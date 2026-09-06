@@ -216,6 +216,7 @@ pub(crate) fn run_surface(
         touches: HashMap::new(),
     };
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
+    let mut layout_complaint: Option<Instant> = None;
     loop {
         if stop.load(Ordering::Acquire) {
             return Ok(());
@@ -328,7 +329,7 @@ pub(crate) fn run_surface(
                 .map_err(|error| error.to_string())?;
         }
         while let Some(event) = client.next_event() {
-            repaint |= handle_surface_event(
+            match handle_surface_event(
                 &mut runtime,
                 &mut renderer,
                 &mut client,
@@ -336,7 +337,18 @@ pub(crate) fn run_surface(
                 event,
                 tx,
                 &name,
-            )?;
+            ) {
+                Ok(painted) => repaint |= painted,
+                // A scene that is mid-change (a view that removed a node
+                // whose parent still lists it) fails the layout for this
+                // event; the event is dropped and the shell stays up, and
+                // the next paint sees whatever the scene has become.
+                Err(error) if is_layout_error(&error) => {
+                    complain_layout(&name, &error, &mut layout_complaint);
+                    repaint = true;
+                }
+                Err(error) => return Err(error),
+            }
         }
         apply_service_requests(&mut runtime, &mut client);
         apply_capture_releases(&mut runtime, &mut renderer);
@@ -355,13 +367,20 @@ pub(crate) fn run_surface(
                 renderer.backend_mut().forget_nodes(&removed);
             }
             apply_parent_transitions(&mut runtime, &mut renderer, &client)?;
-            state.layout = paint(
+            match paint(
                 &mut runtime,
                 &mut renderer,
                 &client,
                 state.primary_root,
                 Some(&state.layout),
-            )?;
+            ) {
+                Ok(layout) => state.layout = layout,
+                Err(error) if is_layout_error(&error) => {
+                    complain_layout(&name, &error, &mut layout_complaint);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
             for surface in state
                 .popup_surfaces
                 .values_mut()
@@ -388,6 +407,23 @@ pub(crate) fn run_surface(
             state.pacer.observed(painted.elapsed());
         }
     }
+}
+
+/// Whether an error is the layout's, from a scene that is mid-change, and
+/// not the compositor's or the GPU's. A layout error is a frame's, not the
+/// output's: the next paint starts from the scene as it is then.
+fn is_layout_error(error: &str) -> bool {
+    error.contains("scene layout error") || error.contains("stale scene node handle")
+}
+
+/// Says what the layout could not do, at most once a second, so a scene
+/// that stays broken does not flood the log.
+fn complain_layout(name: &str, error: &str, last: &mut Option<Instant>) {
+    if last.is_some_and(|at| at.elapsed() < Duration::from_secs(1)) {
+        return;
+    }
+    *last = Some(Instant::now());
+    eprintln!("morf: output {name}: frame skipped: {error}");
 }
 
 /// Builds a pipeline for every shader the configuration registered.

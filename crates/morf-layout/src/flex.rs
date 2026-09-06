@@ -51,6 +51,14 @@ impl FlexTree {
         let id = if is_flex_root(scene, node)? {
             let mut children = Vec::new();
             for &child in scene.children(node)? {
+                // A child the scene no longer has, still listed here, is a
+                // bookkeeping fault worth naming: which container, which slot.
+                if scene.element(child).is_err() {
+                    return Err(LayoutError::Scene(format!(
+                        "stale scene node handle: child {child:?} of {:?} {node:?}",
+                        scene.element(node)
+                    )));
+                }
                 // One kind owns a child's placement. Anchors speak to a plain
                 // parent; here the container places the child, and an
                 // anchor would be silently ignored, which is worse than an
