@@ -35,10 +35,8 @@ end
 --- em's margin, and a morphing icon reads the size of a written one.
 kit.GLYPH_FIT = 0.8
 local glyph_count = 0
---- With `hover` (a signal) and `hover_glyph`, the glyph morphs into
---- `hover_glyph` while the pointer is over it and back when it leaves:
---- the icon becomes what a tap will do.
-function kit.glyph(size, glyph, color, hover, hover_glyph)
+--- A glyph that morphs into the next one when `glyph()` changes.
+function kit.glyph(size, glyph, color)
   size = size * kit.GLYPH_FIT
   glyph_count = glyph_count + 1
   local progress = morf.signal("panacea.kit.glyph." .. glyph_count, 0)
@@ -69,9 +67,9 @@ function kit.glyph(size, glyph, color, hover, hover_glyph)
     },
     shape,
   }
-  if type(glyph) == "function" or hover then
+  if type(glyph) == "function" then
     theme.tick(function()
-      local want = (hover and hover_glyph and hover:get()) and hover_glyph or call(glyph)
+      local want = call(glyph)
       if want == nil or want == "" or want == current then return end
       current = want
       if progress:get() > 0 then pending = want return end
@@ -116,25 +114,18 @@ function kit.row(values)
     circle = ui.Rect {
       width = kit.CIRCLE, height = kit.CIRCLE, radius = kit.CIRCLE / 2,
       color = function() return active() and accent or C.card_hover end,
-      -- Under the pointer the circle grows and makes a full turn with an
-      -- overshoot while its glyph morphs into what a tap does; it pops
-      -- as the row turns, and with `spin` turns over as the row turns on.
-      scale = function() return pop:get() and 1.3 or (hovered:get() and 1.25 or 1) end,
-      rotation = function()
-        return ((values.spin and active()) and 360 or 0) + (hovered:get() and 360 or 0)
-      end,
-      behavior = { color = motion.fade, scale = motion.snappy,
-        rotation = { duration = config.reduceMotion and 1 or 640, easing = "out_back" } },
-      (type(values.icon) == "function" or values.hover_icon)
-        and kit.glyph(S(config.iconSize), values.icon, ink, hovered, values.hover_icon)
+      -- Under the pointer the circle grows a little; it pops as the row
+      -- turns on or off. The glyph stays what it is: it says what the
+      -- row is, and a glyph that changes under the pointer says nothing.
+      scale = function() return pop:get() and 1.25 or (hovered:get() and 1.1 or 1) end,
+      behavior = { color = motion.fade, scale = motion.snappy },
+      type(values.icon) == "function"
+        and kit.glyph(S(config.iconSize), values.icon, ink)
         or theme.icon { text = values.icon, size = config.iconSize - 1, anchors = { center_in = true }, color = ink },
     }
   end
-  -- The words step right a little under the pointer, after the circle.
   local title = values.title_node or theme.text { text = values.title, font_weight = 700, size = config.fontSize - 1,
-    width = room, elide = "right",
-    translate_x = function() return hovered:get() and S(4) or 0 end,
-    behavior = { translate_x = motion.snappy } }
+    width = room, elide = "right" }
   -- A row with no second line centres its title; one with a second line
   -- keeps it even when the line is empty for the moment, so rows in a
   -- list stay level.
@@ -165,10 +156,6 @@ function kit.row(values)
     children[#children + 1] = ui.Item {
       width = values.right_w or S(56), height = H, z = 2,
       anchors = { right = true },
-      -- The right end nudges outward under the pointer: a chevron points
-      -- where a tap goes.
-      translate_x = function() return hovered:get() and S(7) or 0 end,
-      behavior = { translate_x = motion.snappy },
       values.right,
     }
   end
@@ -235,7 +222,6 @@ function kit.switch_row(values)
     width = S(56), height = kit.ROW,
     ui.Item { anchors = { center_in = true }, theme.toggle(values.on, values.set) },
   }
-  values.hover_icon = values.hover_icon or "󰄬"
   values.active = values.active or values.on
   values.on_click = values.on_click or function() values.set(not values.on()) end
   return kit.row(values)
@@ -244,7 +230,6 @@ end
 --- A row whose tap opens something; the chevron says so.
 function kit.nav_row(values)
   values.right = kit.chevron(values.on_click, false)
-  values.hover_icon = values.hover_icon or "󰅂"
   return kit.row(values)
 end
 
@@ -320,11 +305,11 @@ function kit.section(text, visible)
 end
 
 --- A line of words where a list is empty.
-function kit.empty(text, visible)
+function kit.empty(text, visible, width)
   return ui.Item {
-    width = S(400), height = S(28),
+    width = width or theme.page_w(), height = kit.ROW,
     visible = visible,
-    theme.text { text = text, size = config.fontSize - 3, color = C.faint, anchors = { left = true, left_margin = S(4), top = true, top_margin = S(6) } },
+    theme.text { text = text, size = config.fontSize - 2, color = C.muted, anchors = { center_in = true } },
   }
 end
 
@@ -348,26 +333,42 @@ function kit.action(values)
   }
 end
 
---- A round button with a glyph, lit while `lit()`.
+--- A round button with a glyph and its name under it, lit while `lit()`.
+--- The name is there on a phone too, where nothing hovers.
+kit.BTN = S(56)
 local icon_button_count = 0
-function kit.icon_button(glyph, on_click, lit)
-  local D = S(50)
+function kit.icon_button(glyph, on_click, lit, label)
+  local D = label and S(36) or S(40)
   icon_button_count = icon_button_count + 1
   local hovered = morf.signal("panacea.kit.iconbutton." .. icon_button_count, false)
-  return theme.button {
-    width = D, height = D, radius = D / 2,
-    color = function() return lit and lit() and C.on_tint or C.card end,
-    border_width = 1, border_color = function() return lit and lit() and C.on_edge or C.edge end,
-    on_click = on_click,
-    on_hover = function(over) hovered:set(over) end,
-    -- The glyph grows and makes a full turn under the pointer, with an
-    -- overshoot, and springs back.
-    theme.icon { text = glyph, size = config.iconSize - 2, anchors = { center_in = true },
-      color = function() return (lit and lit()) and C.on or (hovered:get() and C.fg or C.muted) end,
-      scale = function() return hovered:get() and 1.35 or 1 end,
-      rotation = function() return hovered:get() and 360 or 0 end,
-      behavior = { color = motion.hover, scale = motion.snappy,
-        rotation = { duration = config.reduceMotion and 1 or 640, easing = "out_back" } } },
+  local function on() return lit and lit() end
+  local button = function(extra)
+    return theme.button {
+      width = D, height = D, radius = D / 2, x = extra and (kit.BTN - D) / 2 or nil,
+      color = function() return on() and C.on_tint or C.card end,
+      border_width = 1, border_color = function() return on() and C.on_edge or C.edge end,
+      on_click = on_click,
+      on_hover = function(over) hovered:set(over) end,
+      theme.icon { text = glyph, size = config.iconSize, anchors = { center_in = true },
+        color = function() return on() and C.on or (hovered:get() and C.fg or C.muted) end,
+        scale = function() return hovered:get() and 1.12 or 1 end,
+        behavior = { color = motion.hover, scale = motion.snappy } },
+      }
+  end
+  -- Without a name it is the round button alone, for a player's transport.
+  if not label then return button(false) end
+  -- Button over name, the pair centred in a row's height, so a row of
+  -- them sits level with a pill beside them.
+  return ui.Item {
+    width = kit.BTN, height = kit.ROW,
+    ui.Column {
+      gap = S(3), align = "center", width = kit.BTN, anchors = { center_in = true },
+      ui.Item { width = kit.BTN, height = D, button(true) },
+      theme.text { text = label, size = config.fontSize - 5, width = kit.BTN, elide = "right",
+        horizontal_alignment = "center",
+        color = function() return on() and C.on or C.muted end,
+        behavior = { color = motion.hover } },
+    },
   }
 end
 

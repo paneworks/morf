@@ -484,6 +484,7 @@ function island.build()
   -- already wears that colour: a green bolt on a green disc is no bolt.
   local function glyph_color()
     if open() and slot("battery_glyph") and battery_color() ~= C.fg then return C.bg end
+    if open() and has_icon() then return C.on end
     return battery_color()
   end
   glyph, glyph_to = glyph_morpher(ICON, glyph_color, {

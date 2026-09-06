@@ -35,23 +35,24 @@ function page.build(island)
   local tiles = require("tiles")
   local bar = require("bar_glyphs")
   local m = media.state
-  local BTN = S(50)
+  local BTN = kit.BTN
 
   -- The system row: the battery at the left -- the strip's own glyph and
   -- figure land on it -- and the round buttons at the right.
   local actions = ui.Row {
     gap = GAP, align = "center",
-    kit.icon_button("󰹑", function() tiles.all.screenshot.toggle() end),
+    kit.icon_button("󰹑", function() tiles.all.screenshot.toggle() end, nil, "Shot"),
     kit.icon_button(function() return notify.silent:get() and "󰂛" or "󰂚" end, function() island.open("notif") end,
-      function() return notify.count:get() > 0 end),
-    kit.icon_button("󰒓", function() island.open("settings") end),
-    kit.icon_button("󰌾", function() island.lock() end),
-    kit.icon_button("󰐥", function() island.open("power") end),
+      function() return notify.count:get() > 0 end,
+      function() local n = notify.count:get() return n > 0 and tostring(n) or "Alerts" end),
+    kit.icon_button("󰒓", function() island.open("settings") end, nil, "Settings"),
+    kit.icon_button("󰌾", function() island.lock() end, nil, "Lock"),
+    kit.icon_button("󰐥", function() island.open("power") end, nil, "Power"),
   }
   local system_row = ui.Item {
     width = W, height = kit.ROW,
     tiles.pill(tiles.all.battery, W - (BTN + GAP) * 5, island, page.slots),
-    ui.Item { anchors = { right = true, top = true, top_margin = (kit.ROW - BTN) / 2 }, actions },
+    ui.Item { anchors = { right = true, top = true }, actions },
   }
 
   -- Now playing, when something is: the card opens the player, and its

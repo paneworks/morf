@@ -243,7 +243,8 @@ function theme.button(values)
   values.behavior = values.behavior or { color = motion.hover, scale = motion.snappy }
   values.behavior.scale = values.behavior.scale or motion.snappy
   local on_hover = values.on_hover
-  values.on_hover = nil
+  local on_move = values.on_move
+  values.on_hover, values.on_move = nil, nil
   values.radius = S(values.radius or config.cornerR)
   local on_wheel = values.on_wheel
   values.on_wheel = nil
@@ -251,6 +252,7 @@ function theme.button(values)
     anchors = { fill = true },
     cursor = "pointer",
     on_entered = function() hovered:set(true) if on_hover then on_hover(true) end end,
+    on_position_changed = function(_, _, lx, ly) if on_move then on_move(lx or 0, ly or 0) end end,
     on_exited = function() hovered:set(false) down:set(false) if on_hover then on_hover(false) end end,
     on_pressed = function() down:set(true) theme.drag_begin() end,
     on_released = function() down:set(false) theme.drag_end() end,
