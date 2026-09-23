@@ -7,6 +7,7 @@ mod api_color_palette;
 mod api_compositor;
 mod api_date;
 mod api_dbus_serve;
+mod api_encoding;
 mod api_file;
 mod api_finish;
 mod api_fling;

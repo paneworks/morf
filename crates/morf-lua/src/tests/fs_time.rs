@@ -112,3 +112,35 @@ fn time_module_does_calendar_arithmetic() {
         )
         .unwrap();
 }
+
+#[test]
+fn encoding_module_round_trips_and_digests() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "encoding.lua",
+            br##"
+            local e = morf.encoding
+            assert(e.base64_encode("foobar") == "Zm9vYmFy")
+            assert(e.base64_encode("\251\255", { url = true }) == "-_8")
+            assert(e.base64_decode("Zm9vYg==") == "foob")
+            local bad, err = e.base64_decode("!!")
+            assert(bad == nil and err:find("base64"))
+            assert(e.hex_encode("\0\171\255") == "00abff" and e.hex_encode("\255", { upper = true }) == "FF")
+            assert(e.hex_decode("00abff") == "\0\171\255")
+            assert(e.url_encode("a b&c") == "a%20b%26c")
+            assert(e.url_encode("a b/c", { component = false, plus = true }) == "a+b/c")
+            assert(e.url_decode("a+b%2F", { plus = true }) == "a b/")
+            assert(e.sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+            assert(#e.sha256("abc", true) == 32)
+            assert(e.sha1("abc") == "a9993e364706816aba3e25717850c26c9cd0d89d")
+            assert(e.crc32("123456789") == 0xCBF43926)
+            assert(#e.random_bytes(24) == 24)
+            local id = e.uuid()
+            assert(#id == 36 and id:sub(15, 15) == "4")
+            assert(not pcall(e.random_bytes, -1))
+            assert(not pcall(e.sha256, {}))
+            "##,
+        )
+        .unwrap();
+}
