@@ -117,6 +117,8 @@ pub(crate) fn install_reactive_api(
         install_view_api(ctx, Rc::clone(&state), morf, limits);
         install_process_api(ctx, morf);
         install_file_api(ctx, morf);
+        crate::api_fs::install_fs_api(ctx, morf);
+        crate::api_date::install_date_api(ctx, morf);
         install_socket_api(ctx, morf);
         install_system_service_api(ctx, Rc::clone(&state), morf);
         let (ui, json) = install_ui_json_api(ctx, Rc::clone(&state), morf, limits);

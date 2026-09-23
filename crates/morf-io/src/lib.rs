@@ -5,6 +5,7 @@ mod dbus_encode;
 mod dbus_serve;
 mod dbus_types;
 mod files;
+mod fsops;
 mod ipc;
 mod process;
 mod sockets;
@@ -16,6 +17,10 @@ pub use dbus_decode::DbusSignal;
 pub use dbus_serve::{DbusCall, DbusService, NameOutcome};
 pub use dbus_types::*;
 pub use files::*;
+pub mod fs {
+    //! Filesystem operations; see [`crate::fsops`].
+    pub use crate::fsops::*;
+}
 pub use ipc::*;
 pub use process::*;
 pub use sockets::*;
