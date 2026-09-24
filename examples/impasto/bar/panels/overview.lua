@@ -450,6 +450,7 @@ local function build()
   local keys = ui.MouseArea {
     anchors = { fill = true },
     z = -2,
+    focus = true,
     on_key_pressed = function(keysym)
       if keysym == KEY.LEFT then select_by(-1)
       elseif keysym == KEY.RIGHT then select_by(1)

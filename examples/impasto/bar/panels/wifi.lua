@@ -194,7 +194,8 @@ function M.build(options)
         end,
         size = theme.size.small, color = C.textMuted,
       },
-      list,
+      -- Longer than the panel, it scrolls.
+      ui.Flickable { anchors = { fill = true }, list },
     },
   }
 end

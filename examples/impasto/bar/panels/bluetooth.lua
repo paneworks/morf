@@ -149,7 +149,8 @@ function M.build(options)
         text = function() return bluetooth.enabled() and "Nothing found yet" or "Turn Bluetooth on to see devices" end,
         size = theme.size.small, color = C.textMuted,
       },
-      list,
+      -- Longer than the panel, it scrolls.
+      ui.Flickable { anchors = { fill = true }, list },
     },
     -- The fold for devices without a name.
     ui.Item {
