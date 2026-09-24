@@ -35,7 +35,7 @@ function task_row.build(values)
   local width = values.width or 300
   local hovered = kit.hover_signal("task_row")
   local on_hover = values.on_hover or function() end
-  local done = function() local t = task() return t and t.state == "done" end
+  local done = function() local t = task() return t ~= nil and t.state == "done" end
   local late = function() return tasks.is_overdue(task()) end
   local day = kit.text {
     anchors = { right = true, right_margin = 6, vertical_center = true },
