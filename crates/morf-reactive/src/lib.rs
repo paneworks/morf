@@ -131,6 +131,10 @@ impl<T: Clone + PartialEq + 'static> EffectContext<'_, T> {
 pub struct Graph<T> {
     signals: SlotMap<SignalId, Signal<T>>,
     effects: SlotMap<EffectId, Effect>,
+    /// The effects waiting to run. Kept beside each effect's own flag so
+    /// finding the next one to run looks at what is dirty, not at every
+    /// effect the graph holds.
+    dirty: HashSet<EffectId>,
     recompute_budget: usize,
 }
 
@@ -146,6 +150,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
         Self {
             signals: SlotMap::with_key(),
             effects: SlotMap::with_key(),
+            dirty: HashSet::new(),
             recompute_budget: recompute_budget.max(1),
         }
     }
@@ -162,13 +167,61 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
 
     /// Registers an externally evaluated effect identified by an opaque token.
     pub fn external_effect(&mut self, name: impl Into<String>, token: u64) -> EffectId {
-        self.effects.insert(Effect {
+        let id = self.effects.insert(Effect {
             name: name.into(),
             callback: EffectCallback::External(token),
             dependencies: HashSet::new(),
             depth: 0,
             dirty: true,
-        })
+        });
+        self.dirty.insert(id);
+        id
+    }
+
+    /// Forgets an effect: it stops depending on anything and never runs
+    /// again. What owned it — a node's binding — is gone, and an effect
+    /// left behind would keep evaluating for nothing every time a signal
+    /// it once read changed.
+    pub fn remove_effect(&mut self, effect: EffectId) -> bool {
+        let Some(removed) = self.effects.remove(effect) else {
+            return false;
+        };
+        self.dirty.remove(&effect);
+        for signal in removed.dependencies {
+            if let Some(slot) = self.signals.get_mut(signal) {
+                slot.subscribers.remove(&effect);
+            }
+        }
+        true
+    }
+
+    /// Forgets a signal. Effects that read it stop depending on it; a later
+    /// read of the handle is `InvalidSignal`.
+    pub fn remove_signal(&mut self, signal: SignalId) -> bool {
+        let Some(removed) = self.signals.remove(signal) else {
+            return false;
+        };
+        for effect in removed.subscribers {
+            if let Some(slot) = self.effects.get_mut(effect) {
+                slot.dependencies.remove(&signal);
+            }
+        }
+        true
+    }
+
+    /// How many signals the graph holds.
+    pub fn signal_count(&self) -> usize {
+        self.signals.len()
+    }
+
+    /// How many effects the graph holds.
+    pub fn effect_count(&self) -> usize {
+        self.effects.len()
+    }
+
+    /// Whether a signal handle is still live.
+    pub fn contains_signal(&self, signal: SignalId) -> bool {
+        self.signals.contains_key(signal)
     }
 
     /// Reads a signal without capturing a dependency.
@@ -268,6 +321,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
                 for (_, pending) in &mut self.effects {
                     pending.dirty = false;
                 }
+                self.dirty.clear();
                 return Err(GraphError::Loop {
                     chain: trace.into_iter().collect(),
                 });
@@ -297,9 +351,9 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
     }
 
     fn next_dirty(&self) -> Option<EffectId> {
-        self.effects
+        self.dirty
             .iter()
-            .filter(|(_, effect)| effect.dirty)
+            .filter_map(|id| Some((*id, self.effects.get(*id)?)))
             .min_by_key(|(id, effect)| (effect.depth, id.data().as_ffi()))
             .map(|(id, _)| id)
     }
@@ -318,6 +372,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
             slot.dirty = false;
             std::mem::take(&mut slot.dependencies)
         };
+        self.dirty.remove(&effect);
         for signal in &old_dependencies {
             if let Some(slot) = self.signals.get_mut(*signal) {
                 slot.subscribers.remove(&effect);
@@ -391,9 +446,10 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
         slot.value = value;
         slot.producer = producer;
         let subscribers: Vec<_> = slot.subscribers.iter().copied().collect();
-        for effect in subscribers {
-            if let Some(effect) = self.effects.get_mut(effect) {
+        for id in subscribers {
+            if let Some(effect) = self.effects.get_mut(id) {
                 effect.dirty = true;
+                self.dirty.insert(id);
             }
         }
         Ok(true)

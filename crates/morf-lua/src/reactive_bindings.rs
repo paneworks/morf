@@ -27,11 +27,12 @@ pub(crate) fn register_property_binding<'gc>(
                 sink: Some(EffectSink::Property(PropertySink { node, property })),
             },
         );
-        state
+        let id = state
             .graph
             .as_mut()
             .expect("reactive graph unavailable outside evaluation")
             .external_effect(name, token);
+        state.effect_ids.insert(token, id);
     }
     let _ = flush_reactive(state, ctx, limits);
 }
@@ -54,11 +55,12 @@ pub(crate) fn register_state_binding<'gc>(
                 sink: Some(EffectSink::State(node)),
             },
         );
-        state
+        let id = state
             .graph
             .as_mut()
             .expect("reactive graph unavailable outside evaluation")
             .external_effect(format!("{node:?}.state"), token);
+        state.effect_ids.insert(token, id);
     }
     let _ = flush_reactive(state, ctx, limits);
 }
@@ -254,6 +256,7 @@ pub(crate) fn flush_reactive(
         }
     }
     state.graph = Some(graph);
+    state.collect_graph_garbage();
 
     match result {
         Ok(report) if report.errors.is_empty() => Ok(()),

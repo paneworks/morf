@@ -73,6 +73,41 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     state
         .timers
         .retain(|timer| timer.node.is_none_or(|node| !removed.contains(&node)));
+    // Bindings that drive a removed node, and the signals that tracked its
+    // properties' reads: the graph forgets both, or every one of them keeps
+    // re-running and growing for the life of the shell.
+    let dead_tokens = state
+        .effects
+        .iter()
+        .filter(|(_, effect)| match &effect.sink {
+            Some(EffectSink::Property(sink)) => removed.contains(&sink.node),
+            Some(EffectSink::State(node)) => removed.contains(node),
+            None => false,
+        })
+        .map(|(token, _)| *token)
+        .collect::<Vec<_>>();
+    for token in dead_tokens {
+        state.effects.remove(&token);
+        if let Some(id) = state.effect_ids.remove(&token) {
+            state.dead_effects.push(id);
+        }
+    }
+    let dead_signals = state
+        .property_signals
+        .iter()
+        .filter(|((node, _, _), _)| removed.contains(node))
+        .map(|(_, signal)| *signal)
+        .collect::<HashSet<_>>();
+    if !dead_signals.is_empty() {
+        for signal in &dead_signals {
+            state.values.remove(signal);
+        }
+        state
+            .signals
+            .retain(|signal| !dead_signals.contains(signal));
+        state.dead_signals.extend(dead_signals);
+    }
+    state.collect_graph_garbage();
     state
         .property_signals
         .retain(|(node, _, _), _| !removed.contains(node));

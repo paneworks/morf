@@ -71,13 +71,14 @@ pub(crate) fn evaluate_effect(
         if state.active.is_some() {
             return Err("reactive effects cannot run recursively".to_owned());
         }
+        // A binding whose node was removed during this flush: its effect
+        // is waiting to be forgotten and has nothing left to drive.
+        let Some(effect) = state.effects.get(&token).cloned() else {
+            return Ok(());
+        };
         state.active = Some(Capture::default());
         state.effect_runs = state.effect_runs.saturating_add(1);
-        state
-            .effects
-            .get(&token)
-            .cloned()
-            .ok_or_else(|| format!("missing Lua closure for effect {token}"))?
+        effect
     };
     let result = execute_effect(
         ctx,

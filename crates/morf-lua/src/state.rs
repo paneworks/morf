@@ -3,7 +3,7 @@ use crate::states::{Capture, StateSet};
 use luna::{StashedClosure, StashedTable};
 use morf_layout::{TransformTracker, TransformWatcher as NativeTransformWatcher};
 use morf_lifecycle::Retention;
-use morf_reactive::{Graph, SignalId};
+use morf_reactive::{EffectId, Graph, SignalId};
 use morf_scene::{GroupId, ListModel, ModelId, NodeHandle, Scene, VirtualList};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -126,6 +126,13 @@ pub(crate) struct ReactiveState {
     pub(crate) values: HashMap<SignalId, IpcValue>,
     pub(crate) signals: Vec<SignalId>,
     pub(crate) property_signals: HashMap<(NodeHandle, String, bool), SignalId>,
+    /// The graph's handle for each Lua effect token, so an effect can be
+    /// forgotten when the node it drives is removed.
+    pub(crate) effect_ids: HashMap<u64, EffectId>,
+    /// Effects and signals whose owners are gone, waiting for the graph:
+    /// a node removed while a flush holds the graph is forgotten after it.
+    pub(crate) dead_effects: Vec<EffectId>,
+    pub(crate) dead_signals: Vec<SignalId>,
     pub(crate) current_property_names: HashMap<String, (NodeHandle, String)>,
     pub(crate) property_revision: i64,
     /// Advances whenever the scene actually changes: a property lands on a new
@@ -267,6 +274,20 @@ pub(crate) struct ReactiveState {
 }
 
 impl ReactiveState {
+    /// Hands the graph what removed nodes left behind, when it is here to
+    /// take them; while a flush holds it they wait for the next call.
+    pub(crate) fn collect_graph_garbage(&mut self) {
+        let Some(graph) = self.graph.as_mut() else {
+            return;
+        };
+        for effect in self.dead_effects.drain(..) {
+            graph.remove_effect(effect);
+        }
+        for signal in self.dead_signals.drain(..) {
+            graph.remove_signal(signal);
+        }
+    }
+
     /// A fresh timer id.
     pub(crate) fn next_timer_id(&mut self) -> u64 {
         self.last_timer_id += 1;
@@ -302,6 +323,9 @@ impl ReactiveState {
             values,
             signals: vec![clock],
             property_signals: HashMap::new(),
+            effect_ids: HashMap::new(),
+            dead_effects: Vec::new(),
+            dead_signals: Vec::new(),
             current_property_names: HashMap::new(),
             property_revision: 0,
             scene_revision: 0,

@@ -9,6 +9,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::state::*;
 
+/// See [`Runtime::resource_stats`].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ResourceStats {
+    pub nodes: usize,
+    pub scene_signals: usize,
+    pub graph_signals: usize,
+    pub graph_effects: usize,
+    pub bindings: usize,
+    pub tracked_signals: usize,
+    pub handlers: usize,
+}
+
 /// Execution limits applied independently to each loaded chunk.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Limits {

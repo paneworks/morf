@@ -252,3 +252,44 @@ fn dependency_snapshot_names_effects_and_signals() {
         }]
     );
 }
+
+#[test]
+fn removed_effects_stop_running_and_removed_signals_unsubscribe() {
+    let mut graph = Graph::<i64>::default();
+    let source = graph.signal("source", 1);
+    let kept = graph.external_effect("kept", 1);
+    let gone = graph.external_effect("gone", 2);
+    let mut runs = Vec::new();
+    graph
+        .flush_external(|token, effect| {
+            runs.push(token);
+            effect
+                .get(source)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        })
+        .unwrap();
+    assert_eq!(runs, [1, 2]);
+
+    assert!(graph.remove_effect(gone));
+    assert!(!graph.remove_effect(gone));
+    assert_eq!(graph.effect_count(), 1);
+    graph.write(source, 2).unwrap();
+    runs.clear();
+    graph
+        .flush_external(|token, effect| {
+            runs.push(token);
+            effect
+                .get(source)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        })
+        .unwrap();
+    assert_eq!(runs, [1], "a removed effect must not run");
+
+    assert!(graph.remove_signal(source));
+    assert!(!graph.contains_signal(source));
+    assert_eq!(graph.signal_count(), 0);
+    assert!(graph.write(source, 3).is_err());
+    let _ = kept;
+}

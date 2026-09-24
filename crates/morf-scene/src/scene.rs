@@ -62,6 +62,16 @@ impl Scene {
         NodeHandle(node)
     }
 
+    /// How many nodes are live.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// How many property signals the scene holds, live nodes' only.
+    pub fn property_signal_count(&self) -> usize {
+        self.properties.signal_count()
+    }
+
     /// Returns whether a handle still refers to a live node generation.
     pub fn contains(&self, node: NodeHandle) -> bool {
         self.nodes.contains_key(node.0)
@@ -223,7 +233,15 @@ impl Scene {
             self.physics_specs.retain(|key, _| key.node != current);
             self.paused_physics.retain(|key| key.node != current);
             self.removed.push(NodeHandle(current));
-            self.nodes.remove(current);
+            // Its properties live in the scene's signal graph, not in the
+            // node; they go with it or they stay allocated for the life of
+            // the process, two per property per node ever made.
+            if let Some(gone) = self.nodes.remove(current) {
+                for slot in gone.properties.values() {
+                    self.properties.remove_signal(slot.current);
+                    self.properties.remove_signal(slot.target);
+                }
+            }
         }
         self.retain_live_groups();
         Ok(())

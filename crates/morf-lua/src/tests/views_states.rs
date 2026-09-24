@@ -408,3 +408,84 @@ fn a_ui_kind_that_does_not_exist_is_named() {
         .to_string();
     assert!(error.contains("no ui kind `RowLayout`"), "{error}");
 }
+
+#[test]
+fn churning_a_list_leaves_nothing_behind() {
+    // Every delegate made and dropped used to leave its bindings in the
+    // reactive graph, still subscribed to what they read: they kept running
+    // for dead nodes on every change, and the graph only grew.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "churn.lua",
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                _G.accent = morf.signal("accent", 1)
+                _G.runs = 0
+                _G.model = morf.list_model({ "a", "b", "c" })
+                ui.Column {
+                    ui.Repeater {
+                        model = _G.model,
+                        delegate = function(item)
+                            return ui.Rect {
+                                width = function() _G.runs = _G.runs + 1 return 10 * _G.accent:get() end,
+                                height = 4,
+                                ui.Text { text = function() return item .. _G.accent:get() end },
+                                ui.MouseArea { width = 4, height = 4, on_clicked = function() end },
+                            }
+                        end,
+                    },
+                }
+            "#,
+        )
+        .unwrap();
+    let settled = runtime.resource_stats();
+    runtime
+        .execute(
+            "churn-loop.lua",
+            br#"
+                _G.round = 0
+            "#,
+        )
+        .unwrap();
+    for _ in 0..200 {
+        runtime
+            .execute(
+                "churn-step.lua",
+                br#"
+                    _G.round = _G.round + 1
+                    _G.model:remove(1)
+                    _G.model:insert(_G.model:len() + 1, "x" .. _G.round)
+                "#,
+            )
+            .unwrap();
+        runtime.poll_services();
+    }
+    runtime
+        .execute("churn-bump.lua", b"_G.runs = 0 _G.accent:set(2)")
+        .unwrap();
+    runtime.poll_services();
+    let after = runtime.resource_stats();
+    assert_eq!(after.nodes, settled.nodes, "{settled:?} -> {after:?}");
+    assert_eq!(
+        after.scene_signals, settled.scene_signals,
+        "{settled:?} -> {after:?}"
+    );
+    assert_eq!(
+        after.graph_effects, settled.graph_effects,
+        "{settled:?} -> {after:?}"
+    );
+    assert_eq!(after.bindings, settled.bindings, "{settled:?} -> {after:?}");
+    assert_eq!(after.handlers, settled.handlers, "{settled:?} -> {after:?}");
+    assert!(
+        after.graph_signals <= settled.graph_signals + 8,
+        "{settled:?} -> {after:?}"
+    );
+    runtime
+        .execute(
+            "churn-check.lua",
+            b"assert(_G.runs == 3, 'bindings ran ' .. _G.runs .. ' times for 3 live rows')",
+        )
+        .unwrap();
+}

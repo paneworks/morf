@@ -8,8 +8,8 @@ use morf_scene::{
 };
 
 use crate::{
-    reactive_bindings::*, reactive_execute::*, scene_bindings::*, serialization::*, state::*,
-    types::*,
+    reactive_bindings::*, reactive_execute::*, runtime_helpers::remove_scene_subtree,
+    scene_bindings::*, serialization::*, state::*, types::*,
 };
 
 pub(crate) fn execute_delegate(
@@ -147,11 +147,7 @@ pub(crate) fn reconcile_lua_view(
         .collect::<HashSet<_>>();
     for id in &invalidated {
         if let Some(instance) = view.reusable.remove(id) {
-            state
-                .borrow_mut()
-                .scene
-                .remove(instance.node)
-                .map_err(|error| error.to_string())?;
+            remove_scene_subtree(&mut state.borrow_mut(), instance.node);
         }
     }
     view.reuse_order.retain(|id| !invalidated.contains(id));
@@ -180,7 +176,7 @@ pub(crate) fn reconcile_lua_view(
                 .and_then(|()| flush_reactive(state, ctx, limits));
             if let Err(error) = update {
                 for (_, _, prepared) in prepared {
-                    let _ = state.borrow_mut().scene.remove(prepared.node);
+                    remove_scene_subtree(&mut state.borrow_mut(), prepared.node);
                 }
                 return Err(error);
             }
@@ -213,9 +209,9 @@ pub(crate) fn reconcile_lua_view(
                 )
                 .and_then(|()| flush_reactive(state, ctx, limits));
                 if let Err(error) = update {
-                    let _ = state.borrow_mut().scene.remove(instance.node);
+                    remove_scene_subtree(&mut state.borrow_mut(), instance.node);
                     for (_, _, prepared) in prepared {
-                        let _ = state.borrow_mut().scene.remove(prepared.node);
+                        remove_scene_subtree(&mut state.borrow_mut(), prepared.node);
                     }
                     return Err(error);
                 }
@@ -226,7 +222,7 @@ pub(crate) fn reconcile_lua_view(
                 Ok(instance) => prepared.push((*id, *index, instance)),
                 Err(error) => {
                     for (_, _, prepared) in prepared {
-                        let _ = state.borrow_mut().scene.remove(prepared.node);
+                        remove_scene_subtree(&mut state.borrow_mut(), prepared.node);
                     }
                     return Err(error);
                 }
@@ -244,11 +240,7 @@ pub(crate) fn reconcile_lua_view(
     for id in removed {
         let instance = view.active.remove(&id).expect("removed delegate is active");
         if invalidated.contains(&id) {
-            state
-                .borrow_mut()
-                .scene
-                .remove(instance.node)
-                .map_err(|error| error.to_string())?;
+            remove_scene_subtree(&mut state.borrow_mut(), instance.node);
             continue;
         }
         let pool_root = match view.pool_root {
@@ -282,11 +274,7 @@ pub(crate) fn reconcile_lua_view(
             break;
         };
         if let Some(instance) = view.reusable.remove(&id) {
-            state
-                .borrow_mut()
-                .scene
-                .remove(instance.node)
-                .map_err(|error| error.to_string())?;
+            remove_scene_subtree(&mut state.borrow_mut(), instance.node);
         }
     }
     for (id, index, instance) in prepared {
