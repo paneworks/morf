@@ -252,6 +252,51 @@ fn a_disposed_effect_never_runs_again() {
 }
 
 #[test]
+fn an_effect_made_inside_a_flush_can_be_disposed() {
+    // Made inside another effect, an effect is queued until the running
+    // flush ends; its handle disposes it all the same, queued or not.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "nested.lua",
+            br#"
+                local morf = require("morf")
+                local tick = morf.signal("tick", 0)
+                local runs = 0
+                local inner, early
+                morf.effect("outer", function()
+                    if inner then return end
+                    inner = morf.effect("inner", function() tick:get(); runs = runs + 1 end)
+                    early = morf.effect("early", function() tick:get(); runs = runs + 100 end)
+                    early:dispose()
+                end)
+                morf.ipc.tick = function() tick:set(tick:get() + 1) end
+                morf.ipc.dispose = function() return inner:dispose() end
+                morf.ipc.runs = function() return runs end
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        runtime.call_ipc("runs", &[]).unwrap(),
+        [IpcValue::Integer(1)]
+    );
+    runtime.call_ipc("tick", &[]).unwrap();
+    assert_eq!(
+        runtime.call_ipc("runs", &[]).unwrap(),
+        [IpcValue::Integer(2)]
+    );
+    assert_eq!(
+        runtime.call_ipc("dispose", &[]).unwrap(),
+        [IpcValue::Boolean(true)]
+    );
+    runtime.call_ipc("tick", &[]).unwrap();
+    assert_eq!(
+        runtime.call_ipc("runs", &[]).unwrap(),
+        [IpcValue::Integer(2)]
+    );
+}
+
+#[test]
 fn an_owned_effect_goes_with_its_node() {
     // An effect made per delegate -- per panel build -- outlived the node it
     // was made for, and every build added one more to the graph.
