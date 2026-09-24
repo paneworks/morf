@@ -530,7 +530,6 @@ end
 
 island.register("board", {
   size = function() return tasks.panel_width, tasks.panel_height end,
-  declared = true,
   build = function()
     return ui.Item {
       anchors = { fill = true },

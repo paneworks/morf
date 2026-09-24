@@ -95,13 +95,47 @@ local function on_change(list)
   bump()
 end
 
+-- The shell's own notifications (a timer that ran out) are numbered down
+-- from -1, so they never meet an id the daemon hands out.
+local own_id = 0
+
+--- A notification from the shell itself: `{ summary, body, app, urgency }`.
+--- It goes straight into the list, as if it had arrived over D-Bus; asking
+--- the bus would mean calling the daemon this very process is.
+function M.post(fields)
+  own_id = own_id - 1
+  local entry = {
+    id = own_id,
+    app = fields.app or "impasto",
+    icon = fields.icon or "",
+    summary = fields.summary or "",
+    body = fields.body or "",
+    actions = {},
+    hints = {},
+    urgency = fields.urgency or 1,
+    image_path = "",
+    category = "",
+    desktop_entry = "",
+    timeout_ms = -1,
+  }
+  entries[entry.id] = entry
+  table.insert(history, 1, entry)
+  while #history > M.HISTORY_LIMIT do
+    local gone = table.remove(history)
+    entries[gone.id] = nil
+  end
+  present(entry)
+  bump()
+  return entry.id
+end
+
 --- Takes the notification off the island, without answering it.
 function M.dismiss() M.current:set(0) end
 
 --- The person closed it: off the island, and the application is told.
 function M.close()
   local id = M.current:get()
-  if id ~= 0 and server then server.dismiss(id) end
+  if id > 0 and server then server.dismiss(id) end
   M.dismiss()
 end
 

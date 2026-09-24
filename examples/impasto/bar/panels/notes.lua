@@ -410,7 +410,6 @@ end
 
 island.register("notes", {
   size = function() return notes.panel_width, notes.panel_height end,
-  declared = true,
   -- While a note is open the island is the note: paper to the edge, with
   -- no rim, and the sheet keeps its own margins.
   paper = function()

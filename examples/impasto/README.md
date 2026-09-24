@@ -131,4 +131,7 @@ Verbs for a state the pointer would otherwise have to reach:
 | notes: service, panel (deck and paper), sticky, module | ported |
 | edge decks (`deck/`, `services/deck.lua`) | ported, one small surface per edge |
 | tasks: service, board, task row, day picker, module | ported; `tasks.days_with_tasks` for the calendar |
+| launcher (`bar/panels/launcher.lua`, `services/launcher.lua`, `services/calc.lua`; `=` `>` `@` `!` `'`) | ported |
+| overview (`bar/panels/overview.lua`), workspaces piece, launcher and overview buttons | ported |
+| timer (`services/timer.lua`, on the island: `bar/layers/timer.lua`), clipboard history (`services/clipboard.lua`) | ported |
 | everything else | in progress |

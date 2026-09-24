@@ -15,9 +15,9 @@
 -- A panel may also say, while it is open, that the island is paper rather
 -- than black -- `paper = function() return colour or nil end` -- and how far
 -- its contents sit from the rim -- `padding = function() return 0 end`. An
--- open note is both: the island becomes the note, to the edge. A panel that
--- says `declared = true` is laid out at its declared size from the first
--- frame rather than resized with the capsule.
+-- open note is both: the island becomes the note, to the edge. Every panel
+-- is laid out at its declared size from the first frame, not resized with
+-- the capsule as it grows.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -173,15 +173,17 @@ function island.build(place)
     children[#children + 1] = layer_loader("panel." .. name,
       function() return state.open_panel() == name end,
       function()
-        if panel.declared then
-          -- Laid out at the declared size from the first frame, inside the
-          -- padding, and uncovered by the capsule as it grows: nothing
-          -- reflows during the morph.
+        -- At the panel's declared size, not the capsule's: the capsule is
+        -- still small when this is built and grows around it (clipping it
+        -- meanwhile), so the panel is laid out once, at its final size,
+        -- inside its padding, rather than squeezed to nothing and reflowed
+        -- on every frame of the morph.
+        if panel.size then
           return ui.Item {
             x = function() return panel_padding(panel) end,
             y = function() return panel_padding(panel) end,
-            width = function() local w = panel.size() return w - 2 * panel_padding(panel) end,
-            height = function() local _, h = panel.size() return h - 2 * panel_padding(panel) end,
+            width = function() local w = panel.size() return math.max(1, w - 2 * panel_padding(panel)) end,
+            height = function() local _, h = panel.size() return math.max(1, h - 2 * panel_padding(panel)) end,
             panel.build(island),
           }
         end
