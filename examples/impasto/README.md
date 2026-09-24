@@ -92,4 +92,5 @@ WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; m
 | settings, theme, kit | ported |
 | island state, island, bar (grouped, spread) | ported |
 | rest layer (clock) | ported |
+| dock (`dock/`, `services/dock.lua`, `services/auto/dock.lua`) | ported |
 | everything else | in progress |
