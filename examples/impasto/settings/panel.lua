@@ -192,8 +192,23 @@ function M.section() return s.section:get() end
 function M.tab() return s.tab:get() end
 
 --- Opens a section, on `wanted` part or the one it was last left on.
-function M.go(id, wanted)
-  if not by_id[id] then return end
+-- A page by its id, its label ("Displays" is `monitors`), or a setting key
+-- it holds; the part the key names comes with it.
+local function resolve(name)
+  if by_id[name] then return name end
+  local lower = tostring(name or ""):lower()
+  for _, entry in ipairs(M.sections) do
+    if entry.module and (entry.label or ""):lower() == lower then return entry.id end
+  end
+  for _, rule in ipairs(KEY_PAGES) do
+    if tostring(name):match(rule[1]) then return rule[2], rule[3] end
+  end
+end
+
+function M.go(name, wanted)
+  local id, part = resolve(name)
+  if not id then return end
+  if (not wanted or wanted == "") and part and part ~= "" then wanted = part end
   local part = (wanted and wanted ~= "") and wanted or visited[id] or first_tab(id)
   if id == s.section:get() and part == s.tab:get() then return end
   local cursor = s.cursor:get()
