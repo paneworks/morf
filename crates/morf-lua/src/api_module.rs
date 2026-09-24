@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
-    layer_parse::*, process_helpers::*, runtime_helpers::*, scene_bindings::*, state::*,
+    LogLevel, layer_parse::*, process_helpers::*, runtime_helpers::*, scene_bindings::*, state::*,
     surface_types::*, table_menu::*, window_geometry::*, window_methods::*, window_parse::*,
 };
 
@@ -11,6 +11,7 @@ pub(crate) fn install_module_api<'gc>(
     ctx: Context<'gc>,
     state: Rc<RefCell<ReactiveState>>,
     morf: Table<'gc>,
+    limits: crate::Limits,
 ) -> (Table<'gc>, Table<'gc>, Table<'gc>) {
     let core = Table::new(&ctx);
     for name in [
@@ -110,7 +111,7 @@ pub(crate) fn install_module_api<'gc>(
                 .window_surfaces
                 .get(&surface.id)
                 .map(|surface| surface.visible)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             stack.replace(ctx, visible);
             Ok(CallbackReturn::Return)
         }
@@ -123,7 +124,7 @@ pub(crate) fn install_module_api<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             if !surface.visible {
                 surface.visible = true;
                 state.window_surfaces_changed = true;
@@ -139,10 +140,44 @@ pub(crate) fn install_module_api<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             if surface.visible {
                 surface.visible = false;
                 state.window_surfaces_changed = true;
+            }
+            Ok(CallbackReturn::Return)
+        }
+    });
+    // `win:destroy()`: the surface goes, its root and everything under it
+    // are removed the way `ui.destroy` removes a node, and every later call
+    // on the handle fails with "window destroyed". A window on screen hears
+    // `on_closed` once, after it is gone; one already closed has heard it.
+    // Destroying twice is nothing. Child windows parented to it are not
+    // destroyed with it: with their parent gone they are never shown.
+    let window_destroy = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
+            let on_closed =
+                crate::window_events::destroy_window_surface(&mut state.borrow_mut(), surface.id);
+            crate::reactive_bindings::run_destroyed_hooks(&state, ctx, limits);
+            if let Some(callback) = on_closed {
+                state.borrow_mut().handler_depth += 1;
+                let result =
+                    crate::reactive_execute::execute_handler_args(ctx, &callback, &[], limits);
+                let mut guard = state.borrow_mut();
+                guard.handler_depth = guard.handler_depth.saturating_sub(1);
+                if let Err(message) = result {
+                    guard.log(
+                        LogLevel::Warn,
+                        format!("window {} on_closed: {message}", surface.id),
+                    );
+                }
+                let flush = guard.handler_depth == 0 && std::mem::take(&mut guard.flush_pending);
+                drop(guard);
+                if flush {
+                    let _ = crate::reactive_bindings::flush_reactive(&state, ctx, limits);
+                }
             }
             Ok(CallbackReturn::Return)
         }
@@ -160,7 +195,7 @@ pub(crate) fn install_module_api<'gc>(
                     WindowSurfaceKind::Floating(_) => "floating",
                     WindowSurfaceKind::Layer(_) => "layer",
                 })
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             stack.replace(ctx, kind);
             Ok(CallbackReturn::Return)
         }
@@ -173,6 +208,7 @@ pub(crate) fn install_module_api<'gc>(
     window_methods.set_field(ctx, "open", window_open);
     window_methods.set_field(ctx, "close", window_close);
     window_methods.set_field(ctx, "kind", window_kind);
+    window_methods.set_field(ctx, "destroy", window_destroy);
     window_methods.set_field(
         ctx,
         "updates_enabled",
