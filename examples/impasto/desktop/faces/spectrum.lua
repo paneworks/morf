@@ -27,6 +27,8 @@ function M.build(ctx)
     bars.build {
       x = margin, y = margin, width = w - 2 * margin, height = h - 2 * margin,
       looks = looks, listening = listening, edge = "bottom",
+      -- The card's tile shows a look in silence.
+      sample = ctx.row == nil,
     },
   }
 end
