@@ -282,6 +282,7 @@ pub(crate) fn append_node(
         | Element::Inset
         | Element::SdfShape
         | Element::MouseArea
+        | Element::DropArea
         | Element::Row
         | Element::Column
         | Element::Grid

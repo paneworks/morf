@@ -256,6 +256,7 @@ impl Layout {
             | Element::Sdf
             | Element::SdfShape
             | Element::MouseArea
+            | Element::DropArea
             | Element::Flickable
             | Element::Loader
             | Element::Timer

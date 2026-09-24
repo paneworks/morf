@@ -74,6 +74,10 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
             // The pointer's shape while it is over this area.
             properties.push(string("cursor", "default"));
         }
+        // The types a drop here may carry, best first: exact types, `major/*`,
+        // `*`, or the shorthands `text`, `image`, `uris`/`files`. Empty takes
+        // anything.
+        Element::DropArea => properties.push(any("keys", Value::List(Vec::new()))),
         Element::Flickable => {
             properties.extend([
                 // Only the offsets. `content_width`/`content_height` were

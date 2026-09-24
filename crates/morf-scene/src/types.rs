@@ -46,6 +46,8 @@ pub enum Element {
     SdfShape,
     /// Pointer and focus event target with no visual output.
     MouseArea,
+    /// Target for drags from other applications, with no visual output.
+    DropArea,
     /// Sequential horizontal positioner.
     Row,
     /// Sequential vertical positioner.
@@ -79,6 +81,7 @@ impl Element {
             Self::Sdf => "Sdf",
             Self::SdfShape => "SdfShape",
             Self::MouseArea => "MouseArea",
+            Self::DropArea => "DropArea",
             Self::Row => "Row",
             Self::Column => "Column",
             Self::Grid => "Grid",
