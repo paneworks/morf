@@ -98,9 +98,13 @@ test.describe("impasto under a fake Hyprland", function()
     test.click({ text = "SUPER + SPACE", visible = true })
     test.settle(500)
     test.truthy(test.find({ text = "Press the keys…", visible = true }), "the editor did not open")
+    -- Recording holds the compositor's binds off the shell, or a combination
+    -- Hyprland already binds would fire there and never reach the field.
+    test.truthy(test.shortcuts_inhibited(), "the compositor's shortcuts were not held off while recording")
     test.key("k", "super", { surface = test.find({ text = "SUPER + SPACE", visible = true }).surface })
     test.settle(500)
     test.truthy(test.find({ text = "SUPER + K", visible = true }), "the draft is not shown")
+    test.falsy(test.shortcuts_inhibited(), "the shortcuts were still held once the keys were caught")
     test.click({ text = "Apply", visible = true })
     until_(function() return sent("/reload") end, "Hyprland was not reloaded")
     local state = morf.fs.dir("state")

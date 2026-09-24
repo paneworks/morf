@@ -68,7 +68,17 @@ end
 --- opens the editor under it (ShortcutRow).
 function M.row(W, description, label, filter, note, ruled)
   local editing = controls.signal("keys.editing", false)
-  local capturing = controls.signal("keys.capturing", false)
+  local capturing_signal = controls.signal("keys.capturing", false)
+  -- While a combination is being recorded the compositor is asked to hold
+  -- its own binds off the shell's surfaces (keyboard-shortcuts-inhibit), or
+  -- a combination it already binds would fire there and never arrive here.
+  local capturing = {
+    get = function() return capturing_signal:get() end,
+    set = function(_, on)
+      capturing_signal:set(on)
+      if morf.shortcuts and morf.shortcuts.inhibit then pcall(morf.shortcuts.inhibit, on == true) end
+    end,
+  }
   local mods = controls.signal("keys.mods", {})
   local key = controls.signal("keys.key", "")
   local hovered = controls.signal("keys.combo", false)
