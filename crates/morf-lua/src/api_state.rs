@@ -205,9 +205,16 @@ pub(crate) fn install_state_api<'gc>(
                 else {
                     return Err(HostError(format!("state list `{key}` takes an array")).into());
                 };
-                model.borrow_mut().reconcile(values, None);
-                let mut state = state.borrow_mut();
-                state.scene_revision = state.scene_revision.wrapping_add(1);
+                let model = Rc::clone(model);
+                drop(fields);
+                {
+                    let mut state = state.borrow_mut();
+                    state.scene_revision = state.scene_revision.wrapping_add(1);
+                }
+                crate::model_revisions::replace_model_rows(
+                    &state, ctx, limits, &model, values, None,
+                )
+                .map_err(HostError)?;
                 return Ok(CallbackReturn::Return);
             }
             if fields.tables.contains_key(&key) {

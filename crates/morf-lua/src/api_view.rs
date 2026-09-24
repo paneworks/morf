@@ -9,8 +9,9 @@ use std::time::Duration;
 use morf_scene::{Behavior, ListModel, Value as SceneValue, VirtualList};
 
 use crate::{
-    lua_values::*, reactive_bindings::*, reactive_execute::*, scene_bindings::*, serialization::*,
-    state::*, surface_types::*, table_menu::*, types::*, views::*,
+    lua_values::*, model_revisions::*, reactive_bindings::*, reactive_execute::*,
+    scene_bindings::*, serialization::*, state::*, surface_types::*, table_menu::*, types::*,
+    views::*,
 };
 
 pub(crate) fn install_view_api<'gc>(
@@ -56,100 +57,144 @@ pub(crate) fn install_view_api<'gc>(
     });
     morf.set_field(ctx, "variants", variants);
 
-    let model_len = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let model: UserRef<ListModelToken> = stack.consume(ctx)?;
-        stack.replace(ctx, model.model.borrow().len() as i64);
-        Ok(CallbackReturn::Return)
-    });
-    let model_get = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (model, index): (UserRef<ListModelToken>, i64) = stack.consume(ctx)?;
-        let index = lua_index(index)?;
-        let model = model.model.borrow();
-        let value = model
-            .get(index)
-            .map(|(_, value)| scene_to_lua(ctx, value))
-            .transpose()
-            .map_err(HostError)?
-            .unwrap_or(LuaValue::Nil);
-        stack.replace(ctx, value);
-        Ok(CallbackReturn::Return)
-    });
-    let model_index_of = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (model, value): (UserRef<ListModelToken>, LuaValue) = stack.consume(ctx)?;
-        let value = lua_to_scene(ctx, value, 0).map_err(HostError)?;
-        let model = model.model.borrow();
-        let index = (0..model.len()).find(|index| {
-            model
-                .get(*index)
-                .is_some_and(|(_, candidate)| candidate == &value)
-        });
-        match index {
-            Some(index) => stack.replace(ctx, index as i64 + 1),
-            None => stack.replace(ctx, LuaValue::Nil),
+    // Reads register the model's revision as a dependency of the running
+    // binding; changes bump it. See `model_revisions`.
+    let model_len = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let model: UserRef<ListModelToken> = stack.consume(ctx)?;
+            track_model_read(&mut state.borrow_mut(), &model.model);
+            stack.replace(ctx, model.model.borrow().len() as i64);
+            Ok(CallbackReturn::Return)
         }
-        Ok(CallbackReturn::Return)
     });
-    let model_insert = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (model, index, value): (UserRef<ListModelToken>, i64, LuaValue) = stack.consume(ctx)?;
-        let index = lua_insert_index(index, model.model.borrow().len())?;
-        let value = lua_to_scene(ctx, value, 0).map_err(HostError)?;
-        if model.model.borrow_mut().insert(index, value).is_none() {
-            return Err(HostError("list-model insert index is out of range".into()).into());
+    let model_get = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let (model, index): (UserRef<ListModelToken>, i64) = stack.consume(ctx)?;
+            track_model_read(&mut state.borrow_mut(), &model.model);
+            let value = model_row(ctx, &model.model, lua_index(index)?)?;
+            stack.replace(ctx, value);
+            Ok(CallbackReturn::Return)
         }
-        Ok(CallbackReturn::Return)
     });
-    let model_remove = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (model, index): (UserRef<ListModelToken>, i64) = stack.consume(ctx)?;
-        let index = lua_index(index)?;
-        let value = model
-            .model
-            .borrow_mut()
-            .remove(index)
-            .map(|value| scene_to_lua(ctx, &value))
-            .transpose()
-            .map_err(HostError)?
-            .unwrap_or(LuaValue::Nil);
-        stack.replace(ctx, value);
-        Ok(CallbackReturn::Return)
-    });
-    let model_move = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (model, from, to): (UserRef<ListModelToken>, i64, i64) = stack.consume(ctx)?;
-        let from = lua_index(from)?;
-        let to = lua_index(to)?;
-        if !model.model.borrow_mut().move_item(from, to) {
-            return Err(HostError("list-model move index is out of range".into()).into());
+    let model_index_of = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let (model, value): (UserRef<ListModelToken>, LuaValue) = stack.consume(ctx)?;
+            track_model_read(&mut state.borrow_mut(), &model.model);
+            let value = lua_to_scene(ctx, value, 0).map_err(HostError)?;
+            let model = model.model.borrow();
+            let index = (0..model.len()).find(|index| {
+                model
+                    .get(*index)
+                    .is_some_and(|(_, candidate)| candidate == &value)
+            });
+            match index {
+                Some(index) => stack.replace(ctx, index as i64 + 1),
+                None => stack.replace(ctx, LuaValue::Nil),
+            }
+            Ok(CallbackReturn::Return)
         }
-        Ok(CallbackReturn::Return)
     });
-    let model_set = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (model, index, value): (UserRef<ListModelToken>, i64, LuaValue) = stack.consume(ctx)?;
-        let index = lua_index(index)?;
-        let value = lua_to_scene(ctx, value, 0).map_err(HostError)?;
-        if !model.model.borrow_mut().set(index, value) {
-            return Err(HostError("list-model update index is out of range".into()).into());
+    let model_insert = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let (model, index, value): (UserRef<ListModelToken>, i64, LuaValue) =
+                stack.consume(ctx)?;
+            let index = lua_insert_index(index, model.model.borrow().len())?;
+            let value = lua_to_scene(ctx, value, 0).map_err(HostError)?;
+            if model.model.borrow_mut().insert(index, value).is_none() {
+                return Err(HostError("list-model insert index is out of range".into()).into());
+            }
+            model_changed(&state, ctx, limits, &model.model).map_err(HostError)?;
+            Ok(CallbackReturn::Return)
         }
-        Ok(CallbackReturn::Return)
     });
-    let model_replace = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (model, items, object_property): (UserRef<ListModelToken>, Table, Option<String>) =
-            stack.consume(ctx)?;
-        if object_property
-            .as_ref()
-            .is_some_and(|property| property.is_empty() || property.len() > 128)
-        {
-            return Err(
-                HostError("list-model object property must contain 1 to 128 bytes".into()).into(),
-            );
+    let model_remove = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let (model, index): (UserRef<ListModelToken>, i64) = stack.consume(ctx)?;
+            let index = lua_index(index)?;
+            let removed = model.model.borrow_mut().remove(index);
+            let value = removed
+                .as_ref()
+                .map(|value| scene_to_lua(ctx, value))
+                .transpose()
+                .map_err(HostError)?
+                .unwrap_or(LuaValue::Nil);
+            if removed.is_some() {
+                model_changed(&state, ctx, limits, &model.model).map_err(HostError)?;
+            }
+            stack.replace(ctx, value);
+            Ok(CallbackReturn::Return)
         }
-        let value = lua_to_scene(ctx, LuaValue::Table(items), 0).map_err(HostError)?;
-        let SceneValue::List(values) = value else {
-            return Err(HostError("list-model replacement needs an array table".into()).into());
-        };
-        model
-            .model
-            .borrow_mut()
-            .reconcile(values, object_property.as_deref());
-        Ok(CallbackReturn::Return)
+    });
+    let model_move = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let (model, from, to): (UserRef<ListModelToken>, i64, i64) = stack.consume(ctx)?;
+            let from = lua_index(from)?;
+            let to = lua_index(to)?;
+            if !model.model.borrow_mut().move_item(from, to) {
+                return Err(HostError("list-model move index is out of range".into()).into());
+            }
+            if from != to {
+                model_changed(&state, ctx, limits, &model.model).map_err(HostError)?;
+            }
+            Ok(CallbackReturn::Return)
+        }
+    });
+    let model_set = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let (model, index, value): (UserRef<ListModelToken>, i64, LuaValue) =
+                stack.consume(ctx)?;
+            let index = lua_index(index)?;
+            let value = lua_to_scene(ctx, value, 0).map_err(HostError)?;
+            let unchanged = model
+                .model
+                .borrow()
+                .get(index)
+                .is_some_and(|(_, current)| current == &value);
+            if !model.model.borrow_mut().set(index, value) {
+                return Err(HostError("list-model update index is out of range".into()).into());
+            }
+            if !unchanged {
+                model_changed(&state, ctx, limits, &model.model).map_err(HostError)?;
+            }
+            Ok(CallbackReturn::Return)
+        }
+    });
+    let model_replace = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let (model, items, object_property): (UserRef<ListModelToken>, Table, Option<String>) =
+                stack.consume(ctx)?;
+            if object_property
+                .as_ref()
+                .is_some_and(|property| property.is_empty() || property.len() > 128)
+            {
+                return Err(HostError(
+                    "list-model object property must contain 1 to 128 bytes".into(),
+                )
+                .into());
+            }
+            let value = lua_to_scene(ctx, LuaValue::Table(items), 0).map_err(HostError)?;
+            let SceneValue::List(values) = value else {
+                return Err(HostError("list-model replacement needs an array table".into()).into());
+            };
+            replace_model_rows(
+                &state,
+                ctx,
+                limits,
+                &model.model,
+                values,
+                object_property.as_deref(),
+            )
+            .map_err(HostError)?;
+            Ok(CallbackReturn::Return)
+        }
     });
     let model_methods = Table::new(&ctx);
     model_methods.set_field(ctx, "len", model_len);
@@ -160,8 +205,38 @@ pub(crate) fn install_view_api<'gc>(
     model_methods.set_field(ctx, "move", model_move);
     model_methods.set_field(ctx, "set", model_set);
     model_methods.set_field(ctx, "replace", model_replace);
+    // `#model` and `model[i]` read -- and are tracked -- like `len` and
+    // `get`, so `for i = 1, #model do ... model[i] ... end` and `ipairs`
+    // follow the model too. Any other key is a method.
+    let model_index = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        let methods = ctx.stash(model_methods);
+        move |ctx, _, mut stack| {
+            let (model, key): (UserRef<ListModelToken>, LuaValue) = stack.consume(ctx)?;
+            let index = match key {
+                LuaValue::Integer(index) => Some(index),
+                LuaValue::Number(index) if index.fract() == 0.0 => Some(index as i64),
+                _ => None,
+            };
+            let value = match index {
+                Some(index) => {
+                    track_model_read(&mut state.borrow_mut(), &model.model);
+                    match usize::try_from(index - 1) {
+                        Ok(index) if index < model.model.borrow().len() => {
+                            model_row(ctx, &model.model, index)?
+                        }
+                        _ => LuaValue::Nil,
+                    }
+                }
+                None => ctx.fetch(&methods).get_value(ctx, key),
+            };
+            stack.replace(ctx, value);
+            Ok(CallbackReturn::Return)
+        }
+    });
     let model_metatable = Table::new(&ctx);
-    model_metatable.set_field(ctx, "__index", model_methods);
+    model_metatable.set_field(ctx, "__index", model_index);
+    model_metatable.set_field(ctx, "__len", model_len);
     let model_metatable = ctx.stash(model_metatable);
     state.borrow_mut().model_metatable = Some(model_metatable.clone());
     let list_model = Callback::from_fn(&ctx, move |ctx, _, mut stack| {

@@ -50,12 +50,14 @@ impl Runtime {
                 let sources = rows(DeviceKind::Source);
                 let streams = snapshot.streams().map(stream_row).collect::<Vec<_>>();
                 let available = snapshot.available();
+                let mut changed_models = Vec::new();
                 for (model, rows) in [
                     (&host.sinks, sinks),
                     (&host.sources, sources),
                     (&host.streams, streams),
                 ] {
                     model.borrow_mut().reconcile(rows, Some("id"));
+                    changed_models.push(Rc::clone(model));
                     // A list nothing draws would keep its change journal
                     // forever; one a view follows is drained by the view.
                     let followed = state
@@ -88,6 +90,12 @@ impl Runtime {
                         && graph.write(id, value.clone()).is_ok()
                     {
                         state.values.insert(id, value);
+                        moved = true;
+                    }
+                }
+                // A binding that counts the devices follows them.
+                for model in changed_models {
+                    if crate::model_revisions::bump_model_revision(state, &model).unwrap_or(false) {
                         moved = true;
                     }
                 }

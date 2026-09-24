@@ -144,6 +144,9 @@ pub(crate) fn evaluate_effect(
         };
         read_signal(state, effect, signal)?;
     }
+    for signal in crate::model_revisions::model_read_signals(state, capture.model_reads)? {
+        read_signal(state, effect, signal)?;
+    }
     for signal in capture.reads {
         read_signal(state, effect, signal)?;
     }

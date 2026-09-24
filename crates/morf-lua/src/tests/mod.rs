@@ -65,6 +65,7 @@ mod modules;
 mod pam_session;
 mod paths;
 mod prefers;
+mod reactivity;
 mod sandbox_limits;
 mod scene;
 mod screens;

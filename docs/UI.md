@@ -213,7 +213,16 @@ ui.Layout {
 `morf.list_model(rows)` holds rows with stable identity. `model:replace(rows,
 "id")` matches by that field, so rows that stayed keep their nodes; without
 a key it matches by value. `insert`, `remove`, `move`, `set`, `get`, `len`
-as expected.
+as expected; `#model` and `model[i]` (so `ipairs(model)`) read like `len`
+and `get`.
+
+A binding that reads a model -- `len`, `get`, `index_of`, `#`, an index --
+depends on it, and runs again when any change lands on it:
+
+```lua
+local items = morf.list_model({})
+ui.Text { text = function() return items:len() .. " items" end }
+```
 
 `ui.Repeater { model, delegate }` builds one node per row and follows the
 model: rows that go are destroyed, rows that come are built, rows that
