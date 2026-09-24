@@ -88,6 +88,7 @@ mod window_parse;
 
 pub use events::*;
 pub use runtime_input::*;
+pub use runtime_layout::SettledLayout;
 pub use runtime_session_lock::SessionLockState;
 pub use surface_types::*;
 pub use text_inputs::KeyModifiers;
