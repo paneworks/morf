@@ -319,6 +319,11 @@ pub(crate) struct ReactiveState {
     pub(crate) window_surfaces: HashMap<u64, WindowSurfaceConfig>,
     pub(crate) next_window_surface: u64,
     pub(crate) window_surfaces_changed: bool,
+    /// The size the compositor last configured each popup and floating
+    /// window to, as the two signals `win.width` and `win.height` read.
+    pub(crate) window_sizes: HashMap<u64, crate::window_events::WindowSize>,
+    /// `win:on_resize`, `win:on_close_requested` and `win:on_closed`.
+    pub(crate) window_handlers: HashMap<(u64, crate::window_events::WindowEvent), StashedClosure>,
     pub(crate) layer_surface_changed: bool,
     pub(crate) window_surface_actions: Vec<WindowSurfaceAction>,
     pub(crate) popup_node_anchors: HashMap<u64, PopupNodeAnchor>,
@@ -569,6 +574,8 @@ impl ReactiveState {
             window_surfaces: HashMap::new(),
             next_window_surface: 0,
             window_surfaces_changed: false,
+            window_sizes: HashMap::new(),
+            window_handlers: HashMap::new(),
             layer_surface_changed: false,
             window_surface_actions: Vec::new(),
             popup_node_anchors: HashMap::new(),

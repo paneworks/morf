@@ -311,6 +311,13 @@ pub(crate) fn install_module_api<'gc>(
         "configure",
         window_configure_method(ctx, Rc::clone(&state)),
     );
+    for event in crate::window_events::WindowEvent::ALL {
+        window_methods.set_field(
+            ctx,
+            event.method(),
+            crate::window_events::window_handler_method(ctx, Rc::clone(&state), event),
+        );
+    }
     // Methods first; on a layer surface any other name reads that layer
     // setting, and assigning one changes it on the live surface, exactly as
     // `morf.surface.<key>` does for the shell's own.
@@ -329,7 +336,15 @@ pub(crate) fn install_module_api<'gc>(
                 return Ok(CallbackReturn::Return);
             };
             let key = key.display_lossy().to_string();
-            let state = state.borrow();
+            let mut state = state.borrow_mut();
+            // A popup's or floating window's `width`/`height` is the size the
+            // compositor configured it to, tracked by the binding reading it.
+            if let Some(value) =
+                crate::window_events::window_size_field(&mut state, surface.id, &key)
+            {
+                stack.replace(ctx, value);
+                return Ok(CallbackReturn::Return);
+            }
             let value = match state.window_surfaces.get(&surface.id).map(|s| &s.kind) {
                 Some(WindowSurfaceKind::Layer(config)) => layer_setting_to_lua(ctx, config, &key),
                 _ => LuaValue::Nil,
@@ -402,6 +417,8 @@ pub(crate) fn install_module_api<'gc>(
                         .map_err(|error| HostError(error.to_string()))?;
                     state.popup_node_anchors.insert(id, anchor);
                 }
+                crate::window_events::register_window_size(&mut state, id);
+                crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
                 id
             };
             let userdata = UserData::new_static(&ctx, WindowSurfaceToken { id });
@@ -437,13 +454,19 @@ pub(crate) fn install_module_api<'gc>(
                     }
                 }
             }
-            let id = register_window_surface(
-                &mut state.borrow_mut(),
-                root,
-                visible,
-                updates_enabled,
-                WindowSurfaceKind::Floating(config),
-            );
+            let id = {
+                let mut state = state.borrow_mut();
+                let id = register_window_surface(
+                    &mut state,
+                    root,
+                    visible,
+                    updates_enabled,
+                    WindowSurfaceKind::Floating(config),
+                );
+                crate::window_events::register_window_size(&mut state, id);
+                crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
+                id
+            };
             let userdata = UserData::new_static(&ctx, WindowSurfaceToken { id });
             userdata.set_metatable(ctx, Some(ctx.fetch(&window_metatable)));
             stack.replace(ctx, userdata);

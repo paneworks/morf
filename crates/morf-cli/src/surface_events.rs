@@ -141,6 +141,9 @@ pub(crate) fn handle_surface_event(
                 let initial = surface.renderer.is_none();
                 surface.width = width.max(1);
                 surface.height = height.max(1);
+                // Before the paint, so the bindings that read `win.width` and
+                // `win.height` lay the root out at the size it is drawn at.
+                runtime.set_window_surface_size(surface.id, surface.width, surface.height);
                 let (physical_width, physical_height) = physical_size(
                     (surface.width, surface.height),
                     client.surface_scale_120(SurfaceRole::Popup(id)),
@@ -195,6 +198,7 @@ pub(crate) fn handle_surface_event(
         LayerEvent::PopupDone { id } => {
             if let Some(surface) = state.popup_surfaces.remove(&id) {
                 runtime.set_window_surface_visible(surface.id, false);
+                repaint |= runtime.dispatch_window_closed(surface.id);
             }
         }
         LayerEvent::FloatingConfigure { id, width, height } => {
@@ -202,6 +206,9 @@ pub(crate) fn handle_surface_event(
                 let initial = surface.renderer.is_none();
                 surface.width = width.max(1);
                 surface.height = height.max(1);
+                // Before the paint, so the bindings that read `win.width` and
+                // `win.height` lay the root out at the size it is drawn at.
+                runtime.set_window_surface_size(surface.id, surface.width, surface.height);
                 let (physical_width, physical_height) = physical_size(
                     (surface.width, surface.height),
                     client.surface_scale_120(SurfaceRole::Floating(id)),
@@ -235,8 +242,11 @@ pub(crate) fn handle_surface_event(
             }
         }
         LayerEvent::FloatingClose { id } => {
-            if let Some(surface) = state.floating_surfaces.remove(&id) {
-                runtime.set_window_surface_visible(surface.id, false);
+            // A request, not a close: the window stays until the
+            // configuration's `on_close_requested` lets it go, and then the
+            // next sync takes it down like any hidden window.
+            if state.floating_surfaces.contains_key(&id) {
+                repaint |= runtime.request_window_close(id);
             }
         }
         // Already taken above, by the pointer path.

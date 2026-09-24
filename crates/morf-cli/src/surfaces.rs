@@ -163,8 +163,11 @@ pub(crate) fn frame_stall(refresh: Duration) -> Duration {
     (refresh * 4).clamp(Duration::from_millis(50), Duration::from_millis(250))
 }
 
+/// Opens, moves and closes the popup, floating and layer windows the
+/// configuration asks for. A popup or floating window taken off screen here
+/// has its `on_closed` run once the sync is done.
 pub(crate) fn sync_window_surfaces(
-    runtime: &Runtime,
+    runtime: &mut Runtime,
     client: &mut LayerClient,
     popups: &mut HashMap<u64, AuxiliarySurface>,
     floatings: &mut HashMap<u64, AuxiliarySurface>,
@@ -213,9 +216,11 @@ pub(crate) fn sync_window_surfaces(
         .copied()
         .collect::<Vec<_>>();
     stale_popups.sort_unstable_by(|a, b| b.cmp(a));
+    let mut closed = Vec::new();
     for id in stale_popups {
         client.close_popup(id);
         popups.remove(&id);
+        closed.push(id);
     }
     let mut stale_floatings = floatings
         .keys()
@@ -226,6 +231,7 @@ pub(crate) fn sync_window_surfaces(
     for id in stale_floatings {
         client.close_floating(id);
         floatings.remove(&id);
+        closed.push(id);
     }
     resumed |= sync_layer_surfaces(client, output, &desired_layers, layers)?;
     let mut reopened = HashSet::new();
@@ -279,14 +285,15 @@ pub(crate) fn sync_window_surfaces(
                 },
             );
         } else if let Some(current) = floatings.get_mut(&id) {
+            // The stored size is the compositor's, from its last configure,
+            // and is left alone: a change to the requested size is a change
+            // to the config and reopens the window above. Writing the
+            // requested size here put a window the person had resized back
+            // to its first size on every sync — until the next configure.
             resumed |= !current.updates_enabled && surface.updates_enabled;
-            let moved = current.root != surface.root
-                || current.width != config.width
-                || current.height != config.height;
+            let moved = current.root != surface.root;
             current.root = surface.root;
             current.updates_enabled = surface.updates_enabled;
-            current.width = config.width;
-            current.height = config.height;
             // Only when the tree it lays out actually changed. `CachedLayout`
             // already re-checks the revision, the size and the scale, so
             // clearing it here on every sync threw away a valid layout — and
@@ -343,6 +350,11 @@ pub(crate) fn sync_window_surfaces(
                 current.layout = None;
             }
         }
+    }
+    // Last, with every surface settled: a callback that opens another window
+    // is heard by the next sync rather than this one.
+    for id in closed {
+        resumed |= runtime.dispatch_window_closed(id);
     }
     Ok(resumed)
 }

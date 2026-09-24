@@ -79,3 +79,4 @@ mod themes;
 mod timers;
 mod toplevels;
 mod views_states;
+mod window_events;
