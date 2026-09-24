@@ -157,6 +157,47 @@ fn a_signal_holds_a_table_by_value() {
 }
 
 #[test]
+fn a_mouse_area_says_whether_it_is_hovered_and_pressed() {
+    // A port made a signal per button and wrote it from on_entered and
+    // on_exited; the area now keeps both, for bindings to follow.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "hover.lua",
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                area = ui.MouseArea { width = 10, height = 10 }
+                ui.Text { text = function()
+                    return (area.hovered and "h" or "-") .. (area.pressed and "p" or "-")
+                end }
+                morf.ipc.write = function() area.hovered = true end
+            "#,
+        )
+        .unwrap();
+    let area = runtime.scene().roots()[0];
+    assert_eq!(text(&runtime, 1), "--");
+    assert!(runtime.dispatch_ui_event(area, UiEvent::PointerEntered));
+    assert_eq!(text(&runtime, 1), "h-");
+    let point = EventPoint::default();
+    assert!(runtime.dispatch_pointer(area, UiEvent::Pressed, point, (0.0, 0.0)));
+    assert_eq!(text(&runtime, 1), "hp");
+    runtime.dispatch_pointer(area, UiEvent::Released, point, (0.0, 0.0));
+    runtime.dispatch_ui_event(area, UiEvent::PointerExited);
+    assert_eq!(text(&runtime, 1), "--");
+    let error = runtime.call_ipc("write", &[]).unwrap_err().to_string();
+    assert!(error.contains("read-only"), "{error}");
+    let error = Runtime::default()
+        .execute(
+            "bad.lua",
+            br#"require("morf.ui").MouseArea { hovered = true }"#,
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("read-only"), "{error}");
+}
+
+#[test]
 fn a_disposed_effect_never_runs_again() {
     let mut runtime = Runtime::default();
     runtime

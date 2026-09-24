@@ -76,6 +76,11 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
             ));
             // The pointer's shape while it is over this area.
             properties.push(string("cursor", "default"));
+            // Kept by the runtime, for bindings to follow: whether the
+            // pointer is over the area, and whether a button is held on it.
+            // Read-only to a configuration.
+            properties.push(boolean("hovered", false));
+            properties.push(boolean("pressed", false));
         }
         // The types a drop here may carry, best first: exact types, `major/*`,
         // `*`, or the shorthands `text`, `image`, `uris`/`files`. Empty takes

@@ -676,6 +676,18 @@ ui.Rect {
 }
 ```
 
+### Hover and press
+
+A `MouseArea` keeps `hovered` (the pointer is over it, and it is the
+topmost area there) and `pressed` (a button or a touch went down on it and
+has not come up), both read-only. A binding follows them like any other
+property, so hover needs no signal and no `on_entered`:
+
+```lua
+local area = ui.MouseArea { anchors = { fill = true } }
+ui.Rect { color = function() return area.pressed and "#444" or area.hovered and "#333" or "#222" end }
+```
+
 ### Cursors
 
 `cursor = "pointer"` on a `MouseArea` is the pointer's shape while it is
