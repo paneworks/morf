@@ -38,7 +38,7 @@ function M.build(ctx)
   local r0 = row()
   local lean = lean_of(r0 and r0.key or "")
   local function path() return desk.picture_of(row()) end
-  local function lost() local p = path() return p ~= "" and not morf.fs.is_file(p) end
+  local function lost() return require("desktop.faces.common").lost(path()) end
   local function empty() return path() == "" or lost() end
   local function caption() local r = row() return r and type(r.caption) == "string" and r.caption or "" end
   local paper = function() return svg.paper(ink) end

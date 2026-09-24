@@ -1117,10 +1117,13 @@ function M.picture_of(row)
   return row and type(row.picture) == "string" and row.picture or ""
 end
 
---- A row's picture in imv, as the original opened it.
+--- A row's picture in a window of the shell's own (the original handed it
+--- to imv): fitted, the wheel zooms, a drag pans, Escape closes.
 function M.open_picture(row)
   local path = M.picture_of(row)
-  if path ~= "" then morf.spawn { command = { "imv", path }, detached = true } end
+  if path == "" then return end
+  local caption = row and type(row.caption) == "string" and row.caption ~= "" and row.caption or nil
+  require("desktop.viewer").open(path, caption or path:match("([^/]+)$"))
 end
 
 -- ----------------------------------------------------------------- editing --

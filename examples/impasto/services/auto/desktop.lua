@@ -19,6 +19,7 @@
 --   day <key> [yyyy-mm-dd]  a calendar widget's day view (none: the month)
 --   note_edge <key> <edge> | note_grid <note> <col> <row> | deck_edge <key> <edge>
 --   deck_add <edge> | along <deck> <0..1> | takes_new <deck> <1|0> | light <edge>
+--   view <photo key>       the photo in the picture viewer
 --                          what the pointer does while arranging, for a bench
 --   theme <modern|analogue>
 --   list                   the rows, one per line
@@ -190,6 +191,10 @@ morf.ipc.desk = function(verb, a, b, c)
     desk.set_deck_along(a or "", tonumber(b) or 0)
   elseif verb == "takes_new" then
     desk.set_takes_new(a or "", b ~= "0" and b ~= "false")
+  elseif verb == "view" then
+    -- A photo widget's picture in the viewer, as a click at rest opens it.
+    desk.open_picture(desk.entry_of(a or ""))
+    return desk.picture_of(desk.entry_of(a or ""))
   elseif verb == "light" then
     require("services.deck").receiving:set(a or "")
     return a or ""
