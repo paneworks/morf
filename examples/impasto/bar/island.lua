@@ -44,12 +44,20 @@ local function panel_size()
   return 560, 420
 end
 
+--- The open panel's inner margin: its own `padding` when it declares one
+--- (a module detail brings its own margins), else the theme's.
+function island.panel_padding(name)
+  local panel = island.panels[name or state.open_panel()]
+  if panel and panel.padding then return panel.padding end
+  return theme.panel_padding
+end
+
 --- The capsule's target size and inner padding for the current layer.
 function island.size()
   local layer = state.layer()
   if layer == "panel" then
     local w, h = panel_size()
-    return w, h, theme.panel_padding
+    return w, h, island.panel_padding()
   end
   local entry = island.layers[layer]
   if entry and entry.size then
@@ -155,7 +163,7 @@ function island.build(place)
       function()
         return ui.Inset {
           anchors = { fill = true },
-          margin = theme.panel_padding,
+          margin = island.panel_padding(name),
           panel.build(island),
         }
       end)
@@ -166,7 +174,11 @@ function island.build(place)
     width = width,
     height = height,
     radius = function()
-      if state.expanded() then return theme.radius_large end
+      -- A module detail stays a pill at capsule height and becomes a
+      -- rounded card as it grows, like the resting island.
+      if state.expanded() and not (island.panels[state.open_panel()] or {}).pill then
+        return theme.radius_large
+      end
       return math.min(height() / 2, theme.radius_large + 4)
     end,
     color = function()
