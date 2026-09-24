@@ -44,6 +44,17 @@ pub(crate) fn structure_value(value: &Structure<'_>) -> Result<DbusValue, String
 }
 
 pub(crate) fn array_value(value: &Array<'_>) -> Result<DbusValue, String> {
+    if matches!(value.element_signature(), zbus::zvariant::Signature::U8) {
+        return value
+            .inner()
+            .iter()
+            .map(|byte| match byte {
+                Value::U8(byte) => Ok(*byte),
+                _ => Err("D-Bus byte array holds a non-byte".to_owned()),
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(DbusValue::Bytes);
+    }
     value
         .inner()
         .iter()

@@ -250,6 +250,8 @@ pub(crate) fn dbus_value_to_lua(
         DbusValue::Unsigned(value) => LuaValue::Number(value as f64),
         DbusValue::Number(value) => LuaValue::Number(value),
         DbusValue::String(value) => LuaValue::String(ctx.intern(value.as_bytes())),
+        // `ay` is bytes, and Lua's bytes are a string.
+        DbusValue::Bytes(bytes) => LuaValue::String(ctx.intern(&bytes)),
         DbusValue::List(values) => {
             let table = Table::new(&ctx);
             for (index, value) in values.into_iter().enumerate() {
@@ -331,7 +333,11 @@ pub(crate) fn lua_to_dbus<'gc>(
         LuaValue::Boolean(value) => Ok(DbusValue::Bool(value)),
         LuaValue::Integer(value) => Ok(DbusValue::Integer(value)),
         LuaValue::Number(value) if value.is_finite() => Ok(DbusValue::Number(value)),
-        LuaValue::String(value) => Ok(DbusValue::String(value.display_lossy().to_string())),
+        // Text is a string; anything that is not UTF-8 can only be bytes.
+        LuaValue::String(value) => Ok(match std::str::from_utf8(value.as_bytes()) {
+            Ok(text) => DbusValue::String(text.to_owned()),
+            Err(_) => DbusValue::Bytes(value.as_bytes().to_vec()),
+        }),
         LuaValue::Table(table) => {
             if let LuaValue::String(signature) = table.get_value(ctx, "signature") {
                 let value = table.get_value(ctx, "value");

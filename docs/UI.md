@@ -821,8 +821,8 @@ morf.image.release(cover)
 ```
 
 - `morf.image.from_rgba(bytes, width, height, stride, options)` publishes raw
-  pixels and returns their source. `bytes` is a string or a list of byte
-  values (what `morf.dbus` gives for an `ay`); `stride` is the bytes from
+  pixels and returns their source. `bytes` is a string (what `morf.dbus`
+  gives for an `ay`) or a list of byte values; `stride` is the bytes from
   one row to the next (`nil`: packed). Options: `format` (`"rgba"`, the
   default, `"rgb"`, `"bgra"`, `"argb"`), `premultiplied` (divide the colour
   back out of alpha), and `name`. Returns `nil, why` when the sizes do not

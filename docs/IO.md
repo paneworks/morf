@@ -166,6 +166,30 @@ The older `morf.file(path):watch()` (`watcher:next(timeout)`) and
 `morf.file_view { watch_changes = true }` still work and sit on the same
 shared watcher, pulled rather than pushed; prefer `morf.fs.watch`.
 
+## D-Bus values
+
+`morf.dbus` converts as the bus's types suggest: numbers are numbers,
+`s`/`o`/`g` are strings, arrays and structures are lists, dictionaries are
+tables, a variant is its value.
+
+**Byte arrays (`ay`) are strings.** An image's pixels, an SSID, a path sent
+NUL-terminated arrive as one Lua string of those bytes — `#data`,
+`data:byte(i)`, `data:sub(a, b)` — not a list of numbers (which is what
+they were before, one table slot per byte). `morf.image.from_dbus` and
+`morf.image.from_rgba` take the string as it comes. When sending, an `ay`
+takes a string or a list of byte values:
+
+```lua
+proxy:call_with("AddConnection", {
+  { signature = "a{sa{sv}}", value = {
+      ["802-11-wireless"] = { ssid = { signature = "ay", value = "cafe" } },
+  } },
+})
+```
+
+A string that is not valid UTF-8 given where no signature says otherwise
+goes as `ay`; given for an `s`, it is made valid, as always.
+
 ## What is bounded, and what is cleaned up
 
 - A runtime runs at most 64 children and holds at most 64 connections;

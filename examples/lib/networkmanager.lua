@@ -543,7 +543,7 @@ function networkmanager.connect(options)
     if security == "enterprise" then
       return nil, "802.1X networks need a profile with their credentials; make one with nmcli or nm-connection-editor"
     end
-    local wireless = { ssid = typed("ay", dbus_client.string_to_bytes(ssid)) }
+    local wireless = { ssid = typed("ay", ssid) }
     if not ap_path then wireless.hidden = true end
     local settings = { ["802-11-wireless"] = wireless }
     if security == "wpa3" then
