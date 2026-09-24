@@ -134,11 +134,6 @@ impl Runtime {
         !callbacks.is_empty()
     }
 
-    /// Takes pending compositor clipboard publications.
-    pub fn take_clipboard_requests(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.reactive.borrow_mut().clipboard_requests)
-    }
-
     /// Dispatches a compositor clipboard selection to registered Lua callbacks.
     pub fn dispatch_clipboard(&mut self, text: Option<String>) -> bool {
         let callbacks = self.reactive.borrow().clipboard_callbacks.clone();

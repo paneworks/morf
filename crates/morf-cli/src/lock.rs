@@ -98,6 +98,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
         .update_clock(&clock)
         .map_err(|error| error.to_string())?;
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
+    client.set_waker(morf_io::wake_all);
     loop {
         client
             .dispatch_timeout_or(
@@ -203,6 +204,19 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                 LayerEvent::Clipboard { text } => {
                     repaint |= runtime.dispatch_clipboard(text);
                 }
+                LayerEvent::Selection { primary, offer } => {
+                    repaint |= runtime.dispatch_selection(
+                        primary,
+                        offer.map(|offer| morf_lua::OfferDescription {
+                            id: offer.id,
+                            mime_types: offer.mime_types,
+                            ..morf_lua::OfferDescription::default()
+                        }),
+                    );
+                }
+                LayerEvent::OfferRead { request_id, result } => {
+                    repaint |= runtime.dispatch_offer_read(request_id, result);
+                }
                 LayerEvent::Screencopy { request_id, result } => {
                     repaint |= dispatch_screencopy(&mut runtime, None, request_id, result);
                 }
@@ -267,6 +281,12 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                 | LayerEvent::FloatingConfigure { .. }
                 | LayerEvent::FloatingFrame { .. }
                 | LayerEvent::FloatingClose { .. }
+                // A lock screen takes no drags, in or out.
+                | LayerEvent::DragEnter { .. }
+                | LayerEvent::DragMotion { .. }
+                | LayerEvent::DragLeave { .. }
+                | LayerEvent::Drop { .. }
+                | LayerEvent::DragSourceEnded { .. }
                 | LayerEvent::Closed { .. } => {}
             }
         }

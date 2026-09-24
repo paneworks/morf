@@ -43,6 +43,7 @@ impl LayerClient {
         while let Ok(text) = self.state.clipboard_rx.try_recv() {
             self.state.events.push_back(LayerEvent::Clipboard { text });
         }
+        self.state.drain_reads();
         self.state.events.pop_front()
     }
 

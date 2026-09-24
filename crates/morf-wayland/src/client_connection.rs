@@ -36,7 +36,10 @@ use wayland_protocols_wlr::output_power_management::v1::client::zwlr_output_powe
 use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
 use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1;
 
+use crate::data_control::{DataControl, DcManager};
 use crate::{helpers::*, state_types::*, surface_types::*, types::*};
+use wayland_protocols::ext::data_control::v1::client::ext_data_control_manager_v1::ExtDataControlManagerV1;
+use wayland_protocols_wlr::data_control::v1::client::zwlr_data_control_manager_v1::ZwlrDataControlManagerV1;
 
 impl LayerClient {
     /// Connects to the current Wayland compositor and creates a top layer bar.
@@ -146,6 +149,19 @@ impl LayerClient {
         let linux_dmabuf = globals.bind::<ZwpLinuxDmabufV1, _, _>(&qh, 2..=5, ()).ok();
         let session_locks = SessionLockState::new(&globals, &qh);
         let (clipboard_tx, clipboard_rx) = mpsc::channel();
+        let (read_tx, read_rx) = mpsc::channel();
+        // Data control: the standard spelling first, the wlroots one where it
+        // is all there is. Version 2 of the latter adds the primary selection.
+        let data_control = globals
+            .bind::<ExtDataControlManagerV1, _, _>(&qh, 1..=1, ())
+            .map(DcManager::Ext)
+            .or_else(|_| {
+                globals
+                    .bind::<ZwlrDataControlManagerV1, _, _>(&qh, 1..=2, ())
+                    .map(DcManager::Wlr)
+            })
+            .ok()
+            .map(DataControl::new);
         let mut state = LayerState {
             registry: RegistryState::new(&globals),
             compositor,
@@ -197,6 +213,14 @@ impl LayerClient {
             clipboard_rx,
             clipboard_reads: Arc::new(AtomicUsize::new(0)),
             clipboard_writes: Arc::new(AtomicUsize::new(0)),
+            data_control,
+            next_offer_id: 0,
+            read_tx,
+            read_rx,
+            waker: None,
+            drag: None,
+            pressed_surface: None,
+            drag_source: None,
             latest_input_serial: None,
             virtual_keyboard_manager,
             virtual_keyboard: None,
