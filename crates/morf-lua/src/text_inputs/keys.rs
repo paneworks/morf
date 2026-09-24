@@ -107,6 +107,13 @@ pub(crate) fn key(
                 }
                 KeyOutcome::Handled
             }
+            // Shift+Delete is cut, and with nothing selected there is nothing
+            // to cut: rather than quietly delete a character, the key goes to
+            // `on_key_pressed`, where a launcher may bind it ("forget this
+            // entry"). Plain Delete still deletes.
+            (keysym::DELETE | keysym::KP_DELETE, _) if shift && !ctrl && !alt => {
+                KeyOutcome::Ignored
+            }
             (_, Some('v')) if ctrl && !alt => {
                 if !read_only && let Some(pasted) = &clipboard {
                     edited = buffer.insert(pasted);

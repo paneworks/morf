@@ -578,7 +578,9 @@ box.
 The keys are the ones every text box has: arrows, Home/End (Ctrl for the
 whole text), Ctrl for a word at a time, Shift to select, Up/Down and
 PageUp/PageDown between lines, Ctrl+A, Ctrl+C/X/V (and Shift+Delete,
-Ctrl/Shift+Insert) through the compositor clipboard, Ctrl+Z and
+Ctrl/Shift+Insert) through the compositor clipboard -- Shift+Delete cuts
+only a selection; with nothing selected it deletes nothing and goes to
+`on_key_pressed`, so a launcher can bind it -- Ctrl+Z and
 Ctrl+Shift+Z or Ctrl+Y, Enter to `on_accepted(text)`, Escape to
 `on_escape()`. A click places the caret, a double click selects a word, a
 triple click the line, and a drag selects. A key the field has no use for
@@ -589,7 +591,10 @@ box. `modifiers` is a string such as `"ctrl+shift"`; every
 
 A field has the keyboard when `focus` is true, and one field at a time
 does: a click, a Tab, or writing `focus = true` moves it, and
-`on_focus_changed(focused)` says so. While it has it, the compositor's
+`on_focus_changed(focused)` says so. A field -- or any node with
+`on_key_pressed` -- that sets `tab_navigation = false` keeps Tab while it
+has the keyboard: Tab and Shift+Tab go to its `on_key_pressed` (for a
+completion, say) instead of moving focus. While it has it, the compositor's
 input method (text-input-v3) is enabled for it and what the input method
 commits is typed into the field.
 

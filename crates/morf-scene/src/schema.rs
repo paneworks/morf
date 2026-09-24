@@ -39,6 +39,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         number("transition_y", 0.0),
         boolean("enabled", true),
         boolean("focus", false),
+        // Whether Tab moves the keyboard away from this node while it has
+        // it. False hands Tab to its own `on_key_pressed`.
+        boolean("tab_navigation", true),
         any("layout", Value::Map(BTreeMap::new())),
     ];
     match element {

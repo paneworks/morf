@@ -195,6 +195,30 @@ fn keys_the_field_does_not_use_reach_its_key_handler() {
 }
 
 #[test]
+fn shift_delete_cuts_a_selection_and_otherwise_is_the_apps() {
+    const DELETE: u32 = 0xffff;
+    let (mut runtime, node) = focused(
+        r#"text = "abc", on_key_pressed = function(keysym, text, modifiers) record("key")(keysym, modifiers) end,"#,
+    );
+    // Nothing selected: nothing to cut, and the text stays as it was.
+    press(&mut runtime, node, HOME, NONE);
+    press(&mut runtime, node, DELETE, SHIFT);
+    assert_eq!(text(&runtime, node), "abc");
+    let seen = log(&mut runtime);
+    assert!(seen.contains(&format!("key {DELETE} shift")), "{seen}");
+    // Plain Delete still deletes.
+    press(&mut runtime, node, DELETE, NONE);
+    assert_eq!(text(&runtime, node), "bc");
+    let _ = log(&mut runtime);
+    // A selection is cut.
+    letter(&mut runtime, node, 'a', CTRL);
+    press(&mut runtime, node, DELETE, SHIFT);
+    assert_eq!(text(&runtime, node), "");
+    assert_eq!(copied(&mut runtime), ["bc"]);
+    assert!(!log(&mut runtime).contains("key"));
+}
+
+#[test]
 fn the_configuration_writes_text_caret_and_selection() {
     let mut runtime = Runtime::default();
     runtime

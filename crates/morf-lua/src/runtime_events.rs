@@ -373,6 +373,17 @@ impl Runtime {
         scene_node_in_subtree(&state.scene, root, node)
     }
 
+    /// Whether Tab pressed while `node` has the keyboard moves focus on
+    /// (its `tab_navigation`, true unless it said otherwise), rather than
+    /// going to the node as a key.
+    pub fn tab_navigates(&self, node: NodeHandle) -> bool {
+        self.reactive
+            .borrow()
+            .scene
+            .bool_value(node, "tab_navigation")
+            .unwrap_or(true)
+    }
+
     /// Advances keyboard focus within one scene root.
     pub fn next_key_target_in(
         &self,
