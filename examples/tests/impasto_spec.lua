@@ -30,6 +30,15 @@ test.describe("impasto", function()
     local surface = test.surfaces()[1]
     test.eq(surface.kind, "primary")
     test.eq(surface.width, 1280)
+    -- The wallpaper is a background layer of its own, shown from the start
+    -- (it was built closed once, and a real compositor showed no wallpaper).
+    local wallpaper
+    for _, each in ipairs(test.surfaces()) do
+      if each.name == "impasto-wallpaper" then wallpaper = each end
+    end
+    test.truthy(wallpaper, "no wallpaper layer")
+    test.truthy(wallpaper.visible, "the wallpaper layer is not shown")
+    test.eq(wallpaper.width, 1280)
   end)
 
   test.it("opens each panel over IPC, and closes it again", function()
