@@ -738,6 +738,43 @@ changed are repainted. A runtime has at most 16 terminals (`MORF_LIMITS`
 reload ends them all. `examples/terminal.lua` runs btop in a panel;
 `examples/fzf_launcher.lua` is an application launcher that is fzf.
 
+### Images
+
+`ui.Image { source = ... }` draws a path, a `file://` URI, an SVG written
+inline (text starting with `<svg`) or a `data:` URI, or a picture held in
+memory under a `memory:` source — a capture's, or pixels the configuration
+published itself:
+
+```lua
+-- A notification's `image-data` hint, straight from morf.dbus: an
+-- (iiibiiay) struct, positional or with the spec's field names.
+local cover = morf.image.from_dbus(hints["image-data"], { name = "note-" .. id })
+ui.Image { source = cover, width = 48, height = 48, fill_mode = "preserve_aspect_fit" }
+-- later, when the notification goes
+morf.image.release(cover)
+```
+
+- `morf.image.from_rgba(bytes, width, height, stride, options)` publishes raw
+  pixels and returns their source. `bytes` is a string or a list of byte
+  values (what `morf.dbus` gives for an `ay`); `stride` is the bytes from
+  one row to the next (`nil`: packed). Options: `format` (`"rgba"`, the
+  default, `"rgb"`, `"bgra"`, `"argb"`), `premultiplied` (divide the colour
+  back out of alpha), and `name`. Returns `nil, why` when the sizes do not
+  fit the bytes.
+- `morf.image.from_dbus(image_data, options)` the same, for a D-Bus
+  `(iiibiiay)` image (8 bits a sample, 3 or 4 channels).
+- `morf.image.release(source)` lets a published picture go; whether it was
+  held.
+- `morf.image.encode_png(bytes, width, height, path, options)` writes raw
+  pixels (same `stride`, `format`, `premultiplied` options) as a PNG file:
+  `true`, or `nil, why`.
+
+A published picture is drawable on every surface and is held until it is
+released, until the same `name` is published again (which answers with a
+*new* source, so nothing draws the old pixels by mistake), or until the
+configuration is reloaded or exits. A configuration may hold 4096 of them
+and 256 MiB of pixels; past that `from_rgba` answers `nil, why`.
+
 ### Paths
 
 `ui.Path` is a shape written as SVG path data — a face, a ring gauge, a

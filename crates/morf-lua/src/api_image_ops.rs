@@ -362,6 +362,7 @@ pub(crate) fn install_image_ops_api<'gc>(
         crate::image_jobs::MAX_IN_FLIGHT as i64,
     );
     image.set_field(ctx, "limits", limits);
+    crate::api_image_raw::install_raw_image_api(ctx, image);
 
     morf.set_field(ctx, "image", image);
 }

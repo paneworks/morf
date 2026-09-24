@@ -108,10 +108,8 @@ impl ImageCache {
         // not decoded from anything, so there is no larger original to resample
         // from, and the node's `fill_mode` is what decides how it lands in the
         // rectangle — the same as for a file whose intrinsic size differs.
-        if let Some(name) = source.as_ref().to_str().and_then(memory_name)
-            && let Some(image) = self.memory.get(name)
-        {
-            return Ok(Arc::clone(image));
+        if let Some(name) = source.as_ref().to_str().and_then(memory_name) {
+            return self.memory_image(name);
         }
         let source = normalize_source(source.as_ref())?;
         let width = physical_size(logical_width, scale_120)?;
@@ -215,8 +213,23 @@ impl ImageCache {
         self.load_distance_field(path, logical_width, logical_height, scale_120, spread)
     }
 
+    /// A named image: one this cache was handed, or one a configuration
+    /// published for every renderer.
+    fn memory_image(&self, name: &str) -> Result<Arc<ImageData>, ImageError> {
+        self.memory
+            .get(name)
+            .cloned()
+            .or_else(|| crate::published::published(name))
+            .ok_or_else(|| ImageError::InvalidSource(format!("memory:{name} is not held")))
+    }
+
     /// Returns a source's unscaled pixel dimensions.
     pub fn intrinsic_size(&mut self, source: impl AsRef<Path>) -> Result<(u32, u32), ImageError> {
+        if let Some(name) = source.as_ref().to_str().and_then(memory_name) {
+            return self
+                .memory_image(name)
+                .map(|image| (image.width, image.height));
+        }
         let source = normalize_source(source.as_ref())?;
         if let Some(size) = self.intrinsic.get(&source) {
             return Ok(*size);

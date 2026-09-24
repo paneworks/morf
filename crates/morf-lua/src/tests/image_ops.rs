@@ -216,3 +216,80 @@ fn a_capture_saved_to_a_file_is_cut_and_encoded_on_a_worker() {
     assert_eq!(pixel, [200, 20, 2, 255]);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn pixels_become_a_source_every_renderer_can_draw() {
+    let dir = scratch("raw");
+    let mut runtime = Runtime::default();
+    let source = format!(
+        r##"
+        local img = morf.image
+        -- Two pixels, as a string: red, then half-transparent green.
+        local src = assert(img.from_rgba("\255\0\0\255\0\255\0\128", 2, 1))
+        assert(src:find("^memory:image/"))
+        -- A notification's image-data, as morf.dbus hands it over: an
+        -- (iiibiiay) struct with the bytes as a list, rows padded to 8.
+        local dbus = {{ 2, 2, 8, false, 8, 3, {{ 1,2,3, 4,5,6, 0,0, 7,8,9, 10,11,12 }} }}
+        local note = assert(img.from_dbus(dbus, {{ name = "note-1" }}))
+        local named = assert(img.from_dbus({{ width = 1, height = 1, rowstride = 4,
+          has_alpha = true, bits_per_sample = 8, channels = 4, data = "\9\9\9\255" }}))
+        local again = assert(img.from_dbus(dbus, {{ name = "note-1" }}))
+        assert(again ~= note, "a republished name is a new source")
+        _G.sources = {{ src = src, note = note, again = again, named = named }}
+        local short, why = img.from_rgba("\0\0\0", 1, 1)
+        assert(short == nil and why:find("need 4 bytes"), why)
+        assert(select(2, img.from_dbus({{ 1, 1, 2, false, 16, 1, "\0\0" }})):find("16 bits"))
+        assert(not pcall(img.from_rgba, "\0\0\0\0", 1, 1, nil, {{ format = "yuv" }}))
+        assert(img.encode_png("\1\2\3\255\4\5\6\255", 2, 1, "{dir}/two.png"))
+        assert(img.encode_png("\3\2\1\255", 1, 1, "{dir}/bgra.png", {{ format = "bgra" }}))
+        assert(img.release(named) and not img.release(named))
+        assert(not img.release("memory:image/not-ours"))
+        "##,
+        dir = dir.display()
+    );
+    runtime.execute("raw.lua", source.as_bytes()).unwrap();
+    let get = |runtime: &mut Runtime, key: &str| -> String {
+        runtime
+            .execute(
+                "get.lua",
+                format!("morf.ipc.got = function() return _G.sources.{key} end").as_bytes(),
+            )
+            .unwrap();
+        match runtime.call_ipc("got", &[]).unwrap().as_slice() {
+            [IpcValue::String(value)] => value.clone(),
+            other => panic!("{other:?}"),
+        }
+    };
+    let (src, note, again, named) = (
+        get(&mut runtime, "src"),
+        get(&mut runtime, "note"),
+        get(&mut runtime, "again"),
+        get(&mut runtime, "named"),
+    );
+    let mut cache = morf_image::ImageCache::default();
+    assert_eq!(cache.intrinsic_size(&src).unwrap(), (2, 1));
+    assert_eq!(
+        cache.load(&src, 2, 1, 120).unwrap().rgba,
+        [255, 0, 0, 255, 0, 255, 0, 128]
+    );
+    assert!(cache.load(&note, 2, 2, 120).is_err(), "replaced by `again`");
+    assert_eq!(
+        cache.load(&again, 2, 2, 120).unwrap().rgba,
+        [1, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255, 10, 11, 12, 255]
+    );
+    assert!(cache.load(&named, 1, 1, 120).is_err(), "released");
+    assert_eq!(
+        morf_image::ops::pixel_at(dir.join("two.png"), 1, 0, u64::MAX).unwrap(),
+        [4, 5, 6, 255]
+    );
+    assert_eq!(
+        morf_image::ops::pixel_at(dir.join("bgra.png"), 0, 0, u64::MAX).unwrap(),
+        [1, 2, 3, 255]
+    );
+    drop(runtime);
+    assert!(
+        cache.load(&src, 2, 1, 120).is_err() && cache.load(&again, 2, 2, 120).is_err(),
+        "a runtime that goes takes its pictures with it"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

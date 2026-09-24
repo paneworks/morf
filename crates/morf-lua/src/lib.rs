@@ -19,6 +19,7 @@ mod api_host;
 mod api_http;
 mod api_image;
 mod api_image_ops;
+mod api_image_raw;
 mod api_io;
 mod api_log;
 mod api_menu;

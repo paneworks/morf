@@ -5,6 +5,7 @@ mod icons;
 mod image_cache;
 mod inline;
 pub mod ops;
+pub mod published;
 mod quantize;
 
 pub use icons::IconResolver;

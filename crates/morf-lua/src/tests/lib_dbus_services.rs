@@ -977,6 +977,7 @@ fn private_bus_notification_with_an_image_and_a_resident_action() {
                         n.summary, n.image_path, image and (image.width .. "x" .. image.height) or "none",
                         image and tostring(#image.data) or "0", tostring(image and image.has_alpha),
                         tostring(n.urgency), n.category, n.desktop_entry, tostring(n.resident),
+                        n.image_source and n.image_source:match("^memory:image/") or "no source",
                     }, "|")
                     morf.timer(1, function()
                         server.invoke(n.id, "open")
@@ -1073,7 +1074,7 @@ fn private_bus_notification_with_an_image_and_a_resident_action() {
     assert!(reply.is_ok(), "Notify was answered: {reply:?}");
     assert_eq!(
         runtime.scene().string_value(root, "text").unwrap(),
-        "hello|/tmp/face.png|2x1|8|true|2|im.received|chat|true|after=1",
+        "hello|/tmp/face.png|2x1|8|true|2|im.received|chat|true|memory:image/|after=1",
         "every hint read, and a resident notification outlives its action"
     );
 }
