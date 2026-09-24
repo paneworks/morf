@@ -42,11 +42,13 @@ local function avatar(size)
   }
 end
 
+-- On the account itself where the machine can (services/account.lua), in
+-- Settings where it cannot.
 local function set_picture(path)
   local clean = tostring(path or ""):gsub("^file://", ""):match("^%s*(.-)%s*$")
-  if clean == "" then settings.set("userAvatar", "") return end
+  if clean == "" then account.clear_picture() return end
   local ext = (clean:match("%.([%w]+)$") or ""):lower()
-  if IMAGES[ext] and morf.fs.is_file(clean) then settings.set("userAvatar", clean) end
+  if IMAGES[ext] and morf.fs.is_file(clean) then account.set_picture(clean) end
 end
 
 local function you_rows(W)
@@ -62,6 +64,8 @@ local function you_rows(W)
       setting.label {
         label = "Picture", width = W - 28 - 48 - 16 - 16 - 100,
         reading = function()
+          if account.busy() == "picture" then return "Changing it on the account…" end
+          if account.failure() ~= "" then return "Not changed: " .. account.failure() end
           if settings.userAvatar ~= "" then return "The lock screen's, chosen here" end
           if account.avatar() ~= "" then return "The account's own" end
           return "Drop an image here, or type its path below"
@@ -70,9 +74,11 @@ local function you_rows(W)
     },
     ui.Item {
       anchors = { right = true, right_margin = 14, vertical_center = true }, width = 92, height = 30,
-      visible = function() return settings.userAvatar ~= "" end,
+      visible = function() return account.avatar() ~= "" end,
       controls.pill { text = "Clear", icon = "󰜉", height = 30, width = 92,
-        on_click = function() settings.set("userAvatar", "") end },
+        on_click = function()
+          if settings.userAvatar ~= "" then settings.set("userAvatar", "") else account.clear_picture() end
+        end },
     },
     ui.DropArea {
       anchors = { fill = true }, keys = { "files" },
@@ -87,14 +93,14 @@ local function you_rows(W)
   return {
     width = W, title = "You",
     note = "Your name and picture, on the lock screen.",
-    hint = "The name defaults to your account's full name and the picture to the account's own. What is set here is kept by the shell; the account is not changed.",
+    hint = "Changed on the account itself, so the lock and the login screen agree: the name through AccountsService, the picture through the setup's helper. Where the machine has neither, it is kept by the shell.",
     picture_row,
     setting.field { width = W, label = "Picture file", placeholder = "A path to an image",
       value = settings.userAvatar,
       on_edited = function(text) set_picture(text) end },
     setting.field { width = W, label = "Name", placeholder = account.full_name ~= "" and account.full_name or account.user,
-      value = settings.userName,
-      on_edited = function(text) settings.set("userName", (text:match("^%s*(.-)%s*$"))) end },
+      value = settings.userName ~= "" and settings.userName or account.full(),
+      on_edited = function(text) account.set_name(text) end },
   }
 end
 

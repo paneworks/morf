@@ -84,27 +84,60 @@ function M.scan(rescan)
   morf.timer(4000, function() M.scanning:set(false) end, false)
 end
 
-local function busy(ssid, what, fn, ...)
+-- A row says "Working…" for as long as its operation runs: until the
+-- library answers (a disconnect, a forget, a refused connection), or for a
+-- connection until NetworkManager reports that network connected -- the
+-- answer to `connect` only says the activation has started. A generation
+-- keeps a late answer from clearing a newer operation's row; nothing waits
+-- longer than a minute.
+local operation = 0
+local waiting_for = nil
+
+local function finish(mine)
+  if mine ~= operation then return end
+  waiting_for = nil
+  M.busy_ssid:set("")
+end
+
+local function busy(ssid, what, fn, arguments, settles_on_connect)
+  operation = operation + 1
+  local mine = operation
   M.busy_ssid:set(ssid or "")
-  local ok, err = act.run(what, fn, ...)
-  -- The result arrives as the state changing; the row stops saying
-  -- "Working…" once the library has answered.
-  morf.timer(600, function() M.busy_ssid:set("") end, false)
+  waiting_for = nil
+  local function done(result, err)
+    if err or result == nil or not settles_on_connect then return finish(mine) end
+    if M.wifi_connected() and s.wifi.ssid == ssid then return finish(mine) end
+    waiting_for = { ssid = ssid, operation = mine }
+  end
+  -- The library's `done` goes after the arguments, which may hold nils.
+  arguments[arguments.n + 1] = done
+  local ok, err = act.run(what, fn, table.unpack(arguments, 1, arguments.n + 1))
+  -- A dry run (or a call that never went out) has nothing to wait for.
+  if act.dry or not ok then morf.timer(1, function() finish(mine) end, false) end
+  morf.timer(60000, function() finish(mine) end, false)
   return ok, err
 end
 
+morf.effect("impasto.network.settled", function()
+  local connected, ssid = s.wifi.connected == true, s.wifi.ssid
+  local wanted = waiting_for
+  if wanted and connected and ssid == wanted.ssid then
+    morf.timer(1, function() finish(wanted.operation) end, false)
+  end
+end)
+
 function M.connect(row_or_ssid, password)
   local ssid = type(row_or_ssid) == "table" and row_or_ssid.ssid or row_or_ssid
-  return busy(ssid, "connecting to " .. tostring(ssid), net.connect, row_or_ssid,
-    (password ~= "" and password) or nil)
+  return busy(ssid, "connecting to " .. tostring(ssid), net.connect,
+    { n = 3, row_or_ssid, (password ~= "" and password) or nil, nil }, true)
 end
 
 function M.disconnect(ssid)
-  return busy(ssid, "disconnecting Wi-Fi", net.disconnect)
+  return busy(ssid, "disconnecting Wi-Fi", net.disconnect, { n = 1, nil })
 end
 
 function M.forget(ssid)
-  return busy(ssid, "forgetting " .. tostring(ssid), net.forget, ssid)
+  return busy(ssid, "forgetting " .. tostring(ssid), net.forget, { n = 1, ssid })
 end
 
 function M.set_wifi(on)

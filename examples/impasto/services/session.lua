@@ -117,14 +117,34 @@ local runners = {
     if lock then lock.lock() end
     suspend_when_locked()
   end,
+  -- Hyprland's own exit where it runs (upstream's hl.dsp.exit()); anywhere
+  -- else, or when Hyprland does not take it, logind ends the session.
   logout = function()
+    local function terminate()
+      local session = morf.env("XDG_SESSION_ID")
+      if session and session ~= "" then
+        call("TerminateSession", session)
+        return
+      end
+      -- No id in the environment: logind's "the caller's session".
+      local ok, proxy = pcall(morf.dbus.proxy, "system", LOGIND,
+        "/org/freedesktop/login1/session/auto", "org.freedesktop.login1.Session", 5000)
+      if ok and proxy then
+        local done, err = pcall(proxy.call, proxy, "Terminate")
+        if not done then morf.log("warn", "impasto: logind Terminate: " .. tostring(err)) end
+      else
+        morf.log("warn", "impasto: logind is not reachable; not logging out")
+      end
+    end
     local ok, hyprland = pcall(require, "lib.hyprland")
-    if ok and hyprland and hyprland.dispatch then
-      hyprland.dispatch("exit")
+    if ok and hyprland and hyprland.available and hyprland.available() then
+      local sent = hyprland.dispatch("exit", nil, function(answered)
+        if not answered then terminate() end
+      end)
+      if sent == false then terminate() end
       return
     end
-    local session = morf.env("XDG_SESSION_ID")
-    if session then call("TerminateSession", session) end
+    terminate()
   end,
   reboot = function() call("Reboot", false) end,
   shutdown = function() call("PowerOff", false) end,

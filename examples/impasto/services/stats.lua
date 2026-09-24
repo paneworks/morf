@@ -172,11 +172,13 @@ local function read_disks()
     local ok, list = pcall(sysinfo.disks)
     if ok and type(list) == "table" and #list > 0 then return list end
   end
+  -- Every real filesystem, once per device, then the four largest (what
+  -- stats.py took from `df`, sorted by size), not the first four mounted.
   local text = fs.read("/proc/mounts") or ""
   local seen, out = {}, {}
   for device, target, kind in text:gmatch("(%S+)%s+(%S+)%s+(%S+)[^\n]*") do
     target = target:gsub("\\040", " ")
-    if REAL[kind] and not seen[device] and not target:find("^/boot") and #out < 4 then
+    if REAL[kind] and not seen[device] and not target:find("^/boot") then
       seen[device] = true
       local usage = fs.disk(target)
       if usage and (usage.total or 0) > 0 then
@@ -184,38 +186,47 @@ local function read_disks()
       end
     end
   end
+  table.sort(out, function(a, b)
+    if a.total ~= b.total then return a.total > b.total end
+    return a.target < b.target
+  end)
+  while #out > 4 do table.remove(out) end
   return out
 end
 
--- The hottest of the sensors that stand for the processor, else of any.
-local PREFERRED = { coretemp = true, k10temp = true, zenpower = true, cpu_thermal = true, acpitz = false }
+-- The hottest sensor with a plausible reading (5 to 125 degrees), to a
+-- tenth of a degree (stats.py `temperature`). A whole number stays whole,
+-- so it reads "48°", not "48.0°".
+local function tenths(value)
+  local rounded = math.floor(value * 10 + 0.5) / 10
+  if rounded == math.floor(rounded) then return math.floor(rounded) end
+  return rounded
+end
+M.tenths = tenths
 
 local function read_temperature()
   if sysinfo and type(sysinfo.temperature) == "function" then
     local ok, t = pcall(sysinfo.temperature)
     if ok and type(t) == "table" and t.celsius then return t end
   end
-  local best, fallback
+  local best
   for _, entry in ipairs(fs.list("/sys/class/hwmon") or {}) do
     local dir = fs.join("/sys/class/hwmon", entry.name)
     local name = (fs.read(fs.join(dir, "name")) or ""):match("^%s*(.-)%s*$")
-    for index = 1, 8 do
+    for index = 1, 16 do
       local raw = fs.read(fs.join(dir, "temp" .. index .. "_input"))
-      if raw then
-        local celsius = math.floor((tonumber(raw:match("%-?%d+")) or 0) / 1000 + 0.5)
-        local label = (fs.read(fs.join(dir, "temp" .. index .. "_label")) or name):match("^%s*(.-)%s*$")
-        local reading = { celsius = celsius, label = label ~= "" and label or name }
-        if celsius > 0 and celsius < 150 then
-          if PREFERRED[name] then
-            if not best or celsius > best.celsius then best = reading end
-          elseif not fallback or celsius > fallback.celsius then
-            fallback = reading
-          end
+      local milli = raw and tonumber(raw:match("^%s*(%d+)"))
+      if milli then
+        local celsius = milli / 1000
+        if celsius > 5 and celsius < 125 and (not best or celsius > best.raw) then
+          local label = (fs.read(fs.join(dir, "temp" .. index .. "_label")) or ""):match("^%s*(.-)%s*$")
+          best = { raw = celsius, celsius = tenths(celsius), label = label ~= "" and label or name }
         end
       end
     end
   end
-  return best or fallback
+  if best then best.raw = nil end
+  return best
 end
 
 local function read_model()
