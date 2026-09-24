@@ -99,6 +99,30 @@ function face.new(options)
     },
   }
 
+  -- The paper style's mouth, drawn live so a new mood reshapes it: the
+  -- outline it had walks into the new one.
+  local mouth_shape = styles.paper.mouth
+  local mouth_from = mouth_shape(mood())
+  local mouth = ui.Path {
+    x = 0, y = 0, width = size, height = size,
+    view_box = { 0, 0, 100, 100 },
+    d = mouth_from, morph_to = mouth_from, morph_progress = 1,
+    fill_color = theme.color.island, stroke_color = "transparent",
+    visible = function() return style() == "paper" and not egg() end,
+  }
+  morf.effect("impasto.pets.mouth", function()
+    local next_d = mouth_shape(mood())
+    if next_d == mouth_from then return end
+    mouth.d = mouth_from
+    mouth.morph_to = next_d
+    mouth.morph_progress = 0
+    mouth_from = next_d
+    morf.animation.play {
+      { node = mouth, property = "morph_progress", from = 0, to = 1,
+        duration = math.max(1, theme.duration_medium()), easing = theme.easing() },
+    }
+  end, { owner = mouth })
+
   local children = {
     ui.Image {
       x = function() return -size() * PAD / 100 end,
@@ -107,6 +131,7 @@ function face.new(options)
       height = function() return size() * (100 + 2 * PAD) / 100 end,
       source = function() return drawing().body end,
     },
+    mouth,
     eyes,
     -- Level-fifteen star, in a fixed indicator colour.
     kit.text {

@@ -1,50 +1,61 @@
 -- The logo at any size: a painter's board with five daubs in the palette's
--- colours (PaletteBoard).
+-- colours (PaletteBoard.qml).
 --
--- The original laid the daubs over a painted picture of a board that ships
--- with impasto. That picture is not part of this port, so the board is
--- drawn: an oval with a thumb hole, the daubs where the original's
--- geometry puts them, each in a palette token so the logo repaints with the
--- wallpaper.
+-- The board is the painted picture impasto installs beside its wallpapers
+-- (`art/palette-board.png` here, cut down from 1254 px to 512, which keeps
+-- the brush texture at every size the shell draws it), and the daubs are laid
+-- over it where its geometry file (Board.qml's `palette-board.json`) puts
+-- them, each in a palette token so the logo repaints with the wallpaper.
+-- Without the picture it is one daub in the accent, as the original falls
+-- back to.
 
 local ui = require("morf.ui")
 local theme = require("theme")
 
 local C = theme.color
 
--- Daub centres and turns on a 100-unit board.
-local DAUBS = {
-  { key = "accent", x = 30, y = 30, turn = -18 },
-  { key = "green", x = 55, y = 22, turn = 8 },
-  { key = "yellow", x = 75, y = 36, turn = 24 },
-  { key = "red", x = 74, y = 62, turn = -12 },
-  { key = "blue", x = 50, y = 72, turn = 14 },
+-- palette-board.json, in board coordinates (a 1254 square).
+local CANVAS = 1254
+local DAUB = { width = 144, height = 90, radius = 45 }
+local PAINT = {
+  { key = "accent", x = 280, y = 650, rotation = -72 },
+  { key = "green", x = 340, y = 480, rotation = -52 },
+  { key = "yellow", x = 450, y = 340, rotation = -33 },
+  { key = "red", x = 620, y = 250, rotation = -12 },
+  { key = "blue", x = 800, y = 225, rotation = 6 },
 }
+
+local PICTURE = morf.fs.join(morf.shell_dir(), "art", "palette-board.png")
+local have_picture = morf.fs.is_file(PICTURE)
 
 --- `size` in pixels (64).
 return function(values)
   local size = values.size or 64
-  local f = size / 100
+  local f = size / CANVAS
+  local fade = { duration = theme.duration_medium() }
   local children = {
-    anchors = values.anchors,
+    anchors = values.anchors, x = values.x, y = values.y,
     width = size, height = size,
-    ui.Path {
-      anchors = { fill = true }, view_box = { 0, 0, 100, 100 },
-      d = "M50 6 C80 6 96 26 96 50 C96 76 76 94 50 94 C30 94 20 84 22 74 "
-        .. "C24 64 34 66 34 58 C34 50 18 54 10 46 C4 40 6 28 14 20 C22 12 36 6 50 6 Z "
-        .. "M24 38 C24 33 28 30 32 32 C36 34 35 40 31 42 C27 44 24 42 24 38 Z",
-      fill_rule = "evenodd",
-      fill_color = C.islandSurfaceHover,
-      stroke_color = C.islandBorder, stroke_width = 1.5,
-    },
   }
-  for _, daub in ipairs(DAUBS) do
-    local w, h = 16 * f, 10 * f
+  if not have_picture then
+    children[#children + 1] = ui.Rect {
+      anchors = { center_in = true },
+      width = size * 0.42, height = size * 0.27, radius = size * 0.135, rotation = -16,
+      color = C.accent, behavior = { color = fade },
+    }
+    return ui.Item(children)
+  end
+  children[#children + 1] = ui.Image {
+    anchors = { fill = true }, source = PICTURE, fill_mode = "preserve_aspect_fit",
+    source_width = math.ceil(size * 2), source_height = math.ceil(size * 2),
+  }
+  for _, daub in ipairs(PAINT) do
+    local w, h = DAUB.width * f, DAUB.height * f
     children[#children + 1] = ui.Rect {
       x = daub.x * f - w / 2, y = daub.y * f - h / 2, width = w, height = h,
-      radius = h / 2, rotation = daub.turn,
+      radius = DAUB.radius * f, rotation = daub.rotation,
       color = C[daub.key],
-      behavior = { color = { duration = 260 } },
+      behavior = { color = fade },
     }
   end
   return ui.Item(children)
