@@ -73,6 +73,14 @@ function M.close()
   if window then window:close() end
 end
 
+--- TESTING ONLY: `morf ipc call settings_scroll <pixels>` scrolls the page
+--- as the wheel would, for a headless compositor with no pointer.
+morf.ipc.settings_scroll = function(pixels)
+  local setting = require("components.setting")
+  if setting.scroll then setting.scroll(0, tonumber(pixels) or 0) end
+  return tostring(panel.state.scroll:get())
+end
+
 function M.toggle(section, part)
   if M.visible() and (not section or section == "") then M.close() else M.open(section, part) end
 end

@@ -421,4 +421,38 @@ end
 
 arrive()
 
+--- `morf ipc call profile [name]` switches to the profile of that name (any
+--- case) and answers with the one in use.
+morf.ipc.profile = function(name)
+  if name and name ~= "" then
+    for _, item in ipairs(list) do
+      if item.name:lower() == name:lower() then M.switch_to(item.id) break end
+    end
+  end
+  local current = M.entry(active)
+  return current and current.name or ""
+end
+
+local function by_name(name)
+  for _, item in ipairs(list) do
+    if item.name:lower() == tostring(name or ""):lower() then return item end
+  end
+  return nil
+end
+
+--- TESTING ONLY: `profile_export <name> <path>` and `profile_import
+--- <path>`, what the menu's Export and the Import button do, without a
+--- pointer to press them.
+morf.ipc.profile_export = function(name, path)
+  local found = by_name(name)
+  if not found then return "no profile " .. tostring(name) end
+  local ok, where = M.export_to(found.id, path)
+  return ok and tostring(where) or ("not written: " .. tostring(where))
+end
+morf.ipc.profile_import = function(path)
+  local id, why = M.import_from(path)
+  if not id then return "not imported: " .. tostring(why) end
+  return M.entry(id).name
+end
+
 return M

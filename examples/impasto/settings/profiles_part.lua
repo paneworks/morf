@@ -97,7 +97,8 @@ local function profile_row(W, id, s)
         color = function() return asking() and C.red() or C.textMuted() end,
       },
     },
-    ui.Row {
+    ui.Flex {
+      direction = "row",
       anchors = { right = true, right_margin = 10, top = true, top_margin = 17 }, gap = 6, align = "center",
       ui.Rect {
         width = 64, height = 26, radius = 13, color = "#00000000", border_width = 1, border_color = C.accent,

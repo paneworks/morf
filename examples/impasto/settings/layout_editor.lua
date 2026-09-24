@@ -117,6 +117,45 @@ local function is_module(id)
   return id ~= "workspaces" and id ~= "split" and not modules.is_button(id)
 end
 
+--- Lets a carried piece go: `drag` is `{ from, index, item, over, at }`,
+--- `from` and `over` each "left", "right", "tray" or "" (nowhere), `index`
+--- and `at` 1-based places on those sides. Let go nowhere, nothing moves;
+--- let go on the catalogue, a piece from the bar is taken off it.
+function M.drop(drag)
+  local left, right = M.items("left"), M.items("right")
+  if drag.over == "" then return end
+  if drag.from == "tray" and drag.over == "tray" then return end
+  if drag.from == "left" then table.remove(left, drag.index) end
+  if drag.from == "right" then table.remove(right, drag.index) end
+  local item = { id = drag.item.id, shape = drag.item.shape or "", figure = drag.item.figure or "",
+    when = drag.item.when or "" }
+  if drag.over == "left" then table.insert(left, math.max(1, math.min(drag.at, #left + 1)), item) end
+  if drag.over == "right" then table.insert(right, math.max(1, math.min(drag.at, #right + 1)), item) end
+  M.set_zone("left", left)
+  M.set_zone("right", right)
+end
+
+--- TESTING ONLY: `morf ipc call layout_drop <from> <index-or-id> <over>
+--- <at>` makes the drop a drag would, since a headless compositor has no
+--- pointer to drag with. From the catalogue, the second word is the id.
+morf.ipc.layout_drop = function(from, which, over, at)
+  local item
+  if from == "tray" then
+    if not modules.placeable(which or "") then return "no piece " .. tostring(which) end
+    item = { id = which }
+  else
+    item = M.items(from)[tonumber(which) or 0]
+    if not item then return "nothing there" end
+  end
+  M.drop { from = from, index = tonumber(which) or 0, item = item, over = over or "", at = tonumber(at) or 1 }
+  local function ids(side)
+    local out = {}
+    for _, each in ipairs(M.items(side)) do out[#out + 1] = each.id end
+    return table.concat(out, ",")
+  end
+  return ids("left") .. " | " .. ids("right")
+end
+
 -- ----------------------------------------------------------------- build --
 
 --- `width`: the editor, as wide as a settings page.
@@ -410,20 +449,7 @@ function M.new(values)
     drag.over, drag.at = "", 0
   end
 
-  local function commit()
-    local left, right = M.items("left"), M.items("right")
-    if drag.from == "left" then table.remove(left, drag.index) end
-    if drag.from == "right" then table.remove(right, drag.index) end
-    -- Let go outside: everything stays as it was.
-    if drag.over == "" then return end
-    if drag.from == "tray" and drag.over == "tray" then return end
-    local item = { id = drag.item.id, shape = drag.item.shape or "", figure = drag.item.figure or "",
-      when = drag.item.when or "" }
-    if drag.over == "left" then table.insert(left, math.min(drag.at, #left + 1), item) end
-    if drag.over == "right" then table.insert(right, math.min(drag.at, #right + 1), item) end
-    M.set_zone("left", left)
-    M.set_zone("right", right)
-  end
+  local function commit() M.drop(drag) end
 
   local carried = controls.signal("layout.carried", "")
 
@@ -606,7 +632,13 @@ function M.new(values)
     ui.Repeater {
       anchors = { fill = true },
       model = model,
-      delegate = function() return scene() end,
+      delegate = function()
+        local ok, node = pcall(scene)
+        if ok then return node end
+        morf.log("warn", "impasto: the bar's picture: " .. tostring(node))
+        return kit.text { x = 14, y = STAGE_PAD, text = "The picture of the bar failed to draw",
+          size = theme.size.small, color = C.red }
+      end,
     },
   }
 

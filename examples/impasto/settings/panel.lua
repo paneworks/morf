@@ -439,8 +439,9 @@ function M.build(close)
       ui.Item {
         width = M.PAGE_W,
         height = function() return body.layout_height or 0 end,
-        translate_y = function() return -clamp() end,
-        behavior = { translate_y = { duration = 120, easing = "out_cubic" } },
+        -- `y`, not `translate_y`: a ClipRect inside a translated ancestor
+        -- clips in the untranslated place and its contents vanish.
+        y = function() return -clamp() end,
         body,
       },
     },
