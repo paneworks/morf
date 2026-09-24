@@ -26,14 +26,14 @@ pub struct Hit {
 /// What a hit test is looking for: which kind of area, and which of those
 /// it takes.
 struct Target<'a> {
-    element: Element,
+    elements: &'a [Element],
     accept: &'a dyn Fn(NodeHandle) -> bool,
 }
 
 impl Layout {
     /// Returns the topmost enabled MouseArea containing a surface-local point.
     pub fn hit_test(&self, scene: &Scene, x: f64, y: f64) -> Result<Option<Hit>, LayoutError> {
-        self.hit_element(scene, Element::MouseArea, x, y, &|_| true)
+        self.hit_element(scene, &[Element::MouseArea], x, y, &|_| true)
     }
 
     /// The topmost enabled MouseArea under a point that `accept` takes.
@@ -48,7 +48,56 @@ impl Layout {
         y: f64,
         accept: &dyn Fn(NodeHandle) -> bool,
     ) -> Result<Option<Hit>, LayoutError> {
-        self.hit_element(scene, Element::MouseArea, x, y, accept)
+        self.hit_element(scene, &[Element::MouseArea], x, y, accept)
+    }
+
+    /// The topmost enabled MouseArea or Flickable under a point that
+    /// `accept` takes: where a wheel turn goes.
+    ///
+    /// A wheel bubbles. A button, a switch or a label's area laid over a
+    /// scrolling page has no use for the wheel and must not swallow it, so
+    /// `accept` refuses every node that would do nothing with it and the
+    /// search walks on down the stack — through the node's ancestors first,
+    /// since a node is tested after its children — until one would. A
+    /// Flickable is a candidate beside the MouseAreas because it scrolls
+    /// itself.
+    pub fn wheel_hit_test(
+        &self,
+        scene: &Scene,
+        x: f64,
+        y: f64,
+        accept: &dyn Fn(NodeHandle) -> bool,
+    ) -> Result<Option<Hit>, LayoutError> {
+        self.hit_element(
+            scene,
+            &[Element::MouseArea, Element::Flickable],
+            x,
+            y,
+            accept,
+        )
+    }
+
+    /// How far a Flickable's content reaches, measured from the content's
+    /// own origin: the furthest right and bottom edge of its children, with
+    /// the current scroll offset taken back out.
+    ///
+    /// `None` when the node has not been laid out.
+    pub fn content_extent(&self, scene: &Scene, node: NodeHandle) -> Option<(f64, f64)> {
+        let geometry = self.geometry(node)?;
+        let content_x = scene.number(node, "content_x").unwrap_or(0.0);
+        let content_y = scene.number(node, "content_y").unwrap_or(0.0);
+        let (mut width, mut height) = (0.0_f64, 0.0_f64);
+        for &child in scene.children(node).ok()? {
+            if !scene.bool_value(child, "visible").unwrap_or(false) {
+                continue;
+            }
+            let Some(child_geometry) = self.geometry(child) else {
+                continue;
+            };
+            width = width.max(child_geometry.x + child_geometry.width - geometry.x + content_x);
+            height = height.max(child_geometry.y + child_geometry.height - geometry.y + content_y);
+        }
+        Some((width, height))
     }
 
     /// Returns the topmost enabled DropArea containing a surface-local point.
@@ -58,19 +107,19 @@ impl Layout {
     /// target, and a click passes over targets on its way to a button. Neither
     /// should stop the other.
     pub fn drop_hit_test(&self, scene: &Scene, x: f64, y: f64) -> Result<Option<Hit>, LayoutError> {
-        self.hit_element(scene, Element::DropArea, x, y, &|_| true)
+        self.hit_element(scene, &[Element::DropArea], x, y, &|_| true)
     }
 
     fn hit_element(
         &self,
         scene: &Scene,
-        element: Element,
+        elements: &[Element],
         x: f64,
         y: f64,
         accept: &dyn Fn(NodeHandle) -> bool,
     ) -> Result<Option<Hit>, LayoutError> {
         for root in scene.roots().into_iter().rev() {
-            let target = Target { element, accept };
+            let target = Target { elements, accept };
             if let Some(hit) = self.hit_node(scene, root, &target, Transform2D::IDENTITY, x, y)? {
                 return Ok(Some(hit));
             }
@@ -236,7 +285,7 @@ impl Layout {
         // is resolved in, which is absolute; subtracting the node's origin is
         // what makes it node-local.
         Ok(
-            (inside && wanted(scene.element(node)?, target.element) && (target.accept)(node))
+            (inside && wanted(scene.element(node)?, target.elements) && (target.accept)(node))
                 .then_some(Hit {
                     node,
                     local_x: local_x - geometry.x,
@@ -250,8 +299,8 @@ impl Layout {
 ///
 /// A text input answers the pointer's: a click places its caret and a drag
 /// selects, which no MouseArea laid over it could do for it.
-fn wanted(found: Element, sought: Element) -> bool {
-    found == sought || (sought == Element::MouseArea && found == Element::TextInput)
+fn wanted(found: Element, sought: &[Element]) -> bool {
+    sought.contains(&found) || (sought.contains(&Element::MouseArea) && found == Element::TextInput)
 }
 
 /// A node's four corner radii, falling back to the uniform one.

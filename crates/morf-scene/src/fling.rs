@@ -69,7 +69,7 @@ impl Scene {
                 bounds,
             },
         );
-        self.touch_layout(property);
+        self.touch_layout(key.node, property);
         Ok(())
     }
 }

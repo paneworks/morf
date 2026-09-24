@@ -43,6 +43,8 @@ mod textures;
 
 pub use backend_types::*;
 #[cfg(test)]
+mod clip_tests;
+#[cfg(test)]
 mod field_agreement_tests;
 #[cfg(test)]
 mod field_color_tests;

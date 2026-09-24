@@ -86,7 +86,11 @@ impl CachedLayout {
     /// Whether this layout still describes the scene.
     ///
     /// Everything `Layout::compute` reads is either a property layout depends
-    /// on — which moves the revision — or one of the two inputs handed to it.
+    /// on inside the tree it lays out — which moves that tree's revision,
+    /// [`morf_scene::Scene::layout_revision_of`] — or one of the two inputs
+    /// handed to it. Nothing outside the tree is read: a binding that reads
+    /// another surface's layout writes what it read into this tree, which
+    /// moves this tree's revision like any other write.
     /// A surface that has resized, or that the compositor now presents at a
     /// different scale, has to be laid out again however still the scene is.
     pub(crate) fn still_valid(&self, revision: u64, size: (u32, u32), scale_120: u32) -> bool {
@@ -178,7 +182,9 @@ pub(crate) fn paint_layer(
         client.set_layer_keyboard_focus(layer, focus);
     }
     let mut split = FrameSplit::start();
-    let revision = runtime.scene().layout_revision();
+    // This surface's tree's revision, not the scene's: a clock ticking on
+    // another surface leaves this layout as it was.
+    let revision = runtime.scene().layout_revision_of(root);
     let reusable = cache.filter(|cached| cached.still_valid(revision, (width, height), scale_120));
     let layout = match reusable {
         Some(cached) => cached.layout.clone(),
@@ -498,15 +504,16 @@ pub(crate) fn paint_auxiliary_surface(
     if let Some(blend) = blend {
         apply_blend(renderer, blend);
     }
-    let revision = runtime.scene().layout_revision();
+    let revision = runtime.scene().layout_revision_of(surface.root);
     let size = (surface.width, surface.height);
     // This surface's own scale, not the bar's. A popup opened from a panel on a
     // 1x screen but shown on a 2x one was drawn at 1x and stretched -- and on a
     // mixed-DPI desk that is most popups.
     let scale_120 = client.surface_scale_120(kind.role(surface.id));
-    let reusable = surface.layout.as_ref().filter(|cached| {
-        cached.revision == revision && cached.size == size && cached.scale_120 == scale_120
-    });
+    let reusable = surface
+        .layout
+        .as_ref()
+        .filter(|cached| cached.still_valid(revision, size, scale_120));
     let layout = match reusable {
         Some(cached) => cached.layout.clone(),
         None => runtime.compute_layout(

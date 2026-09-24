@@ -21,6 +21,45 @@ fn scene_srgb_colors_are_linearized_for_gpu_output() {
     assert_eq!(srgb_channel_to_linear(1.0), 1.0);
 }
 
+/// A 64-square surface with a 32-square bordered ClipRect inside an ancestor
+/// moved down by `translate_y = 32` (and scaled by `scale`), holding a green
+/// bar that runs past its right edge: the layer a bordered clip composites
+/// its contents through must follow the ancestor. Returns the bar.
+pub(crate) fn translated_bordered_clip(radius: f64, scale: f64) -> (Scene, Layout, NodeHandle) {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    let moved = scene.create(Element::Item);
+    let clip = scene.create(Element::ClipRect);
+    let bar = scene.create(Element::Rect);
+    for (node, width, height) in [(moved, 32.0, 32.0), (clip, 32.0, 32.0), (bar, 64.0, 10.0)] {
+        scene.assign(node, "width", width).unwrap();
+        scene.assign(node, "height", height).unwrap();
+    }
+    scene.assign(moved, "translate_y", 32.0).unwrap();
+    scene.assign(moved, "scale", scale).unwrap();
+    scene.assign(clip, "color", "#0000ffff").unwrap();
+    scene.assign(clip, "radius", radius).unwrap();
+    scene.assign(clip, "border_width", 2.0).unwrap();
+    scene.assign(clip, "border_color", "#ffffffff").unwrap();
+    scene.assign(bar, "x", 4.0).unwrap();
+    scene.assign(bar, "y", 4.0).unwrap();
+    scene.assign(bar, "color", "#00ff00ff").unwrap();
+    scene.reparent(moved, Some(root)).unwrap();
+    scene.reparent(clip, Some(moved)).unwrap();
+    scene.reparent(bar, Some(clip)).unwrap();
+    let layout = Layout::compute(
+        &scene,
+        root,
+        Size {
+            width: 64.0,
+            height: 64.0,
+        },
+        &mut NoText,
+    )
+    .unwrap();
+    (scene, layout, bar)
+}
+
 pub(crate) struct NoText;
 
 impl TextMeasurer for NoText {

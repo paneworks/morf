@@ -87,6 +87,7 @@ mod table_menu;
 mod text_inputs;
 mod types;
 mod views;
+mod window_events;
 mod window_geometry;
 mod window_methods;
 mod window_parse;

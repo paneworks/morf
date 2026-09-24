@@ -737,6 +737,18 @@ local area = ui.MouseArea { anchors = { fill = true } }
 ui.Rect { color = function() return area.pressed and "#444" or area.hovered and "#333" or "#222" end }
 ```
 
+### The wheel
+
+`on_wheel(surface_x, surface_y, pixel_x, pixel_y, step_x, step_y,
+local_x, local_y)` runs for a wheel turn or a touchpad scroll. The wheel
+bubbles: it goes to the topmost `MouseArea` under the pointer that has an
+`on_wheel`, passing over any that have none, so a switch or a button on a
+scrolling page does not swallow the page's scroll. A `Flickable` under the
+pointer scrolls itself — `content_x`/`content_y` move by the pixel delta,
+kept between zero and how far its children reach past its viewport — and
+one with nothing to scroll that way lets the wheel on to what is beneath
+it.
+
 ### Cursors
 
 `cursor = "pointer"` on a `MouseArea` is the pointer's shape while it is
@@ -780,6 +792,34 @@ owns the clipboard (`{ mime =, primary = true }` for options; no type means
 text), and `morf.clipboard.supported()` says whether data control is there
 once the shell has connected. `examples/clipboard-history.lua` is all of
 it together.
+
+### Window size and closing
+
+A popup or floating window is drawn at the size the compositor configures
+it to, which is not always the size it asked for: a tiling compositor fills
+a tile, a person drags an edge. Its root is laid out at that size, and
+`win.width` / `win.height` read it — the asked-for size until the first
+configure — so a binding follows every resize. `on_resize(width, height)`
+hears the same change.
+
+A compositor's close button or keybinding asks a floating window to close.
+`on_close_requested` hears the request, and the window is hidden unless it
+returns `false`. `on_closed` runs once a popup or floating window is off
+screen, whatever took it there: a close request, `win:close()`, a hidden
+parent, a dismissed popup. Each may be given in the constructor's table or
+set later with the method of the same name; `nil` clears it.
+
+```lua
+local root = ui.Item {}
+local win = morf.window.floating {
+  root = root, width = 900, height = 640, title = "Settings",
+  on_resize = function(w, h) wide:set(w >= 1200) end,
+}
+win:on_close_requested(function()
+  if dirty:get() then confirm:set(true); return false end
+end)
+ui.reparent(ui.Grid { columns = function() return win.width // 280 end }, root)
+```
 
 ## 7. What makes a frame
 

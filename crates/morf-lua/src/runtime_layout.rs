@@ -43,9 +43,9 @@ impl Runtime {
         loop {
             let layout = self.compute_layout(root, available, text)?;
             passes += 1;
-            let before = self.scene().layout_revision();
+            let before = self.scene().layout_revision_of(root);
             self.observe_layout(&layout);
-            let stable = self.scene().layout_revision() == before;
+            let stable = self.scene().layout_revision_of(root) == before;
             if stable || passes >= max_passes {
                 return Ok(SettledLayout {
                     layout,

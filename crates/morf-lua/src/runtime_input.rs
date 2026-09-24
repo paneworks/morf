@@ -251,6 +251,67 @@ impl Runtime {
         )
     }
 
+    /// Whether a wheel turn over `node` stops there: a MouseArea (or text
+    /// input) that has an `on_wheel` handler, or any Flickable. Everything
+    /// else lets the wheel bubble on to what is beneath it, so a button on a
+    /// scrolling page does not swallow the page's scroll.
+    ///
+    /// A host hit-testing a Flickable should also ask whether it has room to
+    /// move; see [`Runtime::scroll_flickable`].
+    pub fn takes_wheel(&self, node: NodeHandle) -> bool {
+        let state = self.reactive.borrow();
+        match state.scene.element(node) {
+            Ok(morf_scene::Element::Flickable) => true,
+            Ok(_) => state.handlers.contains_key(&(node, UiEvent::Wheel)),
+            Err(_) => false,
+        }
+    }
+
+    /// Scrolls a Flickable by a wheel's pixel delta, keeping its
+    /// `content_x`/`content_y` inside `0..=max`. Returns whether it moved.
+    ///
+    /// `max` is how far the content can scroll on each axis, the content's
+    /// extent less the viewport's, which only the layout knows.
+    pub fn scroll_flickable(
+        &mut self,
+        node: NodeHandle,
+        pixels: (f64, f64),
+        max: (f64, f64),
+    ) -> bool {
+        let mut moved = false;
+        {
+            let mut state = self.reactive.borrow_mut();
+            for (property, delta, limit) in [
+                ("content_x", pixels.0, max.0),
+                ("content_y", pixels.1, max.1),
+            ] {
+                if delta == 0.0 {
+                    continue;
+                }
+                let Ok(SceneValue::Number(current)) = state.scene.target(node, property).cloned()
+                else {
+                    continue;
+                };
+                let next = (current + delta).clamp(0.0, limit.max(0.0));
+                if next != current
+                    && crate::scene_bindings::assign_scene_property(
+                        &mut state,
+                        node,
+                        property,
+                        SceneValue::Number(next),
+                    )
+                    .is_ok()
+                {
+                    moved = true;
+                }
+            }
+        }
+        if moved {
+            self.flush_after_event();
+        }
+        moved
+    }
+
     /// Returns whether a MouseArea accepts one Linux input button code.
     pub fn accepts_pointer_button(&self, node: NodeHandle, button: u32) -> bool {
         let state = self.reactive.borrow();

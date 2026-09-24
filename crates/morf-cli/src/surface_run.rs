@@ -225,7 +225,7 @@ pub(crate) fn run_surface(
     runtime.take_layer_surface_change();
     apply_backdrop(&mut client, &runtime.layer_surface_config(), &name);
     let _ = sync_window_surfaces(
-        &runtime,
+        &mut runtime,
         &mut client,
         &mut popup_surfaces,
         &mut floating_surfaces,
@@ -359,7 +359,7 @@ pub(crate) fn run_surface(
             // The only thing that can move the primary root.
             state.primary_root = primary_surface_root(&runtime)?;
             repaint |= sync_window_surfaces(
-                &runtime,
+                &mut runtime,
                 &mut client,
                 &mut state.popup_surfaces,
                 &mut state.floating_surfaces,

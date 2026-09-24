@@ -340,9 +340,9 @@ impl WindowHandler for LayerState {
         }) else {
             return;
         };
-        self.floatings.remove(&id);
-        self.aux_scales.remove(&SurfaceRole::Floating(id));
-        self.floating_sizes.remove(&id);
+        // `xdg_toplevel.close` asks; it does not close. The window stays
+        // until its owner decides — a settings window may want to ask about
+        // unsaved changes first — and is destroyed through `close_floating`.
         self.events.push_back(LayerEvent::FloatingClose { id });
     }
 

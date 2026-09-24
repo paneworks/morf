@@ -109,16 +109,40 @@ pub(crate) fn handle_pointer_event(
             let Some(hit_layout) = layouts.layout_of(surface) else {
                 return Ok(Ok(false));
             };
+            // The wheel bubbles: it goes to the topmost area that would do
+            // something with it — one with an `on_wheel`, or a Flickable with
+            // room to scroll that way — passing over any that would not.
+            let scroll_room = |node| -> Option<(f64, f64)> {
+                let scene = runtime.scene();
+                if scene.element(node).ok()? != morf_scene::Element::Flickable {
+                    return None;
+                }
+                let (content_width, content_height) = hit_layout.content_extent(&scene, node)?;
+                let viewport = hit_layout.geometry(node)?;
+                Some((
+                    (content_width - viewport.width).max(0.0),
+                    (content_height - viewport.height).max(0.0),
+                ))
+            };
             let hit = hit_layout
-                .hit_test(&runtime.scene(), x, y)
+                .wheel_hit_test(&runtime.scene(), x, y, &|node| {
+                    runtime.takes_wheel(node)
+                        && scroll_room(node).is_none_or(|(room_x, room_y)| {
+                            (horizontal != 0.0 && room_x > 0.0) || (vertical != 0.0 && room_y > 0.0)
+                        })
+                })
                 .map_err(|error| error.to_string())?;
             if let Some(hit) = hit {
-                repaint |= runtime.dispatch_wheel_event(
-                    hit.node,
-                    EventPoint::new((x, y), (hit.local_x, hit.local_y)),
-                    (horizontal, vertical),
-                    (horizontal_steps, vertical_steps),
-                );
+                if let Some(room) = scroll_room(hit.node) {
+                    repaint |= runtime.scroll_flickable(hit.node, (horizontal, vertical), room);
+                } else {
+                    repaint |= runtime.dispatch_wheel_event(
+                        hit.node,
+                        EventPoint::new((x, y), (hit.local_x, hit.local_y)),
+                        (horizontal, vertical),
+                        (horizontal_steps, vertical_steps),
+                    );
+                }
             }
         }
         LayerEvent::PointerButton {

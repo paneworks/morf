@@ -22,6 +22,7 @@ impl Scene {
             group_events: Vec::new(),
             next_group: 0,
             layout_revision: 0,
+            root_revisions: FastMap::default(),
             motion_scale: 1.0,
             removed: Vec::new(),
             shaders: FastMap::default(),
@@ -30,7 +31,6 @@ impl Scene {
 
     /// Allocates an element with every schema property initialized.
     pub fn create(&mut self, element: Element) -> NodeHandle {
-        self.layout_revision = self.layout_revision.wrapping_add(1);
         let node = self.nodes.insert_with_key(|id| {
             let properties = schema(element)
                 .into_iter()
@@ -59,6 +59,8 @@ impl Scene {
                 properties,
             }
         });
+        // A new node is a tree of its own until it is given a parent.
+        self.bump_layout(node);
         NodeHandle(node)
     }
 
@@ -123,7 +125,6 @@ impl Scene {
     ) -> Result<(), SceneError> {
         let child_id = self.live(child)?;
         let parent_id = parent.map(|handle| self.live(handle)).transpose()?;
-        self.layout_revision = self.layout_revision.wrapping_add(1);
         if parent_id == Some(child_id) {
             return Err(SceneError::ParentCycle);
         }
@@ -135,6 +136,9 @@ impl Scene {
             ancestor = self.nodes[node].parent;
         }
 
+        // Both trees change: the one it left and the one it joined. Before
+        // the move, the tree it is in; after, the tree it is in now.
+        self.bump_layout(child_id);
         if let Some(old_parent) = self.nodes[child_id].parent {
             self.nodes[old_parent]
                 .children
@@ -143,7 +147,10 @@ impl Scene {
         self.nodes[child_id].parent = parent_id;
         if let Some(parent) = parent_id {
             self.nodes[parent].children.push(child);
+            // No longer a root, so no longer a tree with a revision of its own.
+            self.root_revisions.remove(&child_id);
         }
+        self.bump_layout(child_id);
         Ok(())
     }
 
@@ -173,7 +180,7 @@ impl Scene {
             }
         }
         if changed {
-            self.layout_revision = self.layout_revision.wrapping_add(1);
+            self.bump_layout(parent_id);
         }
         self.nodes[parent_id].children = arranged;
         Ok(())
@@ -218,7 +225,7 @@ impl Scene {
     /// Removes a node and all descendants, invalidating their handles.
     pub fn remove(&mut self, node: NodeHandle) -> Result<(), SceneError> {
         let id = self.live(node)?;
-        self.layout_revision = self.layout_revision.wrapping_add(1);
+        self.bump_layout(id);
         if let Some(parent) = self.nodes[id].parent {
             self.nodes[parent]
                 .children
@@ -233,6 +240,7 @@ impl Scene {
             self.physics_specs.retain(|key, _| key.node != current);
             self.paused_physics.retain(|key| key.node != current);
             self.removed.push(NodeHandle(current));
+            self.root_revisions.remove(&current);
             // Its properties live in the scene's signal graph, not in the
             // node; they go with it or they stay allocated for the life of
             // the process, two per property per node ever made.
@@ -345,7 +353,7 @@ impl Scene {
         // not moved anything yet, but the ticks that follow will, and one extra
         // layout pass is a great deal cheaper than a frame drawn at stale
         // geometry.
-        self.touch_layout(property_name);
+        self.touch_layout(id, property_name);
         Ok(())
     }
 
@@ -410,7 +418,7 @@ impl Scene {
             if !idle {
                 let slot = node.properties[key.property];
                 if affects_layout(key.property) {
-                    self.layout_revision = self.layout_revision.wrapping_add(1);
+                    self.bump_layout(key.node);
                 }
                 self.properties.write(slot.current, value)?;
                 frame.changed += 1;
@@ -443,7 +451,7 @@ impl Scene {
             if snap {
                 let target = self.properties.read(slot.target)?.clone();
                 if affects_layout(key.property) {
-                    self.layout_revision = self.layout_revision.wrapping_add(1);
+                    self.bump_layout(key.node);
                 }
                 self.properties.write(slot.current, target)?;
                 frame.changed += 1;
@@ -474,7 +482,7 @@ impl Scene {
             // the layout it already had and the scene animates behind a still
             // picture — every other path reaches here through `assign`.
             if affects_layout(key.property) {
-                self.layout_revision = self.layout_revision.wrapping_add(1);
+                self.bump_layout(key.node);
             }
             self.properties
                 .write(slot.current, Value::Number(current))?;

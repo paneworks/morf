@@ -98,7 +98,7 @@ impl Scene {
         // move itself. Without it a paint reuses the layout it already has and
         // the geometry changes behind a still picture; at zero duration nothing
         // later bumps the revision, so the stale picture is permanent.
-        self.touch_layout(name);
+        self.touch_layout(key.node, name);
         Ok(())
     }
 
