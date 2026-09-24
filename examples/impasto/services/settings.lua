@@ -5,6 +5,13 @@
 -- the defaults, so a default changed here reaches everyone who never touched
 -- it. A read inside a binding tracks that one key; a write saves the file a
 -- moment later, once, however many keys a handler changed.
+--
+-- Every screen's runtime holds its own copy, so the file is watched: a
+-- change written by another screen (or by hand) is read back, and only the
+-- keys that moved re-run what follows them. A value of the wrong type on
+-- disk is dropped for the default, and an unknown key is a warning, never an
+-- error. On a first start the upstream shell's own settings file
+-- ($XDG_STATE_HOME/quickshell/settings.json) is taken in when there is one.
 
 local json = morf.json
 local fs = morf.fs
@@ -93,6 +100,8 @@ M.defaults = {
   keyRepeatRate = 25,
   pointerSensitivity = 0,
   lidPolicy = "system",            -- off | keep | system
+  -- Launcher sigil overrides by mode id; absent means `launcher_prefix_defaults`.
+  launcherPrefixes = {},
   wallpaper = "",
   wallpaperDir = "~/.local/share/wallpapers",
   theme = "adaptive",
@@ -108,6 +117,9 @@ M.path = fs.join(M.dir, "settings.json")
 local values = {}
 local revisions = {}
 local saving = false
+-- The text last read from or written to the file: a watch event that finds
+-- it unchanged is this runtime's own write.
+local last_text = nil
 
 --- Whether there was no settings file when the shell started: a fresh
 --- install, which the first shipped profile may take over.
@@ -142,17 +154,50 @@ for key, default in pairs(M.defaults) do
   revisions[key] = morf.signal("impasto.settings." .. key, 0)
 end
 
-local function load()
+--- Whether `value` can stand for `key`: the default's type (a number
+--- finite), and a list for the keys whose default is false ("the
+--- catalogue's own").
+function M.accepts(key, value)
+  local default = M.defaults[key]
+  if default == nil or value == nil then return false end
+  if type(value) == "number" and (value ~= value or value == math.huge or value == -math.huge) then
+    return false
+  end
+  if type(value) == type(default) then return true end
+  return default == false and type(value) == "table"
+end
+
+--- What the file says, as key -> value, keeping only known keys of the
+--- right type; nil when there is no file or it is not JSON.
+local function read_file()
   local text = fs.read(M.path)
-  if not text or text == "" then return end
+  if not text or text == "" then return nil, text end
   local ok, decoded = pcall(json.decode, text)
   if not ok or type(decoded) ~= "table" then
-    morf.log("warn", "impasto: settings file is not JSON; keeping the defaults")
-    return
+    morf.log("warn", "impasto: settings file is not JSON; keeping what there is")
+    return nil, text
   end
+  local out = {}
   for key, value in pairs(plain(decoded)) do
-    if M.defaults[key] ~= nil and value ~= json.null then values[key] = value end
+    if M.defaults[key] == nil then
+      -- An older or newer shell's key: left in the file, not taken.
+    elseif value == json.null then
+      -- null is "the default".
+    elseif M.accepts(key, value) then
+      out[key] = value
+    else
+      morf.log("warn", "impasto: setting " .. key .. " is not a " .. type(M.defaults[key])
+        .. "; using the default")
+    end
   end
+  return out, text
+end
+
+local function load()
+  local stored, text = read_file()
+  last_text = text
+  if not stored then return end
+  for key, value in pairs(stored) do values[key] = value end
 end
 
 local function save()
@@ -161,21 +206,59 @@ local function save()
   for key, value in pairs(values) do
     if not equal(value, M.defaults[key]) then out[key] = value end
   end
-  local ok, err = fs.write(M.path, json.encode(out, true))
+  local text = json.encode(out, true)
+  last_text = text
+  local ok, err = fs.write(M.path, text)
   if not ok then morf.log("warn", "impasto: could not save settings: " .. tostring(err)) end
+end
+
+--- The file changed under this runtime: another screen saved, or a person
+--- edited it. Every key takes the file's value (or the default when the file
+--- leaves it out), and only those that moved are announced.
+local function reread()
+  local stored, text = read_file()
+  if text == last_text then return end
+  last_text = text
+  if not stored then return end
+  for key, default in pairs(M.defaults) do
+    local value = stored[key]
+    if value == nil then value = copy(default) end
+    if not equal(values[key], value) then
+      values[key] = value
+      revisions[key]:set(revisions[key]:get() + 1)
+    end
+  end
+end
+M.reread = reread
+
+local warned = {}
+local function unknown(key)
+  if warned[key] then return end
+  warned[key] = true
+  morf.log("warn", "impasto: unknown setting " .. tostring(key))
 end
 
 --- The value of `key`; inside a binding, the binding follows it.
 function M.get(key)
   local revision = revisions[key]
-  if not revision then error("impasto: unknown setting " .. tostring(key), 2) end
+  if not revision then
+    unknown(key)
+    return nil
+  end
   revision:get()
   return values[key]
 end
 
 --- Sets `key`, and saves the file once this handler is done.
 function M.set(key, value)
-  if M.defaults[key] == nil then error("impasto: unknown setting " .. tostring(key), 2) end
+  if M.defaults[key] == nil then
+    unknown(key)
+    return
+  end
+  if not M.accepts(key, value) then
+    morf.log("warn", "impasto: setting " .. key .. " is not a " .. type(M.defaults[key]))
+    return
+  end
   if equal(values[key], value) then return end
   values[key] = copy(value)
   revisions[key]:set(revisions[key]:get() + 1)
@@ -200,6 +283,127 @@ M.machine_keys = {
   wallpaper = true, wallpaperDir = true, theme = true, writeAppThemes = true,
 }
 
+-- ------------------------------------------------------ launcher sigils --
+
+-- The first character that selects each launcher mode (SettingsService's
+-- launcherPrefixDefaults). Overrides are kept by mode id.
+M.launcher_prefix_defaults = {
+  calculate = "=", desk = ">", windows = "@", timer = "!", clipboard = "'",
+}
+
+--- The sigil for a mode: the override when it is one character, else the
+--- default. Inside a binding it follows the setting.
+function M.launcher_prefix(id)
+  local kept = M.get("launcherPrefixes") or {}
+  local chosen = kept[id]
+  if type(chosen) == "string" and utf8.len(chosen) == 1 then return chosen end
+  return M.launcher_prefix_defaults[id] or ""
+end
+
+--- A new sigil for a mode; "" or the default drops the override.
+function M.set_launcher_prefix(id, sigil)
+  local next = copy(values.launcherPrefixes or {})
+  if sigil == nil or sigil == "" or sigil == M.launcher_prefix_defaults[id] then
+    next[id] = nil
+  else
+    next[id] = sigil
+  end
+  M.set("launcherPrefixes", next)
+end
+
+-- ------------------------------------------------- the upstream format --
+
+-- The QML shell writes a few values differently: Qt's time formats rather
+-- than strftime, "island" for the one-capsule bar, null for "the
+-- catalogue's own", and a font list rather than one family.
+local QT_TO_STRFTIME = { { "HH", "%H" }, { "hh", "%I" }, { "H", "%H" }, { "h", "%I" },
+  { "mm", "%M" }, { "ss", "%S" }, { "AP", "%p" }, { "ap", "%P" } }
+
+--- "HH:mm" -> "%H:%M", "hh:mm AP" -> "%I:%M %p".
+function M.qt_time_to_strftime(format)
+  local out, i = {}, 1
+  while i <= #format do
+    local matched = false
+    for _, pair in ipairs(QT_TO_STRFTIME) do
+      if format:sub(i, i + #pair[1] - 1) == pair[1] then
+        out[#out + 1] = pair[2]
+        i = i + #pair[1]
+        matched = true
+        break
+      end
+    end
+    if not matched then
+      local c = format:sub(i, i)
+      out[#out + 1] = c == "%" and "%%" or c
+      i = i + 1
+    end
+  end
+  return table.concat(out)
+end
+
+--- "%H:%M" -> "HH:mm", the other way.
+function M.strftime_to_qt(format)
+  local map = { H = "HH", I = "hh", M = "mm", S = "ss", p = "AP", P = "ap", ["%"] = "%" }
+  return (format:gsub("%%(.)", function(c) return map[c] or ("%" .. c) end))
+end
+
+-- Keys whose "catalogue's own" is null upstream and false here.
+local NULL_DEFAULTS = {
+  barLeft = true, barRight = true, islandActivities = true,
+  centreButtons = true, centreBlocks = true, centreToggles = true,
+}
+
+--- Upstream values in this port's words. Unknown keys are left for the
+--- caller to drop.
+function M.from_upstream(given)
+  local out = copy(given or {})
+  if out.barStyle == "island" then out.barStyle = "capsule" end
+  if type(out.clockFormat) == "string" and not out.clockFormat:find("%%") then
+    out.clockFormat = M.qt_time_to_strftime(out.clockFormat)
+  end
+  if type(out.fontFamily) == "string" then out.fontFamily = out.fontFamily:match("^%s*([^,]+)") or out.fontFamily end
+  if type(out.fontMono) == "string" then out.fontMono = out.fontMono:match("^%s*([^,]+)") or out.fontMono end
+  for key in pairs(NULL_DEFAULTS) do
+    if out[key] == json.null then out[key] = false end
+  end
+  return out
+end
+
+--- This port's values in the upstream shell's words, for an export it can
+--- read.
+function M.to_upstream(given)
+  local out = copy(given or {})
+  if out.barStyle == "capsule" then out.barStyle = "island" end
+  if type(out.clockFormat) == "string" then out.clockFormat = M.strftime_to_qt(out.clockFormat) end
+  for key in pairs(NULL_DEFAULTS) do
+    if out[key] == false then out[key] = json.null end
+  end
+  return out
+end
+
+--- On a first start, the upstream shell's settings, where it left them.
+--- Returns how many keys were taken.
+local function import_upstream()
+  local state = fs.dir("state") or ((fs.home() or "") .. "/.local/state")
+  local path = fs.join(state, "quickshell", "settings.json")
+  local text = fs.read(path)
+  if not text or text == "" then return 0 end
+  local ok, decoded = pcall(json.decode, text)
+  if not ok or type(decoded) ~= "table" then return 0 end
+  local taken = 0
+  for key, value in pairs(M.from_upstream(plain(decoded))) do
+    if M.accepts(key, value) and not equal(value, M.defaults[key]) then
+      values[key] = value
+      taken = taken + 1
+    end
+  end
+  if taken > 0 then
+    morf.log("info", "impasto: took " .. taken .. " settings from " .. path)
+    save()
+  end
+  return taken
+end
+
 --- The keys a profile holds, sorted.
 function M.profile_keys()
   local out = {}
@@ -208,15 +412,6 @@ function M.profile_keys()
   end
   table.sort(out)
   return out
-end
-
---- Whether `value` can stand for `key`: the default's type, and a list for
---- the keys whose default is false ("the catalogue's own").
-function M.accepts(key, value)
-  local default = M.defaults[key]
-  if default == nil or value == nil then return false end
-  if type(value) == type(default) then return true end
-  return default == false and type(value) == "table"
 end
 
 --- A whole profile out of `given`: every profile key, the given value where
@@ -264,5 +459,41 @@ setmetatable(M, {
 })
 
 load()
+if M.fresh then
+  local ok, taken = pcall(import_upstream)
+  if ok and taken > 0 then M.imported = taken end
+end
+
+-- The file, watched: another screen's save, or a hand edit, is read back.
+-- The watch is inotify's; its queue is looked at twice a second, which costs
+-- a channel read.
+do
+  local watcher
+  local function arm()
+    local ok, made = pcall(function() return morf.file(M.path):watch() end)
+    watcher = ok and made or nil
+  end
+  fs.mkdir(M.dir)
+  arm()
+  local last_stat = fs.stat(M.path)
+  morf.timer(500, function()
+    local changed = false
+    if watcher then
+      while true do
+        local ok, event = pcall(watcher.next, watcher, 0)
+        if not ok or not event then break end
+        changed = true
+      end
+    else
+      -- No inotify: the file's time and size stand in.
+      local now = fs.stat(M.path)
+      local before = last_stat
+      last_stat = now
+      changed = (now and now.modified) ~= (before and before.modified)
+        or (now and now.size) ~= (before and before.size)
+    end
+    if changed and not saving then reread() end
+  end, true)
+end
 
 return M
