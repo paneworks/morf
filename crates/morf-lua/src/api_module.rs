@@ -86,6 +86,10 @@ pub(crate) fn install_module_api<'gc>(
         "split_parser",
         "stream_collector",
         "json",
+        "spawn",
+        "run",
+        "connect",
+        "request_socket",
     ] {
         io.set(ctx, name, morf.get_value(ctx, name))
             .expect("IO module accepts native fields");
