@@ -364,8 +364,10 @@ local function adopt(at_load)
   tend()
 end
 adopt(true)
-morf.timer(2000, function()
-  if not s.recording:get() then adopt(false) end
-end, true)
+-- A take another screen's shell starts is written to the state file: the
+-- file is watched rather than read every two seconds.
+M.watch = morf.fs.watch(state_path(), function(event)
+  if event.kind ~= "deleted" and not s.recording:get() then adopt(false) end
+end)
 
 return M
