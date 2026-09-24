@@ -69,6 +69,7 @@ mod sandbox_limits;
 mod scene;
 mod screens;
 mod services;
+mod session_lock;
 mod shaders;
 mod state_tables;
 mod text_input;

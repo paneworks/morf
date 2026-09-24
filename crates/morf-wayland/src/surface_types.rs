@@ -134,6 +134,9 @@ pub enum SurfaceRole {
     Layer(u64),
     Popup(u64),
     Floating(u64),
+    /// One ext-session-lock surface, by its index in the lock's output list
+    /// (the index `SessionLockConfigure` and its kin carry).
+    Lock(usize),
 }
 
 /// Event produced by the layer-surface connection.

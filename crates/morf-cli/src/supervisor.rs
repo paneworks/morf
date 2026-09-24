@@ -49,7 +49,7 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
         let mut first = Runtime::default();
         execute_config(&mut first, &path, &source, policy)?;
         if first.layer_surface_config().session_lock {
-            return run_lock(first);
+            return run_lock(first, &path);
         }
     }
     let path = Arc::new(path);

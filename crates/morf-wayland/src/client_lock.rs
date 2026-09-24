@@ -44,6 +44,7 @@ impl LayerClient {
         }
         lock.unlock();
         self.state.lock_surfaces.clear();
+        self.state.forget_lock_surfaces();
         self.connection
             .flush()
             .map_err(|error| WaylandError(format!("Wayland flush failed: {error}")))
@@ -55,6 +56,15 @@ impl LayerClient {
             .lock_surfaces
             .get(index)
             .map(|surface| surface.surface.wl_surface())
+    }
+
+    /// The output one lock surface covers, as `screens()` describes it.
+    pub fn lock_screen(&self, index: usize) -> Option<crate::ScreenInfo> {
+        let surface = self.state.lock_surfaces.get(index)?;
+        self.state
+            .outputs
+            .info(&surface.output)
+            .map(crate::protocol_handlers::screen_info)
     }
 
     /// Returns one lock surface's configured logical size.

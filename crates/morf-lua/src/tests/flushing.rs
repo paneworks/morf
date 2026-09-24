@@ -205,3 +205,44 @@ fn a_layout_function_that_writes_to_a_node_is_refused_not_crashed() {
 
     assert!(error.contains("inside a layout function"), "{error}");
 }
+
+#[test]
+fn a_chain_of_layout_bindings_settles_in_as_many_passes_as_it_is_long() {
+    // Each link reads the one before it, which the frame has placed only
+    // once the previous pass has flushed: three passes, the last a no-op.
+    let source = br#"
+        local ui = require("morf.ui")
+        local fill = ui.Item { anchors = { fill = true } }
+        local middle = ui.Item { width = 10, height = 10, x = function()
+            return (fill.layout_width or 0) / 2
+        end }
+        local beside = ui.Item { width = 10, height = 10, x = function()
+            return (middle.layout_width or 0) + (middle.layout_x or 0)
+        end }
+        ui.Item { width = 300, height = 50, fill, middle, beside }
+    "#;
+    let size = morf_layout::Size {
+        width: 300.0,
+        height: 50.0,
+    };
+    let mut runtime = Runtime::default();
+    runtime.execute("settle.lua", source).unwrap();
+    let root = *runtime.scene().roots().last().unwrap();
+    let settled = runtime
+        .settle_layout(root, size, &mut super::NoText, 8)
+        .unwrap();
+    assert!(settled.stable);
+    assert_eq!(settled.passes, 3);
+    let beside = runtime.scene().children(root).unwrap()[2];
+    assert_eq!(settled.layout.geometry(beside).unwrap().x, 160.0);
+
+    // Bounded: out of passes, it says so and hands back the last.
+    let mut runtime = Runtime::default();
+    runtime.execute("settle.lua", source).unwrap();
+    let root = *runtime.scene().roots().last().unwrap();
+    let settled = runtime
+        .settle_layout(root, size, &mut super::NoText, 1)
+        .unwrap();
+    assert!(!settled.stable);
+    assert_eq!(settled.passes, 1);
+}

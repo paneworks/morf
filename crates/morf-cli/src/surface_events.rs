@@ -1,12 +1,11 @@
-use morf_layout::Hit;
-use morf_lua::{EventPoint, Runtime, UiEvent};
+use morf_lua::Runtime;
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_wayland::{LayerClient, LayerEvent, PRIMARY_LAYER, SurfaceRole, physical_size};
 use std::sync::mpsc;
 
 use crate::{
-    backdrop::*, capture::*, lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*,
-    surface_touch::*, surfaces::*,
+    capture::*, lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*,
+    surface_pointer::*, surfaces::*,
 };
 
 pub(crate) fn handle_surface_event(
@@ -28,6 +27,17 @@ pub(crate) fn handle_surface_event(
     // Then selections and drags, which need the layout and the client.
     let event = match crate::surface_drag::handle_data_event(runtime, client, state, event) {
         Ok(repaint) => return repaint,
+        Err(event) => event,
+    };
+    // Then the pointer and the fingers, which need only the layouts.
+    let layouts = LayerLayouts {
+        layout: &state.layout,
+        popups: &state.popup_surfaces,
+        floatings: &state.floating_surfaces,
+        layers: &state.layer_surfaces,
+    };
+    let event = match handle_pointer_event(runtime, client, &mut state.input, &layouts, event)? {
+        Ok(repaint) => return Ok(repaint),
         Err(event) => event,
     };
     match event {
@@ -108,245 +118,6 @@ pub(crate) fn handle_surface_event(
                 state.serial,
             );
         }
-        LayerEvent::PointerMotion { surface, x, y } => {
-            if surface == SurfaceRole::Layer(BACKDROP_LAYER) {
-                client.set_cursor_shape("default");
-            }
-            let Some(hit_layout) = surface_layout(
-                surface,
-                &state.layout,
-                &state.popup_surfaces,
-                &state.floating_surfaces,
-                &state.layer_surfaces,
-            ) else {
-                return Ok(false);
-            };
-            let hit = hit_layout
-                .hit_test(&runtime.scene(), x, y)
-                .map_err(|error| error.to_string())?;
-            // Hover is compared by node, not by hit: the same node under a
-            // moving pointer is still the same hover, even though its local
-            // coordinates change with every motion event.
-            let next_hovered = hit.map(|hit| (surface, hit));
-            let entered = next_hovered.map(|(role, hit)| (role, hit.node));
-            let left = state
-                .hovered
-                .map(|(role, hit): (SurfaceRole, Hit)| (role, hit.node));
-            if entered != left {
-                if let Some((_, node)) = left {
-                    repaint |= runtime.dispatch_ui_event(node, UiEvent::PointerExited);
-                }
-                if let Some(hit) = hit {
-                    repaint |= runtime.dispatch_ui_event(hit.node, UiEvent::PointerEntered);
-                }
-            }
-            state.hovered = next_hovered;
-            crate::pointer_cursor::hover_changed(runtime, client, entered, left);
-            if let Some(hit) = hit {
-                repaint |= runtime.dispatch_pointer(
-                    hit.node,
-                    UiEvent::PointerMoved,
-                    EventPoint::new((x, y), (hit.local_x, hit.local_y)),
-                    (0.0, 0.0),
-                );
-            }
-            if let Some((pressed_surface, pressed_hit, start_x, start_y, dragging)) =
-                &mut state.pressed
-                && *pressed_surface == surface
-            {
-                let delta_x = x - *start_x;
-                let delta_y = y - *start_y;
-                // A drag that has pulled off its handle still reports where the
-                // pointer is relative to that handle, so the node keeps its own
-                // frame of reference for the whole gesture.
-                let local = hit_layout.local_point(&runtime.scene(), pressed_hit.node, x, y);
-                let point = EventPoint::new((x, y), local);
-                if !*dragging && delta_x.hypot(delta_y) >= 8.0 {
-                    *dragging = true;
-                    repaint |= runtime.dispatch_pointer(
-                        pressed_hit.node,
-                        UiEvent::DragStarted,
-                        point,
-                        (delta_x, delta_y),
-                    );
-                }
-                if *dragging {
-                    repaint |= runtime.dispatch_pointer(
-                        pressed_hit.node,
-                        UiEvent::Dragged,
-                        point,
-                        (delta_x, delta_y),
-                    );
-                }
-            }
-        }
-        LayerEvent::PointerLeave { surface } => {
-            if state
-                .hovered
-                .is_some_and(|(hovered_surface, _)| hovered_surface == surface)
-                && let Some((_, hit)) = state.hovered.take()
-            {
-                repaint |= runtime.dispatch_ui_event(hit.node, UiEvent::PointerExited);
-            }
-        }
-        LayerEvent::PointerAxis {
-            surface,
-            x,
-            y,
-            horizontal,
-            vertical,
-            horizontal_steps,
-            vertical_steps,
-        } => {
-            let Some(hit_layout) = surface_layout(
-                surface,
-                &state.layout,
-                &state.popup_surfaces,
-                &state.floating_surfaces,
-                &state.layer_surfaces,
-            ) else {
-                return Ok(false);
-            };
-            let hit = hit_layout
-                .hit_test(&runtime.scene(), x, y)
-                .map_err(|error| error.to_string())?;
-            if let Some(hit) = hit {
-                repaint |= runtime.dispatch_wheel_event(
-                    hit.node,
-                    EventPoint::new((x, y), (hit.local_x, hit.local_y)),
-                    (horizontal, vertical),
-                    (horizontal_steps, vertical_steps),
-                );
-            }
-        }
-        LayerEvent::PointerButton {
-            surface: SurfaceRole::Layer(BACKDROP_LAYER),
-            pressed: true,
-            ..
-        } => {
-            repaint |= runtime.dispatch_backdrop_click();
-        }
-        LayerEvent::PointerButton {
-            surface,
-            button,
-            pressed: true,
-            x,
-            y,
-        } => {
-            let Some(hit_layout) = surface_layout(
-                surface,
-                &state.layout,
-                &state.popup_surfaces,
-                &state.floating_surfaces,
-                &state.layer_surfaces,
-            ) else {
-                return Ok(false);
-            };
-            let hit = hit_layout
-                .hit_test_accepting(&runtime.scene(), x, y, &|node| {
-                    runtime.accepts_pointer_button(node, button)
-                })
-                .map_err(|error| error.to_string())?;
-            // A compositor that has given this surface the keyboard may send
-            // it every press, wherever the pointer is; one that lands on
-            // nothing is the click beside the shell the backdrop exists for.
-            if hit.is_none()
-                && surface == SurfaceRole::Layer(PRIMARY_LAYER)
-                && runtime.layer_surface_config().backdrop == Some(true)
-            {
-                repaint |= runtime.dispatch_backdrop_click();
-            }
-            state.pressed = hit.map(|hit| (surface, hit, x, y, false));
-            state.pressed_button = button;
-            if let Some(target) = hit.and_then(|hit| runtime.key_target_for_node(hit.node)) {
-                state.focused.insert(surface, target);
-                // A click on something that takes keys takes them from a text
-                // input; a click on anything else leaves the field typing.
-                repaint |= runtime.set_key_focus(Some(target));
-            } else {
-                state.focused.remove(&surface);
-            }
-            if let Some(hit) = hit {
-                // The press carries its position now, so a handler can act on
-                // where it landed without waiting for a motion event first.
-                repaint |= runtime.dispatch_pointer(
-                    hit.node,
-                    UiEvent::Pressed,
-                    EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(button),
-                    (0.0, 0.0),
-                );
-            }
-        }
-        LayerEvent::TouchDown { .. }
-        | LayerEvent::TouchMotion { .. }
-        | LayerEvent::TouchUp { .. }
-        | LayerEvent::TouchCancel => {
-            repaint |= handle_touch_event(runtime, state, event)?;
-        }
-        LayerEvent::PointerButton {
-            surface,
-            pressed: false,
-            x,
-            y,
-            ..
-        } => {
-            let hit = surface_layout(
-                surface,
-                &state.layout,
-                &state.popup_surfaces,
-                &state.floating_surfaces,
-                &state.layer_surfaces,
-            )
-            .map(|layout| {
-                let button = state.pressed_button;
-                layout.hit_test_accepting(&runtime.scene(), x, y, &|node| {
-                    runtime.accepts_pointer_button(node, button)
-                })
-            })
-            .transpose()
-            .map_err(|error| error.to_string())?
-            .flatten();
-            if let Some((pressed_surface, pressed_hit, start_x, start_y, dragging)) =
-                state.pressed.take()
-            {
-                let local = surface_layout(
-                    pressed_surface,
-                    &state.layout,
-                    &state.popup_surfaces,
-                    &state.floating_surfaces,
-                    &state.layer_surfaces,
-                )
-                .map(|layout| layout.local_point(&runtime.scene(), pressed_hit.node, x, y))
-                .unwrap_or((x, y));
-                let point = EventPoint::new((x, y), local);
-                let clicked = point.with_button(state.pressed_button);
-                repaint |= runtime.dispatch_pointer(
-                    pressed_hit.node,
-                    UiEvent::Released,
-                    clicked,
-                    (0.0, 0.0),
-                );
-                if dragging {
-                    repaint |= runtime.dispatch_pointer(
-                        pressed_hit.node,
-                        UiEvent::DragFinished,
-                        point,
-                        (x - start_x, y - start_y),
-                    );
-                // A click is a release over the node the press landed on, so the
-                // comparison is by node rather than by the whole hit.
-                } else if pressed_surface == surface
-                    && hit.map(|hit| hit.node) == Some(pressed_hit.node)
-                {
-                    repaint |= runtime.dispatch_pointer(
-                        pressed_hit.node,
-                        UiEvent::Clicked,
-                        clicked,
-                        (0.0, 0.0),
-                    );
-                }
-            }
-        }
         LayerEvent::Key {
             surface,
             pressed: true,
@@ -392,7 +163,7 @@ pub(crate) fn handle_surface_event(
             let surface = match role {
                 SurfaceRole::Popup(id) => state.popup_surfaces.get_mut(&id),
                 SurfaceRole::Floating(id) => state.floating_surfaces.get_mut(&id),
-                SurfaceRole::Layer(_) => None,
+                SurfaceRole::Layer(_) | SurfaceRole::Lock(_) => None,
             };
             if let Some(surface) = surface
                 && let Some(renderer) = &mut surface.renderer
@@ -458,6 +229,15 @@ pub(crate) fn handle_surface_event(
                 runtime.set_window_surface_visible(surface.id, false);
             }
         }
+        // Already taken above, by the pointer path.
+        LayerEvent::PointerMotion { .. }
+        | LayerEvent::PointerLeave { .. }
+        | LayerEvent::PointerAxis { .. }
+        | LayerEvent::PointerButton { .. }
+        | LayerEvent::TouchDown { .. }
+        | LayerEvent::TouchMotion { .. }
+        | LayerEvent::TouchUp { .. }
+        | LayerEvent::TouchCancel => {}
         LayerEvent::Key { pressed: false, .. }
         | LayerEvent::SessionLocked
         | LayerEvent::SessionLockFinished

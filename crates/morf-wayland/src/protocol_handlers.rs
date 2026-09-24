@@ -46,6 +46,23 @@ use wayland_protocols_wlr::screencopy::v1::client::{
 
 use crate::{helpers::*, state_types::*, surface_types::*, types::*};
 
+/// One output, in the shape the rest of morf describes outputs in.
+pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> ScreenInfo {
+    ScreenInfo {
+        id: info.id,
+        name: info.name,
+        make: info.make,
+        model: info.model,
+        description: info.description,
+        position: info.logical_position,
+        size: info.logical_size,
+        physical_size: (info.physical_size.0 > 0 && info.physical_size.1 > 0)
+            .then_some(info.physical_size),
+        scale: info.scale_factor,
+        transform: output_transform_name(info.transform),
+    }
+}
+
 impl LayerState {
     pub(crate) fn layer(&self) -> &ShellSurface {
         &self
@@ -67,19 +84,7 @@ impl LayerState {
             .outputs
             .outputs()
             .filter_map(|output| self.outputs.info(&output))
-            .map(|info| ScreenInfo {
-                id: info.id,
-                name: info.name,
-                make: info.make,
-                model: info.model,
-                description: info.description,
-                position: info.logical_position,
-                size: info.logical_size,
-                physical_size: (info.physical_size.0 > 0 && info.physical_size.1 > 0)
-                    .then_some(info.physical_size),
-                scale: info.scale_factor,
-                transform: output_transform_name(info.transform),
-            })
+            .map(screen_info)
             .collect::<Vec<_>>();
         if screens != self.screens {
             self.screens = screens.clone();
@@ -96,12 +101,46 @@ impl LayerState {
             .find_map(|(id, popup)| (surface == popup.wl_surface()).then_some(*id))
         {
             Some(SurfaceRole::Popup(id))
+        } else if let Some(id) = self
+            .floatings
+            .iter()
+            .find_map(|(id, floating)| (surface == floating.wl_surface()).then_some(*id))
+        {
+            Some(SurfaceRole::Floating(id))
         } else {
-            self.floatings
+            // A lock surface is an input target like any other: the pointer,
+            // a finger and the keyboard all arrive on it while the session is
+            // locked, and until this was here every one of them was dropped.
+            self.lock_surfaces
                 .iter()
-                .find_map(|(id, floating)| (surface == floating.wl_surface()).then_some(*id))
-                .map(SurfaceRole::Floating)
+                .position(|lock| surface == lock.surface.wl_surface())
+                .map(SurfaceRole::Lock)
         }
+    }
+
+    /// Forgets input held by the lock surface at `index`, which has just gone,
+    /// and renumbers what the ones after it held: lock surfaces are addressed
+    /// by position, so every later surface has moved down one.
+    pub(crate) fn forget_lock_surface(&mut self, index: usize) {
+        let shift = |role: SurfaceRole| match role {
+            SurfaceRole::Lock(at) if at == index => None,
+            SurfaceRole::Lock(at) if at > index => Some(SurfaceRole::Lock(at - 1)),
+            other => Some(other),
+        };
+        self.keyboard_surface = self.keyboard_surface.and_then(shift);
+        self.touch_points = std::mem::take(&mut self.touch_points)
+            .into_iter()
+            .filter_map(|(id, (point, role))| shift(role).map(|role| (id, (point, role))))
+            .collect();
+    }
+
+    /// Forgets input held by every lock surface: the lock has ended.
+    pub(crate) fn forget_lock_surfaces(&mut self) {
+        let is_lock = |role: &SurfaceRole| matches!(role, SurfaceRole::Lock(_));
+        if self.keyboard_surface.as_ref().is_some_and(is_lock) {
+            self.keyboard_surface = None;
+        }
+        self.touch_points.retain(|_, (_, role)| !is_lock(role));
     }
 
     pub(crate) fn push_key(&mut self, event: KeyEvent, pressed: bool, repeat: bool) {

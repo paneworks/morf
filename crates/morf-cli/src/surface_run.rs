@@ -246,11 +246,7 @@ pub(crate) fn run_surface(
         pacer: FramePacer::new(),
         // Until a callback says otherwise, assume the commonest refresh.
         refresh: Duration::from_micros(16_667),
-        hovered: None,
-        pressed: None,
-        pressed_button: 0x110,
-        focused: HashMap::new(),
-        touches: HashMap::new(),
+        input: PointerInput::default(),
         drag: None,
         primary_deferred: false,
         fallback_tick: None,
@@ -288,10 +284,7 @@ pub(crate) fn run_surface(
             repaint |= update.repaint;
             recreate_surface |= update.recreate_surface;
             if update.reset_input {
-                state.hovered = None;
-                state.pressed = None;
-                state.focused.clear();
-                state.touches.clear();
+                state.input.reset();
             }
             if update.refresh_idle {
                 client.set_idle_timeouts(&runtime.idle_timeouts());
@@ -336,6 +329,7 @@ pub(crate) fn run_surface(
             return Ok(());
         }
         apply_idle_inhibit(&mut runtime, &mut client);
+        apply_idle_timeouts(&mut runtime, &mut client);
         apply_shortcuts_inhibit(&mut runtime, &mut client);
         if let Some(enabled) = runtime.take_watch_files_change() {
             tx.send(SupervisorMessage::WatchFiles(enabled))

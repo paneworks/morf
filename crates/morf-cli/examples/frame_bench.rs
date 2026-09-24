@@ -66,6 +66,31 @@ fn best(batches: u32, runs: u32, mut body: impl FnMut()) -> Duration {
     best
 }
 
+/// How many layout passes a picture waits for the bindings that read the
+/// layout. A handful is plenty for a real configuration; the bound is there
+/// for one that feeds its own geometry back and never stops.
+const SETTLE_PASSES: usize = 8;
+
+/// Lays the scene out until the layout-reading bindings agree with it.
+fn settled(
+    runtime: &mut Runtime,
+    root: NodeHandle,
+    size: Size,
+    text: &mut impl TextMeasurer,
+    config: &str,
+) -> Layout {
+    let settled = runtime
+        .settle_layout(root, size, text, SETTLE_PASSES)
+        .unwrap_or_else(|error| panic!("{config}: layout: {error}"));
+    if !settled.stable {
+        eprintln!(
+            "{config}: layout still moving after {} passes; drawing the last",
+            settled.passes
+        );
+    }
+    settled.layout
+}
+
 fn main() {
     let Some(config) = std::env::args().nth(1) else {
         eprintln!("usage: frame_bench <config.lua> [width] [height]");
@@ -242,14 +267,7 @@ fn main() {
 
     let root = runtime.scene().roots()[0];
     let size = Size { width, height };
-    let layout = |runtime: &Runtime| {
-        Layout::compute(&runtime.scene(), root, size, &mut RuledText).expect("layout")
-    };
-    let mut computed = layout(&runtime);
-    // A binding on `layout_height` hears about a frame only after it.
-    while runtime.observe_layout(&computed) {
-        computed = layout(&runtime);
-    }
+    let mut computed = settled(&mut runtime, root, size, &mut RuledText, &config);
     // `gpu` renders one frame on a real adapter instead of timing anything: a
     // shader the driver refuses looks fine from the CPU side, and the only way
     // to find out is to build the pipelines and draw, headless.
@@ -257,6 +275,11 @@ fn main() {
         let backend = pollster::block_on(WgpuBackend::new(width as u32, height as u32))
             .expect("a GPU adapter");
         let mut engine = RenderEngine::new(backend);
+        // Settled again against the real faces: what the frame draws is
+        // shaped by the renderer's text system, and a binding placing
+        // something beside a label must read that label's real width, not
+        // the ruled estimate the timings use.
+        computed = settled(&mut runtime, root, size, engine.backend_mut(), &config);
         let mut shaders = 0usize;
         for shader in runtime.shaders() {
             engine
@@ -282,7 +305,7 @@ fn main() {
         for _ in 0..frames.max(2) {
             if frames > 2 {
                 let _ = runtime.tick_animations(Duration::from_millis(16));
-                computed = layout(&runtime);
+                computed = settled(&mut runtime, root, size, engine.backend_mut(), &config);
             }
             runtime.sync_text_inputs(&computed, engine.backend_mut().text_system());
             engine

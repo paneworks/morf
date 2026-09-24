@@ -74,6 +74,14 @@ impl Runtime {
         timeouts
     }
 
+    /// The thresholds, when they changed since this was last asked: a
+    /// subscription made or cancelled after loading, which the compositor
+    /// has to hear about now rather than at the next reload.
+    pub fn take_idle_timeouts_change(&mut self) -> Option<Vec<(u32, bool)>> {
+        let changed = std::mem::take(&mut self.reactive.borrow_mut().idle_timeouts_changed);
+        changed.then(|| self.idle_timeouts())
+    }
+
     /// Dispatches one compositor idle state change to registered Lua callbacks.
     pub fn dispatch_idle(&mut self, timeout_ms: u32, input_only: bool, idle: bool) -> bool {
         let callbacks = self
@@ -81,7 +89,12 @@ impl Runtime {
             .borrow()
             .idle_callbacks
             .get(&(timeout_ms, input_only))
-            .cloned()
+            .map(|callbacks| {
+                callbacks
+                    .iter()
+                    .map(|(_, callback)| callback.clone())
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {

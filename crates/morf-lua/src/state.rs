@@ -226,13 +226,26 @@ pub(crate) struct ReactiveState {
     pub(crate) clipboard_text: Option<String>,
     pub(crate) effect_runs: u64,
     pub(crate) clock: SignalId,
+    /// `morf.session_lock`: where this process's session lock stands, as the
+    /// compositor last said — see [`crate::SessionLockState`].
+    pub(crate) session_lock: SignalId,
+    /// Told when that changes, each with whether it wants only `locked`.
+    pub(crate) session_lock_callbacks: Vec<(StashedClosure, bool)>,
+    /// `morf.lock_surface`: builds one output's lock tree, given its screen.
+    pub(crate) lock_surface_builder: Option<StashedClosure>,
     pub(crate) handlers: HashMap<(NodeHandle, UiEvent), StashedClosure>,
     pub(crate) parent_transitions: Vec<ParentTransitionRequest>,
     pub(crate) states: HashMap<NodeHandle, StateSet>,
     pub(crate) ipc_handlers: HashMap<String, StashedClosure>,
     /// Keyed on the threshold and whether it ignores inhibitors, because the
     /// same number of milliseconds means two different things to the compositor.
-    pub(crate) idle_callbacks: HashMap<(u32, bool), Vec<StashedClosure>>,
+    /// Each with the id its subscription handle cancels it by.
+    pub(crate) idle_callbacks: HashMap<(u32, bool), Vec<(u64, StashedClosure)>>,
+    pub(crate) next_idle_subscription: u64,
+    /// Whether the set of thresholds changed since the loop last asked, so
+    /// the compositor's notifications follow a subscription made (or
+    /// cancelled) at any time, not only the ones made while loading.
+    pub(crate) idle_timeouts_changed: bool,
     pub(crate) output_power_requests: Vec<bool>,
     pub(crate) clipboard_requests: Vec<ClipboardRequest>,
     pub(crate) clipboard_callbacks: Vec<StashedClosure>,
@@ -434,12 +447,15 @@ impl ReactiveState {
         let mut graph = Graph::default();
         let initial_clock = IpcValue::String(String::new());
         let clock = graph.signal("morf.clock", initial_clock.clone());
+        let initial_lock = IpcValue::String(crate::SessionLockState::Unlocked.name().to_owned());
+        let session_lock = graph.signal("morf.session_lock", initial_lock.clone());
         let mut values = HashMap::new();
         values.insert(clock, initial_clock);
+        values.insert(session_lock, initial_lock);
         Self {
             graph: Some(graph),
             values,
-            signals: vec![clock],
+            signals: vec![clock, session_lock],
             property_signals: HashMap::new(),
             effect_ids: HashMap::new(),
             dead_effects: Vec::new(),
@@ -484,11 +500,16 @@ impl ReactiveState {
             clipboard_text: None,
             effect_runs: 0,
             clock,
+            session_lock,
+            session_lock_callbacks: Vec::new(),
+            lock_surface_builder: None,
             handlers: HashMap::new(),
             parent_transitions: Vec::new(),
             states: HashMap::new(),
             ipc_handlers: HashMap::new(),
             idle_callbacks: HashMap::new(),
+            next_idle_subscription: 0,
+            idle_timeouts_changed: false,
             output_power_requests: Vec::new(),
             clipboard_requests: Vec::new(),
             clipboard_callbacks: Vec::new(),

@@ -134,3 +134,18 @@ fn reposition_tokens_count_per_popup_and_record_the_echo() {
     repositions.get_mut(&4).unwrap().sent = u32::MAX;
     assert_eq!(next_reposition_token(&mut repositions, 4), 1);
 }
+
+#[test]
+fn idle_reconciliation_touches_only_what_changed() {
+    use crate::state_methods::idle_changes;
+    let held = [(60_000, false), (300_000, true)];
+    let (removed, added) = idle_changes(&held, &[(5_000, false), (60_000, false)]);
+    assert_eq!(removed, [(300_000, true)]);
+    assert_eq!(
+        added,
+        [(5_000, false)],
+        "the minute keeps its running clock"
+    );
+    let (removed, added) = idle_changes(&held, &held);
+    assert!(removed.is_empty() && added.is_empty());
+}

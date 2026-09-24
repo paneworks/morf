@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::{commands::*, supervisor::*};
 
 pub(crate) fn usage() -> &'static str {
-    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf [--no-plugin | --clean] -c <name> [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments: `logre -- lock`."
+    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf [--no-plugin | --clean] -c <name> [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments: `logre -- lock`."
 }
 
 pub(crate) fn run() -> Result<(), String> {
@@ -258,6 +258,10 @@ fn leading_options<'a>(
                 daemonize = true;
                 strings = rest;
             }
+            ["--lock", rest @ ..] => {
+                LOCK_TARGET.store(true, std::sync::atomic::Ordering::Relaxed);
+                strings = rest;
+            }
             ["-i" | "--instance", display, rest @ ..] => {
                 select_instance(display)?;
                 strings = rest;
@@ -331,7 +335,34 @@ pub(crate) fn socket_dir() -> Result<PathBuf, String> {
 }
 
 pub(crate) fn socket_path() -> Result<PathBuf, String> {
-    socket_path_for(INSTANCE.get().map(String::as_str))
+    let display = INSTANCE.get().map(String::as_str);
+    if LOCK_TARGET.load(std::sync::atomic::Ordering::Relaxed) {
+        return lock_socket_path_for(display);
+    }
+    socket_path_for(display)
+}
+
+/// Whether `--lock` asked the client commands for this display's lock
+/// process rather than its shell.
+static LOCK_TARGET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The socket a lock process binds: its display's, with `-lock` on the name,
+/// because the shell on the same display already holds the plain one.
+pub(crate) fn lock_socket_path() -> Result<PathBuf, String> {
+    lock_socket_path_for(INSTANCE.get().map(String::as_str))
+}
+
+pub(crate) fn lock_socket_path_for(display: Option<&str>) -> Result<PathBuf, String> {
+    Ok(lock_variant(&socket_path_for(display)?))
+}
+
+/// `wayland-1.sock` -> `wayland-1-lock.sock`, in the same directory.
+pub(crate) fn lock_variant(plain: &Path) -> PathBuf {
+    let stem = plain
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    plain.with_file_name(format!("{stem}-lock.sock"))
 }
 
 /// The socket for a named instance, or for this display when none is named.

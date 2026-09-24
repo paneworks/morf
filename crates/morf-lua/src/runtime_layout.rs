@@ -4,13 +4,58 @@
 //! out, the resolved geometry feeds transform watchers, popup anchors, and
 //! the bindings that read `layout_x` and its kin.
 
-use morf_layout::Layout;
+use morf_layout::{Layout, Size, TextMeasurer};
+use morf_scene::NodeHandle;
 
 use crate::{
     reactive_bindings::*, runtime_helpers::*, scene_bindings::*, surface_types::*, types::*,
 };
 
+/// A layout that has stopped moving, and how many passes it took.
+pub struct SettledLayout {
+    pub layout: Layout,
+    /// Layout passes run, one or more.
+    pub passes: usize,
+    /// Whether the last pass changed nothing a layout reads. False when the
+    /// passes ran out first: a binding that feeds its own geometry back.
+    pub stable: bool,
+}
+
 impl Runtime {
+    /// Lays `root` out until the bindings that read the layout agree with it.
+    ///
+    /// A binding on `layout_width` and its kin hears about a frame only after
+    /// the frame: the first layout moves a node, [`Runtime::observe_layout`]
+    /// flushes the bindings that read it, and those may move something else.
+    /// A running shell converges over successive frames; a one-shot render
+    /// (a benchmark, a picture) has to do the same passes up front or it
+    /// draws the first, misplaced one. Stops once a pass leaves the scene's
+    /// layout revision where it was, or after `max_passes` (at least one).
+    pub fn settle_layout(
+        &mut self,
+        root: NodeHandle,
+        available: Size,
+        text: &mut impl TextMeasurer,
+        max_passes: usize,
+    ) -> Result<SettledLayout, String> {
+        let max_passes = max_passes.max(1);
+        let mut passes = 0;
+        loop {
+            let layout = self.compute_layout(root, available, text)?;
+            passes += 1;
+            let before = self.scene().layout_revision();
+            self.observe_layout(&layout);
+            let stable = self.scene().layout_revision() == before;
+            if stable || passes >= max_passes {
+                return Ok(SettledLayout {
+                    layout,
+                    passes,
+                    stable,
+                });
+            }
+        }
+    }
+
     /// Updates native transform watchers from one rendered surface layout.
     ///
     /// Also where a binding on `layout_width` and its kin hears that the

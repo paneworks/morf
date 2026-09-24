@@ -24,7 +24,7 @@ pub(crate) fn surface_key(
     ) else {
         return false;
     };
-    let mut focused = state.focused.get(&surface).copied();
+    let mut focused = state.input.focused.get(&surface).copied();
     let repaint = dispatch_key_in_subtree(
         runtime,
         root,
@@ -34,8 +34,8 @@ pub(crate) fn surface_key(
         key_modifiers(modifiers),
     );
     match focused {
-        Some(node) => state.focused.insert(surface, node),
-        None => state.focused.remove(&surface),
+        Some(node) => state.input.focused.insert(surface, node),
+        None => state.input.focused.remove(&surface),
     };
     repaint
 }

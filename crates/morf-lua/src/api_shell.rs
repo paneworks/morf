@@ -249,6 +249,44 @@ pub(crate) fn install_shell_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "watch_files", watch_files);
+    let lock_state_state = Rc::clone(&state);
+    let session_lock_state = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let name = crate::runtime_session_lock::current(&lock_state_state.borrow()).name();
+        stack.replace(ctx, name);
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "session_lock_state", session_lock_state);
+    // A lock screen built per output: `fn(screen)` returns that output's
+    // root, and bindings in it close over its own screen. Without one, the
+    // file's single root is shared by every output.
+    let builder_state = Rc::clone(&state);
+    let lock_surface = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let builder: Option<Closure> = stack.consume(ctx)?;
+        builder_state.borrow_mut().lock_surface_builder = builder.map(|builder| ctx.stash(builder));
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "lock_surface", lock_surface);
+    // Two ways to hear the compositor about the lock: every change, with the
+    // new state, or only the one a lock screen usually waits for -- the
+    // compositor confirming that it has hidden the session.
+    for (name, locked_only) in [
+        ("on_session_lock_state", false),
+        ("on_session_locked", true),
+    ] {
+        let callbacks_state = Rc::clone(&state);
+        let register = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let callback: Closure = stack.consume(ctx)?;
+            let mut state = callbacks_state.borrow_mut();
+            if state.session_lock_callbacks.len() >= 64 {
+                return Err(HostError("session lock callback limit reached".into()).into());
+            }
+            state
+                .session_lock_callbacks
+                .push((ctx.stash(callback), locked_only));
+            Ok(CallbackReturn::Return)
+        });
+        morf.set_field(ctx, name, register);
+    }
     let quit_state = Rc::clone(&state);
     // Asking to stop, rather than stopping. The call returns and the rest of
     // the handler runs; the shell goes down at the top of the next frame, once

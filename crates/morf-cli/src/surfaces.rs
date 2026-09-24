@@ -56,6 +56,69 @@ pub(crate) fn animation_delta(previous: Option<u32>, time_ms: u32) -> Duration {
     Duration::from_millis(elapsed.into())
 }
 
+/// What the pointer and the fingers are doing, across every surface one
+/// client owns.
+///
+/// Its own struct, apart from the surfaces, because two loops keep one: the
+/// shell's, over layer surfaces, popups and floating windows, and the lock's,
+/// over one lock surface per output. Both route input through the same code
+/// and differ only in how a surface's layout is found.
+pub(crate) struct PointerInput {
+    pub(crate) hovered: Option<(SurfaceRole, Hit)>,
+    pub(crate) pressed: Option<(SurfaceRole, Hit, f64, f64, bool)>,
+    /// The button behind `pressed`, so its release and click say which.
+    pub(crate) pressed_button: u32,
+    pub(crate) focused: HashMap<SurfaceRole, NodeHandle>,
+    /// Each finger down: where it landed, where it was last, and how far
+    /// it has travelled, which is what tells a tap from a swipe.
+    pub(crate) touches: HashMap<i32, (SurfaceRole, Hit, f64, f64, f64)>,
+}
+
+impl Default for PointerInput {
+    fn default() -> Self {
+        Self {
+            hovered: None,
+            pressed: None,
+            pressed_button: 0x110,
+            focused: HashMap::new(),
+            touches: HashMap::new(),
+        }
+    }
+}
+
+impl PointerInput {
+    /// Forgets everything: the nodes it names may no longer exist.
+    pub(crate) fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
+/// How the input path finds the layout a surface was last drawn with, which
+/// is what a point on that surface is hit-tested against.
+pub(crate) trait SurfaceLayouts {
+    fn layout_of(&self, surface: SurfaceRole) -> Option<&Layout>;
+}
+
+/// The shell's surfaces: the primary layer and whatever hangs off it.
+pub(crate) struct LayerLayouts<'a> {
+    pub(crate) layout: &'a Layout,
+    pub(crate) popups: &'a HashMap<u64, AuxiliarySurface>,
+    pub(crate) floatings: &'a HashMap<u64, AuxiliarySurface>,
+    pub(crate) layers: &'a HashMap<u64, AuxiliarySurface>,
+}
+
+impl SurfaceLayouts for LayerLayouts<'_> {
+    fn layout_of(&self, surface: SurfaceRole) -> Option<&Layout> {
+        surface_layout(
+            surface,
+            self.layout,
+            self.popups,
+            self.floatings,
+            self.layers,
+        )
+    }
+}
+
 pub(crate) struct SurfaceEventState {
     pub(crate) layout: CachedLayout,
     /// The scene root this output's main surface draws.
@@ -79,14 +142,8 @@ pub(crate) struct SurfaceEventState {
     pub(crate) animating_shaders: bool,
     /// The interval between the compositor's frame callbacks, as measured.
     pub(crate) refresh: Duration,
-    pub(crate) hovered: Option<(SurfaceRole, Hit)>,
-    pub(crate) pressed: Option<(SurfaceRole, Hit, f64, f64, bool)>,
-    /// The button behind `pressed`, so its release and click say which.
-    pub(crate) pressed_button: u32,
-    pub(crate) focused: HashMap<SurfaceRole, NodeHandle>,
-    /// Each finger down: where it landed, where it was last, and how far
-    /// it has travelled, which is what tells a tap from a swipe.
-    pub(crate) touches: HashMap<i32, (SurfaceRole, Hit, f64, f64, f64)>,
+    /// Where the pointer, the buttons and the fingers are.
+    pub(crate) input: PointerInput,
     /// A drag from another application over one of these surfaces.
     pub(crate) drag: Option<crate::surface_drag::DragFollow>,
     /// Whether the shell's own surface owes a paint it could not make
@@ -304,6 +361,7 @@ pub(crate) fn surface_layout<'a>(
         }
         SurfaceRole::Popup(id) => Some(&popups.get(&id)?.layout.as_ref()?.layout),
         SurfaceRole::Floating(id) => Some(&floatings.get(&id)?.layout.as_ref()?.layout),
+        SurfaceRole::Lock(_) => None,
     }
 }
 
@@ -321,6 +379,7 @@ pub(crate) fn surface_root(
             .map(|surface| surface.root),
         SurfaceRole::Popup(id) => popups.get(&id).map(|surface| surface.root),
         SurfaceRole::Floating(id) => floatings.get(&id).map(|surface| surface.root),
+        SurfaceRole::Lock(_) => None,
     }
 }
 

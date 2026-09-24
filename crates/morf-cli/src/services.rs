@@ -35,6 +35,14 @@ pub(crate) fn apply_idle_inhibit(runtime: &mut Runtime, client: &mut LayerClient
     }
 }
 
+/// A threshold subscribed, or cancelled, since the last frame reaches the
+/// compositor now, not at the next reload.
+pub(crate) fn apply_idle_timeouts(runtime: &mut Runtime, client: &mut LayerClient) {
+    if let Some(timeouts) = runtime.take_idle_timeouts_change() {
+        client.update_idle_timeouts(&timeouts);
+    }
+}
+
 pub(crate) fn apply_shortcuts_inhibit(runtime: &mut Runtime, client: &mut LayerClient) {
     if let Some(inhibited) = runtime.take_shortcuts_inhibit_change() {
         client.set_shortcuts_inhibited(inhibited);
