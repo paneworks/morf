@@ -145,7 +145,7 @@ local function save()
   for key, value in pairs(values) do
     if not equal(value, M.defaults[key]) then out[key] = value end
   end
-  local ok, err = fs.write(M.path, json.encode(out, { pretty = true }))
+  local ok, err = fs.write(M.path, json.encode(out, true))
   if not ok then morf.log("warn", "impasto: could not save settings: " .. tostring(err)) end
 end
 
