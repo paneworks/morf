@@ -244,13 +244,17 @@ function M.scan(root)
       local base = fs.join(root, entry.name)
       local status = (fs.read(fs.join(base, "status")) or ""):match("^%s*(%S+)")
       if status == "connected" then
-        for _, dev in ipairs(fs.list(fs.join(base, "ddc", "i2c-dev")) or {}) do
-          local bus = dev.name:match("^i2c%-(%d+)$")
-          if bus then
-            found[#found + 1] = { connector = connector, bus = bus }
-            break
+        -- The link names the adapter (`../../i2c-5`); its i2c-dev entry is
+        -- the same number, looked at when the link cannot be read.
+        local ok, link = pcall(fs.read_link, fs.join(base, "ddc"))
+        local bus = ok and link and tostring(link):match("i2c%-(%d+)/?$") or nil
+        if not bus then
+          for _, dev in ipairs(fs.list(fs.join(base, "ddc", "i2c-dev")) or {}) do
+            bus = dev.name:match("^i2c%-(%d+)$")
+            if bus then break end
           end
         end
+        if bus then found[#found + 1] = { connector = connector, bus = bus } end
       end
     end
   end
