@@ -165,10 +165,25 @@ function theme.font_display()
   if family == "Inter" then return theme.font_of("Inter Display, Inter") end
   return family
 end
+-- Grape Nuts ships with the shell (fonts/, OFL), as it does with impasto.
+-- morf puts a `fonts` folder beside the configuration on the font path, so
+-- it is normally installed as far as the shell can tell; when it is not (the
+-- shell run from elsewhere), a Text that names it also names the file, and
+-- the engine loads that file once before shaping.
+theme.hand_file = morf.fs.join(morf.shell_dir(), "fonts", "GrapeNuts-Regular.ttf")
+local hand_bundled = not installed["Grape Nuts"] and morf.fs.is_file(theme.hand_file)
+if hand_bundled then installed["Grape Nuts"] = true end
+
 function theme.font_signature() return theme.font_of("Grape Nuts, Georgia, " .. theme.font()) end
 function theme.font_hand()
   if settings.notesHandwriting then return theme.font_signature() end
   return theme.font()
+end
+--- The file behind `font_hand()`, for a node's `font_source`; "" when the
+--- hand is the UI face.
+function theme.font_hand_source()
+  if settings.notesHandwriting and hand_bundled then return theme.hand_file end
+  return ""
 end
 
 theme.size = {
