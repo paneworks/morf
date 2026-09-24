@@ -35,6 +35,7 @@ sense:
 | `bar/panels/` | `bar/island/*Panel.qml` | what the island opens into |
 | `bar/layers/` | `IslandRest`, `IslandSummary`, `OsdLayer`, `NotificationLayer` | the island's layers below a panel |
 | `bar/pieces/` | pieces of `Bar.qml` | what sits on the bar's sides |
+| `bar/controls/` | `bar/island/controls/*.qml` | the control centre's blocks, shared with the details |
 | `desktop/`, `dock/`, `deck/`, `lock/`, `capture/`, `settings/` | same | the other surfaces |
 
 ## How the parts plug in
@@ -82,8 +83,16 @@ Only in a nested, headless compositor — never on the desktop the shell is
 being written on:
 
 ```sh
-WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; morf ipc call controls; grim out.png'
+IMPASTO_DRY_RUN=1 WLR_BACKENDS=headless dbus-run-session -- \
+  cage -- sh -c 'morf examples/impasto/init.lua & sleep 6; morf ipc call controls; grim out.png'
 ```
+
+`IMPASTO_DRY_RUN=1` makes every action that would change the machine --
+the radios, a connection, the volume, the backlight, the power profile,
+the player, the session -- log what it would do instead
+(`services/act.lua`), so a test can press anything. `morf ipc call detail
+<id>` opens a module's detail, `glance` the summary, `controls_edit`
+arranging.
 
 ## Status
 
@@ -91,5 +100,8 @@ WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; m
 |---|---|
 | settings, theme, kit | ported |
 | island state, island, bar (grouped, spread) | ported |
-| rest layer (clock) | ported |
+| rest layer (clock and activities), glance | ported |
+| network, Bluetooth, audio, battery, brightness, media, system, OSD, modules services | ported |
+| control centre (blocks, toggles, arranging), Wi-Fi and Bluetooth lists | ported |
+| battery, volume, brightness, network, Bluetooth, media, notifications, calendar modules | ported |
 | everything else | in progress |
