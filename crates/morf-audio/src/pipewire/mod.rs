@@ -54,8 +54,17 @@ pub(crate) struct PipeWire {
 
 impl PipeWire {
     /// The backend, when libpipewire can be opened.
+    ///
+    /// The library is loaded once for the process and never unloaded:
+    /// `pw_init` sets up global state inside that copy, so a second copy
+    /// loaded after the first was dropped would start uninitialised and
+    /// find no plugins at all.
     pub(crate) fn open() -> Option<Self> {
-        Pw::open().ok().map(|pw| Self { pw: Arc::new(pw) })
+        static LIBRARY: std::sync::OnceLock<Option<Arc<Pw>>> = std::sync::OnceLock::new();
+        LIBRARY
+            .get_or_init(|| Pw::open().ok().map(Arc::new))
+            .clone()
+            .map(|pw| Self { pw })
     }
 }
 
