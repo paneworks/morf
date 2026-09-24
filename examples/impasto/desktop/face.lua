@@ -35,7 +35,12 @@ local function builder(ctx)
     if faces[ctx.id] then return faces[ctx.id] end
   end
   local own = registry(registries[ctx.family] or registries["4x2"])
-  return own[ctx.id] or registry(registries["4x2"])[ctx.id] or registry(registries["2x2"])[ctx.id]
+  if own[ctx.id] then return own[ctx.id] end
+  -- A module with no wide face shows its island detail (Wides.qml's
+  -- fallback), not a square stretched to the width.
+  local detail = registry("desktop.faces.module_detail")
+  if ctx.family == "4x2" and detail.has and detail.has(ctx.id) then return detail.build end
+  return registry(registries["4x2"])[ctx.id] or registry(registries["2x2"])[ctx.id]
 end
 
 local function placeholder(ctx, why)

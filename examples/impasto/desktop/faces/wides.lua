@@ -288,11 +288,6 @@ function M.pet(ctx)
   })
 end
 
-function M.games(ctx)
-  local node = squares.games(ctx)
-  return node
-end
-
 function M.clock(ctx)
   return face(ctx, {
     label = function() return S.clock.format("%A") end,
