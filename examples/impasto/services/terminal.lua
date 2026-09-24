@@ -9,8 +9,8 @@
 -- Closing the window hangs the program up. Ctrl+Shift+C copies what is
 -- selected with the pointer.
 --
--- Windows are reused: a floating window cannot be destroyed, only closed,
--- so a closed one takes the next program. At most eight at once.
+-- Each program gets a window of its own, destroyed -- surface, tree and
+-- terminal -- when it is done with. At most eight at once.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -19,7 +19,10 @@ local C = theme.color
 local M = {}
 
 local MAX = 8
-local pool = {}
+-- Which of the eight places are taken, and each place's status line: a
+-- signal made once per place and reused, not one per program run.
+local slots = {}
+local statuses = {}
 
 -- A theme colour whether the palette moves it (a function) or not.
 local function col(name)
@@ -39,51 +42,29 @@ local function colours()
   }
 end
 
-local function make_entry()
-  local entry = { busy = false }
-  entry.status = morf.signal("impasto.terminal.status." .. (#pool + 1), "")
-  entry.body = ui.Item { anchors = { fill = true, margins = 8 } }
-  entry.root = ui.Rect {
-    color = function() return col("island") end,
-    entry.body,
-    ui.Text {
-      anchors = { right = true, bottom = true, right_margin = 12, bottom_margin = 8 },
-      text = function() return entry.status:get() end,
-      color = function() return col("textMuted") end,
-      font_size = 11,
-      visible = function() return entry.status:get() ~= "" end,
-    },
-  }
-  entry.window = morf.window.floating {
-    title = "Terminal", app_id = "impasto-terminal",
-    width = 900, height = 560,
-    root = entry.root,
-    visible = false,
-    on_closed = function() M.release(entry) end,
-  }
-  pool[#pool + 1] = entry
-  return entry
-end
-
---- The program in `entry` is done with: hung up if it still runs, its node
---- destroyed, the window free for the next.
+--- The program in `entry` is done with: hung up if it still runs, its window
+--- destroyed with everything in it, its place free for the next.
 function M.release(entry)
-  local term = entry.term
-  local heard = entry.heard
-  entry.term, entry.heard = nil, nil
-  entry.busy = false
+  if entry.released then return end
+  entry.released = true
+  slots[entry.slot] = nil
   entry.status:set("")
+  local term, heard, window = entry.term, entry.heard, entry.window
+  entry.term, entry.heard, entry.window = nil, nil, nil
   -- Closed while the program ran: its end is told here, since a destroyed
   -- terminal says nothing more.
   if heard then pcall(heard, nil, nil) end
   if term then
-    if term.running then pcall(term.kill, term, "HUP") end
-    pcall(ui.destroy, term)
+    local ok, running = pcall(function() return term.running end)
+    if ok and running then pcall(term.kill, term, "HUP") end
   end
+  -- Runs `on_closed` when the window is still up, which comes back here and
+  -- finds the entry already released.
+  if window then pcall(window.destroy, window) end
 end
 
 local function title_of(entry, text)
-  pcall(function() entry.window:title(text) end)
+  if entry.window then pcall(function() entry.window:title(text) end) end
 end
 
 --- Runs `command` (an argv) in a terminal window. `options.title` names the
@@ -94,18 +75,16 @@ end
 function M.run(command, options)
   options = options or {}
   if type(command) ~= "table" or #command == 0 then return nil, "no command" end
-  local entry
-  for _, candidate in ipairs(pool) do
-    if not candidate.busy then entry = candidate break end
+  local slot
+  for index = 1, MAX do
+    if not slots[index] then slot = index break end
   end
-  if not entry then
-    if #pool >= MAX then return nil, "too many terminals open" end
-    entry = make_entry()
-  end
-  entry.busy = true
+  if not slot then return nil, "too many terminals open" end
+  statuses[slot] = statuses[slot] or morf.signal("impasto.terminal.status." .. slot, "")
+  local entry = { slot = slot, status = statuses[slot] }
+  slots[slot] = entry
   entry.status:set("")
-  local name = options.title or command[1]
-  title_of(entry, name)
+
   local term
   term = ui.Terminal {
     command = command,
@@ -130,7 +109,7 @@ function M.run(command, options)
       end
       -- Escape closes a window whose program has ended.
       if keysym == 0xff1b and not term.running then
-        entry.window:close()
+        M.release(entry)
         return true
       end
       return false
@@ -140,7 +119,7 @@ function M.run(command, options)
       if options.on_exit then pcall(options.on_exit, code, signal) end
       if entry.term ~= term then return end
       if code == 0 and not options.hold then
-        entry.window:close()
+        M.release(entry)
         return
       end
       entry.status:set(code == 0 and "Done · Escape closes"
@@ -149,17 +128,34 @@ function M.run(command, options)
   }
   entry.term = term
   entry.heard = options.on_exit
-  ui.reparent(term, entry.body)
-  entry.window:open()
+  local root = ui.Rect {
+    color = function() return col("island") end,
+    ui.Item { anchors = { fill = true, margins = 8 }, term },
+    ui.Text {
+      anchors = { right = true, bottom = true, right_margin = 12, bottom_margin = 8 },
+      text = function() return entry.status:get() end,
+      color = function() return col("textMuted") end,
+      font_size = 11,
+      visible = function() return entry.status:get() ~= "" end,
+    },
+  }
+  entry.window = morf.window.floating {
+    title = options.title or command[1], app_id = "impasto-terminal",
+    width = 900, height = 560,
+    root = root,
+    visible = true,
+    -- Closed by the compositor (its close button, a keybinding): the
+    -- program is hung up and the window destroyed.
+    on_closed = function() M.release(entry) end,
+  }
   return term
 end
 
 --- How many terminal windows are up now.
 function M.open_count()
   local count = 0
-  for _, entry in ipairs(pool) do if entry.busy then count = count + 1 end end
+  for index = 1, MAX do if slots[index] then count = count + 1 end end
   return count
 end
-
 
 return M
