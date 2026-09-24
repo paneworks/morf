@@ -37,7 +37,7 @@ fn next(watch: &Watch) -> FsChange {
 /// Everything that arrives until the watch has been quiet a while.
 fn settle(watch: &Watch) -> Vec<FsChange> {
     let started = Instant::now();
-    while !watch.has_pending() && started.elapsed() < WAIT {
+    while !watch.has_pending() && started.elapsed() < Duration::from_secs(1) {
         std::thread::sleep(Duration::from_millis(5));
     }
     std::thread::sleep(Duration::from_millis(150));
@@ -279,14 +279,15 @@ fn a_change_rings_the_loop() {
         rustix::event::PollFlags::IN,
     )];
     // Other tests ring every loop too, so the question is only whether the
-    // alarm is up once the change has arrived: nobody else drains it.
+    // alarm is up once the change has arrived: nobody else drains it. The
+    // watcher rings just after it files the change, hence a moment's grace.
     let started = Instant::now();
     while !watch.has_pending() && started.elapsed() < WAIT {
         std::thread::sleep(Duration::from_millis(5));
     }
     assert!(watch.has_pending());
     let timeout = rustix::event::Timespec {
-        tv_sec: 0,
+        tv_sec: 1,
         tv_nsec: 0,
     };
     assert_eq!(rustix::event::poll(&mut fds, Some(&timeout)).unwrap(), 1);

@@ -181,7 +181,7 @@ fn a_forgotten_handle_is_closed_when_collected() {
     let dir = Scratch::new("gc");
     let file = dir.path("f");
     let mut runtime = start(&format!(
-        "{RECORD}\ndo morf.fs.watch({file:?}, record) end\nkept = morf.fs.watch({file:?}, record)"
+        "{RECORD}\nlost = 0\ndo morf.fs.watch({file:?}, function() lost = lost + 1 end) end\nkept = morf.fs.watch({file:?}, record)"
     ));
     assert_eq!(runtime.reactive.borrow().watches.len(), 2);
     runtime.lua.gc_collect();
@@ -191,7 +191,7 @@ fn a_forgotten_handle_is_closed_when_collected() {
     wait_for(&mut runtime, "assert(#seen >= 1)");
     pump(&mut runtime, 100);
     runtime
-        .execute("check.lua", b"assert(#seen == 1, #seen)")
+        .execute("check.lua", b"assert(lost == 0, lost)")
         .unwrap();
 }
 
