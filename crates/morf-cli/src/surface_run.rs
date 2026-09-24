@@ -94,6 +94,17 @@ pub(crate) fn run_surface(
     let loading = Instant::now();
     execute_config(&mut runtime, path, source, policy)?;
     slow(&name, "loading the configuration", loading);
+    // A configuration that asks to lock the session is one client for every
+    // output, not one layer per worker: the supervisor hears it and runs it
+    // as that instead.
+    let session_lock = runtime.layer_surface_config().session_lock;
+    let _ = tx.send(SupervisorMessage::Worker(WorkerMessage::Loaded {
+        output: name.clone(),
+        session_lock,
+    }));
+    if session_lock {
+        return await_lock(runtime, path, stop, commands);
+    }
     primary_surface_root(&runtime)?;
 
     let layer_config = runtime.layer_surface_config();
@@ -680,4 +691,32 @@ pub(crate) fn register_shaders(
             .map_err(|error| format!("shader pipeline: {error}"))?;
     }
     Ok(())
+}
+
+/// A worker whose configuration asked to lock the session waits here for the
+/// supervisor to say whether it is the one that becomes the lock (the first
+/// to ask) or stops.
+fn await_lock(
+    runtime: Runtime,
+    path: &Path,
+    stop: &AtomicBool,
+    commands: &mpsc::Receiver<WorkerCommand>,
+) -> Result<(), String> {
+    loop {
+        if stop.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        match commands.recv_timeout(Duration::from_millis(50)) {
+            Ok(WorkerCommand::BecomeLock) => return crate::lock::run_lock(runtime, path),
+            Ok(WorkerCommand::Call { reply, .. }) => {
+                let _ = reply.send(Err("the configuration is a session lock".to_owned()));
+            }
+            Ok(WorkerCommand::Reload { reply, .. }) => {
+                let _ = reply.send(Err("the configuration is a session lock".to_owned()));
+            }
+            Ok(_) => {}
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(()),
+        }
+    }
 }

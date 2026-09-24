@@ -68,6 +68,9 @@ pub(crate) enum WorkerCommand {
         hard: bool,
         reply: mpsc::SyncSender<Result<(), String>>,
     },
+    /// The configuration asked to lock the session: this worker takes the
+    /// runtime it ran it with and becomes the lock.
+    BecomeLock,
 }
 
 pub(crate) enum SupervisorMessage {
@@ -82,6 +85,13 @@ pub(crate) enum SupervisorMessage {
 }
 
 pub(crate) enum WorkerMessage {
+    /// A worker ran the configuration. `session_lock` is what it asked to
+    /// be: a worker that hears `true` stops there, and the supervisor runs
+    /// the file as a lock instead.
+    Loaded {
+        output: String,
+        session_lock: bool,
+    },
     Screens {
         output: String,
         screens: Vec<ScreenInfo>,

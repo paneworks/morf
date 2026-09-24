@@ -39,19 +39,15 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
     if desired.is_empty() {
         return Err("compositor advertised no named outputs".to_owned());
     }
-    // The file says what it is, and the only way to hear it is to run it. One
-    // execution here, before any worker: a configuration that asks to be a
-    // session lock is one client for every output, which is not the shape the
-    // workers below have, so it is run as that instead. Every other
-    // configuration is run again by its workers, the way a reload already
-    // runs a candidate before trusting it.
-    {
-        let mut first = Runtime::default();
-        execute_config(&mut first, &path, &source, policy)?;
-        if first.layer_surface_config().session_lock {
-            return run_lock(first, &path);
-        }
-    }
+    // The file says what it is, and the only way to hear it is to run it.
+    // The workers run it, once each, and say what it asked to be: one that
+    // asks to be a session lock is one client for every output, not the
+    // shape the workers have, so the first worker to say so becomes that
+    // client with the runtime it already has and the rest stop. The file
+    // used to be run once more here first, and thrown away: whatever that
+    // run did at once and meant to finish later -- a file written now and
+    // another on a timer, a program started, a bus name taken -- was done
+    // twice, or left half done.
     let path = Arc::new(path);
     let mut source: Arc<[u8]> = source.into();
     let (tx, rx) = mpsc::channel();
@@ -67,35 +63,14 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
         });
     });
     let started = std::time::Instant::now();
-    let (ipc_tx, ipc_rx) = mpsc::channel();
-    let socket = socket_path()?;
-    let server = IpcServer::bind(&socket, ipc_tx).map_err(|error| {
-        // A socket left behind by a killed process is reclaimed by `bind`
-        // itself, so the only way this address is in use is another live
-        // instance. Saying which display it is on is what makes the message
-        // actionable: one morf owns one `WAYLAND_DISPLAY`, and the fix is to
-        // stop that one rather than to go looking for a stale file.
-        if error.kind() == std::io::ErrorKind::AddrInUse {
-            let display = std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "?".to_owned());
-            return format!(
-                "another morf is already running on display {display}; \
-                 stop it before starting another (socket {})",
-                socket.display()
-            );
-        }
-        format!("could not bind IPC socket {}: {error}", socket.display())
-    })?;
-    let owner = fs::metadata(&socket)
-        .map_err(|error| format!("could not inspect IPC socket: {error}"))?
-        .uid();
-    let forward = tx.clone();
-    thread::spawn(move || {
-        while let Ok(request) = ipc_rx.recv() {
-            if forward.send(SupervisorMessage::Ipc(request)).is_err() {
-                break;
-            }
-        }
-    });
+    // Taken before any worker runs the file, so a second shell on this
+    // display stops before it does anything. A lock runs beside the shell
+    // and answers on a socket of its own, so a taken socket is only an
+    // error once the file has shown it is not a lock.
+    let (mut server, owner, taken) = match bind_shell_socket(&tx) {
+        Ok((server, owner)) => (Some(server), owner, None),
+        Err(error) => (None, 0, Some(error)),
+    };
     let mut workers = BTreeMap::new();
     let mut daemon_logs = Vec::new();
     reconcile_workers(
@@ -130,6 +105,36 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
                 );
             }
             Ok(SupervisorMessage::Worker(WorkerMessage::Screens { .. })) => {}
+            Ok(SupervisorMessage::Worker(WorkerMessage::Loaded {
+                output,
+                session_lock,
+            })) => match loaded_step(session_lock, taken.is_some()) {
+                LoadedStep::Run => {}
+                LoadedStep::Refuse => {
+                    stop_workers(workers);
+                    return Err(taken.unwrap_or_default());
+                }
+                LoadedStep::Lock => {
+                    drop(server.take());
+                    let Some(chosen) = workers.remove(&output) else {
+                        continue;
+                    };
+                    stop_workers(std::mem::take(&mut workers));
+                    if chosen.commands.send(WorkerCommand::BecomeLock).is_err() {
+                        return Err(format!("output {output}: stopped before it could lock"));
+                    }
+                    let _ = chosen.join.join();
+                    // A lock that failed says so the way a worker does.
+                    while let Ok(message) = rx.try_recv() {
+                        if let SupervisorMessage::Worker(WorkerMessage::Failed { output, error }) =
+                            message
+                        {
+                            return Err(format!("output {output}: {error}"));
+                        }
+                    }
+                    return Ok(());
+                }
+            },
             Ok(SupervisorMessage::Worker(WorkerMessage::Failed { output, error })) => {
                 stop_workers(workers);
                 return Err(format!("output {output}: {error}"));
@@ -205,6 +210,62 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
             Err(_) => return Err("all output workers stopped".to_owned()),
         }
     }
+}
+
+/// What the supervisor does when a worker has run the configuration.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum LoadedStep {
+    /// A shell: keep going.
+    Run,
+    /// A shell on a display whose socket another one holds: stop.
+    Refuse,
+    /// A session lock: that worker becomes the lock, the others stop.
+    Lock,
+}
+
+pub(crate) fn loaded_step(session_lock: bool, socket_taken: bool) -> LoadedStep {
+    if session_lock {
+        LoadedStep::Lock
+    } else if socket_taken {
+        LoadedStep::Refuse
+    } else {
+        LoadedStep::Run
+    }
+}
+
+/// The shell's IPC socket, with its requests forwarded to `tx`, and the uid
+/// that owns it.
+fn bind_shell_socket(tx: &mpsc::Sender<SupervisorMessage>) -> Result<(IpcServer, u32), String> {
+    let (ipc_tx, ipc_rx) = mpsc::channel();
+    let socket = socket_path()?;
+    let server = IpcServer::bind(&socket, ipc_tx).map_err(|error| {
+        // A socket left behind by a killed process is reclaimed by `bind`
+        // itself, so the only way this address is in use is another live
+        // instance. Saying which display it is on is what makes the message
+        // actionable: one morf owns one `WAYLAND_DISPLAY`, and the fix is to
+        // stop that one rather than to go looking for a stale file.
+        if error.kind() == std::io::ErrorKind::AddrInUse {
+            let display = std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "?".to_owned());
+            return format!(
+                "another morf is already running on display {display}; \
+                 stop it before starting another (socket {})",
+                socket.display()
+            );
+        }
+        format!("could not bind IPC socket {}: {error}", socket.display())
+    })?;
+    let owner = fs::metadata(&socket)
+        .map_err(|error| format!("could not inspect IPC socket: {error}"))?
+        .uid();
+    let forward = tx.clone();
+    thread::spawn(move || {
+        while let Ok(request) = ipc_rx.recv() {
+            if forward.send(SupervisorMessage::Ipc(request)).is_err() {
+                break;
+            }
+        }
+    });
+    Ok((server, owner))
 }
 
 pub(crate) fn named_screens(
