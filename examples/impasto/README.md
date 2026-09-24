@@ -18,6 +18,51 @@ EXAMPLE=examples/impasto/init.lua oslo make run
 Settings live in `~/.config/impasto-morf/settings.json` (only what differs
 from the defaults in `services/settings.lua`).
 
+## The compositor
+
+What upstream pushed through CompositorService, MonitorService and
+ShortcutService goes through `lib/hyprland_config.lua` (on top of
+`lib/hyprland.lua`), for a Lua-configured Hyprland (`eval` of `hl.*` chunks)
+or a hyprlang one (`keyword`s); the configuration files are never written,
+and whatever is pushed is pushed again after every reload. Under any other
+compositor the three services say so, the settings pages lock their
+controls with a note, and nothing is sent.
+
+- `services/compositor.lua`: keyboard layouts and the switch between them,
+  key repeat, pointer sensitivity, the cursor (`setcursor`; its colour is a
+  theme compiled with `hyprcursor-util` from `cursor-src` in the state
+  folder, when both are there), shake to find (hypr-dynamic-cursors), the
+  animation preset, the window shadow and hyprglass. An input option is
+  pushed at start only once it differs from impasto's default, so an
+  untouched one stays the compositor's.
+- `services/displays.lua`: an arrangement per set of connected monitors
+  (`displays` in the settings), pushed as monitor rules; the Displays page
+  drags screens into place, mirrors, picks the main screen, switches them
+  off and on, sets scale, rotation, VRR and mode. No screen lit is put right,
+  workspaces left on a gone screen are brought back, and the lid goes
+  through the arrangement. `morf ipc call displays` lists the screens;
+  `morf ipc call display DP-2 off|on|scale 1.25|position 0x0|mode
+  2560x1440@144|transform 1|vrr 1`, `display mirror on|off`, `display
+  primary eDP-1`, `display forget` change it from a keybind.
+- `services/shortcuts.lua`: the profile's `keys` (bind description ->
+  combination), rebound from the Keys page, are written to
+  `$XDG_STATE_HOME/impasto-morf/keys.tsv` and Hyprland is reloaded. For them
+  to take, the Hyprland configuration needs one line:
+
+  ```lua
+  -- hyprland.lua (Lua config), near the top, before any bind
+  pcall(dofile, (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/impasto-morf/keys.lua")
+  ```
+
+  ```ini
+  # hyprland.conf (hyprlang), at the end, after every bind
+  source = ~/.local/state/impasto-morf/keys.conf
+  ```
+
+Tested headless against a fake Hyprland served from the spec:
+`morf test --private-bus examples/tests/impasto_hyprland_spec.lua` and
+`morf test examples/tests/hyprland_config_spec.lua`.
+
 ## Layout
 
 Folders follow the original's, one Lua file per QML file where that makes
@@ -229,9 +274,9 @@ terminal only on a click, and never on a dry run.
 | control centre (blocks, toggles, arranging), Wi-Fi and Bluetooth lists | ported |
 | battery, volume, brightness, network, Bluetooth, media, notifications, calendar modules | ported |
 | desk: `desktop/`, `services/desktop.lua`, `services/auto/desktop.lua` | ported (both themes, arranging, spectrum) |
-| settings window (`settings/`, eleven sections), its components (`components/setting.lua` and the small pieces beside it) | ported; compositor options are kept in impasto's settings, never written to Hyprland |
+| settings window (`settings/`, eleven sections), its components (`components/setting.lua` and the small pieces beside it) | ported; input, displays and keys are pushed to Hyprland at run time (see below), its files never written |
 | profiles (`services/profiles.lua`, three examples in `profiles/`), import and export | ported |
 | island appearance panel (`bar/panels/appearance.lua`, `appearance` and `palette`) | ported |
 | capture (`capture/`, `services/capture.lua`), recorder, colour picker (`capture/picker.lua`, `services/picker.lua`), their tiles and verbs (`services/auto/capture.lua`) | ported |
-| system statistics (panel `stats`, module `stats`, `services/stats.lua`), key sheet (panel `keys`, read-only), packages and updates (panel `packages`, module `updates`) | ported |
+| system statistics (panel `stats`, module `stats`, `services/stats.lua`), key sheet (panel `keys`), packages and updates (panel `packages`, module `updates`) | ported |
 | everything else | in progress |
