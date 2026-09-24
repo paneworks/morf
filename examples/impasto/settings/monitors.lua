@@ -263,7 +263,7 @@ function M.build(page)
         locked = not editable or (lit <= 1 and not off),
         reason = not editable and NOT_HERE or tr("The only screen there is"),
         checked = not off,
-        on_toggled = function(on) change({ disabled = not on }) end },
+        on_toggled = function(on) displays.switch(m.key, on) end },
       setting.slider { width = W, label = tr("Scale"), from = 1, to = 3, step = 0.05, decimals = 2, unit = "×",
         locked = locked_off, reason = off_reason,
         value = function() return m.scale end,

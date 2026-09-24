@@ -32,7 +32,7 @@ morf.ipc.display = function(what, field, value)
   if not m then return "no screen named " .. tostring(target) end
   local key = displays.key(m)
   if what == "primary" then displays.remember_primary(key) return "ok" end
-  if field == "on" or field == "off" then displays.remember(key, { disabled = field == "off" }) return "ok" end
+  if field == "on" or field == "off" then displays.switch(key, field == "on") return "ok" end
   local numbers = { scale = true, transform = true, vrr = true }
   if numbers[field] then
     local n = tonumber(value)

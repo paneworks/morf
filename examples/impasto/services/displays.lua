@@ -143,6 +143,23 @@ function M.remember(key, fields)
   end)
 end
 
+--- Switches a screen off or on. Off keeps the mode it is in when the rule
+--- names none, so lighting it again brings that mode back rather than the
+--- compositor's preferred one (a screen set to a lower mode, or a custom
+--- one, came back in another).
+function M.switch(key, on)
+  local fields = { disabled = not on }
+  if not on then
+    local m = M.find(key)
+    local a = M.arrangement(true)
+    local kept = a and type(a.monitors) == "table" and a.monitors[key] or nil
+    if m and not m.disabled and m.mode and m.mode ~= "preferred" and not (kept and kept.mode) then
+      fields.mode = m.mode
+    end
+  end
+  return M.remember(key, fields)
+end
+
 --- Every screen's position at once: `{ [key] = { x, y } }`.
 function M.remember_positions(places)
   change(function(kept)
@@ -385,7 +402,7 @@ function M.lid(closed)
   if others == 0 then return true end
   if closed and settings.lidPolicy ~= "off" then return true end
   -- Opening always lights the panel, whatever the policy.
-  M.remember(M.key(panel), { disabled = closed })
+  M.switch(M.key(panel), not closed)
   return true
 end
 

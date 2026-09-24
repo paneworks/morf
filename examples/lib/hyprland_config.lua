@@ -425,7 +425,15 @@ end
 function M.describe(row, names)
   local width, height = row.width or 0, row.height or 0
   local refresh = math.floor((row.refresh_rate or 0) * 100 + 0.5) / 100
-  local modes = M.parse_modes(row.available_modes)
+  local list = {}
+  for index, text in ipairs(row.available_modes or {}) do list[index] = text end
+  -- A mode set by a rule rather than read from the EDID (a custom mode, a
+  -- headless output's) is not among `availableModes`; it is still the one
+  -- the screen is in, and a page offering only the others could not show it.
+  if width > 0 and height > 0 and not row.disabled then
+    list[#list + 1] = string.format("%dx%d@%.2fHz", width, height, refresh)
+  end
+  local modes = M.parse_modes(list)
   local out = {}
   for key, value in pairs(row) do out[key] = value end
   out.refresh = refresh

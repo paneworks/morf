@@ -81,6 +81,10 @@ test.describe("impasto under a fake Hyprland", function()
     -- The workspace left on the dark panel is brought over.
     until_(function() return sent('hl.dsp.workspace.move({ workspace = 1, monitor = "DP-2" })') end, "workspace 1 stranded")
     test.eq(test.ipc("display", "DP-2", "scale", "99"), "refused")
+    -- Lit again in the mode it was switched off in, not the preferred one.
+    test.eq(test.ipc("display", "eDP-1", "on"), "ok")
+    until_(function() return sent('hl.monitor({ output = "desc:BOE 0x0BCA", disabled = false, mode = "1920x1200@60.00"') end,
+      "not lit again in its own mode: " .. table.concat(fake.sent("BOE"), " | "):sub(-400))
   end)
 
   test.it("lights every screen when none is", function()

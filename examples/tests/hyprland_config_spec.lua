@@ -70,6 +70,17 @@ test.describe("hyprland_config plans", function()
     test.eq(value.keyboards[2].active_keymap, "none")
   end)
 
+  test.it("offers the mode a screen is in though the EDID does not list it", function()
+    local described = config.describe({ name = "HEADLESS-2", width = 1024, height = 768, refresh_rate = 60.0,
+      available_modes = { "1920x1080@60.00Hz" } })
+    test.eq(described.mode, "1024x768@60.00")
+    test.eq(#described.modes, 2)
+    test.eq(described.resolutions[2].width, 1024)
+    -- Listed once when it is listed.
+    test.eq(#config.describe({ name = "eDP-1", width = 1920, height = 1080, refresh_rate = 60.0,
+      available_modes = { "1920x1080@60.00Hz" } }).modes, 1)
+  end)
+
   test.it("parses and groups modes", function()
     local modes = config.parse_modes { "1920x1080@60.00Hz", "2560x1440@144.00Hz", "2560x1440@59.95Hz", "1920x1080@60.00Hz" }
     test.eq(#modes, 3)
