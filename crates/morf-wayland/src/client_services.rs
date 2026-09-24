@@ -74,6 +74,18 @@ impl LayerClient {
     }
 
     /// Replaces seat idle thresholds and returns whether the compositor supports them.
+    /// Changes the idle thresholds in place: a notification for a threshold
+    /// still wanted is kept (its clock keeps running), one no longer wanted is
+    /// destroyed, a new one is created. ext-idle-notify allows both at any
+    /// time, so a subscription made after startup applies at once.
+    pub fn update_idle_timeouts(&mut self, timeouts: &[(u32, bool)]) -> bool {
+        self.state.idle_timeouts = timeouts.iter().copied().take(64).collect();
+        self.state.idle_timeouts.sort_unstable();
+        self.state.idle_timeouts.dedup();
+        self.state.reconcile_idle(&self.queue.handle());
+        self.state.idle_notifier.is_some()
+    }
+
     pub fn set_idle_timeouts(&mut self, timeouts: &[(u32, bool)]) -> bool {
         self.state.idle_timeouts = timeouts.iter().copied().take(64).collect();
         self.state.idle_timeouts.sort_unstable();

@@ -302,6 +302,7 @@ pub(crate) fn run_surface(
             return Ok(());
         }
         apply_idle_inhibit(&mut runtime, &mut client);
+        apply_idle_timeouts(&mut runtime, &mut client);
         apply_shortcuts_inhibit(&mut runtime, &mut client);
         if let Some(enabled) = runtime.take_watch_files_change() {
             tx.send(SupervisorMessage::WatchFiles(enabled))

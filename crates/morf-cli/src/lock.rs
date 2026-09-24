@@ -10,8 +10,8 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use crate::{
-    capture::*, lock_outputs::*, paint::*, surface_keys::*, surface_layers::*, surface_pointer::*,
-    surfaces::*,
+    capture::*, lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*,
+    surface_layers::*, surface_pointer::*, surfaces::*,
 };
 
 pub(crate) struct Worker {
@@ -103,6 +103,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
         wake.drain();
         let mut repaint = runtime.poll_services();
         apply_service_requests(&mut runtime, &mut client);
+        apply_idle_timeouts(&mut runtime, &mut client);
         unlock_pending |= runtime.take_session_unlock_request();
         // The file lifts the lock the way it asked for it: by clearing
         // `morf.surface.session_lock`. Which door was opened — a password, a

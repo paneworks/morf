@@ -229,7 +229,13 @@ pub(crate) struct ReactiveState {
     pub(crate) ipc_handlers: HashMap<String, StashedClosure>,
     /// Keyed on the threshold and whether it ignores inhibitors, because the
     /// same number of milliseconds means two different things to the compositor.
-    pub(crate) idle_callbacks: HashMap<(u32, bool), Vec<StashedClosure>>,
+    /// Each with the id its subscription handle cancels it by.
+    pub(crate) idle_callbacks: HashMap<(u32, bool), Vec<(u64, StashedClosure)>>,
+    pub(crate) next_idle_subscription: u64,
+    /// Whether the set of thresholds changed since the loop last asked, so
+    /// the compositor's notifications follow a subscription made (or
+    /// cancelled) at any time, not only the ones made while loading.
+    pub(crate) idle_timeouts_changed: bool,
     pub(crate) output_power_requests: Vec<bool>,
     pub(crate) clipboard_requests: Vec<ClipboardRequest>,
     pub(crate) clipboard_callbacks: Vec<StashedClosure>,
@@ -435,6 +441,8 @@ impl ReactiveState {
             states: HashMap::new(),
             ipc_handlers: HashMap::new(),
             idle_callbacks: HashMap::new(),
+            next_idle_subscription: 0,
+            idle_timeouts_changed: false,
             output_power_requests: Vec::new(),
             clipboard_requests: Vec::new(),
             clipboard_callbacks: Vec::new(),

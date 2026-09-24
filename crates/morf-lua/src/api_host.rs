@@ -29,11 +29,33 @@ pub(crate) fn install_host_service_api<'gc>(
         if !state.idle_callbacks.contains_key(&key) && state.idle_callbacks.len() >= 64 {
             return Err(HostError("idle timeout limit reached".into()).into());
         }
+        let id = state.next_idle_subscription;
+        state.next_idle_subscription += 1;
+        // A threshold the compositor has not been asked for yet.
+        state.idle_timeouts_changed |= !state.idle_callbacks.contains_key(&key);
         state
             .idle_callbacks
             .entry(key)
             .or_default()
-            .push(ctx.stash(callback));
+            .push((id, ctx.stash(callback)));
+        drop(state);
+        // The subscription, so it can be let go: `sub:cancel()`. The last
+        // callback on a threshold takes the compositor's notification with it.
+        let cancel_state = Rc::clone(&idle_state);
+        let cancel = Callback::from_fn(&ctx, move |_, _, _| {
+            let mut state = cancel_state.borrow_mut();
+            if let Some(callbacks) = state.idle_callbacks.get_mut(&key) {
+                callbacks.retain(|(held, _)| *held != id);
+                if callbacks.is_empty() {
+                    state.idle_callbacks.remove(&key);
+                    state.idle_timeouts_changed = true;
+                }
+            }
+            Ok(CallbackReturn::Return)
+        });
+        let subscription = Table::new(&ctx);
+        subscription.set_field(ctx, "cancel", cancel);
+        stack.replace(ctx, subscription);
         Ok(CallbackReturn::Return)
     });
     let inhibit_state = Rc::clone(&state);
