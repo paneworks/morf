@@ -74,7 +74,9 @@ if not inline_mode then
     anchors = { top = true, bottom = true, left = true, right = true },
     width = WIDTH, height = HEIGHT,
     exclusive_zone = -1,
-    keyboard_focus = "none",
+    -- Mapped only while the menu is open, and holding the keyboard then,
+    -- so Escape closes it (the original's took none, and only a click did).
+    keyboard_focus = "exclusive",
     visible = false,
     root = menu_root(WIDTH, HEIGHT),
   }
@@ -198,6 +200,9 @@ morf.ipc.desk = function(verb, a, b, c)
   elseif verb == "light" then
     require("services.deck").receiving:set(a or "")
     return a or ""
+  elseif verb == "grid" then
+    local g = desk.grid()
+    return g.columns .. "x" .. g.rows
   elseif verb == "theme" then
     settings.set("desktopTheme", a == "analogue" and "analogue" or "modern")
     return a or "modern"

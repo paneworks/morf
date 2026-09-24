@@ -222,9 +222,19 @@ function M.drawn_family(id, family_id, theme_id)
   return best
 end
 
-function M.family_of(row)
+-- The family a row asks for, drawn as its theme can.
+local function declared_family(row)
   if not row or not row.family then return "4x2" end
   return M.drawn_family(row.id, row.family, M.theme_of(row))
+end
+
+local fitted_family -- set with the collisions below
+
+--- The family a widget is drawn at on this board: its own, or a smaller one
+--- it offers when its own fits nowhere here (a layout made for a larger
+--- screen).
+function M.family_of(row)
+  return fitted_family(row) or declared_family(row)
 end
 
 -- ------------------------------------------------------------------ board --
@@ -333,27 +343,25 @@ end
 -- or the nearest free one when another holds it. The farthest right and
 -- down go first, so on a smaller board those against the edge keep it.
 -- Never written back, so a layout made on a larger screen stays intact.
-local spots_cache, spots_at = nil, nil
-local function spots()
-  local grid = M.grid()
-  local stamp = revision:get() .. ":" .. grid.columns .. "x" .. grid.rows .. ":" .. settings.desktopTheme
-  if spots_at == stamp then return spots_cache end
-  local list = {}
-  for _, row in ipairs(M.squares()) do
-    local shape = M.family(M.family_of(row))
-    list[#list + 1] = { row = row, shape = shape, right = (row.col or 0) + shape.cols, bottom = (row.row or 0) + shape.rows }
-  end
-  table.sort(list, function(a, b)
-    if a.right ~= b.right then return a.right > b.right end
-    if a.bottom ~= b.bottom then return a.bottom > b.bottom end
-    return a.row.key < b.row.key
-  end)
-  local out, taken = {}, {}
+--
+-- The original stops there, and a layout too big for the board overlaps
+-- (Moon castle's eight widgets on a 1280x720 screen). Here nothing ever
+-- overlaps: when the edge-first order leaves a widget without room, the
+-- largest widgets are placed first instead; when that fails too, the
+-- largest widget that offers a smaller family gives way to it, one step at
+-- a time, until everything fits. What still fits nowhere once nothing can
+-- shrink is left off this board until there is room.
+local function place(list, order, grid)
+  table.sort(list, order)
+  local out, taken, missing = {}, {}, 0
   for _, item in ipairs(list) do
     local shape = item.shape
     local home = clamped(item.row, shape, grid)
-    local spot = home
-    if clashes(taken, home.col, home.row, shape) then
+    local spot = nil
+    if not clashes(taken, home.col, home.row, shape)
+      and home.col + shape.cols <= grid.columns and home.row + shape.rows <= grid.rows then
+      spot = home
+    else
       local nearest = math.huge
       for col = 0, grid.columns - shape.cols do
         for r = 0, grid.rows - shape.rows do
@@ -365,15 +373,94 @@ local function spots()
         end
       end
     end
-    taken[#taken + 1] = { col = spot.col, row = spot.row, cols = shape.cols, rows = shape.rows }
-    out[item.row.key] = spot
+    if spot then
+      taken[#taken + 1] = { col = spot.col, row = spot.row, cols = shape.cols, rows = shape.rows }
+      out[item.row.key] = { col = spot.col, row = spot.row, family = item.family, off = false }
+    else
+      missing = missing + 1
+      out[item.row.key] = { col = home.col, row = home.row, family = item.family, off = true }
+    end
+  end
+  return out, missing
+end
+
+local function area(shape) return shape.cols * shape.rows end
+
+local function edge_first(a, b)
+  if a.right ~= b.right then return a.right > b.right end
+  if a.bottom ~= b.bottom then return a.bottom > b.bottom end
+  return a.row.key < b.row.key
+end
+
+local function largest_first(a, b)
+  local x, y = area(a.shape), area(b.shape)
+  if x ~= y then return x > y end
+  return edge_first(a, b)
+end
+
+-- The next smaller family an item offers inside its shape, or nil.
+local function smaller_family(item)
+  local best, best_area = nil, 0
+  for _, offered in ipairs(M.families_for(item.row.id, M.theme_of(item.row))) do
+    local s = M.family(offered)
+    if s.cols <= item.shape.cols and s.rows <= item.shape.rows
+      and area(s) < area(item.shape) and area(s) > best_area then
+      best, best_area = offered, area(s)
+    end
+  end
+  return best
+end
+
+local spots_cache, spots_at = nil, nil
+local function spots()
+  local grid = M.grid()
+  local stamp = revision:get() .. ":" .. grid.columns .. "x" .. grid.rows .. ":" .. settings.desktopTheme
+  if spots_at == stamp then return spots_cache end
+  local list = {}
+  for _, row in ipairs(M.squares()) do
+    local family = declared_family(row)
+    local shape = M.family(family)
+    list[#list + 1] = {
+      row = row, family = family, shape = shape,
+      right = (row.col or 0) + shape.cols, bottom = (row.row or 0) + shape.rows,
+    }
+  end
+  local out, missing = place(list, edge_first, grid)
+  if missing > 0 then
+    out, missing = place(list, largest_first, grid)
+    while missing > 0 do
+      -- The largest widget that can shrink gives way.
+      local giving = nil
+      for _, item in ipairs(list) do
+        if smaller_family(item) and (not giving or largest_first(item, giving)) then giving = item end
+      end
+      if not giving then break end
+      giving.family = smaller_family(giving)
+      giving.shape = M.family(giving.family)
+      out, missing = place(list, edge_first, grid)
+      if missing > 0 then out, missing = place(list, largest_first, grid) end
+    end
   end
   spots_cache, spots_at = out, stamp
   return out
 end
 
+fitted_family = function(row)
+  if not row or not row.key or M.is_edge(row) then return nil end
+  local spot = spots()[row.key]
+  return spot and spot.family or nil
+end
+
+--- Whether a widget has no room on this board at all: it is not drawn.
+function M.left_off(key)
+  local row = M.entry_of(key)
+  if not row or M.is_edge(row) then return false end
+  local spot = spots()[key]
+  return spot ~= nil and spot.off
+end
+
 function M.spot_of(row)
-  return spots()[row.key] or clamped(row, M.family(M.family_of(row)), M.grid())
+  return spots()[row.key] or clamped(row, M.family(declared_family(row)), M.grid())
 end
 
 --- The widget's box on the board, or nil when it is gone.
@@ -387,7 +474,7 @@ end
 local function overlaps(col, row, family_id, except)
   local shape = M.family(family_id)
   for _, other in ipairs(M.squares()) do
-    if other.key ~= except then
+    if other.key ~= except and not M.left_off(other.key) then
       local theirs = M.family(M.family_of(other))
       local spot = M.spot_of(other)
       if col < spot.col + theirs.cols and spot.col < col + shape.cols
@@ -581,7 +668,7 @@ end
 function M.set_family(key, family_id)
   local widget = M.entry_of(key)
   if not widget or not M.offers(widget.id, family_id, M.theme_of(widget)) then return end
-  if M.family_of(widget) == family_id then return end
+  if M.family_of(widget) == family_id and declared_family(widget) == family_id then return end
   local at = M.spot_of(widget)
   local spot = M.nearest_free(at.col, at.row, family_id, key)
   if not spot then return end

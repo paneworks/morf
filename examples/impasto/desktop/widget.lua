@@ -326,7 +326,10 @@ function M.build(key, arranging)
     y = function() return box().y end,
     width = function() return box().width end,
     height = function() return box().height end,
+    id = "desk-widget-" .. key,
     z = function() return held() and 2 or (selected() and 1 or 0) end,
+    -- No room for it on this board even at its smallest: not drawn here.
+    visible = function() return not desk.left_off(key) end,
     behavior = {
       x = theme.behave("medium"), y = theme.behave("medium"),
       width = theme.behave("medium"), height = theme.behave("medium"),
