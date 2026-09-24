@@ -297,7 +297,7 @@ local function build_edge(edge)
   local open = false
   morf.effect("impasto.deck." .. edge .. ".window", function()
     -- While arranging the board draws the decks (desktop/arrange/decks.lua).
-    -- An edge surface: nothing without layer-shell (services/layer_shell.lua).
+    -- An edge surface: nothing where it cannot be placed (services/layer_shell.lua).
     local want = layer_shell.ok() and the_deck() ~= nil and not service.away()
       and not desk.editing:get()
     local size = extent()

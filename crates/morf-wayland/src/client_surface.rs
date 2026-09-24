@@ -110,6 +110,19 @@ impl LayerClient {
         Ok(positioner)
     }
 
+    /// `config` with its anchor rectangle moved into the fallback toplevel's
+    /// coordinates, when `parent` is a layer surface standing in as a
+    /// subsurface of it; unchanged otherwise.
+    fn fallback_anchored(&self, parent: SurfaceRole, mut config: PopupConfig) -> PopupConfig {
+        if let SurfaceRole::Layer(id) = parent
+            && let Some((_, (x, y))) = self.state.fallback_popup_parent(id)
+        {
+            config.anchor.x += x;
+            config.anchor.y += y;
+        }
+        config
+    }
+
     /// Creates an xdg popup anchored to a parent-surface rectangle.
     pub fn open_popup(
         &mut self,
@@ -119,11 +132,17 @@ impl LayerClient {
     ) -> Result<(), WaylandError> {
         self.close_popup(id);
         let qh = self.queue.handle();
-        let positioner = self.build_positioner(&config)?;
+        let positioner = self.build_positioner(&self.fallback_anchored(parent, config))?;
         let surface = self.state.compositor.create_surface(&qh);
         surface.set_buffer_scale(1);
         let parent_surface = match parent {
-            SurfaceRole::Layer(_) => None,
+            // Without layer-shell there is no `get_popup` to attach it with,
+            // so it hangs from the fallback toplevel directly, its anchor
+            // moved by the subsurface's offset (`fallback_anchored`).
+            SurfaceRole::Layer(id) => self
+                .state
+                .fallback_popup_parent(id)
+                .map(|(window, _)| window.xdg_surface()),
             SurfaceRole::Lock(_) => {
                 return Err(WaylandError("a lock surface cannot parent a popup".into()));
             }
@@ -184,6 +203,7 @@ impl LayerClient {
             .track_aux_scale(SurfaceRole::Popup(id), popup.wl_surface(), &qh);
         popup.wl_surface().commit();
         self.state.popups.insert(id, popup);
+        self.state.popup_parents.insert(id, parent);
         self.connection
             .flush()
             .map_err(|error| WaylandError(format!("Wayland flush failed: {error}")))
@@ -211,6 +231,11 @@ impl LayerClient {
         if version < XDG_POPUP_REPOSITION_VERSION {
             return Ok(false);
         }
+        let parent = self.state.popup_parents.get(&id).copied();
+        let config = match parent {
+            Some(parent) => self.fallback_anchored(parent, config),
+            None => config,
+        };
         let positioner = self.build_positioner(&config)?;
         let token = next_reposition_token(&mut self.state.popup_repositions, id);
         let Some(popup) = self.state.popups.get(&id) else {
@@ -226,6 +251,7 @@ impl LayerClient {
     /// Destroys the current popup when present.
     pub fn close_popup(&mut self, id: u64) {
         self.state.popups.remove(&id);
+        self.state.popup_parents.remove(&id);
         self.state.aux_scales.remove(&SurfaceRole::Popup(id));
         self.state.popup_repositions.remove(&id);
         self.forget_surface(SurfaceRole::Popup(id));

@@ -145,9 +145,7 @@ impl LayerState {
 
     pub(crate) fn push_key(&mut self, event: KeyEvent, pressed: bool, repeat: bool) {
         self.events.push_back(LayerEvent::Key {
-            surface: self
-                .keyboard_surface
-                .unwrap_or(SurfaceRole::Layer(PRIMARY_LAYER)),
+            surface: self.key_target(),
             keysym: event.keysym.raw(),
             text: event.utf8,
             pressed,

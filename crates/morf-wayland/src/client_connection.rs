@@ -78,6 +78,15 @@ impl LayerClient {
         // compositor, greetd's included, over an extension that is optional
         // by design.
         let layer_shell = LayerShell::bind(&globals, &qh).ok();
+        // Only wanted without layer-shell, where the layer surfaces after the
+        // first stand in as subsurfaces of it; binding it anyway costs nothing.
+        let subcompositor = globals
+            .bind::<wayland_client::protocol::wl_subcompositor::WlSubcompositor, _, _>(
+                &qh,
+                1..=1,
+                (),
+            )
+            .ok();
         let xdg_shell = XdgShell::bind(&globals, &qh)
             .map_err(|error| WaylandError(format!("xdg shell is unavailable: {error}")))?;
         let fractional_manager = globals
@@ -174,6 +183,10 @@ impl LayerClient {
             xdg_shell,
             layer_shell,
             layers: HashMap::new(),
+            subcompositor,
+            layer_sequence: std::cell::Cell::new(0),
+            subsurface_stack: Vec::new(),
+            popup_parents: HashMap::new(),
             popups: HashMap::new(),
             popup_repositions: HashMap::new(),
             floatings: HashMap::new(),

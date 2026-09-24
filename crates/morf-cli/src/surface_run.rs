@@ -29,6 +29,7 @@ fn capabilities_of(
     ];
     for (name, supported) in [
         ("layer_shell", client.supports_layer_shell()),
+        ("layer_surfaces", client.supports_layer_surfaces()),
         ("clipboard", client.supports_clipboard()),
         ("data_control", client.supports_data_control()),
         ("primary_selection", client.supports_primary_selection()),
