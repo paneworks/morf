@@ -48,18 +48,31 @@ function chip.face(id, options)
   local figured = function() return modules.value_of(id) ~= "" end
   local figure_w = function() return figured() and (figure.layout_width or 0) or 0 end
 
-  local symbol = kit.glyph {
-    glyph = function() return modules.glyph_of(id) end,
-    size = size,
-    color = function() return modules.tint_of(id) end,
-    behavior = { color = theme.behave("fast") },
-  }
+  local provider = modules.providers[id] or {}
+  -- Claude and the pet have no font glyph and draw their own mark at glyph
+  -- size (ChipFace.qml:74-94), two pixels larger than the glyph.
+  local own_mark = type(provider.chip_mark) == "function"
+  local symbol = own_mark
+    and ui.Item {
+      width = function() return size() + 2 end, height = function() return size() + 2 end,
+      ui.Loader {
+        x = 0, y = 0,
+        width = function() return size() + 2 end, height = function() return size() + 2 end,
+        active = function() return not ring() end,
+        source = function() return provider.chip_mark() end,
+      },
+    }
+    or kit.glyph {
+      glyph = function() return modules.glyph_of(id) end,
+      size = size,
+      color = function() return modules.tint_of(id) end,
+      behavior = { color = theme.behave("fast") },
+    }
   local mark_w = function()
     if ring() then return theme.capsule_height() end
+    if own_mark then return size() + 2 end
     return symbol.layout_width or size()
   end
-
-  local provider = modules.providers[id] or {}
   local gauge = ui.Item {
     width = function() return theme.capsule_height() end,
     height = function() return theme.capsule_height() end,
@@ -147,7 +160,11 @@ function chip.chip(id, options)
   local open = function()
     return modules.open_id:get() == id and require("bar.island_state").open_panel() == "module"
   end
+  -- A reading that polls keeps polling while the chip is on the bar
+  -- (BarChip.qml:42-43).
+  modules.watch(id, true)
   return ui.Item {
+    on_destroyed = function() modules.watch(id, false) end,
     width = function() return face.layout_width or 1 end,
     height = function() return theme.capsule_height() end,
     ui.Rect {

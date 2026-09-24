@@ -72,6 +72,11 @@ M.providers = {}
 ---   chip()    the ring face's contents, a node `capsule_height` square
 ---   detail()  the detail card, a node filling the island
 ---   size()    the detail's size when it is not the catalogue's
+---   chip_mark() the mark in the icon shape, for a module with no font glyph
+---             (Claude, the pet); a node `capsule_height * 0.44` square
+---   watch(on) a reading that polls: called true while a piece on the bar
+---             shows the module, and false when it goes (`M.watch`)
+---   mark(), figure()  the two halves of a running activity on the island
 function M.define(id, provider)
   local kept = M.providers[id] or {}
   for key, value in pairs(provider) do kept[key] = value end
@@ -92,6 +97,14 @@ end
 -- button is drawn as a circle.
 M.button_ids = { "launcher", "overview", "controls", "capture",
   "appearance", "notes", "board", "games", "keys", "packages", "settings", "session" }
+
+-- A reading that polls keeps polling while a piece on the bar shows it, in
+-- either shape (ModuleService.watch). The chip calls this as it is built
+-- and as it goes; the module's own `watch(on)` subscribes and releases.
+function M.watch(id, on)
+  local provider = M.providers[id]
+  if provider and type(provider.watch) == "function" then provider.watch(on and true or false) end
+end
 
 -- Buttons cannot see the island, so they ask here; the bar's island answers.
 M.panel_requests = morf.signal("impasto.modules.panel_request", "")

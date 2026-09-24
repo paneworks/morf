@@ -106,9 +106,18 @@ function M.move_door(id, delta) settings.set("centreButtons", M.moved(M.buttons(
 local function lazy(name)
   return function() return require(name) end
 end
-local network, bluetooth, audio, system, notify, osd =
+local network, bluetooth, audio, system, notify, osd, clipboard =
   lazy("services.network"), lazy("services.bluetooth"), lazy("services.audio"),
-  lazy("services.system"), lazy("services.notifications"), lazy("services.osd")
+  lazy("services.system"), lazy("services.notifications"), lazy("services.osd"),
+  lazy("services.clipboard")
+
+-- hyprsunset is optional; looked for once, so the tile can say it is
+-- missing (SunsetService.qml:34-43).
+local night_found
+local function night_available()
+  if night_found == nil then night_found = require("services.night").available() end
+  return night_found
+end
 
 --- Airplane mode is Wi-Fi and Bluetooth both off; neither service owns it.
 function M.airborne()
@@ -165,9 +174,13 @@ M.tile_catalogue = {
       if bluetooth().available() and bluetooth().enabled() ~= turn_on then bluetooth().toggle() end
     end },
   { key = "nightlight", label = "Night light",
-    icon = function() return "󰖔" end,
-    detail = function() return settings.nightLight and (settings.nightTemperature .. " K") or "Off" end,
+    icon = function() return settings.nightLight and "󰃜" or "󰃝" end,
+    detail = function()
+      if not night_available() then return "Needs hyprsunset" end
+      return settings.nightLight and (settings.nightTemperature .. " K") or "Daylight"
+    end,
     active = function() return settings.nightLight end,
+    available = night_available,
     action = function() require("services.night").toggle() end },
   { key = "output", label = "Output",
     icon = function() return audio().icon() end,
@@ -205,9 +218,15 @@ M.tile_catalogue = {
   { key = "record", label = "Record", closes = true,
     icon = function() return "󰕧" end, detail = function() return "The screen" end,
     available = no },
+  -- A one-shot action, which also lists it in the launcher's `>`.
   { key = "clearClipboard", label = "Clear clipboard", closes = true,
-    icon = function() return "󰅍" end, detail = function() return "Nothing kept" end,
-    available = no },
+    icon = function() return "󰅍" end,
+    detail = function()
+      local n = clipboard().count()
+      return n == 1 and "1 entry kept" or (n .. " entries kept")
+    end,
+    available = function() return settings.clipboardHistory and clipboard().count() > 0 end,
+    action = function() clipboard().wipe() end },
 }
 
 local tiles_by_key = {}
@@ -340,6 +359,25 @@ M.row_gap = 14
 M.panel_width = M.board_width + 2 * theme.panel_padding
 M.panel_height = M.board_height + M.row_height + M.row_gap + 2 * theme.panel_padding
 
+-- The card of blocks shown while arranging, beside the grid (ControlsTray):
+-- two cells wide at `tray_factor`, as tall as the grid, the island growing
+-- by it.
+M.tray_factor = 0.6
+M.tray_pad = 10
+M.tray_gap = 16
+M.tray_width = math.ceil((2 * theme.centre_cell_width + theme.centre_gutter) * M.tray_factor) + 2 * M.tray_pad
+M.tray_x = M.board_width + M.tray_gap
+
+--- The panel's width, with the tray while arranging.
+function M.panel_width_now()
+  return M.panel_width + (M.editing:get() and (M.tray_gap + M.tray_width) or 0)
+end
+
+--- Whether a point on the board (board pixels) is over the tray.
+function M.over_tray(x, y)
+  return M.editing:get() and x >= M.board_width + M.tray_gap / 2 and y >= 0 and y <= M.board_height
+end
+
 function M.offset_x(col) return col * theme.centre_stride_x end
 function M.offset_y(row) return row * theme.centre_stride_y end
 
@@ -457,6 +495,21 @@ end
 function M.tiles_of(key)
   local out = {}
   for _, tile in ipairs(M.toggle_keys_of(key)) do out[#out + 1] = tiles_by_key[tile] end
+  return out
+end
+
+--- The inspector's list: the block's own tiles in their order, then the
+--- rest of the catalogue.
+function M.tile_rows_of(key)
+  local own = M.toggle_keys_of(key)
+  local out, seen = {}, {}
+  for _, tile in ipairs(own) do
+    out[#out + 1] = tiles_by_key[tile]
+    seen[tile] = true
+  end
+  for _, tile in ipairs(M.tile_catalogue) do
+    if not seen[tile.key] then out[#out + 1] = tile end
+  end
   return out
 end
 

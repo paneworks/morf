@@ -32,6 +32,9 @@ modules.define("updates", {
   glyph = function() return "󰏖" end,
   value = function() return tostring(updates.count()) end,
   has = updates.available,
+  -- The chip keeps the count current while it is on the bar
+  -- (ModuleService.qml:127-131), not only while the detail is open.
+  watch = function(on) if on then updates.subscribe() else updates.release() end end,
   detail = function()
     local w = modules.entry("updates").width
     local inner = w - 28

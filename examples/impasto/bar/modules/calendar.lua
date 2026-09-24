@@ -17,6 +17,7 @@ modules.define("calendar", {
   has = function() return true end,
   detail = function()
     local w, h = modules.open_size("calendar")
-    return card.build { bare = true, padding = 12, width = w - 8, height = h - 8 }
+    return card.build { bare = true, padding = 12, width = w - 8, height = h - 8,
+      on_panel = modules.request_panel }
   end,
 })

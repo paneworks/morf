@@ -6,11 +6,13 @@
 -- (white, because it warns about nothing). A click opens the detail in the
 -- island, 380 x 172 as ModuleService's catalogue has it: the pet with its
 -- bob and hop, feed and play, and the shelf of the family below.
+--
+-- It is a module like any other (`modules.define`), so a piece's own
+-- shape, figure and when apply to it, and the chip is `bar.modules.chip`'s.
 
 local ui = require("morf.ui")
 local theme = require("theme")
-local settings = require("services.settings")
-local island = require("bar.island")
+local modules = require("services.modules")
 local pets = require("services.pets")
 local kit = require("components.kit")
 local pill = require("components.pill_button")
@@ -24,7 +26,8 @@ local C = theme.color
 
 local module = {}
 
-module.DETAIL = "pet.detail"
+-- The detail used to be a panel of its own; it is the module panel now.
+module.DETAIL = "module"
 
 --- What the chip says beside the pet.
 function module.figure()
@@ -35,7 +38,7 @@ end
 
 local function detail()
   local big = face.new { size = 60, lively = true }
-  local inner = 380 - 2 * theme.panel_padding
+  local inner = 380 - 8 - 28
   return ui.Column {
     width = inner,
     gap = 10,
@@ -105,119 +108,59 @@ local function detail()
   }
 end
 
-island.register(module.DETAIL, {
-  size = function() return 380, 172 end,
-  build = detail,
-})
-
-morf.ipc["pet.detail"] = function()
-  island.toggle(module.DETAIL)
-  return island.state.open_panel()
-end
-
 -- ----------------------------------------------------------------- chip --
 
---- The chip, `theme.capsule_height()` tall, in the shape and with the
---- figure the settings ask for (`chipShape`: icon | ring, `chipFigure`:
---- on | off | hover).
-function module.chip()
-  local hovered = kit.hover_signal("pet.chip")
+--- The ring face: the pet inside its progress to the next level, white
+--- because it warns about nothing.
+local function ring_face()
   local capsule = theme.capsule_height
-  local ringed = function() return settings.chipShape == "ring" end
-  local open = function() return island.state.open_panel() == module.DETAIL end
-  -- How far the figure is out: always, never, or while the pointer is on
-  -- the chip.
-  local reveal = function()
-    local mode = settings.chipFigure
-    if mode == "off" then return 0 end
-    if mode == "hover" then return (hovered:get() or open()) and 1 or 0 end
-    return 1
-  end
-  local glyph = function() return math.floor(capsule() * 0.44 + 0.5) end
-  local PAD, SPACING, GAP = 8, 5, 7
-  local inset = function() return capsule() * 0.075 end
-
-  local figure = kit.text {
-    text = module.figure,
-    -- Centred on the line box, which is 1.2 of the size.
-    y = function() return (capsule() - theme.size.small * 1.2) / 2 end,
-    size = theme.size.small, weight = 600,
-  }
-  local figure_w = function() return figure.layout_width or 0 end
-  local mark_w = function() return ringed() and capsule() or glyph() + 2 end
-
-  local width = function()
-    local shown = figure_w() * reveal()
-    if ringed() then
-      return capsule() + (figure_w() + 2 * GAP - inset()) * reveal()
-    end
-    return PAD + mark_w() + (shown > 0 and (SPACING + figure_w()) * reveal() or 0) + PAD
-  end
-
-  return ui.Item {
-    width = width,
-    height = capsule,
-    behavior = { width = theme.behave("fast") },
-    -- Highlight on hover and while the detail is open.
-    ui.Rect {
-      anchors = { center_in = true },
-      width = function() return width() - 4 end,
-      height = function() return capsule() - 8 end,
-      radius = function() return (capsule() - 8) / 2 end,
-      color = C.islandSurfaceHover,
-      opacity = function() return (hovered:get() or open()) and 1 or 0 end,
-      behavior = { opacity = theme.behave("fast") },
-    },
-    -- The icon shape: the pet at glyph size.
+  return ring {
+    size = capsule,
+    thickness = 2.5,
+    progress = pets.progress,
+    track_color = C.indicatorDim,
+    fill_color = C.indicator,
     ui.Item {
-      x = PAD,
-      y = function() return (capsule() - glyph() - 2) / 2 end,
-      width = function() return glyph() + 2 end,
-      height = function() return glyph() + 2 end,
-      visible = function() return not ringed() end,
-      face.new { size = function() return glyph() + 2 end, lively = true },
-    },
-    -- The ring shape: the pet inside its progress, drawn at 0.85 so it
-    -- does not touch the capsule's outline.
-    ring {
-      size = capsule,
-      scale = 0.85,
-      visible = ringed,
-      thickness = 2.5,
-      progress = pets.progress,
-      track_color = C.indicatorDim,
-      fill_color = C.indicator,
-      ui.Item {
-        anchors = { center_in = true },
-        width = function() return math.floor(capsule() * 0.56 + 0.5) end,
-        height = function() return math.floor(capsule() * 0.56 + 0.5) end,
-        face.new { size = function() return math.floor(capsule() * 0.56 + 0.5) end, lively = true },
-      },
-    },
-    -- The figure, clipped to the width opened so far and faded in past a
-    -- fifth of the reveal, so a half-open chip never shows half a word.
-    ui.ClipRect {
-      color = "#00000000",
-      x = function()
-        return ringed() and (mark_w() - inset() + GAP) or (PAD + mark_w() + SPACING)
-      end,
-      width = function() return math.max(1, figure_w() * reveal()) end,
-      height = capsule,
-      visible = function() return reveal() > 0 end,
-      ui.Item {
-        width = figure_w, height = capsule,
-        opacity = function() return math.max(0, (reveal() - 0.2) / 0.8) end,
-        figure,
-      },
-    },
-    ui.MouseArea {
-      anchors = { fill = true },
-      cursor = "pointer",
-      on_entered = function() hovered:set(true) end,
-      on_exited = function() hovered:set(false) end,
-      on_clicked = function() island.toggle(module.DETAIL) end,
+      anchors = { center_in = true },
+      width = function() return math.floor(capsule() * 0.56 + 0.5) end,
+      height = function() return math.floor(capsule() * 0.56 + 0.5) end,
+      face.new { size = function() return math.floor(capsule() * 0.56 + 0.5) end, lively = true },
     },
   }
+end
+
+modules.define("pet", {
+  value = module.figure,
+  -- The service is always there; being on the bar is what keeps it company.
+  has = function() return true end,
+  -- The pet at glyph size, in place of a font glyph (ChipFace.qml:86-95).
+  chip_mark = function()
+    local size = function() return math.floor(theme.capsule_height() * 0.44 + 0.5) + 2 end
+    return face.new { size = size, lively = true }
+  end,
+  chip = ring_face,
+  detail = function()
+    pets.subscribe()
+    return ui.Item {
+      anchors = { fill = true },
+      on_destroyed = function() pets.release() end,
+      ui.Item { x = 14, y = 14, width = 380 - 8 - 28, height = 172 - 8 - 28, detail() },
+    }
+  end,
+})
+
+--- The piece bar/pieces/pet.lua registers: the module's chip, with the
+--- piece's own shape, figure and when (ModuleService.qml:229).
+function module.chip(item)
+  item = item or {}
+  return require("bar.modules.chip").piece("pet",
+    { shape = item.shape, figure = item.figure, when = item.when })
+end
+
+-- `morf ipc call pet.detail` opens the detail, as a click on the chip does.
+morf.ipc["pet.detail"] = function()
+  modules.activate("pet")
+  return modules.open_id:get()
 end
 
 return module
