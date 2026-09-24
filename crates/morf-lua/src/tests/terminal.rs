@@ -328,3 +328,65 @@ fn a_key_its_handler_claims_never_reaches_the_program() {
         r#"assert(term:text() == "ab\nab", term:text()) assert(#claimed == 1)"#,
     );
 }
+
+#[test]
+fn the_pointer_selects_when_the_program_does_not_want_it() {
+    let (mut runtime, node) = start(
+        r#"
+        exited, announced = nil, {}
+        term = ui.Terminal {
+            width = 300, height = 80, padding = 0,
+            command = { "echo", "hello world" },
+            on_exit = function(code) exited = code end,
+            on_selection = function(text) announced[#announced + 1] = text end,
+        }
+        "#,
+    );
+    lay_out(&mut runtime, node, 300.0, 80.0);
+    wait_for(
+        &mut runtime,
+        r#"assert(exited == 0 and term:text() == "hello world")"#,
+    );
+    let at = |x: f64, y: f64| EventPoint::new((x, y), (x, y));
+    let press = |runtime: &mut Runtime, x: f64| {
+        runtime.dispatch_pointer(node, UiEvent::Pressed, at(x, 4.0), (0.0, 0.0));
+        runtime.dispatch_pointer(node, UiEvent::Released, at(x, 4.0), (0.0, 0.0));
+    };
+    // A plain click selects nothing.
+    press(&mut runtime, 2.0);
+    runtime
+        .execute("none.lua", b"assert(term:selection() == nil)")
+        .unwrap();
+    // A second click on the same cell is a double click: the word.
+    press(&mut runtime, 2.0);
+    runtime
+        .execute(
+            "word.lua",
+            br#"assert(term:selection() == "hello", tostring(term:selection()))"#,
+        )
+        .unwrap();
+    // A third: the line.
+    press(&mut runtime, 2.0);
+    runtime
+        .execute(
+            "line.lua",
+            br#"assert(term:selection():match("^hello world"), term:selection())"#,
+        )
+        .unwrap();
+    runtime
+        .execute(
+            "clear.lua",
+            b"assert(term:clear_selection() == true and term:selection() == nil)",
+        )
+        .unwrap();
+    // A drag from the first cell to the far right: the row's text.
+    thread::sleep(Duration::from_millis(450));
+    runtime.dispatch_pointer(node, UiEvent::Pressed, at(0.0, 4.0), (0.0, 0.0));
+    runtime.dispatch_pointer(node, UiEvent::Dragged, at(299.0, 4.0), (299.0, 0.0));
+    runtime.dispatch_pointer(node, UiEvent::Released, at(299.0, 4.0), (299.0, 0.0));
+    wait_for(
+        &mut runtime,
+        r#"assert(term:selection() == "hello world", tostring(term:selection()))
+           assert(announced[#announced] == "hello world", tostring(announced[#announced]))"#,
+    );
+}

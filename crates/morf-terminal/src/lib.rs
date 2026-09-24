@@ -16,7 +16,7 @@ mod emulator;
 pub mod input;
 mod pty;
 
-pub use emulator::{Emulator, MAX_SCROLLBACK, Palette, ScreenStyle, TerminalEvent};
+pub use emulator::{Emulator, MAX_SCROLLBACK, Palette, ScreenStyle, SelectionKind, TerminalEvent};
 pub use input::{Modifiers, MouseAction, MouseButton, MouseModes};
 pub use pty::{Pty, PtyOptions, PtySize};
 

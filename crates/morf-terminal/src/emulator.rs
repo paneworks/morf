@@ -15,7 +15,8 @@ use std::time::Instant;
 use alacritty_terminal::Term;
 use alacritty_terminal::event::{Event, EventListener, WindowSize};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::index::{Column, Line, Point, Side};
+use alacritty_terminal::selection::{Selection, SelectionRange, SelectionType};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, TermDamage, TermMode};
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, CursorShape, NamedColor, Processor, Rgb};
@@ -38,6 +39,8 @@ pub enum TerminalEvent {
     Bell,
     /// It asked for text to be put on the clipboard (OSC 52).
     Clipboard(String),
+    /// A selection made with the pointer was let go: its text.
+    Selection(String),
 }
 
 /// The colours a terminal draws with, sRGB with alpha.
@@ -141,7 +144,17 @@ pub struct Emulator {
     style: Option<ScreenStyle>,
     /// Something was fed, scrolled or resized since the last picture.
     changed: bool,
+    /// The selection moved: every line is drawn again.
+    selection_moved: bool,
     cell_pixels: (u16, u16),
+}
+
+/// What a press selects: from the cell, the word, or the line.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SelectionKind {
+    Cells,
+    Word,
+    Line,
 }
 
 impl Emulator {
@@ -167,6 +180,7 @@ impl Emulator {
             lines: Vec::new(),
             style: None,
             changed: true,
+            selection_moved: false,
             cell_pixels: (8, 16),
         }
     }
@@ -383,6 +397,78 @@ impl Emulator {
         )
     }
 
+    /// Starts a selection at a cell of the view; `right_half` is which half
+    /// of the cell the pointer is on.
+    pub fn select_start(
+        &mut self,
+        column: usize,
+        row: usize,
+        right_half: bool,
+        kind: SelectionKind,
+    ) {
+        let kind = match kind {
+            SelectionKind::Cells => SelectionType::Simple,
+            SelectionKind::Word => SelectionType::Semantic,
+            SelectionKind::Line => SelectionType::Lines,
+        };
+        let point = self.view_point(column, row);
+        self.term.selection = Some(Selection::new(kind, point, side(right_half)));
+        self.selection_moved();
+    }
+
+    /// Moves the selection's far end to a cell of the view.
+    pub fn select_update(&mut self, column: usize, row: usize, right_half: bool) {
+        let point = self.view_point(column, row);
+        if let Some(selection) = self.term.selection.as_mut() {
+            selection.update(point, side(right_half));
+            self.selection_moved();
+        }
+    }
+
+    /// Ends a drag: an empty selection (a plain click) is dropped, and one
+    /// with text is announced as [`TerminalEvent::Selection`].
+    pub fn select_finish(&mut self) {
+        let empty = self
+            .term
+            .selection
+            .as_ref()
+            .is_none_or(|selection| selection.is_empty());
+        if empty {
+            self.select_clear();
+        } else if let Some(text) = self.selection_text() {
+            self.notices.push(TerminalEvent::Selection(text));
+        }
+    }
+
+    /// Drops the selection. Whether there was one.
+    pub fn select_clear(&mut self) -> bool {
+        let had = self.term.selection.take().is_some();
+        if had {
+            self.selection_moved();
+        }
+        had
+    }
+
+    /// The selected text, if anything is selected.
+    pub fn selection_text(&self) -> Option<String> {
+        self.term
+            .selection_to_string()
+            .filter(|text| !text.is_empty())
+    }
+
+    fn view_point(&self, column: usize, row: usize) -> Point {
+        let offset = self.display_offset() as i32;
+        Point::new(
+            Line(row.min(self.rows().saturating_sub(1)) as i32 - offset),
+            Column(column.min(self.columns().saturating_sub(1))),
+        )
+    }
+
+    fn selection_moved(&mut self) {
+        self.changed = true;
+        self.selection_moved = true;
+    }
+
     /// The bytes a paste sends.
     pub fn encode_paste(&self, text: &str) -> Vec<u8> {
         input::encode_paste(text, self.bracketed_paste())
@@ -424,7 +510,13 @@ impl Emulator {
             return None;
         }
         let (columns, rows) = (self.columns(), self.rows());
-        let full = restyled || self.lines.len() != rows;
+        let full =
+            restyled || self.lines.len() != rows || std::mem::take(&mut self.selection_moved);
+        let selected = self
+            .term
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.to_range(&self.term));
         let mut damaged = vec![full; rows];
         match self.term.damage() {
             TermDamage::Full => damaged.iter_mut().for_each(|line| *line = true),
@@ -444,7 +536,12 @@ impl Emulator {
             if !damaged {
                 continue;
             }
-            let line = self.build_line(Line(row as i32 - offset), columns, &style.palette);
+            let line = self.build_line(
+                Line(row as i32 - offset),
+                columns,
+                &style.palette,
+                selected.as_ref(),
+            );
             if *self.lines[row] != line {
                 self.lines[row] = Arc::new(line);
             }
@@ -464,7 +561,13 @@ impl Emulator {
         })
     }
 
-    fn build_line(&self, line: Line, columns: usize, palette: &Palette) -> TerminalLine {
+    fn build_line(
+        &self,
+        line: Line,
+        columns: usize,
+        palette: &Palette,
+        selected: Option<&SelectionRange>,
+    ) -> TerminalLine {
         let grid = self.term.grid();
         let row = &grid[line];
         let cells = (0..columns)
@@ -478,7 +581,11 @@ impl Emulator {
                 if flags.contains(Flags::DIM) {
                     foreground = dim(foreground);
                 }
-                let inverse = flags.contains(Flags::INVERSE);
+                // A selected cell is drawn inverted, as an inverse one is
+                // drawn plain.
+                let chosen =
+                    selected.is_some_and(|range| range.contains(Point::new(line, Column(column))));
+                let inverse = flags.contains(Flags::INVERSE) != chosen;
                 if inverse {
                     std::mem::swap(&mut foreground, &mut background);
                 }
@@ -620,4 +727,8 @@ impl Emulator {
 fn dim(color: [u8; 4]) -> [u8; 4] {
     let scale = |value: u8| (u16::from(value) * 2 / 3) as u8;
     [scale(color[0]), scale(color[1]), scale(color[2]), color[3]]
+}
+
+fn side(right_half: bool) -> Side {
+    if right_half { Side::Right } else { Side::Left }
 }

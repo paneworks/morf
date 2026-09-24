@@ -157,7 +157,7 @@ pub(crate) fn terminal_constructor<'gc>(
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let properties: Table = stack.consume(ctx)?;
-        const OWN: [&str; 8] = [
+        const OWN: [&str; 9] = [
             "command",
             "cwd",
             "env",
@@ -166,6 +166,7 @@ pub(crate) fn terminal_constructor<'gc>(
             "on_title",
             "on_bell",
             "on_clipboard",
+            "on_selection",
         ];
         let clean = Table::new(&ctx);
         for (key, value) in properties.iter(ctx) {
@@ -222,6 +223,7 @@ pub(crate) fn terminal_constructor<'gc>(
             on_title: optional_closure(ctx, properties, "on_title").map_err(HostError)?,
             on_bell: optional_closure(ctx, properties, "on_bell").map_err(HostError)?,
             on_clipboard: optional_closure(ctx, properties, "on_clipboard").map_err(HostError)?,
+            on_selection: optional_closure(ctx, properties, "on_selection").map_err(HostError)?,
         };
         if state.borrow().terminals.len() >= limits.terminals {
             return Err(HostError(format!(

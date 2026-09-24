@@ -690,6 +690,12 @@ Methods:
 - `:text()` — the screen as the view shows it, one line per row, trailing
   blanks trimmed. For a test, or for reading what a program printed.
 - `:pid()` — the program's process id while it runs.
+- `:selection()` — the text selected with the pointer, or nil;
+  `:clear_selection()` drops it. When the program has not asked for the
+  mouse, a left drag selects cells, a double click a word, a triple click a
+  line, drawn inverted; `on_selection(text)` runs when the button is let
+  go. Copying is the configuration's: `morf.clipboard.set(term:selection())`
+  from an `on_key_pressed` that returns true for Ctrl+Shift+C.
 
 Keys go to the program — it is the terminal's while it has the keyboard,
 Tab and Escape included — unless the terminal's own

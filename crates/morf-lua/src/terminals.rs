@@ -31,7 +31,7 @@ use morf_layout::Layout;
 use morf_scene::{Color, NodeHandle, TerminalMetrics, Value as SceneValue};
 use morf_terminal::{
     Emulator, Modifiers, MouseAction, MouseButton, Palette, Pty, PtyOptions, PtySize, ScreenStyle,
-    TerminalEvent,
+    SelectionKind, TerminalEvent,
 };
 use morf_text::TextSystem;
 
@@ -45,6 +45,8 @@ pub(crate) const FEED_PER_TURN: usize = 256 * 1024;
 pub(crate) const DEFAULT_SCROLLBACK: usize = 10_000;
 /// Lines one wheel step moves the history.
 const WHEEL_LINES: i32 = 3;
+/// Presses closer together than this on one cell count as one click more.
+const DOUBLE_CLICK: std::time::Duration = std::time::Duration::from_millis(400);
 
 /// How to start a terminal's program.
 pub(crate) struct TerminalSpec {
@@ -61,6 +63,7 @@ pub(crate) struct TerminalCallbacks {
     pub(crate) on_title: Option<StashedClosure>,
     pub(crate) on_bell: Option<StashedClosure>,
     pub(crate) on_clipboard: Option<StashedClosure>,
+    pub(crate) on_selection: Option<StashedClosure>,
 }
 
 pub(crate) struct TerminalEntry {
@@ -81,6 +84,11 @@ pub(crate) struct TerminalEntry {
     held: Option<MouseButton>,
     /// A wheel's pixels not yet a whole line.
     wheel_rest: f64,
+    /// Selecting with the pointer: a drag is under way.
+    selecting: bool,
+    /// The last left press, for double and triple clicks: when, which
+    /// cell, and how many in a row.
+    last_click: Option<(Instant, (usize, usize), u8)>,
 }
 
 /// A callback owed.
@@ -135,6 +143,8 @@ impl TerminalHub {
                 metrics: None,
                 held: None,
                 wheel_rest: 0.0,
+                selecting: false,
+                last_click: None,
             },
         );
     }
@@ -390,6 +400,14 @@ pub(crate) fn pump(state: &mut ReactiveState) -> (Vec<TerminalCall>, bool, bool)
                         });
                     }
                 }
+                TerminalEvent::Selection(text) => {
+                    if let Some(callback) = &entry.callbacks.on_selection {
+                        calls.push(TerminalCall {
+                            callback: callback.clone(),
+                            args: vec![IpcValue::String(text)],
+                        });
+                    }
+                }
                 TerminalEvent::Clipboard(text) => {
                     if let Some(callback) = &entry.callbacks.on_clipboard {
                         calls.push(TerminalCall {
@@ -546,14 +564,24 @@ pub(crate) fn key(
 
 /// Where a point inside the node is on its grid.
 fn cell_at(state: &ReactiveState, node: NodeHandle, local: (f64, f64)) -> Option<(usize, usize)> {
+    cell_and_half_at(state, node, local).map(|(column, row, _)| (column, row))
+}
+
+/// The cell under a point, and whether the point is on its right half.
+fn cell_and_half_at(
+    state: &ReactiveState,
+    node: NodeHandle,
+    local: (f64, f64),
+) -> Option<(usize, usize, bool)> {
     let entry = state.terminals.entries.get(&node)?;
     let metrics = entry.metrics?;
     let padding = state.scene.number(node, "padding").ok()?.max(0.0);
-    let column = ((local.0 - padding) / metrics.cell_width).floor().max(0.0) as usize;
+    let across = ((local.0 - padding) / metrics.cell_width).max(0.0);
     let row = ((local.1 - padding) / metrics.cell_height).floor().max(0.0) as usize;
     Some((
-        column.min(entry.emulator.columns().saturating_sub(1)),
+        (across.floor() as usize).min(entry.emulator.columns().saturating_sub(1)),
         row.min(entry.emulator.rows().saturating_sub(1)),
+        across.fract() >= 0.5,
     ))
 }
 
@@ -574,12 +602,48 @@ pub(crate) fn pointer(
         }
         changed = true;
     }
-    let Some((column, row)) = cell_at(state, node, local) else {
+    let Some((column, row, right_half)) = cell_and_half_at(state, node, local) else {
         return changed;
     };
     let Some(entry) = state.terminals.entries.get_mut(&node) else {
         return changed;
     };
+    // A program that did not ask for the pointer leaves the left button to
+    // selecting: a drag selects cells, a double click a word, a triple
+    // click a line.
+    let left = button.is_none_or(|code| MouseButton::from_code(code) == Some(MouseButton::Left));
+    if !entry.emulator.mouse_modes().any() && (entry.selecting || left) {
+        match action {
+            MouseAction::Press if left => {
+                let now = Instant::now();
+                let count = match entry.last_click {
+                    Some((at, cell, count))
+                        if cell == (column, row) && now.duration_since(at) < DOUBLE_CLICK =>
+                    {
+                        count % 3 + 1
+                    }
+                    _ => 1,
+                };
+                entry.last_click = Some((now, (column, row), count));
+                let kind = match count {
+                    1 => SelectionKind::Cells,
+                    2 => SelectionKind::Word,
+                    _ => SelectionKind::Line,
+                };
+                entry.emulator.select_start(column, row, right_half, kind);
+                entry.selecting = true;
+            }
+            MouseAction::Motion if entry.selecting => {
+                entry.emulator.select_update(column, row, right_half);
+            }
+            MouseAction::Release if entry.selecting => {
+                entry.selecting = false;
+                entry.emulator.select_finish();
+            }
+            _ => return changed,
+        }
+        return changed | refresh_screen(state, node);
+    }
     let button = match action {
         MouseAction::Press => {
             let pressed = button
@@ -752,6 +816,28 @@ pub(crate) fn scroll(state: &mut ReactiveState, node: NodeHandle, lines: i32) ->
 /// What a terminal shows, as text.
 pub(crate) fn text(state: &ReactiveState, node: NodeHandle) -> Option<String> {
     Some(state.terminals.entries.get(&node)?.emulator.text())
+}
+
+/// The text selected with the pointer, if any.
+pub(crate) fn selection(state: &ReactiveState, node: NodeHandle) -> Option<String> {
+    state
+        .terminals
+        .entries
+        .get(&node)?
+        .emulator
+        .selection_text()
+}
+
+/// Drops the selection. Whether there was one.
+pub(crate) fn clear_selection(state: &mut ReactiveState, node: NodeHandle) -> bool {
+    let Some(entry) = state.terminals.entries.get_mut(&node) else {
+        return false;
+    };
+    let had = entry.emulator.select_clear();
+    if had {
+        refresh_screen(state, node);
+    }
+    had
 }
 
 /// The process id of a terminal's program, while it runs.

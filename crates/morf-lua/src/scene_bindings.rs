@@ -380,6 +380,22 @@ fn terminal_method<'gc>(
             stack.replace(ctx, luna::String::from_slice(&ctx, text.as_bytes()));
             Ok(CallbackReturn::Return)
         }),
+        // The text selected with the pointer, or nil.
+        "selection" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let node: UserRef<NodeToken> = stack.consume(ctx)?;
+            let state = state.try_borrow().map_err(|_| busy())?;
+            match terminals::selection(&state, node.handle) {
+                Some(text) => stack.replace(ctx, luna::String::from_slice(&ctx, text.as_bytes())),
+                None => stack.replace(ctx, LuaValue::Nil),
+            }
+            Ok(CallbackReturn::Return)
+        }),
+        "clear_selection" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let node: UserRef<NodeToken> = stack.consume(ctx)?;
+            let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+            stack.replace(ctx, terminals::clear_selection(&mut state, node.handle));
+            Ok(CallbackReturn::Return)
+        }),
         "pid" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let node: UserRef<NodeToken> = stack.consume(ctx)?;
             let state = state.try_borrow().map_err(|_| busy())?;
