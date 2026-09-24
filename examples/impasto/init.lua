@@ -153,11 +153,65 @@ morf.ipc.lock = function()
   lock.lock()
   return "locking"
 end
+
+-- The lid, from logind, on the connection the brightness already holds
+-- (services/lid.lua): the laptop's own screen goes dark or lights again as
+-- `lidPolicy` says.
+do
+  local lid = require("services.lid")
+  lid.start {
+    login = require("services.brightness").lib,
+    on_change = function(closed) lid.apply(closed) end,
+  }
+end
+
 morf.ipc.layer = function() return island.state.layer() end
-morf.ipc.wallpaper = function(path)
+-- `wallpaper` steps to the next picture; `wallpaper set <path>` (upstream's
+-- form, which file managers' "Set as wallpaper" call) or `wallpaper <path>`
+-- shows that one.
+morf.ipc.wallpaper = function(verb, path)
   local wallpaper = require("services.wallpaper")
-  if path and path ~= "" then wallpaper.apply(path) else wallpaper.step(1) end
+  if verb == "set" then
+    if not path or path == "" then return "usage: morf ipc call wallpaper set <path>" end
+    wallpaper.apply(path)
+    return path
+  end
+  if verb == "next" or verb == nil or verb == "" then
+    wallpaper.step(1)
+  elseif verb == "previous" then
+    wallpaper.step(-1)
+  else
+    wallpaper.apply(verb)
+  end
   return wallpaper.current:get()
+end
+
+-- The brightness keys act on the focused screen (shell.qml's brightnessUp
+-- and brightnessDown): `brightness up|down [step]`, `brightness set <0-100>`,
+-- and with nothing the level now. Only the screen that does the single jobs
+-- acts, so one key press is one step.
+morf.ipc.brightness = function(verb, value)
+  local brightness = require("services.brightness")
+  local live = require("services.live")
+  local step = tonumber(value) or 5
+  if verb == "up" or verb == "down" then
+    if live.here() then brightness.step(verb == "up" and step or -step) end
+  elseif verb == "set" then
+    local level = tonumber(value)
+    if not level then return "usage: morf ipc call brightness set <0-100>" end
+    if live.here() then brightness.set_percent(level) end
+  elseif verb ~= nil and verb ~= "" then
+    return "usage: morf ipc call brightness [up|down [step] | set <0-100>]"
+  end
+  return tostring(brightness.percent())
+end
+
+-- `shell reload` (what upstream's `./setup sync` calls once every file has
+-- landed): the configuration read again, on every screen.
+morf.ipc.shell = function(verb)
+  if verb ~= "reload" then return "usage: morf ipc call shell reload" end
+  morf.timer(1, function() morf.reload() end, false)
+  return "reloading"
 end
 morf.ipc.theme = function(id)
   if id and id ~= "" then require("services.theme").set_theme(id) end
