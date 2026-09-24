@@ -89,3 +89,102 @@ test.describe("impasto input", function()
     test.eq(test.ipc("get", "keyboardLayouts"), '"de"')
   end)
 end)
+
+-- The desk's squares as `{ key, family, col, row }`, from `desk list`.
+local function squares()
+  local out = {}
+  for line in (test.ipc("desk", "list") .. "\n"):gmatch("([^\n]*)\n") do
+    local key, cols, rows, col, row = line:match("^(%S+) (%d+)x(%d+) @(%d+),(%d+)$")
+    if key then
+      out[#out + 1] = { key = key, cols = tonumber(cols), rows = tonumber(rows), col = tonumber(col), row = tonumber(row) }
+    end
+  end
+  return out
+end
+
+local function overlapping(list)
+  for i = 1, #list do
+    for j = i + 1, #list do
+      local a, b = list[i], list[j]
+      if a.col < b.col + b.cols and b.col < a.col + a.cols and a.row < b.row + b.rows and b.row < a.row + a.rows then
+        return a.key .. " over " .. b.key
+      end
+    end
+  end
+  return nil
+end
+
+test.describe("impasto desk", function()
+  test.it("a fresh desk made for a larger screen fits 1280x720 without overlapping", function()
+    load()
+    -- A fresh install takes Moon castle: eight widgets laid out for 1080p.
+    test.eq(test.ipc("profile"), "Moon castle")
+    local list = squares()
+    test.eq(#list, 8, "every widget is on the board")
+    test.falsy(overlapping(list))
+    test.eq(test.ipc("desk", "grid"), "10x5")
+    -- The layout itself is kept for a larger screen: the clock asked for
+    -- 4x4 and is drawn smaller only here.
+    test.contains(test.ipc("get", "desktopWidgets"), '"family":"4x4","id":"clock"')
+    -- With room again it is its own size.
+    test.ipc("desk", "remove", "weather-0-4")
+    test.ipc("desk", "remove", "battery-2-6")
+    test.settle(500)
+    local clock
+    for _, s in ipairs(squares()) do if s.key == "clock-0-0" then clock = s end end
+    test.eq(clock.cols .. "x" .. clock.rows, "4x4")
+    test.falsy(overlapping(squares()))
+  end)
+
+  test.it("the arranging card opens one row tall on a short screen, where it covers the fewest widgets", function()
+    load()
+    test.ipc("desk", "remove", "weather-0-4")
+    test.ipc("desk", "remove", "battery-2-6")
+    test.settle(500)
+    test.ipc("desk", "edit")
+    test.settle(1500)
+    local card = test.get { id = "desk-tray", visible = true }
+    test.truthy(card.height < 260, "the card is " .. card.height .. " tall")
+    -- The bottom middle, its home, would cover the calendar, the timer
+    -- and the record player; where it opens covers less.
+    local widgets, lowest = {}, 0
+    for _, s in ipairs(squares()) do
+      local node = test.get(function(n) return n.id == "desk-widget-" .. s.key and n.visible end)
+      widgets[#widgets + 1] = node
+      lowest = math.max(lowest, node.y + node.height)
+    end
+    local function covered(x, y)
+      local total = 0
+      for _, node in ipairs(widgets) do
+        local ox = math.min(x + card.width, node.x + node.width) - math.max(x, node.x)
+        local oy = math.min(y + card.height, node.y + node.height) - math.max(y, node.y)
+        if ox > 0 and oy > 0 then total = total + ox * oy end
+      end
+      return total
+    end
+    local at_home = covered((1280 - card.width) / 2, lowest - card.height)
+    test.truthy(covered(card.x, card.y) < at_home,
+      "the card covers " .. covered(card.x, card.y) .. " square pixels of widgets, its home " .. at_home)
+  end)
+
+  test.it("Escape closes the desk's menu", function()
+    load()
+    -- Between the clock and the weather: the wallpaper.
+    test.click(250, 385, { button = "right" })
+    test.settle(500)
+    test.truthy(test.find { text = "Arrange widgets", visible = true }, "the menu opened")
+    test.key("Escape")
+    test.settle(500)
+    test.falsy(test.find { text = "Arrange widgets", visible = true }, "the menu stayed open")
+  end)
+
+  test.it("a right click beside an open island closes it and opens no menu", function()
+    load()
+    test.eq(test.ipc("wifi"), "wifi")
+    test.settle(2000)
+    test.click(1150, 450, { button = "right" })
+    test.settle(2000)
+    test.ne(test.ipc("layer"), "panel", "the island stayed open")
+    test.falsy(test.find { text = "Arrange widgets", visible = true }, "the desk's menu opened")
+  end)
+end)
