@@ -38,6 +38,7 @@ mod idle_input;
 mod image_ops;
 mod input_api;
 mod layer_surfaces;
+mod lib_dbus_services;
 mod lifecycle_io;
 mod modules;
 mod pam_session;
