@@ -119,6 +119,8 @@ pub(crate) struct PropertySink {
 pub(crate) enum EffectSink {
     Property(PropertySink),
     State(NodeHandle),
+    /// A `loop` binding: what it returns is the node's loops.
+    Loop(NodeHandle),
 }
 
 /// The most log entries kept, and the longest one.
@@ -266,6 +268,9 @@ pub(crate) struct ReactiveState {
     pub(crate) timer_callbacks: HashMap<NodeHandle, StashedClosure>,
     /// Each node's `on_destroyed`, until the node goes.
     pub(crate) destroy_hooks: HashMap<NodeHandle, StashedClosure>,
+    /// The properties each node is looping, from its `loop`.
+    pub(crate) node_loops:
+        HashMap<NodeHandle, std::collections::BTreeMap<String, crate::node_loops::RunningLoop>>,
     /// Hooks of nodes already removed, waiting for a moment Lua can run:
     /// removal happens with the state borrowed, often inside a flush.
     pub(crate) pending_destroyed: Vec<StashedClosure>,
@@ -468,6 +473,7 @@ impl ReactiveState {
             timers: Vec::new(),
             timer_callbacks: HashMap::new(),
             destroy_hooks: HashMap::new(),
+            node_loops: HashMap::new(),
             pending_destroyed: Vec::new(),
             running_destroyed: false,
             animation_callbacks: HashMap::new(),

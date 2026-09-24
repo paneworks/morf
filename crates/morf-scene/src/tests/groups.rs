@@ -205,11 +205,6 @@ fn a_group_refuses_a_schedule_it_could_never_finish() {
     };
 
     assert!(scene.start_group(endless, Repeat::Once).is_err());
-    assert!(
-        scene
-            .start_group(step(rect, "x", 1.0, 100), Repeat::PingPong)
-            .is_err()
-    );
     // An unknown property is rejected where the group starts, not mid-playback.
     assert!(
         scene
@@ -255,23 +250,68 @@ fn removing_a_targeted_node_drops_the_group_scheduling_for_it() {
 }
 
 #[test]
-fn a_group_refuses_both_ways_of_asking_it_to_alternate() {
-    // A group has no per-pass direction, so it cannot alternate. It said so for
-    // the endless form and not for the counted one, which it accepted and then
-    // quietly ran a single time — the configuration got neither what it asked
-    // for nor an explanation.
+fn an_alternating_group_runs_every_other_pass_backwards() {
+    // Idle motion is there and back again: a bob up, a bob down. A group that
+    // alternates plays its schedule forwards, then mirrored — the last step
+    // first, each from its target back to where it set out.
     let mut scene = Scene::new();
     let rect = scene.create(Element::Rect);
-    for repeat in [Repeat::PingPong, Repeat::PingPongTimes(3)] {
-        let error = scene
-            .start_group(
-                AnimationStep::Sequential(vec![step(rect, "x", 100.0, 100)]),
-                repeat,
-            )
-            .unwrap_err();
-        assert!(
-            error.to_string().contains("alternate"),
-            "{repeat:?} is refused with a reason: {error}"
-        );
-    }
+    let group = scene
+        .start_group(
+            AnimationStep::Sequential(vec![
+                step(rect, "x", 100.0, 100),
+                step(rect, "y", 50.0, 100),
+            ]),
+            Repeat::PingPongTimes(2),
+        )
+        .unwrap();
+
+    // Forwards: x, then y.
+    scene.tick_animations(Duration::from_millis(100)).unwrap();
+    assert_eq!(scene.number(rect, "x").unwrap(), 100.0);
+    scene.tick_animations(Duration::from_millis(100)).unwrap();
+    assert_eq!(scene.number(rect, "y").unwrap(), 50.0);
+
+    // Backwards: y returns first while x holds.
+    scene.tick_animations(Duration::from_millis(50)).unwrap();
+    let y = scene.number(rect, "y").unwrap();
+    assert!(y < 50.0 && y > 0.0, "y is on its way back: {y}");
+    assert_eq!(scene.number(rect, "x").unwrap(), 100.0);
+    scene.tick_animations(Duration::from_millis(50)).unwrap();
+    assert_eq!(scene.number(rect, "y").unwrap(), 0.0);
+    scene.tick_animations(Duration::from_millis(100)).unwrap();
+    assert_eq!(scene.number(rect, "x").unwrap(), 0.0);
+
+    // Two passes, and the group is done where it began.
+    let frame = scene.tick_animations(Duration::from_millis(16)).unwrap();
+    assert!(!scene.is_group_active(group), "{frame:?}");
+}
+
+#[test]
+fn a_delayed_group_waits_once_before_its_first_pass() {
+    let mut scene = Scene::new();
+    let rect = scene.create(Element::Rect);
+    let group = scene
+        .start_group_after(
+            step(rect, "x", 100.0, 100),
+            Repeat::Times(2),
+            Duration::from_millis(200),
+        )
+        .unwrap();
+
+    scene.tick_animations(Duration::from_millis(150)).unwrap();
+    assert!(!scene.is_animating(rect, "x").unwrap(), "still waiting");
+    // The rest of the wait, then half the first pass.
+    scene.tick_animations(Duration::from_millis(100)).unwrap();
+    let x = scene.number(rect, "x").unwrap();
+    assert!(
+        (x - 50.0).abs() < 1.0,
+        "half way through the first pass: {x}"
+    );
+    // The second pass follows the first with no wait of its own.
+    scene.tick_animations(Duration::from_millis(50)).unwrap();
+    scene.tick_animations(Duration::from_millis(10)).unwrap();
+    assert!(scene.is_animating(rect, "x").unwrap() || scene.is_group_active(group));
+    scene.tick_animations(Duration::from_millis(200)).unwrap();
+    assert!(!scene.is_group_active(group));
 }

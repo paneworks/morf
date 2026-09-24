@@ -44,6 +44,45 @@ pub(crate) fn register_state_binding<'gc>(
     node: NodeHandle,
     closure: Closure<'gc>,
 ) {
+    register_node_binding(
+        state,
+        ctx,
+        limits,
+        node,
+        closure,
+        EffectSink::State(node),
+        "state",
+    );
+}
+
+/// A `loop` given as a function: each value it returns is the node's loops.
+pub(crate) fn register_loop_binding<'gc>(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'gc>,
+    limits: Limits,
+    node: NodeHandle,
+    closure: Closure<'gc>,
+) {
+    register_node_binding(
+        state,
+        ctx,
+        limits,
+        node,
+        closure,
+        EffectSink::Loop(node),
+        "loop",
+    );
+}
+
+fn register_node_binding<'gc>(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'gc>,
+    limits: Limits,
+    node: NodeHandle,
+    closure: Closure<'gc>,
+    sink: EffectSink,
+    what: &str,
+) {
     {
         let mut state = state.borrow_mut();
         let token = state.next_effect;
@@ -52,14 +91,14 @@ pub(crate) fn register_state_binding<'gc>(
             token,
             LuaEffect {
                 closure: ctx.stash(closure),
-                sink: Some(EffectSink::State(node)),
+                sink: Some(sink),
             },
         );
         let id = state
             .graph
             .as_mut()
             .expect("reactive graph unavailable outside evaluation")
-            .external_effect(format!("{node:?}.state"), token);
+            .external_effect(format!("{node:?}.{what}"), token);
         state.effect_ids.insert(token, id);
     }
     let _ = flush_reactive(state, ctx, limits);

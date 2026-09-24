@@ -325,8 +325,47 @@ installed after construction, so nothing animates its own creation;
 `enter` (section 6) says where a first frame starts instead.
 Animated *current* values do not re-run bindings; read `_target` for the
 destination, or use a `morf.transform_watcher` for the moving value.
-`morf.animation.play { ... }` runs groups and keyframes;
 `morf.animation.fling` coasts a property.
+
+`morf.animation.play { ... }` runs a group: its array part is a sequence of
+steps, each `{ node, property, to, from, duration, easing, delay }`, a
+`{ pause = ms }`, a `{ keyframes = { { at, value, easing }, ... } }` track,
+or a nested `{ sequence = { ... } }` / `{ parallel = { ... } }`. On the group
+itself, `loops = n | "forever"` repeats the whole schedule, `alternate =
+true` runs every other pass backwards (the last step first, each from its
+target back to where it set out), and `delay` waits once before the first
+pass. It returns a handle with `:stop()`, `:finish()`, `:pause()`,
+`:resume()` and `:active()`; `on_finished(reason)` hears `"completed"`,
+`"stopped"`, or `"canceled"` when a node it moves is removed, and may start
+the next group.
+
+```lua
+morf.animation.play {
+  delay = 120, loops = 3, alternate = true,
+  { node = face, property = "translate_y", to = -6, duration = 400, easing = "out_quad" },
+  { node = face, property = "scale_y", to = 0.9, duration = 120 },
+  on_finished = function() morf.animation.play { { node = face, property = "opacity", to = 0, duration = 200 } } end,
+}
+```
+
+Motion a node keeps up on its own — a bob, a spin, a pulse — is `loop`,
+keyed by property like `behavior`: `from` (default: where it is), `to`,
+`duration`, `easing`, `alternate`, `loops` (default forever) and `delay`.
+It runs in Rust between frames and ends with the node. `loop` may be a
+binding: returning another table restarts what changed, returning nil ends
+the loops, and a property whose loop ends goes back to its `from` (through
+its `behavior`, if it has one). A write to a looping property takes it over,
+as any write takes over an animation.
+
+```lua
+ui.Item {
+  loop = function()
+    if pets.mood() == "asleep" then return nil end
+    return { translate_y = { from = 0, to = -4, duration = 1400, easing = "in_out_sine", alternate = true } }
+  end,
+  face,
+}
+```
 
 ### Destruction
 

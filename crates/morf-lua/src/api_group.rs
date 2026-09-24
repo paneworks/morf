@@ -70,10 +70,22 @@ pub(crate) fn install_group_api<'gc>(
             let options: Table = stack.consume(ctx)?;
             // An array of steps at the top level reads as a sequence, which is
             // what a group written out in order is nearly always meant to be.
-            let step = parse_group_children(ctx, options, 0)
-                .map(AnimationStep::Sequential)
-                .map_err(HostError)?;
+            let mut steps = parse_group_children(ctx, options, 0).map_err(HostError)?;
+            // `play { sequence = { ... } }` and `play { parallel = { ... } }`
+            // say at the top what a nested step says below.
+            if ["sequence", "sequential", "parallel"]
+                .iter()
+                .any(|field| !options.get_value(ctx, *field).is_nil())
+            {
+                steps.push(parse_group_step(ctx, options, 0).map_err(HostError)?);
+            }
+            let step = AnimationStep::Sequential(steps);
             let repeat = parse_repeat(ctx, options).map_err(HostError)?;
+            let delay = milliseconds(
+                table_number(ctx, options, "delay", 0.0).map_err(HostError)?,
+                "delay",
+            )
+            .map_err(HostError)?;
             let callback = match options.get_value(ctx, "on_finished") {
                 LuaValue::Nil => None,
                 LuaValue::Function(Function::Closure(callback)) => Some(ctx.stash(callback)),
@@ -87,7 +99,7 @@ pub(crate) fn install_group_api<'gc>(
                 let mut state = state.borrow_mut();
                 let id = state
                     .scene
-                    .start_group(step, repeat)
+                    .start_group_after(step, repeat, delay)
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(callback) = callback {
                     state.group_callbacks.insert(id, callback);
@@ -151,6 +163,7 @@ pub(crate) fn parse_group_step<'gc>(
     for (field, wrap) in [
         ("parallel", AnimationStep::Parallel as fn(_) -> _),
         ("sequential", AnimationStep::Sequential as fn(_) -> _),
+        ("sequence", AnimationStep::Sequential as fn(_) -> _),
     ] {
         match table.get_value(ctx, field) {
             LuaValue::Nil => {}

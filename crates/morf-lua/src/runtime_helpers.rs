@@ -79,6 +79,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
             .animation_callbacks
             .retain(|(owner, _), _| owner != node);
         state.loaded_loaders.remove(node);
+        state.node_loops.remove(node);
     }
     state
         .handlers
@@ -101,7 +102,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         .iter()
         .filter(|(_, effect)| match &effect.sink {
             Some(EffectSink::Property(sink)) => removed.contains(&sink.node),
-            Some(EffectSink::State(node)) => removed.contains(node),
+            Some(EffectSink::State(node) | EffectSink::Loop(node)) => removed.contains(node),
             None => false,
         })
         .map(|(token, _)| *token)
