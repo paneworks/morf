@@ -15,6 +15,15 @@
 -- Every screen runs this file once. The island is live on the screen being
 -- worked on; the others show it at rest.
 
+-- `morf init.lua -- lock` is the lock screen, a process of its own under
+-- ext-session-lock; `-- lock window` the same screen held by nothing, to look
+-- at. The shell starts the first from `lock.lock()`. See lock/screen.lua.
+local operands = morf.operands or {}
+if operands[1] == "lock" then
+  require("lock.screen").build { hold = operands[2] ~= "window" }
+  return
+end
+
 local ui = require("morf.ui")
 local theme = require("theme")
 local settings = require("services.settings")
@@ -131,6 +140,15 @@ for _, name in ipairs { "controls", "launcher", "overview", "wifi", "bluetooth",
   end
 end
 morf.ipc.close = function() island.close() return "" end
+
+-- The lock, and the idle policy that locks, blanks and suspends.
+local lock = require("services.lock")
+require("services.idle").start()
+require("services.session").watch_sleep()
+morf.ipc.lock = function()
+  lock.lock()
+  return "locking"
+end
 morf.ipc.layer = function() return island.state.layer() end
 morf.ipc.flash = function(label) island.state.flash("󰕾", label or "Volume", 0.6) return "ok" end
 
