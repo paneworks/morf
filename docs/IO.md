@@ -170,6 +170,41 @@ All of it runs on the main loop: a few milliseconds for a small database,
 about a tenth of a second for 36 MB of tar, so read a large one when the
 answer is wanted, not in a binding.
 
+## A night light: `morf.gamma`
+
+The colour ramps of an output, through the compositor's
+`wlr-gamma-control-unstable-v1` — what wlsunset and hyprsunset do, as a
+call a configuration makes when it likes (at sunset, from a slider):
+
+```lua
+if morf.gamma.supported() then
+  morf.gamma.set { temperature = 3400, brightness = 0.9 }   -- this output
+  morf.gamma.set { output = "DP-2", temperature = 4000 }    -- another one
+end
+morf.gamma.reset()                                         -- every output it changed
+```
+
+- `set { output, temperature, brightness, gamma }` — `output` is an
+  output's name as `morf.screens` gives it, or `nil` for the one this
+  configuration runs on; `temperature` in kelvin, 1000 to 25000, 6500 being
+  neutral; `brightness` 0 to 1; `gamma` 0.1 to 10, 1 being linear. Anything
+  left out is neutral. The ramps are a black body's white point at that
+  temperature (normalised so 6500 K is white), times the brightness,
+  through the gamma curve.
+- `reset(output)` — that output's own ramps back; with no name, every
+  output this configuration changed.
+- `supported()` — whether the compositor offers gamma control; false while
+  the configuration first loads, before the shell has connected
+  (`morf.capabilities.gamma_control` says the same).
+
+Requests are sent on the next turn of the loop, and only the last one per
+output in a turn is: a slider dragged through a hundred temperatures sends
+one ramp. Only one client may hold an output's gamma at a time; when
+another does (a running wlsunset, say), the compositor refuses and the
+refusal is logged. The compositor restores an output the moment the shell
+lets go of it — on `reset`, on a reload (a new configuration starts from
+the outputs' own ramps), and when the shell exits for any reason.
+
 ## A program on a terminal: `ui.Terminal`
 
 A program that wants a terminal rather than pipes — anything that draws a

@@ -252,6 +252,7 @@ pub(crate) struct ReactiveState {
     /// cancelled) at any time, not only the ones made while loading.
     pub(crate) idle_timeouts_changed: bool,
     pub(crate) output_power_requests: Vec<bool>,
+    pub(crate) gamma_requests: Vec<crate::api_gamma::GammaRequest>,
     pub(crate) clipboard_requests: Vec<ClipboardRequest>,
     pub(crate) clipboard_callbacks: Vec<StashedClosure>,
     /// `morf.clipboard.watch` callbacks, each with whether it wants the
@@ -530,6 +531,7 @@ impl ReactiveState {
             next_idle_subscription: 0,
             idle_timeouts_changed: false,
             output_power_requests: Vec::new(),
+            gamma_requests: Vec::new(),
             clipboard_requests: Vec::new(),
             clipboard_callbacks: Vec::new(),
             clipboard_watchers: Vec::new(),

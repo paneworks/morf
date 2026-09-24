@@ -212,6 +212,9 @@ pub(crate) struct WorkerUpdate {
     pub(crate) reset_input: bool,
     pub(crate) refresh_idle: bool,
     pub(crate) recreate_surface: bool,
+    /// A new configuration replaced the old one: what the old one set on
+    /// the outputs (their gamma) goes with it.
+    pub(crate) reloaded: bool,
 }
 
 pub(crate) fn handle_worker_command(
@@ -236,6 +239,7 @@ pub(crate) fn handle_worker_command(
                 reset_input: false,
                 refresh_idle: false,
                 recreate_surface: false,
+                reloaded: false,
             }
         }
         WorkerCommand::Screens(screens) => {
@@ -273,6 +277,8 @@ pub(crate) fn handle_worker_command(
             reply,
         } => {
             let mut candidate = Runtime::for_screen(Limits::from_env().0, screen.clone());
+            // What the compositor and GPU can do did not change with the file.
+            candidate.set_capabilities(&runtime.capability_pairs());
             if !hard {
                 candidate.restore_reloadable_state(runtime.reloadable_state());
             }
@@ -301,6 +307,7 @@ pub(crate) fn handle_worker_command(
                 reset_input: repaint,
                 refresh_idle: repaint,
                 recreate_surface: repaint && hard,
+                reloaded: repaint,
             }
         }
     }

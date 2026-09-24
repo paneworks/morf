@@ -14,6 +14,7 @@ mod api_file;
 mod api_finish;
 mod api_fling;
 mod api_fs;
+mod api_gamma;
 mod api_group;
 mod api_host;
 mod api_http;
@@ -96,6 +97,7 @@ mod window_geometry;
 mod window_methods;
 mod window_parse;
 
+pub use api_gamma::GammaRequest;
 pub use events::*;
 pub use ipc_table::IpcTable;
 pub use runtime_input::*;

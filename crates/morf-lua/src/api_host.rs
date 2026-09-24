@@ -91,6 +91,7 @@ pub(crate) fn install_host_service_api<'gc>(
     let output_power = Table::new(&ctx);
     output_power.set_field(ctx, "set", output_power_set);
     morf.set_field(ctx, "output_power", output_power);
+    crate::api_gamma::install_gamma_api(ctx, Rc::clone(&state), morf);
     crate::api_clipboard::install_clipboard_api(ctx, Rc::clone(&state), morf);
     // `morf.on_keyboard_focus(function(active) end)`: the keyboard came to
     // the shell's surface, or left it. With `keyboard_focus = "on_demand"`

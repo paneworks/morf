@@ -188,6 +188,11 @@ impl Runtime {
         });
     }
 
+    /// The list as it was recorded, for a runtime that replaces this one.
+    pub fn capability_pairs(&self) -> Vec<(String, String)> {
+        self.reactive.borrow().capabilities.clone()
+    }
+
     /// The same list, as `name=value` lines for the wire.
     pub fn capabilities(&self) -> Vec<String> {
         self.reactive
