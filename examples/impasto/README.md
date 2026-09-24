@@ -77,6 +77,23 @@ Conventions:
   once something reads them.
 - Every panel is reachable over IPC: `morf ipc call <panel>` toggles it.
 
+## The lock
+
+The lock is its own process. `morf ipc call lock` (or the session panel,
+or the idle timeout) closes the island, photographs the desk with
+`morf.screencopy.save`, blurs a quarter-size copy with `morf.image.process`,
+and starts
+
+```sh
+morf examples/impasto/init.lua -- lock
+```
+
+which sets `morf.surface.session_lock = true`: morf runs that file as an
+ext-session-lock client, one surface per output, until PAM (or a face)
+answers and the file clears the flag. The compositor keeps the session
+locked if that process dies. `-- lock window` shows the same screen as a
+plain overlay that holds nothing, to look at it.
+
 ## Testing
 
 Only in a nested, headless compositor — never on the desktop the shell is
@@ -94,4 +111,5 @@ WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; m
 | island state, island, bar (grouped, spread) | ported |
 | rest layer (clock) | ported |
 | pets (service, four styles, panel `pet`, detail `pet.detail`, bar piece `pet`) | ported |
+| lock screen, lock/idle/session services, session panel | ported |
 | everything else | in progress |
