@@ -13,6 +13,8 @@ local controls = require("components.controls")
 
 local C = theme.color
 local ROW = 48
+-- The backlight and services.brightness's four monitor slots.
+local SLOTS = 5
 
 -- One row per display slot: the backlight, then the DDC monitors. A slot
 -- with nothing behind it takes no room.
@@ -24,7 +26,7 @@ local function row(index, column_w)
     gap = 14, align = "center",
     visible = function() return display() ~= nil end,
     ui.Item {
-      width = 48, height = function() return display() and ROW or 0 end,
+      width = 48, height = ROW,
       controls.ring_glyph {
         size = 48, thickness = 3,
         progress = function() return percent() / 100 end,
@@ -84,8 +86,11 @@ modules.define("brightness", {
     brightness.refresh()
     local column_w = modules.entry("brightness").width - 8 - 28 - 48 - 14
     local rows = { anchors = { left = true, top = true, left_margin = 14, top_margin = 26 }, gap = 14 }
-    -- The detail is built as it opens, so it has the screens of that moment.
-    for index = 1, math.max(1, #brightness.dimmable()) do rows[#rows + 1] = row(index, column_w) end
+    -- A row for every slot there could be (the backlight and four
+    -- monitors), each shown while a screen fills it, so a monitor that
+    -- answers after the detail opened still gets its row; the detail's
+    -- size follows the count.
+    for index = 1, SLOTS do rows[#rows + 1] = row(index, column_w) end
     return ui.Item { anchors = { fill = true }, ui.Column(rows) }
   end,
 })

@@ -22,18 +22,31 @@ function clock.text()
   return morf.time.format(format())
 end
 
-function clock.build()
-  -- One text, the date appended when shown, so the time and the date are
-  -- centred as one line.
-  return ui.Item { anchors = { fill = true },
+--- The time, and beside it the date when Settings asks for it, smaller
+--- and muted (ClockModule.qml:46-67): a row to centre wherever it goes.
+function clock.face()
+  return ui.Row {
+    gap = 8, align = "center",
+    kit.text { text = clock.text, size = theme.size.regular, weight = 600 },
     kit.text {
-      anchors = { center_in = true },
+      visible = function() return settings.clockShowsDate end,
       text = function()
-        local text = clock.text()
-        if settings.clockShowsDate then text = text .. "   " .. morf.time.format("%a %-d %b") end
-        return text
+        morf.clock:get()
+        return morf.time.format("%a %-d %b")
       end,
-      size = theme.size.regular, weight = 600,
+      size = theme.size.small, color = theme.color.textMuted,
+    },
+  }
+end
+
+function clock.build()
+  local face = clock.face()
+  return ui.Item { anchors = { fill = true },
+    ui.Item {
+      anchors = { center_in = true },
+      width = function() return face.layout_width or 0 end,
+      height = function() return face.layout_height or 16 end,
+      face,
     },
   }
 end

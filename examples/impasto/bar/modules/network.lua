@@ -17,6 +17,7 @@ local M = {}
 M.MENU_MARGIN = theme.panel_padding - 4
 
 function M.card()
+  morf.timer(1, network.refresh, false)
   return detail.card("network", {
     mark = controls.ring_glyph {
       size = 44, thickness = 2.5, progress = 0, track_color = C.indicatorDim,
@@ -45,6 +46,8 @@ modules.define("network", {
   glyph = network.icon,
   value = network.connection_name,
   detail = function()
+    -- A fresh reading as it opens (NetworkModule.qml:26).
+    morf.timer(1, network.refresh, false)
     local w, h = modules.open_size("network")
     return ui.Inset {
       anchors = { fill = true }, margin = M.MENU_MARGIN,

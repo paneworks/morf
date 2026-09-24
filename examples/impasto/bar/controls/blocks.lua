@@ -106,11 +106,23 @@ M.register("clock", function(o)
   local tall = o.rows >= 4
   local wide = o.cols >= 2 and not tall
   local clock = require("bar.modules.clock")
+  local nominal = tall and 64 or (wide and 44 or 30)
+  local inner = o.width - 28
+  -- Scaled down rather than clipped: with seconds on, the time is wider
+  -- than a square. Measured at its own size by an unseen twin.
+  local twin = kit.text { text = clock.text, size = nominal, weight = 600, opacity = 0 }
+  local fitted = function()
+    local w = twin.layout_width or 0
+    if w <= inner or w <= 0 then return nominal end
+    return math.max(theme.size.large, math.floor(nominal * inner / w))
+  end
   return controls.card {
     width = o.width, height = o.height,
+    ui.Item { x = 0, y = 0, width = 1, height = 1, ui.ClipRect { width = 1, height = 1,
+      color = "#00000000", twin } },
     ui.Column {
       anchors = { center_in = true }, gap = tall and 6 or 2, align = "center",
-      kit.text { text = clock.text, size = tall and 64 or (wide and 44 or 30), weight = 600,
+      kit.text { text = clock.text, size = fitted, weight = 600,
         horizontal_alignment = "center" },
       kit.text {
         text = function()
@@ -127,15 +139,42 @@ end)
 -- The wallpaper, with the palette under it; it opens the appearance panel.
 M.register("appearance", function(o)
   local hovered = controls.signal("appearance.hover", false)
-  local picture = function()
-    local path = settings.wallpaper or ""
-    if path:sub(1, 1) == "~" then path = morf.fs.home() .. path:sub(2) end
-    return path
+  local wallpaper = require("services.wallpaper")
+  local thumbnails = require("services.thumbnails")
+  local themes = require("services.theme")
+  local path = function()
+    local p = wallpaper.current:get()
+    if p == "" then p = settings.wallpaper or "" end
+    if p:sub(1, 1) == "~" then p = morf.fs.home() .. p:sub(2) end
+    return p
   end
-  local swatches = { gap = 6, align = "center" }
+  -- A 560 x 320 copy rather than the full picture (AppearanceCard.qml:42-43).
+  local picture = function()
+    local p = path()
+    return p ~= "" and thumbnails.of(p, 560, 320) or ""
+  end
+  -- The palette's name under the title, as Theme.activeName.
+  local palette_name = function()
+    local id = themes.active_id:get()
+    for _, entry in ipairs(themes.available()) do
+      if entry.id == id then return entry.name end
+    end
+    return id
+  end
+  local swatches = { gap = 4, align = "center" }
   for _, name in ipairs { "accent", "green", "yellow", "red", "blue" } do
-    swatches[#swatches + 1] = ui.Rect { width = 14, height = 14, radius = 7, color = C[name],
+    swatches[#swatches + 1] = ui.Rect { width = 11, height = 11, radius = 5.5, color = C[name],
       border_width = 1, border_color = C.islandBorder }
+  end
+  local chevron = kit.glyph {
+    glyph = "󰅂", size = 14,
+    color = function() return hovered:get() and C.accent() or C.scrimText end,
+    opacity = function() return hovered:get() and 1 or 0.7 end,
+    behavior = { color = theme.behave("fast") },
+  }
+  local swatch_row = ui.Row(swatches)
+  local text_w = function()
+    return o.width - 24 - (swatch_row.layout_width or 63) - 10 - (chevron.layout_width or 14) - 10
   end
   return ui.ClipRect {
     width = o.width, height = o.height, radius = theme.radius_medium,
@@ -158,8 +197,15 @@ M.register("appearance", function(o)
     ui.Row {
       anchors = { left = true, bottom = true, left_margin = 12, bottom_margin = 12 },
       gap = 10, align = "center",
-      ui.Row(swatches),
-      kit.text { text = "Appearance", size = theme.size.small, weight = 600 },
+      swatch_row,
+      ui.Column {
+        gap = 0,
+        kit.text { text = "Appearance", size = theme.size.small, weight = 600, color = C.scrimText,
+          width = text_w, elide = "right" },
+        kit.text { text = palette_name, size = theme.size.label, color = C.scrimText, opacity = 0.7,
+          width = text_w, elide = "right" },
+      },
+      chevron,
     },
     ui.Rect { anchors = { fill = true }, radius = theme.radius_medium, color = "#00000000",
       border_width = 1,
