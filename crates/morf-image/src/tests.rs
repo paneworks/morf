@@ -96,6 +96,61 @@ fn icon_lookup_prefers_closest_directory_and_inherits() {
 }
 
 #[test]
+fn icon_lookup_falls_back_to_base_directories_and_pixmaps() {
+    let root = temp_dir("icon-fallback");
+    let home = root.join("home");
+    let share = root.join("share");
+    fs::create_dir_all(home.join(".icons")).unwrap();
+    fs::create_dir_all(home.join(".local/share/icons")).unwrap();
+    fs::create_dir_all(share.join("pixmaps")).unwrap();
+    let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"/>";
+    fs::write(home.join(".icons/legacy.svg"), svg).unwrap();
+    fs::write(home.join(".local/share/icons/local.png"), svg).unwrap();
+    fs::write(share.join("pixmaps/pixmap.png"), svg).unwrap();
+    let resolver = IconResolver::from_directories(
+        Some(home.clone()),
+        None,
+        Some(share.as_os_str().to_owned()),
+    );
+    assert_eq!(
+        resolver.find("legacy", "hicolor", 32).unwrap(),
+        home.join(".icons/legacy.svg")
+    );
+    assert_eq!(
+        resolver.find("local", "hicolor", 32).unwrap(),
+        home.join(".local/share/icons/local.png")
+    );
+    assert_eq!(
+        resolver.find("pixmap", "Adwaita", 32).unwrap(),
+        share.join("pixmaps/pixmap.png")
+    );
+    // A name with its extension, and an absolute path, are files.
+    assert_eq!(
+        resolver.find("pixmap.png", "hicolor", 32).unwrap(),
+        share.join("pixmaps/pixmap.png")
+    );
+    let absolute = share.join("pixmaps/pixmap.png");
+    assert_eq!(
+        resolver
+            .find(absolute.to_str().unwrap(), "hicolor", 32)
+            .unwrap(),
+        absolute
+    );
+    assert!(resolver.find("../pixmap", "hicolor", 32).is_err());
+    assert!(resolver.find("missing", "hicolor", 32).is_err());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn icon_lookup_always_ends_at_usr_share_pixmaps() {
+    // XDG_DATA_DIRS without /usr/share, as a Nix profile sets it.
+    let resolver = IconResolver::from_directories(None, None, Some("/nix/profile/share".into()));
+    let debug = format!("{resolver:?}");
+    assert!(debug.contains("/usr/share/pixmaps"), "{debug}");
+    assert!(debug.contains("/nix/profile/share/icons"), "{debug}");
+}
+
+#[test]
 fn quantizer_splits_the_widest_color_channel() {
     let image = ImageData {
         width: 4,
