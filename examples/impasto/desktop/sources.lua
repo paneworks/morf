@@ -1,12 +1,11 @@
 -- What the desk's faces read, one table per module.
 --
--- The faces of the original read the same services as the bar. Most of those
--- are other ports' (services.audio, battery, brightness, network, bluetooth,
--- media, tasks, notes, timer), written beside this one; each is asked for
--- here with `pcall(require, ...)`, and while it is missing a small reader over
--- the same library stands in, so the desk works on its own and picks the
--- service up the moment it lands. Every reader is a plain function, so a
--- binding that calls it follows it.
+-- The faces of the original read the same services as the bar
+-- (services.audio, battery, brightness, network, bluetooth, media, tasks,
+-- notes, timer, updates). Each is asked for with `pcall(require, ...)`, and
+-- where one cannot load a small reader over the same library stands in, so
+-- the desk still draws something true. Every reader is a plain function, so
+-- a binding that calls it follows it.
 
 local settings = require("services.settings")
 local theme = require("theme")
@@ -345,7 +344,7 @@ S.media.previous = transport("previous", "previous")
 -- ------------------------------------------------------------------- timer --
 
 
--- The bar's countdown, when its port has landed; a small one here until then.
+-- The bar's countdown (services.timer), else a small one of the desk's own.
 S.timer = {}
 local timer_service = optional("services.timer")
 local own = {
@@ -544,8 +543,8 @@ function S.tasks.toggle(key) if tasks_service and tasks_service.toggle then pcal
 
 -- ------------------------------------------------------------------- notes --
 
--- The notes, when that port has landed. A note on the desk is read-only:
--- a click opens it in the island.
+-- The notes (services.notes). A note on the desk is read-only: a click
+-- opens it in the island.
 S.notes = {}
 local notes_service = optional("services.notes")
 function S.notes.available() return notes_service ~= nil end

@@ -7,7 +7,7 @@
 --
 -- Each widget leans its own way, derived from its key, so it keeps its
 -- angle across redraws and two photos side by side lean apart. At rest a
--- click opens the picture in imv.
+-- click opens the picture in the shell's viewer (desktop/viewer.lua).
 
 local ui = require("morf.ui")
 local theme = require("theme")

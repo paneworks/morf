@@ -125,21 +125,30 @@ surface (raised to the top layer while arranging) is three here:
 - while arranging, `impasto-desktop` on the top layer holds the board:
   the wallpaper under a grid, every widget with its handles (drag to move,
   corner to reshape, badge to remove, wheel to cycle shapes, click for the
-  inspector), the card of modules and the photo picker; Escape, a right
-  click or another workspace ends it;
+  inspector), the note decks on the edges (`desktop/arrange/decks.lua`:
+  grip to slide, tabs to reorder, move, or pull onto the grid or the card),
+  the card of modules and the photo picker; Escape, a right click, the
+  keyboard going to the island, or another workspace ends it, on every
+  screen (each screen's process says so on the session bus);
 - `impasto-desktop-menu`, on the top layer only while the menu is open.
 
-The faces read `desktop/sources.lua`, which prefers the other ports'
-services (`services.audio`, `battery`, `media`, `tasks`, `notes`, ...)
-and stands in with the libraries while they are missing, and
+The note decks at rest are `deck/deck.lua`, one small surface per edge on
+the desk's board; their rows are the desk's too.
+
+The faces read `desktop/sources.lua`, which prefers the shell's services
+(`services.audio`, `battery`, `media`, `tasks`, `notes`, `updates`, ...)
+and stands in with the libraries where one cannot load, and
 `services/weather|stats|github|claude.lua`, which read the lua-stdlib
 libraries (`lib.weather`, `lib.sysinfo`, `lib.github`, `lib.claude_usage`,
-`lib.packages`) and show an empty state until those land.
+`lib.packages`).
 
 `morf ipc call desk <verb>`: `edit`, `done`, `add <module> [col row]`,
 `remove <key>`, `select <key>`, `pick <key>`, `family <key> <2x2|4x2|4x4|8x2>`,
 `menu [key]`, `theme <modern|analogue>`, `style <capsule|accent|outline|bare>`,
-`list`.
+`list`; and for a bench without a pointer, `day <key> [yyyy-mm-dd]` (a
+calendar's day view), `note_edge <key> <edge>`, `note_grid <note> <col> <row>`,
+`deck_edge <key> <edge>`, `deck_add <edge>`, `along <deck> <0..1>`,
+`takes_new <deck> <1|0>`, `light <edge>` and `view <photo key>`.
 
 ## Testing
 
