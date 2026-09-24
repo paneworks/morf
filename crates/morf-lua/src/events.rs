@@ -50,6 +50,8 @@ pub enum UiEvent {
     Escape,
     /// A text input gained or lost the keyboard.
     FocusChanged,
+    /// A link in a text's runs was clicked.
+    LinkActivated,
 }
 
 /// Every event a configuration can handle, and the property it writes.
@@ -81,6 +83,7 @@ pub(crate) const EVENT_PROPERTIES: &[(UiEvent, &str)] = &[
     (UiEvent::Accepted, "on_accepted"),
     (UiEvent::Escape, "on_escape"),
     (UiEvent::FocusChanged, "on_focus_changed"),
+    (UiEvent::LinkActivated, "on_link"),
 ];
 
 impl UiEvent {

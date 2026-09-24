@@ -244,6 +244,13 @@ impl Layout {
         {
             rectangles.push(transform.bounds(geometry));
         }
+        // A link in a label takes the pointer where it is laid out.
+        if scene.element(node)? == Element::Text
+            && let Ok(morf_scene::Value::List(links)) = scene.current(node, "links")
+            && !links.is_empty()
+        {
+            rectangles.push(transform.bounds(geometry));
+        }
         for &child in scene.children(node)? {
             self.collect_input_geometry(scene, child, transform, rectangles)?;
         }
@@ -284,14 +291,17 @@ impl Layout {
         // The inverse point is measured in the space the node's own geometry
         // is resolved in, which is absolute; subtracting the node's origin is
         // what makes it node-local.
-        Ok(
-            (inside && wanted(scene.element(node)?, target.elements) && (target.accept)(node))
-                .then_some(Hit {
-                    node,
-                    local_x: local_x - geometry.x,
-                    local_y: local_y - geometry.y,
-                }),
-        )
+        let element = scene.element(node)?;
+        let (node_x, node_y) = (local_x - geometry.x, local_y - geometry.y);
+        let answers = wanted(element, target.elements)
+            || (element == Element::Text
+                && target.elements.contains(&Element::MouseArea)
+                && link_at(scene, node, node_x, node_y).is_some());
+        Ok((inside && answers && (target.accept)(node)).then_some(Hit {
+            node,
+            local_x: local_x - geometry.x,
+            local_y: local_y - geometry.y,
+        }))
     }
 }
 
@@ -305,6 +315,30 @@ fn wanted(found: Element, sought: &[Element]) -> bool {
     sought.contains(&found)
         || (sought.contains(&Element::MouseArea)
             && matches!(found, Element::TextInput | Element::Terminal))
+}
+
+/// The link a Text node laid out under a point in its own space, from the
+/// `links` the runtime keeps on it.
+pub fn link_at(scene: &Scene, node: NodeHandle, x: f64, y: f64) -> Option<String> {
+    let Ok(morf_scene::Value::List(links)) = scene.current(node, "links") else {
+        return None;
+    };
+    links.iter().find_map(|link| {
+        let morf_scene::Value::Map(link) = link else {
+            return None;
+        };
+        let number = |key: &str| match link.get(key) {
+            Some(morf_scene::Value::Number(value)) => *value,
+            _ => 0.0,
+        };
+        let (left, top) = (number("x"), number("y"));
+        let inside =
+            x >= left && y >= top && x < left + number("width") && y < top + number("height");
+        match (inside, link.get("href")) {
+            (true, Some(morf_scene::Value::String(href))) => Some(href.clone()),
+            _ => None,
+        }
+    })
 }
 
 /// A node's four corner radii, falling back to the uniform one.

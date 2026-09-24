@@ -118,6 +118,35 @@ pub(crate) fn physical_glyphs(
     glyphs
 }
 
+/// Every glyph of a shaped buffer at its physical place, with its run's
+/// colour and size when the text was set in runs.
+pub(crate) fn physical_glyphs_styled(
+    cached: &CachedBuffer,
+    origin: (f32, f32),
+    scale: f32,
+) -> Vec<(PhysicalGlyph, Option<[u8; 4]>, f32)> {
+    let styled = cached.rich.is_some();
+    let mut glyphs = Vec::new();
+    for run in cached.buffer.layout_runs() {
+        let (shifts, back) = word_shifts(&run, cached.word_spacing, cached.alignment);
+        for (glyph, shift) in run.glyphs.iter().zip(shifts) {
+            let physical = glyph.physical(
+                (
+                    origin.0 + (shift - back) * scale,
+                    origin.1 + run.line_y * scale,
+                ),
+                scale,
+            );
+            let tint = glyph
+                .color_opt
+                .filter(|_| styled)
+                .map(|color| [color.r(), color.g(), color.b(), color.a()]);
+            glyphs.push((physical, tint, if styled { glyph.font_size } else { 0.0 }));
+        }
+    }
+    glyphs
+}
+
 /// Every glyph of a shaped buffer at its physical place, with the offset in
 /// the whole text its cluster starts at — which a selection needs to know
 /// which glyphs it covers.
@@ -205,42 +234,60 @@ fn line_bands_of(
             .zip(&shifts)
             .map(|(glyph, shift)| glyph.x + glyph.w + shift - back)
             .fold(f32::MIN, f32::max);
-        let size = first.font_size;
-        // The face's own recommendation, scaled to the size; a face that
-        // cannot be found falls back to proportions that read right on most.
-        let metrics = fonts
-            .get_font(first.font_id, first.font_weight)
-            .map(|font| font.as_swash().metrics(&[]).scale(size));
-        let (ascent, underline_offset, strikeout_offset, stroke_size) = match metrics {
-            Some(metrics) => (
-                metrics.ascent,
-                -metrics.underline_offset,
-                metrics.strikeout_offset,
-                metrics.stroke_size,
-            ),
-            None => (size * 0.8, size * 0.1, size * 0.3, size / 14.0),
-        };
-        bands.push(LineBand {
-            x: left,
-            width: (right - left).max(0.0),
-            baseline: run.line_y,
-            ascent,
-            underline_offset: if underline_offset > 0.0 {
-                underline_offset
-            } else {
-                size * 0.1
-            },
-            strikeout_offset: if strikeout_offset > 0.0 {
-                strikeout_offset
-            } else {
-                size * 0.3
-            },
-            stroke_size: if stroke_size > 0.0 {
-                stroke_size
-            } else {
-                size / 14.0
-            },
-        });
+        bands.push(face_band(
+            fonts,
+            first,
+            left,
+            (right - left).max(0.0),
+            run.line_y,
+        ));
     }
     bands
+}
+
+/// A band along `x..x + width` at `baseline`, with the lines where `glyph`'s
+/// face puts them.
+pub(crate) fn face_band(
+    fonts: &mut cosmic_text::FontSystem,
+    glyph: &cosmic_text::LayoutGlyph,
+    x: f32,
+    width: f32,
+    baseline: f32,
+) -> LineBand {
+    let size = glyph.font_size;
+    // The face's own recommendation, scaled to the size; a face that
+    // cannot be found falls back to proportions that read right on most.
+    let metrics = fonts
+        .get_font(glyph.font_id, glyph.font_weight)
+        .map(|font| font.as_swash().metrics(&[]).scale(size));
+    let (ascent, underline_offset, strikeout_offset, stroke_size) = match metrics {
+        Some(metrics) => (
+            metrics.ascent,
+            -metrics.underline_offset,
+            metrics.strikeout_offset,
+            metrics.stroke_size,
+        ),
+        None => (size * 0.8, size * 0.1, size * 0.3, size / 14.0),
+    };
+    LineBand {
+        x,
+        width,
+        baseline,
+        ascent,
+        underline_offset: if underline_offset > 0.0 {
+            underline_offset
+        } else {
+            size * 0.1
+        },
+        strikeout_offset: if strikeout_offset > 0.0 {
+            strikeout_offset
+        } else {
+            size * 0.3
+        },
+        stroke_size: if stroke_size > 0.0 {
+            stroke_size
+        } else {
+            size / 14.0
+        },
+    }
 }

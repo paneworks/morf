@@ -128,6 +128,16 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         Element::Text => {
             properties.extend([
                 string("text", ""),
+                // Styled runs, which win over `text`; `markup` wins over both.
+                any("spans", Value::List(Vec::new())),
+                string("markup", ""),
+                // The colour of a link run that names none; nil is the text's.
+                any("link_color", Value::Nil),
+                // Kept by the runtime: where each link run was laid out, as
+                // `{ href, x, y, width, height }` in the node's own space.
+                any("links", Value::List(Vec::new())),
+                // The pointer's shape over a link.
+                string("cursor", "pointer"),
                 color("color", Color::rgba8(0, 0, 0, 255)),
                 number("font_size", 16.0),
                 number("font_weight", 400.0),

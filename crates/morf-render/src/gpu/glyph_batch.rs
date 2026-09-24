@@ -98,7 +98,7 @@ pub(crate) fn create_glyph_batch(
                 font_weight: *font_weight,
                 font_source: (!font_source.is_empty()).then(|| font_source.clone()),
                 max_lines: *max_lines,
-                style: *style,
+                style: style.clone(),
             },
         );
         let spare_height = (bounds.height - measured.height).max(0.0);
@@ -137,6 +137,25 @@ pub(crate) fn create_glyph_batch(
         let mut push =
             |glyph: RasterGlyph, morph: Option<RasterGlyph>, progress: f32, tint: Color| {
                 if glyph.width > 0 && glyph.height > 0 {
+                    // A run of text set in its own colour or size: the colour
+                    // keeps the node's opacity, the field its own size's ramp.
+                    let tint = match glyph.tint {
+                        Some([r, g, b, a]) => {
+                            let mut run = Color::rgba8(r, g, b, a);
+                            run.alpha *= tint.alpha;
+                            run
+                        }
+                        None => tint,
+                    };
+                    let (ramp, field) = if glyph.font_size > 0.0 {
+                        (
+                            morf_text::field_units_per_logical_px(glyph.font_size)
+                                / scale.max(f32::EPSILON),
+                            glyph_field_uniform(*field_style, f64::from(glyph.font_size)),
+                        )
+                    } else {
+                        (ramp, glyph_field_uniform(*field_style, *size))
+                    };
                     glyphs.push(PreparedGlyph {
                         glyph,
                         morph,
@@ -146,7 +165,7 @@ pub(crate) fn create_glyph_batch(
                         color_overlay: *color_overlay,
                         transform: *transform,
                         command_index,
-                        field: glyph_field_uniform(*field_style, *size),
+                        field,
                         outline_color: color_array(field_style.outline_color),
                     });
                 }
@@ -188,7 +207,7 @@ pub(crate) fn create_glyph_batch(
                     font_weight: *font_weight,
                     font_source: (!font_source.is_empty()).then(|| font_source.clone()),
                     max_lines: *max_lines,
-                    style: *style,
+                    style: style.clone(),
                 },
             );
             // Paired glyphs come back already measured over one shared box, so
@@ -216,6 +235,42 @@ pub(crate) fn create_glyph_batch(
         } else {
             for glyph in text_system.rasterize(*node, origin, scale, true) {
                 push(glyph, None, 0.0, *color);
+            }
+        }
+        // The lines under and through runs that ask for them, a link's
+        // among them, each in its run's colour.
+        if style.rich.is_some() && edit.is_none() {
+            let origin = Geometry {
+                x: bounds.x,
+                y: bounds.y + vertical_offset,
+                width: bounds.width,
+                height: bounds.height,
+            };
+            for span in text_system.span_bands(*node) {
+                let run_color = span.tint.map(|[r, g, b, a]| {
+                    let mut run = Color::rgba8(r, g, b, a);
+                    run.alpha *= color.alpha;
+                    run
+                });
+                bands.extend(decoration_bands(
+                    vec![span.band],
+                    &TextDecoration {
+                        line: match span.line {
+                            morf_text::SpanLine::Under => DecorationLine::Under,
+                            morf_text::SpanLine::Through => DecorationLine::Through,
+                        },
+                        thickness: None,
+                        offset: 0.0,
+                        color: run_color,
+                    },
+                    *size,
+                    origin,
+                    *color,
+                    *color_overlay,
+                    *transform,
+                    command_index,
+                    scale,
+                ));
             }
         }
         if let Some(decoration) = decoration {

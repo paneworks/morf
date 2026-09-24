@@ -18,6 +18,7 @@ mod motion;
 mod motion_values;
 mod path_style;
 mod playback;
+mod rich_text;
 mod scene;
 mod scene_access;
 mod scene_behavior;
@@ -36,6 +37,7 @@ pub use groups::*;
 pub use hashing::*;
 pub use keyframes::*;
 pub use path_style::*;
+pub use rich_text::{MAX_SPANS, RichSpan, RichText};
 pub use terminal::*;
 pub use types::*;
 #[cfg(test)]

@@ -367,6 +367,8 @@ pub(crate) struct ReactiveState {
     pub(crate) io: crate::api_io::IoHub,
     /// `ui.Terminal` nodes: their emulators and their programs.
     pub(crate) terminals: crate::terminals::TerminalHub,
+    /// Text nodes set in runs, whose links the layout places.
+    pub(crate) linked_texts: std::collections::HashSet<NodeHandle>,
     /// Every `ui.Image`: what became of its source, and its playback.
     pub(crate) images: crate::images::ImageNodes,
     pub(crate) session_unlock_requested: bool,
@@ -567,6 +569,7 @@ impl ReactiveState {
             due_one_shots: HashSet::new(),
             timer_callbacks: HashMap::new(),
             destroy_hooks: HashMap::new(),
+            linked_texts: Default::default(),
             images: Default::default(),
             node_loops: HashMap::new(),
             pending_destroyed: Vec::new(),

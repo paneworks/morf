@@ -176,6 +176,8 @@ impl TextSystem {
                 draw_width: width as f32,
                 draw_height: height as f32,
                 content: RasterContent::Mask,
+                tint: None,
+                font_size: 0.0,
                 data: image,
             });
             return;
@@ -230,6 +232,8 @@ impl TextSystem {
                 draw_width: image.width as f32,
                 draw_height: image.height as f32,
                 content: image.content,
+                tint: None,
+                font_size: 0.0,
                 data: image.data,
             });
         }

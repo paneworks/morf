@@ -168,6 +168,24 @@ impl Runtime {
                 UiEvent::Pressed | UiEvent::PointerMoved | UiEvent::Dragged | UiEvent::Released
             )
         };
+        // A click on a link in a text's runs is the link's.
+        if event == UiEvent::Clicked
+            && self.reactive.borrow().scene.element(node).ok() == Some(morf_scene::Element::Text)
+        {
+            let href = morf_layout::link_at(
+                &self.reactive.borrow().scene,
+                node,
+                point.local_x,
+                point.local_y,
+            );
+            if let Some(href) = href {
+                return self.dispatch_ui_event_with_args(
+                    node,
+                    UiEvent::LinkActivated,
+                    &[IpcValue::String(href)],
+                );
+            }
+        }
         edited | self.dispatch_pointer_handler(node, event, point, delta)
     }
 
@@ -336,6 +354,10 @@ impl Runtime {
         let state = self.reactive.borrow();
         // A text input places its caret with the primary button.
         if state.scene.element(node).ok() == Some(morf_scene::Element::TextInput) {
+            return button == 0x110;
+        }
+        // A link takes the primary button.
+        if state.scene.element(node).ok() == Some(morf_scene::Element::Text) {
             return button == 0x110;
         }
         // A terminal passes all three on to a program that wants them.

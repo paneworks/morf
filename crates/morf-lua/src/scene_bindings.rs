@@ -66,6 +66,10 @@ pub(crate) fn assign_scene_property(
         .scene
         .assign(node, property, value)
         .map_err(|error| error.to_string())?;
+    // Text set in runs may hold links, which the layout places.
+    if matches!(property, "spans" | "markup") {
+        state.linked_texts.insert(node);
+    }
     let current_changed = state
         .scene
         .current(node, property)
@@ -305,6 +309,9 @@ pub(crate) fn refuse_runtime_owned(
         return Err(format!(
             "MouseArea `{property}` is read-only: the pointer sets it"
         ));
+    }
+    if property == "links" && state.scene.element(node).ok() == Some(Element::Text) {
+        return Err("Text `links` is read-only: the layout says where they are".to_owned());
     }
     if matches!(property, "status" | "error" | "frame_count")
         && state.scene.element(node).ok() == Some(Element::Image)

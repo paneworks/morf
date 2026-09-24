@@ -482,5 +482,7 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "frame"
             | "loops"
             | "frame_count"
+            | "links"
+            | "link_color"
     )
 }

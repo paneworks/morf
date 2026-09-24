@@ -81,6 +81,9 @@ pub(crate) fn coerce(
     match property {
         "gradient" => return Gradient::canonical(value).map_err(invalid),
         "decoration" => return TextDecoration::canonical(value).map_err(invalid),
+        "spans" if element == Element::Text => {
+            return crate::rich_text::canonical_spans(value).map_err(invalid);
+        }
         "line_height" => {
             // A bare number is a multiple of the font size; a `px` string is
             // a size. Checked here so a wrong one is refused where written.

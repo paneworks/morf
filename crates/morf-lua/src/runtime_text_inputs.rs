@@ -184,10 +184,61 @@ impl Runtime {
             text_inputs::blink(&mut state, Instant::now());
         }
         self.finish_text_input_work();
+        // Links in text set in runs: where the shaper put them.
+        self.sync_links(layout, text);
         // Terminals are fitted to their boxes at the same moment, for the
         // same reason: with the text system this frame is painted with.
         let terminals = self.sync_terminals(layout, text);
         terminals || self.reactive.borrow().scene_revision != revision
+    }
+
+    /// Writes each linked text's `links`: its link runs' boxes, in its own
+    /// space, from the buffer this frame is painted from.
+    fn sync_links(&mut self, layout: &Layout, text: &mut TextSystem) {
+        let mut state = self.reactive.borrow_mut();
+        let nodes: Vec<NodeHandle> = state.linked_texts.iter().copied().collect();
+        for node in nodes {
+            if !state.scene.contains(node) {
+                state.linked_texts.remove(&node);
+                continue;
+            }
+            let Some(geometry) = layout.geometry(node) else {
+                continue;
+            };
+            let spare = (geometry.height - f64::from(text.shaped_height(node))).max(0.0);
+            let offset = match state.scene.string_value(node, "vertical_alignment") {
+                Ok("center") => spare / 2.0,
+                Ok("bottom") => spare,
+                _ => 0.0,
+            };
+            let links = morf_scene::Value::List(
+                text.link_rects(node)
+                    .into_iter()
+                    .map(|link| {
+                        morf_scene::Value::Map(std::collections::BTreeMap::from([
+                            ("href".to_owned(), morf_scene::Value::String(link.href)),
+                            ("x".to_owned(), morf_scene::Value::Number(f64::from(link.x))),
+                            (
+                                "y".to_owned(),
+                                morf_scene::Value::Number(f64::from(link.y) + offset),
+                            ),
+                            (
+                                "width".to_owned(),
+                                morf_scene::Value::Number(f64::from(link.width)),
+                            ),
+                            (
+                                "height".to_owned(),
+                                morf_scene::Value::Number(f64::from(link.height)),
+                            ),
+                        ]))
+                    })
+                    .collect(),
+            );
+            if state.scene.current(node, "links").ok() != Some(&links) {
+                let _ =
+                    crate::scene_bindings::assign_scene_property(&mut state, node, "links", links);
+            }
+        }
     }
 
     /// Moves the focused caret's blink on; true when it changed.

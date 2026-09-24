@@ -3,7 +3,9 @@
 //! Read once from a node and carried into measurement and painting alike, so
 //! the two cannot disagree about what a line of it takes.
 
-use morf_scene::{NodeHandle, Scene, Value};
+use std::sync::Arc;
+
+use morf_scene::{Element, NodeHandle, RichText, Scene, Value};
 
 use crate::helpers::LayoutError;
 
@@ -101,7 +103,7 @@ impl FontStretch {
 }
 
 /// Everything about how text is set besides its family, size and weight.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TextStyle {
     pub line_height: LineHeight,
     /// Added between letters, in logical pixels.
@@ -110,6 +112,45 @@ pub struct TextStyle {
     pub word_spacing: f64,
     pub font_style: FontStyle,
     pub font_stretch: FontStretch,
+    /// Styled runs from `spans` or `markup`; when present, its text is what
+    /// is set, in place of the node's `text`.
+    pub rich: Option<Arc<RichText>>,
+    /// The colour of a link run that names none.
+    pub link_color: Option<morf_scene::Color>,
+}
+
+/// Markup parsed lately, so a label redrawn every frame is read once.
+fn parsed_markup(markup: &str) -> Arc<RichText> {
+    thread_local! {
+        static PARSED: std::cell::RefCell<std::collections::HashMap<String, Arc<RichText>>> =
+            Default::default();
+    }
+    PARSED.with(|parsed| {
+        let mut parsed = parsed.borrow_mut();
+        if let Some(rich) = parsed.get(markup) {
+            return Arc::clone(rich);
+        }
+        if parsed.len() >= 256 {
+            parsed.clear();
+        }
+        let rich = Arc::new(RichText::from_markup(markup));
+        parsed.insert(markup.to_owned(), Arc::clone(&rich));
+        rich
+    })
+}
+
+/// A Text node's runs: its markup if it has any, else its spans.
+fn rich_of(scene: &Scene, node: NodeHandle) -> Result<Option<Arc<RichText>>, LayoutError> {
+    if scene.element(node)? != Element::Text {
+        return Ok(None);
+    }
+    let markup = scene.string_value(node, "markup")?;
+    if !markup.is_empty() {
+        return Ok(Some(parsed_markup(markup)));
+    }
+    RichText::from_spans(scene.current(node, "spans")?)
+        .map(|rich| rich.map(Arc::new))
+        .map_err(|message| LayoutError::Scene(format!("Text spans: {message}")))
 }
 
 impl TextStyle {
@@ -132,6 +173,15 @@ impl TextStyle {
                     "Text: font_stretch `{font_stretch}` is not a width from ultra_condensed to ultra_expanded"
                 ))
             })?,
+            rich: rich_of(scene, node)?,
+            link_color: match scene.element(node)? {
+                Element::Text => match scene.current(node, "link_color")? {
+                    Value::Color(color) => Some(*color),
+                    Value::String(text) => morf_scene::Color::parse(text),
+                    _ => None,
+                },
+                _ => None,
+            },
         })
     }
 
@@ -149,6 +199,10 @@ impl TextStyle {
             word_spacing: self.word_spacing.to_bits(),
             font_style: self.font_style,
             font_stretch: self.font_stretch,
+            rich: self.rich.as_ref().map_or(0, |rich| rich.key),
+            link_color: self
+                .link_color
+                .map(|color| [color.red, color.green, color.blue, color.alpha].map(f32::to_bits)),
         }
     }
 }
@@ -162,4 +216,6 @@ pub struct TextStyleKey {
     word_spacing: u64,
     font_style: FontStyle,
     font_stretch: FontStretch,
+    rich: u64,
+    link_color: Option<[u32; 4]>,
 }

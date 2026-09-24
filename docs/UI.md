@@ -594,6 +594,40 @@ ui.Text {
 }
 ```
 
+### Text in runs, and links
+
+A `Text` may be set in runs of their own style. `spans` is a list whose
+entries are strings, in the node's own style, or tables: `text`, `bold`,
+`weight`, `italic`, `underline`, `strike`, `color` (any notation), `size`,
+`family`, and `link`. `markup` is the part of HTML the desktop
+notification spec allows — `<b>`, `<i>`, `<u>`, `<s>`, `<a href="…">`,
+`<br>` and entities (`&amp;`, `&lt;`, `&#33;`, …); an unknown tag is
+dropped and its content kept, so a notification body can be drawn as it
+came. `markup` wins over `spans`, which win over `text`.
+
+```lua
+ui.Text {
+  font_size = 14, color = theme.ink, link_color = theme.accent, wrap = true,
+  spans = { "Build ", { text = "failed", bold = true, color = "#e5484d" },
+            " — ", { text = "see the log", link = "file:///tmp/build.log" } },
+  on_link = function(href) morf.spawn { command = { "xdg-open", href } } end,
+}
+ui.Text { markup = notification.body, wrap = true, max_lines = 4, on_link = open }
+```
+
+Anything a run leaves out is the node's own: family, size, weight, slant,
+colour, spacing. A link is underlined unless it says `underline = false`,
+and drawn in `link_color` when it names no colour of its own. A run's size
+changes the height of the line it is on. The runs are shaped together, so
+kerning and wrapping go across them; `elide` and `max_lines` keep the runs
+of what is left.
+
+`on_link(href)` hears a click on a link. The pointer finds a link where it
+was laid out — the rest of the text lets clicks through to whatever is
+beneath — and takes the node's `cursor` (`"pointer"`) over it. Where each
+link landed is the read-only `links`, a list of `{ href, x, y, width,
+height }` in the node's own space, kept current after every layout.
+
 ### Text input
 
 `ui.TextInput` is text you can edit. It is set by the same shaper as

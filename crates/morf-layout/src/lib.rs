@@ -21,7 +21,7 @@ pub use geometry::{
     TransformParameters,
 };
 pub use helpers::LayoutError;
-pub use hit::Hit;
+pub use hit::{Hit, link_at};
 pub use layout::{Layout, TransformTracker, TransformWatcher};
 pub use reparent::ReparentTransition;
 pub use text_input::{InputDisplay, InputShape};
