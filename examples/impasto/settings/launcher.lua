@@ -1,9 +1,9 @@
 -- Settings, Launcher: what it lists and how tall it gets, its sigils, and
 -- the clipboard history, which is one of its modes (LauncherSection).
 --
--- The sigils are shown, not edited: the launcher's modes are declared in
--- services/launcher.lua with their prefix, and nothing reads a changed one
--- from the settings yet.
+-- Each sigil is edited in place, at the end of its mode's row: one
+-- character, not a letter, digit or space, and no other mode's. A refused
+-- one goes back to the sigil in use (`launcherPrefixes`).
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -76,21 +76,57 @@ local function results_part(W)
   }
 end
 
+--- One mode's sigil, typed over in place.
+local function sigil_field(mode)
+  if mode.id == "apps" then
+    return ui.Rect {
+      width = 44, height = 28, radius = theme.radius_small,
+      color = C.island, border_width = 1, border_color = C.islandBorder,
+      kit.text { anchors = { center_in = true }, text = "abc",
+        mono = true, size = theme.size.small, color = C.accent },
+    }
+  end
+  local focused = morf.signal("impasto.settings.sigil." .. mode.id, false)
+  local input
+  input = ui.TextInput {
+    anchors = { fill = true },
+    horizontal_alignment = "center", vertical_alignment = "center",
+    max_length = 1,
+    text = function() return mode.prefix end,
+    font_family = function() return theme.font_mono() end,
+    font_size = theme.size.small, font_weight = 600,
+    color = C.accent, caret_color = C.accent,
+    selection_color = C.accent, selected_text_color = C.accentText,
+    on_focus_changed = function(on)
+      focused:set(on)
+      -- Leaving the field: whatever it holds that was refused goes back.
+      if not on then input.text = mode.prefix end
+    end,
+    on_text_changed = function(text)
+      if text ~= "" then launcher.set_sigil(mode.id, text) end
+    end,
+    on_accepted = function() input.text = mode.prefix end,
+    on_escape = function() input.text = mode.prefix end,
+  }
+  return ui.Rect {
+    width = 34, height = 28, radius = theme.radius_small,
+    color = C.island, border_width = 1,
+    border_color = function() return focused:get() and C.accent() or C.islandBorder end,
+    behavior = { border_color = theme.behave("fast") },
+    input,
+  }
+end
+
 local function sigils_part(W)
   local group = {
     width = W, title = "Sigils",
-    note = "Plain text searches applications, and a sigil in front switches mode.",
-    hint = "Each mode's sigil is set where the launcher declares its modes.",
+    note = "Plain text searches applications, and a sigil in front switches mode. Click one to change it.",
+    hint = "One character each, not a letter, a digit or a space, and no two modes the same.",
   }
   for _, mode in ipairs(launcher.modes) do
     group[#group + 1] = setting.row {
       width = W, label = mode.label, reading = mode.hint,
-      control = ui.Rect {
-        width = mode.prefix == "" and 44 or 34, height = 28, radius = theme.radius_small,
-        color = C.island, border_width = 1, border_color = C.islandBorder,
-        kit.text { anchors = { center_in = true }, text = mode.prefix == "" and "abc" or mode.prefix,
-          mono = true, size = theme.size.small, color = C.accent },
-      },
+      control = sigil_field(mode),
     }
   end
   return { setting.group(group) }

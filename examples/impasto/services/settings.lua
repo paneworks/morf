@@ -464,36 +464,12 @@ if M.fresh then
   if ok and taken > 0 then M.imported = taken end
 end
 
--- The file, watched: another screen's save, or a hand edit, is read back.
--- The watch is inotify's; its queue is looked at twice a second, which costs
--- a channel read.
-do
-  local watcher
-  local function arm()
-    local ok, made = pcall(function() return morf.file(M.path):watch() end)
-    watcher = ok and made or nil
-  end
-  fs.mkdir(M.dir)
-  arm()
-  local last_stat = fs.stat(M.path)
-  morf.timer(500, function()
-    local changed = false
-    if watcher then
-      while true do
-        local ok, event = pcall(watcher.next, watcher, 0)
-        if not ok or not event then break end
-        changed = true
-      end
-    else
-      -- No inotify: the file's time and size stand in.
-      local now = fs.stat(M.path)
-      local before = last_stat
-      last_stat = now
-      changed = (now and now.modified) ~= (before and before.modified)
-        or (now and now.size) ~= (before and before.size)
-    end
-    if changed and not saving then reread() end
-  end, true)
-end
+-- The file, watched: another screen's save, or a hand edit, is read back
+-- (services/watch.lua). A change while this runtime's own save is pending
+-- waits for that save, which then wins.
+fs.mkdir(M.dir)
+require("services.watch").file(M.path, function()
+  if not saving then reread() end
+end)
 
 return M

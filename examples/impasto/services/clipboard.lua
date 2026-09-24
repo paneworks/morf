@@ -331,11 +331,18 @@ function M.start()
   if not ok then morf.log("warn", "impasto: no clipboard history: " .. tostring(err)) end
 end
 
--- `morf ipc call clipboard` says how many entries are kept and whether the
--- compositor lets the shell hear copies; `clipboard wipe` forgets them all;
+-- `morf ipc call clipboard` is the clipboard key (shell.qml): the launcher
+-- on its clipboard mode, or shut again when it is already there, on the
+-- screen being worked on; `clipboard status` says how many entries are
+-- kept and whether the compositor lets the shell hear copies;
+-- `clipboard wipe` forgets them all;
 -- `clipboard_add <text>` keeps a text as if it had been copied (a bench
 -- without data control can still fill the history).
 morf.ipc.clipboard = function(arg)
+  if arg == nil or arg == "" or arg == "toggle" then
+    if not require("services.live").here() then return "elsewhere" end
+    return require("services.launcher").toggle_clipboard()
+  end
   if arg == "wipe" then M.wipe() end
   local ok, supported = pcall(morf.clipboard.supported)
   return ("%d kept, data control %s"):format(#entries, (ok and supported) and "on" or "off")

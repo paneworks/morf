@@ -12,9 +12,20 @@
 --     !      a countdown
 --     '      the clipboard history
 --
+-- The sigils are the defaults above until Settings changes one
+-- (`launcherPrefixes`, services/settings.lua); `mode.prefix` always reads
+-- the current one.
+--
 -- The query lives here, not in the panel, because with `launcherFits` the
 -- island's height follows the results and must be known before the panel
 -- is built.
+--
+-- This file is also the one place a desktop id is spelled: without
+-- `.desktop` (`desktop_id`), for the launch history, the dock's pinned
+-- apps and the favourites alike, and the directories applications are read
+-- from, flatpak's exports included (`application_paths`), which the dock
+-- reads too. An entry marked `Terminal=true` runs in a terminal window of
+-- the shell's own (services/terminal.lua).
 
 local settings = require("services.settings")
 local island = require("bar.island")
@@ -32,22 +43,58 @@ M.query = morf.signal("impasto.launcher.query", "")
 
 -- ------------------------------------------------------------------ modes --
 
--- The prefix-less mode must be last.
+-- The prefix-less mode must be last. `prefix` is not stored: it is read
+-- from the settings each time (a binding that reads it follows a change).
 M.modes = {
-  { id = "calculate", prefix = "=", label = "Calculate", icon = "󰃬",
+  { id = "calculate", label = "Calculate", icon = "󰃬",
     hint = "Work something out", empty = "An expression — 12 * 34, (5 + 5) / 2" },
-  { id = "desk", prefix = ">", label = "Desk", icon = "󰍜",
+  { id = "desk", label = "Desk", icon = "󰍜",
     hint = "Open a panel or change a setting", empty = "Nothing on the desk by that name" },
-  { id = "windows", prefix = "@", label = "Windows", icon = "󰖯",
+  { id = "windows", label = "Windows", icon = "󰖯",
     hint = "Find an open window", empty = "No window by that name is open" },
-  { id = "timer", prefix = "!", label = "Timer", icon = "󰔟",
+  { id = "timer", label = "Timer", icon = "󰔟",
     hint = "Start a countdown", empty = "A duration — 25m, 90s, 1:30" },
-  { id = "clipboard", prefix = "'", label = "Clipboard", icon = "󰅍",
+  { id = "clipboard", label = "Clipboard", icon = "󰅍",
     hint = "Copy something again", empty = "Nothing copied says that" },
-  { id = "apps", prefix = "", label = "Apps", icon = "󰀻",
+  { id = "apps", label = "Apps", icon = "󰀻",
     hint = "Search applications",
     empty = "No application matches. Type > for what the shell itself can do." },
 }
+local mode_meta = {
+  __index = function(mode, key)
+    if key == "prefix" then
+      if mode.id == "apps" then return "" end
+      return settings.launcher_prefix(mode.id)
+    end
+  end,
+}
+for _, mode in ipairs(M.modes) do setmetatable(mode, mode_meta) end
+
+function M.mode(id)
+  for _, mode in ipairs(M.modes) do
+    if mode.id == id then return mode end
+  end
+end
+
+--- Whether `sigil` can be `id`'s: one character, not a letter, a digit or
+--- a space (which would steal searches), and no other mode's
+--- (LauncherSection.qml `accepts`).
+function M.accepts_sigil(id, sigil)
+  if type(sigil) ~= "string" or utf8.len(sigil) ~= 1 or sigil:match("[%w ]") then return false end
+  for _, mode in ipairs(M.modes) do
+    if mode.id ~= id and mode.prefix == sigil then return false end
+  end
+  return true
+end
+
+--- A new sigil for a mode, when it is accepted; "" goes back to the
+--- default. Returns whether it was taken.
+function M.set_sigil(id, sigil)
+  if id == "apps" then return false end
+  if sigil ~= "" and not M.accepts_sigil(id, sigil) then return false end
+  settings.set_launcher_prefix(id, sigil)
+  return true
+end
 
 function M.mode_for(query)
   query = query or ""
@@ -85,7 +132,15 @@ local applications = {}    -- plain rows, sorted by name
 M.apps_revision = morf.signal("impasto.launcher.apps", 0)
 local apps_counter = 0
 
-local function application_paths()
+--- A desktop id as this shell spells it: the file name without
+--- `.desktop` (upstream kept the file name; both are read).
+function M.desktop_id(id)
+  return (tostring(id or ""):match("^%s*(.-)%s*$"):gsub("%.desktop$", ""))
+end
+
+--- Where applications are read from, in XDG precedence (a user's copy
+--- shadows the system's), with flatpak's exported entries last.
+function M.application_paths()
   local env = morf.env or os.getenv
   local home = fs.home()
   local paths, seen = {}, {}
@@ -119,9 +174,12 @@ local function rebuild_applications()
       local subtitle = (entry.comment or ""):match("^%s*(.-)%s*$")
       if subtitle == "" then subtitle = entry.generic_name ~= "" and entry.generic_name or "Application" end
       list[#list + 1] = {
-        kind = "app", id = entry.id, name = name, lower = name:lower(),
+        kind = "app", id = M.desktop_id(entry.id), name = name, lower = name:lower(),
         subtitle = subtitle, keywords = keywords:lower(), icon = entry.icon or "",
         wmclass = entry.startup_class or "",
+        -- `Terminal=true`: its argv runs in a terminal window instead.
+        terminal = entry.run_in_terminal == true,
+        command = entry.command, cwd = entry.working_directory,
       }
     end
   end
@@ -135,7 +193,7 @@ end
 --- scanning is cheaper than watching every XDG directory).
 function M.refresh()
   if not index then
-    local ok, made = pcall(morf.desktop_entries, application_paths())
+    local ok, made = pcall(morf.desktop_entries, M.application_paths())
     if not ok then
       morf.log("warn", "impasto: cannot read the applications: " .. tostring(made))
       return
@@ -166,33 +224,68 @@ local launches = {}
 M.history_revision = morf.signal("impasto.launcher.history", 0)
 local history_counter = 0
 
-do
+-- The file as last read or written, so a watch event for this runtime's
+-- own write is not a change.
+local history_text = nil
+
+local function read_history()
   local text = fs.read(M.history_path)
+  history_text = text
+  local out = {}
   if text and text ~= "" then
     local ok, decoded = pcall(json.decode, text)
     if ok and type(decoded) == "table" and type(decoded.launches) == "table" then
       for id, row in pairs(decoded.launches) do
         if type(id) == "string" and type(row) == "table" then
-          launches[id] = { count = tonumber(row.count) or 0, last = tonumber(row.last) or 0 }
+          -- A file name from the QML shell and a bare id are one app.
+          local key = M.desktop_id(id)
+          local count, last = tonumber(row.count) or 0, tonumber(row.last) or 0
+          local held = out[key]
+          if held then
+            out[key] = { count = held.count + count, last = math.max(held.last, last) }
+          else
+            out[key] = { count = count, last = last }
+          end
         end
       end
     end
   end
+  return out
 end
 
+local function history_changed()
+  history_counter = history_counter + 1
+  M.history_revision:set(history_counter)
+end
+
+launches = read_history()
+
+-- Every screen launches and records: each follows the file, so one screen's
+-- launch is counted by all and none writes over another's.
+require("services.watch").file(M.history_path, function()
+  local text = fs.read(M.history_path)
+  if text == history_text then return end
+  launches = read_history()
+  history_changed()
+end)
+
 function M.score_of(id)
-  local row = launches[id]
+  local row = launches[M.desktop_id(id)]
   if not row or not row.count or row.count == 0 then return 0 end
   local age = morf.time.now_ms() - (row.last or 0)
   return row.count * 0.5 ^ (age / M.HALF_LIFE)
 end
 
 function M.record(id)
-  if not id or id == "" then return end
+  id = M.desktop_id(id)
+  if id == "" then return end
+  -- What another screen wrote since, first.
+  launches = read_history()
   launches[id] = { count = M.score_of(id) + 1, last = morf.time.now_ms() }
-  history_counter = history_counter + 1
-  M.history_revision:set(history_counter)
-  local ok, err = fs.write(M.history_path, json.encode({ launches = launches }, true))
+  history_changed()
+  local text = json.encode({ launches = launches }, true)
+  history_text = text
+  local ok, err = fs.write(M.history_path, text)
   if not ok then morf.log("warn", "impasto: could not save the launch history: " .. tostring(err)) end
 end
 
@@ -201,7 +294,10 @@ local function favourites()
   local pinned = settings.dockPinned
   local out = {}
   if type(pinned) == "table" then
-    for position, id in ipairs(pinned) do out[id] = position end
+    for position, id in ipairs(pinned) do
+      local key = M.desktop_id(id)
+      if out[key] == nil then out[key] = position end
+    end
   end
   return out
 end
@@ -332,6 +428,21 @@ function M.desk(term)
         and not (mode.id == "clipboard" and not settings.clipboardHistory) then
       offer { kind = "mode", id = mode.id, icon = mode.icon, name = mode.label,
         subtitle = mode.hint, sigil = mode.prefix }
+    end
+  end
+
+  -- The control centre's one-shot tiles (Capture, Annotate, Read text,
+  -- Colour, Record, Clear clipboard) that can run here now.
+  local ok_controls, controls = pcall(require, "services.controls")
+  if ok_controls and type(controls.tile_catalogue) == "table" then
+    for _, tile in ipairs(controls.tile_catalogue) do
+      local ok_a, available = pcall(tile.available)
+      if tile.closes and ok_a and available then
+        local ok_i, glyph = pcall(tile.icon)
+        local ok_d, detail = pcall(tile.detail)
+        offer { kind = "action", id = tile.key, icon = ok_i and glyph or "󰐊",
+          name = tile.label, subtitle = ok_d and detail or "" }
+      end
     end
   end
 
@@ -481,6 +592,30 @@ local function launch(id)
   if not ok then morf.log("warn", "impasto: could not launch " .. id .. ": " .. tostring(err)) end
 end
 
+local function row_of(id)
+  for _, app in ipairs(applications) do
+    if app.id == id then return app end
+  end
+end
+
+--- Starts an application by id (with or without `.desktop`): a terminal
+--- program in a terminal window of the shell's, anything else as the
+--- desktop entry says. Shared with the dock.
+function M.launch(id)
+  id = M.desktop_id(id)
+  if not index then M.refresh() end
+  local app = row_of(id)
+  if app and app.terminal and type(app.command) == "table" and #app.command > 0 then
+    -- Starting a program changes nothing on the machine, so a dry run
+    -- starts it as the desktop entry would.
+    local cwd = app.cwd ~= "" and app.cwd or nil
+    local term, why = require("services.terminal").run(app.command, { title = app.name, cwd = cwd })
+    if not term then morf.log("warn", "impasto: no terminal for " .. app.name .. ": " .. tostring(why)) end
+    return
+  end
+  launch(id)
+end
+
 --- Runs an entry. Returns "close" when the launcher should close, "keep"
 --- when it stays open (a mode switched, a setting flipped).
 function M.activate(entry)
@@ -490,7 +625,7 @@ function M.activate(entry)
     -- Recorded here, not in `launch`, so the dock's launches do not count
     -- towards the ranking.
     M.record(entry.id)
-    launch(entry.id)
+    M.launch(entry.id)
   elseif kind == "panel" then
     island.open(entry.panel)
     return "panel"
@@ -511,6 +646,14 @@ function M.activate(entry)
   elseif kind == "settings" then
     require("settings.window").open()
     return "close"
+  elseif kind == "action" then
+    -- The island closes first; the tile waits for it where it has to
+    -- (a capture must not photograph the launcher).
+    local ok, controls = pcall(require, "services.controls")
+    local tile = ok and controls.tile_of(entry.id)
+    if tile then
+      morf.timer(1, function() controls.activate(tile) end, false)
+    end
   elseif kind == "timer" then
     timer.start(entry.milliseconds, "")
   elseif kind == "window" then
@@ -527,6 +670,19 @@ end
 function M.open_with(query)
   M.query:set(query or "")
   island.open("launcher")
+end
+
+--- The clipboard key (shell.qml's `clipboard` shortcut): pressed again on
+--- the clipboard mode it closes, pressed on another mode it switches.
+function M.toggle_clipboard()
+  local sigil = M.mode("clipboard").prefix
+  local query = M.query:get()
+  if island.state.open_panel() == "launcher" and query:sub(1, #sigil) == sigil then
+    island.close()
+    return "closed"
+  end
+  M.open_with(sigil)
+  return "open"
 end
 
 return M
