@@ -151,6 +151,8 @@ pub enum DrawCommand {
         color_overlay: Color,
         /// Aspect-ratio policy inside the resolved bounds.
         fill_mode: ImageFillMode,
+        /// Filtered sampling; false takes the nearest texel.
+        smooth: bool,
         /// Interpret source alpha as a cached signed distance field mask.
         distance_field: bool,
         /// Pixel distance represented on either side of the mask edge.

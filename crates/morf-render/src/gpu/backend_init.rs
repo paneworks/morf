@@ -179,6 +179,12 @@ impl WgpuBackend {
         let clear_pipeline =
             create_clear_pipeline(&device, &pipeline_layout, &clear_shader, format);
         let (glyph_pipeline, glyph_layout, glyph_sampler) = create_glyph_pipeline(&device, blend);
+        let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("morf nearest sampler"),
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
         let glyph_mask_atlas =
             GlyphAtlas::new(&device, &glyph_layout, &glyph_sampler, RasterContent::Mask);
         let glyph_color_atlas =
@@ -258,6 +264,7 @@ impl WgpuBackend {
             glyph_pipeline,
             glyph_layout,
             glyph_sampler,
+            nearest_sampler,
             glyph_mask_atlas,
             glyph_color_atlas,
             blur_pipeline,

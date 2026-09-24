@@ -97,6 +97,8 @@ pub struct WgpuBackend {
     pub(crate) glyph_pipeline: wgpu::RenderPipeline,
     pub(crate) glyph_layout: wgpu::BindGroupLayout,
     pub(crate) glyph_sampler: wgpu::Sampler,
+    /// Nearest-texel sampling for images drawn with `smooth = false`.
+    pub(crate) nearest_sampler: wgpu::Sampler,
     pub(crate) glyph_mask_atlas: GlyphAtlas,
     pub(crate) glyph_color_atlas: GlyphAtlas,
     pub(crate) blur_pipeline: wgpu::RenderPipeline,

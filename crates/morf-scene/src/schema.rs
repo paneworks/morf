@@ -240,6 +240,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
             properties.extend([
                 string("source", ""),
                 string("fill_mode", "stretch"),
+                // Filtered when scaled, as a photograph wants; false samples
+                // the nearest pixel, as pixel art and a magnifier want.
+                boolean("smooth", true),
                 number("source_width", 0.0),
                 number("source_height", 0.0),
                 boolean("distance_field", false),

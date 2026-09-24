@@ -294,6 +294,7 @@ fn images_and_icons_emit_texture_commands() {
             source,
             icon_theme: None,
             fill_mode: ImageFillMode::PreserveAspectFit,
+            smooth: true,
             ..
         } if source == "/tmp/wallpaper.webp"
     ));

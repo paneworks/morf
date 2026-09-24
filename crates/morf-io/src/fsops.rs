@@ -443,6 +443,11 @@ pub fn user_dir(kind: &str) -> Option<PathBuf> {
             .map(PathBuf::from),
         other => {
             let key = format!("XDG_{}_DIR", other.to_ascii_uppercase());
+            // The environment first, as xdg-user-dir itself reads it: a
+            // session that exports XDG_PICTURES_DIR means it.
+            if let Some(value) = std::env::var_os(&key).filter(|value| !value.is_empty()) {
+                return Some(PathBuf::from(expand(&value.to_string_lossy())));
+            }
             let config = env_or("XDG_CONFIG_HOME", ".config")?;
             let text = fs::read_to_string(config.join("user-dirs.dirs")).ok();
             let named = text.as_deref().and_then(|text| {

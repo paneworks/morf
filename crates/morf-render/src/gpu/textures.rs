@@ -66,6 +66,7 @@ pub(crate) struct TextureKey {
     pub(crate) scale_120: u32,
     pub(crate) distance_field: bool,
     pub(crate) distance_field_spread: u32,
+    pub(crate) smooth: bool,
 }
 
 #[derive(Default)]
@@ -98,6 +99,8 @@ pub(crate) struct TextureBatchContext<'a> {
     pub(crate) queue: &'a wgpu::Queue,
     pub(crate) layout: &'a wgpu::BindGroupLayout,
     pub(crate) sampler: &'a wgpu::Sampler,
+    /// Nearest-texel sampling, for images that ask not to be smoothed.
+    pub(crate) nearest: &'a wgpu::Sampler,
     pub(crate) target_size: (u32, u32),
     /// Textures the compositor drew into directly, by name.
     pub(crate) external: &'a HashMap<String, super::backend_types::ExternalTexture>,
@@ -124,6 +127,7 @@ pub(crate) fn create_texture_batch(
             icon_theme,
             color_overlay,
             fill_mode,
+            smooth,
             distance_field,
             distance_field_spread,
             distance_field_style,
@@ -180,6 +184,7 @@ pub(crate) fn create_texture_batch(
             scale_120,
             distance_field: *distance_field,
             distance_field_spread: distance_field_spread.to_bits(),
+            smooth: *smooth,
         };
         used.insert(key.clone());
         if let Some(image) = textures.get(&key) {
@@ -269,7 +274,11 @@ pub(crate) fn create_texture_batch(
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(context.sampler),
+                        resource: wgpu::BindingResource::Sampler(if *smooth {
+                            context.sampler
+                        } else {
+                            context.nearest
+                        }),
                     },
                 ],
             });

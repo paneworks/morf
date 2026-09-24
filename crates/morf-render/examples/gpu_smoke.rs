@@ -81,6 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 icon_theme: None,
                 color_overlay: Color::rgba8(0, 0, 0, 0),
                 fill_mode: ImageFillMode::PreserveAspectFit,
+                smooth: true,
                 distance_field: false,
                 distance_field_spread: 8.0,
                 distance_field_style: DistanceFieldStyle::default(),
