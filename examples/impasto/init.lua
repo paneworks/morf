@@ -132,12 +132,25 @@ for _, name in ipairs { "controls", "launcher", "overview", "wifi", "bluetooth",
 end
 morf.ipc.close = function() island.close() return "" end
 morf.ipc.layer = function() return island.state.layer() end
+morf.ipc.wallpaper = function(path)
+  local wallpaper = require("services.wallpaper")
+  if path and path ~= "" then wallpaper.apply(path) else wallpaper.step(1) end
+  return wallpaper.current:get()
+end
+morf.ipc.theme = function(id)
+  if id and id ~= "" then require("services.theme").set_theme(id) end
+  return require("services.theme").active_id:get()
+end
 morf.ipc.flash = function(label) island.state.flash("󰕾", label or "Volume", 0.6) return "ok" end
 
 -- ------------------------------------------------------------------- root --
 
+-- Testing in a nested compositor without layer-shell: the wallpaper is
+-- drawn here, under the bar, and the root covers the whole screen.
+local inline_wallpaper = (morf.env("IMPASTO_INLINE_WALLPAPER") or "") ~= ""
 ui.Item {
   width = SCREEN_W,
-  height = morf.surface.height,
+  height = inline_wallpaper and SCREEN_H or morf.surface.height,
+  inline_wallpaper and require("desktop.wallpaper").build(SCREEN_W, SCREEN_H) or ui.Item {},
   bar.build(SCREEN_W),
 }

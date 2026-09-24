@@ -87,6 +87,9 @@ M.defaults = {
   wallpaper = "",
   wallpaperDir = "~/.local/share/wallpapers",
   theme = "adaptive",
+  -- Off by default: writing other programs' colour files is writing into
+  -- the user's dotfiles.
+  writeAppThemes = false,
   language = "en",
 }
 

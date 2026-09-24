@@ -78,11 +78,14 @@ function kit.button(values)
   out[#out + 1] = ui.MouseArea {
     anchors = { fill = true },
     cursor = "pointer",
+    -- Right as well only when something answers it, so a plain button lets
+    -- a right click through to whatever is under it.
+    accepted_buttons = on_right_click and { "left", "right" } or "left",
     on_entered = function() hovered:set(true) end,
     on_exited = function() hovered:set(false) pressed:set(false) end,
     on_pressed = function() pressed:set(true) end,
     on_released = function() pressed:set(false) end,
-    on_clicked = function(button)
+    on_clicked = function(_, _, _, _, button)
       if button == "right" then
         if on_right_click then on_right_click() end
       elseif on_click then
