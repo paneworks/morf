@@ -17,6 +17,9 @@
 --   family <key> <family>  change a widget's shape
 --   menu [key]             open the right-click menu (at the board's middle)
 --   day <key> [yyyy-mm-dd]  a calendar widget's day view (none: the month)
+--   note_edge <key> <edge> | note_grid <note> <col> <row> | deck_edge <key> <edge>
+--   deck_add <edge> | along <deck> <0..1> | takes_new <deck> <1|0> | light <edge>
+--                          what the pointer does while arranging, for a bench
 --   theme <modern|analogue>
 --   list                   the rows, one per line
 
@@ -114,6 +117,23 @@ morf.ipc.desk = function(verb, a, b, c)
     if not pick then return "no calendar face for " .. tostring(a) end
     pick.pick(b or "")
     return pick.day()
+  -- The drops the pointer makes while arranging, for a bench without one.
+  elseif verb == "note_edge" then
+    desk.note_to_edge(a or "", b or "")
+    return desk.placement_of((require("desktop.sources").notes.note_for(desk.entry_of(a or "")) or {}).key or "")
+  elseif verb == "note_grid" then
+    return tostring(desk.note_to_grid(a or "", tonumber(b) or 0, tonumber(c) or 0))
+  elseif verb == "deck_edge" then
+    desk.set_deck_edge(a or "", b or "")
+  elseif verb == "deck_add" then
+    desk.add_deck(a or "")
+  elseif verb == "along" then
+    desk.set_deck_along(a or "", tonumber(b) or 0)
+  elseif verb == "takes_new" then
+    desk.set_takes_new(a or "", b ~= "0" and b ~= "false")
+  elseif verb == "light" then
+    require("services.deck").receiving:set(a or "")
+    return a or ""
   elseif verb == "theme" then
     settings.set("desktopTheme", a == "analogue" and "analogue" or "modern")
     return a or "modern"

@@ -134,6 +134,7 @@ function M.arranging(width, height)
   local tray = optional("desktop.tray")
   local inspector = optional("desktop.inspector")
   local picker = optional("desktop.picker")
+  local decks = optional("desktop.arrange.decks")
   local function board_node(children)
     local node = {
       x = function() return desk.board().x end,
@@ -179,6 +180,7 @@ function M.arranging(width, height)
         model = desk.keys,
         delegate = function(r) return widget.build(r.key, true) end,
       },
+      decks and ui.Item { z = 2, anchors = { fill = true }, decks.build() } or ui.Item {},
       tray and ui.Item { z = 3, anchors = { fill = true }, tray.build() } or ui.Item {},
       inspector and ui.Item { z = 5, anchors = { fill = true }, inspector.build() } or ui.Item {},
       picker and ui.Item { z = 5, anchors = { fill = true }, picker.build() } or ui.Item {},
@@ -210,10 +212,14 @@ local function choose(id)
     local ok, window = pcall(require, "settings.window")
     if ok then window.open() end
   elseif id == "open" then
-    local row = desk.entry_of(key)
     local S = require("desktop.sources")
-    local note = S.notes.note_for(row)
-    S.notes.open(note and note.key or "")
+    local on_tab = desk.menu_note:get()
+    if on_tab ~= "" then
+      S.notes.open(on_tab)
+    else
+      local note = S.notes.note_for(desk.entry_of(key))
+      S.notes.open(note and note.key or "")
+    end
   elseif id == "edit" then
     desk.edit(true)
     desk.select(key)
@@ -238,7 +244,10 @@ function M.fill_menu()
     local row = desk.entry_of(key)
     if row and row.id == "notes" then rows[#rows + 1] = { id = "open", label = "Open", icon = "󰏫" } end
     rows[#rows + 1] = { id = "edit", label = "Edit", icon = "󰆾" }
-    rows[#rows + 1] = { id = "remove", label = "Remove", icon = "󰆴", warn = true }
+    -- A deck's tab: open the note, or arrange the deck (Deck.qml's menu).
+    if not desk.is_deck(row) then
+      rows[#rows + 1] = { id = "remove", label = "Remove", icon = "󰆴", warn = true }
+    end
   end
   menu_rows:replace(rows, "id")
   menu_count:set(#rows)

@@ -549,12 +549,12 @@ end
 function S.notes.open(key)
   if notes_service and notes_service.open then pcall(notes_service.open, key) end
   local ok, island = pcall(require, "bar.island")
-  if ok then pcall(island.toggle, "notes") end
+  if ok then pcall(island.open, "notes") end
 end
 function S.notes.create()
   if notes_service and notes_service.create then pcall(notes_service.create) end
   local ok, island = pcall(require, "bar.island")
-  if ok then pcall(island.toggle, "notes") end
+  if ok then pcall(island.open, "notes") end
 end
 
 -- ----------------------------------------------------------- pets, games --

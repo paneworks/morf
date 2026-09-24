@@ -12,7 +12,7 @@
 -- `picture`/`caption` for a photo, `note` for a note, and the spectrum's look
 -- (`look`, `fill`, `color`, `color2`, `bar`, `gap`, `lows`, `peaks`). A row
 -- with an `edge` is a spectrum along that edge of the screen instead of a
--- square (notes on an edge belong to the deck, which is another port's).
+-- square, or a deck of notes there (the decks section below).
 --
 -- The rows are kept here and written back to `desktopWidgets` on a short
 -- debounce, so a drag is one write. Every screen runs the configuration
@@ -438,6 +438,7 @@ end
 
 M.keys = morf.list_model({})          -- the squares on this board, by key
 M.spectrum_keys = morf.list_model({}) -- the spectra along its edges
+M.deck_keys = morf.list_model({})     -- the note decks on its edges
 M.face_models = {}                    -- key -> the one-row face models of its widgets
 
 local writing = false     -- a write is waiting to be saved
@@ -453,15 +454,17 @@ end
 
 local function sync()
   sync_queued = false
-  local keys, edges = {}, {}
+  local keys, edges, decks = {}, {}, {}
   for _, row in ipairs(rows) do
     if here(row) then
       if M.is_spectrum(row) then edges[#edges + 1] = { key = row.key }
-      elseif not M.is_edge(row) then keys[#keys + 1] = { key = row.key } end
+      elseif M.is_edge(row) then decks[#decks + 1] = { key = row.key }
+      else keys[#keys + 1] = { key = row.key } end
     end
   end
   M.keys:replace(keys, "key")
   M.spectrum_keys:replace(edges, "key")
+  M.deck_keys:replace(decks, "key")
   for key, models in pairs(M.face_models) do
     local row
     for _, r in ipairs(rows) do if r.key == key then row = r end end
@@ -844,6 +847,256 @@ function M.spectrum_away()
   return ws and ws > 0 and hypr.occupied(ws) or false
 end
 
+-- ------------------------------------------------------------------- decks --
+--
+-- Notes on the screen edges: a row with an `edge` that is not a spectrum,
+-- `{ key, id = "notes", edge, notes = { note keys }, along, takesNew,
+-- screen }`. One deck per edge and screen; an empty deck is removed. Every
+-- move first takes the note from wherever it was. The geometry and the
+-- pointer's state over the tabs are `services/deck.lua`'s.
+
+local function notes_service()
+  local ok, notes = pcall(require, "services.notes")
+  return ok and notes or nil
+end
+
+function M.is_deck(row) return M.is_edge(row) and row.id ~= "spectrum" end
+
+--- Live, unarchived note keys on a deck row.
+function M.deck_notes(row)
+  local notes = notes_service()
+  local out = {}
+  for _, key in ipairs(row and type(row.notes) == "table" and row.notes or {}) do
+    local note = notes and type(key) == "string" and notes.entry(key)
+    if note and not note.archived then out[#out + 1] = key end
+  end
+  return out
+end
+
+--- The decks on this screen that have notes to show.
+function M.decks()
+  revision:get()
+  local out = {}
+  for _, row in ipairs(rows) do
+    if M.is_deck(row) and here(row) and #M.deck_notes(row) > 0 then out[#out + 1] = row end
+  end
+  return out
+end
+
+function M.deck_on(edge)
+  for _, row in ipairs(M.decks()) do if row.edge == edge then return row end end
+  return nil
+end
+
+--- Position along the edge, as a 0..1 fraction of the free run.
+function M.along_of(row)
+  local own = row and row.along
+  return type(own) == "number" and math.max(0, math.min(1, own)) or 0
+end
+
+function M.set_deck_along(key, along)
+  if M.is_deck(M.entry_of(key)) then M.update(key, { along = math.max(0, math.min(1, along)) }) end
+end
+
+--- Where a note is: "grid", an edge, or "" for nowhere.
+function M.placement_of(note_key)
+  revision:get()
+  for _, row in ipairs(rows) do
+    if not M.is_edge(row) and row.id == "notes" and row.note == note_key then return "grid" end
+  end
+  for _, row in ipairs(rows) do
+    if M.is_deck(row) then
+      for _, key in ipairs(M.deck_notes(row)) do
+        if key == note_key then return row.edge end
+      end
+    end
+  end
+  return ""
+end
+
+-- `list` without any widget or deck entry for this note; decks left empty
+-- are dropped.
+local function without_note(list, note_key)
+  local kept = {}
+  for _, row in ipairs(list) do
+    if not M.is_deck(row) then
+      if not (row.id == "notes" and row.note == note_key) then kept[#kept + 1] = row end
+    else
+      local left = {}
+      for _, key in ipairs(M.deck_notes(row)) do if key ~= note_key then left[#left + 1] = key end end
+      if #left > 0 then
+        local next_row = copy(row)
+        next_row.notes = left
+        kept[#kept + 1] = next_row
+      end
+    end
+  end
+  return kept
+end
+
+local function keep_selection(list)
+  local selected = M.selected:get()
+  if selected == "" then return end
+  for _, row in ipairs(list) do if row.key == selected then return end end
+  M.selected:set("")
+end
+
+function M.remove_note(note_key)
+  local kept = without_note(rows, note_key)
+  keep_selection(kept)
+  write(kept)
+end
+
+--- Puts a note on an edge at `index` (1-based; nil for the end), joining the
+--- deck there or starting one. A deck keeps its key and place even when this
+--- was its only note, so a tab being dragged is not destroyed.
+function M.place_note(note_key, edge, index)
+  local notes = notes_service()
+  if not notes or not notes.entry(note_key) then return end
+  local ok = false
+  for _, e in ipairs(M.edges) do if e == edge then ok = true end end
+  if not ok then return end
+  local target
+  for _, row in ipairs(rows) do
+    if M.is_deck(row) and here(row) and row.edge == edge then target = row end
+  end
+  if not target then
+    local made = { key = M.new_key("notes"), id = "notes", edge = edge, notes = { note_key }, along = 0,
+      screen = screen_field() }
+    local kept = without_note(rows, note_key)
+    kept[#kept + 1] = made
+    write(kept)
+    return
+  end
+  local left = {}
+  for _, key in ipairs(M.deck_notes(target)) do if key ~= note_key then left[#left + 1] = key end end
+  index = math.max(1, math.min(#left + 1, index or (#left + 1)))
+  table.insert(left, index, note_key)
+  local others = {}
+  for _, row in ipairs(rows) do if row.key ~= target.key then others[#others + 1] = row end end
+  local kept = without_note(others, note_key)
+  local next_row = copy(target)
+  next_row.notes = left
+  kept[#kept + 1] = next_row
+  write(kept)
+end
+
+--- A note to the nearest free 2x2 at or near a cell. False when there is
+--- no room.
+function M.note_to_grid(note_key, col, row)
+  local notes = notes_service()
+  if not notes or not notes.entry(note_key) then return false end
+  local spot = M.nearest_free(col or 0, row or 0, "2x2", "")
+  if not spot then return false end
+  local made = { key = M.new_key("notes"), id = "notes", col = spot.col, row = spot.row, family = "2x2",
+    note = note_key, screen = screen_field() }
+  local kept = without_note(rows, note_key)
+  kept[#kept + 1] = made
+  write(kept)
+  return true
+end
+
+--- A notes widget dragged to an edge: its note joins the deck there.
+function M.note_to_edge(key, edge)
+  local widget = M.entry_of(key)
+  if not widget then return end
+  local note = require("desktop.sources").notes.note_for(widget)
+  if not note then return end
+  if M.selected:get() == key then M.selected:set("") end
+  M.place_note(note.key, edge)
+end
+
+--- The card's notes dropped on an edge: the newest note goes there.
+function M.add_deck(edge)
+  local notes = notes_service()
+  local note = notes and notes.newest()
+  if note then M.place_note(note.key, edge) end
+end
+
+--- A deck to another edge, merging into the deck already there.
+function M.set_deck_edge(key, edge)
+  local deck = M.entry_of(key)
+  local ok = false
+  for _, e in ipairs(M.edges) do if e == edge then ok = true end end
+  if not M.is_deck(deck) or not ok or deck.edge == edge then return end
+  local other = M.deck_on(edge)
+  if not other then
+    M.update(key, { edge = edge })
+    return
+  end
+  local merged = M.deck_notes(other)
+  local have = {}
+  for _, n in ipairs(merged) do have[n] = true end
+  for _, n in ipairs(M.deck_notes(deck)) do if not have[n] then merged[#merged + 1] = n end end
+  if M.selected:get() == key then M.selected:set(other.key) end
+  local out = {}
+  for _, row in ipairs(rows) do
+    if row.key == other.key then
+      local next_row = copy(row)
+      next_row.notes = merged
+      if deck.takesNew == true then next_row.takesNew = true end
+      out[#out + 1] = next_row
+    elseif row.key ~= key then
+      out[#out + 1] = row
+    end
+  end
+  write(out)
+end
+
+--- The one deck new notes land on: `takesNew` on its row, cleared from
+--- every other deck when set.
+function M.set_takes_new(key, on)
+  if not M.is_deck(M.entry_of(key)) then return end
+  local out = {}
+  for _, row in ipairs(rows) do
+    if M.is_deck(row) then
+      local next_row = copy(row)
+      next_row.takesNew = (on and row.key == key) and true or nil
+      out[#out + 1] = next_row
+    else
+      out[#out + 1] = row
+    end
+  end
+  write(out)
+end
+
+function M.takes_new(row) return row ~= nil and row.takesNew == true end
+
+--- A note just written lands on the deck that takes new notes, if any.
+function M.note_added(note_key)
+  for _, row in ipairs(M.decks()) do
+    if row.takesNew == true then M.place_note(note_key, row.edge) return end
+  end
+end
+
+--- A note ticked on or off a deck in its inspector.
+function M.toggle_deck_note(key, note_key)
+  local deck = M.entry_of(key)
+  if not M.is_deck(deck) then return end
+  local list = M.deck_notes(deck)
+  for _, n in ipairs(list) do
+    if n == note_key then
+      local left = {}
+      for _, other in ipairs(list) do if other ~= note_key then left[#left + 1] = other end end
+      if #left == 0 then M.remove(key) else M.update(key, { notes = left }) end
+      return
+    end
+  end
+  M.place_note(note_key, deck.edge)
+end
+
+-- A note archived or deleted leaves the desk; a new one lands on the deck
+-- that takes new notes.
+do
+  local notes = notes_service()
+  if notes then
+    notes.on_removed[#notes.on_removed + 1] = function(key)
+      if M.placement_of(key) ~= "" then M.remove_note(key) end
+    end
+    notes.on_added[#notes.on_added + 1] = function(key) M.note_added(key) end
+  end
+end
+
 -- ---------------------------------------------------------------- pictures --
 
 M.picture_types = { png = true, jpg = true, jpeg = true, webp = true, bmp = true }
@@ -890,6 +1143,8 @@ M.menu_open = morf.signal("impasto.desk.menu.open", false)
 M.menu_key = morf.signal("impasto.desk.menu.key", "")
 M.menu_x = morf.signal("impasto.desk.menu.x", 0)
 M.menu_y = morf.signal("impasto.desk.menu.y", 0)
+-- The note whose deck tab the menu was opened on, "" for a widget's menu.
+M.menu_note = morf.signal("impasto.desk.menu.note", "")
 
 function M.set_landing(spot, family_id)
   if not spot then M.landing_family:set("") return end
@@ -930,8 +1185,9 @@ function M.select(key)
   M.selected:set(key or "")
 end
 
-function M.open_menu(key, x, y)
+function M.open_menu(key, x, y, note)
   M.menu_key:set(key or "")
+  M.menu_note:set(note or "")
   M.menu_x:set(x)
   M.menu_y:set(y)
   if M.on_menu_open then M.on_menu_open() end

@@ -1,17 +1,20 @@
 -- Notes on the screen edges: tabs that peek out under the pointer.
 --
--- Port of Deck.qml. At rest each note on an edge is a thin strip of its
+-- Port of Deck.qml, at rest. Each note on an edge is a thin strip of its
 -- paper; hovering slides the tabs out with their titles, the tab under the
--- pointer peeks the whole note beside it, and a click opens the note in the
--- island. A tab dragged along its edge takes another place in the deck;
--- pulled well off the edge and let go, it leaves the deck.
+-- pointer peeks the whole note beside it, a click opens the note in the
+-- island, and a right click offers Open and Edit (the desk's menu; Edit
+-- arranges the desk with the deck selected). A tab is never dragged at
+-- rest: moving a note, or a deck, is arranging's (desktop/arrange/decks.lua
+-- draws the decks on the board then, and these surfaces step aside).
 --
 -- The original is one full-screen surface with a computed input mask. Here
 -- each edge that has a deck gets its own small layer surface, as tall (or
 -- wide) as its deck and its peek need, and the surface's input region is
 -- morf's usual one -- only where there is a MouseArea, so only the tabs and
 -- the peek take the pointer and the desktop under the rest gets its clicks.
--- It never takes the keyboard.
+-- It never takes the keyboard. The surfaces sit on the desk's board, inset
+-- from the bar's band and the dock's, so a deck never lies over the dock.
 --
 -- Hidden under a fullscreen window, and with `deckOnEmpty` on any workspace
 -- that has windows (`services/deck.lua`).
@@ -21,6 +24,7 @@ local theme = require("theme")
 local notes = require("services.notes")
 local service = require("services.deck")
 local island = require("bar.island")
+local desk = require("services.desktop")
 local kit = require("components.kit")
 local sticky = require("components.sticky")
 
@@ -31,9 +35,10 @@ local screen = (morf.screens or {})[1] or {}
 local SCREEN_W = tonumber(screen.width) or 1920
 local SCREEN_H = tonumber(screen.height) or 1080
 
--- The surfaces sit in the usable area, under the bar's reserved band.
-local function board_width() return SCREEN_W end
-local function board_height() return SCREEN_H - theme.bar_reserve() end
+-- The surfaces sit on the desk's board: under the bar's band, clear of
+-- the dock's.
+local function board_width() return desk.board().width end
+local function board_height() return desk.board().height end
 
 local SHADOW = 16
 -- A side surface's depth: the tabs, the gap and the peek with its shadow.
@@ -50,7 +55,7 @@ local function retract_later()
   local mine = retract_generation
   -- After a moment, so moving from a tab to its peek is not leaving.
   morf.timer(320, function()
-    if mine == retract_generation and hover_count <= 0 and D.dragging:get() == "" then
+    if mine == retract_generation and hover_count <= 0 then
       D.revealed:set(false)
       D.peeked:set("")
     end
@@ -69,7 +74,7 @@ local function exited()
 end
 
 morf.effect("impasto.deck.reveal", function()
-  local out = D.revealed:get() or D.peeked:get() ~= "" or D.dragging:get() ~= ""
+  local out = D.revealed:get() or D.peeked:get() ~= ""
   reveal:set(out and 1 or 0)
 end)
 
@@ -84,9 +89,6 @@ end
 
 local function build_edge(edge)
   local vertical = edge ~= "bottom"
-  local drop_slot = morf.signal("impasto.deck." .. edge .. ".drop", 0)
-  local pulled_off = morf.signal("impasto.deck." .. edge .. ".off", false)
-  local ghost_at = morf.signal("impasto.deck." .. edge .. ".ghost", 0)
 
   local function the_deck() return D.deck_on(edge) end
   local function count() local d = the_deck() return d and #d.notes or 0 end
@@ -120,25 +122,17 @@ local function build_edge(edge)
     return D.sliver + (D.tab_depth - D.sliver) * reveal:get()
   end
 
-  -- A slot's slot while a tab of this deck is dragged: the others step
-  -- aside for where it would land.
-  local function shown_slot(key, index)
-    local dragging = D.dragging:get()
-    if dragging == "" or dragging == key or pulled_off:get() then return index end
-    local d = the_deck()
-    local from = 0
-    for i, other in ipairs(d and d.notes or {}) do if other == dragging then from = i end end
-    if from == 0 then return index end
-    local at = index
-    if from < index then at = at - 1 end
-    if drop_slot:get() <= at then at = at + 1 end
-    return at
-  end
-
   local function slot_of(key)
     local d = the_deck()
     for i, other in ipairs(d and d.notes or {}) do if other == key then return i end end
     return 1
+  end
+
+  -- The surface's top left on the board, for the menu's place.
+  local function origin()
+    if edge == "right" then return board_width() - THICK, 0 end
+    if edge == "bottom" then return 0, board_height() - THICK_BOTTOM end
+    return 0, 0
   end
 
   -- Rounded on the screen side, square against the edge.
@@ -159,7 +153,7 @@ local function build_edge(edge)
   local function tab(row)
     local key = row.key
     local note = function() return notes.entry(key) end
-    local along = function() return D.tab_at(start(), shown_slot(key, slot_of(key))) end
+    local along = function() return D.tab_at(start(), slot_of(key)) end
     local title = kit.text {
       anchors = { center_in = true },
       width = D.tab_length - 16, elide = "right", horizontal_alignment = "center",
@@ -192,43 +186,36 @@ local function build_edge(edge)
       top_left_radius = corners[1], top_right_radius = corners[2],
       bottom_right_radius = corners[3], bottom_left_radius = corners[4],
       color = function() local n = note() return notes.paper_of(n and n.tint or "yellow") end,
-      opacity = function() return D.dragging:get() == key and 0.3 or 1 end,
       behavior = {
         x = theme.behave("medium"), y = theme.behave("medium"),
         width = theme.behave("medium"), height = theme.behave("medium"),
         color = theme.behave("fast"),
       },
       title,
+      -- A press opens the note, a right click the menu. Never a drag: a
+      -- note leaves its edge only while the desk is arranged, or from the
+      -- notes panel.
       ui.MouseArea {
-        anchors = { fill = true },
-        cursor = function() return D.dragging:get() == key and "grabbing" or "pointer" end,
+        anchors = { fill = true }, cursor = "pointer",
+        accepted_buttons = { "left", "right" },
         on_entered = function()
           entered()
-          if D.dragging:get() == "" then D.peeked:set(key) end
+          D.peeked:set(key)
         end,
         on_exited = exited,
-        on_clicked = function(button)
-          if button ~= "right" and D.dragging:get() == "" then open_note(key) end
-        end,
-        on_drag_started = function(sx, sy)
-          D.peeked:set("")
-          D.dragging:set(key)
-          drop_slot:set(slot_of(key))
-          ghost_at:set(vertical and sy or sx)
-        end,
-        on_dragged = function(sx, sy)
-          local along_edge = vertical and sy or sx
-          local across = vertical and (edge == "left" and sx or THICK - sx) or (THICK_BOTTOM - sy)
-          ghost_at:set(along_edge)
-          pulled_off:set(across > D.tab_depth + D.reach)
-          drop_slot:set(D.index_at(along_edge, count(), start()))
-        end,
-        on_drag_finished = function()
-          local off, slot = pulled_off:get(), drop_slot:get()
-          D.dragging:set("")
-          pulled_off:set(false)
-          if off then service.remove_note(key) else service.place_note(key, edge, slot) end
-          retract_later()
+        on_clicked = function(sx, sy, lx, ly, button)
+          if button == "right" then
+            local d = the_deck()
+            if not d then return end
+            D.peeked:set("")
+            local ox, oy = origin()
+            local tx, ty = 0, 0
+            if edge == "bottom" then tx = D.tab_at(start(), slot_of(key)) else ty = D.tab_at(start(), slot_of(key)) end
+            if edge == "right" then tx = THICK - depth() elseif edge == "bottom" then ty = THICK_BOTTOM - depth() end
+            desk.open_menu(d.key, ox + tx + (lx or 0), oy + ty + (ly or 0), key)
+            return
+          end
+          open_note(key)
         end,
       },
     }
@@ -244,7 +231,7 @@ local function build_edge(edge)
   end)
   local showing = function()
     local key = D.peeked:get()
-    return key ~= "" and key == peek_key:get() and D.dragging:get() == ""
+    return key ~= "" and key == peek_key:get() and not desk.menu_open:get()
   end
   local peek_along_now = function()
     local key = peek_key:get()
@@ -283,33 +270,11 @@ local function build_edge(edge)
     },
   }
 
-  -- The dragged tab, a small square of its paper under the pointer.
-  local ghost_note = function() return notes.entry(D.dragging:get()) end
-  local ghost = ui.Item {
-    z = 10, width = 72, height = 72,
-    visible = function() return D.dragging:get() ~= "" and service.placement_of(D.dragging:get()) == edge end,
-    opacity = function() return pulled_off:get() and 0.6 or 0.94 end,
-    x = function()
-      if vertical then return edge == "left" and D.tab_depth + 8 or THICK - D.tab_depth - 80 end
-      return ghost_at:get() - 36
-    end,
-    y = function()
-      if vertical then return ghost_at:get() - 36 end
-      return THICK_BOTTOM - D.tab_depth - 80
-    end,
-    sticky.build {
-      note = ghost_note, width = 72, height = 72,
-      padding = 8, title_size = theme.size.label, body_size = 11, show_age = false,
-      shadow_color = "#00000080", shadow_blur = 12, shadow_offset_y = 3,
-    },
-  }
-
   local root = ui.Item {
     width = function() return vertical and THICK or extent() end,
     height = function() return vertical and extent() or THICK_BOTTOM end,
     ui.Repeater { model = model, delegate = tab },
     peek,
-    ghost,
   }
 
   local anchors = edge == "left" and { left = true, top = true }
@@ -319,6 +284,8 @@ local function build_edge(edge)
     namespace = "impasto-deck",
     layer = "top",
     keyboard_focus = "none",
+    -- Placed on the board by margins, not pushed by the other zones.
+    exclusive_zone = -1,
     anchors = anchors,
     width = vertical and THICK or 1,
     height = vertical and 1 or THICK_BOTTOM,
@@ -328,9 +295,20 @@ local function build_edge(edge)
 
   local open = false
   morf.effect("impasto.deck." .. edge .. ".window", function()
-    local want = the_deck() ~= nil and not service.away()
+    -- While arranging the board draws the decks (desktop/arrange/decks.lua).
+    local want = the_deck() ~= nil and not service.away() and not desk.editing:get()
     local size = extent()
     if vertical then window:size(THICK, size) else window:size(size, depth_box) end
+    local b = desk.board()
+    local margins = {
+      margin_top = vertical and b.y or 0,
+      margin_left = edge ~= "right" and b.x or 0,
+      margin_right = edge == "right" and (desk.screen_width - b.x - b.width) or 0,
+      margin_bottom = edge == "bottom" and (desk.screen_height - b.y - b.height) or 0,
+    }
+    for name, value in pairs(margins) do
+      if window[name] ~= value then window[name] = value end
+    end
     if want and not open then window:open() open = true
     elseif not want and open then window:close() open = false end
   end)

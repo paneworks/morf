@@ -4,8 +4,10 @@
 -- at the smallest family it offers -- the face it lands with -- packed as a
 -- mosaic at three quarters of its size, tallest first, then widest, then by
 -- name. Drag a face onto the grid, or click it to place it on the first
--- free cell; drop a widget on the card to remove it. The spectrum also lands
--- on a screen edge when let go against one.
+-- free cell; drop a widget on the card to remove it. Notes let go against a
+-- screen edge are a deck there (the newest note), and the spectrum the bars
+-- along it; the edge lights while they are held there
+-- (desktop/arrange/decks.lua draws the light).
 --
 -- Anywhere on the card that is not a face moves it, and so does the grip in
 -- its top left corner; the handle in the opposite corner resizes it in
@@ -40,7 +42,8 @@ local scrolled = morf.signal("impasto.desk.tray.scrolled", 0)
 local pulling = morf.signal("impasto.desk.tray.pulling", "")   -- the module being dragged out
 local ghost_x = morf.signal("impasto.desk.tray.ghost.x", 0)
 local ghost_y = morf.signal("impasto.desk.tray.ghost.y", 0)
-local receiving_edge = morf.signal("impasto.desk.tray.edge", "")
+local deck = require("services.deck")
+local receiving_edge = deck.receiving
 local held = morf.signal("impasto.desk.tray.held", false)       -- card moved or stretched
 
 -- The ghost is rebuilt for each module pulled.
@@ -165,10 +168,12 @@ local function aim(px, py)
     receiving_edge:set("")
     return
   end
-  if id == "spectrum" then
+  -- A notes piece against an edge is a deck there, and a spectrum the bars
+  -- along it if it has none yet; anywhere else, a square.
+  if id == "notes" or id == "spectrum" then
     local board = desk.board()
-    local edge = px < 24 and "left" or px > board.width - 24 and "right" or py > board.height - 24 and "bottom" or ""
-    if edge ~= "" and desk.spectrum_takes(edge) then
+    local edge = deck.edge_at(px, py, board.width, board.height)
+    if edge ~= "" and (id == "notes" or desk.spectrum_takes(edge)) then
       desk.set_landing(nil)
       receiving_edge:set(edge)
       return
@@ -187,7 +192,9 @@ local function let_go()
   pulling:set("")
   receiving_edge:set("")
   desk.set_landing(nil)
-  if edge ~= "" and id == "spectrum" then
+  if edge ~= "" and id == "notes" then
+    desk.add_deck(edge)
+  elseif edge ~= "" and id == "spectrum" then
     desk.add_spectrum(edge)
   elseif family ~= "" then
     desk.add(id, col, row)
@@ -399,29 +406,9 @@ function M.build()
     end,
   }
 
-  -- An edge a spectrum is headed for, lit along its length.
-  local edge_mark = ui.Rect {
-    visible = function() return receiving_edge:get() ~= "" end,
-    x = function()
-      local e = receiving_edge:get()
-      return e == "right" and desk.board().width - 6 or 0
-    end,
-    y = function() return receiving_edge:get() == "bottom" and desk.board().height - 6 or 0 end,
-    width = function()
-      local e = receiving_edge:get()
-      return (e == "left" or e == "right") and 6 or desk.board().width
-    end,
-    height = function()
-      local e = receiving_edge:get()
-      return (e == "left" or e == "right") and desk.board().height or 6
-    end,
-    radius = 3, color = C.accent,
-  }
-
   return ui.Item {
     anchors = { fill = true },
     card,
-    edge_mark,
     ui.Item { z = 10, anchors = { fill = true }, ghost },
   }
 end
