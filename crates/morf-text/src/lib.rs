@@ -355,6 +355,35 @@ fn looks_monospace(family: &str) -> bool {
 /// every other application. `fc-match` is asked once, and not waited on for
 /// long: a missing or hung fontconfig leaves the fixed list in charge.
 fn fontconfig_family(fonts: &FontSystem, generic: &str) -> Option<String> {
+    // Asked once per process: every font system (a test runner makes one per
+    // test) would otherwise start fontconfig again, and one started with a
+    // fresh cache directory rescans every installed font before it answers.
+    let answers = fontconfig_answers();
+    let index = match generic {
+        "sans-serif" => 0,
+        "serif" => 1,
+        _ => 2,
+    };
+    installed_family(fonts, answers[index].as_deref()?.trim())
+}
+
+static FONTCONFIG_ANSWERS: std::sync::OnceLock<[Option<String>; 3]> = std::sync::OnceLock::new();
+
+fn fontconfig_answers() -> &'static [Option<String>; 3] {
+    FONTCONFIG_ANSWERS.get_or_init(|| ["sans-serif", "serif", "monospace"].map(ask_fontconfig))
+}
+
+/// Asks fontconfig for the generic families now, under the environment as it
+/// is. A process about to point `XDG_CACHE_HOME` somewhere empty (a test
+/// runner isolating a configuration) calls this first, so fontconfig answers
+/// from the person's cache instead of rescanning every font into the new one.
+pub fn warm_font_preferences() {
+    let _ = fontconfig_answers();
+}
+
+/// What `fc-match` names for one generic family, or nothing when it is
+/// missing or slow.
+fn ask_fontconfig(generic: &str) -> Option<String> {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
     let mut child = Command::new("fc-match")
@@ -379,7 +408,7 @@ fn fontconfig_family(fonts: &FontSystem, generic: &str) -> Option<String> {
     }
     let mut name = String::new();
     std::io::Read::read_to_string(child.stdout.as_mut()?, &mut name).ok()?;
-    installed_family(fonts, name.trim())
+    Some(name.trim().to_owned()).filter(|name| !name.is_empty())
 }
 
 fn configure_generic_families(fonts: &mut FontSystem) {

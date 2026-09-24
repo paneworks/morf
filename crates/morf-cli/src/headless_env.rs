@@ -54,6 +54,8 @@ pub(crate) fn scratch_dir() -> PathBuf {
 /// Points the XDG directories into `base`, so a configuration that writes
 /// its settings writes them somewhere that is thrown away.
 pub(crate) fn isolate_home(base: &Path) -> Result<(), String> {
+    // Before the cache moves: fontconfig answers from the person's cache.
+    morf_text::warm_font_preferences();
     for (name, folder) in [
         ("XDG_CONFIG_HOME", "config"),
         ("XDG_DATA_HOME", "data"),
