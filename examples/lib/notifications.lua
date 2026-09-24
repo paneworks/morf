@@ -8,7 +8,11 @@
 --
 -- What comes out is a list the shell draws however it likes. Each entry:
 --   id, app, icon, summary, body, actions (list of {key, label}),
---   urgency (0 low, 1 normal, 2 critical), timeout_ms (0 = never), hints
+--   urgency (0 low, 1 normal, 2 critical), timeout_ms (0 = never), hints,
+--   image_path (a file path or URI, "" if none), image_data (nil, or
+--   { width, height, rowstride, has_alpha, bits_per_sample, channels, data }
+--   with `data` the raw pixel bytes as a list), category, desktop_entry,
+--   resident, transient
 -- and two verbs on the server: `dismiss(id)` when the person closed it and
 -- `invoke(id, key)` when they pressed an action, both of which tell the
 -- application through the signals it is waiting on.
@@ -87,6 +91,35 @@ function notifications.serve(options)
     return 1
   end
 
+  -- The spec renamed its image hints twice; senders still use all three
+  -- spellings, newest first here.
+  local function hint(hints, ...)
+    for index = 1, select("#", ...) do
+      local value = hints[select(index, ...)]
+      if value ~= nil then return value end
+    end
+  end
+
+  --- The picture a notification carries. A raw image (`image-data`, an
+  --- `(iiibiiay)` struct) wins over a path, which wins over the app icon
+  --- when that icon is itself a path -- the spec's own order.
+  local function image_of(hints, icon)
+    local data = hint(hints, "image-data", "image_data", "icon_data")
+    local image_data
+    if type(data) == "table" and #data >= 7 then
+      image_data = {
+        width = data[1], height = data[2], rowstride = data[3], has_alpha = data[4] == true,
+        bits_per_sample = data[5], channels = data[6], data = data[7],
+      }
+    end
+    local path = hint(hints, "image-path", "image_path")
+    if type(path) ~= "string" or path == "" then
+      path = (type(icon) == "string" and (icon:sub(1, 1) == "/" or icon:find("^file://")))
+        and icon or ""
+    end
+    return path, image_data
+  end
+
   service:on_call(function(call)
     local m = call.member
     if m == "GetServerInformation" then
@@ -108,6 +141,8 @@ function notifications.serve(options)
         id = server.next_id
         server.next_id = server.next_id + 1
       end
+      hints = hints or {}
+      local image_path, image_data = image_of(hints, icon)
       local entry = {
         id = id,
         app = app or "",
@@ -115,8 +150,16 @@ function notifications.serve(options)
         summary = summary or "",
         body = body or "",
         actions = pair_up(actions or {}),
-        hints = hints or {},
+        hints = hints,
         urgency = urgency_of(hints),
+        image_path = image_path,
+        image_data = image_data,
+        category = type(hints.category) == "string" and hints.category or "",
+        desktop_entry = type(hints["desktop-entry"]) == "string" and hints["desktop-entry"] or "",
+        -- Resident: stays after an action is pressed (a music player's
+        -- controls). Transient: not to be kept in a history.
+        resident = hints.resident == true,
+        transient = hints.transient == true,
         -- -1 means "you decide"; 0 means "never"; anything else is theirs.
         timeout_ms = (timeout == nil or timeout < 0) and server.default_timeout_ms or timeout,
       }
@@ -158,10 +201,14 @@ function notifications.serve(options)
     return remove(id, DISMISSED)
   end
 
-  --- The person pressed an action. Tells the application, then closes.
+  --- The person pressed an action. Tells the application, then closes --
+  --- unless the notification is resident, which is the sender asking for
+  --- it to stay.
   function server.invoke(id, key)
-    if not by_id[id] then return false end
+    local entry = by_id[id]
+    if not entry then return false end
     service:emit(PATH, INTERFACE, "ActionInvoked", { u(id), key })
+    if entry.resident then return true end
     return remove(id, DISMISSED)
   end
 
