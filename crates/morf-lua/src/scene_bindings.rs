@@ -267,6 +267,7 @@ pub(crate) fn node_metatable<'gc>(
         let mut state = state.try_borrow_mut().map_err(|_| {
             HostError("nodes cannot be written to from inside a layout function".to_owned())
         })?;
+        refuse_runtime_owned(&state, node.handle, &property).map_err(HostError)?;
         assign_scene_property(&mut state, node.handle, &property, value).map_err(HostError)?;
         // A text input takes a write in at once, so the caret a handler
         // reads back after setting `text` is already the one that text has.
@@ -282,6 +283,24 @@ pub(crate) fn node_metatable<'gc>(
     metatable.set_field(ctx, "__index", index);
     metatable.set_field(ctx, "__newindex", new_index);
     metatable
+}
+
+/// Refuses a configuration's write to a property the runtime keeps: a
+/// `MouseArea`'s `hovered` and `pressed` say what the pointer is doing, and
+/// a write would only be undone by the next pointer event.
+pub(crate) fn refuse_runtime_owned(
+    state: &ReactiveState,
+    node: NodeHandle,
+    property: &str,
+) -> Result<(), String> {
+    if matches!(property, "hovered" | "pressed")
+        && state.scene.element(node).ok() == Some(Element::MouseArea)
+    {
+        return Err(format!(
+            "MouseArea `{property}` is read-only: the pointer sets it"
+        ));
+    }
+    Ok(())
 }
 
 /// A text input's methods, called as `input:select(0, 4)`.

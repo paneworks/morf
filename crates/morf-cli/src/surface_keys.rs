@@ -100,7 +100,10 @@ pub(crate) fn dispatch_key_in_subtree(
         }
         KeyAction::Press { repeat } => repeat,
     };
-    if keysym == TAB {
+    // A node that set `tab_navigation = false` keeps Tab (and Shift+Tab,
+    // which arrives as ISO_Left_Tab) as a key of its own.
+    let keeps_tab = current.is_some_and(|node| !runtime.tab_navigates(node));
+    if keysym == TAB && !keeps_tab {
         *focused = runtime.next_key_target_in(root, current);
         runtime.set_key_focus(*focused);
         return true;
@@ -122,5 +125,70 @@ pub(crate) fn key_modifiers(modifiers: morf_wayland::KeyModifiers) -> KeyModifie
         shift: modifiers.shift,
         alt: modifiers.alt,
         logo: modifiers.logo,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use morf_lua::IpcValue;
+
+    fn tab_setup(first: &str) -> (Runtime, NodeHandle, NodeHandle) {
+        let mut runtime = Runtime::default();
+        let source = format!(
+            r#"
+                local ui = require("morf.ui")
+                local keys = {{}}
+                ui.Item {{
+                    ui.TextInput {{
+                        width = 100, height = 20, focus = true, {first}
+                        on_key_pressed = function(keysym) keys[#keys + 1] = keysym end,
+                    }},
+                    ui.TextInput {{ width = 100, height = 20 }},
+                }}
+                morf.ipc.keys = function() return #keys end
+            "#
+        );
+        runtime.execute("tab.lua", source.as_bytes()).unwrap();
+        let root = runtime.scene().roots()[0];
+        let children = runtime.scene().children(root).unwrap().to_vec();
+        (runtime, root, children[0])
+    }
+
+    #[test]
+    fn tab_moves_focus_unless_the_field_keeps_it() {
+        const TAB: u32 = 0xff09;
+        let (mut runtime, root, first) = tab_setup("");
+        let mut focused = Some(first);
+        dispatch_key_in_subtree(
+            &mut runtime,
+            root,
+            &mut focused,
+            TAB,
+            Some("\t"),
+            Default::default(),
+        );
+        assert_ne!(focused, Some(first));
+        assert_eq!(
+            runtime.call_ipc("keys", &[]).unwrap(),
+            [IpcValue::Integer(0)]
+        );
+
+        let (mut runtime, root, first) = tab_setup("tab_navigation = false,");
+        let mut focused = Some(first);
+        dispatch_key_in_subtree(
+            &mut runtime,
+            root,
+            &mut focused,
+            TAB,
+            Some("\t"),
+            Default::default(),
+        );
+        assert_eq!(focused, Some(first));
+        assert_eq!(
+            runtime.call_ipc("keys", &[]).unwrap(),
+            [IpcValue::Integer(1)]
+        );
+        assert_eq!(runtime.scene().string_value(first, "text").unwrap(), "");
     }
 }

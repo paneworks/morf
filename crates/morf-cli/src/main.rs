@@ -13,6 +13,7 @@ mod pacing;
 mod paint;
 mod pointer_cursor;
 mod services;
+mod socket_path;
 mod supervisor;
 mod surface_actions;
 mod surface_drag;

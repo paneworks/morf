@@ -26,6 +26,8 @@ pub(crate) fn wire_ipc_value(value: &IpcValue) -> WireValue {
         // A colour crosses the wire as its hex, which is what a caller can
         // print and what a shell can parse back.
         IpcValue::Color(color) => WireValue::String(color.to_pastel().to_rgb_hex_string(true)),
+        // A table a signal holds crosses the scalar wire as its JSON text.
+        IpcValue::Table(_) => WireValue::String(value.to_json().to_string()),
     }
 }
 

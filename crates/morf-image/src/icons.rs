@@ -21,34 +21,75 @@ impl IconResolver {
         }
     }
 
+    /// Creates a resolver over icon-theme roots and the unthemed pixmap
+    /// directories searched after every theme.
+    pub fn with_pixmaps(roots: Vec<PathBuf>, pixmaps: Vec<PathBuf>) -> Self {
+        Self { roots, pixmaps }
+    }
+
     /// Creates a resolver from XDG data directories and the legacy user icon root.
     pub fn from_environment() -> Self {
-        // The same directories desktop entries come from: the user's data
-        // home first, then `XDG_DATA_DIRS`, then `/usr/local/share` and
-        // `/usr/share` whatever that list said -- a Nix shell's list names
-        // only the store, and every icon on the machine went missing.
-        let data = morf_desktop::xdg_data_dirs();
+        Self::from_directories(
+            env::var_os("HOME").map(PathBuf::from),
+            env::var_os("XDG_DATA_HOME").map(PathBuf::from),
+            env::var_os("XDG_DATA_DIRS"),
+        )
+    }
+
+    /// The Icon Theme spec's base directories, in its order: `~/.icons`,
+    /// then `icons` under each data directory -- the ones desktop entries
+    /// come from (`morf_desktop::xdg_data_dirs`): the user's data home,
+    /// `XDG_DATA_DIRS`, then `/usr/local/share` and `/usr/share` whatever
+    /// that list said, since a Nix shell's list names only the store. After
+    /// the themes, `pixmaps` under each system data directory, which so
+    /// always ends at `/usr/share/pixmaps`, the spec's last resort.
+    pub fn from_directories(
+        home: Option<PathBuf>,
+        data_home: Option<PathBuf>,
+        data_dirs: Option<std::ffi::OsString>,
+    ) -> Self {
+        let has_data_home = data_home
+            .as_ref()
+            .is_some_and(|path| !path.as_os_str().is_empty())
+            || home.is_some();
+        let data = morf_desktop::xdg_data_dirs_from(
+            data_home.map(PathBuf::into_os_string),
+            home.clone().map(PathBuf::into_os_string),
+            data_dirs,
+        );
         let mut roots = Vec::new();
         let mut pixmaps = Vec::new();
-        let mut system = data.iter();
-        let data_home = env::var_os("XDG_DATA_HOME").is_some_and(|value| !value.is_empty())
-            || env::var_os("HOME").is_some();
-        if data_home && let Some(first) = system.next() {
-            roots.push(first.join("icons"));
+        if let Some(home) = &home {
+            roots.push(home.join(".icons"));
         }
-        // The legacy user root, between the user's data home and the system.
-        if let Some(home) = env::var_os("HOME") {
-            roots.push(PathBuf::from(home).join(".icons"));
-        }
-        for root in system {
+        for (index, root) in data.iter().enumerate() {
             roots.push(root.join("icons"));
-            pixmaps.push(root.join("pixmaps"));
+            // The user's data home keeps no pixmaps.
+            if !(has_data_home && index == 0) {
+                pixmaps.push(root.join("pixmaps"));
+            }
         }
         Self { roots, pixmaps }
     }
 
     /// Finds the closest icon file for a physical pixel size.
+    ///
+    /// In the Icon Theme spec's order: the theme and what it inherits, then
+    /// `hicolor`, then an unthemed file directly in a base directory, then
+    /// the pixmap directories. A name that is an absolute path to a file is
+    /// that file, as a desktop entry's `Icon=` may be.
     pub fn find(&self, name: &str, theme: &str, size: u32) -> Result<PathBuf, ImageError> {
+        let path = Path::new(name);
+        if path.is_absolute() {
+            return if path.is_file() {
+                Ok(path.to_path_buf())
+            } else {
+                Err(ImageError::IconNotFound(name.to_owned()))
+            };
+        }
+        if name.is_empty() || name.contains('/') {
+            return Err(ImageError::IconNotFound(name.to_owned()));
+        }
         let mut visited = HashSet::new();
         if let Some(path) = self.find_theme(name, theme, size, &mut visited) {
             return Ok(path);
@@ -58,7 +99,7 @@ impl IconResolver {
         {
             return Ok(path);
         }
-        for root in &self.pixmaps {
+        for root in self.roots.iter().chain(&self.pixmaps) {
             if let Some(path) = find_named_file(root, name) {
                 return Ok(path);
             }
@@ -214,9 +255,22 @@ fn parse_u32(value: Option<&String>) -> Option<u32> {
     value?.parse().ok()
 }
 
+const EXTENSIONS: [&str; 5] = ["svg", "png", "webp", "jpg", "jpeg"];
+
 fn find_named_file(directory: &Path, name: &str) -> Option<PathBuf> {
-    ["svg", "png", "webp", "jpg", "jpeg"]
+    // A name that already carries an extension -- `Icon=foo.png`, which
+    // the spec discourages and desktop files still write -- is that file.
+    let named = Path::new(name)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str()))
+        .then(|| directory.join(name));
+    named
         .into_iter()
-        .map(|extension| directory.join(format!("{name}.{extension}")))
+        .chain(
+            EXTENSIONS
+                .into_iter()
+                .map(|extension| directory.join(format!("{name}.{extension}"))),
+        )
         .find(|path| path.is_file())
 }

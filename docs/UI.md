@@ -216,7 +216,16 @@ ui.Layout {
 `morf.list_model(rows)` holds rows with stable identity. `model:replace(rows,
 "id")` matches by that field, so rows that stayed keep their nodes; without
 a key it matches by value. `insert`, `remove`, `move`, `set`, `get`, `len`
-as expected.
+as expected; `#model` and `model[i]` (so `ipairs(model)`) read like `len`
+and `get`.
+
+A binding that reads a model -- `len`, `get`, `index_of`, `#`, an index --
+depends on it, and runs again when any change lands on it:
+
+```lua
+local items = morf.list_model({})
+ui.Text { text = function() return items:len() .. " items" end }
+```
 
 `ui.Repeater { model, delegate }` builds one node per row and follows the
 model: rows that go are destroyed, rows that come are built, rows that
@@ -269,12 +278,36 @@ A binding or `morf.effect` may itself build nodes with bindings (or make
 another effect): those are registered when the running flush ends and get
 their first run straight after, before the caller sees the result.
 
+`morf.effect(name, fn, options)` is a binding with no property: it runs
+for what it does, and again whenever what it read changes. It returns a
+handle; `handle:dispose()` takes it out of the graph for good, and
+`handle:alive()` says whether it still is. `options.owner = node` ties it
+to a node: removing the node disposes it, so an effect made while building
+a panel goes with the panel. If its first run fails, `morf.effect` returns
+`false, message, handle`.
+
+```lua
+local panel = ui.Item {}
+morf.effect("panel.follow", function() panel.visible = open:get() end, { owner = panel })
+```
+
 ### Signals and state tables
 
-`morf.signal(name, value)` holds one scalar with `get`/`set`. Signals and
-state tables may be made anywhere, a binding included: a module that holds
-state can be `require`d for the first time from inside one, and its signals
-join the flush that is running.
+`morf.signal(name, value)` holds one value with `get`/`set`: a scalar, a
+colour, or a JSON-like table (string keys or a dense array, of those, at
+most 16 deep). A table is copied in on `set` and out on `get`, so changing
+what `get` returned changes nothing until it is `set`, and an equal table
+is no change: nothing re-runs. Over `morf ipc` a table is its JSON text.
+
+```lua
+local player = morf.signal("player", { title = "", artists = {} })
+player:set({ title = "Song", artists = { "A" } })
+ui.Text { text = function() return player:get().title end }
+```
+
+Signals and state tables may be made anywhere, a binding included: a
+module that holds state can be `require`d for the first time from inside
+one, and its signals join the flush that is running.
 
 `morf.state(table)` keeps a shape: each named field is a signal read and
 written through the proxy, a nested table is nested, an array is a list
@@ -569,7 +602,9 @@ box.
 The keys are the ones every text box has: arrows, Home/End (Ctrl for the
 whole text), Ctrl for a word at a time, Shift to select, Up/Down and
 PageUp/PageDown between lines, Ctrl+A, Ctrl+C/X/V (and Shift+Delete,
-Ctrl/Shift+Insert) through the compositor clipboard, Ctrl+Z and
+Ctrl/Shift+Insert) through the compositor clipboard -- Shift+Delete cuts
+only a selection; with nothing selected it deletes nothing and goes to
+`on_key_pressed`, so a launcher can bind it -- Ctrl+Z and
 Ctrl+Shift+Z or Ctrl+Y, Enter to `on_accepted(text)`, Escape to
 `on_escape()`. A click places the caret, a double click selects a word, a
 triple click the line, and a drag selects. A key the field has no use for
@@ -580,7 +615,10 @@ box. `modifiers` is a string such as `"ctrl+shift"`; every
 
 A field has the keyboard when `focus` is true, and one field at a time
 does: a click, a Tab, or writing `focus = true` moves it, and
-`on_focus_changed(focused)` says so. While it has it, the compositor's
+`on_focus_changed(focused)` says so. A field -- or any node with
+`on_key_pressed` -- that sets `tab_navigation = false` keeps Tab while it
+has the keyboard: Tab and Shift+Tab go to its `on_key_pressed` (for a
+completion, say) instead of moving focus. While it has it, the compositor's
 input method (text-input-v3) is enabled for it and what the input method
 commits is typed into the field.
 
@@ -685,6 +723,18 @@ ui.Rect {
   enter = { opacity = 0, translate_x = 32 },
   behavior = { opacity = { duration = 220 }, translate_x = { kind = "spring", stiffness = 260 } },
 }
+```
+
+### Hover and press
+
+A `MouseArea` keeps `hovered` (the pointer is over it, and it is the
+topmost area there) and `pressed` (a button or a touch went down on it and
+has not come up), both read-only. A binding follows them like any other
+property, so hover needs no signal and no `on_entered`:
+
+```lua
+local area = ui.MouseArea { anchors = { fill = true } }
+ui.Rect { color = function() return area.pressed and "#444" or area.hovered and "#333" or "#222" end }
 ```
 
 ### Cursors

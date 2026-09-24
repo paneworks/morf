@@ -101,6 +101,8 @@ pub(crate) struct PopupNodeAnchor {
 pub(crate) struct LuaEffect {
     pub(crate) closure: StashedClosure,
     pub(crate) sink: Option<EffectSink>,
+    /// The node whose removal ends a `morf.effect` given `owner = node`.
+    pub(crate) owner: Option<morf_scene::NodeHandle>,
 }
 
 #[derive(Clone, Default)]
@@ -146,6 +148,9 @@ pub(crate) struct ReactiveState {
     pub(crate) pending_effects: Vec<(u64, String)>,
     pub(crate) current_property_names: HashMap<String, (NodeHandle, String)>,
     pub(crate) property_revision: i64,
+    /// Each list model a binding has read, by address, with the revision
+    /// signal that binding depends on.
+    pub(crate) model_revisions: HashMap<usize, crate::model_revisions::ModelRevision>,
     /// Advances whenever the scene actually changes: a property lands on a new
     /// value, or a node is created, reparented, or removed.
     ///
@@ -363,6 +368,7 @@ impl ReactiveState {
         if self.flushing {
             return;
         }
+        self.collect_dead_models();
         let Some(graph) = self.graph.as_mut() else {
             return;
         };
@@ -466,6 +472,7 @@ impl ReactiveState {
             pending_effects: Vec::new(),
             current_property_names: HashMap::new(),
             property_revision: 0,
+            model_revisions: HashMap::new(),
             scene_revision: 0,
             reload_seed: HashMap::new(),
             reloadable: HashMap::new(),

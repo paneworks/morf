@@ -25,6 +25,7 @@ pub(crate) fn register_property_binding<'gc>(
             LuaEffect {
                 closure: ctx.stash(closure),
                 sink: Some(EffectSink::Property(PropertySink { node, property })),
+                owner: None,
             },
         );
         state.register_external_effect(token, name);
@@ -87,6 +88,7 @@ fn register_node_binding<'gc>(
             LuaEffect {
                 closure: ctx.stash(closure),
                 sink: Some(sink),
+                owner: None,
             },
         );
         state.register_external_effect(token, format!("{node:?}.{what}"));

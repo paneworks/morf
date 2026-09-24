@@ -3,8 +3,8 @@ use std::cell::{Ref, RefMut};
 use morf_scene::{NodeHandle, Scene};
 
 use crate::{
-    events::*, reactive_bindings::*, reactive_execute::*, runtime_helpers::*, surface_types::*,
-    types::*,
+    events::*, reactive_bindings::*, reactive_execute::*, runtime_helpers::*, scene_bindings::*,
+    surface_types::*, types::*,
 };
 
 impl Runtime {
@@ -373,6 +373,55 @@ impl Runtime {
         scene_node_in_subtree(&state.scene, root, node)
     }
 
+    /// Keeps a `MouseArea`'s `hovered` and `pressed` in step with the
+    /// pointer, so a binding follows hover without a signal per area.
+    /// Returns whether one changed.
+    fn track_pointer_state(&mut self, node: NodeHandle, event: UiEvent) -> bool {
+        let (property, value) = match event {
+            UiEvent::PointerEntered => ("hovered", true),
+            UiEvent::PointerExited => ("hovered", false),
+            UiEvent::Pressed => ("pressed", true),
+            UiEvent::Released | UiEvent::TouchCanceled => ("pressed", false),
+            _ => return false,
+        };
+        let mut state = self.reactive.borrow_mut();
+        if state.scene.element(node).ok() != Some(morf_scene::Element::MouseArea)
+            || state.scene.bool_value(node, property).ok() == Some(value)
+        {
+            return false;
+        }
+        assign_scene_property(&mut state, node, property, morf_scene::Value::Bool(value)).is_ok()
+    }
+
+    /// Runs the bindings a host-side write made stale, when no handler
+    /// will: the flush a handler's return would otherwise have been.
+    fn flush_after_event(&mut self) {
+        let flush = {
+            let mut state = self.reactive.borrow_mut();
+            state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)
+        };
+        if flush
+            && let Err(message) = self
+                .lua
+                .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
+        {
+            self.reactive
+                .borrow_mut()
+                .log(LogLevel::Warn, format!("after pointer: {message}"));
+        }
+    }
+
+    /// Whether Tab pressed while `node` has the keyboard moves focus on
+    /// (its `tab_navigation`, true unless it said otherwise), rather than
+    /// going to the node as a key.
+    pub fn tab_navigates(&self, node: NodeHandle) -> bool {
+        self.reactive
+            .borrow()
+            .scene
+            .bool_value(node, "tab_navigation")
+            .unwrap_or(true)
+    }
+
     /// Advances keyboard focus within one scene root.
     pub fn next_key_target_in(
         &self,
@@ -396,9 +445,13 @@ impl Runtime {
         event: UiEvent,
         args: &[IpcValue],
     ) -> bool {
+        let tracked = self.track_pointer_state(node, event);
         let handler = self.reactive.borrow().handlers.get(&(node, event)).cloned();
         let Some(handler) = handler else {
-            return false;
+            if tracked {
+                self.flush_after_event();
+            }
+            return tracked;
         };
         let result =
             self.run_handler(|ctx, limits| execute_handler_args(ctx, &handler, args, limits));

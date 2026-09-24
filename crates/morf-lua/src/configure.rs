@@ -106,6 +106,7 @@ pub(crate) fn configure_element<'gc>(
                 .insert(node, ctx.stash(closure));
             continue;
         }
+        refuse_runtime_owned(&state.borrow(), node, &property)?;
         if let Some(event) = handler_event(&property) {
             let LuaValue::Function(Function::Closure(closure)) = value else {
                 return Err(format!("{property} must be a function"));

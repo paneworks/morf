@@ -233,6 +233,9 @@ pub enum IpcValue {
     String(String),
     /// A colour value, so a signal or a state field may hold one.
     Color(morf_scene::Color),
+    /// A table a signal holds: a deep copy of a JSON-like Lua table.
+    /// Compared by content, so writing an equal table changes nothing.
+    Table(std::sync::Arc<crate::ipc_table::IpcTable>),
 }
 
 /// Deferred virtual keyboard request produced by Lua.
@@ -355,6 +358,9 @@ impl IpcValue {
             Self::Number(value) => LuaValue::Number(*value),
             Self::String(value) => LuaValue::String(ctx.intern(value.as_bytes())),
             Self::Color(color) => crate::api_color::scene_color_userdata(ctx, *color),
+            // A fresh copy each time: what a reader does to it stays with
+            // the reader.
+            Self::Table(table) => table.to_lua(ctx),
         }
     }
 

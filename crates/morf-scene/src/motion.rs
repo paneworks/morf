@@ -470,5 +470,8 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "selected_text_color"
             | "placeholder_color"
             | "focus"
+            | "tab_navigation"
+            | "hovered"
+            | "pressed"
     )
 }

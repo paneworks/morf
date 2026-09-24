@@ -46,4 +46,6 @@ pub(crate) struct Capture {
     pub(crate) reads: HashSet<SignalId>,
     pub(crate) property_reads: HashSet<(NodeHandle, String, bool)>,
     pub(crate) writes: Vec<(SignalId, IpcValue)>,
+    /// List models read whose revision signal does not exist yet.
+    pub(crate) model_reads: Vec<std::rc::Rc<std::cell::RefCell<morf_scene::ListModel>>>,
 }

@@ -144,6 +144,9 @@ pub(crate) fn evaluate_effect(
         };
         read_signal(state, effect, signal)?;
     }
+    for signal in crate::model_revisions::model_read_signals(state, capture.model_reads)? {
+        read_signal(state, effect, signal)?;
+    }
     for signal in capture.reads {
         read_signal(state, effect, signal)?;
     }
@@ -554,5 +557,9 @@ pub(crate) fn execute_ipc_handler(
         Ok(Err(error)) => return Err(error.to_string()),
         Err(error) => return Err(error.to_string()),
     };
-    values.into_iter().map(IpcValue::from_lua).collect()
+    // A table an IPC verb returns crosses the wire as JSON.
+    values
+        .into_iter()
+        .map(|value| IpcValue::from_lua_deep(ctx, value))
+        .collect()
 }
