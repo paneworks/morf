@@ -473,9 +473,13 @@ local function in_group_of(name)
     for gid in (status:match("\nGroups:([^\n]*)") or ""):gmatch("%d+") do own_groups[gid] = true end
   end
   if own_groups.root then return true end
-  local groups = read("/etc/group", 1024 * 1024) or ""
-  local gid = groups:match("\n" .. name .. ":[^:]*:(%d+):") or groups:match("^" .. name .. ":[^:]*:(%d+):")
-  return gid ~= nil and own_groups[gid] == true
+  local key = "name:" .. name
+  if own_groups[key] == nil then
+    local groups = "\n" .. (read("/etc/group", 1024 * 1024) or "")
+    local gid = groups:match("\n" .. name .. ":[^:]*:(%d+):")
+    own_groups[key] = gid ~= nil and own_groups[gid] == true
+  end
+  return own_groups[key]
 end
 
 local function writable(file)

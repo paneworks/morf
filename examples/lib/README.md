@@ -161,3 +161,44 @@ list of `{ name, old, new }`, and a manager that is not installed is absent.
 (both default true), `aur_url`, and `run(argv, on_done)` / `which(name)` to
 replace how programs are run and found (the tests do). `packages.vercmp(a,
 b)` is pacman's version comparison.
+
+## claude_usage
+
+Claude Code's token usage from its own transcripts, a port of impasto's
+`claude_usage.py`: tokens in the current five-hour billing block and in the
+last seven days, read from `~/.claude/projects/**/*.jsonl` with `morf.fs`.
+
+```lua
+local claude_usage = require("lib.claude_usage")
+local usage = claude_usage.new {}
+ui.Text { text = function()
+  local u = usage:get()
+  return u.available and ("%dk / 5h"):format(u.block_tokens // 1000) or ""
+end }
+```
+
+A token count is input + output + cache-creation tokens, as the original
+counts them (cache reads re-send the same context every turn and are left
+out). A turn written as several lines with one request id is counted once.
+The block starts on the hour of its first message within reach of a
+five-hour window.
+
+`usage:get()` is a tracked read of `{ available, block_start, block_end,
+block_tokens, block_messages, week_tokens, week_messages, peak_block_tokens,
+peak_week_tokens, files, scanning, skipped, updated }`. Reading is
+incremental: every file's offset, size and mtime are kept on disk
+(`state_path`), an unchanged file is not opened, a grown one is read from
+where the last pass stopped, and the work is a job in slices. A pass reads at
+most `pass_bytes` (32 MiB); while a backlog remains, `scanning` is true and
+the next pass follows a second later, files written within the block first.
+Files up to `max_read` (4 MiB) are read whole with `morf.fs.read`; larger ones
+a `chunk` at a time by running `dd` directly for the byte range (`morf.fs`
+has no ranged read). Options: `dir`, `state_path`, `interval` (60 s),
+`keep_hours` (five weeks), `pass_bytes`, `max_read`, `chunk`, `read_range`,
+`now`.
+
+`claude_usage.limits(options, on_done)` reports the plan's 5-hour and 7-day
+utilisation from the `anthropic-ratelimit-unified-*` headers, which only a
+real API request returns: it sends the smallest one (one output token) with
+Claude Code's OAuth token from `~/.claude/.credentials.json`. It is never
+called by the library itself.

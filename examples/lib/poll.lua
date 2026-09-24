@@ -24,7 +24,10 @@
 
 local morf = require("morf")
 
-local poll = {}
+local poll = {
+  --- Calls a job may make between yields, when it does not say.
+  slice = 1000,
+}
 
 -- ---------------------------------------------------------------------------
 -- Jobs
@@ -34,12 +37,12 @@ local poll = {}
 ---
 --- `spend(n)` counts work in calls (a unit is one call, about twenty-five
 --- instructions; `spend` is one itself) and yields once the slice
---- (`options.slice`, default 1500 -- under half a handler) is used up; the
---- job resumes a millisecond later. The returned handle has `cancel()` and
---- `done()`.
+--- (`options.slice`, default `poll.slice`, 1000: a quarter of a handler) is
+--- used up; the job resumes a millisecond later. The returned handle has
+--- `cancel()` and `done()`.
 function poll.job(body, on_done, options)
   options = options or {}
-  local slice = options.slice or 1500
+  local slice = options.slice or poll.slice
   local used = 0
   local finished = false
   local timer
