@@ -233,3 +233,22 @@ fn the_configuration_writes_text_caret_and_selection() {
         [IpcValue::Integer(2)]
     );
 }
+
+#[test]
+fn a_line_built_with_a_break_holds_it_as_a_space() {
+    // Built with its text and a caret at the end, a single line used to keep
+    // the break: shaped as two lines, it drew that caret on the empty one
+    // below. The field's rules apply from the first letter, as they do to
+    // any text written later, and saying so is not an edit.
+    let (mut runtime, node) = field(r#"text = "books\n", cursor_position = 6,"#);
+    assert_eq!(text(&runtime, node), "books ");
+    assert_eq!(number(&runtime, node, "cursor_position"), 6.0);
+    assert_eq!(log(&mut runtime), "");
+}
+
+#[test]
+fn a_field_built_too_long_is_cut_to_its_max_length() {
+    let (runtime, node) = field(r#"text = "abcdef", max_length = 3, cursor_position = 6,"#);
+    assert_eq!(text(&runtime, node), "abc");
+    assert_eq!(number(&runtime, node, "cursor_position"), 3.0);
+}

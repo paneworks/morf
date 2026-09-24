@@ -265,7 +265,16 @@ fn main() {
         );
     });
 
-    let root = runtime.scene().roots()[0];
+    // A configuration with several surfaces has a root for each;
+    // `FRAME_BENCH_ROOT` picks which one is measured and drawn.
+    let root = {
+        let roots = runtime.scene().roots().to_vec();
+        let index = std::env::var("FRAME_BENCH_ROOT")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(0);
+        roots[index.min(roots.len() - 1)]
+    };
     let size = Size { width, height };
     let mut computed = settled(&mut runtime, root, size, &mut RuledText, &config);
     // `gpu` renders one frame on a real adapter instead of timing anything: a
