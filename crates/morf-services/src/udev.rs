@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 const MAX_EVENT_BYTES: usize = 64 * 1024;
@@ -52,6 +53,128 @@ pub struct UdevMonitor {
     /// times a frame paid two megabytes of memset per frame per output to
     /// receive packets that are a few hundred bytes long.
     scratch: Vec<u8>,
+    /// Rings the shell's loop when the socket has something, so a monitor
+    /// costs nothing while the machine is quiet and a device plugged in is
+    /// seen at once rather than at whatever wakes the shell next.
+    alarm: Option<Alarm>,
+}
+
+/// Where the watcher thread stands: watching, fired and waiting for the
+/// socket to be drained, or told to stop.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AlarmState {
+    Armed,
+    Fired,
+    Stop,
+}
+
+/// A thread that waits on the monitor's socket and rings the loop once per
+/// burst: after it fires it waits to be re-armed by a drain that found the
+/// socket empty, because a readable socket stays readable until it is read.
+struct Alarm {
+    state: Arc<(Mutex<AlarmState>, Condvar)>,
+    /// An eventfd that ends the thread's `poll`.
+    stop: OwnedFd,
+    join: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Alarm {
+    fn start(socket: OwnedFd) -> io::Result<Self> {
+        let raw = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
+        if raw < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let stop = unsafe { OwnedFd::from_raw_fd(raw) };
+        let stop_raw = stop.as_raw_fd();
+        let state = Arc::new((Mutex::new(AlarmState::Armed), Condvar::new()));
+        let shared = Arc::clone(&state);
+        let join = std::thread::Builder::new()
+            .name("morf-udev".to_owned())
+            .spawn(move || {
+                let (lock, armed) = &*shared;
+                loop {
+                    {
+                        let mut state = lock.lock().unwrap_or_else(|error| error.into_inner());
+                        while *state == AlarmState::Fired {
+                            state = armed.wait(state).unwrap_or_else(|error| error.into_inner());
+                        }
+                        if *state == AlarmState::Stop {
+                            return;
+                        }
+                    }
+                    let mut descriptors = [
+                        libc::pollfd {
+                            fd: socket.as_raw_fd(),
+                            events: libc::POLLIN,
+                            revents: 0,
+                        },
+                        libc::pollfd {
+                            fd: stop_raw,
+                            events: libc::POLLIN,
+                            revents: 0,
+                        },
+                    ];
+                    let ready = unsafe { libc::poll(descriptors.as_mut_ptr(), 2, -1) };
+                    if ready < 0 {
+                        if io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+                            continue;
+                        }
+                        return;
+                    }
+                    if descriptors[1].revents != 0 {
+                        return;
+                    }
+                    if descriptors[0].revents == 0 {
+                        continue;
+                    }
+                    {
+                        let mut state = lock.lock().unwrap_or_else(|error| error.into_inner());
+                        if *state == AlarmState::Stop {
+                            return;
+                        }
+                        *state = AlarmState::Fired;
+                    }
+                    morf_io::wake_all();
+                    // A socket in error stays readable: one ring is enough,
+                    // and the reader reports the error.
+                    if descriptors[0].revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL)
+                        != 0
+                    {
+                        return;
+                    }
+                }
+            })?;
+        Ok(Self {
+            state,
+            stop,
+            join: Some(join),
+        })
+    }
+
+    /// Watches again after a drain that emptied the socket.
+    fn rearm(&self) {
+        let (lock, armed) = &*self.state;
+        let mut state = lock.lock().unwrap_or_else(|error| error.into_inner());
+        if *state == AlarmState::Fired {
+            *state = AlarmState::Armed;
+            armed.notify_one();
+        }
+    }
+}
+
+impl Drop for Alarm {
+    fn drop(&mut self) {
+        {
+            let (lock, armed) = &*self.state;
+            *lock.lock().unwrap_or_else(|error| error.into_inner()) = AlarmState::Stop;
+            armed.notify_one();
+        }
+        let one = 1u64.to_ne_bytes();
+        let _ = unsafe { libc::write(self.stop.as_raw_fd(), one.as_ptr().cast(), one.len()) };
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
+    }
 }
 
 impl UdevMonitor {
@@ -81,10 +204,14 @@ impl UdevMonitor {
         if result < 0 {
             return Err(last_error("could not bind udev monitor"));
         }
+        // Without the watcher the monitor still works when polled; it only
+        // loses the promptness, so failing to start one is not an error.
+        let alarm = socket.try_clone().and_then(Alarm::start).ok();
         Ok(Self {
             socket,
             subsystem: subsystem.filter(|value| !value.is_empty()),
             scratch: vec![0; MAX_EVENT_BYTES],
+            alarm,
         })
     }
 
@@ -101,7 +228,12 @@ impl UdevMonitor {
         loop {
             match self.read_event(timeout)? {
                 ReadOutcome::Event(event) => return Ok(Some(event)),
-                ReadOutcome::Empty => return Ok(None),
+                ReadOutcome::Empty => {
+                    if let Some(alarm) = &self.alarm {
+                        alarm.rearm();
+                    }
+                    return Ok(None);
+                }
                 // Not the subsystem asked for. Go back for the next packet
                 // rather than claiming the socket is empty.
                 ReadOutcome::Filtered => {}
@@ -209,6 +341,37 @@ fn last_error(context: &str) -> UdevError {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_alarm_rings_once_per_burst_and_again_after_a_drain() {
+        // A socket pair stands in for the netlink one: the alarm only needs
+        // something that becomes readable.
+        let (reader, writer) = std::os::unix::net::UnixDatagram::pair().unwrap();
+        reader.set_nonblocking(true).unwrap();
+        let wake = morf_io::Wake::new().unwrap();
+        wake.drain();
+        let alarm = Alarm::start(reader.try_clone().unwrap().into()).unwrap();
+        writer.send(b"one").unwrap();
+        assert!(wake.wait(Duration::from_secs(5)), "a packet rang the loop");
+        wake.drain();
+        // Unread, the socket stays readable; the alarm waits to be re-armed
+        // rather than ringing on and on. (Asked of its state, since other
+        // tests ring every alarm in the process.)
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(
+            *alarm.state.0.lock().unwrap() == AlarmState::Fired,
+            "once per burst"
+        );
+        let mut buffer = [0u8; 16];
+        while reader.recv(&mut buffer).is_ok() {}
+        alarm.rearm();
+        writer.send(b"two").unwrap();
+        assert!(
+            wake.wait(Duration::from_secs(5)),
+            "the next burst rings again"
+        );
+        drop(alarm);
+    }
+
     use super::*;
 
     #[test]

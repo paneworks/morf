@@ -207,12 +207,17 @@ fn worker() {
         if job.cancelled.load(Ordering::Relaxed) {
             continue;
         }
+        // Rings the loop when this job is done with, answered or not: a
+        // request that panicked leaves its reply channel hung up, and the
+        // runtime should see that now rather than at some later wake.
+        let _answered = crate::WakeOnDrop;
+        // Rebound after the guard, so its reply channel is dropped first and
+        // the ring comes after the hang-up.
+        let job = job;
         let outcome = perform(&job.request, &job.cancelled);
         // A receiver that is gone belongs to a runtime that was reloaded or
         // torn down; the answer has nobody to go to and is dropped here.
-        if job.reply.send(outcome).is_ok() {
-            crate::wake_all();
-        }
+        let _ = job.reply.send(outcome);
     }
 }
 

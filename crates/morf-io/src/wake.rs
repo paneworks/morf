@@ -34,6 +34,19 @@ impl Wake {
         Ok(Self { fd })
     }
 
+    /// Waits up to `timeout` for the alarm to ring, and says whether it
+    /// did; it is left rung. For a loop with nothing else to wait on, and for
+    /// tests that stand in for one.
+    pub fn wait(&self, timeout: std::time::Duration) -> bool {
+        use rustix::event::{PollFd, PollFlags, poll};
+        let timeout = rustix::time::Timespec {
+            tv_sec: timeout.as_secs().min(i64::MAX as u64) as i64,
+            tv_nsec: timeout.subsec_nanos() as i64,
+        };
+        let mut fds = [PollFd::new(&self.fd, PollFlags::IN)];
+        poll(&mut fds, Some(&timeout)).is_ok_and(|ready| ready > 0)
+    }
+
     /// Clears the alarm; called after the poll returned because of it.
     pub fn drain(&self) {
         let mut buffer = [0u8; 8];
@@ -61,5 +74,16 @@ pub fn wake_all() {
     let wakes = WAKES.lock().unwrap_or_else(|error| error.into_inner());
     for fd in wakes.iter() {
         let _ = write(fd, &1u64.to_ne_bytes());
+    }
+}
+
+/// Rings every loop when dropped: held by a worker thread for its whole
+/// life, so the thread ending -- its channel hanging up, which a reader takes
+/// as the end of the conversation -- is seen at once like any message.
+pub struct WakeOnDrop;
+
+impl Drop for WakeOnDrop {
+    fn drop(&mut self) {
+        wake_all();
     }
 }

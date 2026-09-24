@@ -202,3 +202,22 @@ fn url_encoding_keeps_unreserved_and_escapes_the_rest() {
     assert_eq!(url_encode("é".as_bytes()), "%C3%A9");
     assert_eq!(url_decode(b"a%20b+c%zz%4"), b"a b c%zz%4");
 }
+
+#[test]
+fn an_answer_rings_the_loop() {
+    // The shell's loop sleeps with no timeout when nothing is due; it sees
+    // an answer because the worker rings its alarm.
+    let base = serve();
+    let wake = Wake::new().unwrap();
+    let mut task = HttpTask::start(HttpRequest::get(format!("{base}/hello")));
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        wake.drain();
+        if let Some(outcome) = task.poll() {
+            assert_eq!(outcome.unwrap().body, b"hello");
+            break;
+        }
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        assert!(wake.wait(left), "the answer rang the loop");
+    }
+}

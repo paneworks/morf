@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
 use std::fmt;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use morf_io::{Bus, DbusProxy, DbusSignal, DbusValue, PendingReply};
 
@@ -65,8 +65,11 @@ pub struct StatusNotifierHost {
     /// used to make connecting an error, when what a shell wants is an empty
     /// tray that fills the moment one appears.
     bootstrapped: bool,
-    /// Polls to wait before asking again. Zero means ask now.
-    retry_in: u32,
+    /// When to ask again after a refusal; nothing means ask now. A time
+    /// rather than a count of polls, because the loop polls when something
+    /// happens: counted in polls, an idle shell never asked again and a busy
+    /// one asked at once.
+    retry_at: Option<Instant>,
     /// The item list, asked for and not yet answered.
     pending_items: Option<PendingReply>,
     /// The namespaces to look under, and which one the proxy is on now.
@@ -116,7 +119,7 @@ impl StatusNotifierHost {
                         items: BTreeMap::new(),
                         initial: true,
                         bootstrapped: false,
-                        retry_in: 0,
+                        retry_at: None,
                         pending_items: None,
                         _pending_register: None,
                         namespaces: namespaces.iter().map(|n| (*n).to_owned()).collect(),
@@ -177,7 +180,12 @@ impl StatusNotifierHost {
                 self.registered = registered;
                 self.unregistered = unregistered;
             }
-            self.retry_in = if self.current == 0 { 60 } else { 5 };
+            let pause = if self.current == 0 {
+                Duration::from_secs(6)
+            } else {
+                Duration::from_millis(500)
+            };
+            self.retry_at = Some(Instant::now() + pause);
             return Ok(false);
         };
         for item in notifier_items(value)? {
@@ -196,18 +204,23 @@ impl StatusNotifierHost {
         Ok(true)
     }
 
+    /// When the host means to ask the watcher again, so the loop can sleep
+    /// until then; nothing while it is waiting on an answer or has one.
+    pub fn next_deadline(&self) -> Option<Instant> {
+        (!self.bootstrapped && self.pending_items.is_none())
+            .then_some(self.retry_at)
+            .flatten()
+    }
+
     /// Drains watcher signals and returns a new complete item snapshot.
     pub fn poll_changed(
         &mut self,
     ) -> Result<Option<Vec<StatusNotifierAddress>>, StatusNotifierError> {
         let mut changed = std::mem::take(&mut self.initial);
-        if !self.bootstrapped {
-            if self.retry_in > 0 {
-                self.retry_in -= 1;
-            } else if self.bootstrap()? {
-                self.bootstrapped = true;
-                changed = true;
-            }
+        let waiting = self.retry_at.is_some_and(|at| Instant::now() < at);
+        if !self.bootstrapped && !waiting && self.bootstrap()? {
+            self.bootstrapped = true;
+            changed = true;
         }
         for _ in 0..64 {
             let Some(value) = self.registered.next_value(Duration::ZERO) else {

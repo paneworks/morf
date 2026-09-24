@@ -523,3 +523,18 @@ fn children_do_not_inherit_the_wrappers_library_path() {
         "{output}"
     );
 }
+
+#[test]
+fn a_worker_that_ends_rings_every_loop() {
+    let wake = Wake::new().unwrap();
+    let other = Wake::new().unwrap();
+    wake.drain();
+    other.drain();
+    std::thread::spawn(|| {
+        let _ending = WakeOnDrop;
+    })
+    .join()
+    .unwrap();
+    assert!(wake.wait(Duration::from_secs(1)));
+    assert!(other.wait(Duration::from_secs(1)));
+}

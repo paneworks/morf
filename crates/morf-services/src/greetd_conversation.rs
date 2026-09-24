@@ -56,6 +56,10 @@ impl GreetdConversation {
         let (event_sender, events) = mpsc::channel();
         let (command_sender, commands) = mpsc::channel::<Command>();
         thread::spawn(move || {
+            // Every event is sent from here and the thread ends with the
+            // conversation, so ringing the loop at each send and at the end
+            // covers all of it.
+            let _wake = morf_io::WakeOnDrop;
             let connected = match path {
                 Some(path) => GreetdClient::connect(path, PATIENCE),
                 None => GreetdClient::connect_environment(PATIENCE),
@@ -67,12 +71,16 @@ impl GreetdConversation {
                     return;
                 }
             };
-            let deliver = |result: Result<GreetdResponse, GreetdError>| match result {
-                Ok(response) => event_sender.send(GreetdEvent::Response(response)).is_ok(),
-                Err(error) => {
-                    let _ = event_sender.send(GreetdEvent::Failed(error.to_string()));
-                    false
-                }
+            let deliver = |result: Result<GreetdResponse, GreetdError>| {
+                let delivered = match result {
+                    Ok(response) => event_sender.send(GreetdEvent::Response(response)).is_ok(),
+                    Err(error) => {
+                        let _ = event_sender.send(GreetdEvent::Failed(error.to_string()));
+                        false
+                    }
+                };
+                morf_io::wake_all();
+                delivered
             };
             if !deliver(client.create_session(&username)) {
                 return;
@@ -154,5 +162,29 @@ impl GreetdConversation {
         self.commands
             .as_ref()
             .is_some_and(|sender| sender.send(command).is_ok())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_connection_rings_the_loop() {
+        let wake = morf_io::Wake::new().unwrap();
+        wake.drain();
+        let missing = std::env::temp_dir().join(format!("morf-no-greetd-{}", std::process::id()));
+        let mut conversation = GreetdConversation::begin(Some(missing), "nobody".to_owned());
+        let event = loop {
+            if let Some(event) = conversation.next(Duration::ZERO) {
+                break event;
+            }
+            assert!(
+                wake.wait(Duration::from_secs(10)),
+                "the failure rang the loop"
+            );
+            wake.drain();
+        };
+        assert!(matches!(event, GreetdEvent::Failed(_)), "{event:?}");
     }
 }
