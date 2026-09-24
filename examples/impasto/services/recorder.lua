@@ -10,7 +10,11 @@
 -- Elapsed time is the wall clock minus the start, not a count of ticks, so
 -- it cannot drift from the file; the ticker runs only while recording. A
 -- take is stopped with SIGINT, which is what makes both encoders close the
--- container: SIGTERM leaves a file nothing can play.
+-- container: SIGTERM leaves a file nothing can play. The take ends when the
+-- encoder exits (its `on_exit`), not after a guess; an encoder that dies
+-- mid-take is noticed and said. Every screen's shell sees the one take
+-- through the state file, whichever screen started it, and any of them can
+-- stop it. What happened is flashed on the island, as the original's OSD.
 --
 -- With IMPASTO_DRY_RUN set nothing is started: the take is pretended, so
 -- the island's activity and the tile can be looked at on a test bench.
@@ -86,10 +90,24 @@ end
 -- ----------------------------------------------------------------- clock --
 
 local started_at, ticker, child = 0, nil, nil
+-- The pid of a take this runtime did not start (another screen's, or an
+-- earlier shell's): watched from the ticker, since there is no handle.
+local adopted_pid = nil
+local stopping = false
+local finish
 
 local function now_s() return morf.time.now_ms() / 1000 end
 
 local function tick()
+  if adopted_pid and not alive(adopted_pid) then
+    -- Gone without this runtime's word: stopped from another screen, or
+    -- the encoder died. The state file says which.
+    local ok, kept = pcall(morf.json.decode, fs.read(state_path()) or "")
+    local asked = stopping or not (ok and type(kept) == "table") or kept.stopping == true
+    adopted_pid = nil
+    finish(not asked)
+    return
+  end
   s.seconds:set(math.max(0, math.floor(now_s() - started_at)))
   local path = s.path:get()
   if path ~= "" then
@@ -107,9 +125,9 @@ local function tend()
   end
 end
 
-local function say(summary, body, icon)
-  local ok, notify = pcall(require, "services.notifications")
-  if ok and notify.post then notify.post { app = "Recorder", summary = summary, body = body or "", icon = icon or "" } end
+local function say(summary, _, icon)
+  local ok, osd = pcall(require, "services.osd")
+  if ok and osd.request then osd.request(icon or "󰕧", summary, -1) end
 end
 
 -- ---------------------------------------------------------------- audio --
@@ -199,13 +217,22 @@ function M.start(shape, box)
     return false
   end
   fs.mkdir(dir, { parents = true })
+  -- The whole screen is the one being worked on: Hyprland's focused
+  -- monitor, else this shell's own.
   local output = ""
   if not box then
-    local screen = (morf.screens or {})[1]
-    output = screen and screen.name or ""
+    local live = require("services.live")
+    output = live.name()
+    if output == "" then
+      local screen = (morf.screens or {})[1]
+      output = screen and screen.name or ""
+    end
   end
   -- One that rejects its arguments, or cannot capture at all, exits at
-  -- once; the take goes to the next encoder rather than failing.
+  -- once; the take goes to the next encoder rather than failing. An
+  -- encoder still running after GRACE is recording; one that exits later
+  -- ended the take.
+  local GRACE = 400
   local index = 0
   local function try()
     index = index + 1
@@ -214,14 +241,30 @@ function M.start(shape, box)
       say("The recorder would not start", encoders[1].name, "󰀦")
       return
     end
-    local handle = morf.spawn { command = command_for(encoder, box, path, audio, output), detached = true }
+    local confirmed, gone = false, false
+    local handle
+    handle = morf.spawn {
+      command = command_for(encoder, box, path, audio, output),
+      detached = true,
+      on_exit = function()
+        gone = true
+        if not confirmed then
+          fs.remove(path)
+          return try()
+        end
+        if child == handle then
+          child = nil
+          -- Not asked to stop: the encoder died under the take.
+          finish(not stopping)
+        end
+      end,
+    }
     if not handle then return try() end
-    morf.timer(300, function()
-      if not handle:running() then
-        fs.remove(path)
-        return try()
-      end
+    morf.timer(GRACE, function()
+      if gone then return end
+      confirmed = true
       child = handle
+      stopping = false
       begin(path, shape, audio, handle:pid())
     end, false)
   end
@@ -229,29 +272,67 @@ function M.start(shape, box)
   return true
 end
 
-local function finish()
+--- The take is over: `died` when the encoder went without being asked.
+finish = function(died)
   local seconds = math.max(0, math.floor(now_s() - started_at))
   s.seconds:set(seconds)
-  tick()
+  local path = s.path:get()
+  if path ~= "" then
+    local stat = fs.stat and fs.stat(path)
+    if stat and stat.size then s.size:set(stat.size) end
+  end
   s.recording:set(false)
   tend()
   fs.remove(state_path())
-  child = nil
-  say("Recorded " .. M.display(), M.name(), "󰕧")
+  child, adopted_pid, stopping = nil, nil, false
+  if died then
+    say("The recorder stopped after " .. M.display(), M.name(), "󰀦")
+  else
+    say("Recorded " .. M.display(), M.name(), "󰕧")
+  end
 end
 
 function M.stop()
-  if not s.recording:get() then return end
+  if not s.recording:get() or stopping then return end
+  stopping = true
   local ok, kept = pcall(morf.json.decode, fs.read(state_path()) or "")
   if not ok or type(kept) ~= "table" then kept = {} end
-  if child and child:running() then
-    child:kill("INT")
-  elseif not kept.dry and alive(tonumber(kept.pid)) then
-    -- A take started by an earlier shell: its handle is gone, its pid is not.
-    morf.kill(math.floor(kept.pid), "INT")
+  if kept.dry then
+    morf.timer(1, function() finish(false) end, false)
+    return
   end
-  -- The encoder closes the container on SIGINT; give it a moment.
-  morf.timer(kept.dry and 1 or 600, finish, false)
+  -- Marked first, so whichever screen started it hears a stop, not a death.
+  kept.stopping = true
+  fs.write(state_path(), morf.json.encode(kept))
+  if child and child:running() then
+    -- Its `on_exit` finishes the take, once the container is closed; five
+    -- seconds is as long as it is waited for (record.py).
+    local asked = child
+    asked:kill("INT")
+    morf.timer(5000, function()
+      if child == asked and stopping then
+        child = nil
+        finish(false)
+      end
+    end, false)
+    return
+  end
+  local pid = tonumber(kept.pid)
+  if not alive(pid) then
+    finish(false)
+    return
+  end
+  -- Another screen's take, or an earlier shell's: no handle, only its pid.
+  -- Up to five seconds for the encoder to close the file (record.py).
+  morf.kill(math.floor(pid), "INT")
+  local waited = 0
+  local timer
+  timer = morf.timer(100, function()
+    waited = waited + 100
+    if alive(pid) and waited < 5000 then return end
+    timer:cancel()
+    if s.recording:get() then finish(false) end
+  end, true)
 end
 
 --- Shared by the key, the tile and the island: the whole screen, at once.
@@ -260,23 +341,36 @@ function M.toggle()
   if s.recording:get() then M.stop() else M.start("screen", nil) end
 end
 
--- A take left running by a shell that has since restarted.
-do
+-- A take this runtime did not start: left running by a shell that has
+-- since restarted, or started on another screen. Looked for at load and
+-- every two seconds while idle (a stat of the state file).
+local function adopt(at_load)
   local text = fs.read(state_path())
-  local ok, kept = pcall(morf.json.decode, text or "")
-  if ok and type(kept) == "table" then
-    if not kept.dry and alive(tonumber(kept.pid)) then
-      started_at = tonumber(kept.started) or now_s()
-      s.path:set(tostring(kept.path or ""))
-      s.shape:set(tostring(kept.shape or "screen"))
-      s.sound:set(kept.audio == true)
-      s.recording:set(true)
-      tick()
-      tend()
-    else
-      fs.remove(state_path())
-    end
+  if not text then return end
+  local ok, kept = pcall(morf.json.decode, text)
+  if not ok or type(kept) ~= "table" then return end
+  if kept.dry then
+    -- A pretended take is only its own runtime's.
+    if at_load then fs.remove(state_path()) end
+    return
   end
+  local pid = tonumber(kept.pid)
+  if not alive(pid) then
+    if at_load then fs.remove(state_path()) end
+    return
+  end
+  adopted_pid = pid
+  started_at = tonumber(kept.started) or now_s()
+  s.path:set(tostring(kept.path or ""))
+  s.shape:set(tostring(kept.shape or "screen"))
+  s.sound:set(kept.audio == true)
+  s.recording:set(true)
+  tick()
+  tend()
 end
+adopt(true)
+morf.timer(2000, function()
+  if not s.recording:get() then adopt(false) end
+end, true)
 
 return M

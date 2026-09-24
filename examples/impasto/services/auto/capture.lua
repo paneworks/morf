@@ -11,6 +11,12 @@
 --
 -- The shortcuts in the original (capture a region, a window, the screen,
 -- annotate, read text, record, pick) are these verbs with arguments.
+--
+-- A verb reaches every screen's shell. Only the screen being worked on acts
+-- on `capture`, `record` and `picker` (services/live.lua), so a key is one
+-- surface, one take and one lens, not one per screen; the others answer
+-- "elsewhere". A take is seen by every screen, so `record stop` works
+-- from any.
 
 local theme = require("theme")
 local controls = require("services.controls")
@@ -20,6 +26,7 @@ local recorder = require("services.recorder")
 local picker = require("services.picker")
 local overlay = require("capture.overlay")
 local lens = require("capture.picker")
+local live = require("services.live")
 
 -- A panel closing first must be gone from the photograph.
 local function settle()
@@ -86,6 +93,7 @@ morf.ipc.capture = function(...)
     if SHAPES[word] then shape = word elseif KINDS[word] then kind = word elseif TO[word] then to = word end
   end
   if capture.active() then return "open" end
+  if not live.here() then return "elsewhere" end
   local wait = settle()
   if island_state.expanded() then island_state.close() end
   return capture.open(shape, kind, to, wait) and "opening" or "busy"
@@ -113,14 +121,19 @@ end
 
 morf.ipc.record = function(verb)
   verb = verb or "toggle"
+  if verb ~= "status" and not live.here() then return "elsewhere" end
   if verb == "start" then recorder.start("screen", nil)
   elseif verb == "stop" then recorder.stop()
-  elseif verb == "toggle" then recorder.toggle()
+  elseif verb == "toggle" then
+    island_state.close()
+    recorder.toggle()
   end
   return (recorder.recording() and ("recording " .. recorder.display() .. " " .. recorder.path()) or "idle")
 end
 
 morf.ipc.picker = function()
+  -- The lens up here is let go by the same key, wherever the pointer is.
+  if not picker.active() and not live.here() then return "elsewhere" end
   local wait = settle()
   if island_state.expanded() then island_state.close() end
   picker.pick(wait)
