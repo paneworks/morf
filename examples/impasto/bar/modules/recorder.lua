@@ -20,10 +20,20 @@ modules.define("recorder", {
   value = function() return recorder.display() end,
   tint = function() return C.indicatorBad end,
   stop = function() recorder.stop() end,
-  mark = function()
+  -- `hovered()`, when the rest layer passes it, says the pointer is on the
+  -- side: the dot stops breathing and squares off into a stop button.
+  mark = function(hovered)
+    local over = function() return hovered ~= nil and hovered() or false end
     return ui.Rect {
-      width = 8, height = 8, radius = 4, color = C.indicatorBad,
-      loop = { opacity = { from = 1, to = 0.4, duration = 900, easing = "in_out_sine", alternate = true } },
+      width = function() return over() and 9 or 8 end,
+      height = function() return over() and 9 or 8 end,
+      radius = function() return over() and 2 or 4 end,
+      color = C.indicatorBad,
+      behavior = { radius = theme.behave("fast") },
+      loop = function()
+        if over() then return nil end
+        return { opacity = { from = 1, to = 0.4, duration = 900, easing = "in_out_sine", alternate = true } }
+      end,
     }
   end,
   figure = function()

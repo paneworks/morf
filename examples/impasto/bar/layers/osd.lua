@@ -16,6 +16,10 @@ island.register_layer("osd", {
   size = function() return 260, theme.capsule_height(), 10 end,
   build = function()
     local has_level = function() return s.osd_progress:get() >= 0 end
+    local label = kit.text {
+      text = function() return s.osd_label:get() end,
+      size = theme.size.small, weight = 600,
+    }
     return ui.Item { anchors = { fill = true },
       ui.Row {
         anchors = { center_in = true },
@@ -37,10 +41,13 @@ island.register_layer("osd", {
             },
           },
         },
-        kit.text {
-          text = function() return s.osd_label:get() end,
-          width = 34, horizontal_alignment = "right",
-          size = theme.size.small, weight = 600,
+        -- At least 34 wide, so the group does not shift as a reading goes
+        -- from one digit to three, but never narrower than the text: some
+        -- readings are not percentages (a picked colour, a new best).
+        ui.Item {
+          width = function() return math.max(34, label.layout_width or 0) end,
+          height = function() return math.max(1, label.layout_height or 0) end,
+          ui.Item { anchors = { right = true, top = true }, label },
         },
       },
     }
