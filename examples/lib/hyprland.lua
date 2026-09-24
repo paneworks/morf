@@ -284,9 +284,19 @@ function hyprland.request(command, callback)
   return true
 end
 
+-- Hyprland (0.56) writes a keyboard with no layout active -- a virtual
+-- keyboard such as wtype's, wayvnc's or KDE Connect's -- as
+-- `"active_layout_index": none`, which is not JSON, and one such field would
+-- lose every device. A bare `none` where a value goes is read as null.
+local function repaired(reply)
+  return (reply:gsub("(:%s*)none(%s*[,}%]])", "%1null%2"))
+end
+hyprland.repaired_json = repaired
+
 local function decode(reply)
   if type(reply) ~= "string" then return nil, "no reply" end
   local ok, value = pcall(json.decode, reply)
+  if not ok and reply:find(":%s*none") then ok, value = pcall(json.decode, repaired(reply)) end
   if not ok then
     -- Hyprland answers a bad command in prose, even when JSON was asked for.
     local first = reply:gsub("^%s+", ""):sub(1, 200)
