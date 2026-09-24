@@ -71,11 +71,20 @@ end
 local function move(delta) select(selected:get() + delta) end
 
 -- Back to the top whenever the results change: something is always
--- selected, so Enter always runs a result.
+-- selected, so Enter always runs a result. After a clipboard entry is
+-- forgotten the selection stays where it was, on the entry that took its
+-- place, since deleting usually means deleting several.
+local keep_index = nil
 morf.effect("impasto.launcher.reset", function()
   L.results_revision:get()
+  local keep = keep_index
+  keep_index = nil
   selected:set(1)
   first:set(1)
+  if keep then
+    -- Outside the effect, so it does not follow the count.
+    morf.timer(1, function() select(math.max(1, math.min(keep, L.count:get()))) end, false)
+  end
 end)
 
 -- Opening refreshes the application index and the window list (both are
@@ -125,7 +134,10 @@ end
 local function forget_selected()
   if L.mode_for(L.query:get()).id ~= "clipboard" then return end
   local entry = entry_at(selected:get())
-  if entry then clipboard.forget(entry.id) end
+  if entry then
+    keep_index = selected:get()
+    clipboard.forget(entry.id)
+  end
 end
 
 -- ---------------------------------------------------------------- badges --
