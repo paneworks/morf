@@ -115,7 +115,7 @@ impl Scene {
             (None, None) => return Ok(false),
         };
         self.paused_physics.remove(&key);
-        self.touch_layout(key.property);
+        self.touch_layout(key.node, key.property);
         self.properties.batch(|graph| {
             graph.write(slot.current, target.clone())?;
             graph.write(slot.target, target)?;
@@ -139,7 +139,7 @@ impl Scene {
             animation.clock.reset();
             let value = animation.value();
             self.properties.write(slot.current, value)?;
-            self.touch_layout(key.property);
+            self.touch_layout(key.node, key.property);
             return Ok(true);
         }
         let Some(motion) = self.physics.get(&key) else {
@@ -199,7 +199,7 @@ impl Scene {
         animation.clock.seek(progress.clamp(0.0, 1.0) as f32);
         let value = animation.value();
         self.properties.write(slot.current, value)?;
-        self.touch_layout(key.property);
+        self.touch_layout(key.node, key.property);
         Ok(true)
     }
 

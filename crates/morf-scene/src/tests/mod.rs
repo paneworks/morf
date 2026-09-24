@@ -306,6 +306,81 @@ fn the_layout_revision_moves_only_when_geometry_does() {
 }
 
 #[test]
+fn a_change_moves_only_its_own_trees_layout_revision() {
+    // Two surfaces' trees: a bar whose clock ticks, and a settings window.
+    let mut scene = Scene::new();
+    let bar = scene.create(Element::Item);
+    let clock = scene.create(Element::Text);
+    scene.reparent(clock, Some(bar)).unwrap();
+    let window = scene.create(Element::Item);
+    let page = scene.create(Element::Column);
+    let row = scene.create(Element::Rect);
+    scene.reparent(page, Some(window)).unwrap();
+    scene.reparent(row, Some(page)).unwrap();
+
+    let bar_before = scene.layout_revision_of(bar);
+    let window_before = scene.layout_revision_of(window);
+    scene.assign(clock, "text", "12:01").unwrap();
+    assert_ne!(scene.layout_revision_of(bar), bar_before, "the bar moved");
+    assert_eq!(
+        scene.layout_revision_of(window),
+        window_before,
+        "the window did not"
+    );
+    // Asked of a node inside a tree, the answer is the tree's.
+    assert_eq!(scene.layout_revision_of(row), window_before);
+
+    // An animation ticking on the bar leaves the window alone too.
+    scene
+        .set_behavior(
+            clock,
+            "x",
+            Some(Behavior::timed(Duration::from_millis(100), Easing::Linear)),
+        )
+        .unwrap();
+    scene.assign(clock, "x", 40.0).unwrap();
+    scene.tick_animations(Duration::from_millis(50)).unwrap();
+    assert_eq!(scene.layout_revision_of(window), window_before);
+
+    // A node moving between the trees moves both.
+    let (bar_before, window_before) = (
+        scene.layout_revision_of(bar),
+        scene.layout_revision_of(window),
+    );
+    scene.reparent(row, Some(bar)).unwrap();
+    assert_ne!(scene.layout_revision_of(bar), bar_before);
+    assert_ne!(scene.layout_revision_of(window), window_before);
+
+    // And once there, it is the bar's: a change to it no longer touches the
+    // window.
+    let window_before = scene.layout_revision_of(window);
+    scene.assign(row, "height", 30.0).unwrap();
+    assert_eq!(scene.layout_revision_of(window), window_before);
+
+    // Made, reordered or removed inside the window: the window's.
+    let bar_before = scene.layout_revision_of(bar);
+    let extra = scene.create(Element::Rect);
+    assert_eq!(scene.layout_revision_of(bar), bar_before);
+    scene.reparent(extra, Some(page)).unwrap();
+    assert_ne!(scene.layout_revision_of(window), window_before);
+    let window_before = scene.layout_revision_of(window);
+    scene.remove(extra).unwrap();
+    assert_ne!(scene.layout_revision_of(window), window_before);
+    assert_eq!(scene.layout_revision_of(bar), bar_before);
+
+    // Taken out of the window, a subtree is a tree of its own, and the
+    // window still hears that it lost it.
+    let window_before = scene.layout_revision_of(window);
+    scene.reparent(page, None).unwrap();
+    assert_ne!(scene.layout_revision_of(window), window_before);
+    let page_before = scene.layout_revision_of(page);
+    let window_before = scene.layout_revision_of(window);
+    scene.assign(page, "width", 4.0).unwrap();
+    assert_ne!(scene.layout_revision_of(page), page_before);
+    assert_eq!(scene.layout_revision_of(window), window_before);
+}
+
+#[test]
 fn an_animation_moves_the_layout_revision_only_on_geometry_frames() {
     // The same rule while a behavior is running: an easing colour must not
     // invalidate layout on every one of its frames.

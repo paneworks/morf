@@ -1,22 +1,56 @@
 use crate::{animation::*, motion::*, types::*};
 
 impl Scene {
-    /// Records that a property layout reads has moved.
+    /// Records that a property layout reads has moved on `node`.
     ///
     /// Conservative on purpose: a spurious bump costs one extra layout pass, a
     /// missed one leaves the scene drawn at stale geometry.
-    pub(crate) fn touch_layout(&mut self, property: &str) {
+    pub(crate) fn touch_layout(&mut self, node: NodeId, property: &str) {
         if affects_layout(property) {
-            self.layout_revision = self.layout_revision.wrapping_add(1);
+            self.bump_layout(node);
         }
     }
 
-    /// How many times something layout reads has changed.
+    /// Moves the layout revision, for the whole scene and for the tree
+    /// `node` is in now.
+    ///
+    /// A move between trees changes both, so whatever moves a node calls this
+    /// once before and once after.
+    pub(crate) fn bump_layout(&mut self, node: NodeId) {
+        self.layout_revision = self.layout_revision.wrapping_add(1);
+        let root = self.root_id(node);
+        self.root_revisions.insert(root, self.layout_revision);
+    }
+
+    /// The root of the tree a node is in: the node itself when it has no
+    /// parent.
+    fn root_id(&self, mut node: NodeId) -> NodeId {
+        while let Some(parent) = self.nodes.get(node).and_then(|node| node.parent) {
+            node = parent;
+        }
+        node
+    }
+
+    /// How many times something layout reads has changed, anywhere.
     ///
     /// A paint that finds this unmoved since its last one may reuse that
-    /// layout instead of computing another.
+    /// layout instead of computing another; one that lays out a single tree
+    /// wants [`Scene::layout_revision_of`], which a change elsewhere does not
+    /// move.
     pub fn layout_revision(&self) -> u64 {
         self.layout_revision
+    }
+
+    /// The layout revision of the tree `root` is in: moved by every change
+    /// layout reads inside that tree — a property, a node made, moved in or
+    /// out, reordered or removed — and by nothing outside it.
+    ///
+    /// A surface laying out one root compares this with the one its cached
+    /// layout was computed at. Given a node that is not a root, the answer
+    /// is its whole tree's, which is never less careful.
+    pub fn layout_revision_of(&self, root: NodeHandle) -> u64 {
+        let root = self.root_id(root.id());
+        self.root_revisions.get(&root).copied().unwrap_or(0)
     }
 }
 

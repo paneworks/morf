@@ -219,6 +219,15 @@ pub struct Scene {
     /// fading: none of them move a box. Recording when the geometry last
     /// actually moved lets a paint reuse the layout it already has.
     pub(crate) layout_revision: u64,
+    /// The layout revision each tree last moved at, keyed by its root.
+    ///
+    /// A shell draws several trees — the bar, the desk, a settings window —
+    /// each on its own surface, and a clock ticking on the bar has nothing to
+    /// do with the settings window's layout. With one revision for the whole
+    /// scene every change laid out every surface again. A change is recorded
+    /// against the root of the tree it happened in, so a surface re-lays out
+    /// only when its own tree moved; see [`Scene::layout_revision_of`].
+    pub(crate) root_revisions: FastMap<NodeId, u64>,
     /// How fast motion runs: 1 is real time, 0 finishes everything at once.
     pub(crate) motion_scale: f64,
     /// Nodes destroyed since anyone last asked.
