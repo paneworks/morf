@@ -1,10 +1,9 @@
 -- The registry of control centre blocks: an id and a size in, a card out.
 --
 -- Port of BlockFace.qml. A face is told its cells and its pixels, so a
--- block with several faces picks one. The blocks whose services live in
--- other parts of the port (weather, the pet, notes, tasks, games, the
--- impasto mark) register their faces with `blocks.register(id, build)`
--- when those parts load; until then a block shows its symbol and name.
+-- block with several faces picks one. Every block of the catalogue has a
+-- face here; one added later registers its own with `blocks.register(id,
+-- build)`, and until it does it shows its symbol and name.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -58,6 +57,39 @@ end)
 
 M.register("weather", function(o)
   return require("bar.controls.weather_card").build(o)
+end)
+
+M.register("tasks", function(o) return require("bar.controls.tasks_block").build(o) end)
+M.register("pet", function(o) return require("bar.controls.pet_block").build(o) end)
+M.register("games", function(o) return require("bar.controls.games_block").build(o) end)
+M.register("impasto", function(o) return require("bar.controls.impasto_block").build(o) end)
+
+-- A note with no card around it: the block's own note, else the newest.
+-- Clicking opens it for editing (BlockFace.qml:166-191).
+M.register("notes", function(o)
+  local notes = require("services.notes")
+  local note = function()
+    local row = service.entry_of(o.key)
+    local named = row and row.note and notes.entry(row.note)
+    if named and not named.archived then return named end
+    return notes.newest()
+  end
+  local hovered = controls.signal("notes.block", false)
+  return ui.Item {
+    width = o.width, height = o.height,
+    require("components.sticky").build {
+      note = note, width = o.width, height = o.height,
+      placeholder = "No notes yet",
+      padding = o.cols == 1 and 12 or 14,
+      title_size = o.rows >= 4 and theme.size.regular or theme.size.small,
+      body_size = o.rows >= 4 and 20 or 16,
+    },
+    controls.hit { hovered = hovered, on_click = function()
+      local n = note()
+      notes.open(n and n.key or "")
+      o.on_panel("notes")
+    end },
+  }
 end)
 
 M.register("calendar", function(o)

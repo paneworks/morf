@@ -50,7 +50,8 @@ local function line(width, height)
       width = function() return width - (head.layout_width or 0) - (tail.layout_width or 0) - 20 end,
       elide = "right", text = conditions, size = theme.size.small, color = C.textMuted,
     },
-    ui.Item { anchors = { right = true, vertical_center = true }, width = function() return tail.layout_width or 0 end,
+    ui.Item { anchors = { right = true, vertical_center = true }, visible = weather.available,
+      width = function() return tail.layout_width or 0 end,
       height = 14, tail },
   }
 end
@@ -71,7 +72,7 @@ local function now_block(width)
         kit.text { anchors = { left = true, vertical_center = true }, text = degrees, size = 28, weight = 600 },
         -- Pushed to the far edge, on the figure's baseline.
         ui.Item { anchors = { right = true, bottom = true, bottom_margin = 5 },
-          width = function() return hi_lo.layout_width or 0 end, height = 12, hi_lo },
+          visible = weather.available, width = function() return hi_lo.layout_width or 0 end, height = 12, hi_lo },
       },
       kit.text { width = text_w, elide = "right", text = conditions,
         size = theme.size.small, color = C.textMuted },
