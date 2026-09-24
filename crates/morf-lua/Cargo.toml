@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 jiff.workspace = true
 luna.workspace = true
+morf-audio.workspace = true
 morf-desktop.workspace = true
 morf-image.workspace = true
 morf-io.workspace = true

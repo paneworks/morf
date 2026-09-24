@@ -2,6 +2,7 @@
 
 mod api_animation;
 mod api_clipboard;
+mod api_audio;
 mod api_color;
 mod api_color_ops;
 mod api_color_palette;
@@ -52,6 +53,7 @@ mod reactive_bindings;
 mod reactive_execute;
 mod runtime_animation;
 mod runtime_clipboard;
+mod runtime_audio;
 mod runtime_config;
 mod runtime_default;
 mod runtime_events;
