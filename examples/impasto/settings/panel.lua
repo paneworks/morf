@@ -439,9 +439,8 @@ function M.build(close)
       ui.Item {
         width = M.PAGE_W,
         height = function() return body.layout_height or 0 end,
-        -- `y`, not `translate_y`: a ClipRect inside a translated ancestor
-        -- clips in the untranslated place and its contents vanish.
-        y = function() return -clamp() end,
+        -- A transform, not `y`: scrolling moves pixels and lays nothing out.
+        translate_y = function() return -clamp() end,
         body,
       },
     },

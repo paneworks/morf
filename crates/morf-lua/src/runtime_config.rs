@@ -229,10 +229,7 @@ impl Runtime {
             if (geometry.width <= 0.0 || geometry.height <= 0.0)
                 && !growing_from_nothing(&scene, node)
             {
-                let element = scene
-                    .element(node)
-                    .map(|element| format!("{element:?}"))
-                    .unwrap_or_default();
+                let element = lint_path(&scene, node);
                 queue.push((node, element, children.len()));
             }
         }
@@ -475,4 +472,26 @@ fn growing_from_nothing(scene: &morf_scene::Scene, node: NodeHandle) -> bool {
         current = scene.parent(candidate).ok().flatten();
     }
     false
+}
+
+/// A node as the lint names it: its element under up to three ancestors,
+/// outermost first (`Rect > Column > Item`), so the one meant can be found.
+fn lint_path(scene: &morf_scene::Scene, node: NodeHandle) -> String {
+    let mut names = Vec::new();
+    let mut current = Some(node);
+    while let Some(at) = current {
+        if names.len() == 4 {
+            names.push("…".to_owned());
+            break;
+        }
+        names.push(
+            scene
+                .element(at)
+                .map(|element| format!("{element:?}"))
+                .unwrap_or_default(),
+        );
+        current = scene.parent(at).ok().flatten();
+    }
+    names.reverse();
+    names.join(" > ")
 }

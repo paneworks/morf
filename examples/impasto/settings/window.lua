@@ -13,20 +13,36 @@
 
 local ui = require("morf.ui")
 local panel = require("settings.panel")
+local theme = require("theme")
 
 local M = {}
 
 local shown = morf.signal("impasto.settings.shown", false)
 local window
 
+-- The page is a fixed size; a compositor that makes the window larger
+-- (a tiling layout, a kiosk) gets it centred on the island's colour, and
+-- the root follows the window's configured size through `on_resize`.
+local frame
+
 local function root()
-  return ui.Item {
-    width = panel.WIDTH, height = panel.HEIGHT,
-    ui.Loader {
-      active = function() return shown:get() end,
-      source = function() return panel.build(M.close) end,
+  frame = ui.Rect {
+    width = panel.WIDTH, height = panel.HEIGHT, color = theme.color.island,
+    ui.Item {
+      width = panel.WIDTH, height = panel.HEIGHT,
+      anchors = { center_in = true },
+      ui.Loader {
+        active = function() return shown:get() end,
+        source = function() return panel.build(M.close) end,
+      },
     },
   }
+  return frame
+end
+
+local function fit(width, height)
+  frame.width = math.max(width, panel.WIDTH)
+  frame.height = math.max(height, panel.HEIGHT)
 end
 
 --- The window surface, for mapping a node to window coordinates
@@ -59,11 +75,11 @@ function M.open(section, part)
       maximum_width = panel.WIDTH, maximum_height = panel.HEIGHT,
       root = root(),
       visible = false,
+      on_resize = fit,
+      -- The compositor's close button: the page is let go, as `close` does.
+      on_closed = function() shown:set(false) end,
     }
   end
-  -- Closed by the compositor: the loader is still up from last time, so it
-  -- is dropped first and the page is built fresh.
-  if shown:get() and not M.visible() then shown:set(false) end
   shown:set(true)
   window:open()
 end
