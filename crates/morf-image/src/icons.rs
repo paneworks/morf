@@ -23,21 +23,24 @@ impl IconResolver {
 
     /// Creates a resolver from XDG data directories and the legacy user icon root.
     pub fn from_environment() -> Self {
-        let home = env::var_os("HOME").map(PathBuf::from);
-        let data_home = env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .or_else(|| home.as_ref().map(|path| path.join(".local/share")));
-        let data_dirs =
-            env::var_os("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+        // The same directories desktop entries come from: the user's data
+        // home first, then `XDG_DATA_DIRS`, then `/usr/local/share` and
+        // `/usr/share` whatever that list said -- a Nix shell's list names
+        // only the store, and every icon on the machine went missing.
+        let data = morf_desktop::xdg_data_dirs();
         let mut roots = Vec::new();
         let mut pixmaps = Vec::new();
-        if let Some(data_home) = data_home {
-            roots.push(data_home.join("icons"));
+        let mut system = data.iter();
+        let data_home = env::var_os("XDG_DATA_HOME").is_some_and(|value| !value.is_empty())
+            || env::var_os("HOME").is_some();
+        if data_home && let Some(first) = system.next() {
+            roots.push(first.join("icons"));
         }
-        if let Some(home) = home {
-            roots.push(home.join(".icons"));
+        // The legacy user root, between the user's data home and the system.
+        if let Some(home) = env::var_os("HOME") {
+            roots.push(PathBuf::from(home).join(".icons"));
         }
-        for root in env::split_paths(&data_dirs) {
+        for root in system {
             roots.push(root.join("icons"));
             pixmaps.push(root.join("pixmaps"));
         }

@@ -87,6 +87,7 @@ mod window_parse;
 
 pub use events::*;
 pub use runtime_input::*;
+pub use serialization::runtimepath_roots;
 pub use surface_types::*;
 pub use text_inputs::KeyModifiers;
 pub use types::*;

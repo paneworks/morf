@@ -2,7 +2,6 @@ use morf_io::{IpcReply, IpcRequest, IpcServer, IpcValue as WireValue};
 use morf_lua::{LogEntry, LogLevel, Runtime, Screen};
 use morf_wayland::{LayerClient, ScreenInfo};
 use std::collections::BTreeMap;
-use std::env;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -293,32 +292,8 @@ pub(crate) fn lua_screen(screen: &ScreenInfo) -> Screen {
     }
 }
 
-pub(crate) fn runtimepath_roots(config: &Path, external: bool) -> Vec<PathBuf> {
-    let mut roots = config
-        .parent()
-        .map(Path::to_path_buf)
-        .into_iter()
-        .collect::<Vec<_>>();
-    if external {
-        roots.extend(
-            env::var_os("MORF_RUNTIME_PATH")
-                .into_iter()
-                .flat_map(|paths| env::split_paths(&paths).collect::<Vec<_>>()),
-        );
-        if let Some(data) = env::var_os("XDG_DATA_HOME") {
-            roots.push(PathBuf::from(data).join("morf/site"));
-        } else if let Some(home) = env::var_os("HOME") {
-            roots.push(PathBuf::from(home).join(".local/share/morf/site"));
-        }
-    }
-    let mut unique = Vec::new();
-    for root in roots {
-        if !unique.contains(&root) {
-            unique.push(root);
-        }
-    }
-    unique
-}
+/// Where `require` looks, shared with `frame_bench` through morf-lua.
+pub(crate) use morf_lua::runtimepath_roots;
 
 pub(crate) fn execute_config(
     runtime: &mut Runtime,

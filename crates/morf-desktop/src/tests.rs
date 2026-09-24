@@ -139,3 +139,37 @@ fn sessions_are_looked_for_where_sessions_live() {
         "the application search did not grow session directories",
     );
 }
+
+#[test]
+fn the_system_data_directories_are_always_searched_last() {
+    // A Nix development shell sets XDG_DATA_DIRS to store paths alone;
+    // /usr/share has to be searched anyway, after them.
+    let dirs = xdg_data_dirs_from(
+        None,
+        Some("/home/u".into()),
+        Some("/nix/store/a/share:/usr/share/".into()),
+    );
+    assert_eq!(
+        dirs,
+        [
+            "/home/u/.local/share",
+            "/nix/store/a/share",
+            "/usr/share",
+            "/usr/local/share"
+        ]
+        .map(PathBuf::from)
+        .to_vec()
+    );
+    // Unset or empty is the spec default, and XDG_DATA_HOME wins over HOME.
+    let dirs = xdg_data_dirs_from(
+        Some("/data".into()),
+        Some("/home/u".into()),
+        Some("".into()),
+    );
+    assert_eq!(
+        dirs,
+        ["/data", "/usr/local/share", "/usr/share"]
+            .map(PathBuf::from)
+            .to_vec()
+    );
+}
