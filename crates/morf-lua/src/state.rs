@@ -216,6 +216,11 @@ pub(crate) struct ReactiveState {
     pub(crate) clipboard_text: Option<String>,
     pub(crate) effect_runs: u64,
     pub(crate) clock: SignalId,
+    /// `morf.session_lock`: where this process's session lock stands, as the
+    /// compositor last said — see [`crate::SessionLockState`].
+    pub(crate) session_lock: SignalId,
+    /// Told when that changes, each with whether it wants only `locked`.
+    pub(crate) session_lock_callbacks: Vec<(StashedClosure, bool)>,
     pub(crate) handlers: HashMap<(NodeHandle, UiEvent), StashedClosure>,
     pub(crate) parent_transitions: Vec<ParentTransitionRequest>,
     pub(crate) states: HashMap<NodeHandle, StateSet>,
@@ -369,12 +374,15 @@ impl ReactiveState {
         let mut graph = Graph::default();
         let initial_clock = IpcValue::String(String::new());
         let clock = graph.signal("morf.clock", initial_clock.clone());
+        let initial_lock = IpcValue::String(crate::SessionLockState::Unlocked.name().to_owned());
+        let session_lock = graph.signal("morf.session_lock", initial_lock.clone());
         let mut values = HashMap::new();
         values.insert(clock, initial_clock);
+        values.insert(session_lock, initial_lock);
         Self {
             graph: Some(graph),
             values,
-            signals: vec![clock],
+            signals: vec![clock, session_lock],
             property_signals: HashMap::new(),
             effect_ids: HashMap::new(),
             dead_effects: Vec::new(),
@@ -417,6 +425,8 @@ impl ReactiveState {
             clipboard_text: None,
             effect_runs: 0,
             clock,
+            session_lock,
+            session_lock_callbacks: Vec::new(),
             handlers: HashMap::new(),
             parent_transitions: Vec::new(),
             states: HashMap::new(),

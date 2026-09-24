@@ -66,6 +66,7 @@ mod runtime_layout;
 mod runtime_prefers;
 mod runtime_screens;
 mod runtime_services;
+mod runtime_session_lock;
 mod runtime_text_inputs;
 mod runtime_toplevels;
 mod runtime_views;
@@ -86,6 +87,7 @@ mod window_parse;
 
 pub use events::*;
 pub use runtime_input::*;
+pub use runtime_session_lock::SessionLockState;
 pub use surface_types::*;
 pub use text_inputs::KeyModifiers;
 pub use types::*;

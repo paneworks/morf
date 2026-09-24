@@ -273,4 +273,14 @@ pub(crate) fn install_signal_api<'gc>(
     );
     clock.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
     morf.set_field(ctx, "clock", clock);
+    // Where the session lock stands, for a binding to follow: "unlocked",
+    // "pending", "locked" or "failed". Written by the lock loop only.
+    let session_lock = UserData::new_static(
+        &ctx,
+        SignalToken {
+            id: state.borrow().session_lock,
+        },
+    );
+    session_lock.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
+    morf.set_field(ctx, "session_lock", session_lock);
 }

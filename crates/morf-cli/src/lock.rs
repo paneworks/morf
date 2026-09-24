@@ -1,6 +1,6 @@
 use morf_io::IpcIncoming;
 use morf_layout::Size;
-use morf_lua::{IpcValue, Runtime};
+use morf_lua::{IpcValue, Runtime, SessionLockState};
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::Element;
 use morf_wayland::{LayerClient, LayerEvent, ScreenInfo};
@@ -108,6 +108,9 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
     client
         .begin_session_lock()
         .map_err(|error| error.to_string())?;
+    // Asked for, not yet granted: the compositor says `locked` once every
+    // output shows a locked frame, and only then is the session hidden.
+    runtime.set_session_lock_state(SessionLockState::Pending);
     apply_service_requests(&mut runtime, &mut client);
     let mut outputs: Vec<LockOutput> = Vec::new();
     let mut last_frame = None;
@@ -139,6 +142,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
         unlock_pending |= !runtime.layer_surface_config().session_lock;
         if locked && unlock_pending {
             client.unlock_session().map_err(|error| error.to_string())?;
+            runtime.set_session_lock_state(SessionLockState::Unlocked);
             return Ok(());
         }
         let next_clock = clock_text();
@@ -174,7 +178,10 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                 LayerEvent::AuxScale { .. }
                 | LayerEvent::ShortcutsInhibited { .. }
                 | LayerEvent::KeyboardFocus { .. } => {}
-                LayerEvent::SessionLocked => locked = true,
+                LayerEvent::SessionLocked => {
+                    locked = true;
+                    repaint |= runtime.set_session_lock_state(SessionLockState::Locked);
+                }
                 LayerEvent::Screens(_) => {}
                 LayerEvent::SessionLockConfigure { index, .. } => {
                     if outputs.len() <= index {
@@ -248,7 +255,15 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                     };
                 }
                 LayerEvent::SessionLockFinished => {
-                    return Err("compositor ended the session lock".to_owned());
+                    // Told before the process goes, so a configuration can
+                    // say why: refused outright, or ended from outside.
+                    let (state, error) = if locked {
+                        (SessionLockState::Unlocked, "compositor ended the session lock")
+                    } else {
+                        (SessionLockState::Failed, "compositor refused the session lock")
+                    };
+                    runtime.set_session_lock_state(state);
+                    return Err(error.to_owned());
                 }
                 LayerEvent::Idle {
                     timeout_ms,
