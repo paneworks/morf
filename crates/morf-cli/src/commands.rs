@@ -45,6 +45,23 @@ pub(crate) fn follow_logs(follow: bool, level: LogLevel) -> Result<(), String> {
     }
 }
 
+/// The `.sock` files in one directory; none if it does not exist.
+fn sockets_in(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
+    match fs::read_dir(dir) {
+        Ok(entries) => Ok(entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension == "sock")
+            })
+            .collect()),
+        // No directory is no instances, not an error: nothing has run yet.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(error) => Err(format!("could not read {}: {error}", dir.display())),
+    }
+}
+
 /// Prints every instance on this machine, by asking each one who it is.
 ///
 /// Dead sockets -- left by an instance that was killed rather than stopped --
@@ -52,19 +69,12 @@ pub(crate) fn follow_logs(follow: bool, level: LogLevel) -> Result<(), String> {
 /// running", and the answer to that should not include what is not.
 pub(crate) fn list_instances(json: bool, show_dead: bool) -> Result<(), String> {
     let dir = socket_dir()?;
-    let mut entries = match fs::read_dir(&dir) {
-        Ok(entries) => entries
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| {
-                path.extension()
-                    .is_some_and(|extension| extension == "sock")
-            })
-            .collect::<Vec<_>>(),
-        // No directory is no instances, not an error: nothing has run yet.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-        Err(error) => return Err(format!("could not read {}: {error}", dir.display())),
-    };
+    let mut entries = sockets_in(&dir)?;
+    // Sockets whose proper path was too long to bind live here instead.
+    let fallback = crate::socket_path::fallback_dir();
+    if fallback != dir {
+        entries.extend(sockets_in(&fallback)?);
+    }
     entries.sort();
     let mut rows = Vec::new();
     for socket in entries {

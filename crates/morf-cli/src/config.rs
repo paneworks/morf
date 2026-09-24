@@ -374,7 +374,12 @@ pub(crate) fn socket_path_for(display: Option<&str>) -> Result<PathBuf, String> 
     if display.is_empty() || display.contains('/') {
         return Err("WAYLAND_DISPLAY must be one path component".to_owned());
     }
-    Ok(socket_dir()?.join(format!("{display}.sock")))
+    // Too long a path for a socket moves somewhere short; see `socket_path`.
+    crate::socket_path::fitting_socket_path(
+        socket_dir()?.join(format!("{display}.sock")),
+        &display,
+        &crate::socket_path::fallback_dir(),
+    )
 }
 
 /// Puts a `fonts` directory beside the configuration, if there is one, on
