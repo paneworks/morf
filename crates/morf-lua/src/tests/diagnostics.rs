@@ -91,6 +91,56 @@ fn a_container_growing_from_nothing_is_not_reported() {
 }
 
 #[test]
+fn a_container_of_hidden_rows_is_not_reported() {
+    // A list of rows each shown only while it has something to show -- the
+    // desk's task list with no tasks -- lays out to nothing, and so does the
+    // column holding it. Nothing in either would be seen at any size, so
+    // neither is a mistake; a hidden subtree is passed over altogether.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "hidden.lua",
+            br#"
+                local ui = require("morf.ui")
+                ui.Rect {
+                    ui.Column {
+                        width = 50,
+                        ui.Column {
+                            width = 50,
+                            ui.Rect { width = 40, height = 20, visible = false },
+                            ui.Rect { width = 40, height = 20, visible = false },
+                        },
+                    },
+                    ui.Rect {
+                        width = 0, height = 0, visible = false,
+                        ui.Text { text = "hidden with its parent" },
+                    },
+                }
+            "#,
+        )
+        .unwrap();
+    let root = runtime.scene().roots()[0];
+    let layout = morf_layout::Layout::compute(
+        &runtime.scene(),
+        root,
+        morf_layout::Size {
+            width: 100.0,
+            height: 100.0,
+        },
+        &mut NoText,
+    )
+    .unwrap();
+    runtime.lint_layout(&layout, root);
+    runtime.poll_services();
+    let logs = runtime.take_logs();
+    assert!(
+        logs.iter()
+            .all(|log| !log.message.contains("laid out to nothing")),
+        "hidden rows are not lost ones: {logs:?}"
+    );
+}
+
+#[test]
 fn capabilities_reach_the_configuration_and_the_wire() {
     // "Is there screencopy here" is a question a shell should be able to ask
     // rather than try and read the error; `morf info` is the same question

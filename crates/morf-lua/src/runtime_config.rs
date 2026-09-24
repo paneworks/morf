@@ -221,21 +221,31 @@ impl Runtime {
         let mut pending = vec![root];
         let mut queue = self.lint_queue.borrow_mut();
         while let Some(node) = pending.pop() {
+            // What is hidden on purpose is not lost: an invisible item and
+            // everything in it are passed over.
+            if !scene.bool_value(node, "visible").unwrap_or(true) {
+                continue;
+            }
             let Ok(children) = scene.children(node) else {
                 continue;
             };
             pending.extend(children.iter().copied());
-            if children.is_empty() {
-                continue;
-            }
             let Some(geometry) = layout.geometry(node) else {
                 continue;
             };
-            if (geometry.width <= 0.0 || geometry.height <= 0.0)
-                && !growing_from_nothing(&scene, node)
-            {
+            if geometry.width > 0.0 && geometry.height > 0.0 {
+                continue;
+            }
+            // Only children that would show something count: a column of
+            // rows that are all hidden, or that are empty themselves, lays
+            // out to nothing because there is nothing in it to see.
+            let seen = children
+                .iter()
+                .filter(|&&child| would_show(&scene, layout, child))
+                .count();
+            if seen > 0 && !growing_from_nothing(&scene, node) {
                 let element = lint_path(&scene, node);
-                queue.push((node, element, children.len()));
+                queue.push((node, element, seen));
             }
         }
     }
@@ -456,6 +466,28 @@ impl Runtime {
 /// frames, with its whole subtree inside, and that is the animation working
 /// rather than a configuration forgetting a size. The lint is for a size that
 /// stays at nothing, so it looks past one that is moving.
+/// Whether a node would show something given room: it is visible, and it is
+/// a leaf, or laid out to a size, or holds something that would show. A
+/// container whose children are all hidden (or empty the same way) holds
+/// nothing to see at any size.
+fn would_show(scene: &morf_scene::Scene, layout: &morf_layout::Layout, node: NodeHandle) -> bool {
+    if !scene.bool_value(node, "visible").unwrap_or(true) {
+        return false;
+    }
+    if layout
+        .geometry(node)
+        .is_some_and(|geometry| geometry.width > 0.0 && geometry.height > 0.0)
+    {
+        return true;
+    }
+    match scene.children(node) {
+        Ok(children) if !children.is_empty() => children
+            .iter()
+            .any(|&child| would_show(scene, layout, child)),
+        _ => true,
+    }
+}
+
 fn growing_from_nothing(scene: &morf_scene::Scene, node: NodeHandle) -> bool {
     const SIZES: &[&str] = &[
         "width",

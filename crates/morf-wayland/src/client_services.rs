@@ -67,6 +67,18 @@ impl LayerClient {
         self.queue
             .flush()
             .map_err(|error| WaylandError(format!("Wayland flush failed: {error}")))?;
+        // A held key repeats on the client's clock: the wait ends when the
+        // next repeat is due, and the repeats that are due are queued.
+        if self.fire_key_repeats() {
+            return Ok(Woke::Queued);
+        }
+        let timeout = match self.state.key_repeat.deadline() {
+            Some(due) => {
+                let until = due.saturating_duration_since(std::time::Instant::now());
+                Some(timeout.map_or(until, |timeout| timeout.min(until)))
+            }
+            None => timeout,
+        };
         let Some(guard) = self.queue.prepare_read() else {
             self.queue
                 .dispatch_pending(&mut self.state)
@@ -95,6 +107,9 @@ impl LayerClient {
         let alarm = fds.get(1).is_some_and(|fd| !fd.revents().is_empty());
         if ready == 0 || fds[0].revents().is_empty() {
             drop(guard);
+            if self.fire_key_repeats() {
+                return Ok(Woke::Queued);
+            }
             return Ok(if alarm { Woke::Alarm } else { Woke::Timeout });
         }
         guard
@@ -104,6 +119,16 @@ impl LayerClient {
             .dispatch_pending(&mut self.state)
             .map_err(|error| WaylandError(format!("Wayland dispatch failed: {error}")))?;
         Ok(Woke::Compositor)
+    }
+
+    /// Queues the repeats of a held key that are due; true when there were any.
+    fn fire_key_repeats(&mut self) -> bool {
+        let due = self.state.key_repeat.due(std::time::Instant::now());
+        let fired = !due.is_empty();
+        for event in due {
+            self.state.push_key(event, true, true);
+        }
+        fired
     }
 
     /// Replaces seat idle thresholds and returns whether the compositor supports them.

@@ -259,6 +259,7 @@ pub(crate) fn run_surface(
         drag: None,
         primary_deferred: false,
         fallback_tick: None,
+        forced_paint: None,
     };
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
     let mut layout_complaint: Option<Instant> = None;
@@ -437,13 +438,26 @@ pub(crate) fn run_surface(
         apply_capture_releases(&mut runtime, &mut renderer);
         apply_window_surface_actions(&mut runtime, &client, &state.floating_surfaces);
         advance_without_callbacks(&mut runtime, &client, &mut state)?;
+        // A paint owed for longer than a stall is made without the callback.
+        let owed = owed_paint_due(
+            state.primary_deferred,
+            client.layer_frame_wait(PRIMARY_LAYER),
+            state.refresh,
+            state.forced_paint,
+            Instant::now(),
+        );
+        if owed {
+            state.primary_deferred = false;
+            state.forced_paint = Some(Instant::now());
+            repaint = true;
+        }
         // A surface still waiting for its last frame callback is not
         // presented to again: under FIFO the present blocks until that
         // callback, and a surface the compositor is not showing (a fallback
         // toplevel under another, in cage) never gets one -- which froze this
         // whole output, every other surface and IPC with it. The callback,
         // when it comes, makes the paint.
-        if repaint && client.layer_frame_wait(PRIMARY_LAYER).is_some() {
+        if repaint && !owed && client.layer_frame_wait(PRIMARY_LAYER).is_some() {
             state.primary_deferred = true;
             for surface in state.layer_surfaces.values_mut() {
                 surface.needs_paint |= surface.updates_enabled;
@@ -611,10 +625,18 @@ fn motion_deadline(
     state: &SurfaceEventState,
 ) -> Option<Instant> {
     let waiting = client.layer_frame_wait(PRIMARY_LAYER)?;
-    if !(state.animating_shaders || runtime.has_motion()) {
-        return None;
-    }
     let now = Instant::now();
+    if !(state.animating_shaders || runtime.has_motion()) {
+        // Still, a paint owed and waiting on the callback comes due once
+        // the callback is overdue (`owed_paint_due`).
+        if !state.primary_deferred {
+            return None;
+        }
+        let stall = frame_stall(state.refresh);
+        let after_wait = now + stall.saturating_sub(waiting);
+        let after_forced = state.forced_paint.map_or(now, |at| at + stall);
+        return Some(after_wait.max(after_forced) + Duration::from_millis(1));
+    }
     Some(match state.fallback_tick {
         Some(last) => last + state.refresh,
         // A hair past the threshold, so the check finds it crossed.

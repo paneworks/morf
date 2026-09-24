@@ -45,6 +45,14 @@ impl Headless {
             }
             _ => {}
         }
+        if let LayerEvent::PointerButton {
+            surface,
+            pressed: true,
+            ..
+        } = &event
+        {
+            self.keyboard = Some(*surface);
+        }
         let layouts = Layouts(&self.surfaces);
         match handle_pointer_event(
             &mut self.runtime,

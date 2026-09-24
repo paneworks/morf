@@ -246,6 +246,8 @@ pub(crate) struct LayerState {
     pub(crate) touch: Option<wl_touch::WlTouch>,
     pub(crate) touch_points: HashMap<i32, ((f64, f64), SurfaceRole)>,
     pub(crate) keyboard_surface: Option<SurfaceRole>,
+    /// The key being held, repeated by the client (`key_repeat`).
+    pub(crate) key_repeat: crate::key_repeat::KeyRepeat,
     pub(crate) idle_notifier: Option<ExtIdleNotifierV1>,
     pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
     /// The control half of the window list. Optional: a compositor may offer

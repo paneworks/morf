@@ -13,6 +13,25 @@ use crate::headless::Headless;
 use crate::headless_input::{button, keysym, modifiers};
 use crate::test_host::{TestHost, list, map, number, optional_text, string, text};
 
+/// Where keys go: the surface named, else the one last clicked (a
+/// compositor hands the keyboard to the window pressed on), else the
+/// primary.
+fn key_role(
+    subject: &Headless,
+    surface: Option<&IpcValue>,
+) -> Result<morf_wayland::SurfaceRole, String> {
+    if optional_text(surface).is_none()
+        && let Some(clicked) = subject.keyboard
+        && subject
+            .surfaces
+            .iter()
+            .any(|candidate| candidate.role == clicked)
+    {
+        return Ok(clicked);
+    }
+    role(subject, surface)
+}
+
 fn role(
     subject: &Headless,
     surface: Option<&IpcValue>,
@@ -92,7 +111,7 @@ pub(crate) fn key(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<Ipc
     // A key typed with Ctrl or Alt held is a shortcut, not text.
     let typed = typed.filter(|_| !held.ctrl && !held.alt && !held.logo);
     let subject = host.subject()?;
-    let surface = role(subject, arguments.get(2))?;
+    let surface = key_role(subject, arguments.get(2))?;
     subject.key(surface, code, typed.as_deref(), held)?;
     Ok(Vec::new())
 }
@@ -103,7 +122,7 @@ pub(crate) fn type_text(
 ) -> Result<Vec<IpcValue>, String> {
     let typed = optional_text(arguments.first()).unwrap_or_default();
     let subject = host.subject()?;
-    let surface = role(subject, arguments.get(1))?;
+    let surface = key_role(subject, arguments.get(1))?;
     for character in typed.chars() {
         let name = match character {
             '\n' => "Return".to_owned(),

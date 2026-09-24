@@ -1,5 +1,5 @@
 use smithay_client_toolkit::seat::keyboard::{
-    KeyEvent, KeyboardHandler, Keymap, Keysym, Modifiers, RawModifiers,
+    KeyEvent, KeyboardHandler, Keymap, Keysym, Modifiers, RawModifiers, RepeatInfo,
 };
 use smithay_client_toolkit::seat::pointer::{
     AxisScroll, PointerEvent, PointerEventKind, PointerHandler,
@@ -68,6 +68,7 @@ impl SeatHandler for LayerState {
         if capability == Capability::Keyboard
             && let Some(keyboard) = self.keyboard.take()
         {
+            self.key_repeat.stop();
             keyboard.release();
         }
         if capability == Capability::Touch
@@ -307,6 +308,7 @@ impl KeyboardHandler for LayerState {
         surface: &wl_surface::WlSurface,
         _serial: u32,
     ) {
+        self.key_repeat.stop();
         let role = self.surface_role(surface);
         if role == self.keyboard_surface {
             self.keyboard_surface = None;
@@ -332,6 +334,7 @@ impl KeyboardHandler for LayerState {
         event: KeyEvent,
     ) {
         self.latest_input_serial = Some(serial);
+        self.key_repeat.press(&event, std::time::Instant::now());
         self.push_key(event, true, false);
     }
 
@@ -354,6 +357,7 @@ impl KeyboardHandler for LayerState {
         _serial: u32,
         event: KeyEvent,
     ) {
+        self.key_repeat.release(&event);
         self.push_key(event, false, false);
     }
 
@@ -377,6 +381,16 @@ impl KeyboardHandler for LayerState {
             alt: modifiers.alt,
             logo: modifiers.logo,
         };
+    }
+
+    fn update_repeat_info(
+        &mut self,
+        _connection: &Connection,
+        _qh: &QueueHandle<Self>,
+        _keyboard: &wl_keyboard::WlKeyboard,
+        info: RepeatInfo,
+    ) {
+        self.key_repeat.set_info(info);
     }
 
     fn update_keymap(
