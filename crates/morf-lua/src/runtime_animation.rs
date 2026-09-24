@@ -14,6 +14,35 @@ impl Runtime {
     /// allowed to abort the frame.
     /// Whether anything is in motion, so a loop standing in for the
     /// compositor's frame callbacks knows whether to keep ticking.
+    /// What is animating right now, one line each (`path.property`, marked
+    /// when it loops forever), at most `max`: for `MORF_WAKE_LOG`, which asks
+    /// what keeps an otherwise idle shell drawing frames.
+    pub fn motion_report(&self, max: usize) -> Vec<String> {
+        let state = self.reactive.borrow();
+        let scene = &state.scene;
+        let mut lines: Vec<String> = scene
+            .running_animations()
+            .into_iter()
+            .map(|(node, property, endless)| {
+                let id = scene
+                    .string_value(node, "id")
+                    .ok()
+                    .filter(|id| !id.is_empty())
+                    .map(|id| format!(" #{id}"))
+                    .unwrap_or_default();
+                format!(
+                    "{}{id}.{property}{}",
+                    crate::runtime_config::lint_path(scene, node),
+                    if endless { " (loops)" } else { "" }
+                )
+            })
+            .collect();
+        lines.sort();
+        lines.dedup();
+        lines.truncate(max);
+        lines
+    }
+
     pub fn has_motion(&self) -> bool {
         self.reactive.borrow().scene.has_motion()
     }

@@ -481,7 +481,7 @@ fn growing_from_nothing(scene: &morf_scene::Scene, node: NodeHandle) -> bool {
 
 /// A node as the lint names it: its element under up to three ancestors,
 /// outermost first (`Rect > Column > Item`), so the one meant can be found.
-fn lint_path(scene: &morf_scene::Scene, node: NodeHandle) -> String {
+pub(crate) fn lint_path(scene: &morf_scene::Scene, node: NodeHandle) -> String {
     let mut names = Vec::new();
     let mut current = Some(node);
     while let Some(at) = current {

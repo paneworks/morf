@@ -262,6 +262,7 @@ pub(crate) fn run_surface(
     };
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
     let mut layout_complaint: Option<Instant> = None;
+    let mut motion_reported: Option<Instant> = None;
     // Whether the last turn handled anything -- an event, a command -- whose
     // handlers may have left work that only the checks at the top of a turn
     // pick up (a popup to open, a reload asked for). One more turn, at once.
@@ -286,6 +287,16 @@ pub(crate) fn run_surface(
             .map_err(|error| error.to_string())?;
         wake.drain();
         log_wake(&name, woke, &sleep, slept);
+        // Now and then, what keeps the loop drawing, when anything does.
+        if wake_log_wanted()
+            && runtime.has_motion()
+            && motion_reported.is_none_or(|at: Instant| at.elapsed() >= Duration::from_secs(2))
+        {
+            motion_reported = Some(Instant::now());
+            for line in runtime.motion_report(8) {
+                eprintln!("morf: output {name}: moving: {line}");
+            }
+        }
         // Before the services, so a callback reading the time reads it as it
         // is now, not as it was when the loop last woke.
         let next_clock = clock_text();

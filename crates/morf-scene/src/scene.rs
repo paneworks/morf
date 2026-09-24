@@ -392,6 +392,17 @@ impl Scene {
             || self.groups.values().any(|group| !group.paused)
     }
 
+    /// The animations that are running rather than paused: node, property,
+    /// and whether it loops forever. For diagnostics -- what keeps an idle
+    /// shell drawing.
+    pub fn running_animations(&self) -> Vec<(NodeHandle, &'static str, bool)> {
+        self.animations
+            .iter()
+            .filter(|(_, animation)| !animation.is_paused())
+            .map(|(key, animation)| (NodeHandle(key.node), key.property, !animation.settles()))
+            .collect()
+    }
+
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, SceneError> {
         let snap = self.motion_scale == 0.0;
         // A scale of zero is a tick long enough to finish anything timed. A
