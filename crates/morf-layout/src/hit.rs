@@ -23,10 +23,32 @@ pub struct Hit {
     pub local_y: f64,
 }
 
+/// What a hit test is looking for: which kind of area, and which of those
+/// it takes.
+struct Target<'a> {
+    element: Element,
+    accept: &'a dyn Fn(NodeHandle) -> bool,
+}
+
 impl Layout {
     /// Returns the topmost enabled MouseArea containing a surface-local point.
     pub fn hit_test(&self, scene: &Scene, x: f64, y: f64) -> Result<Option<Hit>, LayoutError> {
-        self.hit_element(scene, Element::MouseArea, x, y)
+        self.hit_element(scene, Element::MouseArea, x, y, &|_| true)
+    }
+
+    /// The topmost enabled MouseArea under a point that `accept` takes.
+    ///
+    /// One that refuses is passed over, not in the way: an area taking only
+    /// the right button laid over one taking the left has to let a left
+    /// click through, or a right-click menu costs a button its click.
+    pub fn hit_test_accepting(
+        &self,
+        scene: &Scene,
+        x: f64,
+        y: f64,
+        accept: &dyn Fn(NodeHandle) -> bool,
+    ) -> Result<Option<Hit>, LayoutError> {
+        self.hit_element(scene, Element::MouseArea, x, y, accept)
     }
 
     /// Returns the topmost enabled DropArea containing a surface-local point.
@@ -36,7 +58,7 @@ impl Layout {
     /// target, and a click passes over targets on its way to a button. Neither
     /// should stop the other.
     pub fn drop_hit_test(&self, scene: &Scene, x: f64, y: f64) -> Result<Option<Hit>, LayoutError> {
-        self.hit_element(scene, Element::DropArea, x, y)
+        self.hit_element(scene, Element::DropArea, x, y, &|_| true)
     }
 
     fn hit_element(
@@ -45,9 +67,11 @@ impl Layout {
         element: Element,
         x: f64,
         y: f64,
+        accept: &dyn Fn(NodeHandle) -> bool,
     ) -> Result<Option<Hit>, LayoutError> {
         for root in scene.roots().into_iter().rev() {
-            if let Some(hit) = self.hit_node(scene, root, element, Transform2D::IDENTITY, x, y)? {
+            let target = Target { element, accept };
+            if let Some(hit) = self.hit_node(scene, root, &target, Transform2D::IDENTITY, x, y)? {
                 return Ok(Some(hit));
             }
         }
@@ -178,7 +202,7 @@ impl Layout {
         &self,
         scene: &Scene,
         node: NodeHandle,
-        element: Element,
+        target: &Target<'_>,
         inherited: Transform2D,
         x: f64,
         y: f64,
@@ -201,18 +225,22 @@ impl Layout {
             return Ok(None);
         }
         for &child in scene.paint_order(node)?.iter().rev() {
-            if let Some(hit) = self.hit_node(scene, child, element, transform, x, y)? {
+            if let Some(hit) = self.hit_node(scene, child, target, transform, x, y)? {
                 return Ok(Some(hit));
             }
         }
         // The inverse point is measured in the space the node's own geometry
         // is resolved in, which is absolute; subtracting the node's origin is
         // what makes it node-local.
-        Ok((inside && scene.element(node)? == element).then_some(Hit {
-            node,
-            local_x: local_x - geometry.x,
-            local_y: local_y - geometry.y,
-        }))
+        Ok(
+            (inside && scene.element(node)? == target.element && (target.accept)(node)).then_some(
+                Hit {
+                    node,
+                    local_x: local_x - geometry.x,
+                    local_y: local_y - geometry.y,
+                },
+            ),
+        )
     }
 }
 

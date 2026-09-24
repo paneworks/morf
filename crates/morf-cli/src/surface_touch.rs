@@ -9,6 +9,9 @@ use crate::surfaces::*;
 
 /// How far a finger may wander and still be a tap, in logical pixels.
 const TAP_TRAVEL: f64 = 10.0;
+/// A finger is the primary button: it presses, releases and clicks as
+/// `left`, and a MouseArea that takes only another button lets it through.
+const TOUCH_BUTTON: u32 = 0x110;
 
 pub(crate) fn handle_touch_event(
     runtime: &mut Runtime,
@@ -28,10 +31,13 @@ pub(crate) fn handle_touch_event(
                 return Ok(false);
             };
             let hit = hit_layout
-                .hit_test(&runtime.scene(), x, y)
+                .hit_test_accepting(&runtime.scene(), x, y, &|node| {
+                    runtime.accepts_pointer_button(node, TOUCH_BUTTON)
+                })
                 .map_err(|error| error.to_string())?;
             if let Some(hit) = hit {
-                let point = EventPoint::new((x, y), (hit.local_x, hit.local_y));
+                let point =
+                    EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(TOUCH_BUTTON);
                 state.touches.insert(id, (surface, hit, x, y, 0.0));
                 if let Some(target) = runtime.key_target_for_node(hit.node) {
                     state.focused.insert(surface, target);
@@ -79,7 +85,7 @@ pub(crate) fn handle_touch_event(
                 let local = layout
                     .map(|layout| layout.local_point(&runtime.scene(), pressed_hit.node, x, y))
                     .unwrap_or((x, y));
-                let point = EventPoint::new((x, y), local);
+                let point = EventPoint::new((x, y), local).with_button(TOUCH_BUTTON);
                 repaint |= runtime.dispatch_touch_event(
                     pressed_hit.node,
                     UiEvent::TouchReleased,
@@ -94,7 +100,11 @@ pub(crate) fn handle_touch_event(
                 );
                 let hit = layout
                     .filter(|_| touch_surface == surface)
-                    .map(|layout| layout.hit_test(&runtime.scene(), x, y))
+                    .map(|layout| {
+                        layout.hit_test_accepting(&runtime.scene(), x, y, &|node| {
+                            runtime.accepts_pointer_button(node, TOUCH_BUTTON)
+                        })
+                    })
                     .transpose()
                     .map_err(|error| error.to_string())?
                     .flatten();
@@ -120,7 +130,8 @@ pub(crate) fn handle_touch_event(
         }
         LayerEvent::TouchCancel => {
             for (id, (_, hit, x, y, _)) in state.touches.drain() {
-                let point = EventPoint::new((x, y), (hit.local_x, hit.local_y));
+                let point =
+                    EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(TOUCH_BUTTON);
                 repaint |=
                     runtime.dispatch_touch_event(hit.node, UiEvent::TouchCanceled, id, point);
                 repaint |= runtime.dispatch_pointer(hit.node, UiEvent::Released, point, (0.0, 0.0));

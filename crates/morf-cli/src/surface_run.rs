@@ -222,6 +222,7 @@ pub(crate) fn run_surface(
         refresh: Duration::from_micros(16_667),
         hovered: None,
         pressed: None,
+        pressed_button: 0x110,
         focused: HashMap::new(),
         touches: HashMap::new(),
         drag: None,

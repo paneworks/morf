@@ -242,9 +242,10 @@ pub(crate) fn handle_surface_event(
                 return Ok(false);
             };
             let hit = hit_layout
-                .hit_test(&runtime.scene(), x, y)
+                .hit_test_accepting(&runtime.scene(), x, y, &|node| {
+                    runtime.accepts_pointer_button(node, button)
+                })
                 .map_err(|error| error.to_string())?;
-            let hit = hit.filter(|hit| runtime.accepts_pointer_button(hit.node, button));
             // A compositor that has given this surface the keyboard may send
             // it every press, wherever the pointer is; one that lands on
             // nothing is the click beside the shell the backdrop exists for.
@@ -255,6 +256,7 @@ pub(crate) fn handle_surface_event(
                 repaint |= runtime.dispatch_backdrop_click();
             }
             state.pressed = hit.map(|hit| (surface, hit, x, y, false));
+            state.pressed_button = button;
             if let Some(target) = hit.and_then(|hit| runtime.key_target_for_node(hit.node)) {
                 state.focused.insert(surface, target);
             } else {
@@ -266,7 +268,7 @@ pub(crate) fn handle_surface_event(
                 repaint |= runtime.dispatch_pointer(
                     hit.node,
                     UiEvent::Pressed,
-                    EventPoint::new((x, y), (hit.local_x, hit.local_y)),
+                    EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(button),
                     (0.0, 0.0),
                 );
             }
@@ -291,7 +293,12 @@ pub(crate) fn handle_surface_event(
                 &state.floating_surfaces,
                 &state.layer_surfaces,
             )
-            .map(|layout| layout.hit_test(&runtime.scene(), x, y))
+            .map(|layout| {
+                let button = state.pressed_button;
+                layout.hit_test_accepting(&runtime.scene(), x, y, &|node| {
+                    runtime.accepts_pointer_button(node, button)
+                })
+            })
             .transpose()
             .map_err(|error| error.to_string())?
             .flatten();
@@ -308,10 +315,11 @@ pub(crate) fn handle_surface_event(
                 .map(|layout| layout.local_point(&runtime.scene(), pressed_hit.node, x, y))
                 .unwrap_or((x, y));
                 let point = EventPoint::new((x, y), local);
+                let clicked = point.with_button(state.pressed_button);
                 repaint |= runtime.dispatch_pointer(
                     pressed_hit.node,
                     UiEvent::Released,
-                    point,
+                    clicked,
                     (0.0, 0.0),
                 );
                 if dragging {
@@ -329,7 +337,7 @@ pub(crate) fn handle_surface_event(
                     repaint |= runtime.dispatch_pointer(
                         pressed_hit.node,
                         UiEvent::Clicked,
-                        point,
+                        clicked,
                         (0.0, 0.0),
                     );
                 }

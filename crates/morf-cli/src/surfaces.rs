@@ -81,6 +81,8 @@ pub(crate) struct SurfaceEventState {
     pub(crate) refresh: Duration,
     pub(crate) hovered: Option<(SurfaceRole, Hit)>,
     pub(crate) pressed: Option<(SurfaceRole, Hit, f64, f64, bool)>,
+    /// The button behind `pressed`, so its release and click say which.
+    pub(crate) pressed_button: u32,
     pub(crate) focused: HashMap<SurfaceRole, NodeHandle>,
     /// Each finger down: where it landed, where it was last, and how far
     /// it has travelled, which is what tells a tap from a swipe.

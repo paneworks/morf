@@ -20,6 +20,9 @@ pub struct EventPoint {
     pub local_x: f64,
     /// Pointer y inside the handling node.
     pub local_y: f64,
+    /// The Linux button code of a press, release or click, when there was
+    /// one; handlers get its name as a fifth argument.
+    pub button: Option<u32>,
 }
 
 impl EventPoint {
@@ -30,16 +33,39 @@ impl EventPoint {
             surface_y: surface.1,
             local_x: local.0,
             local_y: local.1,
+            button: None,
         }
     }
 
-    pub(crate) fn args(self) -> [IpcValue; 4] {
-        [
+    /// The same point, from a press of `button` (a Linux input code).
+    pub fn with_button(mut self, button: u32) -> Self {
+        self.button = Some(button);
+        self
+    }
+
+    /// `left`, `right`, `middle`, `back`, `forward`, or the code as text.
+    pub fn button_name(button: u32) -> String {
+        match button {
+            0x110 => "left".to_owned(),
+            0x111 => "right".to_owned(),
+            0x112 => "middle".to_owned(),
+            0x113 => "back".to_owned(),
+            0x114 => "forward".to_owned(),
+            other => other.to_string(),
+        }
+    }
+
+    pub(crate) fn args(self) -> Vec<IpcValue> {
+        let mut args = vec![
             IpcValue::Number(self.surface_x),
             IpcValue::Number(self.surface_y),
             IpcValue::Number(self.local_x),
             IpcValue::Number(self.local_y),
-        ]
+        ];
+        if let Some(button) = self.button {
+            args.push(IpcValue::String(Self::button_name(button)));
+        }
+        args
     }
 }
 

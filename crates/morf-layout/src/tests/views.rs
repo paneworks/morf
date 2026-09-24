@@ -376,3 +376,41 @@ fn a_scene_with_nothing_interactive_claims_no_input_at_all() {
     assert_eq!(regions[0].x, 30.0);
     assert_eq!(regions[0].width, 60.0);
 }
+
+#[test]
+fn a_refusing_mouse_area_lets_the_press_through_to_the_one_below() {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    let below = scene.create(Element::MouseArea);
+    let above = scene.create(Element::MouseArea);
+    for node in [below, above] {
+        scene.assign(node, "width", 30.0).unwrap();
+        scene.assign(node, "height", 10.0).unwrap();
+        scene.reparent(node, Some(root)).unwrap();
+    }
+    let layout = Layout::compute(
+        &scene,
+        root,
+        Size {
+            width: 100.0,
+            height: 40.0,
+        },
+        &mut FixedText,
+    )
+    .unwrap();
+    assert_eq!(
+        layout.hit_test(&scene, 5.0, 5.0).unwrap().unwrap().node,
+        above
+    );
+    let passed = layout
+        .hit_test_accepting(&scene, 5.0, 5.0, &|node| node != above)
+        .unwrap()
+        .unwrap();
+    assert_eq!(passed.node, below);
+    assert_eq!(
+        layout
+            .hit_test_accepting(&scene, 5.0, 5.0, &|_| false)
+            .unwrap(),
+        None
+    );
+}

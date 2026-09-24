@@ -85,8 +85,8 @@ fn pointer_handlers_receive_both_coordinate_spaces() {
                 local ui = require("morf.ui")
                 local seen = morf.signal("pointer.seen", "")
                 local function record(name)
-                  return function(sx, sy, lx, ly)
-                    seen:set(("%s %g,%g %g,%g"):format(name, sx, sy, lx, ly))
+                  return function(sx, sy, lx, ly, button)
+                    seen:set(("%s %g,%g %g,%g%s"):format(name, sx, sy, lx, ly, button and (" " .. button) or ""))
                   end
                 end
                 morf.ipc["pointer.seen"] = function() return seen:get() end
@@ -133,6 +133,11 @@ fn pointer_handlers_receive_both_coordinate_spaces() {
 
     assert!(runtime.dispatch_pointer(area, UiEvent::Clicked, point, (0.0, 0.0)));
     assert_eq!(seen(&mut runtime), "clicked 130,55 30,15");
+
+    // A button event says which button, as a fifth argument.
+    let right = point.with_button(0x111);
+    assert!(runtime.dispatch_pointer(area, UiEvent::Clicked, right, (0.0, 0.0)));
+    assert_eq!(seen(&mut runtime), "clicked 130,55 30,15 right");
 
     // A drag keeps its displacement in surface space and lets the local pair
     // run past the node it started on.
