@@ -64,14 +64,25 @@ function M.flavour(cb)
   if not M.available() then return cb(nil) end
   if waiting then waiting[#waiting + 1] = cb return end
   waiting = { cb }
-  hyprland.eval("local _ = 0", function(reply)
-    local list = waiting
-    waiting = nil
-    if type(reply) == "string" then
-      flavour = reply:match("^%s*ok%s*$") and "lua" or "hyprlang"
-    end
-    for _, each in ipairs(list) do each(flavour) end
-  end)
+  local tries = 0
+  local function ask()
+    hyprland.eval("local _ = 0", function(reply)
+      if type(reply) ~= "string" and tries < 10 and M.available() then
+        -- Asked before the library had started, or while the compositor
+        -- was busy: ask again shortly rather than give up for good.
+        tries = tries + 1
+        morf.timer(300, ask, false)
+        return
+      end
+      local list = waiting
+      waiting = nil
+      if type(reply) == "string" then
+        flavour = reply:match("^%s*ok%s*$") and "lua" or "hyprlang"
+      end
+      for _, each in ipairs(list) do each(flavour) end
+    end)
+  end
+  ask()
 end
 
 --- The flavour last found, or nil.
@@ -418,7 +429,8 @@ function M.describe(row, names)
   local out = {}
   for key, value in pairs(row) do out[key] = value end
   out.refresh = refresh
-  out.mode = (width > 0 and height > 0) and string.format("%dx%d@%.2f", width, height, refresh) or "preferred"
+  out.mode = (width > 0 and height > 0 and not row.disabled)
+    and string.format("%dx%d@%.2f", width, height, refresh) or "preferred"
   out.position = string.format("%dx%d", row.x or 0, row.y or 0)
   out.scale = math.floor((row.scale or 1) * 1000 + 0.5) / 1000
   out.transform = row.transform or 0
