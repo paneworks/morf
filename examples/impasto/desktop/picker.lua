@@ -8,7 +8,9 @@
 --
 -- The card sits beside the widget where there is room, else over the
 -- middle of the board. It opens on the current picture's folder, else the
--- pictures folder.
+-- pictures folder. The folder is a virtualised grid: however many pictures
+-- it holds, only the rows in view are built, and only their thumbnails
+-- made.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -23,7 +25,6 @@ local M = {}
 M.PAD = 16
 M.GAP = 14
 M.THUMB = 108
-M.LIMIT = 120
 
 local model = controls.keyed("picker", function() return desk.picking:get() end)
 
@@ -35,17 +36,23 @@ local function user_dir(name, fallback)
   return home() .. "/" .. fallback
 end
 
+-- A user folder goes by its name on disk, in the language of the machine
+-- that made it; one that is the home itself is left out.
 local function places()
   local out = {
-    { glyph = "󰋩", label = "Pictures", path = user_dir("pictures", "Pictures") },
+    { glyph = "󰋩", path = user_dir("pictures", "Pictures") },
     { glyph = "󰸉", label = "Wallpapers", path = wallpaper.dir() },
-    { glyph = "󰇚", label = "Downloads", path = user_dir("download", "Downloads") },
-    { glyph = "󰍹", label = "Desktop", path = user_dir("desktop", "Desktop") },
+    { glyph = "󰇚", path = user_dir("download", "Downloads") },
+    { glyph = "󰍹", path = user_dir("desktop", "Desktop") },
     { glyph = "󰋜", label = "Home", path = home() },
   }
   local kept = {}
   for _, p in ipairs(out) do
-    if p.path == home() and p.label ~= "Home" then p = nil end
+    local path = (p.path or ""):gsub("/+$", "")
+    p.path = path ~= "" and path or "/"
+    if not p.label then
+      if p.path == home() then p = nil else p.label = p.path:match("([^/]+)$") or p.path end
+    end
     if p and (p.label == "Home" or morf.fs.is_dir(p.path)) then kept[#kept + 1] = p end
   end
   return kept
@@ -105,8 +112,8 @@ local function listing(folder)
   table.sort(dirs, by_name)
   table.sort(pictures, by_name)
   local out = {}
-  for _, d in ipairs(dirs) do if #out < M.LIMIT then out[#out + 1] = d end end
-  for _, p in ipairs(pictures) do if #out < M.LIMIT then out[#out + 1] = p end end
+  for _, d in ipairs(dirs) do out[#out + 1] = d end
+  for _, p in ipairs(pictures) do out[#out + 1] = p end
   return out
 end
 
@@ -120,6 +127,7 @@ local function card_for(key)
   local scrolled = controls.signal("picker.scrolled", 0)
   local count = controls.signal("picker.count", 0)
   local items = morf.list_model({})
+  local grid -- the virtualised view, once built
 
   local function open(path)
     local rows = listing(path)
@@ -127,6 +135,7 @@ local function card_for(key)
     scrolled:set(0)
     items:replace(rows, "path")
     count:set(#rows)
+    if grid then morf.sync_view(grid, 0) end
   end
   open(start)
 
@@ -145,6 +154,10 @@ local function card_for(key)
 
   local function content_h() return math.ceil(count:get() / per_row) * cell_h end
   local function overflow() return math.max(0, content_h() - grid_h) end
+  local function scroll_by(pixels)
+    scrolled:set(math.max(0, math.min(overflow(), scrolled:get() + pixels)))
+    if grid then morf.sync_view(grid, scrolled:get()) end
+  end
 
   local function choose(path)
     desk.set_picture(key, path)
@@ -219,9 +232,7 @@ local function card_for(key)
         on_entered = function() hovered:set(true) end,
         on_exited = function() hovered:set(false) end,
         on_clicked = function() if r.dir then open(r.path) else choose(r.path) end end,
-        on_wheel = function(_, _, _, py, _, steps)
-          scrolled:set(math.max(0, math.min(overflow(), scrolled:get() + (steps ~= 0 and steps * 60 or -py))))
-        end },
+        on_wheel = function(_, _, _, py, _, steps) scroll_by(steps ~= 0 and steps * 60 or -py) end },
     }
   end
 
@@ -242,9 +253,7 @@ local function card_for(key)
     radius = theme.radius_large, color = C.island, border_color = C.islandBorder, border_width = 1,
     ui.MouseArea {
       anchors = { fill = true }, accepted_buttons = { "left", "right" },
-      on_wheel = function(_, _, _, py, _, steps)
-        scrolled:set(math.max(0, math.min(overflow(), scrolled:get() + (steps ~= 0 and steps * 60 or -py))))
-      end,
+      on_wheel = function(_, _, _, py, _, steps) scroll_by(steps ~= 0 and steps * 60 or -py) end,
     },
     -- The head: up a level, the title, the folder, cancel.
     ui.Item {
@@ -268,11 +277,14 @@ local function card_for(key)
     ui.ClipRect {
       x = 12 + side_w + 12 + 1 + 12, y = top + 12, width = grid_w, height = grid_h,
       color = morf.color("transparent"),
-      ui.Repeater {
-        as = "grid", columns = per_row, gap = 0,
-        y = function() return -math.min(scrolled:get(), overflow()) end,
-        model = items, delegate = tile,
-      },
+      (function()
+        grid = ui.GridView {
+          width = grid_w, height = grid_h, cell_width = cell_w, cell_height = cell_h,
+          columns = per_row, overscan = 1,
+          model = items, delegate = tile,
+        }
+        return grid
+      end)(),
       kit.text { anchors = { center_in = true }, text = "No pictures here", size = theme.size.small,
         color = C.textMuted, visible = function() return count:get() == 0 end },
     },

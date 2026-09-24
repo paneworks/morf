@@ -145,8 +145,65 @@ local function publish()
   desk.tray_box = { x = card_left(), y = card_top(), width = card_width(), height = card_height() }
 end
 
+local rail
 local function scroll_by(pixels)
   scrolled:set(math.max(0, math.min(overflow(), scrolled:get() + pixels)))
+end
+
+-- The bar in the right margin while the mosaic is taller than the card: the
+-- thumb is the part in view. Dragged, it scrolls; pressed on the track, the
+-- thumb's middle goes there first. It widens under the pointer and turns to
+-- the accent while held (EditTray.qml's rail).
+local rail_hover = morf.signal("impasto.desk.tray.rail.hover", false)
+local scrubbing = morf.signal("impasto.desk.tray.rail.scrub", false)
+local function thumb_length()
+  local total = span(layout().rows, stride_y())
+  return math.max(M.PAD, viewport_height() * viewport_height() / math.max(1, total))
+end
+local function rail_reach() return viewport_height() - thumb_length() end
+local function thumb_top()
+  return rail_reach() * math.min(scrolled:get(), overflow()) / math.max(1, overflow())
+end
+local function scroll_to(top)
+  local reach = rail_reach()
+  scrolled:set(reach > 0 and math.max(0, math.min(1, top / reach)) * overflow() or 0)
+end
+
+rail = function()
+  local scrub_from, press_y = 0, 0
+  return ui.Item {
+    x = function() return card_width() - M.PAD + (M.PAD - 12) / 2 end,
+    y = M.PAD, width = 12, height = viewport_height,
+    visible = function() return overflow() > 0 end,
+    ui.Rect {
+      x = function() return (12 - ((rail_hover:get() or scrubbing:get()) and 6 or 4)) / 2 end,
+      y = thumb_top, height = thumb_length,
+      width = function() return (rail_hover:get() or scrubbing:get()) and 6 or 4 end,
+      radius = function() return (rail_hover:get() or scrubbing:get()) and 3 or 2 end,
+      color = function()
+        if scrubbing:get() then return C.accent() end
+        return C.scrimText:alpha(rail_hover:get() and 0.45 or 0.25)
+      end,
+      behavior = { width = theme.behave("fast"), x = theme.behave("fast") },
+    },
+    ui.MouseArea {
+      anchors = { fill = true }, cursor = "pointer",
+      on_entered = function() rail_hover:set(true) end,
+      on_exited = function() rail_hover:set(false) end,
+      on_pressed = function(_, _, _, y)
+        press_y = y or 0
+        local top = thumb_top()
+        -- On the thumb it is taken where it is; anywhere else its middle
+        -- goes to the pointer.
+        scrub_from = (press_y >= top and press_y <= top + thumb_length()) and top or (press_y - thumb_length() / 2)
+        scrubbing:set(true)
+        scroll_to(scrub_from)
+      end,
+      on_dragged = function(_, _, _, dy) scroll_to(scrub_from + dy) end,
+      on_released = function() scrubbing:set(false) end,
+      on_wheel = function(_, _, _, py, _, steps) scroll_by(steps ~= 0 and steps * 40 or -py) end,
+    },
+  }
 end
 
 -- ------------------------------------------------------------------- pulling --
@@ -325,22 +382,23 @@ function M.build()
         height = function() return span(layout().rows, stride_y()) end,
         table.unpack(tiles),
       },
+      -- A fade at an edge says there is more that way.
+      ui.Rect {
+        anchors = { left = true, right = true, top = true }, height = M.PAD,
+        visible = function() return math.min(scrolled:get(), overflow()) > 0 end,
+        gradient = function()
+          return { angle = 180, stops = { C.island, C.island:alpha(0) } }
+        end,
+      },
+      ui.Rect {
+        anchors = { left = true, right = true, bottom = true }, height = M.PAD,
+        visible = function() return math.min(scrolled:get(), overflow()) < overflow() end,
+        gradient = function()
+          return { angle = 180, stops = { C.island:alpha(0), C.island } }
+        end,
+      },
     },
-    -- The part of the mosaic in view, in the right margin, when it scrolls.
-    ui.Rect {
-      x = function() return card_width() - M.PAD / 2 - 2 end,
-      width = 4, radius = 2,
-      visible = function() return overflow() > 0 end,
-      color = function() return C.scrimText:alpha(0.3) end,
-      y = function()
-        local total = span(layout().rows, stride_y())
-        return M.PAD + viewport_height() * math.min(scrolled:get(), overflow()) / math.max(1, total)
-      end,
-      height = function()
-        local total = span(layout().rows, stride_y())
-        return math.max(M.PAD, viewport_height() * viewport_height() / math.max(1, total))
-      end,
-    },
+    rail(),
     -- The grip: moves the card.
     ui.Rect {
       x = -8, y = -8, width = 24, height = 24, radius = 12, color = C.island,
