@@ -154,7 +154,7 @@ function M.stats(ctx)
   local g = 128
   local figures = {}
   for _, f in ipairs {
-    { function() return string.format("%.2f", stats.load()) end, "load" },
+    { function() return string.format("%.2f", (stats.load()[1] or 0)) end, "load" },
     { uptime, "up" },
   } do
     figures[#figures + 1] = ui.Column { gap = 1, width = w - (22 + 2 * g + 28) - 22,

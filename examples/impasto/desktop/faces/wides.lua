@@ -111,7 +111,7 @@ function M.stats(ctx)
     label = "System",
     reading = function() return string.format("%d%%", math.floor(stats.cpu() + 0.5)) end,
     note = function()
-      return string.format("RAM %d%% · load %.2f", math.floor(stats.memory_fraction() * 100 + 0.5), stats.load())
+      return string.format("RAM %d%% · load %.2f", math.floor(stats.memory_fraction() * 100 + 0.5), (stats.load()[1] or 0))
     end,
     extra_share = 0.45,
     mark = glyph { glyph = "󰻠", size = 30, color = ctx.ink.text },

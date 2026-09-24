@@ -179,6 +179,20 @@ presses a key in them. `IMPASTO_SETTINGS_TIMING=1` logs how long each
 page took to build and lay out. Wallpaper thumbnails are cut into
 `$XDG_CACHE_HOME/impasto-morf/thumbs`, so a test with its own config home
 wants its own cache home too.
+Capture, recording and the picker are the shortcuts' verbs: `capture
+[region|window|screen] [photo|video] [file|clipboard|editor|text]`, `record
+[toggle|start|stop]`, `picker`; a test drives them with `capture.select x y
+w h`, `capture.take`, `capture.cancel`, `capture.last`, `picker.hover x y`,
+`picker.take x y`, `picker.last`. A dry run pretends a recording instead of
+starting the encoder. Captures go to `$IMPASTO_CAPTURES`, else
+`$XDG_PICTURES_DIR`, else the XDG pictures folder; recordings to
+`$IMPASTO_RECORDINGS`, `$XDG_VIDEOS_DIR` or the videos folder -- point them
+at a temporary folder on a test bench. `stats.warm [n]` fills the graphs'
+history, `keys.sample` gives the key sheet a bind list where there is no
+Hyprland, `updates.sample` a pending list, and `packages.view <id>`,
+`packages.query <text>`, `packages.filter <id>`, `packages.key <key>` drive
+the packages panel. Its Install, Remove and Update everything open a
+terminal only on a click, and never on a dry run.
 
 ## Status
 
@@ -205,4 +219,6 @@ wants its own cache home too.
 | settings window (`settings/`, eleven sections), its components (`components/setting.lua` and the small pieces beside it) | ported; compositor options are kept in impasto's settings, never written to Hyprland |
 | profiles (`services/profiles.lua`, three examples in `profiles/`), import and export | ported |
 | island appearance panel (`bar/panels/appearance.lua`, `appearance` and `palette`) | ported |
+| capture (`capture/`, `services/capture.lua`), recorder, colour picker (`capture/picker.lua`, `services/picker.lua`), their tiles and verbs (`services/auto/capture.lua`) | ported |
+| system statistics (panel `stats`, module `stats`, `services/stats.lua`), key sheet (panel `keys`, read-only), packages and updates (panel `packages`, module `updates`) | ported |
 | everything else | in progress |

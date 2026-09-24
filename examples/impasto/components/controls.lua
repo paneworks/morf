@@ -498,6 +498,7 @@ function M.segmented(values)
   end
   local row = ui.Row(children)
   return ui.Rect {
+    anchors = values.anchors, visible = values.visible,
     width = function() return (row.layout_width or 0) + 6 end,
     height = height, radius = theme.radius_small,
     color = C.islandSurfaceHover, border_width = 1, border_color = C.islandBorder,
