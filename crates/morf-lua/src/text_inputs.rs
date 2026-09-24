@@ -149,6 +149,12 @@ pub(crate) fn register(state: &mut ReactiveState, node: NodeHandle) {
     };
     let mut input = InputState::new(&text);
     configure_buffer(state, node, &mut input.buffer);
+    // Through the field's own rules, now that it knows them: a single line
+    // takes no line breaks, and `max_length` holds from the first letter.
+    // Built before them, a line given "books\n" kept its break, was shaped
+    // as two lines, and drew a caret at its end on the empty line below.
+    // `push` writes the text back when this changed it.
+    input.buffer.set_text(&text);
     let placed = |name: &str| {
         state
             .scene

@@ -420,7 +420,7 @@ local function build_sheet()
     placeholder = "What has to be done", placeholder_color = C.textMuted,
     selection_color = C.accent, selected_text_color = C.accentText,
     -- Set once: see the notes sheet.
-    text = first.text, focus = true,
+    text = first.text, cursor_position = #first.text, focus = true,
     on_text_changed = function(text) tasks.update(key, { text = text:match("^%s*(.-)%s*$") }) end,
     -- Enter moves on to the notes.
     on_accepted = function() more.focus = true end,
@@ -441,9 +441,6 @@ local function build_sheet()
       if keysym == KEY.up and not more.text:sub(1, more.cursor_position):find("\n") then line.focus = true end
     end,
   }
-
-  -- The caret at the end of the line, once the line has been laid out.
-  morf.timer(1, function() line.cursor_position = #line.text end, false)
 
   local function pick(day)
     tasks.set_due(key, day)

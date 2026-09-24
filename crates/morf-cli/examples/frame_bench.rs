@@ -234,16 +234,20 @@ fn main() {
         );
     });
 
-    let root = runtime.scene().roots()[0];
+    // A configuration with several surfaces has a root for each;
+    // `FRAME_BENCH_ROOT` picks which one is measured and drawn.
+    let root = {
+        let roots = runtime.scene().roots().to_vec();
+        let index = std::env::var("FRAME_BENCH_ROOT")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(0);
+        roots[index.min(roots.len() - 1)]
+    };
     let size = Size { width, height };
     let layout = |runtime: &Runtime| {
         Layout::compute(&runtime.scene(), root, size, &mut RuledText).expect("layout")
     };
-    let mut computed = layout(&runtime);
-    // A binding on `layout_height` hears about a frame only after it.
-    while runtime.observe_layout(&computed) {
-        computed = layout(&runtime);
-    }
     // `gpu` renders one frame on a real adapter instead of timing anything: a
     // shader the driver refuses looks fine from the CPU side, and the only way
     // to find out is to build the pipelines and draw, headless.
@@ -273,10 +277,27 @@ fn main() {
         // target; `FRAME_BENCH_GPU_FRAMES` draws more, for `MORF_GPU_WAIT=1`.
         let frames: usize =
             std::env::var("FRAME_BENCH_GPU_FRAMES").map_or(2, |value| value.parse().unwrap_or(2));
+        // Laid out as the shell lays out: with the text system the frame is
+        // painted with, and with a host for `Custom` containers. The ruled
+        // measure above is for timing; a picture measured by it is not the
+        // picture the shell draws, and a text input's first caret, sized by
+        // one and drawn by the other, is exactly where that shows.
+        let real_layout = |runtime: &mut Runtime, engine: &mut RenderEngine<WgpuBackend>| {
+            let mut computed = runtime
+                .compute_layout(root, size, engine.backend_mut().text_system())
+                .expect("layout");
+            while runtime.observe_layout(&computed) {
+                computed = runtime
+                    .compute_layout(root, size, engine.backend_mut().text_system())
+                    .expect("layout");
+            }
+            computed
+        };
+        let mut computed = real_layout(&mut runtime, &mut engine);
         for _ in 0..frames.max(2) {
             if frames > 2 {
                 let _ = runtime.tick_animations(Duration::from_millis(16));
-                computed = layout(&runtime);
+                computed = real_layout(&mut runtime, &mut engine);
             }
             runtime.sync_text_inputs(&computed, engine.backend_mut().text_system());
             engine
@@ -297,6 +318,11 @@ fn main() {
             println!("  written to {path}");
         }
         return;
+    }
+    let mut computed = layout(&runtime);
+    // A binding on `layout_height` hears about a frame only after it.
+    while runtime.observe_layout(&computed) {
+        computed = layout(&runtime);
     }
     let scene = runtime.scene();
 
