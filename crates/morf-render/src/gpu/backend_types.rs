@@ -134,6 +134,10 @@ pub struct WgpuBackend {
     pub(crate) elapsed: f32,
     pub(crate) images: ImageCache,
     pub(crate) image_textures: HashMap<TextureKey, TextureImage>,
+    /// `Path` outlines already drawn, by everything that shaped their pixels,
+    /// and the path data already parsed.
+    pub(crate) path_textures: HashMap<u64, TextureImage>,
+    pub(crate) path_outlines: crate::path::PathOutlines,
     /// Full-surface render targets, one per offscreen layer, kept between
     /// frames.
     ///

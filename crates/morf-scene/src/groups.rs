@@ -128,13 +128,42 @@ pub(crate) struct ScheduledStep {
 /// A group being advanced by the scene's frame tick.
 pub(crate) struct RunningGroup {
     pub(crate) steps: Vec<ScheduledStep>,
-    /// Index of the first step that has not started yet.
+    /// The order the steps start in on a backward pass, each with its start
+    /// time mirrored across the pass: the step that ended last starts first.
+    pub(crate) backward_order: Vec<(Duration, usize)>,
+    /// Where each step actually departed from on the last forward pass, which
+    /// is where a backward pass returns it to.
+    pub(crate) origins: Vec<Option<Value>>,
+    /// Index of the first step that has not started yet, in the order the
+    /// current pass runs them.
     pub(crate) cursor: usize,
     pub(crate) elapsed: Duration,
     pub(crate) total: Duration,
     pub(crate) repeat: Repeat,
     pub(crate) passes: u32,
     pub(crate) paused: bool,
+    /// Time still to wait before the first pass begins.
+    pub(crate) delay: Duration,
+    /// Whether this pass runs the schedule backwards.
+    pub(crate) backward: bool,
+}
+
+impl RunningGroup {
+    /// The start time and step index of the `cursor`th step of this pass.
+    fn upcoming(&self) -> Option<(Duration, usize)> {
+        if self.backward {
+            self.backward_order.get(self.cursor).copied()
+        } else {
+            self.steps
+                .get(self.cursor)
+                .map(|step| (step.at, self.cursor))
+        }
+    }
+}
+
+/// How long one scheduled step occupies the timeline.
+fn span(behavior: Behavior) -> Duration {
+    behavior.delay + behavior.duration * passes(behavior)
 }
 
 /// How many times a settling repetition covers its interval.
@@ -158,16 +187,24 @@ impl Scene {
         step: AnimationStep,
         repeat: Repeat,
     ) -> Result<GroupId, SceneError> {
-        // Both alternating forms, not just the endless one. A group has no
-        // per-pass direction to reverse, so `PingPongTimes` used to slip past
-        // this guard and then find no arm in the tick — accepted, and quietly
-        // run once. A configuration asking for something the engine cannot do
-        // should be told so, whether it asked for it forever or five times.
-        if matches!(repeat, Repeat::PingPong | Repeat::PingPongTimes(_)) {
-            return Err(SceneError::Reactive(
-                "an animation group cannot alternate direction".to_owned(),
-            ));
-        }
+        self.start_group_after(step, repeat, Duration::ZERO)
+    }
+
+    /// Starts a group once `delay` has passed.
+    ///
+    /// The wait comes once, before the first pass, not before every
+    /// repetition: a stagger across several groups is what it is for, and a
+    /// pause inside the schedule is already how a pass waits.
+    ///
+    /// An alternating repetition runs every other pass backwards: the steps
+    /// start in mirrored order, each travelling from its target back to where
+    /// it departed on the forward pass, with its own easing.
+    pub fn start_group_after(
+        &mut self,
+        step: AnimationStep,
+        repeat: Repeat,
+        delay: Duration,
+    ) -> Result<GroupId, SceneError> {
         step.validate()?;
         // A schedule with no length would restart on every tick and hold the
         // frame clock awake for nothing.
@@ -184,18 +221,32 @@ impl Scene {
             self.property_key(scheduled.node, &scheduled.property)?;
         }
         steps.sort_by_key(|step| step.at);
+        let total = step.duration();
+        let mut backward_order = steps
+            .iter()
+            .enumerate()
+            .map(|(index, step)| {
+                let end = step.at + span(step.behavior);
+                (total.saturating_sub(end), index)
+            })
+            .collect::<Vec<_>>();
+        backward_order.sort_by_key(|(at, index)| (*at, std::cmp::Reverse(*index)));
         let id = GroupId(self.next_group);
         self.next_group = self.next_group.wrapping_add(1);
         self.groups.insert(
             id,
             RunningGroup {
+                origins: vec![None; steps.len()],
                 steps,
+                backward_order,
                 cursor: 0,
                 elapsed: Duration::ZERO,
-                total: step.duration(),
+                total,
                 repeat,
                 passes: 0,
                 paused: false,
+                delay,
+                backward: false,
             },
         );
         Ok(id)
@@ -264,49 +315,75 @@ impl Scene {
             if group.paused {
                 continue;
             }
+            // The group's own delay drains first; whatever of this frame is
+            // left over is the first pass's.
+            let frame = delta;
+            let mut delta = delta;
+            if !group.delay.is_zero() {
+                let waited = group.delay.min(delta);
+                group.delay -= waited;
+                delta -= waited;
+                if !group.delay.is_zero() {
+                    continue;
+                }
+            }
             group.elapsed += delta;
-            while let Some(step) = group.steps.get(group.cursor) {
-                if step.at > group.elapsed {
+            while let Some((at, index)) = group.upcoming() {
+                if at > group.elapsed {
                     break;
                 }
-                let mut step = step.clone();
-                step.behavior.delay += delta.saturating_sub(group.elapsed - step.at);
-                due.push(step);
+                let mut step = group.steps[index].clone();
+                // Measured against the whole frame, which is what the step's own
+                // clock advances by on this tick, the group's delay included.
+                let lag = frame.saturating_sub(group.elapsed - at);
+                if group.backward {
+                    // Back from its target to where it set out from, with no
+                    // lead-in: a step's delay on the way out is the idle time
+                    // after it on the way back.
+                    step.from = Some(step.to.clone());
+                    step.to = group.origins[index]
+                        .clone()
+                        .unwrap_or_else(|| step.to.clone());
+                    step.behavior.delay = lag;
+                } else {
+                    step.behavior.delay += lag;
+                }
+                due.push((*id, index, group.backward, step));
                 group.cursor += 1;
             }
             if group.elapsed < group.total {
                 continue;
             }
             group.passes += 1;
-            let repeating = match group.repeat {
-                Repeat::Forever => true,
-                Repeat::Times(count) => group.passes < count.max(1),
-                _ => false,
+            let (repeating, alternating) = match group.repeat {
+                Repeat::Forever => (true, false),
+                Repeat::Times(count) => (group.passes < count.max(1), false),
+                Repeat::PingPong => (true, true),
+                Repeat::PingPongTimes(count) => (group.passes < count.max(1), true),
+                Repeat::Once => (false, false),
             };
             if repeating {
                 group.cursor = 0;
                 group.elapsed = Duration::ZERO;
+                if alternating {
+                    group.backward = !group.backward;
+                }
             } else {
                 finished.push(*id);
             }
         }
-        for step in due {
-            match &step.from {
-                Some(from) => self.animate_from(
-                    step.node,
-                    &step.property,
-                    from.clone(),
-                    step.to,
-                    step.behavior,
-                )?,
-                // Without an explicit start the step behaves like a write
-                // through an installed behavior: it departs from wherever the
-                // property currently sits.
-                None => {
-                    let current = self.current(step.node, &step.property)?.clone();
-                    self.animate_from(step.node, &step.property, current, step.to, step.behavior)?
-                }
+        for (id, index, backward, step) in due {
+            // Without an explicit start the step behaves like a write through
+            // an installed behavior: it departs from wherever the property
+            // currently sits.
+            let from = match &step.from {
+                Some(from) => from.clone(),
+                None => self.current(step.node, &step.property)?.clone(),
+            };
+            if !backward && let Some(group) = self.groups.get_mut(&id) {
+                group.origins[index] = Some(from.clone());
             }
+            self.animate_from(step.node, &step.property, from, step.to, step.behavior)?;
         }
         for id in finished {
             self.groups.remove(&id);

@@ -1453,6 +1453,7 @@ version = "0.1.3"
 dependencies = [
  "ash",
  "bytemuck",
+ "kurbo",
  "morf-image",
  "morf-layout",
  "morf-region",
@@ -1462,6 +1463,7 @@ dependencies = [
  "morf-text",
  "pollster",
  "raw-window-handle",
+ "resvg",
  "wgpu",
 ]
 
@@ -1470,6 +1472,7 @@ name = "morf-scene"
 version = "0.1.3"
 dependencies = [
  "animato",
+ "kurbo",
  "morf-reactive",
  "pastel",
  "slotmap",

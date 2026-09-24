@@ -49,6 +49,7 @@ mod image_jobs;
 mod layer_parse;
 mod layout_host;
 mod lua_values;
+mod node_loops;
 mod process_helpers;
 mod reactive_bindings;
 mod reactive_execute;

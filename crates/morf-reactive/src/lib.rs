@@ -88,12 +88,53 @@ impl fmt::Display for GraphError {
 
 impl StdError for GraphError {}
 
+/// What one effect evaluation read and staged, collected apart from the graph.
+///
+/// Kept separate from any borrow of the graph so a host can evaluate an
+/// effect while the graph stays reachable: the effect may allocate signals,
+/// register further effects, or write signals it does not read, and every one
+/// of those needs the graph while the evaluation is still going on.
+#[derive(Debug)]
+pub struct EffectCapture<T> {
+    dependencies: HashSet<SignalId>,
+    writes: Vec<(SignalId, T)>,
+}
+
+impl<T> Default for EffectCapture<T> {
+    fn default() -> Self {
+        Self {
+            dependencies: HashSet::new(),
+            writes: Vec::new(),
+        }
+    }
+}
+
+impl<T: Clone + PartialEq + 'static> EffectCapture<T> {
+    /// Reads a value and captures the dependency edge.
+    pub fn get(&mut self, graph: &Graph<T>, signal: SignalId) -> Result<T, GraphError> {
+        if let Some((_, value)) = self.writes.iter().rev().find(|(id, _)| *id == signal) {
+            self.dependencies.insert(signal);
+            return Ok(value.clone());
+        }
+        let slot = graph.signals.get(signal).ok_or(GraphError::InvalidSignal)?;
+        self.dependencies.insert(signal);
+        Ok(slot.value.clone())
+    }
+
+    /// Stages a signal write which is committed only if the effect succeeds.
+    pub fn set(&mut self, graph: &Graph<T>, signal: SignalId, value: T) -> Result<(), GraphError> {
+        if !graph.signals.contains_key(signal) {
+            return Err(GraphError::InvalidSignal);
+        }
+        self.writes.push((signal, value));
+        Ok(())
+    }
+}
+
 /// Dependency-capturing access available while an effect evaluates.
 pub struct EffectContext<'a, T> {
     graph: &'a mut Graph<T>,
-    effect: EffectId,
-    dependencies: HashSet<SignalId>,
-    writes: Vec<(SignalId, T)>,
+    capture: EffectCapture<T>,
 }
 
 impl<T: Clone + PartialEq + 'static> EffectContext<'_, T> {
@@ -104,26 +145,64 @@ impl<T: Clone + PartialEq + 'static> EffectContext<'_, T> {
 
     /// Reads a value and captures the dependency edge.
     pub fn get(&mut self, signal: SignalId) -> Result<T, GraphError> {
-        if let Some((_, value)) = self.writes.iter().rev().find(|(id, _)| *id == signal) {
-            self.dependencies.insert(signal);
-            return Ok(value.clone());
-        }
-        let slot = self
-            .graph
-            .signals
-            .get(signal)
-            .ok_or(GraphError::InvalidSignal)?;
-        self.dependencies.insert(signal);
-        Ok(slot.value.clone())
+        self.capture.get(self.graph, signal)
     }
 
     /// Stages a signal write which is committed only if the effect succeeds.
     pub fn set(&mut self, signal: SignalId, value: T) -> Result<(), GraphError> {
-        if !self.graph.signals.contains_key(signal) {
-            return Err(GraphError::InvalidSignal);
+        self.capture.set(self.graph, signal, value)
+    }
+}
+
+/// A flush under way, driven one effect at a time.
+///
+/// [`Graph::flush_external`] runs a whole flush with the graph borrowed from
+/// start to finish, which means nothing evaluated inside it can reach the
+/// graph — a configuration that creates a signal from inside a binding (the
+/// first `require` of a module does exactly that) had nowhere to put it. A
+/// host that owns the graph drives this instead: it asks for the next effect,
+/// evaluates it with the graph back in its own hands, and hands the capture
+/// back. Signals and effects created in between join the same flush.
+#[derive(Debug)]
+pub struct Flush<T> {
+    report: FlushReport,
+    runs: HashMap<EffectId, usize>,
+    trace: VecDeque<String>,
+    originals: HashMap<SignalId, (T, Option<EffectId>)>,
+}
+
+impl<T> Default for Flush<T> {
+    fn default() -> Self {
+        Self {
+            report: FlushReport::default(),
+            runs: HashMap::new(),
+            trace: VecDeque::new(),
+            originals: HashMap::new(),
         }
-        self.writes.push((signal, value));
-        Ok(())
+    }
+}
+
+impl<T> Flush<T> {
+    /// The runs and recoverable errors of the flush so far.
+    pub fn finish(self) -> FlushReport {
+        self.report
+    }
+}
+
+/// One effect handed out by [`Graph::next_effect`], to be evaluated and then
+/// returned through [`Graph::complete_effect`].
+#[derive(Debug)]
+pub struct PendingEffect {
+    effect: EffectId,
+    token: u64,
+    name: String,
+    old_dependencies: HashSet<SignalId>,
+}
+
+impl PendingEffect {
+    /// The opaque token the effect was registered with.
+    pub fn token(&self) -> u64 {
+        self.token
     }
 }
 
@@ -303,51 +382,112 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
     where
         F: for<'a> FnMut(u64, &mut EffectContext<'a, T>) -> Result<(), String>,
     {
-        let mut report = FlushReport::default();
-        let mut runs = HashMap::<EffectId, usize>::new();
-        let mut trace = VecDeque::<String>::new();
-        let mut originals = HashMap::<SignalId, (T, Option<EffectId>)>::new();
+        let mut flush = Flush::default();
+        while let Some(pending) = self.next_effect(&mut flush)? {
+            let mut context = EffectContext {
+                graph: self,
+                capture: EffectCapture::default(),
+            };
+            let result = evaluate(pending.token, &mut context);
+            let capture = context.capture;
+            self.complete_effect(&mut flush, pending, capture, result);
+        }
+        Ok(flush.finish())
+    }
 
-        while let Some(effect) = self.next_dirty() {
-            let count = runs.entry(effect).or_default();
-            *count += 1;
-            if *count > self.recompute_budget {
-                for (signal, (value, producer)) in originals {
-                    if let Some(slot) = self.signals.get_mut(signal) {
-                        slot.value = value;
-                        slot.producer = producer;
-                    }
+    /// Takes the next dirty effect off the flush, in dependency depth order,
+    /// or nothing once every effect is clean.
+    ///
+    /// The effect stops depending on what it read last time until its
+    /// evaluation comes back with what it reads now. An effect that has run
+    /// more often than the recompute budget allows in one flush is a loop:
+    /// every write the flush made is undone and the loop is reported.
+    pub fn next_effect(
+        &mut self,
+        flush: &mut Flush<T>,
+    ) -> Result<Option<PendingEffect>, GraphError> {
+        let Some(effect) = self.next_dirty() else {
+            return Ok(None);
+        };
+        let count = flush.runs.entry(effect).or_default();
+        *count += 1;
+        if *count > self.recompute_budget {
+            for (signal, (value, producer)) in std::mem::take(&mut flush.originals) {
+                if let Some(slot) = self.signals.get_mut(signal) {
+                    slot.value = value;
+                    slot.producer = producer;
                 }
-                for (_, pending) in &mut self.effects {
-                    pending.dirty = false;
-                }
-                self.dirty.clear();
-                return Err(GraphError::Loop {
-                    chain: trace.into_iter().collect(),
-                });
             }
-
-            let name = self.effects[effect].name.clone();
-            trace.push_back(name.clone());
-            let max_trace = self.recompute_budget.saturating_mul(2).max(4);
-            if trace.len() > max_trace {
-                trace.pop_front();
+            for (_, pending) in &mut self.effects {
+                pending.dirty = false;
             }
-
-            report.runs += 1;
-            match self.run_effect(effect, &mut originals, &mut evaluate) {
-                Ok(writes) => trace.extend(writes),
-                Err(message) => report.errors.push(EffectError {
-                    effect: name,
-                    message,
-                }),
-            }
-            while trace.len() > max_trace {
-                trace.pop_front();
-            }
+            self.dirty.clear();
+            return Err(GraphError::Loop {
+                chain: std::mem::take(&mut flush.trace).into_iter().collect(),
+            });
         }
 
-        Ok(report)
+        let name = self.effects[effect].name.clone();
+        flush.trace.push_back(name.clone());
+        let max_trace = self.max_trace();
+        if flush.trace.len() > max_trace {
+            flush.trace.pop_front();
+        }
+        flush.report.runs += 1;
+
+        let slot = &mut self.effects[effect];
+        slot.dirty = false;
+        let old_dependencies = std::mem::take(&mut slot.dependencies);
+        let EffectCallback::External(token) = slot.callback;
+        self.dirty.remove(&effect);
+        for signal in &old_dependencies {
+            if let Some(slot) = self.signals.get_mut(*signal) {
+                slot.subscribers.remove(&effect);
+            }
+        }
+        Ok(Some(PendingEffect {
+            effect,
+            token,
+            name,
+            old_dependencies,
+        }))
+    }
+
+    /// Hands an evaluation back: what it read becomes the effect's
+    /// dependencies, and what it staged is written if it succeeded.
+    ///
+    /// A failure is recorded in the flush's report rather than ending it, and
+    /// its staged writes are dropped. An effect removed while it was being
+    /// evaluated — its node went away inside its own binding — keeps nothing.
+    pub fn complete_effect(
+        &mut self,
+        flush: &mut Flush<T>,
+        pending: PendingEffect,
+        capture: EffectCapture<T>,
+        result: Result<(), String>,
+    ) {
+        let PendingEffect {
+            effect,
+            name,
+            old_dependencies,
+            ..
+        } = pending;
+        let outcome = self.settle_effect(flush, effect, capture, old_dependencies, result);
+        let max_trace = self.max_trace();
+        match outcome {
+            Ok(written) => flush.trace.extend(written),
+            Err(message) => flush.report.errors.push(EffectError {
+                effect: name,
+                message,
+            }),
+        }
+        while flush.trace.len() > max_trace {
+            flush.trace.pop_front();
+        }
+    }
+
+    fn max_trace(&self) -> usize {
+        self.recompute_budget.saturating_mul(2).max(4)
     }
 
     fn next_dirty(&self) -> Option<EffectId> {
@@ -358,54 +498,42 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
             .map(|(id, _)| id)
     }
 
-    fn run_effect(
+    fn settle_effect(
         &mut self,
+        flush: &mut Flush<T>,
         effect: EffectId,
-        originals: &mut HashMap<SignalId, (T, Option<EffectId>)>,
-        evaluate: &mut impl for<'a> FnMut(u64, &mut EffectContext<'a, T>) -> Result<(), String>,
+        capture: EffectCapture<T>,
+        old_dependencies: HashSet<SignalId>,
+        result: Result<(), String>,
     ) -> Result<Vec<String>, String> {
-        let old_dependencies = {
-            let slot = self
-                .effects
-                .get_mut(effect)
-                .ok_or_else(|| GraphError::InvalidEffect.to_string())?;
-            slot.dirty = false;
-            std::mem::take(&mut slot.dependencies)
-        };
-        self.dirty.remove(&effect);
-        for signal in &old_dependencies {
-            if let Some(slot) = self.signals.get_mut(*signal) {
-                slot.subscribers.remove(&effect);
-            }
+        if !self.effects.contains_key(effect) {
+            return result.map(|()| Vec::new());
         }
-
-        let EffectCallback::External(token) = self.effects[effect].callback;
-        let mut context = EffectContext {
-            graph: self,
-            effect,
-            dependencies: HashSet::new(),
-            writes: Vec::new(),
-        };
-        let result = evaluate(token, &mut context);
-        let dependencies = context.dependencies;
-        let writes = context.writes;
-
+        let EffectCapture {
+            dependencies,
+            writes,
+        } = capture;
         let dependencies = if result.is_ok() || !dependencies.is_empty() {
             dependencies
         } else {
             old_dependencies
         };
+        // A signal forgotten while the effect ran is not one it can follow.
+        let dependencies: HashSet<SignalId> = dependencies
+            .into_iter()
+            .filter(|signal| self.signals.contains_key(*signal))
+            .collect();
         let depth = dependencies
             .iter()
-            .filter_map(|signal| context.graph.signals.get(*signal)?.producer)
-            .filter_map(|producer| context.graph.effects.get(producer))
+            .filter_map(|signal| self.signals.get(*signal)?.producer)
+            .filter_map(|producer| self.effects.get(producer))
             .map(|producer| producer.depth.saturating_add(1))
             .max()
             .unwrap_or(0);
-        context.graph.effects[effect].dependencies = dependencies.clone();
-        context.graph.effects[effect].depth = depth;
+        self.effects[effect].dependencies = dependencies.clone();
+        self.effects[effect].depth = depth;
         for signal in dependencies {
-            if let Some(slot) = context.graph.signals.get_mut(signal) {
+            if let Some(slot) = self.signals.get_mut(signal) {
                 slot.subscribers.insert(effect);
             }
         }
@@ -413,15 +541,14 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
         result?;
         let mut written_names = Vec::with_capacity(writes.len());
         for (signal, value) in writes {
-            if let Some(slot) = context.graph.signals.get(signal) {
-                originals
+            if let Some(slot) = self.signals.get(signal) {
+                flush
+                    .originals
                     .entry(signal)
                     .or_insert_with(|| (slot.value.clone(), slot.producer));
                 written_names.push(slot.name.clone());
             }
-            context
-                .graph
-                .write_from(signal, value, Some(context.effect))
+            self.write_from(signal, value, Some(effect))
                 .map_err(|error| error.to_string())?;
         }
         Ok(written_names)

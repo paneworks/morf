@@ -39,6 +39,10 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("view: {error}")),
             }
         }
+        // The rows that went, and whatever was inside them.
+        self.lua.enter(|ctx| {
+            crate::reactive_bindings::run_destroyed_hooks(&self.reactive, ctx, self.limits)
+        });
         changed
     }
 }

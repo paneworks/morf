@@ -44,6 +44,45 @@ pub(crate) fn register_state_binding<'gc>(
     node: NodeHandle,
     closure: Closure<'gc>,
 ) {
+    register_node_binding(
+        state,
+        ctx,
+        limits,
+        node,
+        closure,
+        EffectSink::State(node),
+        "state",
+    );
+}
+
+/// A `loop` given as a function: each value it returns is the node's loops.
+pub(crate) fn register_loop_binding<'gc>(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'gc>,
+    limits: Limits,
+    node: NodeHandle,
+    closure: Closure<'gc>,
+) {
+    register_node_binding(
+        state,
+        ctx,
+        limits,
+        node,
+        closure,
+        EffectSink::Loop(node),
+        "loop",
+    );
+}
+
+fn register_node_binding<'gc>(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'gc>,
+    limits: Limits,
+    node: NodeHandle,
+    closure: Closure<'gc>,
+    sink: EffectSink,
+    what: &str,
+) {
     {
         let mut state = state.borrow_mut();
         let token = state.next_effect;
@@ -52,14 +91,14 @@ pub(crate) fn register_state_binding<'gc>(
             token,
             LuaEffect {
                 closure: ctx.stash(closure),
-                sink: Some(EffectSink::State(node)),
+                sink: Some(sink),
             },
         );
         let id = state
             .graph
             .as_mut()
             .expect("reactive graph unavailable outside evaluation")
-            .external_effect(format!("{node:?}.state"), token);
+            .external_effect(format!("{node:?}.{what}"), token);
         state.effect_ids.insert(token, id);
     }
     let _ = flush_reactive(state, ctx, limits);
@@ -239,17 +278,119 @@ pub(crate) fn flush_reactive(
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
-    let mut graph = state
-        .borrow_mut()
-        .graph
-        .take()
-        .ok_or_else(|| "reactive graph is already running".to_owned())?;
+    let result = flush_graph(state, ctx, limits);
+    // A flush is where most removals happen — a Loader let go, a Repeater's
+    // row gone — and the end of one is the first moment their hooks can run.
+    run_destroyed_hooks(state, ctx, limits);
+    result
+}
+
+/// Runs the `on_destroyed` hooks of nodes that have been removed.
+///
+/// Never from inside a flush, and never from inside another hook: a removal
+/// happens with the state borrowed, so its hooks wait in a queue for the next
+/// moment nothing holds it. Each hook is a handler — its own fuel, its writes
+/// flushed once when the last of them returns — and a node its hook removes
+/// has its own hook queued and run in the same drain.
+pub(crate) fn run_destroyed_hooks(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'_>,
+    limits: Limits,
+) {
+    {
+        let mut state = state.borrow_mut();
+        if state.flushing || state.running_destroyed || state.pending_destroyed.is_empty() {
+            return;
+        }
+        state.running_destroyed = true;
+        state.handler_depth += 1;
+    }
+    loop {
+        let hooks = std::mem::take(&mut state.borrow_mut().pending_destroyed);
+        if hooks.is_empty() {
+            break;
+        }
+        for hook in hooks {
+            if let Err(error) = execute_handler_args(ctx, &hook, &[], limits) {
+                state
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("on_destroyed: {error}"));
+            }
+        }
+    }
+    let flush = {
+        let mut state = state.borrow_mut();
+        state.running_destroyed = false;
+        state.handler_depth = state.handler_depth.saturating_sub(1);
+        state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)
+    };
+    if flush {
+        let _ = flush_reactive(state, ctx, limits);
+    }
+}
+
+fn flush_graph(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'_>,
+    limits: Limits,
+) -> Result<(), String> {
+    {
+        let mut state = state.borrow_mut();
+        // A flush asked for from inside one — a binding that registers
+        // another, a module `require`d from a binding writing a signal — has
+        // nothing to do of its own: whatever it would have run is dirty in
+        // the graph, and the flush already under way drains it.
+        if state.flushing {
+            return Ok(());
+        }
+        if state.graph.is_none() {
+            return Err("reactive graph unavailable".to_owned());
+        }
+        state.flushing = true;
+    }
+    // Driven one effect at a time, with the graph left in the state between
+    // the steps rather than taken out for the whole flush. An effect is Lua,
+    // and Lua may create signals or effects of its own while it runs — the
+    // first `require` of a module that holds state does — so the graph has to
+    // be where Lua can reach it.
+    let mut flush = morf_reactive::Flush::default();
     let mut remaining = limits.frame_fuel;
-    let result = graph.flush_external(|token, effect| {
-        evaluate_effect(state, ctx, limits, &mut remaining, token, effect)
-    });
+    let result = loop {
+        let next = state
+            .borrow_mut()
+            .graph
+            .as_mut()
+            .expect("the graph stays in place during a flush")
+            .next_effect(&mut flush);
+        let pending = match next {
+            Ok(Some(pending)) => pending,
+            Ok(None) => break Ok(()),
+            Err(error) => break Err(error),
+        };
+        let mut capture = morf_reactive::EffectCapture::default();
+        let outcome = evaluate_effect(
+            state,
+            ctx,
+            limits,
+            &mut remaining,
+            pending.token(),
+            &mut capture,
+        );
+        state
+            .borrow_mut()
+            .graph
+            .as_mut()
+            .expect("the graph stays in place during a flush")
+            .complete_effect(&mut flush, pending, capture, outcome);
+    };
+    let result = result.map(|()| flush.finish());
 
     let mut state = state.borrow_mut();
+    state.flushing = false;
+    let graph = state
+        .graph
+        .take()
+        .expect("the graph stays in place during a flush");
     for signal in state.signals.clone() {
         if let Ok(value) = graph.read(signal) {
             state.values.insert(signal, value.clone());

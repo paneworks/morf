@@ -119,6 +119,8 @@ pub(crate) struct PropertySink {
 pub(crate) enum EffectSink {
     Property(PropertySink),
     State(NodeHandle),
+    /// A `loop` binding: what it returns is the node's loops.
+    Loop(NodeHandle),
 }
 
 /// The most log entries kept, and the longest one.
@@ -192,6 +194,9 @@ pub(crate) struct ReactiveState {
     pub(crate) handler_depth: u32,
     /// Whether something wrote while a handler was running.
     pub(crate) flush_pending: bool,
+    /// A flush is draining the graph. Another asked for meanwhile is folded
+    /// into it, and what removed nodes leave behind waits until it is done.
+    pub(crate) flushing: bool,
     pub(crate) logs: Vec<LogEntry>,
     /// Shaders the configuration registered, by name.
     ///
@@ -261,6 +266,16 @@ pub(crate) struct ReactiveState {
     pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
     pub(crate) timers: Vec<PendingTimer>,
     pub(crate) timer_callbacks: HashMap<NodeHandle, StashedClosure>,
+    /// Each node's `on_destroyed`, until the node goes.
+    pub(crate) destroy_hooks: HashMap<NodeHandle, StashedClosure>,
+    /// The properties each node is looping, from its `loop`.
+    pub(crate) node_loops:
+        HashMap<NodeHandle, std::collections::BTreeMap<String, crate::node_loops::RunningLoop>>,
+    /// Hooks of nodes already removed, waiting for a moment Lua can run:
+    /// removal happens with the state borrowed, often inside a flush.
+    pub(crate) pending_destroyed: Vec<StashedClosure>,
+    /// The pending hooks are being run; removals they cause join the queue.
+    pub(crate) running_destroyed: bool,
     pub(crate) animation_callbacks: HashMap<(NodeHandle, String), StashedClosure>,
     pub(crate) group_callbacks: HashMap<GroupId, StashedClosure>,
     pub(crate) loader_factories: HashMap<NodeHandle, StashedClosure>,
@@ -321,6 +336,9 @@ impl ReactiveState {
     /// Hands the graph what removed nodes left behind, when it is here to
     /// take them; while a flush holds it they wait for the next call.
     pub(crate) fn collect_graph_garbage(&mut self) {
+        if self.flushing {
+            return;
+        }
         let Some(graph) = self.graph.as_mut() else {
             return;
         };
@@ -411,6 +429,7 @@ impl ReactiveState {
             active: None,
             handler_depth: 0,
             flush_pending: false,
+            flushing: false,
             logs: Vec::new(),
             shaders: HashMap::new(),
             scene: Scene::new(),
@@ -459,6 +478,10 @@ impl ReactiveState {
             greetd_sessions: Vec::new(),
             timers: Vec::new(),
             timer_callbacks: HashMap::new(),
+            destroy_hooks: HashMap::new(),
+            node_loops: HashMap::new(),
+            pending_destroyed: Vec::new(),
+            running_destroyed: false,
             animation_callbacks: HashMap::new(),
             group_callbacks: HashMap::new(),
             loader_factories: HashMap::new(),

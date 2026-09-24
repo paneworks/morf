@@ -16,6 +16,7 @@ mod hashing;
 mod keyframes;
 mod motion;
 mod motion_values;
+mod path_style;
 mod playback;
 mod scene;
 mod scene_access;
@@ -33,6 +34,7 @@ pub use gradient::*;
 pub use groups::*;
 pub use hashing::*;
 pub use keyframes::*;
+pub use path_style::*;
 pub use types::*;
 #[cfg(test)]
 mod tests;

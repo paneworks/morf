@@ -234,6 +234,16 @@ impl Layout {
                     positive(scene.number(node, "source_height")?).unwrap_or(natural.height);
                 Size { width, height }
             }
+            // A path's own size is its view box; without one, path units are
+            // the node's pixels and it has no size but the one it is given.
+            Element::Path => morf_scene::PathViewBox::parse(scene.current(node, "view_box")?)
+                .ok()
+                .flatten()
+                .map(|view_box| Size {
+                    width: view_box.width,
+                    height: view_box.height,
+                })
+                .unwrap_or_default(),
             Element::Row => Size {
                 width: sum_with_spacing(&child_sizes, scene.number(node, "gap")?, true),
                 height: child_sizes

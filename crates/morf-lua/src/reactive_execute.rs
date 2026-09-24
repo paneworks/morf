@@ -1,7 +1,7 @@
 use crate::states::Capture;
 use luna::{Context, Executor, Fuel, StashedClosure, Table, Value as LuaValue, Variadic};
 use morf_io::{DbusCall, DbusValue};
-use morf_reactive::EffectContext;
+use morf_reactive::EffectCapture;
 use morf_scene::Value as SceneValue;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -64,7 +64,7 @@ pub(crate) fn evaluate_effect(
     limits: Limits,
     frame_remaining: &mut u64,
     token: u64,
-    effect: &mut EffectContext<'_, IpcValue>,
+    effect: &mut EffectCapture<IpcValue>,
 ) -> Result<(), String> {
     let lua_effect = {
         let mut state = state.borrow_mut();
@@ -111,6 +111,9 @@ pub(crate) fn evaluate_effect(
                     &sink.property,
                     value.clone(),
                 ),
+                EffectSink::Loop(node) => {
+                    crate::node_loops::apply_loops(&mut state.borrow_mut(), node, value)
+                }
                 EffectSink::State(_) => Ok(()),
             }
         } else {
@@ -125,8 +128,12 @@ pub(crate) fn evaluate_effect(
         } else {
             let name = format!("{node:?}.{property}{}", if target { "_target" } else { "" });
             let value = IpcValue::Integer(state.borrow().property_revision);
-            let signal = effect.signal(name.clone(), value.clone());
             let mut state = state.borrow_mut();
+            let signal = state
+                .graph
+                .as_mut()
+                .ok_or("reactive graph unavailable")?
+                .signal(name.clone(), value.clone());
             state.property_signals.insert(key, signal);
             if !target {
                 state.current_property_names.insert(name, (node, property));
@@ -135,21 +142,40 @@ pub(crate) fn evaluate_effect(
             state.signals.push(signal);
             signal
         };
-        effect.get(signal).map_err(|error| error.to_string())?;
+        read_signal(state, effect, signal)?;
     }
     for signal in capture.reads {
-        effect.get(signal).map_err(|error| error.to_string())?;
+        read_signal(state, effect, signal)?;
     }
     if result.is_ok() {
         for (signal, value) in capture.writes {
+            let mut state = state.borrow_mut();
             effect
-                .set(signal, value.clone())
+                .set(
+                    state.graph.as_ref().ok_or("reactive graph unavailable")?,
+                    signal,
+                    value.clone(),
+                )
                 .map_err(|error| error.to_string())?;
-            state.borrow_mut().values.insert(signal, value);
+            state.values.insert(signal, value);
         }
     }
     state_result?;
     result.map(|_| ())
+}
+
+/// Records that the effect being evaluated read `signal`.
+fn read_signal(
+    state: &Rc<RefCell<ReactiveState>>,
+    effect: &mut EffectCapture<IpcValue>,
+    signal: morf_reactive::SignalId,
+) -> Result<(), String> {
+    let state = state.borrow();
+    let graph = state.graph.as_ref().ok_or("reactive graph unavailable")?;
+    effect
+        .get(graph, signal)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 pub(crate) fn execute_effect(

@@ -16,11 +16,13 @@ mod gradient;
 mod paint;
 mod paint_fields;
 mod paint_text_input;
+mod path;
 mod sdf;
 
 pub use commands::*;
 pub use damage::*;
 pub use field::*;
+pub use path::PathPaint;
 pub use sdf::*;
 #[cfg(test)]
 mod tests;

@@ -47,6 +47,13 @@ pub enum Element {
     /// fragment shader. Because the layer is an ordinary node, every number it
     /// carries animates through the same behaviors as any other property.
     SdfShape,
+    /// A vector outline: SVG path data, filled and stroked.
+    ///
+    /// Every number and colour on it animates like any other property, and
+    /// its outline is drawn at the pixel size it covers, so it stays crisp
+    /// however it is scaled. The outline itself morphs into `morph_to` when
+    /// the two have the same run of segments.
+    Path,
     /// Pointer and focus event target with no visual output.
     MouseArea,
     /// Target for drags from other applications, with no visual output.
@@ -84,6 +91,7 @@ impl Element {
             Self::Icon => "Icon",
             Self::Sdf => "Sdf",
             Self::SdfShape => "SdfShape",
+            Self::Path => "Path",
             Self::MouseArea => "MouseArea",
             Self::DropArea => "DropArea",
             Self::Row => "Row",

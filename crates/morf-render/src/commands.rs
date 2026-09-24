@@ -158,6 +158,21 @@ pub enum DrawCommand {
         /// Edge shaping applied to the sampled field.
         distance_field_style: DistanceFieldStyle,
     },
+    /// A vector outline, rasterised at the pixels it covers.
+    Path {
+        /// Source scene node.
+        node: NodeHandle,
+        /// Logical surface bounds.
+        bounds: Geometry,
+        /// Composed node and ancestor transform.
+        transform: Transform2D,
+        /// Intersected ancestor clip in logical surface coordinates.
+        clip: Option<Geometry>,
+        /// Inherited colour overlay.
+        color_overlay: Color,
+        /// The outline and how it is filled and stroked.
+        paint: Box<crate::path::PathPaint>,
+    },
     /// Composed signed-distance field resolved in one fragment shader.
     Field {
         /// Source scene node.
@@ -289,6 +304,7 @@ impl DrawCommand {
             Self::Quad { node, .. }
             | Self::Text { node, .. }
             | Self::Texture { node, .. }
+            | Self::Path { node, .. }
             | Self::Field { node, .. } => *node,
         }
     }
@@ -319,6 +335,22 @@ impl DrawCommand {
             | Self::Texture {
                 bounds, transform, ..
             } => transform.bounds(*bounds),
+            // A stroke reaches past the box by half its width and more at a
+            // mitred corner; the drawing's own margin says how far.
+            Self::Path {
+                bounds,
+                transform,
+                paint,
+                ..
+            } => {
+                let margin = paint.margin(bounds.width, bounds.height);
+                transform.bounds(Geometry {
+                    x: bounds.x - margin,
+                    y: bounds.y - margin,
+                    width: bounds.width + margin * 2.0,
+                    height: bounds.height + margin * 2.0,
+                })
+            }
             Self::Field {
                 transform,
                 stroke_width,
@@ -345,6 +377,7 @@ impl DrawCommand {
             Self::Quad { clip, .. }
             | Self::Text { clip, .. }
             | Self::Texture { clip, .. }
+            | Self::Path { clip, .. }
             | Self::Field { clip, .. } => *clip,
         }
     }

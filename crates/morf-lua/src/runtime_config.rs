@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use crate::{
-    api_finish::*, reactive_execute::*, serialization::*, state::*, surface_types::*, types::*,
+    api_finish::*, reactive_bindings::run_destroyed_hooks, reactive_execute::*, serialization::*,
+    state::*, surface_types::*, types::*,
 };
 
 impl Runtime {
@@ -91,9 +92,13 @@ impl Runtime {
             )));
         }
 
-        self.lua
+        let result = self
+            .lua
             .execute::<()>(&executor)
-            .map_err(|error| Error::Runtime(error.to_string()))
+            .map_err(|error| Error::Runtime(error.to_string()));
+        self.lua
+            .enter(|ctx| run_destroyed_hooks(&self.reactive, ctx, self.limits));
+        result
     }
 
     /// Replaces the ordered filesystem roots used for user Lua modules.
@@ -221,7 +226,9 @@ impl Runtime {
             let Some(geometry) = layout.geometry(node) else {
                 continue;
             };
-            if geometry.width <= 0.0 || geometry.height <= 0.0 {
+            if (geometry.width <= 0.0 || geometry.height <= 0.0)
+                && !growing_from_nothing(&scene, node)
+            {
                 let element = scene
                     .element(node)
                     .map(|element| format!("{element:?}"))
@@ -438,4 +445,34 @@ impl Runtime {
                     .is_some_and(|vertex| vertex.reads_time)
         })
     }
+}
+
+/// Whether a node's size is on its way somewhere: its own size, or an
+/// ancestor's, is animating.
+///
+/// A container that morphs open from nothing lays out to nothing on its first
+/// frames, with its whole subtree inside, and that is the animation working
+/// rather than a configuration forgetting a size. The lint is for a size that
+/// stays at nothing, so it looks past one that is moving.
+fn growing_from_nothing(scene: &morf_scene::Scene, node: NodeHandle) -> bool {
+    const SIZES: &[&str] = &[
+        "width",
+        "height",
+        "implicit_width",
+        "implicit_height",
+        "scale",
+        "scale_x",
+        "scale_y",
+    ];
+    let mut current = Some(node);
+    while let Some(candidate) = current {
+        if SIZES
+            .iter()
+            .any(|property| scene.is_animating(candidate, property).unwrap_or(false))
+        {
+            return true;
+        }
+        current = scene.parent(candidate).ok().flatten();
+    }
+    false
 }

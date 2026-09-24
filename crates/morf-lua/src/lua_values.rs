@@ -145,41 +145,74 @@ pub(crate) fn bounded_timeout(milliseconds: i64) -> Result<Duration, String> {
 pub(crate) fn parse_easing<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<Easing, String> {
     match value {
         LuaValue::Nil => Ok(Easing::Linear),
-        LuaValue::String(value) => match value.display_lossy().to_string().as_str() {
-            "linear" => Ok(Easing::Linear),
-            "in_quad" => Ok(Easing::InQuad),
-            "out_quad" => Ok(Easing::OutQuad),
-            "in_out_quad" => Ok(Easing::InOutQuad),
-            "in_cubic" => Ok(Easing::InCubic),
-            "out_cubic" => Ok(Easing::OutCubic),
-            "in_out_cubic" => Ok(Easing::InOutCubic),
-            "in_quart" => Ok(Easing::InQuart),
-            "out_quart" => Ok(Easing::OutQuart),
-            "in_out_quart" => Ok(Easing::InOutQuart),
-            "in_quint" => Ok(Easing::InQuint),
-            "out_quint" => Ok(Easing::OutQuint),
-            "in_out_quint" => Ok(Easing::InOutQuint),
-            "in_sine" => Ok(Easing::InSine),
-            "out_sine" => Ok(Easing::OutSine),
-            "in_out_sine" => Ok(Easing::InOutSine),
-            "in_expo" => Ok(Easing::InExpo),
-            "out_expo" => Ok(Easing::OutExpo),
-            "in_out_expo" => Ok(Easing::InOutExpo),
-            "in_circ" => Ok(Easing::InCirc),
-            "out_circ" => Ok(Easing::OutCirc),
-            "in_out_circ" => Ok(Easing::InOutCirc),
-            "in_back" => Ok(Easing::InBack),
-            "out_back" => Ok(Easing::OutBack),
-            "in_out_back" => Ok(Easing::InOutBack),
-            "in_bounce" => Ok(Easing::InBounce),
-            "out_bounce" => Ok(Easing::OutBounce),
-            "in_out_bounce" => Ok(Easing::InOutBounce),
-            name => Err(format!("unknown easing `{name}`")),
-        },
+        LuaValue::String(value) => easing_named(&value.display_lossy().to_string()),
         LuaValue::Table(value) => {
             let read = |field| match value.get_value(ctx, field) {
                 LuaValue::Integer(value) => Ok(value as f64),
                 LuaValue::Number(value) if value.is_finite() => Ok(value),
+                _ => Err(format!("easing {field} must be a finite number")),
+            };
+            let x1 = read("x1")?;
+            let x2 = read("x2")?;
+            if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
+                return Err("easing x1 and x2 must be between 0 and 1".into());
+            }
+            Ok(Easing::CubicBezier {
+                x1,
+                y1: read("y1")?,
+                x2,
+                y2: read("y2")?,
+            })
+        }
+        _ => Err("easing must be a string or cubic Bezier table".to_owned()),
+    }
+}
+
+/// A timing curve by the name a behavior's `easing` takes.
+pub(crate) fn easing_named(name: &str) -> Result<Easing, String> {
+    match name {
+        "linear" => Ok(Easing::Linear),
+        "in_quad" => Ok(Easing::InQuad),
+        "out_quad" => Ok(Easing::OutQuad),
+        "in_out_quad" => Ok(Easing::InOutQuad),
+        "in_cubic" => Ok(Easing::InCubic),
+        "out_cubic" => Ok(Easing::OutCubic),
+        "in_out_cubic" => Ok(Easing::InOutCubic),
+        "in_quart" => Ok(Easing::InQuart),
+        "out_quart" => Ok(Easing::OutQuart),
+        "in_out_quart" => Ok(Easing::InOutQuart),
+        "in_quint" => Ok(Easing::InQuint),
+        "out_quint" => Ok(Easing::OutQuint),
+        "in_out_quint" => Ok(Easing::InOutQuint),
+        "in_sine" => Ok(Easing::InSine),
+        "out_sine" => Ok(Easing::OutSine),
+        "in_out_sine" => Ok(Easing::InOutSine),
+        "in_expo" => Ok(Easing::InExpo),
+        "out_expo" => Ok(Easing::OutExpo),
+        "in_out_expo" => Ok(Easing::InOutExpo),
+        "in_circ" => Ok(Easing::InCirc),
+        "out_circ" => Ok(Easing::OutCirc),
+        "in_out_circ" => Ok(Easing::InOutCirc),
+        "in_back" => Ok(Easing::InBack),
+        "out_back" => Ok(Easing::OutBack),
+        "in_out_back" => Ok(Easing::InOutBack),
+        "in_bounce" => Ok(Easing::InBounce),
+        "out_bounce" => Ok(Easing::OutBounce),
+        "in_out_bounce" => Ok(Easing::InOutBounce),
+        name => Err(format!("unknown easing `{name}`")),
+    }
+}
+
+/// A timing curve from a value a binding returned: a name, or a cubic Bezier
+/// as `{ x1, y1, x2, y2 }`.
+pub(crate) fn easing_from_scene(value: &morf_scene::Value) -> Result<Easing, String> {
+    use morf_scene::Value;
+    match value {
+        Value::Nil => Ok(Easing::Linear),
+        Value::String(name) => easing_named(name),
+        Value::Map(fields) => {
+            let read = |field: &str| match fields.get(field) {
+                Some(Value::Number(value)) if value.is_finite() => Ok(*value),
                 _ => Err(format!("easing {field} must be a finite number")),
             };
             let x1 = read("x1")?;

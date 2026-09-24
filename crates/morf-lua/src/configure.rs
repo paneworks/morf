@@ -53,6 +53,10 @@ pub(crate) fn configure_element<'gc>(
         .iter()
         .find(|(name, _)| name == "enter")
         .map(|(_, value)| *value);
+    let named_loop = named
+        .iter()
+        .find(|(name, _)| name == "loop")
+        .map(|(_, value)| *value);
     let mut state_selector = None;
     if let Some((_, states)) = named.iter().find(|(name, _)| name == "states") {
         let transitions = named
@@ -84,12 +88,22 @@ pub(crate) fn configure_element<'gc>(
     for (property, value) in named {
         if matches!(
             property.as_str(),
-            "behavior" | "states" | "transitions" | "shader" | "shader_params" | "enter"
+            "behavior" | "states" | "transitions" | "shader" | "shader_params" | "enter" | "loop"
         ) {
             continue;
         }
         if property == "state" {
             state_value = Some(value);
+            continue;
+        }
+        if property == "on_destroyed" {
+            let LuaValue::Function(Function::Closure(closure)) = value else {
+                return Err("on_destroyed must be a function".to_owned());
+            };
+            state
+                .borrow_mut()
+                .destroy_hooks
+                .insert(node, ctx.stash(closure));
             continue;
         }
         if let Some(event) = handler_event(&property) {
@@ -142,6 +156,19 @@ pub(crate) fn configure_element<'gc>(
     }
     for (property, settled) in entering {
         assign_scene_property(&mut state.borrow_mut(), node, &property, settled)?;
+    }
+    // After the behaviors and the entrance, so a loop starts from where the
+    // node was declared to be rather than from a schema default.
+    if let Some(value) = named_loop {
+        match value {
+            LuaValue::Function(Function::Closure(closure)) => {
+                crate::reactive_bindings::register_loop_binding(state, ctx, limits, node, closure);
+            }
+            value => {
+                let value = lua_to_scene(ctx, value, 0)?;
+                crate::node_loops::apply_loops(&mut state.borrow_mut(), node, &value)?;
+            }
+        }
     }
     children.sort_by_key(|(index, _)| *index);
     for (_, child) in children {
@@ -331,11 +358,16 @@ pub(crate) fn configure_behaviors<'gc>(
 /// turns whichever of those was given into an alternating variant. Lua reserves
 /// `repeat` as a keyword, so the count field cannot carry that name.
 pub(crate) fn parse_repeat<'gc>(ctx: Context<'gc>, options: Table<'gc>) -> Result<Repeat, String> {
-    let alternating = match options.get_value(ctx, "ping_pong") {
-        LuaValue::Nil => false,
-        LuaValue::Boolean(value) => value,
-        _ => return Err("behavior ping_pong must be boolean".to_owned()),
-    };
+    // `alternate` is the word the rest of the vocabulary uses; `ping_pong`
+    // stays as its older spelling.
+    let mut alternating = false;
+    for field in ["ping_pong", "alternate"] {
+        match options.get_value(ctx, field) {
+            LuaValue::Nil => {}
+            LuaValue::Boolean(value) => alternating |= value,
+            _ => return Err(format!("behavior {field} must be boolean")),
+        }
+    }
     let count = |value: f64| -> Result<u32, String> {
         if !value.is_finite() || value < 1.0 {
             return Err("behavior loops must be at least one pass".to_owned());

@@ -34,7 +34,7 @@ ui.Rect {
 | group | kinds |
 |---|---|
 | containers | `Item`, `Inset`, `Flickable`, `Loader`, `Layout` |
-| painting | `Rect`, `ClipRect`, `Text`, `Image`, `Icon`, `Sdf`, `SdfShape` |
+| painting | `Rect`, `ClipRect`, `Text`, `Image`, `Icon`, `Path`, `Sdf`, `SdfShape` |
 | input | `MouseArea` and `TextInput` (the kinds the pointer can hit), `DropArea` (the only kind a drag can) |
 | positioners | `Row`, `Column`, `Grid` with `columns` |
 | layouts | `Flex`, `Grid` with tracks |
@@ -255,7 +255,10 @@ take one (a gradient, a decoration). It never runs per frame.
 
 ### Signals and state tables
 
-`morf.signal(name, value)` holds one scalar with `get`/`set`.
+`morf.signal(name, value)` holds one scalar with `get`/`set`. Signals and
+state tables may be made anywhere, a binding included: a module that holds
+state can be `require`d for the first time from inside one, and its signals
+join the flush that is running.
 
 `morf.state(table)` keeps a shape: each named field is a signal read and
 written through the proxy, a nested table is nested, an array is a list
@@ -322,8 +325,66 @@ installed after construction, so nothing animates its own creation;
 `enter` (section 6) says where a first frame starts instead.
 Animated *current* values do not re-run bindings; read `_target` for the
 destination, or use a `morf.transform_watcher` for the moving value.
-`morf.animation.play { ... }` runs groups and keyframes;
 `morf.animation.fling` coasts a property.
+
+`morf.animation.play { ... }` runs a group: its array part is a sequence of
+steps, each `{ node, property, to, from, duration, easing, delay }`, a
+`{ pause = ms }`, a `{ keyframes = { { at, value, easing }, ... } }` track,
+or a nested `{ sequence = { ... } }` / `{ parallel = { ... } }`. On the group
+itself, `loops = n | "forever"` repeats the whole schedule, `alternate =
+true` runs every other pass backwards (the last step first, each from its
+target back to where it set out), and `delay` waits once before the first
+pass. It returns a handle with `:stop()`, `:finish()`, `:pause()`,
+`:resume()` and `:active()`; `on_finished(reason)` hears `"completed"`,
+`"stopped"`, or `"canceled"` when a node it moves is removed, and may start
+the next group.
+
+```lua
+morf.animation.play {
+  delay = 120, loops = 3, alternate = true,
+  { node = face, property = "translate_y", to = -6, duration = 400, easing = "out_quad" },
+  { node = face, property = "scale_y", to = 0.9, duration = 120 },
+  on_finished = function() morf.animation.play { { node = face, property = "opacity", to = 0, duration = 200 } } end,
+}
+```
+
+Motion a node keeps up on its own — a bob, a spin, a pulse — is `loop`,
+keyed by property like `behavior`: `from` (default: where it is), `to`,
+`duration`, `easing`, `alternate`, `loops` (default forever) and `delay`.
+It runs in Rust between frames and ends with the node. `loop` may be a
+binding: returning another table restarts what changed, returning nil ends
+the loops, and a property whose loop ends goes back to its `from` (through
+its `behavior`, if it has one). A write to a looping property takes it over,
+as any write takes over an animation.
+
+```lua
+ui.Item {
+  loop = function()
+    if pets.mood() == "asleep" then return nil end
+    return { translate_y = { from = 0, to = -4, duration = 1400, easing = "in_out_sine", alternate = true } }
+  end,
+  face,
+}
+```
+
+### Destruction
+
+A node is destroyed when a `Loader` lets it go, when its `Repeater` row
+leaves the model, when `ui.destroy(node)` is called, or when any of its
+ancestors goes the same way. `on_destroyed = function() end` on any node
+runs once then, deepest node first, so what the node's Lua made for it —
+a `morf.clipboard.watch`, a service subscription, a timer outside the tree
+— can be let go of. It runs as a handler once nothing else is running (never
+in the middle of a flush), with a handler's fuel; its writes flush when it
+returns, and an error in it is logged. Groups, loops, bindings and handlers
+that belong to a destroyed node end with it.
+
+```lua
+local function clock_face()
+  local unsubscribe = services.time.subscribe(function(t) ... end)
+  return ui.Item { on_destroyed = unsubscribe, ... }
+end
+```
 
 ## 6. Appearance
 
@@ -494,6 +555,60 @@ content has scrolled to keep the caret in view, and `content_width` /
 `content_height` how big it is, for a scroll bar to follow. Methods:
 `:select(start, stop)`, `:select_all()`, `:deselect()`, `:insert(text)`,
 `:selected_text()`, `:undo()`, `:redo()`.
+
+### Paths
+
+`ui.Path` is a shape written as SVG path data — a face, a ring gauge, a
+sprite, a rounded polyline — and, unlike an SVG in an `Image`, it stays
+geometry: every number and colour on it animates, and it is drawn at the
+pixels it covers, so it is as sharp scaled up as at rest.
+
+- `d`: the outline, every SVG command, absolute or relative.
+- `fill_color` (black, as SVG's default), `fill_rule`: `nonzero` or
+  `evenodd`.
+- `stroke_color` (none), `stroke_width` (1), `stroke_cap`: `butt`, `round`,
+  `square`; `stroke_join`: `miter`, `round`, `bevel`; `miter_limit` (4).
+- `dash = { dash, gap, ... }` and `dash_offset`, in path units; an odd list
+  is read twice over, as SVG reads it.
+- `trim_start`, `trim_end`: the part of the outline that is stroked, as
+  fractions of its whole length (across every subpath, in order). A
+  progress ring is `trim_end`; a line drawing itself on is `trim_end` going
+  from 0 to 1. The fill is always the whole shape.
+- `view_box = { x, y, w, h }` (or four numbers): the part of path space
+  stretched over the node, and the node's own size when it is given none.
+  `fill_mode` fits it the way an `Image` fits: `stretch`,
+  `preserve_aspect_fit` (centred), `preserve_aspect_crop`. Without a view
+  box, path units are the node's pixels and the node needs a size. A stroke
+  may reach past the node's box, by half its width and more at a corner.
+- `morph_to` and `morph_progress`: the outline it turns into. When the two
+  have the same run of moves, segments and closes — lines and curves count
+  alike — the points walk from one to the other; otherwise the outline
+  changes over at the halfway mark.
+
+```lua
+local mouth = ui.Path {
+  anchors = { fill = true }, view_box = { 0, 0, 140, 130 },
+  d = "M34 82 C50 102 90 102 106 82",            -- a smile
+  morph_to = "M34 96 C50 76 90 76 106 96",       -- a frown: the same curve
+  morph_progress = function() return mood() == "sad" and 1 or 0 end,
+  fill_color = "transparent", stroke_color = "#2b2118", stroke_width = 6, stroke_cap = "round",
+  behavior = { morph_progress = { duration = 300, easing = "out_cubic" } },
+}
+
+local ring = ui.Path {
+  width = 48, height = 48, view_box = { 0, 0, 100, 100 },
+  d = "M50 8 A42 42 0 1 1 49.99 8",
+  fill_color = "transparent", stroke_color = theme.accent, stroke_width = 12, stroke_cap = "round",
+  trim_end = function() return battery.level / 100 end,
+  behavior = { trim_end = { duration = 400 } },
+}
+```
+
+A path that is not changing costs a texture lookup: what was drawn is kept
+under a key of everything that shaped its pixels. One whose numbers move is
+drawn again for each frame they move in, on the CPU, at its on-screen size —
+cheap for an icon or a gauge, worth knowing for a path the size of the
+screen. `examples/path.lua` has one of each.
 
 ### Entering
 

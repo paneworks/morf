@@ -118,6 +118,53 @@ pub(crate) fn coerce(
                 return Err(invalid(format!("`{name}` is not a cursor shape")));
             }
         }
+        // A path's words are checked where they are written, so a misspelt
+        // cap is an error at the node rather than a stroke that ends wrong.
+        "stroke_cap" | "stroke_join" | "fill_rule" if element == Element::Path => {
+            if let Value::String(name) = &value {
+                let known = match property {
+                    "stroke_cap" => crate::StrokeCap::parse(name).is_some(),
+                    "stroke_join" => crate::StrokeJoin::parse(name).is_some(),
+                    _ => crate::FillRule::parse(name).is_some(),
+                };
+                if !known {
+                    return Err(invalid(format!(
+                        "`{name}` is not one of {}",
+                        match property {
+                            "stroke_cap" => "butt, round, square",
+                            "stroke_join" => "miter, round, bevel",
+                            _ => "nonzero, evenodd",
+                        }
+                    )));
+                }
+            }
+        }
+        "d" | "morph_to" if element == Element::Path => {
+            if let Value::String(data) = &value
+                && !data.trim().is_empty()
+            {
+                kurbo::BezPath::from_svg(data)
+                    .map_err(|error| invalid(format!("not SVG path data: {error}")))?;
+            }
+        }
+        "view_box" if element == Element::Path => {
+            crate::PathViewBox::parse(&value).map_err(invalid)?;
+        }
+        "dash" if element == Element::Path => {
+            crate::path_dash(&value).map_err(invalid)?;
+        }
+        "fill_mode" if element == Element::Path => {
+            if let Value::String(name) = &value
+                && !matches!(
+                    name.as_str(),
+                    "stretch" | "preserve_aspect_fit" | "preserve_aspect_crop"
+                )
+            {
+                return Err(invalid(format!(
+                    "`{name}` is not stretch, preserve_aspect_fit or preserve_aspect_crop"
+                )));
+            }
+        }
         "font_style" => {
             if let Value::String(name) = &value
                 && !matches!(name.as_str(), "normal" | "italic" | "oblique")

@@ -24,6 +24,7 @@ pub(crate) fn install_ui_json_api<'gc>(
         ("Icon", Element::Icon),
         ("Sdf", Element::Sdf),
         ("SdfShape", Element::SdfShape),
+        ("Path", Element::Path),
         ("MouseArea", Element::MouseArea),
         ("DropArea", Element::DropArea),
         ("Row", Element::Row),
@@ -70,7 +71,7 @@ pub(crate) fn install_ui_json_api<'gc>(
             other => format!("{other:?}"),
         };
         Err(HostError(format!(
-            "no ui kind `{key}`: the kinds are Item, Inset, Rect, ClipRect, Text, TextInput, Image, Icon, Sdf, SdfShape, MouseArea, DropArea, Row, Column, Grid, Flex, Flickable, Loader, Timer, Layout, Repeater, ListView, GridView, each"
+            "no ui kind `{key}`: the kinds are Item, Inset, Rect, ClipRect, Text, TextInput, Image, Icon, Sdf, SdfShape, Path, MouseArea, DropArea, Row, Column, Grid, Flex, Flickable, Loader, Timer, Layout, Repeater, ListView, GridView, each"
         ))
         .into())
     });
@@ -133,6 +134,18 @@ pub(crate) fn install_ui_json_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     ui.set_field(ctx, "reparent", reparent);
+    // Removes a node and everything under it for good: its bindings, its
+    // handlers, its animations, and — once nothing is borrowed — its
+    // `on_destroyed` hooks, deepest first. A Repeater's delegate is its
+    // model's to remove, not this.
+    let destroy_state = Rc::clone(&state);
+    let destroy = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let node: UserRef<NodeToken> = stack.consume(ctx)?;
+        crate::runtime_helpers::remove_scene_subtree(&mut destroy_state.borrow_mut(), node.handle);
+        crate::reactive_bindings::run_destroyed_hooks(&destroy_state, ctx, limits);
+        Ok(CallbackReturn::Return)
+    });
+    ui.set_field(ctx, "destroy", destroy);
     for kind in ["spring", "smoothed"] {
         ui.set_field(
             ctx,
