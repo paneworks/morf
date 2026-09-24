@@ -285,9 +285,13 @@ pub(crate) struct LayerState {
     /// destroy — so this is `Some` exactly while the session is being held.
     pub(crate) idle_inhibitor: Option<ZwpIdleInhibitorV1>,
     pub(crate) shortcuts_inhibit_manager: Option<ZwpKeyboardShortcutsInhibitManagerV1>,
-    /// Live while the shell is asking the compositor to stop eating its keys.
-    /// Same shape as the idle inhibitor: the object's existence is the request.
-    pub(crate) shortcuts_inhibitor: Option<ZwpKeyboardShortcutsInhibitorV1>,
+    /// While the shell asks the compositor to stop eating its keys, one
+    /// inhibitor per surface that can hold the keyboard: the primary layer
+    /// and every floating window. Same shape as the idle inhibitor -- each
+    /// object's existence is the request -- but per surface, because the
+    /// protocol honours an inhibitor only while *its* surface has focus.
+    pub(crate) shortcuts_inhibitors: HashMap<SurfaceRole, ZwpKeyboardShortcutsInhibitorV1>,
+    pub(crate) shortcuts_inhibit: crate::inhibit_handlers::ShortcutsInhibit,
     pub(crate) idle_notifications: Vec<ExtIdleNotificationV1>,
     /// Thresholds, each with whether it should ignore inhibitors.
     pub(crate) idle_timeouts: Vec<(u32, bool)>,

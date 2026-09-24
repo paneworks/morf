@@ -263,34 +263,6 @@ impl LayerState {
             .collect();
     }
 
-    /// Asks the compositor to stop taking the shell's keys, or lets it again.
-    ///
-    /// A compositor binds keys for itself -- Super for the launcher, Alt-Tab
-    /// for the switcher -- and a shell that draws its own launcher never sees
-    /// the one key it most wants. This says: while my surface has focus, give
-    /// me all of them. Whether the compositor agrees arrives as an event.
-    pub(crate) fn set_shortcuts_inhibited(&mut self, inhibited: bool, qh: &QueueHandle<Self>) {
-        if inhibited == self.shortcuts_inhibitor.is_some() {
-            return;
-        }
-        match self.shortcuts_inhibitor.take() {
-            Some(inhibitor) => inhibitor.destroy(),
-            None => {
-                let Some(manager) = &self.shortcuts_inhibit_manager else {
-                    return;
-                };
-                let Some(seat) = self.seats.seats().next() else {
-                    return;
-                };
-                let Some(layer) = self.layers.get(&crate::PRIMARY_LAYER) else {
-                    return;
-                };
-                self.shortcuts_inhibitor =
-                    Some(manager.inhibit_shortcuts(layer.surface.wl_surface(), &seat, qh, ()));
-            }
-        }
-    }
-
     /// Starts tracking fractional scale for a popup or floating window.
     ///
     /// The same two objects a layer surface gets, kept in `aux_scales` because
