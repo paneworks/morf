@@ -47,6 +47,50 @@ fn a_container_that_laid_out_to_nothing_is_reported_once() {
 }
 
 #[test]
+fn a_container_growing_from_nothing_is_not_reported() {
+    // A panel that morphs open from zero lays out to nothing on its first
+    // frames with its whole subtree inside. That is the animation, not a
+    // forgotten size, so neither it nor anything inside it is reported while
+    // the size moves.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "grow.lua",
+            br#"
+                local ui = require("morf.ui")
+                _G.panel = ui.Rect {
+                    width = 0, height = 0,
+                    behavior = { width = { duration = 200 }, height = { duration = 200 } },
+                    ui.Column { ui.Text { text = "inside" } },
+                }
+                ui.Rect { _G.panel }
+                _G.panel.width = 120
+                _G.panel.height = 40
+            "#,
+        )
+        .unwrap();
+    let root = runtime.scene().roots()[0];
+    let layout = morf_layout::Layout::compute(
+        &runtime.scene(),
+        root,
+        morf_layout::Size {
+            width: 100.0,
+            height: 100.0,
+        },
+        &mut NoText,
+    )
+    .unwrap();
+    runtime.lint_layout(&layout, root);
+    runtime.poll_services();
+    let logs = runtime.take_logs();
+    assert!(
+        logs.iter()
+            .all(|log| !log.message.contains("laid out to nothing")),
+        "an opening panel is not a mistake: {logs:?}"
+    );
+}
+
+#[test]
 fn capabilities_reach_the_configuration_and_the_wire() {
     // "Is there screencopy here" is a question a shell should be able to ask
     // rather than try and read the error; `morf info` is the same question
