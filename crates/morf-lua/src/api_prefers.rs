@@ -7,7 +7,7 @@
 //! and a configuration reads them the same way.
 
 use luna::{Context, Table};
-use morf_io::{Bus, DbusProxy, DbusValue};
+use morf_io::{Bus, DbusValue};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -112,55 +112,73 @@ pub(crate) fn preference_from_setting(
     }
 }
 
-/// Asks the portal for one setting; `None` when it has nothing to say.
-fn read_setting(proxy: &DbusProxy, namespace: &str, key: &str) -> Option<DbusValue> {
-    proxy
-        .call_value_with(
-            "ReadOne",
-            &DbusValue::List(vec![
-                DbusValue::String(namespace.to_owned()),
-                DbusValue::String(key.to_owned()),
-            ]),
-        )
-        .ok()
+/// The settings this state follows, by portal namespace and key.
+const SETTINGS_READ: [(&str, &str); 4] = [
+    (APPEARANCE, "color-scheme"),
+    (APPEARANCE, "contrast"),
+    (APPEARANCE, "accent-color"),
+    (INTERFACE, "enable-animations"),
+];
+
+/// How long a reading may take before it is given up on. Generous, because
+/// nothing waits for it: the fields hold their defaults meanwhile.
+const READ_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Asks the portal for every setting this state follows, answered later.
+///
+/// This used to be four blocking calls, made while the runtime was being
+/// built — before anything was drawn. A portal that had to be started by
+/// activation, or a slow one, held the whole shell off the screen for as long
+/// as it took. Now the calls go out and the fields fill in when they answer.
+pub(crate) fn ask_portal() -> Vec<(&'static str, &'static str, morf_io::PendingReply)> {
+    SETTINGS_READ
+        .iter()
+        .filter_map(|&(namespace, key)| {
+            morf_io::call_async(
+                Bus::Session,
+                PORTAL,
+                PORTAL_PATH,
+                SETTINGS,
+                "ReadOne",
+                DbusValue::List(vec![
+                    DbusValue::String(namespace.to_owned()),
+                    DbusValue::String(key.to_owned()),
+                ]),
+                READ_TIMEOUT,
+            )
+            .ok()
+            .map(|reply| (namespace, key, reply))
+        })
+        .collect()
 }
 
-/// The portal's settings interface, its change signal, and what it said.
-struct Portal {
-    proxy: DbusProxy,
-    signal: morf_io::DbusSignal,
-    read: Vec<(&'static str, IpcValue)>,
-}
-
-/// Connects to the settings portal and reads every preference it knows,
-/// leaving the change signal subscribed. `None` when there is no portal.
-fn portal_preferences() -> Option<Portal> {
-    let proxy = DbusProxy::connect_with_timeout(
+/// Starts following the settings portal: its change signal, its name, and —
+/// only if something already owns the name — a first reading. `None` when
+/// there is no session bus.
+///
+/// Never by activation. Asking the bus whether the name has an owner cannot
+/// start anything; a call to the name would, and a portal started that way
+/// can take the whole of a call's timeout to come up. A portal that starts
+/// later is read when its name arrives.
+fn watch_portal() -> Option<PortalWatch> {
+    let changes = morf_io::subscribe_signal(
         Bus::Session,
-        PORTAL.to_owned(),
-        PORTAL_PATH.to_owned(),
-        SETTINGS.to_owned(),
-        Duration::from_millis(250),
+        PORTAL,
+        PORTAL_PATH,
+        SETTINGS,
+        "SettingChanged",
     )
     .ok()?;
-    let signal = proxy.subscribe("SettingChanged").ok()?;
-    let mut read = Vec::new();
-    for (namespace, key) in [
-        (APPEARANCE, "color-scheme"),
-        (APPEARANCE, "contrast"),
-        (APPEARANCE, "accent-color"),
-        (INTERFACE, "enable-animations"),
-    ] {
-        if let Some(value) = read_setting(&proxy, namespace, key)
-            && let Some(preference) = preference_from_setting(namespace, key, value)
-        {
-            read.push(preference);
-        }
-    }
-    Some(Portal {
-        proxy,
-        signal,
-        read,
+    let owner = morf_io::subscribe_name_owner_changed(Bus::Session, PORTAL).ok()?;
+    let pending = if morf_io::name_has_owner(Bus::Session, PORTAL).unwrap_or(false) {
+        ask_portal()
+    } else {
+        Vec::new()
+    };
+    Some(PortalWatch {
+        changes,
+        owner,
+        pending,
     })
 }
 
@@ -170,17 +188,12 @@ pub(crate) fn install_prefers_api<'gc>(
     morf: Table<'gc>,
     screen: Option<&Screen>,
 ) {
-    let portal = portal_preferences();
+    let portal = watch_portal();
     let seed = Table::new(&ctx);
     seed.set_field(ctx, "color_scheme", "none");
     seed.set_field(ctx, "contrast", "none");
     seed.set_field(ctx, "reduced_motion", false);
     seed.set_field(ctx, "scale", screen.map_or(1, |screen| screen.scale) as i64);
-    if let Some(portal) = &portal {
-        for (name, value) in &portal.read {
-            seed.set_field(ctx, name, value.to_lua(ctx));
-        }
-    }
     let metatable = state
         .borrow()
         .state_metatable
@@ -212,7 +225,8 @@ pub(crate) fn install_prefers_api<'gc>(
         reduced_motion: id("reduced_motion"),
         accent_color: id("accent_color"),
         scale: id("scale"),
-        portal: portal.map(|portal| (portal.proxy, portal.signal)),
+        portal,
+        overridden: std::collections::HashSet::new(),
     };
     let reduced = matches!(
         state.borrow().values.get(&prefers.reduced_motion),

@@ -259,6 +259,84 @@ pub(crate) fn execute_dbus_handler(
     }
 }
 
+/// Hands one signal to a subscription's handler.
+///
+/// A plain subscription is called `(body, info)`: the body first, exactly as
+/// it has always been passed, so every handler written before `info` existed
+/// still works; `info` is `{ sender, path, interface, member, arguments }`,
+/// and `sender` — the unique name — is what tells two services emitting on
+/// the same path apart. A name-owner subscription is called
+/// `(old_owner, new_owner, name)`, with `""` for nobody.
+pub(crate) fn execute_dbus_signal_handler(
+    ctx: Context<'_>,
+    closure: &StashedClosure,
+    event: morf_io::DbusSignalEvent,
+    kind: DbusSignalKind,
+    limits: Limits,
+) -> Result<(), String> {
+    let arguments = event.arguments?;
+    let args = match kind {
+        DbusSignalKind::OwnerChanged => {
+            let text = |value: Option<&DbusValue>| match value {
+                Some(DbusValue::String(text)) => text.clone(),
+                _ => String::new(),
+            };
+            let DbusValue::List(values) = &arguments else {
+                return Err("NameOwnerChanged carried no arguments".to_owned());
+            };
+            let name = text(values.first());
+            let old = text(values.get(1));
+            let new = text(values.get(2));
+            vec![
+                LuaValue::String(ctx.intern(old.as_bytes())),
+                LuaValue::String(ctx.intern(new.as_bytes())),
+                LuaValue::String(ctx.intern(name.as_bytes())),
+            ]
+        }
+        DbusSignalKind::Signal => {
+            let body = dbus_value_to_lua(ctx, arguments.clone())?;
+            let info = Table::new(&ctx);
+            info.set_field(ctx, "sender", event.sender.as_str());
+            info.set_field(ctx, "path", event.path.as_str());
+            info.set_field(ctx, "interface", event.interface.as_str());
+            info.set_field(ctx, "member", event.member.as_str());
+            info.set_field(ctx, "arguments", dbus_value_to_lua(ctx, arguments)?);
+            vec![body, LuaValue::Table(info)]
+        }
+    };
+    let executor = Executor::start(ctx, ctx.fetch(closure).into(), Variadic(args));
+    drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
+    match executor.take_result::<()>(ctx) {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(error)) => Err(error.to_string()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// Hands a `call_async` answer to its callback: `(true, reply)` or
+/// `(false, error)`.
+pub(crate) fn execute_dbus_reply_handler(
+    ctx: Context<'_>,
+    closure: &StashedClosure,
+    reply: Result<DbusValue, String>,
+    limits: Limits,
+) -> Result<(), String> {
+    let args = match reply {
+        Ok(value) => vec![LuaValue::Boolean(true), dbus_value_to_lua(ctx, value)?],
+        Err(error) => vec![
+            LuaValue::Boolean(false),
+            LuaValue::String(ctx.intern(error.as_bytes())),
+        ],
+    };
+    let executor = Executor::start(ctx, ctx.fetch(closure).into(), Variadic(args));
+    drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
+    match executor.take_result::<()>(ctx) {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(error)) => Err(error.to_string()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 /// Hands one arriving method call to its Lua handler.
 ///
 /// The call arrives as a table rather than as positional arguments because most
@@ -277,6 +355,7 @@ pub(crate) fn execute_dbus_call_handler(
     table.set_field(ctx, "member", call.member.as_str());
     table.set_field(ctx, "path", call.path.as_str());
     table.set_field(ctx, "sender", call.sender.as_str());
+    table.set_field(ctx, "signature", call.signature.as_str());
     table.set_field(ctx, "arguments", dbus_value_to_lua(ctx, call.arguments)?);
     let executor = Executor::start(
         ctx,

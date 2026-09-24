@@ -12,7 +12,7 @@
 -- Nothing here touches a real bus, so these tests can press every button a
 -- real network or radio would mind being pressed.
 
-local fake = { objects = {}, methods = {}, owners = {}, calls = {}, subscriptions = {} }
+local fake = { objects = {}, methods = {}, owners = {}, calls = {}, subscriptions = {}, fds = {} }
 
 local function key(...) return table.concat({ ... }, "|") end
 
@@ -60,11 +60,43 @@ function fake.own(bus, dest, owned)
   fake.owners[key(bus, dest)] = owned and true or nil
 end
 
---- Delivers a signal to whoever subscribed to exactly this address.
+--- The unique name a fake service speaks with: what a real signal's
+--- `info.sender` carries.
+function fake.unique(dest)
+  if dest == "org.freedesktop.DBus" then return dest end
+  return ":fake." .. dest
+end
+
+--- Delivers a signal to whoever subscribed to exactly this address, as
+--- the engine does: the body, then `{ sender, path, interface, member,
+--- arguments }`.
 function fake.emit(bus, dest, path, iface, member, body)
-  for _, callback in ipairs(fake.subscriptions[key(bus, dest, path, iface, member)] or {}) do
-    callback(copy(body))
+  local list = fake.subscriptions[key(bus, dest, path, iface, member)] or {}
+  -- A copy of the list: a handler may close its own subscription.
+  local snapshot = {}
+  for index, entry in ipairs(list) do snapshot[index] = entry end
+  for _, entry in ipairs(snapshot) do
+    if not entry.closed then
+      entry.callback(copy(body), {
+        sender = fake.unique(dest), path = path, interface = iface, member = member,
+        arguments = copy(body),
+      })
+    end
   end
+end
+
+--- A stand-in for a file descriptor handle: `close()` and `is_open()`, as
+--- the engine's userdata has.
+function fake.fd(label)
+  local handle = { label = label, open = true }
+  function handle:close()
+    local was = self.open
+    self.open = false
+    return was
+  end
+  function handle:is_open() return self.open end
+  fake.fds[#fake.fds + 1] = handle
+  return handle
 end
 
 --- The calls made to one method, in order.
@@ -105,6 +137,12 @@ local function dispatch(bus, dest, path, iface, method, args)
     if method == "GetAll" then return { copy(target) } end
     if method == "Get" then return copy(target[plain(args[2])]) end
     if method == "Set" then
+      -- Recorded as `proxy:set` records it, so a test reads a property
+      -- write the same way whichever route the library took. The variant
+      -- is the wire's wrapper, not what the library typed.
+      local value = args[3]
+      if type(value) == "table" and value.signature == "v" then value = value.value end
+      call.property, call.value = plain(args[2]), value
       target[plain(args[2])] = plain(args[3])
       return nil
     end
@@ -143,21 +181,69 @@ function proxy_methods:set(property, value)
   props[property] = plain(value)
 end
 
-function proxy_methods:call(method)
-  return dispatch(self.bus, self.dest, self.path, self.iface, method, {})
+--- The engine's rule for arguments: none; one (a list of them, or the one
+--- argument); or several.
+local function positional(...)
+  local count = select("#", ...)
+  if count == 0 then return {} end
+  if count > 1 then return { ... } end
+  local args = ...
+  if args == nil then return {} end
+  if type(args) ~= "table" or args.signature ~= nil or getmetatable(args) ~= nil then
+    return { args }
+  end
+  return args
 end
 
-function proxy_methods:call_with(method, args)
-  -- The engine's rule: a list is the positional arguments, anything else is
-  -- the one argument.
-  if type(args) ~= "table" or args.signature ~= nil then args = { args } end
-  return dispatch(self.bus, self.dest, self.path, self.iface, method, args)
+function proxy_methods:call(method, ...)
+  return dispatch(self.bus, self.dest, self.path, self.iface, method, positional(...))
+end
+
+function proxy_methods:call_with(method, ...)
+  return dispatch(self.bus, self.dest, self.path, self.iface, method, positional(...))
+end
+
+--- Answers on a later turn, as the engine does: the call is recorded now,
+--- the callback runs from a timer.
+local function answer_later(callback, ok, reply)
+  local morf = require("morf")
+  morf.timer(1, function() callback(ok, reply) end, false)
+end
+
+local function dispatch_async(bus, dest, path, iface, method, args, callback)
+  local ok, reply = pcall(dispatch, bus, dest, path, iface, method, args)
+  fake.calls[#fake.calls].async = true
+  answer_later(callback, ok, reply)
+  return true
+end
+
+function proxy_methods:call_async(method, ...)
+  local all = table.pack(...)
+  local callback = all[all.n]
+  return dispatch_async(self.bus, self.dest, self.path, self.iface, method,
+    positional(table.unpack(all, 1, all.n - 1)), callback)
+end
+
+local function subscribe(k, callback)
+  fake.subscriptions[k] = fake.subscriptions[k] or {}
+  local entry = { callback = callback }
+  table.insert(fake.subscriptions[k], entry)
+  local handle = {}
+  function handle:close()
+    if entry.closed then return false end
+    entry.closed = true
+    for index, each in ipairs(fake.subscriptions[k]) do
+      if each == entry then table.remove(fake.subscriptions[k], index) break end
+    end
+    return true
+  end
+  handle.unsubscribe = handle.close
+  function handle:active() return not entry.closed end
+  return handle
 end
 
 function proxy_methods:subscribe(member, callback)
-  local k = key(self.bus, self.dest, self.path, self.iface, member)
-  fake.subscriptions[k] = fake.subscriptions[k] or {}
-  table.insert(fake.subscriptions[k], callback)
+  return subscribe(key(self.bus, self.dest, self.path, self.iface, member), callback)
 end
 
 fake.dbus = {
@@ -165,6 +251,31 @@ fake.dbus = {
     fake.last_timeout = timeout
     return setmetatable({ bus = bus, dest = dest, path = path, iface = iface, timeout = timeout },
       proxy_methods)
+  end,
+  call_async = function(bus, dest, path, iface, method, args, options, callback)
+    if type(options) == "function" then options, callback = nil, options end
+    fake.last_timeout = options and options.timeout_ms
+    return dispatch_async(bus, dest, path, iface, method, positional(args), callback)
+  end,
+  name_has_owner = function(bus, name)
+    return fake.owners[key(bus, name)] == true
+  end,
+  list_names = function(bus)
+    local names = {}
+    for k in pairs(fake.owners) do
+      local b, n = k:match("^([^|]*)|(.*)$")
+      if b == bus then names[#names + 1] = n end
+    end
+    table.sort(names)
+    return names
+  end,
+  on_name_owner_changed = function(bus, name, callback)
+    return subscribe(key(bus, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+      "org.freedesktop.DBus", "NameOwnerChanged"), function(body)
+      if type(body) == "table" and body[1] == name then
+        callback(body[2] or "", body[3] or "", body[1])
+      end
+    end)
   end,
 }
 

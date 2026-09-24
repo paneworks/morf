@@ -293,6 +293,10 @@ pub(crate) struct ReactiveState {
     pub(crate) transform_watchers: HashMap<u64, LuaTransformWatcher>,
     pub(crate) next_transform_watcher: u64,
     pub(crate) dbus_signals: Vec<PendingDbusSignal>,
+    /// Hands out the ids subscription handles close by.
+    pub(crate) next_dbus_signal_id: u64,
+    /// `call_async` calls waiting for their answer.
+    pub(crate) dbus_replies: Vec<PendingDbusReply>,
     /// The metatable every state proxy shares, so a theme can be one.
     pub(crate) state_metatable: Option<StashedTable>,
     /// Theme token files being watched.
@@ -480,6 +484,8 @@ impl ReactiveState {
             prefers: None,
             audio: None,
             dbus_signals: Vec::new(),
+            next_dbus_signal_id: 0,
+            dbus_replies: Vec::new(),
             dbus_services: Vec::new(),
             udev_monitors: Vec::new(),
             status_notifiers: Vec::new(),

@@ -52,6 +52,10 @@ pub struct DbusCall {
     pub sender: String,
     /// Arguments, decoded the same way a reply body is.
     pub arguments: DbusValue,
+    /// The arguments' wire signature, `""` for none. Decoding loses what
+    /// the caller typed — an `a{sv}` and an `aa{sv}` can both arrive as an
+    /// empty table — and this is where it is still visible.
+    pub signature: String,
 }
 
 /// A bus name this process owns, and the calls arriving on it.
@@ -67,6 +71,8 @@ pub struct DbusService {
     pending: HashMap<u64, zbus::Message>,
     next_id: u64,
     join: Option<thread::JoinHandle<()>>,
+    /// Whether the name has been given back already.
+    released: bool,
 }
 
 impl DbusService {
@@ -150,9 +156,26 @@ impl DbusService {
                 pending: HashMap::new(),
                 next_id: 0,
                 join: Some(join),
+                released: false,
             },
             outcome,
         ))
+    }
+
+    /// Gives the name back now, rather than when the last reference goes.
+    ///
+    /// A configuration's `service:close()` is this: the handle it holds is a
+    /// reference too, and "closed" that waited for the garbage collector
+    /// would leave the name taken for as long as a variable named it.
+    pub fn release(&mut self) {
+        if self.released {
+            return;
+        }
+        self.released = true;
+        // A unique name cannot be released, and the call is skipped.
+        if !self.name.starts_with(':') {
+            let _ = self.connection.release_name(self.name.as_str());
+        }
     }
 
     /// The name this service holds.
@@ -177,6 +200,7 @@ impl DbusService {
             path: header.path().map(ToString::to_string).unwrap_or_default(),
             sender: header.sender().map(ToString::to_string).unwrap_or_default(),
             arguments: arguments_of(&message),
+            signature: message.body().signature().to_string_no_parens(),
         };
         self.pending.insert(call.id, message);
         Some(call)
@@ -327,10 +351,8 @@ impl Drop for DbusService {
     fn drop(&mut self) {
         // Releasing the name lets whoever is queued behind us take over
         // immediately rather than waiting for the connection to be noticed as
-        // gone. A unique name cannot be released and the call is skipped.
-        if !self.name.starts_with(':') {
-            let _ = self.connection.release_name(self.name.as_str());
-        }
+        // gone.
+        self.release();
         drop(self.join.take());
     }
 }

@@ -110,12 +110,11 @@ fn a_configuration_can_ask_the_shell_to_stop() {
         .unwrap();
     assert!(!runtime.quit_requested(), "nothing has asked to stop yet");
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    while !runtime.poll_services() && std::time::Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(1));
-    }
-
     let root = runtime.scene().roots()[0];
+    poll_until(&mut runtime, |runtime| {
+        runtime.scene().string_value(root, "text").ok() == Some("leaving")
+    });
+
     assert_eq!(
         runtime.scene().string_value(root, "text").unwrap(),
         "leaving",
@@ -240,12 +239,11 @@ fn a_configuration_reads_workspaces_and_asks_to_switch() {
         },
     ]);
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    while !runtime.poll_services() && std::time::Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(1));
-    }
-
     let root = runtime.scene().roots()[0];
+    poll_until(&mut runtime, |runtime| {
+        runtime.scene().string_value(root, "text").ok() == Some("1*,2")
+    });
+
     assert_eq!(
         runtime.scene().string_value(root, "text").unwrap(),
         "1*,2",
@@ -322,12 +320,11 @@ fn a_configuration_acts_on_another_window() {
         },
     ]);
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    while !runtime.poll_services() && std::time::Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(1));
-    }
-
     let root = runtime.scene().roots()[0];
+    poll_until(&mut runtime, |runtime| {
+        runtime.scene().string_value(root, "text").ok() == Some("editor*,mailer?")
+    });
+
     assert_eq!(
         runtime.scene().string_value(root, "text").unwrap(),
         "editor*,mailer?",

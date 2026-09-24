@@ -5,6 +5,19 @@ use morf_scene::NodeHandle;
 
 use crate::*;
 
+/// Polls until `done` holds, for at most a second.
+///
+/// Not "until a poll reports a repaint": other things than the one a test is
+/// waiting for owe a repaint too — the settings portal answering, on a desktop
+/// that has one, is the usual one.
+fn poll_until(runtime: &mut Runtime, done: impl Fn(&Runtime) -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+    while !done(runtime) && std::time::Instant::now() < deadline {
+        runtime.poll_services();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+}
+
 struct NoText;
 
 impl morf_layout::TextMeasurer for NoText {
@@ -27,6 +40,7 @@ mod audio;
 mod clipboard_dnd;
 mod config;
 mod core_api;
+mod dbus_private;
 mod diagnostics;
 mod entering;
 mod events_animation;

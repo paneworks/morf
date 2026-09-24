@@ -247,7 +247,44 @@ pub(crate) fn dbus_value_to_lua(
             table.set_field(ctx, "value", dbus_value_to_lua(ctx, *value)?);
             LuaValue::Table(table)
         }
+        DbusValue::Fd(fd) => LuaValue::UserData(dbus_fd_userdata(ctx, fd)),
     })
+}
+
+/// A descriptor from the bus as a handle a configuration can hold, close,
+/// and pass back — and nothing else.
+///
+/// Closed when `:close()` is called, when the handle is collected, and when
+/// the runtime holding it goes: the last two are the same drop, so a
+/// configuration that forgets a handle releases whatever it held (an
+/// inhibitor lock, say) rather than holding it for the life of the shell.
+fn dbus_fd_userdata<'gc>(ctx: Context<'gc>, fd: morf_io::DbusFd) -> UserData<'gc> {
+    let close = luna::Callback::from_fn(&ctx, |ctx, _, mut stack| {
+        let handle: luna::UserRef<DbusFdToken> = stack.consume(ctx)?;
+        let was_open = handle.fd.borrow_mut().take().is_some();
+        stack.replace(ctx, was_open);
+        Ok(luna::CallbackReturn::Return)
+    });
+    let is_open = luna::Callback::from_fn(&ctx, |ctx, _, mut stack| {
+        let handle: luna::UserRef<DbusFdToken> = stack.consume(ctx)?;
+        let open = handle.fd.borrow().is_some();
+        stack.replace(ctx, open);
+        Ok(luna::CallbackReturn::Return)
+    });
+    let methods = Table::new(&ctx);
+    methods.set_field(ctx, "close", close);
+    methods.set_field(ctx, "is_open", is_open);
+    let metatable = Table::new(&ctx);
+    metatable.set_field(ctx, "__index", methods);
+    metatable.set_field(ctx, "__name", "morf.dbus.fd");
+    let userdata = UserData::new_static(
+        &ctx,
+        DbusFdToken {
+            fd: std::cell::RefCell::new(Some(fd)),
+        },
+    );
+    userdata.set_metatable(ctx, Some(metatable));
+    userdata
 }
 
 pub(crate) fn lua_to_dbus<'gc>(
@@ -317,6 +354,19 @@ pub(crate) fn lua_to_dbus<'gc>(
             } else {
                 Err("D-Bus table keys must be all integers or all strings".to_owned())
             }
+        }
+        // The only userdata that means anything on the bus is a descriptor
+        // that came from it.
+        LuaValue::UserData(userdata) => {
+            let Ok(handle) = userdata.downcast_static::<DbusFdToken>() else {
+                return Err("unsupported D-Bus value".to_owned());
+            };
+            handle
+                .fd
+                .borrow()
+                .clone()
+                .map(DbusValue::Fd)
+                .ok_or_else(|| "the file descriptor handle was closed".to_owned())
         }
         _ => Err("unsupported D-Bus value".to_owned()),
     }

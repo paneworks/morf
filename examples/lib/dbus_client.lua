@@ -7,21 +7,25 @@
 -- service; this is the part that is about the bus, written once so the five do
 -- not drift into five slightly different answers to the same questions.
 --
--- Three facts about the engine's D-Bus binding decide how this is written:
+-- Four facts about the engine's D-Bus binding decide how this is written:
 --
 -- * Every `morf.dbus.proxy` is its own bus connection. A proxy per object in a
 --   tree of a hundred access points is a hundred sockets, so proxies are cached
 --   by address and the libraries read trees through `GetManagedObjects` — one
 --   proxy, one call — rather than an object at a time.
--- * A subscription cannot be taken back, and each is a match rule on the bus,
---   which caps them (512 per connection on a stock system bus). So a
---   subscription is made once per address and remembered, and the libraries
---   subscribe per *stable* object only — a device, an adapter — never per
---   access point or per discovered Bluetooth stranger, whose paths never end.
--- * A signal handler is given the body and not the sender, and signals are
---   told apart by path, interface and member. Two services emitting on the
---   same path (every MPRIS player lives at `/org/mpris/MediaPlayer2`) cannot be
---   told apart by the handler; the MPRIS library re-reads rather than guesses.
+-- * A blocking call holds the thread that draws. Reads of a running service
+--   are quick and stay blocking; anything that may wait on a radio, polkit or
+--   a person goes through `call_async`, which answers on a later turn from the
+--   process's one shared connection.
+-- * Each subscription is a match rule on the bus, which caps them (512 per
+--   connection on a stock system bus). A subscription is made once per address
+--   and shared by every handler on it, and `on_signal` returns a handle whose
+--   `close()` ends it when the last handler rides off — so a library can
+--   follow an object for exactly as long as the object exists.
+-- * A signal handler is given the body and then `info`, with the sender's
+--   unique name. Two services emitting on the same path (every MPRIS player
+--   lives at `/org/mpris/MediaPlayer2`) are told apart by the engine, which
+--   routes a signal only to subscriptions that named its sender.
 --
 -- The `dbus` field is a seam: it defaults to `morf.dbus`, and a test hands in
 -- a table with the same `proxy` function answering from Lua. Nothing else in
@@ -142,6 +146,41 @@ function dbus_client.new(options)
     return reply
   end
 
+  --- Calls a method without waiting. `done(reply, err)` runs on a later
+  --- turn with what `call` would have returned: the reply (`true` for a
+  --- reply with no body), or nil and the error. Returns true once the call
+  --- is on its way, or nil and why it could not be sent. `timeout_ms` is
+  --- how long to wait for the answer; nothing is blocked meanwhile.
+  function client.call_async(destination, path, interface, method, arguments, timeout_ms, done)
+    done = done or function() end
+    local ok, failure = pcall(client.dbus.call_async, client.bus, destination, path, interface,
+      method, arguments or {}, { timeout_ms = timeout_ms }, function(answered, reply)
+        if not answered then return done(nil, tostring(reply)) end
+        if reply == nil then return done(true) end
+        done(reply)
+      end)
+    if not ok then return nil, tostring(failure) end
+    return true
+  end
+
+  --- `call_async` for a method with exactly one output.
+  function client.call1_async(destination, path, interface, method, arguments, timeout_ms, done)
+    done = done or function() end
+    return client.call_async(destination, path, interface, method, arguments, timeout_ms,
+      function(reply, err)
+        if reply == nil then return done(nil, err) end
+        done(dbus_client.first(reply))
+      end)
+  end
+
+  --- Writes one property without waiting: `done(true)` or `done(nil, err)`.
+  --- `value` may be typed (`dbus_client.d(0.5)`); it is sent inside the
+  --- variant `Set` wants either way.
+  function client.set_async(destination, path, interface, property, value, timeout_ms, done)
+    return client.call_async(destination, path, "org.freedesktop.DBus.Properties", "Set",
+      { interface, property, typed("v", value) }, timeout_ms, done)
+  end
+
   --- Calls a method with exactly one output and returns that output.
   ---
   --- A reply arrives as the list of its outputs — `GetAll` answers
@@ -180,48 +219,83 @@ function dbus_client.new(options)
     return true
   end
 
-  --- Hears one signal. Subscribes the address once; later handlers ride the
-  --- same subscription. Returns true, or nil and why.
+  --- A handle on one handler's place in a route. `close()` takes the
+  --- handler off, and the last one off ends the engine's subscription and
+  --- its match rule with it. True the first time, false after.
+  local function handle_for(key, route, handler)
+    local handle = { closed = false }
+    function handle.close()
+      if handle.closed then return false end
+      handle.closed = true
+      for index, each in ipairs(route.handlers) do
+        if each == handler then
+          table.remove(route.handlers, index)
+          break
+        end
+      end
+      if #route.handlers == 0 and client.routes[key] == route then
+        client.routes[key] = nil
+        pcall(route.subscription.close, route.subscription)
+      end
+      return true
+    end
+    return handle
+  end
+
+  --- Hears one signal: `handler(body, info)`, `info` carrying the sender's
+  --- unique name. Subscribes the address once; later handlers ride the same
+  --- subscription. Returns a handle with `close()`, or nil and why.
   function client.on_signal(destination, path, interface, member, handler)
     local key = table.concat({ destination, path, interface, member }, " ")
     local route = client.routes[key]
     if route then
-      route[#route + 1] = handler
-      return true
+      route.handlers[#route.handlers + 1] = handler
+      return handle_for(key, route, handler)
     end
     local proxy, err = client.proxy(destination, path, interface)
     if not proxy then return nil, err end
-    route = { handler }
-    local ok, failure = pcall(proxy.subscribe, proxy, member, function(body)
-      for _, each in ipairs(route) do each(body) end
+    route = { handlers = { handler } }
+    local ok, subscription = pcall(proxy.subscribe, proxy, member, function(body, info)
+      -- A copy: a handler may close its own subscription while this runs.
+      local handlers = {}
+      for index, each in ipairs(route.handlers) do handlers[index] = each end
+      for _, each in ipairs(handlers) do each(body, info) end
     end)
-    if not ok then return nil, tostring(failure) end
+    if not ok then return nil, tostring(subscription) end
+    route.subscription = subscription
     client.routes[key] = route
-    return true
+    return handle_for(key, route, handler)
   end
 
-  --- `PropertiesChanged` on one path: `handler(interface, changed, invalidated)`.
+  --- `PropertiesChanged` on one path:
+  --- `handler(interface, changed, invalidated, info)`. Returns a handle.
   function client.on_properties(destination, path, handler)
     return client.on_signal(destination, path, "org.freedesktop.DBus.Properties",
-      "PropertiesChanged", function(body)
+      "PropertiesChanged", function(body, info)
         if type(body) ~= "table" then return end
-        handler(body[1], body[2] or {}, body[3] or {})
+        handler(body[1], body[2] or {}, body[3] or {}, info)
       end)
   end
 
-  --- Whether a name has an owner right now.
+  --- Whether a name has an owner right now. Asked of the bus, which never
+  --- starts a service to answer.
   function client.has_owner(name)
-    local reply = client.call1("org.freedesktop.DBus", "/org/freedesktop/DBus",
-      "org.freedesktop.DBus", "NameHasOwner", { name })
-    return reply == true
+    local ok, owned = pcall(client.dbus.name_has_owner, client.bus, name)
+    return ok and owned == true
+  end
+
+  --- The unique name that owns `name` now, or nil.
+  function client.owner_of(name)
+    if not client.dbus.name_owner then return nil end
+    local ok, owner = pcall(client.dbus.name_owner, client.bus, name)
+    if ok and type(owner) == "string" then return owner end
   end
 
   --- Every name on the bus, or an empty list.
   function client.list_names()
-    local reply = client.call1("org.freedesktop.DBus", "/org/freedesktop/DBus",
-      "org.freedesktop.DBus", "ListNames")
-    if type(reply) ~= "table" then return {} end
-    return reply
+    local ok, names = pcall(client.dbus.list_names, client.bus)
+    if not ok or type(names) ~= "table" then return {} end
+    return names
   end
 
   --- `handler(name, old_owner, new_owner)` whenever any name changes hands.
@@ -235,13 +309,15 @@ function dbus_client.new(options)
       end)
   end
 
-  --- Watches one name: `handler(true)` when it appears, `handler(false)` when
-  --- it goes. Not called for the state at the time of watching; the caller
-  --- reads that itself.
+  --- Watches one name: `handler(true, new_owner)` when it appears,
+  --- `handler(false, "")` when it goes. Not called for the state at the time
+  --- of watching; the caller reads that itself. The bus filters by name, so
+  --- this hears nothing about any other. Returns a handle, or nil and why.
   function client.watch_name(name, handler)
-    return client.on_owner_changed(function(changed, _, new_owner)
-      if changed == name then handler(new_owner ~= "") end
-    end)
+    local ok, subscription = pcall(client.dbus.on_name_owner_changed, client.bus, name,
+      function(_, new_owner) handler(new_owner ~= "", new_owner) end)
+    if not ok then return nil, tostring(subscription) end
+    return subscription
   end
 
   --- The whole tree under an ObjectManager: path -> interface -> properties.

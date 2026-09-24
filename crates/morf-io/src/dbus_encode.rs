@@ -18,6 +18,7 @@ fn dbus_scalar_value<'a>(value: &'a DbusValue, role: &str) -> Result<Value<'a>, 
         DbusValue::Number(value) => Ok(Value::F64(*value)),
         DbusValue::String(value) => Ok(Value::Str(value.as_str().into())),
         DbusValue::Typed { signature, value } => typed_dbus_value(signature, value),
+        DbusValue::Fd(fd) => Ok(Value::Fd(fd.as_fd().into())),
         DbusValue::Nil => Err(format!("nil cannot be a {role}")),
         DbusValue::List(_) | DbusValue::Map(_) => {
             Err(format!("a compound {role} needs an explicit signature"))
@@ -93,8 +94,12 @@ fn dbus_value_for_signature<'a>(
         },
         Signature::Variant => Value::Value(Box::new(inferred_dbus_value(value)?)),
         Signature::Array(child) => {
-            let DbusValue::List(values) = value else {
-                return Err(format!("D-Bus `{name}` value must be a list"));
+            // An empty Lua table is an empty map as readily as an empty list;
+            // with the signature stated, which it was is no longer a question.
+            let values = match value {
+                DbusValue::List(values) => values.as_slice(),
+                DbusValue::Map(values) if values.is_empty() => &[],
+                _ => return Err(format!("D-Bus `{name}` value must be a list")),
             };
             let mut array = Array::new(child.signature());
             for value in values {
@@ -108,8 +113,16 @@ fn dbus_value_for_signature<'a>(
             key: key_signature,
             value: value_signature,
         } => {
-            let DbusValue::Map(values) = value else {
-                return Err(format!("D-Bus `{name}` value must be a map"));
+            // `{}` reads as an empty list, because Lua cannot say otherwise —
+            // and it was refused here as "not a map", which left no way at all
+            // to send an empty `a{sv}`. The signature says it is a map; an
+            // empty list is taken at its word.
+            static NO_ENTRIES: std::collections::BTreeMap<String, DbusValue> =
+                std::collections::BTreeMap::new();
+            let values = match value {
+                DbusValue::Map(values) => values,
+                DbusValue::List(values) if values.is_empty() => &NO_ENTRIES,
+                _ => return Err(format!("D-Bus `{name}` value must be a map")),
             };
             let mut dict = Dict::new(key_signature.signature(), value_signature.signature());
             for (key, value) in values {
@@ -139,8 +152,13 @@ fn dbus_value_for_signature<'a>(
             Value::Structure(structure.build().map_err(|error| error.to_string())?)
         }
         Signature::Unit => return Err("D-Bus unit values cannot be arguments".to_owned()),
+        // Only ever one that came from the bus: nothing in a configuration can
+        // make a `DbusFd`, so this hands back what it was given and no more.
         #[cfg(unix)]
-        Signature::Fd => return Err("D-Bus file descriptors cannot come from Lua".to_owned()),
+        Signature::Fd => match value {
+            DbusValue::Fd(fd) => Value::Fd(fd.as_fd().into()),
+            _ => return Err("D-Bus `h` value must be a file descriptor handle".to_owned()),
+        },
         #[allow(unreachable_patterns)]
         _ => return Err(format!("unsupported explicit D-Bus signature `{name}`")),
     })
@@ -202,6 +220,26 @@ pub(crate) fn decode_message_value(message: &zbus::Message) -> Result<DbusValue,
     let body = message.body();
     if body.deserialize::<()>().is_ok() {
         return Ok(DbusValue::Nil);
+    }
+    // A body carrying a descriptor skips the scalar guesses below: zvariant
+    // reads an `h` as an `i32` when asked for one — the descriptor's number in
+    // this process — and the first guess to succeed would have been that.
+    let signature = body.signature().to_string_no_parens();
+    if signature.contains('h') {
+        #[cfg(unix)]
+        if signature == "h" {
+            let fd = body
+                .deserialize::<zbus::zvariant::Fd<'_>>()
+                .map_err(|error| error.to_string())?;
+            return crate::dbus_decode::owned_fd(&fd).map(DbusValue::Fd);
+        }
+        if let Ok(value) = body.deserialize::<Structure<'_>>() {
+            return structure_value(&value);
+        }
+        if let Ok(value) = body.deserialize::<Array<'_>>() {
+            return array_value(&value);
+        }
+        return Err(format!("D-Bus reply type `{signature}` is not supported"));
     }
     if let Ok(value) = body.deserialize::<bool>() {
         return Ok(DbusValue::Bool(value));

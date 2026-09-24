@@ -22,13 +22,16 @@
 -- is advanced by a timer (once a second by default) while the player plays.
 -- `position(name)` computes it exactly, for a caller that wants it now.
 --
--- One quirk of the engine is visible here. A signal handler is handed the
--- body, not the sender, and every player emits on the same path, so when a
--- `PropertiesChanged` arrives nothing says whose it was. The library does not
--- guess: any change re-reads every player (debounced; there are rarely more
--- than three). A player's subscription is made when it first appears and
--- cannot be taken back; a browser that invents a new name per launch leaves
--- one idle match rule behind each time.
+-- Every player emits on the same path, so a `PropertiesChanged` is told
+-- apart by its sender. The engine routes a signal only to the subscriptions
+-- that named whoever sent it, so each player's handler hears that player and
+-- re-reads only it (debounced). A player's subscriptions are made when it
+-- appears and closed when it leaves, so a browser that invents a new name per
+-- launch leaves nothing behind.
+--
+-- The buttons do not wait for the player: a hung player cannot freeze the
+-- shell. Each returns true once sent (or nil and why not), and the player's
+-- own `PropertiesChanged` moves the state.
 --
 -- `playerctld` is skipped by default: it is a proxy that re-publishes
 -- another player, and listing it would show every track twice.
@@ -88,13 +91,15 @@ end
 --- its own so it never sees, or presses, a real player), `ignore` (names
 --- after the prefix to skip; `{ "playerctld" }`), `tick_ms` (1000),
 --- `debounce_ms` (50), `clock` (a function returning milliseconds; for
---- tests), `dbus` (test seam).
+--- tests), `timeout_ms` (how long a button waits for the player; 5000),
+--- `dbus` (test seam).
 function mpris.connect(options)
   options = options or {}
   local prefix = options.prefix or PREFIX
   local ignore = {}
   for _, each in ipairs(options.ignore or { "playerctld" }) do ignore[prefix .. each] = true end
   local client = dbus_client.new({ dbus = options.dbus, bus = options.bus or "session" })
+  local timeout = options.timeout_ms or 5000
   local clock = options.clock
   if not clock then
     local elapsed = morf.elapsed_timer()
@@ -110,7 +115,7 @@ function mpris.connect(options)
 
   local media = { state = state }
   local players = {} -- bus name -> reading
-  local subscribed = {}
+  local subscribed = {} -- bus name -> its subscription handles
   local pinned
   local sequence = 0 -- orders "most recently changed" without trusting clocks
 
@@ -132,9 +137,16 @@ function mpris.connect(options)
 
   local function subscribe(name)
     if subscribed[name] then return end
-    subscribed[name] = true
-    client.on_properties(name, PATH, function() schedule() end)
-    client.on_signal(name, PATH, PLAYER, "Seeked", function() schedule() end)
+    local changed = function() schedule(name) end
+    subscribed[name] = {
+      client.on_properties(name, PATH, changed),
+      client.on_signal(name, PATH, PLAYER, "Seeked", changed),
+    }
+  end
+
+  local function unsubscribe(name)
+    for _, handle in pairs(subscribed[name] or {}) do handle.close() end
+    subscribed[name] = nil
   end
 
   --- Reads one player whole. Returns nil if it does not answer as a player.
@@ -241,7 +253,19 @@ function mpris.connect(options)
     publish()
   end
 
-  schedule = dbus_client.debounce(options.debounce_ms or 50, function() refresh() end)
+  -- The players that changed since the last re-read; `schedule()` with no
+  -- name means all of them.
+  local dirty, dirty_all = {}, false
+  local reread = dbus_client.debounce(options.debounce_ms or 50, function()
+    local names = dirty
+    if dirty_all then names = nil end
+    dirty, dirty_all = {}, false
+    refresh(names)
+  end)
+  schedule = function(name)
+    if name then dirty[name] = true else dirty_all = true end
+    reread()
+  end
 
   local function add(name)
     if ignore[name] or name:sub(1, #prefix) ~= prefix then return end
@@ -258,9 +282,17 @@ function mpris.connect(options)
   local function control(name, method, arguments)
     local player = target(name)
     if not player then return nil, "no player" end
-    local ok, err = client.call(player.name, PATH, PLAYER, method, arguments)
-    schedule()
-    return ok and true or nil, err
+    local player_name = player.name
+    return client.call_async(player_name, PATH, PLAYER, method, arguments, timeout,
+      function() schedule(player_name) end)
+  end
+
+  local function set(name, property, value)
+    local player = target(name)
+    if not player then return nil, "no player" end
+    local player_name = player.name
+    return client.set_async(player_name, PATH, PLAYER, property, value, timeout,
+      function() schedule(player_name) end)
   end
 
   --- Whether any player is on the bus.
@@ -311,48 +343,33 @@ function mpris.connect(options)
   end
 
   --- Sets the volume, 0 to 1.
-  function media.set_volume(volume, name)
-    local player = target(name)
-    if not player then return nil, "no player" end
-    local ok, err = client.set(player.name, PATH, PLAYER, "Volume", typed("d", volume))
-    schedule()
-    return ok, err
-  end
-
-  function media.set_shuffle(on, name)
-    local player = target(name)
-    if not player then return nil, "no player" end
-    local ok, err = client.set(player.name, PATH, PLAYER, "Shuffle", on == true)
-    schedule()
-    return ok, err
-  end
+  function media.set_volume(volume, name) return set(name, "Volume", typed("d", volume)) end
+  function media.set_shuffle(on, name) return set(name, "Shuffle", on == true) end
 
   --- "none", "track" or "playlist".
   function media.set_loop(loop, name)
-    local player = target(name)
-    if not player then return nil, "no player" end
     local word = ({ none = "None", track = "Track", playlist = "Playlist" })[loop] or loop
-    local ok, err = client.set(player.name, PATH, PLAYER, "LoopStatus", word)
-    schedule()
-    return ok, err
+    return set(name, "LoopStatus", word)
   end
 
   --- Brings the player's window forward, if it has one.
   function media.raise(name)
     local player = target(name)
     if not player then return nil, "no player" end
-    local ok, err = client.call(player.name, PATH, ROOT_IFACE, "Raise")
-    return ok and true or nil, err
+    return client.call_async(player.name, PATH, ROOT_IFACE, "Raise", nil, timeout)
   end
 
   client.on_owner_changed(function(name, _, new_owner)
     if name:sub(1, #prefix) ~= prefix or ignore[name] then return end
     if new_owner ~= "" then
       add(name)
-    elseif players[name] then
-      players[name] = nil
-      client.forget(PATH, name)
-      publish()
+    else
+      unsubscribe(name)
+      if players[name] then
+        players[name] = nil
+        client.forget(PATH, name)
+        publish()
+      end
     end
   end)
 

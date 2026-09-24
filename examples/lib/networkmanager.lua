@@ -19,10 +19,11 @@
 -- worth hearing (the manager's own properties, a device's, an object coming
 -- or going) schedules one re-read of that tree, debounced, rather than
 -- patching rows signal by signal. Access points are deliberately *not*
--- subscribed one by one: their paths are never reused, and a subscription
--- can never be taken back, so a week in a busy building would run the bus
--- out of match rules. Their strengths arrive with each scan instead, because a
--- scan changes the device's `LastScan`, and the device *is* subscribed.
+-- subscribed one by one: their paths are never reused and come and go by
+-- the dozen, so a week in a busy building would be a churn of match rules
+-- for nothing. Their strengths arrive with each scan instead, because a scan
+-- changes the device's `LastScan`, and the device *is* subscribed — for as
+-- long as it exists, and no longer.
 --
 -- Saved profiles are not in that tree in readable form — their names and
 -- SSIDs live behind `GetSettings` — so they are read separately, when the
@@ -31,8 +32,13 @@
 -- When NetworkManager is not running, `available()` is false and every list
 -- is empty; when it appears, the state fills in. Nothing raises.
 --
--- Every action is a real change to the machine. They return true (or a path)
--- on success and nil plus the service's error otherwise.
+-- Every action is a real change to the machine, and none of them waits for
+-- it: NetworkManager may be waiting on polkit, or on a radio, and the shell
+-- keeps drawing meanwhile. An action returns true once it is on its way (or
+-- nil and why it could not be sent — no Wi-Fi device, no password), and takes
+-- an optional last argument `done(result, err)` that hears how it ended:
+-- `result` is what the action produces (a path, a count, `true`), or nil with
+-- the service's error. The state follows by itself either way.
 
 local morf = require("morf")
 local dbus_client = require("lib.dbus_client")
@@ -161,10 +167,11 @@ function networkmanager.connect(options)
   })
 
   local net = { state = state }
+  local function nothing() end
   -- The last reading, in plain Lua, for the actions to consult. The state is
   -- for bindings; this is for logic, and reading it costs no bus round trip.
   local snapshot = { devices = {}, active = {}, access_points = {}, known = {} }
-  local watched = {}
+  local watched = {} -- device path -> subscription handle
   local refresh, refresh_known
   -- Whether the name has an owner. Reads are made only then: a call to an
   -- absent but activatable name would start NetworkManager, and starting the
@@ -192,6 +199,10 @@ function networkmanager.connect(options)
     state.known_connections:replace({}, "path")
     state.vpn_connections:replace({}, "path")
     snapshot = { devices = {}, active = {}, access_points = {}, known = {} }
+    for path, handle in pairs(watched) do
+      handle.close()
+      watched[path] = nil
+    end
   end
 
   local schedule = dbus_client.debounce(options.debounce_ms or 80, function() refresh() end)
@@ -202,8 +213,18 @@ function networkmanager.connect(options)
 
   local function watch_device(path)
     if watched[path] then return end
-    watched[path] = true
-    client.on_properties(name, path, function() schedule() end)
+    watched[path] = client.on_properties(name, path, function() schedule() end) or nil
+  end
+
+  --- Ends the subscriptions of devices that have gone (a USB adapter
+  --- unplugged, a VPN's tun device torn down).
+  local function unwatch_missing(present_paths)
+    for path, handle in pairs(watched) do
+      if not present_paths[path] then
+        handle.close()
+        watched[path] = nil
+      end
+    end
   end
 
   local function known_for_ssid(ssid)
@@ -309,9 +330,11 @@ function networkmanager.connect(options)
     local device_rows, ap_rows, by_ssid = {}, {}, {}
     local wifi_summary, wired_summary
     local device_paths = main.AllDevices or main.Devices or {}
+    local seen = {}
     for _, path in ipairs(device_paths) do
       local device = iface(path, DEVICE)
       if device then
+        seen[path] = true
         watch_device(path)
         local wireless = iface(path, WIRELESS)
         local wired = iface(path, WIRED)
@@ -388,6 +411,7 @@ function networkmanager.connect(options)
         end
       end
     end
+    unwatch_missing(seen)
     for _, entry in pairs(by_ssid) do ap_rows[#ap_rows + 1] = entry end
     table.sort(ap_rows, function(a, b)
       if a.in_use ~= b.in_use then return a.in_use end
@@ -441,8 +465,9 @@ function networkmanager.connect(options)
     end
   end
 
-  local function call_manager(method, arguments)
-    return client.call(name, ROOT, IFACE, method, arguments, action_timeout)
+  --- An action on the manager, answered later: `done(reply, err)`.
+  local function call_manager(method, arguments, done)
+    return client.call_async(name, ROOT, IFACE, method, arguments, action_timeout, done)
   end
 
   --- Whether NetworkManager is on the bus.
@@ -460,17 +485,16 @@ function networkmanager.connect(options)
   end
 
   --- Asks every Wi-Fi device (or the named one) to scan. The results arrive
-  --- as the device's `LastScan` changes, not as this call's reply.
-  function net.request_scan(interface)
+  --- as the device's `LastScan` changes, not as this call's reply; `done`
+  --- hears each device's answer.
+  function net.request_scan(interface, done)
+    done = done or nothing
     local asked, err = false, "no wifi device"
     for _, row in ipairs(snapshot.devices) do
       if row.type == "wifi" and (interface == nil or row.interface == interface) then
-        -- `a{sv}` of options. An empty table is an empty *list* to the
-        -- engine, which has no way to write an empty map, so the one option
-        -- NetworkManager defines is sent empty: scan for nothing in
-        -- particular, which is a normal scan.
-        local ok, failure = client.call(name, row.path, WIRELESS, "RequestScan",
-          { typed("a{sv}", { ssids = typed("aay", {}) }) }, action_timeout)
+        -- `a{sv}` of options, none of them: a normal scan.
+        local ok, failure = client.call_async(name, row.path, WIRELESS, "RequestScan",
+          { typed("a{sv}", {}) }, action_timeout, done)
         if ok then asked = true else err = failure end
       end
     end
@@ -486,8 +510,9 @@ function networkmanager.connect(options)
   --- one (`forget` removes both), because rewriting a saved profile means
   --- sending all of it back, and the engine cannot type every field of it.
   ---
-  --- Returns the active connection's path, or nil and why.
-  function net.connect(target, password, interface)
+  --- `done(path, err)` hears the active connection's path, or why not.
+  function net.connect(target, password, interface, done)
+    done = done or nothing
     local ssid, ap_path, security, device_name
     if type(target) == "table" then
       ssid, ap_path, security, device_name = target.ssid, target.path, target.security, target.device
@@ -506,12 +531,13 @@ function networkmanager.connect(options)
 
     local known = known_for_ssid(ssid)[1]
     if known and password == nil then
-      local reply, err = call_manager("ActivateConnection",
-        { o(known.path), o(device.path), o(ap_path or "/") })
-      schedule()
-      reply = dbus_client.first(reply)
-      if type(reply) == "string" then return reply end
-      return nil, err
+      return call_manager("ActivateConnection",
+        { o(known.path), o(device.path), o(ap_path or "/") }, function(reply, err)
+          schedule()
+          reply = dbus_client.first(reply)
+          if type(reply) == "string" then return done(reply) end
+          done(nil, err or "no active connection")
+        end)
     end
 
     if security == "enterprise" then
@@ -534,17 +560,23 @@ function networkmanager.connect(options)
     elseif security == "owe" then
       settings["802-11-wireless-security"] = { ["key-mgmt"] = "owe" }
     end
-    local reply, err = call_manager("AddAndActivateConnection",
-      { typed("a{sa{sv}}", settings), o(device.path), o(ap_path or "/") })
-    schedule_known()
-    -- The reply is `(oo)`: the new profile and the active connection.
-    if type(reply) == "table" then return reply[2] end
-    return nil, err
+    return call_manager("AddAndActivateConnection",
+      { typed("a{sa{sv}}", settings), o(device.path), o(ap_path or "/") }, function(reply, err)
+        schedule_known()
+        -- The reply is `(oo)`: the new profile and the active connection.
+        if type(reply) == "table" then return done(reply[2]) end
+        done(nil, err or "no active connection")
+      end)
   end
 
   --- Takes a connection down. `which` is an active connection's id, uuid or
   --- path, or a device's interface name; nothing means the Wi-Fi connection.
-  function net.disconnect(which)
+  function net.disconnect(which, done)
+    done = done or nothing
+    local function finished(ok, err)
+      schedule()
+      done(ok and true or nil, err)
+    end
     local active
     if which == nil then
       local device = wifi_device()
@@ -559,67 +591,84 @@ function networkmanager.connect(options)
       if not active then
         for _, row in ipairs(snapshot.devices) do
           if row.interface == which then
-            local ok, err = client.call(name, row.path, DEVICE, "Disconnect", nil, action_timeout)
-            schedule()
-            return ok and true or nil, err
+            return client.call_async(name, row.path, DEVICE, "Disconnect", nil, action_timeout,
+              finished)
           end
         end
       end
     end
     if not active then return nil, "nothing to disconnect" end
-    local ok, err = call_manager("DeactivateConnection", { o(active.path) })
-    schedule()
-    return ok and true or nil, err
+    return call_manager("DeactivateConnection", { o(active.path) }, finished)
   end
 
-  --- Deletes every saved profile for an SSID. Returns how many went.
-  function net.forget(ssid)
-    local removed, err = 0, nil
-    for _, row in ipairs(known_for_ssid(ssid)) do
-      local ok, failure = client.call(name, row.path, SETTINGS_CONNECTION, "Delete", nil, action_timeout)
-      if ok then
-        removed = removed + 1
-        client.forget(row.path)
-      else
-        err = failure
-      end
+  --- Deletes every saved profile for an SSID. Returns how many it asked to
+  --- delete; `done(removed, err)` hears how many went.
+  function net.forget(ssid, done)
+    done = done or nothing
+    local rows = known_for_ssid(ssid)
+    if #rows == 0 then return 0 end
+    local waiting, removed, err, asked = #rows, 0, nil, 0
+    local function one(ok, failure)
+      if ok then removed = removed + 1 else err = failure end
+      waiting = waiting - 1
+      if waiting > 0 then return end
+      schedule_known()
+      if removed == 0 and err then return done(nil, err) end
+      done(removed)
     end
-    schedule_known()
-    if removed == 0 and err then return nil, err end
-    return removed
+    for _, row in ipairs(rows) do
+      local path = row.path
+      local sent, failure = client.call_async(name, path, SETTINGS_CONNECTION, "Delete", nil,
+        action_timeout, function(ok, why)
+          if ok then client.forget(path) end
+          one(ok, why)
+        end)
+      if sent then asked = asked + 1 else one(nil, failure) end
+    end
+    if asked == 0 then return nil, err end
+    return asked
   end
 
   --- Turns the Wi-Fi radio on or off (the software switch; the hardware one
   --- is `state.wifi_hardware_enabled`, and nothing here can move it).
-  function net.set_wifi(enabled)
-    local ok, err = client.set(name, ROOT, IFACE, "WirelessEnabled", enabled == true, action_timeout)
-    schedule()
-    return ok, err
+  function net.set_wifi(enabled, done)
+    done = done or nothing
+    return client.set_async(name, ROOT, IFACE, "WirelessEnabled", enabled == true, action_timeout,
+      function(ok, err)
+        schedule()
+        done(ok and true or nil, err)
+      end)
   end
 
   --- Brings up any saved profile by id, uuid or path — a VPN, a wired
   --- profile, a Wi-Fi network — on whatever device it names.
-  function net.activate(which)
+  --- `done(path, err)` hears the active connection's path.
+  function net.activate(which, done)
+    done = done or nothing
     local known = find_known(which)
     if not known then return nil, "no saved connection " .. tostring(which) end
-    local reply, err = call_manager("ActivateConnection", { o(known.path), o("/"), o("/") })
-    schedule()
-    reply = dbus_client.first(reply)
-    if type(reply) == "string" then return reply end
-    return nil, err
+    return call_manager("ActivateConnection", { o(known.path), o("/"), o("/") },
+      function(reply, err)
+        schedule()
+        reply = dbus_client.first(reply)
+        if type(reply) == "string" then return done(reply) end
+        done(nil, err or "no active connection")
+      end)
   end
 
   --- Takes down an active connection by id, uuid or path.
-  function net.deactivate(which)
+  function net.deactivate(which, done)
+    done = done or nothing
     local active = find_active(which)
     if not active then return nil, "not active: " .. tostring(which) end
-    local ok, err = call_manager("DeactivateConnection", { o(active.path) })
-    schedule()
-    return ok and true or nil, err
+    return call_manager("DeactivateConnection", { o(active.path) }, function(ok, err)
+      schedule()
+      done(ok and true or nil, err)
+    end)
   end
 
-  function net.activate_vpn(which) return net.activate(which) end
-  function net.deactivate_vpn(which) return net.deactivate(which) end
+  function net.activate_vpn(which, done) return net.activate(which, done) end
+  function net.deactivate_vpn(which, done) return net.deactivate(which, done) end
 
   -- Subscriptions, made once. Made even while the service is absent: a match
   -- rule names the service by its well-known name, and the bus applies it to
