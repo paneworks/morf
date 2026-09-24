@@ -179,7 +179,7 @@ fn fake_hyprland(tag: &str) -> Instance {
         accepts: AtomicUsize::new(0),
         stop: AtomicBool::new(false),
     });
-    fake.set("j/monitors", MONITORS);
+    fake.set("j/monitors all", MONITORS);
     fake.set("j/workspaces", WORKSPACES);
     fake.set("j/clients", CLIENTS);
     fake.set("j/devices", DEVICES);
@@ -311,7 +311,7 @@ fn hyprland_library_follows_events_and_refetches_what_they_touch() {
 
     // The compositor has moved on: a third window on workspace 2, now shown.
     fake.set(
-        "j/monitors",
+        "j/monitors all",
         &MONITORS.replace(r#""id": 1, "name": "1""#, r#""id": 2, "name": "2""#),
     );
     fake.set(
@@ -385,7 +385,7 @@ fn hyprland_library_follows_events_and_refetches_what_they_touch() {
         .unwrap();
     // Back on workspace 1, which now has a fullscreen window: the fake's
     // answers agree with the events, as the compositor's would.
-    fake.set("j/monitors", MONITORS);
+    fake.set("j/monitors all", MONITORS);
     fake.set(
         "j/workspaces",
         &WORKSPACES.replacen(r#""hasfullscreen": false"#, r#""hasfullscreen": true"#, 1),
@@ -498,7 +498,7 @@ fn hyprland_library_reconnects_when_the_stream_drops() {
         &mut runtime,
         "assert(H.state.connected and seen.connects == 1)",
     );
-    let monitors_before = fake.count("j/monitors");
+    let monitors_before = fake.count("j/monitors all");
 
     fake.hang_up();
     wait_for(
@@ -509,7 +509,7 @@ fn hyprland_library_reconnects_when_the_stream_drops() {
     // A reconnect asks for everything again: what happened meanwhile is not
     // known.
     let deadline = Instant::now() + Duration::from_secs(5);
-    while fake.count("j/monitors") == monitors_before {
+    while fake.count("j/monitors all") == monitors_before {
         assert!(Instant::now() < deadline, "no refetch after reconnecting");
         runtime.poll_services();
         thread::sleep(Duration::from_millis(3));
