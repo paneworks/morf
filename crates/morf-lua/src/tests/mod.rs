@@ -54,6 +54,7 @@ mod http;
 mod idle_input;
 mod idle_motion;
 mod image_ops;
+mod images;
 mod input_api;
 mod layer_surfaces;
 mod lib_dbus_services;

@@ -769,6 +769,44 @@ morf.image.release(cover)
   pixels (same `stride`, `format`, `premultiplied` options) as a PNG file:
   `true`, or `nil, why`.
 
+What became of the source is on the node, as properties a binding
+follows, and in `on_status(status, error)` (given when the image is made):
+
+- `status` is `"none"` with no source, `"loading"` until the frame that
+  first draws the node, then `"ready"`, or `"error"` with the reason in
+  `error` — a file that is not there, is not a picture, or will not decode.
+  A source whose header reads but whose pixels do not (a truncated
+  download) turns `"error"` the frame after it was first drawn.
+- The node's implicit size is the picture's own, as for any image.
+
+```lua
+local cover = ui.Image {
+  source = path, width = 64, height = 64, fill_mode = "preserve_aspect_crop",
+  on_status = function(status, err) if status == "error" then log(err) end end,
+}
+ui.Text { visible = function() return cover.status == "error" end, text = "lost" }
+```
+
+An error is not retried while the source stays the same: write another
+source (or the same one again after writing `""`) to look again.
+
+A GIF, animated PNG or animated WebP plays. `playing` (default `true`)
+pauses it where it is; `speed` (1) scales its frame delays; `frame` is the
+frame it shows, and writing it seeks; `loops` is `"forever"` or how many
+times through, after which it rests on its last frame; `frame_count` is
+read-only. It moves only while it is drawn: hidden, fully transparent, off
+a surface that stopped painting, it stops where it is and costs nothing,
+and nothing wakes the loop but its next frame. Every frame is decoded once
+at the picture's own size and kept — at most 64 MiB of frames per picture
+(a longer one plays the frames that fit), 16 moving pictures and 256 MiB in
+all per surface, the least recently drawn let go first. An inline or
+`memory:` source is always drawn still.
+
+```lua
+local spinner = ui.Image { source = "~/.cache/spinner.gif", width = 32, height = 32,
+                           playing = function() return busy:get() end }
+```
+
 A published picture is drawable on every surface and is held until it is
 released, until the same `name` is published again (which answers with a
 *new* source, so nothing draws the old pixels by mistake), or until the

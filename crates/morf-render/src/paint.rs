@@ -241,6 +241,7 @@ pub(crate) fn append_node(
             distance_field: scene.bool_value(node, "distance_field")?,
             distance_field_spread: scene.number(node, "distance_field_spread")?.max(0.5) as f32,
             distance_field_style: text_field_style(scene, node)?,
+            frame: scene.number(node, "frame")?.max(0.0) as u32,
         }),
         Element::Icon => list.commands.push(DrawCommand::Texture {
             node,
@@ -255,6 +256,7 @@ pub(crate) fn append_node(
             distance_field: scene.bool_value(node, "distance_field")?,
             distance_field_spread: scene.number(node, "distance_field_spread")?.max(0.5) as f32,
             distance_field_style: text_field_style(scene, node)?,
+            frame: 0,
         }),
         Element::Path => list.commands.push(DrawCommand::Path {
             node,

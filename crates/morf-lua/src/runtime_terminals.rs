@@ -59,6 +59,48 @@ impl Runtime {
         changed
     }
 
+    /// Reads what the paint that just happened made of every image laid out
+    /// in `layout`: its status, and whether it moves and is on screen. Called
+    /// once a frame, after the render, with the cache that render drew from.
+    /// Returns whether anything changed.
+    pub fn sync_images(&mut self, layout: &Layout, cache: &mut morf_image::ImageCache) -> bool {
+        let calls = {
+            let mut state = self.reactive.borrow_mut();
+            if state.images.is_empty() {
+                return false;
+            }
+            let revision = state.scene_revision;
+            let calls = crate::images::sync(&mut state, layout, cache);
+            if calls.is_empty() && state.scene_revision == revision {
+                return false;
+            }
+            calls
+        };
+        for call in &calls {
+            if let Err(message) = self.run_handler(|ctx, limits| {
+                execute_handler_args(ctx, &call.callback, &call.args, limits)
+            }) {
+                self.reactive
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("Image on_status: {message}"));
+            }
+        }
+        self.flush_after_event();
+        true
+    }
+
+    /// Moves playing pictures on by the clock; true when a frame changed.
+    pub(crate) fn poll_images(&mut self) -> bool {
+        let changed = {
+            let mut state = self.reactive.borrow_mut();
+            crate::images::advance(&mut state, std::time::Instant::now())
+        };
+        if changed {
+            self.flush_after_event();
+        }
+        changed
+    }
+
     pub(crate) fn terminal_key(
         &mut self,
         node: NodeHandle,

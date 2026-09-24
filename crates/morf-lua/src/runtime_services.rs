@@ -19,6 +19,7 @@ impl Runtime {
         let appearance_changed = self.poll_appearance();
         let audio_changed = self.poll_audio();
         let terminals_changed = self.poll_terminals();
+        let images_changed = self.poll_images();
         let mut ready = Vec::new();
         let mut timers = Vec::new();
         let mut dbus_signals = Vec::new();
@@ -369,6 +370,7 @@ impl Runtime {
             || appearance_changed
             || audio_changed
             || terminals_changed
+            || images_changed
             || blinked
             || !transform_callbacks.is_empty();
         for (callback, unlock_on_success, result) in ready {

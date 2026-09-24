@@ -96,6 +96,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         state.loaded_loaders.remove(node);
         state.node_loops.remove(node);
         state.terminals.remove(*node);
+        state.images.remove(*node);
     }
     state
         .handlers

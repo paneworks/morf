@@ -159,6 +159,8 @@ pub enum DrawCommand {
         distance_field_spread: f32,
         /// Edge shaping applied to the sampled field.
         distance_field_style: DistanceFieldStyle,
+        /// Which frame of a moving picture to show; still ones ignore it.
+        frame: u32,
     },
     /// A vector outline, rasterised at the pixels it covers.
     Path {

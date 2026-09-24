@@ -48,6 +48,7 @@ mod constructors;
 mod constructors_layout;
 mod events;
 mod image_jobs;
+mod images;
 mod ipc_table;
 mod layer_parse;
 mod layout_host;

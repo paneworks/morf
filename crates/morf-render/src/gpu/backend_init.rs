@@ -413,6 +413,12 @@ impl WgpuBackend {
         &mut self.text
     }
 
+    /// The images this backend draws from, for reading what became of a
+    /// source: its size, whether it moves, why it failed.
+    pub fn image_cache(&mut self) -> &mut morf_image::ImageCache {
+        &mut self.images
+    }
+
     /// Registers a compiled shader, building its pipeline.
     ///
     /// Called when a configuration loads, never while rendering: compiling a

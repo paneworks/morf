@@ -15,9 +15,39 @@ pub(crate) fn element_constructor<'gc>(
     element: Element,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let properties: Table = stack.consume(ctx)?;
+        let mut properties: Table = stack.consume(ctx)?;
+        // An image's `on_status` is the runtime's to call, not a property.
+        let mut on_status = None;
+        if element == Element::Image {
+            on_status = optional_closure(ctx, properties, "on_status").map_err(HostError)?;
+            let clean = Table::new(&ctx);
+            for (key, value) in properties.iter(ctx) {
+                if !matches!(key, LuaValue::String(name) if name.as_bytes() == b"on_status") {
+                    clean.set(ctx, key, value)?;
+                }
+            }
+            properties = clean;
+        }
         let node = create_node(&state, element);
         configure_element(&state, ctx, limits, node, properties).map_err(HostError)?;
+        if element == Element::Image {
+            let mut state = state.borrow_mut();
+            state.images.register(node, on_status);
+            // Until a paint has looked at it, a source is loading.
+            if state
+                .scene
+                .string_value(node, "source")
+                .is_ok_and(|source| !source.is_empty())
+            {
+                crate::scene_bindings::assign_scene_property(
+                    &mut state,
+                    node,
+                    "status",
+                    morf_scene::Value::String("loading".to_owned()),
+                )
+                .map_err(HostError)?;
+            }
+        }
         if element == Element::TextInput {
             crate::text_inputs::register(&mut state.borrow_mut(), node);
         }

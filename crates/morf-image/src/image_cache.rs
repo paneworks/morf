@@ -9,6 +9,7 @@ use std::sync::Arc;
 use image::ImageReader;
 use resvg::{tiny_skia, usvg};
 
+use crate::animation::Animation;
 use crate::distance_field::distance_field_from_alpha;
 use crate::icons::IconResolver;
 use crate::inline::{InlineSource, inline_source, is_inline_source};
@@ -93,6 +94,12 @@ pub struct ImageCache {
     icons: HashMap<(String, String, u32, u32), PathBuf>,
     intrinsic: HashMap<PathBuf, (u32, u32)>,
     distance_fields: HashMap<DistanceFieldKey, Arc<ImageData>>,
+    /// Why a source could not be drawn, by source, for a node's `status`.
+    failures: HashMap<String, String>,
+    /// Whether each source moves, and its frames when it does.
+    animations: HashMap<String, Option<Arc<Animation>>>,
+    /// Least recently asked-for last: which moving pictures to drop first.
+    animation_use: Vec<String>,
 }
 
 impl ImageCache {
@@ -108,10 +115,26 @@ impl ImageCache {
         // not decoded from anything, so there is no larger original to resample
         // from, and the node's `fill_mode` is what decides how it lands in the
         // rectangle — the same as for a file whose intrinsic size differs.
-        if let Some(name) = source.as_ref().to_str().and_then(memory_name) {
+        let result = self.load_uncached(source.as_ref(), logical_width, logical_height, scale_120);
+        if let Err(error) = &result
+            && let Some(text) = source.as_ref().to_str()
+        {
+            self.note_failure(text, error);
+        }
+        result
+    }
+
+    fn load_uncached(
+        &mut self,
+        source: &Path,
+        logical_width: u32,
+        logical_height: u32,
+        scale_120: u32,
+    ) -> Result<Arc<ImageData>, ImageError> {
+        if let Some(name) = source.to_str().and_then(memory_name) {
             return self.memory_image(name);
         }
-        let source = normalize_source(source.as_ref())?;
+        let source = normalize_source(source)?;
         let width = physical_size(logical_width, scale_120)?;
         let height = physical_size(logical_height, scale_120)?;
         let key = CacheKey {
@@ -126,6 +149,103 @@ impl ImageCache {
         let image = Arc::new(decode_path(&source, width, height)?);
         self.images.insert(key, Arc::clone(&image));
         Ok(image)
+    }
+
+    fn note_failure(&mut self, source: &str, error: &ImageError) {
+        if self.failures.len() >= MAX_INTRINSIC {
+            self.failures.clear();
+        }
+        self.failures.insert(source.to_owned(), error.to_string());
+    }
+
+    /// Why the last attempt to draw `source` failed, if it did.
+    pub fn failure(&self, source: &str) -> Option<&str> {
+        self.failures.get(source).map(String::as_str)
+    }
+
+    /// The frames of a moving source (GIF, animated PNG or WebP), or `None`
+    /// for a still one or one that cannot be read (see [`Self::failure`]).
+    ///
+    /// Asked every frame for every image, so the answer is remembered: a
+    /// still picture costs a lookup after its first twelve bytes were read,
+    /// and a moving one is decoded once. At most [`MAX_ANIMATIONS`] moving
+    /// pictures and [`MAX_ANIMATIONS_BYTES`] of their frames are kept; the
+    /// least recently drawn go first.
+    pub fn animation(&mut self, source: &str) -> Option<Arc<Animation>> {
+        // Inline pictures and named ones are drawn still: an inline source is
+        // its own cache key, and remembering one per frame's worth of text
+        // would hold every sparkline a configuration ever drew.
+        if source.is_empty()
+            || memory_name(source).is_some()
+            || source.starts_with("gpu:")
+            || is_inline_source(source)
+        {
+            return None;
+        }
+        if let Some(known) = self.animations.get(source) {
+            let known = known.clone();
+            if known.is_some()
+                && let Some(index) = self.animation_use.iter().position(|used| used == source)
+            {
+                let used = self.animation_use.remove(index);
+                self.animation_use.push(used);
+            }
+            return known;
+        }
+        let decoded = match normalize_source(Path::new(source)) {
+            Ok(path) if crate::animation::may_move(&path) => {
+                crate::animation::decode_animation(&path).map(|found| found.map(Arc::new))
+            }
+            Ok(_) => Ok(None),
+            Err(error) => Err(error),
+        };
+        let found = match decoded {
+            Ok(found) => found,
+            Err(error) => {
+                self.note_failure(source, &error);
+                None
+            }
+        };
+        let stills = self
+            .animations
+            .values()
+            .filter(|known| known.is_none())
+            .count();
+        if found.is_none() && stills >= MAX_INTRINSIC {
+            self.animations.retain(|_, known| known.is_some());
+        }
+        if found.is_some() {
+            self.animation_use.push(source.to_owned());
+        }
+        self.animations.insert(source.to_owned(), found.clone());
+        self.evict_animations();
+        found
+    }
+
+    fn evict_animations(&mut self) {
+        let mut bytes: usize = self
+            .animations
+            .values()
+            .flatten()
+            .map(|animation| animation.bytes())
+            .sum();
+        while self.animation_use.len() > 1
+            && (self.animation_use.len() > MAX_ANIMATIONS || bytes > MAX_ANIMATIONS_BYTES)
+        {
+            let oldest = self.animation_use.remove(0);
+            if let Some(Some(animation)) = self.animations.remove(&oldest) {
+                bytes -= animation.bytes();
+            }
+        }
+    }
+
+    /// How many moving pictures are held, and the bytes of their frames.
+    pub fn animation_usage(&self) -> (usize, usize) {
+        let held = self.animations.values().flatten();
+        (
+            self.animation_use.len(),
+            held.map(|animation| animation.bytes()).sum(),
+        )
     }
 
     /// Publishes pixels under a name that `ui.Image` can resolve.
@@ -293,6 +413,9 @@ impl ImageCache {
         self.icons.clear();
         self.intrinsic.clear();
         self.distance_fields.clear();
+        self.failures.clear();
+        self.animations.clear();
+        self.animation_use.clear();
     }
 
     /// Drops decoded pixels once the cache has grown past what a shell needs.
@@ -335,6 +458,10 @@ fn physical_size(logical: u32, scale_120: u32) -> Result<u32, ImageError> {
 
 /// How many decoded images to hold before dropping them.
 const MAX_DECODED_IMAGES: usize = 128;
+/// How many moving pictures to keep decoded.
+pub const MAX_ANIMATIONS: usize = 16;
+/// How many bytes of decoded frames to keep, across every moving picture.
+pub const MAX_ANIMATIONS_BYTES: usize = 256 * 1024 * 1024;
 
 pub(crate) fn normalize_source(source: &Path) -> Result<PathBuf, ImageError> {
     let Some(value) = source.to_str() else {

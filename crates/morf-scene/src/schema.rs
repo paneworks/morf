@@ -257,6 +257,18 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("softness", 0.0),
                 number("outline_width", 0.0),
                 color("outline_color", Color::rgba8(0, 0, 0, 0)),
+                // Kept by the runtime, for bindings to follow: what became of
+                // the source. `none` without one, `loading` until it was
+                // looked at, then `ready` or `error` with the reason.
+                string("status", "none"),
+                any("error", Value::Nil),
+                // A moving picture's playback. `frame` is where it is, and a
+                // write seeks; `frame_count` is the runtime's.
+                boolean("playing", true),
+                number("speed", 1.0),
+                number("frame", 0.0),
+                any("loops", Value::String("forever".to_owned())),
+                number("frame_count", 0.0),
             ]);
         }
         Element::Icon => {

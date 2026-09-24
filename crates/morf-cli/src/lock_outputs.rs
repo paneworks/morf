@@ -244,6 +244,8 @@ pub(crate) fn paint_lock(
         client.commit_lock(index);
     }
     drop(scene);
+    // After the render: what the images became is known once they were drawn.
+    runtime.sync_images(&layout, renderer.backend_mut().image_cache());
     runtime.observe_layout(&layout);
     Ok(layout)
 }

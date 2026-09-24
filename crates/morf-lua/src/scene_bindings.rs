@@ -306,6 +306,13 @@ pub(crate) fn refuse_runtime_owned(
             "MouseArea `{property}` is read-only: the pointer sets it"
         ));
     }
+    if matches!(property, "status" | "error" | "frame_count")
+        && state.scene.element(node).ok() == Some(Element::Image)
+    {
+        return Err(format!(
+            "Image `{property}` is read-only: the runtime says what became of the source"
+        ));
+    }
     if matches!(
         property,
         "columns" | "rows" | "title" | "running" | "exit_code"
