@@ -241,7 +241,9 @@ as the shell runs them, once per handler.
 Points are surface-local logical pixels on the primary surface unless
 `options.surface` names another (as `morf render --surface` does). Where a
 point is taken, a node or a query for one may be given instead, meaning its
-centre and its surface.
+centre and its surface. Keys go where a compositor would send them: to the
+surface a button was last pressed on (a settings window clicked into), or
+the primary before anything was.
 
 | call | |
 |------|---|

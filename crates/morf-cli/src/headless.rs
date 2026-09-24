@@ -148,6 +148,9 @@ pub(crate) struct Headless {
     last_frame: Duration,
     /// Where the pointer is, for a wheel or a release with no position.
     pub(crate) pointer: Option<(SurfaceRole, f64, f64)>,
+    /// The surface a button was last pressed on: the one a compositor gives
+    /// the keyboard to, and where keys go when a test names no surface.
+    pub(crate) keyboard: Option<SurfaceRole>,
 }
 
 impl Headless {
@@ -206,6 +209,7 @@ impl Headless {
             now: Duration::ZERO,
             last_frame: Duration::ZERO,
             pointer: None,
+            keyboard: None,
         };
         // The first frame, at time zero: what the shell draws before any
         // time has passed.
