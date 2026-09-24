@@ -37,14 +37,69 @@ pub struct Limits {
 }
 
 impl Default for Limits {
+    /// Sized for a whole desktop -- a bar, a desk of widgets, a palette
+    /// derived from a painting in one handler -- while a loop that never
+    /// ends is still stopped within a frame or two.
     fn default() -> Self {
         Self {
-            fuel: 10_000_000,
-            memory: 64 * 1024 * 1024,
+            fuel: 50_000_000,
+            memory: 256 * 1024 * 1024,
             slice_fuel: 4_096,
-            effect_fuel: 100_000,
-            frame_fuel: 1_000_000,
+            effect_fuel: 1_000_000,
+            frame_fuel: 8_000_000,
         }
+    }
+}
+
+impl Limits {
+    /// The defaults with any of `MORF_LIMITS` applied: comma-separated
+    /// `load=N`, `memory=N` (bytes, or with a `k`/`m`/`g` suffix),
+    /// `handler=N` and `frame=N` (VM instructions). An entry that does not
+    /// parse is ignored and named in the returned warnings.
+    pub fn from_env() -> (Self, Vec<String>) {
+        let mut limits = Self::default();
+        let mut warnings = Vec::new();
+        let Ok(text) = std::env::var("MORF_LIMITS") else {
+            return (limits, warnings);
+        };
+        for entry in text
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+        {
+            let Some((key, value)) = entry.split_once('=') else {
+                warnings.push(format!("MORF_LIMITS entry `{entry}` is not key=value"));
+                continue;
+            };
+            let value = value.trim().to_ascii_lowercase();
+            let (digits, scale) = match value.chars().last() {
+                Some('k') => (&value[..value.len() - 1], 1024u64),
+                Some('m') => (&value[..value.len() - 1], 1024 * 1024),
+                Some('g') => (&value[..value.len() - 1], 1024 * 1024 * 1024),
+                _ => (value.as_str(), 1),
+            };
+            let Some(number) = digits
+                .parse::<u64>()
+                .ok()
+                .and_then(|n| n.checked_mul(scale))
+                .filter(|n| *n > 0)
+            else {
+                warnings.push(format!(
+                    "MORF_LIMITS value `{value}` for {key} is not a positive number"
+                ));
+                continue;
+            };
+            match key.trim() {
+                "load" => limits.fuel = number,
+                "memory" => limits.memory = usize::try_from(number).unwrap_or(usize::MAX),
+                "handler" => limits.effect_fuel = number,
+                "frame" => limits.frame_fuel = number,
+                other => warnings.push(format!(
+                    "MORF_LIMITS key `{other}` is not load, memory, handler or frame"
+                )),
+            }
+        }
+        (limits, warnings)
     }
 }
 

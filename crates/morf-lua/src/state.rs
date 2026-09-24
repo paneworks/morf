@@ -249,6 +249,8 @@ pub(crate) struct ReactiveState {
     pub(crate) animation_callbacks: HashMap<(NodeHandle, String), StashedClosure>,
     pub(crate) group_callbacks: HashMap<GroupId, StashedClosure>,
     pub(crate) loader_factories: HashMap<NodeHandle, StashedClosure>,
+    /// Loaders whose source raised, left alone until they are deactivated.
+    pub(crate) failed_loaders: HashSet<NodeHandle>,
     /// The `measure` and `place` functions of every `ui.Layout` container.
     pub(crate) custom_layouts: HashMap<NodeHandle, CustomLayoutFns>,
     /// The list model's metatable, kept so a list inside `morf.state` is
@@ -432,6 +434,7 @@ impl ReactiveState {
             animation_callbacks: HashMap::new(),
             group_callbacks: HashMap::new(),
             loader_factories: HashMap::new(),
+            failed_loaders: HashSet::new(),
             custom_layouts: HashMap::new(),
             model_metatable: None,
             loaded_loaders: HashSet::new(),

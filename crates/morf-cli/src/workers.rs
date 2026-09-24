@@ -272,7 +272,7 @@ pub(crate) fn handle_worker_command(
             hard,
             reply,
         } => {
-            let mut candidate = Runtime::for_screen(Limits::default(), screen.clone());
+            let mut candidate = Runtime::for_screen(Limits::from_env().0, screen.clone());
             if !hard {
                 candidate.restore_reloadable_state(runtime.reloadable_state());
             }

@@ -114,6 +114,14 @@ impl Runtime {
                     .bool_value(node, "active_async")
                     .unwrap_or(false);
                 let requested = active || loading || active_async;
+                // A source that failed stays failed until the Loader is let go
+                // and asked again; trying it every frame filled the log with
+                // one error sixty times a second and spent a frame on it each.
+                if !requested {
+                    state.failed_loaders.remove(&node);
+                } else if state.failed_loaders.contains(&node) {
+                    continue;
+                }
                 if requested && state.loaded_loaders.insert(node) {
                     loaders.push((node, factory));
                 } else if !requested && state.loaded_loaders.remove(&node) {
@@ -124,6 +132,7 @@ impl Runtime {
             for node in stale_loaders {
                 state.loader_factories.remove(&node);
                 state.loaded_loaders.remove(&node);
+                state.failed_loaders.remove(&node);
             }
             let mut index = 0;
             while index < state.timers.len() {
@@ -304,6 +313,7 @@ impl Runtime {
                 Err(error) => {
                     let mut state = self.reactive.borrow_mut();
                     state.loaded_loaders.remove(&node);
+                    state.failed_loaders.insert(node);
                     let _ =
                         assign_scene_property(&mut state, node, "loading", SceneValue::Bool(false));
                     let _ = assign_scene_property(

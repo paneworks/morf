@@ -230,3 +230,20 @@ fn a_shared_behavior_table_can_be_both_a_spring_and_a_smoothing() {
         )
         .unwrap();
 }
+
+#[test]
+fn limits_read_overrides_from_the_environment() {
+    // SAFETY: tests in this binary that read MORF_LIMITS all run here.
+    unsafe {
+        std::env::set_var(
+            "MORF_LIMITS",
+            "handler=2000000, memory=512m, frame=bogus, nope=1",
+        )
+    };
+    let (limits, warnings) = Limits::from_env();
+    unsafe { std::env::remove_var("MORF_LIMITS") };
+    assert_eq!(limits.effect_fuel, 2_000_000);
+    assert_eq!(limits.memory, 512 * 1024 * 1024);
+    assert_eq!(limits.frame_fuel, Limits::default().frame_fuel);
+    assert_eq!(warnings.len(), 2, "{warnings:?}");
+}

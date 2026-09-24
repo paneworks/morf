@@ -77,7 +77,16 @@ pub(crate) fn run_surface(
         scale: screen.scale,
         transform: screen.transform.to_owned(),
     };
-    let mut runtime = Runtime::for_screen(Limits::default(), runtime_screen.clone());
+    let mut runtime = Runtime::for_screen(
+        {
+            let (limits, warnings) = Limits::from_env();
+            for warning in warnings {
+                eprintln!("morf: {warning}");
+            }
+            limits
+        },
+        runtime_screen.clone(),
+    );
     execute_config(&mut runtime, path, source, policy)?;
     primary_surface_root(&runtime)?;
 

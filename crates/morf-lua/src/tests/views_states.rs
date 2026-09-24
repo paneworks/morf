@@ -489,3 +489,52 @@ fn churning_a_list_leaves_nothing_behind() {
         )
         .unwrap();
 }
+
+#[test]
+fn a_failing_loader_is_tried_once_per_activation() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "failing-loader.lua",
+            br#"
+                local ui = require("morf.ui")
+                _G.on = morf.signal("loader.on", false)
+                _G.tries = 0
+                ui.Item {
+                    ui.Loader {
+                        active = function() return _G.on:get() end,
+                        source = function() _G.tries = _G.tries + 1 error("broken source") end,
+                    },
+                }
+            "#,
+        )
+        .unwrap();
+    runtime.execute("on-1.lua", b"_G.on:set(true)").unwrap();
+    for _ in 0..10 {
+        runtime.poll_services();
+    }
+    runtime
+        .execute(
+            "check-1.lua",
+            b"assert(_G.tries == 1, 'tried ' .. _G.tries .. ' times')",
+        )
+        .unwrap();
+    let warnings = runtime
+        .take_logs()
+        .into_iter()
+        .filter(|entry| entry.message.contains("broken source"))
+        .count();
+    assert_eq!(warnings, 1);
+    runtime.execute("off.lua", b"_G.on:set(false)").unwrap();
+    runtime.poll_services();
+    runtime.execute("on.lua", b"_G.on:set(true)").unwrap();
+    for _ in 0..5 {
+        runtime.poll_services();
+    }
+    runtime
+        .execute(
+            "check-2.lua",
+            b"assert(_G.tries == 2, 'tried ' .. _G.tries .. ' times')",
+        )
+        .unwrap();
+}
