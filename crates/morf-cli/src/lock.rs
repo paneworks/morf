@@ -82,6 +82,10 @@ pub(crate) enum SupervisorMessage {
     WatchFiles(bool),
     /// The configuration asked the shell to stop.
     Quit,
+    /// Ask the compositor which outputs it has, and run a worker on each:
+    /// after an output's surface was closed under it, and again every
+    /// second while there is none.
+    Probe,
 }
 
 pub(crate) enum WorkerMessage {

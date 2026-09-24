@@ -290,3 +290,41 @@ fn a_loaded_configuration_decides_what_the_supervisor_does() {
     assert_eq!(loaded_step(true, false), LoadedStep::Lock);
     assert_eq!(loaded_step(true, true), LoadedStep::Lock);
 }
+
+#[test]
+fn an_output_going_away_does_not_stop_the_shell() {
+    use crate::supervisor::{FailureStep, SURFACE_CLOSED, failure_step};
+    use std::collections::VecDeque;
+    use std::time::{Duration, Instant};
+    let mut closures = VecDeque::new();
+    let start = Instant::now();
+    // A screen switched off closes its surfaces: the shell asks again.
+    assert_eq!(
+        failure_step(SURFACE_CLOSED, &mut closures, start),
+        FailureStep::Probe
+    );
+    // Anything else is the shell's own failure.
+    assert_eq!(
+        failure_step("GPU lost", &mut closures, start),
+        FailureStep::Stop
+    );
+    // A compositor closing every surface it is given is not asked forever.
+    for _ in 0..4 {
+        assert_eq!(
+            failure_step(SURFACE_CLOSED, &mut closures, start),
+            FailureStep::Probe
+        );
+    }
+    assert_eq!(
+        failure_step(SURFACE_CLOSED, &mut closures, start),
+        FailureStep::Stop
+    );
+    // A minute on, it is news again.
+    let later = start + Duration::from_secs(61);
+    let mut closures = VecDeque::from(vec![start; 5]);
+    assert_eq!(
+        failure_step(SURFACE_CLOSED, &mut closures, later),
+        FailureStep::Probe
+    );
+    assert_eq!(closures.len(), 1);
+}
