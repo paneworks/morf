@@ -345,12 +345,16 @@ impl KeyboardHandler for LayerState {
         _raw: RawModifiers,
         _layout: u32,
     ) {
-        // The serial is what this is for. A `Modifiers` event was also pushed
-        // here and discarded by every consumer — six match arms across three
-        // files existed to throw it away — so the modifier state travelled
-        // nowhere and cost an allocation on every shift key.
+        // Kept rather than sent: what a modifier means is only ever asked
+        // with a key, so it rides on the next key event instead of being an
+        // event of its own that every consumer would have to throw away.
         self.latest_input_serial = Some(serial);
-        let _ = modifiers;
+        self.modifiers = KeyModifiers {
+            ctrl: modifiers.ctrl,
+            shift: modifiers.shift,
+            alt: modifiers.alt,
+            logo: modifiers.logo,
+        };
     }
 
     fn update_keymap(

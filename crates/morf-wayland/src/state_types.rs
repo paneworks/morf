@@ -281,6 +281,8 @@ pub(crate) struct LayerState {
     /// A drag this client started, and what it answers with.
     pub(crate) drag_source: Option<OwnedDrag>,
     pub(crate) latest_input_serial: Option<u32>,
+    /// The modifiers the keyboard last reported held.
+    pub(crate) modifiers: KeyModifiers,
     pub(crate) virtual_keyboard_manager: Option<ZwpVirtualKeyboardManagerV1>,
     pub(crate) virtual_keyboard: Option<ZwpVirtualKeyboardV1>,
     pub(crate) virtual_keyboard_keymap: Option<String>,

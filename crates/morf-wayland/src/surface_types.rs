@@ -208,6 +208,8 @@ pub enum LayerEvent {
         text: Option<String>,
         pressed: bool,
         repeat: bool,
+        /// The modifiers held when it did.
+        modifiers: KeyModifiers,
     },
     /// A configured seat idle threshold changed state.
     Idle {
@@ -396,4 +398,16 @@ impl ShellSurface {
             Self::Window(window) => window.commit(),
         }
     }
+}
+
+/// Which modifier keys are held.
+///
+/// The keysym already says what a key means with Shift applied; this says
+/// what else is held, which is what tells Ctrl+C from C.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct KeyModifiers {
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+    pub logo: bool,
 }
