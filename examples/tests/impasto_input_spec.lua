@@ -188,3 +188,20 @@ test.describe("impasto desk", function()
     test.falsy(test.find { text = "Arrange widgets", visible = true }, "the desk's menu opened")
   end)
 end)
+
+test.describe("impasto control centre", function()
+  test.it("arranging with the bar spread takes the whole bar, so the card is not cut off", function()
+    load()
+    test.ipc("set", "barStyle", '"spread"')
+    test.settle(500)
+    test.eq(test.ipc("controls"), "controls")
+    test.settle(2000)
+    test.eq(test.ipc("controls_edit"), "editing")
+    test.settle(2000)
+    local island = test.get { id = "island", visible = true }
+    local tray = test.get { id = "controls-tray", visible = true }
+    test.truthy(tray.x + tray.width <= island.x + island.width,
+      "the card ends at " .. (tray.x + tray.width) .. ", the island at " .. (island.x + island.width))
+    test.truthy(island.x >= 0 and island.x + island.width <= 1280, "the island is on the screen")
+  end)
+end)
