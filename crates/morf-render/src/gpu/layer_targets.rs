@@ -25,9 +25,7 @@ impl WgpuBackend {
                     &self.device,
                     &self.blur_layout,
                     &self.blur_sampler,
-                    &view,
-                    self.width,
-                    self.height,
+                    (&texture, &view),
                     (layer.blur * scale as f32 / 4.0).max(0.5),
                 )
             });
@@ -36,9 +34,7 @@ impl WgpuBackend {
                     &self.device,
                     &self.blur_layout,
                     &self.blur_sampler,
-                    &view,
-                    self.width,
-                    self.height,
+                    (&texture, &view),
                     (layer.shadow_blur * scale as f32 / 4.0).max(0.5),
                 )
             });

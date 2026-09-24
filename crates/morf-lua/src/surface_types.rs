@@ -95,6 +95,10 @@ pub struct LayerSurfaceConfig {
     /// How much the backdrop darkens what it covers while it is awake, 0 to
     /// 1: a phone's shade dims the screen behind it.
     pub backdrop_dim: f64,
+    /// The space translucent colours are mixed in: `"linear"` (the default,
+    /// linear light) or `"srgb"` (encoded values, as browsers and Qt mix
+    /// them).
+    pub blend: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -135,6 +139,10 @@ pub struct PopupSurfaceConfig {
     pub offset_y: i32,
     pub constraints: PopupConstraintConfig,
     pub grab_focus: bool,
+    /// The space translucent colours are mixed in: `"linear"` (the default,
+    /// linear light) or `"srgb"` (encoded values, as browsers and Qt mix
+    /// them).
+    pub blend: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -151,6 +159,10 @@ pub struct FloatingSurfaceConfig {
     pub minimized: bool,
     pub maximized: bool,
     pub fullscreen: bool,
+    /// The space translucent colours are mixed in: `"linear"` (the default,
+    /// linear light) or `"srgb"` (encoded values, as browsers and Qt mix
+    /// them).
+    pub blend: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -197,6 +209,7 @@ impl Default for LayerSurfaceConfig {
             session_lock: false,
             backdrop: None,
             backdrop_dim: 0.0,
+            blend: "linear".to_owned(),
         }
     }
 }

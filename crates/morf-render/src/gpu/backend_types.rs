@@ -85,7 +85,13 @@ pub(crate) struct ShaderProgram {
 pub struct WgpuBackend {
     pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
+    /// The space this surface blends in; every target and pipeline follows it.
+    pub(crate) blend: crate::BlendSpace,
     pub(crate) clear_pipeline: wgpu::RenderPipeline,
+    /// What the clear pipeline is built from, kept to rebuild it when the
+    /// blend space changes.
+    pub(crate) clear_layout: wgpu::PipelineLayout,
+    pub(crate) clear_shader: wgpu::ShaderModule,
     pub(crate) viewport_buffer: wgpu::Buffer,
     pub(crate) viewport_bind_group: wgpu::BindGroup,
     pub(crate) glyph_pipeline: wgpu::RenderPipeline,

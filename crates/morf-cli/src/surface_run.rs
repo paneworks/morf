@@ -582,7 +582,7 @@ fn complain_layout(name: &str, error: &str, last: &mut Option<Instant>) {
 /// Once, at startup and after a device loss — never during a frame. Compiling a
 /// pipeline costs tens of milliseconds, which is several frames' worth of
 /// budget, and a shader is known the moment the configuration finishes loading.
-fn register_shaders(
+pub(crate) fn register_shaders(
     runtime: &Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
 ) -> Result<(), String> {

@@ -175,12 +175,27 @@ pub(crate) fn apply_layer_setting<'gc>(
             };
             Ok(assign_layer_setting(&mut config.input_regions, regions))
         }
+        "blend" => Ok(assign_layer_setting(&mut config.blend, parse_blend(value)?)),
         "reserve" => Ok(assign_layer_setting(
             &mut config.reserve,
             parse_surface_reserve(ctx, value)?,
         )),
         _ => Err(format!("unknown surface setting `{key}`")),
     }
+}
+
+/// Reads a surface's `blend`: `"linear"` or `"srgb"`.
+pub(crate) fn parse_blend(value: LuaValue<'_>) -> Result<String, String> {
+    let LuaValue::String(value) = value else {
+        return Err("surface blend must be \"linear\" or \"srgb\"".into());
+    };
+    let value = value.display_lossy().to_string();
+    if !matches!(value.as_str(), "linear" | "srgb") {
+        return Err(format!(
+            "surface blend `{value}` is not \"linear\" or \"srgb\""
+        ));
+    }
+    Ok(value)
 }
 
 /// Reads the per-edge thicknesses of `morf.surface.reserve`.
@@ -289,6 +304,7 @@ pub(crate) fn layer_setting_to_lua<'gc>(
         "session_lock" => LuaValue::Boolean(config.session_lock),
         "backdrop" => config.backdrop.map_or(LuaValue::Nil, LuaValue::Boolean),
         "backdrop_dim" => LuaValue::Number(config.backdrop_dim),
+        "blend" => LuaValue::String(ctx.intern(config.blend.as_bytes())),
         "anchors" => {
             let anchors = Table::new(&ctx);
             anchors.set_field(ctx, "top", config.anchors.top);

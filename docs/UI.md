@@ -442,6 +442,27 @@ crossfade between two saturated colours should look like; `space` and
 ui.Rect { color = accent, behavior = { color = { duration = 300, space = "oklch", hue = "longer" } } }
 ```
 
+### Blending
+
+A translucent colour is mixed with what is under it in linear light, which
+is how light mixes and what morf does unless told otherwise. Browsers, Qt
+and GTK mix the sRGB-encoded values instead, and the two disagree on every
+translucent pixel: 50% white over black is `#bcbcbc` here and `#808080`
+there, and a 3.5% white hairline that is a hint in a browser is a visible
+line here. A design made in one of those, or ported from one, looks right
+only when mixed the same way:
+
+```lua
+morf.surface.blend = "srgb"              -- the shell's own surface
+morf.window.popup { root = menu, blend = "srgb" }   -- or any window surface
+```
+
+It is per surface, `"linear"` by default, and may change at any time; the
+surface rebuilds its pipelines when it does. Opaque colours, images and
+gradients' stops land on the same pixels either way — only the mixing
+differs, text's antialiasing included. `examples/blend-compare.lua` draws
+one design both ways.
+
 ### Gradients
 
 `gradient` on a `Rect` or an `Sdf` is one table: a `kind` (`linear`,

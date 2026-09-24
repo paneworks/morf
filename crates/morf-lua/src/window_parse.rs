@@ -198,9 +198,18 @@ pub(crate) fn parse_popup_surface<'gc>(
             offset_y: window_i32(ctx, options, "offset_y", 0)?,
             constraints,
             grab_focus: table_bool(ctx, options, "grab_focus", false)?,
+            blend: window_blend(ctx, options)?,
         },
         node_anchor,
     ))
+}
+
+/// A window surface's `blend`, `"linear"` when it names none.
+fn window_blend<'gc>(ctx: Context<'gc>, options: Table<'gc>) -> Result<String, String> {
+    match options.get_value(ctx, "blend") {
+        LuaValue::Nil => Ok("linear".to_owned()),
+        value => crate::layer_parse::parse_blend(value),
+    }
 }
 
 pub(crate) fn parse_floating_surface<'gc>(
@@ -240,6 +249,7 @@ pub(crate) fn parse_floating_surface<'gc>(
             minimized: table_bool(ctx, options, "minimized", false)?,
             maximized: table_bool(ctx, options, "maximized", false)?,
             fullscreen: table_bool(ctx, options, "fullscreen", false)?,
+            blend: window_blend(ctx, options)?,
         },
     ))
 }

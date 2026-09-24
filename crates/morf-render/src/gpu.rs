@@ -1,5 +1,27 @@
-/// The one surface format every target and pipeline agrees on.
-pub(crate) const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+use crate::BlendSpace;
+
+/// The format every target and pipeline of one blend space agrees on.
+///
+/// Linear blending renders into an sRGB target: shaders write linear light
+/// and the hardware encodes on store and decodes on blend, so the blend
+/// happens in linear light. Gamma blending renders into a plain target and
+/// the shaders encode themselves, so what the blend unit sees -- and mixes --
+/// are the sRGB-encoded values, as a browser or Qt mixes them.
+pub(crate) fn target_format(blend: BlendSpace) -> wgpu::TextureFormat {
+    match blend {
+        BlendSpace::Linear => wgpu::TextureFormat::Rgba8UnormSrgb,
+        BlendSpace::Srgb => wgpu::TextureFormat::Rgba8Unorm,
+    }
+}
+
+/// The pipeline constants telling the field and glyph shaders which space
+/// they write in.
+pub(crate) fn blend_constants(blend: BlendSpace) -> &'static [(&'static str, f64)] {
+    match blend {
+        BlendSpace::Linear => &[("MORF_GAMMA_BLEND", 0.0)],
+        BlendSpace::Srgb => &[("MORF_GAMMA_BLEND", 1.0)],
+    }
+}
 
 mod backend_init;
 mod backend_render;

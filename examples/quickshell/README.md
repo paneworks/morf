@@ -71,9 +71,11 @@ colour for the GPU and blends in linear light. The two disagree, predictably:
 
 Both predictions land on the measurement, the morf one exactly. Linear is the
 physically correct way to blend and the reason morf does it, but it means any
-port from a Qt or GTK shell will read lighter wherever alpha is used. Anything
-that has to match a Qt original pixel-for-pixel needs the blend done up front
-and handed over as an opaque colour.
+port from a Qt or GTK shell will read lighter wherever alpha is used. A surface
+that has to match a Qt original says so with `morf.surface.blend = "srgb"`
+(or `blend = "srgb"` on a `morf.window.*` surface), and then mixes the way Qt
+does: the empty pill comes out `#46565a`, the original's measurement. See
+`examples/blend-compare.lua` for the two side by side.
 
 ## One thing worth knowing about child processes
 
