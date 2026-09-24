@@ -462,14 +462,33 @@ end
 -- ------------------------------------------------------------- segmented --
 
 --- Two or three options, all visible: SegmentedControl. `options` is
---- `{ { id, label, icon? } }`; `current` the chosen id; `on_selected(id)`.
+--- `{ { id, label, icon? } }`; `current` the chosen id; `on_selected(id)`;
+--- `enabled` (default true) dims it and refuses the pointer. An option drawn
+--- as a glyph names itself in a small label over it while hovered, kept
+--- through the fade-out so the name does not blank before it is gone.
 function M.segmented(values)
   local current = bind(values.current or "")
+  local enabled = bind(values.enabled == nil and true or values.enabled)
   local height = values.height or 28
+  local tip_gap = values.tip_gap or 6
+  -- The glyph segment under the pointer, and the last one, for the label.
+  local over = signal("segment.over", 0)
+  local named = signal("segment.named", 0)
+  local segments = {}
   local children = { gap = 2, align = "center", anchors = { center_in = true } }
-  for _, option in ipairs(values.options or {}) do
-    local hovered = signal("segment", false)
+  for index, option in ipairs(values.options or {}) do
+    local lit = signal("segment", false)
     local glyph = (option.icon or "") ~= ""
+    -- The hover, and for a glyph which segment the label names.
+    local hovered = {
+      get = function() return lit:get() end,
+      set = function(_, on)
+        lit:set(on)
+        if not glyph then return end
+        if on then over:set(index) named:set(index)
+        elseif over:get() == index then over:set(0) end
+      end,
+    }
     local active = function() return current() == option.id end
     local label = glyph
       and kit.glyph { anchors = { center_in = true }, glyph = option.icon,
@@ -481,7 +500,7 @@ function M.segmented(values)
       or kit.text { anchors = { center_in = true }, text = option.label, size = theme.size.small,
         weight = function() return active() and 600 or 400 end,
         color = function() return active() and C.accentText() or C.textMuted() end }
-    children[#children + 1] = ui.Rect {
+    local segment = ui.Rect {
       height = height - 6,
       width = glyph and (height - 6) or function() return math.max(64, (label.layout_width or 0) + 20) end,
       radius = theme.radius_small - 2,
@@ -491,18 +510,44 @@ function M.segmented(values)
       end,
       behavior = { color = fast() },
       label,
-      M.hit { hovered = hovered, on_click = function()
+      M.hit { hovered = hovered, enabled = enabled, on_click = function()
         if values.on_selected then values.on_selected(option.id) end
       end },
     }
+    segments[index] = { node = segment, option = option, glyph = glyph }
+    children[#children + 1] = segment
   end
   local row = ui.Row(children)
+  local tip_text = kit.text {
+    anchors = { center_in = true }, size = theme.size.small, weight = 600, color = C.text,
+    text = function()
+      local s = segments[named:get()]
+      return s and s.option.label or ""
+    end,
+  }
+  local tip = ui.Rect {
+    z = 10,
+    width = function() return (tip_text.layout_width or 0) + 20 end,
+    height = 26, radius = 13, y = -26 - tip_gap,
+    x = function()
+      local s = segments[named:get()]
+      if not s then return 0 end
+      local w = (tip_text.layout_width or 0) + 20
+      return (row.layout_x or 3) + (s.node.layout_x or 0) + ((s.node.layout_width or 0) - w) / 2
+    end,
+    color = C.island, border_width = 1, border_color = C.islandBorder,
+    opacity = function() return over:get() > 0 and 1 or 0 end,
+    behavior = { opacity = fast() },
+    tip_text,
+  }
   return ui.Rect {
     anchors = values.anchors, visible = values.visible,
     width = function() return (row.layout_width or 0) + 6 end,
     height = height, radius = theme.radius_small,
+    opacity = function() return enabled() and 1 or 0.45 end,
+    behavior = { opacity = fast() },
     color = C.islandSurfaceHover, border_width = 1, border_color = C.islandBorder,
-    row,
+    row, tip,
   }
 end
 
