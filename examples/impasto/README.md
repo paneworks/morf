@@ -115,4 +115,7 @@ WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; m
 | lock screen, lock/idle/session services, session panel | ported |
 | dock (`dock/`, `services/dock.lua`, `services/auto/dock.lua`) | ported |
 | arcade: `bar/panels/games.lua`, `games/`, `services/games.lua` | ported (eleven games) |
+| launcher (`bar/panels/launcher.lua`, `services/launcher.lua`, `services/calc.lua`; `=` `>` `@` `!` `'`) | ported |
+| overview (`bar/panels/overview.lua`), workspaces piece, launcher and overview buttons | ported |
+| timer (`services/timer.lua`, on the island: `bar/layers/timer.lua`), clipboard history (`services/clipboard.lua`) | ported |
 | everything else | in progress |

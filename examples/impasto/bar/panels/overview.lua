@@ -22,6 +22,8 @@ local island = require("bar.island")
 local kit = require("components.kit")
 local workspaces = require("services.workspaces")
 local app_icon = require("components.app_icon")
+local has_wallpapers, wallpapers = pcall(require, "services.wallpaper")
+if not has_wallpapers then wallpapers = nil end
 
 local C = theme.color
 
@@ -318,7 +320,11 @@ local function build()
       local area = area_for(workspaces.monitor_of(id))
       return area, math.min(model_w / area.width, model_h / area.height)
     end
-    local wallpaper = function() return settings.wallpaper or "" end
+    -- The picture on the desk, the same in every cell.
+    local wallpaper = function()
+      if wallpapers then return wallpapers.current:get() or "" end
+      return settings.wallpaper or ""
+    end
 
     return ui.Item {
       x = cx, y = cy, width = cell_w, height = cell_h,
@@ -360,16 +366,19 @@ local function build()
       },
       -- The number, on empty cells only; occupied ones are known by their
       -- windows.
-      kit.text {
-        anchors = { center_in = true },
-        text = tostring(id),
-        size = math.floor(cell_h * 0.44 + 0.5), weight = 600,
+      ui.Item {
+        anchors = { fill = true },
         z = 4,
         opacity = function()
           if not empty() then return 0 end
           return hovered:get() and 0.2 or 0.3
         end,
         behavior = { opacity = theme.behave("medium") },
+        kit.text {
+          anchors = { center_in = true },
+          text = tostring(id),
+          size = math.floor(cell_h * 0.44 + 0.5), weight = 600,
+        },
       },
       -- A click on the cell goes there; windows on top take their own
       -- clicks first.

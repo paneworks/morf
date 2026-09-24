@@ -153,6 +153,20 @@ function island.build(place)
     children[#children + 1] = layer_loader("panel." .. name,
       function() return state.open_panel() == name end,
       function()
+        -- At the panel's declared size, not the capsule's: the capsule is
+        -- still small when this is built and grows around it (clipping it
+        -- meanwhile), so the panel is laid out once, at its final size,
+        -- rather than squeezed to nothing and reflowed on every frame of
+        -- the morph.
+        if panel.size then
+          local pad = theme.panel_padding
+          return ui.Item {
+            x = pad, y = pad,
+            width = function() local w = panel.size() return math.max(1, w - 2 * pad) end,
+            height = function() local _, h = panel.size() return math.max(1, h - 2 * pad) end,
+            panel.build(island),
+          }
+        end
         return ui.Inset {
           anchors = { fill = true },
           margin = theme.panel_padding,
