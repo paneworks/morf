@@ -14,13 +14,18 @@ local ok, lib = pcall(require, "lib.weather")
 if not ok then lib = nil end
 
 local source_handle, source_place = nil, nil
+-- Pieces watching the reading (see `subscribe`).
+local watchers = 0
 local function source()
   if not lib then return nil end
   local place = settings.weatherPlace
   if source_handle == nil or source_place ~= place then
+    -- A new place is a new reading; the watchers move to it.
+    if source_handle and source_handle.source then source_handle.source:pin(false) end
     source_place = place
     local okn, made = pcall(lib.new, { location = place ~= "" and place or nil, units = "metric" })
     source_handle = okn and made or false
+    if source_handle and watchers > 0 then source_handle.source:pin(true) end
   end
   return source_handle or nil
 end
@@ -82,7 +87,47 @@ function M.code() return M.now().code end
 function M.is_day() return M.now().is_day ~= false end
 function M.glyph() local n = M.now() return M.glyph_for(n.code, n.is_day) end
 
---- The next hours after this one: `{ hour, tomorrow, glyph, temperature, code }`.
+--- How old the reading is: "just now", "12 min ago", "2 h ago", or "" with
+--- none (WeatherService.qml:54-63).
+function M.age()
+  local n = M.now()
+  if not n.available then return "" end
+  local at = tonumber(n.updated) or 0
+  if at <= 0 then return "" end
+  morf.clock:get()
+  local minutes = math.floor((morf.time.now() - at) / 60)
+  if minutes < 2 then return "just now" end
+  if minutes < 60 then return minutes .. " min ago" end
+  return math.floor(minutes / 60 + 0.5) .. " h ago"
+end
+
+--- The region under the place, when the source names one.
+function M.region() return M.now().region or "" end
+
+-- Watchers: a chip on the bar, the detail, the control centre's card. The
+-- source polls while anything reads it; a watcher also keeps it polling
+-- with nothing drawn, and asks again when the reading is missing or more
+-- than ten minutes old (WeatherService.qml:75-85).
+function M.subscribe()
+  watchers = watchers + 1
+  local s = source()
+  if not s or not s.source then return end
+  if watchers == 1 and s.source.pin then s.source:pin(true) end
+  local n = M.now()
+  local at = tonumber(n.updated) or 0
+  if not n.available or morf.time.now() - at > 600 then
+    morf.timer(1, function() s.source:refresh() end, false)
+  end
+end
+function M.release()
+  watchers = math.max(0, watchers - 1)
+  local s = source()
+  if watchers == 0 and s and s.source and s.source.pin then s.source:pin(false) end
+end
+
+--- The next hours after this one: `{ hour, tomorrow, glyph, temperature,
+--- code, is_day, rain }`; `is_day` is false for an hour after dark, and
+--- `rain` the chance of it in percent.
 function M.hours_ahead(count)
   local now = M.now()
   if not now.available then return {} end
@@ -96,6 +141,8 @@ function M.hours_ahead(count)
       out[#out + 1] = {
         hour = at.hour, tomorrow = at.day ~= today.day,
         glyph = M.glyph_for(block.code, block.is_day), code = block.code,
+        is_day = block.is_day ~= false,
+        rain = round(block.precipitation),
         temperature = round(block.temperature),
       }
     end

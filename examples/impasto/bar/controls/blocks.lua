@@ -56,6 +56,10 @@ M.register("media", function(o)
   return require("bar.controls.media_card").build(o)
 end)
 
+M.register("weather", function(o)
+  return require("bar.controls.weather_card").build(o)
+end)
+
 M.register("calendar", function(o)
   return require("bar.controls.calendar_card").build(o)
 end)
