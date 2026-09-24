@@ -50,6 +50,7 @@ mod flush_construction;
 mod flushing;
 mod fs_time;
 mod gradients;
+mod harness;
 mod http;
 mod idle_input;
 mod idle_motion;

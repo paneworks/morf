@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 use crate::*;
 
+mod headless;
 mod layout_cache;
 mod lock_input;
 mod lock_ipc;

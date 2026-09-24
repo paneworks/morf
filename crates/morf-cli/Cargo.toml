@@ -24,6 +24,4 @@ morf-scene.workspace = true
 morf-text.workspace = true
 morf-wayland.workspace = true
 pollster.workspace = true
-
-[dev-dependencies]
 image.workspace = true

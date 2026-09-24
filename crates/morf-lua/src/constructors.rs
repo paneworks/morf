@@ -1,5 +1,4 @@
 use luna::{Callback, CallbackReturn, Context, Function, Table, Value as LuaValue};
-use morf_io::Timer as IoTimer;
 use morf_scene::{Element, VirtualList};
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -126,9 +125,11 @@ pub(crate) fn timer_constructor<'gc>(
             }
             let callback =
                 callback.ok_or_else(|| HostError("running Timer requires on_triggered".into()))?;
-            let timer = IoTimer::every(Duration::from_secs_f64(interval / 1_000.0))
-                .map_err(|error| HostError(error.to_string()))?;
             let interval = Duration::from_secs_f64(interval / 1_000.0);
+            let timer = state
+                .borrow()
+                .new_timer(interval)
+                .map_err(|error| HostError(error.to_string()))?;
             let id = state.borrow_mut().next_timer_id();
             state.borrow_mut().timers.push(PendingTimer {
                 id,

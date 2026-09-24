@@ -291,6 +291,9 @@ pub(crate) struct ReactiveState {
     /// One-shot timers that came due this turn and have not yet fired: a
     /// cancel before their turn in the batch takes them out, so it holds.
     pub(crate) due_one_shots: HashSet<u64>,
+    /// The virtual clock's reading, when the runtime keeps one instead of
+    /// running its timers off the wall clock (`Runtime::use_virtual_clock`).
+    pub(crate) virtual_now: Option<std::time::Duration>,
     pub(crate) timer_callbacks: HashMap<NodeHandle, StashedClosure>,
     /// Each node's `on_destroyed`, until the node goes.
     pub(crate) destroy_hooks: HashMap<NodeHandle, StashedClosure>,
@@ -421,6 +424,14 @@ impl ReactiveState {
     }
 
     /// A fresh timer id.
+    /// A timer every `interval`, on whichever clock this runtime keeps.
+    pub(crate) fn new_timer(
+        &self,
+        interval: std::time::Duration,
+    ) -> std::io::Result<crate::state_pending::TimerSource> {
+        crate::state_pending::TimerSource::every(interval, self.virtual_now)
+    }
+
     pub(crate) fn next_timer_id(&mut self) -> u64 {
         self.last_timer_id += 1;
         self.last_timer_id
@@ -558,6 +569,7 @@ impl ReactiveState {
             greetd_sessions: Vec::new(),
             timers: Vec::new(),
             due_one_shots: HashSet::new(),
+            virtual_now: None,
             timer_callbacks: HashMap::new(),
             destroy_hooks: HashMap::new(),
             node_loops: HashMap::new(),

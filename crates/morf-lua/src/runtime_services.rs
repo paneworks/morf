@@ -1,7 +1,6 @@
 use morf_services::{GreetdEvent, PamEvent};
 use std::time::Duration;
 
-use morf_io::Timer as IoTimer;
 use morf_scene::{NodeHandle, Value as SceneValue};
 
 use crate::{
@@ -84,7 +83,7 @@ impl Runtime {
                 if let Some(index) = current {
                     state.timers.swap_remove(index);
                 }
-                match IoTimer::every(duration) {
+                match state.new_timer(duration) {
                     Ok(timer) => {
                         let id = state.next_timer_id();
                         state.timers.push(PendingTimer {
@@ -142,8 +141,10 @@ impl Runtime {
                 state.failed_loaders.remove(&node);
             }
             let mut index = 0;
+            let now = state.virtual_now;
             while index < state.timers.len() {
-                if state.timers[index].timer.tick(Duration::ZERO) {
+                let interval = state.timers[index].interval;
+                if state.timers[index].timer.fire(now, interval) {
                     let timer = &state.timers[index];
                     timers.push(DueTimer {
                         id: timer.id,

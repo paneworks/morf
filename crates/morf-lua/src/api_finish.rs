@@ -52,8 +52,21 @@ pub(crate) fn finish_reactive_api<'gc>(
     let loaded = ctx.stash(loaded);
     ctx.set_global(
         "require",
-        Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        Callback::from_fn(&ctx, move |ctx, exec, mut stack| {
             let name: String = stack.consume(ctx)?;
+            // A module that is missing or fails is blamed on the line that
+            // asked for it: the error comes from here, a native with no
+            // position of its own, and a bare "module `x` is not
+            // available" leaves a configuration's author searching for
+            // which `require` it was.
+            let located = |error: String| match exec.frame_at(0) {
+                Some(frame) => format!(
+                    "{}:{}: {error}",
+                    frame.chunk_name.display_lossy(),
+                    frame.current_line
+                ),
+                None => error,
+            };
             match name.as_str() {
                 "morf" => stack.replace(ctx, ctx.fetch(&morf)),
                 "morf.ui" => stack.replace(ctx, ctx.fetch(&ui)),
@@ -70,7 +83,7 @@ pub(crate) fn finish_reactive_api<'gc>(
                         Ok(source) => source,
                         Err(error) => {
                             loaded.set(ctx, key, LuaValue::Nil)?;
-                            return Err(HostError(error).into());
+                            return Err(HostError(located(error)).into());
                         }
                     };
                     let module = match execute_module(ctx, &name, &source, limits) {
