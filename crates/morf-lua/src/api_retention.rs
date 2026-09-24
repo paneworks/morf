@@ -248,11 +248,9 @@ pub(crate) fn install_retention_api<'gc>(
                         sink: None,
                     },
                 );
-                state
-                    .graph
-                    .as_mut()
-                    .ok_or_else(|| HostError("reactive graph is already running".to_owned()))?
-                    .external_effect(name, token);
+                // Inside another effect the graph is away: the new one is
+                // queued and runs when that flush ends.
+                state.register_external_effect(token, name);
             }
             replace_status(ctx, &mut stack, flush_reactive(&state, ctx, limits));
             Ok(CallbackReturn::Return)

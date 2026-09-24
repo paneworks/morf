@@ -27,12 +27,7 @@ pub(crate) fn register_property_binding<'gc>(
                 sink: Some(EffectSink::Property(PropertySink { node, property })),
             },
         );
-        let id = state
-            .graph
-            .as_mut()
-            .expect("reactive graph unavailable outside evaluation")
-            .external_effect(name, token);
-        state.effect_ids.insert(token, id);
+        state.register_external_effect(token, name);
     }
     let _ = flush_reactive(state, ctx, limits);
 }
@@ -55,12 +50,7 @@ pub(crate) fn register_state_binding<'gc>(
                 sink: Some(EffectSink::State(node)),
             },
         );
-        let id = state
-            .graph
-            .as_mut()
-            .expect("reactive graph unavailable outside evaluation")
-            .external_effect(format!("{node:?}.state"), token);
-        state.effect_ids.insert(token, id);
+        state.register_external_effect(token, format!("{node:?}.state"));
     }
     let _ = flush_reactive(state, ctx, limits);
 }
@@ -234,7 +224,42 @@ pub(crate) fn replace_status<'gc>(
     }
 }
 
+/// How many times one flush re-runs to take in effects registered by the
+/// flush before it -- an effect that builds a node with a binding whose
+/// evaluation builds another, and so on. Past this the rest wait for the
+/// next flush rather than spinning here forever.
+const MAX_NESTED_FLUSHES: usize = 32;
+
 pub(crate) fn flush_reactive(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'_>,
+    limits: Limits,
+) -> Result<(), String> {
+    let mut result = flush_once(state, ctx, limits);
+    // Bindings made while the graph was away -- a node built inside an
+    // effect -- are registered now and get their first run here, so the
+    // caller sees them evaluated as if they had been made outside it.
+    for _ in 0..MAX_NESTED_FLUSHES {
+        if state.borrow_mut().register_pending_effects() == 0 {
+            return result;
+        }
+        let next = flush_once(state, ctx, limits);
+        if result.is_ok() {
+            result = next;
+        }
+    }
+    if !state.borrow().pending_effects.is_empty() {
+        state.borrow_mut().log(
+            LogLevel::Warn,
+            format!(
+                "effects kept creating effects for {MAX_NESTED_FLUSHES} rounds; the rest run on the next flush"
+            ),
+        );
+    }
+    result
+}
+
+fn flush_once(
     state: &Rc<RefCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,

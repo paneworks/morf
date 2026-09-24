@@ -137,6 +137,11 @@ pub(crate) struct ReactiveState {
     /// a node removed while a flush holds the graph is forgotten after it.
     pub(crate) dead_effects: Vec<EffectId>,
     pub(crate) dead_signals: Vec<SignalId>,
+    /// Effects registered while a flush held the graph -- a binding on a
+    /// node built inside `morf.effect`, or an effect made by a binding.
+    /// Each is `(token, name)`, handed to the graph when the flush ends
+    /// and run by the flush that follows.
+    pub(crate) pending_effects: Vec<(u64, String)>,
     pub(crate) current_property_names: HashMap<String, (NodeHandle, String)>,
     pub(crate) property_revision: i64,
     /// Advances whenever the scene actually changes: a property lands on a new
@@ -326,6 +331,39 @@ impl ReactiveState {
         }
     }
 
+    /// Hands Lua effect `token` to the graph, or, while a flush holds the
+    /// graph, queues it for [`Self::register_pending_effects`]. Either way
+    /// the effect runs on the next flush. Building a node with bindings
+    /// inside an effect used to panic the whole engine here.
+    pub(crate) fn register_external_effect(&mut self, token: u64, name: String) {
+        match self.graph.as_mut() {
+            Some(graph) => {
+                let id = graph.external_effect(name, token);
+                self.effect_ids.insert(token, id);
+            }
+            None => self.pending_effects.push((token, name)),
+        }
+    }
+
+    /// Registers the effects queued while a flush held the graph, skipping
+    /// any whose owner was removed in the meantime. Returns how many were
+    /// registered; nothing happens while the graph is still away.
+    pub(crate) fn register_pending_effects(&mut self) -> usize {
+        if self.graph.is_none() || self.pending_effects.is_empty() {
+            return 0;
+        }
+        let pending = std::mem::take(&mut self.pending_effects);
+        let mut registered = 0;
+        for (token, name) in pending {
+            if !self.effects.contains_key(&token) {
+                continue;
+            }
+            self.register_external_effect(token, name);
+            registered += 1;
+        }
+        registered
+    }
+
     /// A fresh timer id.
     pub(crate) fn next_timer_id(&mut self) -> u64 {
         self.last_timer_id += 1;
@@ -379,6 +417,7 @@ impl ReactiveState {
             effect_ids: HashMap::new(),
             dead_effects: Vec::new(),
             dead_signals: Vec::new(),
+            pending_effects: Vec::new(),
             current_property_names: HashMap::new(),
             property_revision: 0,
             scene_revision: 0,
