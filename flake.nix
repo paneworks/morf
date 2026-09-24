@@ -85,6 +85,11 @@
           # its own modules under lib/security, which is where a service file
           # naming `pam_exec.so` will be looked up.
           pam
+          # libpipewire, for `morf.audio`. Opened at run time like the Vulkan
+          # loader, never linked, so only the library is needed -- no headers,
+          # no bindgen -- and only on the search path: a binary built here
+          # uses Nix's loader, which does not look in /usr/lib for it.
+          pipewire
           alsa-lib
           udev
           vulkan-loader
