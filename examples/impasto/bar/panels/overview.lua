@@ -11,7 +11,9 @@
 -- icon.
 --
 -- Click a workspace to go there; click a window to focus it, right-click
--- to close it; drag a window onto another workspace to move it there. The
+-- to close it, middle-click to float or tile it; drag a window onto another
+-- workspace to move it there, or within its own to put a floating one where
+-- it is dropped or swap a tiled one with the tiled window under it. The
 -- arrows move a ring over the workspaces and Enter goes to the ringed one.
 -- Outside Hyprland the grid is drawn empty and says why.
 
@@ -141,22 +143,77 @@ end)
 -- ------------------------------------------------------------- geometry --
 
 -- The area windows can occupy on a monitor, in the layout every screen
--- shares: its place and its size in logical pixels, less the bar's band
--- (hyprctl's per-monitor reservation is not in the library's rows).
+-- shares: its place and its size in logical pixels, less what the layer
+-- surfaces reserve on it, which Hyprland reports per monitor as left, top,
+-- right, bottom. Modelling the whole screen would draw the bar's strip as
+-- empty space above every window and make equal gaps look unequal. A row
+-- without the reservation (the demo) keeps the bar's band clear.
 local function area_for(monitor)
   if not monitor then return { x = 0, y = 0, width = 1920, height = 1200 } end
   local scale = (monitor.scale and monitor.scale > 0) and monitor.scale or 1
   local width = (monitor.width > 0 and monitor.width or 1920) / scale
   local height = (monitor.height > 0 and monitor.height or 1200) / scale
-  local top = theme.bar_reserve()
-  return { x = monitor.x or 0, y = (monitor.y or 0) + top, width = width, height = height - top }
+  local r = monitor.reserved
+  if type(r) ~= "table" or #r < 4 then r = { 0, theme.bar_reserve(), 0, 0 } end
+  return {
+    x = (monitor.x or 0) + r[1], y = (monitor.y or 0) + r[2],
+    width = math.max(1, width - r[1] - r[3]), height = math.max(1, height - r[2] - r[4]),
+  }
+end
+
+-- ------------------------------------------------------------ dispatch --
+
+-- What the overview asks of Hyprland beyond services/workspaces: the
+-- classic dispatcher first, the Lua one (0.56+) when that is refused, as
+-- impasto's HyprlandService spells it. Nothing is sent in the demo.
+local ok_hypr, hyprland = pcall(require, "lib.hyprland")
+if not ok_hypr then hyprland = nil end
+
+local function dispatch(classic, argument, lua)
+  if workspaces.demo:get() then
+    morf.log("info", "impasto: (demo) would dispatch " .. classic .. " " .. tostring(argument))
+    return
+  end
+  if not hyprland or not hyprland.available() then return end
+  local function fallback()
+    if lua then hyprland.dispatch(lua) end
+  end
+  if not classic then return fallback() end
+  hyprland.dispatch(classic, argument, function(ok) if not ok then fallback() end end)
+end
+
+--- Floats a tiled window, tiles a floating one.
+local function toggle_floating(address)
+  dispatch("togglefloating", "address:" .. address,
+    ('hl.dsp.window.float({ window = "address:%s" })'):format(address))
+  workspaces.reload()
+end
+
+--- A floating window to a point on the layout (its top left).
+local function move_floating(address, x, y)
+  dispatch("movewindowpixel", ("exact %d %d,address:%s"):format(x, y, address),
+    ('hl.dsp.window.move({ window = "address:%s", x = %d, y = %d })'):format(address, x, y))
+  workspaces.reload()
+end
+
+--- Two tiled windows trade places. Only the Lua dispatcher names the second
+--- window (the classic `swapwindow` takes a direction), and the swap warps
+--- the pointer, so the chunk puts it back where it was.
+local function swap_windows(address, target)
+  if address == target then return end
+  local swap = ('hl.dsp.window.swap({ window = "address:%s", target = "address:%s" })'):format(address, target)
+  dispatch(nil, nil, "function() local p = hl.get_cursor_pos() hl.dispatch(" .. swap
+    .. ") if p then hl.dispatch(hl.dsp.cursor.move({ x = p.x, y = p.y })) end end")
+  workspaces.reload()
 end
 
 local function build()
   local max = math.max(1, settings.workspaceMax)
   local columns = math.min(5, max)
   local rows = rows_for(max)
-  local inner_w = WIDTH - 2 * theme.panel_padding
+  -- Spread, the sides keep their room and the island gets what is left
+  -- between them (`island.room`, DynamicIsland.qml's `roomForPanel`).
+  local inner_w = math.min(WIDTH, island.room()) - 2 * theme.panel_padding
   local inner_h = panel_height() - 2 * theme.panel_padding
   local board_h = inner_h - CAPTION - GAP
 
@@ -258,12 +315,18 @@ local function build()
       ui.MouseArea {
         anchors = { fill = true },
         cursor = "pointer",
+        accepted_buttons = { "left", "right", "middle" },
         on_entered = function() hovered:set(true) selected:set(id) end,
         on_exited = function() hovered:set(false) end,
-        -- Left focuses, right closes (the panel stays open for that).
+        -- Left focuses, right closes, middle toggles floating; the panel
+        -- stays open for the last two.
         on_clicked = function(button)
           if button == "right" then
             workspaces.close_window(address)
+            return
+          end
+          if button == "middle" then
+            toggle_floating(address)
             return
           end
           if button ~= "left" then return end
@@ -285,12 +348,40 @@ local function build()
         on_drag_finished = function(_, _, dx, dy)
           local target = cell_at(ghost.x + ghost.width / 2 + dx, ghost.y + ghost.height / 2 + dy)
           local moving = ghost.address
+          local drop_x = ghost.x + ghost.width / 2 + dx
+          local drop_y = ghost.y + ghost.height / 2 + dy
           ghost.address = ""
           drop_target:set(0)
-          -- Another workspace: move it there, tiling decides where. The
-          -- same one: nothing to do.
-          if moving ~= "" and target ~= 0 and target ~= data.workspace then
+          if moving == "" or target == 0 then return end
+          -- Another workspace: move it there; tiling decides the place, a
+          -- floating window keeps its own.
+          if target ~= data.workspace then
             workspaces.move_window(moving, target)
+            return
+          end
+          -- Its own workspace: the drop point on the real screen.
+          local cx, cy = cell_origin(id)
+          local area, factor = factor_of()
+          local sx = area.x + (drop_x - cx - INSET) / factor
+          local sy = area.y + (drop_y - cy - INSET) / factor
+          -- Floating: to exactly where it was dropped.
+          if data.floating then
+            move_floating(moving, math.floor(sx - data.width / 2 + 0.5), math.floor(sy - data.height / 2 + 0.5))
+            return
+          end
+          -- Tiled, onto another tiled window: the two swap. Anywhere else,
+          -- nothing to do. The topmost window there, floating above tiled.
+          local stack = {}
+          for _, client in ipairs(workspaces.clients_on(target)) do
+            if client.address ~= moving then stack[#stack + 1] = client end
+          end
+          table.sort(stack, function(a, b) return (a.floating and 1 or 0) < (b.floating and 1 or 0) end)
+          for i = #stack, 1, -1 do
+            local c = stack[i]
+            if sx >= c.x and sx <= c.x + c.width and sy >= c.y and sy <= c.y + c.height then
+              if not c.floating then swap_windows(moving, c.address) end
+              return
+            end
           end
         end,
       },
