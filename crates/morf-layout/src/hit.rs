@@ -239,7 +239,7 @@ impl Layout {
         // pointer itself.
         if matches!(
             scene.element(node)?,
-            Element::MouseArea | Element::DropArea | Element::TextInput
+            Element::MouseArea | Element::DropArea | Element::TextInput | Element::Terminal
         ) && let Some(geometry) = self.geometry(node)
         {
             rectangles.push(transform.bounds(geometry));
@@ -298,9 +298,13 @@ impl Layout {
 /// Whether a node of kind `found` answers a hit test looking for `sought`.
 ///
 /// A text input answers the pointer's: a click places its caret and a drag
-/// selects, which no MouseArea laid over it could do for it.
+/// selects, which no MouseArea laid over it could do for it. A terminal
+/// answers it too: a click gives it the keyboard, and a program that asked
+/// for the mouse is sent it.
 fn wanted(found: Element, sought: &[Element]) -> bool {
-    sought.contains(&found) || (sought.contains(&Element::MouseArea) && found == Element::TextInput)
+    sought.contains(&found)
+        || (sought.contains(&Element::MouseArea)
+            && matches!(found, Element::TextInput | Element::Terminal))
 }
 
 /// A node's four corner radii, falling back to the uniform one.

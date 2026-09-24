@@ -1,0 +1,14 @@
+[package]
+name = "morf-terminal"
+description = "Pseudo-terminals and a VT emulator for morf's Terminal node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+alacritty_terminal.workspace = true
+libc.workspace = true
+morf-io.workspace = true
+morf-scene.workspace = true
+rustix.workspace = true

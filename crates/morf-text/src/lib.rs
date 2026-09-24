@@ -141,6 +141,8 @@ pub struct TextSystem {
     /// first time a letter is drawn and read from thereafter however many sizes
     /// it is later drawn at.
     fields: FastMap<u64, Option<Rc<FieldImage>>>,
+    /// Cell metrics, shaped characters and drawn cells for terminals.
+    terminal: terminal::TerminalCache,
 }
 
 /// Pixel format of one rasterized glyph image.
@@ -217,6 +219,7 @@ impl TextSystem {
             outline_keys: FastMap::default(),
             font_sources: HashSet::new(),
             fields: FastMap::default(),
+            terminal: terminal::TerminalCache::default(),
         };
         if let Some(paths) = std::env::var_os("MORF_FONT_PATH") {
             for path in std::env::split_paths(&paths) {
@@ -239,6 +242,7 @@ impl TextSystem {
         if loaded > 0 {
             configure_generic_families(&mut self.fonts);
             self.buffers.clear();
+            self.terminal = terminal::TerminalCache::default();
         }
         Ok(loaded)
     }
@@ -424,6 +428,8 @@ pub(crate) use elide::elided_text;
 mod raster_glyph;
 mod style;
 pub use style::LineBand;
+mod terminal;
+pub use terminal::{CellFace, CellText, drawn_here};
 
 pub use glyph_fields::{
     FIELD_REFERENCE_PX as GLYPH_FIELD_REFERENCE_PX, FIELD_SPREAD_PX as GLYPH_FIELD_SPREAD_PX,

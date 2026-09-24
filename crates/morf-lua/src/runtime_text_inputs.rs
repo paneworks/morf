@@ -37,6 +37,11 @@ impl Runtime {
     /// from whichever text input had it. Returns whether that changed
     /// anything worth a frame.
     pub fn set_key_focus(&mut self, node: Option<NodeHandle>) -> bool {
+        let terminal_moved = {
+            let mut state = self.reactive.borrow_mut();
+            let terminal = node.filter(|node| state.terminals.contains(*node));
+            crate::terminals::set_focus(&mut state, terminal)
+        };
         let changed = {
             let mut state = self.reactive.borrow_mut();
             let before = state.focused_input;
@@ -53,7 +58,7 @@ impl Runtime {
             state.focused_input != before
         };
         self.finish_text_input_work();
-        changed
+        changed || terminal_moved
     }
 
     /// Runs one key press: into the focused text input when `node` is one,
@@ -88,6 +93,10 @@ impl Runtime {
         modifiers: KeyModifiers,
         repeat: bool,
     ) -> bool {
+        // A terminal takes every key: they are its program's.
+        if self.is_terminal(node) {
+            return self.terminal_key(node, keysym, text, modifiers);
+        }
         let outcome = if self.is_text_input(node) {
             let outcome = {
                 let mut state = self.reactive.borrow_mut();
@@ -169,7 +178,10 @@ impl Runtime {
             text_inputs::blink(&mut state, Instant::now());
         }
         self.finish_text_input_work();
-        self.reactive.borrow().scene_revision != revision
+        // Terminals are fitted to their boxes at the same moment, for the
+        // same reason: with the text system this frame is painted with.
+        let terminals = self.sync_terminals(layout, text);
+        terminals || self.reactive.borrow().scene_revision != revision
     }
 
     /// Moves the focused caret's blink on; true when it changed.

@@ -214,6 +214,20 @@ pub(crate) fn append_node(
                 color_overlay,
             )?);
         }
+        Element::Terminal => {
+            // Nothing until the runtime has a picture of its screen: a
+            // terminal is laid out before its program has written anything.
+            if let Some(screen) = scene.terminal_screen(node) {
+                list.commands.push(DrawCommand::Terminal {
+                    node,
+                    bounds,
+                    transform,
+                    clip,
+                    color_overlay,
+                    screen: std::sync::Arc::clone(screen),
+                });
+            }
+        }
         Element::Image => list.commands.push(DrawCommand::Texture {
             node,
             bounds,

@@ -24,6 +24,7 @@ mod scene_behavior;
 mod scene_default;
 mod scene_revision;
 mod schema;
+mod terminal;
 mod types;
 
 pub use animation::*;
@@ -35,6 +36,7 @@ pub use groups::*;
 pub use hashing::*;
 pub use keyframes::*;
 pub use path_style::*;
+pub use terminal::*;
 pub use types::*;
 #[cfg(test)]
 mod tests;

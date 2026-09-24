@@ -73,6 +73,7 @@ mod services;
 mod session_lock;
 mod shaders;
 mod state_tables;
+mod terminal;
 mod text_input;
 mod text_style;
 mod themes;

@@ -39,6 +39,7 @@ mod pipelines;
 mod shader_registry;
 mod shaders;
 mod targets;
+mod terminal_batch;
 mod textures;
 
 pub use backend_types::*;

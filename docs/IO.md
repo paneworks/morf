@@ -132,6 +132,14 @@ calls back once: `(reply, nil)`, or `(nil, err)` on a refused connection,
   every connection is closed; nothing from the old configuration calls
   into the new one.
 
+## A program on a terminal: `ui.Terminal`
+
+A program that wants a terminal rather than pipes — anything that draws a
+screen, asks for its size, or reads keys one at a time — runs in a
+`ui.Terminal` node instead: a pseudo-terminal, watched by the same kind of
+reactor, with an emulator drawing its screen. It is described with the
+other nodes, in [UI.md](UI.md#terminal).
+
 ## The older API
 
 `morf.io.process_view`, `morf.process` and `morf.socket` still work: they

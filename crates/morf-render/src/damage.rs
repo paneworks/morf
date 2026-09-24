@@ -77,9 +77,19 @@ impl DamageTracker {
         for (key, (order, command)) in &current {
             match previous.get(key) {
                 Some((old_order, old)) if old_order == order && *old == *command => {}
-                Some((_, old)) => {
-                    logical.push(old.bounds());
-                    logical.push(command.bounds());
+                Some((old_order, old)) => {
+                    // A terminal whose screen alone changed damages the rows
+                    // that did, not its whole rectangle.
+                    match (old_order == order)
+                        .then(|| command.terminal_rows_changed(old))
+                        .flatten()
+                    {
+                        Some(rows) => logical.extend(rows),
+                        None => {
+                            logical.push(old.bounds());
+                            logical.push(command.bounds());
+                        }
+                    }
                 }
                 None => logical.push(command.bounds()),
             }

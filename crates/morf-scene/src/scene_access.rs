@@ -99,6 +99,25 @@ impl Scene {
         self.shaders.remove(&node.0);
     }
 
+    /// Hangs a picture of a terminal's screen on its node, for the renderer.
+    pub fn set_terminal_screen(
+        &mut self,
+        node: NodeHandle,
+        screen: std::sync::Arc<crate::TerminalScreen>,
+    ) {
+        if self.nodes.contains_key(node.0) {
+            self.terminal_screens.insert(node.0, screen);
+        }
+    }
+
+    /// What a `Terminal` node's screen last showed.
+    pub fn terminal_screen(
+        &self,
+        node: NodeHandle,
+    ) -> Option<&std::sync::Arc<crate::TerminalScreen>> {
+        self.terminal_screens.get(&node.0)
+    }
+
     /// The shader attached to a node.
     pub fn node_shader(&self, node: NodeHandle) -> Option<&NodeShader> {
         self.shaders.get(&node.0)

@@ -214,6 +214,23 @@ pub enum DrawCommand {
         /// Layers in composition order; the first establishes the field.
         layers: Vec<SdfLayer>,
     },
+    /// A terminal's screen: a grid of cells, each drawn at its own column
+    /// and row whatever the font would have advanced it by.
+    Terminal {
+        /// Source scene node.
+        node: NodeHandle,
+        /// Logical surface bounds.
+        bounds: Geometry,
+        /// Composed node and ancestor transform.
+        transform: Transform2D,
+        /// Intersected ancestor clip in logical surface coordinates.
+        clip: Option<Geometry>,
+        /// Inherited colour overlay.
+        color_overlay: Color,
+        /// What the screen shows. Shared with the runtime, which made it;
+        /// comparing two is a pointer comparison when nothing changed.
+        screen: std::sync::Arc<morf_scene::TerminalScreen>,
+    },
 }
 
 /// A compiled shader attached to a node, and the values it was given.
@@ -307,7 +324,8 @@ impl DrawCommand {
             | Self::Text { node, .. }
             | Self::Texture { node, .. }
             | Self::Path { node, .. }
-            | Self::Field { node, .. } => *node,
+            | Self::Field { node, .. }
+            | Self::Terminal { node, .. } => *node,
         }
     }
 
@@ -335,6 +353,9 @@ impl DrawCommand {
                 bounds, transform, ..
             }
             | Self::Texture {
+                bounds, transform, ..
+            }
+            | Self::Terminal {
                 bounds, transform, ..
             } => transform.bounds(*bounds),
             // A stroke reaches past the box by half its width and more at a
@@ -380,8 +401,86 @@ impl DrawCommand {
             | Self::Text { clip, .. }
             | Self::Texture { clip, .. }
             | Self::Path { clip, .. }
-            | Self::Field { clip, .. } => *clip,
+            | Self::Field { clip, .. }
+            | Self::Terminal { clip, .. } => *clip,
         }
+    }
+}
+
+impl DrawCommand {
+    /// What changed between two pictures of one terminal, row by row, when
+    /// only what is on its screen did. `None` when anything else moved, and
+    /// the whole command is damaged as usual.
+    ///
+    /// A shell printing a line changes two rows of fifty; repainting the
+    /// terminal's whole rectangle for it would be the one cost a terminal has
+    /// that the program did not ask for.
+    pub(crate) fn terminal_rows_changed(&self, old: &Self) -> Option<Vec<Geometry>> {
+        let (
+            Self::Terminal {
+                node,
+                bounds,
+                transform,
+                clip,
+                color_overlay,
+                screen,
+            },
+            Self::Terminal {
+                node: old_node,
+                bounds: old_bounds,
+                transform: old_transform,
+                clip: old_clip,
+                color_overlay: old_overlay,
+                screen: old_screen,
+            },
+        ) = (self, old)
+        else {
+            return None;
+        };
+        let same_frame = node == old_node
+            && bounds == old_bounds
+            && transform == old_transform
+            && clip == old_clip
+            && color_overlay == old_overlay
+            && screen.rows == old_screen.rows
+            && screen.columns == old_screen.columns
+            && screen.metrics == old_screen.metrics
+            && screen.padding == old_screen.padding
+            && screen.background == old_screen.background
+            && screen.font_family == old_screen.font_family
+            && screen.font_size == old_screen.font_size
+            && screen.lines.len() == old_screen.lines.len();
+        if !same_frame {
+            return None;
+        }
+        let mut rows: Vec<usize> = (0..screen.lines.len())
+            .filter(|&row| {
+                !std::sync::Arc::ptr_eq(&screen.lines[row], &old_screen.lines[row])
+                    && screen.lines[row] != old_screen.lines[row]
+            })
+            .collect();
+        if screen.cursor != old_screen.cursor {
+            rows.extend(screen.cursor.map(|cursor| cursor.row));
+            rows.extend(old_screen.cursor.map(|cursor| cursor.row));
+        }
+        let cell = screen.metrics.cell_height;
+        let top = bounds.y + screen.padding;
+        Some(
+            rows.into_iter()
+                .map(|row| {
+                    // A row and a pixel either side of it: the grid is
+                    // snapped to device pixels, so a row may sit a fraction
+                    // away from where its logical position says.
+                    let area = transform.bounds(Geometry {
+                        x: bounds.x,
+                        y: top + row as f64 * cell - 1.0,
+                        width: bounds.width,
+                        height: cell + 2.0,
+                    });
+                    clip.map_or(area, |clip| intersect_geometry(area, clip))
+                })
+                .collect(),
+        )
     }
 }
 
