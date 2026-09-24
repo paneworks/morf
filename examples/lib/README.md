@@ -128,3 +128,36 @@ current streak runs back from today, or from yesterday while today is still
 empty. Options: `user`, `token`, `interval`, `ttl`, `cache_dir`, `today`,
 `base_url`, `api_url`. `github.parse_html`, `github.parse_graphql` and
 `github.summarise` are there for other uses.
+
+## packages
+
+Pending updates and installed counts from the package managers that are
+there, by running their programs directly (an argument list, never a shell)
+and reading what they print. Only queries: nothing syncs the system's
+database, installs, or asks for privileges.
+
+- **pacman**: `checkupdates` when pacman-contrib is installed (it syncs a
+  private copy of the database, so the answer is current), else `pacman -Qu`
+  against the last sync; `pacman -Q` for the installed count.
+- **AUR**: the foreign packages from `pacman -Qm`, their versions asked of
+  the AUR RPC (`https://aur.archlinux.org/rpc/v5/info`, a hundred names per
+  request) over `morf.http`, compared the way pacman compares versions.
+- **flatpak**: `flatpak remote-ls --updates` and `flatpak list`.
+
+```lua
+local packages = require("lib.packages")
+local updates = packages.new { interval = 60 * 60 * 1000 }
+ui.Text { text = function()
+  local state = updates:get()
+  return state.checking and "…" or (state.total .. " updates")
+end }
+```
+
+`updates:get()` is a tracked read of `{ total, managers, pacman = { installed,
+updates, count, via }, aur = { foreign, updates, count }, flatpak = {
+installed, updates, count }, errors, checking, updated }`; each `updates` is a
+list of `{ name, old, new }`, and a manager that is not installed is absent.
+`updates:refresh()` checks now. Options: `interval`, `aur` and `flatpak`
+(both default true), `aur_url`, and `run(argv, on_done)` / `which(name)` to
+replace how programs are run and found (the tests do). `packages.vercmp(a,
+b)` is pacman's version comparison.
