@@ -41,7 +41,7 @@ function M.stats(ctx)
   return face(ctx, {
     label = "System",
     reading = function() return string.format("%d%%", math.floor(stats.cpu() + 0.5)) end,
-    note = function() return string.format("load %.2f · RAM %d%%", stats.load(), math.floor(stats.memory_fraction() * 100 + 0.5)) end,
+    note = function() return string.format("load %.2f · RAM %d%%", (stats.load()[1] or 0), math.floor(stats.memory_fraction() * 100 + 0.5)) end,
     mark = glyph { glyph = "󰻠", size = 30, color = ink.text },
     body = function(w, h)
       local traces = {
