@@ -154,6 +154,33 @@ pub(crate) struct SurfaceEventState {
     /// surface gets no frame callbacks (hidden under another toplevel in a
     /// nested compositor). `None` while callbacks drive it as usual.
     pub(crate) fallback_tick: Option<std::time::Instant>,
+    /// When a paint the shell owed was last made without waiting any longer
+    /// for an overdue frame callback ([`owed_paint_due`]).
+    pub(crate) forced_paint: Option<std::time::Instant>,
+}
+
+/// Whether a paint the shell's own surface owes -- deferred until its frame
+/// callback, which is now overdue -- is made anyway, at most once a stall.
+///
+/// A compositor answers a frame callback when it next draws the output, and
+/// one that draws only what is damaged (wlroots under a headless or idle
+/// output: cage) may not draw again after an empty commit. A change that
+/// moves nothing -- a panel shown, a list filled from a timer, an IPC call --
+/// then waited for whatever next made the compositor draw: the pointer, a
+/// key, a screenshot. What the shell showed was the state from the change
+/// before. Motion already had the wall clock to fall back on; this is the
+/// same for a single paint.
+pub(crate) fn owed_paint_due(
+    deferred: bool,
+    waiting: Option<std::time::Duration>,
+    refresh: std::time::Duration,
+    forced: Option<std::time::Instant>,
+    now: std::time::Instant,
+) -> bool {
+    let stall = frame_stall(refresh);
+    deferred
+        && waiting.is_some_and(|waiting| waiting > stall)
+        && forced.is_none_or(|at| now.saturating_duration_since(at) > stall)
 }
 
 /// How long the shell's own surface may wait for a frame callback before

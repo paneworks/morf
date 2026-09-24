@@ -1,7 +1,7 @@
 //! What an output's loop sleeps until, and what rings it.
 
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use morf_lua::{ClockPrecision, DeadlineCause, Runtime};
 
@@ -104,4 +104,41 @@ fn a_command_for_an_output_rings_its_loop() {
         "the command rang the loop"
     );
     assert!(receiver.try_recv().is_ok());
+}
+
+#[test]
+fn a_paint_owed_on_an_overdue_frame_callback_is_made_once_a_stall() {
+    // A compositor that draws only damage may never answer the callback an
+    // empty commit asked for; the change the shell owes a paint for then
+    // showed only after the next unrelated event. Past a stall it is painted
+    // anyway -- and not again until another stall has passed.
+    use crate::surfaces::{frame_stall, owed_paint_due};
+    let refresh = Duration::from_millis(16);
+    let stall = frame_stall(refresh);
+    let now = Instant::now();
+    let overdue = Some(stall + Duration::from_millis(1));
+    assert!(
+        !owed_paint_due(false, overdue, refresh, None, now),
+        "nothing owed"
+    );
+    assert!(
+        !owed_paint_due(true, None, refresh, None, now),
+        "no callback outstanding: the loop paints as usual"
+    );
+    assert!(
+        !owed_paint_due(true, Some(stall / 2), refresh, None, now),
+        "not overdue yet"
+    );
+    assert!(owed_paint_due(true, overdue, refresh, None, now));
+    assert!(
+        !owed_paint_due(true, overdue, refresh, Some(now), now),
+        "just forced one"
+    );
+    assert!(owed_paint_due(
+        true,
+        overdue,
+        refresh,
+        Some(now - stall * 2),
+        now
+    ));
 }
