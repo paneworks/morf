@@ -413,27 +413,45 @@ local function conf_combination(combination)
   return table.concat(parts, " "), key or ""
 end
 
---- keys.conf for a hyprlang config: each bind the profile moved is unbound
---- from where Hyprland has it and bound again on the kept keys, with the
---- dispatcher Hyprland reported. Lua binds (`__lua`) cannot be re-created
---- this way and are left out.
-function M.conf_text(kept)
+--- keys.conf for a hyprlang config: each bind the profile moves is unbound
+--- from where the configuration puts it and bound again on the kept keys,
+--- with the dispatcher Hyprland reported. Once the file is sourced
+--- Hyprland lists a moved bind on its new keys (or not at all), so where
+--- each bind came from is kept in the file itself, on `# from` lines, and
+--- read back from `previous` (the file's text) the next time. Lua binds
+--- (`__lua`) cannot be re-created this way and are left out.
+function M.conf_text(kept, previous)
   kept = kept or settings.peek("keys") or {}
-  local lines = { "# Written by impasto (services/shortcuts.lua); sourced at the end of",
-    "# hyprland.conf. Moves the binds the profile's keys change." }
+  local origins, order = {}, {}
+  for line in tostring(previous or ""):gmatch("[^\n]+") do
+    local description, combination, dispatcher, arg = line:match("^# from\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
+    if description and not origins[description] then
+      origins[description] = { combination = combination, dispatcher = dispatcher, arg = arg }
+      order[#order + 1] = description
+    end
+  end
   for _, bind in ipairs(binds) do
     local description = tostring(bind.description or "")
-    local wanted = kept[description]
-    local now = M.spell(bind)
     local dispatcher = tostring(bind.dispatcher or "")
-    if type(wanted) == "string" and wanted ~= now and dispatcher ~= "" and dispatcher ~= "__lua"
-      and not description:find("[,\n]") then
-      local mods, key = conf_combination(now)
+    if description ~= "" and not origins[description] and dispatcher ~= "" and dispatcher ~= "__lua"
+      and not tostring(bind.key or ""):match("^switch:") then
+      origins[description] = { combination = M.spell(bind), dispatcher = dispatcher, arg = flat(bind.arg or "") }
+      order[#order + 1] = description
+    end
+  end
+  local lines = { "# Written by impasto (services/shortcuts.lua); sourced at the end of",
+    "# hyprland.conf. Moves the binds the profile's keys change." }
+  for _, description in ipairs(order) do
+    local origin = origins[description]
+    local wanted = kept[description]
+    if type(wanted) == "string" and wanted ~= origin.combination and not description:find("[,\t]") then
+      lines[#lines + 1] = table.concat({ "# from", description, origin.combination, origin.dispatcher, origin.arg }, "\t")
+      local mods, key = conf_combination(origin.combination)
       lines[#lines + 1] = "unbind = " .. mods .. ", " .. key
       if wanted ~= "" then
         local new_mods, new_key = conf_combination(wanted)
         lines[#lines + 1] = "bindd = " .. new_mods .. ", " .. new_key .. ", " .. description .. ", "
-          .. dispatcher .. ", " .. flat(bind.arg or "")
+          .. origin.dispatcher .. (origin.arg ~= "" and (", " .. origin.arg) or ",")
       end
     end
   end
@@ -451,7 +469,7 @@ local function write_keys()
     fs.mkdir(M.dir)
     fs.write(M.tsv_path, text)
     fs.write(M.lua_path, M.lua_text())
-    fs.write(M.conf_path, M.conf_text())
+    fs.write(M.conf_path, M.conf_text(nil, fs.read(M.conf_path)))
     if config then config.reload() end
     return true
   end)

@@ -25,6 +25,10 @@ end
 local function sent(text) return #fake.sent(text) > 0 end
 
 local function load(env)
+  -- The scratch state folder outlives a test within this spec too.
+  for _, name in ipairs { "keys.tsv", "keys.lua", "keys.conf" } do
+    pcall(morf.fs.remove, morf.fs.join(morf.fs.dir("state"), "impasto-morf", name))
+  end
   local given = { IMPASTO_DRY_RUN = false, HYPRLAND_INSTANCE_SIGNATURE = fake.signature,
     XDG_RUNTIME_DIR = fake.runtime }
   for k, v in pairs(env or {}) do given[k] = v end
@@ -140,6 +144,35 @@ test.describe("impasto under a fake hyprlang Hyprland", function()
       test.fail("no monitor keyword in: " .. table.concat(fake.transcript, "\n"):sub(-700))
     end
     test.eq(#fake.sent("/eval hl."), 0, "a Lua chunk went to a hyprlang Hyprland")
+  end)
+
+  test.it("keeps every moved bind in keys.conf, one move after another", function()
+    load()
+    test.ipc("settings", "keys", "shell")
+    test.settle(2000)
+    local function rebind(shown, key)
+      until_(function() return test.find({ text = shown, visible = true }) ~= nil end, "no row on " .. shown)
+      local surface = test.find({ text = shown, visible = true }).surface
+      test.click({ text = shown, visible = true })
+      test.settle(300)
+      test.key(key, "super", { surface = surface })
+      test.settle(300)
+      local before = #fake.sent("/reload")
+      test.click({ text = "Apply", visible = true })
+      if not pcall(until_, function() return #fake.sent("/reload") > before end, "") then
+        test.fail("no reload after " .. shown .. ": " .. table.concat(fake.transcript, "\n"):sub(-500) .. " | " .. tostring(test.ipc("get", "keys")))
+      end
+    end
+    rebind("SUPER + SPACE", "k")
+    -- As Hyprland would list it once keys.conf is sourced.
+    fake.binds[2].key = "K"
+    fake.emit("configreloaded>>")
+    test.advance(600)
+    fake.serve()
+    rebind("SUPER + A", "j")
+    local conf = morf.fs.read(morf.fs.join(morf.fs.dir("state"), "impasto-morf", "keys.conf")) or ""
+    test.contains(conf, "unbind = SUPER, SPACE\nbindd = SUPER, K, Shell · Open the launcher, exec, morf ipc call launcher")
+    test.contains(conf, "unbind = SUPER, A\nbindd = SUPER, J, Shell · Open the control centre, exec, morf ipc call controls")
   end)
 end)
 
