@@ -166,3 +166,103 @@ fn motion_lab_example_drives_loops_shapes_and_field_edges_in_rust() {
     runtime.tick_animations(Duration::from_millis(100)).unwrap();
     assert_eq!(runtime.scene().number(sweep, "translate_x").unwrap(), held);
 }
+
+#[test]
+fn clipboard_history_example_keeps_copies_and_drops() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "examples/clipboard-history.lua",
+            include_bytes!("../../../../examples/clipboard-history.lua"),
+        )
+        .unwrap();
+    assert!(runtime.watches_clipboard());
+    let copy = |runtime: &mut Runtime, id: u64, text: &str| {
+        runtime.dispatch_selection(
+            false,
+            Some(OfferDescription {
+                id,
+                mime_types: vec!["text/plain;charset=utf-8".to_owned()],
+                ..OfferDescription::default()
+            }),
+        );
+        let reads = runtime.take_offer_reads();
+        assert_eq!(reads.len(), 1);
+        assert_eq!(reads[0].mime, "text");
+        runtime.dispatch_offer_read(reads[0].id, Ok(text.as_bytes().to_vec()));
+    };
+    for index in 0..10 {
+        copy(&mut runtime, index, &format!("copy {index}"));
+    }
+    // The same text again moves nothing.
+    copy(&mut runtime, 10, "copy 9");
+    // The frame loop is what reconciles a Repeater with its model.
+    runtime.poll_services();
+    let text_of = |runtime: &Runtime| {
+        let mut found = Vec::new();
+        let scene = runtime.scene();
+        let mut stack = scene.roots();
+        while let Some(node) = stack.pop() {
+            if scene.element(node).unwrap() == Element::Text {
+                found.push(scene.string_value(node, "text").unwrap().to_owned());
+            }
+            stack.extend_from_slice(scene.children(node).unwrap());
+        }
+        found
+    };
+    let texts = text_of(&runtime);
+    assert!(
+        texts.iter().any(|text| text == "8 copies, newest first"),
+        "{texts:?}"
+    );
+    assert!(texts.iter().any(|text| text == "copy 9"), "{texts:?}");
+    assert!(
+        !texts.iter().any(|text| text == "copy 1"),
+        "only the last eight stay"
+    );
+
+    // A drop of files onto the strip joins the history as their paths.
+    let mut drop_area = None;
+    let scene = runtime.scene();
+    let mut stack = scene.roots();
+    while let Some(node) = stack.pop() {
+        if scene.element(node).unwrap() == Element::DropArea {
+            drop_area = Some(node);
+        }
+        stack.extend_from_slice(scene.children(node).unwrap());
+    }
+    drop(scene);
+    let drop_area = drop_area.expect("the example has a drop area");
+    assert_eq!(
+        runtime.drop_area_keys(drop_area),
+        ["image", "files", "text"]
+    );
+    let point = EventPoint::new((10.0, 10.0), (5.0, 5.0));
+    let offer = OfferDescription {
+        id: 40,
+        mime_types: vec!["text/uri-list".to_owned()],
+        accepted: Some("text/uri-list".to_owned()),
+        uris: vec!["file:///tmp/dropped.txt".to_owned()],
+        paths: vec!["/tmp/dropped.txt".to_owned()],
+        ..OfferDescription::default()
+    };
+    runtime.dispatch_drag_entered(drop_area, point, &offer);
+    assert!(
+        text_of(&runtime)
+            .iter()
+            .any(|text| text == "drop to keep it (text/uri-list)")
+    );
+    runtime.dispatch_dropped(drop_area, point, &offer);
+    runtime.dispatch_drag_exited(drop_area);
+    runtime.poll_services();
+    let texts = text_of(&runtime);
+    assert!(
+        texts.iter().any(|text| text == "/tmp/dropped.txt"),
+        "{texts:?}"
+    );
+    assert!(
+        texts
+            .iter()
+            .any(|text| text == "drop files, text or images here")
+    );
+}
