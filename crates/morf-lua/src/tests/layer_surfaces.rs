@@ -246,3 +246,88 @@ fn an_exclusive_zone_can_be_automatic() {
     );
     assert!(!runtime.layer_surface_config().exclusive_auto);
 }
+
+#[test]
+fn a_layer_handle_changes_its_settings_at_runtime() {
+    // A dock that slides away or a panel that moves to another edge needs
+    // anchors, margins, the zone, the layer and focus to change after the
+    // surface exists; the handle used to offer only `size()`.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "layer_runtime.lua",
+            br##"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local window = require("morf.window")
+                local dock = window.layer {
+                    root = ui.Item {},
+                    visible = true,
+                    namespace = "dock",
+                    width = 400,
+                    height = 64,
+                    anchors = { bottom = true },
+                }
+                assert(dock.namespace == "dock")
+                assert(dock.margin_bottom == 0 and dock.layer == "top")
+                assert(dock:kind() == "layer")
+                morf.ipc.slide = function(margin) dock.margin_bottom = margin end
+                morf.ipc.move = function()
+                    dock:configure {
+                        anchors = { left = true, top = true, bottom = true },
+                        exclusive_zone = 64,
+                        layer = "overlay",
+                        keyboard_focus = "exclusive",
+                        mask = { x = 0, y = 0, width = 10, height = 10 },
+                        margin_left = 4.4,
+                    }
+                end
+                morf.ipc.bad = function() dock:configure { margin_top = 3, layer = "sky" } end
+                morf.ipc.rename = function() dock.namespace = "other" end
+                morf.ipc.read = function() return dock.margin_bottom, dock.layer end
+            "##,
+        )
+        .unwrap();
+    runtime.take_window_surface_change();
+    let layer = |runtime: &Runtime| {
+        let WindowSurfaceKind::Layer(config) = runtime.window_surface_configs()[0].kind.clone()
+        else {
+            panic!("not a layer surface");
+        };
+        config
+    };
+
+    runtime
+        .call_ipc("slide", &[IpcValue::Integer(-40)])
+        .unwrap();
+    assert!(runtime.take_window_surface_change());
+    assert_eq!(layer(&runtime).margin_bottom, -40);
+    // The same value again is no change: an animation re-assigning its
+    // resting value must not reconfigure the surface every frame.
+    runtime
+        .call_ipc("slide", &[IpcValue::Integer(-40)])
+        .unwrap();
+    assert!(!runtime.take_window_surface_change());
+
+    runtime.call_ipc("move", &[]).unwrap();
+    assert!(runtime.take_window_surface_change());
+    let config = layer(&runtime);
+    assert!(config.anchors.left && config.anchors.top && config.anchors.bottom);
+    assert!(!config.anchors.right);
+    assert_eq!(config.exclusive_zone, 64);
+    assert_eq!(config.layer, "overlay");
+    assert_eq!(config.keyboard_focus, "exclusive");
+    assert_eq!(config.margin_left, 4);
+    assert!(config.input_regions.is_some());
+    assert_eq!(
+        runtime.call_ipc("read", &[]).unwrap(),
+        [IpcValue::Integer(-40), IpcValue::String("overlay".into())]
+    );
+
+    // A bad setting in a batch leaves the surface as it was.
+    assert!(runtime.call_ipc("bad", &[]).is_err());
+    assert_eq!(layer(&runtime).margin_top, 0);
+    assert!(!runtime.take_window_surface_change());
+    assert!(runtime.call_ipc("rename", &[]).is_err());
+    assert_eq!(layer(&runtime).namespace, "dock");
+}

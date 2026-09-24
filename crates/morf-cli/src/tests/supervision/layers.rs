@@ -162,8 +162,8 @@ fn layer_geometry_changes_without_recreating_the_surface() {
     };
 
     // A surface with no predecessor has to be created.
-    assert_eq!(layer_update(None, config), LayerUpdate::Recreate);
-    assert_eq!(layer_update(Some(config), config), LayerUpdate::None);
+    assert_eq!(layer_update(None, config, false), LayerUpdate::Recreate);
+    assert_eq!(layer_update(Some(config), config, false), LayerUpdate::None);
 
     // Everything wlr-layer-shell accepts on a mapped surface stays mapped.
     for moved in [
@@ -193,7 +193,10 @@ fn layer_geometry_changes_without_recreating_the_surface() {
             ..config.clone()
         },
     ] {
-        assert_eq!(layer_update(Some(config), &moved), LayerUpdate::Geometry);
+        assert_eq!(
+            layer_update(Some(config), &moved, false),
+            LayerUpdate::Geometry
+        );
     }
 
     // Namespace and layer are fixed when the surface is created.
@@ -203,7 +206,8 @@ fn layer_geometry_changes_without_recreating_the_surface() {
             &LayerSurfaceConfig {
                 namespace: "ribbon-popup".to_owned(),
                 ..config.clone()
-            }
+            },
+            false
         ),
         LayerUpdate::Recreate
     );
@@ -213,8 +217,22 @@ fn layer_geometry_changes_without_recreating_the_surface() {
             &LayerSurfaceConfig {
                 layer: "top".to_owned(),
                 ..config.clone()
-            }
+            },
+            false
         ),
         LayerUpdate::Recreate
+    );
+    // A compositor with zwlr_layer_surface_v1 version 2 moves the layer in
+    // place.
+    assert_eq!(
+        layer_update(
+            Some(config),
+            &LayerSurfaceConfig {
+                layer: "top".to_owned(),
+                ..config.clone()
+            },
+            true
+        ),
+        LayerUpdate::Geometry
     );
 }

@@ -1,12 +1,15 @@
 use morf_region::Region;
 
 use smithay_client_toolkit::compositor::FrameCallbackData;
+use smithay_client_toolkit::globals::ProvidesBoundGlobal;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shell::wlr_layer::{
-    Anchor, KeyboardInteractivity as WlrKeyboardInteractivity, Layer,
+    Anchor, KeyboardInteractivity as WlrKeyboardInteractivity, Layer, SurfaceKind,
 };
 use smithay_client_toolkit::shell::xdg::window::WindowDecorations;
+use wayland_client::Proxy;
 use wayland_client::protocol::{wl_output, wl_surface};
+use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1;
 
 use crate::{state_types::*, surface_types::*, types::*};
 
@@ -49,7 +52,34 @@ pub(crate) fn layer_interactivity(focus: KeyboardFocus) -> WlrKeyboardInteractiv
     }
 }
 
+/// Converts a configured stacking layer into its layer-shell value.
+pub(crate) fn shell_layer(layer: ShellLayer) -> Layer {
+    match layer {
+        ShellLayer::Background => Layer::Background,
+        ShellLayer::Bottom => Layer::Bottom,
+        ShellLayer::Top => Layer::Top,
+        ShellLayer::Overlay => Layer::Overlay,
+    }
+}
+
+/// The zwlr_layer_surface_v1 version that added `set_layer`.
+const LIVE_LAYER_VERSION: u32 = 2;
+
 impl LayerClient {
+    /// Whether a mapped layer surface can move to another stacking layer in
+    /// place (zwlr_layer_surface_v1 version 2's `set_layer`), rather than
+    /// being destroyed and recreated there.
+    pub fn supports_live_layer_change(&self) -> bool {
+        self.state
+            .layer_shell
+            .as_ref()
+            .and_then(|shell| {
+                ProvidesBoundGlobal::<zwlr_layer_shell_v1::ZwlrLayerShellV1, 1>::bound_global(shell)
+                    .ok()
+            })
+            .is_some_and(|shell| shell.version() >= LIVE_LAYER_VERSION)
+    }
+
     /// Resolves a configured output name against the compositor's current set.
     pub(crate) fn layer_output(
         &self,
@@ -85,12 +115,7 @@ impl LayerClient {
                 let layer = shell.create_layer_surface(
                     &qh,
                     surface,
-                    match config.layer {
-                        ShellLayer::Background => Layer::Background,
-                        ShellLayer::Bottom => Layer::Bottom,
-                        ShellLayer::Top => Layer::Top,
-                        ShellLayer::Overlay => Layer::Overlay,
-                    },
+                    shell_layer(config.layer),
                     Some(config.namespace.clone()),
                     output.as_ref(),
                 );
@@ -181,8 +206,9 @@ impl LayerClient {
     /// Re-issues the geometry of a layer surface that is already open.
     ///
     /// wlr-layer-shell permits size, anchors, margins, exclusive zone and
-    /// keyboard interactivity to change on a mapped surface; namespace, layer
-    /// and output do not, and stay the business of [`LayerClient::open_layer`].
+    /// keyboard interactivity to change on a mapped surface, and from version
+    /// 2 the stacking layer; namespace and output do not, and stay the
+    /// business of [`LayerClient::open_layer`].
     /// Nothing here destroys an object, so the zwlr surface, the wl_surface, the
     /// fractional scale, the viewport and whatever renders into them all
     /// survive: the compositor answers with a configure, and the surface
@@ -208,6 +234,11 @@ impl LayerClient {
         );
         layer.set_exclusive_zone(config.exclusive_zone);
         layer.set_keyboard_interactivity(layer_interactivity(config.keyboard_focus));
+        if let SurfaceKind::Wlr(wlr) = layer.kind()
+            && wlr.version() >= LIVE_LAYER_VERSION
+        {
+            layer.set_layer(shell_layer(config.layer));
+        }
         layer.commit();
         self.connection
             .flush()
