@@ -5,10 +5,11 @@
 -- the night light or one ddcutil must happen once, not once per screen, so
 -- those ask `live.here()` first.
 --
--- The island knows which screen is being worked on (`bar.island_state.live`
--- when it has it). Without that the focused monitor Hyprland reports is
--- used, and without Hyprland the screen with the lowest id: the same answer
--- in every runtime, so exactly one of them says yes.
+-- The island knows which screen is being worked on: `bar.island_state.live`
+-- (services/auto/live_screen.lua decides it, from the compositor's focus, a
+-- claim, or the primary). Should that be missing, the focused monitor
+-- Hyprland reports is used, and without Hyprland the screen with the lowest
+-- id: the same answer in every runtime, so exactly one of them says yes.
 
 local M = {}
 
@@ -39,6 +40,13 @@ function M.name()
     if not first or (tonumber(screen.id) or 0) < (tonumber(first.id) or 0) then first = screen end
   end
   return first and first.name or ""
+end
+
+--- The output to act on (a whole-screen recording): this shell's own when
+--- it is the live one, else the one the rules above name.
+function M.output()
+  if M.here() then return own().name or "" end
+  return M.name()
 end
 
 --- Whether this runtime is the one that acts.

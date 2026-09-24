@@ -221,12 +221,7 @@ function M.start(shape, box)
   -- monitor, else this shell's own.
   local output = ""
   if not box then
-    local live = require("services.live")
-    output = live.name()
-    if output == "" then
-      local screen = (morf.screens or {})[1]
-      output = screen and screen.name or ""
-    end
+    output = require("services.live").output()
   end
   -- One that rejects its arguments, or cannot capture at all, exits at
   -- once; the take goes to the next encoder rather than failing. An

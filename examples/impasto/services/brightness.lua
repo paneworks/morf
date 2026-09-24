@@ -309,9 +309,11 @@ function M.detect()
     elseif asks then
       read(slot)
     elseif not adopt(slot, levels[entry.bus]) then
-      -- The asking screen has not written yet: look again shortly.
+      -- The asking screen has not written yet: look again shortly, and ask
+      -- the monitor here if this has become the screen that asks.
       morf.timer(3000, function()
-        if slot.bus == entry.bus then adopt(slot, load_levels()[entry.bus]) end
+        if slot.bus ~= entry.bus then return end
+        if not adopt(slot, load_levels()[entry.bus]) and live.here() then read(slot) end
       end, false)
     end
   end

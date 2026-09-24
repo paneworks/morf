@@ -146,12 +146,24 @@ function M.set_temperature(value)
   if settings.nightLight then retune() end
 end
 
--- At login: the setting is put back by one screen.
+-- At login the setting is put back, once, by the live screen -- which is
+-- decided a moment after the shell starts, so this follows it.
+local restored = false
 morf.timer(1200, function()
-  if alive_pid() then M.running:set(true) return end
-  if settings.nightLight and M.available() and live.here() then
-    act.run("restore the night light", start)
+  if alive_pid() then
+    restored = true
+    M.running:set(true)
+    return
   end
+  morf.effect("impasto.night.restore", function()
+    if restored or not live.here() then return end
+    restored = true
+    if settings.nightLight and M.available() then
+      morf.timer(1, function()
+        if not alive_pid() then act.run("restore the night light", start) end
+      end, false)
+    end
+  end)
 end, false)
 
 return M

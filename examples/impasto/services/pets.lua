@@ -441,7 +441,7 @@ function M.release() watchers:set(math.max(0, watchers:get() - 1)) end
 local function watched()
   if watchers:get() > 0 or M.on_bar() then return true end
   local panel = island_state.open_panel()
-  return panel == "pet" or panel == "pet.detail"
+  return panel == "pet"
 end
 
 local minute

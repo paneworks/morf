@@ -10,14 +10,3 @@ clipboard.start()
 require("services.lock").on_change(function(locked)
   if locked and settings.clipboardWipeOnLock then clipboard.wipe() end
 end)
-
--- The control centre's one-shot "Clear clipboard", also listed in the
--- launcher's `>` (ControlsService.qml).
-require("services.controls").define_tile("clearClipboard", {
-  detail = function()
-    local count = clipboard.count()
-    return count == 1 and "1 entry kept" or (count .. " entries kept")
-  end,
-  available = function() return settings.clipboardHistory and clipboard.count() > 0 end,
-  action = function() clipboard.wipe() end,
-})
