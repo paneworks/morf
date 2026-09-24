@@ -382,6 +382,16 @@ impl LayerClient {
         // application and title. A window with no match keeps its defaults and
         // stays `controllable: false`, which is the honest answer: the state is
         // not false, it is unknown.
+        let identifiers: Vec<(String, String, String)> = toplevels
+            .iter()
+            .map(|toplevel| {
+                (
+                    toplevel.app_id.clone(),
+                    toplevel.title.clone(),
+                    toplevel.identifier.clone(),
+                )
+            })
+            .collect();
         for toplevel in &mut toplevels {
             let Some(control) = self.state.toplevel_controls.values().find(|control| {
                 control.app_id == toplevel.app_id && control.title == toplevel.title
@@ -393,6 +403,25 @@ impl LayerClient {
             toplevel.minimized = control.minimized;
             toplevel.fullscreen = control.fullscreen;
             toplevel.controllable = true;
+            toplevel.outputs = control
+                .outputs
+                .iter()
+                .filter_map(|output| self.state.outputs.info(output).and_then(|info| info.name))
+                .collect();
+            // The parent is a control handle; its window is found the way this
+            // one was, by application and title.
+            toplevel.parent = control
+                .parent
+                .as_ref()
+                .and_then(|parent| self.state.toplevel_controls.get(parent))
+                .and_then(|parent| {
+                    identifiers
+                        .iter()
+                        .find(|(app_id, title, _)| {
+                            *app_id == parent.app_id && *title == parent.title
+                        })
+                        .map(|(_, _, identifier)| identifier.clone())
+                });
         }
         toplevels.sort_by(|a, b| a.identifier.cmp(&b.identifier));
         toplevels

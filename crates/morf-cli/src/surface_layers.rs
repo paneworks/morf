@@ -68,6 +68,8 @@ fn publish_windows(runtime: &mut Runtime, client: &mut LayerClient) {
             minimized: window.minimized,
             fullscreen: window.fullscreen,
             controllable: window.controllable,
+            outputs: window.outputs,
+            parent: window.parent,
         })
         .collect();
     runtime.set_windows(&windows);

@@ -259,6 +259,25 @@ a window opens, closes, or changes title, app id or state), and
 `{ opened, closed, changed }` identifier lists. `morf.windows` is still
 the plain snapshot table.
 
+A row is `{ identifier, title, app_id, activated, maximized, minimized,
+fullscreen, controllable, outputs, output, parent }`. The state flags,
+`outputs` (the names of the screens the window is on, as `morf.screens`
+names them, in the order it entered them), `output` (the first of them)
+and `parent` (the identifier of the window a dialog belongs to) come from
+`wlr-foreign-toplevel-management`; on a compositor without it they are
+false, empty and absent, and `controllable` is false. A window moving to
+another screen is a change like a retitle, so a dock per screen is a
+filter:
+
+```lua
+local here = morf.screens[1] and morf.screens[1].name   -- the screen this instance drives
+ui.Text { text = function()
+  local n = 0
+  for _, w in ipairs(morf.toplevels.list()) do if w.output == here then n = n + 1 end end
+  return n .. " windows here"
+end }
+```
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).

@@ -390,6 +390,13 @@ pub struct ToplevelInfo {
     /// does but this window could not be matched to a handle in it. A task bar
     /// should draw an entry either way and only offer the click for this.
     pub controllable: bool,
+    /// The names of the outputs the window is on, in the order it entered
+    /// them; empty when the compositor offers no control protocol or never
+    /// said. What a dock on one screen filters its windows by.
+    pub outputs: Vec<String>,
+    /// The identifier of the window this one belongs to (a dialog's
+    /// parent), when the compositor says so (control protocol version 3).
+    pub parent: Option<String>,
 }
 
 /// One thing on offer — a selection or a drag — before any of it is read.
