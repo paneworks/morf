@@ -15,8 +15,10 @@ local draw = require("pets.draw")
 local M = {}
 
 --- The wall as an SVG document `w` by `h`: `weeks` newest last, seven
---- levels each; `spacing`, `radius`, `max_cell`.
-function M.document(weeks, w, h, spacing, radius, max_cell)
+--- levels each; `spacing`, `radius`, `max_cell`. `raised` (the Analogue
+--- theme) edges each tile with a line of its own colour lightened, as
+--- ContributionGrid's embossed tiles.
+function M.document(weeks, w, h, spacing, radius, max_cell, raised)
   local cell = math.min(max_cell or 24, (h - 6 * spacing) / 7)
   local step = cell + spacing
   local columns = math.max(1, math.floor((w + spacing) / step))
@@ -32,8 +34,17 @@ function M.document(weeks, w, h, spacing, radius, max_cell)
       if type(level) == "table" then level = level.level end
       if type(level) == "number" and level >= 0 then
         local colour = theme.github_levels[math.min(5, math.floor(level) + 1)]
-        parts[#parts + 1] = string.format('<rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="%s"/>',
-          draw.n(left + (i - 1) * step), draw.n(top + (d - 1) * step), draw.n(cell), draw.n(cell), draw.n(radius), colour)
+        local x, y = left + (i - 1) * step, top + (d - 1) * step
+        if raised then
+          -- A border inside the tile, as a Rectangle draws one.
+          parts[#parts + 1] = string.format(
+            '<rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="%s" stroke="%s" stroke-width="1"/>',
+            draw.n(x + 0.5), draw.n(y + 0.5), draw.n(cell - 1), draw.n(cell - 1), draw.n(math.max(0, radius - 0.5)),
+            colour, draw.lighter(colour, 1.45))
+        else
+          parts[#parts + 1] = string.format('<rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="%s"/>',
+            draw.n(x), draw.n(y), draw.n(cell), draw.n(cell), draw.n(radius), colour)
+        end
       end
     end
   end

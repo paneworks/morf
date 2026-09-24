@@ -58,20 +58,12 @@ local function member(row)
         size = theme.size.small,
         color = C.textMuted,
       },
-      ui.Rect {
+      name_field.boxed {
         layout = { grow = 1, minimum_width = 0 },
         visible = function() return not egg() end,
         height = 28,
-        radius = theme.radius_small,
-        color = C.island,
-        border_width = 1,
-        border_color = C.islandBorder,
-        name_field.new {
-          anchors = { fill = true, left_margin = 10, right_margin = 10 },
-          height = 28,
-          index = function() return index end,
-          size = theme.size.small,
-        },
+        index = function() return index end,
+        size = theme.size.small,
       },
       kit.text {
         text = function() return "Lv " .. (record().level or 1) end,

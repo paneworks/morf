@@ -213,25 +213,81 @@ function common.sparkline(values)
   }
 end
 
---- The Claude mark: a sunburst of eight rounded rays, in `color`.
+--- The Claude mark, the real outline (components/claude_mark.lua), in
+--- `color`: a colour, or a function a binding follows.
 function common.claude_mark(values)
-  local size = values.size or 32
-  return ui.Image {
-    x = values.x, y = values.y, anchors = values.anchors, width = size, height = size,
-    source = function()
-      local col = draw.hex(read(values.color) or C.text())
-      local rays = {}
-      for i = 0, 11 do
-        local a = math.rad(i * 30)
-        local long = i % 2 == 0 and 46 or 34
-        rays[#rays + 1] = string.format('<line x1="50" y1="50" x2="%s" y2="%s"/>',
-          draw.n(50 + math.cos(a) * long), draw.n(50 + math.sin(a) * long))
-      end
-      return string.format(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g stroke="%s" stroke-width="10" stroke-linecap="round">%s</g></svg>',
-        col, table.concat(rays))
-    end,
+  return require("components.claude_mark") {
+    x = values.x, y = values.y, anchors = values.anchors, size = values.size or 32,
+    color = values.color or C.text,
   }
+end
+
+--- Whether the pointer is anywhere over a face, which a single MouseArea
+--- cannot say: hover here goes to the topmost area only, so a face's own
+--- buttons take it from the area under them. Every area of the face calls
+--- `enter` and `leave` (`hover(true|false)`), and `on_leave` runs when the
+--- pointer has been over none of them for a moment -- HoverHandler's
+--- `hovered` going false on a calendar face, which puts the month back.
+function common.region()
+  local r = { inside = false, listeners = {} }
+  local serial = 0
+  function r.enter() serial = serial + 1 r.inside = true end
+  function r.leave()
+    serial = serial + 1
+    r.inside = false
+    local mine = serial
+    -- Leaving one area and entering the next are two events of the same
+    -- motion; only a leave that nothing followed is the pointer going.
+    morf.timer(40, function()
+      if serial ~= mine or r.inside then return end
+      for _, fn in ipairs(r.listeners) do pcall(fn) end
+    end, false)
+  end
+  function r.hover(on) if on then r.enter() else r.leave() end end
+  function r.on_leave(fn) r.listeners[#r.listeners + 1] = fn end
+  return r
+end
+
+--- The region a face's areas report to: the widget's own (`ctx.region`),
+--- or one of the face's when it is built without a widget (the card).
+function common.region_of(ctx)
+  if not ctx.region then ctx.region = common.region() end
+  return ctx.region
+end
+
+--- A MouseArea that also tells the face's region where the pointer is.
+function common.area(ctx, values)
+  local region = common.region_of(ctx)
+  local entered, exited = values.on_entered, values.on_exited
+  values.on_entered = function(...) region.enter() if entered then return entered(...) end end
+  values.on_exited = function(...) region.leave() if exited then return exited(...) end end
+  return ui.MouseArea(values)
+end
+
+--- Whether a picture cannot be shown: gone, or not a picture the engine
+--- decodes (Image.Error in the original). ui.Image says nothing when a file
+--- does not decode, so the header is read with `morf.image.info`, once per
+--- file and modification.
+local decodable = {}
+function common.lost(path)
+  if not path or path == "" then return false end
+  local stat = morf.fs.stat and morf.fs.stat(path) or nil
+  if not morf.fs.is_file(path) then return true end
+  local stamp = path .. "@" .. tostring(stat and stat.modified or "")
+  if decodable[stamp] == nil then
+    local ok, info = pcall(morf.image.info, path)
+    decodable[stamp] = ok and info ~= nil
+  end
+  return not decodable[stamp]
+end
+
+--- Whether a face is on screen: the one at rest while the desk is not being
+--- arranged, the arranging board's (and the card's) while it is. A face that
+--- moves by itself stops while it is out of sight.
+function common.shown(ctx)
+  local desk = require("services.desktop")
+  local on_board = ctx.arranging == true or (ctx.key or "") == ""
+  return function() return desk.editing:get() == on_board end
 end
 
 --- A layer that shadows its content, for faces drawn on the wallpaper.

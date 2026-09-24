@@ -2,8 +2,9 @@
 --
 -- Port of faces/PhotoFace.qml. The widget draws no capsule for it, so the
 -- picture is the widget and takes the widget's corner. Empty, it is the
--- capsule the other widgets are drawn on, saying so; the picture is chosen
--- in the picker while arranging, and at rest a click opens it in imv.
+-- capsule the other widgets are drawn on, saying so (and whether the picture
+-- is gone or does not decode); the picture is chosen in the picker while
+-- arranging, and at rest a click opens it in a viewer of the shell's own.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -17,10 +18,7 @@ function M.build(ctx)
   local ink = ctx.ink
   local function row() return ctx.row and ctx.row() or nil end
   local function path() return desk.picture_of(row()) end
-  local function lost()
-    local p = path()
-    return p ~= "" and not morf.fs.is_file(p)
-  end
+  local function lost() return require("desktop.faces.common").lost(path()) end
   local function empty() return path() == "" or lost() end
   return ui.Item {
     width = w, height = h,

@@ -35,7 +35,12 @@ local function builder(ctx)
     if faces[ctx.id] then return faces[ctx.id] end
   end
   local own = registry(registries[ctx.family] or registries["4x2"])
-  return own[ctx.id] or registry(registries["4x2"])[ctx.id] or registry(registries["2x2"])[ctx.id]
+  if own[ctx.id] then return own[ctx.id] end
+  -- A module with no wide face shows its island detail (Wides.qml's
+  -- fallback), not a square stretched to the width.
+  local detail = registry("desktop.faces.module_detail")
+  if ctx.family == "4x2" and detail.has and detail.has(ctx.id) then return detail.build end
+  return registry(registries["4x2"])[ctx.id] or registry(registries["2x2"])[ctx.id]
 end
 
 local function placeholder(ctx, why)
@@ -52,6 +57,12 @@ function M.build(ctx)
   local build = builder(ctx)
   if not build then return placeholder(ctx, "no face") end
   local ok, node = pcall(build, ctx)
+  if ok and node and ctx.id == "updates" then
+    -- The count is checked, and its age moves, while a face shows it.
+    local S = require("desktop.sources")
+    S.updates.subscribe()
+    return ui.Item { width = ctx.width, height = ctx.height, on_destroyed = S.updates.release, node }
+  end
   if ok and node then return node end
   morf.log("error", "impasto: the " .. ctx.id .. " face (" .. ctx.family .. ", " .. ctx.theme .. ") failed: " .. tostring(node))
   return placeholder(ctx, "failed")

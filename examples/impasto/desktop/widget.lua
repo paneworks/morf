@@ -16,6 +16,7 @@ local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("components.kit")
 local desk = require("services.desktop")
+local deck = require("services.deck")
 local face = require("desktop.face")
 
 local C = theme.color
@@ -36,6 +37,9 @@ function M.build(key, arranging)
   local function style() return desk.style_of(row()) end
   local function on_picture() local s = style() return s == "bare" or s == "outline" end
 
+  -- Where the pointer is over the widget, across the face's own areas.
+  local region = require("desktop.faces.common").region()
+
   -- The face, rebuilt when the model's one row names another.
   local faces = desk.face_model(key)
   local face_holder = ui.Repeater {
@@ -48,7 +52,7 @@ function M.build(key, arranging)
       return face.build {
         id = r.id, key = key, family = family, theme = desk.theme_of(r),
         ink = ink, row = row, width = size.width, height = size.height,
-        arranging = arranging,
+        arranging = arranging, region = region,
       }
     end,
   }
@@ -77,7 +81,7 @@ function M.build(key, arranging)
     anchors = { fill = true },
     layer = function()
       local r = row()
-      if on_picture() and r and r.id ~= "spectrum" and r.id ~= "notes" then
+      if on_picture() and r and r.id ~= "spectrum" then
         return { enabled = true, shadow_color = C.island:alpha(0.6), shadow_blur = 8, shadow_offset_y = 2 }
       end
       return { enabled = false }
@@ -99,6 +103,7 @@ function M.build(key, arranging)
       -- one opens the widget's menu at the pointer.
       ui.MouseArea {
         anchors = { fill = true }, accepted_buttons = "right",
+        on_entered = region.enter, on_exited = region.leave,
         on_clicked = function(sx, sy)
           local b = desk.board()
           desk.open_menu(key, sx - b.x, sy - b.y)
@@ -121,6 +126,17 @@ function M.build(key, arranging)
   local press_x, press_y = 0, 0
   local wheel_spent, wheel_rest = 0, 0
 
+  -- A note held against a screen edge is headed for that edge's deck, and
+  -- a spectrum for the bars along it when it has none; the edge lights.
+  local function edge_under(px, py)
+    local r = row()
+    if not r or (r.id ~= "notes" and r.id ~= "spectrum") then return "" end
+    local board = desk.board()
+    local edge = deck.edge_at(px, py, board.width, board.height)
+    if r.id == "spectrum" and not desk.spectrum_takes(edge) then return "" end
+    return edge
+  end
+
   local function aim(dx, dy)
     local b = box()
     local board = desk.board()
@@ -129,7 +145,15 @@ function M.build(key, arranging)
     hand.translate_x, hand.translate_y = x - b.x, y - b.y
     local r = row()
     if not r then return end
-    if desk.over_tray(press_x + dx - board.x, press_y + dy - board.y) then
+    local px, py = press_x + dx - board.x, press_y + dy - board.y
+    if desk.over_tray(px, py) then
+      desk.set_landing(nil)
+      deck.receiving:set("")
+      return
+    end
+    local edge = edge_under(px, py)
+    deck.receiving:set(edge)
+    if edge ~= "" then
       desk.set_landing(nil)
       return
     end
@@ -141,6 +165,7 @@ function M.build(key, arranging)
   local function drop(dx, dy)
     desk.dragging:set("")
     desk.set_landing(nil)
+    deck.receiving:set("")
     local b = box()
     local board = desk.board()
     local tx, ty = hand.translate_x or 0, hand.translate_y or 0
@@ -160,15 +185,16 @@ function M.build(key, arranging)
       desk.remove(key)
       return
     end
-    local edge = ""
-    if r.id == "spectrum" then
-      local px, py = press_x + dx - board.x, press_y + dy - board.y
-      if px < 24 then edge = "left" elseif px > board.width - 24 then edge = "right"
-      elseif py > board.height - 24 then edge = "bottom" end
-      if edge ~= "" and desk.spectrum_takes(edge) then
-        desk.spectrum_to_edge(key, edge)
-        return
-      end
+    -- A note dropped on a screen edge joins that edge's deck, and a
+    -- spectrum becomes the bars along it.
+    local edge = edge_under(press_x + dx - board.x, press_y + dy - board.y)
+    if edge ~= "" and r.id == "spectrum" then
+      desk.spectrum_to_edge(key, edge)
+      return
+    end
+    if edge ~= "" then
+      desk.note_to_edge(key, edge)
+      return
     end
     desk.place(key, desk.cell_x(b.x + tx), desk.cell_y(b.y + ty))
   end

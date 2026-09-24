@@ -35,11 +35,17 @@ M.motion_presets = {
 
 -- Hyprland's presets in the original; stored here for whoever animates the
 -- windows, and drawn as the motion they name.
+-- Each is one Bezier and the time windows take to arrive (Motion.qml's
+-- `slow`, in deciseconds), and a window that slides or pops in.
 M.window_presets = {
-  { id = "macos", label = "Glide", note = "Scales into place and decelerates with a long tail." },
-  { id = "snappy", label = "Brisk", note = "Half the distance and half the time." },
-  { id = "smooth", label = "Calm", note = "Long and soft, and workspaces fade rather than slide." },
-  { id = "springy", label = "Bounce", note = "Overshoots a little and settles back." },
+  { id = "macos", label = "Glide", note = "Scales into place and decelerates with a long tail.",
+    curve = { 0.32, 0.72, 0, 1 }, slow = 2.6, windows = "slide" },
+  { id = "snappy", label = "Brisk", note = "Half the distance and half the time.",
+    curve = { 0.22, 1, 0.36, 1 }, slow = 1.3, windows = "popin 94%" },
+  { id = "smooth", label = "Calm", note = "Long and soft, and workspaces fade rather than slide.",
+    curve = { 0.25, 0.1, 0.25, 1 }, slow = 4.2, windows = "popin 85%" },
+  { id = "springy", label = "Bounce", note = "Overshoots a little and settles back.",
+    curve = { 0.05, 0.9, 0.1, 1.15 }, slow = 3.2, windows = "popin 80%" },
   { id = "off", label = "None", note = "Nothing moves." },
 }
 
@@ -100,38 +106,180 @@ function M.palette_face(entry, size)
   }
 end
 
---- Two panes, the next revealed over the last in the transition's own way,
---- looping.
+-- ----------------------------------------------------- transition preview --
+--
+-- WallpaperTransitionPreview.qml: the current wallpaper and the next one in
+-- the folder, the next revealed over the last in the transition's own way,
+-- then held, then the two swap roles, so the loop never cuts. "random"
+-- cycles through the five effects, one per pass.
+--
+-- The original fills a Shape with the incoming picture. morf clips to a
+-- rounded rectangle only, so the circles are round ClipRects, and the
+-- diagonal wipe and the wavy edge are the picture cut into thin bands, each
+-- revealed on its own schedule: a staircase of 16 steps across 48 pixels.
+
+local PREVIEW_W, PREVIEW_H = 84, 48
+local BANDS = 16
+local POOL = { "fade", "wipe", "wave", "circle", "outer" }
+
+-- The current wallpaper and the one after it, in `list` (the folder, read
+-- once for the page).
+local function pictures(list)
+  local current = wallpaper.current:get()
+  local at = 1
+  for i, path in ipairs(list) do if path == current then at = i end end
+  local first = list[at] or ""
+  local second = #list > 1 and list[at % #list + 1] or ""
+  return first, second
+end
+
+local function thumb(path)
+  if path == "" then return "" end
+  return thumbnails.of(path, PREVIEW_W * 2, PREVIEW_H * 2)
+end
+
 function M.transition_picture(kind)
-  local W, H = 76, 40
-  local old = ui.Rect { x = 0, y = 0, width = W, height = H, color = C.islandSurfaceHover }
-  local reveal
-  if kind == "fade" then
-    reveal = ui.Rect { x = 0, y = 0, width = W, height = H, color = C.accent,
-      loop = { opacity = { from = 0, to = 1, duration = 1400, easing = "in_out_cubic", alternate = true } } }
-  elseif kind == "wipe" or kind == "wave" then
-    reveal = ui.Rect { x = 0, y = 0, height = H, color = C.accent, width = 1,
-      loop = { width = { from = 1, to = W, duration = 1400, alternate = true,
-        easing = kind == "wave" and "in_out_sine" or "in_out_cubic" } } }
-  elseif kind == "circle" then
-    reveal = ui.Rect { anchors = { center_in = true }, width = 1, height = 1, radius = 0.5,
-      color = C.accent,
-      loop = { scale = { from = 1, to = 2 * W, duration = 1400, easing = "in_out_cubic", alternate = true } } }
-  elseif kind == "outer" then
-    reveal = ui.Rect { x = 0, y = 0, width = W, height = H, color = C.accent,
-      ui.Rect { anchors = { center_in = true }, width = 1, height = 1, radius = 0.5,
-        color = C.islandSurfaceHover,
-        loop = { scale = { from = 2 * W, to = 1, duration = 1400, easing = "in_out_cubic", alternate = true } } } }
-  elseif kind == "random" then
-    reveal = kit.glyph { anchors = { center_in = true }, glyph = "󰒝", size = 18, color = C.accent }
-  else
-    reveal = ui.Rect { x = W / 2, y = 0, width = W / 2, height = H, color = C.accent }
+  local W, H = PREVIEW_W, PREVIEW_H
+  local reach = math.sqrt(W * W + H * H) / 2
+  local showing = controls.signal("transition.showing", 1)   -- which picture is under
+  local drawn = controls.signal("transition.drawn", kind == "random" and POOL[1] or kind)
+  local pass = 0
+  local list = wallpaper.scan()
+  local function under() local a, b = pictures(list) return showing:get() == 1 and a or b end
+  local function over() local a, b = pictures(list) return showing:get() == 1 and b or a end
+  local function picture(source, x, y)
+    return ui.Image { x = x or 0, y = y or 0, width = W, height = H, fill_mode = "preserve_aspect_crop",
+      source = function() return thumb(source()) end }
   end
-  return ui.ClipRect {
-    anchors = { center_in = true }, width = W, height = H, radius = theme.radius_small,
-    color = "#00000000", border_width = 1, border_color = C.islandBorder,
-    old, reveal,
+  -- The arriving picture, on the accent where there is none.
+  local function arriving(x, y)
+    return ui.Item { x = x or 0, y = y or 0, width = W, height = H,
+      ui.Rect { width = W, height = H, color = C.accent }, picture(over) }
+  end
+  local is = function(name) return function() return drawn:get() == name end end
+
+  -- Fade and a cut: the whole picture, its opacity animated.
+  local whole = ui.Item { width = W, height = H, opacity = 0,
+    visible = function() local d = drawn:get() return d == "fade" or d == "none" or d == "outer" end,
+    arriving() }
+  -- Bands: a wipe and a wave.
+  local bands = {}
+  local band_h = H / BANDS
+  for i = 1, BANDS do
+    local y = (i - 1) * band_h
+    local inner = arriving(0, -y)
+    bands[i] = { inner = inner, clip = ui.ClipRect { x = 0, y = y, width = 0.001, height = band_h + 0.5,
+      color = "#00000000", inner } }
+  end
+  local band_nodes = { width = W, height = H, visible = function() local d = drawn:get() return d == "wipe" or d == "wave" end }
+  for i, b in ipairs(bands) do band_nodes[i] = b.clip end
+  local band_layer = ui.Item(band_nodes)
+  -- A circle growing with the arriving picture in it; for "outer", one
+  -- shrinking with the old picture in it, over the new.
+  local circle_inner = ui.Item { width = W, height = H,
+    ui.Item { width = W, height = H, visible = is("circle"), arriving() },
+    ui.Item { width = W, height = H, visible = is("outer"),
+      ui.Rect { width = W, height = H, color = C.surface }, picture(under) },
   }
+  local circle = ui.ClipRect { x = W / 2, y = H / 2, width = 0.001, height = 0.001, radius = 0,
+    color = "#00000000", visible = function() local d = drawn:get() return d == "circle" or d == "outer" end,
+    circle_inner }
+
+  local node = ui.ClipRect {
+    anchors = { center_in = true }, width = W, height = H, radius = theme.radius_small,
+    color = C.surface, border_width = 1, border_color = C.islandBorder,
+    content_under_border = false,
+    picture(under),
+    whole, band_layer, circle,
+  }
+
+  -- One pass: every piece set to where the transition starts, then moved on
+  -- one schedule, held, and the pictures swapped.
+  local function tracks(d)
+    local out = {}
+    -- Keyframes strictly in order: a band whose schedule starts at the
+    -- very beginning or ends at the very end drops the repeated point.
+    local function track(target, property, frames)
+      local kept, last = {}, -1
+      for _, f in ipairs(frames) do
+        if f.at > last then kept[#kept + 1] = f last = f.at end
+      end
+      out[#out + 1] = { node = target, property = property, duration = 900, keyframes = kept }
+    end
+    if d == "fade" then
+      track(whole, "opacity", { { at = 0, value = 0 }, { at = 1, value = 1 } })
+    elseif d == "none" then
+      track(whole, "opacity", { { at = 0, value = 0 }, { at = 0.499, value = 0 }, { at = 0.5, value = 1 }, { at = 1, value = 1 } })
+    elseif d == "wipe" then
+      -- Top right to bottom left: at progress p a band at y shows from
+      -- y + W - p (W + H) to the right edge.
+      for i, b in ipairs(bands) do
+        local y = (i - 0.5) * band_h
+        local p0, p1 = y / (W + H), (y + W) / (W + H)
+        local xs = { { at = 0, value = W }, { at = p0, value = W }, { at = p1, value = 0 }, { at = 1, value = 0 } }
+        track(b.clip, "x", xs)
+        local ws = {}
+        for k, f in ipairs(xs) do ws[k] = { at = f.at, value = math.max(0.001, W - f.value) } end
+        track(b.clip, "width", ws)
+        local ins = {}
+        for k, f in ipairs(xs) do ins[k] = { at = f.at, value = -f.value } end
+        track(b.inner, "x", ins)
+      end
+    elseif d == "wave" then
+      -- Left to right with a sinusoidal edge.
+      local amplitude = H / 6
+      for i, b in ipairs(bands) do
+        local y = (i - 0.5) * band_h
+        local offset = amplitude * math.sin(y / H * 2 * math.pi * 1.2) - amplitude
+        -- edge = p (W + 2A) + offset, clamped to the frame
+        local p0 = math.max(0, math.min(1, -offset / (W + 2 * amplitude)))
+        local p1 = math.max(0, math.min(1, (W - offset) / (W + 2 * amplitude)))
+        track(b.clip, "width", { { at = 0, value = 0.001 }, { at = p0, value = 0.001 },
+          { at = p1, value = W }, { at = 1, value = W } })
+      end
+    elseif d == "circle" or d == "outer" then
+      local r0, r1 = 0.001, reach
+      if d == "outer" then r0, r1 = reach, 0.001 end
+      track(circle, "x", { { at = 0, value = W / 2 - r0 }, { at = 1, value = W / 2 - r1 } })
+      track(circle, "y", { { at = 0, value = H / 2 - r0 }, { at = 1, value = H / 2 - r1 } })
+      track(circle, "width", { { at = 0, value = 2 * r0 }, { at = 1, value = 2 * r1 } })
+      track(circle, "height", { { at = 0, value = 2 * r0 }, { at = 1, value = 2 * r1 } })
+      track(circle, "radius", { { at = 0, value = r0 }, { at = 1, value = r1 } })
+      track(circle_inner, "x", { { at = 0, value = r0 - W / 2 }, { at = 1, value = r1 - W / 2 } })
+      track(circle_inner, "y", { { at = 0, value = r0 - H / 2 }, { at = 1, value = r1 - H / 2 } })
+    end
+    return out
+  end
+  local function reset(d)
+    whole.opacity = d == "outer" and 1 or 0
+    for _, b in ipairs(bands) do
+      b.clip.width = 0.001
+      b.clip.x = d == "wipe" and W or 0
+      b.inner.x = d == "wipe" and -W or 0
+    end
+    local r = d == "outer" and reach or 0.001
+    circle.x, circle.y, circle.width, circle.height, circle.radius = W / 2 - r, H / 2 - r, 2 * r, 2 * r, r
+    circle_inner.x, circle_inner.y = r - W / 2, r - H / 2
+  end
+  local run
+  run = function()
+    local d = kind == "random" and POOL[pass % #POOL + 1] or kind
+    drawn:set(d)
+    reset(d)
+    morf.animation.play {
+      { pause = 700 },
+      { parallel = tracks(d) },
+      { pause = 700 },
+      on_finished = function(reason)
+        if reason ~= "completed" then return end
+        showing:set(showing:get() == 1 and 2 or 1)
+        pass = pass + 1
+        run()
+      end,
+    }
+  end
+  morf.timer(1, run, false)
+  return node
 end
 
 --- The island's own morph at a pace: a capsule growing and shrinking.
@@ -151,20 +299,43 @@ function M.island_motion(preset)
   return node
 end
 
---- A window arriving in a preset's manner.
+--- A window arriving on a tiny screen with the preset's curve and duration
+--- (MotionPreview.qml): popping in for a popin preset, sliding up for a
+--- slide one, appearing at once for None. It never fades: every preset turns
+--- the fade off, so it shows, stays, and is gone, every 1.3 s.
 function M.window_motion(preset)
-  local loops = {
-    macos = { scale = { from = 0.6, to = 1, duration = 520, easing = "out_cubic", alternate = true } },
-    snappy = { scale = { from = 0.85, to = 1, duration = 220, easing = "out_quint", alternate = true } },
-    smooth = { opacity = { from = 0.1, to = 1, duration = 900, easing = "in_out_sine", alternate = true } },
-    springy = { scale = { from = 0.5, to = 1, duration = 600, easing = "out_back", alternate = true } },
+  local still = preset.curve == nil
+  local slides = tostring(preset.windows or ""):sub(1, 5) == "slide"
+  local span = still and 0 or math.floor(preset.slow * 100 + 0.5)
+  local win = ui.Rect {
+    x = 10, y = 8, width = 72, height = 30, radius = 4,
+    color = C.accent, opacity = 0,
   }
-  return ui.Rect {
-    anchors = { center_in = true }, width = 58, height = 34, radius = 6,
-    color = C.islandSurfaceHover, border_width = 1, border_color = C.accent,
-    loop = loops[preset.id],
-    ui.Rect { x = 0, y = 0, width = 58, height = 7, radius = 6, color = C.islandBorder },
+  local screen = ui.ClipRect {
+    anchors = { center_in = true }, width = 92, height = 46, radius = 5,
+    color = C.island, border_width = 1, border_color = C.islandBorder,
+    win,
   }
+  local function pass()
+    local steps = { { node = win, property = "opacity", from = 0, to = 1, duration = 1 } }
+    if not still then
+      local easing = { x1 = preset.curve[1], y1 = preset.curve[2], x2 = preset.curve[3], y2 = preset.curve[4] }
+      if slides then
+        steps[#steps + 1] = { node = win, property = "translate_y", from = 12, to = 0, duration = span, easing = easing }
+      else
+        steps[#steps + 1] = { node = win, property = "scale", from = 0.8, to = 1, duration = span, easing = easing }
+      end
+    end
+    morf.animation.play {
+      loops = "forever",
+      { parallel = steps },
+      { pause = math.max(1, 1300 - span) },
+      { node = win, property = "opacity", from = 1, to = 0, duration = 1 },
+      { pause = 1300 },
+    }
+  end
+  morf.timer(1, pass, false)
+  return screen
 end
 
 -- ---------------------------------------------------------------- parts --

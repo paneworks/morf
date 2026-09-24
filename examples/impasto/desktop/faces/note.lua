@@ -1,11 +1,11 @@
 -- A note on the desk, in any of the four families: the paper the deck
 -- draws, a title and a handwritten body.
 --
--- Port of faces/NoteFace.qml and the Sticky it draws. The notes themselves
--- are another port's (`services.notes`); this asks it for the note a row
--- names and for its helpers (`paper_of`, `title_of`, `display`, `age_of`)
--- when it has them, and draws plain cream paper saying "No notes yet"
--- while it is not there. Read-only: a click opens the note in the island.
+-- Port of faces/NoteFace.qml and the Sticky it draws, over the notes service
+-- (`services.notes`): the note a row names (else the newest) and its helpers
+-- (`paper_of`, `title_of`, `display`, `age_of`); plain cream paper saying
+-- "No notes yet" when there is none. Read-only: a click opens the note in
+-- the island. Without a capsule of its own it takes the widget's shadow.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -50,7 +50,6 @@ function M.build(ctx)
   end
   return ui.Item {
     width = w, height = h,
-    layer = { enabled = true, shadow_color = morf.color("#000000"):alpha(0.35), shadow_blur = 10, shadow_offset_y = 2 },
     ui.Rect {
       anchors = { fill = true }, radius = theme.paper_radius,
       color = function()

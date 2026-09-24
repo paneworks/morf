@@ -4,8 +4,10 @@
 -- at the smallest family it offers -- the face it lands with -- packed as a
 -- mosaic at three quarters of its size, tallest first, then widest, then by
 -- name. Drag a face onto the grid, or click it to place it on the first
--- free cell; drop a widget on the card to remove it. The spectrum also lands
--- on a screen edge when let go against one.
+-- free cell; drop a widget on the card to remove it. Notes let go against a
+-- screen edge are a deck there (the newest note), and the spectrum the bars
+-- along it; the edge lights while they are held there
+-- (desktop/arrange/decks.lua draws the light).
 --
 -- Anywhere on the card that is not a face moves it, and so does the grip in
 -- its top left corner; the handle in the opposite corner resizes it in
@@ -40,7 +42,8 @@ local scrolled = morf.signal("impasto.desk.tray.scrolled", 0)
 local pulling = morf.signal("impasto.desk.tray.pulling", "")   -- the module being dragged out
 local ghost_x = morf.signal("impasto.desk.tray.ghost.x", 0)
 local ghost_y = morf.signal("impasto.desk.tray.ghost.y", 0)
-local receiving_edge = morf.signal("impasto.desk.tray.edge", "")
+local deck = require("services.deck")
+local receiving_edge = deck.receiving
 local held = morf.signal("impasto.desk.tray.held", false)       -- card moved or stretched
 
 -- The ghost is rebuilt for each module pulled.
@@ -142,8 +145,65 @@ local function publish()
   desk.tray_box = { x = card_left(), y = card_top(), width = card_width(), height = card_height() }
 end
 
+local rail
 local function scroll_by(pixels)
   scrolled:set(math.max(0, math.min(overflow(), scrolled:get() + pixels)))
+end
+
+-- The bar in the right margin while the mosaic is taller than the card: the
+-- thumb is the part in view. Dragged, it scrolls; pressed on the track, the
+-- thumb's middle goes there first. It widens under the pointer and turns to
+-- the accent while held (EditTray.qml's rail).
+local rail_hover = morf.signal("impasto.desk.tray.rail.hover", false)
+local scrubbing = morf.signal("impasto.desk.tray.rail.scrub", false)
+local function thumb_length()
+  local total = span(layout().rows, stride_y())
+  return math.max(M.PAD, viewport_height() * viewport_height() / math.max(1, total))
+end
+local function rail_reach() return viewport_height() - thumb_length() end
+local function thumb_top()
+  return rail_reach() * math.min(scrolled:get(), overflow()) / math.max(1, overflow())
+end
+local function scroll_to(top)
+  local reach = rail_reach()
+  scrolled:set(reach > 0 and math.max(0, math.min(1, top / reach)) * overflow() or 0)
+end
+
+rail = function()
+  local scrub_from, press_y = 0, 0
+  return ui.Item {
+    x = function() return card_width() - M.PAD + (M.PAD - 12) / 2 end,
+    y = M.PAD, width = 12, height = viewport_height,
+    visible = function() return overflow() > 0 end,
+    ui.Rect {
+      x = function() return (12 - ((rail_hover:get() or scrubbing:get()) and 6 or 4)) / 2 end,
+      y = thumb_top, height = thumb_length,
+      width = function() return (rail_hover:get() or scrubbing:get()) and 6 or 4 end,
+      radius = function() return (rail_hover:get() or scrubbing:get()) and 3 or 2 end,
+      color = function()
+        if scrubbing:get() then return C.accent() end
+        return C.scrimText:alpha(rail_hover:get() and 0.45 or 0.25)
+      end,
+      behavior = { width = theme.behave("fast"), x = theme.behave("fast") },
+    },
+    ui.MouseArea {
+      anchors = { fill = true }, cursor = "pointer",
+      on_entered = function() rail_hover:set(true) end,
+      on_exited = function() rail_hover:set(false) end,
+      on_pressed = function(_, _, _, y)
+        press_y = y or 0
+        local top = thumb_top()
+        -- On the thumb it is taken where it is; anywhere else its middle
+        -- goes to the pointer.
+        scrub_from = (press_y >= top and press_y <= top + thumb_length()) and top or (press_y - thumb_length() / 2)
+        scrubbing:set(true)
+        scroll_to(scrub_from)
+      end,
+      on_dragged = function(_, _, _, dy) scroll_to(scrub_from + dy) end,
+      on_released = function() scrubbing:set(false) end,
+      on_wheel = function(_, _, _, py, _, steps) scroll_by(steps ~= 0 and steps * 40 or -py) end,
+    },
+  }
 end
 
 -- ------------------------------------------------------------------- pulling --
@@ -165,10 +225,12 @@ local function aim(px, py)
     receiving_edge:set("")
     return
   end
-  if id == "spectrum" then
+  -- A notes piece against an edge is a deck there, and a spectrum the bars
+  -- along it if it has none yet; anywhere else, a square.
+  if id == "notes" or id == "spectrum" then
     local board = desk.board()
-    local edge = px < 24 and "left" or px > board.width - 24 and "right" or py > board.height - 24 and "bottom" or ""
-    if edge ~= "" and desk.spectrum_takes(edge) then
+    local edge = deck.edge_at(px, py, board.width, board.height)
+    if edge ~= "" and (id == "notes" or desk.spectrum_takes(edge)) then
       desk.set_landing(nil)
       receiving_edge:set(edge)
       return
@@ -187,7 +249,9 @@ local function let_go()
   pulling:set("")
   receiving_edge:set("")
   desk.set_landing(nil)
-  if edge ~= "" and id == "spectrum" then
+  if edge ~= "" and id == "notes" then
+    desk.add_deck(edge)
+  elseif edge ~= "" and id == "spectrum" then
     desk.add_spectrum(edge)
   elseif family ~= "" then
     desk.add(id, col, row)
@@ -318,22 +382,23 @@ function M.build()
         height = function() return span(layout().rows, stride_y()) end,
         table.unpack(tiles),
       },
+      -- A fade at an edge says there is more that way.
+      ui.Rect {
+        anchors = { left = true, right = true, top = true }, height = M.PAD,
+        visible = function() return math.min(scrolled:get(), overflow()) > 0 end,
+        gradient = function()
+          return { angle = 180, stops = { C.island, C.island:alpha(0) } }
+        end,
+      },
+      ui.Rect {
+        anchors = { left = true, right = true, bottom = true }, height = M.PAD,
+        visible = function() return math.min(scrolled:get(), overflow()) < overflow() end,
+        gradient = function()
+          return { angle = 180, stops = { C.island:alpha(0), C.island } }
+        end,
+      },
     },
-    -- The part of the mosaic in view, in the right margin, when it scrolls.
-    ui.Rect {
-      x = function() return card_width() - M.PAD / 2 - 2 end,
-      width = 4, radius = 2,
-      visible = function() return overflow() > 0 end,
-      color = function() return C.scrimText:alpha(0.3) end,
-      y = function()
-        local total = span(layout().rows, stride_y())
-        return M.PAD + viewport_height() * math.min(scrolled:get(), overflow()) / math.max(1, total)
-      end,
-      height = function()
-        local total = span(layout().rows, stride_y())
-        return math.max(M.PAD, viewport_height() * viewport_height() / math.max(1, total))
-      end,
-    },
+    rail(),
     -- The grip: moves the card.
     ui.Rect {
       x = -8, y = -8, width = 24, height = 24, radius = 12, color = C.island,
@@ -399,29 +464,9 @@ function M.build()
     end,
   }
 
-  -- An edge a spectrum is headed for, lit along its length.
-  local edge_mark = ui.Rect {
-    visible = function() return receiving_edge:get() ~= "" end,
-    x = function()
-      local e = receiving_edge:get()
-      return e == "right" and desk.board().width - 6 or 0
-    end,
-    y = function() return receiving_edge:get() == "bottom" and desk.board().height - 6 or 0 end,
-    width = function()
-      local e = receiving_edge:get()
-      return (e == "left" or e == "right") and 6 or desk.board().width
-    end,
-    height = function()
-      local e = receiving_edge:get()
-      return (e == "left" or e == "right") and desk.board().height or 6
-    end,
-    radius = 3, color = C.accent,
-  }
-
   return ui.Item {
     anchors = { fill = true },
     card,
-    edge_mark,
     ui.Item { z = 10, anchors = { fill = true }, ghost },
   }
 end

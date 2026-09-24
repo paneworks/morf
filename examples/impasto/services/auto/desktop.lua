@@ -16,6 +16,11 @@
 --   select <key>           open a widget's inspector (arranging)
 --   family <key> <family>  change a widget's shape
 --   menu [key]             open the right-click menu (at the board's middle)
+--   day <key> [yyyy-mm-dd]  a calendar widget's day view (none: the month)
+--   note_edge <key> <edge> | note_grid <note> <col> <row> | deck_edge <key> <edge>
+--   deck_add <edge> | along <deck> <0..1> | takes_new <deck> <1|0> | light <edge>
+--   view <photo key>       the photo in the picture viewer
+--                          what the pointer does while arranging, for a bench
 --   theme <modern|analogue>
 --   list                   the rows, one per line
 
@@ -79,6 +84,65 @@ if not inline_mode then
   end)
 end
 
+-- ---------------------------------------------------------- every screen --
+--
+-- Arranging is one mode on every screen, as the original's one `editing`
+-- flag is; but each screen here is a process of its own. Each owns a name
+-- on the session bus, says when it starts or ends arranging, and follows
+-- what the others say. Only with more than one screen, and only while the
+-- bus answers: a lone screen needs none of it.
+local PATH, INTERFACE = "/io/impasto/Desk", "io.impasto.Desk"
+local function bus_name(screen_entry)
+  return "io.impasto.Desk.S" .. (tostring(screen_entry.name or ""):gsub("[^%w]", "_"))
+end
+M.shared = false
+do
+  local screens = morf.screens or {}
+  local ok, service, outcome = false, nil, nil
+  if #screens > 1 and morf.dbus and morf.dbus.serve then
+    ok, service, outcome = pcall(morf.dbus.serve, "session", bus_name(screens[1]), PATH, true)
+  end
+  if ok and service and outcome == "owned" then
+    M.shared = true
+    -- What another screen said last, so it is not said back to it.
+    local heard = nil
+    local first = true
+    morf.effect("impasto.desk.share", function()
+      local on = desk.editing:get()
+      if first then first = false return end
+      if heard == on then heard = nil return end
+      pcall(service.emit, service, PATH, INTERFACE, "Editing", { on })
+    end)
+    for i = 2, #screens do
+      local okp, proxy = pcall(morf.dbus.proxy, "session", bus_name(screens[i]), PATH, INTERFACE)
+      if okp and proxy then
+        pcall(proxy.subscribe, proxy, "Editing", function(body)
+          local on = type(body) == "table" and body[1] == true
+          if desk.editing:get() ~= on then
+            heard = on
+            desk.edit(on)
+          end
+        end)
+      end
+    end
+  elseif #screens > 1 then
+    morf.log("warn", "impasto: arranging stays on this screen: " .. tostring(outcome or service))
+  end
+end
+
+-- The keyboard going to the shell's own surface (the island, the bar) while
+-- arranging is a click elsewhere: the original's focus grab ends the mode
+-- then. Drawn inline, the board is that surface, and losing the keyboard is
+-- the click elsewhere. A window.layer surface reports no focus of its own,
+-- so a click on another application's surface is not heard.
+if morf.on_keyboard_focus then
+  morf.on_keyboard_focus(function(active)
+    if not desk.editing:get() then return end
+    if inline_mode and not active then desk.edit(false)
+    elseif not inline_mode and active then desk.edit(false) end
+  end)
+end
+
 -- -------------------------------------------------------------------- IPC --
 
 morf.ipc.desk = function(verb, a, b, c)
@@ -106,6 +170,34 @@ morf.ipc.desk = function(verb, a, b, c)
     local board = desk.board()
     desk.open_menu(a or "", tonumber(b) or board.width / 2, tonumber(c) or board.height / 2)
     return "open"
+  elseif verb == "day" then
+    -- A calendar widget's day view, as pressing a day would open it ("" or
+    -- nothing puts the month back).
+    local pick = require("desktop.faces.day_tasks").by_widget[a or ""]
+    if not pick then return "no calendar face for " .. tostring(a) end
+    pick.pick(b or "")
+    return pick.day()
+  -- The drops the pointer makes while arranging, for a bench without one.
+  elseif verb == "note_edge" then
+    desk.note_to_edge(a or "", b or "")
+    return desk.placement_of((require("desktop.sources").notes.note_for(desk.entry_of(a or "")) or {}).key or "")
+  elseif verb == "note_grid" then
+    return tostring(desk.note_to_grid(a or "", tonumber(b) or 0, tonumber(c) or 0))
+  elseif verb == "deck_edge" then
+    desk.set_deck_edge(a or "", b or "")
+  elseif verb == "deck_add" then
+    desk.add_deck(a or "")
+  elseif verb == "along" then
+    desk.set_deck_along(a or "", tonumber(b) or 0)
+  elseif verb == "takes_new" then
+    desk.set_takes_new(a or "", b ~= "0" and b ~= "false")
+  elseif verb == "view" then
+    -- A photo widget's picture in the viewer, as a click at rest opens it.
+    desk.open_picture(desk.entry_of(a or ""))
+    return desk.picture_of(desk.entry_of(a or ""))
+  elseif verb == "light" then
+    require("services.deck").receiving:set(a or "")
+    return a or ""
   elseif verb == "theme" then
     settings.set("desktopTheme", a == "analogue" and "analogue" or "modern")
     return a or "modern"

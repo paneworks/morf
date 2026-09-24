@@ -1,18 +1,17 @@
 -- The note decks on the screen edges: which notes sit on which edge, the
 -- geometry of their tabs, and the pointer's state over them.
 --
--- Port of DeckService.qml and the deck half of DesktopService.qml. A deck is
--- a row in the `desktopWidgets` setting with an `edge` -- the same list the
--- desktop's widgets live in, so a desktop that is ported later finds the
--- decks where the original kept them:
+-- Port of DeckService.qml. A deck is a row in the `desktopWidgets` setting
+-- with an `edge`, kept by `services/desktop.lua` beside the widgets:
 --
---     { key = "deck-left", id = "notes", edge = "left", notes = { "note-..." }, along = 0 }
+--     { key = "notes-2", id = "notes", edge = "left", notes = { "note-..." }, along = 0 }
 --
--- One deck per edge (left, right, bottom); an empty deck is removed. Tabs
--- run top to bottom on the sides and left to right along the bottom.
+-- One deck per edge (left, right, bottom) and screen; an empty deck is
+-- removed. Tabs run top to bottom on the sides and left to right along the
+-- bottom. Lengths are along the desk's board (the screen less the bar's and
+-- the dock's bands), so a deck never sits under the dock.
 
 local settings = require("services.settings")
-local notes = require("services.notes")
 local theme = require("theme")
 
 local M = {}
@@ -59,38 +58,39 @@ function M.index_at(position, count, start)
   return math.max(1, math.min(count, slot + 1))
 end
 
+-- Handle for sliding a deck along its edge while arranging.
+M.grip = 24
+
+--- Inverse of `start_of`: the fraction for a strip starting at `start`.
+function M.along_at(count, start, length)
+  local run = M.run_of(count, length)
+  if run <= 0 then return 0 end
+  return math.max(0, math.min(1, (start - M.margin) / run))
+end
+
+--- The edge a point on the board is against, or "": within `reach` of the
+--- left, the right or the bottom. Sides win in the corners.
+function M.edge_at(x, y, width, height)
+  if x <= M.reach then return "left" end
+  if x >= width - M.reach then return "right" end
+  if y >= height - M.reach then return "bottom" end
+  return ""
+end
+
 -- -------------------------------------------------------------------- rows --
+--
+-- The rows are the desk's (`services/desktop.lua`, DesktopService's deck
+-- half), so a drag on the desk and a drop on an edge are one write.
 
-local function rows()
-  local list = settings.desktopWidgets
-  return type(list) == "table" and list or {}
-end
+local function desk() return require("services.desktop") end
 
-local function is_deck(row)
-  return type(row) == "table" and edge_names[row.edge] and row.id ~= "spectrum"
-end
-
---- Live, unarchived note keys on a deck row.
-local function deck_notes(row)
-  local out = {}
-  for _, key in ipairs(row.notes or {}) do
-    local note = type(key) == "string" and notes.entry(key)
-    if note and not note.archived then out[#out + 1] = key end
-  end
-  return out
-end
-
---- The decks that have notes: `{ key, edge, along, notes }`. A binding that
---- calls it follows the setting and the notes.
+--- The decks on this screen that have notes: `{ key, edge, along, notes,
+--- takes_new }`. A binding that calls it follows the rows and the notes.
 function M.decks()
   local out = {}
-  for _, row in ipairs(rows()) do
-    if is_deck(row) then
-      local keys = deck_notes(row)
-      if #keys > 0 then
-        out[#out + 1] = { key = row.key, edge = row.edge, along = tonumber(row.along) or 0, notes = keys }
-      end
-    end
+  for _, row in ipairs(desk().decks()) do
+    out[#out + 1] = { key = row.key, edge = row.edge, along = desk().along_of(row),
+      notes = desk().deck_notes(row), takes_new = row.takesNew == true }
   end
   return out
 end
@@ -102,101 +102,26 @@ function M.deck_on(edge)
 end
 
 --- Where a note is: an edge, "grid" for a desktop widget, or "".
-function M.placement_of(key)
-  for _, row in ipairs(rows()) do
-    if is_deck(row) then
-      for _, other in ipairs(row.notes or {}) do
-        if other == key then return row.edge end
-      end
-    elseif type(row) == "table" and row.id == "notes" and row.note == key then
-      return "grid"
-    end
-  end
-  return ""
-end
-
--- A copy of the list without this note anywhere; decks left empty go.
-local function without(list, key)
-  local kept = {}
-  for _, row in ipairs(list) do
-    if is_deck(row) then
-      local left = {}
-      for _, other in ipairs(row.notes or {}) do
-        if other ~= key then left[#left + 1] = other end
-      end
-      if #left > 0 then
-        local copy = {}
-        for k, v in pairs(row) do copy[k] = v end
-        copy.notes = left
-        kept[#kept + 1] = copy
-      end
-    elseif not (type(row) == "table" and row.id == "notes" and row.note == key) then
-      kept[#kept + 1] = row
-    end
-  end
-  return kept
-end
-
-function M.remove_note(key)
-  settings.set("desktopWidgets", without(rows(), key))
-end
-
---- Puts a note on an edge at `index` (1-based; nil for the end), joining
---- the deck there or starting one. A deck keeps its key and place.
-function M.place_note(key, edge, index)
-  if not notes.entry(key) or not edge_names[edge] then return end
-  local list = rows()
-  local target
-  for _, row in ipairs(list) do
-    if is_deck(row) and row.edge == edge then target = row end
-  end
-  local kept = without(list, key)
-  if not target then
-    kept[#kept + 1] = { key = "deck-" .. edge, id = "notes", edge = edge, notes = { key }, along = 0 }
-  else
-    local left = {}
-    for _, other in ipairs(deck_notes(target)) do
-      if other ~= key then left[#left + 1] = other end
-    end
-    index = math.max(1, math.min(#left + 1, index or (#left + 1)))
-    table.insert(left, index, key)
-    local copy = {}
-    for k, v in pairs(target) do copy[k] = v end
-    copy.notes = left
-    local placed = false
-    for i, row in ipairs(kept) do
-      if is_deck(row) and row.edge == edge then kept[i] = copy placed = true end
-    end
-    if not placed then kept[#kept + 1] = copy end
-  end
-  settings.set("desktopWidgets", kept)
-end
+function M.placement_of(key) return desk().placement_of(key) end
+function M.remove_note(key) desk().remove_note(key) end
+--- Puts a note on an edge at `index` (1-based; nil for the end).
+function M.place_note(key, edge, index) desk().place_note(key, edge, index) end
 
 function M.set_along(edge, along)
-  local list = {}
-  for i, row in ipairs(rows()) do
-    if is_deck(row) and row.edge == edge then
-      local copy = {}
-      for k, v in pairs(row) do copy[k] = v end
-      copy.along = math.max(0, math.min(1, along))
-      list[i] = copy
-    else
-      list[i] = row
-    end
-  end
-  settings.set("desktopWidgets", list)
-end
-
--- A note archived or deleted leaves the edges with it.
-notes.on_removed[#notes.on_removed + 1] = function(key)
-  if M.placement_of(key) ~= "" then M.remove_note(key) end
+  local deck = M.deck_on(edge)
+  if deck then desk().set_deck_along(deck.key, along) end
 end
 
 -- ----------------------------------------------------------------- pointer --
 
 M.revealed = morf.signal("impasto.deck.revealed", false)
 M.peeked = morf.signal("impasto.deck.peeked", "")
+-- The note whose tab is carried while arranging, and the deck whose grip is.
 M.dragging = morf.signal("impasto.deck.dragging", "")
+M.sliding = morf.signal("impasto.deck.sliding", "")
+-- The edge that would take what the desk is carrying (a note widget, the
+-- card's notes or spectrum, a tab), or "": lit along its length.
+M.receiving = morf.signal("impasto.deck.receiving", "")
 
 -- ----------------------------------------------------------------- showing --
 --

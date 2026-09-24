@@ -13,10 +13,10 @@
 -- Repeater over a one-row model keyed by the selection), so what a module
 -- has no use for is never built.
 --
--- Not ported: a deck of notes on an edge (its placement, notes and "new
--- notes land here") belongs to the deck, which is another port's; for a
--- note on the grid the card offers the notes the notes service lists, when
--- that service is there.
+-- A note says where it is (the grid or an edge, where it joins the deck)
+-- and which note it shows; a deck of notes on an edge, where it is, its
+-- place along the edge, whether new notes land on it, and which notes it
+-- holds.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -25,6 +25,7 @@ local settings = require("services.settings")
 local desk = require("services.desktop")
 local controls = require("desktop.arrange.controls")
 local swatch = require("desktop.theme_swatch")
+local deck_service = require("services.deck")
 
 local C = theme.color
 local M = {}
@@ -75,6 +76,7 @@ local function title(key, id)
       text = function()
         local row = desk.entry_of(key)
         if desk.is_spectrum(row) then return entry.name .. " · " .. row.edge .. " edge" end
+        if desk.is_deck(row) then return entry.name .. " · Notes on the edge" end
         return entry.name
       end,
       size = theme.size.medium, weight = 600, color = C.text,
@@ -114,8 +116,10 @@ local function shape_section(key, id)
   }
 end
 
--- The spectrum goes to the grid or to an edge that has none.
-local function where_section(key)
+-- A note goes to the grid or to an edge's deck; a deck, the whole of it, to
+-- another edge; the spectrum to the grid or to an edge that has none.
+local function where_section(key, id)
+  local on_spectrum = id == "spectrum"
   local places = {
     { id = "grid", label = "Grid", icon = "󰕰" },
     { id = "left", label = "Left", icon = "󰞕" },
@@ -130,15 +134,23 @@ local function where_section(key)
       return place.id == "grid"
     end
     local function taken()
-      return not current() and place.id ~= "grid" and not desk.spectrum_takes(place.id)
+      return on_spectrum and not current() and place.id ~= "grid" and not desk.spectrum_takes(place.id)
     end
     items[#items + 1] = {
       width = 64,
       tile_values = {
         width = 64, height = 48, current = current, dim = taken,
         on_click = function()
-          if current() then return end
+          if current() or taken() then return end
           local row = desk.entry_of(key)
+          if not on_spectrum then
+            if desk.is_deck(row) then
+              if place.id ~= "grid" then desk.set_deck_edge(key, place.id) end
+            elseif place.id ~= "grid" then
+              desk.note_to_edge(key, place.id)
+            end
+            return
+          end
           if place.id == "grid" then
             desk.spectrum_to_grid(key)
           elseif desk.is_edge(row) then
@@ -341,37 +353,116 @@ local function photo_sections(key)
   }
 end
 
--- For a note on the grid: the newest, or one the notes service lists.
+-- For a notes widget on a cell: the newest (the default when the row names
+-- none), then every note, each with its tint.
 local function note_sections(key)
-  local ok, notes = pcall(require, "services.notes")
-  local list = {}
-  if ok and type(notes) == "table" then
-    local okl, live = pcall(function() return notes.live and (type(notes.live) == "function" and notes.live() or notes.live) end)
-    if okl and type(live) == "table" then list = live end
-  end
+  local notes = require("services.notes")
   local choices = { { key = "", title = "The newest" } }
-  for i, n in ipairs(list) do
-    if i > 7 then break end
-    choices[#choices + 1] = { key = n.key, title = n.title ~= "" and n.title or (tostring(n.text or ""):match("[^\n]*") or "Note") }
+  for _, n in ipairs(notes.live()) do
+    choices[#choices + 1] = { key = n.key, title = notes.title_of(n), tint = n.tint }
   end
   local nodes, x, y = {}, 0, 0
   for _, choice in ipairs(choices) do
-    local w = math.min(140, 24 + #choice.title * 6)
+    local dot = choice.key ~= "" and 12 or 0
+    local w = math.min(140, 24 + dot + math.ceil(utf8.len(choice.title) or #choice.title) * 6)
     if x + w > inner then x, y = 0, y + 32 end
     local current = function()
       local row = desk.entry_of(key)
       return (row and row.note or "") == choice.key
     end
-    nodes[#nodes + 1] = controls.tile {
+    local children = {
       x = x, y = y, width = w, height = 26, radius = theme.radius_pill, current = current,
       on_click = function() desk.update(key, { note = choice.key ~= "" and choice.key or false }) end,
-      kit.text { x = 10, y = 0, width = w - 20, height = 26, vertical_alignment = "center", elide = "right",
-        text = choice.title, size = theme.size.label,
-        color = function() return current() and C.text() or C.textMuted() end },
     }
+    if dot > 0 then
+      children[#children + 1] = ui.Rect { x = 10, y = 9.5, width = 7, height = 7, radius = 3.5,
+        color = function() return notes.tint_color(choice.tint) end }
+    end
+    children[#children + 1] = kit.text {
+      x = 10 + dot, y = 0, width = w - 20 - dot, height = 26, vertical_alignment = "center", elide = "right",
+      text = choice.title, size = theme.size.label,
+      color = function() return current() and C.text() or C.textMuted() end,
+    }
+    nodes[#nodes + 1] = controls.tile(children)
     x = x + w + 6
   end
   return { controls.heading("Which note"), ui.Item { width = inner, height = y + 26, table.unpack(nodes) } }
+end
+
+-- For a deck: its place along the edge (finer placement is the grip before
+-- the first tab), whether new notes land on it, and every note ticked on or
+-- off it. Ticking a note here moves it from wherever it was.
+local function deck_sections(key)
+  local notes = require("services.notes")
+  local along = {}
+  for _, entry in ipairs { { value = 0, label = "Start" }, { value = 0.5, label = "Middle" }, { value = 1, label = "End" } } do
+    local current = function() return math.abs(desk.along_of(desk.entry_of(key)) - entry.value) < 0.01 end
+    along[#along + 1] = {
+      width = 64,
+      tile_values = { width = 64, height = 30, current = current,
+        on_click = function() desk.set_deck_along(key, entry.value) end,
+        kit.text { anchors = { fill = true }, horizontal_alignment = "center", vertical_alignment = "center",
+          text = entry.label, size = theme.size.label,
+          color = function() return current() and C.text() or C.textMuted() end } },
+    }
+  end
+  local ticks = {}
+  for _, n in ipairs(notes.live()) do
+    local note_key, tint = n.key, n.tint
+    local on = function()
+      for _, k in ipairs(desk.deck_notes(desk.entry_of(key))) do if k == note_key then return true end end
+      return false
+    end
+    local elsewhere = function()
+      if on() then return "" end
+      return desk.placement_of(note_key)
+    end
+    local hovered = controls.signal("inspector.tick", false)
+    ticks[#ticks + 1] = ui.Rect {
+      width = inner, height = 26, radius = theme.radius_small,
+      color = function() return hovered:get() and C.islandSurfaceHover or morf.color("transparent") end,
+      ui.Rect {
+        x = 6, y = 6, width = 14, height = 14, radius = 4,
+        color = function() return on() and C.accent() or morf.color("transparent") end,
+        border_color = function() return on() and C.accent() or C.textMuted() end, border_width = 1.5,
+        kit.glyph { anchors = { fill = true }, vertical_alignment = "center", glyph = "󰄬", size = 9,
+          color = C.accentText, visible = on },
+      },
+      ui.Rect { x = 28, y = 9, width = 8, height = 8, radius = 4,
+        color = function() return notes.tint_color(tint) end },
+      kit.text {
+        x = 44, y = 0, height = 26, vertical_alignment = "center", elide = "right",
+        width = function() return inner - 50 - (elsewhere() ~= "" and 18 or 0) end,
+        text = function() local e = notes.entry(note_key) return e and notes.title_of(e) or "" end,
+        size = theme.size.label, color = function() return on() and C.text() or C.textMuted() end,
+      },
+      kit.glyph {
+        x = inner - 22, y = 0, width = 16, height = 26, vertical_alignment = "center", size = 10,
+        color = C.textMuted, visible = function() return elsewhere() ~= "" end,
+        glyph = function() return elsewhere() == "grid" and "󰕰" or "󰞘" end,
+      },
+      ui.MouseArea {
+        anchors = { fill = true }, cursor = "pointer",
+        on_entered = function() hovered:set(true) end,
+        on_exited = function() hovered:set(false) end,
+        on_clicked = function() desk.toggle_deck_note(key, note_key) end,
+      },
+    }
+  end
+  return {
+    controls.heading("Along the edge"),
+    tile_row(along, 8),
+    ui.Item {
+      width = inner, height = 28,
+      kit.text { x = 0, y = 0, height = 28, vertical_alignment = "center", text = "New notes land here",
+        size = theme.size.label, weight = 600, color = C.textMuted },
+      controls.switch { x = inner - 36, y = 4,
+        get = function() return desk.takes_new(desk.entry_of(key)) end,
+        set = function(on) desk.set_takes_new(key, on) end },
+    },
+    controls.heading("Which notes"),
+    ui.Column { width = inner, gap = 4, height = #ticks * 30 - 4, table.unpack(ticks) },
+  }
 end
 
 local function face_section(key)
@@ -470,14 +561,14 @@ local function card_for(key)
   local on_note, on_photo, on_spectrum = id == "notes", id == "photo", id == "spectrum"
   local styled = not on_note and not on_photo and not on_spectrum
 
+  local on_deck = desk.is_deck(row)
   local children = { title(key, id), controls.rule(inner) }
   local function add(list) for _, n in ipairs(list) do children[#children + 1] = n end end
   if not desk.is_edge(row) then add(shape_section(key, id)) end
-  if on_spectrum then
-    add(where_section(key))
-    add(spectrum_sections(key))
-  end
-  if on_note then add(note_sections(key)) end
+  if on_note or on_spectrum then add(where_section(key, id)) end
+  if on_spectrum then add(spectrum_sections(key)) end
+  if on_deck then add(deck_sections(key)) end
+  if on_note and not on_deck then add(note_sections(key)) end
   if on_photo then add(photo_sections(key)) end
   if not on_note and not on_spectrum then add(face_section(key)) end
   if styled then add(style_sections(key, id)) end
@@ -490,6 +581,18 @@ local function card_for(key)
     if desk.is_spectrum(r) then
       local b, s = desk.board(), desk.spectrum_box(r)
       return { x = s.x - b.x, y = s.y - b.y, width = s.width, height = s.height }
+    end
+    if desk.is_deck(r) then
+      -- The whole strip at full depth.
+      local board, D = desk.board(), deck_service
+      local n = #desk.deck_notes(r)
+      local length = r.edge == "bottom" and board.width or board.height
+      local start = D.start_of(n, desk.along_of(r), length)
+      local strip = D.strip_length(n)
+      if r.edge == "bottom" then
+        return { x = start, y = board.height - D.tab_depth, width = strip, height = D.tab_depth }
+      end
+      return { x = r.edge == "right" and board.width - D.tab_depth or 0, y = start, width = D.tab_depth, height = strip }
     end
     return desk.geometry(key) or { x = 0, y = 0, width = 0, height = 0 }
   end
@@ -504,9 +607,10 @@ local function card_for(key)
     return b.x + b.width + M.GAP + M.WIDTH <= desk.board().width - theme.desktop_gutter
   end
   local function left_fits() return box().x - M.GAP - M.WIDTH >= theme.desktop_gutter end
+  -- Anything on the bottom edge has no side: the card goes above.
   local function above()
     local r = desk.entry_of(key)
-    return desk.is_spectrum(r) and r.edge == "bottom"
+    return desk.is_edge(r) and r.edge == "bottom"
   end
   local gutter = theme.desktop_gutter
   return ui.Rect {

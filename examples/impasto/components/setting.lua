@@ -454,14 +454,120 @@ function M.slider(values)
         end,
       },
     },
-    kit.text {
-      text = reading, mono = true, size = theme.size.small, width = figure_w,
-      horizontal_alignment = "right", elide = "left", color = C.textMuted,
+    M.figure {
+      width = figure_w, reading = reading, value = value, from = from, to = to, step = step,
+      decimals = values.decimals or 0, locked = locked, on_moved = values.on_moved,
     },
   }
   return M.row {
     width = width, label = values.label, locked = locked, reason = values.reason,
     visible = values.visible, control = control,
+  }
+end
+
+local UP, DOWN = 0xff52, 0xff54
+
+--- A slider's figure, which a click turns into a field for an exact number
+--- (SettingSlider.qml's reading slot): Enter or leaving it commits, clamped
+--- and snapped to the steps; Escape cancels; Up and Down step and show the
+--- new value. Only a number can be typed: a sign, digits and one point (a
+--- comma reads as one).
+function M.figure(values)
+  local width = values.width or 64
+  local from, to, step = values.from, values.to, values.step
+  local decimals = values.decimals or 0
+  local locked = values.locked or function() return false end
+  local editing = signal("figure.editing", false)
+  local hovered = signal("figure.hover", false)
+  local function format(v) return string.format("%." .. decimals .. "f", v) end
+  local function clamp(v) return math.max(from, math.min(to, v)) end
+  local function commit(entered)
+    local parsed = tonumber((tostring(entered or ""):gsub(",", ".")))
+    if not parsed or not values.on_moved then return end
+    local wanted = clamp(parsed)
+    if step > 0 then wanted = from + math.floor((wanted - from) / step + 0.5) * step end
+    wanted = clamp(wanted)
+    if decimals == 0 then wanted = math.floor(wanted + 0.5) end
+    values.on_moved(wanted)
+  end
+  local valid = ""
+  local editor
+  local function nudge(direction)
+    if not values.on_moved then return end
+    local wanted = clamp((tonumber(values.value()) or 0) + direction * step)
+    values.on_moved(wanted)
+    valid = format(wanted)
+    editor.text = valid
+    editor.cursor_position = #valid
+  end
+  editor = ui.TextInput {
+    anchors = { fill = true, left_margin = 6, right_margin = 6 },
+    horizontal_alignment = "center", vertical_alignment = "center",
+    font_family = function() return theme.font_mono() end, font_size = theme.size.small,
+    color = C.text, caret_color = C.accent,
+    selection_color = C.accent, selected_text_color = C.accentText,
+    clip = true,
+    on_text_changed = function(text)
+      -- The validator: what is not a number being typed goes back.
+      if text:match("^%-?%d*[.,]?%d*$") then valid = text return end
+      local at = editor.cursor_position
+      editor.text = valid
+      editor.cursor_position = math.min(#valid, math.max(0, at - 1))
+    end,
+    on_accepted = function(text)
+      if not editing:get() then return end
+      editing:set(false)
+      editor.focus = false
+      commit(text)
+    end,
+    -- Escape clears `editing` first, so letting go does not commit.
+    on_escape = function()
+      editing:set(false)
+      editor.focus = false
+    end,
+    on_key_pressed = function(keysym)
+      if keysym == UP then nudge(1) return true end
+      if keysym == DOWN then nudge(-1) return true end
+    end,
+    on_focus_changed = function(on)
+      if on or not editing:get() then return end
+      editing:set(false)
+      commit(editor.text)
+    end,
+  }
+  return ui.Item {
+    width = width, height = 22,
+    kit.text {
+      anchors = { right = true, vertical_center = true },
+      visible = function() return not editing:get() end,
+      text = values.reading, mono = true, size = theme.size.small, width = width,
+      horizontal_alignment = "right", elide = "left",
+      color = function() return hovered:get() and C.text() or C.textMuted() end,
+      behavior = { color = fast() },
+    },
+    ui.MouseArea {
+      anchors = { fill = true },
+      visible = function() return not editing:get() end,
+      cursor = function() return locked() and "default" or "text" end,
+      on_entered = function() hovered:set(true) end,
+      on_exited = function() hovered:set(false) end,
+      on_clicked = function()
+        if locked() then return end
+        valid = format(tonumber(values.value()) or 0)
+        editing:set(true)
+        editor.text = valid
+        editor.focus = true
+        editor:select_all()
+      end,
+    },
+    ui.Rect {
+      anchors = { right = true, vertical_center = true },
+      width = 68, height = 22,
+      visible = function() return editing:get() end,
+      radius = theme.radius_small - 2, color = C.island,
+      border_color = C.accent, border_width = 1,
+      editor,
+    },
   }
 end
 

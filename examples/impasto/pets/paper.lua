@@ -31,10 +31,42 @@ local function egg(coat)
 end
 
 -- The mouth: one flat block, shaped by mood (rounded below, or above when
--- lonely, so it turns down).
+-- lonely, so it turns down). It is not in the drawing: the face draws it
+-- live (`paper.mouth`), so a change of mood reshapes it rather than
+-- swapping it, as the original's Behaviors on its width and height do.
 local mouths = {
   beaming = { 22, 11 }, peckish = { 16, 4.5 }, lonely = { 18, 8.5 }, asleep = { 12, 4.5 },
 }
+
+local K = 0.5523 -- a quarter circle's control distance, as a fraction of its radius
+
+--- The mouth for a mood as path data in the pet's 0..100 square: always the
+--- same run of moves and curves (a square corner is a curve of no size), so
+--- one mood's mouth walks into the next's.
+function paper.mouth(mood)
+  local size = mouths[mood] or { 18, 8.5 }
+  local w, h = size[1], size[2]
+  local x, y = 50 - w / 2, 76
+  local limit = math.min(w, h) / 2
+  local round = math.min(h, limit)
+  local top = mood == "lonely" and round or 0
+  local bottom = mood == "lonely" and 0 or round
+  local tl, tr, br, bl = top, top, bottom, bottom
+  local n = draw.n
+  local function pt(px, py) return n(px) .. " " .. n(py) end
+  return table.concat({
+    "M", pt(x + tl, y),
+    "L", pt(x + w - tr, y),
+    "C", pt(x + w - tr + tr * K, y), pt(x + w, y + tr - tr * K), pt(x + w, y + tr),
+    "L", pt(x + w, y + h - br),
+    "C", pt(x + w, y + h - br + br * K), pt(x + w - br + br * K, y + h), pt(x + w - br, y + h),
+    "L", pt(x + bl, y + h),
+    "C", pt(x + bl - bl * K, y + h), pt(x, y + h - bl + bl * K), pt(x, y + h - bl),
+    "L", pt(x, y + tl),
+    "C", pt(x, y + tl - tl * K), pt(x + tl - tl * K, y), pt(x + tl, y),
+    "Z",
+  }, " ")
+end
 
 function paper.draw(p)
   if p.egg then return egg(p.coat) end
@@ -94,11 +126,7 @@ function paper.draw(p)
     end
   end
 
-  local size = mouths[p.mood] or { 18, 8.5 }
-  local w, h = size[1], size[2]
   local lonely = p.mood == "lonely"
-  out[#out + 1] = draw.rect(50 - w / 2, 76, w, h, 0, { fill = INK }, 0,
-    lonely and { h, h, 0, 0 } or { 0, 0, h, h })
 
   if asleep then return table.concat(out), defs, nil end
 

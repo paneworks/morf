@@ -1,12 +1,11 @@
 -- What the desk's faces read, one table per module.
 --
--- The faces of the original read the same services as the bar. Most of those
--- are other ports' (services.audio, battery, brightness, network, bluetooth,
--- media, tasks, notes, timer), written beside this one; each is asked for
--- here with `pcall(require, ...)`, and while it is missing a small reader over
--- the same library stands in, so the desk works on its own and picks the
--- service up the moment it lands. Every reader is a plain function, so a
--- binding that calls it follows it.
+-- The faces of the original read the same services as the bar
+-- (services.audio, battery, brightness, network, bluetooth, media, tasks,
+-- notes, timer, updates). Each is asked for with `pcall(require, ...)`, and
+-- where one cannot load a small reader over the same library stands in, so
+-- the desk still draws something true. Every reader is a plain function, so
+-- a binding that calls it follows it.
 
 local settings = require("services.settings")
 local theme = require("theme")
@@ -313,6 +312,7 @@ end
 S.media.title = field("title")
 S.media.artist = field("artist")
 S.media.identity = field("identity")
+S.media.album = field("album")
 --- A local path for the art, or "".
 function S.media.art()
   if media_service and media_service.art then return call(media_service, "art") or "" end
@@ -343,7 +343,8 @@ S.media.previous = transport("previous", "previous")
 
 -- ------------------------------------------------------------------- timer --
 
--- The bar's countdown, when its port has landed; a small one here until then.
+
+-- The bar's countdown (services.timer), else a small one of the desk's own.
 S.timer = {}
 local timer_service = optional("services.timer")
 local own = {
@@ -415,9 +416,10 @@ end
 
 -- ----------------------------------------------------------------- updates --
 
--- Pending packages through `lib.packages`, which lands in lua-stdlib
--- separately. Without it the faces say "cannot check".
+-- Pending packages: the updates service (UpdatesService), else a reader over
+-- `lib.packages`. Without either the faces say "cannot check".
 S.updates = {}
+local updates_service = optional("services.updates")
 local packages_ok, packages = pcall(require, "lib.packages")
 if not packages_ok then packages = nil end
 local packages_handle = nil
@@ -439,17 +441,23 @@ local function updates_now()
   return value
 end
 function S.updates.available()
+  if updates_service then return call(updates_service, "available") == true end
   local now = updates_now()
   if now.available ~= nil then return now.available == true end
   return type(now.managers) == "table" and #now.managers > 0
 end
-function S.updates.checking() return updates_now().checking == true end
+function S.updates.checking()
+  if updates_service then return call(updates_service, "checking") == true end
+  return updates_now().checking == true
+end
 function S.updates.count()
+  if updates_service then return tonumber(call(updates_service, "count")) or 0 end
   local now = updates_now()
   return tonumber(now.total or now.count) or 0
 end
 --- Names of pending packages, up to `n`, across the managers.
 function S.updates.packages(n)
+  if updates_service then return call(updates_service, "names", n) or {} end
   local now = updates_now()
   local out = {}
   for _, manager in ipairs(now.managers or {}) do
@@ -460,10 +468,15 @@ function S.updates.packages(n)
   end
   return out
 end
+--- "5 min ago", "just now", or "" before the first check.
+function S.updates.age() return updates_service and call(updates_service, "age") or "" end
+--- A face on screen keeps the count checked and the age moving.
+function S.updates.subscribe() if updates_service then call(updates_service, "subscribe") end end
+function S.updates.release() if updates_service then call(updates_service, "release") end end
 
 -- ------------------------------------------------------------------- tasks --
 
--- The board's tasks, when that port has landed; empty until then.
+-- The board's tasks (services.tasks).
 S.tasks = {}
 local tasks_service = optional("services.tasks")
 function S.tasks.available() return tasks_service ~= nil end
@@ -523,32 +536,38 @@ function S.tasks.on(key)
   local list = tasks_service and call(tasks_service, "on", key) or {}
   return type(list) == "table" and list or {}
 end
+--- The next unfinished task due from today on, or nil.
+function S.tasks.next() return tasks_service and call(tasks_service, "next") or nil end
+function S.tasks.due_label(day) return tasks_service and call(tasks_service, "due_label", day) or (day or "") end
 function S.tasks.toggle(key) if tasks_service and tasks_service.toggle then pcall(tasks_service.toggle, key) end end
 
 -- ------------------------------------------------------------------- notes --
 
--- The notes, when that port has landed. A note on the desk is read-only:
--- a click opens it in the island.
+-- The notes (services.notes). A note on the desk is read-only: a click
+-- opens it in the island.
 S.notes = {}
 local notes_service = optional("services.notes")
 function S.notes.available() return notes_service ~= nil end
 --- The note a row names, or the newest: `{ key, title, body, items, updated }`.
 function S.notes.note_for(row)
   if not notes_service then return nil end
-  local note = call(notes_service, "note_for", row)
-  if note == nil and row and row.note then note = call(notes_service, "entry", row.note) end
-  if note == nil then note = call(notes_service, "newest") end
+  -- NotesService.noteFor: the note the row names while it is not archived,
+  -- else the newest.
+  local key = row and row.note or ""
+  local named = key ~= "" and call(notes_service, "entry", key) or nil
+  if type(named) == "table" and not named.archived then return named end
+  local note = call(notes_service, "newest")
   return type(note) == "table" and note or nil
 end
 function S.notes.open(key)
   if notes_service and notes_service.open then pcall(notes_service.open, key) end
   local ok, island = pcall(require, "bar.island")
-  if ok then pcall(island.toggle, "notes") end
+  if ok then pcall(island.open, "notes") end
 end
 function S.notes.create()
   if notes_service and notes_service.create then pcall(notes_service.create) end
   local ok, island = pcall(require, "bar.island")
-  if ok then pcall(island.toggle, "notes") end
+  if ok then pcall(island.open, "notes") end
 end
 
 -- ----------------------------------------------------------- pets, games --

@@ -41,7 +41,11 @@ function M.stats(ctx)
   return face(ctx, {
     label = "System",
     reading = function() return string.format("%d%%", math.floor(stats.cpu() + 0.5)) end,
-    note = function() return string.format("load %.2f · RAM %d%%", (stats.load()[1] or 0), math.floor(stats.memory_fraction() * 100 + 0.5)) end,
+    -- The load and how far back the graphs go (StatsService.window).
+    note = function()
+      local minutes = math.floor((stats.HISTORY or 100) * (stats.POLL_MS or 3000) / 60000 + 0.5)
+      return string.format("load %.2f · last %d min", (stats.load()[1] or 0), minutes)
+    end,
     mark = glyph { glyph = "󰻠", size = 30, color = ink.text },
     body = function(w, h)
       local traces = {
@@ -109,6 +113,11 @@ end
 function M.calendar(ctx)
   local ink = ctx.ink
   local w, h = ctx.width, ctx.height
+  local day_tasks = require("desktop.faces.day_tasks")
+  -- Pressing a day with tasks turns the widget into that day's list; the
+  -- month comes back by the arrow or when the pointer leaves, so the widget
+  -- never stays on a stale day.
+  local pick = day_tasks.picker(ctx)
   local pad = 22
   local inner_w = w - 2 * pad
   local header_h = 22
@@ -146,12 +155,19 @@ function M.calendar(ctx)
         if not day then return nil end
         return S.tasks.days_with_tasks(now.year, now.month)[day.day]
       end
+      local function key()
+        local day, now = cell()
+        return day and S.tasks.day_key(now.year, now.month, day.day) or ""
+      end
+      local function picked() return not is_today() and key() ~= "" and pick.day() == key() end
       local d = math.min(cell_w, cell_h) - 6
       nodes[#nodes + 1] = ui.Item {
         x = (c - 1) * cell_w, y = r * cell_h, width = cell_w, height = cell_h,
         visible = function() return (cell()) ~= nil end,
         ui.Rect { x = (cell_w - d) / 2, y = (cell_h - d) / 2, width = d, height = d, radius = d / 2,
-          visible = is_today, color = ink.accent },
+          visible = function() return is_today() or picked() end,
+          color = function() return is_today() and ink.accent() or morf.color("transparent") end,
+          border_color = ink.accent, border_width = function() return picked() and 1 or 0 end },
         kit.text { anchors = { fill = true }, horizontal_alignment = "center", vertical_alignment = "center",
           size = theme.size.small,
           weight = function() return is_today() and 600 or 400 end,
@@ -163,6 +179,9 @@ function M.calendar(ctx)
             if is_today() then return ink.accentText() end
             return mark() == "pending" and ink.accent() or ink.muted()
           end },
+        common.area(ctx, { anchors = { fill = true }, cursor = "pointer",
+          visible = function() return mark() ~= nil end,
+          on_clicked = function() pick.pick(key()) end }),
       }
     end
   end
@@ -178,10 +197,10 @@ function M.calendar(ctx)
       end },
   }
   if S.tasks.available() then
-    agenda[#agenda + 1] = require("desktop.faces.day_tasks").rows(ctx, inner_w, 2,
+    agenda[#agenda + 1] = day_tasks.rows(ctx, inner_w, 2,
       function(n) local out = {} for i, t in ipairs(S.tasks.on(S.tasks.today_key())) do if i <= n then out[i] = t end end return out end)
   end
-  return ui.Item { width = w, height = h,
+  return day_tasks.over(ctx, pick, ui.Item { width = w, height = h,
     kit.text { x = pad, y = pad, text = function() return S.clock.format("%B") end,
       size = theme.size.large, weight = 600, color = ink.text },
     kit.text { x = pad, y = pad + 4, width = inner_w, horizontal_alignment = "right",
@@ -189,7 +208,7 @@ function M.calendar(ctx)
     ui.Item { x = pad, y = pad + header_h + 10, width = inner_w, height = grid_h, table.unpack(nodes) },
     ui.Rect { x = pad, y = pad + header_h + 10 + grid_h + 10, width = inner_w, height = 1, color = ink.dim },
     ui.Column { x = pad, y = pad + header_h + 10 + grid_h + 21, width = inner_w, gap = 3, table.unpack(agenda) },
-  }
+  }, pad)
 end
 
 -- Album art at a useful size, with the transport under it.
@@ -223,7 +242,7 @@ function M.tasks(ctx)
     end,
     tint = function() return S.tasks.overdue() > 0 and ink.red() or ink.text() end,
     mark = glyph { glyph = "󰄲", size = 30, color = ink.text },
-    body = function(w) return require("desktop.faces.day_tasks").rows(ctx, w, 6, function(n) return S.tasks.queue(n) end) end,
+    body = function(w) return require("desktop.faces.day_tasks").rows(ctx, w, 6, function(n) return S.tasks.queue(n) end, { dated = true }) end,
   })
 end
 

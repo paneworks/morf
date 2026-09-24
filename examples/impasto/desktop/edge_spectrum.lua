@@ -23,14 +23,11 @@ local M = {}
 
 local count = 0
 
--- The edge under a point on the screen, "" for none: a band as wide as the
--- gutter along the left, right and bottom.
+-- The edge under a point on the screen, "" for none: DeckService's reach
+-- from the board's left, right and bottom.
 local function edge_at(x, y)
-  local reach = theme.desktop_gutter * 2
-  if x < reach then return "left" end
-  if x > desk.screen_width - reach then return "right" end
-  if y > desk.screen_height - reach then return "bottom" end
-  return ""
+  local board = desk.board()
+  return require("services.deck").edge_at(x - board.x, y - board.y, board.width, board.height)
 end
 
 function M.build(key, arranging)
@@ -107,10 +104,20 @@ function M.build(key, arranging)
       hand_x:set(px - card_size.width / 2)
       hand_y:set(py - card_size.height / 2)
       local board = desk.board()
-      if desk.over_tray(px - board.x, py - board.y) or edge_at(px, py) ~= "" then
+      local D = require("services.deck")
+      if desk.over_tray(px - board.x, py - board.y) then
+        D.receiving:set("")
         desk.set_landing(nil)
         return
       end
+      -- Another free edge lights while the strip is held against it.
+      local edge = edge_at(px, py)
+      if edge ~= "" then
+        D.receiving:set(desk.spectrum_takes(edge) and edge or "")
+        desk.set_landing(nil)
+        return
+      end
+      D.receiving:set("")
       local family = desk.families_for("spectrum")[1] or "4x2"
       local spot = desk.nearest_free(
         desk.cell_x(px - card_size.width / 2 - board.x),
@@ -121,6 +128,7 @@ function M.build(key, arranging)
     local function drop(px, py)
       held:set(false)
       desk.dragging:set("")
+      require("services.deck").receiving:set("")
       local family = desk.landing_family:get()
       local col, row_ = desk.landing_col:get(), desk.landing_row:get()
       desk.set_landing(nil)
