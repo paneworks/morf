@@ -303,7 +303,8 @@ function M.build(page)
         reading = m.refresh > 0 and string.format("%.2f Hz", m.refresh) or "Not reported here",
         locked = locked_off or #refreshes < 2,
         reason = locked_off and off_reason or tr("The only rate at this resolution"),
-        control = ui.Row(pills) },
+        control = #refreshes > 0 and ui.Row(pills)
+          or kit.text { text = "—", size = theme.size.small, color = C.textMuted } },
     }
     return {
       unavailable_group(W),

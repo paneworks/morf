@@ -1,0 +1,159 @@
+-- impasto's compositor settings against a fake Hyprland: what the input
+-- page, the displays page and the keys page send. The fake is served from
+-- this spec (fake_hyprland.lua); the session's Hyprland is never reached
+-- (`morf test` removes HYPRLAND_INSTANCE_SIGNATURE, and impasto is pointed
+-- at the fake's runtime directory). Settings and keys.tsv land in the
+-- scratch XDG folders `morf test` sets up.
+--
+--     morf test --private-bus examples/tests/impasto_hyprland_spec.lua
+
+local test = morf.test
+local fake_hyprland = require("fake_hyprland")
+
+local fake
+
+-- Serves the fake and moves the clock until `done()` holds.
+local function until_(done, message, timeout_ms)
+  return test.wait(function()
+    fake.serve()
+    test.advance(25)
+    fake.serve()
+    return done()
+  end, timeout_ms or 8000, message)
+end
+
+local function sent(text) return #fake.sent(text) > 0 end
+
+local function load(env)
+  local given = { IMPASTO_DRY_RUN = false, HYPRLAND_INSTANCE_SIGNATURE = fake.signature,
+    XDG_RUNTIME_DIR = fake.runtime }
+  for k, v in pairs(env or {}) do given[k] = v end
+  test.load("../impasto/init.lua", { size = { 1280, 720 }, env = given })
+  -- The settings file outlives a test within this spec; start each clean.
+  test.ipc("set", "displays", "{}")
+  test.ipc("set", "keys", "{}")
+  until_(function() return sent("/eval local _ = 0") end, "impasto never asked the flavour")
+end
+
+test.describe("impasto under a fake Hyprland", function()
+  test.before_each(function() fake = fake_hyprland.new {} end)
+  test.after_each(function() fake.close() end)
+
+  test.it("pushes the animation preset, and input only once touched", function()
+    load()
+    until_(function() return sent('hl.curve("preset"') end, "no animation preset")
+    test.eq(#fake.sent("kb_layout"), 0, "an untouched layout was pushed")
+    test.eq(test.ipc("set", "keyRepeatRate", "40"), "40")
+    until_(function() return sent("hl.config({ input = { repeat_rate = 40 } })") end, "the repeat rate was not pushed")
+    test.eq(test.ipc("set", "keyboardLayouts", '"us,de"'), '"us,de"')
+    until_(function() return sent('kb_layout = "us,de"') end, "the layouts were not pushed")
+    test.eq(test.ipc("failed"), "")
+  end)
+
+  test.it("pushes it all again after a reload", function()
+    load()
+    test.eq(test.ipc("set", "pointerSensitivity", "0.5"), "0.5")
+    if not pcall(until_, function() return sent("sensitivity = 0.5") end, "x") then
+      test.fail("sensitivity not pushed: " .. table.concat(fake.transcript, "\n"):sub(-900))
+    end
+    local before = #fake.sent("sensitivity = 0.5")
+    fake.emit("configreloaded>>")
+    until_(function() return #fake.sent("sensitivity = 0.5") > before end, "not pushed after the reload")
+  end)
+
+  test.it("keeps a screen arrangement and pushes it as monitor rules", function()
+    load()
+    until_(function() return test.ipc("displays"):find("DP-2", 1, true) ~= nil end, "no screens")
+    test.eq(test.ipc("display", "DP-2", "position", "0x-1440"), "ok")
+    until_(function() return sent('hl.monitor({ output = "desc:Dell Inc. DELL U2720Q 7XJ1K", mode = "3840x2160@60.00", position = "0x-1440", scale = 1.5 })') end,
+      "the position was not pushed")
+    -- The fake moved it, so nothing is left to push.
+    local count = #fake.sent("hl.monitor(")
+    test.advance(2000)
+    fake.serve()
+    test.eq(#fake.sent("hl.monitor("), count, "pushed again though nothing differs")
+    test.eq(test.ipc("display", "eDP-1", "off"), "ok")
+    until_(function() return sent('hl.monitor({ output = "desc:BOE 0x0BCA", disabled = true })') end, "not switched off")
+    -- The workspace left on the dark panel is brought over.
+    until_(function() return sent('hl.dsp.workspace.move({ workspace = 1, monitor = "DP-2" })') end, "workspace 1 stranded")
+    test.eq(test.ipc("display", "DP-2", "scale", "99"), "refused")
+  end)
+
+  test.it("lights every screen when none is", function()
+    for _, m in ipairs(fake.monitors) do m.disabled = true end
+    load()
+    until_(function() return sent('hl.monitor({ output = "desc:BOE 0x0BCA", disabled = false, mode = "preferred", position = "auto", scale = 1 })') end,
+      "nothing was lit")
+  end)
+
+  test.it("rebinds a key from the keys page, writes keys.tsv and reloads", function()
+    load()
+    test.eq(test.ipc("settings", "keys", "shell"), "keys")
+    test.settle(2000)
+    until_(function() return test.find({ text = "SUPER + SPACE", visible = true }) ~= nil end, "the launcher's keys are not shown")
+    test.click({ text = "SUPER + SPACE", visible = true })
+    test.settle(500)
+    test.truthy(test.find({ text = "Press the keys…", visible = true }), "the editor did not open")
+    test.key("k", "super", { surface = test.find({ text = "SUPER + SPACE", visible = true }).surface })
+    test.settle(500)
+    test.truthy(test.find({ text = "SUPER + K", visible = true }), "the draft is not shown")
+    test.click({ text = "Apply", visible = true })
+    until_(function() return sent("/reload") end, "Hyprland was not reloaded")
+    local state = morf.fs.dir("state")
+    local tsv = morf.fs.read(morf.fs.join(state, "impasto-morf", "keys.tsv")) or ""
+    test.contains(tsv, "Shell · Open the launcher\tSUPER + K")
+    test.contains(morf.fs.read(morf.fs.join(state, "impasto-morf", "keys.lua")) or "", "hl.bind = function")
+    test.eq(test.ipc("get", "keys"):find("SUPER + K", 1, true) ~= nil, true)
+  end)
+
+  test.it("warns of a clash before applying, and Escape cancels", function()
+    load()
+    test.ipc("settings", "keys", "shell")
+    test.settle(2000)
+    until_(function() return test.find({ text = "SUPER + SPACE", visible = true }) ~= nil end, "no launcher row")
+    test.click({ text = "SUPER + SPACE", visible = true })
+    test.settle(300)
+    test.key("a", "super", { surface = test.find({ text = "SUPER + SPACE", visible = true }).surface })
+    test.settle(300)
+    test.truthy(test.find(function(node)
+      return node.visible and node.text and node.text:find("is already Open the control centre", 1, true)
+    end), "no clash warning")
+    test.click({ text = "SUPER + SPACE", visible = true })
+    test.settle(300)
+    test.key("Escape", nil, { surface = test.find({ text = "SUPER + SPACE", visible = true }).surface })
+    test.settle(300)
+    test.falsy(test.find({ text = "Apply", visible = true }), "the editor stayed open")
+  end)
+end)
+
+test.describe("impasto under a fake hyprlang Hyprland", function()
+  test.before_each(function() fake = fake_hyprland.new { flavour = "hyprlang" } end)
+  test.after_each(function() fake.close() end)
+
+  test.it("sends keywords, and monitor rules as keyword monitor", function()
+    load()
+    test.eq(test.ipc("set", "keyRepeatRate", "45"), "45")
+    until_(function() return sent("/keyword input:repeat_rate 45") end, "no repeat rate keyword")
+    until_(function() return test.ipc("displays"):find("DP-2", 1, true) ~= nil end, "no screens")
+    test.eq(test.ipc("display", "DP-2", "scale", "2"), "ok")
+    if not pcall(until_, function() return sent("/keyword monitor desc:Dell Inc. DELL U2720Q 7XJ1K,3840x2160@60.00,1536x0,2") end, "") then
+      test.fail("no monitor keyword in: " .. table.concat(fake.transcript, "\n"):sub(-700))
+    end
+    test.eq(#fake.sent("/eval hl."), 0, "a Lua chunk went to a hyprlang Hyprland")
+  end)
+end)
+
+test.describe("impasto under another compositor", function()
+  test.it("says the pages are not available, and sends nothing", function()
+    test.load("../impasto/init.lua", { size = { 1280, 720 }, env = { IMPASTO_DRY_RUN = "1" } })
+    test.settle(3000)
+    test.eq(test.ipc("display", "DP-2", "off"), "not available here: this compositor is not Hyprland")
+    for _, page in ipairs { { "input", "keyboard" }, { "monitors", "screen" }, { "keys", "shell" } } do
+      test.ipc("settings", page[1], page[2])
+      test.settle(1500)
+      test.truthy(test.find({ text = "Not available here", visible = true }), page[1] .. " does not say so")
+    end
+    test.eq(test.ipc("failed"), "")
+    test.eq(#test.logs("warn"), 0)
+  end)
+end)
