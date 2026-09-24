@@ -105,16 +105,31 @@ function M.shadow_options()
   }
 end
 
---- The keyboard and the pointer, as Hyprland's input options.
-function M.input_options()
-  local layouts = tostring(settings.keyboardLayouts or ""):gsub("%s+", "")
-  if layouts == "" then layouts = "us" end
-  return {
-    { "input:kb_layout", "str", layouts },
-    { "input:kb_options", "str", settings.keyboardSwitch or "" },
-    { "input:repeat_rate", "int", settings.keyRepeatRate },
-    { "input:sensitivity", "float", settings.pointerSensitivity },
-  }
+-- Setting -> Hyprland option, and how the value is spelled.
+M.INPUT = {
+  { key = "keyboardLayouts", option = "input:kb_layout", kind = "str" },
+  { key = "keyboardSwitch", option = "input:kb_options", kind = "str" },
+  { key = "keyRepeatRate", option = "input:repeat_rate", kind = "int" },
+  { key = "pointerSensitivity", option = "input:sensitivity", kind = "float" },
+}
+
+--- The keyboard and the pointer, as Hyprland's input options. `touched`
+--- keeps only those changed from impasto's defaults: at start and after a
+--- reload an option never touched is left to the compositor's own
+--- configuration (CompositorService's store held only touched ones).
+function M.input_options(touched)
+  local out = {}
+  for _, entry in ipairs(M.INPUT) do
+    local value = settings[entry.key]
+    if entry.key == "keyboardLayouts" then
+      value = tostring(value or ""):gsub("%s+", "")
+      if value == "" then value = "us" end
+    end
+    if not touched or value ~= settings.defaults[entry.key] then
+      out[#out + 1] = { entry.option, entry.kind, value }
+    end
+  end
+  return out
 end
 
 local config
@@ -164,12 +179,15 @@ function M.apply_glass()
   end)
 end
 
-function M.apply_input()
-  push("keyboard and pointer", function(how) return config.options_plan(M.input_options(), how) end)
+function M.apply_input(touched)
+  local list = M.input_options(touched)
+  if #list == 0 then return end
+  push("keyboard and pointer", function(how) return config.options_plan(list, how) end)
 end
 
-function M.apply_shake()
+function M.apply_shake(touched)
   if not s.shake:get() then return end
+  if touched and settings.shakeToFind == settings.defaults.shakeToFind then return end
   push("shake to find", function(how)
     return config.options_plan({ { "plugin:dynamic_cursors:shake:enabled", "bool", settings.shakeToFind == true } }, how)
   end)
@@ -286,8 +304,10 @@ end
 
 local last_theme = nil
 
-function M.apply_cursor()
+function M.apply_cursor(touched)
   if not M.available() or not live.here() then return end
+  if touched and settings.cursorColor == settings.defaults.cursorColor
+    and settings.cursorSize == settings.defaults.cursorSize then return end
   local hex = M.cursor_hex()
   local size = math.floor(tonumber(settings.cursorSize) or 24)
   local function set(name)
@@ -342,21 +362,21 @@ function M.start()
   follow("input", function()
     return table.concat({ tostring(settings.keyboardLayouts), tostring(settings.keyboardSwitch),
       tostring(settings.keyRepeatRate), tostring(settings.pointerSensitivity) }, "|")
-  end, M.apply_input)
-  follow("shake", function() return settings.shakeToFind end, M.apply_shake)
+  end, function() M.apply_input(false) end)
+  follow("shake", function() return settings.shakeToFind end, function() M.apply_shake(false) end)
   -- The accent animates between palettes; wait for it to settle rather
   -- than recompile the cursor on every frame.
   follow("cursor", function()
     return tostring(M.cursor_hex()) .. ":" .. tostring(settings.cursorSize)
-  end, M.apply_cursor, 450)
+  end, function() M.apply_cursor(false) end, 450)
 
   local function all()
     M.apply_animations()
     M.apply_shadow()
     M.apply_glass()
-    M.apply_input()
-    M.apply_shake()
-    M.apply_cursor()
+    M.apply_input(true)
+    M.apply_shake(true)
+    M.apply_cursor(true)
   end
   config.on_reload(function()
     plugins()

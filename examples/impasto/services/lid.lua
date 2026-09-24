@@ -8,9 +8,11 @@
 -- "system" leaves the lid to logind. With nothing else connected nothing is
 -- done: logind suspends.
 --
--- The panel is turned off by its own screen's runtime asking the compositor
--- for output power (wlr-output-power-management), as the idle blank does,
--- rather than by rewriting the compositor's monitor rules. The lock hears
+-- Under Hyprland the panel is disabled by a monitor rule, kept in the
+-- screen arrangement (services/displays.lua, as MonitorService.lid did), so
+-- its workspaces move to the other screen. Elsewhere the panel's own
+-- runtime asks the compositor for output power
+-- (wlr-output-power-management), as the idle blank does. The lock hears
 -- the lid too: opening it wakes the lock, which looks for a face.
 
 local settings = require("services.settings")
@@ -26,6 +28,14 @@ M.is_panel = is_panel
 --- What this screen does about the lid: its own panel off or on.
 function M.apply(closed)
   if settings.lidPolicy == "system" then return end
+  -- Under Hyprland the panel is disabled through the screen arrangement
+  -- (a monitor rule), so its workspaces move over and later pushes agree
+  -- with the lid; one screen's runtime does it.
+  local ok, displays = pcall(require, "services.displays")
+  if ok and displays.available() then
+    if require("services.live").here() then displays.lid(closed) end
+    return
+  end
   local screens = morf.screens or {}
   local own = screens[1]
   if not own or not is_panel(own.name) then return end

@@ -91,8 +91,8 @@ M.defaults = {
   nightLight = false,
   nightTemperature = 4000,
   cursorSize = 24,
-  -- Kept in impasto's own settings only: nothing here is pushed to the
-  -- compositor, so the user's Hyprland configuration is never written.
+  -- Kept here and pushed to Hyprland at run time (services/compositor.lua),
+  -- so the user's Hyprland configuration files are never written.
   cursorColor = "palette",
   shakeToFind = false,
   keyboardLayouts = "us",
@@ -100,6 +100,13 @@ M.defaults = {
   keyRepeatRate = 25,
   pointerSensitivity = 0,
   lidPolicy = "system",            -- off | keep | system
+  -- The screens' arrangement, one per set of connected monitors
+  -- (services/displays.lua): set key -> { primary, mirror, monitors =
+  -- { [description] = { position, scale, transform, vrr, mode, disabled } } }.
+  displays = {},
+  -- The profile's keys: bind description -> combination ("SUPER + T", ""
+  -- for unbound), written to keys.tsv for Hyprland (services/shortcuts.lua).
+  keys = {},
   -- Launcher sigil overrides by mode id; absent means `launcher_prefix_defaults`.
   launcherPrefixes = {},
   wallpaper = "",
@@ -249,6 +256,10 @@ function M.get(key)
   return values[key]
 end
 
+--- The value of `key` without tracking it: for code building a view that
+--- must not be built again when this key moves.
+function M.peek(key) return values[key] end
+
 --- Sets `key`, and saves the file once this handler is done.
 function M.set(key, value)
   if M.defaults[key] == nil then
@@ -276,7 +287,7 @@ function M.reset(key) M.set(key, copy(M.defaults[key])) end
 -- What belongs to this machine and this person rather than to a look: a
 -- profile never carries these, and switching one leaves them alone.
 M.machine_keys = {
-  lidPolicy = true, userName = true, userAvatar = true, language = true,
+  lidPolicy = true, displays = true, userName = true, userAvatar = true, language = true,
   keyboardLayouts = true, keyboardSwitch = true, weatherPlace = true, githubUser = true,
   doNotDisturb = true, nightLight = true, nightTemperature = true,
   recorderAudio = true, captureShape = true, captureKind = true,
