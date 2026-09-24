@@ -691,8 +691,11 @@ Methods:
   blanks trimmed. For a test, or for reading what a program printed.
 - `:pid()` — the program's process id while it runs.
 
-Every key goes to the program — it is the terminal's while it has the
-keyboard, Tab and Escape included — encoded as xterm does: the arrows,
+Keys go to the program — it is the terminal's while it has the keyboard,
+Tab and Escape included — unless the terminal's own
+`on_key_pressed(keysym, text, modifiers, repeat)` returns `true`, which
+keeps that key from the program (a panel's Escape, a copy shortcut); any
+other return lets it through. They are encoded as xterm does: the arrows,
 Home/End, PageUp/PageDown, Insert/Delete and F1–F12 with their modifier
 forms, application cursor mode, Ctrl folding a letter to its control code,
 Alt as an Escape prefix. A click gives it the keyboard (its cursor is solid

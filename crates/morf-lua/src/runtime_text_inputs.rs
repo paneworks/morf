@@ -93,8 +93,14 @@ impl Runtime {
         modifiers: KeyModifiers,
         repeat: bool,
     ) -> bool {
-        // A terminal takes every key: they are its program's.
+        // A terminal's keys are its program's, except those its own
+        // `on_key_pressed` claims by returning true: a panel's Escape, a
+        // copy shortcut.
         if self.is_terminal(node) {
+            let args = key_args(keysym, text, modifiers, Some(repeat));
+            if self.terminal_key_claimed(node, &args) {
+                return true;
+            }
             return self.terminal_key(node, keysym, text, modifiers);
         }
         let outcome = if self.is_text_input(node) {

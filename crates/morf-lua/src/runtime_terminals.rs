@@ -6,7 +6,9 @@ use morf_scene::{Element, NodeHandle};
 use morf_terminal::{Modifiers, MouseAction};
 use morf_text::TextSystem;
 
-use crate::reactive_execute::execute_handler_args;
+use crate::events::UiEvent;
+use crate::reactive_execute::{execute_handler_args, execute_ipc_handler};
+use crate::surface_types::IpcValue;
 use crate::text_inputs::KeyModifiers;
 use crate::types::*;
 
@@ -72,6 +74,30 @@ impl Runtime {
         };
         let mut state = self.reactive.borrow_mut();
         crate::terminals::key(&mut state, node, keysym, text, modifiers)
+    }
+
+    /// Whether the terminal's `on_key_pressed` took the key (returned
+    /// true) before its program saw it.
+    pub(crate) fn terminal_key_claimed(&mut self, node: NodeHandle, args: &[IpcValue]) -> bool {
+        let handler = self
+            .reactive
+            .borrow()
+            .handlers
+            .get(&(node, UiEvent::KeyPressed))
+            .cloned();
+        let Some(handler) = handler else {
+            return false;
+        };
+        match self.run_handler(|ctx, limits| execute_ipc_handler(ctx, &handler, args, limits)) {
+            Ok(values) => values.first() == Some(&IpcValue::Boolean(true)),
+            Err(message) => {
+                self.reactive.borrow_mut().log(
+                    LogLevel::Warn,
+                    format!("{node:?}.on_key_pressed: {message}"),
+                );
+                false
+            }
+        }
     }
 
     pub(crate) fn terminal_pointer(

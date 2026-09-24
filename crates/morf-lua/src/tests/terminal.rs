@@ -301,3 +301,30 @@ fn the_wheel_scrolls_the_history_when_the_program_does_not_want_it() {
         )
         .unwrap();
 }
+
+#[test]
+fn a_key_its_handler_claims_never_reaches_the_program() {
+    let (mut runtime, node) = start(
+        r#"
+        claimed = {}
+        term = ui.Terminal {
+            width = 400, height = 200,
+            command = { "cat" },
+            on_key_pressed = function(keysym, text)
+                if text == "x" then claimed[#claimed + 1] = text return true end
+            end,
+        }
+        "#,
+    );
+    lay_out(&mut runtime, node, 400.0, 200.0);
+    wait_for(&mut runtime, "assert(term.running)");
+    for (keysym, text) in [('a' as u32, "a"), ('x' as u32, "x"), ('b' as u32, "b")] {
+        runtime.dispatch_key(node, keysym, Some(text), NONE);
+    }
+    runtime.dispatch_key(node, RETURN, Some("\r"), NONE);
+    // "x" was the handler's; the handler saw "a" and "b" too and let them by.
+    wait_for(
+        &mut runtime,
+        r#"assert(term:text() == "ab\nab", term:text()) assert(#claimed == 1)"#,
+    );
+}
