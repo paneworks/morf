@@ -79,7 +79,8 @@ pub(crate) fn install_time_api<'gc>(
         let state = Rc::clone(&state);
         move |ctx, _, mut stack| {
             let clock: UserRef<SystemClockToken> = stack.consume(ctx)?;
-            track_clock_dependency(&state, clock.enabled.get());
+            let precision = crate::ClockPrecision::parse(&clock.precision.borrow());
+            track_clock_dependency(&state, clock.enabled.get(), precision);
             stack.replace(ctx, local_time_table(ctx));
             Ok(CallbackReturn::Return)
         }
@@ -91,7 +92,12 @@ pub(crate) fn install_time_api<'gc>(
             if format.len() > 256 || format.as_bytes().contains(&0) {
                 return Err(HostError("clock format exceeds 256 bytes".into()).into());
             }
-            track_clock_dependency(&state, clock.enabled.get());
+            // What the text can show bounds how often it can change: a
+            // format with no seconds in it needs no tick every second,
+            // whatever precision the clock was made with.
+            let precision = crate::ClockPrecision::parse(&clock.precision.borrow())
+                .min(crate::ClockPrecision::of_format(&format));
+            track_clock_dependency(&state, clock.enabled.get(), precision);
             stack.replace(ctx, jiff::Zoned::now().strftime(&format).to_string());
             Ok(CallbackReturn::Return)
         }

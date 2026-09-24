@@ -29,7 +29,7 @@ mod frame;
 mod keys;
 mod pointer;
 
-pub(crate) use frame::{blink, observe_shaped};
+pub(crate) use frame::{blink, next_blink, observe_shaped};
 pub(crate) use keys::{KeyOutcome, key};
 use pointer::tell_input_method;
 pub(crate) use pointer::{drag, input_method_commit, press, reconcile_focus, release, set_focus};

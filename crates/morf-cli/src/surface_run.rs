@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 
 use crate::{
     backdrop::*, capture::*, config::*, lock::*, pacing::*, paint::*, services::*, supervisor::*,
-    surface_actions::*, surface_events::*, surface_layers::*, surfaces::*, workers::*,
+    surface_actions::*, surface_events::*, surface_layers::*, surfaces::*, wake_plan::*,
+    workers::*,
 };
 
 /// What this output can do, as name = value pairs.
@@ -98,6 +99,10 @@ pub(crate) fn run_surface(
     let layer_config = runtime.layer_surface_config();
     let mut client = LayerClient::connect(runtime_bar_config(&layer_config, &name)?)
         .map_err(|error| error.to_string())?;
+    // A clipboard or drop read finishing on its thread rings every loop, so
+    // this one wakes for its answer rather than sleeping past it. Set before
+    // the first configure, since a read can start before it.
+    client.set_waker(morf_io::wake_all);
     open_reserve_layers(&mut client, &layer_config, &name)?;
     open_backdrop_layer(&mut client, &layer_config, &name)?;
     // What the reservers were last built from. A reserver is a separate surface
@@ -256,32 +261,47 @@ pub(crate) fn run_surface(
         fallback_tick: None,
     };
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
-    // A clipboard or drop read finishing on its thread rings every loop, so
-    // this one wakes for its answer instead of at the next fallback tick.
-    client.set_waker(morf_io::wake_all);
     let mut layout_complaint: Option<Instant> = None;
+    // Whether the last turn handled anything -- an event, a command -- whose
+    // handlers may have left work that only the checks at the top of a turn
+    // pick up (a popup to open, a reload asked for). One more turn, at once.
+    let mut follow_up = false;
+    let mut pending_streak = 0;
     loop {
         if stop.load(Ordering::Acquire) {
             return Ok(());
         }
-        // Until the compositor, a service thread, the clock, or a fallback.
-        // A refresh at most while the wall clock is standing in for the
-        // shell's frame callbacks, so motion keeps its rate.
-        let idle = if state.fallback_tick.is_some() {
-            state.refresh
-        } else {
-            Duration::from_millis(100)
-        };
-        client
-            .dispatch_timeout_or(until_next_second().min(idle), Some(wake.as_fd()))
+        // Until the compositor sends something, a service thread rings the
+        // alarm, or the first thing that comes due on the clock. Nothing else:
+        // an idle shell sleeps until one of those.
+        let sleep = Sleep::plan_with(
+            &runtime,
+            std::mem::take(&mut follow_up) || client.has_queued_events(),
+            motion_deadline(&runtime, &client, &state),
+            &mut pending_streak,
+        );
+        let slept = Instant::now();
+        let woke = client
+            .wait_for(sleep.timeout(), Some(wake.as_fd()))
             .map_err(|error| error.to_string())?;
         wake.drain();
+        log_wake(&name, woke, &sleep, slept);
+        // Before the services, so a callback reading the time reads it as it
+        // is now, not as it was when the loop last woke.
         let next_clock = clock_text();
+        let mut repaint = false;
+        if next_clock != clock {
+            clock = next_clock;
+            repaint |= runtime
+                .update_clock(&clock)
+                .map_err(|error| error.to_string())?;
+        }
         let polling = Instant::now();
-        let mut repaint = runtime.poll_services();
+        repaint |= runtime.poll_services();
         slow(&name, "services, timers and callbacks", polling);
         let mut recreate_surface = false;
         while let Ok(command) = commands.try_recv() {
+            follow_up = true;
             let started_command = Instant::now();
             let update = handle_worker_command(&mut runtime, &runtime_screen, policy, command);
             slow(&name, "an IPC call", started_command);
@@ -375,13 +395,8 @@ pub(crate) fn run_surface(
             )?;
         }
         apply_service_requests(&mut runtime, &mut client);
-        if next_clock != clock {
-            clock = next_clock;
-            repaint |= runtime
-                .update_clock(&clock)
-                .map_err(|error| error.to_string())?;
-        }
         while let Some(event) = client.next_event() {
+            follow_up = true;
             let handling = Instant::now();
             let what = event_kind(&event);
             let handled = handle_surface_event(
@@ -572,6 +587,28 @@ fn advance_without_callbacks(
         }
     }
     Ok(())
+}
+
+/// When the wall clock next has to tick motion, while the compositor sends
+/// this output's surface no frame callbacks: the stall check a few refreshes
+/// after the callback was asked for, then every refresh. Nothing while no
+/// callback is outstanding or nothing moves -- the callbacks themselves, or
+/// the event that starts the motion, wake the loop then.
+fn motion_deadline(
+    runtime: &Runtime,
+    client: &LayerClient,
+    state: &SurfaceEventState,
+) -> Option<Instant> {
+    let waiting = client.layer_frame_wait(PRIMARY_LAYER)?;
+    if !(state.animating_shaders || runtime.has_motion()) {
+        return None;
+    }
+    let now = Instant::now();
+    Some(match state.fallback_tick {
+        Some(last) => last + state.refresh,
+        // A hair past the threshold, so the check finds it crossed.
+        None => now + frame_stall(state.refresh).saturating_sub(waiting) + Duration::from_millis(1),
+    })
 }
 
 /// Says what the layout could not do, at most once a second, so a scene

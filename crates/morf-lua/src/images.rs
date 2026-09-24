@@ -36,8 +36,9 @@ const FASTEST_WAKE: Duration = Duration::from_millis(16);
 #[derive(Default)]
 pub(crate) struct ImageNodes {
     entries: HashMap<NodeHandle, ImageEntry>,
-    /// Wakes the loop while anything plays, as often as the quickest frame.
-    waker: Option<(Duration, morf_io::Timer)>,
+    /// When the quickest playing picture next changes frame, while anything
+    /// plays: the loop wakes then, and not before.
+    due: Option<Instant>,
     last_advance: Option<Instant>,
 }
 
@@ -82,8 +83,13 @@ impl ImageNodes {
     pub(crate) fn remove(&mut self, node: NodeHandle) {
         self.entries.remove(&node);
         if self.entries.is_empty() {
-            self.waker = None;
+            self.due = None;
         }
+    }
+
+    /// When a playing picture next needs the loop.
+    pub(crate) fn due(&self) -> Option<Instant> {
+        self.due
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -166,6 +172,12 @@ pub(crate) fn sync(
             .playback
             .as_ref()
             .map_or(0, |playback| playback.delays.len());
+        // A moving picture just drawn is looked at on the next turn, which
+        // works out when its frame changes; until then nothing would wake
+        // the loop for it.
+        if visible && frames > 1 && state.images.due.is_none() {
+            state.images.due = Some(now);
+        }
         let callback = entry.on_status.clone();
         if changed_source {
             set(state, node, "frame", SceneValue::Number(0.0));
@@ -212,7 +224,7 @@ fn passes(scene: &Scene, node: NodeHandle) -> Option<u32> {
 /// returns whether any frame changed.
 pub(crate) fn advance(state: &mut ReactiveState, now: Instant) -> bool {
     if state.images.entries.is_empty() {
-        state.images.waker = None;
+        state.images.due = None;
         state.images.last_advance = None;
         return false;
     }
@@ -285,28 +297,8 @@ pub(crate) fn advance(state: &mut ReactiveState, now: Instant) -> bool {
             changed = true;
         }
     }
-    // One timer for all of them, at the pace of the quickest frame; none
-    // while nothing plays.
-    match quickest {
-        None => state.images.waker = None,
-        Some(next) => {
-            let pace = next.clamp(FASTEST_WAKE, Duration::from_secs(1));
-            // Rounded to whole milliseconds so a timer is not remade for
-            // every microsecond the next deadline drifts by.
-            let pace = Duration::from_millis(pace.as_millis() as u64);
-            let keep = state
-                .images
-                .waker
-                .as_ref()
-                .is_some_and(|(current, _)| *current <= pace && *current * 2 > pace);
-            if !keep {
-                state.images.waker = morf_io::Timer::every(pace).ok().map(|timer| (pace, timer));
-            }
-        }
-    }
-    if let Some((_, timer)) = &state.images.waker {
-        // Drain the tick that woke us; the timer is only an alarm.
-        let _ = timer.tick(Duration::ZERO);
-    }
+    // One deadline for all of them, at the pace of the quickest frame;
+    // none while nothing plays.
+    state.images.due = quickest.map(|next| now + next.clamp(FASTEST_WAKE, Duration::from_secs(1)));
     changed
 }

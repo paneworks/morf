@@ -96,12 +96,16 @@ pub(crate) fn greetd_response<'gc>(ctx: Context<'gc>, response: GreetdResponse) 
     value
 }
 
-pub(crate) fn track_clock_dependency(state: &Rc<RefCell<ReactiveState>>, enabled: bool) {
+pub(crate) fn track_clock_dependency(
+    state: &Rc<RefCell<ReactiveState>>,
+    enabled: bool,
+    precision: crate::ClockPrecision,
+) {
     if !enabled {
         return;
     }
     let mut state = state.borrow_mut();
-    let clock = state.clock;
+    let clock = state.clock_signal(precision);
     if let Some(active) = &mut state.active {
         active.reads.insert(clock);
     }

@@ -158,3 +158,37 @@ fn a_confdir_that_does_not_exist_is_an_error_not_a_fallback() {
     let mut session = PamSession::start("login", "nobody", Some("/nonexistent/morf-pam"));
     assert!(matches!(next(&mut session), PamEvent::Finished(Err(_))));
 }
+
+#[test]
+fn a_prompt_and_the_verdict_ring_the_loop() {
+    // The shell's loop sleeps with no timeout when nothing is due: what the
+    // transaction says reaches it only because saying it rings the alarm.
+    let dir = service_dir("wake", ASKS_FOR_A_PASSWORD);
+    let wake = morf_io::Wake::new().unwrap();
+    wake.drain();
+    let mut session = PamSession::start("wake", "nobody", dir.to_str());
+    let ringing = |wake: &morf_io::Wake| {
+        let rang = wake.wait(Duration::from_secs(10));
+        wake.drain();
+        rang
+    };
+    let prompt = loop {
+        if let Some(event) = session.next(Duration::ZERO) {
+            break event;
+        }
+        assert!(ringing(&wake), "the prompt rang the loop");
+    };
+    assert!(matches!(
+        prompt,
+        PamEvent::Message(PamPrompt::Prompt { .. })
+    ));
+    session.respond("hunter2");
+    let verdict = loop {
+        if let Some(event) = session.next(Duration::ZERO) {
+            break event;
+        }
+        assert!(ringing(&wake), "the verdict rang the loop");
+    };
+    assert!(matches!(verdict, PamEvent::Finished(Ok(()))));
+    let _ = fs::remove_dir_all(&dir);
+}

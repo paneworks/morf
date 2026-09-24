@@ -45,6 +45,95 @@ pub enum Bus {
     System,
 }
 
+impl Bus {
+    /// A connection builder for this bus, on a socket connected here.
+    ///
+    /// zbus connects a Unix socket on the `blocking` crate's thread pool,
+    /// and that pool's thread never leaves once it exists: it wakes every
+    /// half second for the life of the process, the one wake an idle shell
+    /// could not get rid of. Connecting a local socket takes no time, so it
+    /// is done on the calling thread and zbus is handed the stream. An
+    /// address this does not understand -- TCP, `unixexec`, a launchd one --
+    /// goes to zbus as before.
+    pub(crate) fn builder(self) -> zbus::Result<zbus::blocking::connection::Builder<'static>> {
+        let address = match self {
+            Self::Session => std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().or_else(|| {
+                std::env::var("XDG_RUNTIME_DIR")
+                    .ok()
+                    .map(|dir| format!("unix:path={dir}/bus"))
+            }),
+            Self::System => Some(
+                std::env::var("DBUS_SYSTEM_BUS_ADDRESS")
+                    .unwrap_or_else(|_| "unix:path=/var/run/dbus/system_bus_socket".to_owned()),
+            ),
+        };
+        if let Some(stream) = address.as_deref().and_then(connect_local) {
+            return Ok(zbus::blocking::connection::Builder::async_io_unix_stream(
+                stream,
+            ));
+        }
+        match self {
+            Self::Session => zbus::blocking::connection::Builder::session(),
+            Self::System => zbus::blocking::connection::Builder::system(),
+        }
+    }
+}
+
+/// Connects the first `unix:path=` or `unix:abstract=` entry of a D-Bus
+/// address that answers.
+fn connect_local(address: &str) -> Option<std::os::unix::net::UnixStream> {
+    use std::os::unix::ffi::OsStrExt;
+    for entry in address.split(';') {
+        let Some(keys) = entry.strip_prefix("unix:") else {
+            continue;
+        };
+        let mut path = None;
+        let mut abstract_name = None;
+        for pair in keys.split(',') {
+            match pair.split_once('=') {
+                Some(("path", value)) => path = unescape_address(value),
+                Some(("abstract", value)) => abstract_name = unescape_address(value),
+                _ => {}
+            }
+        }
+        let stream = match (path, abstract_name) {
+            (Some(path), _) => {
+                std::os::unix::net::UnixStream::connect(std::ffi::OsStr::from_bytes(&path))
+            }
+            (None, Some(name)) => {
+                use std::os::linux::net::SocketAddrExt;
+                std::os::unix::net::SocketAddr::from_abstract_name(&name)
+                    .and_then(|address| std::os::unix::net::UnixStream::connect_addr(&address))
+            }
+            (None, None) => continue,
+        };
+        if let Ok(stream) = stream
+            && stream.set_nonblocking(true).is_ok()
+        {
+            return Some(stream);
+        }
+    }
+    None
+}
+
+/// Undoes a D-Bus address value's `%xx` escapes.
+fn unescape_address(value: &str) -> Option<Vec<u8>> {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let hex = std::str::from_utf8(bytes.get(index + 1..index + 3)?).ok()?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            index += 3;
+        } else {
+            out.push(bytes[index]);
+            index += 1;
+        }
+    }
+    Some(out)
+}
+
 /// How long a call waits for its reply before giving up.
 ///
 /// zbus defaults to twenty-five seconds, which is the right answer for a
@@ -70,6 +159,12 @@ pub struct PendingReply {
 }
 
 impl PendingReply {
+    /// When the caller stops waiting, if it set a bound: the loop has to
+    /// wake then to deliver the timeout, since no thread will ring for it.
+    pub fn deadline(&self) -> Option<Instant> {
+        self.deadline
+    }
+
     /// The reply if it is in, `None` while it is not. A reply whose thread
     /// vanished is an error rather than a wait that never ends, and so is one
     /// that missed its deadline.
@@ -392,12 +487,7 @@ impl DbusProxy {
         interface: impl Into<String>,
         timeout: Duration,
     ) -> zbus::Result<Self> {
-        let connection = match bus {
-            Bus::Session => zbus::blocking::connection::Builder::session()?,
-            Bus::System => zbus::blocking::connection::Builder::system()?,
-        }
-        .method_timeout(timeout)
-        .build()?;
+        let connection = bus.builder()?.method_timeout(timeout).build()?;
         let destination = destination.into();
         let path = path.into();
         let interface = interface.into();
@@ -938,12 +1028,10 @@ fn router(bus: Bus) -> zbus::Result<Arc<SignalRouter>> {
     }
     // The asynchronous calls ride this connection too, and each carries its
     // own deadline; the connection's bound is only the ceiling under them.
-    let connection = match bus {
-        Bus::Session => zbus::blocking::connection::Builder::session()?,
-        Bus::System => zbus::blocking::connection::Builder::system()?,
-    }
-    .method_timeout(MAX_ASYNC_CALL_TIMEOUT)
-    .build()?;
+    let connection = bus
+        .builder()?
+        .method_timeout(MAX_ASYNC_CALL_TIMEOUT)
+        .build()?;
     let router = Arc::new(SignalRouter {
         connection: connection.clone(),
         routes: Mutex::new(Vec::new()),

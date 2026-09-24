@@ -111,6 +111,15 @@ pub(crate) struct TerminalHub {
 }
 
 impl TerminalHub {
+    /// When the earliest synchronized update a program left open must be
+    /// shown anyway: the one thing a terminal owes the loop on a clock.
+    pub(crate) fn next_deadline(&self) -> Option<Instant> {
+        self.entries
+            .values()
+            .filter_map(|entry| entry.emulator.sync_deadline())
+            .min()
+    }
+
     /// How many terminals there are.
     pub(crate) fn len(&self) -> usize {
         self.entries.len()

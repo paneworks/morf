@@ -12,6 +12,12 @@ impl Runtime {
     /// The tick itself runs no Lua. Only the `on_finished` handlers declared on
     /// behaviors are invoked afterwards, and a failing one is logged rather than
     /// allowed to abort the frame.
+    /// Whether anything is in motion, so a loop standing in for the
+    /// compositor's frame callbacks knows whether to keep ticking.
+    pub fn has_motion(&self) -> bool {
+        self.reactive.borrow().scene.has_motion()
+    }
+
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
         let frame = self
             .reactive

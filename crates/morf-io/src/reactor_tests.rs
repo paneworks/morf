@@ -291,3 +291,26 @@ fn reactor_speaks_tcp_to_a_numeric_host() {
     assert_eq!(events[0], IoEvent::Connected(handle.id()));
     assert!(events.contains(&IoEvent::Data(handle.id(), b"pong".to_vec())));
 }
+
+#[test]
+fn a_childs_output_rings_the_loop() {
+    let reactor = Reactor::new().unwrap();
+    let wake = Wake::new().unwrap();
+    wake.drain();
+    let handle = reactor
+        .spawn(SpawnOptions::new(argv(&["printf", "one"])))
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut finished = false;
+    while !finished {
+        let left = deadline.saturating_duration_since(Instant::now());
+        assert!(wake.wait(left), "the child's events rang the loop");
+        wake.drain();
+        while let Some(event) = reactor.next_timeout(Duration::ZERO) {
+            if event.id() == handle.id() {
+                reactor.control().credit(&handle, event.weight());
+                finished |= event.is_final();
+            }
+        }
+    }
+}

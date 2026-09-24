@@ -46,6 +46,14 @@ impl LayerClient {
         self.state.events.pop_front()
     }
 
+    /// Whether surface events are queued that [`Self::next_event`] has not
+    /// handed out: ones this client made itself (a configure for a surface
+    /// it just opened) after the loop drained the queue, which no fd will
+    /// announce, so the loop must not sleep on them.
+    pub fn has_queued_events(&self) -> bool {
+        !self.state.events.is_empty()
+    }
+
     /// Requests a compositor callback for the next frame.
     pub fn request_frame(&self) {
         self.request_layer_frame(PRIMARY_LAYER);

@@ -2,7 +2,6 @@ use morf_io::IpcValue as WireValue;
 use morf_lua::{InputMethodRequest, IpcValue, Runtime, TextInputRequest, VirtualKeyboardRequest};
 use morf_wayland::{InputRect, LayerClient, OutputPowerMode};
 use std::collections::BTreeMap;
-use std::sync::atomic::Ordering;
 
 use crate::lock::*;
 
@@ -185,7 +184,7 @@ pub(crate) fn apply_text_input_requests(runtime: &mut Runtime, client: &mut Laye
 
 pub(crate) fn stop_workers(workers: BTreeMap<String, Worker>) {
     for worker in workers.values() {
-        worker.stop.store(true, Ordering::Release);
+        worker.request_stop();
     }
     for (_, worker) in workers {
         let _ = worker.join.join();

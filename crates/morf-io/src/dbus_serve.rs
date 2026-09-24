@@ -87,11 +87,7 @@ impl DbusService {
         path: &str,
         replace: bool,
     ) -> zbus::Result<(Self, NameOutcome)> {
-        let connection = match bus {
-            Bus::Session => zbus::blocking::connection::Builder::session()?,
-            Bus::System => zbus::blocking::connection::Builder::system()?,
-        }
-        .build()?;
+        let connection = bus.builder()?.build()?;
         // `AllowReplacement` either way: a shell that cannot be restarted
         // without first being killed is a shell nobody restarts.
         //

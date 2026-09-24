@@ -303,6 +303,14 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
         self.signals.contains_key(signal)
     }
 
+    /// Whether any effect currently depends on a signal: whether writing it
+    /// could change anything at all. A clock nobody reads need not tick.
+    pub fn has_subscribers(&self, signal: SignalId) -> bool {
+        self.signals
+            .get(signal)
+            .is_some_and(|slot| !slot.subscribers.is_empty())
+    }
+
     /// Reads a signal without capturing a dependency.
     pub fn read(&self, signal: SignalId) -> Result<&T, GraphError> {
         self.signals

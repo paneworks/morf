@@ -379,6 +379,19 @@ impl Scene {
         self.motion_scale
     }
 
+    /// Whether a tick would move anything: an animation or group that is
+    /// running rather than paused, or an ending not yet reported. What a loop
+    /// asks before it keeps a clock ticking for motion.
+    pub fn has_motion(&self) -> bool {
+        !self.events.is_empty()
+            || !self.group_events.is_empty()
+            || self
+                .animations
+                .values()
+                .any(|animation| !animation.is_paused())
+            || self.groups.values().any(|group| !group.paused)
+    }
+
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, SceneError> {
         let snap = self.motion_scale == 0.0;
         // A scale of zero is a tick long enough to finish anything timed. A

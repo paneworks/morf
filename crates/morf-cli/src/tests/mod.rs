@@ -21,6 +21,7 @@ mod lock_ipc;
 mod lock_trees;
 mod operations;
 mod supervision;
+mod wake_plan;
 mod wheel;
 
 use std::collections::{HashMap, HashSet};

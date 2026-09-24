@@ -7,18 +7,47 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::Instant;
 
 use crate::{
     capture::*, lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*,
-    surface_layers::*, surface_pointer::*, surfaces::*,
+    surface_layers::*, surface_pointer::*, surfaces::*, wake_plan::*,
 };
 
 pub(crate) struct Worker {
     pub(crate) stop: Arc<AtomicBool>,
-    pub(crate) commands: mpsc::Sender<WorkerCommand>,
+    pub(crate) commands: WorkerSender,
     pub(crate) join: JoinHandle<()>,
     pub(crate) screen: ScreenInfo,
+}
+
+/// The way into an output thread: a channel whose every message rings the
+/// loop's alarm, because the thread sleeps until something does -- a command
+/// that only sat in the channel waited for the next unrelated wake, and its
+/// sender, blocked on the answer, timed out first.
+pub(crate) struct WorkerSender(mpsc::Sender<WorkerCommand>);
+
+impl WorkerSender {
+    pub(crate) fn new(sender: mpsc::Sender<WorkerCommand>) -> Self {
+        Self(sender)
+    }
+
+    pub(crate) fn send(
+        &self,
+        command: WorkerCommand,
+    ) -> Result<(), mpsc::SendError<WorkerCommand>> {
+        let sent = self.0.send(command);
+        morf_io::wake_all();
+        sent
+    }
+}
+
+impl Worker {
+    /// Tells the output thread to stop, and wakes it to hear it.
+    pub(crate) fn request_stop(&self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Release);
+        morf_io::wake_all();
+    }
 }
 
 pub(crate) enum WorkerCommand {
@@ -96,14 +125,23 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
         .map_err(|error| error.to_string())?;
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
     client.set_waker(morf_io::wake_all);
+    // As on an output: one more turn at once after a turn that handled
+    // events, for what their handlers left behind.
+    let mut follow_up = false;
+    let mut pending_streak = 0;
     loop {
-        client
-            .dispatch_timeout_or(
-                until_next_second().min(Duration::from_millis(100)),
-                Some(wake.as_fd()),
-            )
+        let sleep = Sleep::plan_with(
+            &runtime,
+            std::mem::take(&mut follow_up) || client.has_queued_events(),
+            None,
+            &mut pending_streak,
+        );
+        let slept = Instant::now();
+        let woke = client
+            .wait_for(sleep.timeout(), Some(wake.as_fd()))
             .map_err(|error| error.to_string())?;
         wake.drain();
+        log_wake("lock", woke, &sleep, slept);
         let mut repaint = runtime.poll_services();
         repaint |= ipc.serve(&mut runtime);
         apply_service_requests(&mut runtime, &mut client);
@@ -126,6 +164,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                 .map_err(|error| error.to_string())?;
         }
         while let Some(event) = client.next_event() {
+            follow_up = true;
             let event = match handle_pointer_event(
                 &mut runtime,
                 &mut client,

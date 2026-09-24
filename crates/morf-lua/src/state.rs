@@ -159,6 +159,10 @@ pub(crate) struct ReactiveState {
     /// finds it unchanged would otherwise force a full render of every output,
     /// at its own interval, forever.
     pub(crate) scene_revision: u64,
+    /// The scene's revision when `poll_services` last looked at it: a scene
+    /// that moved on since may hold a timer to start or a loader to fill,
+    /// which is work for the next turn rather than for the next wake.
+    pub(crate) polled_revision: u64,
     pub(crate) reload_seed: HashMap<String, IpcValue>,
     pub(crate) reloadable: HashMap<String, SignalId>,
     pub(crate) reload_request: Option<bool>,
@@ -230,7 +234,13 @@ pub(crate) struct ReactiveState {
     /// The clipboard's text as last seen, for a text input to paste.
     pub(crate) clipboard_text: Option<String>,
     pub(crate) effect_runs: u64,
+    /// `morf.clock`, "HH:MM:SS", written every second something reads it.
     pub(crate) clock: SignalId,
+    /// `morf.minute_clock`, "HH:MM": the clock for whatever changes by the
+    /// minute, so reading the time does not wake the shell every second.
+    pub(crate) clock_minutes: SignalId,
+    /// `morf.hour_clock`, "HH", for what changes by the hour or the day.
+    pub(crate) clock_hours: SignalId,
     /// `morf.session_lock`: where this process's session lock stands, as the
     /// compositor last said — see [`crate::SessionLockState`].
     pub(crate) session_lock: SignalId,
@@ -440,6 +450,15 @@ impl ReactiveState {
         crate::state_pending::TimerSource::every(interval, self.virtual_now)
     }
 
+    /// The clock signal a reader at `precision` depends on.
+    pub(crate) fn clock_signal(&self, precision: crate::ClockPrecision) -> SignalId {
+        match precision {
+            crate::ClockPrecision::Seconds => self.clock,
+            crate::ClockPrecision::Minutes => self.clock_minutes,
+            crate::ClockPrecision::Hours => self.clock_hours,
+        }
+    }
+
     pub(crate) fn next_timer_id(&mut self) -> u64 {
         self.last_timer_id += 1;
         self.last_timer_id
@@ -482,15 +501,19 @@ impl ReactiveState {
         let mut graph = Graph::default();
         let initial_clock = IpcValue::String(String::new());
         let clock = graph.signal("morf.clock", initial_clock.clone());
+        let clock_minutes = graph.signal("morf.minute_clock", initial_clock.clone());
+        let clock_hours = graph.signal("morf.hour_clock", initial_clock.clone());
         let initial_lock = IpcValue::String(crate::SessionLockState::Unlocked.name().to_owned());
         let session_lock = graph.signal("morf.session_lock", initial_lock.clone());
         let mut values = HashMap::new();
-        values.insert(clock, initial_clock);
+        values.insert(clock, initial_clock.clone());
+        values.insert(clock_minutes, initial_clock.clone());
+        values.insert(clock_hours, initial_clock);
         values.insert(session_lock, initial_lock);
         Self {
             graph: Some(graph),
             values,
-            signals: vec![clock, session_lock],
+            signals: vec![clock, clock_minutes, clock_hours, session_lock],
             property_signals: HashMap::new(),
             effect_ids: HashMap::new(),
             dead_effects: Vec::new(),
@@ -500,6 +523,7 @@ impl ReactiveState {
             property_revision: 0,
             model_revisions: HashMap::new(),
             scene_revision: 0,
+            polled_revision: 0,
             reload_seed: HashMap::new(),
             reloadable: HashMap::new(),
             reload_request: None,
@@ -536,6 +560,8 @@ impl ReactiveState {
             clipboard_text: None,
             effect_runs: 0,
             clock,
+            clock_minutes,
+            clock_hours,
             session_lock,
             session_lock_callbacks: Vec::new(),
             lock_surface_builder: None,

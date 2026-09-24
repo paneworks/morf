@@ -199,6 +199,8 @@ impl PamSession {
                     cancelled,
                 };
                 thread::spawn(move || {
+                    // The verdict, and the thread's end, ring the loop.
+                    let _wake = morf_io::WakeOnDrop;
                     let outcome = transact(&service, &user, confdir.as_deref(), bridge);
                     let _ = events.send(PamEvent::Finished(outcome));
                 });
@@ -207,6 +209,7 @@ impl PamSession {
             // owed it through the same channel it will be reading.
             Err(error) => {
                 let _ = events.send(PamEvent::Finished(Err(error)));
+                morf_io::wake_all();
             }
         }
         session
