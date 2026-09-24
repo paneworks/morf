@@ -77,6 +77,11 @@ fn main() {
     let started = Instant::now();
     let now = || started.elapsed().as_millis() as u32;
     let mut state = State;
+    // In a compositor with no other pointer the seat gains its pointer only
+    // now, and a client binds `wl_pointer` when it hears so: an event sent
+    // before that goes nowhere (a press lost, its release delivered alone).
+    queue.roundtrip(&mut state).expect("roundtrip");
+    std::thread::sleep(Duration::from_millis(150));
     let mut words = args.iter().map(String::as_str);
     let number = |word: Option<&str>| -> u32 {
         word.and_then(|word| word.parse().ok())
