@@ -25,7 +25,6 @@ local ui = require("morf.ui")
 local core = require("morf.core")
 local config = require("config")
 local theme = require("theme")
-local proc = require("proc")
 local system = require("system")
 local hypr = require("hypr")
 local island = require("island")
@@ -179,13 +178,6 @@ ui.Item {
   },
   island.build(),
   require("cards").build(),
-  ui.Timer {
-    interval = 40, running = true, ["repeat"] = true,
-    on_triggered = function()
-      proc.tick()
-      hypr.tick()
-    end,
-  },
 }
 
 -- ---------------------------------------------------------------- keyboard --

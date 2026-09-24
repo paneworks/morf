@@ -127,6 +127,7 @@ pub(crate) fn install_reactive_api(
         install_system_service_api(ctx, Rc::clone(&state), morf);
         let (ui, json, json_kinds) = install_ui_json_api(ctx, Rc::clone(&state), morf, limits);
         crate::api_http::install_http_api(ctx, Rc::clone(&state), morf, json_kinds);
+        crate::api_io::install_io_api(ctx, Rc::clone(&state), morf);
         install_menu_desktop_api(ctx, morf, limits);
         let (core, io, window) = install_module_api(ctx, state, morf);
         finish_reactive_api(

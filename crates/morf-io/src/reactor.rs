@@ -1,0 +1,586 @@
+//! Child processes and sockets that report as things happen.
+//!
+//! The older `Process` and `Socket` are pulled: someone has to ask each one
+//! whether it has anything, on a timer, with a timeout. A shell with a dozen
+//! of them spent its idle time asking. Here one thread per [`Reactor`] waits
+//! in `epoll` on every pipe, socket and pidfd it owns, reads what arrives,
+//! and hands it over as [`IoEvent`]s on a channel, ringing
+//! [`crate::wake_all`] once per batch so the main loop drains it at once
+//! and otherwise sleeps.
+//!
+//! One thread rather than a reader per pipe: a child with stdout, stderr,
+//! stdin and an exit to watch would be three or four threads, and a
+//! configuration may run dozens. `epoll` also gives timeouts, connects and
+//! writes that never block the loop for free, which threads would each have
+//! to reinvent.
+//!
+//! Every queue is bounded. A handle whose undelivered output passes
+//! [`HIGH_WATER`] stops being read until the consumer [credits]
+//! (ReactorControl::credit) it back below the low mark, so a child that
+//! prints faster than Lua can listen waits on its pipe instead of filling
+//! memory. Writes are refused past [`MAX_OUTGOING`] queued bytes. A line is
+//! at most `max_line` bytes; a longer one is cut there and the rest of it
+//! dropped.
+//!
+//! Dropping the reactor kills and reaps every child it started, except those
+//! spawned `detached`, which are left running and reaped by a thread of
+//! their own when they exit.
+
+use std::collections::BTreeMap;
+use std::io;
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::os::fd::OwnedFd;
+use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
+
+use rustix::event::{EventfdFlags, eventfd};
+
+/// Undelivered bytes one handle may have before its reads stop.
+pub const HIGH_WATER: usize = 1024 * 1024;
+/// Where reading starts again.
+pub const LOW_WATER: usize = 256 * 1024;
+/// Bytes one handle may have waiting to be written.
+pub const MAX_OUTGOING: usize = 4 * 1024 * 1024;
+/// The longest line delivered whole unless asked otherwise.
+pub const DEFAULT_MAX_LINE: usize = 64 * 1024;
+
+/// Names one process or connection for the life of its reactor.
+pub type IoId = u64;
+
+/// What a child's standard input is.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum StdinMode {
+    /// `/dev/null`.
+    #[default]
+    Null,
+    /// These bytes, then end of file.
+    Data(Vec<u8>),
+    /// Kept open for [`ReactorControl::write`] until closed.
+    Pipe,
+}
+
+/// What becomes of a child's stdout or stderr.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum OutputMode {
+    /// Read and delivered as events.
+    #[default]
+    Capture,
+    /// `/dev/null`.
+    Null,
+    /// The same stream morf itself writes to.
+    Inherit,
+}
+
+/// How to start a child. Never through a shell: `command` is the argv.
+#[derive(Clone, Debug)]
+pub struct SpawnOptions {
+    pub command: Vec<String>,
+    /// Set in the child on top of what it inherits.
+    pub environment: BTreeMap<String, String>,
+    /// Start from an empty environment instead of morf's.
+    pub clear_environment: bool,
+    pub working_directory: Option<PathBuf>,
+    pub stdin: StdinMode,
+    pub stdout: OutputMode,
+    pub stderr: OutputMode,
+    /// Split output on `\n` and deliver lines rather than chunks.
+    pub lines: bool,
+    pub max_line: usize,
+    /// Output past this many bytes, both streams together, is read and
+    /// dropped; the exit then says `truncated`.
+    pub max_output: Option<usize>,
+    /// Terminated when it runs longer, killed if it will not go.
+    pub timeout: Option<Duration>,
+    /// Left running when the reactor goes, in a process group of its own.
+    pub detached: bool,
+}
+
+impl SpawnOptions {
+    pub fn new(command: Vec<String>) -> Self {
+        Self {
+            command,
+            environment: BTreeMap::new(),
+            clear_environment: false,
+            working_directory: None,
+            stdin: StdinMode::Null,
+            stdout: OutputMode::Capture,
+            stderr: OutputMode::Capture,
+            lines: true,
+            max_line: DEFAULT_MAX_LINE,
+            max_output: None,
+            timeout: None,
+            detached: false,
+        }
+    }
+}
+
+/// Where a connection goes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Endpoint {
+    Unix(PathBuf),
+    Tcp { host: String, port: u16 },
+}
+
+/// How to open a connection.
+#[derive(Clone, Debug)]
+pub struct ConnectOptions {
+    pub endpoint: Endpoint,
+    pub lines: bool,
+    pub max_line: usize,
+    /// Given up with [`CloseReason::TimedOut`] when not connected by then.
+    pub connect_timeout: Duration,
+    /// The whole connection's life, for a request that must be answered.
+    pub deadline: Option<Duration>,
+    /// Written as soon as the connection is up.
+    pub greeting: Vec<u8>,
+}
+
+impl ConnectOptions {
+    pub fn new(endpoint: Endpoint) -> Self {
+        Self {
+            endpoint,
+            lines: false,
+            max_line: DEFAULT_MAX_LINE,
+            connect_timeout: Duration::from_secs(5),
+            deadline: None,
+            greeting: Vec::new(),
+        }
+    }
+}
+
+/// Why a connection ended.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CloseReason {
+    /// The peer closed it.
+    Eof,
+    /// Its connect or its deadline ran out.
+    TimedOut,
+    Error(String),
+}
+
+impl CloseReason {
+    pub fn describe(&self) -> String {
+        match self {
+            Self::Eof => "eof".to_owned(),
+            Self::TimedOut => "timed out".to_owned(),
+            Self::Error(message) => message.clone(),
+        }
+    }
+}
+
+/// Something that happened to one handle.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum IoEvent {
+    /// A line (without its newline) or a chunk from a child's stdout.
+    Stdout(IoId, Vec<u8>),
+    Stderr(IoId, Vec<u8>),
+    /// The child is gone and all its output has been delivered. The last
+    /// event for the handle.
+    Exit {
+        id: IoId,
+        code: Option<i32>,
+        signal: Option<i32>,
+        timed_out: bool,
+        truncated: bool,
+    },
+    Connected(IoId),
+    /// A line or a chunk from a connection.
+    Data(IoId, Vec<u8>),
+    /// The connection is over. The last event for the handle.
+    Closed {
+        id: IoId,
+        reason: CloseReason,
+    },
+}
+
+impl IoEvent {
+    pub fn id(&self) -> IoId {
+        match self {
+            Self::Stdout(id, _) | Self::Stderr(id, _) | Self::Connected(id) | Self::Data(id, _) => {
+                *id
+            }
+            Self::Exit { id, .. } | Self::Closed { id, .. } => *id,
+        }
+    }
+
+    /// What this event counts against its handle's [`HIGH_WATER`], and what
+    /// the consumer credits back once it is handled. One more than the
+    /// payload, so a flood of empty lines is still a flood.
+    pub fn weight(&self) -> usize {
+        match self {
+            Self::Stdout(_, bytes) | Self::Stderr(_, bytes) | Self::Data(_, bytes) => {
+                bytes.len() + 1
+            }
+            _ => 0,
+        }
+    }
+
+    /// Whether nothing more will come for this handle.
+    pub fn is_final(&self) -> bool {
+        matches!(self, Self::Exit { .. } | Self::Closed { .. })
+    }
+}
+
+/// What the reactor thread and the handle's owner share.
+#[derive(Default)]
+pub(crate) struct Shared {
+    pub(crate) undelivered: AtomicUsize,
+    pub(crate) outgoing: AtomicUsize,
+    pub(crate) paused: AtomicBool,
+}
+
+/// One process or connection, as its owner holds it.
+#[derive(Clone)]
+pub struct IoHandle {
+    id: IoId,
+    pid: Option<u32>,
+    pub(crate) shared: Arc<Shared>,
+}
+
+impl IoHandle {
+    pub fn id(&self) -> IoId {
+        self.id
+    }
+
+    /// The child's process id; `None` for a connection.
+    pub fn pid(&self) -> Option<u32> {
+        self.pid
+    }
+}
+
+pub(crate) enum Order {
+    Process {
+        id: IoId,
+        shared: Arc<Shared>,
+        child: Box<Child>,
+        options: Box<SpawnOptions>,
+    },
+    Connect {
+        id: IoId,
+        shared: Arc<Shared>,
+        options: Box<ConnectOptions>,
+        address: Option<Result<SocketAddr, String>>,
+    },
+    Resolved {
+        id: IoId,
+        address: Result<SocketAddr, String>,
+    },
+    Write(IoId, Vec<u8>),
+    CloseStdin(IoId),
+    Signal(IoId, i32),
+    Close(IoId),
+    Resume(IoId),
+    Shutdown,
+}
+
+pub(crate) struct Inbox {
+    pub(crate) orders: Mutex<Vec<Order>>,
+    pub(crate) bell: OwnedFd,
+}
+
+/// The side of a reactor that can be handed around: writes, signals and
+/// closes are orders to its thread. Orders after the reactor has gone are
+/// dropped.
+#[derive(Clone)]
+pub struct ReactorControl {
+    inbox: Arc<Inbox>,
+}
+
+impl ReactorControl {
+    pub(crate) fn order(&self, order: Order) {
+        self.inbox
+            .orders
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .push(order);
+        let _ = rustix::io::write(&self.inbox.bell, &1u64.to_ne_bytes());
+    }
+
+    /// Queues bytes for a child's stdin or a connection. Refused when the
+    /// handle already has [`MAX_OUTGOING`] bytes waiting.
+    pub fn write(&self, handle: &IoHandle, bytes: Vec<u8>) -> io::Result<()> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        let queued = handle.shared.outgoing.load(Ordering::SeqCst);
+        if queued + bytes.len() > MAX_OUTGOING {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                format!("more than {MAX_OUTGOING} bytes waiting to be written"),
+            ));
+        }
+        handle
+            .shared
+            .outgoing
+            .fetch_add(bytes.len(), Ordering::SeqCst);
+        self.order(Order::Write(handle.id, bytes));
+        Ok(())
+    }
+
+    /// Ends a child's stdin once what is queued has been written.
+    pub fn close_stdin(&self, handle: &IoHandle) {
+        self.order(Order::CloseStdin(handle.id));
+    }
+
+    /// Signals a child that has not been reaped yet.
+    pub fn signal(&self, handle: &IoHandle, signal: i32) {
+        self.order(Order::Signal(handle.id, signal));
+    }
+
+    /// Drops a process's pipes or a connection. No further events come for
+    /// it; a child is left to finish (and is reaped), not killed.
+    pub fn close(&self, handle: &IoHandle) {
+        self.order(Order::Close(handle.id));
+    }
+
+    /// Hands back what the consumer has finished with, restarting reads on
+    /// a handle that was paused for being too far ahead.
+    pub fn credit(&self, handle: &IoHandle, weight: usize) {
+        if weight == 0 {
+            return;
+        }
+        let before = handle
+            .shared
+            .undelivered
+            .fetch_sub(weight, Ordering::SeqCst);
+        if before.saturating_sub(weight) < LOW_WATER
+            && handle.shared.paused.swap(false, Ordering::SeqCst)
+        {
+            self.order(Order::Resume(handle.id));
+        }
+    }
+}
+
+/// One thread watching processes and connections; see the module docs.
+pub struct Reactor {
+    control: ReactorControl,
+    events: mpsc::Receiver<IoEvent>,
+    next_id: AtomicU64,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Reactor {
+    pub fn new() -> io::Result<Self> {
+        let bell = eventfd(0, EventfdFlags::CLOEXEC | EventfdFlags::NONBLOCK)?;
+        let inbox = Arc::new(Inbox {
+            orders: Mutex::new(Vec::new()),
+            bell,
+        });
+        let (sender, events) = mpsc::channel();
+        let core = crate::reactor_core::Core::new(Arc::clone(&inbox), sender)?;
+        let thread = thread::Builder::new()
+            .name("morf-io-reactor".into())
+            .spawn(move || core.run())?;
+        Ok(Self {
+            control: ReactorControl { inbox },
+            events,
+            next_id: AtomicU64::new(1),
+            thread: Some(thread),
+        })
+    }
+
+    pub fn control(&self) -> ReactorControl {
+        self.control.clone()
+    }
+
+    fn next_id(&self) -> IoId {
+        self.next_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Starts a child. A child that cannot be started (no such program, no
+    /// such directory) is an error here; everything after is an event.
+    ///
+    /// `LD_LIBRARY_PATH` is not passed on unless `environment` names it:
+    /// morf may run under a wrapper that points it at libraries a system
+    /// binary must not load.
+    pub fn spawn(&self, options: SpawnOptions) -> io::Result<IoHandle> {
+        let (program, args) = options.command.split_first().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "command cannot be empty")
+        })?;
+        let mut command = Command::new(program);
+        command.args(args);
+        if options.clear_environment {
+            command.env_clear();
+        } else {
+            command.env_remove("LD_LIBRARY_PATH");
+        }
+        command.envs(&options.environment);
+        if let Some(directory) = &options.working_directory {
+            command.current_dir(directory);
+        }
+        if options.detached {
+            command.process_group(0);
+        }
+        command.stdin(match options.stdin {
+            StdinMode::Null => Stdio::null(),
+            _ => Stdio::piped(),
+        });
+        let output = |mode| match mode {
+            OutputMode::Capture => Stdio::piped(),
+            OutputMode::Null => Stdio::null(),
+            OutputMode::Inherit => Stdio::inherit(),
+        };
+        command.stdout(output(options.stdout));
+        command.stderr(output(options.stderr));
+        let child = command.spawn()?;
+        let id = self.next_id();
+        let shared = Arc::new(Shared::default());
+        let handle = IoHandle {
+            id,
+            pid: Some(child.id()),
+            shared: Arc::clone(&shared),
+        };
+        self.control.order(Order::Process {
+            id,
+            shared,
+            child: Box::new(child),
+            options: Box::new(options),
+        });
+        Ok(handle)
+    }
+
+    /// Opens a connection without waiting for it. Whether it worked comes
+    /// as [`IoEvent::Connected`] or [`IoEvent::Closed`].
+    pub fn connect(&self, options: ConnectOptions) -> IoHandle {
+        let id = self.next_id();
+        let shared = Arc::new(Shared::default());
+        let handle = IoHandle {
+            id,
+            pid: None,
+            shared: Arc::clone(&shared),
+        };
+        let address = match &options.endpoint {
+            Endpoint::Unix(_) => None,
+            Endpoint::Tcp { host, port } => match host.parse::<IpAddr>() {
+                Ok(ip) => Some(Ok(SocketAddr::new(ip, *port))),
+                Err(_) => {
+                    // A name may take the resolver a while; that happens on a
+                    // thread of its own and arrives as an order.
+                    let control = self.control();
+                    let (host, port) = (host.clone(), *port);
+                    let resolved =
+                        thread::Builder::new()
+                            .name("morf-io-resolve".into())
+                            .spawn(move || {
+                                let address = (host.as_str(), port)
+                                    .to_socket_addrs()
+                                    .map_err(|error| error.to_string())
+                                    .and_then(|mut found| {
+                                        found.next().ok_or_else(|| format!("{host}: no address"))
+                                    });
+                                control.order(Order::Resolved { id, address });
+                            });
+                    match resolved {
+                        Ok(_) => None,
+                        Err(error) => Some(Err(error.to_string())),
+                    }
+                }
+            },
+        };
+        self.control.order(Order::Connect {
+            id,
+            shared,
+            options: Box::new(options),
+            address,
+        });
+        handle
+    }
+
+    /// The next event, if one has arrived.
+    pub fn try_next(&self) -> Option<IoEvent> {
+        self.events.try_recv().ok()
+    }
+
+    /// The next event, waiting up to `timeout` for it.
+    pub fn next_timeout(&self, timeout: Duration) -> Option<IoEvent> {
+        self.events.recv_timeout(timeout).ok()
+    }
+}
+
+impl Drop for Reactor {
+    fn drop(&mut self) {
+        self.control.order(Order::Shutdown);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// A signal by its name (`"TERM"`, `"SIGKILL"`, any case) or its number.
+pub fn signal_number(name: &str) -> Option<i32> {
+    if let Ok(number) = name.parse::<i32>() {
+        return (1..=64).contains(&number).then_some(number);
+    }
+    let upper = name.to_ascii_uppercase();
+    let bare = upper.strip_prefix("SIG").unwrap_or(&upper);
+    Some(match bare {
+        "HUP" => libc::SIGHUP,
+        "INT" => libc::SIGINT,
+        "QUIT" => libc::SIGQUIT,
+        "KILL" => libc::SIGKILL,
+        "USR1" => libc::SIGUSR1,
+        "USR2" => libc::SIGUSR2,
+        "TERM" => libc::SIGTERM,
+        "CONT" => libc::SIGCONT,
+        "STOP" => libc::SIGSTOP,
+        "TSTP" => libc::SIGTSTP,
+        "WINCH" => libc::SIGWINCH,
+        _ => return None,
+    })
+}
+
+/// Cuts a byte stream into lines of at most `max` bytes.
+///
+/// A line longer than that is delivered cut at `max`, and the rest of it,
+/// up to its newline, is dropped. The newline itself is never part of a line.
+#[derive(Debug)]
+pub struct LineSplitter {
+    buffer: Vec<u8>,
+    max: usize,
+    skipping: bool,
+}
+
+impl LineSplitter {
+    pub fn new(max: usize) -> Self {
+        Self {
+            buffer: Vec::new(),
+            max: max.max(1),
+            skipping: false,
+        }
+    }
+
+    pub fn push(&mut self, mut data: &[u8], mut emit: impl FnMut(Vec<u8>)) {
+        while let Some(newline) = data.iter().position(|&byte| byte == b'\n') {
+            if self.skipping {
+                self.skipping = false;
+            } else {
+                let room = self.max - self.buffer.len();
+                self.buffer.extend_from_slice(&data[..newline.min(room)]);
+                emit(std::mem::take(&mut self.buffer));
+            }
+            data = &data[newline + 1..];
+        }
+        if self.skipping || data.is_empty() {
+            return;
+        }
+        let room = self.max - self.buffer.len();
+        if data.len() > room {
+            self.buffer.extend_from_slice(&data[..room]);
+            emit(std::mem::take(&mut self.buffer));
+            self.skipping = true;
+        } else {
+            self.buffer.extend_from_slice(data);
+        }
+    }
+
+    /// What is left at the end of the stream, as a last line.
+    pub fn finish(&mut self) -> Option<Vec<u8>> {
+        self.skipping = false;
+        (!self.buffer.is_empty()).then(|| std::mem::take(&mut self.buffer))
+    }
+}

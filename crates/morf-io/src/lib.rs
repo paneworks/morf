@@ -10,6 +10,8 @@ mod fsops;
 mod http;
 mod ipc;
 mod process;
+mod reactor;
+mod reactor_core;
 mod sockets;
 mod streams;
 mod timer;
@@ -26,6 +28,7 @@ pub mod fs {
 }
 pub use ipc::*;
 pub use process::*;
+pub use reactor::*;
 pub use sockets::*;
 pub use streams::*;
 pub use timer::*;
@@ -34,5 +37,7 @@ pub use wake::*;
 mod dbus_tests;
 #[cfg(test)]
 mod http_tests;
+#[cfg(test)]
+mod reactor_tests;
 #[cfg(test)]
 mod tests;

@@ -22,6 +22,7 @@ impl morf_layout::TextMeasurer for NoText {
 
 mod animation_groups;
 mod animation_playback;
+mod async_io;
 mod audio;
 mod clipboard_dnd;
 mod config;

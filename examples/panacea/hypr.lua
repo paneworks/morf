@@ -3,8 +3,8 @@
 -- Two sockets, both under `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE`:
 -- `.socket2.sock` streams events as `name>>data` lines, and `.socket.sock`
 -- answers one request per connection -- `j/monitors`, `j/workspaces`, or a
--- Lua expression after `eval`. Neither is watched by the engine's loop, so
--- both are drained from `hypr.tick()` with a one-millisecond read timeout.
+-- Lua expression after `eval`. The engine watches both and calls back when
+-- a line or an answer arrives, so nothing here polls.
 --
 -- The pill follows one monitor: whichever `MORF_MONITOR` names, else the
 -- focused one, and it moves when focus does. A workspace is "occupied" when
@@ -42,63 +42,37 @@ local function find_sockets()
   directories[#directories + 1] = "/tmp/hypr/" .. signature
   for _, directory in ipairs(directories) do
     for _, suffix in ipairs { ".sock", "" } do
+      -- A connect that works is the test; the stream itself is opened below.
       local ok, socket = pcall(io.socket, directory .. "/.socket2" .. suffix)
       if ok and socket then
-        return socket, directory .. "/.socket" .. suffix
+        pcall(socket.close, socket)
+        return directory .. "/.socket2" .. suffix, directory .. "/.socket" .. suffix
       end
     end
   end
   return nil, nil
 end
 
-local events, command_path = find_sockets()
+local events_path, command_path = find_sockets()
 hypr.available = command_path ~= nil
 
 local RECEIVE_LIMIT = 64 * 1024
-local READ_TIMEOUT_MS = 1
-local READS_PER_TICK = 6
 
 -- ---------------------------------------------------------------- requests --
 
--- One connection per request, at most one per key in flight.
+-- One connection per request, at most one per key in flight. `on_reply`
+-- gets the answer, or nil when there was none.
 local requests = {}
 
 local function request(key, payload, on_reply)
   if not command_path or requests[key] then return false end
-  local ok, socket = pcall(io.socket, command_path)
-  if not ok or not socket then return false end
-  local sent = pcall(socket.send, socket, payload)
-  if sent then sent = pcall(socket.flush, socket) end
-  if not sent then
-    pcall(socket.close, socket)
-    return false
-  end
-  requests[key] = { socket = socket, buffer = "", on_reply = on_reply }
-  return true
-end
-
-local function drain_requests()
-  local finished = nil
-  for key, entry in pairs(requests) do
-    for _ = 1, READS_PER_TICK do
-      local ok, chunk = pcall(entry.socket.receive, entry.socket, RECEIVE_LIMIT, READ_TIMEOUT_MS)
-      if not ok then chunk = "" end
-      if chunk == nil then break end
-      if chunk == "" then
-        finished = finished or {}
-        finished[#finished + 1] = key
-        break
-      end
-      entry.buffer = entry.buffer .. chunk
-    end
-  end
-  if not finished then return end
-  for _, key in ipairs(finished) do
-    local entry = requests[key]
+  local ok, handle = pcall(morf.request_socket, command_path, payload, function(reply)
     requests[key] = nil
-    pcall(entry.socket.close, entry.socket)
-    if entry.on_reply then entry.on_reply(entry.buffer) end
-  end
+    if on_reply then on_reply(reply) end
+  end, { timeout_ms = 2000 })
+  if not ok then return false end
+  requests[key] = handle
+  return true
 end
 
 --- One request, answered now: for the few things needed before the first
@@ -223,6 +197,7 @@ end
 
 local function refresh_keymap()
   request("devices", "j/devices", function(reply)
+    if not reply then return end
     local ok, devices = pcall(io.json.decode, reply)
     if not ok or type(devices) ~= "table" then return end
     for _, keyboard in ipairs(devices.keyboards or {}) do
@@ -237,15 +212,34 @@ local function refresh_keymap()
 end
 hypr.refresh_keymap = refresh_keymap
 
+-- Asked again once the answers in flight are in when something changed
+-- meanwhile, so the last event of a burst is never lost to the first.
+local refreshing = 0
+local refresh_again = false
+
 local function refresh()
-  request("monitors", "j/monitors", function(reply)
-    pending.monitors = reply
-    rebuild()
-  end)
-  request("workspaces", "j/workspaces", function(reply)
-    pending.workspaces = reply
-    rebuild()
-  end)
+  if refreshing > 0 then
+    refresh_again = true
+    return
+  end
+  local function answered()
+    refreshing = refreshing - 1
+    if refreshing == 0 and refresh_again then
+      refresh_again = false
+      refresh()
+    end
+  end
+  refreshing = 2
+  local function ask(key, payload)
+    local asked = request(key, payload, function(reply)
+      pending[key] = reply
+      if reply then rebuild() end
+      answered()
+    end)
+    if not asked then answered() end
+  end
+  ask("monitors", "j/monitors")
+  ask("workspaces", "j/workspaces")
 end
 hypr.refresh = refresh
 
@@ -260,53 +254,41 @@ local WATCHED = {
   urgent = true, monitoradded = true, monitorremoved = true,
 }
 
-local event_buffer = ""
-local refresh_wanted = false
 hypr.on_event = nil
 
-local function drain_events()
-  if not events then return end
-  for _ = 1, READS_PER_TICK do
-    local ok, chunk = pcall(events.receive, events, RECEIVE_LIMIT, READ_TIMEOUT_MS)
-    if not ok or chunk == nil then break end
-    if chunk == "" then
-      -- The compositor closed the stream; it is not coming back.
-      pcall(events.close, events)
-      events = nil
-      break
-    end
-    event_buffer = event_buffer .. chunk
-  end
-  while true do
-    local line, rest = event_buffer:match("^(.-)\n(.*)$")
-    if not line then break end
-    event_buffer = rest
-    local name, data = line:match("^([^>]+)>>(.*)$")
-    if name and WATCHED[name] then refresh_wanted = true end
-    if name == "activelayout" then refresh_keymap() end
-    if name and hypr.on_event then hypr.on_event(name, data or "") end
-  end
+local function on_line(line)
+  local name, data = line:match("^([^>]+)>>(.*)$")
+  if name and WATCHED[name] then refresh() end
+  if name == "activelayout" then refresh_keymap() end
+  if name and hypr.on_event then hypr.on_event(name, data or "") end
 end
 
---- Reads whatever the sockets have; called on the shell's tick.
-function hypr.tick()
-  drain_events()
-  drain_requests()
-  if refresh_wanted then
-    refresh_wanted = false
-    refresh()
-  end
+--- Nothing to do any more: the sockets call back. Kept for callers.
+function hypr.tick() end
+
+-- Without an event stream the state still follows, just later.
+local fallback = nil
+local function follow_slowly()
+  if not fallback then fallback = morf.timer(2000, refresh, true) end
 end
 
--- Without an event socket, the state still follows, just later.
-if not events then morf.timer(2000, function() refresh_wanted = true end, true) end
+if events_path then
+  morf.connect {
+    path = events_path,
+    on_line = on_line,
+    -- The compositor closed the stream; it is not coming back.
+    on_close = follow_slowly,
+  }
+else
+  follow_slowly()
+end
 
 -- ------------------------------------------------------------------- verbs --
 
 --- Goes to workspace `id`.
 function hypr.go_to(id)
   hypr.eval(string.format('hl.dispatch(hl.dsp.focus({ workspace = "%d" }))', id))
-  refresh_wanted = true
+  refresh()
 end
 
 --- The next or previous workspace among the ones shown, wrapping.

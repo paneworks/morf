@@ -21,7 +21,7 @@ luna = { git = "https://github.com/onix-os/luna", rev = "e8b7e98ec977c8973ce1a18
 pollster = "1.0"
 raw-window-handle = "0.6"
 resvg = { version = "=0.48.1", default-features = false, features = ["raster-images", "text"] }
-rustix = { version = "1.1", features = ["event", "fs", "pipe", "rand"] }
+rustix = { version = "1.1", features = ["event", "fs", "net", "pipe", "process", "rand"] }
 slotmap = "1.0"
 signed-distance-field = "=0.6.3"
 serde = "1.0"

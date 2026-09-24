@@ -577,3 +577,6 @@ it together.
 - Keep a palette in a `morf.theme` and derive from it; let
   `morf.prefers` choose the scheme.
 - A secret stays a plain local. Signals are named and observable.
+- Let processes and sockets call you: `morf.run`, `morf.spawn`,
+  `morf.connect` and `morf.request_socket` (see [IO.md](IO.md)) deliver
+  output as it arrives; a timer that polls them costs every idle second.
