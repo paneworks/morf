@@ -523,6 +523,32 @@ pub(crate) fn install_io_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "run", run);
+    // `morf.kill(pid, signal)`: a signal to a process morf did not start
+    // (or no longer holds the handle of) -- a recorder left running by an
+    // earlier shell. The default is TERM. Process groups (pid <= 0) and init
+    // are refused. Returns true, or false and the reason.
+    let kill_pid = Callback::from_fn(&ctx, |ctx, _, mut stack| {
+        let (pid, signal): (i64, LuaValue) = stack.consume(ctx)?;
+        let pid = i32::try_from(pid)
+            .ok()
+            .filter(|pid| *pid > 1)
+            .ok_or_else(|| HostError("kill takes a process id above 1".into()))?;
+        let signal = match signal {
+            LuaValue::Nil => morf_io::signal_number("TERM"),
+            LuaValue::Integer(number) => i32::try_from(number)
+                .ok()
+                .and_then(|number| morf_io::signal_number(&number.to_string())),
+            LuaValue::String(name) => morf_io::signal_number(&name.display_lossy().to_string()),
+            _ => None,
+        }
+        .ok_or_else(|| HostError("kill takes a signal name or number".into()))?;
+        match morf_io::signal_process(pid, signal) {
+            Ok(()) => stack.replace(ctx, true),
+            Err(error) => stack.replace(ctx, (false, error.to_string().as_str())),
+        }
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "kill", kill_pid);
 
     let connect_starter = Rc::clone(&starter);
     let connect = Callback::from_fn(&ctx, move |ctx, _, mut stack| {

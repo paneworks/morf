@@ -525,6 +525,23 @@ impl Drop for Reactor {
     }
 }
 
+/// Sends `signal` to process `pid`. Process groups and init (`pid <= 1`)
+/// are refused.
+pub fn signal_process(pid: i32, signal: i32) -> std::io::Result<()> {
+    if pid <= 1 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "a process id above 1",
+        ));
+    }
+    // SAFETY: kill(2) with a positive pid only sends a signal.
+    if unsafe { libc::kill(pid, signal) } == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
 /// A signal by its name (`"TERM"`, `"SIGKILL"`, any case) or its number.
 pub fn signal_number(name: &str) -> Option<i32> {
     if let Ok(number) = name.parse::<i32>() {

@@ -150,6 +150,35 @@ fn run_times_out_and_kill_ends_a_child() {
 }
 
 #[test]
+fn kill_signals_a_process_by_its_id() {
+    let mut runtime = start(
+        r#"
+        ended = nil
+        sleeper = morf.spawn {
+            command = { "sleep", "30" },
+            on_exit = function(code, signal) ended = signal end,
+        }
+        -- As a shell that lost the handle would: by the id alone.
+        assert(morf.kill(sleeper:pid(), "INT") == true)
+        assert(require("morf.io").kill == morf.kill)
+        assert(not pcall(morf.kill, 1), "init is refused")
+        assert(not pcall(morf.kill, 0), "a process group is refused")
+        assert(not pcall(morf.kill, sleeper:pid(), "NOPE"), "an unknown signal is an error")
+        "#,
+    );
+    wait_for(&mut runtime, "assert(ended == 2, tostring(ended))");
+    runtime
+        .execute(
+            "gone.lua",
+            br#"
+            local ok, err = morf.kill(sleeper_pid_gone or 2147483000, "TERM")
+            assert(ok == false and type(err) == "string", "a missing process says why")
+            "#,
+        )
+        .unwrap();
+}
+
+#[test]
 fn spawn_strips_ld_library_path_unless_given() {
     // SAFETY: a variable only these tests read.
     unsafe { std::env::set_var("LD_LIBRARY_PATH", "/nix/store/wrapped") };

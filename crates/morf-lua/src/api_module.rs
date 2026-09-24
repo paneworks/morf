@@ -88,6 +88,7 @@ pub(crate) fn install_module_api<'gc>(
         "json",
         "spawn",
         "run",
+        "kill",
         "connect",
         "request_socket",
     ] {

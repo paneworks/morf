@@ -115,16 +115,12 @@ end
 -- ---------------------------------------------------------------- audio --
 
 -- System audio is the default sink's monitor: given a bare audio flag both
--- encoders record the microphone instead.
-local pactl = act.which("pactl")
-local function probe_audio()
-  if not pactl then return end
-  morf.run({ pactl, "get-default-sink" }, { timeout_ms = 3000 }, function(result)
-    local sink = tostring(result.stdout or ""):match("^%s*(.-)%s*$")
-    s.audio_source:set((result.ok and sink ~= "") and (sink .. ".monitor") or "")
-  end)
-end
-probe_audio()
+-- encoders record the microphone instead. `morf.audio` follows the default
+-- sink, so a change of output is a change of source.
+morf.effect("impasto.recorder.audio", function()
+  local sink = morf.audio.available() and morf.audio.default_sink() or nil
+  s.audio_source:set(sink and sink.name ~= "" and (sink.name .. ".monitor") or "")
+end)
 
 -- ---------------------------------------------------------------- command --
 
@@ -252,8 +248,7 @@ function M.stop()
     child:kill("INT")
   elseif not kept.dry and alive(tonumber(kept.pid)) then
     -- A take started by an earlier shell: its handle is gone, its pid is not.
-    local kill = act.which("kill")
-    if kill then morf.run({ kill, "-INT", tostring(math.floor(kept.pid)) }, function() end) end
+    morf.kill(math.floor(kept.pid), "INT")
   end
   -- The encoder closes the container on SIGINT; give it a moment.
   morf.timer(kept.dry and 1 or 600, finish, false)

@@ -77,6 +77,10 @@ Otherwise the handle has:
 - `:close()` — stop listening: no callback runs for it again. The child is
   not killed; it loses its pipes.
 
+A process morf holds no handle for -- one an earlier shell started, say --
+is signalled by its id: `morf.kill(pid, signal)` (default `TERM`) returns
+`true`, or `false` and the reason. Process groups and init are refused.
+
 ## Connecting: `morf.connect`
 
 A long-lived connection to a Unix socket (or TCP with `host`, `port`).
