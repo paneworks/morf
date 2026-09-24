@@ -1,4 +1,4 @@
-use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef};
+use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -306,8 +306,50 @@ pub(crate) fn install_module_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     window_methods.set_field(ctx, "start_system_resize", start_system_resize);
+    window_methods.set_field(
+        ctx,
+        "configure",
+        window_configure_method(ctx, Rc::clone(&state)),
+    );
+    // Methods first; on a layer surface any other name reads that layer
+    // setting, and assigning one changes it on the live surface, exactly as
+    // `morf.surface.<key>` does for the shell's own.
+    let window_method_table = ctx.stash(window_methods);
+    let window_index = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let (surface, key): (UserRef<WindowSurfaceToken>, LuaValue) = stack.consume(ctx)?;
+            let method = ctx.fetch(&window_method_table).get_value(ctx, key);
+            if !method.is_nil() {
+                stack.replace(ctx, method);
+                return Ok(CallbackReturn::Return);
+            }
+            let LuaValue::String(key) = key else {
+                stack.replace(ctx, LuaValue::Nil);
+                return Ok(CallbackReturn::Return);
+            };
+            let key = key.display_lossy().to_string();
+            let state = state.borrow();
+            let value = match state.window_surfaces.get(&surface.id).map(|s| &s.kind) {
+                Some(WindowSurfaceKind::Layer(config)) => layer_setting_to_lua(ctx, config, &key),
+                _ => LuaValue::Nil,
+            };
+            stack.replace(ctx, value);
+            Ok(CallbackReturn::Return)
+        }
+    });
+    let window_new_index = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        move |ctx, _, mut stack| {
+            let (surface, key, value): (UserRef<WindowSurfaceToken>, String, LuaValue) =
+                stack.consume(ctx)?;
+            set_window_layer_setting(ctx, &mut state.borrow_mut(), surface.id, &key, value)?;
+            Ok(CallbackReturn::Return)
+        }
+    });
     let window_metatable = Table::new(&ctx);
-    window_metatable.set_field(ctx, "__index", window_methods);
+    window_metatable.set_field(ctx, "__index", window_index);
+    window_metatable.set_field(ctx, "__newindex", window_new_index);
     let window_metatable = ctx.stash(window_metatable);
     let popup_surface = Callback::from_fn(&ctx, {
         let state = Rc::clone(&state);

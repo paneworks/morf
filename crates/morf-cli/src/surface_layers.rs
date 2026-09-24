@@ -245,8 +245,9 @@ pub(crate) enum LayerUpdate {
 /// Decides how one layer surface is brought up to date.
 ///
 /// wlr-layer-shell lets a mapped surface change its size, anchors, margins,
-/// exclusive zone and keyboard interactivity, and nothing else: namespace,
-/// layer and output are fixed when the surface is created. Sorting the two
+/// exclusive zone and keyboard interactivity, and from version 2 its layer
+/// (`live_layer`); namespace and output are fixed when the surface is
+/// created, and so is the layer on an older compositor. Sorting the two
 /// apart is what keeps an animated margin or a growing border from destroying
 /// the zwlr surface, the wl_surface, the fractional scale, the viewport and the
 /// renderer once per frame — a visible unmap and remap for a geometry change
@@ -254,11 +255,12 @@ pub(crate) enum LayerUpdate {
 pub(crate) fn layer_update(
     current: Option<&LayerSurfaceConfig>,
     next: &LayerSurfaceConfig,
+    live_layer: bool,
 ) -> LayerUpdate {
     let Some(current) = current else {
         return LayerUpdate::Recreate;
     };
-    if current.namespace != next.namespace || current.layer != next.layer {
+    if current.namespace != next.namespace || (!live_layer && current.layer != next.layer) {
         return LayerUpdate::Recreate;
     }
     if current == next {
@@ -300,6 +302,7 @@ pub(crate) fn sync_layer_surfaces(
                 .get(&id)
                 .and_then(|current| current.layer_config.as_ref()),
             config,
+            client.supports_live_layer_change(),
         );
         if update == LayerUpdate::Recreate {
             client

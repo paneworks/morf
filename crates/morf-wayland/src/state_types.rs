@@ -181,6 +181,13 @@ impl Drop for LayerRecord {
 }
 
 pub(crate) struct LayerState {
+    /// When each surface's outstanding frame callback was asked for, by
+    /// wl_surface id. Cleared when the callback arrives, so an entry that
+    /// grows old names a surface the compositor is not showing -- a fallback
+    /// toplevel under another in cage, say -- and a present to it under
+    /// FIFO would block the whole output thread waiting for that callback.
+    pub(crate) frames_outstanding:
+        std::cell::RefCell<HashMap<wayland_client::backend::ObjectId, std::time::Instant>>,
     pub(crate) registry: RegistryState,
     pub(crate) compositor: CompositorState,
     pub(crate) outputs: OutputState,

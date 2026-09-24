@@ -264,3 +264,52 @@ pub(crate) fn reserve_to_lua<'gc>(ctx: Context<'gc>, reserve: SurfaceReserve) ->
     }
     table
 }
+
+/// Reads one layer-surface setting back as Lua sees it; `nil` for a key
+/// that is not a setting. `morf.surface.<key>` and a `window.layer`
+/// handle's `<key>` answer through this one table.
+pub(crate) fn layer_setting_to_lua<'gc>(
+    ctx: Context<'gc>,
+    config: &LayerSurfaceConfig,
+    key: &str,
+) -> LuaValue<'gc> {
+    match key {
+        "namespace" => LuaValue::String(ctx.intern(config.namespace.as_bytes())),
+        "width" => LuaValue::Integer(i64::from(config.width)),
+        "height" => LuaValue::Integer(i64::from(config.height)),
+        "exclusive_zone" if config.exclusive_auto => LuaValue::String(ctx.intern(b"auto")),
+        "exclusive_zone" => LuaValue::Integer(i64::from(config.exclusive_zone)),
+        "margin_top" => LuaValue::Integer(i64::from(config.margin_top)),
+        "margin_right" => LuaValue::Integer(i64::from(config.margin_right)),
+        "margin_bottom" => LuaValue::Integer(i64::from(config.margin_bottom)),
+        "margin_left" => LuaValue::Integer(i64::from(config.margin_left)),
+        "layer" => LuaValue::String(ctx.intern(config.layer.as_bytes())),
+        "keyboard_focus" => LuaValue::String(ctx.intern(config.keyboard_focus.as_bytes())),
+        "opaque" => LuaValue::Boolean(config.opaque),
+        "session_lock" => LuaValue::Boolean(config.session_lock),
+        "backdrop" => config.backdrop.map_or(LuaValue::Nil, LuaValue::Boolean),
+        "backdrop_dim" => LuaValue::Number(config.backdrop_dim),
+        "anchors" => {
+            let anchors = Table::new(&ctx);
+            anchors.set_field(ctx, "top", config.anchors.top);
+            anchors.set_field(ctx, "right", config.anchors.right);
+            anchors.set_field(ctx, "bottom", config.anchors.bottom);
+            anchors.set_field(ctx, "left", config.anchors.left);
+            LuaValue::Table(anchors)
+        }
+        "mask" => config
+            .input_regions
+            .as_ref()
+            .map_or(LuaValue::Nil, |regions| {
+                let values = Table::new(&ctx);
+                for (index, region) in regions.iter().enumerate() {
+                    values
+                        .set(ctx, index as i64 + 1, region_to_lua(ctx, region))
+                        .expect("region list accepts integer keys");
+                }
+                LuaValue::Table(values)
+            }),
+        "reserve" => LuaValue::Table(reserve_to_lua(ctx, config.reserve)),
+        _ => LuaValue::Nil,
+    }
+}

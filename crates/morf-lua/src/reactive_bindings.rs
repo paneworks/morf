@@ -27,12 +27,7 @@ pub(crate) fn register_property_binding<'gc>(
                 sink: Some(EffectSink::Property(PropertySink { node, property })),
             },
         );
-        let id = state
-            .graph
-            .as_mut()
-            .expect("reactive graph unavailable outside evaluation")
-            .external_effect(name, token);
-        state.effect_ids.insert(token, id);
+        state.register_external_effect(token, name);
     }
     let _ = flush_reactive(state, ctx, limits);
 }
@@ -94,12 +89,7 @@ fn register_node_binding<'gc>(
                 sink: Some(sink),
             },
         );
-        let id = state
-            .graph
-            .as_mut()
-            .expect("reactive graph unavailable outside evaluation")
-            .external_effect(format!("{node:?}.{what}"), token);
-        state.effect_ids.insert(token, id);
+        state.register_external_effect(token, format!("{node:?}.{what}"));
     }
     let _ = flush_reactive(state, ctx, limits);
 }
@@ -273,12 +263,30 @@ pub(crate) fn replace_status<'gc>(
     }
 }
 
+/// How many times one flush re-runs to take in effects registered by the
+/// flush before it -- an effect that builds a node with a binding whose
+/// evaluation builds another, and so on. Past this the rest wait for the
+/// next flush rather than spinning here forever.
+const MAX_NESTED_FLUSHES: usize = 32;
+
 pub(crate) fn flush_reactive(
     state: &Rc<RefCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
-    let result = flush_graph(state, ctx, limits);
+    let mut result = flush_graph(state, ctx, limits);
+    // Anything registered while the graph was away -- a path that still
+    // takes it for a moment -- is registered now and gets its first run
+    // here, so the caller sees it evaluated.
+    for _ in 0..MAX_NESTED_FLUSHES {
+        if state.borrow_mut().register_pending_effects() == 0 {
+            break;
+        }
+        let next = flush_graph(state, ctx, limits);
+        if result.is_ok() {
+            result = next;
+        }
+    }
     // A flush is where most removals happen — a Loader let go, a Repeater's
     // row gone — and the end of one is the first moment their hooks can run.
     run_destroyed_hooks(state, ctx, limits);

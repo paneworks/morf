@@ -238,6 +238,15 @@ ui.Repeater {
 windows:replace(rows, "identifier")
 ```
 
+The compositor's own windows come ready-made: `morf.toplevels.model` is a
+list model keyed by `identifier` that the engine keeps current, so a dock
+is a Repeater over it with no timer. `morf.toplevels.list()`, `.get(id)`
+and `.revision()` are tracked reads (a binding that calls one re-runs when
+a window opens, closes, or changes title, app id or state), and
+`morf.toplevels.on_changed(function(change) end)` hears
+`{ opened, closed, changed }` identifier lists. `morf.windows` is still
+the plain snapshot table.
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).
@@ -252,6 +261,10 @@ field, another node's property (`other.width`, or `other.width_target`
 for the animation's destination), `layout_*`, `morf.clock`. It returns a
 value: a number, a string, a colour, or a table for the properties that
 take one (a gradient, a decoration). It never runs per frame.
+
+A binding or `morf.effect` may itself build nodes with bindings (or make
+another effect): those are registered when the running flush ends and get
+their first run straight after, before the caller sees the result.
 
 ### Signals and state tables
 

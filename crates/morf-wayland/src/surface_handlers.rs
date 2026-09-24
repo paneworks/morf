@@ -54,6 +54,9 @@ impl CompositorHandler for LayerState {
         surface: &wl_surface::WlSurface,
         time: u32,
     ) {
+        self.frames_outstanding
+            .borrow_mut()
+            .remove(&wayland_client::Proxy::id(surface));
         if let Some(id) = self.layer_id(surface) {
             self.events
                 .push_back(LayerEvent::Frame { id, time_ms: time });

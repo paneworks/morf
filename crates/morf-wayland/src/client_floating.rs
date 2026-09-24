@@ -1,4 +1,3 @@
-use smithay_client_toolkit::compositor::FrameCallbackData;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shell::xdg::window::{Window, WindowDecorations};
 use wayland_client::protocol::wl_surface;
@@ -102,8 +101,7 @@ impl LayerClient {
         let Some(surface) = self.floating_surface(id) else {
             return;
         };
-        let qh = self.queue.handle();
-        surface.frame(&qh, FrameCallbackData(surface.clone()));
+        self.request_frame_on(surface);
     }
 
     /// Returns an owned raw-window target for the current floating window.

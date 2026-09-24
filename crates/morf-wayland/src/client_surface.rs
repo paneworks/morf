@@ -1,5 +1,4 @@
 use crate::client_layer::PRIMARY_LAYER;
-use smithay_client_toolkit::compositor::FrameCallbackData;
 use smithay_client_toolkit::shell::xdg::XdgPositioner;
 use smithay_client_toolkit::shell::xdg::XdgSurface;
 use smithay_client_toolkit::shell::xdg::popup::Popup;
@@ -239,8 +238,7 @@ impl LayerClient {
         let Some(surface) = self.popup_surface(id) else {
             return;
         };
-        let qh = self.queue.handle();
-        surface.frame(&qh, FrameCallbackData(surface.clone()));
+        self.request_frame_on(surface);
     }
 
     /// Returns an owned raw-window target for the current popup.

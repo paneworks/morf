@@ -98,7 +98,13 @@ fn main() {
         },
     );
     if let Some(parent) = PathBuf::from(&config).parent() {
-        runtime.set_module_roots(vec![parent.to_path_buf()]);
+        // The roots the shell itself gives a configuration: its folder, then
+        // `MORF_RUNTIME_PATH` and the user's site folder, so a configuration
+        // whose library lives on the runtime path loads here too.
+        runtime.set_module_roots(morf_lua::runtimepath_roots(
+            std::path::Path::new(&config),
+            true,
+        ));
         // The same root the shell gives a configuration, and for the same
         // reason: `core.shell_path` is how a configuration names a file beside
         // itself. Leaving it at the default made this bench resolve those paths

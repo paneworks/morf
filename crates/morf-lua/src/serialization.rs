@@ -15,6 +15,37 @@ pub(crate) fn default_module_roots() -> Vec<PathBuf> {
         .collect()
 }
 
+/// Where `require` looks for a configuration at `config`: its own folder,
+/// then, when `external`, every `MORF_RUNTIME_PATH` entry and the user's
+/// `$XDG_DATA_HOME/morf/site` (or `~/.local/share/morf/site`), without
+/// duplicates.
+///
+/// Public so every host that runs a configuration -- the shell, the frame
+/// bench -- resolves modules the same way; a bench that looked only beside
+/// the file failed on a configuration the shell loads fine.
+pub fn runtimepath_roots(config: &std::path::Path, external: bool) -> Vec<PathBuf> {
+    let mut roots = config
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .into_iter()
+        .collect::<Vec<_>>();
+    if external {
+        roots.extend(default_module_roots());
+        if let Some(data) = std::env::var_os("XDG_DATA_HOME") {
+            roots.push(PathBuf::from(data).join("morf/site"));
+        } else if let Some(home) = std::env::var_os("HOME") {
+            roots.push(PathBuf::from(home).join(".local/share/morf/site"));
+        }
+    }
+    let mut unique = Vec::new();
+    for root in roots {
+        if !unique.contains(&root) {
+            unique.push(root);
+        }
+    }
+    unique
+}
+
 pub(crate) fn load_runtime_module(roots: &[PathBuf], name: &str) -> Result<Vec<u8>, String> {
     if name.is_empty()
         || name.split('.').any(|part| {

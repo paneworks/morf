@@ -89,6 +89,21 @@ pub(crate) struct SurfaceEventState {
     pub(crate) touches: HashMap<i32, (SurfaceRole, Hit, f64, f64, f64)>,
     /// A drag from another application over one of these surfaces.
     pub(crate) drag: Option<crate::surface_drag::DragFollow>,
+    /// Whether the shell's own surface owes a paint it could not make
+    /// because its last frame callback had not come back yet; the callback
+    /// makes it.
+    pub(crate) primary_deferred: bool,
+    /// When the wall clock last advanced motion, while the shell's own
+    /// surface gets no frame callbacks (hidden under another toplevel in a
+    /// nested compositor). `None` while callbacks drive it as usual.
+    pub(crate) fallback_tick: Option<std::time::Instant>,
+}
+
+/// How long the shell's own surface may wait for a frame callback before
+/// the wall clock takes over advancing motion: a few refreshes, so a slow
+/// frame is not mistaken for a hidden surface.
+pub(crate) fn frame_stall(refresh: Duration) -> Duration {
+    (refresh * 4).clamp(Duration::from_millis(50), Duration::from_millis(250))
 }
 
 pub(crate) fn sync_window_surfaces(
