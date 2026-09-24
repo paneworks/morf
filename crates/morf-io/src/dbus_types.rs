@@ -450,6 +450,9 @@ pub enum DbusValue {
     Unsigned(u64),
     Number(f64),
     String(String),
+    /// A byte array (`ay`): an image's pixels, a file's contents, a
+    /// NUL-terminated path. A string of bytes to Lua, not a list of numbers.
+    Bytes(Vec<u8>),
     List(Vec<DbusValue>),
     Map(BTreeMap<String, DbusValue>),
     Typed {
@@ -633,7 +636,7 @@ impl DbusProxy {
             DbusValue::Unsigned(value) => self.set_property(property, *value),
             DbusValue::Number(value) => self.set_property(property, *value),
             DbusValue::String(value) => self.set_property(property, value.as_str()),
-            DbusValue::Typed { .. } | DbusValue::Fd(_) => {
+            DbusValue::Typed { .. } | DbusValue::Fd(_) | DbusValue::Bytes(_) => {
                 let value = dbus_argument_value(value)?;
                 self.set_property(property, value)
             }

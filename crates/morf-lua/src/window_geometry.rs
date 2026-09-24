@@ -15,7 +15,7 @@ pub(crate) fn checked_window_node(
     let surface = state
         .window_surfaces
         .get(&surface)
-        .ok_or_else(|| HostError("window surface is stale".into()))?;
+        .ok_or_else(|| HostError("window destroyed".into()))?;
     if !scene_node_in_subtree(&state.scene, surface.root, node) {
         return Err(HostError(
             "item does not belong to the window surface".into(),
@@ -159,7 +159,7 @@ pub(crate) fn floating_state_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Floating(config) = &mut surface.kind else {
                 return Err(
                     HostError(format!("{property} is only valid for floating windows")).into(),
@@ -203,7 +203,7 @@ pub(crate) fn floating_string_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Floating(config) = &mut surface.kind else {
                 return Err(
                     HostError(format!("{property} is only valid for floating windows")).into(),
@@ -256,7 +256,7 @@ pub(crate) fn floating_size_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Floating(config) = &mut surface.kind else {
                 return Err(
                     HostError(format!("{property} is only valid for floating windows")).into(),

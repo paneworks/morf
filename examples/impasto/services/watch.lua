@@ -2,45 +2,43 @@
 --
 -- Every screen's shell is a runtime of its own, so a file one of them
 -- writes -- the settings, the launch history -- has to be read back by the
--- others. `morf.file(path):watch()` is inotify on the file's directory; its
--- queue is emptied from a timer (a channel read when nothing happened),
--- since the engine hands it over pulled rather than pushed. Where inotify
--- cannot be had, the file's time and size stand in.
+-- others. `morf.fs.watch` pushes the change the moment the kernel reports
+-- it (the engine's one inotify thread, asleep until then), coalesced per
+-- turn of the loop, so a save is one call however many writes it took.
+-- Where a watch cannot be had, the file's time and size are looked at on
+-- a timer instead.
 
 local fs = morf.fs
 
 local M = {}
 
+-- A watch closes when its handle is collected. Callers often drop what
+-- `M.file` returns, so the handles are held here until cancelled.
+local live = {}
+
 --- Calls `on_change()` after the file at `path` is written, moved into
---- place or removed. `interval` is how often the queue is looked at (500
---- ms). Returns a handle with `cancel()`.
+--- place or removed. `interval` is how often the file is looked at (500
+--- ms) when it cannot be watched. Returns a handle with `cancel()`.
 function M.file(path, on_change, interval)
-  local watcher
-  local ok, made = pcall(function() return morf.file(path):watch() end)
-  if ok then watcher = made end
+  local ok, watch = pcall(fs.watch, path, function() on_change() end)
+  if ok and watch then
+    live[watch] = true
+    return {
+      cancel = function()
+        live[watch] = nil
+        watch:close()
+      end,
+    }
+  end
   local last = fs.stat(path)
   local timer = morf.timer(interval or 500, function()
-    local changed = false
-    if watcher then
-      while true do
-        local asked, event = pcall(watcher.next, watcher, 0)
-        if not asked or not event then break end
-        changed = true
-      end
-    else
-      local now = fs.stat(path)
-      changed = (now and now.modified) ~= (last and last.modified)
-        or (now and now.size) ~= (last and last.size)
-      last = now
-    end
+    local now = fs.stat(path)
+    local changed = (now and now.modified) ~= (last and last.modified)
+      or (now and now.size) ~= (last and last.size)
+    last = now
     if changed then on_change() end
   end, true)
-  return {
-    cancel = function()
-      timer:cancel()
-      watcher = nil
-    end,
-  }
+  return { cancel = function() timer:cancel() end }
 end
 
 return M

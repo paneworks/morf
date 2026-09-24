@@ -384,6 +384,8 @@ pub(crate) struct ReactiveState {
     pub(crate) http_requests: Vec<crate::api_http::PendingHttp>,
     /// `morf.spawn` children and `morf.connect` connections.
     pub(crate) io: crate::api_io::IoHub,
+    /// `morf.fs.watch` watches.
+    pub(crate) watches: crate::api_watch::WatchHub,
     /// `ui.Terminal` nodes: their emulators and their programs.
     pub(crate) terminals: crate::terminals::TerminalHub,
     /// Text nodes set in runs, whose links the layout places.
@@ -657,6 +659,7 @@ impl ReactiveState {
             status_notifiers: Vec::new(),
             http_requests: Vec::new(),
             io: Default::default(),
+            watches: Default::default(),
             terminals: Default::default(),
             session_unlock_requested: false,
             layer_surface: LayerSurfaceConfig::default(),

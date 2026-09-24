@@ -17,6 +17,7 @@ mod sockets;
 mod streams;
 mod timer;
 mod wake;
+mod watch;
 
 pub use dbus_decode::{DbusSignal, DbusSignalEvent};
 pub use dbus_serve::{DbusCall, DbusService, NameOutcome};
@@ -34,6 +35,7 @@ pub use sockets::*;
 pub use streams::*;
 pub use timer::*;
 pub use wake::*;
+pub use watch::*;
 #[cfg(test)]
 mod dbus_codec_tests;
 #[cfg(test)]
@@ -44,3 +46,5 @@ mod http_tests;
 mod reactor_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod watch_tests;

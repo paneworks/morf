@@ -231,3 +231,94 @@ fn a_surface_hears_the_keyboard_and_the_pointer_come_and_go() {
         )]
     );
 }
+
+#[test]
+fn a_destroyed_window_takes_its_tree_and_hears_closed_once() {
+    let mut runtime = floating();
+    let id = runtime.window_surface_configs()[0].id;
+    let root = runtime.window_surface_configs()[0].root;
+    let before = runtime.scene().node_count();
+    runtime.take_window_surface_change();
+    runtime
+        .execute(
+            "destroy.lua",
+            br#"
+                win:destroy()
+                -- Once: a second destroy is nothing, and the shell closing the
+                -- surface afterwards finds no callback left to run.
+                win:destroy()
+                morf.ipc.after = function()
+                  local ok, err = pcall(win.visible, win)
+                  return ok, tostring(err)
+                end
+                morf.ipc.open_again = function()
+                  local ok, err = pcall(win.open, win)
+                  return ok, tostring(err)
+                end
+            "#,
+        )
+        .unwrap();
+    assert_eq!(ask(&mut runtime, "closed"), [IpcValue::Integer(1)]);
+    assert!(
+        !runtime.dispatch_window_closed(id),
+        "nothing left to hear it"
+    );
+    assert_eq!(ask(&mut runtime, "closed"), [IpcValue::Integer(1)]);
+    assert!(runtime.window_surface_configs().is_empty());
+    assert!(runtime.take_window_surface_change());
+    assert!(!runtime.scene().contains(root), "the root is gone");
+    assert!(
+        runtime.scene().node_count() < before - 1,
+        "and what was under it"
+    );
+    for verb in ["after", "open_again"] {
+        let answer = ask(&mut runtime, verb);
+        assert_eq!(answer[0], IpcValue::Boolean(false));
+        let IpcValue::String(message) = &answer[1] else {
+            panic!("{answer:?}");
+        };
+        assert!(message.contains("window destroyed"), "{message}");
+    }
+    // Its size signals went with it.
+    assert!(runtime.reactive.borrow().window_sizes.is_empty());
+}
+
+#[test]
+fn a_hidden_window_is_destroyed_without_hearing_closed_again() {
+    let mut runtime = floating();
+    runtime
+        .execute("hide.lua", b"win:close() win:destroy()")
+        .unwrap();
+    assert_eq!(ask(&mut runtime, "closed"), [IpcValue::Integer(0)]);
+    assert!(runtime.window_surface_configs().is_empty());
+}
+
+#[test]
+fn popups_and_layers_are_destroyed_too() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "kinds.lua",
+            br#"
+                local ui = require("morf.ui")
+                local window = require("morf.window")
+                ui.Item {}
+                local closed = 0
+                local layer = window.layer { root = ui.Rect { ui.Text { text = "x" } }, height = 30 }
+                local menu = window.popup {
+                  root = ui.Item {}, width = 100, height = 100, visible = true,
+                  on_closed = function() closed = closed + 1 end,
+                }
+                layer:destroy()
+                menu:destroy()
+                assert(closed == 1, closed)
+                assert(not pcall(layer.kind, layer))
+                assert(not pcall(function() layer.height = 40 end))
+                -- A new window after them works as ever.
+                local again = window.floating { root = ui.Item {}, width = 10, height = 10 }
+                assert(again:kind() == "floating")
+            "#,
+        )
+        .unwrap();
+    assert_eq!(runtime.window_surface_configs().len(), 1);
+}

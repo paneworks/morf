@@ -15,7 +15,7 @@ pub(crate) fn window_updates_enabled_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let changed = value.is_some_and(|value| surface.updates_enabled != value);
             if let Some(value) = value {
                 surface.updates_enabled = value;
@@ -57,7 +57,7 @@ pub(crate) fn window_size_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let size = match &mut surface.kind {
                 WindowSurfaceKind::Popup(config) => (&mut config.width, &mut config.height),
                 WindowSurfaceKind::Floating(config) => (&mut config.width, &mut config.height),
@@ -90,7 +90,7 @@ pub(crate) fn popup_bool_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Popup(config) = &mut surface.kind else {
                 return Err(HostError(format!("{property} is only valid for popups")).into());
             };
@@ -125,7 +125,7 @@ pub(crate) fn popup_string_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Popup(config) = &mut surface.kind else {
                 return Err(HostError(format!("{property} is only valid for popups")).into());
             };
@@ -183,7 +183,7 @@ pub(crate) fn popup_anchor_rect_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Popup(config) = &mut surface.kind else {
                 return Err(HostError("anchor_rect is only valid for popups".into()).into());
             };
@@ -253,7 +253,7 @@ pub(crate) fn popup_offset_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Popup(config) = &mut surface.kind else {
                 return Err(HostError("offset is only valid for popups".into()).into());
             };
@@ -286,7 +286,7 @@ pub(crate) fn popup_constraints_method<'gc>(
             let surface = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Popup(config) = &mut surface.kind else {
                 return Err(HostError("constraints is only valid for popups".into()).into());
             };
@@ -342,7 +342,7 @@ pub(crate) fn window_parent_id_method<'gc>(
                 WindowSurfaceKind::Floating(config) => config.parent,
                 WindowSurfaceKind::Layer(_) => None,
             })
-            .ok_or_else(|| HostError("window surface is stale".into()))?;
+            .ok_or_else(|| HostError("window destroyed".into()))?;
         stack.replace(
             ctx,
             parent.map_or(LuaValue::Nil, |id| LuaValue::Integer(id as i64)),
@@ -399,7 +399,7 @@ pub(crate) fn window_set_parent_method<'gc>(
             let target = state
                 .window_surfaces
                 .get_mut(&surface.id)
-                .ok_or_else(|| HostError("window surface is stale".into()))?;
+                .ok_or_else(|| HostError("window destroyed".into()))?;
             match &mut target.kind {
                 WindowSurfaceKind::Popup(config) => {
                     let changed = config.parent != parent;
@@ -467,7 +467,7 @@ pub(crate) fn set_window_layer_setting<'gc>(
     let surface = state
         .window_surfaces
         .get_mut(&id)
-        .ok_or_else(|| HostError("window surface is stale".into()))?;
+        .ok_or_else(|| HostError("window destroyed".into()))?;
     let WindowSurfaceKind::Layer(config) = &mut surface.kind else {
         return Err(HostError(format!(
             "`{key}` can only be set on a layer surface"
@@ -506,7 +506,7 @@ pub(crate) fn window_configure_method<'gc>(
             .window_surfaces
             .get(&surface.id)
             .map(|surface| surface.kind.clone())
-            .ok_or_else(|| HostError("window surface is stale".into()))?;
+            .ok_or_else(|| HostError("window destroyed".into()))?;
         let changed_before = state.window_surfaces_changed;
         for (key, value) in entries {
             if let Err(error) = set_window_layer_setting(ctx, &mut state, surface.id, &key, value) {

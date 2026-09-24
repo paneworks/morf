@@ -132,6 +132,7 @@ pub(crate) fn install_reactive_api(
         install_process_api(ctx, morf);
         install_file_api(ctx, morf);
         crate::api_fs::install_fs_api(ctx, morf);
+        crate::api_watch::install_watch_api(ctx, Rc::clone(&state), morf, limits);
         crate::api_date::install_date_api(ctx, morf);
         crate::api_encoding::install_encoding_api(ctx, morf);
         crate::api_encoding::install_archive_api(ctx, morf);
@@ -144,7 +145,7 @@ pub(crate) fn install_reactive_api(
         crate::api_http::install_http_api(ctx, Rc::clone(&state), morf, json_kinds);
         crate::api_io::install_io_api(ctx, Rc::clone(&state), morf);
         install_menu_desktop_api(ctx, morf, limits);
-        let (core, io, window) = install_module_api(ctx, state, morf);
+        let (core, io, window) = install_module_api(ctx, state, morf, limits);
         finish_reactive_api(
             ctx,
             ApiModules {

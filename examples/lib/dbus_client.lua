@@ -51,10 +51,12 @@ function dbus_client.x(value) return typed("x", value) end
 function dbus_client.i(value) return typed("i", value) end
 function dbus_client.d(value) return typed("d", value) end
 
---- A byte string as the list of bytes an `ay` decodes to, and back.
+--- An `ay` as a string of bytes, and a string as a list of bytes.
 ---
 --- SSIDs are bytes, not text: the protocol allows any octets and some routers
---- use them. They are shown as text when they are text.
+--- use them. They are shown as text when they are text. `morf.dbus` hands an
+--- `ay` over as a string already, and takes a string where it sends one;
+--- the list form is for an engine older than that.
 function dbus_client.bytes_to_string(bytes)
   if type(bytes) == "string" then return bytes end
   if type(bytes) ~= "table" then return "" end

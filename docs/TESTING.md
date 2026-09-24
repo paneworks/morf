@@ -298,6 +298,13 @@ or an exact `text`), or a function of the node returning true.
   timer, a stubbed command, IPC, finding by id, text and predicate.
 - `terminal_spec.lua`: `examples/terminal.lua`, with btop (or top) really
   running on its pseudo-terminal, waited for on the wall clock.
+- `watch_destroy_spec.lua`: `morf.fs.watch` hearing a file in the run's
+  scratch state directory (waited for on the wall clock), and
+  `window:destroy()` taking a floating window's surface and tree.
+- `impasto_terminal_spec.lua`: a `Terminal=true` desktop entry written into
+  the run's scratch data folder and started through impasto's launcher: a
+  window per program, destroyed when it exits, kept up (with the exit code)
+  when it fails.
 - `impasto_spec.lua`: loads `examples/impasto/init.lua` with
   `IMPASTO_DRY_RUN`, opens every panel over IPC and closes it, and checks
   that nothing landed in `morf ipc call failed`. Run it with

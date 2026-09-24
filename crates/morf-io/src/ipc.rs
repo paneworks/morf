@@ -1,5 +1,6 @@
 use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::os::fd::OwnedFd;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -8,6 +9,8 @@ use std::sync::{Arc, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use rustix::event::{EventfdFlags, PollFd, PollFlags, eventfd, poll};
+use rustix::io::Errno;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
 const IPC_MAX_CONNECTIONS: usize = 32;
@@ -97,6 +100,8 @@ impl IpcIncoming {
 pub struct IpcServer {
     path: PathBuf,
     stop: Arc<AtomicBool>,
+    /// Rung to end the accept loop's poll.
+    wake: Arc<OwnedFd>,
     join: Option<JoinHandle<()>>,
 }
 
@@ -121,12 +126,31 @@ impl IpcServer {
             }
         }
         let listener = UnixListener::bind(&path)?;
+        // Non-blocking so an accept after a spurious wake returns rather
+        // than hangs; the thread waits in `poll` on the listener and the
+        // wake eventfd instead, so an idle server costs nothing.
         listener.set_nonblocking(true)?;
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
+        let wake = Arc::new(eventfd(0, EventfdFlags::CLOEXEC | EventfdFlags::NONBLOCK)?);
+        let worker_wake = Arc::clone(&wake);
         let active = Arc::new(AtomicUsize::new(0));
         let join = thread::spawn(move || {
             while !worker_stop.load(Ordering::Acquire) {
+                let mut fds = [
+                    PollFd::new(&listener, PollFlags::IN),
+                    PollFd::new(&*worker_wake, PollFlags::IN),
+                ];
+                match poll(&mut fds, None) {
+                    Ok(_) | Err(Errno::INTR) => {}
+                    Err(_) => break,
+                }
+                if worker_stop.load(Ordering::Acquire) {
+                    break;
+                }
+                if fds[0].revents().is_empty() {
+                    continue;
+                }
                 match listener.accept() {
                     Ok((stream, _)) => {
                         if active.fetch_add(1, Ordering::AcqRel) >= IPC_MAX_CONNECTIONS {
@@ -157,7 +181,12 @@ impl IpcServer {
                                 | io::ErrorKind::Interrupted
                                 | io::ErrorKind::ConnectionAborted
                                 | io::ErrorKind::ConnectionReset
-                        ) || error.raw_os_error() == Some(libc::EMFILE)
+                        ) => {}
+                    // Out of descriptors: the connection stays queued and the
+                    // listener stays readable, so polling again at once would
+                    // spin. A pause lets some close first.
+                    Err(error)
+                        if error.raw_os_error() == Some(libc::EMFILE)
                             || error.raw_os_error() == Some(libc::ENFILE) =>
                     {
                         thread::sleep(Duration::from_millis(10));
@@ -169,6 +198,7 @@ impl IpcServer {
         Ok(Self {
             path,
             stop,
+            wake,
             join: Some(join),
         })
     }
@@ -177,6 +207,7 @@ impl IpcServer {
 impl Drop for IpcServer {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
+        let _ = rustix::io::write(&*self.wake, &1u64.to_ne_bytes());
         if let Some(join) = self.join.take() {
             let _ = join.join();
         }

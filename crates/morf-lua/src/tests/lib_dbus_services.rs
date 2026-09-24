@@ -29,7 +29,8 @@ pub(super) fn run_with_fake(name: &str, body: &str) -> String {
          local verdict = morf.signal(\"verdict\", \"running\")\n\
          local function done(text) verdict:set(text) end\n\
          ui.Text {{ text = function() return verdict:get() end }}\n\
-         local function bytes(s) return {{ s:byte(1, -1) }} end\n\
+         -- An `ay` as the engine delivers it: a string of bytes.\n\
+         local function bytes(s) return s end\n\
          {body}"
     );
     let path = format!("{}/../../examples/{name}.lua", env!("CARGO_MANIFEST_DIR"));
@@ -181,7 +182,7 @@ fn networkmanager_reads_the_tree_and_types_every_action() {
                 local add = fake.calls_to("AddAndActivateConnection")[1]
                 eq(add.args[1].signature, "a{sa{sv}}", "settings typed")
                 eq(add.args[1].value["802-11-wireless"].ssid.signature, "ay", "ssid is bytes")
-                eq(fake.plain(add.args[1].value["802-11-wireless"].ssid.value)[1], string.byte("c"), "ssid bytes")
+                eq(fake.plain(add.args[1].value["802-11-wireless"].ssid.value), "cafe", "ssid bytes, as a string")
                 eq(add.args[1].value["802-11-wireless-security"], nil, "no security for open")
                 eq(add.args[2].signature, "o", "device is a path")
                 eq(add.args[2].value, DEV1, "device")

@@ -835,8 +835,8 @@ morf.image.release(cover)
 ```
 
 - `morf.image.from_rgba(bytes, width, height, stride, options)` publishes raw
-  pixels and returns their source. `bytes` is a string or a list of byte
-  values (what `morf.dbus` gives for an `ay`); `stride` is the bytes from
+  pixels and returns their source. `bytes` is a string (what `morf.dbus`
+  gives for an `ay`) or a list of byte values; `stride` is the bytes from
   one row to the next (`nil`: packed). Options: `format` (`"rgba"`, the
   default, `"rgb"`, `"bgra"`, `"argb"`), `premultiplied` (divide the colour
   back out of alpha), and `name`. Returns `nil, why` when the sizes do not
@@ -1070,6 +1070,24 @@ returns `false`. `on_closed` runs once a popup or floating window is off
 screen, whatever took it there: a close request, `win:close()`, a hidden
 parent, a dismissed popup. Each may be given in the constructor's table or
 set later with the method of the same name; `nil` clears it.
+
+`win:close()` only hides a window; it can be opened again. `win:destroy()`
+ends it for good, for a popup, a floating window or a layer surface alike:
+the surface is torn down, its root and everything under it are removed as
+`ui.destroy` removes a node (their `on_destroyed` hooks run, a terminal in
+it is hung up), and `on_closed` runs once if the window was on screen — not
+again if it was already closed. After that every method on the handle
+raises `window destroyed`; a second `destroy()` does nothing. A window made
+per use — a dialog, a terminal — is destroyed when done with instead of
+being kept hidden in a pool. A child window hanging off a destroyed parent
+is not destroyed with it, but with no parent it is never shown.
+
+```lua
+local dialog = morf.window.floating {
+  root = build_dialog(), width = 420, height = 200, visible = true,
+  on_closed = function() dialog:destroy() end,   -- closed by the compositor
+}
+```
 
 Every surface also hears the keyboard and the pointer come and go:
 `on_focus_changed(focused)` when the keyboard comes to it or leaves it (a

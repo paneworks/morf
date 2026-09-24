@@ -155,6 +155,34 @@ pub(crate) fn window_size_field<'gc>(
     Some(LuaValue::Integer(i64::from(value)))
 }
 
+/// Takes window `id` out of the runtime for good: its record, its
+/// callbacks, its size signals, its root subtree. Returns the `on_closed`
+/// callback owed, when the window was on screen; `None` when it was hidden
+/// (it heard `on_closed` then) or is already gone.
+///
+/// With its record gone the shell closes the surface on its next sync, and
+/// the `on_closed` it would run then finds nothing: it is run here instead,
+/// by the caller, once, in both a shell and a headless run.
+pub(crate) fn destroy_window_surface(
+    state: &mut ReactiveState,
+    id: u64,
+) -> Option<luna::StashedClosure> {
+    let window = state.window_surfaces.remove(&id)?;
+    state.window_surfaces_changed = true;
+    let on_closed = state.window_handlers.remove(&(id, WindowEvent::Closed));
+    state.window_handlers.retain(|(window, _), _| *window != id);
+    state.popup_node_anchors.remove(&id);
+    if let Some(size) = state.window_sizes.remove(&id) {
+        for signal in [size.width, size.height] {
+            state.values.remove(&signal);
+            state.signals.retain(|other| *other != signal);
+            state.dead_signals.push(signal);
+        }
+    }
+    crate::runtime_helpers::remove_scene_subtree(state, window.root);
+    on_closed.filter(|_| window.visible)
+}
+
 /// `win:on_resize(fn)`, `win:on_close_requested(fn)`, `win:on_closed(fn)`:
 /// sets the callback, or clears it given `nil`.
 pub(crate) fn window_handler_method<'gc>(
@@ -167,7 +195,7 @@ pub(crate) fn window_handler_method<'gc>(
             stack.consume(ctx)?;
         let mut state = state.borrow_mut();
         let Some(window) = state.window_surfaces.get(&surface.id) else {
-            return Err(HostError("window surface is stale".into()).into());
+            return Err(HostError("window destroyed".into()).into());
         };
         if matches!(window.kind, WindowSurfaceKind::Layer(_)) && !event.for_layers() {
             return Err(HostError(format!(

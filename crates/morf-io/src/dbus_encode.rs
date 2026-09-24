@@ -19,6 +19,7 @@ fn dbus_scalar_value<'a>(value: &'a DbusValue, role: &str) -> Result<Value<'a>, 
         DbusValue::String(value) => Ok(Value::Str(value.as_str().into())),
         DbusValue::Typed { signature, value } => typed_dbus_value(signature, value),
         DbusValue::Fd(fd) => Ok(Value::Fd(fd.as_fd().into())),
+        DbusValue::Bytes(bytes) => byte_array(bytes),
         DbusValue::Nil => Err(format!("nil cannot be a {role}")),
         DbusValue::List(_) | DbusValue::Map(_) => {
             Err(format!("a compound {role} needs an explicit signature"))
@@ -78,6 +79,10 @@ fn dbus_value_for_signature<'a>(
         },
         Signature::Str => match value {
             DbusValue::String(value) => Value::Str(value.as_str().into()),
+            // A Lua string that is not UTF-8, as it always was: made valid.
+            DbusValue::Bytes(bytes) => {
+                Value::Str(String::from_utf8_lossy(bytes).into_owned().into())
+            }
             _ => return Err("D-Bus `s` value must be a string".to_owned()),
         },
         Signature::ObjectPath => match value {
@@ -93,6 +98,23 @@ fn dbus_value_for_signature<'a>(
             _ => return Err("D-Bus `g` value must be a string".to_owned()),
         },
         Signature::Variant => Value::Value(Box::new(inferred_dbus_value(value)?)),
+        // `ay` takes bytes as they come to Lua -- a string -- as well as a
+        // list of numbers.
+        Signature::Array(child) if matches!(child.signature(), Signature::U8) => match value {
+            DbusValue::Bytes(bytes) => byte_array(bytes)?,
+            DbusValue::String(text) => byte_array(text.as_bytes())?,
+            DbusValue::List(values) => {
+                let mut array = Array::new(&Signature::U8);
+                for value in values {
+                    array
+                        .append(dbus_value_for_signature(&Signature::U8, value)?)
+                        .map_err(|error| error.to_string())?;
+                }
+                Value::Array(array)
+            }
+            DbusValue::Map(values) if values.is_empty() => byte_array(&[])?,
+            _ => return Err(format!("D-Bus `{name}` value must be a string or a list")),
+        },
         Signature::Array(child) => {
             // An empty Lua table is an empty map as readily as an empty list;
             // with the signature stated, which it was is no longer a question.
@@ -162,6 +184,17 @@ fn dbus_value_for_signature<'a>(
         #[allow(unreachable_patterns)]
         _ => return Err(format!("unsupported explicit D-Bus signature `{name}`")),
     })
+}
+
+/// An `ay` holding `bytes`.
+fn byte_array(bytes: &[u8]) -> Result<Value<'static>, String> {
+    let mut array = Array::new(&Signature::U8);
+    for byte in bytes {
+        array
+            .append(Value::U8(*byte))
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(Value::Array(array))
 }
 
 fn dbus_map_key<'a>(signature: &Signature, key: &'a str) -> Result<Value<'a>, String> {

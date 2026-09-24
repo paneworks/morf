@@ -162,3 +162,59 @@ fn a_descriptor_closes_when_its_last_value_goes() {
         "closed with the last one"
     );
 }
+
+#[test]
+fn a_byte_array_comes_back_as_bytes() {
+    // An SSID that is not text, and an image's pixels: bytes, not numbers.
+    let bytes = vec![0x00, 0xff, b'h', b'i', 0x80];
+    for sent in [
+        typed("ay", DbusValue::Bytes(bytes.clone())),
+        typed(
+            "ay",
+            DbusValue::List(
+                bytes
+                    .iter()
+                    .map(|byte| DbusValue::Integer(i64::from(*byte)))
+                    .collect(),
+            ),
+        ),
+    ] {
+        let message = message_with(&[sent]);
+        assert_eq!(
+            decode_message_value(&message).unwrap(),
+            DbusValue::List(vec![DbusValue::Bytes(bytes.clone())])
+        );
+    }
+    // Text sent as `ay` is its UTF-8 bytes.
+    let message = message_with(&[typed("ay", DbusValue::String("wifi".into()))]);
+    assert_eq!(
+        decode_message_value(&message).unwrap(),
+        DbusValue::List(vec![DbusValue::Bytes(b"wifi".to_vec())])
+    );
+    // Bytes with no signature are `ay`.
+    assert!(matches!(
+        dbus_argument_value(&DbusValue::Bytes(vec![1, 2])).unwrap(),
+        Value::Array(array) if array.element_signature() == &Signature::U8
+    ));
+    // Inside a structure, as a notification's `image-data` is.
+    let image = typed(
+        "(iiibiiay)",
+        DbusValue::List(vec![
+            DbusValue::Integer(1),
+            DbusValue::Integer(1),
+            DbusValue::Integer(4),
+            DbusValue::Bool(true),
+            DbusValue::Integer(8),
+            DbusValue::Integer(4),
+            DbusValue::Bytes(vec![1, 2, 3, 4]),
+        ]),
+    );
+    let message = message_with(&[image]);
+    // A body that is one structure reads as that structure's fields.
+    let DbusValue::List(fields) = decode_message_value(&message).unwrap() else {
+        panic!("a structure is a list");
+    };
+    assert_eq!(fields[6], DbusValue::Bytes(vec![1, 2, 3, 4]));
+    // A byte out of range is refused, not wrapped.
+    assert!(typed_dbus_value("ay", &DbusValue::List(vec![DbusValue::Integer(256)])).is_err());
+}

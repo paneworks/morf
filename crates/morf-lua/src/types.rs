@@ -37,6 +37,8 @@ pub struct Limits {
     /// Most `ui.Terminal` nodes that may exist at once: each is a program
     /// on a pseudo-terminal and a screen with its history.
     pub terminals: usize,
+    /// Most `morf.fs.watch` watches that may be open at once.
+    pub watches: usize,
 }
 
 impl Default for Limits {
@@ -51,6 +53,7 @@ impl Default for Limits {
             effect_fuel: 1_000_000,
             frame_fuel: 8_000_000,
             terminals: 16,
+            watches: 256,
         }
     }
 }
@@ -58,7 +61,8 @@ impl Default for Limits {
 impl Limits {
     /// The defaults with any of `MORF_LIMITS` applied: comma-separated
     /// `load=N`, `memory=N` (bytes, or with a `k`/`m`/`g` suffix),
-    /// `handler=N` and `frame=N` (VM instructions), and `terminals=N`. An
+    /// `handler=N` and `frame=N` (VM instructions), `terminals=N` and
+    /// `watches=N`. An
     /// entry that does not parse is ignored and named in the returned
     /// warnings.
     pub fn from_env() -> (Self, Vec<String>) {
@@ -100,8 +104,9 @@ impl Limits {
                 "handler" => limits.effect_fuel = number,
                 "frame" => limits.frame_fuel = number,
                 "terminals" => limits.terminals = usize::try_from(number).unwrap_or(usize::MAX),
+                "watches" => limits.watches = usize::try_from(number).unwrap_or(usize::MAX),
                 other => warnings.push(format!(
-                    "MORF_LIMITS key `{other}` is not load, memory, handler, frame or terminals"
+                    "MORF_LIMITS key `{other}` is not load, memory, handler, frame, terminals or watches"
                 )),
             }
         }

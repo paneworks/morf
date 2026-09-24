@@ -56,28 +56,15 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
     let mut source: Arc<[u8]> = source.into();
     let (tx, rx) = mpsc::channel();
     let reload_roots = runtimepath_roots(&path, policy.external_roots);
-    let mut reload_snapshot = lua_snapshot(&reload_roots);
     let watch_files = Arc::new(AtomicBool::new(true));
     let watcher_enabled = Arc::clone(&watch_files);
     let reload_tx = tx.clone();
     thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_millis(100));
-            let next = lua_snapshot(&reload_roots);
-            if !watcher_enabled.load(Ordering::Acquire) {
-                reload_snapshot = next;
-                continue;
-            }
-            if next != reload_snapshot {
-                reload_snapshot = next;
-                if reload_tx
-                    .send(SupervisorMessage::Reload { hard: false })
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        }
+        follow_lua_files(&reload_roots, &watcher_enabled, |_| {
+            reload_tx
+                .send(SupervisorMessage::Reload { hard: false })
+                .is_ok()
+        });
     });
     let started = std::time::Instant::now();
     let (ipc_tx, ipc_rx) = mpsc::channel();
@@ -374,6 +361,64 @@ pub(crate) fn collect_lua_scripts(path: &Path, scripts: &mut Vec<PathBuf>) {
             collect_lua_scripts(&path, scripts);
         } else if path.extension().and_then(|value| value.to_str()) == Some("lua") {
             scripts.push(path);
+        }
+    }
+}
+
+/// How long the files must be quiet after a change before it is acted on:
+/// a save, a `git checkout`, a formatter touching every file are one reload.
+pub(crate) const RELOAD_SETTLE: Duration = Duration::from_millis(50);
+/// The longest a stream of changes can put a reload off.
+const RELOAD_SETTLE_MAX: Duration = Duration::from_secs(1);
+
+/// Calls `changed` whenever a `.lua` file under `roots` is written, made,
+/// moved or removed, while `enabled` says so; returns when `changed` says to
+/// stop, or when the roots cannot be watched at all.
+///
+/// The roots are watched recursively through the shared inotify thread, so
+/// this sleeps until something under them happens. Every event is only a
+/// reason to look: once the files have been quiet for [`RELOAD_SETTLE`], the
+/// `.lua` snapshot is taken again and compared, and only a difference counts
+/// -- an editor's swap file, a settings file written beside the
+/// configuration, a change made while watching was off, are not reloads.
+pub(crate) fn follow_lua_files(
+    roots: &[PathBuf],
+    enabled: &AtomicBool,
+    mut changed: impl FnMut(&BTreeMap<PathBuf, (u64, SystemTime)>) -> bool,
+) {
+    let watches = roots
+        .iter()
+        .filter_map(|root| {
+            morf_io::Watch::new(root, morf_io::WatchOptions { recursive: true }).ok()
+        })
+        .collect::<Vec<_>>();
+    if watches.is_empty() {
+        return;
+    }
+    let mut snapshot = lua_snapshot(roots);
+    loop {
+        morf_io::wait_any(&watches, None);
+        let started = std::time::Instant::now();
+        loop {
+            for watch in &watches {
+                watch.drain();
+            }
+            if started.elapsed() >= RELOAD_SETTLE_MAX
+                || !morf_io::wait_any(&watches, Some(RELOAD_SETTLE))
+            {
+                break;
+            }
+        }
+        for watch in &watches {
+            watch.drain();
+        }
+        let next = lua_snapshot(roots);
+        if next == snapshot {
+            continue;
+        }
+        snapshot = next;
+        if enabled.load(Ordering::Acquire) && !changed(&snapshot) {
+            return;
         }
     }
 }
