@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::{commands::*, supervisor::*};
 
 pub(crate) fn usage() -> &'static str {
-    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf [--no-plugin | --clean] -c <name> [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments: `logre -- lock`."
+    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf [--no-plugin | --clean] -c <name> [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf check <shell.lua> [--size WxH] [--screens N] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--strict] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf render <shell.lua> -o <out.png> [--size WxH] [--scale S] [--surface NAME|INDEX|screen] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf test <spec.lua>... [--filter PATTERN] [--size WxH] [--scale S] [--snapshots DIR] [--no-dbus | --private-bus] [--no-isolate]\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments: `logre -- lock`.\n\ncheck, render and test run a configuration with no compositor: nothing\nconnects to Wayland and time is virtual. See docs/TESTING.md."
 }
 
 pub(crate) fn run() -> Result<(), String> {
@@ -95,6 +95,7 @@ pub(crate) fn run() -> Result<(), String> {
         Command::Log { follow, level } => follow_logs(follow, level)?,
         Command::List { json, show_dead } => list_instances(json, show_dead)?,
         Command::Info => print_info()?,
+        Command::Runner(args) => return crate::runners::run(args),
         Command::Client(request) => {
             let reply = ipc_call(socket_path()?, &request).map_err(|error| error.to_string())?;
             println!(
@@ -156,6 +157,8 @@ pub(crate) enum Command {
     },
     /// Everything about this machine, this display and the instance on it.
     Info,
+    /// `check`, `render` or `test`: a configuration with no compositor.
+    Runner(crate::runner_args::RunnerArgs),
     Client(IpcRequest),
 }
 
@@ -207,6 +210,9 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         ["list", rest @ ..] => parse_list(rest),
         ["bundle", rest @ ..] => parse_bundle(rest),
         ["info"] => Ok(Command::Info),
+        ["check", rest @ ..] => runner(crate::runner_args::Runner::Check, rest, policy),
+        ["render", rest @ ..] => runner(crate::runner_args::Runner::Render, rest, policy),
+        ["test", rest @ ..] => runner(crate::runner_args::Runner::Test, rest, policy),
         // The configuration itself has to look like a path. Without this an
         // unknown flag becomes a filename, and `morf --colour` fails by saying
         // it could not read a file called `--colour` rather than that there is
@@ -232,6 +238,17 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         )),
         _ => Err(usage().to_owned()),
     }
+}
+
+/// A headless runner, with morf's leading `--clean` or `--no-plugin`.
+fn runner(
+    kind: crate::runner_args::Runner,
+    rest: &[&str],
+    policy: LoadPolicy,
+) -> Result<Command, String> {
+    let mut args = crate::runner_args::parse_runner(kind, rest)?;
+    args.policy = policy;
+    Ok(Command::Runner(args))
 }
 
 /// Reads morf's own leading options, in any order and any combination. Each

@@ -19,6 +19,10 @@ belongs to exactly one of them:
 Layout kinds compete with each other for one node's placement. Value
 sources compete with each other for one property. Everything else nests.
 
+A configuration can be checked, drawn and tested without a compositor --
+`morf check`, `morf render`, `morf test` -- as [TESTING.md](TESTING.md)
+describes; give a node an `id` to find it from a test.
+
 ## 1. Nodes
 
 `local ui = require("morf.ui")`. A node is a table constructor: named keys
@@ -936,3 +940,6 @@ ui.reparent(ui.Grid { columns = function() return win.width // 280 end }, root)
 - Let processes and sockets call you: `morf.run`, `morf.spawn`,
   `morf.connect` and `morf.request_socket` (see [IO.md](IO.md)) deliver
   output as it arrives; a timer that polls them costs every idle second.
+- Check before you run: `morf check shell.lua` lays out every surface --
+  hidden ones too -- and names what failed and where; `morf test` drives
+  it with clicks, keys and virtual time ([TESTING.md](TESTING.md)).
