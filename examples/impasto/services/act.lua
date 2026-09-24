@@ -49,6 +49,26 @@ function M.spawn(what, program, argv, mutates, options)
   return handle
 end
 
+-- A test bench that runs its own compositor (a nested Hyprland) sets
+-- IMPASTO_LIVE_COMPOSITOR=1 next to IMPASTO_DRY_RUN: what goes to the
+-- compositor over its socket then happens, and the machine is still left
+-- alone.
+M.live_compositor = (morf.env("IMPASTO_LIVE_COMPOSITOR") or "") ~= ""
+
+--- `run` for an action that changes only the compositor's state (options,
+--- monitor rules, a reload, the keys file it reads): done on a dry run too
+--- when the compositor is a test instance.
+function M.compositor(what, fn, ...)
+  if M.dry and M.live_compositor then
+    local saved = M.dry
+    M.dry = false
+    local a, b = M.run(what, fn, ...)
+    M.dry = saved
+    return a, b
+  end
+  return M.run(what, fn, ...)
+end
+
 --- Whether `program` is on PATH, found without a shell.
 function M.which(program)
   for dir in tostring(morf.env("PATH") or ""):gmatch("[^:]+") do

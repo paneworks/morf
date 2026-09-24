@@ -164,7 +164,7 @@ function M.forget()
   store[M.profile()] = nil
   settings.set("displays", store)
   if M.available() and live.here() then
-    act.run("reload Hyprland to forget the arrangement", function() config.reload() return true end)
+    act.compositor("reload Hyprland to forget the arrangement", function() config.reload() return true end)
   end
 end
 
@@ -285,7 +285,7 @@ local function send(what, rules)
     disturbed = true
     if hyprland and hyprland.refresh then hyprland.refresh() end
   end, false)
-  act.run(what, function()
+  act.compositor(what, function()
     config.apply(function(how) return config.monitors_plan(rules, how) end, function(ok, replies)
       if not ok then
         morf.log("warn", "impasto: Hyprland did not take the monitor rules: "
@@ -329,7 +329,7 @@ rescue = function()
     if not m.disabled then lit[#lit + 1] = { name = m.name, workspace = m.workspace } end
   end
   local workspaces = (hyprland.snapshot().workspaces) or {}
-  act.run("bring workspaces back to lit screens", function()
+  act.compositor("bring workspaces back to lit screens", function()
     config.apply(function(how) return config.rehome_plan(lit, workspaces, M.primary_name(), how) end)
     return true
   end)

@@ -148,7 +148,7 @@ function M.cursor_note() return s.cursor_note:get() end
 
 local function push(what, build)
   if not M.available() or not live.here() then return end
-  act.run("push the " .. what .. " to Hyprland", function()
+  act.compositor("push the " .. what .. " to Hyprland", function()
     config.apply(build, function(ok, replies)
       if not ok then
         morf.log("warn", "impasto: Hyprland did not take the " .. what .. ": "
