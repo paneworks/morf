@@ -97,3 +97,34 @@ temperatures, `precipitation` (%), `code`, `condition`, `icon`, `glyph`.
 `glyph` a Unicode symbol. `here:refresh()` asks again past the cache.
 Answers are cached on disk; offline, the last one comes back with `stale =
 true`. `weather.condition(code, is_day)` maps any WMO code.
+
+## github
+
+A public user's contribution calendar: a year of days, each with a count and
+the 0-4 shade GitHub draws it in.
+
+```lua
+local github = require("lib.github")
+local me = github.new { user = "torvalds" }          -- or { user = ..., token = "ghp_..." }
+ui.Text { text = function()
+  local c = me:get()
+  return c.available and ("%d contributions, %d-day streak"):format(c.total, c.current_streak) or ""
+end }
+```
+
+Without a token the calendar is read from the public page
+`github.com/users/<user>/contributions`, by what identifies a day (a cell's
+`data-date` and `data-level`, the tooltip naming it with the count) rather
+than by where it sits in the markup. With a `token` it comes from the GraphQL
+API. Either way it is cached on disk (`ttl`, default an hour) and refreshed
+every `interval` (default an hour) while read.
+
+`me:get()` is a tracked read of `{ available, user, source, days = { {date,
+count, level, weekday} }, weeks, total, current_streak, longest_streak, today,
+max, updated, stale }`. `weeks` are columns of seven, Sunday first, the way the
+calendar is drawn (the first column padded with nils). `total` is the number
+GitHub states when it states one (it includes private contributions). The
+current streak runs back from today, or from yesterday while today is still
+empty. Options: `user`, `token`, `interval`, `ttl`, `cache_dir`, `today`,
+`base_url`, `api_url`. `github.parse_html`, `github.parse_graphql` and
+`github.summarise` are there for other uses.

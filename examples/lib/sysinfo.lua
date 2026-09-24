@@ -598,7 +598,8 @@ local function sample_processes(done)
     for _, entry in ipairs(entries) do
       local pid = entry.name:match("^%d+$") and entry.name
       if pid then
-        spend(4)
+        -- The read, three matches, four conversions, two rankings, this.
+        spend(12)
         local stat = read("/proc/" .. pid .. "/stat", 4096)
         local name, rest
         if stat then name, rest = stat:match("^%d+ %((.*)%) (.*)$") end

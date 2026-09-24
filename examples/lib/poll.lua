@@ -15,8 +15,9 @@
 -- `pin(true)` keeps a source polling without readers, for code that reacts
 -- from a handler instead of a binding.
 --
--- A handler here gets a hundred thousand Lua instructions, and a native call
--- costs a few dozen of them, so work that is proportional to the machine (a
+-- A handler here gets a hundred thousand Lua instructions, and any call --
+-- a Lua function, `string.match`, `morf.fs.read` -- costs about twenty-five
+-- of them, so a handler has room for some four thousand calls. Work that is proportional to the machine (a
 -- process per pid, a line per transcript) runs as a *job*: a coroutine that
 -- calls `spend(n)` as it goes and is resumed on the next tick when it has
 -- spent its share. Nothing here blocks: processes and HTTP answer later.
@@ -31,12 +32,14 @@ local poll = {}
 --- Runs `body(spend)` in slices across timer ticks and hands its return value
 --- to `on_done(value)` (or `on_done(nil, message)` when it raised).
 ---
---- `spend(n)` counts work -- roughly native calls -- and yields once the slice
---- (`options.slice`, default 600) is used up; the job resumes a millisecond
---- later. The returned handle has `cancel()` and `done()`.
+--- `spend(n)` counts work in calls (a unit is one call, about twenty-five
+--- instructions; `spend` is one itself) and yields once the slice
+--- (`options.slice`, default 1500 -- under half a handler) is used up; the
+--- job resumes a millisecond later. The returned handle has `cancel()` and
+--- `done()`.
 function poll.job(body, on_done, options)
   options = options or {}
-  local slice = options.slice or 600
+  local slice = options.slice or 1500
   local used = 0
   local finished = false
   local timer
