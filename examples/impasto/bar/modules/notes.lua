@@ -1,17 +1,16 @@
 -- The notes module: how many notes, and the latest three.
 --
--- Port of NotesModule.qml. On the bar it is a chip -- a note and the count
--- -- whose click opens its detail in the island: the three most recently
--- edited notes, one line each with their tint, New and Open. A row opens
--- its note; editing needs the keyboard, so it happens in the notes panel.
+-- Port of NotesModule.qml. Its detail is the three most recently edited
+-- notes, one line each with their tint, New and Open. A row opens its
+-- note; editing needs the keyboard, so it happens in the notes panel.
 --
--- Like tasks, the original keeps it off the bar by default; `barLeft` or
--- `barRight` can name "notes".
+-- On the bar "notes" is not this module but the notes panel's door button,
+-- as in the original; the module is for the desktop and the settings.
 
 local ui = require("morf.ui")
 local theme = require("theme")
 local island = require("bar.island")
-local bar = require("bar.bar")
+local modules = require("services.modules")
 local notes = require("services.notes")
 local kit = require("components.kit")
 local pill = require("components.pill")
@@ -65,11 +64,11 @@ end
 
 --- The detail, at the module's declared size.
 function module.detail()
-  local W = module.width - 28
+  local W = module.width - 8 - 28
   local rows = {}
   for i = 1, 3 do rows[i] = row(i, W) end
   return ui.Item {
-    width = module.width, height = module.height,
+    anchors = { fill = true },
     ui.Column {
       x = 14, y = 12, gap = 8,
       ui.Item {
@@ -106,40 +105,21 @@ function module.detail()
   }
 end
 
---- The chip: a note and the count.
-function module.chip()
-  local hovered = kit.hover_signal("notes.chip")
-  local row_node = ui.Row {
-    anchors = { center_in = true }, gap = 5, align = "center",
-    kit.glyph { text = "󰎞", size = 13 },
-    kit.text { text = function() return tostring(notes.count()) end, size = theme.size.small, weight = 600 },
-  }
-  return ui.Rect {
-    width = function() return (row_node.layout_width or 0) + 16 end,
-    height = function() return theme.capsule_height() - 6 end,
-    radius = function() return (theme.capsule_height() - 6) / 2 end,
-    color = function() return hovered:get() and C.islandSurfaceHover or "#00000000" end,
-    behavior = { color = theme.behave("fast") },
-    row_node,
-    ui.MouseArea {
-      anchors = { fill = true }, cursor = "pointer",
-      on_entered = function() hovered:set(true) end,
-      on_exited = function() hovered:set(false) end,
-      on_clicked = function() island.toggle("module.notes") end,
-    },
-  }
-end
-
-island.register("module.notes", {
-  size = function() return module.width, module.height end,
-  padding = function() return 0 end,
-  declared = true,
-  build = module.detail,
+-- On the bar "notes" is the notes panel's door button (ModuleService.qml
+-- 77-83): an id is a button before it is a module. The module is what the
+-- desktop and the settings know.
+modules.define("notes", {
+  glyph = function() return "󰎞" end,
+  value = function() return tostring(notes.count()) end,
+  has = function() return true end,
+  detail = module.detail,
 })
-bar.register("notes", { build = module.chip })
+
+-- `morf ipc call module.notes` opens the detail.
 morf.ipc["module.notes"] = function()
-  island.toggle("module.notes")
-  return island.state.open_panel()
+  modules.activate("notes")
+  return modules.open_id:get()
 end
 
 return module
+

@@ -1,18 +1,15 @@
 -- The tasks module: how many are open, and the next three.
 --
--- Port of TasksModule.qml. On the bar it is a chip -- a tick and the open
--- count, red while something is overdue -- whose click opens its detail in
--- the island: the next three tasks by due day with their ticks, New and
--- Open. A row opens the board on that task; editing happens in the board.
---
--- The original catalogue keeps tasks off the bar by default (it lives on
--- the desktop); here the chip is a piece like any other, so `barLeft` or
--- `barRight` can name "tasks".
+-- Port of TasksModule.qml. Its detail is the next three tasks by due day
+-- with their ticks, New and Open. A row opens the board on that task;
+-- editing happens in the board. The chip -- a tick and the open count, red
+-- while something is overdue -- is `bar.modules.chip`'s, though the
+-- original catalogue keeps tasks off the bar (it lives on the desktop).
 
 local ui = require("morf.ui")
 local theme = require("theme")
 local island = require("bar.island")
-local bar = require("bar.bar")
+local modules = require("services.modules")
 local tasks = require("services.tasks")
 local kit = require("components.kit")
 local pill = require("components.pill")
@@ -32,7 +29,7 @@ end
 
 --- The detail, at the module's declared size.
 function module.detail()
-  local W = module.width - 28
+  local W = module.width - 8 - 28
   local rows = {}
   for i = 1, 3 do
     local task = function() return tasks.queue()[i] end
@@ -50,7 +47,7 @@ function module.detail()
     }
   end
   return ui.Item {
-    width = module.width, height = module.height,
+    anchors = { fill = true },
     ui.Column {
       x = 14, y = 12, gap = 6,
       ui.Item {
@@ -88,40 +85,20 @@ function module.detail()
   }
 end
 
---- The chip: a tick and the open count.
-function module.chip()
-  local hovered = kit.hover_signal("tasks.chip")
-  local row = ui.Row {
-    anchors = { center_in = true }, gap = 5, align = "center",
-    kit.glyph { text = "󰄲", size = 13, color = function() return late() and C.red() or C.text() end },
-    kit.text { text = function() return tostring(tasks.pending()) end, size = theme.size.small, weight = 600 },
-  }
-  return ui.Rect {
-    width = function() return (row.layout_width or 0) + 16 end,
-    height = function() return theme.capsule_height() - 6 end,
-    radius = function() return (theme.capsule_height() - 6) / 2 end,
-    color = function() return hovered:get() and C.islandSurfaceHover or "#00000000" end,
-    behavior = { color = theme.behave("fast") },
-    row,
-    ui.MouseArea {
-      anchors = { fill = true }, cursor = "pointer",
-      on_entered = function() hovered:set(true) end,
-      on_exited = function() hovered:set(false) end,
-      on_clicked = function() island.toggle("module.tasks") end,
-    },
-  }
-end
-
-island.register("module.tasks", {
-  size = function() return module.width, module.height end,
-  padding = function() return 0 end,
-  declared = true,
-  build = module.detail,
+modules.define("tasks", {
+  glyph = function() return "󰄲" end,
+  value = function() return tostring(tasks.pending()) end,
+  -- Red while something is overdue.
+  tint = function() return late() and C.red() or C.text() end,
+  has = function() return true end,
+  detail = module.detail,
 })
-bar.register("tasks", { build = module.chip })
+
+-- `morf ipc call module.tasks` opens the detail.
 morf.ipc["module.tasks"] = function()
-  island.toggle("module.tasks")
-  return island.state.open_panel()
+  modules.activate("tasks")
+  return modules.open_id:get()
 end
 
 return module
+
