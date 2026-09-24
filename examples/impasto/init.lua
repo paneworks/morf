@@ -182,6 +182,24 @@ do
   end)
 end
 
+-- `morf ipc call get <key>` and `morf ipc call set <key> <json>`: one
+-- setting, for keybinds and scripts. The value is JSON (`true`, `5`,
+-- `"dark"`); a bare word that is not JSON is taken as a string.
+morf.ipc.get = function(key)
+  if settings.defaults[key] == nil then return "unknown setting " .. tostring(key) end
+  return morf.json.encode(settings.get(key))
+end
+morf.ipc.set = function(key, text)
+  if settings.defaults[key] == nil then return "unknown setting " .. tostring(key) end
+  local ok, value = pcall(morf.json.decode, text or "")
+  if not ok then value = text end
+  if not settings.accepts(key, value) then
+    return "not a " .. type(settings.defaults[key]) .. ": " .. tostring(text)
+  end
+  settings.set(key, value)
+  return morf.json.encode(settings.get(key))
+end
+
 morf.ipc.flash = function(label) island.state.flash("󰕾", label or "Volume", 0.6) return "ok" end
 
 -- ------------------------------------------------------------------- root --

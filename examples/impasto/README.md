@@ -86,6 +86,10 @@ Conventions:
 - Nothing is polled faster than it changes; services start their timers only
   once something reads them.
 - Every panel is reachable over IPC: `morf ipc call <panel>` toggles it.
+- Any setting is too: `morf ipc call get <key>`, and
+  `morf ipc call set <key> <json>` (`set idleLock 5`, `set theme '"nord"'`).
+- Idle: lock, screen off and suspend are each their own `morf.idle`
+  subscription at the minutes in Settings; changing one re-arms it at once.
 
 ## The lock
 

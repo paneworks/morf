@@ -5,11 +5,9 @@
 -- `morf.idle.subscribe`), honouring inhibitors, so a video player holds all
 -- three off. The three timeouts are minutes in Settings, zero for never.
 --
--- morf hands the compositor its timeouts when the shell starts, so a timeout
--- changed later in Settings would wait for a restart. Instead one timeout is
--- asked for, a minute, and the minutes after it are counted here while the
--- session stays idle: the settings are read at the moment each would fire,
--- so a change applies at once.
+-- Each action is its own subscription at its own timeout. An effect follows
+-- the three settings and trades a subscription for a new one when its
+-- minutes change, and morf hands the compositor the new timeout at once.
 
 local settings = require("services.settings")
 local lock = require("services.lock")
@@ -18,12 +16,9 @@ local session = require("services.session")
 local M = {}
 
 local MINUTE = 60 * 1000
-local CHECK = 5000
 
-local idle_since
-local counting
-local done = {}
 local screen_off = false
+local armed = {}
 
 --- Turns this screen off or on, once each way. morf asks the compositor
 --- (wlr-output-power-management) rather than dispatching Hyprland's dpms,
@@ -34,47 +29,40 @@ function M.screen(on)
   morf.output_power.set(on and "on" or "off")
 end
 
-local function due(key, minutes, elapsed)
-  if minutes <= 0 or done[key] then return false end
-  if elapsed >= minutes * MINUTE then
-    done[key] = true
-    return true
-  end
-  return false
-end
-
-local function check(since)
-  -- The compositor says "idle" a minute after the last touch.
-  local elapsed = MINUTE + (morf.time.now_ms() - since)
+local actions = {
   -- `lock()` does nothing when already locked.
-  if due("lock", settings.idleLock, elapsed) then lock.lock() end
-  if due("screen", settings.idleScreen, elapsed) then M.screen(false) end
+  idleLock = { on_idle = function() lock.lock() end },
+  -- Waking matters: the screen comes back on the first touch.
+  idleScreen = { on_idle = function() M.screen(false) end, on_wake = function() M.screen(true) end },
   -- The session action locks and waits for the lock before suspending. Once,
   -- not once a screen.
-  if due("suspend", settings.idleSuspend, elapsed) and session.leader() then session.run("suspend") end
-end
+  idleSuspend = { on_idle = function() if session.leader() then session.run("suspend") end end },
+}
 
-local function on_idle(idle)
-  if idle then
-    if counting then return end
-    done = {}
-    idle_since = morf.time.now_ms()
-    local since = idle_since
-    check(since)
-    counting = morf.timer(CHECK, function() check(since) end, true)
-  else
-    if counting then counting:cancel() counting = nil end
-    idle_since = nil
-    -- Waking matters: the screen comes back on the first touch.
-    M.screen(true)
-  end
+local function arm(key, minutes)
+  local current = armed[key]
+  if current and current.minutes == minutes then return end
+  if current then current.subscription:cancel() end
+  armed[key] = nil
+  if type(minutes) ~= "number" or minutes <= 0 then return end
+  local action = actions[key]
+  armed[key] = {
+    minutes = minutes,
+    subscription = morf.idle.subscribe(math.floor(minutes * MINUTE), function(idle)
+      morf.log("info", "impasto: idle " .. key .. (idle and " fired" or " woke"))
+      if idle then action.on_idle()
+      elseif action.on_wake then action.on_wake() end
+    end, false),
+  }
 end
 
 local started = false
 function M.start()
   if started then return end
   started = true
-  morf.idle.subscribe(MINUTE, on_idle, false)
+  morf.effect("impasto.idle.timeouts", function()
+    for key in pairs(actions) do arm(key, settings.get(key)) end
+  end)
 end
 
 return M
