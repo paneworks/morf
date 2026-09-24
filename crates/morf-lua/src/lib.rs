@@ -1,8 +1,8 @@
 //! Sandboxed execution of morf configuration code.
 
 mod api_animation;
-mod api_clipboard;
 mod api_audio;
+mod api_clipboard;
 mod api_color;
 mod api_color_ops;
 mod api_color_palette;
@@ -52,8 +52,8 @@ mod process_helpers;
 mod reactive_bindings;
 mod reactive_execute;
 mod runtime_animation;
-mod runtime_clipboard;
 mod runtime_audio;
+mod runtime_clipboard;
 mod runtime_config;
 mod runtime_default;
 mod runtime_events;
