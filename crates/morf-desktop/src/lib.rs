@@ -241,16 +241,25 @@ pub fn xdg_data_dirs_from(
     data_dirs: Option<std::ffi::OsString>,
 ) -> Vec<PathBuf> {
     let mut roots = Vec::new();
+    let home = home.map(PathBuf::from);
     let data_home = data_home
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .or_else(|| home.map(|home| PathBuf::from(home).join(".local/share")));
+        .or_else(|| home.as_ref().map(|home| home.join(".local/share")));
     roots.extend(data_home);
     let data_dirs = data_dirs
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
     roots.extend(std::env::split_paths(&data_dirs).filter(|path| !path.as_os_str().is_empty()));
     roots.extend(["/usr/local/share", "/usr/share"].map(PathBuf::from));
+    // Flatpak adds its exports to the list from a login profile script, so a
+    // shell started some other way (a Nix shell, a service) never sees the
+    // applications and icons of anything installed with it.
+    roots.extend(
+        home.as_ref()
+            .map(|home| home.join(".local/share/flatpak/exports/share")),
+    );
+    roots.push(PathBuf::from("/var/lib/flatpak/exports/share"));
     let mut unique = Vec::with_capacity(roots.len());
     for root in roots {
         // `/usr/share/` and `/usr/share` are one directory.

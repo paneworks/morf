@@ -143,7 +143,8 @@ fn sessions_are_looked_for_where_sessions_live() {
 #[test]
 fn the_system_data_directories_are_always_searched_last() {
     // A Nix development shell sets XDG_DATA_DIRS to store paths alone;
-    // /usr/share has to be searched anyway, after them.
+    // /usr/share has to be searched anyway, after them, and flatpak's
+    // exports (which only a login profile adds) after those.
     let dirs = xdg_data_dirs_from(
         None,
         Some("/home/u".into()),
@@ -155,7 +156,9 @@ fn the_system_data_directories_are_always_searched_last() {
             "/home/u/.local/share",
             "/nix/store/a/share",
             "/usr/share",
-            "/usr/local/share"
+            "/usr/local/share",
+            "/home/u/.local/share/flatpak/exports/share",
+            "/var/lib/flatpak/exports/share"
         ]
         .map(PathBuf::from)
         .to_vec()
@@ -168,8 +171,14 @@ fn the_system_data_directories_are_always_searched_last() {
     );
     assert_eq!(
         dirs,
-        ["/data", "/usr/local/share", "/usr/share"]
-            .map(PathBuf::from)
-            .to_vec()
+        [
+            "/data",
+            "/usr/local/share",
+            "/usr/share",
+            "/home/u/.local/share/flatpak/exports/share",
+            "/var/lib/flatpak/exports/share"
+        ]
+        .map(PathBuf::from)
+        .to_vec()
     );
 }

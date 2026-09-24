@@ -5,6 +5,9 @@ use std::fs;
 use crate::image_cache::ImageError;
 use std::path::{Path, PathBuf};
 
+/// Desktop themes tried after `hicolor`, when installed.
+const FALLBACK_THEMES: [&str; 2] = ["Adwaita", "breeze"];
+
 /// XDG icon-theme resolver with inheritance and size matching.
 #[derive(Clone, Debug)]
 pub struct IconResolver {
@@ -98,6 +101,16 @@ impl IconResolver {
             && let Some(path) = self.find_theme(name, "hicolor", size, &mut visited)
         {
             return Ok(path);
+        }
+        // Past the spec: hicolor holds application icons, but the generic
+        // names desktop entries also use (`network-wired`, `utilities-terminal`)
+        // live in the desktop themes. With no theme configured -- a shell
+        // started outside a desktop session -- those would never be found, so
+        // the two themes nearly every system has are tried before giving up.
+        for fallback in FALLBACK_THEMES {
+            if let Some(path) = self.find_theme(name, fallback, size, &mut visited) {
+                return Ok(path);
+            }
         }
         for root in self.roots.iter().chain(&self.pixmaps) {
             if let Some(path) = find_named_file(root, name) {
