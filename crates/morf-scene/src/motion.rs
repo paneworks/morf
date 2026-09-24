@@ -440,6 +440,19 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "outline_color"
             | "fill_color"
             | "stroke_color"
+            // A path's outline and how it is drawn are all inside the box it
+            // was given; only its view box says how big that box wants to be.
+            | "d"
+            | "morph_to"
+            | "fill_rule"
+            | "stroke_width"
+            | "stroke_cap"
+            | "stroke_join"
+            | "miter_limit"
+            | "dash"
+            | "dash_offset"
+            | "trim_start"
+            | "trim_end"
             // A text input's caret, selection and scroll are where it is
             // looking, not how big it is: they move on every key, and each of
             // them costing a layout pass would be a layout per keystroke.

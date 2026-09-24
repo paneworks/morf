@@ -46,6 +46,7 @@ mod lib_palette;
 mod lifecycle_io;
 mod modules;
 mod pam_session;
+mod paths;
 mod prefers;
 mod sandbox_limits;
 mod scene;

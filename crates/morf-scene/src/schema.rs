@@ -367,6 +367,45 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("angle", 90.0),
             ]);
         }
+        Element::Path => {
+            properties.extend([
+                // SVG path data: `M 0 0 L 10 10 A 5 5 0 0 1 20 20 Z`, every
+                // command, absolute or relative.
+                string("d", ""),
+                // The outline this one turns into, and how far along it is.
+                // The two are walked point by point when they have the same
+                // run of segments (lines and curves count alike); otherwise
+                // the outline changes over at the halfway mark.
+                string("morph_to", ""),
+                number("morph_progress", 0.0),
+                // What SVG does with a path that says nothing: filled black,
+                // not stroked, a unit-wide stroke once it has a colour.
+                color("fill_color", Color::rgba8(0, 0, 0, 255)),
+                string("fill_rule", "nonzero"),
+                color("stroke_color", Color::rgba8(0, 0, 0, 0)),
+                number("stroke_width", 1.0),
+                string("stroke_cap", "butt"),
+                string("stroke_join", "miter"),
+                number("miter_limit", 4.0),
+                // Dash and gap lengths, in path units, repeated; an odd list
+                // is read twice over, as SVG reads it.
+                any("dash", Value::List(Vec::new())),
+                number("dash_offset", 0.0),
+                // The part of the outline that is stroked, as fractions of
+                // its length: a progress ring is `trim_end`, a line drawing
+                // itself on is `trim_end` going from zero to one.
+                number("trim_start", 0.0),
+                number("trim_end", 1.0),
+                // `{ x, y, w, h }` (or `{ x, y, width, height }`, or four
+                // numbers): the part of path space that fills the node. Empty
+                // means path units are the node's own pixels.
+                any("view_box", Value::Map(BTreeMap::new())),
+                // How a view box that is not the node's shape fits it:
+                // `stretch`, `preserve_aspect_fit` or `preserve_aspect_crop`,
+                // the words an Image uses.
+                string("fill_mode", "stretch"),
+            ]);
+        }
         Element::Row | Element::Column => {
             properties.extend([
                 // One vocabulary for every packing container: `gap` between

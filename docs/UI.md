@@ -34,7 +34,7 @@ ui.Rect {
 | group | kinds |
 |---|---|
 | containers | `Item`, `Inset`, `Flickable`, `Loader`, `Layout` |
-| painting | `Rect`, `ClipRect`, `Text`, `Image`, `Icon`, `Sdf`, `SdfShape` |
+| painting | `Rect`, `ClipRect`, `Text`, `Image`, `Icon`, `Path`, `Sdf`, `SdfShape` |
 | input | `MouseArea` and `TextInput` (the kinds the pointer can hit), `DropArea` (the only kind a drag can) |
 | positioners | `Row`, `Column`, `Grid` with `columns` |
 | layouts | `Flex`, `Grid` with tracks |
@@ -555,6 +555,60 @@ content has scrolled to keep the caret in view, and `content_width` /
 `content_height` how big it is, for a scroll bar to follow. Methods:
 `:select(start, stop)`, `:select_all()`, `:deselect()`, `:insert(text)`,
 `:selected_text()`, `:undo()`, `:redo()`.
+
+### Paths
+
+`ui.Path` is a shape written as SVG path data — a face, a ring gauge, a
+sprite, a rounded polyline — and, unlike an SVG in an `Image`, it stays
+geometry: every number and colour on it animates, and it is drawn at the
+pixels it covers, so it is as sharp scaled up as at rest.
+
+- `d`: the outline, every SVG command, absolute or relative.
+- `fill_color` (black, as SVG's default), `fill_rule`: `nonzero` or
+  `evenodd`.
+- `stroke_color` (none), `stroke_width` (1), `stroke_cap`: `butt`, `round`,
+  `square`; `stroke_join`: `miter`, `round`, `bevel`; `miter_limit` (4).
+- `dash = { dash, gap, ... }` and `dash_offset`, in path units; an odd list
+  is read twice over, as SVG reads it.
+- `trim_start`, `trim_end`: the part of the outline that is stroked, as
+  fractions of its whole length (across every subpath, in order). A
+  progress ring is `trim_end`; a line drawing itself on is `trim_end` going
+  from 0 to 1. The fill is always the whole shape.
+- `view_box = { x, y, w, h }` (or four numbers): the part of path space
+  stretched over the node, and the node's own size when it is given none.
+  `fill_mode` fits it the way an `Image` fits: `stretch`,
+  `preserve_aspect_fit` (centred), `preserve_aspect_crop`. Without a view
+  box, path units are the node's pixels and the node needs a size. A stroke
+  may reach past the node's box, by half its width and more at a corner.
+- `morph_to` and `morph_progress`: the outline it turns into. When the two
+  have the same run of moves, segments and closes — lines and curves count
+  alike — the points walk from one to the other; otherwise the outline
+  changes over at the halfway mark.
+
+```lua
+local mouth = ui.Path {
+  anchors = { fill = true }, view_box = { 0, 0, 140, 130 },
+  d = "M34 82 C50 102 90 102 106 82",            -- a smile
+  morph_to = "M34 96 C50 76 90 76 106 96",       -- a frown: the same curve
+  morph_progress = function() return mood() == "sad" and 1 or 0 end,
+  fill_color = "transparent", stroke_color = "#2b2118", stroke_width = 6, stroke_cap = "round",
+  behavior = { morph_progress = { duration = 300, easing = "out_cubic" } },
+}
+
+local ring = ui.Path {
+  width = 48, height = 48, view_box = { 0, 0, 100, 100 },
+  d = "M50 8 A42 42 0 1 1 49.99 8",
+  fill_color = "transparent", stroke_color = theme.accent, stroke_width = 12, stroke_cap = "round",
+  trim_end = function() return battery.level / 100 end,
+  behavior = { trim_end = { duration = 400 } },
+}
+```
+
+A path that is not changing costs a texture lookup: what was drawn is kept
+under a key of everything that shaped its pixels. One whose numbers move is
+drawn again for each frame they move in, on the CPU, at its on-screen size —
+cheap for an icon or a gauge, worth knowing for a path the size of the
+screen. `examples/path.lua` has one of each.
 
 ### Entering
 

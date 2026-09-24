@@ -269,6 +269,8 @@ impl WgpuBackend {
             elapsed: 0.0,
             images: ImageCache::default(),
             image_textures: HashMap::new(),
+            path_textures: HashMap::new(),
+            path_outlines: Default::default(),
             layer_target_pool: Vec::new(),
             text: TextSystem::new(),
             drawings: morf_svg::SvgOutlines::new(),

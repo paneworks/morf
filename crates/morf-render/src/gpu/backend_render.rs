@@ -89,6 +89,21 @@ impl RenderBackend for WgpuBackend {
             list,
             scale_120,
         );
+        push_path_textures(
+            TextureBatchContext {
+                device: &self.device,
+                queue: &self.queue,
+                layout: &self.glyph_layout,
+                sampler: &self.glyph_sampler,
+                target_size: (self.width, self.height),
+                external: &self.external_textures,
+            },
+            &mut self.path_outlines,
+            &mut self.path_textures,
+            list,
+            scale_120,
+            &mut texture_batch,
+        );
         let scale = scale_120.max(1) as f64 / 120.0;
         let layer_targets = self.build_layer_targets(list, &mut texture_batch, scale);
         self.ensure_textures(texture_batch.instances.len().max(1));
