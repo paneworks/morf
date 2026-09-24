@@ -213,24 +213,12 @@ function common.sparkline(values)
   }
 end
 
---- The Claude mark: a sunburst of eight rounded rays, in `color`.
+--- The Claude mark, the real outline (components/claude_mark.lua), in
+--- `color`: a colour, or a function a binding follows.
 function common.claude_mark(values)
-  local size = values.size or 32
-  return ui.Image {
-    x = values.x, y = values.y, anchors = values.anchors, width = size, height = size,
-    source = function()
-      local col = draw.hex(read(values.color) or C.text())
-      local rays = {}
-      for i = 0, 11 do
-        local a = math.rad(i * 30)
-        local long = i % 2 == 0 and 46 or 34
-        rays[#rays + 1] = string.format('<line x1="50" y1="50" x2="%s" y2="%s"/>',
-          draw.n(50 + math.cos(a) * long), draw.n(50 + math.sin(a) * long))
-      end
-      return string.format(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g stroke="%s" stroke-width="10" stroke-linecap="round">%s</g></svg>',
-        col, table.concat(rays))
-    end,
+  return require("components.claude_mark") {
+    x = values.x, y = values.y, anchors = values.anchors, size = values.size or 32,
+    color = values.color or C.text,
   }
 end
 
@@ -274,6 +262,23 @@ function common.area(ctx, values)
   values.on_entered = function(...) region.enter() if entered then return entered(...) end end
   values.on_exited = function(...) region.leave() if exited then return exited(...) end end
   return ui.MouseArea(values)
+end
+
+--- Whether a picture cannot be shown: gone, or not a picture the engine
+--- decodes (Image.Error in the original). ui.Image says nothing when a file
+--- does not decode, so the header is read with `morf.image.info`, once per
+--- file and modification.
+local decodable = {}
+function common.lost(path)
+  if not path or path == "" then return false end
+  local stat = morf.fs.stat and morf.fs.stat(path) or nil
+  if not morf.fs.is_file(path) then return true end
+  local stamp = path .. "@" .. tostring(stat and stat.modified or "")
+  if decodable[stamp] == nil then
+    local ok, info = pcall(morf.image.info, path)
+    decodable[stamp] = ok and info ~= nil
+  end
+  return not decodable[stamp]
 end
 
 --- Whether a face is on screen: the one at rest while the desk is not being

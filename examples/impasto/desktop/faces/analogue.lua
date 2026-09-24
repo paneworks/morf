@@ -268,7 +268,11 @@ function M.media(ctx)
       return ui.Item { width = w, height = h,
         ui.Column { x = 0, y = (h - 100) / 2, width = w, gap = 14, align = "center",
           kit.text { width = w, elide = "right", horizontal_alignment = "center",
-            text = function() return S.media.identity() end, size = theme.size.regular, color = ink.muted },
+            -- The album, else the player's name (MediaFace.qml).
+            text = function()
+              local album = S.media.album()
+              return album ~= "" and album or S.media.identity()
+            end, size = theme.size.regular, color = ink.muted },
           common.bar { width = w, progress = S.media.progress, fill_color = ink.accent, track_color = ink.raised },
           transport(ctx, 28, 22) } }
     end or nil,
@@ -429,7 +433,8 @@ function M.updates(ctx)
     note = function()
       if S.updates.checking() then return "checking" end
       if not S.updates.available() then return "cannot check" end
-      return none() and "up to date" or "pending"
+      local age = S.updates.age()
+      return (none() and "up to date" or "pending") .. (age ~= "" and (" · " .. age) or "")
     end,
     tint = function() return none() and ink.muted() or ink.text() end,
     filled = true,
@@ -565,36 +570,9 @@ end
 
 -- ------------------------------------------------------------------ github --
 
--- The contribution wall with embossed tiles instead of flat ones: each tile
--- lit along its top and shaded along its bottom, from its own colour.
+-- The contribution wall with raised tiles (ContributionGrid `raised`).
 local function wall_doc(weeks, w, h)
-  local spacing, radius = 3, 2.5
-  local cell = math.min(24, (h - 6 * spacing) / 7)
-  local step = cell + spacing
-  local columns = math.max(1, math.floor((w + spacing) / step))
-  local shown = math.min(columns, #weeks)
-  local left = (w - (shown * step - spacing)) / 2
-  local top = (h - (7 * step - spacing)) / 2
-  local parts = {}
-  for i = 1, shown do
-    local week = weeks[#weeks - shown + i] or {}
-    for d = 1, 7 do
-      local level = week[d]
-      if type(level) == "table" then level = level.level end
-      if type(level) == "number" and level >= 0 then
-        local colour = theme.github_levels[math.min(5, math.floor(level) + 1)]
-        local x, y = left + (i - 1) * step, top + (d - 1) * step
-        parts[#parts + 1] = string.format(
-          '<rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="%s"/>' ..
-          '<rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="%s"/>' ..
-          '<rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="%s"/>',
-          n(x), n(y), n(cell), n(cell), n(radius), draw.darker(colour, 1.35),
-          n(x), n(y), n(cell), n(cell - 1.5), n(radius), draw.lighter(colour, 1.3),
-          n(x + 1), n(y + 1.2), n(cell - 2), n(cell - 2.7), n(radius * 0.8), colour)
-      end
-    end
-  end
-  return svg.doc(w, h, table.concat(parts))
+  return require("desktop.faces.github").document(weeks, w, h, 3, 2.5, 24, true)
 end
 
 function M.github(ctx)
