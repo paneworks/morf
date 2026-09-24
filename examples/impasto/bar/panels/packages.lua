@@ -5,7 +5,9 @@
 -- carries the actions on the whole of it.
 --
 -- Port of PackagesPanel.qml. Install, Remove and Update run in a terminal
--- (services/packages.lua), only on a click, and never on a dry run.
+-- window of the shell's own (services/packages.lua), only on a click, and
+-- never on a dry run. A row's one action is Install on the selected row
+-- (Enter runs it) or Remove under the pointer, in Find as in Installed.
 --
 -- `morf ipc call packages` toggles it; `packages.view <id>`,
 -- `packages.query <text>`, `packages.key up|down|tab|enter` and
@@ -106,7 +108,7 @@ local function row(slot_row)
   local installed = function() return entry().installed == true end
   local action_shown = function()
     if update() then return false end
-    if installed() then return hovered:get() and view() ~= "find" end
+    if installed() then return hovered:get() end
     return is_selected() and P.installable(entry())
   end
 
@@ -197,13 +199,18 @@ local function row(slot_row)
       kit.text { text = "→", size = theme.size.small, color = C.textMuted },
       kit.text { text = function() return entry().to or "" end, mono = true, size = theme.size.label },
     },
-    -- Votes for the AUR, "Installed" in Find.
+    -- The installed size, votes for the AUR, "Installed" in Find. A meta
+    -- package has no size, and "0.00 B" would look like an error.
     kit.text {
       anchors = { right = true, right_margin = 10, vertical_center = true },
       visible = function() return not update() and not action_shown() end,
       text = function()
         local e = entry()
         if view() == "find" and installed() then return "Installed" end
+        if view() == "installed" then
+          local size = e.size or ""
+          return size:match("^0%.00") and "" or size
+        end
         if aur() and e.votes then return e.votes .. " votes" end
         return ""
       end,
@@ -251,9 +258,7 @@ local function status_text()
     for _, row in ipairs(updates.updates()) do if row.source == "aur" then aur = aur + 1 end end
     local parts = { (updates.count() - aur) .. " from the repositories"
       .. (updates.tool() == "pacman" and " as of the last sync" or "") }
-    if updates.helper ~= "" then
-      parts[#parts + 1] = updates.aur() and (aur .. " from the AUR") or "the AUR did not answer"
-    end
+    parts[#parts + 1] = updates.aur() and (aur .. " from the AUR") or "the AUR did not answer"
     if updates.checking() then parts[#parts + 1] = "checking…"
     elseif updates.age() ~= "" then parts[#parts + 1] = "checked " .. updates.age() end
     return table.concat(parts, " · ")
@@ -327,11 +332,18 @@ local function build()
     },
   }
 
+  -- While something is typed the whole list is searched, so the filter
+  -- has nothing to say: dimmed, and deaf to clicks.
+  local typing = function() return P.term() ~= "" end
   local filter = controls.segmented {
     anchors = { left = true, vertical_center = true },
     visible = function() return P.view() == "installed" end,
     current = P.filter,
-    on_selected = function(id) P.set_filter(id) input.focus = true end,
+    on_selected = function(id)
+      if typing() then return end
+      P.set_filter(id)
+      input.focus = true
+    end,
     options = {
       { id = "mine", label = function() return "By you · " .. P.mine_count() end },
       { id = "all", label = function() return "All · " .. #P.installed() end },
@@ -386,7 +398,11 @@ local function build()
       ui.Rect { width = INNER_W, height = 1, color = C.islandBorder },
       ui.Item {
         width = INNER_W, height = P.footer_height,
-        filter,
+        ui.Item {
+          anchors = { fill = true },
+          opacity = function() return typing() and 0.4 or 1 end,
+          filter,
+        },
         kit.text {
           anchors = { vertical_center = true },
           x = function() return P.view() == "installed" and ((filter.layout_width or 0) + 10) or 0 end,

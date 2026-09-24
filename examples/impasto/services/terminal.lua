@@ -69,9 +69,13 @@ end
 --- destroyed, the window free for the next.
 function M.release(entry)
   local term = entry.term
-  entry.term = nil
+  local heard = entry.heard
+  entry.term, entry.heard = nil, nil
   entry.busy = false
   entry.status:set("")
+  -- Closed while the program ran: its end is told here, since a destroyed
+  -- terminal says nothing more.
+  if heard then pcall(heard, nil, nil) end
   if term then
     if term.running then pcall(term.kill, term, "HUP") end
     pcall(ui.destroy, term)
@@ -132,6 +136,7 @@ function M.run(command, options)
       return false
     end,
     on_exit = function(code, signal)
+      if entry.term == term then entry.heard = nil end
       if options.on_exit then pcall(options.on_exit, code, signal) end
       if entry.term ~= term then return end
       if code == 0 and not options.hold then
@@ -143,6 +148,7 @@ function M.run(command, options)
     end,
   }
   entry.term = term
+  entry.heard = options.on_exit
   ui.reparent(term, entry.body)
   entry.window:open()
   return term
