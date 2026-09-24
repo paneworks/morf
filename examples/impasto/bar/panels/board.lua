@@ -206,8 +206,8 @@ local function build_board()
       return c ~= nil and c.key == key
     end
     local inner_w = CARD_W - 35 - 9
-    -- Placed by hand rather than in a Column, which keeps room for a hidden
-    -- child: a card without notes or a day is only as tall as its line.
+    -- Each line placed under the one before it: a card without notes or a
+    -- day is only as tall as its line.
     local has_more = function() return more() ~= "" end
     local has_day = function() local t = task() return t ~= nil and t.due ~= "" end
     local line = kit.text {

@@ -121,11 +121,22 @@ impl Layout {
     ) -> Result<Size, LayoutError> {
         let children = scene.children(node)?;
         let mut child_sizes = Vec::with_capacity(children.len());
+        // What a positioner packs: the children it can show. An invisible
+        // child keeps its own size, but a Row, Column or Grid gives it no
+        // room and no gap, as a `Flex` already does and QML's do.
+        let mut shown_sizes = Vec::with_capacity(children.len());
+        let positioner = matches!(
+            scene.element(node)?,
+            Element::Row | Element::Column | Element::Grid
+        );
         for &child in children {
             let implicit = self.measure_implicit(scene, child, text, host)?;
             let requested = self.requested_size(scene, child, implicit)?;
             self.requested.insert(child, requested);
             child_sizes.push(requested);
+            if positioner && scene.bool_value(child, "visible")? {
+                shown_sizes.push(requested);
+            }
         }
 
         if scene.element(node)? == Element::Custom {
@@ -245,23 +256,23 @@ impl Layout {
                 })
                 .unwrap_or_default(),
             Element::Row => Size {
-                width: sum_with_spacing(&child_sizes, scene.number(node, "gap")?, true),
-                height: child_sizes
+                width: sum_with_spacing(&shown_sizes, scene.number(node, "gap")?, true),
+                height: shown_sizes
                     .iter()
                     .map(|size| size.height)
                     .fold(0.0, f64::max),
             },
             Element::Column => Size {
-                width: child_sizes
+                width: shown_sizes
                     .iter()
                     .map(|size| size.width)
                     .fold(0.0, f64::max),
-                height: sum_with_spacing(&child_sizes, scene.number(node, "gap")?, false),
+                height: sum_with_spacing(&shown_sizes, scene.number(node, "gap")?, false),
             },
             Element::Grid => {
                 let (column_gap, row_gap) = grid_gaps(scene, node)?;
                 grid_size(
-                    &child_sizes,
+                    &shown_sizes,
                     grid_columns(scene.number(node, "columns")?),
                     column_gap,
                     row_gap,
@@ -370,6 +381,18 @@ impl Layout {
         }
         let children = scene.children(parent)?;
         let packed = matches!(parent_element, Element::Row | Element::Column);
+        // Which children the positioner packs: the visible ones. The rest
+        // are still placed, where the next shown child would go, at their
+        // own size, but take no room, no gap and no grid cell.
+        let shown = if packed || parent_element == Element::Grid {
+            children
+                .iter()
+                .map(|&child| scene.bool_value(child, "visible"))
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            Vec::new()
+        };
+        let shown_count = shown.iter().filter(|&&shown| shown).count();
         let spacing = if packed {
             scene.number(parent, "gap")?
         } else {
@@ -381,12 +404,14 @@ impl Layout {
             let horizontal = parent_element == Element::Row;
             let used = children
                 .iter()
-                .map(|child| {
+                .zip(&shown)
+                .filter(|(_, shown)| **shown)
+                .map(|(child, _)| {
                     let size = self.requested[child];
                     if horizontal { size.width } else { size.height }
                 })
                 .sum::<f64>()
-                + spacing * children.len().saturating_sub(1) as f64;
+                + spacing * shown_count.saturating_sub(1) as f64;
             let extent = if horizontal {
                 parent_geometry.width
             } else {
@@ -395,7 +420,7 @@ impl Layout {
             justify_run(
                 scene.string_value(parent, "justify")?,
                 extent - used,
-                children.len(),
+                shown_count,
             )?
         } else {
             (0.0, 0.0)
@@ -415,8 +440,13 @@ impl Layout {
         let mut grid_heights = Vec::new();
         if parent_element == Element::Grid {
             grid_widths.resize(columns, 0.0_f64);
-            grid_heights.resize(children.len().div_ceil(columns), 0.0_f64);
-            for (index, child) in children.iter().enumerate() {
+            grid_heights.resize(shown_count.div_ceil(columns), 0.0_f64);
+            let cells = children
+                .iter()
+                .zip(&shown)
+                .filter(|(_, shown)| **shown)
+                .map(|(child, _)| child);
+            for (index, child) in cells.enumerate() {
                 let size = self.requested[child];
                 grid_widths[index % columns] = grid_widths[index % columns].max(size.width);
                 grid_heights[index / columns] = grid_heights[index / columns].max(size.height);
@@ -428,8 +458,11 @@ impl Layout {
             None
         };
 
-        for (position, &child) in children.iter().enumerate() {
+        // The grid cell the next shown child takes.
+        let mut cell = 0;
+        for (index, &child) in children.iter().enumerate() {
             let size = self.requested[&child];
+            let visible = shown.get(index).copied().unwrap_or(true);
             let anchors = anchors(scene.current(child, "anchors")?)?;
             reject_axis_conflict(parent_element, anchors)?;
             let mut geometry = Geometry {
@@ -464,18 +497,26 @@ impl Layout {
             match parent_element {
                 Element::Row => {
                     geometry.x = cursor;
-                    cursor += geometry.width + spacing;
+                    if visible {
+                        cursor += geometry.width + spacing;
+                    }
                 }
                 Element::Column => {
                     geometry.y = cursor;
-                    cursor += geometry.height + spacing;
+                    if visible {
+                        cursor += geometry.height + spacing;
+                    }
                 }
                 Element::Grid => {
-                    let column = position % columns;
-                    let row = position / columns;
+                    let column = cell % columns;
+                    // Past the last row when every child after it is hidden.
+                    let row = (cell / columns).min(grid_heights.len());
                     geometry.x =
                         grid_widths[..column].iter().sum::<f64>() + column_spacing * column as f64;
                     geometry.y = grid_heights[..row].iter().sum::<f64>() + row_spacing * row as f64;
+                    if visible {
+                        cell += 1;
+                    }
                 }
                 _ => {}
             }

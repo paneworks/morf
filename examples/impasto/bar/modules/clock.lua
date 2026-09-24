@@ -23,8 +23,8 @@ function clock.text()
 end
 
 function clock.build()
-  -- One text, the date appended when shown: a Row keeps room for a hidden
-  -- child, which would pull the time off centre.
+  -- One text, the date appended when shown, so the time and the date are
+  -- centred as one line.
   return ui.Item { anchors = { fill = true },
     kit.text {
       anchors = { center_in = true },

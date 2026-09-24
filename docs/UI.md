@@ -120,7 +120,10 @@ along it: `start`, `center`, `end`, `space_between`, `space_around`,
 `Row` and `Column` pack children at their own sizes: `gap` between,
 `align` across, `justify` along. They never resize a child (`align =
 "stretch"` is the one exception). `Grid` with a numeric `columns` fills
-row-major; tracks are as wide as their widest cell.
+row-major; tracks are as wide as their widest cell. A child with `visible
+= false` takes no room, no gap and no grid cell, as in a `Flex`: hide a
+card and the ones after it close up, and the container shrinks to what it
+shows. To keep a hidden child's place, fade it with `opacity = 0` instead.
 
 ```lua
 ui.Row {

@@ -28,8 +28,8 @@ return function(values)
       opacity = function() return (is_armed() or hovered:get()) and 1 or 0.75 end,
       behavior = { opacity = theme.behave("fast") },
     }
-    -- A Row keeps room for a hidden child, so the holder below is sized
-    -- to the glyph alone until the caption shows.
+    -- The holder below is sized to the glyph alone until the caption
+    -- shows, so the chip grows out of its circle rather than jumping.
     local content = ui.Row { gap = 7, align = "center", icon, name }
     return ui.Rect {
       width = function()
