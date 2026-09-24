@@ -18,7 +18,6 @@
 
 local ui = require("morf.ui")
 local theme = require("theme")
-local settings = require("services.settings")
 local island = require("bar.island")
 local modules = require("services.modules")
 local clock = require("bar.modules.clock")
@@ -110,14 +109,14 @@ island.register_layer("modules", {
   build = function()
     local list = function() return modules.activities() end
     local split = function() return #list() == 1 end
-    local time = kit.text {
+    -- The time, and the date beside it smaller and muted, as the clock
+    -- module draws it.
+    local face = clock.face()
+    local time = ui.Item {
       anchors = { center_in = true },
-      text = function()
-        local text = clock.text()
-        if settings.clockShowsDate then text = text .. "   " .. morf.time.format("%a %-d %b") end
-        return text
-      end,
-      size = theme.size.regular, weight = 600,
+      width = function() return face.layout_width or 0 end,
+      height = function() return face.layout_height or 16 end,
+      face,
     }
     local leading, leading_area = segment(function() return list()[1] or "" end,
       function() return split() and "mark" or "both" end,

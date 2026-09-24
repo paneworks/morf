@@ -214,7 +214,7 @@ terminal only on a click, and never on a dry run.
 | tasks: service, board, task row, day picker, module | ported; `tasks.days_with_tasks` for the calendar |
 | launcher (`bar/panels/launcher.lua`, `services/launcher.lua`, `services/calc.lua`; `=` `>` `@` `!` `'`) | ported |
 | overview (`bar/panels/overview.lua`), workspaces piece, launcher and overview buttons | ported |
-| timer (`services/timer.lua`, on the island: `bar/layers/timer.lua`), clipboard history (`services/clipboard.lua`) | ported |
+| timer (`services/timer.lua`, on the island: `bar/modules/timer.lua`), clipboard history (`services/clipboard.lua`) | ported |
 | rest layer (clock and activities), glance | ported |
 | network, Bluetooth, audio, battery, brightness, media, system, OSD, modules services | ported |
 | control centre (blocks, toggles, arranging), Wi-Fi and Bluetooth lists | ported |
