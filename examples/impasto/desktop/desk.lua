@@ -206,7 +206,9 @@ local function choose(id)
   elseif id == "palette" then
     panel("palette")
   elseif id == "settings" then
-    panel("settings")
+    -- DesktopService.settingsRequested: the settings window, not a panel.
+    local ok, window = pcall(require, "settings.window")
+    if ok then window.open() end
   elseif id == "open" then
     local row = desk.entry_of(key)
     local S = require("desktop.sources")
