@@ -339,7 +339,14 @@ pub(crate) fn append_node(
                 transform,
                 radii: radii.map(|radius| (radius - border).max(0.0)),
             }),
-            bounds: inner,
+            // A layer's bounds are where it lands on the surface — the
+            // scissor it is composited through — so they carry every
+            // ancestor transform. The mask keeps the untransformed inner
+            // rectangle beside the transform, as a mask does. Written
+            // untransformed, a bordered ClipRect under anything moved by
+            // `translate_y` composited through the place it would have
+            // been, and its contents vanished.
+            bounds: transform.bounds(inner),
         });
         Some((index, inner))
     } else {
@@ -378,7 +385,7 @@ pub(crate) fn append_node(
     }
     if let Some((content_layer, inner)) = content_layer {
         list.layers[content_layer].commands.end = list.commands.len();
-        list.layers[content_layer].bounds = inner;
+        list.layers[content_layer].bounds = transform.bounds(inner);
     }
     if element == Element::ClipRect && scene.number(node, "border_width")? > 0.0 {
         list.commands.push(DrawCommand::Quad {

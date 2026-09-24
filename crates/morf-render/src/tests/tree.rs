@@ -364,3 +364,50 @@ fn an_effect_beside_its_content_covers_nothing() {
         "the sibling's layer does not hold the content: {inside:?}",
     );
 }
+
+#[test]
+fn a_bordered_clip_composites_where_its_translated_ancestor_put_it() {
+    let (scene, layout, bar) = super::translated_bordered_clip(0.0, 1.0);
+    let list = DrawList::from_scene(&scene, &layout).unwrap();
+    let content = list
+        .layers
+        .iter()
+        .find(|layer| layer.mask.is_some())
+        .expect("the bordered clip's content layer");
+    // The inner rectangle, 2 in from each edge, moved 32 down.
+    let inner = Geometry {
+        x: 2.0,
+        y: 34.0,
+        width: 28.0,
+        height: 28.0,
+    };
+    assert_eq!(content.bounds, inner);
+    // What is drawn inside is clipped there too, not at the untranslated
+    // place.
+    let clip = list
+        .commands
+        .iter()
+        .find(|command| command.node() == bar)
+        .and_then(DrawCommand::clip)
+        .expect("a clipped bar");
+    assert_eq!(clip, inner);
+
+    // A scale about the ancestor's centre shrinks the layer with it.
+    let (scene, layout, _) = super::translated_bordered_clip(6.0, 0.5);
+    let list = DrawList::from_scene(&scene, &layout).unwrap();
+    let content = list
+        .layers
+        .iter()
+        .rev()
+        .find(|layer| layer.mask.is_some())
+        .unwrap();
+    assert_eq!(
+        content.bounds,
+        Geometry {
+            x: 9.0,
+            y: 41.0,
+            width: 14.0,
+            height: 14.0,
+        }
+    );
+}
