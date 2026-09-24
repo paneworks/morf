@@ -1,17 +1,21 @@
 -- Settings, Displays: the screens, the one picked, the laptop's lid and the
 -- night light (MonitorsSection, MonitorCanvas, LidPreview).
 --
--- Read-only where the original wrote Hyprland: the arrangement, modes,
--- scale and rotation are shown as the compositor reports them (Hyprland's
--- list through lib/hyprland when it is there, else the outputs morf sees),
--- and saving a layout is left to the compositor's own configuration. The
--- lid policy is kept in impasto's settings (`lidPolicy`) for whoever acts
--- on the lid; the night light is `services/night.lua`.
+-- Under Hyprland the page edits the arrangement services/displays.lua keeps
+-- per set of connected monitors and pushes as monitor rules: drag a screen
+-- on the canvas, mirror or extend, choose the main screen, switch a screen
+-- off or on, its scale, rotation, variable refresh, resolution and refresh
+-- rate, and forget the arrangement. Changes apply at once, with no
+-- confirmation. What is shown is what the compositor reports, so a change
+-- appears once it has taken. Elsewhere the screens morf sees are shown,
+-- the controls locked, and the page says why. The lid policy is kept in
+-- `lidPolicy` (services/lid.lua); the night light is services/night.lua.
 
 local ui = require("morf.ui")
 local theme = require("theme")
 local settings = require("services.settings")
 local night = require("services.night")
+local displays = require("services.displays")
 local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
@@ -19,35 +23,46 @@ local canvas = require("settings.monitor_canvas")
 local tr = require("services.tr")
 
 local C = theme.color
+local fast = function() return theme.behave("fast") end
 
 local M = {}
 
-local ROTATIONS = { [0] = "None", [1] = "90°", [2] = "180°", [3] = "270°" }
+-- Hyprland's transform 0-3; the flipped ones (4-7) are left out.
+M.rotations = {
+  { id = "0", label = tr("None") }, { id = "1", label = "90°" },
+  { id = "2", label = "180°" }, { id = "3", label = "270°" },
+}
+
+local NOT_HERE = "Only under Hyprland"
 
 --- The screens: `{ key, name, make, model, x, y, width, height, scale,
---- transform, refresh, disabled }`.
+--- transform, refresh, disabled, vrr, dpms, resolutions }`. Hyprland's
+--- (every output, lit or not) when it is there, else the outputs morf
+--- sees. Tracks the list in a binding.
 function M.monitors()
   local out = {}
-  local ok, workspaces = pcall(require, "services.workspaces")
-  local rows = ok and workspaces.monitors() or {}
-  for _, m in ipairs(rows or {}) do
-    out[#out + 1] = {
-      key = (m.description ~= "" and m.description) or m.name, name = m.name,
-      make = m.make or "", model = m.model or "", x = m.x or 0, y = m.y or 0,
-      width = m.width or 0, height = m.height or 0, scale = m.scale or 1,
-      transform = m.transform or 0, refresh = m.refresh_rate or 0, disabled = m.disabled,
-    }
-  end
-  if #out == 0 then
-    local x = 0
-    for _, s in ipairs(morf.screens or {}) do
+  if displays.available() then
+    for _, m in ipairs(displays.monitors()) do
       out[#out + 1] = {
-        key = s.description or s.name, name = s.name or "?", make = s.make or "", model = s.model or "",
-        x = s.x or x, y = s.y or 0, width = s.width or 0, height = s.height or 0,
-        scale = s.scale or 1, transform = 0, refresh = 0, disabled = false,
+        key = displays.key(m), name = m.name, make = m.make or "", model = m.model or "",
+        x = m.x or 0, y = m.y or 0, width = m.width or 0, height = m.height or 0,
+        scale = m.scale or 1, transform = m.transform or 0, refresh = m.refresh or 0,
+        disabled = m.disabled == true, vrr = m.vrr or 0, dpms = m.dpms ~= false,
+        resolutions = m.resolutions or {}, focused = m.focused, mirror = m.mirror or "none",
       }
-      x = x + (s.width or 0)
     end
+    return out
+  end
+  local x = 0
+  for _, s in ipairs(morf.screens or {}) do
+    out[#out + 1] = {
+      key = s.description or s.name, name = s.name or "?",
+      make = (s.make ~= "Unknown" and s.make) or "", model = (s.model ~= "Unknown" and s.model) or "",
+      x = s.x or x, y = s.y or 0, width = s.width or 0, height = s.height or 0,
+      scale = s.scale or 1, transform = 0, refresh = 0, disabled = false, vrr = 0, dpms = true,
+      resolutions = {},
+    }
+    x = x + (s.width or 0)
   end
   return out
 end
@@ -80,72 +95,233 @@ local function lid_picture(lit, external)
   }
 end
 
+--- One resolution in the list: the size, its fastest rate, lit when in use.
+local function resolution_line(W, entry, active, locked, on_pick)
+  local hovered = controls.signal("displays.resolution", false)
+  return ui.Rect {
+    width = W, height = 32, radius = theme.radius_small,
+    color = function()
+      if active then return C.accent() end
+      return hovered:get() and C.islandSurfaceHover or "#00000000"
+    end,
+    behavior = { color = fast() },
+    kit.text { anchors = { left = true, left_margin = 10, vertical_center = true },
+      text = string.format("%d × %d", entry.width, entry.height), mono = true, size = theme.size.small,
+      color = active and C.accentText or C.text },
+    kit.text { anchors = { right = true, right_margin = 10, vertical_center = true },
+      text = string.format("%g Hz", entry.refreshes[1] or 0), mono = true, size = theme.size.label,
+      color = active and C.accentText or C.textMuted },
+    setting.hit { hovered = hovered, enabled = function() return not locked end, on_click = on_pick },
+  }
+end
+
+--- Says why nothing here reaches the compositor, shown only then.
+local function unavailable_group(W)
+  return setting.group {
+    width = W, visible = function() return not displays.available() end,
+    setting.row { width = W, label = tr("Not available here"),
+      reading = "Arranging screens goes through Hyprland, and this compositor is not Hyprland; they are shown as they are.",
+      control = kit.glyph { glyph = "󰅙", size = 13, color = C.textMuted } },
+  }
+end
+
+--- A part built again whenever `revision()` changes: `build(W)`'s groups
+--- in a one-row Repeater whose row is keyed by the revision, so a new
+--- revision replaces the row. (A Loader builds once, when it is shown.)
+local function rebuilding(W, revision, build)
+  local model = morf.list_model({ { key = tostring(revision()) } })
+  local seen = nil
+  return {
+    setting.watch(function()
+      local now = tostring(revision())
+      if seen ~= nil and now ~= seen then
+        morf.timer(1, function() model:replace({ { key = now } }, "key") end, false)
+      end
+      seen = now
+    end),
+    ui.Repeater {
+      as = "flex", direction = "column", align = "start", width = W, gap = 0,
+      model = model,
+      delegate = function()
+        local children = { direction = "column", gap = 20, align = "start", width = W }
+        for _, node in ipairs(build(W)) do children[#children + 1] = node end
+        return ui.Flex(children)
+      end,
+    },
+  }
+end
+M.rebuilding = rebuilding
+
 function M.build(page)
-  local list = M.monitors()
   local chosen = controls.signal("monitors.chosen", "")
-  local current = function()
-    local key = chosen:get()
-    for _, m in ipairs(list) do if m.key == key then return m end end
-    return list[1]
+
+  -- Read inside each part's build, so the part is built again when the
+  -- compositor reports the screens anew.
+  -- The screen picked: the one clicked, else the main one, else the first.
+  local function pick(list, key)
+    local current
+    for _, m in ipairs(list) do if m.key == key then current = m end end
+    if not current and displays.available() then
+      local primary = displays.primary_name(true)
+      for _, m in ipairs(list) do if m.name == primary then current = m end end
+    end
+    return current or list[1]
   end
-  local single = #list < 2
-  local internal = M.internal(list)
+  local function snapshot()
+    local list = M.monitors()
+    local current = pick(list, chosen:get())
+    local lit = 0
+    for _, m in ipairs(list) do if not m.disabled then lit = lit + 1 end end
+    return list, current, lit
+  end
 
   local arrangement = function(W)
+    -- Not `snapshot()`: a click picks a screen, and must not build the
+    -- canvas again under the pointer.
+    local list = M.monitors()
+    local editable = displays.available()
+    local single = #list < 2
+    -- Bindings, not values: the store changing (a drop on the canvas) must
+    -- not build the part again; the compositor's answer does.
+    local mirrored = function() return editable and displays.mirroring() end
+    local picker = {}
+    for _, each in ipairs(list) do picker[#picker + 1] = { id = each.key, label = each.name } end
+    local group = {
+      width = W, title = tr("The screens"),
+      note = editable and tr("Drag one to move it, click one to change it.") or "As the compositor has them. Click one to see it.",
+      hint = "Arrangements are saved per set of connected monitors, known by the monitor rather than the port, so moving a cable or closing the lid keeps them. They are pushed to Hyprland as monitor rules; its configuration files are never written.",
+      setting.block { width = W,
+        ui.Item { width = W - 28, height = 230, opacity = function() return mirrored() and 0.5 or 1 end,
+          canvas.new { width = W - 28, height = 230, monitors = list,
+            editable = function() return editable and not mirrored() end,
+            selected = function() local c = pick(list, chosen:get()) return c and c.key or "" end,
+            primary = function() return editable and displays.primary_name() or "" end,
+            on_picked = function(key) chosen:set(key) end,
+            on_arranged = function(places) displays.remember_positions(places) end } } },
+    }
+    -- A screen that is off has no place on the canvas; a row each, which
+    -- picks it.
+    for _, m in ipairs(list) do
+      if m.disabled then
+        group[#group + 1] = setting.row { width = W, label = m.name .. " — off, and still plugged in",
+          control = setting.pill { text = tr("Edit"), on_click = function() chosen:set(m.key) page.go("monitors", "screen") end } }
+      end
+    end
+    group[#group + 1] = setting.row { width = W, label = tr("Arrangement"),
+      reading = function() return mirrored() and tr("Every screen shows the main one's") or tr("Extended across all of them") end,
+      locked = not editable or single,
+      reason = not editable and NOT_HERE or tr("Only one screen is plugged in"),
+      control = controls.segmented {
+        options = { { id = "extend", label = tr("Extend") }, { id = "mirror", label = tr("Mirror") } },
+        current = function() return mirrored() and "mirror" or "extend" end,
+        on_selected = function(id) displays.remember_mirror(id == "mirror") end } }
+    group[#group + 1] = setting.row { width = W, label = tr("The main screen"),
+      reading = "Where anything without a screen of its own goes, and what mirroring copies.",
+      locked = not editable or single,
+      reason = not editable and NOT_HERE or tr("Only one screen is plugged in"),
+      control = controls.segmented { options = picker,
+        current = function()
+          if not editable then return "" end
+          local name = displays.primary_name()
+          for _, m in ipairs(list) do if m.name == name then return m.key end end
+          return ""
+        end,
+        on_selected = function(key) displays.remember_primary(key) end } }
     return {
+      unavailable_group(W),
+      setting.group(group),
       setting.group {
-        width = W, title = tr("The screens"),
-        note = "As the compositor has them. Click one to see it.",
-        hint = "Arranging screens is the compositor's own configuration, which this shell never writes.",
-        setting.block { width = W,
-          canvas.new { width = W - 28, height = 220, monitors = list,
-            selected = function() local m = current() return m and m.key or "" end,
-            on_picked = function(key) chosen:set(key) end } },
-        setting.row { width = W, label = tr("Arrangement"),
-          reading = single and "One screen" or tr("Extended across all of them"),
-          control = kit.text { text = #list .. (#list == 1 and " screen" or " screens"),
-            size = theme.size.small, color = C.textMuted } },
+        width = W, title = tr("This arrangement"), visible = function() return editable and displays.arranged() end,
+        note = "Kept against these screens and no others.",
+        setting.row { width = W, label = tr("Forget it"),
+          reading = "Hands these screens back to Hyprland's own configuration",
+          control = setting.pill { text = tr("Forget"), on_click = function() displays.forget() end } },
       },
     }
   end
 
   local screen = function(W)
-    local m = current()
+    local list, m, lit = snapshot()
     if not m then return { setting.group { width = W, setting.row { width = W, label = "No screen" } } } end
+    local editable = displays.available()
+    local off = m.disabled
+    local change = function(fields) displays.remember(m.key, fields) end
     local picker = {}
     for _, each in ipairs(list) do picker[#picker + 1] = { id = each.key, label = each.name } end
-    local title = m.name
     local made = (m.make .. " " .. m.model):match("^%s*(.-)%s*$")
-    if made ~= "" then title = title .. " · " .. made end
+    local title = m.name .. (made ~= "" and (" · " .. made) or "")
+    local locked_off = not editable or off
+    local off_reason = not editable and NOT_HERE or tr("The screen is off")
+
+    local group = setting.group {
+      width = W, title = title,
+      setting.switch_row { width = W, label = tr("On"),
+        reading = off and tr("Off — out of the layout, and still plugged in")
+          or (not m.dpms and "Dark — the panel is asleep, and its workspaces are still on it" or ""),
+        -- The last lit screen cannot be switched off: there would be no way
+        -- back.
+        locked = not editable or (lit <= 1 and not off),
+        reason = not editable and NOT_HERE or tr("The only screen there is"),
+        checked = not off,
+        on_toggled = function(on) change({ disabled = not on }) end },
+      setting.slider { width = W, label = tr("Scale"), from = 1, to = 3, step = 0.05, decimals = 2, unit = "×",
+        locked = locked_off, reason = off_reason,
+        value = function() return m.scale end,
+        on_moved = function(v) change({ scale = math.floor(v * 20 + 0.5) / 20 }) end },
+      setting.row { width = W, label = tr("Rotation"), locked = locked_off, reason = off_reason,
+        control = controls.segmented { options = M.rotations, current = tostring(m.transform),
+          on_selected = function(id) change({ transform = tonumber(id) }) end } },
+      setting.switch_row { width = W, label = tr("Variable refresh"), locked = locked_off, reason = off_reason,
+        checked = (m.vrr or 0) ~= 0,
+        on_toggled = function(on) change({ vrr = on and 1 or 0 }) end },
+    }
+
+    local lines = { direction = "column", gap = 2, align = "start", width = W - 12 }
+    local refreshes = {}
+    for index, entry in ipairs(m.resolutions) do
+      if index > 8 then break end
+      local active = entry.width == m.width and entry.height == m.height
+      if active then refreshes = entry.refreshes end
+      lines[#lines + 1] = resolution_line(W - 12, entry, active, locked_off, function()
+        change({ mode = string.format("%dx%d@%.2f", entry.width, entry.height, entry.refreshes[1] or 60) })
+      end)
+    end
+    local pills = { gap = 6, align = "center" }
+    for _, rate in ipairs(refreshes) do
+      pills[#pills + 1] = setting.pill { text = string.format("%g Hz", rate),
+        active = math.abs(m.refresh - rate) < 0.05,
+        on_click = function() change({ mode = string.format("%dx%d@%.2f", m.width, m.height, rate) }) end }
+    end
+    local resolution = setting.group {
+      width = W, title = tr("Resolution"),
+      note = #m.resolutions > 0 and "What the monitor itself reported, largest first."
+        or "The monitor's modes are not reported here.",
+      hint = "Only the modes the monitor reports are listed. Choosing a resolution takes its highest refresh rate.",
+      setting.block { width = W, padding = 6, visible = #m.resolutions > 0,
+        ui.Flex(lines) },
+      setting.row { width = W, label = tr("Refresh rate"),
+        reading = m.refresh > 0 and string.format("%.2f Hz", m.refresh) or "Not reported here",
+        locked = locked_off or #refreshes < 2,
+        reason = locked_off and off_reason or tr("The only rate at this resolution"),
+        control = #refreshes > 0 and ui.Row(pills)
+          or kit.text { text = "—", size = theme.size.small, color = C.textMuted } },
+    }
     return {
+      unavailable_group(W),
       setting.group {
-        width = W, title = tr("Which screen"), visible = not single,
-        setting.row { width = W, label = "Showing", reading = made,
-          control = controls.segmented { options = picker,
-            current = function() local c = current() return c and c.key or "" end,
+        width = W, title = tr("Which screen"), visible = #list > 1,
+        setting.row { width = W, label = "Editing", reading = made,
+          control = controls.segmented { options = picker, current = m.key,
             on_selected = function(id) chosen:set(id) end } },
       },
-      setting.group {
-        width = W, title = function() local c = current() return c and c.name or "" end,
-        note = "As the compositor reports it.",
-        setting.row { width = W, label = tr("Resolution"),
-          reading = function() local c = current() return string.format("%d × %d", c.width, c.height) end },
-        setting.row { width = W, label = tr("Refresh rate"),
-          reading = function()
-            local c = current()
-            return c.refresh > 0 and string.format("%.2f Hz", c.refresh) or "Not reported here"
-          end },
-        setting.row { width = W, label = tr("Scale"),
-          reading = function() return string.format("%.2f×", current().scale) end },
-        setting.row { width = W, label = tr("Rotation"),
-          reading = function() return ROTATIONS[current().transform] or tostring(current().transform) end },
-        setting.row { width = W, label = "Changing it",
-          reading = "In the compositor's own configuration, which the shell leaves alone" },
-      },
+      group,
+      resolution,
     }
   end
 
   local lid = function(W)
+    local list = M.monitors()
+    local internal = M.internal(list)
     local tiles = {}
     for _, choice in ipairs {
       { id = "off", label = tr("Switch it off"), lit = false, external = true },
@@ -163,11 +339,15 @@ function M.build(page)
     end
     local others = {}
     for _, m in ipairs(list) do if m ~= internal then others[#others + 1] = m.name end end
+    local panel_reading = tr("Not on this machine")
+    if internal then
+      panel_reading = internal.disabled and (internal.name .. " — off, and still plugged in") or (internal.name .. " — on")
+    end
     return {
       setting.group {
         width = W, title = tr("When the lid closes"),
         note = tr("Only applies with another screen connected."),
-        hint = "Kept in the shell's settings. With nothing else connected, closing the lid is left to logind, which suspends.",
+        hint = "With nothing else connected, closing the lid is left to logind, which suspends. With another screen connected, the laptop's panel can be switched off (under Hyprland, out of the layout, its workspaces moved over) and lit again when the lid opens.",
         setting.tiles { width = W, label = tr("The laptop's screen"), tiles = tiles,
           locked = internal == nil, reason = tr("No laptop panel on this machine"),
           reading = function()
@@ -179,9 +359,8 @@ function M.build(page)
       },
       setting.group {
         width = W, title = tr("Right now"), note = "The current state, as the shell sees it.",
-        setting.row { width = W, label = tr("The laptop's panel"),
-          reading = internal and (internal.name .. " — on") or tr("Not on this machine"),
-          control = kit.glyph { glyph = internal and "󰍹" or "󰶐", size = 13, color = C.textMuted } },
+        setting.row { width = W, label = tr("The laptop's panel"), reading = panel_reading,
+          control = kit.glyph { glyph = (internal and not internal.disabled) and "󰍹" or "󰶐", size = 13, color = C.textMuted } },
         setting.row { width = W, label = tr("Other screens"),
           reading = #others == 0 and tr("None — the system handles the lid") or table.concat(others, ", "),
           control = kit.text { text = tostring(#others), size = theme.size.small, color = C.textMuted } },
@@ -221,10 +400,12 @@ function M.build(page)
     }
   end
 
+  local by_revision = function() return displays.revision() end
+  local by_screen = function() return displays.revision() .. "/" .. chosen:get() end
   return setting.parts(page, {
-    { id = "arrangement", build = arrangement },
-    { id = "screen", build = screen },
-    { id = "lid", build = lid },
+    { id = "arrangement", build = function(W) return rebuilding(W, by_revision, arrangement) end },
+    { id = "screen", build = function(W) return rebuilding(W, by_screen, screen) end },
+    { id = "lid", build = function(W) return rebuilding(W, by_revision, lid) end },
     { id = "night", build = night_part },
   })
 end

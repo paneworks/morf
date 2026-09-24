@@ -32,7 +32,8 @@
 --                        `submap`, `fullscreen`, `urgent`, `connected`.
 --   hyprland.on(name, fn)  typed events, `fn` gets the parsed fields;
 --                        returns a handle with `:off()`. `"*"` sees every
---                        event as (name, raw data).
+--                        event as (name, raw data); `"refreshed"` hears
+--                        `(kind)` once a refetched answer is in the state.
 --   hyprland.request / json / batch  asynchronous questions, queued, with a
 --                        bound on how many connections are open at once.
 --   dispatch, keyword, eval, reload, and the read-only helpers at the end.
@@ -71,6 +72,9 @@ for key, value in pairs(defaults) do settings[key] = value end
 hyprland.state = morf.state {
   connected = false,
   monitors = {},
+  -- Every connected output, lit or not (`monitors all`), keyed by `name`;
+  -- `monitors` keeps only the lit ones.
+  outputs = {},
   workspaces = {},
   clients = {},
   active_workspace = { id = 0, name = "" },
@@ -87,7 +91,7 @@ local state = hyprland.state
 
 -- Plain copies of what the models hold, for lookups from logic: a model is
 -- for a Repeater, a table is for `for`.
-local rows = { monitors = {}, workspaces = {}, clients = {} }
+local rows = { monitors = {}, outputs = {}, workspaces = {}, clients = {} }
 -- The last decoded answers, the source every row is rebuilt from.
 local latest = { monitors = nil, workspaces = nil, clients = nil }
 -- Urgency is not in any request's answer, only in the event, so it is kept
@@ -346,6 +350,15 @@ end
 
 -- ---------------------------------------------------------------- rebuild --
 
+local function mode_list(value)
+  local out = {}
+  if type(value) ~= "table" then return out end
+  for _, mode in ipairs(value) do
+    if type(mode) == "string" then out[#out + 1] = mode end
+  end
+  return out
+end
+
 local function monitor_row(monitor)
   local active = type(monitor.activeWorkspace) == "table" and monitor.activeWorkspace or {}
   local special = type(monitor.specialWorkspace) == "table" and monitor.specialWorkspace or {}
@@ -364,6 +377,14 @@ local function monitor_row(monitor)
     refresh_rate = number_or(monitor.refreshRate, 0),
     focused = monitor.focused == true,
     disabled = monitor.disabled == true,
+    serial = text(monitor.serial),
+    -- "2560x1440@144.00Hz", as the monitor reported them.
+    available_modes = mode_list(monitor.availableModes),
+    vrr = monitor.vrr == true,
+    -- The id of the output this one mirrors, -1 for none.
+    mirror_of = number_or(monitor.mirrorOf, -1),
+    -- Unlike `disabled`, DPMS off keeps the output in the layout; it is dark.
+    dpms = monitor.dpmsStatus ~= false,
     active_workspace = number_or(active.id, 0),
     active_workspace_name = text(active.name),
     special_workspace = number_or(special.id, 0),
@@ -440,10 +461,16 @@ local function rebuild()
   local focused_id = state.active_workspace.id
 
   if latest.monitors then
-    local list, shown, focused = {}, {}, nil
+    local list, shown, focused, every = {}, {}, nil, {}
     for _, monitor in ipairs(latest.monitors) do
       if type(monitor) == "table" then
         local row = monitor_row(monitor)
+        every[#every + 1] = row
+      end
+    end
+    table.sort(every, function(a, b) return a.name < b.name end)
+    for _, row in ipairs(every) do
+      if not row.disabled then
         list[#list + 1] = row
         shown[row.active_workspace] = true
         if row.special_workspace ~= 0 then shown[row.special_workspace] = true end
@@ -452,6 +479,7 @@ local function rebuild()
     end
     table.sort(list, by_id)
     rows.monitors = list
+    rows.outputs = every
     rows.shown = shown
     if focused then
       state.focused_monitor = focused.name
@@ -460,6 +488,7 @@ local function rebuild()
       focused_id = focused.active_workspace
     end
     state.monitors:replace(list, "id")
+    state.outputs:replace(every, "name")
   end
 
   local urgent_workspaces = {}
@@ -545,7 +574,9 @@ local fetching = {}
 local generation = { submap = 0, devices = 0 }
 
 local QUERIES = {
-  monitors = "j/monitors",
+  -- `all`, so a disabled output is listed too (in `outputs`) and can be
+  -- lit again from a settings page.
+  monitors = "j/monitors all",
   workspaces = "j/workspaces",
   clients = "j/clients",
   devices = "j/devices",
@@ -566,6 +597,7 @@ local function apply_devices(devices)
 end
 
 local hyprland_flush
+local emit
 
 local function fetch(kind)
   if fetching[kind] then
@@ -598,6 +630,9 @@ local function fetch(kind)
       latest[kind] = value
       rebuild()
     end
+    -- After the state holds the answer: a consumer that needs the whole
+    -- fresh list (a settings page, a reconciler) hears it here.
+    emit("refreshed", kind)
   end)
 end
 
@@ -777,7 +812,7 @@ function hyprland.on(name, fn)
   }
 end
 
-local function emit(name, ...)
+emit = function(name, ...)
   local list = listeners[name]
   if not list or #list == 0 then return end
   -- A copy, so a handler that calls `:off()` does not skip its neighbour.
@@ -1039,6 +1074,14 @@ function hyprland.monitor(key)
   for _, row in ipairs(rows.monitors) do
     if row.name == key or row.id == key then return copy(row) end
   end
+end
+
+--- Every connected output, lit or not (`monitors all`), as plain rows;
+--- the lit ones are also `monitor(...)`'s.
+function hyprland.outputs()
+  local out = {}
+  for index, row in ipairs(rows.outputs) do out[index] = copy(row) end
+  return out
 end
 
 --- A workspace's row by id or name, or nil.
