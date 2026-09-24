@@ -133,6 +133,18 @@ pub(crate) fn install_ui_json_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     ui.set_field(ctx, "reparent", reparent);
+    // Removes a node and everything under it for good: its bindings, its
+    // handlers, its animations, and — once nothing is borrowed — its
+    // `on_destroyed` hooks, deepest first. A Repeater's delegate is its
+    // model's to remove, not this.
+    let destroy_state = Rc::clone(&state);
+    let destroy = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let node: UserRef<NodeToken> = stack.consume(ctx)?;
+        crate::runtime_helpers::remove_scene_subtree(&mut destroy_state.borrow_mut(), node.handle);
+        crate::reactive_bindings::run_destroyed_hooks(&destroy_state, ctx, limits);
+        Ok(CallbackReturn::Return)
+    });
+    ui.set_field(ctx, "destroy", destroy);
     for kind in ["spring", "smoothed"] {
         ui.set_field(
             ctx,

@@ -6,7 +6,10 @@ use std::rc::Rc;
 use morf_reactive::SignalId;
 use morf_scene::{NodeHandle, Scene};
 
-use crate::{events::*, reactive_execute::*, state::*, surface_types::*, types::*};
+use crate::{
+    events::*, reactive_bindings::run_destroyed_hooks, reactive_execute::*, state::*,
+    surface_types::*, types::*,
+};
 
 pub(crate) fn geometry_i32(value: f64) -> i32 {
     value
@@ -54,6 +57,14 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     state.scene_revision = state.scene_revision.wrapping_add(1);
     if state.scene.remove(node).is_err() {
         return;
+    }
+    // Deepest first, so a child lets go of what it holds before the parent
+    // that may have lent it. They run later, once nothing is borrowed and no
+    // flush is under way: see `run_destroyed_hooks`.
+    for removed in nodes.iter().rev() {
+        if let Some(hook) = state.destroy_hooks.remove(removed) {
+            state.pending_destroyed.push(hook);
+        }
     }
     let removed = nodes.into_iter().collect::<HashSet<_>>();
     for node in &removed {
@@ -173,6 +184,7 @@ pub(crate) fn finish_retained_destroy(
         );
     }
     remove_scene_subtree(&mut state.borrow_mut(), node);
+    run_destroyed_hooks(state, ctx, limits);
 }
 
 pub(crate) fn drop_retainable(
@@ -184,6 +196,7 @@ pub(crate) fn drop_retainable(
     let registered = state.borrow().retention.state(node).is_some();
     if !registered {
         remove_scene_subtree(&mut state.borrow_mut(), node);
+        run_destroyed_hooks(state, ctx, limits);
         return;
     }
     let callback = {

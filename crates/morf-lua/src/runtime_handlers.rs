@@ -38,6 +38,10 @@ impl Runtime {
         // A handler that edited a text input — `:insert`, `:select` — owes
         // that field's callbacks, which could not run while it was running.
         self.drain_input_events();
+        // What the handler removed — a model row gone, a node destroyed —
+        // lets its hooks run now, with nothing borrowed.
+        self.lua
+            .enter(|ctx| run_destroyed_hooks(&self.reactive, ctx, self.limits));
         result
     }
 }

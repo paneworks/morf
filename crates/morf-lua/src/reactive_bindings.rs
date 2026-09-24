@@ -239,6 +239,62 @@ pub(crate) fn flush_reactive(
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
+    let result = flush_graph(state, ctx, limits);
+    // A flush is where most removals happen — a Loader let go, a Repeater's
+    // row gone — and the end of one is the first moment their hooks can run.
+    run_destroyed_hooks(state, ctx, limits);
+    result
+}
+
+/// Runs the `on_destroyed` hooks of nodes that have been removed.
+///
+/// Never from inside a flush, and never from inside another hook: a removal
+/// happens with the state borrowed, so its hooks wait in a queue for the next
+/// moment nothing holds it. Each hook is a handler — its own fuel, its writes
+/// flushed once when the last of them returns — and a node its hook removes
+/// has its own hook queued and run in the same drain.
+pub(crate) fn run_destroyed_hooks(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'_>,
+    limits: Limits,
+) {
+    {
+        let mut state = state.borrow_mut();
+        if state.flushing || state.running_destroyed || state.pending_destroyed.is_empty() {
+            return;
+        }
+        state.running_destroyed = true;
+        state.handler_depth += 1;
+    }
+    loop {
+        let hooks = std::mem::take(&mut state.borrow_mut().pending_destroyed);
+        if hooks.is_empty() {
+            break;
+        }
+        for hook in hooks {
+            if let Err(error) = execute_handler_args(ctx, &hook, &[], limits) {
+                state
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("on_destroyed: {error}"));
+            }
+        }
+    }
+    let flush = {
+        let mut state = state.borrow_mut();
+        state.running_destroyed = false;
+        state.handler_depth = state.handler_depth.saturating_sub(1);
+        state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)
+    };
+    if flush {
+        let _ = flush_reactive(state, ctx, limits);
+    }
+}
+
+fn flush_graph(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'_>,
+    limits: Limits,
+) -> Result<(), String> {
     {
         let mut state = state.borrow_mut();
         // A flush asked for from inside one — a binding that registers

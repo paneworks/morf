@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use crate::{
-    api_finish::*, reactive_execute::*, serialization::*, state::*, surface_types::*, types::*,
+    api_finish::*, reactive_bindings::run_destroyed_hooks, reactive_execute::*, serialization::*,
+    state::*, surface_types::*, types::*,
 };
 
 impl Runtime {
@@ -91,9 +92,13 @@ impl Runtime {
             )));
         }
 
-        self.lua
+        let result = self
+            .lua
             .execute::<()>(&executor)
-            .map_err(|error| Error::Runtime(error.to_string()))
+            .map_err(|error| Error::Runtime(error.to_string()));
+        self.lua
+            .enter(|ctx| run_destroyed_hooks(&self.reactive, ctx, self.limits));
+        result
     }
 
     /// Replaces the ordered filesystem roots used for user Lua modules.

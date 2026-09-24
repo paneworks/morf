@@ -92,6 +92,16 @@ pub(crate) fn configure_element<'gc>(
             state_value = Some(value);
             continue;
         }
+        if property == "on_destroyed" {
+            let LuaValue::Function(Function::Closure(closure)) = value else {
+                return Err("on_destroyed must be a function".to_owned());
+            };
+            state
+                .borrow_mut()
+                .destroy_hooks
+                .insert(node, ctx.stash(closure));
+            continue;
+        }
         if let Some(event) = handler_event(&property) {
             let LuaValue::Function(Function::Closure(closure)) = value else {
                 return Err(format!("{property} must be a function"));

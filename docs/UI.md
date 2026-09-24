@@ -328,6 +328,25 @@ destination, or use a `morf.transform_watcher` for the moving value.
 `morf.animation.play { ... }` runs groups and keyframes;
 `morf.animation.fling` coasts a property.
 
+### Destruction
+
+A node is destroyed when a `Loader` lets it go, when its `Repeater` row
+leaves the model, when `ui.destroy(node)` is called, or when any of its
+ancestors goes the same way. `on_destroyed = function() end` on any node
+runs once then, deepest node first, so what the node's Lua made for it —
+a `morf.clipboard.watch`, a service subscription, a timer outside the tree
+— can be let go of. It runs as a handler once nothing else is running (never
+in the middle of a flush), with a handler's fuel; its writes flush when it
+returns, and an error in it is logged. Groups, loops, bindings and handlers
+that belong to a destroyed node end with it.
+
+```lua
+local function clock_face()
+  local unsubscribe = services.time.subscribe(function(t) ... end)
+  return ui.Item { on_destroyed = unsubscribe, ... }
+end
+```
+
 ## 6. Appearance
 
 One rule covers every property in this section: it is a number, a colour,

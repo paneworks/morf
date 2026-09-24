@@ -264,6 +264,13 @@ pub(crate) struct ReactiveState {
     pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
     pub(crate) timers: Vec<PendingTimer>,
     pub(crate) timer_callbacks: HashMap<NodeHandle, StashedClosure>,
+    /// Each node's `on_destroyed`, until the node goes.
+    pub(crate) destroy_hooks: HashMap<NodeHandle, StashedClosure>,
+    /// Hooks of nodes already removed, waiting for a moment Lua can run:
+    /// removal happens with the state borrowed, often inside a flush.
+    pub(crate) pending_destroyed: Vec<StashedClosure>,
+    /// The pending hooks are being run; removals they cause join the queue.
+    pub(crate) running_destroyed: bool,
     pub(crate) animation_callbacks: HashMap<(NodeHandle, String), StashedClosure>,
     pub(crate) group_callbacks: HashMap<GroupId, StashedClosure>,
     pub(crate) loader_factories: HashMap<NodeHandle, StashedClosure>,
@@ -460,6 +467,9 @@ impl ReactiveState {
             greetd_sessions: Vec::new(),
             timers: Vec::new(),
             timer_callbacks: HashMap::new(),
+            destroy_hooks: HashMap::new(),
+            pending_destroyed: Vec::new(),
+            running_destroyed: false,
             animation_callbacks: HashMap::new(),
             group_callbacks: HashMap::new(),
             loader_factories: HashMap::new(),
