@@ -79,6 +79,42 @@ impl Bus {
     }
 }
 
+/// The connection proxies on `bus` with calls bounded by `timeout` share.
+///
+/// zbus bounds calls per connection, and a connection per proxy was what
+/// that led to: a socket, an authentication handshake, a unique bus name and
+/// an executor thread for every object a configuration talked to -- 53 of
+/// them in one shell. Proxies with the same bus and bound now share one; a
+/// connection the bus has dropped (the daemon restarted) is replaced by the
+/// next proxy that asks.
+fn shared_connection(bus: Bus, timeout: Duration) -> zbus::Result<zbus::blocking::Connection> {
+    static SHARED: OnceLock<Mutex<Vec<(Bus, Duration, zbus::blocking::Connection)>>> =
+        OnceLock::new();
+    let shared = SHARED.get_or_init(|| Mutex::new(Vec::new()));
+    let mut shared = shared.lock().unwrap_or_else(|error| error.into_inner());
+    if let Some(index) = shared
+        .iter()
+        .position(|(held_bus, held_timeout, _)| *held_bus == bus && *held_timeout == timeout)
+    {
+        // A connection whose peer is gone answers nothing: replaced, not reused.
+        if !is_closed(&shared[index].2) {
+            return Ok(shared[index].2.clone());
+        }
+        let _gone = shared.swap_remove(index);
+    }
+    let connection = bus.builder()?.method_timeout(timeout).build()?;
+    shared.push((bus, timeout, connection.clone()));
+    Ok(connection)
+}
+
+/// Whether a connection's socket has gone (the bus daemon restarted).
+fn is_closed(connection: &zbus::blocking::Connection) -> bool {
+    // A cheap local question the executor answers only while it runs.
+    zbus::blocking::fdo::DBusProxy::new(connection)
+        .and_then(|proxy| proxy.get_id().map_err(zbus::Error::from))
+        .is_err()
+}
+
 /// Connects the first `unix:path=` or `unix:abstract=` entry of a D-Bus
 /// address that answers.
 fn connect_local(address: &str) -> Option<std::os::unix::net::UnixStream> {
@@ -490,7 +526,7 @@ impl DbusProxy {
         interface: impl Into<String>,
         timeout: Duration,
     ) -> zbus::Result<Self> {
-        let connection = bus.builder()?.method_timeout(timeout).build()?;
+        let connection = shared_connection(bus, timeout)?;
         let destination = destination.into();
         let path = path.into();
         let interface = interface.into();
