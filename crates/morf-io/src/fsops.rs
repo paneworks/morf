@@ -323,6 +323,18 @@ pub fn symlink(target: &Path, link: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(target, link)
 }
 
+/// Up to `length` bytes from `offset`; fewer at the end of the file, none
+/// past it. A negative-free window, so a reader that remembers where it got
+/// to reads only what was appended since -- a log, a transcript.
+pub fn read_range(path: &Path, offset: u64, length: u64) -> io::Result<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = fs::File::open(path)?;
+    file.seek(SeekFrom::Start(offset))?;
+    let mut out = Vec::new();
+    file.take(length).read_to_end(&mut out)?;
+    Ok(out)
+}
+
 pub fn read_link(path: &Path) -> io::Result<PathBuf> {
     fs::read_link(path)
 }

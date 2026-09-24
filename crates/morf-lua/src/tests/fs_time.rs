@@ -177,3 +177,26 @@ fn log_writes_levels_and_stays_bounded() {
         "{logs:?}"
     );
 }
+
+#[test]
+fn fs_reads_a_window_of_a_file() {
+    let dir = scratch("window");
+    let mut runtime = Runtime::default();
+    let source = format!(
+        r##"
+        local fs = morf.fs
+        local path = "{base}/log.txt"
+        assert(fs.write(path, "0123456789"))
+        assert(fs.read(path, {{ offset = 3, length = 4 }}) == "3456")
+        assert(fs.read(path, {{ offset = 7 }}) == "789")
+        assert(fs.read(path, {{ offset = 50 }}) == "")
+        assert(fs.append(path, "abc"))
+        local size = fs.stat(path).size
+        assert(fs.read(path, {{ offset = size - 3 }}) == "abc")
+        assert(not pcall(fs.read, path, {{ offset = -1 }}))
+        "##,
+        base = dir.display()
+    );
+    runtime.execute("window.lua", source.as_bytes()).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+}

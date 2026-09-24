@@ -21,8 +21,8 @@
 -- by another a second later, most recently changed files first, so the
 -- current block is right before the backlog is done.
 --
--- `morf.fs.read` reads a whole file. A file larger than `max_read` is read a
--- chunk at a time by running `dd` (directly, read-only) for the byte range.
+-- A file larger than `max_read` is read a chunk at a time with
+-- `morf.fs.read(path, { offset, length })`, from where the last pass stopped.
 
 local morf = require("morf")
 local poll = require("lib.poll")
@@ -229,9 +229,9 @@ Usage.__index = Usage
 ---                   since are skipped (default five weeks)
 ---   pass_bytes   -- most bytes one pass reads (default 32 MiB)
 ---   max_read     -- files up to this are read whole (default 4 MiB)
----   chunk        -- bytes per `dd` read of a larger file (default 2 MiB)
+---   chunk        -- bytes per ranged read of a larger file (default 2 MiB)
 ---   read_range(path, offset, length, on_done) -- how a range of a large file
----                   is read; `dd` unless a test says otherwise
+---                   is read; `morf.fs.read` with a window unless a test says otherwise
 ---   now          -- a function returning the time, for tests
 function claude_usage.new(options)
   options = options or {}
@@ -249,14 +249,8 @@ function claude_usage.new(options)
     files = nil,
   }, Usage)
   if not self.read_range then
-    local dd = poll.which("dd")
-    if dd then
-      self.read_range = function(path, offset, length, on_done)
-        poll.run({ dd, "if=" .. path, "bs=64K", "iflag=skip_bytes,count_bytes",
-          "skip=" .. offset, "count=" .. length, "status=none" }, function(result)
-          on_done(result.ok and result.stdout or nil, result.error or result.stderr)
-        end, { max_bytes = length + 65536, timeout_ms = 60000 })
-      end
+    self.read_range = function(path, offset, length, on_done)
+      on_done(fs.read(path, { offset = offset, length = length }))
     end
   end
   local interval = options.interval or 60 * 1000
@@ -325,7 +319,7 @@ function Usage:_read_file(path, file, stat, budget, spend, wait)
     return read, false
   end
   if not self.read_range then
-    return 0, false, "no way to read past " .. self.max_read .. " bytes (no dd)"
+    return 0, false, "no way to read past " .. self.max_read .. " bytes"
   end
   while file.offset < stat.size and read < budget do
     local length = math.min(self.chunk, stat.size - file.offset)

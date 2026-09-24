@@ -191,14 +191,38 @@ pub(crate) fn install_fs_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         ctx,
         "read",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let (path, limit): (LuaValue, Option<i64>) = stack.consume(ctx)?;
+            let (path, limit): (LuaValue, LuaValue) = stack.consume(ctx)?;
             let path = path_of(path, "fs.read")?;
+            // `read(path, { offset, length })` reads a window of the file:
+            // what was appended since a remembered offset, the tail of a
+            // log. `length` defaults to the rest, bounded like a whole read.
+            if let LuaValue::Table(window) = limit {
+                let offset = integer(ctx, Some(window), "offset")?.unwrap_or(0);
+                let length = integer(ctx, Some(window), "length")?.unwrap_or(DEFAULT_READ as i64);
+                let offset = u64::try_from(offset)
+                    .map_err(|_| HostError("fs.read offset must not be negative".into()))?;
+                let length = u64::try_from(length)
+                    .ok()
+                    .filter(|length| *length <= MAX_BYTES)
+                    .ok_or_else(|| HostError(format!("fs.read length must be 0..{MAX_BYTES}")))?;
+                match ops::read_range(&path, offset, length) {
+                    Ok(bytes) => stack.replace(ctx, luna::String::from_slice(&ctx, bytes)),
+                    Err(error) => fail!(stack, ctx, error),
+                }
+                return Ok(CallbackReturn::Return);
+            }
             let limit = match limit {
-                None => DEFAULT_READ,
-                Some(limit) => u64::try_from(limit)
+                LuaValue::Nil => DEFAULT_READ,
+                LuaValue::Integer(limit) => u64::try_from(limit)
                     .ok()
                     .filter(|limit| *limit <= MAX_BYTES)
                     .ok_or_else(|| HostError(format!("fs.read limit must be 0..{MAX_BYTES}")))?,
+                _ => {
+                    return Err(HostError(
+                        "fs.read takes a byte limit or { offset, length }".into(),
+                    )
+                    .into());
+                }
             };
             match ops::read(&path, limit) {
                 Ok(bytes) => stack.replace(ctx, luna::String::from_slice(&ctx, bytes)),
