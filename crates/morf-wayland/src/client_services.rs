@@ -316,22 +316,23 @@ impl LayerClient {
         true
     }
 
-    /// Starts an asynchronous capture of the configured or first output.
-    pub fn capture_output(&mut self, request_id: u64, include_cursor: bool) -> bool {
+    /// Starts an asynchronous capture of the named output, or of the
+    /// configured or first one.
+    pub fn capture_output(
+        &mut self,
+        request_id: u64,
+        include_cursor: bool,
+        output: Option<&str>,
+    ) -> bool {
+        let Some(output) = self.capture_target(output) else {
+            return false;
+        };
         let Some(manager) = &self.state.screencopy_manager else {
             return false;
         };
         if self.state.shm.is_none() || self.state.screencopies.len() >= 4 {
             return false;
         }
-        let output = self
-            .state
-            .output_power_target
-            .clone()
-            .or_else(|| self.state.outputs.outputs().next());
-        let Some(output) = output else {
-            return false;
-        };
         let frame =
             manager.capture_output(i32::from(include_cursor), &output, &self.queue.handle(), ());
         self.state.screencopies.push(PendingScreencopy {

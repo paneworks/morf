@@ -85,6 +85,24 @@ pub fn outline_of(path: impl AsRef<Path>) -> Result<Outline, SvgError> {
     outline_from_bytes(&bytes)
 }
 
+/// Takes the outlines of whatever a `source` string names: a path, or the
+/// document itself written inline — `<svg …>` text or a `data:image/svg+xml`
+/// URI, plain or base64.
+///
+/// Inline is what lets a configuration draw a path it computed without a
+/// temporary file. The same forms `ui.Image` accepts, recognised by the same
+/// code, so a string that draws as a picture also draws as a field.
+pub fn outline_of_source(source: &str) -> Result<Outline, SvgError> {
+    match morf_image::inline_source(source) {
+        None => outline_of(source),
+        Some(Ok(morf_image::InlineSource::Svg(bytes))) => outline_from_bytes(&bytes),
+        Some(Ok(morf_image::InlineSource::Raster(_))) => Err(SvgError::Parse(
+            "a raster image has no outline; an SdfShape source must be SVG".to_owned(),
+        )),
+        Some(Err(error)) => Err(SvgError::Parse(error.to_string())),
+    }
+}
+
 /// Takes the outlines of a document already in memory.
 pub fn outline_from_bytes(bytes: &[u8]) -> Result<Outline, SvgError> {
     let options = usvg::Options::default();

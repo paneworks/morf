@@ -208,7 +208,11 @@ pub(crate) struct ReactiveState {
     pub(crate) screencopy_names: HashMap<u64, String>,
     /// Published captures the configuration is done with.
     pub(crate) screencopy_releases: Vec<String>,
+    /// Captures to be written to a file rather than handed to Lua, by request.
+    pub(crate) screencopy_saves: HashMap<u64, crate::image_jobs::CaptureSave>,
     pub(crate) next_screencopy: u64,
+    /// `morf.image` work on its way through the worker pool.
+    pub(crate) image_jobs: crate::image_jobs::ImageJobs,
     pub(crate) virtual_keyboard_requests: Vec<VirtualKeyboardRequest>,
     pub(crate) input_method_enable_requested: bool,
     pub(crate) input_method_requests: Vec<InputMethodRequest>,
@@ -347,7 +351,9 @@ impl ReactiveState {
             screencopy_callbacks: HashMap::new(),
             screencopy_names: HashMap::new(),
             screencopy_releases: Vec::new(),
+            screencopy_saves: HashMap::new(),
             next_screencopy: 0,
+            image_jobs: crate::image_jobs::ImageJobs::default(),
             virtual_keyboard_requests: Vec::new(),
             input_method_enable_requested: false,
             input_method_requests: Vec::new(),
