@@ -102,6 +102,54 @@ impl std::ops::Deref for CachedLayout {
     }
 }
 
+/// `MORF_FRAME_LOG=2`: where one frame's time went, stage by stage, for any
+/// frame over 16 ms.
+struct FrameSplit {
+    on: bool,
+    started: std::time::Instant,
+    last: std::time::Instant,
+    stages: Vec<(&'static str, f64)>,
+}
+
+impl FrameSplit {
+    fn start() -> Self {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let on =
+            *ON.get_or_init(|| std::env::var("MORF_FRAME_LOG").is_ok_and(|value| value == "2"));
+        let now = std::time::Instant::now();
+        Self {
+            on,
+            started: now,
+            last: now,
+            stages: Vec::new(),
+        }
+    }
+
+    fn mark(&mut self, stage: &'static str) {
+        if !self.on {
+            return;
+        }
+        let now = std::time::Instant::now();
+        self.stages
+            .push((stage, (now - self.last).as_secs_f64() * 1000.0));
+        self.last = now;
+    }
+
+    fn finish(self) {
+        let total = self.started.elapsed().as_secs_f64() * 1000.0;
+        if !self.on || total < 16.0 {
+            return;
+        }
+        let parts = self
+            .stages
+            .iter()
+            .map(|(stage, ms)| format!("{stage} {ms:.1}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        eprintln!("frame split {total:.1} ms: {parts}");
+    }
+}
+
 pub(crate) fn paint_layer(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
@@ -123,6 +171,7 @@ pub(crate) fn paint_layer(
     {
         client.set_layer_keyboard_focus(layer, focus);
     }
+    let mut split = FrameSplit::start();
     let revision = runtime.scene().layout_revision();
     let reusable = cache.filter(|cached| cached.still_valid(revision, (width, height), scale_120));
     let layout = match reusable {
@@ -140,13 +189,16 @@ pub(crate) fn paint_layer(
             )?;
             // Only on a fresh layout: it is the one moment the answer can have
             // changed, and the cached one has already been looked at.
+            split.mark("layout");
             runtime.lint_layout(&layout, root);
+            split.mark("lint");
             layout
         }
     };
     // Every frame, not only a fresh layout's: a caret that moved without the
     // text changing still has to be scrolled into view.
     runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
+    split.mark("text inputs");
     let scene = runtime.scene();
     let input = if let Some(regions) = &config.input_regions {
         // A configured mask is a static surface setting — nothing animates it —
@@ -246,6 +298,7 @@ pub(crate) fn paint_layer(
         backdrop = shapes;
     }
 
+    split.mark("input and backdrop regions");
     client.request_layer_frame(layer);
     let surface = client
         .layer_surface(layer)
@@ -266,11 +319,14 @@ pub(crate) fn paint_layer(
             }
         })
         .map_err(|error| error.to_string())?;
+    split.mark("render");
     if damage.is_empty() {
         client.commit_layer(layer);
     }
     drop(scene);
     runtime.observe_layout(&layout);
+    split.mark("observe layout");
+    split.finish();
     Ok(CachedLayout {
         layout,
         revision,

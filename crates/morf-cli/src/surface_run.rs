@@ -88,7 +88,9 @@ pub(crate) fn run_surface(
         },
         runtime_screen.clone(),
     );
+    let loading = Instant::now();
     execute_config(&mut runtime, path, source, policy)?;
+    slow(&name, "loading the configuration", loading);
     primary_surface_root(&runtime)?;
 
     let layer_config = runtime.layer_surface_config();
@@ -108,6 +110,7 @@ pub(crate) fn run_surface(
         screens: client.screens().to_vec(),
     }))
     .map_err(|_| "output supervisor stopped".to_owned())?;
+    let configuring = Instant::now();
     'configured: loop {
         client.dispatch().map_err(|error| error.to_string())?;
         while let Some(event) = client.next_event() {
@@ -182,6 +185,12 @@ pub(crate) fn run_surface(
             }
         }
     }
+    slow(
+        &name,
+        "waiting for the compositor's first configure",
+        configuring,
+    );
+    let gpu = Instant::now();
     let (width, height) = client.physical_size();
     let backend = pollster::block_on(WgpuBackend::new_surface(
         client.window_target(),
@@ -193,7 +202,10 @@ pub(crate) fn run_surface(
     // Known only now: the protocols came with the connection, the GPU with
     // the renderer. Everything a configuration or `morf info` might ask.
     runtime.set_capabilities(&capabilities_of(&client, &mut renderer));
+    slow(&name, "starting the GPU", gpu);
+    let shaders = Instant::now();
     register_shaders(&runtime, &mut renderer)?;
+    slow(&name, "building shaders", shaders);
     let animating_shaders = runtime.shaders_animate();
     let started = Instant::now();
     let mut clock = clock_text();
@@ -202,7 +214,10 @@ pub(crate) fn run_surface(
         .map_err(|error| error.to_string())?;
     apply_parent_transitions(&mut runtime, &mut renderer, &client)?;
     let primary_root = primary_surface_root(&runtime)?;
+    let first = Instant::now();
     let layout = paint(&mut runtime, &mut renderer, &client, primary_root, None)?;
+    slow(&name, "the first frame", first);
+    let windows_opening = Instant::now();
     let mut popup_surfaces = HashMap::new();
     let mut floating_surfaces = HashMap::new();
     let mut layer_surfaces = HashMap::new();
@@ -218,6 +233,7 @@ pub(crate) fn run_surface(
         &name,
     )?;
     apply_service_requests(&mut runtime, &mut client);
+    slow(&name, "opening the other surfaces", windows_opening);
 
     let mut state = SurfaceEventState {
         layout,
@@ -255,10 +271,14 @@ pub(crate) fn run_surface(
             .map_err(|error| error.to_string())?;
         wake.drain();
         let next_clock = clock_text();
+        let polling = Instant::now();
         let mut repaint = runtime.poll_services();
+        slow(&name, "services, timers and callbacks", polling);
         let mut recreate_surface = false;
         while let Ok(command) = commands.try_recv() {
+            let started_command = Instant::now();
             let update = handle_worker_command(&mut runtime, &runtime_screen, policy, command);
+            slow(&name, "an IPC call", started_command);
             repaint |= update.repaint;
             recreate_surface |= update.recreate_surface;
             if update.reset_input {
@@ -355,7 +375,9 @@ pub(crate) fn run_surface(
                 .map_err(|error| error.to_string())?;
         }
         while let Some(event) = client.next_event() {
-            match handle_surface_event(
+            let handling = Instant::now();
+            let what = event_kind(&event);
+            let handled = handle_surface_event(
                 &mut runtime,
                 &mut renderer,
                 &mut client,
@@ -363,7 +385,9 @@ pub(crate) fn run_surface(
                 event,
                 tx,
                 &name,
-            ) {
+            );
+            slow(&name, what, handling);
+            match handled {
                 Ok(painted) => repaint |= painted,
                 // A scene that is mid-change (a view that removed a node
                 // whose parent still lists it) fails the layout for this
@@ -393,13 +417,16 @@ pub(crate) fn run_surface(
                 renderer.backend_mut().forget_nodes(&removed);
             }
             apply_parent_transitions(&mut runtime, &mut renderer, &client)?;
-            match paint(
+            let painting = Instant::now();
+            let painted_frame = paint(
                 &mut runtime,
                 &mut renderer,
                 &client,
                 state.primary_root,
                 Some(&state.layout),
-            ) {
+            );
+            slow(&name, "a frame", painting);
+            match painted_frame {
                 Ok(layout) => state.layout = layout,
                 Err(error) if is_layout_error(&error) => {
                     complain_layout(&name, &error, &mut layout_complaint);
@@ -432,6 +459,37 @@ pub(crate) fn run_surface(
             // paced against.
             state.pacer.observed(painted.elapsed());
         }
+    }
+}
+
+/// Says, on stderr, when one stage of the loop held the output longer than a
+/// person notices: a configuration that blocks in a handler, a layout that
+/// takes a quarter second. Silent for anything quicker; `MORF_SLOW_MS` sets
+/// the threshold (default 150).
+fn slow(name: &str, what: &str, since: Instant) {
+    static THRESHOLD: std::sync::OnceLock<u128> = std::sync::OnceLock::new();
+    let threshold = *THRESHOLD.get_or_init(|| {
+        std::env::var("MORF_SLOW_MS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(150)
+    });
+    let took = since.elapsed().as_millis();
+    if took >= threshold {
+        eprintln!("morf: output {name}: {what} took {took} ms");
+    }
+}
+
+/// What an event is, for `slow`.
+fn event_kind(event: &LayerEvent) -> &'static str {
+    match event {
+        LayerEvent::PointerMotion { .. } => "pointer motion",
+        LayerEvent::PointerButton { .. } => "a click",
+        LayerEvent::PointerAxis { .. } => "a scroll",
+        LayerEvent::Key { .. } => "a key",
+        LayerEvent::Configure { .. } => "a configure",
+        LayerEvent::Frame { .. } => "a frame callback",
+        _ => "an event",
     }
 }
 
