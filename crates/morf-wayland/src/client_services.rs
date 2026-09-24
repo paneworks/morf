@@ -179,6 +179,7 @@ impl LayerClient {
     pub fn surface_scale_120(&self, role: SurfaceRole) -> u32 {
         match role {
             SurfaceRole::Layer(id) => self.layer_scale_120(id).unwrap_or(120),
+            SurfaceRole::Lock(index) => self.lock_scale_120(index).unwrap_or(120),
             other => self
                 .state
                 .aux_scales

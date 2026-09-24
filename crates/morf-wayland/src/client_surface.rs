@@ -125,6 +125,9 @@ impl LayerClient {
         surface.set_buffer_scale(1);
         let parent_surface = match parent {
             SurfaceRole::Layer(_) => None,
+            SurfaceRole::Lock(_) => {
+                return Err(WaylandError("a lock surface cannot parent a popup".into()));
+            }
             SurfaceRole::Popup(parent) => Some(
                 self.state
                     .popups

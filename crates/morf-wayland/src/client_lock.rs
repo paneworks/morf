@@ -44,6 +44,7 @@ impl LayerClient {
         }
         lock.unlock();
         self.state.lock_surfaces.clear();
+        self.state.forget_lock_surfaces();
         self.connection
             .flush()
             .map_err(|error| WaylandError(format!("Wayland flush failed: {error}")))

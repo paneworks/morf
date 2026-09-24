@@ -229,11 +229,7 @@ pub(crate) fn run_surface(
         pacer: FramePacer::new(),
         // Until a callback says otherwise, assume the commonest refresh.
         refresh: Duration::from_micros(16_667),
-        hovered: None,
-        pressed: None,
-        pressed_button: 0x110,
-        focused: HashMap::new(),
-        touches: HashMap::new(),
+        input: PointerInput::default(),
         drag: None,
     };
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
@@ -261,10 +257,7 @@ pub(crate) fn run_surface(
             repaint |= update.repaint;
             recreate_surface |= update.recreate_surface;
             if update.reset_input {
-                state.hovered = None;
-                state.pressed = None;
-                state.focused.clear();
-                state.touches.clear();
+                state.input.reset();
             }
             if update.refresh_idle {
                 client.set_idle_timeouts(&runtime.idle_timeouts());

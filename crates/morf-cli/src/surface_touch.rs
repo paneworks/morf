@@ -15,19 +15,14 @@ const TOUCH_BUTTON: u32 = 0x110;
 
 pub(crate) fn handle_touch_event(
     runtime: &mut Runtime,
-    state: &mut SurfaceEventState,
+    input: &mut PointerInput,
+    layouts: &dyn SurfaceLayouts,
     event: LayerEvent,
 ) -> Result<bool, String> {
     let mut repaint = false;
     match event {
         LayerEvent::TouchDown { surface, id, x, y } => {
-            let Some(hit_layout) = surface_layout(
-                surface,
-                &state.layout,
-                &state.popup_surfaces,
-                &state.floating_surfaces,
-                &state.layer_surfaces,
-            ) else {
+            let Some(hit_layout) = layouts.layout_of(surface) else {
                 return Ok(false);
             };
             let hit = hit_layout
@@ -38,33 +33,28 @@ pub(crate) fn handle_touch_event(
             if let Some(hit) = hit {
                 let point =
                     EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(TOUCH_BUTTON);
-                state.touches.insert(id, (surface, hit, x, y, 0.0));
+                input.touches.insert(id, (surface, hit, x, y, 0.0));
                 if let Some(target) = runtime.key_target_for_node(hit.node) {
-                    state.focused.insert(surface, target);
+                    input.focused.insert(surface, target);
                 } else {
-                    state.focused.remove(&surface);
+                    input.focused.remove(&surface);
                 }
                 repaint |= runtime.dispatch_pointer(hit.node, UiEvent::Pressed, point, (0.0, 0.0));
                 repaint |= runtime.dispatch_touch_event(hit.node, UiEvent::TouchPressed, id, point);
             }
         }
         LayerEvent::TouchMotion { id, x, y, .. } => {
-            if let Some((touch_surface, hit, last_x, last_y, travel)) = state.touches.get_mut(&id) {
+            if let Some((touch_surface, hit, last_x, last_y, travel)) = input.touches.get_mut(&id) {
                 let delta = (x - *last_x, y - *last_y);
                 *travel += delta.0.abs() + delta.1.abs();
                 *last_x = x;
                 *last_y = y;
                 let node = hit.node;
                 let role = *touch_surface;
-                let local = surface_layout(
-                    role,
-                    &state.layout,
-                    &state.popup_surfaces,
-                    &state.floating_surfaces,
-                    &state.layer_surfaces,
-                )
-                .map(|layout| layout.local_point(&runtime.scene(), node, x, y))
-                .unwrap_or((x, y));
+                let local = layouts
+                    .layout_of(role)
+                    .map(|layout| layout.local_point(&runtime.scene(), node, x, y))
+                    .unwrap_or((x, y));
                 let point = EventPoint::new((x, y), local);
                 repaint |= runtime.dispatch_touch_event(node, UiEvent::TouchMoved, id, point);
                 // A finger moving is a drag, as a held button moving is: the
@@ -74,14 +64,8 @@ pub(crate) fn handle_touch_event(
             }
         }
         LayerEvent::TouchUp { surface, id, x, y } => {
-            if let Some((touch_surface, pressed_hit, _, _, travel)) = state.touches.remove(&id) {
-                let layout = surface_layout(
-                    surface,
-                    &state.layout,
-                    &state.popup_surfaces,
-                    &state.floating_surfaces,
-                    &state.layer_surfaces,
-                );
+            if let Some((touch_surface, pressed_hit, _, _, travel)) = input.touches.remove(&id) {
+                let layout = layouts.layout_of(surface);
                 let local = layout
                     .map(|layout| layout.local_point(&runtime.scene(), pressed_hit.node, x, y))
                     .unwrap_or((x, y));
@@ -129,7 +113,7 @@ pub(crate) fn handle_touch_event(
             }
         }
         LayerEvent::TouchCancel => {
-            for (id, (_, hit, x, y, _)) in state.touches.drain() {
+            for (id, (_, hit, x, y, _)) in input.touches.drain() {
                 let point =
                     EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(TOUCH_BUTTON);
                 repaint |=

@@ -173,6 +173,7 @@ impl SessionLockHandler for LayerState {
         _session_lock: SessionLock,
     ) {
         self.lock_surfaces.clear();
+        self.forget_lock_surfaces();
         self.session_lock = None;
         self.events.push_back(LayerEvent::SessionLockFinished);
     }
@@ -274,6 +275,7 @@ impl OutputHandler for LayerState {
             .position(|surface| surface.output == output)
         {
             self.lock_surfaces.remove(index);
+            self.forget_lock_surface(index);
             self.events
                 .push_back(LayerEvent::SessionLockSurfaceRemoved { index });
         }

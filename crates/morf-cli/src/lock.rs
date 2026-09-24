@@ -2,7 +2,7 @@ use morf_io::IpcIncoming;
 use morf_layout::Size;
 use morf_lua::{IpcValue, Runtime};
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_scene::{Element, NodeHandle};
+use morf_scene::Element;
 use morf_wayland::{LayerClient, LayerEvent, ScreenInfo};
 use std::os::fd::AsFd;
 use std::path::PathBuf;
@@ -11,7 +11,30 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crate::{capture::*, paint::*, surface_keys::*, surface_layers::*, surfaces::*};
+use crate::{
+    capture::*, paint::*, surface_keys::*, surface_layers::*, surface_pointer::*, surfaces::*,
+};
+
+/// One output's lock surface: what draws it, and what it last drew.
+#[derive(Default)]
+pub(crate) struct LockOutput {
+    pub(crate) renderer: Option<RenderEngine<WgpuBackend>>,
+    /// The layout of the last frame, which is what a point on this surface
+    /// is hit-tested against.
+    pub(crate) layout: Option<morf_layout::Layout>,
+}
+
+/// The lock's surfaces, as the input path looks them up.
+pub(crate) struct LockLayouts<'a>(pub(crate) &'a [LockOutput]);
+
+impl SurfaceLayouts for LockLayouts<'_> {
+    fn layout_of(&self, surface: morf_wayland::SurfaceRole) -> Option<&morf_layout::Layout> {
+        match surface {
+            morf_wayland::SurfaceRole::Lock(index) => self.0.get(index)?.layout.as_ref(),
+            _ => None,
+        }
+    }
+}
 
 pub(crate) struct Worker {
     pub(crate) stop: Arc<AtomicBool>,
@@ -86,11 +109,11 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
         .begin_session_lock()
         .map_err(|error| error.to_string())?;
     apply_service_requests(&mut runtime, &mut client);
-    let mut renderers: Vec<Option<RenderEngine<WgpuBackend>>> = Vec::new();
+    let mut outputs: Vec<LockOutput> = Vec::new();
     let mut last_frame = None;
-    // Which node holds keyboard focus. One surface, so one slot rather than the
-    // per-surface map the general path keeps.
-    let mut focused: Option<NodeHandle> = None;
+    // The pointer, the fingers and which node each surface's keys go to: the
+    // same state, and the same routing, a layer surface has.
+    let mut input = PointerInput::default();
     let mut locked = false;
     let mut unlock_pending = false;
     let mut clock = clock_text();
@@ -126,6 +149,25 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                 .map_err(|error| error.to_string())?;
         }
         while let Some(event) = client.next_event() {
+            let event = match handle_pointer_event(
+                &mut runtime,
+                &mut client,
+                &mut input,
+                &LockLayouts(&outputs),
+                event,
+            ) {
+                Ok(Ok(painted)) => {
+                    repaint |= painted;
+                    continue;
+                }
+                Ok(Err(event)) => event,
+                // A scene mid-change fails a hit test the way it fails a
+                // layout; the event is dropped and the lock stays up.
+                Err(error) => {
+                    runtime.warn(format!("lock input: {error}"));
+                    continue;
+                }
+            };
             match event {
                 // A lock client has only lock surfaces, and those are not
                 // popups or floating windows.
@@ -135,11 +177,13 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                 LayerEvent::SessionLocked => locked = true,
                 LayerEvent::Screens(_) => {}
                 LayerEvent::SessionLockConfigure { index, .. } => {
-                    renderers.resize_with(index + 1, || None);
+                    if outputs.len() <= index {
+                        outputs.resize_with(index + 1, LockOutput::default);
+                    }
                     let (width, height) = client
                         .lock_physical_size(index)
                         .ok_or_else(|| "configured lock surface disappeared".to_owned())?;
-                    if let Some(renderer) = &mut renderers[index] {
+                    if let Some(renderer) = &mut outputs[index].renderer {
                         renderer.resize(width, height);
                     } else {
                         // The root's colour, up before the GPU is looked for,
@@ -153,14 +197,17 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                         let backend =
                             pollster::block_on(WgpuBackend::new_surface(target, width, height))
                                 .map_err(|error| error.to_string())?;
-                        renderers[index] = Some(RenderEngine::new(backend));
+                        outputs[index].renderer = Some(RenderEngine::new(backend));
                     }
                     repaint = true;
                 }
                 LayerEvent::SessionLockSurfaceRemoved { index } => {
-                    if index < renderers.len() {
-                        renderers.remove(index);
+                    if index < outputs.len() {
+                        outputs.remove(index);
                     }
+                    // The surfaces after it moved down one, and so did every
+                    // role the input state names.
+                    input.reset();
                 }
                 LayerEvent::SessionLockFrame { time_ms, .. } => {
                     let frame = runtime
@@ -170,6 +217,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                     repaint |= frame.active || frame.changed > 0;
                 }
                 LayerEvent::Key {
+                    surface,
                     pressed: true,
                     keysym,
                     text,
@@ -184,6 +232,8 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                     let Some(root) = runtime.scene().roots().first().copied() else {
                         continue;
                     };
+                    // Remembered per surface, as a click set it.
+                    let mut focused = input.focused.get(&surface).copied();
                     repaint |= dispatch_key_in_subtree(
                         &mut runtime,
                         root,
@@ -192,6 +242,10 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                         text.as_deref(),
                         key_modifiers(modifiers),
                     );
+                    match focused {
+                        Some(node) => input.focused.insert(surface, node),
+                        None => input.focused.remove(&surface),
+                    };
                 }
                 LayerEvent::SessionLockFinished => {
                     return Err("compositor ended the session lock".to_owned());
@@ -269,6 +323,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                 | LayerEvent::Configure { .. }
                 | LayerEvent::Scale { .. }
                 | LayerEvent::Frame { .. }
+                // Taken above, by the pointer path every surface shares.
                 | LayerEvent::PointerMotion { .. }
                 | LayerEvent::PointerLeave { .. }
                 | LayerEvent::PointerButton { .. }
@@ -294,9 +349,9 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
         }
         apply_service_requests(&mut runtime, &mut client);
         if repaint {
-            for (index, renderer) in renderers.iter_mut().enumerate() {
-                if let Some(renderer) = renderer {
-                    paint_lock(&mut runtime, renderer, &client, index)?;
+            for (index, output) in outputs.iter_mut().enumerate() {
+                if let Some(renderer) = &mut output.renderer {
+                    output.layout = Some(paint_lock(&mut runtime, renderer, &client, index)?);
                     client.release_lock_primer(index);
                 }
             }
@@ -325,7 +380,7 @@ pub(crate) fn paint_lock(
     renderer: &mut RenderEngine<WgpuBackend>,
     client: &LayerClient,
     index: usize,
-) -> Result<(), String> {
+) -> Result<morf_layout::Layout, String> {
     let (width, height) = client
         .lock_size(index)
         .ok_or_else(|| "lock surface disappeared while painting".to_owned())?;
@@ -389,5 +444,5 @@ pub(crate) fn paint_lock(
     }
     drop(scene);
     runtime.observe_layout(&layout);
-    Ok(())
+    Ok(layout)
 }
