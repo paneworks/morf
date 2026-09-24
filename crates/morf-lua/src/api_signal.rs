@@ -273,6 +273,17 @@ pub(crate) fn install_signal_api<'gc>(
     );
     clock.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
     morf.set_field(ctx, "clock", clock);
+    // The same clock at coarser grains, for a binding that shows or checks
+    // something by the minute or the hour: reading one of these instead of
+    // `morf.clock` is what lets an idle shell sleep between them.
+    for (name, id) in [
+        ("minute_clock", state.borrow().clock_minutes),
+        ("hour_clock", state.borrow().clock_hours),
+    ] {
+        let token = UserData::new_static(&ctx, SignalToken { id });
+        token.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
+        morf.set_field(ctx, name, token);
+    }
     // Where the session lock stands, for a binding to follow: "unlocked",
     // "pending", "locked" or "failed". Written by the lock loop only.
     let session_lock = UserData::new_static(

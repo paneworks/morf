@@ -32,6 +32,7 @@ mod types;
 mod workspace_handlers;
 
 pub use client_layer::*;
+pub use client_services::Woke;
 pub use cursor::cursor_shape;
 pub use gamma::{
     GammaSettings, NEUTRAL as NEUTRAL_TEMPERATURE, TEMPERATURE_RANGE, ramps as gamma_ramps,

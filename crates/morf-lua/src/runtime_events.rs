@@ -23,33 +23,6 @@ impl Runtime {
         std::mem::take(&mut self.reactive.borrow_mut().parent_transitions)
     }
 
-    /// Updates the clock service signal and recomputes dependent Lua bindings.
-    ///
-    /// Returns whether the scene actually changed. The clock ticks once a
-    /// second whether or not anything reads it, and a repaint of a shell that
-    /// shows no time is pure cost — a full tessellation and GPU submit per
-    /// output per second. So the answer is the same one `poll_services` gives:
-    /// not "did a signal move" but "did the scene".
-    pub fn update_clock(&mut self, value: impl Into<String>) -> Result<bool, Error> {
-        let revision_before = self.reactive.borrow().scene_revision;
-        let value = IpcValue::String(value.into());
-        {
-            let mut state = self.reactive.borrow_mut();
-            let clock = state.clock;
-            state
-                .graph
-                .as_mut()
-                .ok_or_else(|| Error::Runtime("reactive graph is already running".to_owned()))?
-                .write(clock, value.clone())
-                .map_err(|error| Error::Runtime(error.to_string()))?;
-            state.values.insert(clock, value);
-        }
-        self.lua
-            .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
-            .map_err(Error::Runtime)?;
-        Ok(self.reactive.borrow().scene_revision != revision_before)
-    }
-
     /// Returns the number of Lua effect evaluations performed by this runtime.
     pub fn effect_runs(&self) -> u64 {
         self.reactive.borrow().effect_runs

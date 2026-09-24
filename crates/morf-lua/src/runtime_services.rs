@@ -12,8 +12,8 @@ impl Runtime {
     /// Polls native service jobs and runs completed callbacks with bounded fuel.
     pub fn poll_services(&mut self) -> bool {
         self.flush_lint();
-        // The shell's loop wakes at least ten times a second, which is what
-        // lets a caret blink without a timer of its own.
+        // The loop wakes when the caret is due to turn over
+        // (`Runtime::next_deadline`), so it blinks without a timer of its own.
         let blinked = self.blink_text_inputs();
         let appearance_changed = self.poll_appearance();
         let audio_changed = self.poll_audio();
@@ -242,17 +242,28 @@ impl Runtime {
             }
             let mut udev_errors = Vec::new();
             for subscription in &mut state.udev_monitors {
+                let mut drained = false;
                 for _ in 0..32 {
                     match subscription.monitor.next_event(Duration::ZERO) {
                         Ok(Some(event)) => {
                             udev_events.push((subscription.callback.clone(), event));
                         }
-                        Ok(None) => break,
+                        Ok(None) => {
+                            drained = true;
+                            break;
+                        }
                         Err(error) => {
                             udev_errors.push(error.to_string());
+                            drained = true;
                             break;
                         }
                     }
+                }
+                // This turn's share is taken; the monitor's alarm only rings
+                // again once a drain finds the socket empty, so the rest is
+                // asked for now.
+                if !drained {
+                    morf_io::wake_all();
                 }
             }
             for error in udev_errors {
@@ -367,6 +378,9 @@ impl Runtime {
         // finds it unchanged would otherwise force a full render of every
         // output sixty times a second, forever.
         let revision_before = self.reactive.borrow().scene_revision;
+        // Timers, loaders and views are in step with the scene as it is now;
+        // what the callbacks below change is for the next turn to pick up.
+        self.reactive.borrow_mut().polled_revision = revision_before;
         let service_changed = service_changed
             || appearance_changed
             || audio_changed

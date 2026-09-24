@@ -530,3 +530,83 @@ fn a_bus_descriptor_is_closed_when_forgotten_or_reloaded() {
         "and the runtime going closes the rest"
     );
 }
+
+/// How long until something rang a loop's alarm, if within `most`: the
+/// shell's loop, reduced to its alarm and a poll.
+fn rung_within(wake: &morf_io::Wake, most: Duration) -> Option<Duration> {
+    let started = std::time::Instant::now();
+    wake.wait(most).then(|| started.elapsed())
+}
+
+#[test]
+#[ignore = "runs only inside dbus-run-session, started by the test above"]
+fn private_bus_signals_and_replies_ring_the_loop() {
+    // The shell's loop sleeps with no timeout when nothing is due: a signal
+    // or an answer from the bus is only seen because its arrival rings the
+    // alarm.
+    if std::env::var(PRIVATE_BUS).is_err() {
+        return;
+    }
+    let name = format!("org.morf.test.v2.w{}", std::process::id());
+    let _server = Server::start(&name);
+    let wake = morf_io::Wake::new().unwrap();
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "wake.lua",
+            format!(
+                r#"
+                local p = morf.dbus.proxy("session", "{name}", "{PATH}", "{INTERFACE}", 2000)
+                local answered, pinged = false, false
+                p:subscribe("Ping", function() pinged = true end)
+                morf.ipc.ask = function()
+                    assert(p:call_async("Echo", "x", function(ok) answered = ok end))
+                end
+                morf.ipc.ping = function() p:call_with("Emit", "hello") end
+                morf.ipc.answered = function() return answered end
+                morf.ipc.pinged = function() return pinged end
+                "#
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let flag = |runtime: &mut Runtime, verb: &str| {
+        matches!(
+            runtime.call_ipc(verb, &[]).unwrap().as_slice(),
+            [IpcValue::Boolean(true)]
+        )
+    };
+
+    // A reply.
+    runtime.poll_services();
+    wake.drain();
+    runtime.call_ipc("ask", &[]).unwrap();
+    let took = rung_within(&wake, Duration::from_secs(5)).expect("the reply rang the loop");
+    assert!(took < Duration::from_secs(1), "at once: {took:?}");
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while !flag(&mut runtime, "answered") && std::time::Instant::now() < deadline {
+        wake.drain();
+        runtime.poll_services();
+        if !flag(&mut runtime, "answered") {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            rung_within(&wake, left).expect("the reply rang the loop");
+        }
+    }
+    assert!(
+        flag(&mut runtime, "answered"),
+        "and it was there to collect"
+    );
+
+    // A signal.
+    runtime.poll_services();
+    wake.drain();
+    runtime.call_ipc("ping", &[]).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while !flag(&mut runtime, "pinged") && std::time::Instant::now() < deadline {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        rung_within(&wake, left).expect("the signal rang the loop");
+        wake.drain();
+        runtime.poll_services();
+    }
+    assert!(flag(&mut runtime, "pinged"), "the signal was delivered");
+}

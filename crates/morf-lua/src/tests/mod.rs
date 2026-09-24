@@ -82,4 +82,5 @@ mod themes;
 mod timers;
 mod toplevels;
 mod views_states;
+mod wake;
 mod window_events;

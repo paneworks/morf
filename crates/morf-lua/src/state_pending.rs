@@ -6,7 +6,7 @@
 //! is owed the answer. The runtime drains all of them in one pass.
 
 use luna::StashedClosure;
-use morf_io::{DbusService, DbusSignal, FileWatcher, PendingReply, Timer as IoTimer};
+use morf_io::{DbusService, DbusSignal, FileWatcher, PendingReply};
 use morf_reactive::SignalId;
 use morf_scene::NodeHandle;
 use morf_services::{GreetdConversation, PamSession, PamTask, StatusNotifierHost, UdevMonitor};
@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub(crate) struct PendingPam {
     pub(crate) task: PamTask,
@@ -25,60 +25,78 @@ pub(crate) struct PendingPam {
 
 /// What makes a timer come due.
 ///
-/// The wall clock, through a thread that ticks, is what a shell runs on. A
-/// runtime told to keep a virtual clock ([`crate::Runtime::use_virtual_clock`])
-/// holds a deadline instead, and the timer comes due when that clock is
-/// advanced past it: a test that waits a second of a configuration's time
+/// A deadline either way. On the wall clock it is an instant the shell's
+/// loop sleeps until, which is how a timer costs nothing between firings --
+/// no thread ticking beside it, no wake that finds nothing due. A runtime
+/// told to keep a virtual clock ([`crate::Runtime::use_virtual_clock`]) holds
+/// the deadline on that clock instead, and the timer comes due when the clock
+/// is advanced past it: a test that waits a second of a configuration's time
 /// takes no second of its own, and fires the same callbacks every run.
 pub(crate) enum TimerSource {
-    Wall(IoTimer),
+    Wall { due: Instant },
     Virtual { due: Duration },
 }
 
 impl TimerSource {
     /// A timer every `interval`, on the virtual clock when `now` is one.
     pub(crate) fn every(interval: Duration, now: Option<Duration>) -> std::io::Result<Self> {
-        match now {
-            Some(_) if interval.is_zero() => Err(std::io::Error::new(
+        if interval.is_zero() {
+            return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "timer interval cannot be zero",
-            )),
-            Some(now) => Ok(Self::Virtual {
-                due: now + interval,
-            }),
-            None => IoTimer::every(interval).map(Self::Wall),
+            ));
         }
+        Ok(match now {
+            Some(now) => Self::Virtual {
+                due: now + interval,
+            },
+            None => Self::Wall {
+                due: Instant::now() + interval,
+            },
+        })
     }
 
     /// Whether the timer has come due since it was last asked, rescheduling
-    /// it when it has. Like the wall timer, a virtual one that fell several
-    /// intervals behind fires once, not once per interval missed.
+    /// it when it has. A timer that fell several intervals behind fires
+    /// once, not once per interval missed.
     pub(crate) fn fire(&mut self, now: Option<Duration>, interval: Duration) -> bool {
         match self {
-            Self::Wall(timer) => timer.tick(Duration::ZERO),
-            Self::Virtual { due } => {
-                let Some(now) = now else {
-                    return false;
-                };
-                if now < *due {
-                    return false;
-                }
-                *due += interval;
-                if *due <= now {
-                    *due = now + interval;
-                }
-                true
-            }
+            Self::Wall { due } => reschedule(due, Instant::now(), interval),
+            Self::Virtual { due } => now.is_some_and(|now| reschedule(due, now, interval)),
         }
     }
 
     /// When a virtual timer next comes due; nothing for a wall one.
     pub(crate) fn deadline(&self) -> Option<Duration> {
         match self {
-            Self::Wall(_) => None,
+            Self::Wall { .. } => None,
             Self::Virtual { due } => Some(*due),
         }
     }
+
+    /// When a wall timer next comes due; nothing for a virtual one.
+    pub(crate) fn wall_deadline(&self) -> Option<Instant> {
+        match self {
+            Self::Wall { due } => Some(*due),
+            Self::Virtual { .. } => None,
+        }
+    }
+}
+
+/// Moves a deadline that `now` has reached on by one interval, or to one
+/// interval from now if it fell further behind than that.
+fn reschedule<T>(due: &mut T, now: T, interval: Duration) -> bool
+where
+    T: Copy + Ord + std::ops::Add<Duration, Output = T>,
+{
+    if now < *due {
+        return false;
+    }
+    *due = *due + interval;
+    if *due <= now {
+        *due = now + interval;
+    }
+    true
 }
 
 pub(crate) struct PendingTimer {

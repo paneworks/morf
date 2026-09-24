@@ -5,6 +5,19 @@ use std::time::Duration;
 
 use crate::{state_types::*, surface_types::*, types::*};
 
+/// What ended a [`LayerClient::wait_for`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Woke {
+    /// Events were already queued; there was no sleep.
+    Queued,
+    /// The compositor sent something.
+    Compositor,
+    /// The loop's alarm rang: a thread has something for it.
+    Alarm,
+    /// The timeout passed.
+    Timeout,
+}
+
 impl LayerClient {
     /// Blocks until at least one Wayland event is dispatched.
     pub fn dispatch(&mut self) -> Result<(), WaylandError> {
@@ -30,47 +43,67 @@ impl LayerClient {
         timeout: Duration,
         wake: Option<BorrowedFd<'_>>,
     ) -> Result<bool, WaylandError> {
+        self.wait_for(Some(timeout), wake)
+            .map(|woke| matches!(woke, Woke::Queued | Woke::Compositor))
+    }
+
+    /// Sleeps until the compositor sends something, `wake` becomes readable,
+    /// or `timeout` passes -- with no timeout, only the first two -- and
+    /// dispatches what the compositor sent. Says which of them ended the
+    /// sleep, for a loop that wants to know why it is awake.
+    pub fn wait_for(
+        &mut self,
+        timeout: Option<Duration>,
+        wake: Option<BorrowedFd<'_>>,
+    ) -> Result<Woke, WaylandError> {
         if self
             .queue
             .dispatch_pending(&mut self.state)
             .map_err(|error| WaylandError(format!("Wayland dispatch failed: {error}")))?
             > 0
         {
-            return Ok(true);
+            return Ok(Woke::Queued);
         }
         self.queue
             .flush()
             .map_err(|error| WaylandError(format!("Wayland flush failed: {error}")))?;
         let Some(guard) = self.queue.prepare_read() else {
-            return self
-                .queue
+            self.queue
                 .dispatch_pending(&mut self.state)
-                .map(|count| count > 0)
-                .map_err(|error| WaylandError(format!("Wayland dispatch failed: {error}")));
+                .map_err(|error| WaylandError(format!("Wayland dispatch failed: {error}")))?;
+            return Ok(Woke::Queued);
         };
-        let seconds = timeout.as_secs().min(i64::MAX as u64) as i64;
-        let timeout = Timespec {
-            tv_sec: seconds,
+        let timeout = timeout.map(|timeout| Timespec {
+            tv_sec: timeout.as_secs().min(i64::MAX as u64) as i64,
             tv_nsec: timeout.subsec_nanos() as i64,
-        };
+        });
         let mut fds = Vec::with_capacity(2);
         fds.push(PollFd::new(&self.queue, PollFlags::IN));
         if let Some(wake) = wake {
             fds.push(PollFd::from_borrowed_fd(wake, PollFlags::IN));
         }
-        let ready = poll(&mut fds, Some(&timeout))
-            .map_err(|error| WaylandError(format!("Wayland poll failed: {error}")))?;
+        let ready = loop {
+            match poll(&mut fds, timeout.as_ref()) {
+                // A signal landing mid-sleep is not a reason to wake the
+                // shell; with no deadline it would otherwise look like one.
+                Err(rustix::io::Errno::INTR) if timeout.is_none() => continue,
+                Err(rustix::io::Errno::INTR) => break 0,
+                Err(error) => return Err(WaylandError(format!("Wayland poll failed: {error}"))),
+                Ok(ready) => break ready,
+            }
+        };
+        let alarm = fds.get(1).is_some_and(|fd| !fd.revents().is_empty());
         if ready == 0 || fds[0].revents().is_empty() {
             drop(guard);
-            return Ok(false);
+            return Ok(if alarm { Woke::Alarm } else { Woke::Timeout });
         }
         guard
             .read()
             .map_err(|error| WaylandError(format!("Wayland read failed: {error}")))?;
         self.queue
             .dispatch_pending(&mut self.state)
-            .map(|count| count > 0)
-            .map_err(|error| WaylandError(format!("Wayland dispatch failed: {error}")))
+            .map_err(|error| WaylandError(format!("Wayland dispatch failed: {error}")))?;
+        Ok(Woke::Compositor)
     }
 
     /// Replaces seat idle thresholds and returns whether the compositor supports them.

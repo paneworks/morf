@@ -138,6 +138,24 @@ pub(crate) fn observe_shaped(
 }
 
 /// Moves the focused field's blink on. Returns whether its caret changed.
+/// When the focused field's caret next turns on or off, if it blinks: the
+/// loop sleeps until then rather than waking to ask.
+pub(crate) fn next_blink(state: &ReactiveState) -> Option<Instant> {
+    let node = state.focused_input?;
+    let input = state.text_inputs.get(&node)?;
+    let interval = state
+        .scene
+        .number(node, "caret_blink_interval")
+        .unwrap_or(0.0);
+    if !(interval.is_finite() && interval > 0.0) {
+        return None;
+    }
+    let half = std::time::Duration::from_secs_f64(interval / 1000.0);
+    let since = Instant::now().saturating_duration_since(input.blink_start);
+    let halves = (since.as_secs_f64() / half.as_secs_f64()) as u32;
+    Some(input.blink_start + half * (halves + 1))
+}
+
 pub(crate) fn blink(state: &mut ReactiveState, now: Instant) -> bool {
     let Some(node) = state.focused_input else {
         return false;
