@@ -38,6 +38,11 @@ hyprland.json("j/activeworkspace", function(value, err) ... end)
   `active_workspace`; workspace rows carry `windows`, `visible`, `active`,
   `urgent`. Events carrying their news are applied at once; the rest mark the
   answers they invalidate, refetched once per tick however many events came.
+- **Outputs**: `monitors` asks `j/monitors all`; the lit ones are the
+  `monitors` model, and every one, disabled included, is `state.outputs`
+  (keyed by `name`) and `outputs()`. Rows carry `serial`,
+  `available_modes`, `vrr`, `mirror_of` and `dpms` too. `on("refreshed",
+  fn(kind))` hears each refetched answer once it is in the state.
 - **Lookups**: `monitor(name|id)`, `workspace(id|name)`, `client(address)`,
   `workspace_windows(id)`, `occupied(id)`, `monitor_workspace(name?)`,
   `snapshot()`.
@@ -64,6 +69,36 @@ hyprland.json("j/activeworkspace", function(value, err) ... end)
 
 Tested against a fake compositor in
 `crates/morf-lua/src/tests/lib_hyprland.rs`.
+
+## hyprland_config.lua
+
+Opt-in, on top of `hyprland.lua`: changes Hyprland's configuration at run
+time and never writes its files. Works with a Lua config (0.56+, every
+change an `eval` of `hl.*` chunks) and a hyprlang one (`keyword` commands in
+one batch); `flavour(cb)` finds out which once, by evaluating a chunk that
+does nothing.
+
+Each change is a *plan* built by a pure, validated function, then sent:
+
+```lua
+local config = require("lib.hyprland_config")
+config.apply(function(how)
+  return config.options_plan({ { "input:kb_layout", "str", "us,de" },
+                               { "input:repeat_rate", "int", 30 } }, how)
+end, function(ok, replies) end)
+```
+
+- `options_plan(list, how)`, `animation_plan(spec, how)`,
+  `monitors_plan(rules, how)` (disabled outputs first unless one is also
+  lit, never through zero lit outputs), `monitor_rule(rule, how)`,
+  `rehome_plan(lit, workspaces, home, how)` (workspaces stranded on a gone
+  output, empty workspaces shown beside full ones), `cursor_plan(theme,
+  size)`; each returns `nil, why` for anything invalid.
+- `run(plan, cb)`, `apply(build, cb)`; `sent` keeps the last commands.
+- `outputs()` (described: `mode`, `position`, `scale`, `mirror`, `vrr`,
+  `modes`, `resolutions`), `parse_modes`, `group_modes`, `spell(bind)`,
+  `plugin_available(option, cb)`, `reload(cb)`, `on_reload(fn)`.
+- Without Hyprland, `available()` is false and nothing is sent.
 
 ## palette
 
