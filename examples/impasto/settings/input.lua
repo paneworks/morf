@@ -52,27 +52,16 @@ local function layouts()
 end
 
 local function keyboard_part(W)
-  local field_text = controls.signal("input.layouts", settings.keyboardLayouts)
-  local box = setting.text_box { placeholder = "us", value = settings.keyboardLayouts,
-    on_edited = function(text)
-      field_text:set(text)
-      -- Only what can be a list of xkb layouts ("us,de"); anything else
-      -- stays in the field and is not kept.
-      local clean = text:gsub("%s+", "")
-      if clean:match("^[%w_,%-%(%)]*$") then settings.set("keyboardLayouts", clean ~= "" and clean or "us") end
-    end }
+  local picker = require("settings.layout_picker")
   return {
     unavailable_group(W),
     setting.group {
       width = W, title = tr("Layouts"),
       note = tr("Loaded in this order; the first is active at login."),
       hint = "Pushed to Hyprland as input:kb_layout and input:kb_options; its configuration file keeps its own defaults, used again when impasto is not running.",
-      setting.row { width = W, label = tr("Layouts"), control = box,
-        locked = away, reason = NOT_HERE,
-        reading = function()
-          local n = #layouts()
-          return n <= 1 and "One layout" or (n .. " layouts, comma-separated")
-        end },
+      picker.build { width = W,
+        current = function() return settings.keyboardLayouts end,
+        on_changed = function(list) settings.set("keyboardLayouts", list ~= "" and list or "us") end },
       setting.row { width = W, label = tr("Switch between them"),
         locked = function() return away() or #layouts() <= 1 end,
         reason = function() return away() and NOT_HERE or tr("Only one layout is loaded") end,
