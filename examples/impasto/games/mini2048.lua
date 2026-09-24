@@ -153,17 +153,16 @@ return function(ctx)
       radius = theme.radius_small,
       -- Mixed over the ground as Qt mixes it (see `common.over`), with
       -- the light on the face, so a tile is a tile and not a patch of
-      -- colour. The original animated the colour on a merge; a behaviour
-      -- on a gradient that is retargeted mid-flight was seen to stop short
-      -- of its new value here, so the face changes at once and the swell
-      -- carries the beat.
+      -- colour. The face fades to a new value on the fast curve, as
+      -- Mini2048.qml's ColorAnimation, while the swell carries the beat.
       color = "#00000000",
       gradient = function()
         local c = morf.color(fill(value(), ctx.tint()))
         local face = common.over(c, c.a)
-        if value() == 0 then return common.lit(face, 0, 0, 0) end
+        if value() == 0 then return common.lit(face, 0, 0, 0, 0.45) end
         return common.lit(face, 0.16, 0.03, 0.14, 0.45)
       end,
+      behavior = { gradient = theme.behave("fast") },
       border_color = function() return value() == 0 and "#00000000" or "#00000040" end,
       border_width = 1,
       ui.Text {

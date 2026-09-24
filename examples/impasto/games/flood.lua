@@ -52,6 +52,13 @@ local function colours()
   return picked
 end
 
+--- The colour a cell's index stands for. A palette with fewer distinct
+--- colours than a board was dealt in folds the missing ones onto the last.
+local function colour_at(index)
+  local list = colours()
+  return list[math.min(index, #list)] or colour_of("accent")
+end
+
 return function(ctx)
   -- Swatches sit under the grid as one more row of cells, with padding all
   -- round.
@@ -71,10 +78,10 @@ return function(ctx)
   local current = morf.signal("impasto.flood." .. id .. ".current", 1)
 
   -- A move spreads out of the corner: every cell waits its distance from
-  -- it, sixteen milliseconds a step, before it turns. The original put the
-  -- wait in each cell's colour behaviour; a behaviour on a gradient that
-  -- is retargeted mid-flight was seen to stop short here, so the ripple is
-  -- a timer that turns one diagonal per tick and each cell changes at once.
+  -- it, sixteen milliseconds a step, before it fades to its new colour in
+  -- 110 ms. The original put the wait in each cell's colour behaviour; here
+  -- a timer turns one diagonal per tick (so a move made mid-ripple can
+  -- finish the old one first) and the cell's behaviour does the fade.
   local LAST = COLUMNS + ROWS - 2
   local reach = morf.signal("impasto.flood." .. id .. ".reach", LAST + 1)
   local diagonals = {}
@@ -102,7 +109,8 @@ return function(ctx)
   end
 
   local function restart()
-    for i = 1, COLUMNS * ROWS do grid[i] = common.random(6) + 1 end
+    local count = math.max(1, #colours())
+    for i = 1, COLUMNS * ROWS do grid[i] = common.random(count) + 1 end
     ctx.score:set(0)
     ctx.over:set(false)
     show(true)
@@ -149,7 +157,9 @@ return function(ctx)
       radius = radius,
       color = "#00000000",
       -- The light on the cell, so the board reads as tiles.
-      gradient = function() return common.lit(colours()[held:get()], 0.13, 0.02, 0.13) end,
+      gradient = function() return common.lit(colour_at(held:get()), 0.13, 0.02, 0.13) end,
+      -- Flood.qml's ColorAnimation, once the ripple reaches the cell.
+      behavior = { gradient = { duration = 110 } },
     }
   end, { x = 0, y = 0 })
 
@@ -160,8 +170,11 @@ return function(ctx)
     local hovered = morf.signal("impasto.flood." .. id .. ".hover." .. index, false)
     swatches[index] = ui.Rect {
       width = cell, height = cell, radius = cell / 2,
+      -- As many swatches as the palette has colours apart (Flood.qml's
+      -- `colours.length`), which is six unless two tokens coincide.
+      visible = function() return index <= #colours() end,
       color = "#00000000",
-      gradient = function() return common.lit(colours()[index], 0.18, 0.0, 0.16, 0.6) end,
+      gradient = function() return common.lit(colour_at(index), 0.18, 0.0, 0.16, 0.6) end,
       border_color = C.text,
       border_width = function() return current:get() == index and 2 or 0 end,
       scale = function() return hovered:get() and 1.12 or 1 end,
@@ -177,7 +190,7 @@ return function(ctx)
 
   local ground_w = cell * COLUMNS + 2 * pad
   local ground_h = cell * (ROWS + 1) + 3 * pad
-  local row_w = 6 * cell + 5 * pad
+  local row_w = function() local n = #colours() return n * cell + math.max(0, n - 1) * pad end
   local node = ui.Item {
     width = ctx.width, height = ctx.height,
     -- The ripple: one diagonal a tick until the move has reached the far
@@ -201,7 +214,7 @@ return function(ctx)
         squares,
       },
       ui.Row {
-        x = (ground_w - row_w) / 2, y = ground_h - pad - cell,
+        x = function() return (ground_w - row_w()) / 2 end, y = ground_h - pad - cell,
         gap = pad,
         table.unpack(swatches),
       },
@@ -210,7 +223,7 @@ return function(ctx)
 
   local function key(keysym)
     local digit = common.digit(keysym)
-    if not digit or digit < 1 or digit > 6 then return false end
+    if not digit or digit < 1 or digit > #colours() then return false end
     flood(digit)
     return true
   end

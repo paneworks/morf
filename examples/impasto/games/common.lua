@@ -12,8 +12,11 @@
 --   live()          whether a tick should run (the round is on and the
 --                   game still on screen); every game timer asks first
 --
--- and `build` returns `{ node = ..., key = function(keysym, text) ... end,
--- restart = function() ... end }`. `key` returns true when it used the key.
+-- and `build` returns `{ node = ..., key = function(keysym, text, repeat_) ... end,
+-- restart = function() ... end }`. `key` returns true when it used the key;
+-- `repeat_` says it is the keyboard's repeat of a held key. A game that
+-- tracks held keys also returns `release = function(keysym) end` and
+-- `let_go = function() end`, told when the keyboard goes elsewhere.
 -- A game draws only its board; the frame draws the score strip, the best,
 -- the game-over card and the restart button, and Escape and R are the
 -- panel's.
@@ -186,12 +189,16 @@ function common.burst(values)
   local span = values.span or 320
   local tint = values.tint or C.accent
   local size = spread * 2
+  -- The ring opens by its size, not a scale: its line thins as it grows
+  -- (Burst.qml's `spread * 0.14 * (1 - phase)`), where a scaled ring's
+  -- line would thicken with it.
+  local line = math.max(1, spread * 0.14)
   local ring = ui.Rect {
-    x = 0, y = 0, width = size, height = size, radius = spread,
+    x = spread, y = spread, width = 1, height = 1, radius = 0.5,
     color = "#00000000",
     border_color = tint,
-    border_width = math.max(1, spread * 0.14),
-    opacity = 0, scale = 0,
+    border_width = line,
+    opacity = 0,
   }
   local dot = math.max(1, spread * 0.18)
   local sparks = {}
@@ -208,9 +215,14 @@ function common.burst(values)
     ring, table.unpack(sparks),
   }
   local function play()
+    local function grow(property, from, to)
+      return { node = ring, property = property, from = from, to = to, duration = span, easing = "out_cubic" }
+    end
     local tracks = {
-      { node = ring, property = "scale", from = 0, to = 1, duration = span, easing = "out_cubic" },
-      { node = ring, property = "opacity", from = 1, to = 0, duration = span, easing = "out_cubic" },
+      grow("width", 1, size), grow("height", 1, size), grow("radius", 0.5, spread),
+      grow("x", spread - 0.5, 0), grow("y", spread - 0.5, 0),
+      grow("border_width", line, 1),
+      grow("opacity", 1, 0),
     }
     for i, spark in ipairs(sparks) do
       local angle = (i - 1) * (math.pi * 2 / count)

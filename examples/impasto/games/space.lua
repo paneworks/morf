@@ -12,11 +12,9 @@
 -- frames) in one formation item that the tick moves, and shots, bombs and
 -- blasts come from small pools. The tick writes positions, never builds.
 --
--- Left and right were held keys there: the tick read them, and a release
--- cleared them. morf hands a configuration presses (and the keyboard's own
--- repeats) but no releases, so here a press holds its direction for a
--- moment and every repeat extends it: a tap nudges the ship, a held key
--- flies it.
+-- Left and right are held, not tapped: a press holds its direction and
+-- only a real release lets it go, the keyboard's repeats ignored; the tick
+-- reads them. Space fires once per press.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -36,11 +34,6 @@ local SHOTS_IN_FLIGHT = 3
 local BOMBS_IN_FLIGHT = 3
 local BLAST_LIFE = 9
 local BLASTS = 6
--- How long a press holds its direction before a repeat must renew it: the
--- first long enough to be a nudge, the rest just longer than the gap
--- between repeats.
-local TAP_HOLD = 300
-local REPEAT_HOLD = 110
 
 -- Eleven cells across and eight down, two frames each: the row decides
 -- which creature and what it is worth.
@@ -130,8 +123,7 @@ return function(ctx)
   for c = 0, COLUMNS - 1 do
     for r = 0, ROWS - 1 do alive[c * 10 + r] = morf.signal("impasto.space." .. id .. ".a" .. c .. r, true) end
   end
-  local held = { left = 0, right = 0 }
-  local clock = morf.elapsed_timer()
+  local held = { left = false, right = false }
 
   local function ship_x() return MARGIN + ship_w / 2 + ship_at * lane end
 
@@ -210,8 +202,7 @@ return function(ctx)
   local function step()
     ticks = ticks + 1
     -- Ship.
-    local now = clock:elapsed_ms()
-    local heading = (held.right > now and 1 or 0) - (held.left > now and 1 or 0)
+    local heading = (held.right and 1 or 0) - (held.left and 1 or 0)
     ship_at = math.max(0, math.min(1, ship_at + heading * SHIP_SPEED / lane))
     if shield > 0 then shield = shield - 1 end
 
@@ -303,7 +294,7 @@ return function(ctx)
     ctx.score:set(0)
     lives:set(3)
     wave, shield, ship_at, ticks = 0, 0, 0.5, 0
-    held.left, held.right = 0, 0
+    held.left, held.right = false, false
     ctx.over:set(false)
     spawn_wave()
     draw()
@@ -449,29 +440,40 @@ return function(ctx)
     },
   }
 
-  -- A press holds its direction for a moment; the key's own repeats keep
-  -- it held (see the top of the file). The other direction lets go.
-  local function hold(side, other)
-    local now = clock:elapsed_ms()
-    local repeating = held[side] > now
-    held[side] = now + (repeating and REPEAT_HOLD or TAP_HOLD)
-    held[other] = 0
+  local function side_of(keysym)
+    local l = common.letter(keysym)
+    if keysym == common.K.LEFT or l == "a" then return "left" end
+    if keysym == common.K.RIGHT or l == "d" then return "right" end
+    return nil
   end
 
-  local function key(keysym)
-    local l = common.letter(keysym)
-    if keysym == common.K.LEFT or l == "a" then hold("left", "right")
-    elseif keysym == common.K.RIGHT or l == "d" then hold("right", "left")
-    elseif keysym == common.K.SPACE then fire()
+  -- A press holds its side until its release; repeats change nothing, and
+  -- Space fires once per press.
+  local function key(keysym, _, repeat_)
+    local side = side_of(keysym)
+    if side then held[side] = true
+    elseif keysym == common.K.SPACE then
+      if not repeat_ then fire() end
     else return false end
     return true
   end
+
+  local function release(keysym)
+    local side = side_of(keysym)
+    if not side then return false end
+    held[side] = false
+    return true
+  end
+
+  -- The keyboard went elsewhere (the panel closed, the game was left): a key
+  -- down now would never come up.
+  local function let_go() held.left, held.right = false, false end
 
   restart()
   -- Written after construction, so the breathing has somewhere to go.
   for _, t in ipairs(twinkles) do t.opacity = 1 end
   return {
-    node = node, key = key, restart = restart,
+    node = node, key = key, release = release, let_go = let_go, restart = restart,
     debug = function()
       return "invaders " .. count .. " wave " .. wave .. " lives " .. lives:get()
         .. " ship " .. string.format("%.2f", ship_at) .. " form " .. math.floor(form_x) .. "," .. math.floor(form_y)
