@@ -48,6 +48,25 @@ pub const CURSOR_SHAPES: [&str; 36] = [
     "all_resize",
 ];
 
+/// Every key `anchors` understands.
+pub const ANCHOR_KEYS: &[&str] = &[
+    "fill",
+    "center_in",
+    "horizontal_center",
+    "vertical_center",
+    "left",
+    "right",
+    "top",
+    "bottom",
+    "margins",
+    "left_margin",
+    "right_margin",
+    "top_margin",
+    "bottom_margin",
+    "horizontal_center_offset",
+    "vertical_center_offset",
+];
+
 pub(crate) fn coerce(
     element: Element,
     property: &str,
@@ -79,6 +98,18 @@ pub(crate) fn coerce(
                     "a multiple of the font size or a `px` size".to_owned(),
                 )),
             };
+        }
+        "anchors" => {
+            // An anchor name nothing reads used to be dropped without a word,
+            // and a node with a misspelt `center_in` simply sat in the corner.
+            if let Value::Map(map) = &value
+                && let Some(unknown) = map.keys().find(|key| !ANCHOR_KEYS.contains(&key.as_str()))
+            {
+                return Err(invalid(format!(
+                    "`{unknown}` is not an anchor: use {}",
+                    ANCHOR_KEYS.join(", ")
+                )));
+            }
         }
         "cursor" => {
             if let Value::String(name) = &value

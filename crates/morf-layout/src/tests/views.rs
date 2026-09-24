@@ -414,3 +414,36 @@ fn a_refusing_mouse_area_lets_the_press_through_to_the_one_below() {
         None
     );
 }
+
+#[test]
+fn one_axis_centre_anchors_leave_the_other_axis_to_its_own_anchor() {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    scene.assign(root, "width", 200.0).unwrap();
+    scene.assign(root, "height", 60.0).unwrap();
+    let child = scene.create(Element::Item);
+    scene.assign(child, "width", 40.0).unwrap();
+    scene.assign(child, "height", 20.0).unwrap();
+    let mut anchors = std::collections::BTreeMap::new();
+    anchors.insert("vertical_center".to_owned(), Value::Bool(true));
+    anchors.insert("left".to_owned(), Value::Bool(true));
+    anchors.insert("left_margin".to_owned(), Value::Number(13.0));
+    scene.assign(child, "anchors", Value::Map(anchors)).unwrap();
+    scene.reparent(child, Some(root)).unwrap();
+    let layout = Layout::compute(
+        &scene,
+        root,
+        Size {
+            width: 200.0,
+            height: 60.0,
+        },
+        &mut FixedText,
+    )
+    .unwrap();
+    let geometry = layout.geometry(child).unwrap();
+    assert_eq!((geometry.x, geometry.y), (13.0, 20.0));
+
+    let mut wrong = std::collections::BTreeMap::new();
+    wrong.insert("centre_in".to_owned(), Value::Bool(true));
+    assert!(scene.assign(child, "anchors", Value::Map(wrong)).is_err());
+}

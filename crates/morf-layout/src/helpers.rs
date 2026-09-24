@@ -145,12 +145,20 @@ pub(crate) fn reject_axis_conflict(
     let fill = flag(anchors, "fill");
     let center = flag(anchors, "center_in");
     if matches!(parent, Element::Row | Element::Grid)
-        && (fill || center || flag(anchors, "left") || flag(anchors, "right"))
+        && (fill
+            || center
+            || flag(anchors, "left")
+            || flag(anchors, "right")
+            || flag(anchors, "horizontal_center"))
     {
         return Err(LayoutError::AxisConflict { axis: "horizontal" });
     }
     if matches!(parent, Element::Column | Element::Grid)
-        && (fill || center || flag(anchors, "top") || flag(anchors, "bottom"))
+        && (fill
+            || center
+            || flag(anchors, "top")
+            || flag(anchors, "bottom")
+            || flag(anchors, "vertical_center"))
     {
         return Err(LayoutError::AxisConflict { axis: "vertical" });
     }
@@ -174,9 +182,15 @@ pub(crate) fn apply_anchors(
         geometry.height = (parent.height - top_margin - bottom_margin).max(0.0);
         return;
     }
-    if flag(anchors, "center_in") {
-        geometry.x = (parent.width - geometry.width) / 2.0;
-        geometry.y = (parent.height - geometry.height) / 2.0;
+    // One axis centred, the other left to its own anchors: a row of icons
+    // centred vertically in a bar and pinned to its left edge.
+    let horizontal_offset = number(anchors, "horizontal_center_offset").unwrap_or(0.0);
+    let vertical_offset = number(anchors, "vertical_center_offset").unwrap_or(0.0);
+    if flag(anchors, "center_in") || flag(anchors, "horizontal_center") {
+        geometry.x = (parent.width - geometry.width) / 2.0 + horizontal_offset;
+    }
+    if flag(anchors, "center_in") || flag(anchors, "vertical_center") {
+        geometry.y = (parent.height - geometry.height) / 2.0 + vertical_offset;
     }
     if flag(anchors, "left") {
         geometry.x = left_margin;

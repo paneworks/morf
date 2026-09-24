@@ -101,12 +101,15 @@ function kit.icon_button(values)
     color = values.glyph_color or C.text,
     anchors = { center_in = true },
   }
-  return kit.button {
+  local node = kit.button {
     width = d, height = d, radius = d / 2,
     color = values.color or C.surface, hover_color = values.hover_color,
     on_click = values.on_click, on_right_click = values.on_right_click,
     glyph,
   }
+  -- One value: it goes last in a list of children, where a second return
+  -- would be taken for another child.
+  return node
 end
 
 --- A capsule: the bar's grouping shape.

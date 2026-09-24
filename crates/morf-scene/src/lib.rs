@@ -26,7 +26,7 @@ mod schema;
 mod types;
 
 pub use animation::*;
-pub use coerce::CURSOR_SHAPES;
+pub use coerce::{ANCHOR_KEYS, CURSOR_SHAPES};
 pub use color::{ColorSpace, HueDirection, mix as mix_colors};
 pub use decoration::*;
 pub use gradient::*;
