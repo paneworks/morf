@@ -159,6 +159,29 @@ morf.ipc.theme = function(id)
   if id and id ~= "" then require("services.theme").set_theme(id) end
   return require("services.theme").active_id:get()
 end
+-- The settings window: `morf ipc call settings [section] [part]` opens it
+-- (on that page), and closes it when it is up and no page is named. The
+-- control centre's settings door and the bar's settings button ask through
+-- `modules.request_settings`.
+local settings_window = require("settings.window")
+morf.ipc.settings = function(section, part)
+  settings_window.toggle(section, part)
+  return settings_window.visible() and require("settings.panel").section() or "closed"
+end
+do
+  local modules = require("services.modules")
+  local seen = modules.settings_requests:get()
+  morf.effect("impasto.settings.requests", function()
+    local asked = modules.settings_requests:get()
+    if asked == seen then return end
+    seen = asked
+    morf.timer(1, function()
+      island.close()
+      settings_window.open()
+    end, false)
+  end)
+end
+
 morf.ipc.flash = function(label) island.state.flash("󰕾", label or "Volume", 0.6) return "ok" end
 
 -- ------------------------------------------------------------------- root --

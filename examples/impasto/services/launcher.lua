@@ -308,7 +308,11 @@ function M.desk(term)
   local named = {}
   for _, door in ipairs(M.doors) do
     named[door.id] = true
-    if island.panels[door.id] then
+    if door.id == "settings" then
+      -- A window rather than a panel: settings/window.lua.
+      offer { kind = "settings", id = door.id, icon = door.icon, name = door.label,
+        subtitle = door.detail }
+    elseif island.panels[door.id] then
       offer { kind = "panel", id = door.id, icon = door.icon, name = door.label,
         subtitle = door.detail, panel = door.id }
     end
@@ -496,11 +500,17 @@ function M.activate(entry)
   elseif kind == "setting" then
     if entry.flips then
       settings.set(entry.id, not settings.get(entry.id))
-    elseif island.panels.settings then
-      island.open("settings")
-      return "panel"
+      return "keep"
     end
-    return "keep"
+    -- Anything else is changed in the settings window, on its page.
+    local ok, panel = pcall(require, "settings.panel")
+    local section, part = "", ""
+    if ok then section, part = panel.section_for_key(entry.id) end
+    require("settings.window").open(section, part)
+    return "close"
+  elseif kind == "settings" then
+    require("settings.window").open()
+    return "close"
   elseif kind == "timer" then
     timer.start(entry.milliseconds, "")
   elseif kind == "window" then

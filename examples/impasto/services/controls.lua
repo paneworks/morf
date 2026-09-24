@@ -168,7 +168,7 @@ M.tile_catalogue = {
     icon = function() return "󰖔" end,
     detail = function() return settings.nightLight and (settings.nightTemperature .. " K") or "Off" end,
     active = function() return settings.nightLight end,
-    available = no },
+    action = function() require("services.night").toggle() end },
   { key = "output", label = "Output",
     icon = function() return audio().icon() end,
     detail = function() return audio().muted() and "Muted" or (audio().volume() .. "%") end,
