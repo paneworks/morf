@@ -22,6 +22,32 @@ local function hour_label(b)
   return b.tomorrow and (hour .. "⁺") or (hour .. "h")
 end
 
+-- Whether an hour ahead is in daylight: the hour's own `is_day` when the
+-- reading carries it, else the forecast hour it was made from, else between
+-- that day's sunrise and sunset. An hour after dark draws a moon, as the
+-- original's WeatherFace does.
+local function is_day(b)
+  if b.is_day ~= nil then return b.is_day ~= false end
+  local now = weather.now()
+  local today = morf.time.date()
+  for _, block in ipairs(now.hourly or {}) do
+    local at = block.time and morf.time.date(block.time)
+    if at and at.hour == b.hour and (at.day ~= today.day) == (b.tomorrow == true) then
+      if block.is_day ~= nil then return block.is_day ~= false end
+      break
+    end
+  end
+  for _, day in ipairs(now.daily or {}) do
+    local d = day.time and morf.time.date(day.time)
+    local want = b.tomorrow and morf.time.date(morf.time.add(morf.time.now(), { days = 1 })) or today
+    if d and d.day == want.day and day.sunrise and day.sunset then
+      local rise, set = morf.time.date(day.sunrise), morf.time.date(day.sunset)
+      return b.hour >= rise.hour and b.hour < set.hour
+    end
+  end
+  return true
+end
+
 local function now_kind()
   return sky.kind_of(weather.code(), weather.is_day(), weather.available())
 end
@@ -40,7 +66,7 @@ local function hours(ctx, count)
           kit.text { mono = true, size = theme.size.label, color = ctx.ink.muted,
             text = function() local b = block() return b and hour_label(b) or "" end },
           sky.build { size = 20, ink = ctx.ink,
-            kind = function() local b = block() return b and sky.kind_of(b.code, true, true) or "cloud" end },
+            kind = function() local b = block() return b and sky.kind_of(b.code, is_day(b), true) or "cloud" end },
           kit.text { size = theme.size.small, color = ctx.ink.text,
             text = function() local b = block() return b and (b.temperature .. "°") or "" end },
         },
@@ -98,7 +124,7 @@ local function chart(ctx, count)
           size = theme.size.label, color = ink.muted,
           text = function() local b = at() return b and hour_label(b) or "" end },
         sky.build { x = 19, y = plot_bottom + 22, size = 22, ink = ink, quiet = true,
-          kind = function() local b = at() return b and sky.kind_of(b.code, true, true) or "cloud" end },
+          kind = function() local b = at() return b and sky.kind_of(b.code, is_day(b), true) or "cloud" end },
       }
     end
     return ui.Item { width = w, height = h, table.unpack(children) }
