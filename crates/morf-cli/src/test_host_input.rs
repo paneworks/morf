@@ -22,7 +22,10 @@ fn key_role(
 ) -> Result<morf_wayland::SurfaceRole, String> {
     if optional_text(surface).is_none()
         && let Some(clicked) = subject.keyboard
-        && subject.surfaces.iter().any(|candidate| candidate.role == clicked)
+        && subject
+            .surfaces
+            .iter()
+            .any(|candidate| candidate.role == clicked)
     {
         return Ok(clicked);
     }
