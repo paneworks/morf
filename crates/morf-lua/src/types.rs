@@ -34,6 +34,12 @@ pub struct Limits {
     pub effect_fuel: u64,
     /// Maximum VM fuel granted to all effects in one recompute pass.
     pub frame_fuel: u64,
+    /// Maximum VM fuel granted to one view delegate. A delegate builds a
+    /// part of a view -- a row, or a whole panel or board shown on demand --
+    /// which is loading's kind of work rather than a handler's, so it gets
+    /// a budget nearer loading's: a board of widgets each drawing a face
+    /// took most of a handler's million instructions.
+    pub delegate_fuel: u64,
     /// Most `ui.Terminal` nodes that may exist at once: each is a program
     /// on a pseudo-terminal and a screen with its history.
     pub terminals: usize,
@@ -52,6 +58,7 @@ impl Default for Limits {
             slice_fuel: 4_096,
             effect_fuel: 1_000_000,
             frame_fuel: 8_000_000,
+            delegate_fuel: 20_000_000,
             terminals: 16,
             watches: 256,
         }
@@ -61,7 +68,7 @@ impl Default for Limits {
 impl Limits {
     /// The defaults with any of `MORF_LIMITS` applied: comma-separated
     /// `load=N`, `memory=N` (bytes, or with a `k`/`m`/`g` suffix),
-    /// `handler=N` and `frame=N` (VM instructions), `terminals=N` and
+    /// `handler=N`, `frame=N` and `delegate=N` (VM instructions), `terminals=N` and
     /// `watches=N`. An
     /// entry that does not parse is ignored and named in the returned
     /// warnings.
@@ -103,10 +110,11 @@ impl Limits {
                 "memory" => limits.memory = usize::try_from(number).unwrap_or(usize::MAX),
                 "handler" => limits.effect_fuel = number,
                 "frame" => limits.frame_fuel = number,
+                "delegate" => limits.delegate_fuel = number,
                 "terminals" => limits.terminals = usize::try_from(number).unwrap_or(usize::MAX),
                 "watches" => limits.watches = usize::try_from(number).unwrap_or(usize::MAX),
                 other => warnings.push(format!(
-                    "MORF_LIMITS key `{other}` is not load, memory, handler, frame, terminals or watches"
+                    "MORF_LIMITS key `{other}` is not load, memory, handler, frame, delegate, terminals or watches"
                 )),
             }
         }
