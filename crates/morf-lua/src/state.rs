@@ -121,6 +121,10 @@ pub(crate) enum EffectSink {
     State(NodeHandle),
 }
 
+/// The most log entries kept, and the longest one.
+pub(crate) const MAX_LOG_ENTRIES: usize = 2000;
+pub(crate) const MAX_LOG_MESSAGE: usize = 4096;
+
 pub(crate) struct ReactiveState {
     pub(crate) graph: Option<Graph<IpcValue>>,
     pub(crate) values: HashMap<SignalId, IpcValue>,
@@ -311,10 +315,25 @@ impl ReactiveState {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|since| since.as_millis() as u64)
             .unwrap_or(0);
+        // A cap, oldest out first: a shell that logs a warning a second
+        // would otherwise hold a day of them.
+        if self.logs.len() >= MAX_LOG_ENTRIES {
+            let excess = self.logs.len() + 1 - MAX_LOG_ENTRIES;
+            self.logs.drain(..excess);
+        }
+        let mut message = message.into();
+        if message.len() > MAX_LOG_MESSAGE {
+            let mut cut = MAX_LOG_MESSAGE;
+            while !message.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            message.truncate(cut);
+            message.push('…');
+        }
         self.logs.push(LogEntry {
             level,
             at_ms,
-            message: message.into(),
+            message,
         });
     }
 
