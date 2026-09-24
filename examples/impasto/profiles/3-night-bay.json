@@ -1,0 +1,176 @@
+{
+  "impasto": 1,
+  "name": "Night bay",
+  "wallpaper": "tropical-bay-night.jpeg",
+  "palette": "adaptive",
+  "settings": {
+    "barStyle": "spread",
+    "islandAttached": false,
+    "barLeft": [
+      "workspaces",
+      "split",
+      "media",
+      "timer"
+    ],
+    "barRight": [
+      "weather",
+      "calendar",
+      "split",
+      "notifications",
+      "network",
+      "bluetooth",
+      "volume",
+      "battery"
+    ],
+    "chipShape": "ring",
+    "chipFigure": "hover",
+    "desktopTheme": "modern",
+    "desktopStyle": "capsule",
+    "desktopOpacity": 75,
+    "desktopWidgets": [
+      {
+        "id": "clock",
+        "family": "8x2",
+        "col": 0,
+        "row": 0,
+        "key": "clock-0-0"
+      },
+      {
+        "id": "weather",
+        "family": "4x2",
+        "col": 8,
+        "row": 0,
+        "key": "weather-8-0"
+      },
+      {
+        "id": "calendar",
+        "family": "4x4",
+        "col": 13,
+        "row": 0,
+        "key": "calendar-13-0"
+      },
+      {
+        "id": "battery",
+        "family": "2x2",
+        "col": 13,
+        "row": 4,
+        "key": "battery-13-4"
+      },
+      {
+        "id": "media",
+        "family": "4x2",
+        "col": 0,
+        "row": 2,
+        "key": "media-0-2"
+      },
+      {
+        "id": "stats",
+        "family": "4x2",
+        "col": 4,
+        "row": 2,
+        "key": "stats-4-2"
+      },
+      {
+        "id": "tasks",
+        "family": "4x2",
+        "col": 8,
+        "row": 2,
+        "key": "tasks-8-2"
+      },
+      {
+        "id": "volume",
+        "family": "2x2",
+        "col": 15,
+        "row": 4,
+        "key": "volume-15-4"
+      }
+    ],
+    "centreBlocks": [
+      {
+        "id": "impasto",
+        "col": 0,
+        "row": 0,
+        "size": "2x4",
+        "key": "impasto-0-0"
+      },
+      {
+        "id": "toggles",
+        "col": 0,
+        "row": 4,
+        "size": "2x2",
+        "key": "toggles-0-4"
+      },
+      {
+        "id": "volume",
+        "col": 0,
+        "row": 6,
+        "size": "2x1",
+        "key": "volume-0-6"
+      },
+      {
+        "id": "brightness",
+        "col": 0,
+        "row": 7,
+        "size": "2x1",
+        "key": "brightness-0-7"
+      },
+      {
+        "id": "media",
+        "col": 2,
+        "row": 0,
+        "size": "2x2",
+        "key": "media-2-0"
+      },
+      {
+        "id": "clock",
+        "col": 2,
+        "row": 2,
+        "size": "2x2",
+        "key": "clock-2-2"
+      },
+      {
+        "id": "pet",
+        "col": 2,
+        "row": 4,
+        "size": "2x2",
+        "key": "pet-2-4"
+      },
+      {
+        "id": "tasks",
+        "col": 2,
+        "row": 6,
+        "size": "2x2",
+        "key": "tasks-2-6"
+      },
+      {
+        "id": "calendar",
+        "col": 4,
+        "row": 0,
+        "size": "2x4",
+        "key": "calendar-4-0"
+      },
+      {
+        "id": "notes",
+        "col": 4,
+        "row": 4,
+        "size": "2x2",
+        "key": "notes-4-4"
+      },
+      {
+        "id": "weather",
+        "col": 4,
+        "row": 6,
+        "size": "2x2",
+        "key": "weather-4-6"
+      }
+    ],
+    "dockEdge": "bottom",
+    "dockAutohide": true,
+    "dockPinned": [
+      "kitty.desktop",
+      "thunar.desktop"
+    ],
+    "greeting": "invaders",
+    "wallpaperTransition": "wave"
+  }
+}
