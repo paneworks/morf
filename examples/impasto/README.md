@@ -33,6 +33,7 @@ sense:
 | `bar/island_state.lua` | `bar/island/IslandState.qml` | which layer is showing |
 | `bar/modules/` | `bar/modules/*.qml` | module chips and their details |
 | `bar/panels/` | `bar/island/*Panel.qml` | what the island opens into |
+| `games/` | `bar/island/games/*.qml` | the arcade's games, one file each (`common.lua` is their contract) |
 | `bar/layers/` | `IslandRest`, `IslandSummary`, `OsdLayer`, `NotificationLayer` | the island's layers below a panel |
 | `bar/pieces/` | pieces of `Bar.qml` | what sits on the bar's sides |
 | `desktop/`, `dock/`, `deck/`, `lock/`, `capture/`, `settings/` | same | the other surfaces |
@@ -92,4 +93,5 @@ WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; m
 | settings, theme, kit | ported |
 | island state, island, bar (grouped, spread) | ported |
 | rest layer (clock) | ported |
+| arcade: `bar/panels/games.lua`, `games/`, `services/games.lua` | ported (eleven games) |
 | everything else | in progress |
