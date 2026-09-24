@@ -126,7 +126,7 @@ M.register("clock", function(o)
         horizontal_alignment = "center" },
       kit.text {
         text = function()
-          morf.clock:get()
+          morf.hour_clock:get()
           return morf.time.format((wide or tall) and "%A %-d %B" or "%a %-d %b")
         end,
         size = tall and theme.size.medium or theme.size.small, color = C.textMuted,

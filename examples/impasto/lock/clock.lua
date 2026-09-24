@@ -28,7 +28,7 @@ return function(values)
 
   local function format(pattern)
     if values.at then return morf.time.format(pattern, values.at) end
-    morf.clock:get()
+    if pattern:find("%%[STr]") then morf.clock:get() else morf.minute_clock:get() end
     return morf.time.format(pattern)
   end
   -- The clock's own format, split on its separator for the stacked form.

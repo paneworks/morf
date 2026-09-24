@@ -282,6 +282,20 @@ ui.Text { text = function()
 end }
 ```
 
+The outputs are `morf.screens`, index 1 the one this instance drives, a
+table kept current in place. `morf.screens_revision()` is its tracked
+read: a binding or an effect that calls it runs again when an output is
+plugged or unplugged, moves, resizes, rescales or rotates -- and not when
+the compositor merely repeats the same list -- so nothing has to compare
+lists on a timer:
+
+```lua
+morf.effect("follow screens", function()
+  morf.screens_revision()
+  rebuild_for(#morf.screens)
+end)
+```
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).

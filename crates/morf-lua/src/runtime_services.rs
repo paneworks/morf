@@ -87,6 +87,11 @@ impl Runtime {
                 match state.new_timer(duration) {
                     Ok(timer) => {
                         let id = state.next_timer_id();
+                        let origin = state
+                            .timer_origins
+                            .get(&node)
+                            .cloned()
+                            .unwrap_or_else(|| format!("ui.Timer {node:?}").into());
                         state.timers.push(PendingTimer {
                             id,
                             timer,
@@ -94,6 +99,7 @@ impl Runtime {
                             repeat,
                             interval: duration,
                             node: Some(node),
+                            origin,
                         });
                     }
                     Err(error) => state.log(LogLevel::Warn, format!("Timer: {error}")),
@@ -103,6 +109,7 @@ impl Runtime {
             for node in stale_timers {
                 state.timer_callbacks.remove(&node);
                 state.timers.retain(|timer| timer.node != Some(node));
+                state.timer_origins.remove(&node);
             }
             let loader_definitions = state
                 .loader_factories
@@ -147,6 +154,14 @@ impl Runtime {
                 let interval = state.timers[index].interval;
                 if state.timers[index].timer.fire(now, interval) {
                     let timer = &state.timers[index];
+                    if wake_log_wanted() {
+                        eprintln!(
+                            "morf: timer {} fired ({:.0} ms{})",
+                            timer.origin,
+                            interval.as_secs_f64() * 1000.0,
+                            if timer.repeat { ", repeating" } else { "" }
+                        );
+                    }
                     timers.push(DueTimer {
                         id: timer.id,
                         node: timer.node,
@@ -611,4 +626,13 @@ fn timer_still_due(
     } else {
         one_shot_pending
     }
+}
+
+/// Whether `MORF_WAKE_LOG` asks for wakes -- and so the timers behind them --
+/// to be named.
+fn wake_log_wanted() -> bool {
+    static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *WANTED.get_or_init(|| {
+        std::env::var_os("MORF_WAKE_LOG").is_some_and(|value| !value.is_empty() && value != "0")
+    })
 }

@@ -306,6 +306,8 @@ pub(crate) struct ReactiveState {
     /// running its timers off the wall clock (`Runtime::use_virtual_clock`).
     pub(crate) virtual_now: Option<std::time::Duration>,
     pub(crate) timer_callbacks: HashMap<NodeHandle, StashedClosure>,
+    /// Where each `ui.Timer` was built, for `MORF_WAKE_LOG`.
+    pub(crate) timer_origins: HashMap<NodeHandle, std::rc::Rc<str>>,
     /// Each node's `on_destroyed`, until the node goes.
     pub(crate) destroy_hooks: HashMap<NodeHandle, StashedClosure>,
     /// The properties each node is looping, from its `loop`.
@@ -371,6 +373,10 @@ pub(crate) struct ReactiveState {
     /// `morf.toplevels`, installed with the runtime and fed by
     /// `Runtime::set_windows`.
     pub(crate) toplevels: Option<crate::api_toplevels::ToplevelHost>,
+    /// `morf.screens_revision()`: the signal a binding follows to hear the
+    /// output list change, how many times it has, and what it last was.
+    pub(crate) screens_revision: Option<(SignalId, i64)>,
+    pub(crate) screens_signature: String,
     pub(crate) dbus_services: Vec<PendingDbusService>,
     pub(crate) udev_monitors: Vec<PendingUdev>,
     pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
@@ -606,6 +612,7 @@ impl ReactiveState {
             due_one_shots: HashSet::new(),
             virtual_now: None,
             timer_callbacks: HashMap::new(),
+            timer_origins: HashMap::new(),
             destroy_hooks: HashMap::new(),
             linked_texts: Default::default(),
             images: Default::default(),
@@ -640,6 +647,8 @@ impl ReactiveState {
             prefers: None,
             audio: None,
             toplevels: None,
+            screens_revision: None,
+            screens_signature: String::new(),
             dbus_signals: Vec::new(),
             next_dbus_signal_id: 0,
             dbus_replies: Vec::new(),

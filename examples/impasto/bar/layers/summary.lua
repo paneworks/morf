@@ -82,8 +82,9 @@ island.register_layer("summary", {
     }
     local time = kit.text {
       text = function()
-        morf.clock:get()
-        return morf.time.format(settings.clockFormat)
+        local pattern = settings.clockFormat
+        if pattern:find("%%[STr]") then morf.clock:get() else morf.minute_clock:get() end
+        return morf.time.format(pattern)
       end,
       size = 34, weight = 600,
     }
@@ -100,9 +101,9 @@ island.register_layer("summary", {
             time,
             ui.Column {
               gap = 0,
-              kit.text { text = function() morf.clock:get() return day_name() end,
+              kit.text { text = function() morf.hour_clock:get() return day_name() end,
                 size = theme.size.small, color = C.textMuted },
-              kit.text { text = function() morf.clock:get() return day_and_month() end,
+              kit.text { text = function() morf.hour_clock:get() return day_and_month() end,
                 size = theme.size.medium, weight = 600 },
             },
           },

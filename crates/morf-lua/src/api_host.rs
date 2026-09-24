@@ -349,6 +349,38 @@ pub(crate) fn install_host_service_api<'gc>(
             .expect("screen table accepts integer keys");
     }
     morf.set_field(ctx, "screens", screens);
+    // `morf.screens` is a plain table refreshed in place; this is the tracked
+    // read beside it, so a binding or an effect runs again when an output
+    // comes, goes, moves or rescales -- instead of a timer comparing lists.
+    {
+        let mut state = state.borrow_mut();
+        let revision = state
+            .graph
+            .as_mut()
+            .expect("the graph is not running at install")
+            .signal("screens.revision", IpcValue::Integer(0));
+        state.values.insert(revision, IpcValue::Integer(0));
+        state.signals.push(revision);
+        state.screens_revision = Some((revision, 0));
+        state.screens_signature = screen.map(screens_signature_of_one).unwrap_or_default();
+    }
+    let revision_state = Rc::clone(&state);
+    morf.set_field(
+        ctx,
+        "screens_revision",
+        Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let mut state = revision_state.borrow_mut();
+            let Some((signal, count)) = state.screens_revision else {
+                stack.replace(ctx, 0);
+                return Ok(CallbackReturn::Return);
+            };
+            if let Some(active) = &mut state.active {
+                active.reads.insert(signal);
+            }
+            stack.replace(ctx, count);
+            Ok(CallbackReturn::Return)
+        }),
+    );
 
     // Every window the compositor reports, filled by `Runtime::set_windows` and
     // updated in place. Empty here rather than absent so a configuration can
@@ -448,4 +480,20 @@ pub(crate) fn screen_entry<'gc>(ctx: Context<'gc>, screen: &Screen) -> Table<'gc
     );
     value.set_field(ctx, "serial_number", LuaValue::Nil);
     value
+}
+
+/// What makes two output lists the same for `morf.screens_revision`.
+pub(crate) fn screens_signature(screens: &[Screen]) -> String {
+    screens
+        .iter()
+        .map(screens_signature_of_one)
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+fn screens_signature_of_one(screen: &Screen) -> String {
+    format!(
+        "{}|{:?}|{:?}x{:?}|{}|{}",
+        screen.name, screen.position, screen.width, screen.height, screen.scale, screen.transform
+    )
 }

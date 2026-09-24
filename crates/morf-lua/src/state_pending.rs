@@ -107,6 +107,9 @@ pub(crate) struct PendingTimer {
     pub(crate) repeat: bool,
     pub(crate) interval: Duration,
     pub(crate) node: Option<NodeHandle>,
+    /// Where it was made (`file:line`, or the `ui.Timer` node), for
+    /// `MORF_WAKE_LOG`: an idle shell woken by a timer can say whose.
+    pub(crate) origin: std::rc::Rc<str>,
 }
 
 pub(crate) struct PendingDbusSignal {

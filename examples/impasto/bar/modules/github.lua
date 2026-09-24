@@ -22,7 +22,7 @@ function M.age()
   if not github.available() then return "" end
   local at = tonumber(github.now().updated) or 0
   if at <= 0 then return "" end
-  morf.clock:get()
+  morf.minute_clock:get()
   local minutes = math.floor((morf.time.now() - at) / 60)
   if minutes < 2 then return "just now" end
   if minutes < 60 then return minutes .. " min ago" end

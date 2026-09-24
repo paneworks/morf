@@ -100,7 +100,7 @@ end
 --- between polls.
 function M.remaining()
   if nothing() then return 0 end
-  morf.clock:get()
+  morf.minute_clock:get()
   return math.max(0, M.block_ends() * 1000 - morf.time.now_ms())
 end
 

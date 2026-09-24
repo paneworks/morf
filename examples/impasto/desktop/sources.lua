@@ -44,11 +44,11 @@ S.clock = {}
 --- The time now, as `morf.time.date` fields; a binding follows the minute
 --- (the second with `clockShowsSeconds`).
 function S.clock.now()
-  morf.clock:get()
+  if settings.clockShowsSeconds then morf.clock:get() else morf.minute_clock:get() end
   return morf.time.date()
 end
 function S.clock.format(pattern)
-  morf.clock:get()
+  if pattern:find("%%[STr]") then morf.clock:get() else morf.minute_clock:get() end
   return morf.time.format(pattern)
 end
 --- The clock's own format, with seconds when the setting says.

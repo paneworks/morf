@@ -209,7 +209,9 @@ function mpris.connect(options)
     }
   end
 
+  local ensure_ticker
   local function publish()
+    if ensure_ticker then ensure_ticker() end
     local list = {}
     for _, player in pairs(players) do list[#list + 1] = player end
     table.sort(list, function(a, b) return a.name < b.name end)
@@ -374,13 +376,29 @@ function mpris.connect(options)
   end)
 
   -- The position, moving. Only the active player's row is advanced; the
-  -- list's positions are as of the last reading.
-  morf.timer(options.tick_ms or 1000, function()
+  -- list's positions are as of the last reading. The tick runs only while
+  -- something plays: an idle desk is not woken every second to learn that
+  -- nothing moved.
+  local ticker
+  ensure_ticker = function()
     local active = choose()
-    if active and active.playing then
-      state.active.position = position_of(active) / 1e6
+    local playing = active and active.playing
+    if playing and not ticker then
+      ticker = morf.timer(options.tick_ms or 1000, function()
+        local now = choose()
+        if now and now.playing then
+          state.active.position = position_of(now) / 1e6
+        else
+          ticker:cancel()
+          ticker = nil
+        end
+      end, true)
+    elseif not playing and ticker then
+      ticker:cancel()
+      ticker = nil
     end
-  end)
+  end
+  ensure_ticker()
 
   for _, name in ipairs(client.list_names()) do add(name) end
   publish()

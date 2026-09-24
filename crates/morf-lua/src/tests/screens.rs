@@ -110,3 +110,54 @@ fn outputs_the_compositor_left_unnamed_stay_separate_entries() {
         )
         .unwrap();
 }
+
+#[test]
+fn an_effect_on_the_screens_revision_runs_when_outputs_change() {
+    let mut runtime = Runtime::for_screen(Limits::default(), output("DP-2", 1920, 2560, 1440));
+    runtime
+        .execute(
+            "revision.lua",
+            br#"
+                runs, seen = 0, {}
+                morf.effect("screens", function()
+                    morf.screens_revision()
+                    runs = runs + 1
+                    seen[runs] = #morf.screens
+                end)
+            "#,
+        )
+        .unwrap();
+    let runs = |runtime: &mut Runtime| {
+        runtime.call_ipc("runs", &[]).ok();
+        runtime
+            .execute("check.lua", b"morf.ipc.runs = function() return runs end")
+            .unwrap();
+        match runtime.call_ipc("runs", &[]).unwrap().as_slice() {
+            [IpcValue::Integer(count)] => *count,
+            [IpcValue::Number(count)] => *count as i64,
+            other => panic!("{other:?}"),
+        }
+    };
+    assert_eq!(runs(&mut runtime), 1);
+    // A second monitor arrives.
+    let two = [
+        output("DP-2", 1920, 2560, 1440),
+        output("eDP-1", 0, 1920, 1080),
+    ];
+    runtime.set_screens(&two);
+    assert_eq!(runs(&mut runtime), 2);
+    // The same list again is not a change.
+    runtime.set_screens(&two);
+    assert_eq!(runs(&mut runtime), 2);
+    // A rescale is.
+    let mut rescaled = two.clone();
+    rescaled[1].scale = 2;
+    runtime.set_screens(&rescaled);
+    assert_eq!(runs(&mut runtime), 3);
+    runtime
+        .execute(
+            "seen.lua",
+            br#"assert(seen[2] == 2 and morf.screens_revision() == 2)"#,
+        )
+        .unwrap();
+}

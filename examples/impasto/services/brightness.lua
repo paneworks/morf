@@ -391,11 +391,14 @@ local function outputs()
   return table.concat(names, ",")
 end
 local seen_outputs = outputs()
-morf.timer(2000, function()
+-- Re-detected when an output comes, goes or moves: the engine says so
+-- through `morf.screens_revision()` rather than a timer comparing lists.
+morf.effect("impasto.brightness.outputs", function()
+  if morf.screens_revision then morf.screens_revision() end
   local now = outputs()
   if now == seen_outputs then return end
   seen_outputs = now
   morf.timer(1500, M.detect, false)
-end, true)
+end)
 
 return M

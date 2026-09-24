@@ -269,15 +269,23 @@ end
 local function mounted(predicate, name)
   local shown = morf.signal("impasto.island.mounted." .. name, predicate())
   local generation = 0
+  -- Mirrors `shown` without reading it, so the effect follows only the
+  -- predicate: a predicate that re-runs while staying false must not arm a
+  -- fresh timer each time.
+  local mounted_now = shown:get()
   morf.effect("impasto.island.mount." .. name, function()
     local want = predicate()
     generation = generation + 1
     local mine = generation
     if want then
+      mounted_now = true
       shown:set(true)
-    else
+    elseif mounted_now then
       morf.timer(theme.duration_morph() + 40, function()
-        if mine == generation and not predicate() then shown:set(false) end
+        if mine == generation and not predicate() then
+          mounted_now = false
+          shown:set(false)
+        end
       end, false)
     end
   end)

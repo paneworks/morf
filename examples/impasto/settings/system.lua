@@ -95,7 +95,7 @@ local function machine_tab(W)
             value = total > 0 and string.format("%.1f GiB", total / 1073741824) or "—",
             note = math.floor(used * 100 + 0.5) .. "% in use" },
           controls.figure { width = cell, label = tr("UPTIME"),
-            value = function() morf.clock:get() return spell(uptime()) end, note = tr("since boot") },
+            value = function() morf.minute_clock:get() return spell(uptime()) end, note = tr("since boot") },
           controls.figure { width = cell, label = tr("VERSION"), value = "morf " .. tostring(morf.version or "?"),
             note = "impasto, ported" },
         },

@@ -1,6 +1,6 @@
 use luna::{Table, Value as LuaValue};
 
-use crate::{api_host::*, types::*};
+use crate::{api_host::*, surface_types::IpcValue, types::*};
 
 impl Runtime {
     /// Replaces `morf.screens` with the compositor's current output list.
@@ -79,6 +79,39 @@ impl Runtime {
         });
         if let Some(scale) = own_scale {
             self.set_preferred_scale(scale);
+        }
+        self.bump_screens_revision(screens);
+    }
+
+    /// Moves `morf.screens_revision()` when the output list changed, and
+    /// runs what follows it.
+    fn bump_screens_revision(&mut self, screens: &[Screen]) {
+        let signature = screens_signature(screens);
+        {
+            let mut state = self.reactive.borrow_mut();
+            if state.screens_signature == signature {
+                return;
+            }
+            state.screens_signature = signature;
+            let Some((signal, count)) = state.screens_revision else {
+                return;
+            };
+            let count = count + 1;
+            state.screens_revision = Some((signal, count));
+            let value = IpcValue::Integer(count);
+            if let Some(graph) = state.graph.as_mut()
+                && graph.write(signal, value.clone()).is_ok()
+            {
+                state.values.insert(signal, value);
+            }
+        }
+        if let Err(message) = self
+            .lua
+            .enter(|ctx| crate::reactive_bindings::flush_reactive(&self.reactive, ctx, self.limits))
+        {
+            self.reactive
+                .borrow_mut()
+                .log(LogLevel::Warn, format!("screens: {message}"));
         }
     }
 }

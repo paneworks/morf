@@ -116,7 +116,7 @@ pub(crate) fn timer_constructor<'gc>(
     state: Rc<RefCell<ReactiveState>>,
     limits: Limits,
 ) -> Callback<'gc> {
-    Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+    Callback::from_fn(&ctx, move |ctx, exec, mut stack| {
         let properties: Table = stack.consume(ctx)?;
         let clean = Table::new(&ctx);
         let mut callback = None;
@@ -149,6 +149,19 @@ pub(crate) fn timer_constructor<'gc>(
                 .map_err(|error| HostError(error.to_string()))?;
             (interval, repeat, running)
         };
+        let origin: std::rc::Rc<str> = match exec.frame_at(0) {
+            Some(frame) => format!(
+                "ui.Timer at {}:{}",
+                frame.chunk_name.display_lossy(),
+                frame.current_line
+            )
+            .into(),
+            None => format!("ui.Timer {node:?}").into(),
+        };
+        state
+            .borrow_mut()
+            .timer_origins
+            .insert(node, std::rc::Rc::clone(&origin));
         if running {
             if !interval.is_finite() || interval <= 0.0 {
                 return Err(HostError("Timer interval must be finite and positive".into()).into());
@@ -168,6 +181,7 @@ pub(crate) fn timer_constructor<'gc>(
                 repeat,
                 interval,
                 node: Some(node),
+                origin,
             });
             state.borrow_mut().timer_callbacks.insert(node, callback);
         } else if let Some(callback) = callback {

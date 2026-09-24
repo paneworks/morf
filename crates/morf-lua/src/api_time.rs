@@ -293,8 +293,17 @@ pub(crate) fn install_timer_api<'gc>(
     let timer_metatable = ctx.stash(timer_metatable);
 
     let timer_state = Rc::clone(&state);
-    let timer = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+    let timer = Callback::from_fn(&ctx, move |ctx, exec, mut stack| {
         let (milliseconds, callback, repeat): (f64, Closure, LuaValue) = stack.consume(ctx)?;
+        let origin: std::rc::Rc<str> = match exec.frame_at(0) {
+            Some(frame) => format!(
+                "{}:{}",
+                frame.chunk_name.display_lossy(),
+                frame.current_line
+            )
+            .into(),
+            None => "morf.timer".into(),
+        };
         if !milliseconds.is_finite() || milliseconds <= 0.0 {
             return Err(HostError("timer interval must be finite and positive".into()).into());
         }
@@ -316,6 +325,7 @@ pub(crate) fn install_timer_api<'gc>(
             repeat,
             interval,
             node: None,
+            origin,
         });
         drop(state);
         let userdata = UserData::new_static(&ctx, TimerToken { id });
