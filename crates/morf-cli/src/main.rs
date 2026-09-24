@@ -35,6 +35,7 @@ mod surfaces;
 mod test_host;
 mod test_host_input;
 mod test_runner;
+mod wake_plan;
 mod workers;
 
 use config::*;

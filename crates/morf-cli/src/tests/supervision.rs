@@ -220,7 +220,7 @@ fn supervisor_dispatches_registered_ipc_handler() {
         "test".to_owned(),
         Worker {
             stop,
-            commands,
+            commands: crate::lock::WorkerSender::new(commands),
             join,
             screen: ScreenInfo {
                 name: Some("test".to_owned()),

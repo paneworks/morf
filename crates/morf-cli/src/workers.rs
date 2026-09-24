@@ -27,7 +27,7 @@ pub(crate) fn reconcile_workers(
         .collect::<Vec<_>>();
     for name in stale {
         let worker = workers.remove(&name).expect("worker key is present");
-        worker.stop.store(true, Ordering::Release);
+        worker.request_stop();
         let _ = worker.join.join();
     }
     for (name, screen) in desired {
@@ -69,7 +69,7 @@ pub(crate) fn reconcile_workers(
             name.clone(),
             Worker {
                 stop,
-                commands,
+                commands: WorkerSender::new(commands),
                 join,
                 screen: worker_screen,
             },

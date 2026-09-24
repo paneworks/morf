@@ -297,6 +297,15 @@ for the animation's destination), `layout_*`, `morf.clock`. It returns a
 value: a number, a string, a colour, or a table for the properties that
 take one (a gradient, a decoration). It never runs per frame.
 
+The time comes in three grains: `morf.clock` ("HH:MM:SS"),
+`morf.minute_clock` ("HH:MM") and `morf.hour_clock` ("HH"). Read the
+coarsest one that shows what you need: the shell wakes every second only
+while some binding reads `morf.clock`, every minute while one reads the
+minute clock, and not at all for the time when nothing does. A
+`morf.system_clock` binds at its `precision`, or at the grain its `format`
+shows if that is coarser — `clock:format("%H:%M")` is a minute binding
+even on a clock made at seconds.
+
 A binding or `morf.effect` may itself build nodes with bindings (or make
 another effect): those are registered when the running flush ends and get
 their first run straight after, before the caller sees the result.
@@ -1090,6 +1099,31 @@ ui.reparent(ui.Grid { columns = function() return win.width // 280 end }, root)
   1M. Exhaustion is logged, not fatal.
 - A terminal's program writing is a frame only when it changed the screen,
   and the frame repaints the rows it changed.
+
+### What wakes a shell
+
+An idle shell sleeps until something happens, with no poll of its own: the
+compositor sending an event, a service thread ringing the loop (a D-Bus
+signal or reply, a child's output, an HTTP answer, a decoded image, a
+command over IPC), or the first thing that comes due on the clock — a
+`morf.timer` or running `ui.Timer`, a caret blink, the next frame of a
+moving picture, a D-Bus call's `timeout_ms`, and the clock at the finest
+grain a binding reads. Motion runs on the compositor's frame callbacks;
+only when a surface gets none (a hidden window in a nested compositor)
+does the wall clock tick it instead.
+
+Three environment variables look inside a running output's loop, each
+printed on stderr:
+
+| Variable | Prints |
+|---|---|
+| `MORF_WAKE_LOG=1` | every wake and its cause: `compositor`, `wake fd` (a service thread), or `deadline: timer`, `caret`, `image`, `dbus-timeout`, `terminal`, `tray-retry`, `clock-seconds`, `clock-minutes`, `clock-hours`, `fallback`, `pending` (the last turn left work), with how long it slept |
+| `MORF_FRAME_LOG=1` | every painted frame and what it cost |
+| `MORF_SLOW_MS=N` | any stage of a turn that held the output longer than N ms (default 150) |
+
+A shell that wakes more than it should says why under `MORF_WAKE_LOG`:
+a `clock-seconds` every second is a binding reading `morf.clock` where
+the minute clock would do, a `timer` is a timer still running.
 
 ## 8. Idioms to prefer
 

@@ -4,7 +4,6 @@ use morf_region::{Rect as RegionRect, Region};
 use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
 use morf_wayland::{InputRect, LayerClient, PRIMARY_LAYER, SurfaceRole, physical_size};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::{surface_layers::*, surfaces::*};
 
@@ -564,13 +563,6 @@ pub(crate) fn paint_auxiliary_surface(
 
 pub(crate) fn clock_text() -> String {
     jiff::Zoned::now().strftime("%H:%M:%S").to_string()
-}
-
-pub(crate) fn until_next_second() -> Duration {
-    let elapsed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    Duration::from_nanos(1_000_000_000 - elapsed.subsec_nanos() as u64)
 }
 
 /// Puts a renderer in the blend space a surface's configuration names.
