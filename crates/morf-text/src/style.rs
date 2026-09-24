@@ -118,6 +118,40 @@ pub(crate) fn physical_glyphs(
     glyphs
 }
 
+/// Every glyph of a shaped buffer at its physical place, with the offset in
+/// the whole text its cluster starts at — which a selection needs to know
+/// which glyphs it covers.
+pub(crate) fn physical_glyphs_at(
+    cached: &CachedBuffer,
+    origin: (f32, f32),
+    scale: f32,
+) -> Vec<(PhysicalGlyph, usize)> {
+    let mut bases = Vec::with_capacity(cached.buffer.lines.len());
+    let mut base = 0;
+    for line in &cached.buffer.lines {
+        bases.push(base);
+        base += line.text().len() + line.ending().as_str().len();
+    }
+    let mut glyphs = Vec::new();
+    for run in cached.buffer.layout_runs() {
+        let base = bases.get(run.line_i).copied().unwrap_or(0);
+        let (shifts, back) = word_shifts(&run, cached.word_spacing, cached.alignment);
+        for (glyph, shift) in run.glyphs.iter().zip(shifts) {
+            glyphs.push((
+                glyph.physical(
+                    (
+                        origin.0 + (shift - back) * scale,
+                        origin.1 + run.line_y * scale,
+                    ),
+                    scale,
+                ),
+                base + glyph.start,
+            ));
+        }
+    }
+    glyphs
+}
+
 /// One laid-out line, as a decoration needs it: where it runs and where the
 /// face puts a line under, over or through it. Logical units from the text's
 /// own origin.

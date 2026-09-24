@@ -89,6 +89,23 @@ impl TextSystem {
             .collect()
     }
 
+    /// The glyphs of a node, each with the text offset its cluster starts
+    /// at, so a caller can tell which of them a selection covers.
+    pub fn rasterize_at(
+        &mut self,
+        node: NodeHandle,
+        origin: (f32, f32),
+        scale: f32,
+    ) -> Vec<(RasterGlyph, usize)> {
+        let Some(cached) = self.buffers.get(&BufferKey::own(node)) else {
+            return Vec::new();
+        };
+        crate::style::physical_glyphs_at(cached, origin, scale)
+            .into_iter()
+            .filter_map(|(glyph, offset)| Some((self.raster_glyph(&glyph, true)?, offset)))
+            .collect()
+    }
+
     fn physical_glyphs(
         &mut self,
         key: BufferKey,
