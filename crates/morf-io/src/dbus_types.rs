@@ -880,20 +880,11 @@ impl SignalRouter {
         if route.resolves_sender() {
             self.track(&route.sender);
         }
-        // Ask the bus to deliver these. Rules are reference counted by the bus,
-        // so two subscriptions to the same signal add it twice and it survives
-        // until both have gone.
-        let added = route.rule().and_then(|rule| {
-            zbus::blocking::fdo::DBusProxy::new(&self.connection)?
-                .add_match_rule(rule)
-                .map_err(zbus::Error::from)
-        });
-        if let Err(error) = added {
-            if route.resolves_sender() {
-                self.untrack(&route.sender);
-            }
-            return Err(error);
-        }
+        // The route goes in before the bus is asked for the signal: once the
+        // match rule is in, the reader can receive a matching message at any
+        // moment, and one that arrived before its route existed was read,
+        // matched nothing, and was dropped -- a name that appeared in that
+        // window was never heard of again.
         let (tx, events) = mpsc::channel();
         let id = {
             let mut next = self
@@ -903,10 +894,28 @@ impl SignalRouter {
             *next = next.wrapping_add(1);
             *next
         };
+        let rule = route.rule();
         self.routes
             .lock()
             .unwrap_or_else(|error| error.into_inner())
-            .push((id, route, tx));
+            .push((id, route.clone(), tx));
+        // Rules are reference counted by the bus, so two subscriptions to the
+        // same signal add it twice and it survives until both have gone.
+        let added = rule.and_then(|rule| {
+            zbus::blocking::fdo::DBusProxy::new(&self.connection)?
+                .add_match_rule(rule)
+                .map_err(zbus::Error::from)
+        });
+        if let Err(error) = added {
+            self.routes
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .retain(|(held, _, _)| *held != id);
+            if route.resolves_sender() {
+                self.untrack(&route.sender);
+            }
+            return Err(error);
+        }
         Ok(DbusSignal {
             events,
             router: Some(Arc::clone(self)),
