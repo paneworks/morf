@@ -29,6 +29,7 @@ function M.document(weeks, w, h, spacing, radius, max_cell)
     local week = weeks[#weeks - shown + i] or {}
     for d = 1, 7 do
       local level = week[d]
+      if type(level) == "table" then level = level.level end
       if type(level) == "number" and level >= 0 then
         local colour = theme.github_levels[math.min(5, math.floor(level) + 1)]
         parts[#parts + 1] = string.format('<rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="%s"/>',

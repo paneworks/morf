@@ -3,8 +3,8 @@
 -- Port of GithubService.qml over `lib.github`, which lands in lua-stdlib
 -- separately. Until it does, or with no `githubUser` set, the wall is
 -- unavailable and the faces say why. The reading is taken as the library
--- gives it: `weeks` (one list of seven levels 0..4 per week, Sunday first,
--- -1 or nil for days outside the range), `total`, `streak`, `today`.
+-- gives it: `weeks` (columns of seven days, Sunday first, each a day with
+-- its `level` 0..4, nil outside the range), `total`, `current_streak`, `today`.
 
 local settings = require("services.settings")
 
@@ -52,7 +52,7 @@ end
 function M.available() return M.now().available == true end
 function M.weeks() return M.now().weeks or {} end
 function M.total() return tonumber(M.now().total) or 0 end
-function M.streak() return tonumber(M.now().streak) or 0 end
+function M.streak() local n = M.now() return tonumber(n.current_streak or n.streak) or 0 end
 function M.user_set() return user() ~= "" end
 
 --- "3689" as GitHub writes it, "3,689".

@@ -59,6 +59,9 @@ function M.build(key, arranging)
     color = function() return ink.ground():alpha(desk.opacity_of(row()) / 100) end,
     border_color = ink.border,
     border_width = function() return style() == "accent" and 0 or 1 end,
+    -- What impasto asked of Hyprland with a layer rule: the wallpaper
+    -- behind a translucent capsule blurred.
+    backdrop_blur = function() return desk.opacity_of(row()) < 100 end,
     behavior = { color = theme.behave("medium") },
   }
   local outline = ui.Rect {

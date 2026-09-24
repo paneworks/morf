@@ -134,7 +134,7 @@ function M.hour_columns(ctx, count, glyph_size, full_hour, gap)
         visible = function() return block() ~= nil end,
         ui.Column {
           anchors = { center_in = true }, gap = gap or 2, align = "center",
-          kit.text { mono = true, size = theme.size.label, color = ctx.ink.muted,
+          kit.text { mono = true, width = w / count, horizontal_alignment = "center", size = theme.size.label, color = ctx.ink.muted,
             text = function()
               local b = block()
               if not b then return "" end
@@ -142,9 +142,9 @@ function M.hour_columns(ctx, count, glyph_size, full_hour, gap)
               if full_hour then return hour .. ":00" .. (b.tomorrow and "⁺" or "") end
               return b.tomorrow and (hour .. "⁺") or (hour .. "h")
             end },
-          kit.glyph { size = glyph_size, color = ctx.ink.text,
+          kit.glyph { width = w / count, size = glyph_size, color = ctx.ink.text,
             glyph = function() local b = block() return b and b.glyph or "" end },
-          kit.text { mono = true, size = theme.size.small, color = ctx.ink.text,
+          kit.text { mono = true, width = w / count, horizontal_alignment = "center", size = theme.size.small, color = ctx.ink.text,
             text = function() local b = block() return b and (b.temperature .. "°") or "" end },
         },
       }

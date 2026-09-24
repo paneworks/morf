@@ -187,7 +187,7 @@ function S.brightness.icon()
 end
 function S.brightness.set(percent)
   percent = math.max(1, math.min(100, percent))
-  if brightness_service and brightness_service.set then return brightness_service.set(percent) end
+  if brightness_service and brightness_service.set_percent then return brightness_service.set_percent(percent) end
   local l = lib_state("logind")
   if l then pcall(l.set_brightness, percent / 100) end
 end
@@ -255,7 +255,11 @@ end
 --- The connected devices: `{ name, battery }`.
 function S.bluetooth.devices()
   if bluetooth_service and bluetooth_service.connected_devices then
-    return call(bluetooth_service, "connected_devices") or {}
+    local out = {}
+    for _, d in ipairs(call(bluetooth_service, "connected_devices") or {}) do
+      out[#out + 1] = { name = d.alias or d.name or d.address or "", battery = d.battery }
+    end
+    return out
   end
   local s = bz()
   local out = {}
@@ -421,7 +425,6 @@ local function updates_now()
   if not packages then return { available = false, count = 0, packages = {} } end
   if packages_handle == nil then
     local ok, made = pcall(function()
-      if packages.updates then return packages.updates() end
       if packages.new then return packages.new {} end
       return nil
     end)
@@ -435,18 +438,25 @@ local function updates_now()
   if not ok or type(value) ~= "table" then return { available = false, count = 0, packages = {} } end
   return value
 end
-function S.updates.available() return updates_now().available == true end
+function S.updates.available()
+  local now = updates_now()
+  if now.available ~= nil then return now.available == true end
+  return type(now.managers) == "table" and #now.managers > 0
+end
 function S.updates.checking() return updates_now().checking == true end
 function S.updates.count()
   local now = updates_now()
-  return tonumber(now.count) or #(now.packages or now.updates or {})
+  return tonumber(now.total or now.count) or 0
 end
---- Names of pending packages, up to `n`.
+--- Names of pending packages, up to `n`, across the managers.
 function S.updates.packages(n)
+  local now = updates_now()
   local out = {}
-  for _, p in ipairs(updates_now().packages or updates_now().updates or {}) do
-    if #out >= n then break end
-    out[#out + 1] = type(p) == "table" and (p.name or p[1] or "") or tostring(p)
+  for _, manager in ipairs(now.managers or {}) do
+    for _, p in ipairs((now[manager] or {}).updates or {}) do
+      if #out >= n then return out end
+      out[#out + 1] = type(p) == "table" and (p.name or "") or tostring(p)
+    end
   end
   return out
 end
@@ -468,8 +478,15 @@ end
 function S.tasks.days_with_tasks(year, month)
   if not tasks_service then return {} end
   if tasks_service.days_with_tasks then
-    local out = call(tasks_service, "days_with_tasks", year, month)
-    if type(out) == "table" then return out end
+    local got = call(tasks_service, "days_with_tasks", year, month)
+    if type(got) == "table" then
+      local out = {}
+      for day, v in pairs(got) do
+        if type(v) == "table" then out[day] = (v.pending or 0) > 0 and "pending" or "done"
+        else out[day] = v end
+      end
+      return out
+    end
   end
   local out = {}
   local days = morf.time.days_in_month(year, month)
