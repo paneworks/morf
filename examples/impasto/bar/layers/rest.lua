@@ -44,17 +44,21 @@ end
 --- "both".
 local function segment(activity, what, anchor)
   local hovered = controls.signal("rest.segment", false)
-  local slots = { anchors = { center_in = true }, gap = 7, align = "center" }
+  -- One loader per activity and per way of showing it; one at most is
+  -- active, and it builds only the parts it shows.
+  local slots = { anchors = { fill = true } }
   for _, id in ipairs(ACTIVITIES) do
-    for _, which in ipairs { "mark", "figure" } do
-      local shows = function()
-        local p = what()
-        return activity() == id and (p == "both" or p == which)
-      end
+    for _, mode in ipairs { "mark", "figure", "both" } do
+      local shows = function() return activity() == id and what() == mode end
       slots[#slots + 1] = ui.Loader {
-        visible = shows,
+        anchors = { center_in = true },
         active = shows,
-        source = function() return part(id, which) end,
+        source = function()
+          local row = { gap = 7, align = "center" }
+          if mode ~= "figure" then row[#row + 1] = part(id, "mark") end
+          if mode ~= "mark" then row[#row + 1] = part(id, "figure") end
+          return ui.Row(row)
+        end,
       }
     end
   end
@@ -63,7 +67,7 @@ local function segment(activity, what, anchor)
     width = function() return modules.activity_side() end,
     height = function() return theme.capsule_height() end,
     visible = function() return activity() ~= "" end,
-    ui.Row(slots),
+    ui.Item(slots),
     ui.MouseArea {
       anchors = { fill = true }, cursor = "pointer",
       -- A side under the pointer holds the glance off.
