@@ -171,4 +171,7 @@ ui.Item {
   height = inline_wallpaper and SCREEN_H or morf.surface.height,
   inline_wallpaper and require("desktop.wallpaper").build(SCREEN_W, SCREEN_H) or ui.Item {},
   bar.build(SCREEN_W),
+  -- The desk's arranging board and menu, which have surfaces of their own
+  -- above the windows otherwise (services/auto/desktop.lua).
+  inline_wallpaper and require("services.auto.desktop").inline(SCREEN_W, SCREEN_H) or ui.Item {},
 }
