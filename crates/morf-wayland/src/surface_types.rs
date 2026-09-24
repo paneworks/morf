@@ -266,6 +266,11 @@ pub enum LayerEvent {
     /// which is how a shell learns that the user has moved on without
     /// covering the screen to hear the click.
     KeyboardFocus { active: bool },
+    /// The keyboard came to one of this client's surfaces, or left it: any
+    /// surface, the primary one included (which also sends `KeyboardFocus`).
+    SurfaceKeyboard { surface: SurfaceRole, focused: bool },
+    /// The pointer came over one of this client's surfaces, or left it.
+    SurfacePointer { surface: SurfaceRole, inside: bool },
     /// A capture asked for on the GPU has been described by its session.
     ///
     /// The compositor has said what size it will produce, which device the

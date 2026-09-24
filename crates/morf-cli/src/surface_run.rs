@@ -159,6 +159,8 @@ pub(crate) fn run_surface(
                 | LayerEvent::Drop { .. }
                 | LayerEvent::DragSourceEnded { .. }
                 | LayerEvent::KeyboardFocus { .. }
+                | LayerEvent::SurfaceKeyboard { .. }
+                | LayerEvent::SurfacePointer { .. }
                 | LayerEvent::InputMethod(_)
                 | LayerEvent::TextInput(_)
                 | LayerEvent::Frame { .. }

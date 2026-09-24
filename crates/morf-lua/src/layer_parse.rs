@@ -256,7 +256,10 @@ pub(crate) fn parse_layer_surface<'gc>(
             return Err("layer surface settings must have string keys".into());
         };
         let key = key.display_lossy().to_string();
-        if matches!(key.as_str(), "root" | "visible" | "updates_enabled") {
+        if matches!(
+            key.as_str(),
+            "root" | "visible" | "updates_enabled" | "on_focus_changed" | "on_pointer_changed"
+        ) {
             continue;
         }
         if key == "reserve" {

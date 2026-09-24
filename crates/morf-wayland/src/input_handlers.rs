@@ -109,6 +109,10 @@ impl PointerHandler for LayerState {
                     // again on the next hover.
                     self.pointer_enter_serial = Some(serial);
                     self.cursor_shape_current = None;
+                    self.events.push_back(LayerEvent::SurfacePointer {
+                        surface,
+                        inside: true,
+                    });
                     self.events
                         .push_back(LayerEvent::PointerMotion { surface, x, y });
                 }
@@ -119,6 +123,10 @@ impl PointerHandler for LayerState {
                     self.pointer_enter_serial = None;
                     self.cursor_shape_current = None;
                     self.events.push_back(LayerEvent::PointerLeave { surface });
+                    self.events.push_back(LayerEvent::SurfacePointer {
+                        surface,
+                        inside: false,
+                    });
                 }
                 PointerEventKind::Press { button, serial, .. } => {
                     self.latest_input_serial = Some(serial);
@@ -277,6 +285,12 @@ impl KeyboardHandler for LayerState {
         _keysyms: &[Keysym],
     ) {
         self.keyboard_surface = self.surface_role(surface);
+        if let Some(role) = self.keyboard_surface {
+            self.events.push_back(LayerEvent::SurfaceKeyboard {
+                surface: role,
+                focused: true,
+            });
+        }
         if self.keyboard_surface == Some(SurfaceRole::Layer(crate::PRIMARY_LAYER)) {
             self.events
                 .push_back(LayerEvent::KeyboardFocus { active: true });
@@ -294,6 +308,12 @@ impl KeyboardHandler for LayerState {
         let role = self.surface_role(surface);
         if role == self.keyboard_surface {
             self.keyboard_surface = None;
+        }
+        if let Some(role) = role {
+            self.events.push_back(LayerEvent::SurfaceKeyboard {
+                surface: role,
+                focused: false,
+            });
         }
         if role == Some(SurfaceRole::Layer(crate::PRIMARY_LAYER)) {
             self.events

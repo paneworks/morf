@@ -325,6 +325,9 @@ pub(crate) struct ReactiveState {
     pub(crate) window_sizes: HashMap<u64, crate::window_events::WindowSize>,
     /// `win:on_resize`, `win:on_close_requested` and `win:on_closed`.
     pub(crate) window_handlers: HashMap<(u64, crate::window_events::WindowEvent), StashedClosure>,
+    /// `morf.surface.on_focus_changed` and `on_pointer_changed`, for the
+    /// shell's own surface.
+    pub(crate) surface_handlers: HashMap<crate::window_events::WindowEvent, StashedClosure>,
     pub(crate) layer_surface_changed: bool,
     pub(crate) window_surface_actions: Vec<WindowSurfaceAction>,
     pub(crate) popup_node_anchors: HashMap<u64, PopupNodeAnchor>,
@@ -579,6 +582,7 @@ impl ReactiveState {
             retain_callbacks: HashMap::new(),
             retained_destroy_queue: HashSet::new(),
             window_surfaces: HashMap::new(),
+            surface_handlers: HashMap::new(),
             next_window_surface: 0,
             window_surfaces_changed: false,
             window_sizes: HashMap::new(),

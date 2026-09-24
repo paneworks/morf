@@ -88,6 +88,16 @@ pub(crate) fn handle_surface_event(
             repaint |= runtime.dispatch_clipboard(text);
         }
         LayerEvent::KeyboardFocus { active } => repaint |= runtime.dispatch_keyboard_focus(active),
+        LayerEvent::SurfaceKeyboard { surface, focused } => {
+            if let Some(window) = surface_window(surface) {
+                repaint |= runtime.dispatch_surface_focus(window, focused);
+            }
+        }
+        LayerEvent::SurfacePointer { surface, inside } => {
+            if let Some(window) = surface_window(surface) {
+                repaint |= runtime.dispatch_surface_pointer(window, inside);
+            }
+        }
         // Already taken above; named so a new event cannot slip past unmatched.
         LayerEvent::Screencopy { .. } | LayerEvent::CaptureOffer { .. } => {}
         LayerEvent::Selection { .. }
@@ -276,4 +286,19 @@ pub(crate) fn handle_surface_event(
         }
     }
     Ok(repaint)
+}
+
+/// Which of the configuration's surfaces a role is: `Some(None)` for the
+/// shell's own, `Some(Some(id))` for a window, `None` for one the engine
+/// keeps for itself (the backdrop, the edge reservers, a lock surface).
+fn surface_window(surface: morf_wayland::SurfaceRole) -> Option<Option<u64>> {
+    use morf_wayland::SurfaceRole;
+    match surface {
+        SurfaceRole::Layer(morf_wayland::PRIMARY_LAYER) => Some(None),
+        SurfaceRole::Layer(layer) => crate::surface_layers::window_surface_id(layer)
+            .filter(|_| layer < crate::surface_layers::RESERVE_LAYER_BASE)
+            .map(Some),
+        SurfaceRole::Popup(id) | SurfaceRole::Floating(id) => Some(Some(id)),
+        SurfaceRole::Lock(_) => None,
+    }
 }

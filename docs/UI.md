@@ -1010,6 +1010,23 @@ screen, whatever took it there: a close request, `win:close()`, a hidden
 parent, a dismissed popup. Each may be given in the constructor's table or
 set later with the method of the same name; `nil` clears it.
 
+Every surface also hears the keyboard and the pointer come and go:
+`on_focus_changed(focused)` when the keyboard comes to it or leaves it (a
+click on another window or surface takes it away from one with
+`keyboard_focus = "on_demand"`), and `on_pointer_changed(inside)` when the
+pointer comes over it or leaves it. Popups, floating windows and layer
+surfaces (`morf.window.layer`) take them in the constructor's table or by
+method; the shell's own surface takes them as `morf.surface.on_focus_changed`
+and `morf.surface.on_pointer_changed` (assign `nil` to stop). An arrange
+mode that should end on a click elsewhere:
+
+```lua
+morf.surface.keyboard_focus = "on_demand"
+morf.surface.on_focus_changed = function(focused)
+  if not focused then arranging:set(false) end
+end
+```
+
 ```lua
 local root = ui.Item {}
 local win = morf.window.floating {

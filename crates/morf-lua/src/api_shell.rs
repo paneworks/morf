@@ -4,6 +4,16 @@ use std::rc::Rc;
 
 use crate::{layer_parse::*, scene_bindings::*, state::*, table_menu::*, types::*};
 
+/// The callbacks `morf.surface` holds rather than layer settings.
+fn surface_event(key: &str) -> Option<crate::window_events::WindowEvent> {
+    use crate::window_events::WindowEvent;
+    match key {
+        "on_focus_changed" => Some(WindowEvent::FocusChanged),
+        "on_pointer_changed" => Some(WindowEvent::PointerChanged),
+        _ => None,
+    }
+}
+
 pub(crate) fn install_shell_api<'gc>(
     ctx: Context<'gc>,
     state: Rc<RefCell<ReactiveState>>,
@@ -12,6 +22,18 @@ pub(crate) fn install_shell_api<'gc>(
     let surface_read_state = Rc::clone(&state);
     let surface_index = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (_surface, key): (Table, String) = stack.consume(ctx)?;
+        if let Some(event) = surface_event(&key) {
+            let handler = surface_read_state
+                .borrow()
+                .surface_handlers
+                .get(&event)
+                .cloned();
+            match handler {
+                Some(handler) => stack.replace(ctx, ctx.fetch(&handler)),
+                None => stack.replace(ctx, LuaValue::Nil),
+            }
+            return Ok(CallbackReturn::Return);
+        }
         let value = layer_setting_to_lua(ctx, &surface_read_state.borrow().layer_surface, &key);
         stack.replace(ctx, value);
         Ok(CallbackReturn::Return)
@@ -20,6 +42,20 @@ pub(crate) fn install_shell_api<'gc>(
     let surface_new_index = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (_surface, key, value): (Table, String, LuaValue) = stack.consume(ctx)?;
         let mut state = surface_write_state.borrow_mut();
+        if let Some(event) = surface_event(&key) {
+            match value {
+                LuaValue::Nil => {
+                    state.surface_handlers.remove(&event);
+                }
+                LuaValue::Function(luna::Function::Closure(callback)) => {
+                    state.surface_handlers.insert(event, ctx.stash(callback));
+                }
+                _ => {
+                    return Err(HostError(format!("morf.surface.{key} must be a function")).into());
+                }
+            }
+            return Ok(CallbackReturn::Return);
+        }
         let changed =
             apply_layer_setting(ctx, &mut state.layer_surface, &key, value).map_err(HostError)?;
         state.layer_surface_changed |= changed;
