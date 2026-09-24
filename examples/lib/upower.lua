@@ -18,7 +18,9 @@
 -- folded into one percentage and one state — and is what a status bar
 -- should show; `devices` lists the parts. A device's path is stable for as
 -- long as the device exists (it is derived from the kernel's name for it), so
--- each is subscribed for `PropertiesChanged` once.
+-- each is subscribed for `PropertiesChanged` once, and the subscription is
+-- closed when the device goes — a headset that comes and goes all day does
+-- not leave a match rule behind each time.
 --
 -- Neither service is ever started by this: a name nobody owns is read as
 -- absent, not activated.
@@ -136,8 +138,18 @@ function upower.connect(options)
 
   local function watch(path, handler)
     if watched[path] then return end
-    watched[path] = true
-    client.on_properties(name, path, handler)
+    watched[path] = client.on_properties(name, path, handler) or nil
+  end
+
+  --- Closes the subscriptions of devices no longer enumerated. The display
+  --- device is UPower's own and never goes.
+  local function unwatch_missing(present)
+    for path, handle in pairs(watched) do
+      if path ~= DISPLAY and not present[path] then
+        handle.close()
+        watched[path] = nil
+      end
+    end
   end
 
   local refresh_devices
@@ -180,9 +192,11 @@ function upower.connect(options)
   function refresh_devices()
     local paths = client.call1(name, ROOT, NAME, "EnumerateDevices")
     local list, peripherals = {}, {}
+    local present = {}
     for _, path in ipairs(type(paths) == "table" and paths or {}) do
       local p = client.get_all(name, path, DEVICE)
       if p then
+        present[path] = true
         watch(path, function() schedule() end)
         local row = upower.device_row(path, p)
         list[#list + 1] = row
@@ -191,6 +205,7 @@ function upower.connect(options)
         end
       end
     end
+    unwatch_missing(present)
     table.sort(list, function(a, b) return a.path < b.path end)
     table.sort(peripherals, function(a, b) return a.path < b.path end)
     rows = list

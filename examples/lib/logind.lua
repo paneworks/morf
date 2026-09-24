@@ -15,15 +15,17 @@
 --
 -- Inhibitors and file descriptors. logind's `Inhibit` answers with a file
 -- descriptor, and the lock lasts exactly as long as someone holds it open.
--- The engine refuses to hand fds to a configuration (see the note at the
--- top of `morf_io::dbus_types`: an fd is a hole through the sandbox), so the
--- D-Bus route cannot work — the reply would fail to decode and the fd would be
--- closed, releasing the lock, in the same instant. `inhibit` therefore holds
--- the lock through a child process instead: `systemd-inhibit ... cat`. `cat`
--- waits on a pipe from the shell, so the lock ends when the handle is
--- released *or* when the shell dies for any reason — the pipe closes, `cat`
--- exits, and `systemd-inhibit` with it. A lock that outlived a crashed shell
--- would keep a laptop awake in a bag.
+-- The engine hands it over as an opaque handle (see the note at the top of
+-- `morf_io::dbus_types`): nothing can be read or written through it, only
+-- held and closed. So the lock is held by the shell itself and ends when the
+-- handle is released, when it is dropped and collected, or when the shell
+-- dies for any reason — the kernel closes the descriptor. A lock that
+-- outlived a crashed shell would keep a laptop awake in a bag.
+--
+-- Nothing here waits on logind to act. The power actions, locking and the
+-- backlight are sent and answered later (logind may be waiting on polkit, and
+-- the shell keeps drawing meanwhile): each returns true once sent, or nil and
+-- why not, and takes an optional last argument `done(ok, err)`.
 --
 -- Brightness is read from `/sys/class/backlight` with `morf.fs` and written
 -- with `Session.SetBrightness`, which logind allows an active session to do
@@ -70,13 +72,14 @@ end
 --- Options: `bus` ("system"), `name` (logind's), `session_path` (skips
 --- finding the caller's own session), `backlight_dir`
 --- ("/sys/class/backlight"), `backlight` (a device name; the first
---- otherwise), `inhibit_program` ("systemd-inhibit"), `action_timeout_ms`
---- (5000), `dbus` (test seam), `udev` (false to skip the backlight watch).
+--- otherwise), `action_timeout_ms` (how long an action may wait on logind
+--- and polkit; 25000), `dbus` (test seam), `udev` (false to skip the
+--- backlight watch).
 function logind.connect(options)
   options = options or {}
   local name = options.name or NAME
   local client = dbus_client.new({ dbus = options.dbus, bus = options.bus or "system" })
-  local action_timeout = options.action_timeout_ms or 5000
+  local action_timeout = options.action_timeout_ms or 25000
   local backlight_dir = options.backlight_dir or "/sys/class/backlight"
 
   local can_seed = {}
@@ -230,15 +233,25 @@ function logind.connect(options)
     read_brightness()
   end
 
-  local function manager_call(method, arguments)
-    local ok, err = client.call(name, MANAGER_PATH, MANAGER, method, arguments, action_timeout)
-    return ok and true or nil, err
+  local function nothing() end
+
+  --- Sends one action and returns true once it is on its way; `done(ok,
+  --- err)` hears how it ended.
+  local function send(path, interface, method, arguments, done)
+    done = done or nothing
+    local sent, err = client.call_async(name, path, interface, method, arguments, action_timeout,
+      function(ok, failure) done(ok and true or nil, failure) end)
+    if not sent then return nil, err end
+    return true
   end
 
-  local function session_call(method, arguments)
+  local function manager_call(method, arguments, done)
+    return send(MANAGER_PATH, MANAGER, method, arguments, done)
+  end
+
+  local function session_call(method, arguments, done)
     if not session_path then return nil, "no session" end
-    local ok, err = client.call(name, session_path, SESSION, method, arguments, action_timeout)
-    return ok and true or nil, err
+    return send(session_path, SESSION, method, arguments, done)
   end
 
   --- Whether logind is on the bus.
@@ -272,69 +285,93 @@ function logind.connect(options)
   --- Asks logind to lock this session. It answers by sending `Lock` back,
   --- to this shell's own `on_lock` among others — so the lock screen is
   --- drawn from the handler, whichever way the request came.
-  function login.lock() return session_call("Lock") end
-  function login.unlock() return session_call("Unlock") end
+  function login.lock(done) return session_call("Lock", nil, done) end
+  function login.unlock(done) return session_call("Unlock", nil, done) end
 
   --- What a lock screen tells logind once it is up (and down again), so
   --- `loginctl` and other programs can see the session is locked.
-  function login.set_locked_hint(on) return session_call("SetLockedHint", { on == true }) end
-  function login.set_idle_hint(on) return session_call("SetIdleHint", { on == true }) end
+  function login.set_locked_hint(on, done)
+    return session_call("SetLockedHint", { on == true }, done)
+  end
+  function login.set_idle_hint(on, done) return session_call("SetIdleHint", { on == true }, done) end
 
   --- The power actions. `interactive` (default true) lets polkit ask for a
-  --- password when the policy wants one.
-  function login.suspend(interactive) return manager_call("Suspend", { interactive ~= false }) end
-  function login.hibernate(interactive) return manager_call("Hibernate", { interactive ~= false }) end
-  function login.hybrid_sleep(interactive)
-    return manager_call("HybridSleep", { interactive ~= false })
+  --- password when the policy wants one — which is why they are never waited
+  --- on: the dialog is drawn by the same shell that would be waiting.
+  local function power(method)
+    return function(interactive, done)
+      return manager_call(method, { interactive ~= false }, done)
+    end
   end
-  function login.suspend_then_hibernate(interactive)
-    return manager_call("SuspendThenHibernate", { interactive ~= false })
-  end
-  function login.reboot(interactive) return manager_call("Reboot", { interactive ~= false }) end
-  function login.power_off(interactive) return manager_call("PowerOff", { interactive ~= false }) end
+  login.suspend = power("Suspend")
+  login.hibernate = power("Hibernate")
+  login.hybrid_sleep = power("HybridSleep")
+  login.suspend_then_hibernate = power("SuspendThenHibernate")
+  login.reboot = power("Reboot")
+  login.power_off = power("PowerOff")
 
   --- Takes an inhibitor lock. `what` is a colon-separated list ("sleep",
   --- "idle", "handle-lid-switch", ...), `mode` "block" or "delay". Returns a
-  --- handle with `release()`, or nil and why. See the header for why this is
-  --- a process rather than a file descriptor.
-  function login.inhibit(what, who, why, mode)
-    local program = options.inhibit_program or "systemd-inhibit"
-    local argv = {
-      "--what=" .. tostring(what or "sleep"),
-      "--who=" .. tostring(who or "morf"),
-      "--why=" .. tostring(why or ""),
-      "--mode=" .. tostring(mode or "block"),
-      "cat",
+  --- handle at once, with `release()`; the lock itself arrives a moment
+  --- later as logind answers, and `done(handle)` or `done(nil, err)` hears
+  --- it. `handle.held` is true from the answer until the release. A handle
+  --- released before the answer came releases the lock as it arrives.
+  function login.inhibit(what, who, why, mode, done)
+    done = done or nothing
+    local handle = {
+      what = what or "sleep", who = who or "morf", why = why or "", mode = mode or "block",
+      held = false, released = false,
     }
-    local ok, process = pcall(morf.process, program, argv)
-    if not ok then return nil, tostring(process) end
-    local handle = { what = what, who = who, why = why, mode = mode, argv = argv, held = true }
+    local fd
     function handle.release()
-      if not handle.held then return false end
+      if handle.released then return false end
+      handle.released = true
       handle.held = false
-      pcall(process.close_stdin, process)
-      pcall(process.kill, process)
+      if fd then pcall(fd.close, fd) end
+      fd = nil
       return true
     end
+    local sent, err = client.call1_async(name, MANAGER_PATH, MANAGER, "Inhibit",
+      { handle.what, handle.who, handle.why, handle.mode }, action_timeout,
+      function(reply, failure)
+        if reply == nil or type(reply) ~= "userdata" and type(reply) ~= "table" then
+          handle.released = true
+          return done(nil, failure or "logind answered without a lock")
+        end
+        fd = reply
+        if handle.released then
+          pcall(fd.close, fd)
+          fd = nil
+          return done(nil, "released before it was granted")
+        end
+        handle.held = true
+        done(handle)
+      end)
+    if not sent then return nil, err end
     return handle
   end
 
   --- Sets the backlight. `level` is a fraction, 0 to 1, of the device's
   --- maximum; `device` defaults to the one `state.brightness` shows.
-  function login.set_brightness(level, device)
+  function login.set_brightness(level, device, done)
     local target = device and { name = device } or backlight()
     if not target then return nil, "no backlight" end
     local max = target.max or state.brightness.max
     if not max or max <= 0 then return nil, "backlight has no range" end
     level = math.max(0, math.min(1, tonumber(level) or 0))
-    return login.set_brightness_raw(math.floor(level * max + 0.5), target.name)
+    return login.set_brightness_raw(math.floor(level * max + 0.5), target.name, done)
   end
 
   --- Sets the backlight to a raw value, in the device's own units.
-  function login.set_brightness_raw(value, device)
+  function login.set_brightness_raw(value, device, done)
     device = device or state.brightness.device
     if device == "" then return nil, "no backlight" end
-    local ok, err = session_call("SetBrightness", { "backlight", device, u(math.floor(value)) })
+    local ok, err = session_call("SetBrightness", { "backlight", device, u(math.floor(value)) },
+      function(done_ok, failure)
+        -- Wrong about what was asked for: read back what the device has.
+        if not done_ok then read_brightness() end
+        if done then done(done_ok, failure) end
+      end)
     if ok and device == state.brightness.device then
       -- sysfs reads back the new value at once on most drivers, but not
       -- all; the state says what was asked for rather than waiting.

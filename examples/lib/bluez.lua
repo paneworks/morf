@@ -15,18 +15,22 @@
 --
 -- Staying current. Objects arriving and leaving come from `InterfacesAdded`
 -- and `InterfacesRemoved`; property changes come from `PropertiesChanged` on
--- each adapter and each *paired* device. Strangers found by a scan are not
--- subscribed one by one — every one is a match rule on the bus that can
--- never be removed, and a scan in a train carriage finds hundreds — so while
--- discovery runs, the tree is re-read on a timer instead, which is how their
--- names and signal strengths move.
+-- each adapter and each *paired* device, for as long as it stays one — a
+-- device that is removed or unpaired has its subscription closed. Strangers
+-- found by a scan are not subscribed one by one — a scan in a train carriage
+-- finds hundreds, each a match rule on the bus — so while discovery runs,
+-- the tree is re-read on a timer instead, which is how their names and
+-- signal strengths move.
 --
--- Actions and waiting. `Connect` and `Pair` do not answer until the radio
--- work is done, seconds later, and the engine's calls block the thread that
--- draws. So actions wait a short while (`action_timeout_ms`, 2500) and then
--- stop waiting: BlueZ carries on regardless, the proxy's connection stays
--- open so nothing is cancelled, and the outcome arrives as the device's
--- `Connected` or `Paired` changing. Such a call returns `true, "pending"`.
+-- Actions and waiting. Nothing here waits for BlueZ. `Connect` and `Pair` do
+-- not answer until the radio work is done — seconds, or as long as a person
+-- takes to confirm a code — so they are sent and answered later
+-- (`connect_timeout_ms`, 60000), and return `true, "pending"` at once. The
+-- outcome shows as the device's `Connected` or `Paired` changing; a caller
+-- that wants it directly passes `done(ok, err)` as the last argument. The
+-- quicker actions (power, trust, remove, discovery) are sent the same way
+-- with `action_timeout_ms` (2500), return true once sent, and take `done`
+-- too.
 --
 -- Pairing a device that asks for a PIN needs an `org.bluez.Agent1`, which
 -- this does not register; devices that pair without one ("just works") pair.
@@ -44,22 +48,20 @@ local OBJECT_MANAGER = "org.freedesktop.DBus.ObjectManager"
 
 local o = dbus_client.o
 
-local function is_timeout(err)
-  err = tostring(err or "")
-  return err:find("NoReply", 1, true) ~= nil or err:find("Timeout", 1, true) ~= nil
-    or err:find("timed out", 1, true) ~= nil
-end
+local function nothing() end
 
 --- Starts watching. Call it while the configuration loads.
 ---
 --- Options: `bus` ("system"), `name` ("org.bluez"), `dbus` (test seam),
 --- `adapter` (a path; the first adapter otherwise), `action_timeout_ms`
---- (2500), `discovery_poll_ms` (2000), `debounce_ms` (60).
+--- (2500), `connect_timeout_ms` (60000), `discovery_poll_ms` (2000),
+--- `debounce_ms` (60).
 function bluez.connect(options)
   options = options or {}
   local name = options.name or NAME
   local client = dbus_client.new({ dbus = options.dbus, bus = options.bus or "system" })
   local action_timeout = options.action_timeout_ms or 2500
+  local connect_timeout = options.connect_timeout_ms or 60000
 
   local state = morf.state({
     available = false,
@@ -78,7 +80,7 @@ function bluez.connect(options)
 
   local bt = { state = state }
   local objects = {} -- path -> interface -> properties: the mirror
-  local watched = {}
+  local watched = {} -- path -> subscription handle
   local rows = { adapters = {}, devices = {} }
   local present = false
   local poll
@@ -95,14 +97,24 @@ function bluez.connect(options)
 
   local function watch(path)
     if watched[path] then return end
-    watched[path] = true
-    client.on_properties(name, path, function(interface, changed, invalidated)
+    watched[path] = client.on_properties(name, path, function(interface, changed, invalidated)
       local held = objects[path] and objects[path][interface]
       if held then
         dbus_client.merge(held, changed, invalidated)
         bt.publish()
       end
-    end)
+    end) or nil
+  end
+
+  --- Ends the subscriptions no longer wanted: objects gone from the tree,
+  --- and devices that are neither paired nor connected any more.
+  local function unwatch_stale(wanted)
+    for path, handle in pairs(watched) do
+      if not wanted[path] then
+        handle.close()
+        watched[path] = nil
+      end
+    end
   end
 
   local publish_now
@@ -111,10 +123,12 @@ function bluez.connect(options)
   function publish_now()
     local adapters, devices = {}, {}
     local connected = 0
+    local wanted = {}
     for path, interfaces in pairs(objects) do
       local adapter = interfaces[ADAPTER]
       local device = interfaces[DEVICE]
       if adapter then
+        wanted[path] = true
         watch(path)
         adapters[#adapters + 1] = {
           path = path,
@@ -126,7 +140,10 @@ function bluez.connect(options)
           pairable = adapter.Pairable == true,
         }
       elseif device then
-        if device.Paired == true or device.Connected == true then watch(path) end
+        if device.Paired == true or device.Connected == true then
+          wanted[path] = true
+          watch(path)
+        end
         local battery = interfaces[BATTERY]
         local percentage = battery and battery.Percentage
         local row = {
@@ -152,6 +169,7 @@ function bluez.connect(options)
         devices[#devices + 1] = row
       end
     end
+    unwatch_stale(wanted)
     table.sort(adapters, function(a, b) return a.path < b.path end)
     -- Connected, then paired, then things with names, then the rest by
     -- signal: the order a person scans the list in.
@@ -214,13 +232,26 @@ function bluez.connect(options)
     end
   end
 
-  local function device_call(which, method)
+  --- Sends a device method and returns at once: `true, "pending"`. The
+  --- answer goes to `done(ok, err)`.
+  local function device_call(which, method, timeout, done)
+    done = done or nothing
     local row = find_device(which)
     if not row then return nil, "no device " .. tostring(which) end
-    local ok, err = client.call(name, row.path, DEVICE, method, nil, action_timeout)
+    local sent, err = client.call_async(name, row.path, DEVICE, method, nil, timeout,
+      function(ok, failure) done(ok and true or nil, failure) end)
+    if not sent then return nil, err end
+    return true, "pending"
+  end
+
+  --- Sends an adapter or property change and returns true once sent.
+  local function sent(ok, err)
     if ok then return true end
-    if is_timeout(err) then return true, "pending" end
     return nil, err
+  end
+  local function relay(done)
+    done = done or nothing
+    return function(ok, err) done(ok and true or nil, err) end
   end
 
   local function adapter_path(which)
@@ -234,64 +265,58 @@ function bluez.connect(options)
   --- The current rows as plain tables: `adapters`, `devices`.
   function bt.snapshot() return rows end
 
+  local function adapter_set(adapter, property, on, done)
+    local path = adapter_path(adapter)
+    if path == "" then return nil, "no adapter" end
+    return sent(client.set_async(name, path, ADAPTER, property, on == true, action_timeout,
+      relay(done)))
+  end
+
   --- Turns the default adapter (or the named one) on or off.
-  function bt.set_powered(on, adapter)
-    local path = adapter_path(adapter)
-    if path == "" then return nil, "no adapter" end
-    return client.set(name, path, ADAPTER, "Powered", on == true, action_timeout)
+  function bt.set_powered(on, adapter, done) return adapter_set(adapter, "Powered", on, done) end
+  function bt.set_discoverable(on, adapter, done)
+    return adapter_set(adapter, "Discoverable", on, done)
   end
+  function bt.set_pairable(on, adapter, done) return adapter_set(adapter, "Pairable", on, done) end
 
-  function bt.set_discoverable(on, adapter)
+  local function adapter_call(adapter, method, done)
     local path = adapter_path(adapter)
     if path == "" then return nil, "no adapter" end
-    return client.set(name, path, ADAPTER, "Discoverable", on == true, action_timeout)
-  end
-
-  function bt.set_pairable(on, adapter)
-    local path = adapter_path(adapter)
-    if path == "" then return nil, "no adapter" end
-    return client.set(name, path, ADAPTER, "Pairable", on == true, action_timeout)
+    return sent(client.call_async(name, path, ADAPTER, method, nil, action_timeout, relay(done)))
   end
 
   --- Starts a scan. BlueZ ties a scan to the connection that asked for it
-  --- and stops it when that connection leaves; the proxy is cached, so the
-  --- scan lasts until `stop_discovery` (from the same proxy) or the shell
-  --- exits.
-  function bt.start_discovery(adapter)
-    local path = adapter_path(adapter)
-    if path == "" then return nil, "no adapter" end
-    local ok, err = client.call(name, path, ADAPTER, "StartDiscovery", nil, action_timeout)
-    return ok and true or nil, err
-  end
+  --- and stops it when that connection leaves; the call goes from the
+  --- process's one shared connection, so the scan lasts until
+  --- `stop_discovery` or the shell exits.
+  function bt.start_discovery(adapter, done) return adapter_call(adapter, "StartDiscovery", done) end
+  function bt.stop_discovery(adapter, done) return adapter_call(adapter, "StopDiscovery", done) end
 
-  function bt.stop_discovery(adapter)
-    local path = adapter_path(adapter)
-    if path == "" then return nil, "no adapter" end
-    local ok, err = client.call(name, path, ADAPTER, "StopDiscovery", nil, action_timeout)
-    return ok and true or nil, err
+  --- Connects a device (a row, a path, or an address). Returns
+  --- `true, "pending"` at once; see the header.
+  function bt.connect(device, done) return device_call(device, "Connect", connect_timeout, done) end
+  function bt.disconnect(device, done)
+    return device_call(device, "Disconnect", action_timeout, done)
   end
-
-  --- Connects a device (a row, a path, or an address). See the header for
-  --- why this may return `true, "pending"`.
-  function bt.connect(device) return device_call(device, "Connect") end
-  function bt.disconnect(device) return device_call(device, "Disconnect") end
-  function bt.pair(device) return device_call(device, "Pair") end
-  function bt.cancel_pairing(device) return device_call(device, "CancelPairing") end
+  function bt.pair(device, done) return device_call(device, "Pair", connect_timeout, done) end
+  function bt.cancel_pairing(device, done)
+    return device_call(device, "CancelPairing", action_timeout, done)
+  end
 
   --- Marks a device trusted (or not), which lets it connect on its own.
-  function bt.trust(device, on)
+  function bt.trust(device, on, done)
     local row = find_device(device)
     if not row then return nil, "no device " .. tostring(device) end
-    return client.set(name, row.path, DEVICE, "Trusted", on ~= false, action_timeout)
+    return sent(client.set_async(name, row.path, DEVICE, "Trusted", on ~= false, action_timeout,
+      relay(done)))
   end
 
   --- Unpairs and forgets a device.
-  function bt.remove(device)
+  function bt.remove(device, done)
     local row = find_device(device)
     if not row then return nil, "no device " .. tostring(device) end
-    local ok, err = client.call(name, row.adapter, ADAPTER, "RemoveDevice", { o(row.path) },
-      action_timeout)
-    return ok and true or nil, err
+    return sent(client.call_async(name, row.adapter, ADAPTER, "RemoveDevice", { o(row.path) },
+      action_timeout, relay(done)))
   end
 
   client.watch_name(name, function(owned)

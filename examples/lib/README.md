@@ -201,12 +201,17 @@ against fake services written in Lua.
 ### `dbus_client` — the shared half
 
 Proxies cached per address (each `morf.dbus.proxy` is its own bus connection),
-subscriptions made once per address (they cannot be taken back, and the system
-bus caps match rules at 512 per connection), `call`/`call1`/`get`/`get_all`/
-`set`, `on_signal`/`on_properties`, `watch_name`, `managed_objects`, typed-value
-helpers (`u`, `o`, `x`, `typed`) and `debounce`. Replies arrive as the list of a
-method's outputs (a lone scalar bare); `call1` and `first` take the one output
-out.
+subscriptions made once per address and shared by every handler on it,
+`call`/`call1`/`get`/`get_all`/`set` (blocking; for quick reads),
+`call_async`/`call1_async`/`set_async` (answered later through
+`done(reply, err)`; for anything that may wait on a radio, polkit or a person),
+`on_signal`/`on_properties` (handlers get `info` with the sender's unique name
+last; both return a handle whose `close()` ends the subscription when its last
+handler goes — the system bus caps match rules at 512 per connection),
+`has_owner`/`owner_of`/`list_names`/`watch_name` (asked of the bus, never
+activating anything), `managed_objects`, typed-value helpers (`u`, `o`, `x`,
+`typed`) and `debounce`. Replies arrive as the list of a method's outputs (a
+lone scalar bare); `call1` and `first` take the one output out.
 
 ### `networkmanager` — `org.freedesktop.NetworkManager`, system bus
 
@@ -225,26 +230,29 @@ net.state.access_points      -- one row per SSID: key, ssid, bssid, strength, fr
 net.state.known_connections  -- rows: path, id, uuid, type, ssid, autoconnect, timestamp, vpn
 net.state.vpn_connections    -- rows: path, id, uuid, type, active, state
 
-net.request_scan([interface])
-net.connect(ap_row_or_ssid, [password], [interface])  -- ActivateConnection if saved,
-                                                       -- AddAndActivateConnection if new
-net.disconnect([active id/uuid/path or interface])     -- default: the Wi-Fi connection
-net.forget(ssid)                                       -- deletes every saved profile for it
-net.set_wifi(enabled)
-net.activate(id_or_uuid), net.deactivate(id_or_uuid)
-net.activate_vpn(id_or_uuid), net.deactivate_vpn(id_or_uuid)
+-- Actions never wait: each returns true once sent (or nil and why not) and
+-- takes an optional last `done(result, err)`.
+net.request_scan([interface], [done])
+net.connect(ap_row_or_ssid, [password], [interface], [done(path)]) -- ActivateConnection if
+                                                       -- saved, AddAndActivateConnection if new
+net.disconnect([active id/uuid/path or interface], [done])  -- default: the Wi-Fi connection
+net.forget(ssid, [done(count)])  -- returns how many profiles it asked to delete
+net.set_wifi(enabled, [done])
+net.activate(id_or_uuid, [done(path)]), net.deactivate(id_or_uuid, [done])
+net.activate_vpn(id_or_uuid, [done]), net.deactivate_vpn(id_or_uuid, [done])
 net.snapshot(), net.refresh()
 ```
 
 The whole tree is one `GetManagedObjects` on NetworkManager's ObjectManager,
 re-read (debounced) when the manager, a device or the object set changes.
 Access points are never subscribed one by one — their paths are never reused —
-and their strengths arrive with each scan, through the device's `LastScan`.
-Limitations: a password given for an already-saved SSID creates a second
-profile beside the old one (rewriting a saved profile means sending all of it
-back, fully typed); 802.1X networks need a profile made elsewhere; an action
-waits up to `action_timeout_ms` (5000) on the service, which may be waiting on
-polkit.
+and their strengths arrive with each scan, through the device's `LastScan`;
+devices are, for as long as they exist. Limitations: a password given for an
+already-saved SSID creates a second profile beside the old one (rewriting a
+saved profile means sending all of it back, fully typed); 802.1X networks need
+a profile made elsewhere; an action's answer is awaited for up to
+`action_timeout_ms` (5000) — without blocking — since the service may be
+waiting on polkit.
 
 ### `bluez` — `org.bluez`, system bus
 
@@ -256,19 +264,21 @@ bt.state.adapters -- rows: path, name, address, powered, discovering, discoverab
 bt.state.devices  -- rows: path, adapter, address, name, alias, named, icon, paired, bonded,
                   -- trusted, blocked, connected, rssi, in_range, battery (-1 unknown), has_battery
 
+-- Every action takes an optional last `done(ok, err)` and never waits.
 bt.set_powered(on, [adapter]), bt.set_discoverable(on), bt.set_pairable(on)
 bt.start_discovery(), bt.stop_discovery()
-bt.connect(dev), bt.disconnect(dev), bt.pair(dev), bt.cancel_pairing(dev)
+bt.connect(dev), bt.disconnect(dev), bt.pair(dev), bt.cancel_pairing(dev)  -- true, "pending"
 bt.trust(dev, [on]), bt.remove(dev)       -- dev: a row, a path or an address
 ```
 
 Mirrors the ObjectManager tree incrementally (`InterfacesAdded`/`Removed`,
 `PropertiesChanged` on adapters and on paired or connected devices). Strangers
 found by a scan are refreshed by re-reading the tree every `discovery_poll_ms`
-(2000) while discovery runs, rather than by a match rule each. `Connect` and
-`Pair` can take seconds and the engine's calls block the drawing thread, so
-actions wait `action_timeout_ms` (2500) and then return `true, "pending"`:
-BlueZ carries on and the result arrives as `connected`/`paired` changing.
+(2000) while discovery runs, rather than by a match rule each; a device's
+subscription is closed when it is removed or unpaired. `Connect` and `Pair`
+can take as long as a person does, so they are sent asynchronously
+(`connect_timeout_ms`, 60000) and return `true, "pending"` at once: the result
+arrives as `connected`/`paired` changing, and through `done`.
 Pairing a device that needs a PIN requires an `org.bluez.Agent1`, which this
 does not register.
 
@@ -315,9 +325,11 @@ The active player is one that is playing (the most recent to start), else the
 most recently changed, else the first by name; `set_active` pins one. Lengths
 and positions are seconds. Position is interpolated between readings and
 `Seeked`, and `state.active.position` is advanced by a timer (`tick_ms`, 1000)
-while playing. Every player lives at the same object path and a signal handler
-is not told the sender, so any player's change re-reads all of them
-(debounced). `playerctld` is skipped by default (`ignore`).
+while playing. Every player lives at the same object path; the engine routes a
+signal only to the subscriptions naming its sender, so a player's change
+re-reads that player alone (debounced), and its subscriptions close when it
+leaves. The buttons are sent without waiting on the player. `playerctld` is
+skipped by default (`ignore`).
 
 ### `logind` — `org.freedesktop.login1`, system bus
 
@@ -335,20 +347,21 @@ login.state.inhibitors -- rows: what, who, why, mode, uid, pid
 
 login.on_lock(fn), login.on_unlock(fn)
 login.on_prepare_for_sleep(fn(going)), login.on_prepare_for_shutdown(fn(going))
+-- Actions never wait on logind (it may be waiting on polkit): each returns true
+-- once sent and takes an optional last `done(ok, err)`.
 login.lock(), login.unlock(), login.set_locked_hint(on), login.set_idle_hint(on)
 login.suspend([interactive]), .hibernate, .hybrid_sleep, .suspend_then_hibernate,
       .reboot, .power_off
 login.can("suspend")                         -- asked now
-login.inhibit(what, who, why, mode)          -- handle with release()
+login.inhibit(what, who, why, mode, [done])  -- handle with release(), held once granted
 login.set_brightness(fraction, [device]), login.set_brightness_raw(value, [device])
 login.backlights()
 ```
 
-`Inhibit` answers with a file descriptor, and the engine deliberately never
-passes fds into a configuration (see `morf_io::dbus_types`). So `inhibit`
-holds the lock through a child process, `systemd-inhibit ... cat`: `cat` waits
-on a pipe from the shell, so the lock ends when the handle is released or when
-the shell dies, never outliving it. Brightness is read from
+`Inhibit` answers with a file descriptor, which the engine hands over as an
+opaque handle (see `morf_io::dbus_types`): it can be held and closed, nothing
+more. The lock ends when the handle is released, when it is dropped and
+collected, or when the shell dies — never outliving it. Brightness is read from
 `/sys/class/backlight` with `morf.fs` and written with `Session.SetBrightness`,
 which an active session may do unprivileged; it is re-read on udev backlight
 events.
