@@ -205,3 +205,36 @@ test.describe("impasto control centre", function()
     test.truthy(island.x >= 0 and island.x + island.width <= 1280, "the island is on the screen")
   end)
 end)
+
+test.describe("impasto bar", function()
+  test.it("a chip's long figure never draws past its capsule while the capsule grows", function()
+    load()
+    test.ipc("set", "barRight", '["network", "bluetooth"]')
+    test.settle(500)
+    test.eq(test.ipc("bluetooth_demo", "Andreu's WH-1000XM4 Headphones"), "Andreu's WH-1000XM4 Headphones")
+    test.advance(32)
+    local text = test.get { text = "Andreu's WH-1000XM4 Headphones" }
+    -- Up its ancestors: the capsule is the first box as tall as the bar's
+    -- capsules that holds more than the chip, and it clips.
+    local clipped_by = {}
+    local handle = text.parent
+    while handle do
+      local node = test.find(function(n) return n.handle == handle end)
+      if not node then break end
+      if node.element == "ClipRect" then
+        clipped_by[#clipped_by + 1] = node
+      end
+      handle = node.parent
+    end
+    local capsule = clipped_by[#clipped_by]
+    test.truthy(capsule, "nothing clips the figure")
+    local right = 0
+    for _, node in ipairs(clipped_by) do right = math.max(right, node.x + node.width) end
+    -- Every clip the figure is under ends inside the outermost, the capsule.
+    test.truthy(right <= capsule.x + capsule.width + 0.5)
+    -- And the outermost is the capsule, which holds the network chip too.
+    test.truthy(capsule.height <= 40 and capsule.x < text.x - 40, "the outermost clip is the capsule")
+    test.settle(1500)
+    test.ipc("bluetooth_demo", "")
+  end)
+end)

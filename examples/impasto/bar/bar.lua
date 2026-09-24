@@ -160,7 +160,9 @@ local function chips_capsule(group, chromeless)
     height = function() return theme.capsule_height() end,
     table.unpack(children),
   }
-  return ui.Rect {
+  -- Clipped to its own shape: a chip's figure changing (a long device name
+  -- coming in) grows while the capsule does, and never draws past it.
+  return ui.ClipRect {
     width = function() return math.max(1, (row.layout_width or 0) + 2 * pad) end,
     height = function() return theme.capsule_height() end,
     radius = function() return theme.capsule_height() / 2 end,

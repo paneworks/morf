@@ -15,7 +15,12 @@ M.lib = bt
 M.state = bt.state
 local s = bt.state
 
-function M.available() return s.available and s.adapter ~= "" end
+local demo_name -- a made-up device, for testing (below)
+
+function M.available()
+  if demo_name and demo_name:get() ~= "" then return true end
+  return s.available and s.adapter ~= ""
+end
 function M.enabled() return M.available() and s.powered end
 function M.discovering() return M.available() and s.discovering end
 
@@ -38,7 +43,17 @@ end
 function M.connected_count() return s.connected_count end
 
 --- A single device is named; several are counted.
+-- TESTING ONLY: `morf ipc call bluetooth_demo <name>` names a made-up
+-- connected device for the bar's figure (nothing is sent to BlueZ);
+-- `bluetooth_demo` with nothing puts the adapter's own summary back.
+demo_name = morf.signal("impasto.bluetooth.demo", "")
+morf.ipc.bluetooth_demo = function(name)
+  demo_name:set(name or "")
+  return demo_name:get()
+end
+
 function M.summary()
+  if demo_name:get() ~= "" then return demo_name:get() end
   if not M.available() then return "Unavailable" end
   if not s.powered then return "Off" end
   local count = s.connected_count
