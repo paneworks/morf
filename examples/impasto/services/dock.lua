@@ -595,17 +595,33 @@ indexed_at = now()
 M.poll()
 morf.effect("impasto.dock.items", rebuild)
 
--- The window list is a plain table the engine refills in place, so it is
--- read on a timer; only while the dock is on.
-local poller
-morf.effect("impasto.dock.poll", function()
-  local on = M.enabled()
-  if on and not poller then
-    poller = morf.timer(400, M.poll, true)
-  elseif not on and poller then
-    poller:cancel()
-    poller = nil
+-- The window list follows the compositor rather than a timer: an effect
+-- reads what changes when a window does -- `morf.toplevels.revision()`, and
+-- Hyprland's models when that library is there -- and queues one read of
+-- the list for the next turn, so a burst of changes is one poll. Only while
+-- the dock is on.
+local poll_queued = false
+local function queue_poll()
+  if poll_queued then return end
+  poll_queued = true
+  morf.timer(1, function()
+    poll_queued = false
+    M.poll()
+  end, false)
+end
+
+morf.effect("impasto.dock.follow", function()
+  if not M.enabled() then return end
+  if morf.toplevels then morf.toplevels.revision() end
+  local h = hypr()
+  if h then
+    local state = h.state
+    state.clients:len()
+    state.workspaces:len()
+    state.monitors:len()
+    local _ = state.active_window.address, state.active_workspace.id
   end
+  queue_poll()
 end)
 
 return M
