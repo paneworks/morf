@@ -3,8 +3,9 @@
 -- morf's core does not know which compositor it runs under, and should not:
 -- what Hyprland calls a workspace, a submap or a window address is Hyprland's
 -- vocabulary, so it lives here, in a library a configuration may require or
--- ignore. Nothing below needs more than `morf.socket`, `morf.json`,
--- `morf.state`, `morf.timer`, `morf.fs` and `morf.log`; nothing spawns
+-- ignore. Nothing below needs more than `morf.connect`,
+-- `morf.request_socket`, `morf.json`, `morf.state`, `morf.timer`,
+-- `morf.fs` and `morf.log`; nothing spawns
 -- `hyprctl`, because a process per question is slower than the question.
 --
 -- Both sockets live in `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE`:
@@ -17,10 +18,9 @@
 --   `.socket2.sock`  a stream of `EVENT>>DATA` lines, one per change, for as
 --                    long as the connection is open.
 --
--- The engine does not watch arbitrary sockets for readiness, so both are
--- drained from one repeating timer with the shortest read timeout the socket
--- API allows (1 ms). An idle tick therefore costs at most a millisecond per
--- open socket; `poll_ms` trades that against how late a change is noticed.
+-- The engine watches both sockets and calls back as lines and answers
+-- arrive, so nothing here polls: an idle compositor costs nothing, and a
+-- change is seen when it is written, not at the next tick.
 --
 -- What a configuration gets:
 --
@@ -51,7 +51,7 @@ local log = morf.log
 -- --------------------------------------------------------------- settings --
 
 local defaults = {
-  poll_ms = 30,             -- how often the sockets are drained
+  poll_ms = 30,             -- accepted and ignored: nothing polls any more
   max_in_flight = 4,        -- request connections open at once
   max_queue = 256,          -- requests waiting for a connection
   request_timeout_ms = 5000,
@@ -61,8 +61,6 @@ local defaults = {
   reconnect_max_ms = 8000,
 }
 
-local RECEIVE = 64 * 1024   -- the socket API's largest single read
-local READS_PER_TICK = 32   -- per socket, so a flood cannot stall a frame
 local BATCH_SEPARATOR = "\n\n\n"
 
 local settings = {}
@@ -147,6 +145,10 @@ local function close_socket(socket)
   if socket then pcall(socket.close, socket) end
 end
 
+local function cancel(timer)
+  if timer then pcall(timer.cancel, timer) end
+end
+
 local function number_or(value, fallback)
   local n = tonumber(value)
   if n == nil then return fallback end
@@ -206,7 +208,7 @@ end
 
 local queue = {}
 local in_flight = {}
-local tick = 0
+local pump_requests
 
 local function unavailable(callback)
   if callback then protected("callback", callback, nil, "unavailable") end
@@ -218,60 +220,38 @@ local function finish(entry, reply, err)
   if entry.callback then protected("request callback", entry.callback, reply, err) end
 end
 
+local function forget(entry)
+  for index = #in_flight, 1, -1 do
+    if in_flight[index] == entry then table.remove(in_flight, index) end
+  end
+end
+
+-- One connection, one command, one answer: the engine connects, writes,
+-- collects until the compositor closes, and calls back once.
 local function begin(entry)
   local path = socket_path(".socket.sock")
   if not path then return finish(entry, nil, "unavailable") end
-  local ok, socket = pcall(morf.socket, path)
-  if not ok or not socket then
+  local ok, socket = pcall(morf.request_socket, path, entry.payload, function(reply, err)
+    forget(entry)
+    entry.socket = nil
+    if reply == nil and err ~= "timed out" then
+      if tostring(err):find("exceeds", 1, true) then
+        err = "reply exceeds " .. settings.reply_limit .. " bytes"
+      else
+        err = "request failed: " .. tostring(err)
+      end
+    end
+    finish(entry, reply, err)
+    pump_requests()
+  end, { timeout_ms = settings.request_timeout_ms, max_bytes = settings.reply_limit })
+  if not ok then
     return finish(entry, nil, "could not connect: " .. tostring(socket))
   end
-  local sent, err = pcall(socket.send, socket, entry.payload)
-  if sent then sent, err = pcall(socket.flush, socket) end
-  if not sent then
-    close_socket(socket)
-    return finish(entry, nil, "could not send: " .. tostring(err))
-  end
   entry.socket = socket
-  entry.parts = {}
-  entry.size = 0
-  entry.deadline = tick + math.max(1, math.floor(settings.request_timeout_ms / settings.poll_ms))
   in_flight[#in_flight + 1] = entry
 end
 
--- One pass over the open requests: read what arrived, finish what closed.
-local function drain_requests()
-  local index = 1
-  while index <= #in_flight do
-    local entry = in_flight[index]
-    local done, reply, err = false, nil, nil
-    for _ = 1, READS_PER_TICK do
-      local ok, chunk = pcall(entry.socket.receive, entry.socket, RECEIVE, 1)
-      if not ok then
-        done, err = true, "receive failed: " .. tostring(chunk)
-        break
-      end
-      if chunk == nil then break end
-      if chunk == "" then
-        done, reply = true, table.concat(entry.parts)
-        break
-      end
-      entry.size = entry.size + #chunk
-      if entry.size > settings.reply_limit then
-        done, err = true, "reply exceeds " .. settings.reply_limit .. " bytes"
-        break
-      end
-      entry.parts[#entry.parts + 1] = chunk
-    end
-    if not done and tick > entry.deadline then
-      done, err = true, "timed out"
-    end
-    if done then
-      table.remove(in_flight, index)
-      finish(entry, reply, err)
-    else
-      index = index + 1
-    end
-  end
+pump_requests = function()
   while #in_flight < settings.max_in_flight and #queue > 0 do
     begin(table.remove(queue, 1))
   end
@@ -296,9 +276,7 @@ function hyprland.request(command, callback)
     return false
   end
   queue[#queue + 1] = { payload = command, callback = callback }
-  -- Started now when there is room, so a request made from a handler is
-  -- on the wire before the next tick rather than after it.
-  if #in_flight < settings.max_in_flight then begin(table.remove(queue, 1)) end
+  pump_requests()
   return true
 end
 
@@ -580,6 +558,8 @@ local function apply_devices(devices)
   state.keyboard_layout = text(chosen.active_keymap)
 end
 
+local hyprland_flush
+
 local function fetch(kind)
   if fetching[kind] then
     -- Already asked; ask again once this answer is in, since the event that
@@ -592,7 +572,11 @@ local function fetch(kind)
   hyprland.json(QUERIES[kind], function(value, err)
     local again = fetching[kind] == "again"
     fetching[kind] = nil
-    if again then dirty[kind] = true end
+    if again then
+      -- An event dirtied it while this answer was on its way.
+      dirty[kind] = true
+      hyprland_flush()
+    end
     if asked ~= generation[kind] then return end
     if value == nil then
       log.debug("hyprland: refreshing", kind, "failed:", tostring(err))
@@ -610,13 +594,19 @@ local function fetch(kind)
   end)
 end
 
--- Called once per tick, after every event read in it, so a burst of events
--- (a workspace switch is four or five) is one refetch per answer it touched.
+-- Called after every event line. A burst of events (a workspace switch is
+-- four or five) is still one or two refetches per answer it touched: the
+-- first line asks, and the rest only mark the answer to be asked again
+-- once that one is in.
 local function flush_dirty()
   for kind in pairs(dirty) do
     dirty[kind] = nil
     fetch(kind)
   end
+end
+
+hyprland_flush = function()
+  if instance.directory then flush_dirty() end
 end
 
 local function invalidate_all()
@@ -874,101 +864,89 @@ end
 -- ------------------------------------------------------------- connection --
 
 local events = nil       -- the `.socket2.sock` connection
-local buffer = ""        -- bytes after the last newline
-local skipping = false   -- inside an overlong line, dropping to its end
-local next_attempt = 0   -- tick at which to try the event socket again
+local retry = nil        -- the timer that tries it again
 local backoff_ms = defaults.reconnect_min_ms
 local failures = 0
+local connect
 
-local function ticks(ms) return math.max(1, math.ceil(ms / settings.poll_ms)) end
+local function schedule_reconnect()
+  cancel(retry)
+  retry = morf.timer(backoff_ms, function()
+    retry = nil
+    protected("reconnect", connect)
+  end, false)
+  backoff_ms = math.min(backoff_ms * 2, settings.reconnect_max_ms)
+end
 
 local function disconnect(why)
-  if events then
-    close_socket(events)
-    events = nil
-    buffer, skipping = "", false
+  close_socket(events)
+  events = nil
+  if state.connected then
     state.connected = false
     log.info("hyprland: event stream closed:", why)
     emit("disconnected", why)
   end
-  next_attempt = tick + ticks(backoff_ms)
+  schedule_reconnect()
 end
 
-local function connect()
-  local path = socket_path(".socket2.sock")
-  local ok, socket = false, nil
-  if path then ok, socket = pcall(morf.socket, path) end
-  if not ok or not socket then
-    -- The instance may have been replaced; look once before backing off.
-    if rediscover() then
-      path = socket_path(".socket2.sock")
-      ok, socket = pcall(morf.socket, path)
-    end
-  end
-  if not ok or not socket then
-    failures = failures + 1
-    if failures == 1 then
-      log.warn("hyprland: event socket unreachable, retrying:", tostring(socket))
-    end
-    next_attempt = tick + ticks(backoff_ms)
-    backoff_ms = math.min(backoff_ms * 2, settings.reconnect_max_ms)
+local function on_line(line)
+  -- The engine cuts a line one byte past the limit, so an overlong one is
+  -- recognisable here and dropped whole rather than parsed in part.
+  if #line > settings.line_limit then
+    log.warn("hyprland: dropping an event line over", settings.line_limit, "bytes")
     return
   end
-  if failures > 0 then log.info("hyprland: event socket reachable again") end
-  events = socket
-  failures = 0
-  backoff_ms = settings.reconnect_min_ms
-  state.connected = true
-  -- Whatever happened while no one was listening is unknown, so everything
-  -- is asked again.
-  invalidate_all()
-  emit("connected")
+  if #line > 0 then handle_line(line) end
+  flush_dirty()
 end
 
-local function drain_events()
-  if not events then
-    if tick >= next_attempt then connect() end
-    if not events then return end
+local function unreachable(why)
+  events = nil
+  failures = failures + 1
+  if failures == 1 then
+    log.warn("hyprland: event socket unreachable, retrying:", tostring(why))
   end
-  for _ = 1, READS_PER_TICK do
-    local ok, chunk = pcall(events.receive, events, RECEIVE, 1)
-    if not ok then return disconnect(tostring(chunk)) end
-    if chunk == nil then break end
-    if chunk == "" then return disconnect("compositor closed the stream") end
-    buffer = buffer .. chunk
-    local position = 1
-    while true do
-      local newline = buffer:find("\n", position, true)
-      if not newline then break end
-      if skipping then
-        skipping = false
+  -- The instance may have been replaced; look once before backing off.
+  if failures == 1 and rediscover() then return connect() end
+  schedule_reconnect()
+end
+
+connect = function()
+  local path = socket_path(".socket2.sock")
+  if not path then return end
+  local up = false
+  local ok, made = pcall(morf.connect, {
+    path = path,
+    max_line = settings.line_limit + 1,
+    on_connect = function()
+      up = true
+      if failures > 0 then log.info("hyprland: event socket reachable again") end
+      failures = 0
+      backoff_ms = settings.reconnect_min_ms
+      state.connected = true
+      -- Whatever happened while no one was listening is unknown, so
+      -- everything is asked again.
+      invalidate_all()
+      emit("connected")
+      flush_dirty()
+    end,
+    on_line = function(line) protected("event", on_line, line) end,
+    on_close = function(reason)
+      if up then
+        disconnect(reason == "eof" and "compositor closed the stream" or reason)
       else
-        local line = buffer:sub(position, newline - 1)
-        if #line > 0 and #line <= settings.line_limit then handle_line(line) end
+        unreachable(reason)
       end
-      position = newline + 1
-    end
-    buffer = buffer:sub(position)
-    if #buffer > settings.line_limit then
-      -- A line longer than any real event: drop it up to its newline rather
-      -- than let the buffer grow without end.
-      log.warn("hyprland: dropping an event line over", settings.line_limit, "bytes")
-      buffer, skipping = "", true
-    end
-  end
+    end,
+  })
+  if not ok then return unreachable(made) end
+  -- Held from the start, so `stop` can close a connect still under way.
+  events = made
 end
 
 -- ------------------------------------------------------------- lifecycle --
 
-local timer = nil
 local started = false
-
-local function pump()
-  tick = tick + 1
-  drain_events()
-  flush_dirty()
-  drain_requests()
-end
 
 --- Starts talking to Hyprland. Called by itself shortly after `require`
 --- when the environment names an instance; call it first to choose one:
@@ -994,25 +972,21 @@ function hyprland.start(options)
   end
   instance.directory = instance.runtime .. "/hypr/" .. instance.signature
   backoff_ms = settings.reconnect_min_ms
-  next_attempt = tick
-  timer = morf.timer(settings.poll_ms, function() protected("tick", pump) end, true)
+  failures = 0
   connect()
   flush_dirty()
   return true
 end
 
---- Stops the timer, closes every socket and answers pending requests with
---- `nil, "stopped"`. The state keeps its last values.
+--- Closes every socket, stops trying to reconnect and answers pending
+--- requests with `nil, "stopped"`. The state keeps its last values.
 function hyprland.stop()
-  if timer then
-    timer:cancel()
-    timer = nil
-  end
+  cancel(retry)
+  retry = nil
   if events then
     close_socket(events)
     events = nil
   end
-  buffer, skipping = "", false
   local pending = {}
   for _, entry in ipairs(in_flight) do pending[#pending + 1] = entry end
   for _, entry in ipairs(queue) do pending[#pending + 1] = entry end
@@ -1034,7 +1008,7 @@ end
 --- Asks for everything again, as after a reconnect.
 function hyprland.refresh()
   invalidate_all()
-  if timer then flush_dirty() end
+  if started then hyprland_flush() end
 end
 
 -- A deferred start, so a configuration that calls `start{...}` in the same
