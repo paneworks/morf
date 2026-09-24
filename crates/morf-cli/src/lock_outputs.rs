@@ -210,6 +210,8 @@ pub(crate) fn paint_lock(
         .lock_size(index)
         .ok_or_else(|| "lock surface disappeared while painting".to_owned())?;
     size_lock_root(runtime, root, (width, height))?;
+    // The lock screen is `morf.surface` too, so it blends the way that says.
+    crate::paint::apply_blend(renderer, &runtime.layer_surface_config().blend);
     let scene = runtime.scene();
     let color = scene
         .color_value(root, "color")
