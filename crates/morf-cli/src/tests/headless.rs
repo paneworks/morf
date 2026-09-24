@@ -293,3 +293,26 @@ fn a_spec_runs_its_tests_one_at_a_time() {
     assert_eq!((tally.passed, number), (1, 1));
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn each_spec_file_starts_from_an_empty_home() {
+    let base = std::env::temp_dir().join(format!("morf-empty-home-{}", std::process::id()));
+    for folder in ["config", "data", "state", "cache"] {
+        let path = base.join(folder).join("app");
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(path.join("settings.json"), "{\"left\":\"over\"}").unwrap();
+    }
+    std::fs::create_dir_all(base.join("bus")).unwrap();
+    crate::headless_env::empty_home(&base);
+    for folder in ["config", "data", "state", "cache"] {
+        let path = base.join(folder);
+        assert!(path.is_dir(), "{folder} is still there to write into");
+        assert_eq!(
+            std::fs::read_dir(&path).unwrap().count(),
+            0,
+            "{folder} is empty"
+        );
+    }
+    assert!(base.join("bus").is_dir(), "the private bus is left alone");
+    let _ = std::fs::remove_dir_all(&base);
+}

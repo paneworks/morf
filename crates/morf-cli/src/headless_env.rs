@@ -71,6 +71,18 @@ pub(crate) fn isolate_home(base: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Empties the folders [`isolate_home`] made, so the next configuration
+/// starts from nothing: what one spec file saved (settings, profiles, a
+/// history) is not what the next one finds. The variables already point
+/// here, so nothing in the environment changes.
+pub(crate) fn empty_home(base: &Path) {
+    for folder in ["config", "data", "state", "cache"] {
+        let path = base.join(folder);
+        let _ = std::fs::remove_dir_all(&path);
+        let _ = std::fs::create_dir_all(&path);
+    }
+}
+
 /// The configuration a private bus runs with: a session bus that allows
 /// anything and knows no services, so nothing is started on its behalf.
 fn bus_config(listen: &Path) -> String {

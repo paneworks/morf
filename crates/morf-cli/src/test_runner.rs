@@ -182,6 +182,10 @@ pub(crate) fn run(args: &RunnerArgs) -> Result<bool, String> {
     let mut number = 0;
     let mut tally = Tally::default();
     for path in &args.files {
+        // Each spec file starts from an empty home, as it would alone.
+        if args.isolate {
+            crate::headless_env::empty_home(&crate::headless_env::scratch_dir());
+        }
         if let Err(error) = run_spec(path, args, &mut number, &mut tally) {
             number += 1;
             tally.failed += 1;
