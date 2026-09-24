@@ -47,6 +47,7 @@ mod constructors;
 mod constructors_layout;
 mod events;
 mod image_jobs;
+mod ipc_table;
 mod layer_parse;
 mod layout_host;
 mod lua_values;
@@ -91,6 +92,7 @@ mod window_methods;
 mod window_parse;
 
 pub use events::*;
+pub use ipc_table::IpcTable;
 pub use runtime_input::*;
 pub use runtime_layout::SettledLayout;
 pub use runtime_session_lock::SessionLockState;

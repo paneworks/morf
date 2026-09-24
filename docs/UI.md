@@ -290,10 +290,21 @@ morf.effect("panel.follow", function() panel.visible = open:get() end, { owner =
 
 ### Signals and state tables
 
-`morf.signal(name, value)` holds one scalar with `get`/`set`. Signals and
-state tables may be made anywhere, a binding included: a module that holds
-state can be `require`d for the first time from inside one, and its signals
-join the flush that is running.
+`morf.signal(name, value)` holds one value with `get`/`set`: a scalar, a
+colour, or a JSON-like table (string keys or a dense array, of those, at
+most 16 deep). A table is copied in on `set` and out on `get`, so changing
+what `get` returned changes nothing until it is `set`, and an equal table
+is no change: nothing re-runs. Over `morf ipc` a table is its JSON text.
+
+```lua
+local player = morf.signal("player", { title = "", artists = {} })
+player:set({ title = "Song", artists = { "A" } })
+ui.Text { text = function() return player:get().title end }
+```
+
+Signals and state tables may be made anywhere, a binding included: a
+module that holds state can be `require`d for the first time from inside
+one, and its signals join the flush that is running.
 
 `morf.state(table)` keeps a shape: each named field is a signal read and
 written through the proxy, a nested table is nested, an array is a list

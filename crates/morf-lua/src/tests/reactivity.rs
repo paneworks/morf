@@ -89,6 +89,74 @@ fn a_state_list_is_followed_when_assigned_whole() {
 }
 
 #[test]
+fn a_signal_holds_a_table_by_value() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "table-signal.lua",
+            br##"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local seed = { title = "a", tags = { "x", "y" }, count = 2 }
+                local window = morf.signal("window", seed)
+                seed.title = "changed behind its back"
+                local runs = 0
+                ui.Text { text = function()
+                    runs = runs + 1
+                    local w = window:get()
+                    return w.title .. ":" .. table.concat(w.tags, ",") .. ":" .. w.count
+                end }
+                morf.ipc.same = function()
+                    window:set({ count = 2, tags = { "x", "y" }, title = "a" })
+                end
+                morf.ipc.retitle = function()
+                    local w = window:get()
+                    w.title = "b"
+                    window:set(w)
+                end
+                morf.ipc.mutate_copy = function()
+                    window:get().title = "ignored"
+                    return window:get().title
+                end
+                morf.ipc.runs = function() return runs end
+                morf.ipc.get = function() return window:get() end
+                morf.ipc.bad = function() window:set({ 1, 2, x = 3 }) end
+                morf.ipc.cycle = function()
+                    local t = {}
+                    t.self = t
+                    window:set(t)
+                end
+            "##,
+        )
+        .unwrap();
+    assert_eq!(text(&runtime, 0), "a:x,y:2");
+    // An equal table is no change: nothing re-runs.
+    runtime.call_ipc("same", &[]).unwrap();
+    assert_eq!(
+        runtime.call_ipc("runs", &[]).unwrap(),
+        [IpcValue::Integer(1)]
+    );
+    // What `get` hands out is a copy.
+    assert_eq!(
+        runtime.call_ipc("mutate_copy", &[]).unwrap(),
+        [IpcValue::String("a".into())]
+    );
+    runtime.call_ipc("retitle", &[]).unwrap();
+    assert_eq!(text(&runtime, 0), "b:x,y:2");
+    let [value] = &runtime.call_ipc("get", &[]).unwrap()[..] else {
+        panic!("one value")
+    };
+    assert_eq!(
+        value.to_json(),
+        serde_json::json!({ "title": "b", "tags": ["x", "y"], "count": 2 })
+    );
+    let error = runtime.call_ipc("bad", &[]).unwrap_err().to_string();
+    assert!(error.contains("not both"), "{error}");
+    let error = runtime.call_ipc("cycle", &[]).unwrap_err().to_string();
+    assert!(error.contains("nests deeper"), "{error}");
+}
+
+#[test]
 fn a_disposed_effect_never_runs_again() {
     let mut runtime = Runtime::default();
     runtime

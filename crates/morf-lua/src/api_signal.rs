@@ -40,7 +40,7 @@ pub(crate) fn install_signal_api<'gc>(
         let state = Rc::clone(&state);
         move |ctx, _, mut stack| {
             let (signal, value): (UserRef<SignalToken>, LuaValue) = stack.consume(ctx)?;
-            let value = IpcValue::from_lua(value).map_err(HostError)?;
+            let value = IpcValue::from_lua_deep(ctx, value).map_err(HostError)?;
             {
                 let mut state = state.borrow_mut();
                 if let Some(active) = &mut state.active {
@@ -81,7 +81,7 @@ pub(crate) fn install_signal_api<'gc>(
         let signal_metatable = signal_metatable.clone();
         move |ctx, _, mut stack| {
             let (name, value): (String, LuaValue) = stack.consume(ctx)?;
-            let value = IpcValue::from_lua(value).map_err(HostError)?;
+            let value = IpcValue::from_lua_deep(ctx, value).map_err(HostError)?;
             let id = {
                 let mut state = state.borrow_mut();
                 let id = state
@@ -105,7 +105,7 @@ pub(crate) fn install_signal_api<'gc>(
         let signal_metatable = signal_metatable.clone();
         move |ctx, _, mut stack| {
             let (name, initial): (String, LuaValue) = stack.consume(ctx)?;
-            let initial = IpcValue::from_lua(initial).map_err(HostError)?;
+            let initial = IpcValue::from_lua_deep(ctx, initial).map_err(HostError)?;
             let (id, _) = register_reloadable_value(&mut state.borrow_mut(), name, initial)
                 .map_err(HostError)?;
             let userdata = UserData::new_static(&ctx, SignalToken { id });
@@ -218,7 +218,7 @@ pub(crate) fn install_signal_api<'gc>(
             let (scope, name, initial): (UserRef<ScopeToken>, String, LuaValue) =
                 stack.consume(ctx)?;
             let name = scoped_id(&scope.prefix, &name).map_err(HostError)?;
-            let initial = IpcValue::from_lua(initial).map_err(HostError)?;
+            let initial = IpcValue::from_lua_deep(ctx, initial).map_err(HostError)?;
             let (id, _) = register_reloadable_value(&mut state.borrow_mut(), name, initial)
                 .map_err(HostError)?;
             let userdata = UserData::new_static(&ctx, SignalToken { id });
