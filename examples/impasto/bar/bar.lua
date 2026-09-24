@@ -479,6 +479,13 @@ function bar.build(screen_width)
   -- pointer to this surface and the desktop would drop it.
   local desktop_ok, desktop = pcall(require, "services.desktop")
   local painted = function() return state.live() or settings.barEverywhere end
+
+  -- The band windows keep clear of, on every screen whether painted or not
+  -- (BarReserve.qml), so no window is re-tiled when the island changes
+  -- hands; it follows the bar's height and margin.
+  morf.effect("impasto.bar.reserve", function()
+    morf.surface.reserve = { top = theme.bar_reserve() }
+  end)
   local inert = function()
     if not painted() then return true end
     return desktop_ok and desktop.editing and desktop.editing:get() or false
