@@ -15,6 +15,7 @@ local clock = require("bar.modules.clock")
 local kit = require("components.kit")
 local padlock = require("lock.padlock")
 local face_ring = require("lock.face_ring")
+local notch_fillet = require("bar.notch_fillet")
 
 local C = theme.color
 local st = lock.state
@@ -92,6 +93,19 @@ return function(values)
       width = theme.behave("morph"),
       height = theme.behave("morph"),
       radius = theme.behave("morph"),
+    },
+    -- Attached, the fillets flare from its top corners out along the
+    -- screen edge (LockIsland.qml's NotchFillets), moving and shaking with
+    -- it.
+    notch_fillet {
+      mirrored = true,
+      x = -2 * theme.radius_notch,
+      visible = attached,
+    },
+    notch_fillet {
+      x = width,
+      visible = attached,
+      behavior = { x = theme.behave("morph") },
     },
     -- Centred as the bar centres its own: half the notch's pad above, half
     -- below.

@@ -12,14 +12,13 @@
 -- anchors are fixed once it exists, so moving the dock to another edge opens
 -- that edge's surface and closes the old one. Its size follows the icon
 -- size. It ignores other surfaces' zones (`exclusive_zone = -1`), so the
--- band the dock asks windows to keep clear -- set below, through the main
--- surface's `reserve` -- does not push the dock itself inwards.
+-- bar's reserved band does not push it inwards, and it reserves none of
+-- its own.
 --
 -- The menu is a full-screen surface on the layer above, open only while
 -- the menu is: the dock's band is too shallow for it, and a click anywhere
 -- outside it has to close it.
 
-local theme = require("theme")
 local dock = require("services.dock")
 local view = require("dock.dock")
 local island = require("bar.island")
@@ -107,14 +106,10 @@ morf.effect("impasto.dock.menu.surface", function()
   if dock.menu_item() ~= nil then menu_window:open() else menu_window:close() end
 end)
 
--- The band windows keep clear of the dock, when it does not hide; the bar's
--- own band stays as init.lua set it.
-morf.effect("impasto.dock.reserve", function()
-  local reserve = { top = theme.bar_reserve() }
-  local zone = dock.zone()
-  if zone > 0 then reserve[dock.edge()] = zone end
-  morf.surface.reserve = reserve
-end)
+-- The dock reserves nothing (Dock.qml's `exclusiveZone: 0`): windows pass
+-- under it, and the desktop keeps its grid clear of it on its own
+-- (`dock.zone`). A reserved band would have to come and go with the dock,
+-- re-tiling every window whenever a hand crossed screens.
 
 -- `morf ipc call dock <verb> [key]`: `items` lists the keys, `menu <key>`
 -- toggles an icon's menu, `hover <key>` lights one (for screenshots), `pin

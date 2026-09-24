@@ -3,4 +3,4 @@
 local bar = require("bar.bar")
 local chip = require("bar.modules.chip")
 
-bar.register("brightness", { build = function() return chip.piece("brightness") end })
+bar.register("brightness", { build = function(_, look) return chip.piece("brightness", look) end })

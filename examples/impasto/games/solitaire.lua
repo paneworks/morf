@@ -401,6 +401,14 @@ return function(ctx)
     return true
   end
 
+  -- The faces are written by `apply`, not bound, so a new palette (the
+  -- game's tint, the accent) repaints them here.
+  morf.effect("impasto.solitaire.palette." .. id, function()
+    local _ = ctx.tint()
+    local _accent = C.accent()
+    for i = 1, 52 do apply(i) end
+  end, { owner = node })
+
   restart()
   return {
     node = node, key = key, restart = restart,

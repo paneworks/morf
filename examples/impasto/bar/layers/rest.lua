@@ -7,10 +7,14 @@
 -- `modules.rest_width()`: the catalogue's clock alone, narrower clock and
 -- two slots with activities.
 --
--- The track is built here. The recording and the countdown belong to other
--- parts of the port: they plug in through `modules.define` with `runs`,
--- `mark()`, `figure()` and, for the recording, `stop()` -- a recording
--- stops with one click here, since nothing else on screen can stop it.
+-- The recording and the countdown belong to other parts of the port: they
+-- plug in through `modules.define` with `runs`, `mark(hovered)`, `figure()`
+-- and, for the recording, `stop()` -- a recording stops with one click
+-- here, since nothing else on screen can, and its dot squares off into a
+-- stop button under the pointer. The countdown's ring and figure and the
+-- track's artwork and spectrum are built here when their modules bring
+-- none. A side under the pointer holds the glance off (`island.rest_busy`),
+-- so a click on the dot never lands on a glance that opened under it.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -19,31 +23,51 @@ local island = require("bar.island")
 local modules = require("services.modules")
 local clock = require("bar.modules.clock")
 local kit = require("components.kit")
-local controls = require("components.controls")
 local bars = require("components.spectrum")
+local ring = require("components.ring_indicator")
 local card = require("bar.controls.media_card")
+
+local C = theme.color
 
 local ACTIVITIES = { "recorder", "timer", "media" }
 
--- The track's two halves: the artwork, and the real spectrum.
+local ok_timer, timer = pcall(require, "services.timer")
+if not ok_timer then timer = nil end
+
+-- The parts built here when a module brings none.
 local built_in = {
   media = {
     mark = function() return card.art { size = 20, glyph_size = 11 } end,
     figure = function() return bars { height = 14, bar_width = 2, bars = 6 } end,
   },
 }
+if timer then
+  built_in.timer = {
+    mark = function()
+      return ring { size = 16, thickness = 2, progress = timer.progress,
+        track_color = C.indicatorDim, fill_color = timer.tint }
+    end,
+    figure = function()
+      return kit.text {
+        text = timer.display, mono = true, size = theme.size.small, weight = 600,
+        color = function() return timer.paused() and C.textMuted() or C.text() end,
+      }
+    end,
+  }
+end
 
-local function part(id, which)
+local function part(id, which, hovered)
   local provider = modules.providers[id] or {}
   local build = provider[which] or (built_in[id] and built_in[id][which])
-  if build then return build() end
+  if build then return build(hovered) end
   return ui.Item {}
 end
 
---- One side. `activity()` is the id it shows, `part` "mark", "figure" or
---- "both".
+--- One side. `activity()` is the id it shows, `what()` "mark", "figure"
+--- or "both". Returns the node and its pointer area.
 local function segment(activity, what, anchor)
-  local hovered = controls.signal("rest.segment", false)
+  local area
+  local hovered = function() return area ~= nil and area.hovered or false end
   -- One loader per activity and per way of showing it; one at most is
   -- active, and it builds only the parts it shows.
   local slots = { anchors = { fill = true } }
@@ -55,32 +79,30 @@ local function segment(activity, what, anchor)
         active = shows,
         source = function()
           local row = { gap = 7, align = "center" }
-          if mode ~= "figure" then row[#row + 1] = part(id, "mark") end
-          if mode ~= "mark" then row[#row + 1] = part(id, "figure") end
+          if mode ~= "figure" then row[#row + 1] = part(id, "mark", hovered) end
+          if mode ~= "mark" then row[#row + 1] = part(id, "figure", hovered) end
           return ui.Row(row)
         end,
       }
     end
   end
+  area = ui.MouseArea {
+    anchors = { fill = true }, cursor = "pointer",
+    on_clicked = function()
+      local id = activity()
+      local provider = modules.providers[id] or {}
+      if id == "recorder" and provider.stop then provider.stop()
+      else modules.activate(id) end
+    end,
+  }
   return ui.Item {
     anchors = anchor,
     width = function() return modules.activity_side() end,
     height = function() return theme.capsule_height() end,
     visible = function() return activity() ~= "" end,
     ui.Item(slots),
-    ui.MouseArea {
-      anchors = { fill = true }, cursor = "pointer",
-      -- A side under the pointer holds the glance off.
-      on_entered = function() hovered:set(true) end,
-      on_exited = function() hovered:set(false) end,
-      on_clicked = function()
-        local id = activity()
-        local provider = modules.providers[id] or {}
-        if id == "recorder" and provider.stop then provider.stop()
-        else modules.activate(id) end
-      end,
-    },
-  }
+    area,
+  }, area
 end
 
 island.register_layer("modules", {
@@ -97,19 +119,25 @@ island.register_layer("modules", {
       end,
       size = theme.size.regular, weight = 600,
     }
-    return ui.Item {
+    local leading, leading_area = segment(function() return list()[1] or "" end,
+      function() return split() and "mark" or "both" end,
+      { left = true, vertical_center = true })
+    local trailing, trailing_area = segment(function()
+        local l = list()
+        if #l == 1 then return l[1] end
+        return l[2] or ""
+      end,
+      function() return split() and "figure" or "both" end,
+      { right = true, vertical_center = true })
+    local node = ui.Item {
       anchors = { fill = true },
-      time,
-      segment(function() return list()[1] or "" end,
-        function() return split() and "mark" or "both" end,
-        { left = true, vertical_center = true }),
-      segment(function()
-          local l = list()
-          if #l == 1 then return l[1] end
-          return l[2] or ""
-        end,
-        function() return split() and "figure" or "both" end,
-        { right = true, vertical_center = true }),
+      on_destroyed = function() island.rest_busy:set(false) end,
+      time, leading, trailing,
     }
+    morf.effect("impasto.rest.busy", function()
+      local busy = (leading.visible and leading_area.hovered) or (trailing.visible and trailing_area.hovered)
+      island.rest_busy:set(busy and true or false)
+    end, { owner = node })
+    return node
   end,
 })

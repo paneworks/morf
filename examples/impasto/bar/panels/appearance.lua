@@ -37,7 +37,7 @@ local DAUB = 12
 local KEY = {
   LEFT = 0xff51, UP = 0xff52, RIGHT = 0xff53, DOWN = 0xff54,
   PAGE_UP = 0xff55, PAGE_DOWN = 0xff56, HOME = 0xff50, END = 0xff57,
-  RETURN = 0xff0d, KP_ENTER = 0xff8d,
+  RETURN = 0xff0d, KP_ENTER = 0xff8d, ESCAPE = 0xff1b,
 }
 
 local on_palette = function() return island.state.open_panel() == "palette" end
@@ -188,6 +188,7 @@ local function build()
     elseif keysym == KEY.END then s.go_to(s.count() - 1)
     elseif keysym == KEY.PAGE_UP then s.step(-5)
     elseif keysym == KEY.PAGE_DOWN then s.step(5)
+    elseif keysym == KEY.ESCAPE then island.close()
     end
     local _ = current
   end

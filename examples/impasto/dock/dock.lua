@@ -346,8 +346,14 @@ function M.build(width, height, edge, options)
   children[#children + 1] = lane
 
   local w, h = surface_size()
+  -- No input while the desktop is being arranged, so a widget dragged
+  -- across the dock does not hand it the pointer (Dock.qml's mask).
+  local desktop_ok, desktop = pcall(require, "services.desktop")
   local root = ui.Item {
     width = w, height = h,
+    enabled = function()
+      return not (desktop_ok and desktop.editing and desktop.editing:get())
+    end,
     table.unpack(children),
   }
   return root

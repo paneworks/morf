@@ -21,6 +21,31 @@ local list = require("bar.controls.notification_list")
 
 local C = theme.color
 
+-- The day and the month in the shell's language (`settings.language`), as
+-- Qt.locale(language) spells them: impasto ships English and Spanish.
+local NAMES = {
+  en = {
+    days = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" },
+    months = { "January", "February", "March", "April", "May", "June", "July", "August",
+      "September", "October", "November", "December" },
+  },
+  es = {
+    days = { "domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado" },
+    months = { "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+      "septiembre", "octubre", "noviembre", "diciembre" },
+  },
+}
+
+local function names() return NAMES[settings.language] or NAMES.en end
+
+local function day_name()
+  return names().days[(tonumber(morf.time.format("%w")) or 0) + 1]
+end
+
+local function day_and_month()
+  return morf.time.format("%-d") .. " " .. names().months[tonumber(morf.time.format("%m")) or 1]
+end
+
 -- One reading: a glyph and a figure. Built only while it shows: a hidden
 -- child keeps its room in a Row, and no size is ever zero.
 local function reading(values)
@@ -75,9 +100,9 @@ island.register_layer("summary", {
             time,
             ui.Column {
               gap = 0,
-              kit.text { text = function() morf.clock:get() return morf.time.format("%A") end,
+              kit.text { text = function() morf.clock:get() return day_name() end,
                 size = theme.size.small, color = C.textMuted },
-              kit.text { text = function() morf.clock:get() return morf.time.format("%-d %B") end,
+              kit.text { text = function() morf.clock:get() return day_and_month() end,
                 size = theme.size.medium, weight = 600 },
             },
           },

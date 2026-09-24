@@ -60,7 +60,9 @@ return function(ctx)
 
   -- Out of the pit on a spring, back into it flat: the overshoot is what
   -- makes it look alive, and a mole dropping with one would bounce off the
-  -- ground. The two curves differ, so each move is played by hand.
+  -- ground. The two curves differ, so each move is played by hand, from
+  -- wherever the mole is: one hit while still rising drops from there
+  -- rather than jumping to the top first (Whack.qml's Behavior on y).
   local moles = {}
   local function put(hole, is_up, when)
     local was = up[hole]
@@ -69,9 +71,9 @@ return function(ctx)
     local mole = moles[hole]
     if mole and was ~= is_up then
       if is_up then
-        common.kick(mole, "translate_y", 0, -cell * 0.55, 190, "out_back")
+        common.kick(mole, "translate_y", nil, -cell * 0.55, 190, "out_back")
       else
-        common.kick(mole, "translate_y", -cell * 0.55, 0, 110, "in_quad")
+        common.kick(mole, "translate_y", nil, 0, 110, "in_quad")
       end
     end
   end

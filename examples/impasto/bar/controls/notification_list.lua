@@ -140,7 +140,8 @@ function M.build(options)
         kit.text { anchors = { center_in = true }, text = "Nothing new",
           size = theme.size.small, color = C.textMuted,
           visible = function() return M.count:get() == 0 end },
-        list,
+        -- Longer than the card, it scrolls (the wheel reaches it past the rows).
+        ui.Flickable { anchors = { fill = true }, list },
       },
     },
   }

@@ -116,6 +116,8 @@ island.register("session", {
       ui.MouseArea {
         anchors = { fill = true },
         z = -1,
+        -- Asked for, so it wins over the island's own Escape catcher.
+        focus = true,
         on_key_pressed = function(keysym)
           if keysym == KEY.LEFT then move(-1)
           elseif keysym == KEY.RIGHT then move(1)

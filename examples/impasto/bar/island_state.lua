@@ -83,13 +83,36 @@ end
 
 --- Handing the island to another screen puts this one back to rest.
 function M.set_active(active)
+  active = active and true or false
+  if s.active:get() == active then return end
   s.active:set(active)
   if not active then
     s.panel:set("")
     s.summary:set(false)
     s.osd:set(false)
+    osd_generation = osd_generation + 1
   end
 end
+
+-- ------------------------------------------------------------ live screen --
+--
+-- Every screen runs the shell once, each in a runtime of its own, and one of
+-- them is live: the screen being worked on (Bar.qml's `live`,
+-- shell.qml's `liveScreenName`). Only the live one opens panels, shows an
+-- OSD or a notification and takes the keyboard; the others draw the same
+-- bar at rest. services/auto/live_screen.lua decides, and calls
+-- `set_active`.
+
+--- The output this runtime draws on.
+function M.own_screen()
+  return ((morf.screens or {})[1] or {}).name or ""
+end
+
+--- Whether this screen is the live one. A binding that calls it follows
+--- the island changing hands; a service that must run once for the whole
+--- shell (a capture, a recorder, a picker) asks it before acting on an IPC
+--- verb every screen hears.
+function M.live() return s.active:get() end
 
 function M.set_summary(on) s.summary:set(on and true or false) end
 function M.set_notification(on) s.notification:set(on and true or false) end

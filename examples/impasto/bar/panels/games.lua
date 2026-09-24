@@ -386,16 +386,21 @@ local function frame(item)
 
   -- R restarts at any time. Enter and Space do too once the round is over;
   -- while it runs they belong to the game. No game uses R.
-  local function key(keysym, text)
-    if common.letter(keysym) == "r"
-      or (over:get() and (common.confirm(keysym) or keysym == K.SPACE)) then
+  local function key(keysym, text, repeat_)
+    if (common.letter(keysym) == "r" and not repeat_)
+      or (over:get() and not repeat_ and (common.confirm(keysym) or keysym == K.SPACE)) then
       again()
       return true
     end
-    if game and game.key then return game.key(keysym, text) end
+    if game and game.key then return game.key(keysym, text, repeat_) end
     return false
   end
-  return node, key, function() return game end, function() return over:get() end
+  -- A key coming up, for the games that hold keys (Space Blaster's ship).
+  local function release(keysym)
+    if game and game.release then return game.release(keysym) end
+    return false
+  end
+  return node, key, function() return game end, function() return over:get() end, release
 end
 
 -- ------------------------------------------------------------------ panel --
@@ -403,7 +408,7 @@ end
 -- The game on screen right now and the panel's key handler, for the IPC
 -- hooks below.
 local current_game, current_frame = nil, nil
-local panel_key = nil
+local panel_key, panel_release = nil, nil
 
 local function build()
   local shelf_node, shelf_key
@@ -424,26 +429,32 @@ local function build()
       x = 0, y = 0,
       active = function() return games.playing() == item.id end,
       source = function()
-        local node, key, get, ended = frame(item)
-        frames[item.id] = { key = key, get = get, ended = ended }
+        local node, key, get, ended, release = frame(item)
+        frames[item.id] = { key = key, get = get, ended = ended, release = release }
         return node
       end,
     }
   end
 
-  local function handle_key(keysym, text)
+  local function handle_key(keysym, text, _, repeat_)
     local playing = games.playing()
     if keysym == K.ESCAPE then
+      if repeat_ then return end
       if playing == "" then island.close() else games.leave() end
       return
     end
     if playing == "" then
       if shelf_key then shelf_key(keysym) end
     elseif frames[playing] then
-      frames[playing].key(keysym, text)
+      frames[playing].key(keysym, text, repeat_)
     end
   end
+  local function handle_release(keysym)
+    local frame_now = frames[games.playing()]
+    if frame_now and frame_now.release then frame_now.release(keysym) end
+  end
   panel_key = handle_key
+  panel_release = handle_release
   current_game = function()
     local f = frames[games.playing()]
     return f and f.get()
@@ -458,6 +469,7 @@ local function build()
     height = function() local _, h = size() return h - 2 * theme.panel_padding end,
     focus = true,
     on_key_pressed = handle_key,
+    on_key_released = handle_release,
     table.unpack(children),
   }
 end
@@ -496,6 +508,16 @@ morf.ipc.game_key = function(name)
   if island.state.open_panel() ~= "games" or not panel_key then return "arcade closed" end
   -- The same path a real key takes.
   panel_key(keysym, #name == 1 and name or nil)
+  return games.playing()
+end
+
+--- TESTING ONLY: `morf ipc call game_key_up <key>` lets a pressed key go,
+--- for the games that hold keys.
+morf.ipc.game_key_up = function(name)
+  local keysym = names[name or ""] or (name and #name == 1 and string.byte(name)) or nil
+  if not keysym then return "unknown key" end
+  if island.state.open_panel() ~= "games" or not panel_release then return "arcade closed" end
+  panel_release(keysym)
   return games.playing()
 end
 

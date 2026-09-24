@@ -368,6 +368,13 @@ local function monitor_row(monitor)
     active_workspace_name = text(active.name),
     special_workspace = number_or(special.id, 0),
     special_workspace_name = text(special.name),
+    -- What layer surfaces keep clear on each edge: left, top, right, bottom.
+    reserved = {
+      number_or(type(monitor.reserved) == "table" and monitor.reserved[1], 0),
+      number_or(type(monitor.reserved) == "table" and monitor.reserved[2], 0),
+      number_or(type(monitor.reserved) == "table" and monitor.reserved[3], 0),
+      number_or(type(monitor.reserved) == "table" and monitor.reserved[4], 0),
+    },
   }
 end
 
