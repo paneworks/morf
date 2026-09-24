@@ -3,7 +3,7 @@ use smithay_client_toolkit::shell::wlr_layer::LayerSurface;
 use smithay_client_toolkit::shell::xdg::window::Window;
 use std::error::Error as StdError;
 use std::fmt;
-use wayland_client::protocol::wl_surface;
+use wayland_client::protocol::{wl_subsurface, wl_surface};
 use wayland_client::{Connection, EventQueue};
 use wayland_protocols::xdg::shell::client::xdg_toplevel;
 
@@ -361,16 +361,37 @@ pub struct LayerClient {
 /// indistinguishable from the layer surface it is standing in for, because the
 /// compositor gives its single client the whole output regardless.
 ///
-/// So the layer role is preferred and the toplevel is the fallback. The
-/// fallback is worth less than it looks on a general-purpose compositor —
-/// anchors, margins and the exclusive zone have no meaning for a toplevel and
-/// are dropped — which is why it is only ever reached when the compositor has
-/// no layer-shell whatsoever, leaving nothing better to fall back from.
+/// So the layer role is preferred and the toplevel is the fallback — for the
+/// primary surface only. Every other layer surface (a dock, a menu, an OSD)
+/// becomes a `wl_subsurface` of that toplevel, placed inside it by its anchors,
+/// margins and size exactly where layer-shell would put it on an output the
+/// primary's size (`layer_placement`). Opening each as a toplevel of its own
+/// instead stacked unrelated fullscreen windows, and dropped every anchor.
 pub(crate) enum ShellSurface {
     /// A `wlr-layer-shell` surface: what a shell wants.
     Layer(LayerSurface),
-    /// A fullscreen xdg toplevel, standing in where there is no layer-shell.
+    /// A fullscreen xdg toplevel, standing in for the primary surface where
+    /// there is no layer-shell.
     Window(Box<Window>),
+    /// A desynchronised subsurface of that toplevel, standing in for any other
+    /// layer surface where there is no layer-shell.
+    Subsurface(SubsurfaceShell),
+}
+
+/// A layer surface drawn as a subsurface of the fallback toplevel.
+pub(crate) struct SubsurfaceShell {
+    pub(crate) surface: wl_surface::WlSurface,
+    pub(crate) subsurface: wl_subsurface::WlSubsurface,
+}
+
+impl Drop for SubsurfaceShell {
+    fn drop(&mut self) {
+        // The role object first: destroying it unmaps the surface from its
+        // parent, and the surface itself goes after, as sctk's own shell
+        // surfaces do on drop.
+        self.subsurface.destroy();
+        self.surface.destroy();
+    }
 }
 
 impl ShellSurface {
@@ -379,6 +400,7 @@ impl ShellSurface {
         match self {
             Self::Layer(layer) => layer.wl_surface(),
             Self::Window(window) => window.wl_surface(),
+            Self::Subsurface(sub) => &sub.surface,
         }
     }
 
@@ -390,7 +412,23 @@ impl ShellSurface {
     pub(crate) fn as_layer(&self) -> Option<&LayerSurface> {
         match self {
             Self::Layer(layer) => Some(layer),
-            Self::Window(_) => None,
+            Self::Window(_) | Self::Subsurface(_) => None,
+        }
+    }
+
+    /// The fallback toplevel, when this is the primary standing in for one.
+    pub(crate) fn as_window(&self) -> Option<&Window> {
+        match self {
+            Self::Window(window) => Some(window),
+            Self::Layer(_) | Self::Subsurface(_) => None,
+        }
+    }
+
+    /// The subsurface, when this is a layer surface standing in as one.
+    pub(crate) fn as_subsurface(&self) -> Option<&SubsurfaceShell> {
+        match self {
+            Self::Subsurface(sub) => Some(sub),
+            Self::Layer(_) | Self::Window(_) => None,
         }
     }
 
@@ -399,6 +437,7 @@ impl ShellSurface {
         match self {
             Self::Layer(layer) => layer.commit(),
             Self::Window(window) => window.commit(),
+            Self::Subsurface(sub) => sub.surface.commit(),
         }
     }
 }

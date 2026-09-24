@@ -123,6 +123,7 @@ impl PointerHandler for LayerState {
                 PointerEventKind::Press { button, serial, .. } => {
                     self.latest_input_serial = Some(serial);
                     self.pressed_surface = Some(event.surface.clone());
+                    self.note_press(surface);
                     self.events.push_back(LayerEvent::PointerButton {
                         surface,
                         button,
@@ -189,6 +190,7 @@ impl TouchHandler for LayerState {
             return;
         };
         self.latest_input_serial = Some(serial);
+        self.note_press(surface);
         self.touch_points.insert(id, (position, surface));
         self.events.push_back(LayerEvent::TouchDown {
             surface,

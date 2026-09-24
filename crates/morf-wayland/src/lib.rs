@@ -17,6 +17,7 @@ mod data_handlers;
 mod helpers;
 mod inhibit_handlers;
 mod input_handlers;
+mod layer_placement;
 pub mod mime;
 mod offer_io;
 mod protocol_handlers;

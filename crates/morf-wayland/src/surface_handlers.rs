@@ -151,6 +151,11 @@ impl LayerState {
         self.attach_blank_buffer(id);
         self.events
             .push_back(LayerEvent::Configure { id, width, height });
+        // Without layer-shell the primary's size is the output's, and every
+        // subsurface is placed against it.
+        if id == crate::PRIMARY_LAYER && self.layer_shell.is_none() {
+            self.arrange_subsurfaces();
+        }
     }
 }
 
@@ -316,6 +321,7 @@ impl PopupHandler for LayerState {
             return;
         };
         self.popups.remove(&id);
+        self.popup_parents.remove(&id);
         // The scale objects go with the surface: keeping them would leak two
         // protocol objects per popup, and a popup is opened per click.
         self.aux_scales.remove(&SurfaceRole::Popup(id));

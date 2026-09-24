@@ -25,6 +25,7 @@ use std::time::Instant;
 use wayland_client::Proxy;
 use wayland_client::backend::ObjectId;
 use wayland_client::protocol::wl_buffer;
+use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::{
     wl_keyboard, wl_output, wl_pointer, wl_seat, wl_shm, wl_surface, wl_touch,
 };
@@ -167,6 +168,20 @@ pub(crate) struct LayerRecord {
     /// The blank pixel's colour, premultiplied BGRA: transparent for a
     /// reserver, a dim for a backdrop.
     pub(crate) blank_color: [u8; 4],
+    /// Where the surface asked to be. Layer-shell is told directly and the
+    /// compositor places it; without layer-shell this is what places the
+    /// subsurface standing in for it (`layer_placement`).
+    pub(crate) request: crate::layer_placement::LayerRequest,
+    /// When the surface was opened, from `LayerState::layer_sequence`: breaks
+    /// stacking ties between subsurfaces on one layer.
+    pub(crate) sequence: u64,
+    /// The keyboard focus it asks for, and when it last asked. Only read
+    /// without layer-shell, where every stand-in shares the toplevel's
+    /// keyboard focus and keys go to the latest surface that wants them.
+    /// A `Cell` because the paint path changes it through `&LayerClient`.
+    pub(crate) keyboard: std::cell::Cell<(KeyboardFocus, u64)>,
+    /// A subsurface's position inside the primary, once placed.
+    pub(crate) placed: Option<(i32, i32)>,
 }
 
 impl Drop for LayerRecord {
@@ -199,6 +214,17 @@ pub(crate) struct LayerState {
     /// compositors omit it; see `ShellSurface` for what happens instead.
     pub(crate) layer_shell: Option<LayerShell>,
     pub(crate) layers: HashMap<u64, LayerRecord>,
+    /// The subcompositor, for standing layer surfaces in as subsurfaces of
+    /// the primary where there is no layer-shell.
+    pub(crate) subcompositor: Option<WlSubcompositor>,
+    /// A counter for `LayerRecord::sequence` and keyboard requests.
+    pub(crate) layer_sequence: std::cell::Cell<u64>,
+    /// The order the subsurfaces were last stacked in, bottom first, so they
+    /// are restacked only when it changes.
+    pub(crate) subsurface_stack: Vec<u64>,
+    /// The layer surface each popup was opened against, so a reposition can
+    /// add the same subsurface offset its creation did.
+    pub(crate) popup_parents: HashMap<u64, SurfaceRole>,
     pub(crate) popups: HashMap<u64, Popup>,
     /// Reposition tokens sent to, and echoed back by, each live popup.
     pub(crate) popup_repositions: HashMap<u64, PopupReposition>,

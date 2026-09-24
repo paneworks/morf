@@ -149,3 +149,29 @@ fn idle_reconciliation_touches_only_what_changed() {
     let (removed, added) = idle_changes(&held, &held);
     assert!(removed.is_empty() && added.is_empty());
 }
+
+#[test]
+fn fallback_keys_go_to_the_latest_surface_asking_for_them() {
+    use crate::client_layer::fallback_key_target;
+    use KeyboardFocus::{Exclusive, None as NoFocus, OnDemand};
+    // Nobody asks: keys stay where the compositor sent them.
+    assert_eq!(
+        fallback_key_target(&[(0, NoFocus, 1), (5, NoFocus, 9)]),
+        None
+    );
+    // The latest on-demand asker wins over an older one and the primary.
+    assert_eq!(
+        fallback_key_target(&[(0, OnDemand, 1), (5, OnDemand, 7), (6, OnDemand, 3)]),
+        Some(5)
+    );
+    // An exclusive asker wins over a later on-demand one.
+    assert_eq!(
+        fallback_key_target(&[(0, Exclusive, 2), (5, OnDemand, 9)]),
+        Some(0)
+    );
+    // And the latest of two exclusive ones wins.
+    assert_eq!(
+        fallback_key_target(&[(0, Exclusive, 2), (5, Exclusive, 4), (6, NoFocus, 8)]),
+        Some(5)
+    );
+}
