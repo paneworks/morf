@@ -64,10 +64,13 @@ end
 surface_for(dock.edge())
 local pending = {}
 
+-- An edge surface: nothing without layer-shell (services/layer_shell.lua).
+local layers = require("services.layer_shell").available
+
 -- Which surface is open, and how big.
 morf.effect("impasto.dock.surface", function()
   local edge = dock.edge()
-  local shown = dock.shown(island.state.signals.active:get())
+  local shown = layers:get() and dock.shown(island.state.signals.active:get())
   local _, _, w, h = view.surface_box(WIDTH, HEIGHT, edge)
   for name, window in pairs(M.surfaces) do
     if name ~= edge or not shown then window:close() end
@@ -103,7 +106,7 @@ local menu_window = morf.window.layer {
   root = view.build_menu(WIDTH, HEIGHT),
 }
 morf.effect("impasto.dock.menu.surface", function()
-  if dock.menu_item() ~= nil then menu_window:open() else menu_window:close() end
+  if layers:get() and dock.menu_item() ~= nil then menu_window:open() else menu_window:close() end
 end)
 
 -- The dock reserves nothing (Dock.qml's `exclusiveZone: 0`): windows pass

@@ -19,6 +19,7 @@
 -- Hidden under a fullscreen window, and with `deckOnEmpty` on any workspace
 -- that has windows (`services/deck.lua`).
 
+local layer_shell = require("services.layer_shell")
 local ui = require("morf.ui")
 local theme = require("theme")
 local notes = require("services.notes")
@@ -296,7 +297,9 @@ local function build_edge(edge)
   local open = false
   morf.effect("impasto.deck." .. edge .. ".window", function()
     -- While arranging the board draws the decks (desktop/arrange/decks.lua).
-    local want = the_deck() ~= nil and not service.away() and not desk.editing:get()
+    -- An edge surface: nothing without layer-shell (services/layer_shell.lua).
+    local want = layer_shell.ok() and the_deck() ~= nil and not service.away()
+      and not desk.editing:get()
     local size = extent()
     if vertical then window:size(THICK, size) else window:size(size, depth_box) end
     local b = desk.board()
