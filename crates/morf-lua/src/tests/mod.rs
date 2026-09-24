@@ -31,6 +31,7 @@ mod examples;
 mod flushing;
 mod fs_time;
 mod gradients;
+mod http;
 mod idle_input;
 mod input_api;
 mod layer_surfaces;

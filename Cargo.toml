@@ -36,6 +36,7 @@ wayland-protocols-wlr = { version = "=0.3.12", features = ["client"] }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "vulkan", "gles", "wgsl"] }
 xkbcommon = "=0.8.0"
 zbus = "=5.19.0"
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls", "gzip"] }
 morf-image = { path = "crates/morf-image" }
 morf-desktop = { path = "crates/morf-desktop" }
 morf-io = { path = "crates/morf-io" }

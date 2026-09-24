@@ -268,6 +268,8 @@ pub(crate) struct ReactiveState {
     pub(crate) dbus_services: Vec<PendingDbusService>,
     pub(crate) udev_monitors: Vec<PendingUdev>,
     pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
+    /// `morf.http` requests in flight.
+    pub(crate) http_requests: Vec<crate::api_http::PendingHttp>,
     pub(crate) session_unlock_requested: bool,
     pub(crate) layer_surface: LayerSurfaceConfig,
     pub(crate) shell_root: PathBuf,
@@ -411,6 +413,7 @@ impl ReactiveState {
             dbus_services: Vec::new(),
             udev_monitors: Vec::new(),
             status_notifiers: Vec::new(),
+            http_requests: Vec::new(),
             session_unlock_requested: false,
             layer_surface: LayerSurfaceConfig::default(),
             shell_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
