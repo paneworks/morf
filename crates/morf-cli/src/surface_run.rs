@@ -357,7 +357,7 @@ pub(crate) fn run_surface(
         }
         if runtime.take_window_surface_change() {
             // The only thing that can move the primary root.
-            state.primary_root = primary_surface_root(&runtime)?;
+            state.primary_root = primary_surface_root_keeping(&runtime, state.primary_root)?;
             repaint |= sync_window_surfaces(
                 &mut runtime,
                 &mut client,

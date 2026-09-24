@@ -415,10 +415,85 @@ pub(crate) fn primary_surface_root(runtime: &Runtime) -> Result<NodeHandle, Stri
         .into_iter()
         .filter(|root| !window_roots.contains(root))
         .collect::<Vec<_>>();
-    if primary.len() != 1 {
-        return Err("configuration must create exactly one primary surface root".into());
+    match primary.as_slice() {
+        [] => Err("configuration must create exactly one primary surface root".into()),
+        [only] => Ok(*only),
+        many => {
+            // A node left at the top level -- built and never parented, or
+            // unparented and never destroyed -- is a bug in the
+            // configuration, not a reason to take the shell down. The shell's
+            // own root is the one whose tree is by far the largest; the rest
+            // are named once so they can be found.
+            let scene = runtime.scene();
+            let chosen = *many
+                .iter()
+                .max_by_key(|root| subtree_size(&scene, **root))
+                .expect("many is not empty");
+            for stray in many.iter().filter(|root| **root != chosen) {
+                warn_stray_root(&scene, *stray);
+            }
+            Ok(chosen)
+        }
     }
-    Ok(primary[0])
+}
+
+/// [`primary_surface_root`], keeping `previous` while it is still a root that
+/// no window surface has taken: a stray node never displaces the shell.
+pub(crate) fn primary_surface_root_keeping(
+    runtime: &Runtime,
+    previous: NodeHandle,
+) -> Result<NodeHandle, String> {
+    let still_primary = runtime
+        .scene()
+        .parent(previous)
+        .is_ok_and(|parent| parent.is_none())
+        && !runtime
+            .window_surface_configs()
+            .iter()
+            .any(|surface| surface.root == previous);
+    if still_primary {
+        // Still name any strays, once.
+        let _ = primary_surface_root(runtime);
+        return Ok(previous);
+    }
+    primary_surface_root(runtime)
+}
+
+fn subtree_size(scene: &morf_scene::Scene, root: NodeHandle) -> usize {
+    let mut count = 0;
+    let mut pending = vec![root];
+    while let Some(node) = pending.pop() {
+        count += 1;
+        if let Ok(children) = scene.children(node) {
+            pending.extend(children.iter().copied());
+        }
+    }
+    count
+}
+
+fn warn_stray_root(scene: &morf_scene::Scene, root: NodeHandle) {
+    thread_local! {
+        static WARNED: std::cell::RefCell<HashSet<NodeHandle>> = Default::default();
+    }
+    if !WARNED.with(|warned| warned.borrow_mut().insert(root)) {
+        return;
+    }
+    let element = scene
+        .element(root)
+        .map(|element| format!("{element:?}"))
+        .unwrap_or_default();
+    let id = match scene.string_value(root, "id") {
+        Ok(id) if !id.is_empty() => format!(" id={id:?}"),
+        _ => String::new(),
+    };
+    let children = scene
+        .children(root)
+        .map(|children| children.len())
+        .unwrap_or(0);
+    eprintln!(
+        "morf: a {element}{id} with {children} children sits at the top level with no \
+         surface; it is not drawn (build it inside a surface, or ui.destroy it)"
+    );
 }
 
 /// The zone a surface reserves when it asks for "auto".

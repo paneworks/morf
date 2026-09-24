@@ -242,7 +242,9 @@ local function theme_part(W)
       setting.hit { hovered = hovered, on_click = function() wallpaper.apply(path) end },
     }
   end
-  local grid = ui.Grid(cells)
+  -- Only built when there is something to show: a node made and never
+  -- placed is left at the top level of the scene.
+  local grid = #list > 0 and ui.Grid(cells) or nil
   groups[#groups + 1] = setting.group {
     width = W, title = "Wallpaper",
     note = "Every picture in the wallpaper folder.",
