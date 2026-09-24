@@ -276,6 +276,15 @@ function common.area(ctx, values)
   return ui.MouseArea(values)
 end
 
+--- Whether a face is on screen: the one at rest while the desk is not being
+--- arranged, the arranging board's (and the card's) while it is. A face that
+--- moves by itself stops while it is out of sight.
+function common.shown(ctx)
+  local desk = require("services.desktop")
+  local on_board = ctx.arranging == true or (ctx.key or "") == ""
+  return function() return desk.editing:get() == on_board end
+end
+
 --- A layer that shadows its content, for faces drawn on the wallpaper.
 common.shadow_layer = function()
   return { enabled = true, shadow_color = morf.color("#000000"):alpha(0.6), shadow_blur = 8, shadow_offset_y = 2 }

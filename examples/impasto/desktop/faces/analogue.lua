@@ -254,7 +254,8 @@ function M.media(ctx)
     filled = true,
     object = function(w, h)
       return centred(w, h, math.min(w, h), function(x, y, s)
-        return record.build { x = x, y = y, size = s, ink = ink, playing = S.media.playing, art = S.media.art }
+        return record.build { x = x, y = y, size = s, ink = ink, playing = S.media.playing, art = S.media.art,
+          shown = common.shown(ctx) }
       end)
     end,
     extra = not large and function(w, h)

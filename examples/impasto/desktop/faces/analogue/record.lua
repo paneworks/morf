@@ -3,9 +3,10 @@
 -- The disc spins during playback and stops where it is.
 --
 -- Port of Record.qml. The disc is always the island's black, whatever the
--- palette. The spin is a turn every 1.8 s (the original's), played by the
--- engine one turn at a time while a timer says it is playing; the arm is
--- its own document turning about its pivot.
+-- palette. The spin is 33⅓ rpm, a linear turn every 1.8 s looping in the
+-- engine, paused where it is when the music stops or the face is out of
+-- sight and taken up again from there; the arm is its own document turning
+-- about its pivot.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -46,21 +47,16 @@ local function arm_doc(s, ink)
   end)
 end
 
---- `values`: `size`, `ink`, `playing` and `art` (functions).
+--- `values`: `size`, `ink`, `playing` and `art` (functions), and `shown`
+--- (a function; default always), whether the face is on screen.
 function M.build(values)
   local s, ink = values.size, values.ink
   local r = s * 0.42
   local cx, cy = s * 0.46, s * 0.52
   local label = r * 0.72
   local function playing() return common.read(values.playing) and true or false end
-  local disc
-  local function spin()
-    morf.animation.play {
-      { node = disc, property = "rotation", duration = TURN,
-        keyframes = { { at = 0, value = 0 }, { at = 1, value = 360, easing = "linear" } } },
-    }
-  end
-  disc = ui.Item {
+  local shown = values.shown or function() return true end
+  local disc = ui.Item {
     x = cx - r, y = cy - r, width = 2 * r, height = 2 * r,
     ui.Image { width = 2 * r, height = 2 * r, source = function() return disc_doc(2 * r, ink) end },
     ui.ClipRect {
@@ -71,8 +67,23 @@ function M.build(values)
         visible = function() return (common.read(values.art) or "") ~= "" end },
     },
     ui.Rect { x = r - 3, y = r - 3, width = 6, height = 6, radius = 3, color = C.island },
-    ui.Timer { interval = TURN, ["repeat"] = true, running = playing, on_triggered = spin },
   }
+  -- One endless turn, paused rather than ended, so the disc stops on the
+  -- spot and starts again from there.
+  local turning
+  morf.effect("impasto.desk.record", function()
+    local go = playing() and shown()
+    if go and not turning then
+      turning = morf.animation.play {
+        loops = "forever",
+        { node = disc, property = "rotation", from = 0, to = 360, duration = TURN, easing = "linear" },
+      }
+    elseif go then
+      turning:resume()
+    elseif turning then
+      turning:pause()
+    end
+  end, { owner = disc })
   return ui.Item {
     x = values.x, y = values.y, width = s, height = s,
     disc,
