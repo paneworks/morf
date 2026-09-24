@@ -209,6 +209,7 @@ pub(crate) fn create_glyph_batch(
                 *color_overlay,
                 *transform,
                 command_index,
+                scale,
             ));
         }
     }
@@ -454,8 +455,10 @@ fn decoration_bands(
     color_overlay: Color,
     transform: Transform2D,
     command_index: usize,
+    scale: f32,
 ) -> Vec<PreparedBand> {
     let color = decoration.color.unwrap_or(text_color);
+    let scale = f64::from(scale.max(f32::EPSILON));
     lines
         .into_iter()
         .map(|line| {
@@ -473,12 +476,13 @@ fn decoration_bands(
                 DecorationLine::Over => baseline - f64::from(line.ascent) + thickness / 2.0,
                 DecorationLine::Through => baseline - f64::from(line.strikeout_offset),
             } + decoration.offset;
+            let (y, height) = pixel_band(centre, thickness, scale);
             PreparedBand {
                 rect: Geometry {
                     x: bounds.x + f64::from(line.x),
-                    y: centre - thickness / 2.0,
+                    y,
                     width: f64::from(line.width),
-                    height: thickness,
+                    height,
                 },
                 color,
                 color_overlay,
@@ -487,4 +491,43 @@ fn decoration_bands(
             }
         })
         .collect()
+}
+
+/// A band `thickness` tall around `centre`, as whole device pixels: at least
+/// one, starting on a pixel edge. Returns its top and height, logical.
+///
+/// A solid quad is not antialiased; the rasteriser fills the pixels whose
+/// centres it covers. A face's strikeout at a small size is under a pixel
+/// thick, and a band thinner than a pixel covers a pixel centre only when it
+/// happens to straddle one: the same line drawn at y = 10.3 showed and at
+/// y = 10.6 vanished, so one card in a list lost its strike-through while
+/// its neighbours, a fraction of a pixel away, kept theirs.
+pub(crate) fn pixel_band(centre: f64, thickness: f64, scale: f64) -> (f64, f64) {
+    let pixels = (thickness * scale).round().max(1.0);
+    let top = (centre * scale - pixels / 2.0).round();
+    (top / scale, pixels / scale)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pixel_band;
+
+    #[test]
+    fn a_thin_band_covers_a_whole_pixel_wherever_it_falls() {
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            for step in 0..40 {
+                let centre = 10.0 + f64::from(step) * 0.025;
+                let (top, height) = pixel_band(centre, 0.7, scale);
+                let (top, height) = (top * scale, height * scale);
+                assert!(
+                    (top - top.round()).abs() < 1e-9 && height >= 1.0 - 1e-9,
+                    "at {centre} x{scale}: {top} + {height}"
+                );
+                // Still where the face put it: within a pixel of the centre.
+                assert!(((top + height / 2.0) - centre * scale).abs() <= 1.0);
+            }
+        }
+        // A band already whole pixels thick keeps its thickness.
+        assert_eq!(pixel_band(20.0, 2.0, 1.0), (19.0, 2.0));
+    }
 }
