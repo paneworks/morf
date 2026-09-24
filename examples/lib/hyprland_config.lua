@@ -548,6 +548,7 @@ M.sent = {}
 local function note(command)
   M.sent[#M.sent + 1] = command
   if #M.sent > 200 then table.remove(M.sent, 1) end
+  morf.log("debug", "hyprland_config: sending " .. command:sub(1, 400))
 end
 
 local function payload(step)

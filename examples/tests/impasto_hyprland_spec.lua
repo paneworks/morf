@@ -180,6 +180,33 @@ test.describe("impasto under a fake hyprlang Hyprland", function()
   end)
 end)
 
+test.describe("impasto on a screen that is not the focused one", function()
+  test.before_each(function()
+    local monitor = function(id, name, x, focused)
+      return { id = id, name = name, description = "", make = "", model = "", serial = "",
+        width = 1280, height = 720, refreshRate = 60.0, x = x, y = 0, scale = 1, transform = 0,
+        focused = focused, dpmsStatus = true, vrr = false, disabled = false, mirrorOf = "none",
+        activeWorkspace = { id = id + 1, name = tostring(id + 1) }, specialWorkspace = { id = 0, name = "" },
+        availableModes = { "1280x720@60.00Hz" } }
+    end
+    fake = fake_hyprland.new { monitors = { monitor(0, "HEADLESS-1", 0, false), monitor(1, "HEADLESS-2", 1280, true) } }
+  end)
+  test.after_each(function() fake.close() end)
+
+  test.it("leaves the settings window to the focused screen's shell", function()
+    -- Every screen's shell hears `settings`; two windows used to open, one
+    -- over the other, and the one clicked was not the one that pushed.
+    test.load("../impasto/init.lua", { size = { 1280, 720 }, screens = 2,
+      env = { IMPASTO_DRY_RUN = "1", HYPRLAND_INSTANCE_SIGNATURE = fake.signature, XDG_RUNTIME_DIR = fake.runtime } })
+    until_(function() return (test.ipc("live") or ""):find("at rest", 1, true) ~= nil end, "HEADLESS-1 never saw HEADLESS-2 focused")
+    test.eq(test.ipc("settings", "keys"), nil)
+    test.settle(500)
+    for _, surface in ipairs(test.surfaces()) do
+      test.ne(surface.kind, "floating", "a settings window opened on the screen at rest")
+    end
+  end)
+end)
+
 test.describe("impasto under another compositor", function()
   test.it("says the pages are not available, and sends nothing", function()
     test.load("../impasto/init.lua", { size = { 1280, 720 }, env = { IMPASTO_DRY_RUN = "1" } })
