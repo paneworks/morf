@@ -85,6 +85,7 @@ function kit.button(values)
     on_exited = function() hovered:set(false) pressed:set(false) end,
     on_pressed = function() pressed:set(true) end,
     on_released = function() pressed:set(false) end,
+    -- A click is (surface x, y, local x, y, button name).
     on_clicked = function(_, _, _, _, button)
       if button == "right" then
         if on_right_click then on_right_click() end

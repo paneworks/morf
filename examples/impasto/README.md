@@ -38,6 +38,7 @@ sense:
 | `fonts/` | `home/.local/share/fonts` | Grape Nuts, the notes' hand (OFL); morf puts it on the font path |
 | `bar/pieces/` | pieces of `Bar.qml` | what sits on the bar's sides |
 | `pets/` | `components/Pet*.qml`, `components/pets/*` | the pets' four drawing styles, face, family, shelf |
+| `bar/controls/` | `bar/island/controls/*.qml` | the control centre's blocks, shared with the details |
 | `desktop/`, `dock/`, `deck/`, `lock/`, `capture/`, `settings/` | same | the other surfaces |
 
 ## How the parts plug in
@@ -108,7 +109,8 @@ Only in a nested, headless compositor — never on the desktop the shell is
 being written on:
 
 ```sh
-WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; morf ipc call controls; grim out.png'
+IMPASTO_DRY_RUN=1 WLR_BACKENDS=headless dbus-run-session -- \
+  cage -- sh -c 'morf examples/impasto/init.lua & sleep 6; morf ipc call controls; grim out.png'
 ```
 
 Verbs for a state the pointer would otherwise have to reach:
@@ -116,6 +118,12 @@ Verbs for a state the pointer would otherwise have to reach:
 `board.pick` (the month over the open task's day), `board.move <key>
 <lane> <slot>`, `deck.peek <key>`, `deck.reveal`, `deck.rest`,
 `deck.place <key> <edge>`, `module.notes`, `module.tasks`.
+`IMPASTO_DRY_RUN=1` makes every action that would change the machine --
+the radios, a connection, the volume, the backlight, the power profile,
+the player, the session -- log what it would do instead
+(`services/act.lua`), so a test can press anything. `morf ipc call detail
+<id>` opens a module's detail, `glance` the summary, `controls_edit`
+arranging.
 
 ## Status
 
@@ -134,4 +142,8 @@ Verbs for a state the pointer would otherwise have to reach:
 | launcher (`bar/panels/launcher.lua`, `services/launcher.lua`, `services/calc.lua`; `=` `>` `@` `!` `'`) | ported |
 | overview (`bar/panels/overview.lua`), workspaces piece, launcher and overview buttons | ported |
 | timer (`services/timer.lua`, on the island: `bar/layers/timer.lua`), clipboard history (`services/clipboard.lua`) | ported |
+| rest layer (clock and activities), glance | ported |
+| network, Bluetooth, audio, battery, brightness, media, system, OSD, modules services | ported |
+| control centre (blocks, toggles, arranging), Wi-Fi and Bluetooth lists | ported |
+| battery, volume, brightness, network, Bluetooth, media, notifications, calendar modules | ported |
 | everything else | in progress |

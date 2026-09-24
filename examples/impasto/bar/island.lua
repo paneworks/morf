@@ -51,9 +51,18 @@ local function panel_size()
   return 560, 420
 end
 
+--- A panel's inner margin: its own `padding` when it declares one -- a
+--- number, or a function when it changes while open (a note goes to the
+--- edge) -- else the theme's.
 local function panel_padding(panel)
-  if panel and panel.padding then return panel.padding() end
+  local padding = panel and panel.padding
+  if type(padding) == "function" then return padding() end
+  if type(padding) == "number" then return padding end
   return theme.panel_padding
+end
+
+function island.panel_padding(name)
+  return panel_padding(island.panels[name or state.open_panel()])
 end
 
 --- The paper colour the open panel asks for, or nil for the island's black.
@@ -200,7 +209,11 @@ function island.build(place)
     width = width,
     height = height,
     radius = function()
-      if state.expanded() then return theme.radius_large end
+      -- A module detail stays a pill at capsule height and becomes a
+      -- rounded card as it grows, like the resting island.
+      if state.expanded() and not (island.panels[state.open_panel()] or {}).pill then
+        return theme.radius_large
+      end
       return math.min(height() / 2, theme.radius_large + 4)
     end,
     color = function()
