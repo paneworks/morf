@@ -99,6 +99,8 @@ function M.build(width, height)
     ui.Rect { width = width, height = height, color = theme.color.background },
     under,
     reveal,
+    -- The desk's widgets, on the wallpaper and under every window.
+    require("desktop.desk").rest(width, height),
   }
 end
 
