@@ -7,9 +7,12 @@
 --
 -- Right-click the background to arrange: drag a block to move it (it lands
 -- on the lit cells, or the nearest free fit), pull its corner or scroll
--- over it to resize, and press its badge to remove it. Closing the panel
--- ends arranging, so it never reopens swallowing clicks. Tiles that lead to
--- a list (Wi-Fi, Bluetooth) open it as a panel of its own.
+-- over it to resize, and press its badge to remove it. Click a block for
+-- its inspector (Remove, its sizes, a toggles block's switches). The tray
+-- of every block stands beside the grid while arranging: click or drag a
+-- block in, drop one on it to remove it. Closing the panel ends arranging,
+-- so it never reopens swallowing clicks. Tiles that lead to a list (Wi-Fi,
+-- Bluetooth) open it as a panel of its own.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -20,6 +23,8 @@ local service = require("services.controls")
 local modules = require("services.modules")
 local blocks = require("bar.controls.blocks")
 local power_row = require("bar.controls.power_row")
+local tray = require("bar.controls.tray")
+local inspector = require("bar.controls.inspector")
 
 local C = theme.color
 local M = {}
@@ -86,7 +91,17 @@ local function block(row)
     }
   end
 
-  local function aim(x, y)
+  -- The pointer, in board pixels, where the drag began.
+  local grab = { x = 0, y = 0 }
+
+  -- Over the tray a let-go removes the block, so nothing lands on the grid.
+  local function aim(x, y, px, py)
+    if service.over_tray(px, py) then
+      tray.receiving:set(true)
+      service.set_landing(nil)
+      return
+    end
+    tray.receiving:set(false)
     local spot = service.nearest_free(service.cell_x(x), service.cell_y(y), size(), key)
     service.set_landing(spot, size())
   end
@@ -120,9 +135,10 @@ local function block(row)
       on_clicked = function()
         service.selected:set(selected() and "" or key)
       end,
-      on_drag_started = function()
+      on_drag_started = function(_, _, _, _, lx, ly)
         local g = geometry()
         start.x, start.y = g.x, g.y
+        grab.x, grab.y = g.x + (lx or 0), g.y + (ly or 0)
         drag_x:set(g.x)
         drag_y:set(g.y)
         service.dragging:set(key)
@@ -131,17 +147,26 @@ local function block(row)
       on_dragged = function(_, _, dx, dy)
         if not held() then return end
         local w, h = geometry().width, geometry().height
-        local x = math.max(0, math.min(service.board_width - w, start.x + dx))
+        -- It may leave the grid for the tray beside it.
+        local reach = service.editing:get() and (service.tray_x + service.tray_width) or service.board_width
+        local x = math.max(0, math.min(reach - w, start.x + dx))
         local y = math.max(0, math.min(service.board_height - h, start.y + dy))
         drag_x:set(x)
         drag_y:set(y)
-        aim(x, y)
+        aim(math.min(x, service.board_width - w), y, grab.x + dx, grab.y + dy)
       end,
       on_drag_finished = function()
         if not held() then return end
         service.dragging:set("")
         service.set_landing(nil)
-        service.place(key, service.cell_x(drag_x:get()), service.cell_y(drag_y:get()))
+        -- Let go over the tray: removed (Block.qml:150-157).
+        if tray.receiving:get() then
+          tray.receiving:set(false)
+          service.remove(key)
+          return
+        end
+        service.place(key, service.cell_x(math.min(drag_x:get(), service.board_width - geometry().width)),
+          service.cell_y(drag_y:get()))
       end,
       -- One size per detent.
       on_wheel = function(_, _, _, _, _, steps)
@@ -259,6 +284,20 @@ function M.build()
         model = service.keys,
         delegate = block,
       },
+      -- Beside a block clicked while arranging.
+      ui.Loader {
+        z = 3,
+        active = function() return service.editing:get() and service.selected:get() ~= "" end,
+        source = function() return inspector.build(board_w, board_h) end,
+      },
+      -- A block pulled out of the tray, over everything.
+      ui.Item { z = 4, x = 0, y = 0, width = board_w, height = board_h, tray.ghost(blocks) },
+      -- The tray, beside the grid while arranging.
+      ui.Loader {
+        x = service.tray_x, y = 0,
+        active = function() return service.editing:get() end,
+        source = function() return tray.build(blocks, board_h) end,
+      },
       -- What arranging is, while it is on.
       kit.text {
         anchors = { horizontal_center = true, bottom = true, bottom_margin = -18 },
@@ -271,7 +310,7 @@ function M.build()
 end
 
 island.register("controls", {
-  size = function() return service.panel_width, service.panel_height end,
+  size = function() return service.panel_width_now(), service.panel_height end,
   build = M.build,
 })
 
@@ -286,6 +325,14 @@ morf.ipc.controls_edit = function()
   if island.state.open_panel() ~= "controls" then island.open("controls") end
   service.edit(not service.editing:get())
   return service.editing:get() and "editing" or "done"
+end
+-- `controls_select <key>` inspects a block, as a click on it while
+-- arranging does; no key closes the inspector.
+morf.ipc.controls_select = function(key)
+  if island.state.open_panel() ~= "controls" then island.open("controls") end
+  if not service.editing:get() then service.edit(true) end
+  service.selected:set(key or "")
+  return service.selected:get()
 end
 morf.ipc.controls_add = function(id)
   return service.add(id or "")

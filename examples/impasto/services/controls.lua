@@ -340,6 +340,25 @@ M.row_gap = 14
 M.panel_width = M.board_width + 2 * theme.panel_padding
 M.panel_height = M.board_height + M.row_height + M.row_gap + 2 * theme.panel_padding
 
+-- The card of blocks shown while arranging, beside the grid (ControlsTray):
+-- two cells wide at `tray_factor`, as tall as the grid, the island growing
+-- by it.
+M.tray_factor = 0.6
+M.tray_pad = 10
+M.tray_gap = 16
+M.tray_width = math.ceil((2 * theme.centre_cell_width + theme.centre_gutter) * M.tray_factor) + 2 * M.tray_pad
+M.tray_x = M.board_width + M.tray_gap
+
+--- The panel's width, with the tray while arranging.
+function M.panel_width_now()
+  return M.panel_width + (M.editing:get() and (M.tray_gap + M.tray_width) or 0)
+end
+
+--- Whether a point on the board (board pixels) is over the tray.
+function M.over_tray(x, y)
+  return M.editing:get() and x >= M.board_width + M.tray_gap / 2 and y >= 0 and y <= M.board_height
+end
+
 function M.offset_x(col) return col * theme.centre_stride_x end
 function M.offset_y(row) return row * theme.centre_stride_y end
 
@@ -457,6 +476,21 @@ end
 function M.tiles_of(key)
   local out = {}
   for _, tile in ipairs(M.toggle_keys_of(key)) do out[#out + 1] = tiles_by_key[tile] end
+  return out
+end
+
+--- The inspector's list: the block's own tiles in their order, then the
+--- rest of the catalogue.
+function M.tile_rows_of(key)
+  local own = M.toggle_keys_of(key)
+  local out, seen = {}, {}
+  for _, tile in ipairs(own) do
+    out[#out + 1] = tiles_by_key[tile]
+    seen[tile] = true
+  end
+  for _, tile in ipairs(M.tile_catalogue) do
+    if not seen[tile.key] then out[#out + 1] = tile end
+  end
   return out
 end
 
