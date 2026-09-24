@@ -34,6 +34,9 @@ pub struct Limits {
     pub effect_fuel: u64,
     /// Maximum VM fuel granted to all effects in one recompute pass.
     pub frame_fuel: u64,
+    /// Most `ui.Terminal` nodes that may exist at once: each is a program
+    /// on a pseudo-terminal and a screen with its history.
+    pub terminals: usize,
 }
 
 impl Default for Limits {
@@ -47,6 +50,7 @@ impl Default for Limits {
             slice_fuel: 4_096,
             effect_fuel: 1_000_000,
             frame_fuel: 8_000_000,
+            terminals: 16,
         }
     }
 }
@@ -54,8 +58,9 @@ impl Default for Limits {
 impl Limits {
     /// The defaults with any of `MORF_LIMITS` applied: comma-separated
     /// `load=N`, `memory=N` (bytes, or with a `k`/`m`/`g` suffix),
-    /// `handler=N` and `frame=N` (VM instructions). An entry that does not
-    /// parse is ignored and named in the returned warnings.
+    /// `handler=N` and `frame=N` (VM instructions), and `terminals=N`. An
+    /// entry that does not parse is ignored and named in the returned
+    /// warnings.
     pub fn from_env() -> (Self, Vec<String>) {
         let mut limits = Self::default();
         let mut warnings = Vec::new();
@@ -94,8 +99,9 @@ impl Limits {
                 "memory" => limits.memory = usize::try_from(number).unwrap_or(usize::MAX),
                 "handler" => limits.effect_fuel = number,
                 "frame" => limits.frame_fuel = number,
+                "terminals" => limits.terminals = usize::try_from(number).unwrap_or(usize::MAX),
                 other => warnings.push(format!(
-                    "MORF_LIMITS key `{other}` is not load, memory, handler or frame"
+                    "MORF_LIMITS key `{other}` is not load, memory, handler, frame or terminals"
                 )),
             }
         }

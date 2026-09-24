@@ -34,6 +34,30 @@ pub(crate) fn create_glyph_batch(
     // Drawn before any glyph, so a selection lies under the text it selects.
     let mut under: Vec<PreparedBand> = Vec::new();
     for (command_index, command) in list.commands.iter().enumerate() {
+        if let DrawCommand::Terminal {
+            bounds,
+            transform,
+            color_overlay,
+            screen,
+            ..
+        } = command
+        {
+            super::terminal_batch::prepare_terminal(
+                text_system,
+                screen,
+                *bounds,
+                *transform,
+                *color_overlay,
+                command_index,
+                scale,
+                super::terminal_batch::TerminalOut {
+                    glyphs: &mut glyphs,
+                    under: &mut under,
+                    over: &mut bands,
+                },
+            );
+            continue;
+        }
         let DrawCommand::Text {
             node,
             bounds,
@@ -436,12 +460,12 @@ fn edit_bands(
 }
 
 /// One decoration line, positioned, waiting to become an instance.
-struct PreparedBand {
-    rect: Geometry,
-    color: Color,
-    color_overlay: Color,
-    transform: Transform2D,
-    command_index: usize,
+pub(crate) struct PreparedBand {
+    pub(crate) rect: Geometry,
+    pub(crate) color: Color,
+    pub(crate) color_overlay: Color,
+    pub(crate) transform: Transform2D,
+    pub(crate) command_index: usize,
 }
 
 /// Where a decoration runs along each line, from the face's own metrics.

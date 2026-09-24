@@ -301,7 +301,10 @@ impl Layout {
             | Element::Loader
             | Element::Timer
             | Element::Flex
-            | Element::Custom => {
+            | Element::Custom
+            // A terminal is as big as it is made: its grid follows its size,
+            // not the other way round.
+            | Element::Terminal => {
                 let mut bounds = Size::default();
                 for (child, size) in children.iter().zip(child_sizes) {
                     bounds.width = bounds.width.max(scene.number(*child, "x")? + size.width);

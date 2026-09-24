@@ -128,6 +128,22 @@ impl Runtime {
         point: EventPoint,
         delta: (f64, f64),
     ) -> bool {
+        // A terminal answers the pointer itself: it takes the keyboard on a
+        // press, and a program that asked for the pointer is sent it.
+        if self.is_terminal(node) {
+            let action = match event {
+                UiEvent::Pressed => Some(morf_terminal::MouseAction::Press),
+                UiEvent::Released => Some(morf_terminal::MouseAction::Release),
+                UiEvent::PointerMoved | UiEvent::Dragged | UiEvent::DragStarted => {
+                    Some(morf_terminal::MouseAction::Motion)
+                }
+                _ => None,
+            };
+            let changed = action.is_some_and(|action| {
+                self.terminal_pointer(node, action, point.button, (point.local_x, point.local_y))
+            });
+            return changed | self.dispatch_pointer_handler(node, event, point, delta);
+        }
         // A text input answers the pointer itself — a caret where it was
         // pressed, a selection where it is dragged — and then its own
         // handlers, if the configuration gave it any, hear it as usual.
@@ -235,6 +251,9 @@ impl Runtime {
         pixels: (f64, f64),
         steps: (i32, i32),
     ) -> bool {
+        if self.is_terminal(node) {
+            return self.terminal_wheel(node, (point.local_x, point.local_y), pixels.1, steps.1);
+        }
         self.dispatch_ui_event_with_args(
             node,
             UiEvent::Wheel,
@@ -261,7 +280,7 @@ impl Runtime {
     pub fn takes_wheel(&self, node: NodeHandle) -> bool {
         let state = self.reactive.borrow();
         match state.scene.element(node) {
-            Ok(morf_scene::Element::Flickable) => true,
+            Ok(morf_scene::Element::Flickable | morf_scene::Element::Terminal) => true,
             Ok(_) => state.handlers.contains_key(&(node, UiEvent::Wheel)),
             Err(_) => false,
         }
@@ -318,6 +337,10 @@ impl Runtime {
         // A text input places its caret with the primary button.
         if state.scene.element(node).ok() == Some(morf_scene::Element::TextInput) {
             return button == 0x110;
+        }
+        // A terminal passes all three on to a program that wants them.
+        if state.scene.element(node).ok() == Some(morf_scene::Element::Terminal) {
+            return matches!(button, 0x110..=0x112);
         }
         let Ok(value) = state.scene.current(node, "accepted_buttons") else {
             return false;

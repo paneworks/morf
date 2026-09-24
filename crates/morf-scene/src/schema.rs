@@ -40,8 +40,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         boolean("enabled", true),
         boolean("focus", false),
         // Whether Tab moves the keyboard away from this node while it has
-        // it. False hands Tab to its own `on_key_pressed`.
-        boolean("tab_navigation", true),
+        // it. False hands Tab to its own `on_key_pressed`. A terminal keeps
+        // it: Tab is how a shell completes.
+        boolean("tab_navigation", element != Element::Terminal),
         any("layout", Value::Map(BTreeMap::new())),
     ];
     match element {
@@ -443,6 +444,28 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
             ]);
         }
         Element::Custom => {}
+        Element::Terminal => {
+            properties.extend([
+                string("font_family", "monospace"),
+                number("font_size", 13.0),
+                // `{ foreground, background, cursor, cursor_text, palette =
+                // { sixteen colours } }`; anything left out is the default.
+                any("colors", Value::Map(BTreeMap::new())),
+                // Between the node's edge and the grid, on every side; the
+                // default background fills it.
+                number("padding", 0.0),
+                // Kept by the runtime, for bindings to follow; read-only to a
+                // configuration. The grid's size in cells, what the program
+                // last called itself, and whether it is still running.
+                number("columns", 0.0),
+                number("rows", 0.0),
+                string("title", ""),
+                boolean("running", false),
+                any("exit_code", Value::Nil),
+                // The pointer over a terminal is a text beam, as over any text.
+                string("cursor", "text"),
+            ]);
+        }
         Element::Flex => {
             properties.extend([
                 string("direction", "row"),

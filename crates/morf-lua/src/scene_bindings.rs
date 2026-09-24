@@ -193,6 +193,12 @@ pub(crate) fn node_metatable<'gc>(
             stack.replace(ctx, method);
             return Ok(CallbackReturn::Return);
         }
+        if element == Element::Terminal
+            && let Some(method) = terminal_method(ctx, &read_state, &key)
+        {
+            stack.replace(ctx, method);
+            return Ok(CallbackReturn::Return);
+        }
         let key = if key == "active_async" && element == Element::Loader {
             "active".to_owned()
         } else {
@@ -300,7 +306,91 @@ pub(crate) fn refuse_runtime_owned(
             "MouseArea `{property}` is read-only: the pointer sets it"
         ));
     }
+    if matches!(
+        property,
+        "columns" | "rows" | "title" | "running" | "exit_code"
+    ) && state.scene.element(node).ok() == Some(Element::Terminal)
+    {
+        return Err(format!(
+            "Terminal `{property}` is read-only: the terminal and its program set it"
+        ));
+    }
     Ok(())
+}
+
+/// A terminal's methods, called as `term:write("ls\r")`.
+fn terminal_method<'gc>(
+    ctx: Context<'gc>,
+    state: &Rc<RefCell<ReactiveState>>,
+    name: &str,
+) -> Option<Callback<'gc>> {
+    use crate::terminals;
+    let state = Rc::clone(state);
+    let busy = || HostError("terminals cannot be used from inside a layout function".to_owned());
+    Some(match name {
+        // Bytes to the program, as if typed: `true`, or `false, why`.
+        "write" | "paste" => {
+            let paste = name == "paste";
+            Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+                let (node, data): (UserRef<NodeToken>, luna::String) = stack.consume(ctx)?;
+                if data.as_bytes().len() > morf_io::MAX_OUTGOING {
+                    return Err(HostError("a terminal write is at most 4 MiB".into()).into());
+                }
+                let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+                let result = if paste {
+                    terminals::paste(&mut state, node.handle, &data.display_lossy().to_string())
+                } else {
+                    terminals::write(&mut state, node.handle, data.as_bytes().to_vec())
+                };
+                match result {
+                    Ok(()) => stack.replace(ctx, true),
+                    Err(why) => stack.replace(ctx, (false, why.as_str())),
+                }
+                Ok(CallbackReturn::Return)
+            })
+        }
+        // A signal to the program: `"TERM"` unless named; whether it ran.
+        "kill" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let (node, signal): (UserRef<NodeToken>, LuaValue) = stack.consume(ctx)?;
+            let signal = match signal {
+                LuaValue::Nil => morf_io::signal_number("TERM"),
+                LuaValue::Integer(number) => morf_io::signal_number(&number.to_string()),
+                LuaValue::String(name) => morf_io::signal_number(&name.display_lossy().to_string()),
+                _ => None,
+            }
+            .ok_or_else(|| HostError("kill takes a signal name or number".into()))?;
+            let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+            stack.replace(ctx, terminals::kill(&mut state, node.handle, signal));
+            Ok(CallbackReturn::Return)
+        }),
+        // Through the history: up by `lines`, down by a negative number,
+        // back to the bottom with none. Whether the view moved.
+        "scroll" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let (node, lines): (UserRef<NodeToken>, Option<i64>) = stack.consume(ctx)?;
+            let lines = lines.unwrap_or(0).clamp(-100_000, 100_000) as i32;
+            let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+            stack.replace(ctx, terminals::scroll(&mut state, node.handle, lines));
+            Ok(CallbackReturn::Return)
+        }),
+        // What the screen shows, as text: one line per row.
+        "text" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let node: UserRef<NodeToken> = stack.consume(ctx)?;
+            let state = state.try_borrow().map_err(|_| busy())?;
+            let text = terminals::text(&state, node.handle).unwrap_or_default();
+            stack.replace(ctx, luna::String::from_slice(&ctx, text.as_bytes()));
+            Ok(CallbackReturn::Return)
+        }),
+        "pid" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let node: UserRef<NodeToken> = stack.consume(ctx)?;
+            let state = state.try_borrow().map_err(|_| busy())?;
+            match terminals::pid(&state, node.handle) {
+                Some(pid) => stack.replace(ctx, i64::from(pid)),
+                None => stack.replace(ctx, LuaValue::Nil),
+            }
+            Ok(CallbackReturn::Return)
+        }),
+        _ => return None,
+    })
 }
 
 /// A text input's methods, called as `input:select(0, 4)`.

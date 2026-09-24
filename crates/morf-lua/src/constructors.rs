@@ -147,6 +147,107 @@ pub(crate) fn timer_constructor<'gc>(
     })
 }
 
+/// `ui.Terminal { command, cwd, env, scrollback, on_exit, on_title, on_bell,
+/// on_clipboard, ... }`: the keys that say how to start the program are
+/// taken off here; everything else is the node's own properties.
+pub(crate) fn terminal_constructor<'gc>(
+    ctx: Context<'gc>,
+    state: Rc<RefCell<ReactiveState>>,
+    limits: Limits,
+) -> Callback<'gc> {
+    Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let properties: Table = stack.consume(ctx)?;
+        const OWN: [&str; 8] = [
+            "command",
+            "cwd",
+            "env",
+            "scrollback",
+            "on_exit",
+            "on_title",
+            "on_bell",
+            "on_clipboard",
+        ];
+        let clean = Table::new(&ctx);
+        for (key, value) in properties.iter(ctx) {
+            let own = matches!(key, LuaValue::String(name)
+                if OWN.contains(&name.display_lossy().to_string().as_str()));
+            if !own {
+                clean.set(ctx, key, value)?;
+            }
+        }
+        let command = match properties.get_value(ctx, "command") {
+            // The person's own shell, as any terminal opens with.
+            LuaValue::Nil => vec![
+                std::env::var("SHELL")
+                    .ok()
+                    .filter(|shell| !shell.is_empty())
+                    .unwrap_or_else(|| "/bin/sh".to_owned()),
+            ],
+            LuaValue::Table(command) => table_string_array(ctx, command, 256).map_err(HostError)?,
+            _ => {
+                return Err(HostError(
+                    "Terminal command must be an argv table, such as { \"btop\" }".into(),
+                )
+                .into());
+            }
+        };
+        if command.is_empty() || command[0].is_empty() {
+            return Err(HostError("Terminal command cannot be empty".into()).into());
+        }
+        let environment = match properties.get_value(ctx, "env") {
+            LuaValue::Nil => Default::default(),
+            LuaValue::Table(env) => table_string_map(ctx, env, 256).map_err(HostError)?,
+            _ => return Err(HostError("Terminal env must be a table".into()).into()),
+        };
+        let working_directory = match properties.get_value(ctx, "cwd") {
+            LuaValue::Nil => None,
+            LuaValue::String(cwd) => {
+                Some(std::path::PathBuf::from(cwd.display_lossy().to_string()))
+            }
+            _ => return Err(HostError("Terminal cwd must be a string".into()).into()),
+        };
+        let scrollback = match properties.get_value(ctx, "scrollback") {
+            LuaValue::Nil => crate::terminals::DEFAULT_SCROLLBACK,
+            LuaValue::Integer(lines) if lines >= 0 => lines as usize,
+            LuaValue::Number(lines) if lines.is_finite() && lines >= 0.0 => lines as usize,
+            _ => {
+                return Err(
+                    HostError("Terminal scrollback must be a number of lines".into()).into(),
+                );
+            }
+        }
+        .min(morf_terminal::MAX_SCROLLBACK);
+        let callbacks = crate::terminals::TerminalCallbacks {
+            on_exit: optional_closure(ctx, properties, "on_exit").map_err(HostError)?,
+            on_title: optional_closure(ctx, properties, "on_title").map_err(HostError)?,
+            on_bell: optional_closure(ctx, properties, "on_bell").map_err(HostError)?,
+            on_clipboard: optional_closure(ctx, properties, "on_clipboard").map_err(HostError)?,
+        };
+        if state.borrow().terminals.len() >= limits.terminals {
+            return Err(HostError(format!(
+                "more than {} terminals: each is a program and a screen of its own \
+                 (MORF_LIMITS terminals=N)",
+                limits.terminals
+            ))
+            .into());
+        }
+        let node = create_node(&state, Element::Terminal);
+        configure_element(&state, ctx, limits, node, clean).map_err(HostError)?;
+        state.borrow_mut().terminals.register(
+            node,
+            crate::terminals::TerminalSpec {
+                command,
+                environment,
+                working_directory,
+                scrollback,
+            },
+            callbacks,
+        );
+        stack.replace(ctx, node_userdata(ctx, Rc::clone(&state), node));
+        Ok(CallbackReturn::Return)
+    })
+}
+
 pub(crate) fn view_constructor<'gc>(
     ctx: Context<'gc>,
     state: Rc<RefCell<ReactiveState>>,

@@ -34,12 +34,21 @@ pub(crate) fn handles_keys(state: &ReactiveState, node: NodeHandle) -> bool {
         || state.handlers.contains_key(&(node, UiEvent::KeyReleased))
 }
 
+/// Whether keys can go to a node: it handles them, or it is a text input or
+/// a terminal, which take them themselves.
+pub(crate) fn takes_keys(state: &ReactiveState, node: NodeHandle) -> bool {
+    handles_keys(state, node)
+        || matches!(
+            state.scene.element(node).ok(),
+            Some(morf_scene::Element::TextInput | morf_scene::Element::Terminal)
+        )
+}
+
 pub(crate) fn key_targets_in(state: &ReactiveState, root: NodeHandle) -> Vec<NodeHandle> {
     let mut targets = Vec::new();
     let mut pending = vec![root];
     while let Some(node) = pending.pop() {
-        if (handles_keys(state, node)
-            || state.scene.element(node).ok() == Some(morf_scene::Element::TextInput))
+        if takes_keys(state, node)
             && state.scene.bool_value(node, "enabled").unwrap_or(false)
             && state.scene.bool_value(node, "visible").unwrap_or(false)
         {
@@ -86,6 +95,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
             .retain(|(owner, _), _| owner != node);
         state.loaded_loaders.remove(node);
         state.node_loops.remove(node);
+        state.terminals.remove(*node);
     }
     state
         .handlers

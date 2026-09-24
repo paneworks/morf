@@ -361,6 +361,8 @@ pub(crate) struct ReactiveState {
     pub(crate) http_requests: Vec<crate::api_http::PendingHttp>,
     /// `morf.spawn` children and `morf.connect` connections.
     pub(crate) io: crate::api_io::IoHub,
+    /// `ui.Terminal` nodes: their emulators and their programs.
+    pub(crate) terminals: crate::terminals::TerminalHub,
     pub(crate) session_unlock_requested: bool,
     pub(crate) layer_surface: LayerSurfaceConfig,
     pub(crate) shell_root: PathBuf,
@@ -596,6 +598,7 @@ impl ReactiveState {
             status_notifiers: Vec::new(),
             http_requests: Vec::new(),
             io: Default::default(),
+            terminals: Default::default(),
             session_unlock_requested: false,
             layer_surface: LayerSurfaceConfig::default(),
             shell_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),

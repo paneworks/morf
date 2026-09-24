@@ -71,7 +71,7 @@ pub(crate) fn install_ui_json_api<'gc>(
             other => format!("{other:?}"),
         };
         Err(HostError(format!(
-            "no ui kind `{key}`: the kinds are Item, Inset, Rect, ClipRect, Text, TextInput, Image, Icon, Sdf, SdfShape, Path, MouseArea, DropArea, Row, Column, Grid, Flex, Flickable, Loader, Timer, Layout, Repeater, ListView, GridView, each"
+            "no ui kind `{key}`: the kinds are Item, Inset, Rect, ClipRect, Text, TextInput, Image, Icon, Sdf, SdfShape, Path, MouseArea, DropArea, Row, Column, Grid, Flex, Flickable, Loader, Timer, Terminal, Layout, Repeater, ListView, GridView, each"
         ))
         .into())
     });
@@ -112,6 +112,11 @@ pub(crate) fn install_ui_json_api<'gc>(
         ctx,
         "Timer",
         timer_constructor(ctx, Rc::clone(&state), limits),
+    );
+    ui.set_field(
+        ctx,
+        "Terminal",
+        terminal_constructor(ctx, Rc::clone(&state), limits),
     );
     let reparent_state = Rc::clone(&state);
     let reparent = Callback::from_fn(&ctx, move |ctx, _, mut stack| {

@@ -76,6 +76,9 @@ pub enum Element {
     /// A container whose measure and placement are functions the
     /// configuration wrote.
     Custom,
+    /// A terminal emulator: a program on a pseudo-terminal, its screen drawn
+    /// as a grid of cells, the keyboard and the pointer going to it.
+    Terminal,
 }
 
 impl Element {
@@ -102,6 +105,7 @@ impl Element {
             Self::Timer => "Timer",
             Self::Flex => "Flex",
             Self::Custom => "Layout",
+            Self::Terminal => "Terminal",
         }
     }
 }
@@ -201,6 +205,9 @@ pub struct Scene {
     /// in the scene carry two signals per slot whether or not it has a shader.
     /// A shader is rare; it should cost nothing when absent.
     pub(crate) shaders: FastMap<NodeId, NodeShader>,
+    /// What each `Terminal` node's screen shows, by node: a side table for
+    /// the same reason `shaders` is one. See [`crate::TerminalScreen`].
+    pub(crate) terminal_screens: FastMap<NodeId, std::sync::Arc<crate::TerminalScreen>>,
     pub(crate) properties: Graph<Value>,
     pub(crate) behaviors: FastMap<PropertyKey, Behavior>,
     pub(crate) animations: FastMap<PropertyKey, Animation>,

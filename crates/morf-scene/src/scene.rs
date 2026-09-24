@@ -26,6 +26,7 @@ impl Scene {
             motion_scale: 1.0,
             removed: Vec::new(),
             shaders: FastMap::default(),
+            terminal_screens: FastMap::default(),
         }
     }
 
@@ -241,6 +242,7 @@ impl Scene {
             self.paused_physics.retain(|key| key.node != current);
             self.removed.push(NodeHandle(current));
             self.root_revisions.remove(&current);
+            self.terminal_screens.remove(&current);
             // Its properties live in the scene's signal graph, not in the
             // node; they go with it or they stay allocated for the life of
             // the process, two per property per node ever made.
