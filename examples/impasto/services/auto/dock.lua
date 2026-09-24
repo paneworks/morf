@@ -101,7 +101,9 @@ local menu_window = morf.window.layer {
   width = WIDTH,
   height = HEIGHT,
   exclusive_zone = -1,
-  keyboard_focus = "none",
+  -- Mapped only while the menu is open, and holding the keyboard then, so
+  -- Escape closes it.
+  keyboard_focus = "exclusive",
   visible = false,
   root = view.build_menu(WIDTH, HEIGHT),
 }

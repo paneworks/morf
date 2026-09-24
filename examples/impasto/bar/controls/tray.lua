@@ -187,6 +187,7 @@ function M.build(blocks, height)
   end
 
   return ui.Rect {
+    id = "controls-tray",
     width = service.tray_width, height = height,
     radius = theme.radius_large, color = C.island, border_width = function() return M.receiving:get() and 2 or 1 end,
     border_color = function() return M.receiving:get() and C.accent() or C.islandBorder end,

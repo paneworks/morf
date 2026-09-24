@@ -270,6 +270,9 @@ pub(crate) fn handle_worker_command(
             let _ = reply.send(runtime.binding_dependencies());
             WorkerUpdate::default()
         }
+        // Only a worker whose configuration asked to lock is sent this, and
+        // it hears it before it has a surface (surface_run.rs).
+        WorkerCommand::BecomeLock => WorkerUpdate::default(),
         WorkerCommand::Reload {
             path,
             source,

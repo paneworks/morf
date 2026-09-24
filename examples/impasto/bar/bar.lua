@@ -160,7 +160,9 @@ local function chips_capsule(group, chromeless)
     height = function() return theme.capsule_height() end,
     table.unpack(children),
   }
-  return ui.Rect {
+  -- Clipped to its own shape: a chip's figure changing (a long device name
+  -- coming in) grows while the capsule does, and never draws past it.
+  return ui.ClipRect {
     width = function() return math.max(1, (row.layout_width or 0) + 2 * pad) end,
     height = function() return theme.capsule_height() end,
     radius = function() return theme.capsule_height() / 2 end,
@@ -276,8 +278,15 @@ function bar.build(screen_width)
 
   -- A panel's room: spread, the sides stay put and a panel gets the room
   -- between them; otherwise the sides move aside and it gets the whole bar.
+  -- Arranging the control centre takes the whole bar whatever the style
+  -- (Bar.qml's `wholeScreen`): the grid and the card beside it are wider
+  -- than the room between spread sides, and were cut off there.
+  local arranging_controls = function()
+    local ok, controls = pcall(require, "services.controls")
+    return ok and controls.editing and controls.editing:get() or false
+  end
   island.room = function()
-    if spread() then return W - 2 * (margin() + widest() + spacing) end
+    if spread() and not arranging_controls() then return W - 2 * (margin() + widest() + spacing) end
     return W - 2 * margin()
   end
 
@@ -412,6 +421,8 @@ function bar.build(screen_width)
   -- In the band they go whenever the island takes it.
   local away = function()
     if unified() then return taken() end
+    -- Arranging the control centre, the island has the whole bar.
+    if arranging_controls() then return true end
     return state.expanded() and grouped() and state.open_panel() ~= "module"
   end
 

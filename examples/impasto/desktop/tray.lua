@@ -35,7 +35,7 @@ M.START_ROWS = 2
 
 -- The card's size in packing units lasts for the session; its place does not.
 local columns_signal = morf.signal("impasto.desk.tray.columns", M.START_COLUMNS)
-local rows_signal = morf.signal("impasto.desk.tray.rows", M.START_ROWS)
+local rows_signal = morf.signal("impasto.desk.tray.rows", -1)   -- -1: never resized
 local card_x = morf.signal("impasto.desk.tray.x", -1)
 local card_y = morf.signal("impasto.desk.tray.y", -1)
 local scrolled = morf.signal("impasto.desk.tray.scrolled", 0)
@@ -107,9 +107,19 @@ end
 
 local function columns() return math.max(widest, columns_signal:get()) end
 local function layout() return pack(columns()) end
+-- The rows it opens with until it is resized: START_ROWS, or one on a
+-- board so short that two would take more than two fifths of it (a
+-- 1280x720 screen), so the card leaves most of the desk in view.
+local function start_rows()
+  local two = span(M.START_ROWS, stride_y()) + 2 * M.PAD
+  return two <= desk.board().height * 0.4 and M.START_ROWS or 1
+end
+
 local function shown_rows()
   local l = layout()
-  return math.min(l.rows, math.max(math.min(tallest, l.rows), rows_signal:get()))
+  local asked = rows_signal:get()
+  if asked < 0 then asked = start_rows() end
+  return math.min(l.rows, math.max(math.min(tallest, l.rows), asked))
 end
 
 -- --------------------------------------------------------------------- card --
@@ -324,10 +334,51 @@ end
 
 -- --------------------------------------------------------------------- build --
 
+-- Where the card opens: its home at the bottom middle, as the original's,
+-- unless that covers widgets and another corner or edge of the board covers
+-- fewer. Worked out once as arranging starts, so the card never moves by
+-- itself under a widget being dragged.
+local function covered(boxes, x, y, w, h)
+  local total = 0
+  for _, b in ipairs(boxes) do
+    local ox = math.min(x + w, b.x + b.width) - math.max(x, b.x)
+    local oy = math.min(y + h, b.y + b.height) - math.max(y, b.y)
+    if ox > 0 and oy > 0 then total = total + ox * oy end
+  end
+  return total
+end
+
+local function home()
+  local board = desk.board()
+  local w, h, g = card_width(), card_height(), theme.desktop_gutter
+  local left, middle, right = g, (board.width - w) / 2, board.width - w - g
+  local top, bottom = g, board.height - h - g
+  local boxes = {}
+  for _, row in ipairs(desk.squares()) do
+    if not desk.left_off(row.key) then boxes[#boxes + 1] = desk.geometry(row.key) end
+  end
+  local best, best_x, best_y = math.huge, -1, -1
+  for _, spot in ipairs {
+    { middle, bottom }, { middle, top }, { left, bottom }, { right, bottom },
+    { left, top }, { right, top }, { middle, (board.height - h) / 2 },
+  } do
+    local area = covered(boxes, clamp_x(spot[1]), clamp_y(spot[2]), w, h)
+    if area < best then best, best_x, best_y = area, spot[1], spot[2] end
+    if area == 0 then break end
+  end
+  return best_x, best_y
+end
+M.home = home
+
 --- The card and the ghost, filling the board.
 function M.build()
   card_x:set(-1)
   card_y:set(-1)
+  do
+    local x, y = home()
+    card_x:set(clamp_x(x))
+    card_y:set(clamp_y(y))
+  end
   scrolled:set(0)
   pulling:set("")
   publish()
@@ -359,6 +410,7 @@ function M.build()
   local grip_on = controls.signal("tray.grip", false)
 
   local card = ui.Rect {
+    id = "desk-tray",
     x = card_left, y = card_top, width = card_width, height = card_height,
     radius = theme.radius_large, color = C.island,
     border_color = function() return receiving() and C.accent() or C.islandBorder end,

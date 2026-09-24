@@ -20,6 +20,7 @@
 --   note_edge <key> <edge> | note_grid <note> <col> <row> | deck_edge <key> <edge>
 --   deck_add <edge> | along <deck> <0..1> | takes_new <deck> <1|0> | light <edge>
 --   view <photo key>       the photo in the picture viewer
+--   picture <photo key> <path>  a photo widget's picture
 --                          what the pointer does while arranging, for a bench
 --   theme <modern|analogue>
 --   list                   the rows, one per line
@@ -74,7 +75,9 @@ if not inline_mode then
     anchors = { top = true, bottom = true, left = true, right = true },
     width = WIDTH, height = HEIGHT,
     exclusive_zone = -1,
-    keyboard_focus = "none",
+    -- Mapped only while the menu is open, and holding the keyboard then,
+    -- so Escape closes it (the original's took none, and only a click did).
+    keyboard_focus = "exclusive",
     visible = false,
     root = menu_root(WIDTH, HEIGHT),
   }
@@ -195,9 +198,16 @@ morf.ipc.desk = function(verb, a, b, c)
     -- A photo widget's picture in the viewer, as a click at rest opens it.
     desk.open_picture(desk.entry_of(a or ""))
     return desk.picture_of(desk.entry_of(a or ""))
+  elseif verb == "picture" then
+    -- A photo widget's picture, as the picker sets it.
+    desk.set_picture(a or "", b or "")
+    return desk.picture_of(desk.entry_of(a or ""))
   elseif verb == "light" then
     require("services.deck").receiving:set(a or "")
     return a or ""
+  elseif verb == "grid" then
+    local g = desk.grid()
+    return g.columns .. "x" .. g.rows
   elseif verb == "theme" then
     settings.set("desktopTheme", a == "analogue" and "analogue" or "modern")
     return a or "modern"

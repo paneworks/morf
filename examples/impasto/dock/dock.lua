@@ -395,7 +395,13 @@ function M.build_menu(width, height)
       anchors = { fill = true },
       z = -1,
       accepted_buttons = "all",
+      -- Holds the keyboard while the menu is open, as the desk's menu does,
+      -- so Escape closes it too (the original's took none).
+      focus = function() return dock.menu_item() ~= nil end,
       on_pressed = function() dock.close_menu() end,
+      on_key_pressed = function(keysym)
+        if keysym == 0xff1b then dock.close_menu() end
+      end,
     },
     placed,
   }

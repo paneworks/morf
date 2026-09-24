@@ -247,3 +247,56 @@ fn limits_read_overrides_from_the_environment() {
     assert_eq!(limits.frame_fuel, Limits::default().frame_fuel);
     assert_eq!(warnings.len(), 2, "{warnings:?}");
 }
+
+// A delegate is a part of a view built on demand -- a whole board, say --
+// and gets a budget of its own, well past a handler's; a runaway one is
+// still stopped.
+#[test]
+fn a_delegate_builds_past_a_handlers_budget_and_a_runaway_one_stops() {
+    let mut runtime = Runtime::new(Limits {
+        effect_fuel: 10_000,
+        delegate_fuel: 1_000_000,
+        slice_fuel: 64,
+        ..Limits::default()
+    });
+    runtime
+        .execute(
+            "delegate-fuel.lua",
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local rows = morf.list_model({ { id = "busy" } })
+                local built = 0
+                ui.Column {
+                    ui.Repeater {
+                        model = rows,
+                        delegate = function(r)
+                            local n = 0
+                            for i = 1, 20000 do n = n + i end
+                            built = n
+                            return ui.Text { text = tostring(n) }
+                        end,
+                    },
+                }
+                morf.ipc.built = function() return built end
+                local ok, err = pcall(ui.Repeater, {
+                    model = morf.list_model({ { id = "runaway" } }),
+                    delegate = function() while true do end end,
+                })
+                morf.ipc.runaway = function() return tostring(ok) .. " " .. tostring(err) end
+            "#,
+        )
+        .unwrap();
+    let built = runtime.call_ipc("built", &[]).unwrap();
+    assert_eq!(
+        built,
+        vec![IpcValue::Integer(200_010_000)],
+        "the busy delegate built its row"
+    );
+    let answer = format!("{:?}", runtime.call_ipc("runaway", &[]));
+    let logs = format!("{:?}", runtime.take_logs());
+    assert!(
+        answer.contains("delegate fuel exhausted") || logs.contains("delegate fuel exhausted"),
+        "{answer} {logs}"
+    );
+}

@@ -278,3 +278,15 @@ fn supervisor_dispatches_registered_ipc_handler() {
     );
     stop_workers(workers);
 }
+
+// The workers run the configuration and say what it asked to be; there is
+// no run before them. A shell goes on, a second shell on a taken display
+// stops, and a lock is a lock whether or not a shell holds the socket.
+#[test]
+fn a_loaded_configuration_decides_what_the_supervisor_does() {
+    use crate::supervisor::{LoadedStep, loaded_step};
+    assert_eq!(loaded_step(false, false), LoadedStep::Run);
+    assert_eq!(loaded_step(false, true), LoadedStep::Refuse);
+    assert_eq!(loaded_step(true, false), LoadedStep::Lock);
+    assert_eq!(loaded_step(true, true), LoadedStep::Lock);
+}

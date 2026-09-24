@@ -41,6 +41,19 @@ local function optional(name)
   return nil
 end
 
+local island_state = nil
+local function island_open()
+  if island_state == nil then
+    local ok, state = pcall(require, "bar.island_state")
+    island_state = ok and state or false
+  end
+  return island_state and island_state.expanded() or false
+end
+local function close_island()
+  local ok, island = pcall(require, "bar.island")
+  if ok and island and island.close then island.close() end
+end
+
 -- The spectra along the screen's edges, in screen coordinates.
 local function edge_spectra(arranging)
   local edge = optional("desktop.edge_spectrum")
@@ -80,6 +93,17 @@ function M.rest(width, height)
       edge_spectra(false),
     },
     board,
+    -- While the island is open, a press anywhere on the desk -- any
+    -- button, a widget included -- is the click beside it that closes it,
+    -- and does nothing else: a right click does not open the desk's menu
+    -- under the closing island. The shell's backdrop does this over the
+    -- windows; drawn inline (IMPASTO_INLINE_WALLPAPER) the desk is inside
+    -- the shell's own surface, where the backdrop never hears it.
+    ui.MouseArea {
+      anchors = { fill = true }, accepted_buttons = "all",
+      visible = function() return island_open() end,
+      on_pressed = function() close_island() end,
+    },
   }
 end
 
@@ -297,9 +321,14 @@ function M.menu(width, height)
   return ui.Item {
     width = width, height = height,
     visible = function() return desk.menu_open:get() end,
+    -- Holds the keyboard while the menu is open, so Escape closes it.
     ui.MouseArea {
       anchors = { fill = true }, accepted_buttons = { "left", "right" },
+      focus = function() return desk.menu_open:get() end,
       on_clicked = function() desk.close_menu() end,
+      on_key_pressed = function(keysym)
+        if keysym == ESCAPE then desk.close_menu() end
+      end,
     },
     ui.Rect {
       x = function()

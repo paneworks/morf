@@ -24,7 +24,7 @@ pub(crate) fn execute_delegate(
         LuaValue::Integer(index as i64 + 1),
     ]);
     let executor = Executor::start(ctx, ctx.fetch(delegate).into(), args);
-    drive_executor(ctx, executor, limits, limits.effect_fuel, "delegate")?;
+    drive_executor(ctx, executor, limits, limits.delegate_fuel, "delegate")?;
     let values = match executor.take_result::<Variadic<Vec<LuaValue>>>(ctx) {
         Ok(Ok(values)) => values,
         Ok(Err(error)) => return Err(error.to_string()),

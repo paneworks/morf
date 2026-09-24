@@ -363,6 +363,7 @@ function island.build(place)
     return settings.islandAttached and 0 or island.radius()
   end
   local capsule = ui.ClipRect {
+    id = "island",
     x = place.x, y = place.y,
     width = width,
     height = height,

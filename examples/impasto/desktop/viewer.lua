@@ -64,7 +64,11 @@ local function root()
       local z = zoom:get()
       local next_z = math.max(1, math.min(16, z * (1.2 ^ notches)))
       if next_z == z then return end
-      local w, h = window and window.width or 0, window and window.height or 0
+      -- The size the window was given, which a compositor may have made
+      -- other than the size asked for (a tiling one, or fullscreen): the
+      -- picture is centred in that.
+      local w = area.layout_width or (window and window.width) or 0
+      local h = area.layout_height or (window and window.height) or 0
       local px, py_ = (lx or w / 2) - w / 2, (ly or h / 2) - h / 2
       local k = next_z / z
       pan_x:set(px - k * (px - pan_x:get()))
