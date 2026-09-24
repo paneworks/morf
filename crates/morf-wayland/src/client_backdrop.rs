@@ -21,6 +21,7 @@ use morf_region::Region;
 use crate::WaylandError;
 use crate::state_types::PendingCapture;
 use crate::surface_types::LayerClient;
+use wayland_client::protocol::wl_output;
 use wayland_protocols::ext::image_capture_source::v1::client::ext_image_capture_source_v1::ExtImageCaptureSourceV1;
 use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_capture_manager_v1::{
     self, ExtImageCopyCaptureManagerV1,
@@ -147,20 +148,39 @@ impl LayerClient {
         true
     }
 
+    /// Whether an output of this name is connected, as `morf.screens`
+    /// reports names.
+    pub fn has_output(&self, name: &str) -> bool {
+        matches!(self.layer_output(Some(name)), Ok(Some(_)))
+    }
+
+    /// The output a capture is of: the one named, or else the one this
+    /// shell sits on, or else the first there is.
+    pub(crate) fn capture_target(&self, name: Option<&str>) -> Option<wl_output::WlOutput> {
+        match name {
+            Some(name) => self.layer_output(Some(name)).ok().flatten(),
+            None => self
+                .state
+                .output_power_target
+                .clone()
+                .or_else(|| self.state.outputs.outputs().next()),
+        }
+    }
+
     /// Captures an output through the newer protocol.
-    pub fn capture_output_image(&mut self, request_id: u64, gpu: bool) -> bool {
+    pub fn capture_output_image(
+        &mut self,
+        request_id: u64,
+        gpu: bool,
+        output: Option<&str>,
+    ) -> bool {
         let (Some(manager), Some(sources)) = (
             self.state.capture_manager.clone(),
             self.state.output_source_manager.clone(),
         ) else {
             return false;
         };
-        let output = self
-            .state
-            .output_power_target
-            .clone()
-            .or_else(|| self.state.outputs.outputs().next());
-        let Some(output) = output else {
+        let Some(output) = self.capture_target(output) else {
             return false;
         };
         if self.state.shm.is_none() || self.state.captures.len() >= 8 {

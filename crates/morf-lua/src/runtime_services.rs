@@ -444,6 +444,7 @@ impl Runtime {
                 );
             }
         }
+        self.poll_image_jobs();
         service_changed || self.reactive.borrow().scene_revision != revision_before
     }
 }

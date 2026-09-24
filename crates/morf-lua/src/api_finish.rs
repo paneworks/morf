@@ -107,6 +107,7 @@ pub(crate) fn install_reactive_api(
         install_shell_api(ctx, Rc::clone(&state), morf);
         install_time_api(ctx, Rc::clone(&state), morf);
         install_image_api(ctx, morf);
+        crate::api_image_ops::install_image_ops_api(ctx, Rc::clone(&state), morf);
         install_shader_api(ctx, morf, Rc::clone(&state));
         install_transform_api(ctx, Rc::clone(&state), morf);
         install_animation_api(ctx, Rc::clone(&state), morf);

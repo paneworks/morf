@@ -33,6 +33,7 @@ mod fs_time;
 mod gradients;
 mod http;
 mod idle_input;
+mod image_ops;
 mod input_api;
 mod layer_surfaces;
 mod lifecycle_io;

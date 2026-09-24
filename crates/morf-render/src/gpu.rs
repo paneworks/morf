@@ -28,6 +28,8 @@ mod field_color_tests;
 mod field_shape_tests;
 #[cfg(test)]
 mod field_tests;
+#[cfg(test)]
+mod inline_source_tests;
 mod readback;
 #[cfg(test)]
 mod shader_host_tests;

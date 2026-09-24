@@ -7,4 +7,5 @@ repository.workspace = true
 
 [dependencies]
 morf-outline.workspace = true
+morf-image.workspace = true
 resvg.workspace = true

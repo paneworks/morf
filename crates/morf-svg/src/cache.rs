@@ -9,9 +9,28 @@ use std::collections::HashMap;
 
 use morf_outline::{Contour, Paired, contour_points, contours, pair_up, walk};
 
-use crate::{Outline, SvgError, outline_of};
+use crate::{Outline, SvgError, outline_of_source};
 
-/// Documents already read, by the path they were read from.
+/// How many documents to keep before starting over.
+const MAX_DOCUMENTS: usize = 256;
+
+/// A source as it appears in a message: a path whole, an inline document by
+/// its first few characters, since the whole of one is a screenful of path
+/// data nobody asked to see.
+fn label_of(source: &str) -> String {
+    if morf_image::is_inline_source(source) && source.len() > 48 {
+        let cut = (0..=48)
+            .rev()
+            .find(|index| source.is_char_boundary(*index))
+            .unwrap_or(0);
+        format!("{}… ({} bytes inline)", &source[..cut], source.len())
+    } else {
+        source.to_owned()
+    }
+}
+
+/// Documents already read, by the path they were read from — or, for one
+/// written inline, by its text, which makes the key the content itself.
 #[derive(Default)]
 pub struct SvgOutlines {
     loops: HashMap<Box<str>, Option<Vec<Contour>>>,
@@ -68,19 +87,28 @@ impl SvgOutlines {
             // for no stated reason is the hardest kind of thing to find: the
             // configuration looks right, the field composes, and nothing
             // appears. The name of the file and the reason cost one line.
-            let read = match outline_of(source) {
+            let label = label_of(source);
+            let read = match outline_of_source(source) {
                 Ok(outline) => {
                     let loops = contours(&outline.steps);
                     if loops.is_empty() {
-                        eprintln!("morf: `{source}` has no outlines in it");
+                        eprintln!("morf: `{label}` has no outlines in it");
                     }
                     Some(loops).filter(|loops| !loops.is_empty())
                 }
                 Err(error) => {
-                    eprintln!("morf: {error} (`{source}`)");
+                    eprintln!("morf: {error} (`{label}`)");
                     None
                 }
             };
+            // Files are few; inline drawings are not. A configuration that
+            // redraws a computed path mints a new source each time, and every
+            // one would be kept here for the life of the shell. Starting over
+            // costs one parse per drawing still on screen.
+            if self.loops.len() >= MAX_DOCUMENTS {
+                self.loops.clear();
+                self.paired.clear();
+            }
             self.loops.insert(Box::from(source), read);
         }
         self.loops.get(source).and_then(Option::as_ref)
@@ -109,6 +137,6 @@ impl SvgOutlines {
 
     /// Reads a document without keeping it, for a caller that wants the error.
     pub fn probe(source: &str) -> Result<Outline, SvgError> {
-        outline_of(source)
+        outline_of_source(source)
     }
 }

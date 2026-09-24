@@ -22,23 +22,27 @@ pub(crate) fn apply_screencopy_requests(runtime: &mut Runtime, client: &mut Laye
         // can include the cursor: the newer protocol makes a pointer a separate
         // session, so asking for one here would be asking for a different
         // capture rather than the same one with a pointer drawn on it.
+        let output = request.output.as_deref();
         let started = match &request.window {
             Some(identifier) => client.capture_window(request.id, identifier, request.gpu),
-            None if request.include_cursor => client.capture_output(request.id, true),
+            None if request.include_cursor => client.capture_output(request.id, true, output),
             None => {
-                client.capture_output_image(request.id, request.gpu)
-                    || client.capture_output(request.id, false)
+                client.capture_output_image(request.id, request.gpu, output)
+                    || client.capture_output(request.id, false, output)
             }
         };
         if !started {
-            let why = match &request.window {
-                Some(_) if !client.supports_window_capture() => {
-                    "this compositor cannot capture a single window"
+            let why = match (&request.window, output) {
+                (Some(_), _) if !client.supports_window_capture() => {
+                    "this compositor cannot capture a single window".to_owned()
                 }
-                Some(_) => "no window with that identifier",
-                None => "screen capture is unavailable",
+                (Some(_), _) => "no window with that identifier".to_owned(),
+                (None, Some(name)) if !client.has_output(name) => {
+                    format!("no output named `{name}`")
+                }
+                (None, _) => "screen capture is unavailable".to_owned(),
             };
-            runtime.dispatch_screencopy(request.id, Err(why.to_owned()));
+            runtime.dispatch_screencopy(request.id, Err(why));
         }
     }
 }
@@ -97,6 +101,10 @@ pub(crate) fn dispatch_screencopy(
                 Err(error) => result = Err(error),
             }
         }
+        // A capture headed for a file is encoded from the pixels Lua's side
+        // is handed; publishing it too would hold a screen's worth of memory
+        // that nothing will ever release.
+        (Some(_), Ok(_)) if !runtime.screencopy_publishes(request_id) => {}
         (Some(renderer), Ok(frame)) => {
             renderer.backend_mut().publish_image(
                 name,

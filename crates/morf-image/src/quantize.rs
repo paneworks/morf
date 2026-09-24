@@ -1,9 +1,6 @@
-use std::fs;
 use std::path::Path;
 
-use resvg::usvg;
-
-use crate::image_cache::{ImageError, decode_path, normalize_source};
+use crate::image_cache::{ImageError, decode_path, normalize_source, source_dimensions};
 
 /// Decoded straight-alpha RGBA pixels.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -35,16 +32,7 @@ pub fn quantize_colors(
         return Err(ImageError::InvalidSize);
     }
     let source = normalize_source(source.as_ref())?;
-    let (intrinsic_width, intrinsic_height) =
-        if source.extension().and_then(|value| value.to_str()) == Some("svg") {
-            let bytes = fs::read(&source)?;
-            let tree = usvg::Tree::from_data(&bytes, &usvg::Options::default())
-                .map_err(|error| ImageError::Svg(error.to_string()))?;
-            let size = tree.size();
-            (size.width().ceil() as u32, size.height().ceil() as u32)
-        } else {
-            image::image_dimensions(&source)?
-        };
+    let (intrinsic_width, intrinsic_height) = source_dimensions(&source)?;
     if intrinsic_width == 0
         || intrinsic_height == 0
         || u64::from(intrinsic_width) * u64::from(intrinsic_height) > 16_777_216
@@ -156,4 +144,99 @@ fn widest_channel(pixels: &[[u8; 4]]) -> usize {
     (0..3)
         .max_by_key(|channel| maximum[*channel] - minimum[*channel])
         .unwrap_or(0)
+}
+
+/// One colour of a palette, and how much of the picture it covers.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PaletteEntry {
+    /// The colour, straight RGBA.
+    pub rgba: [u8; 4],
+    /// Its share of the picture's visible pixels, 0..1.
+    pub fraction: f64,
+}
+
+/// Up to `count` dominant colours of an image, most common first.
+///
+/// Median cut alone — what [`quantize_colors`] does — splits the pixels into
+/// buckets of *equal* size, so every colour it names covers the same share of
+/// the picture and "dominant" means nothing. Its buckets are good starting
+/// points, though, so they seed a few rounds of k-means, and each colour then
+/// owns the pixels actually nearest to it. That count is what the order and
+/// the fractions come from.
+///
+/// Twice as many seeds as colours asked for, then the least common dropped:
+/// a small accent colour survives when it is distinct, rather than being
+/// averaged into its neighbour because the split happened to fall there.
+pub fn palette_of(image: &ImageData, count: usize) -> Vec<PaletteEntry> {
+    let count = count.clamp(1, 64);
+    let pixels: Vec<[u8; 4]> = image
+        .rgba
+        .chunks_exact(4)
+        .filter(|pixel| pixel[3] >= 128)
+        .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
+        .collect();
+    if pixels.is_empty() {
+        return Vec::new();
+    }
+    let depth = (count * 2).next_power_of_two().trailing_zeros().min(8) as u8;
+    let mut centres: Vec<[f64; 3]> = quantize_image(image, depth, None)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|colour| [colour[0].into(), colour[1].into(), colour[2].into()])
+        .collect();
+    if centres.is_empty() {
+        return Vec::new();
+    }
+    let mut owners = vec![0usize; pixels.len()];
+    for _ in 0..6 {
+        let mut sums = vec![[0.0f64; 4]; centres.len()];
+        for (pixel, owner) in pixels.iter().zip(owners.iter_mut()) {
+            *owner = nearest(&centres, pixel);
+            let sum = &mut sums[*owner];
+            sum[0] += f64::from(pixel[0]);
+            sum[1] += f64::from(pixel[1]);
+            sum[2] += f64::from(pixel[2]);
+            sum[3] += 1.0;
+        }
+        for (centre, sum) in centres.iter_mut().zip(&sums) {
+            if sum[3] > 0.0 {
+                *centre = [sum[0] / sum[3], sum[1] / sum[3], sum[2] / sum[3]];
+            }
+        }
+    }
+    let mut population = vec![0usize; centres.len()];
+    for owner in &owners {
+        population[*owner] += 1;
+    }
+    let total = pixels.len() as f64;
+    let mut entries: Vec<PaletteEntry> = centres
+        .iter()
+        .zip(&population)
+        .filter(|(_, count)| **count > 0)
+        .map(|(centre, count)| PaletteEntry {
+            rgba: [
+                centre[0].round() as u8,
+                centre[1].round() as u8,
+                centre[2].round() as u8,
+                255,
+            ],
+            fraction: *count as f64 / total,
+        })
+        .collect();
+    entries.sort_by(|a, b| b.fraction.total_cmp(&a.fraction));
+    entries.truncate(count);
+    entries
+}
+
+fn nearest(centres: &[[f64; 3]], pixel: &[u8; 4]) -> usize {
+    let mut best = (0, f64::MAX);
+    for (index, centre) in centres.iter().enumerate() {
+        let distance = (centre[0] - f64::from(pixel[0])).powi(2)
+            + (centre[1] - f64::from(pixel[1])).powi(2)
+            + (centre[2] - f64::from(pixel[2])).powi(2);
+        if distance < best.1 {
+            best = (index, distance);
+        }
+    }
+    best.0
 }

@@ -359,6 +359,7 @@ fn screencopy_bridges_bounded_requests_and_pixels() {
                 window: None,
                 gpu: false,
                 name: None,
+                output: None,
             },
             ScreencopyRequest {
                 id: 1,
@@ -366,6 +367,7 @@ fn screencopy_bridges_bounded_requests_and_pixels() {
                 window: None,
                 gpu: false,
                 name: None,
+                output: None,
             },
         ]
     );

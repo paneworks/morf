@@ -13,6 +13,23 @@ const LINE_ICON: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
   <path d="M4 12 H20"/>
 </svg>"#;
 
+/// The document itself, as the source, in each form a configuration may
+/// write it — and the same outline out of all of them.
+#[test]
+fn a_document_written_inline_is_its_own_source() {
+    let from_text = outline_of_source(RING).unwrap();
+    assert_eq!(contours(&from_text.steps).len(), 2);
+    let escaped = format!("data:image/svg+xml,{}", RING.replace('\n', "%0A"));
+    assert_eq!(outline_of_source(&escaped).unwrap(), from_text);
+    let mut cache = SvgOutlines::new();
+    assert!(cache.outline(RING, None, 0.0).len() >= 3);
+    assert!(cache.outline("<svg nonsense", None, 0.0).is_empty());
+    assert!(matches!(
+        outline_of_source("data:image/png;base64,AAAA"),
+        Err(SvgError::Parse(_))
+    ));
+}
+
 #[test]
 fn a_document_arrives_as_loops_of_points_and_not_as_pixels() {
     let outline = outline_from_bytes(RING.as_bytes()).unwrap();

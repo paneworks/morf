@@ -328,6 +328,9 @@ pub struct ScreencopyRequest {
     /// per refresh. Without a name the request's own id is used, and the
     /// picture stays until `morf.screencopy.release(source)`.
     pub name: Option<String>,
+    /// The output to capture, by the name `morf.screens` reports; `None` is
+    /// the shell's own output, or the first there is.
+    pub output: Option<String>,
 }
 
 impl IpcValue {

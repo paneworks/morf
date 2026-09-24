@@ -213,6 +213,10 @@ impl Runtime {
         request_id: u64,
         result: Result<Screencopy, String>,
     ) -> bool {
+        let result = match self.save_screencopy(request_id, result) {
+            Ok(handled) => return handled,
+            Err(result) => result,
+        };
         let Some(callback) = self
             .reactive
             .borrow_mut()

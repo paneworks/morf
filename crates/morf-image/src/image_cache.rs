@@ -11,6 +11,7 @@ use resvg::{tiny_skia, usvg};
 
 use crate::distance_field::distance_field_from_alpha;
 use crate::icons::IconResolver;
+use crate::inline::{InlineSource, inline_source, is_inline_source};
 use crate::quantize::ImageData;
 
 /// Image or icon loading failure.
@@ -30,6 +31,8 @@ pub enum ImageError {
     InvalidSource(String),
     /// The source alpha mask had no detectable boundary.
     DistanceFieldEmpty,
+    /// A request was refused before any work: too large, or out of range.
+    Refused(String),
 }
 
 impl fmt::Display for ImageError {
@@ -42,6 +45,7 @@ impl fmt::Display for ImageError {
             Self::InvalidSize => f.write_str("image size must be greater than zero"),
             Self::InvalidSource(source) => write!(f, "invalid local image source `{source}`"),
             Self::DistanceFieldEmpty => f.write_str("distance-field source has no alpha edge"),
+            Self::Refused(why) => f.write_str(why),
         }
     }
 }
@@ -217,17 +221,16 @@ impl ImageCache {
         if let Some(size) = self.intrinsic.get(&source) {
             return Ok(*size);
         }
-        let size = if source.extension().and_then(|value| value.to_str()) == Some("svg") {
-            let bytes = fs::read(&source)?;
-            let tree = usvg::Tree::from_data(&bytes, &usvg::Options::default())
-                .map_err(|error| ImageError::Svg(error.to_string()))?;
-            let size = tree.size();
-            (size.width().ceil() as u32, size.height().ceil() as u32)
-        } else {
-            image::image_dimensions(&source)?
-        };
+        let size = source_dimensions(&source)?;
         if size.0 == 0 || size.1 == 0 {
             return Err(ImageError::InvalidSize);
+        }
+        // Paths are few and fixed; inline drawings are not. A configuration
+        // redrawing a sparkline every second mints a new source each time,
+        // and this map would keep every one of them for the life of the
+        // shell. Dropping the lot now and then costs a header read each.
+        if self.intrinsic.len() >= MAX_INTRINSIC {
+            self.intrinsic.clear();
         }
         self.intrinsic.insert(source, size);
         Ok(size)
@@ -361,9 +364,57 @@ fn hex_digit(value: u8) -> Option<u8> {
     }
 }
 
+/// How many intrinsic sizes to remember before starting over.
+const MAX_INTRINSIC: usize = 1024;
+
+/// A source's bytes, and whether they are an SVG document.
+///
+/// The one place a source becomes bytes, so that everything reading one —
+/// the decoder, the size probe, the quantiser, `morf.image` — accepts the
+/// same things: a path, a `file://` URI, or inline content.
+pub(crate) fn read_source(source: &Path) -> Result<(Vec<u8>, bool), ImageError> {
+    if let Some(inline) = source.to_str().and_then(inline_source) {
+        return Ok(match inline? {
+            InlineSource::Svg(bytes) => (bytes, true),
+            InlineSource::Raster(bytes) => (bytes, false),
+        });
+    }
+    let bytes = fs::read(source)?;
+    Ok((bytes, is_svg_path(source)))
+}
+
+/// Whether a path names an SVG document by its extension.
+pub(crate) fn is_svg_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
+}
+
+/// A source's pixel size, from its header alone where it has one.
+pub(crate) fn source_dimensions(source: &Path) -> Result<(u32, u32), ImageError> {
+    let inline = source.to_str().is_some_and(is_inline_source);
+    if !inline && !is_svg_path(source) {
+        return Ok(image::image_dimensions(source)?);
+    }
+    let (bytes, svg) = read_source(source)?;
+    if svg {
+        let size = svg_tree(&bytes)?.size();
+        Ok((size.width().ceil() as u32, size.height().ceil() as u32))
+    } else {
+        Ok(ImageReader::new(std::io::Cursor::new(bytes))
+            .with_guessed_format()?
+            .into_dimensions()?)
+    }
+}
+
+pub(crate) fn svg_tree(bytes: &[u8]) -> Result<usvg::Tree, ImageError> {
+    usvg::Tree::from_data(bytes, &usvg::Options::default())
+        .map_err(|error| ImageError::Svg(error.to_string()))
+}
+
 pub(crate) fn decode_path(path: &Path, width: u32, height: u32) -> Result<ImageData, ImageError> {
-    let bytes = fs::read(path)?;
-    if path.extension().and_then(|value| value.to_str()) == Some("svg") {
+    let (bytes, svg) = read_source(path)?;
+    if svg {
         decode_svg(&bytes, width, height)
     } else {
         decode_raster(&bytes, width, height)
@@ -383,9 +434,8 @@ fn decode_raster(bytes: &[u8], width: u32, height: u32) -> Result<ImageData, Ima
     })
 }
 
-fn decode_svg(bytes: &[u8], width: u32, height: u32) -> Result<ImageData, ImageError> {
-    let tree = usvg::Tree::from_data(bytes, &usvg::Options::default())
-        .map_err(|error| ImageError::Svg(error.to_string()))?;
+pub(crate) fn decode_svg(bytes: &[u8], width: u32, height: u32) -> Result<ImageData, ImageError> {
+    let tree = svg_tree(bytes)?;
     let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or(ImageError::InvalidSize)?;
     let size = tree.size();
     let transform = tiny_skia::Transform::from_scale(

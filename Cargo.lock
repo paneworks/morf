@@ -1365,6 +1365,7 @@ version = "0.1.3"
 name = "morf-image"
 version = "0.1.3"
 dependencies = [
+ "base64",
  "image",
  "resvg",
  "signed-distance-field",
@@ -1485,6 +1486,7 @@ dependencies = [
 name = "morf-svg"
 version = "0.1.3"
 dependencies = [
+ "morf-image",
  "morf-outline",
  "resvg",
 ]
