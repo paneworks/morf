@@ -20,6 +20,7 @@
 --   note_edge <key> <edge> | note_grid <note> <col> <row> | deck_edge <key> <edge>
 --   deck_add <edge> | along <deck> <0..1> | takes_new <deck> <1|0> | light <edge>
 --   view <photo key>       the photo in the picture viewer
+--   picture <photo key> <path>  a photo widget's picture
 --                          what the pointer does while arranging, for a bench
 --   theme <modern|analogue>
 --   list                   the rows, one per line
@@ -196,6 +197,10 @@ morf.ipc.desk = function(verb, a, b, c)
   elseif verb == "view" then
     -- A photo widget's picture in the viewer, as a click at rest opens it.
     desk.open_picture(desk.entry_of(a or ""))
+    return desk.picture_of(desk.entry_of(a or ""))
+  elseif verb == "picture" then
+    -- A photo widget's picture, as the picker sets it.
+    desk.set_picture(a or "", b or "")
     return desk.picture_of(desk.entry_of(a or ""))
   elseif verb == "light" then
     require("services.deck").receiving:set(a or "")
