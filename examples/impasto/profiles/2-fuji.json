@@ -1,0 +1,96 @@
+{
+  "impasto": 1,
+  "name": "Fuji",
+  "wallpaper": "pagoda-fuji-blossom.jpeg",
+  "palette": "adaptive",
+  "settings": {
+    "barStyle": "grouped",
+    "islandAttached": true,
+    "barLeft": [
+      "workspaces",
+      "overview",
+      "split",
+      "launcher"
+    ],
+    "barRight": [
+      "notifications",
+      "network",
+      "bluetooth",
+      "volume",
+      {
+        "id": "battery",
+        "figure": "on"
+      },
+      "split",
+      {
+        "id": "pet",
+        "shape": "ring"
+      }
+    ],
+    "chipShape": "icon",
+    "chipFigure": "off",
+    "desktopTheme": "modern",
+    "desktopStyle": "capsule",
+    "desktopOpacity": 75,
+    "desktopWidgets": [
+      {
+        "id": "clock",
+        "family": "2x2",
+        "col": 13,
+        "row": 0,
+        "key": "clock-13-0",
+        "theme": "analogue"
+      },
+      {
+        "id": "pet",
+        "family": "2x2",
+        "col": 15,
+        "row": 0,
+        "key": "pet-15-0"
+      },
+      {
+        "id": "calendar",
+        "family": "4x2",
+        "col": 13,
+        "row": 2,
+        "key": "calendar-13-2"
+      },
+      {
+        "id": "weather",
+        "family": "2x2",
+        "col": 13,
+        "row": 4,
+        "key": "weather-13-4"
+      },
+      {
+        "id": "media",
+        "family": "2x2",
+        "col": 15,
+        "row": 4,
+        "key": "media-15-4"
+      },
+      {
+        "id": "stats",
+        "family": "4x2",
+        "col": 13,
+        "row": 6,
+        "key": "stats-13-6"
+      },
+      {
+        "id": "github",
+        "family": "4x2",
+        "col": 13,
+        "row": 8,
+        "key": "github-13-8"
+      }
+    ],
+    "dockEdge": "bottom",
+    "dockAutohide": false,
+    "dockPinned": [
+      "kitty.desktop",
+      "thunar.desktop"
+    ],
+    "greeting": "koi",
+    "wallpaperTransition": "circle"
+  }
+}

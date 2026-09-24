@@ -1,0 +1,92 @@
+{
+  "impasto": 1,
+  "name": "Moon castle",
+  "wallpaper": "japanese-castle-full-moon.jpeg",
+  "palette": "adaptive",
+  "settings": {
+    "barStyle": "capsule",
+    "islandAttached": true,
+    "barLeft": [
+      "workspaces",
+      "launcher"
+    ],
+    "barRight": [
+      "notifications",
+      "network",
+      "volume",
+      "battery"
+    ],
+    "chipShape": "icon",
+    "chipFigure": "off",
+    "clockShowsDate": true,
+    "desktopTheme": "analogue",
+    "desktopStyle": "capsule",
+    "desktopOpacity": 60,
+    "desktopWidgets": [
+      {
+        "id": "clock",
+        "family": "4x4",
+        "col": 0,
+        "row": 0,
+        "key": "clock-0-0"
+      },
+      {
+        "id": "weather",
+        "family": "4x2",
+        "col": 0,
+        "row": 4,
+        "key": "weather-0-4"
+      },
+      {
+        "id": "calendar",
+        "family": "2x2",
+        "col": 0,
+        "row": 6,
+        "key": "calendar-0-6"
+      },
+      {
+        "id": "battery",
+        "family": "2x2",
+        "col": 2,
+        "row": 6,
+        "key": "battery-2-6"
+      },
+      {
+        "id": "volume",
+        "family": "2x2",
+        "col": 15,
+        "row": 0,
+        "key": "volume-15-0"
+      },
+      {
+        "id": "brightness",
+        "family": "2x2",
+        "col": 15,
+        "row": 2,
+        "key": "brightness-15-2"
+      },
+      {
+        "id": "timer",
+        "family": "2x2",
+        "col": 15,
+        "row": 4,
+        "key": "timer-15-4"
+      },
+      {
+        "id": "media",
+        "family": "2x2",
+        "col": 15,
+        "row": 6,
+        "key": "media-15-6"
+      }
+    ],
+    "dockEdge": "bottom",
+    "dockAutohide": true,
+    "dockPinned": [
+      "kitty.desktop",
+      "thunar.desktop"
+    ],
+    "greeting": "lava",
+    "wallpaperTransition": "fade"
+  }
+}

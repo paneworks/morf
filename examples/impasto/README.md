@@ -36,6 +36,7 @@ sense:
 | `games/` | `bar/island/games/*.qml` | the arcade's games, one file each (`common.lua` is their contract) |
 | `bar/layers/` | `IslandRest`, `IslandSummary`, `OsdLayer`, `NotificationLayer` | the island's layers below a panel |
 | `fonts/` | `home/.local/share/fonts` | Grape Nuts, the notes' hand (OFL); morf puts it on the font path |
+| `profiles/` | `home/.local/share/impasto/profiles` | the three example profiles; wallpapers by file name, found in `wallpaperDir` |
 | `bar/pieces/` | pieces of `Bar.qml` | what sits on the bar's sides |
 | `pets/` | `components/Pet*.qml`, `components/pets/*` | the pets' four drawing styles, face, family, shelf |
 | `bar/controls/` | `bar/island/controls/*.qml` | the control centre's blocks, shared with the details |
@@ -167,6 +168,17 @@ portal. `IMPASTO_INLINE_WALLPAPER=1` draws the wallpaper, the desk, its
 arranging board and its menu inside the main surface, since cage has no
 layer shell. The headless output is 1280x720, which the desk's grid makes
 11 by 5 cells.
+The settings window: `settings [section] [part]` opens it on a page (or
+closes it when no page is named), `settings_scroll <pixels>` scrolls the
+page, `layout_drop <from> <index-or-id> <over> <at>` makes the drop a drag
+in the bar's layout editor would (once the Bar page has been open),
+`profile <name>` switches profiles, `profile_export <name> <path>` and
+`profile_import <path>` write and read one. `appearance` and `palette`
+open the island's strips, `appearance_key <left|right|up|down|return>`
+presses a key in them. `IMPASTO_SETTINGS_TIMING=1` logs how long each
+page took to build and lay out. Wallpaper thumbnails are cut into
+`$XDG_CACHE_HOME/impasto-morf/thumbs`, so a test with its own config home
+wants its own cache home too.
 
 ## Status
 
@@ -190,4 +202,7 @@ layer shell. The headless output is 1280x720, which the desk's grid makes
 | control centre (blocks, toggles, arranging), Wi-Fi and Bluetooth lists | ported |
 | battery, volume, brightness, network, Bluetooth, media, notifications, calendar modules | ported |
 | desk: `desktop/`, `services/desktop.lua`, `services/auto/desktop.lua` | ported (both themes, arranging, spectrum) |
+| settings window (`settings/`, eleven sections), its components (`components/setting.lua` and the small pieces beside it) | ported; compositor options are kept in impasto's settings, never written to Hyprland |
+| profiles (`services/profiles.lua`, three examples in `profiles/`), import and export | ported |
+| island appearance panel (`bar/panels/appearance.lua`, `appearance` and `palette`) | ported |
 | everything else | in progress |

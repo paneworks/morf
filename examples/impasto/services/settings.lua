@@ -84,6 +84,15 @@ M.defaults = {
   nightLight = false,
   nightTemperature = 4000,
   cursorSize = 24,
+  -- Kept in impasto's own settings only: nothing here is pushed to the
+  -- compositor, so the user's Hyprland configuration is never written.
+  cursorColor = "palette",
+  shakeToFind = false,
+  keyboardLayouts = "us",
+  keyboardSwitch = "",
+  keyRepeatRate = 25,
+  pointerSensitivity = 0,
+  lidPolicy = "system",            -- off | keep | system
   wallpaper = "",
   wallpaperDir = "~/.local/share/wallpapers",
   theme = "adaptive",
@@ -99,6 +108,10 @@ M.path = fs.join(M.dir, "settings.json")
 local values = {}
 local revisions = {}
 local saving = false
+
+--- Whether there was no settings file when the shell started: a fresh
+--- install, which the first shipped profile may take over.
+M.fresh = not fs.is_file(M.path)
 
 local function copy(value)
   if type(value) ~= "table" then return value end
@@ -174,6 +187,73 @@ end
 
 --- Back to the default.
 function M.reset(key) M.set(key, copy(M.defaults[key])) end
+
+-- ------------------------------------------------------------- profiles --
+
+-- What belongs to this machine and this person rather than to a look: a
+-- profile never carries these, and switching one leaves them alone.
+M.machine_keys = {
+  lidPolicy = true, userName = true, userAvatar = true, language = true,
+  keyboardLayouts = true, keyboardSwitch = true, weatherPlace = true, githubUser = true,
+  doNotDisturb = true, nightLight = true, nightTemperature = true,
+  recorderAudio = true, captureShape = true, captureKind = true,
+  wallpaper = true, wallpaperDir = true, theme = true, writeAppThemes = true,
+}
+
+--- The keys a profile holds, sorted.
+function M.profile_keys()
+  local out = {}
+  for key in pairs(M.defaults) do
+    if not M.machine_keys[key] then out[#out + 1] = key end
+  end
+  table.sort(out)
+  return out
+end
+
+--- Whether `value` can stand for `key`: the default's type, and a list for
+--- the keys whose default is false ("the catalogue's own").
+function M.accepts(key, value)
+  local default = M.defaults[key]
+  if default == nil or value == nil then return false end
+  if type(value) == type(default) then return true end
+  return default == false and type(value) == "table"
+end
+
+--- A whole profile out of `given`: every profile key, the given value where
+--- it is accepted, the default elsewhere. Also returns how many given keys
+--- were left out.
+function M.complete(given)
+  given = type(given) == "table" and given or {}
+  local out, skipped = {}, 0
+  for key, value in pairs(given) do
+    if M.defaults[key] == nil or M.machine_keys[key] or not M.accepts(key, value) then
+      skipped = skipped + 1
+    end
+  end
+  for _, key in ipairs(M.profile_keys()) do
+    local value = given[key]
+    out[key] = copy(M.accepts(key, value) and value or M.defaults[key])
+  end
+  return out, skipped
+end
+
+--- The profile keys as they are now, as plain data.
+function M.snapshot()
+  local out = {}
+  for _, key in ipairs(M.profile_keys()) do out[key] = copy(values[key]) end
+  return out
+end
+
+--- Takes on a whole profile in one handler, so the file is written once.
+function M.adopt(profile)
+  local whole = M.complete(profile)
+  for key, value in pairs(whole) do M.set(key, value) end
+end
+
+--- Every profile key back to its default.
+function M.reset_all()
+  for _, key in ipairs(M.profile_keys()) do M.reset(key) end
+end
 
 --- `settings.barHeight` reads like a field, and tracks like `get`.
 setmetatable(M, {
