@@ -11,7 +11,9 @@
 --   urgency (0 low, 1 normal, 2 critical), timeout_ms (0 = never), hints,
 --   image_path (a file path or URI, "" if none), image_data (nil, or
 --   { width, height, rowstride, has_alpha, bits_per_sample, channels, data }
---   with `data` the raw pixel bytes as a list), category, desktop_entry,
+--   with `data` the raw pixel bytes as a list), image_source (nil, or the
+--   raw image as a source `ui.Image` draws, from `morf.image.from_dbus`;
+--   released when the notification goes), category, desktop_entry,
 --   resident, transient
 -- and three verbs on the server: `dismiss(id)` when the person closed it,
 -- `expire(id)` when its time ran out, and `invoke(id, key)` when they
@@ -77,6 +79,7 @@ function notifications.serve(options)
     by_id[id] = nil
     entry.closed_reason = reason
     if reason == CLOSED_BY_APP then entry.closed_by_app = true end
+    if entry.image_source then morf.image.release(entry.image_source) end
     for index, candidate in ipairs(server.list) do
       if candidate.id == id then
         table.remove(server.list, index)
@@ -155,6 +158,13 @@ function notifications.serve(options)
       end
       hints = hints or {}
       local image_path, image_data = image_of(hints, icon)
+      -- One name per id: a replacement's picture releases the one before.
+      local image_source
+      if image_data and morf.image and morf.image.from_dbus then
+        image_source = morf.image.from_dbus(image_data, { name = "notification-" .. id })
+      elseif by_id[id] and by_id[id].image_source then
+        morf.image.release(by_id[id].image_source)
+      end
       local entry = {
         id = id,
         app = app or "",
@@ -166,6 +176,7 @@ function notifications.serve(options)
         urgency = urgency_of(hints),
         image_path = image_path,
         image_data = image_data,
+        image_source = image_source,
         category = type(hints.category) == "string" and hints.category or "",
         desktop_entry = type(hints["desktop-entry"]) == "string" and hints["desktop-entry"] or "",
         -- Resident: stays after an action is pressed (a music player's

@@ -307,6 +307,8 @@ pub(crate) struct LayerState {
     pub(crate) output_power: Vec<OutputPowerControl>,
     pub(crate) output_power_target: Option<wl_output::WlOutput>,
     pub(crate) output_power_mode: Option<OutputPowerMode>,
+    /// `wlr-gamma-control-unstable-v1`: the outputs whose ramps this shell set.
+    pub(crate) gamma: crate::gamma::GammaState,
     pub(crate) shm: Option<Shm>,
     pub(crate) screencopy_manager: Option<ZwlrScreencopyManagerV1>,
     /// `ext-background-effect-v1`, when the compositor offers it.

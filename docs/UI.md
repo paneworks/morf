@@ -263,6 +263,25 @@ a window opens, closes, or changes title, app id or state), and
 `{ opened, closed, changed }` identifier lists. `morf.windows` is still
 the plain snapshot table.
 
+A row is `{ identifier, title, app_id, activated, maximized, minimized,
+fullscreen, controllable, outputs, output, parent }`. The state flags,
+`outputs` (the names of the screens the window is on, as `morf.screens`
+names them, in the order it entered them), `output` (the first of them)
+and `parent` (the identifier of the window a dialog belongs to) come from
+`wlr-foreign-toplevel-management`; on a compositor without it they are
+false, empty and absent, and `controllable` is false. A window moving to
+another screen is a change like a retitle, so a dock per screen is a
+filter:
+
+```lua
+local here = morf.screens[1] and morf.screens[1].name   -- the screen this instance drives
+ui.Text { text = function()
+  local n = 0
+  for _, w in ipairs(morf.toplevels.list()) do if w.output == here then n = n + 1 end end
+  return n .. " windows here"
+end }
+```
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).
@@ -407,8 +426,19 @@ keyed by property like `behavior`: `from` (default: where it is), `to`,
 It runs in Rust between frames and ends with the node. `loop` may be a
 binding: returning another table restarts what changed, returning nil ends
 the loops, and a property whose loop ends goes back to its `from` (through
-its `behavior`, if it has one). A write to a looping property takes it over,
-as any write takes over an animation.
+its `behavior`, if it has one) — unless the loop says `hold = true`, when
+it stays wherever the motion had it, and a loop started on it again (with
+no `from`) goes on from there: a spinner that stops keeps its angle. A write
+to a looping property takes it over, as any write takes over an animation.
+
+```lua
+ui.Item {
+  loop = function()
+    if not busy:get() then return nil end
+    return { rotation = { to = 360, duration = 900, hold = true } }
+  end,
+}
+```
 
 ```lua
 ui.Item {
@@ -567,6 +597,40 @@ ui.Text {
   decoration = function() return refused:get() and { line = "under", color = theme.alert } or {} end,
 }
 ```
+
+### Text in runs, and links
+
+A `Text` may be set in runs of their own style. `spans` is a list whose
+entries are strings, in the node's own style, or tables: `text`, `bold`,
+`weight`, `italic`, `underline`, `strike`, `color` (any notation), `size`,
+`family`, and `link`. `markup` is the part of HTML the desktop
+notification spec allows — `<b>`, `<i>`, `<u>`, `<s>`, `<a href="…">`,
+`<br>` and entities (`&amp;`, `&lt;`, `&#33;`, …); an unknown tag is
+dropped and its content kept, so a notification body can be drawn as it
+came. `markup` wins over `spans`, which win over `text`.
+
+```lua
+ui.Text {
+  font_size = 14, color = theme.ink, link_color = theme.accent, wrap = true,
+  spans = { "Build ", { text = "failed", bold = true, color = "#e5484d" },
+            " — ", { text = "see the log", link = "file:///tmp/build.log" } },
+  on_link = function(href) morf.spawn { command = { "xdg-open", href } } end,
+}
+ui.Text { markup = notification.body, wrap = true, max_lines = 4, on_link = open }
+```
+
+Anything a run leaves out is the node's own: family, size, weight, slant,
+colour, spacing. A link is underlined unless it says `underline = false`,
+and drawn in `link_color` when it names no colour of its own. A run's size
+changes the height of the line it is on. The runs are shaped together, so
+kerning and wrapping go across them; `elide` and `max_lines` keep the runs
+of what is left.
+
+`on_link(href)` hears a click on a link. The pointer finds a link where it
+was laid out — the rest of the text lets clicks through to whatever is
+beneath — and takes the node's `cursor` (`"pointer"`) over it. Where each
+link landed is the read-only `links`, a list of `{ href, x, y, width,
+height }` in the node's own space, kept current after every layout.
 
 ### Text input
 
@@ -730,6 +794,81 @@ changed are repainted. A runtime has at most 16 terminals (`MORF_LIMITS`
 `terminals=N`); destroying the node hangs its program up (`SIGHUP`), and a
 reload ends them all. `examples/terminal.lua` runs btop in a panel;
 `examples/fzf_launcher.lua` is an application launcher that is fzf.
+
+### Images
+
+`ui.Image { source = ... }` draws a path, a `file://` URI, an SVG written
+inline (text starting with `<svg`) or a `data:` URI, or a picture held in
+memory under a `memory:` source — a capture's, or pixels the configuration
+published itself:
+
+```lua
+-- A notification's `image-data` hint, straight from morf.dbus: an
+-- (iiibiiay) struct, positional or with the spec's field names.
+local cover = morf.image.from_dbus(hints["image-data"], { name = "note-" .. id })
+ui.Image { source = cover, width = 48, height = 48, fill_mode = "preserve_aspect_fit" }
+-- later, when the notification goes
+morf.image.release(cover)
+```
+
+- `morf.image.from_rgba(bytes, width, height, stride, options)` publishes raw
+  pixels and returns their source. `bytes` is a string or a list of byte
+  values (what `morf.dbus` gives for an `ay`); `stride` is the bytes from
+  one row to the next (`nil`: packed). Options: `format` (`"rgba"`, the
+  default, `"rgb"`, `"bgra"`, `"argb"`), `premultiplied` (divide the colour
+  back out of alpha), and `name`. Returns `nil, why` when the sizes do not
+  fit the bytes.
+- `morf.image.from_dbus(image_data, options)` the same, for a D-Bus
+  `(iiibiiay)` image (8 bits a sample, 3 or 4 channels).
+- `morf.image.release(source)` lets a published picture go; whether it was
+  held.
+- `morf.image.encode_png(bytes, width, height, path, options)` writes raw
+  pixels (same `stride`, `format`, `premultiplied` options) as a PNG file:
+  `true`, or `nil, why`.
+
+What became of the source is on the node, as properties a binding
+follows, and in `on_status(status, error)` (given when the image is made):
+
+- `status` is `"none"` with no source, `"loading"` until the frame that
+  first draws the node, then `"ready"`, or `"error"` with the reason in
+  `error` — a file that is not there, is not a picture, or will not decode.
+  A source whose header reads but whose pixels do not (a truncated
+  download) turns `"error"` the frame after it was first drawn.
+- The node's implicit size is the picture's own, as for any image.
+
+```lua
+local cover = ui.Image {
+  source = path, width = 64, height = 64, fill_mode = "preserve_aspect_crop",
+  on_status = function(status, err) if status == "error" then log(err) end end,
+}
+ui.Text { visible = function() return cover.status == "error" end, text = "lost" }
+```
+
+An error is not retried while the source stays the same: write another
+source (or the same one again after writing `""`) to look again.
+
+A GIF, animated PNG or animated WebP plays. `playing` (default `true`)
+pauses it where it is; `speed` (1) scales its frame delays; `frame` is the
+frame it shows, and writing it seeks; `loops` is `"forever"` or how many
+times through, after which it rests on its last frame; `frame_count` is
+read-only. It moves only while it is drawn: hidden, fully transparent, off
+a surface that stopped painting, it stops where it is and costs nothing,
+and nothing wakes the loop but its next frame. Every frame is decoded once
+at the picture's own size and kept — at most 64 MiB of frames per picture
+(a longer one plays the frames that fit), 16 moving pictures and 256 MiB in
+all per surface, the least recently drawn let go first. An inline or
+`memory:` source is always drawn still.
+
+```lua
+local spinner = ui.Image { source = "~/.cache/spinner.gif", width = 32, height = 32,
+                           playing = function() return busy:get() end }
+```
+
+A published picture is drawable on every surface and is held until it is
+released, until the same `name` is published again (which answers with a
+*new* source, so nothing draws the old pixels by mistake), or until the
+configuration is reloaded or exits. A configuration may hold 4096 of them
+and 256 MiB of pixels; past that `from_rgba` answers `nil, why`.
 
 ### Paths
 
@@ -908,6 +1047,23 @@ returns `false`. `on_closed` runs once a popup or floating window is off
 screen, whatever took it there: a close request, `win:close()`, a hidden
 parent, a dismissed popup. Each may be given in the constructor's table or
 set later with the method of the same name; `nil` clears it.
+
+Every surface also hears the keyboard and the pointer come and go:
+`on_focus_changed(focused)` when the keyboard comes to it or leaves it (a
+click on another window or surface takes it away from one with
+`keyboard_focus = "on_demand"`), and `on_pointer_changed(inside)` when the
+pointer comes over it or leaves it. Popups, floating windows and layer
+surfaces (`morf.window.layer`) take them in the constructor's table or by
+method; the shell's own surface takes them as `morf.surface.on_focus_changed`
+and `morf.surface.on_pointer_changed` (assign `nil` to stop). An arrange
+mode that should end on a click elsewhere:
+
+```lua
+morf.surface.keyboard_focus = "on_demand"
+morf.surface.on_focus_changed = function(focused)
+  if not focused then arranging:set(false) end
+end
+```
 
 ```lua
 local root = ui.Item {}

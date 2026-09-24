@@ -22,6 +22,7 @@ use crate::{capture::*, paint::*, services::*, surfaces::*};
 /// time, for no reason anybody chose.
 pub(crate) fn apply_service_requests(runtime: &mut Runtime, client: &mut LayerClient) {
     apply_output_power_requests(runtime, client);
+    crate::services::apply_gamma_requests(runtime, client);
     apply_clipboard_requests(runtime, client);
     crate::surface_drag::apply_offer_reads(runtime, client);
     crate::surface_drag::apply_drag_requests(runtime, client);
@@ -67,6 +68,8 @@ fn publish_windows(runtime: &mut Runtime, client: &mut LayerClient) {
             minimized: window.minimized,
             fullscreen: window.fullscreen,
             controllable: window.controllable,
+            outputs: window.outputs,
+            parent: window.parent,
         })
         .collect();
     runtime.set_windows(&windows);

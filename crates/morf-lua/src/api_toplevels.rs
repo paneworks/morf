@@ -112,6 +112,32 @@ pub(crate) fn toplevel_row(window: &Toplevel) -> SceneValue {
         ("minimized".into(), SceneValue::Bool(window.minimized)),
         ("fullscreen".into(), SceneValue::Bool(window.fullscreen)),
         ("controllable".into(), SceneValue::Bool(window.controllable)),
+        (
+            "outputs".into(),
+            SceneValue::List(
+                window
+                    .outputs
+                    .iter()
+                    .map(|name| SceneValue::String(name.clone()))
+                    .collect(),
+            ),
+        ),
+        // The first output, for the common question "which screen is it on";
+        // absent while the compositor has not said.
+        (
+            "output".into(),
+            window
+                .outputs
+                .first()
+                .map_or(SceneValue::Nil, |name| SceneValue::String(name.clone())),
+        ),
+        (
+            "parent".into(),
+            window
+                .parent
+                .clone()
+                .map_or(SceneValue::Nil, SceneValue::String),
+        ),
     ]))
 }
 

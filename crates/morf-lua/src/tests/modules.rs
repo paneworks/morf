@@ -368,6 +368,58 @@ fn output_power_requests_are_bounded_and_ordered() {
 }
 
 #[test]
+fn gamma_requests_keep_the_last_word_per_output() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "gamma.lua",
+            br#"
+                assert(morf.gamma.supported() == false, "unknown until the shell connects")
+                for k = 6500, 3000, -500 do morf.gamma.set { temperature = k } end
+                morf.gamma.set { output = "DP-1", temperature = 4000, brightness = 0.8, gamma = 1.1 }
+                morf.gamma.reset("HDMI-A-1")
+                assert(not pcall(morf.gamma.set, { temperature = 100 }))
+                assert(not pcall(morf.gamma.set, { brightness = 2 }))
+                assert(not pcall(morf.gamma.set, { warmth = 1 }))
+                assert(not pcall(morf.gamma.set, { output = 3 }))
+            "#,
+        )
+        .unwrap();
+    let requests = runtime.take_gamma_requests();
+    assert_eq!(
+        requests,
+        [
+            GammaRequest {
+                output: None,
+                set: Some((3000.0, 1.0, 1.0)),
+            },
+            GammaRequest {
+                output: Some("DP-1".to_owned()),
+                set: Some((4000.0, 0.8, 1.1)),
+            },
+            GammaRequest {
+                output: Some("HDMI-A-1".to_owned()),
+                set: None,
+            },
+        ]
+    );
+    runtime.set_capabilities(&[("gamma_control".to_owned(), "true".to_owned())]);
+    runtime
+        .execute(
+            "later.lua",
+            b"assert(morf.gamma.supported()) morf.gamma.reset()",
+        )
+        .unwrap();
+    assert_eq!(
+        runtime.take_gamma_requests(),
+        [GammaRequest {
+            output: None,
+            set: None
+        }]
+    );
+}
+
+#[test]
 fn clipboard_bridges_publications_and_selections() {
     let mut runtime = Runtime::default();
     runtime

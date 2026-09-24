@@ -301,6 +301,10 @@ pub struct Toplevel {
     /// unknown rather than false -- the compositor offers no control protocol,
     /// or this window did not match a handle in it.
     pub controllable: bool,
+    /// The names of the outputs the window is on.
+    pub outputs: Vec<String>,
+    /// The identifier of the window this one belongs to, if any.
+    pub parent: Option<String>,
 }
 
 /// Something a configuration asked to do to another window.

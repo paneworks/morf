@@ -131,6 +131,17 @@ impl Runtime {
                 entry.set_field(ctx, "minimized", window.minimized);
                 entry.set_field(ctx, "fullscreen", window.fullscreen);
                 entry.set_field(ctx, "controllable", window.controllable);
+                let outputs = luna::Table::new(&ctx);
+                for (index, name) in window.outputs.iter().enumerate() {
+                    let _ = outputs.set(ctx, index as i64 + 1, ctx.intern(name.as_bytes()));
+                }
+                entry.set_field(ctx, "outputs", outputs);
+                if let Some(first) = window.outputs.first() {
+                    entry.set_field(ctx, "output", ctx.intern(first.as_bytes()));
+                }
+                if let Some(parent) = &window.parent {
+                    entry.set_field(ctx, "parent", ctx.intern(parent.as_bytes()));
+                }
                 let _ = table.set(ctx, index as i64 + 1, entry);
             }
         });

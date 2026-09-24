@@ -132,6 +132,16 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         Element::Text => {
             properties.extend([
                 string("text", ""),
+                // Styled runs, which win over `text`; `markup` wins over both.
+                any("spans", Value::List(Vec::new())),
+                string("markup", ""),
+                // The colour of a link run that names none; nil is the text's.
+                any("link_color", Value::Nil),
+                // Kept by the runtime: where each link run was laid out, as
+                // `{ href, x, y, width, height }` in the node's own space.
+                any("links", Value::List(Vec::new())),
+                // The pointer's shape over a link.
+                string("cursor", "pointer"),
                 color("color", Color::rgba8(0, 0, 0, 255)),
                 number("font_size", 16.0),
                 number("font_weight", 400.0),
@@ -261,6 +271,18 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("softness", 0.0),
                 number("outline_width", 0.0),
                 color("outline_color", Color::rgba8(0, 0, 0, 0)),
+                // Kept by the runtime, for bindings to follow: what became of
+                // the source. `none` without one, `loading` until it was
+                // looked at, then `ready` or `error` with the reason.
+                string("status", "none"),
+                any("error", Value::Nil),
+                // A moving picture's playback. `frame` is where it is, and a
+                // write seeks; `frame_count` is the runtime's.
+                boolean("playing", true),
+                number("speed", 1.0),
+                number("frame", 0.0),
+                any("loops", Value::String("forever".to_owned())),
+                number("frame_count", 0.0),
             ]);
         }
         Element::Icon => {

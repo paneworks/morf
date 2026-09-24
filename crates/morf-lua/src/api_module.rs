@@ -489,13 +489,18 @@ pub(crate) fn install_module_api<'gc>(
                     .element(root)
                     .map_err(|error| HostError(error.to_string()))?;
             }
-            let id = register_window_surface(
-                &mut state.borrow_mut(),
-                root,
-                visible,
-                updates_enabled,
-                WindowSurfaceKind::Layer(config),
-            );
+            let id = {
+                let mut state = state.borrow_mut();
+                let id = register_window_surface(
+                    &mut state,
+                    root,
+                    visible,
+                    updates_enabled,
+                    WindowSurfaceKind::Layer(config),
+                );
+                crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
+                id
+            };
             let userdata = UserData::new_static(&ctx, WindowSurfaceToken { id });
             userdata.set_metatable(ctx, Some(ctx.fetch(&window_metatable)));
             stack.replace(ctx, userdata);

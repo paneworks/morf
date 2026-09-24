@@ -46,6 +46,7 @@ fn capabilities_of(
         ("backdrop_blur", client.supports_backdrop_blur()),
         ("toplevels", client.supports_toplevels()),
         ("toplevel_control", client.supports_toplevel_control()),
+        ("gamma_control", client.supports_gamma_control()),
     ] {
         list.push((name.to_owned(), supported.to_string()));
     }
@@ -158,6 +159,8 @@ pub(crate) fn run_surface(
                 | LayerEvent::Drop { .. }
                 | LayerEvent::DragSourceEnded { .. }
                 | LayerEvent::KeyboardFocus { .. }
+                | LayerEvent::SurfaceKeyboard { .. }
+                | LayerEvent::SurfacePointer { .. }
                 | LayerEvent::InputMethod(_)
                 | LayerEvent::TextInput(_)
                 | LayerEvent::Frame { .. }
@@ -288,6 +291,9 @@ pub(crate) fn run_surface(
             }
             if update.refresh_idle {
                 client.set_idle_timeouts(&runtime.idle_timeouts());
+            }
+            if update.reloaded {
+                let _ = client.reset_gamma(None);
             }
         }
         if recreate_surface {

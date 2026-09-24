@@ -154,6 +154,54 @@ fn a_node_loop_runs_until_its_binding_lets_it_go() {
 }
 
 #[test]
+fn a_held_loop_stays_where_it_stopped() {
+    // A spinner that stops spinning keeps the angle it had, and one started
+    // again turns on from there rather than jumping back to its `from`.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "hold.lua",
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local spinning = morf.signal("spinning", true)
+                ui.Item {
+                    loop = function()
+                        if not spinning:get() then return nil end
+                        return { rotation = { to = 360, duration = 400, hold = true } }
+                    end,
+                }
+                morf.ipc.spin = function(on) spinning:set(on) end
+                assert(not pcall(ui.Item, { loop = { x = { to = 1, duration = 10, hold = 1 } } }))
+            "#,
+        )
+        .unwrap();
+    let face = runtime.scene().roots()[0];
+    tick(&mut runtime, 100);
+    runtime
+        .call_ipc("spin", &[IpcValue::Boolean(false)])
+        .unwrap();
+    assert!(!runtime.scene().is_animating(face, "rotation").unwrap());
+    let stopped = runtime.scene().number(face, "rotation").unwrap();
+    assert!((stopped - 90.0).abs() < 1.0, "held at {stopped}");
+    tick(&mut runtime, 200);
+    assert_eq!(runtime.scene().number(face, "rotation").unwrap(), stopped);
+    assert_eq!(
+        runtime.scene().target(face, "rotation").unwrap(),
+        &morf_scene::Value::Number(stopped)
+    );
+    runtime
+        .call_ipc("spin", &[IpcValue::Boolean(true)])
+        .unwrap();
+    tick(&mut runtime, 16);
+    let resumed = runtime.scene().number(face, "rotation").unwrap();
+    assert!(
+        resumed >= stopped && resumed < stopped + 20.0,
+        "turns on from {stopped}: {resumed}"
+    );
+}
+
+#[test]
 fn a_static_loop_ends_with_its_node_and_bad_loops_are_refused() {
     let mut runtime = Runtime::default();
     runtime

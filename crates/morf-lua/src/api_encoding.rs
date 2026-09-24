@@ -5,7 +5,7 @@
 //! `nil, message`, since the input usually came from outside.
 
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
-use morf_io::codec;
+use morf_io::{archive, codec};
 
 use crate::scene_bindings::*;
 
@@ -36,6 +36,163 @@ fn flag<'gc>(
         },
         _ => Err(HostError("encoding options must be a table".into())),
     }
+}
+
+/// Largest output a decompression may produce unless `max_size` says less.
+const DEFAULT_MAX_OUTPUT: usize = 64 * 1024 * 1024;
+/// Largest output a caller may ask a decompression for.
+const MAX_OUTPUT: usize = 512 * 1024 * 1024;
+const DEFAULT_MAX_ENTRIES: usize = 100_000;
+const MAX_ENTRIES: usize = 1_000_000;
+
+fn count_option<'gc>(
+    ctx: Context<'gc>,
+    options: LuaValue<'gc>,
+    field: &str,
+    default: usize,
+    most: usize,
+) -> Result<usize, HostError> {
+    let LuaValue::Table(table) = options else {
+        return Ok(default);
+    };
+    match table.get_value(ctx, field) {
+        LuaValue::Nil => Ok(default),
+        LuaValue::Integer(value) if value > 0 && value as u64 <= most as u64 => Ok(value as usize),
+        LuaValue::Number(value) if value >= 1.0 && value <= most as f64 => Ok(value as usize),
+        _ => Err(HostError(format!("{field} must be 1..{most}"))),
+    }
+}
+
+/// `format` as given (`nil` or `"auto"` detects), then the bytes inflated.
+fn inflate(input: &[u8], format: Option<&str>, max_output: usize) -> Result<Vec<u8>, String> {
+    let format = match format {
+        None | Some("auto") => archive::detect(input).ok_or_else(|| {
+            "unknown compression format (give one: gzip, zlib, deflate, zstd, xz, lzma)".to_string()
+        })?,
+        Some(name) => archive::Compression::parse(name)
+            .ok_or_else(|| format!("unknown compression format {name:?}"))?,
+    };
+    archive::decompress(input, format, max_output)
+}
+
+fn format_name(value: LuaValue<'_>) -> Result<Option<String>, HostError> {
+    match value {
+        LuaValue::Nil => Ok(None),
+        LuaValue::String(name) => Ok(Some(String::from_utf8_lossy(name.as_bytes()).into_owned())),
+        _ => Err(HostError("format must be a string".into())),
+    }
+}
+
+/// A tar archive's bytes: inflated first when a magic number says so.
+fn tar_bytes(input: &[u8], max_output: usize) -> Result<std::borrow::Cow<'_, [u8]>, String> {
+    match archive::detect(input) {
+        Some(format) => archive::decompress(input, format, max_output).map(std::borrow::Cow::Owned),
+        None => Ok(std::borrow::Cow::Borrowed(input)),
+    }
+}
+
+fn entry_table<'gc>(
+    ctx: Context<'gc>,
+    entry: &archive::TarEntry,
+    data: Option<&[u8]>,
+) -> Table<'gc> {
+    let row = Table::new(&ctx);
+    row.set_field(
+        ctx,
+        "name",
+        luna::String::from_slice(&ctx, entry.name.as_bytes()),
+    );
+    row.set_field(ctx, "type", entry.kind);
+    row.set_field(ctx, "size", entry.size as i64);
+    row.set_field(ctx, "mode", i64::from(entry.mode));
+    row.set_field(ctx, "mtime", entry.mtime);
+    if !entry.link.is_empty() {
+        row.set_field(
+            ctx,
+            "link",
+            luna::String::from_slice(&ctx, entry.link.as_bytes()),
+        );
+    }
+    if let Some(data) = data {
+        row.set_field(ctx, "data", luna::String::from_slice(&ctx, data));
+    }
+    row
+}
+
+pub(crate) fn install_archive_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
+    let module = Table::new(&ctx);
+
+    // tar(bytes, { contents = false, max_size, max_entries }): every member,
+    // `data` included when `contents` is true. A gzip, zstd or xz archive is
+    // inflated first.
+    module.set_field(
+        ctx,
+        "tar",
+        Callback::from_fn(&ctx, |ctx, _, mut stack| {
+            let (input, options): (LuaValue, LuaValue) = stack.consume(ctx)?;
+            let input = bytes(input, "archive.tar")?;
+            let contents = flag(ctx, options, "contents", false)?;
+            let max_output =
+                count_option(ctx, options, "max_size", DEFAULT_MAX_OUTPUT, MAX_OUTPUT)?;
+            let max_entries = count_option(
+                ctx,
+                options,
+                "max_entries",
+                DEFAULT_MAX_ENTRIES,
+                MAX_ENTRIES,
+            )?;
+            let listed = tar_bytes(input, max_output).and_then(|tar| {
+                archive::tar_entries(&tar, max_entries).map(|entries| (tar, entries))
+            });
+            match listed {
+                Ok((tar, entries)) => {
+                    let list = Table::new(&ctx);
+                    for (index, entry) in entries.iter().enumerate() {
+                        let data = contents.then(|| &tar[entry.data.clone()]);
+                        list.set(ctx, index as i64 + 1, entry_table(ctx, entry, data))?;
+                    }
+                    stack.replace(ctx, list);
+                }
+                Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
+            }
+            Ok(CallbackReturn::Return)
+        }),
+    );
+
+    // tar_read(bytes, name, options): one member's bytes, or nil and why.
+    module.set_field(
+        ctx,
+        "tar_read",
+        Callback::from_fn(&ctx, |ctx, _, mut stack| {
+            let (input, name, options): (LuaValue, luna::String, LuaValue) = stack.consume(ctx)?;
+            let input = bytes(input, "archive.tar_read")?;
+            let max_output =
+                count_option(ctx, options, "max_size", DEFAULT_MAX_OUTPUT, MAX_OUTPUT)?;
+            let max_entries = count_option(
+                ctx,
+                options,
+                "max_entries",
+                DEFAULT_MAX_ENTRIES,
+                MAX_ENTRIES,
+            )?;
+            let wanted = String::from_utf8_lossy(name.as_bytes()).into_owned();
+            let found = tar_bytes(input, max_output).and_then(|tar| {
+                let entries = archive::tar_entries(&tar, max_entries)?;
+                let entry = entries
+                    .iter()
+                    .find(|entry| entry.name == wanted && entry.kind == "file")
+                    .ok_or_else(|| format!("{wanted}: no such file in the archive"))?;
+                Ok(tar[entry.data.clone()].to_vec())
+            });
+            match found {
+                Ok(data) => stack.replace(ctx, luna::String::from_slice(&ctx, data)),
+                Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
+            }
+            Ok(CallbackReturn::Return)
+        }),
+    );
+
+    morf.set_field(ctx, "archive", module);
 }
 
 pub(crate) fn install_encoding_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
@@ -180,6 +337,39 @@ pub(crate) fn install_encoding_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             let id = codec::uuid_v4().map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, id);
+            Ok(CallbackReturn::Return)
+        }),
+    );
+
+    // decompress(bytes, format, { max_size }): gzip, zlib, deflate, zstd, xz
+    // or lzma; `format` nil or "auto" goes by the magic number.
+    encoding.set_field(
+        ctx,
+        "decompress",
+        Callback::from_fn(&ctx, |ctx, _, mut stack| {
+            let (input, format, options): (LuaValue, LuaValue, LuaValue) = stack.consume(ctx)?;
+            let input = bytes(input, "decompress")?;
+            let format = format_name(format)?;
+            let max_output =
+                count_option(ctx, options, "max_size", DEFAULT_MAX_OUTPUT, MAX_OUTPUT)?;
+            match inflate(input, format.as_deref(), max_output) {
+                Ok(out) => stack.replace(ctx, luna::String::from_slice(&ctx, out)),
+                Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
+            }
+            Ok(CallbackReturn::Return)
+        }),
+    );
+    // compression(bytes): the format a magic number names, or nil.
+    encoding.set_field(
+        ctx,
+        "compression",
+        Callback::from_fn(&ctx, |ctx, _, mut stack| {
+            let input: LuaValue = stack.consume(ctx)?;
+            let input = bytes(input, "compression")?;
+            match archive::detect(input) {
+                Some(format) => stack.replace(ctx, format.name()),
+                None => stack.replace(ctx, LuaValue::Nil),
+            }
             Ok(CallbackReturn::Return)
         }),
     );

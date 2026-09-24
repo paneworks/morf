@@ -109,6 +109,11 @@ impl Runtime {
     }
 
     /// Takes pending compositor output power requests.
+    /// Takes the `morf.gamma` requests made since the last call, in order.
+    pub fn take_gamma_requests(&mut self) -> Vec<crate::GammaRequest> {
+        std::mem::take(&mut self.reactive.borrow_mut().gamma_requests)
+    }
+
     pub fn take_output_power_requests(&mut self) -> Vec<bool> {
         std::mem::take(&mut self.reactive.borrow_mut().output_power_requests)
     }

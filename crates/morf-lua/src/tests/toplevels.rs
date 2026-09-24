@@ -106,3 +106,70 @@ fn bindings_and_repeaters_follow_the_compositor_windows() {
         [IpcValue::String("2/0/0 0/0/1 0/1/0".into())]
     );
 }
+
+#[test]
+fn a_window_says_which_screens_it_is_on_and_whose_dialog_it_is() {
+    // A dock on one screen shows that screen's windows, without asking the
+    // compositor's own socket where they are.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "screens.lua",
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local heard = 0
+                morf.toplevels.on_changed(function() heard = heard + 1 end)
+                local here = ui.Text {
+                    text = function()
+                        local names = {}
+                        for _, w in ipairs(morf.toplevels.list()) do
+                            if w.output == "DP-1" then names[#names + 1] = w.identifier end
+                        end
+                        return table.concat(names, ",")
+                    end,
+                }
+                morf.ipc.describe = function(id)
+                    local w = morf.toplevels.get(id)
+                    return table.concat(w.outputs, "+") .. "|" .. tostring(w.output)
+                        .. "|" .. tostring(w.parent) .. "|" .. heard
+                end
+                morf.ipc.model = function()
+                    local row = morf.toplevels.model:get(2)
+                    return row.identifier .. ":" .. tostring(row.parent) .. ":" .. tostring(row.output)
+                end
+            "#,
+        )
+        .unwrap();
+    let here = runtime.scene().roots()[0];
+    let mut editor = window("a", "Editor");
+    editor.outputs = vec!["DP-1".into(), "HDMI-A-1".into()];
+    let mut dialog = window("b", "Save as");
+    dialog.outputs = vec!["DP-1".into()];
+    dialog.parent = Some("a".into());
+    let elsewhere = window("c", "Mail");
+    runtime.set_windows(&[editor.clone(), dialog.clone(), elsewhere.clone()]);
+    runtime.poll_services();
+    assert_eq!(runtime.scene().string_value(here, "text").unwrap(), "a,b");
+    let describe = |runtime: &mut Runtime, id: &str| match runtime
+        .call_ipc("describe", &[IpcValue::String(id.into())])
+        .unwrap()
+        .as_slice()
+    {
+        [IpcValue::String(text)] => text.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(describe(&mut runtime, "a"), "DP-1+HDMI-A-1|DP-1|nil|1");
+    assert_eq!(describe(&mut runtime, "b"), "DP-1|DP-1|a|1");
+    assert_eq!(describe(&mut runtime, "c"), "|nil|nil|1");
+    assert_eq!(
+        runtime.call_ipc("model", &[]).unwrap(),
+        [IpcValue::String("b:a:DP-1".into())]
+    );
+    // Moving a window to another screen is a change like any other.
+    editor.outputs = vec!["HDMI-A-1".into()];
+    runtime.set_windows(&[editor, dialog, elsewhere]);
+    runtime.poll_services();
+    assert_eq!(runtime.scene().string_value(here, "text").unwrap(), "b");
+    assert_eq!(describe(&mut runtime, "a"), "HDMI-A-1|HDMI-A-1|nil|2");
+}

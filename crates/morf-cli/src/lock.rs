@@ -150,7 +150,9 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                 // popups or floating windows.
                 LayerEvent::AuxScale { .. }
                 | LayerEvent::ShortcutsInhibited { .. }
-                | LayerEvent::KeyboardFocus { .. } => {}
+                | LayerEvent::KeyboardFocus { .. }
+                | LayerEvent::SurfaceKeyboard { .. }
+                | LayerEvent::SurfacePointer { .. } => {}
                 LayerEvent::SessionLocked => {
                     locked = true;
                     repaint |= runtime.set_session_lock_state(SessionLockState::Locked);

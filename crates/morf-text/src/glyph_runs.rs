@@ -125,10 +125,18 @@ impl TextSystem {
         scale: f32,
         field: bool,
     ) -> Vec<RasterGlyph> {
-        let physical = self.physical_glyphs(key, origin, scale);
+        let Some(cached) = self.buffers.get(&key) else {
+            return Vec::new();
+        };
+        let physical = crate::style::physical_glyphs_styled(cached, origin, scale);
         physical
             .into_iter()
-            .filter_map(|glyph| self.raster_glyph(&glyph, field))
+            .filter_map(|(glyph, tint, font_size)| {
+                let mut raster = self.raster_glyph(&glyph, field)?;
+                raster.tint = tint;
+                raster.font_size = font_size;
+                Some(raster)
+            })
             .collect()
     }
 }

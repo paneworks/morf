@@ -115,6 +115,9 @@ impl LayerClient {
         let output_power_manager = globals
             .bind::<ZwlrOutputPowerManagerV1, _, _>(&qh, 1..=1, ())
             .ok();
+        let gamma_manager = globals
+            .bind::<wayland_protocols_wlr::gamma_control::v1::client::zwlr_gamma_control_manager_v1::ZwlrGammaControlManagerV1, _, _>(&qh, 1..=1, ())
+            .ok();
         let shm = Shm::bind(&globals, &qh).ok();
         // Blur behind a surface. Absent on compositors that do not implement it,
         // in which case a configuration asking for one simply does not get it —
@@ -241,6 +244,10 @@ impl LayerClient {
             output_power: Vec::new(),
             output_power_target: None,
             output_power_mode: None,
+            gamma: crate::gamma::GammaState {
+                manager: gamma_manager,
+                ..Default::default()
+            },
             shm,
             screencopy_manager,
             toplevel_list,

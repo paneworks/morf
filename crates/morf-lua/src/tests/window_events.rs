@@ -171,3 +171,63 @@ fn a_popup_hears_its_size_but_not_a_close_request() {
         [IpcValue::String("180090".into())]
     );
 }
+
+#[test]
+fn a_surface_hears_the_keyboard_and_the_pointer_come_and_go() {
+    // An arrange mode ends on a click elsewhere: the keyboard leaves, or the
+    // pointer does, and the surface it was on hears it.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "focus.lua",
+            br#"
+                local ui = require("morf.ui")
+                local window = require("morf.window")
+                local heard = {}
+                local function note(what) return function(on) heard[#heard + 1] = what .. "=" .. tostring(on) end end
+                ui.Item {}
+                morf.surface.on_focus_changed = note("shell-keys")
+                morf.surface.on_pointer_changed = note("shell-pointer")
+                assert(type(morf.surface.on_focus_changed) == "function")
+                local desk = window.layer {
+                    root = ui.Item {}, visible = true, keyboard_focus = "on_demand",
+                    on_focus_changed = note("desk-keys"),
+                }
+                desk:on_pointer_changed(note("desk-pointer"))
+                local menu = window.popup { root = ui.Item {}, width = 100, height = 100 }
+                menu:on_focus_changed(note("menu-keys"))
+                assert(not pcall(desk.on_resize, desk, function() end), "a layer has no resize to hear")
+                assert(not pcall(function() morf.surface.on_focus_changed = 3 end))
+                _G.ids = { desk = desk, menu = menu }
+                morf.ipc.heard = function() return table.concat(heard, " ") end
+                morf.ipc.clear = function() morf.surface.on_pointer_changed = nil end
+            "#,
+        )
+        .unwrap();
+    let ids: Vec<u64> = runtime
+        .window_surface_configs()
+        .iter()
+        .map(|config| config.id)
+        .collect();
+    let (desk, menu) = (ids[0], ids[1]);
+    assert!(runtime.dispatch_surface_focus(None, true));
+    assert!(runtime.dispatch_surface_pointer(None, true));
+    assert!(runtime.dispatch_surface_focus(Some(desk), true));
+    assert!(runtime.dispatch_surface_focus(Some(desk), false));
+    assert!(runtime.dispatch_surface_pointer(Some(desk), false));
+    assert!(runtime.dispatch_surface_focus(Some(menu), false));
+    assert!(
+        !runtime.dispatch_surface_pointer(Some(menu), true),
+        "nothing to hear it"
+    );
+    runtime.call_ipc("clear", &[]).unwrap();
+    assert!(!runtime.dispatch_surface_pointer(None, false));
+    assert_eq!(
+        ask(&mut runtime, "heard"),
+        [IpcValue::String(
+            "shell-keys=true shell-pointer=true desk-keys=true desk-keys=false \
+             desk-pointer=false menu-keys=false"
+                .into()
+        )]
+    );
+}

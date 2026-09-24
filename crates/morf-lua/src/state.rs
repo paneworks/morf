@@ -252,6 +252,7 @@ pub(crate) struct ReactiveState {
     /// cancelled) at any time, not only the ones made while loading.
     pub(crate) idle_timeouts_changed: bool,
     pub(crate) output_power_requests: Vec<bool>,
+    pub(crate) gamma_requests: Vec<crate::api_gamma::GammaRequest>,
     pub(crate) clipboard_requests: Vec<ClipboardRequest>,
     pub(crate) clipboard_callbacks: Vec<StashedClosure>,
     /// `morf.clipboard.watch` callbacks, each with whether it wants the
@@ -327,6 +328,9 @@ pub(crate) struct ReactiveState {
     pub(crate) window_sizes: HashMap<u64, crate::window_events::WindowSize>,
     /// `win:on_resize`, `win:on_close_requested` and `win:on_closed`.
     pub(crate) window_handlers: HashMap<(u64, crate::window_events::WindowEvent), StashedClosure>,
+    /// `morf.surface.on_focus_changed` and `on_pointer_changed`, for the
+    /// shell's own surface.
+    pub(crate) surface_handlers: HashMap<crate::window_events::WindowEvent, StashedClosure>,
     pub(crate) layer_surface_changed: bool,
     pub(crate) window_surface_actions: Vec<WindowSurfaceAction>,
     pub(crate) popup_node_anchors: HashMap<u64, PopupNodeAnchor>,
@@ -366,6 +370,10 @@ pub(crate) struct ReactiveState {
     pub(crate) io: crate::api_io::IoHub,
     /// `ui.Terminal` nodes: their emulators and their programs.
     pub(crate) terminals: crate::terminals::TerminalHub,
+    /// Text nodes set in runs, whose links the layout places.
+    pub(crate) linked_texts: std::collections::HashSet<NodeHandle>,
+    /// Every `ui.Image`: what became of its source, and its playback.
+    pub(crate) images: crate::images::ImageNodes,
     pub(crate) session_unlock_requested: bool,
     pub(crate) layer_surface: LayerSurfaceConfig,
     pub(crate) shell_root: PathBuf,
@@ -539,6 +547,7 @@ impl ReactiveState {
             next_idle_subscription: 0,
             idle_timeouts_changed: false,
             output_power_requests: Vec::new(),
+            gamma_requests: Vec::new(),
             clipboard_requests: Vec::new(),
             clipboard_callbacks: Vec::new(),
             clipboard_watchers: Vec::new(),
@@ -572,6 +581,8 @@ impl ReactiveState {
             virtual_now: None,
             timer_callbacks: HashMap::new(),
             destroy_hooks: HashMap::new(),
+            linked_texts: Default::default(),
+            images: Default::default(),
             node_loops: HashMap::new(),
             pending_destroyed: Vec::new(),
             running_destroyed: false,
@@ -586,6 +597,7 @@ impl ReactiveState {
             retain_callbacks: HashMap::new(),
             retained_destroy_queue: HashSet::new(),
             window_surfaces: HashMap::new(),
+            surface_handlers: HashMap::new(),
             next_window_surface: 0,
             window_surfaces_changed: false,
             window_sizes: HashMap::new(),

@@ -336,6 +336,8 @@ pub(crate) fn paint_layer(
         client.commit_layer(layer);
     }
     drop(scene);
+    // After the render: what the images became is known once they were drawn.
+    runtime.sync_images(&layout, renderer.backend_mut().image_cache());
     runtime.observe_layout(&layout);
     split.mark("observe layout");
     split.finish();
@@ -545,6 +547,8 @@ pub(crate) fn paint_auxiliary_surface(
         kind.request_frame(client, surface.id);
     }
     drop(scene);
+    // After the render: what the images became is known once they were drawn.
+    runtime.sync_images(&layout, renderer.backend_mut().image_cache());
     runtime.observe_layout(&layout);
     surface.layout = Some(CachedLayout {
         layout,

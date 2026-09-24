@@ -17,6 +17,9 @@ pub(crate) struct CachedBuffer {
     /// What shaping could not be told, applied to every glyph after it.
     pub(crate) word_spacing: f32,
     pub(crate) alignment: TextAlignment,
+    /// The runs it was set in, when it was: glyph metadata is an index into
+    /// these, plus one.
+    pub(crate) rich: Option<std::sync::Arc<morf_scene::RichText>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -190,6 +193,12 @@ pub struct RasterGlyph {
     pub draw_height: f32,
     /// Bitmap pixel format.
     pub content: RasterContent,
+    /// A styled run's own colour, straight RGBA, for text set in runs; `None`
+    /// draws in the node's colour.
+    pub tint: Option<[u8; 4]>,
+    /// The logical size this glyph was set at when a run changed it; zero is
+    /// the node's own size.
+    pub font_size: f32,
     /// Tightly packed bitmap bytes.
     ///
     /// Shared rather than owned. The atlas reads these only on a miss — once a
@@ -426,6 +435,8 @@ mod glyph_runs;
 mod measure;
 pub(crate) use elide::elided_text;
 mod raster_glyph;
+mod rich;
+pub use rich::{LinkRect, SpanBand, SpanLine};
 mod style;
 pub use style::LineBand;
 mod terminal;
@@ -440,6 +451,8 @@ pub use glyph_fields::{
 mod caret_tests;
 #[cfg(test)]
 mod probe_tests;
+#[cfg(test)]
+mod rich_tests;
 #[cfg(test)]
 mod style_tests;
 #[cfg(test)]

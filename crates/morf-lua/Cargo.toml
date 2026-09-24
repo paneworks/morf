@@ -25,3 +25,6 @@ morf-services.workspace = true
 morf-terminal.workspace = true
 serde_json.workspace = true
 pastel = "0.12"
+
+[dev-dependencies]
+image.workspace = true

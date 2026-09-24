@@ -32,10 +32,20 @@ pub(crate) enum WindowEvent {
     Resized,
     CloseRequested,
     Closed,
+    /// The keyboard came to the surface, or left it.
+    FocusChanged,
+    /// The pointer came over the surface, or left it.
+    PointerChanged,
 }
 
 impl WindowEvent {
-    pub(crate) const ALL: [Self; 3] = [Self::Resized, Self::CloseRequested, Self::Closed];
+    pub(crate) const ALL: [Self; 5] = [
+        Self::Resized,
+        Self::CloseRequested,
+        Self::Closed,
+        Self::FocusChanged,
+        Self::PointerChanged,
+    ];
 
     /// The method that sets it, and the constructor key.
     pub(crate) fn method(self) -> &'static str {
@@ -43,7 +53,14 @@ impl WindowEvent {
             Self::Resized => "on_resize",
             Self::CloseRequested => "on_close_requested",
             Self::Closed => "on_closed",
+            Self::FocusChanged => "on_focus_changed",
+            Self::PointerChanged => "on_pointer_changed",
         }
+    }
+
+    /// Whether a layer surface hears it, as popups and floating windows do.
+    pub(crate) fn for_layers(self) -> bool {
+        matches!(self, Self::FocusChanged | Self::PointerChanged)
     }
 }
 
@@ -152,6 +169,13 @@ pub(crate) fn window_handler_method<'gc>(
         let Some(window) = state.window_surfaces.get(&surface.id) else {
             return Err(HostError("window surface is stale".into()).into());
         };
+        if matches!(window.kind, WindowSurfaceKind::Layer(_)) && !event.for_layers() {
+            return Err(HostError(format!(
+                "{} is only valid for popups and floating windows",
+                event.method()
+            ))
+            .into());
+        }
         if event == WindowEvent::CloseRequested
             && !matches!(window.kind, WindowSurfaceKind::Floating(_))
         {
@@ -183,7 +207,14 @@ pub(crate) fn window_handlers_from_options<'gc>(
     id: u64,
     options: luna::Table<'gc>,
 ) -> Result<(), HostError> {
+    let layer = state
+        .window_surfaces
+        .get(&id)
+        .is_some_and(|window| matches!(window.kind, WindowSurfaceKind::Layer(_)));
     for event in WindowEvent::ALL {
+        if layer && !event.for_layers() {
+            continue;
+        }
         match options.get_value(ctx, event.method()) {
             LuaValue::Nil => {}
             LuaValue::Function(luna::Function::Closure(callback)) => {
@@ -272,6 +303,44 @@ impl Runtime {
             .run_window_handler(id, WindowEvent::CloseRequested, &[])
             .is_some_and(|values| values.first() == Some(&IpcValue::Boolean(false)));
         !keep && self.set_window_surface_visible(id, false)
+    }
+
+    /// The keyboard came to a surface or left it: `on_focus_changed(focused)`
+    /// on the window with that id, or on `morf.surface` for `None`.
+    pub fn dispatch_surface_focus(&mut self, window: Option<u64>, focused: bool) -> bool {
+        self.dispatch_surface_event(window, WindowEvent::FocusChanged, focused)
+    }
+
+    /// The pointer came over a surface or left it: `on_pointer_changed(inside)`.
+    pub fn dispatch_surface_pointer(&mut self, window: Option<u64>, inside: bool) -> bool {
+        self.dispatch_surface_event(window, WindowEvent::PointerChanged, inside)
+    }
+
+    fn dispatch_surface_event(
+        &mut self,
+        window: Option<u64>,
+        event: WindowEvent,
+        on: bool,
+    ) -> bool {
+        let args = [IpcValue::Boolean(on)];
+        match window {
+            Some(id) => self.run_window_handler(id, event, &args).is_some(),
+            None => {
+                let handler = self.reactive.borrow().surface_handlers.get(&event).cloned();
+                let Some(handler) = handler else {
+                    return false;
+                };
+                if let Err(message) = self
+                    .run_handler(|ctx, limits| execute_ipc_handler(ctx, &handler, &args, limits))
+                {
+                    self.reactive.borrow_mut().log(
+                        LogLevel::Warn,
+                        format!("morf.surface.{}: {message}", event.method()),
+                    );
+                }
+                true
+            }
+        }
     }
 
     /// A popup or floating window went off screen, whatever took it: runs its

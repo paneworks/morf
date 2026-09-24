@@ -473,5 +473,16 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "tab_navigation"
             | "hovered"
             | "pressed"
+            // An image's status and playback say what is drawn in its box,
+            // never how big the box is.
+            | "status"
+            | "error"
+            | "playing"
+            | "speed"
+            | "frame"
+            | "loops"
+            | "frame_count"
+            | "links"
+            | "link_color"
     )
 }

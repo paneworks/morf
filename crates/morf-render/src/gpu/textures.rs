@@ -11,6 +11,8 @@ use super::glyphs::*;
 pub(crate) struct TextureImage {
     pub(crate) _texture: wgpu::Texture,
     pub(crate) bind_group: wgpu::BindGroup,
+    /// For a moving picture, the frame the texture holds now.
+    pub(crate) frame: Option<u32>,
 }
 
 /// How many decoded images the GPU keeps around.
@@ -131,6 +133,7 @@ pub(crate) fn create_texture_batch(
             distance_field,
             distance_field_spread,
             distance_field_style,
+            frame,
             ..
         } = command
         else {
@@ -154,11 +157,77 @@ pub(crate) fn create_texture_batch(
                 TextureImage {
                     _texture: external.image.texture.clone(),
                     bind_group: external.bind_group.clone(),
+                    frame: None,
                 },
                 placement,
                 TextureStyle {
                     overlay: *color_overlay,
                     distance_field: *distance_field,
+                    field: *distance_field_style,
+                    spread: *distance_field_spread,
+                },
+                context.target_size,
+                scale,
+            );
+            continue;
+        }
+        // A moving picture: its frames were decoded once, at its own size,
+        // and one texture holds whichever frame the node is on. A change of
+        // frame is an upload into it, never a new texture.
+        if icon_theme.is_none()
+            && !*distance_field
+            && let Some(animation) = cache.animation(source)
+        {
+            let index = (*frame as usize) % animation.frames.len();
+            let placement = texture_placement(
+                *bounds,
+                (animation.width, animation.height),
+                *fill_mode,
+                *transform,
+            );
+            let key = TextureKey {
+                source: source.clone(),
+                theme: None,
+                width: animation.width,
+                height: animation.height,
+                // No surface scale: the frames are drawn at their own size
+                // whatever the output's, so zero marks the key as a moving one.
+                scale_120: 0,
+                distance_field: false,
+                distance_field_spread: 0,
+                smooth: *smooth,
+            };
+            used.insert(key.clone());
+            let image = textures.entry(key).or_insert_with(|| {
+                upload_texture(
+                    &context,
+                    animation.width,
+                    animation.height,
+                    &animation.frames[index],
+                    *smooth,
+                )
+            });
+            if image.frame != Some(index as u32) {
+                if image.frame.is_some() {
+                    write_frame(
+                        context.queue,
+                        &image._texture,
+                        animation.width,
+                        animation.height,
+                        &animation.frames[index],
+                    );
+                }
+                image.frame = Some(index as u32);
+            }
+            let image = image.clone();
+            push_texture_instance(
+                &mut batch,
+                command_index,
+                image,
+                placement,
+                TextureStyle {
+                    overlay: *color_overlay,
+                    distance_field: false,
                     field: *distance_field_style,
                     spread: *distance_field_spread,
                 },
@@ -286,6 +355,7 @@ pub(crate) fn create_texture_batch(
         let texture_image = TextureImage {
             _texture: texture,
             bind_group,
+            frame: None,
         };
         textures.insert(key, texture_image.clone());
         push_texture_instance(
@@ -377,7 +447,7 @@ pub(crate) fn push_path_textures(
                 ) else {
                     continue;
                 };
-                let image = upload_texture(&context, drawn.width, drawn.height, &drawn.rgba);
+                let image = upload_texture(&context, drawn.width, drawn.height, &drawn.rgba, true);
                 textures.insert(key, image.clone());
                 image
             }
@@ -408,12 +478,36 @@ pub(crate) fn push_path_textures(
     }
 }
 
+/// Replaces a texture's pixels with a moving picture's next frame.
+fn write_frame(queue: &wgpu::Queue, texture: &wgpu::Texture, width: u32, height: u32, rgba: &[u8]) {
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        rgba,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+}
+
 /// Uploads straight-alpha RGBA pixels as a texture the glyph pipeline samples.
 fn upload_texture(
     context: &TextureBatchContext<'_>,
     width: u32,
     height: u32,
     rgba: &[u8],
+    smooth: bool,
 ) -> TextureImage {
     let texture = context.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("morf path texture"),
@@ -461,13 +555,18 @@ fn upload_texture(
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(context.sampler),
+                    resource: wgpu::BindingResource::Sampler(if smooth {
+                        context.sampler
+                    } else {
+                        context.nearest
+                    }),
                 },
             ],
         });
     TextureImage {
         _texture: texture,
         bind_group,
+        frame: None,
     }
 }
 

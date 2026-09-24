@@ -302,6 +302,8 @@ impl TextSystem {
             draw_width: image.placement.width as f32,
             draw_height: image.placement.height as f32,
             content,
+            tint: None,
+            font_size: 0.0,
             data: Rc::new(image.data),
         })
     }
@@ -327,6 +329,8 @@ pub(crate) fn field_raster(glyph: &PhysicalGlyph, key: u64, field: &Rc<FieldImag
         draw_width: (field.width as f32 * scale).max(1.0),
         draw_height: (field.height as f32 * scale).max(1.0),
         content: RasterContent::Field,
+        tint: None,
+        font_size: 0.0,
         data: Rc::clone(&field.data),
     }
 }

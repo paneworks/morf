@@ -41,6 +41,10 @@ pub(crate) struct ToplevelControl {
     pub(crate) maximized: bool,
     pub(crate) minimized: bool,
     pub(crate) fullscreen: bool,
+    /// The outputs the window is on, as the compositor enters and leaves them.
+    pub(crate) outputs: Vec<wayland_client::protocol::wl_output::WlOutput>,
+    /// The window this one is a dialog or child of, by its control handle.
+    pub(crate) parent: Option<wayland_client::backend::ObjectId>,
     /// Set while the description is incomplete. The protocol sends title,
     /// app_id and state separately and then `done`; publishing in between shows
     /// a window that is briefly neither maximized nor not.
@@ -138,6 +142,23 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for LayerState {
                         _ => {}
                     }
                 }
+            }
+            // Where the window is. Not held for `done`: some compositors send
+            // no `done` after an output change, and a dock that follows a
+            // window to another screen should not wait for its title to change.
+            zwlr_foreign_toplevel_handle_v1::Event::OutputEnter { output } => {
+                if !entry.outputs.contains(&output) {
+                    entry.outputs.push(output);
+                }
+                state.toplevels_changed = true;
+            }
+            zwlr_foreign_toplevel_handle_v1::Event::OutputLeave { output } => {
+                entry.outputs.retain(|held| *held != output);
+                state.toplevels_changed = true;
+            }
+            zwlr_foreign_toplevel_handle_v1::Event::Parent { parent } => {
+                entry.parent = parent.map(|parent| parent.id());
+                state.toplevels_changed = true;
             }
             zwlr_foreign_toplevel_handle_v1::Event::Done => {
                 let pending = entry.pending.clone();

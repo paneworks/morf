@@ -59,6 +59,7 @@ impl TextSystem {
             input: None,
             word_spacing: 0.0,
             alignment: options.alignment,
+            rich: None,
         });
         if cached.input.as_ref() != Some(&input) {
             cached.buffer.set_metrics_and_size(
@@ -71,21 +72,53 @@ impl TextSystem {
             } else {
                 Wrap::None
             });
-            let displayed = elided_text(&mut self.fonts, text, family, size, &options);
+            let rich = options.style.rich.clone();
+            let source = rich.as_ref().map_or(text, |rich| rich.text.as_str());
+            let displayed = elided_text(&mut self.fonts, source, family, size, &options);
             let family = resolve_family(&self.fonts, family);
             cached.word_spacing = options.style.word_spacing as f32;
             cached.alignment = options.alignment;
-            cached.buffer.set_text(
-                &displayed,
-                &text_attrs(&family, font_weight, size, &options.style),
-                Shaping::Advanced,
-                Some(match options.alignment {
-                    TextAlignment::Left => Align::Left,
-                    TextAlignment::Right => Align::Right,
-                    TextAlignment::Center => Align::Center,
-                    TextAlignment::Justified => Align::Justified,
-                }),
-            );
+            let align = Some(match options.alignment {
+                TextAlignment::Left => Align::Left,
+                TextAlignment::Right => Align::Right,
+                TextAlignment::Center => Align::Center,
+                TextAlignment::Justified => Align::Justified,
+            });
+            let base = text_attrs(&family, font_weight, size, &options.style);
+            match &rich {
+                None => cached
+                    .buffer
+                    .set_text(&displayed, &base, Shaping::Advanced, align),
+                Some(rich) => {
+                    // Each run's family resolved once, and kept alive for the
+                    // attributes that borrow it.
+                    let families: Vec<_> = rich
+                        .spans
+                        .iter()
+                        .map(|span| {
+                            span.family
+                                .as_deref()
+                                .map(|name| resolve_family(&self.fonts, name))
+                        })
+                        .collect();
+                    let segments = crate::rich::segments(rich, &displayed);
+                    let runs = segments.iter().map(|(range, index)| {
+                        let attrs = crate::rich::span_attrs(
+                            &base,
+                            &rich.spans[*index],
+                            *index,
+                            families[*index].as_ref(),
+                            size,
+                            &options.style,
+                        );
+                        (&displayed[range.clone()], attrs)
+                    });
+                    cached
+                        .buffer
+                        .set_rich_text(runs, &base, Shaping::Advanced, align);
+                }
+            }
+            cached.rich = rich;
             cached.buffer.shape_until_scroll(&mut self.fonts, false);
             cached.input = Some(input);
         }
