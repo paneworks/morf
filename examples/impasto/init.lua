@@ -97,6 +97,30 @@ bar.register("bluetooth", button_piece("󰂯", "bluetooth"))
 bar.register("volume", button_piece("󰕾", "volume"))
 bar.register("battery", button_piece("󰁹", "battery"))
 
+-- ----------------------------------------------------------------- plug-ins --
+
+-- Every file in these folders registers itself when required: a panel with
+-- `island.register`, a bar piece with `bar.register`, a layer with
+-- `island.register_layer`. New parts need no line here, and a part that
+-- fails to load is reported by `morf ipc call failed` instead of taking the
+-- shell down with it.
+local failed = {}
+local root = morf.shell_dir()
+for _, folder in ipairs { "services/auto", "bar/modules", "bar/pieces", "bar/layers", "bar/panels" } do
+  local entries = morf.fs.list(morf.fs.join(root, folder)) or {}
+  for _, entry in ipairs(entries) do
+    if entry.is_file and entry.extension == "lua" then
+      local name = (folder .. "/" .. entry.name:sub(1, -5)):gsub("/", ".")
+      local ok, err = pcall(require, name)
+      if not ok then
+        failed[#failed + 1] = name .. ": " .. tostring(err)
+        morf.log("error", "impasto: " .. name .. " did not load: " .. tostring(err))
+      end
+    end
+  end
+end
+morf.ipc.failed = function() return table.concat(failed, "\n") end
+
 -- -------------------------------------------------------------------- IPC --
 
 -- `morf ipc call <panel>` toggles it, as impasto's keybinds do through qs ipc.
