@@ -136,10 +136,62 @@ enum Outcome {
     NoServer,
 }
 
+/// Tells libpipewire where its plugins and modules are when nothing else
+/// has: beside the library that was actually loaded.
+///
+/// A libpipewire found through a library path that is not its build's own
+/// prefix -- a Nix profile, a bundle -- knows no plugin directory, and fails
+/// with "plugin directory undefined" and no sound at all. The directories
+/// sit next to the library in every layout PipeWire installs, so they are
+/// found from where `dladdr` says `pw_init` lives. An environment that
+/// already names them is left alone.
+fn point_at_plugins(pw: &Pw) {
+    let Some(library_dir) = library_dir_of(pw.init as *const std::ffi::c_void) else {
+        return;
+    };
+    for (variable, folder) in [
+        ("SPA_PLUGIN_DIR", "spa-0.2"),
+        ("PIPEWIRE_MODULE_DIR", "pipewire-0.3"),
+    ] {
+        if std::env::var_os(variable).is_some() {
+            continue;
+        }
+        let candidate = library_dir.join(folder);
+        if candidate.is_dir() {
+            // SAFETY: set once, from the audio thread, before libpipewire
+            // reads it; nothing else in morf reads these variables, and
+            // this runs before any PipeWire thread exists.
+            unsafe { std::env::set_var(variable, &candidate) };
+        }
+    }
+}
+
+/// The directory of the shared object containing `address`.
+fn library_dir_of(address: *const std::ffi::c_void) -> Option<std::path::PathBuf> {
+    // SAFETY: dladdr only reads the loader's tables; `info` is written by it.
+    let mut info: libc::Dl_info = unsafe { std::mem::zeroed() };
+    if unsafe { libc::dladdr(address, &mut info) } == 0 || info.dli_fname.is_null() {
+        return None;
+    }
+    // SAFETY: dli_fname is a NUL-terminated path owned by the loader.
+    let path = unsafe { std::ffi::CStr::from_ptr(info.dli_fname) };
+    let path = std::path::Path::new(
+        <std::ffi::OsStr as std::os::unix::ffi::OsStrExt>::from_bytes(path.to_bytes()),
+    );
+    std::fs::canonicalize(path)
+        .ok()?
+        .parent()
+        .map(std::path::Path::to_path_buf)
+}
+
 fn run(pw: Arc<Pw>, events: Events, mut receiver: Receiver<Message>, waker: SharedWaker) {
     static INIT: Once = Once::new();
     // SAFETY: pw_init takes optional argc/argv and is safe to call with none.
-    INIT.call_once(|| unsafe { (pw.init)(ptr::null_mut(), ptr::null_mut()) });
+    INIT.call_once(|| {
+        point_at_plugins(&pw);
+        // SAFETY: pw_init takes optional argc/argv and is safe to call with none.
+        unsafe { (pw.init)(ptr::null_mut(), ptr::null_mut()) }
+    });
     loop {
         let (outcome, back) = session(&pw, &events, receiver, &waker);
         receiver = back;
