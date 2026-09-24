@@ -306,6 +306,9 @@ pub(crate) struct ReactiveState {
     pub(crate) prefers: Option<Prefers>,
     /// `morf.audio`, installed with the runtime and started on first use.
     pub(crate) audio: Option<crate::api_audio::AudioHost>,
+    /// `morf.toplevels`, installed with the runtime and fed by
+    /// `Runtime::set_windows`.
+    pub(crate) toplevels: Option<crate::api_toplevels::ToplevelHost>,
     pub(crate) dbus_services: Vec<PendingDbusService>,
     pub(crate) udev_monitors: Vec<PendingUdev>,
     pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
@@ -516,6 +519,7 @@ impl ReactiveState {
             theme_sources: Vec::new(),
             prefers: None,
             audio: None,
+            toplevels: None,
             dbus_signals: Vec::new(),
             dbus_services: Vec::new(),
             udev_monitors: Vec::new(),

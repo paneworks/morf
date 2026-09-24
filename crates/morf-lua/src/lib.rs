@@ -35,6 +35,7 @@ mod api_state;
 mod api_system;
 mod api_theme;
 mod api_time;
+mod api_toplevels;
 mod api_transform;
 mod api_ui_json;
 mod api_view;
