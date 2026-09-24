@@ -83,6 +83,65 @@ if not inline_mode then
   end)
 end
 
+-- ---------------------------------------------------------- every screen --
+--
+-- Arranging is one mode on every screen, as the original's one `editing`
+-- flag is; but each screen here is a process of its own. Each owns a name
+-- on the session bus, says when it starts or ends arranging, and follows
+-- what the others say. Only with more than one screen, and only while the
+-- bus answers: a lone screen needs none of it.
+local PATH, INTERFACE = "/io/impasto/Desk", "io.impasto.Desk"
+local function bus_name(screen_entry)
+  return "io.impasto.Desk.S" .. (tostring(screen_entry.name or ""):gsub("[^%w]", "_"))
+end
+M.shared = false
+do
+  local screens = morf.screens or {}
+  local ok, service, outcome = false, nil, nil
+  if #screens > 1 and morf.dbus and morf.dbus.serve then
+    ok, service, outcome = pcall(morf.dbus.serve, "session", bus_name(screens[1]), PATH, true)
+  end
+  if ok and service and outcome == "owned" then
+    M.shared = true
+    -- What another screen said last, so it is not said back to it.
+    local heard = nil
+    local first = true
+    morf.effect("impasto.desk.share", function()
+      local on = desk.editing:get()
+      if first then first = false return end
+      if heard == on then heard = nil return end
+      pcall(service.emit, service, PATH, INTERFACE, "Editing", { on })
+    end)
+    for i = 2, #screens do
+      local okp, proxy = pcall(morf.dbus.proxy, "session", bus_name(screens[i]), PATH, INTERFACE)
+      if okp and proxy then
+        pcall(proxy.subscribe, proxy, "Editing", function(body)
+          local on = type(body) == "table" and body[1] == true
+          if desk.editing:get() ~= on then
+            heard = on
+            desk.edit(on)
+          end
+        end)
+      end
+    end
+  elseif #screens > 1 then
+    morf.log("warn", "impasto: arranging stays on this screen: " .. tostring(outcome or service))
+  end
+end
+
+-- The keyboard going to the shell's own surface (the island, the bar) while
+-- arranging is a click elsewhere: the original's focus grab ends the mode
+-- then. Drawn inline, the board is that surface, and losing the keyboard is
+-- the click elsewhere. A window.layer surface reports no focus of its own,
+-- so a click on another application's surface is not heard.
+if morf.on_keyboard_focus then
+  morf.on_keyboard_focus(function(active)
+    if not desk.editing:get() then return end
+    if inline_mode and not active then desk.edit(false)
+    elseif not inline_mode and active then desk.edit(false) end
+  end)
+end
+
 -- -------------------------------------------------------------------- IPC --
 
 morf.ipc.desk = function(verb, a, b, c)
