@@ -58,6 +58,15 @@ impl LayerClient {
             .map(|surface| surface.surface.wl_surface())
     }
 
+    /// The output one lock surface covers, as `screens()` describes it.
+    pub fn lock_screen(&self, index: usize) -> Option<crate::ScreenInfo> {
+        let surface = self.state.lock_surfaces.get(index)?;
+        self.state
+            .outputs
+            .info(&surface.output)
+            .map(crate::protocol_handlers::screen_info)
+    }
+
     /// Returns one lock surface's configured logical size.
     pub fn lock_size(&self, index: usize) -> Option<(u32, u32)> {
         self.state

@@ -221,6 +221,8 @@ pub(crate) struct ReactiveState {
     pub(crate) session_lock: SignalId,
     /// Told when that changes, each with whether it wants only `locked`.
     pub(crate) session_lock_callbacks: Vec<(StashedClosure, bool)>,
+    /// `morf.lock_surface`: builds one output's lock tree, given its screen.
+    pub(crate) lock_surface_builder: Option<StashedClosure>,
     pub(crate) handlers: HashMap<(NodeHandle, UiEvent), StashedClosure>,
     pub(crate) parent_transitions: Vec<ParentTransitionRequest>,
     pub(crate) states: HashMap<NodeHandle, StateSet>,
@@ -427,6 +429,7 @@ impl ReactiveState {
             clock,
             session_lock,
             session_lock_callbacks: Vec::new(),
+            lock_surface_builder: None,
             handlers: HashMap::new(),
             parent_transitions: Vec::new(),
             states: HashMap::new(),

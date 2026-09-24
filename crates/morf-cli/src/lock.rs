@@ -1,8 +1,6 @@
 use morf_io::IpcIncoming;
-use morf_layout::Size;
 use morf_lua::{IpcValue, Runtime, SessionLockState};
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_scene::Element;
 use morf_wayland::{LayerClient, LayerEvent, ScreenInfo};
 use std::os::fd::AsFd;
 use std::path::PathBuf;
@@ -12,29 +10,9 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use crate::{
-    capture::*, paint::*, surface_keys::*, surface_layers::*, surface_pointer::*, surfaces::*,
+    capture::*, lock_outputs::*, paint::*, surface_keys::*, surface_layers::*, surface_pointer::*,
+    surfaces::*,
 };
-
-/// One output's lock surface: what draws it, and what it last drew.
-#[derive(Default)]
-pub(crate) struct LockOutput {
-    pub(crate) renderer: Option<RenderEngine<WgpuBackend>>,
-    /// The layout of the last frame, which is what a point on this surface
-    /// is hit-tested against.
-    pub(crate) layout: Option<morf_layout::Layout>,
-}
-
-/// The lock's surfaces, as the input path looks them up.
-pub(crate) struct LockLayouts<'a>(pub(crate) &'a [LockOutput]);
-
-impl SurfaceLayouts for LockLayouts<'_> {
-    fn layout_of(&self, surface: morf_wayland::SurfaceRole) -> Option<&morf_layout::Layout> {
-        match surface {
-            morf_wayland::SurfaceRole::Lock(index) => self.0.get(index)?.layout.as_ref(),
-            _ => None,
-        }
-    }
-}
 
 pub(crate) struct Worker {
     pub(crate) stop: Arc<AtomicBool>,
@@ -91,18 +69,8 @@ pub(crate) enum WorkerMessage {
 /// `morf.surface.session_lock = true`: the same file that would have been a
 /// layer is instead one lock surface per output, until it says otherwise.
 pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
-    if runtime.scene().roots().len() != 1 {
-        return Err("lock configuration must create exactly one root item".to_owned());
-    }
-    let root = runtime.scene().roots()[0];
-    if runtime
-        .scene()
-        .element(root)
-        .map_err(|error| error.to_string())?
-        != Element::Rect
-    {
-        return Err("lock configuration root must be an opaque Rect".to_owned());
-    }
+    // One tree for every output, or one built for each: see lock_outputs.rs.
+    let trees = LockTrees::of(&runtime)?;
     let mut client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
     client.set_idle_timeouts(&runtime.idle_timeouts());
     client
@@ -183,10 +151,26 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                     repaint |= runtime.set_session_lock_state(SessionLockState::Locked);
                 }
                 LayerEvent::Screens(_) => {}
-                LayerEvent::SessionLockConfigure { index, .. } => {
+                LayerEvent::SessionLockConfigure {
+                    index,
+                    width: logical_width,
+                    height: logical_height,
+                } => {
                     if outputs.len() <= index {
                         outputs.resize_with(index + 1, LockOutput::default);
                     }
+                    // Before the primer, which is this tree's colour.
+                    ensure_lock_tree(
+                        &mut runtime,
+                        trees,
+                        &mut outputs[index],
+                        index,
+                        client.lock_screen(index),
+                        (logical_width, logical_height),
+                    )?;
+                    let root = trees
+                        .root(&outputs, index)
+                        .ok_or_else(|| "lock surface has no tree to draw".to_owned())?;
                     let (width, height) = client
                         .lock_physical_size(index)
                         .ok_or_else(|| "configured lock surface disappeared".to_owned())?;
@@ -197,7 +181,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                         // so the compositor has a locked frame within
                         // milliseconds rather than after three devices and
                         // three 4K frames.
-                        client.prime_lock(index, root_color_bytes(&runtime)?);
+                        client.prime_lock(index, root_color_bytes(&runtime, root)?);
                         let target = client
                             .lock_window_target(index)
                             .ok_or_else(|| "configured lock surface disappeared".to_owned())?;
@@ -210,7 +194,8 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                 }
                 LayerEvent::SessionLockSurfaceRemoved { index } => {
                     if index < outputs.len() {
-                        outputs.remove(index);
+                        let mut gone = outputs.remove(index);
+                        release_lock_tree(&mut runtime, &mut gone);
                     }
                     // The surfaces after it moved down one, and so did every
                     // role the input state names.
@@ -236,7 +221,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                     // with no Tab traversal and no memory of what had focus —
                     // so a lock screen with more than one field had one that
                     // could not be reached.
-                    let Some(root) = runtime.scene().roots().first().copied() else {
+                    let Some(root) = trees.key_root(&outputs, surface) else {
                         continue;
                     };
                     // Remembered per surface, as a click set it.
@@ -364,100 +349,27 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
         }
         apply_service_requests(&mut runtime, &mut client);
         if repaint {
-            for (index, output) in outputs.iter_mut().enumerate() {
+            // A tree taken down leaves shaped text and textures in whichever
+            // renderer drew it, keyed on nodes that are gone.
+            let removed = runtime.take_removed_nodes();
+            if !removed.is_empty() {
+                for renderer in outputs
+                    .iter_mut()
+                    .filter_map(|output| output.renderer.as_mut())
+                {
+                    renderer.backend_mut().forget_nodes(&removed);
+                }
+            }
+            for index in 0..outputs.len() {
+                let Some(root) = trees.root(&outputs, index) else {
+                    continue;
+                };
+                let output = &mut outputs[index];
                 if let Some(renderer) = &mut output.renderer {
-                    output.layout = Some(paint_lock(&mut runtime, renderer, &client, index)?);
+                    output.layout = Some(paint_lock(&mut runtime, renderer, &client, index, root)?);
                     client.release_lock_primer(index);
                 }
             }
         }
     }
-}
-
-/// The lock root's colour as bytes, for the first frame.
-fn root_color_bytes(runtime: &Runtime) -> Result<[u8; 4], String> {
-    let root = primary_surface_root(runtime)?;
-    let color = runtime
-        .scene()
-        .color_value(root, "color")
-        .map_err(|error| error.to_string())?;
-    let byte = |channel: f32| (channel.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Ok([
-        byte(color.red),
-        byte(color.green),
-        byte(color.blue),
-        byte(color.alpha),
-    ])
-}
-
-pub(crate) fn paint_lock(
-    runtime: &mut Runtime,
-    renderer: &mut RenderEngine<WgpuBackend>,
-    client: &LayerClient,
-    index: usize,
-) -> Result<morf_layout::Layout, String> {
-    let (width, height) = client
-        .lock_size(index)
-        .ok_or_else(|| "lock surface disappeared while painting".to_owned())?;
-    let root = primary_surface_root(runtime)?;
-    {
-        let mut scene = runtime.scene_mut();
-        scene
-            .assign(root, "x", 0.0)
-            .map_err(|error| error.to_string())?;
-        scene
-            .assign(root, "y", 0.0)
-            .map_err(|error| error.to_string())?;
-        scene
-            .assign(root, "width", width as f64)
-            .map_err(|error| error.to_string())?;
-        scene
-            .assign(root, "height", height as f64)
-            .map_err(|error| error.to_string())?;
-    }
-    let scene = runtime.scene();
-    let color = scene
-        .color_value(root, "color")
-        .map_err(|error| error.to_string())?;
-    if color.alpha < 1.0
-        || scene
-            .number(root, "opacity")
-            .map_err(|error| error.to_string())?
-            < 1.0
-    {
-        return Err("lock configuration root must stay opaque".to_owned());
-    }
-    if scene
-        .number(root, "width")
-        .map_err(|error| error.to_string())?
-        < width as f64
-        || scene
-            .number(root, "height")
-            .map_err(|error| error.to_string())?
-            < height as f64
-    {
-        return Err("lock configuration root must cover the output".to_owned());
-    }
-    drop(scene);
-    let layout = runtime.compute_layout(
-        root,
-        Size {
-            width: width as f64,
-            height: height as f64,
-        },
-        renderer.backend_mut(),
-    )?;
-    runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
-    let scene = runtime.scene();
-    client.request_lock_frame(index);
-    let scale = client.lock_scale_120(index).unwrap_or(120);
-    let damage = renderer
-        .render(&scene, &layout, scale, |_| {})
-        .map_err(|error| error.to_string())?;
-    if damage.is_empty() {
-        client.commit_lock(index);
-    }
-    drop(scene);
-    runtime.observe_layout(&layout);
-    Ok(layout)
 }

@@ -297,6 +297,16 @@ pub(crate) fn install_shell_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "session_lock_state", session_lock_state);
+    // A lock screen built per output: `fn(screen)` returns that output's
+    // root, and bindings in it close over its own screen. Without one, the
+    // file's single root is shared by every output.
+    let builder_state = Rc::clone(&state);
+    let lock_surface = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let builder: Option<Closure> = stack.consume(ctx)?;
+        builder_state.borrow_mut().lock_surface_builder = builder.map(|builder| ctx.stash(builder));
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "lock_surface", lock_surface);
     // Two ways to hear the compositor about the lock: every change, with the
     // new state, or only the one a lock screen usually waits for -- the
     // compositor confirming that it has hidden the session.

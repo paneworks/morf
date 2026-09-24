@@ -1,7 +1,7 @@
 // The lock screen's input: pointer, touch and wheel on lock surfaces go
 // through the same hit test and handlers a layer surface's do.
 
-use crate::lock::{LockLayouts, LockOutput};
+use crate::lock_outputs::{LockLayouts, LockOutput};
 use crate::pointer_cursor::CursorShapes;
 use crate::surface_pointer::handle_pointer_event;
 use crate::surfaces::PointerInput;
@@ -97,8 +97,8 @@ fn send(
 fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
     let mut runtime = lock_runtime();
     let outputs = vec![LockOutput {
-        renderer: None,
         layout: Some(laid_out(&runtime)),
+        ..LockOutput::default()
     }];
     let mut input = PointerInput::default();
     let mut shapes = Shapes::default();
@@ -152,8 +152,8 @@ fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
 fn a_tap_on_a_lock_surface_is_a_click() {
     let mut runtime = lock_runtime();
     let outputs = vec![LockOutput {
-        renderer: None,
         layout: Some(laid_out(&runtime)),
+        ..LockOutput::default()
     }];
     let mut input = PointerInput::default();
     let mut shapes = Shapes::default();
@@ -192,8 +192,8 @@ fn a_lock_surface_is_hit_tested_against_its_own_layout() {
     // and the first output's layout is not borrowed for it.
     let outputs = vec![
         LockOutput {
-            renderer: None,
             layout: Some(laid_out(&runtime)),
+            ..LockOutput::default()
         },
         LockOutput::default(),
     ];

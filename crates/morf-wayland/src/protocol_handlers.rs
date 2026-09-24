@@ -46,6 +46,23 @@ use wayland_protocols_wlr::screencopy::v1::client::{
 
 use crate::{helpers::*, state_types::*, surface_types::*, types::*};
 
+/// One output, in the shape the rest of morf describes outputs in.
+pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> ScreenInfo {
+    ScreenInfo {
+        id: info.id,
+        name: info.name,
+        make: info.make,
+        model: info.model,
+        description: info.description,
+        position: info.logical_position,
+        size: info.logical_size,
+        physical_size: (info.physical_size.0 > 0 && info.physical_size.1 > 0)
+            .then_some(info.physical_size),
+        scale: info.scale_factor,
+        transform: output_transform_name(info.transform),
+    }
+}
+
 impl LayerState {
     pub(crate) fn layer(&self) -> &ShellSurface {
         &self
@@ -67,19 +84,7 @@ impl LayerState {
             .outputs
             .outputs()
             .filter_map(|output| self.outputs.info(&output))
-            .map(|info| ScreenInfo {
-                id: info.id,
-                name: info.name,
-                make: info.make,
-                model: info.model,
-                description: info.description,
-                position: info.logical_position,
-                size: info.logical_size,
-                physical_size: (info.physical_size.0 > 0 && info.physical_size.1 > 0)
-                    .then_some(info.physical_size),
-                scale: info.scale_factor,
-                transform: output_transform_name(info.transform),
-            })
+            .map(screen_info)
             .collect::<Vec<_>>();
         if screens != self.screens {
             self.screens = screens.clone();
