@@ -68,9 +68,12 @@ pub(crate) enum WorkerMessage {
 /// Entered from the ordinary run, once the file has said
 /// `morf.surface.session_lock = true`: the same file that would have been a
 /// layer is instead one lock surface per output, until it says otherwise.
-pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
+pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), String> {
     // One tree for every output, or one built for each: see lock_outputs.rs.
     let trees = LockTrees::of(&runtime)?;
+    // Before the lock is asked for, so `morf --lock ipc call` reaches it
+    // from the first moment; beside the shell's socket, not over it.
+    let ipc = crate::lock_ipc::LockIpc::bind(path)?;
     let mut client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
     client.set_idle_timeouts(&runtime.idle_timeouts());
     client
@@ -102,6 +105,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
         wake.drain();
         let mut repaint = runtime.poll_services();
+        repaint |= ipc.serve(&mut runtime);
         apply_service_requests(&mut runtime, &mut client);
         apply_idle_timeouts(&mut runtime, &mut client);
         unlock_pending |= runtime.take_session_unlock_request();

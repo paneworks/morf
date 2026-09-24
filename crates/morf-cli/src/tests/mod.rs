@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use crate::*;
 
 mod lock_input;
+mod lock_ipc;
 mod lock_trees;
 mod operations;
 mod supervision;

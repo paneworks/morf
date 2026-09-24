@@ -7,6 +7,7 @@ mod commands;
 mod config;
 mod crash;
 mod lock;
+mod lock_ipc;
 mod lock_outputs;
 mod pacing;
 mod paint;
