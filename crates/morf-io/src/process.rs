@@ -44,6 +44,11 @@ impl Process {
     {
         let mut command = Command::new(program);
         command.args(args);
+        // morf itself may run under a wrapper that points LD_LIBRARY_PATH at
+        // its own libraries (nixGL, a bundle); a system program that
+        // inherits them loads the wrong libpipewire, libGL, libc++ and fails
+        // in ways that look like the program's fault.
+        command.env_remove("LD_LIBRARY_PATH");
         Self::spawn_command(&mut command)
     }
 
@@ -58,6 +63,10 @@ impl Process {
         command.args(args);
         if config.clear_environment {
             command.env_clear();
+        } else {
+            // Not the wrapper's libraries; a caller that wants a path
+            // names it in `environment`, which is applied next.
+            command.env_remove("LD_LIBRARY_PATH");
         }
         command.envs(&config.environment);
         if let Some(directory) = &config.working_directory {

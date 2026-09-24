@@ -151,6 +151,9 @@ pub(crate) fn install_image_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         let program = command.remove(0);
         let mut child = StdCommand::new(program)
             .args(command)
+            // What is started detached outlives the moment and is often an
+            // application; it must not inherit a wrapper's library path.
+            .env_remove("LD_LIBRARY_PATH")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

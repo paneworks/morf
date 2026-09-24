@@ -345,6 +345,9 @@ fn launch(command: &[String], working_directory: &str) -> io::Result<()> {
     let mut process = Command::new(program);
     process
         .args(args)
+        // An application started from the shell gets the session's own
+        // library path, not the one a wrapper gave morf.
+        .env_remove("LD_LIBRARY_PATH")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());

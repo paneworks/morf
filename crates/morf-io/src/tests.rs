@@ -501,3 +501,25 @@ mod fsops_tests {
         assert!(ops::user_dir("nonsense").is_none());
     }
 }
+
+#[test]
+fn children_do_not_inherit_the_wrappers_library_path() {
+    // SAFETY: only this test reads or writes LD_LIBRARY_PATH in this binary.
+    unsafe { std::env::set_var("LD_LIBRARY_PATH", "/nix/store/wrapper-libs") };
+    let mut process = Process::spawn("env", std::iter::empty::<&str>()).expect("env runs");
+    let mut output = String::new();
+    while let Ok(Some(event)) = process.next_event(std::time::Duration::from_secs(5)) {
+        match event {
+            ProcessEvent::Stdout(bytes) => output.push_str(&String::from_utf8_lossy(&bytes)),
+            ProcessEvent::Exit(_) => break,
+            ProcessEvent::Stderr(_) => {}
+        }
+    }
+    unsafe { std::env::remove_var("LD_LIBRARY_PATH") };
+    assert!(
+        !output
+            .lines()
+            .any(|line| line.starts_with("LD_LIBRARY_PATH=")),
+        "{output}"
+    );
+}
