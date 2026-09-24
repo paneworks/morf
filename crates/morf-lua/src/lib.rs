@@ -63,6 +63,7 @@ mod runtime_config;
 mod runtime_default;
 mod runtime_events;
 mod runtime_handlers;
+mod runtime_harness;
 mod runtime_helpers;
 mod runtime_images;
 mod runtime_input;
@@ -96,6 +97,7 @@ mod window_parse;
 
 pub use events::*;
 pub use ipc_table::IpcTable;
+pub use runtime_harness::HostFunction;
 pub use runtime_input::*;
 pub use runtime_layout::SettledLayout;
 pub use runtime_session_lock::SessionLockState;

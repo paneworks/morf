@@ -23,10 +23,68 @@ pub(crate) struct PendingPam {
     pub(crate) unlock_on_success: bool,
 }
 
+/// What makes a timer come due.
+///
+/// The wall clock, through a thread that ticks, is what a shell runs on. A
+/// runtime told to keep a virtual clock ([`crate::Runtime::use_virtual_clock`])
+/// holds a deadline instead, and the timer comes due when that clock is
+/// advanced past it: a test that waits a second of a configuration's time
+/// takes no second of its own, and fires the same callbacks every run.
+pub(crate) enum TimerSource {
+    Wall(IoTimer),
+    Virtual { due: Duration },
+}
+
+impl TimerSource {
+    /// A timer every `interval`, on the virtual clock when `now` is one.
+    pub(crate) fn every(interval: Duration, now: Option<Duration>) -> std::io::Result<Self> {
+        match now {
+            Some(_) if interval.is_zero() => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "timer interval cannot be zero",
+            )),
+            Some(now) => Ok(Self::Virtual {
+                due: now + interval,
+            }),
+            None => IoTimer::every(interval).map(Self::Wall),
+        }
+    }
+
+    /// Whether the timer has come due since it was last asked, rescheduling
+    /// it when it has. Like the wall timer, a virtual one that fell several
+    /// intervals behind fires once, not once per interval missed.
+    pub(crate) fn fire(&mut self, now: Option<Duration>, interval: Duration) -> bool {
+        match self {
+            Self::Wall(timer) => timer.tick(Duration::ZERO),
+            Self::Virtual { due } => {
+                let Some(now) = now else {
+                    return false;
+                };
+                if now < *due {
+                    return false;
+                }
+                *due += interval;
+                if *due <= now {
+                    *due = now + interval;
+                }
+                true
+            }
+        }
+    }
+
+    /// When a virtual timer next comes due; nothing for a wall one.
+    pub(crate) fn deadline(&self) -> Option<Duration> {
+        match self {
+            Self::Wall(_) => None,
+            Self::Virtual { due } => Some(*due),
+        }
+    }
+}
+
 pub(crate) struct PendingTimer {
     /// Names the timer to whoever holds its handle, so it can be cancelled.
     pub(crate) id: u64,
-    pub(crate) timer: IoTimer,
+    pub(crate) timer: TimerSource,
     pub(crate) callback: StashedClosure,
     pub(crate) repeat: bool,
     pub(crate) interval: Duration,

@@ -1,7 +1,6 @@
 use luna::{
     Callback, CallbackReturn, Closure, Context, Table, UserData, UserRef, Value as LuaValue,
 };
-use morf_io::Timer as IoTimer;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -298,10 +297,11 @@ pub(crate) fn install_timer_api<'gc>(
             LuaValue::Boolean(value) => value,
             _ => return Err(HostError("timer repeat must be boolean".into()).into()),
         };
-        let timer = IoTimer::every(Duration::from_secs_f64(milliseconds / 1_000.0))
-            .map_err(|error| HostError(error.to_string()))?;
         let interval = Duration::from_secs_f64(milliseconds / 1_000.0);
         let mut state = timer_state.borrow_mut();
+        let timer = state
+            .new_timer(interval)
+            .map_err(|error| HostError(error.to_string()))?;
         let id = state.next_timer_id();
         state.timers.push(PendingTimer {
             id,

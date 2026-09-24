@@ -44,6 +44,10 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         // it: Tab is how a shell completes.
         boolean("tab_navigation", element != Element::Terminal),
         any("layout", Value::Map(BTreeMap::new())),
+        // A name for the node that nothing in the engine reads: it is for
+        // whoever has to find the node again from outside -- `morf test`'s
+        // `test.find { id = ... }`, a log line.
+        string("id", ""),
     ];
     match element {
         // Nothing of its own to paint, but a colour for the text beneath it

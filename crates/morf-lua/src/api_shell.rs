@@ -62,43 +62,7 @@ pub(crate) fn install_shell_api<'gc>(
     // resolved into names and values; `operands` is what was left over. A
     // configuration that wants to read the line itself has the first, and one
     // that wants an answer has the other two.
-    let given = crate::arguments::given();
-    let list_of = |items: &[String]| {
-        let table = Table::new(&ctx);
-        for (index, word) in items.iter().enumerate() {
-            table
-                .set(ctx, index as i64 + 1, word.as_str())
-                .expect("a table accepts integer keys");
-        }
-        table
-    };
-    let words = list_of(given.words());
-    morf.set_field(ctx, "args", words);
-    let options = Table::new(&ctx);
-    for (name, values) in given.options() {
-        // One value is that value; several are a list, because a repeated
-        // option keeps what it was given and only the configuration knows
-        // whether the first, the last or all of them was meant.
-        if let [only] = values.as_slice() {
-            match only.text() {
-                Some(text) => options.set_field(ctx, name.as_str(), text),
-                None => options.set_field(ctx, name.as_str(), true),
-            };
-            continue;
-        }
-        let list = Table::new(&ctx);
-        for (index, value) in values.iter().enumerate() {
-            let slot = index as i64 + 1;
-            match value.text() {
-                Some(text) => list.set(ctx, slot, text),
-                None => list.set(ctx, slot, true),
-            }
-            .expect("a table accepts integer keys");
-        }
-        options.set_field(ctx, name.as_str(), list);
-    }
-    morf.set_field(ctx, "options", options);
-    morf.set_field(ctx, "operands", list_of(given.operands()));
+    set_argument_fields(ctx, morf, crate::arguments::given());
     morf.set_field(ctx, "process_id", i64::from(std::process::id()));
     // The binary that is running, so a configuration can start another of
     // itself. `"morf"` only works when morf is on `PATH`, which it is not when
@@ -311,4 +275,51 @@ pub(crate) fn install_shell_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "working_directory", working_directory);
+}
+
+/// Writes `morf.args`, `morf.options` and `morf.operands` from one command
+/// line: the process's at startup, or the one a test runner loads a
+/// configuration with (`Runtime::set_arguments`).
+pub(crate) fn set_argument_fields<'gc>(
+    ctx: Context<'gc>,
+    morf: Table<'gc>,
+    given: &crate::arguments::Arguments,
+) {
+    let list_of = |items: &[String]| {
+        let table = Table::new(&ctx);
+        for (index, word) in items.iter().enumerate() {
+            table
+                .set(ctx, index as i64 + 1, word.as_str())
+                .expect("a table accepts integer keys");
+        }
+        table
+    };
+    let words = list_of(given.words());
+    morf.set_field(ctx, "args", words);
+    let options = Table::new(&ctx);
+    for (name, values) in given.options() {
+        // One value is that value; several are a list, because a repeated
+        // option keeps what it was given and only the configuration knows
+        // whether the first, the last or all of them was meant.
+        if let [only] = values.as_slice() {
+            let key = ctx.intern(name.as_bytes());
+            let _ = match only.text() {
+                Some(text) => options.set(ctx, key, text),
+                None => options.set(ctx, key, true),
+            };
+            continue;
+        }
+        let list = Table::new(&ctx);
+        for (index, value) in values.iter().enumerate() {
+            let slot = index as i64 + 1;
+            match value.text() {
+                Some(text) => list.set(ctx, slot, text),
+                None => list.set(ctx, slot, true),
+            }
+            .expect("a table accepts integer keys");
+        }
+        let _ = options.set(ctx, ctx.intern(name.as_bytes()), list);
+    }
+    morf.set_field(ctx, "options", options);
+    morf.set_field(ctx, "operands", list_of(given.operands()));
 }

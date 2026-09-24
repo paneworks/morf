@@ -149,6 +149,37 @@ impl Layout {
             })
     }
 
+    /// A node's box in surface coordinates: the bounds of its four corners
+    /// through every transform above it and its own. Nothing for a node this
+    /// layout did not place.
+    pub fn surface_rect(&self, scene: &Scene, node: NodeHandle) -> Option<Geometry> {
+        let geometry = self.geometry(node)?;
+        let transform = self.chain_transform(scene, node).ok()?;
+        let corners = [
+            (geometry.x, geometry.y),
+            (geometry.x + geometry.width, geometry.y),
+            (geometry.x, geometry.y + geometry.height),
+            (geometry.x + geometry.width, geometry.y + geometry.height),
+        ]
+        .map(|(x, y)| transform.point(x, y));
+        let left = corners.iter().map(|c| c.0).fold(f64::INFINITY, f64::min);
+        let top = corners.iter().map(|c| c.1).fold(f64::INFINITY, f64::min);
+        let right = corners
+            .iter()
+            .map(|c| c.0)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let bottom = corners
+            .iter()
+            .map(|c| c.1)
+            .fold(f64::NEG_INFINITY, f64::max);
+        Some(Geometry {
+            x: left,
+            y: top,
+            width: right - left,
+            height: bottom - top,
+        })
+    }
+
     /// Collects enabled MouseArea and DropArea rectangles for the Wayland
     /// input region.
     pub fn input_geometry(&self, scene: &Scene) -> Result<Vec<Geometry>, LayoutError> {
