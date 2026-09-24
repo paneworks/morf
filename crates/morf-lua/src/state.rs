@@ -258,6 +258,8 @@ pub(crate) struct ReactiveState {
     pub(crate) theme_sources: Vec<ThemeSource>,
     /// `morf.prefers` and where its answers come from.
     pub(crate) prefers: Option<Prefers>,
+    /// `morf.audio`, installed with the runtime and started on first use.
+    pub(crate) audio: Option<crate::api_audio::AudioHost>,
     pub(crate) dbus_services: Vec<PendingDbusService>,
     pub(crate) udev_monitors: Vec<PendingUdev>,
     pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
@@ -383,6 +385,7 @@ impl ReactiveState {
             state_metatable: None,
             theme_sources: Vec::new(),
             prefers: None,
+            audio: None,
             dbus_signals: Vec::new(),
             dbus_services: Vec::new(),
             udev_monitors: Vec::new(),

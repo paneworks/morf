@@ -112,7 +112,15 @@ fn main() {
         std::process::exit(1);
     }
     // Let the services settle so the scene is the one a running shell has.
+    // A service on another thread — the sound server, a bus — answers in
+    // milliseconds rather than instantly; `FRAME_BENCH_SETTLE_MS` spreads the
+    // polls over that long so the picture has what it said.
+    let settle = std::env::var("FRAME_BENCH_SETTLE_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map_or(Duration::ZERO, |ms| Duration::from_millis(ms) / 30);
     for _ in 0..30 {
+        std::thread::sleep(settle);
         runtime.poll_services();
         runtime
             .tick_animations(Duration::from_millis(16))
