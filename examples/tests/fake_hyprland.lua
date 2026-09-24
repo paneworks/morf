@@ -183,6 +183,7 @@ function M.new(options)
     requests:close()
     events:close()
     for _, socket in ipairs(self.listeners) do pcall(socket.close, socket) end
+    if not options.runtime then pcall(fs.remove, self.runtime, { recursive = true }) end
   end
 
   return self
