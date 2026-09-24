@@ -1,4 +1,3 @@
-use super::FORMAT;
 use crate::{SdfFieldInstance, SdfFieldLayer, SdfFieldMaterial};
 use std::mem;
 
@@ -101,6 +100,8 @@ pub(crate) struct FieldPipeline<'a> {
     pub(crate) vertex: Option<&'a str>,
     pub(crate) textures: Option<&'a wgpu::BindGroupLayout>,
     pub(crate) data: Option<&'a wgpu::BindGroupLayout>,
+    /// The space it blends in, which decides its target and what it writes.
+    pub(crate) blend: crate::BlendSpace,
 }
 
 pub(crate) fn build_field_pipeline(
@@ -115,6 +116,7 @@ pub(crate) fn build_field_pipeline(
         vertex,
         textures,
         data,
+        blend,
     } = built;
     // Group two is a shader's own textures and three its data blocks, both
     // present only when it declared any — an empty group is still a group wgpu
@@ -162,11 +164,14 @@ pub(crate) fn build_field_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: FORMAT,
+                format: super::target_format(blend),
                 blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
-            compilation_options: Default::default(),
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: super::blend_constants(blend),
+                ..Default::default()
+            },
         }),
         multiview_mask: None,
         cache: None,

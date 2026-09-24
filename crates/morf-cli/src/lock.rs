@@ -215,7 +215,8 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                 }
                 LayerEvent::Key {
                     surface,
-                    pressed: true,
+                    pressed,
+                    repeat,
                     keysym,
                     text,
                     modifiers,
@@ -235,6 +236,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                         &mut runtime,
                         root,
                         &mut focused,
+                        KeyAction::of(pressed, repeat),
                         keysym,
                         text.as_deref(),
                         key_modifiers(modifiers),
@@ -324,8 +326,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                         state.serial,
                     );
                 }
-                LayerEvent::Key { pressed: false, .. }
-                | LayerEvent::Configure { .. }
+                LayerEvent::Configure { .. }
                 | LayerEvent::Scale { .. }
                 | LayerEvent::Frame { .. }
                 // Taken above, by the pointer path every surface shares.

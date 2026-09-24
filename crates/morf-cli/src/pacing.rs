@@ -84,8 +84,14 @@ impl FramePacer {
     }
 
     /// Forgets where in the cadence the surface was, for when it stops moving.
-    pub(crate) fn rest(&mut self) {
-        self.waited = None;
+    ///
+    /// Returns whether a paint is still owed: the callback the motion ended on
+    /// was one the cadence gave up, so the frame it landed on was advanced but
+    /// never drawn. Without that paint the surface stops on the last frame it
+    /// did draw — a tile left between its old colour and its new one, and
+    /// nothing moving to ever correct it.
+    pub(crate) fn rest(&mut self) -> bool {
+        self.waited.take().is_some_and(|waited| waited > 0)
     }
 }
 
@@ -130,8 +136,10 @@ pub(crate) fn primary_frame(
             client.request_layer_frame(PRIMARY_LAYER);
             client.commit_layer(PRIMARY_LAYER);
         }
-    } else {
-        state.pacer.rest();
+    } else if state.pacer.rest() {
+        // The motion landed on a callback the cadence skipped; this is the
+        // paint that shows where it landed.
+        repaint = true;
     }
     // Configured layer surfaces have no clock of their own; the shell's
     // tick is what tells them a repaint is due, and a surface that is

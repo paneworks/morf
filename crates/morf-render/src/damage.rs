@@ -188,6 +188,15 @@ impl<B: RenderBackend> RenderEngine<B> {
         self.damage.forget();
     }
 
+    /// Forgets what is on screen, so the next frame is drawn in full.
+    ///
+    /// For when the backend's target was replaced behind the engine's back —
+    /// a change of blend space rebuilds it, and nothing the tracker remembers
+    /// is on the new one.
+    pub fn forget(&mut self) {
+        self.damage.forget();
+    }
+
     /// Returns the backend for surface-specific operations.
     pub fn backend_mut(&mut self) -> &mut B {
         &mut self.backend

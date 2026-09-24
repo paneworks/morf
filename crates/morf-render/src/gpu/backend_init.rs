@@ -174,13 +174,16 @@ impl WgpuBackend {
             bind_group_layouts: &[Some(&viewport_layout)],
             immediate_size: 0,
         });
-        let clear_pipeline = create_clear_pipeline(&device, &pipeline_layout, &clear_shader);
-        let (glyph_pipeline, glyph_layout, glyph_sampler) = create_glyph_pipeline(&device);
+        let blend = crate::BlendSpace::default();
+        let format = super::target_format(blend);
+        let clear_pipeline =
+            create_clear_pipeline(&device, &pipeline_layout, &clear_shader, format);
+        let (glyph_pipeline, glyph_layout, glyph_sampler) = create_glyph_pipeline(&device, blend);
         let glyph_mask_atlas =
             GlyphAtlas::new(&device, &glyph_layout, &glyph_sampler, RasterContent::Mask);
         let glyph_color_atlas =
             GlyphAtlas::new(&device, &glyph_layout, &glyph_sampler, RasterContent::Color);
-        let (blur_pipeline, blur_layout, blur_sampler) = create_blur_pipeline(&device);
+        let (blur_pipeline, blur_layout, blur_sampler) = create_blur_pipeline(&device, blend);
         let glyph_capacity = 1;
         let glyph_buffer = create_glyph_buffer(&device, glyph_capacity);
         let texture_capacity = 1;
@@ -200,6 +203,7 @@ impl WgpuBackend {
                 vertex: None,
                 textures: None,
                 data: None,
+                blend,
             },
         )
         .expect("the field shader carries its own hook");
@@ -228,15 +232,27 @@ impl WgpuBackend {
             &field_material_buffer,
             &field_outline_buffer,
         );
-        let (texture, view) = create_target(&device, width, height);
+        let (texture, view) = create_target(&device, width, height, format);
         let surface = surface
-            .map(|surface| create_surface_state(&device, &adapter, surface, &view, width, height))
+            .map(|surface| {
+                create_surface_state(
+                    &device,
+                    &adapter,
+                    surface,
+                    &composite_view(&texture),
+                    width,
+                    height,
+                )
+            })
             .transpose()?;
 
         Ok(Self {
             device,
             queue,
+            blend,
             clear_pipeline,
+            clear_layout: pipeline_layout,
+            clear_shader,
             viewport_buffer,
             viewport_bind_group,
             glyph_pipeline,
@@ -301,7 +317,12 @@ impl WgpuBackend {
     pub(crate) fn resize_target(&mut self, width: u32, height: u32) {
         self.width = width.max(1);
         self.height = height.max(1);
-        (self.texture, self.view) = create_target(&self.device, self.width, self.height);
+        (self.texture, self.view) = create_target(
+            &self.device,
+            self.width,
+            self.height,
+            super::target_format(self.blend),
+        );
         // The pooled layer targets are surface-sized, so a resize retires them.
         self.layer_target_pool.clear();
         let viewport = [self.width as f32, self.height as f32, self.elapsed, 0.0];
@@ -314,10 +335,61 @@ impl WgpuBackend {
             surface.bind_group = create_composite_bind_group(
                 &self.device,
                 &surface.texture_layout,
-                &self.view,
+                &composite_view(&self.texture),
                 &surface.sampler,
             );
         }
+    }
+
+    /// The space this surface blends translucent colours in.
+    pub fn blend(&self) -> crate::BlendSpace {
+        self.blend
+    }
+
+    /// Changes the space this surface blends in.
+    ///
+    /// Every target and built-in pipeline is rebuilt for it, and registered
+    /// shaders are dropped: their pipelines were built for the old target, so
+    /// the host registers them again. Returns whether anything changed — only
+    /// then do the shaders need registering. The next frame is drawn in full,
+    /// since the old target is gone.
+    pub fn set_blend(&mut self, blend: crate::BlendSpace) -> bool {
+        if blend == self.blend {
+            return false;
+        }
+        self.blend = blend;
+        let format = super::target_format(blend);
+        self.clear_pipeline =
+            create_clear_pipeline(&self.device, &self.clear_layout, &self.clear_shader, format);
+        self.glyph_pipeline = build_glyph_pipeline(
+            &self.device,
+            &self.glyph_layout,
+            None,
+            None,
+            None,
+            None,
+            blend,
+        )
+        .expect("the glyph shader carries its own hook");
+        self.blur_pipeline = build_blur_pipeline(&self.device, &self.blur_layout, blend);
+        self.field_pipeline = build_field_pipeline(
+            &self.device,
+            FieldPipeline {
+                layout: &self.field_layout,
+                shader_layout: &self.field_shader_layout,
+                user: None,
+                owns_coverage: false,
+                vertex: None,
+                textures: None,
+                data: None,
+                blend,
+            },
+        )
+        .expect("the field shader carries its own hook");
+        self.shaders.clear();
+        self.effect_shaders.clear();
+        self.resize_target(self.width, self.height);
+        true
     }
 
     /// Returns the persistent target for copying or diagnostics.
@@ -433,8 +505,12 @@ impl WgpuBackend {
     /// needed and is emptied only by a resize.
     pub(crate) fn layer_target(&mut self, index: usize) -> (wgpu::Texture, wgpu::TextureView) {
         while self.layer_target_pool.len() <= index {
-            self.layer_target_pool
-                .push(create_target(&self.device, self.width, self.height));
+            self.layer_target_pool.push(create_target(
+                &self.device,
+                self.width,
+                self.height,
+                super::target_format(self.blend),
+            ));
         }
         self.layer_target_pool[index].clone()
     }

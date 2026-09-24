@@ -512,6 +512,29 @@ fn morf_coverage_hook(shader_alpha: f32, filled: f32) -> f32 {
 
 const TAU: f32 = 6.28318530718;
 
+/// Whether this pipeline writes into a gamma-blended target.
+///
+/// Set per pipeline by the host. Off, the target is sRGB and the hardware
+/// encodes what is written, so blending happens in linear light. On, the
+/// target is plain and the value written is already encoded, so the blend
+/// unit mixes sRGB values the way a browser or Qt does.
+override MORF_GAMMA_BLEND: bool = false;
+
+/// A premultiplied linear colour as the target wants it: unchanged for a
+/// linear target, and for a gamma one encoded as straight colour and
+/// premultiplied again, so an opaque colour lands on the same bytes either
+/// way and only the mixing differs.
+fn morf_blend_output(color: vec4<f32>) -> vec4<f32> {
+    if !MORF_GAMMA_BLEND || color.a <= 0.0 {
+        return color;
+    }
+    let straight = clamp(color.rgb / color.a, vec3<f32>(0.0), vec3<f32>(1.0));
+    let low = straight * 12.92;
+    let high = 1.055 * pow(straight, vec3<f32>(1.0 / 2.4)) - 0.055;
+    let encoded = select(high, low, straight <= vec3<f32>(0.0031308));
+    return vec4<f32>(encoded * color.a, color.a);
+}
+
 fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
     let low = c * 12.92;
     let high = 1.055 * pow(max(c, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.4)) - 0.055;
@@ -720,8 +743,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    return vec4<f32>(
+    return morf_blend_output(vec4<f32>(
         mix(result.rgb, material.color_overlay.rgb * result.a, material.color_overlay.a),
         result.a,
-    );
+    ));
 }

@@ -283,6 +283,9 @@ pub(crate) struct ReactiveState {
     pub(crate) pam_sessions: Vec<PendingPamSession>,
     pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
     pub(crate) timers: Vec<PendingTimer>,
+    /// One-shot timers that came due this turn and have not yet fired: a
+    /// cancel before their turn in the batch takes them out, so it holds.
+    pub(crate) due_one_shots: HashSet<u64>,
     pub(crate) timer_callbacks: HashMap<NodeHandle, StashedClosure>,
     /// Each node's `on_destroyed`, until the node goes.
     pub(crate) destroy_hooks: HashMap<NodeHandle, StashedClosure>,
@@ -540,6 +543,7 @@ impl ReactiveState {
             pam_sessions: Vec::new(),
             greetd_sessions: Vec::new(),
             timers: Vec::new(),
+            due_one_shots: HashSet::new(),
             timer_callbacks: HashMap::new(),
             destroy_hooks: HashMap::new(),
             node_loops: HashMap::new(),

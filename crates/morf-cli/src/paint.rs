@@ -1,7 +1,7 @@
 use morf_layout::{Layout, Size};
 use morf_lua::{LayerSurfaceConfig, Runtime};
 use morf_region::{Rect as RegionRect, Region};
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
 use morf_wayland::{InputRect, LayerClient, PRIMARY_LAYER, SurfaceRole, physical_size};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -162,6 +162,12 @@ pub(crate) fn paint_layer(
     let (width, height) = client
         .layer_logical_size(layer)
         .ok_or_else(|| "layer surface disappeared while painting".to_owned())?;
+    // Read every paint like the keyboard focus below, so a configuration may
+    // change it at any time; the renderer rebuilds only when it moved, and
+    // its pipelines — the configuration's shaders among them — with it.
+    if apply_blend(renderer, &config.blend) {
+        crate::surface_run::register_shaders(runtime, renderer)?;
+    }
     let scale_120 = client.layer_scale_120(layer).unwrap_or(120);
     // `morf.surface.keyboard_focus` is read every paint, so a configuration
     // may take the keyboard for a page and hand it back after, without a
@@ -485,6 +491,13 @@ pub(crate) fn paint_auxiliary_surface(
     let Some(renderer) = &mut surface.renderer else {
         return Ok(());
     };
+    let blend = match kind {
+        AuxiliaryKind::Popup => surface.popup_config.as_ref().map(|config| &config.blend),
+        AuxiliaryKind::Floating => surface.floating_config.as_ref().map(|config| &config.blend),
+    };
+    if let Some(blend) = blend {
+        apply_blend(renderer, blend);
+    }
     let revision = runtime.scene().layout_revision();
     let size = (surface.width, surface.height);
     // This surface's own scale, not the bar's. A popup opened from a panel on a
@@ -547,4 +560,18 @@ pub(crate) fn until_next_second() -> Duration {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     Duration::from_nanos(1_000_000_000 - elapsed.subsec_nanos() as u64)
+}
+
+/// Puts a renderer in the blend space a surface's configuration names.
+///
+/// Returns whether it changed, which rebuilt the renderer's target and
+/// pipelines: the next frame is drawn in full, and whoever registered shaders
+/// with it registers them again.
+pub(crate) fn apply_blend(renderer: &mut RenderEngine<WgpuBackend>, blend: &str) -> bool {
+    let blend = BlendSpace::parse(blend).unwrap_or_default();
+    if !renderer.backend_mut().set_blend(blend) {
+        return false;
+    }
+    renderer.forget();
+    true
 }

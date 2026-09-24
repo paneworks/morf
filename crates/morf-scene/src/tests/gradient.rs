@@ -158,3 +158,68 @@ fn a_property_stores_the_canonical_form_and_animates_stop_by_stop() {
         "invalid Rect property `gradient`: a gradient needs a list of stops"
     );
 }
+
+fn two_stops(first: &str, second: &str) -> Value {
+    map(&[("stops", list(vec![first.into(), second.into()]))])
+}
+
+#[test]
+fn a_gradient_retargeted_midway_arrives_at_the_new_target() {
+    // A tile that changes colour again before its last change finished must
+    // still end up on the colour it was last given.
+    for easing in [
+        Easing::Linear,
+        Easing::OutQuad,
+        Easing::OutBack,
+        Easing::CubicBezier {
+            x1: 0.34,
+            y1: 1.56,
+            x2: 0.64,
+            y2: 1.0,
+        },
+        Easing::CubicBezier {
+            x1: 0.33,
+            y1: 1.0,
+            x2: 0.68,
+            y2: 1.0,
+        },
+    ] {
+        let mut scene = Scene::new();
+        let rect = scene.create(Element::Rect);
+        scene
+            .assign(rect, "gradient", two_stops("#000000", "#000000"))
+            .unwrap();
+        scene
+            .set_behavior(
+                rect,
+                "gradient",
+                Some(Behavior {
+                    duration: Duration::from_millis(100),
+                    easing,
+                    ..Behavior::default()
+                }),
+            )
+            .unwrap();
+        scene
+            .assign(rect, "gradient", two_stops("#ff0000", "#00ff00"))
+            .unwrap();
+        scene.tick_animations(Duration::from_millis(40)).unwrap();
+        scene
+            .assign(rect, "gradient", two_stops("#0000ff", "#ffffff"))
+            .unwrap();
+        for _ in 0..30 {
+            scene.tick_animations(Duration::from_millis(16)).unwrap();
+        }
+        let settled = Gradient::parse(scene.current(rect, "gradient").unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            settled,
+            Gradient::parse(&two_stops("#0000ff", "#ffffff"))
+                .unwrap()
+                .unwrap(),
+            "{easing:?}"
+        );
+        assert!(!scene.is_animating(rect, "gradient").unwrap(), "{easing:?}");
+    }
+}

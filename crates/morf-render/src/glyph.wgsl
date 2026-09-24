@@ -16,6 +16,29 @@ struct VertexOutput {
     @location(13) ramp: f32,
 }
 
+/// Whether this pipeline writes into a gamma-blended target.
+///
+/// Set per pipeline by the host. Off, the target is sRGB and the hardware
+/// encodes what is written, so blending happens in linear light. On, the
+/// target is plain and the value written is already encoded, so the blend
+/// unit mixes sRGB values the way a browser or Qt does.
+override MORF_GAMMA_BLEND: bool = false;
+
+/// A premultiplied linear colour as the target wants it: unchanged for a
+/// linear target, and for a gamma one encoded as straight colour and
+/// premultiplied again, so an opaque colour lands on the same bytes either
+/// way and only the mixing differs.
+fn morf_blend_output(color: vec4<f32>) -> vec4<f32> {
+    if !MORF_GAMMA_BLEND || color.a <= 0.0 {
+        return color;
+    }
+    let straight = clamp(color.rgb / color.a, vec3<f32>(0.0), vec3<f32>(1.0));
+    let low = straight * 12.92;
+    let high = 1.055 * pow(straight, vec3<f32>(1.0 / 2.4)) - 0.055;
+    let encoded = select(high, low, straight <= vec3<f32>(0.0031308));
+    return vec4<f32>(encoded * color.a, color.a);
+}
+
 @group(0) @binding(0) var atlas: texture_2d<f32>;
 @group(0) @binding(1) var atlas_sampler: sampler;
 
@@ -185,7 +208,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let alpha = (body_alpha + outline_alpha * (1.0 - body_alpha)) * mask_coverage;
         let premultiplied = (body * body_alpha
             + input.outline_color.rgb * outline_alpha * (1.0 - body_alpha)) * mask_coverage;
-        return vec4<f32>(premultiplied, alpha);
+        return morf_blend_output(vec4<f32>(premultiplied, alpha));
     }
 
     sampled *= mask_coverage;
@@ -197,8 +220,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     );
     let alpha = sampled_alpha * input.color.a;
     if input.mode.x > 0.5 {
+        // A layer composited back: its target holds what its subtree wrote,
+        // already in the space this pipeline writes, so it is not encoded
+        // again.
         return vec4<f32>(sampled.rgb * input.color.a, alpha);
     }
     let color = select(sampled.rgb * input.color.rgb, input.color.rgb, input.mode.z > 0.5);
-    return vec4<f32>(mix(color, input.color_overlay.rgb, input.color_overlay.a) * alpha, alpha);
+    return morf_blend_output(
+        vec4<f32>(mix(color, input.color_overlay.rgb, input.color_overlay.a) * alpha, alpha),
+    );
 }

@@ -56,18 +56,37 @@ impl Runtime {
         changed
     }
 
-    /// Runs one key: into the focused text input when `node` is one, and to
-    /// the node's `on_key_pressed` otherwise — or when the text input had no
-    /// use for it.
+    /// Runs one key press: into the focused text input when `node` is one,
+    /// and to the node's `on_key_pressed` otherwise — or when the text input
+    /// had no use for it.
     ///
-    /// A handler is called as `(keysym, text, modifiers)`, the last a string
-    /// such as `"ctrl+shift"`, empty when nothing is held.
+    /// A handler is called as `(keysym, text, modifiers, repeat)`, the third
+    /// a string such as `"ctrl+shift"`, empty when nothing is held, and the
+    /// last false here; see [`Runtime::dispatch_key_press`] for repeats.
     pub fn dispatch_key(
         &mut self,
         node: NodeHandle,
         keysym: u32,
         text: Option<&str>,
         modifiers: KeyModifiers,
+    ) -> bool {
+        self.dispatch_key_press(node, keysym, text, modifiers, false)
+    }
+
+    /// Runs one key press, saying whether it is the keyboard's own repeat of
+    /// a held key rather than a fresh press.
+    ///
+    /// A text input takes a repeat as it takes a press — a held Backspace
+    /// keeps deleting — while a handler can tell them apart by its fourth
+    /// argument: a game moving on held keys ignores repeats and tracks the
+    /// press and its release instead.
+    pub fn dispatch_key_press(
+        &mut self,
+        node: NodeHandle,
+        keysym: u32,
+        text: Option<&str>,
+        modifiers: KeyModifiers,
+        repeat: bool,
     ) -> bool {
         let outcome = if self.is_text_input(node) {
             let outcome = {
@@ -86,11 +105,26 @@ impl Runtime {
         self.dispatch_ui_event_with_args(
             node,
             UiEvent::KeyPressed,
-            &[
-                IpcValue::Integer(i64::from(keysym)),
-                text.map_or(IpcValue::Nil, |value| IpcValue::String(value.to_owned())),
-                IpcValue::String(modifiers.name()),
-            ],
+            &key_args(keysym, text, modifiers, Some(repeat)),
+        )
+    }
+
+    /// Runs one key release to the node's `on_key_released`, called as
+    /// `(keysym, text, modifiers)`.
+    ///
+    /// Text inputs have no use for releases, so one goes to the handler
+    /// whatever the node is.
+    pub fn dispatch_key_release(
+        &mut self,
+        node: NodeHandle,
+        keysym: u32,
+        text: Option<&str>,
+        modifiers: KeyModifiers,
+    ) -> bool {
+        self.dispatch_ui_event_with_args(
+            node,
+            UiEvent::KeyReleased,
+            &key_args(keysym, text, modifiers, None),
         )
     }
 
@@ -223,4 +257,22 @@ impl Runtime {
             );
         }
     }
+}
+
+/// The arguments a key handler is called with; `repeat` only for presses.
+fn key_args(
+    keysym: u32,
+    text: Option<&str>,
+    modifiers: KeyModifiers,
+    repeat: Option<bool>,
+) -> Vec<IpcValue> {
+    let mut args = vec![
+        IpcValue::Integer(i64::from(keysym)),
+        text.map_or(IpcValue::Nil, |value| IpcValue::String(value.to_owned())),
+        IpcValue::String(modifiers.name()),
+    ];
+    if let Some(repeat) = repeat {
+        args.push(IpcValue::Boolean(repeat));
+    }
+    args
 }

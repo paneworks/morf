@@ -1,5 +1,3 @@
-use super::FORMAT;
-
 // The clear pass. It draws one full-screen triangle with no instance data and
 // no blending — it is replacing the target, not compositing onto it.
 //
@@ -11,6 +9,7 @@ pub(crate) fn create_clear_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     shader: &wgpu::ShaderModule,
+    format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("morf clear pipeline"),
@@ -28,7 +27,7 @@ pub(crate) fn create_clear_pipeline(
             module: shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: FORMAT,
+                format,
                 blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],

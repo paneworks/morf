@@ -84,6 +84,40 @@ fn layer_surface_settings_reject_unknown_and_shell_only_keys() {
 }
 
 #[test]
+fn every_surface_names_the_space_it_blends_in() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "blend.lua",
+            br#"
+                local ui = require("morf.ui")
+                local window = require("morf.window")
+                assert(morf.surface.blend == "linear")
+                morf.surface.blend = "srgb"
+                assert(morf.surface.blend == "srgb")
+                assert(not pcall(function() morf.surface.blend = "gamma" end))
+                assert(not pcall(function() morf.surface.blend = true end))
+                window.layer { root = ui.Item {}, blend = "srgb" }
+                window.popup { root = ui.Item {}, blend = "srgb" }
+                window.floating { root = ui.Item {} }
+                assert(not pcall(window.floating, { root = ui.Item {}, blend = "cmyk" }))
+            "#,
+        )
+        .unwrap();
+    assert_eq!(runtime.layer_surface_config().blend, "srgb");
+    let blends: Vec<_> = runtime
+        .window_surface_configs()
+        .into_iter()
+        .map(|surface| match surface.kind {
+            WindowSurfaceKind::Layer(config) => config.blend,
+            WindowSurfaceKind::Popup(config) => config.blend,
+            WindowSurfaceKind::Floating(config) => config.blend,
+        })
+        .collect();
+    assert_eq!(blends, ["srgb", "srgb", "linear"]);
+}
+
+#[test]
 fn shell_surface_reserve_is_native_and_typed() {
     let mut runtime = Runtime::default();
     runtime

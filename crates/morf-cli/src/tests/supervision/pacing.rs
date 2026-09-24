@@ -106,3 +106,25 @@ fn a_hidden_surface_hands_the_clock_over_after_a_few_refreshes() {
         Duration::from_millis(250)
     );
 }
+
+#[test]
+fn motion_that_lands_on_a_skipped_callback_is_still_painted() {
+    // At half rate the last frame of an animation can fall on a callback the
+    // cadence gives up. The scene has landed but the screen has not: resting
+    // must say a paint is owed, or the surface stays on the frame before —
+    // a gradient tile stuck between two colours.
+    let mut pacer = FramePacer::new();
+    for _ in 0..12 {
+        pacer.observed(Duration::from_micros(25_000));
+    }
+    assert!(pacer.due(REFRESH), "painted");
+    assert!(!pacer.due(REFRESH), "the landing frame is skipped");
+    assert!(pacer.rest(), "so the next callback owes a paint");
+    assert!(!pacer.rest(), "and only one");
+
+    assert!(pacer.due(REFRESH), "painted");
+    assert!(
+        !pacer.rest(),
+        "motion that ended on a painted frame owes nothing"
+    );
+}

@@ -1,4 +1,3 @@
-use super::FORMAT;
 use crate::DamageRect;
 use wgpu::util::DeviceExt;
 
@@ -8,6 +7,7 @@ pub(crate) fn create_target(
     device: &wgpu::Device,
     width: u32,
     height: u32,
+    format: wgpu::TextureFormat,
 ) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("morf persistent target"),
@@ -19,11 +19,13 @@ pub(crate) fn create_target(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: FORMAT,
+        format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::COPY_SRC
             | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
+        // A gamma-blended target is also read through an sRGB view, by the
+        // pass that hands it to an sRGB swapchain; see `composite_view`.
+        view_formats: &[format.add_srgb_suffix()],
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     (texture, view)
@@ -33,18 +35,19 @@ pub(crate) fn create_blur_chain(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     sampler: &wgpu::Sampler,
-    source: &wgpu::TextureView,
-    width: u32,
-    height: u32,
+    (texture, source): (&wgpu::Texture, &wgpu::TextureView),
     offset: f32,
 ) -> BlurChain {
+    // The chain matches its source: its size, and the format of the blend
+    // space it was rendered in.
+    let (width, height, format) = (texture.width(), texture.height(), texture.format());
     let half = ((width / 2).max(1), (height / 2).max(1));
     let quarter = ((width / 4).max(1), (height / 4).max(1));
     let sizes = [half, quarter, half, (width.max(1), height.max(1))];
     let mut textures = Vec::with_capacity(4);
     let mut views = Vec::with_capacity(4);
     for (target_width, target_height) in sizes {
-        let (texture, view) = create_target(device, target_width, target_height);
+        let (texture, view) = create_target(device, target_width, target_height, format);
         textures.push(texture);
         views.push(view);
     }
@@ -258,6 +261,19 @@ pub(crate) fn create_surface_state(
         texture_layout,
         sampler,
         bind_group,
+    })
+}
+
+/// The view of the persistent target the surface composite samples.
+///
+/// The swapchain is sRGB, so it encodes what the composite writes. A linear
+/// target decodes on read and the two cancel. A gamma-blended target already
+/// holds encoded values; read through an sRGB view they are decoded, and the
+/// swapchain's encode puts back exactly the bytes that were blended.
+pub(crate) fn composite_view(texture: &wgpu::Texture) -> wgpu::TextureView {
+    texture.create_view(&wgpu::TextureViewDescriptor {
+        format: Some(texture.format().add_srgb_suffix()),
+        ..Default::default()
     })
 }
 

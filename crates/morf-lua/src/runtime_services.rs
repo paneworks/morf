@@ -143,8 +143,16 @@ impl Runtime {
             let mut index = 0;
             while index < state.timers.len() {
                 if state.timers[index].timer.tick(Duration::ZERO) {
-                    timers.push(state.timers[index].callback.clone());
+                    let timer = &state.timers[index];
+                    timers.push(DueTimer {
+                        id: timer.id,
+                        node: timer.node,
+                        repeat: timer.repeat,
+                        callback: timer.callback.clone(),
+                    });
                     if !state.timers[index].repeat {
+                        let id = state.timers[index].id;
+                        state.due_one_shots.insert(id);
                         if let Some(node) = state.timers[index].node {
                             let _ = assign_scene_property(
                                 &mut state,
@@ -408,7 +416,19 @@ impl Runtime {
             // which this makes come at once rather than at the next event.
             morf_io::wake_all();
         }
-        for callback in timers {
+        for DueTimer {
+            id,
+            node,
+            repeat,
+            callback,
+        } in timers
+        {
+            // Collected before this turn's other callbacks, loader drops and
+            // earlier timers ran, any of which may have stopped this one or
+            // torn its node down. A timer fires only if it is still wanted.
+            if !timer_still_due(&mut self.reactive.borrow_mut(), id, node, repeat) {
+                continue;
+            }
             if let Err(message) =
                 self.run_handler(|ctx, limits| execute_handler_args(ctx, &callback, &[], limits))
             {
@@ -531,5 +551,45 @@ impl Runtime {
             transform_tracker.retain_scene(&*scene);
         }
         removed
+    }
+}
+
+/// A timer that came due this turn, as collected before any callback ran.
+struct DueTimer {
+    id: u64,
+    node: Option<NodeHandle>,
+    repeat: bool,
+    callback: luna::StashedClosure,
+}
+
+/// Whether a timer collected as due should still fire, now that everything
+/// before it in this turn has run.
+///
+/// A `Timer` node must still exist and still be a timer — not removed,
+/// alone or with an ancestor such as a Loader letting its item go — and a
+/// repeating one must still be running. A timer with no node must not have
+/// been cancelled. A one-shot fires at most once either way.
+fn timer_still_due(
+    state: &mut ReactiveState,
+    id: u64,
+    node: Option<NodeHandle>,
+    repeat: bool,
+) -> bool {
+    let one_shot_pending = !repeat && state.due_one_shots.remove(&id);
+    if let Some(node) = node {
+        if !state.timer_callbacks.contains_key(&node) {
+            return false;
+        }
+        let Ok(running) = state.scene.bool_value(node, "running") else {
+            return false;
+        };
+        if repeat && !running {
+            return false;
+        }
+    }
+    if repeat {
+        state.timers.iter().any(|timer| timer.id == id)
+    } else {
+        one_shot_pending
     }
 }

@@ -252,3 +252,27 @@ fn a_field_built_too_long_is_cut_to_its_max_length() {
     assert_eq!(text(&runtime, node), "abc");
     assert_eq!(number(&runtime, node, "cursor_position"), 3.0);
 }
+
+#[test]
+fn repeats_type_and_releases_reach_the_handler() {
+    let (mut runtime, node) = focused(
+        r#"text = "abc",
+           on_key_pressed = function(keysym, text, modifiers, repeat_)
+               record("key")(keysym, tostring(text), modifiers, repeat_)
+           end,
+           on_key_released = function(keysym, text, modifiers)
+               record("up")(keysym, tostring(text), modifiers)
+           end,"#,
+    );
+    press(&mut runtime, node, END, NONE);
+    // A held Backspace keeps deleting: the field takes a repeat as a press.
+    runtime.dispatch_key_press(node, BACKSPACE, None, NONE, false);
+    runtime.dispatch_key_press(node, BACKSPACE, None, NONE, true);
+    assert_eq!(text(&runtime, node), "a");
+    log(&mut runtime);
+    // What the field has no use for goes on, saying whether it repeated.
+    runtime.dispatch_key_press(node, UP, None, NONE, true);
+    assert_eq!(log(&mut runtime), "key 65362 nil  true");
+    runtime.dispatch_key_release(node, BACKSPACE, None, NONE);
+    assert_eq!(log(&mut runtime), "up 65288 nil ");
+}

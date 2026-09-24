@@ -262,6 +262,101 @@ pub(crate) fn layer_mask_data_inverts_the_owner_transform() {
     assert_eq!(radii, [4.0, 5.0, 6.0, 7.0]);
 }
 
+/// Renders `list` on a 4×4 target blending in `blend`, and reads the pixel at
+/// (1, 1).
+fn blended_pixel(blend: BlendSpace, list: &DrawList) -> [u8; 4] {
+    let mut backend = pollster::block_on(WgpuBackend::new(4, 4)).unwrap();
+    assert!(backend.set_blend(blend) || blend == BlendSpace::Linear);
+    assert_eq!(backend.blend(), blend);
+    backend
+        .render(
+            list,
+            &[DamageRect {
+                x: 0,
+                y: 0,
+                width: 4,
+                height: 4,
+            }],
+            120,
+        )
+        .unwrap();
+    let pixels = backend.read_pixels();
+    let at = (4 + 1) * 4;
+    pixels[at..at + 4].try_into().unwrap()
+}
+
+fn close_to(pixel: [u8; 4], expected: [u8; 4]) -> bool {
+    pixel
+        .iter()
+        .zip(expected)
+        .all(|(channel, expected)| channel.abs_diff(expected) <= 2)
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+pub(crate) fn srgb_blending_mixes_encoded_values_as_browsers_do() {
+    let mut scene = morf_scene::Scene::new();
+    let ground = scene.create(morf_scene::Element::Rect);
+    let veil = scene.create(morf_scene::Element::Rect);
+    let clear = Color::rgba8(0, 0, 0, 0);
+    let black = test_quad(ground, Color::rgba8(0, 0, 0, 255), clear, 0.0);
+    // Half white, drawn straight over black.
+    let direct = DrawList {
+        commands: vec![
+            black.clone(),
+            test_quad(veil, Color::rgba8(255, 255, 255, 128), clear, 0.0),
+        ],
+        layers: Vec::new(),
+    };
+    // Opaque white in a half-opaque layer: the layer's target is composited
+    // back without being encoded a second time.
+    let layered = DrawList {
+        commands: vec![
+            black.clone(),
+            test_quad(veil, Color::rgba8(255, 255, 255, 255), clear, 0.0),
+        ],
+        layers: vec![Layer {
+            node: veil,
+            commands: 1..2,
+            parent: None,
+            opacity: 128.0 / 255.0,
+            blur: 0.0,
+            shadow_color: clear,
+            shadow_blur: 0.0,
+            shadow_offset: [0.0; 2],
+            mask: None,
+            shader: None,
+            bounds: Geometry {
+                x: 0.0,
+                y: 0.0,
+                width: 4.0,
+                height: 4.0,
+            },
+        }],
+    };
+    // An opaque colour lands on the same bytes whichever space blends.
+    let solid = DrawList {
+        commands: vec![test_quad(
+            ground,
+            Color::rgba8(33, 134, 241, 255),
+            clear,
+            0.0,
+        )],
+        layers: Vec::new(),
+    };
+
+    for list in [&direct, &layered] {
+        let linear = blended_pixel(BlendSpace::Linear, list);
+        let srgb = blended_pixel(BlendSpace::Srgb, list);
+        assert!(close_to(linear, [188, 188, 188, 255]), "linear: {linear:?}");
+        assert!(close_to(srgb, [128, 128, 128, 255]), "srgb: {srgb:?}");
+    }
+    for blend in [BlendSpace::Linear, BlendSpace::Srgb] {
+        let pixel = blended_pixel(blend, &solid);
+        assert!(close_to(pixel, [33, 134, 241, 255]), "{blend:?}: {pixel:?}");
+    }
+}
+
 #[test]
 pub(crate) fn glyph_shelves_reserve_padding_and_wrap_rows() {
     let mut allocator = ShelfAllocator::default();

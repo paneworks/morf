@@ -355,7 +355,7 @@ impl Runtime {
         let state = self.reactive.borrow();
         let mut current = Some(node);
         while let Some(node) = current {
-            if (state.handlers.contains_key(&(node, UiEvent::KeyPressed))
+            if (handles_keys(&state, node)
                 || state.scene.element(node).ok() == Some(morf_scene::Element::TextInput))
                 && state.scene.bool_value(node, "enabled").unwrap_or(false)
                 && state.scene.bool_value(node, "visible").unwrap_or(false)

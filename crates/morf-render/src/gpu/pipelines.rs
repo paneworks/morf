@@ -1,10 +1,11 @@
-use super::FORMAT;
+use crate::BlendSpace;
 use std::mem;
 
 use super::{glyphs::*, shaders::*};
 
 pub(crate) fn create_blur_pipeline(
     device: &wgpu::Device,
+    blend: BlendSpace,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout, wgpu::Sampler) {
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("morf blur layout"),
@@ -43,16 +44,27 @@ pub(crate) fn create_blur_pipeline(
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
     });
+    let pipeline = build_blur_pipeline(device, &layout, blend);
+    (pipeline, layout, sampler)
+}
+
+/// The blur pipeline for one blend space. The blur averages whatever the
+/// target holds, so only the format it writes changes with the space.
+pub(crate) fn build_blur_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    blend: BlendSpace,
+) -> wgpu::RenderPipeline {
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("morf blur pipeline layout"),
-        bind_group_layouts: &[Some(&layout)],
+        bind_group_layouts: &[Some(layout)],
         immediate_size: 0,
     });
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("morf dual-kawase shader"),
         source: wgpu::ShaderSource::Wgsl(fullscreen_source(include_str!("../blur.wgsl")).into()),
     });
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("morf dual-kawase pipeline"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
@@ -68,7 +80,7 @@ pub(crate) fn create_blur_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: FORMAT,
+                format: super::target_format(blend),
                 blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],
@@ -76,12 +88,12 @@ pub(crate) fn create_blur_pipeline(
         }),
         multiview_mask: None,
         cache: None,
-    });
-    (pipeline, layout, sampler)
+    })
 }
 
 pub(crate) fn create_glyph_pipeline(
     device: &wgpu::Device,
+    blend: BlendSpace,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout, wgpu::Sampler) {
     let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("morf glyph texture layout"),
@@ -110,7 +122,7 @@ pub(crate) fn create_glyph_pipeline(
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
     });
-    let pipeline = build_glyph_pipeline(device, &texture_layout, None, None, None, None)
+    let pipeline = build_glyph_pipeline(device, &texture_layout, None, None, None, None, blend)
         .expect("the glyph shader carries its own hook");
     (pipeline, texture_layout, sampler)
 }
@@ -128,6 +140,7 @@ pub(crate) fn build_glyph_pipeline(
     user: Option<&str>,
     textures: Option<&wgpu::BindGroupLayout>,
     data: Option<&wgpu::BindGroupLayout>,
+    blend: BlendSpace,
 ) -> Option<wgpu::RenderPipeline> {
     // The same group numbers the field pipeline uses, because the compiler
     // emits the same numbers whatever mode a shader is in: one for its
@@ -188,11 +201,14 @@ pub(crate) fn build_glyph_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: FORMAT,
+                format: super::target_format(blend),
                 blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
-            compilation_options: Default::default(),
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: super::blend_constants(blend),
+                ..Default::default()
+            },
         }),
         multiview_mask: None,
         cache: None,

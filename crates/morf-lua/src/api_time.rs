@@ -263,6 +263,7 @@ pub(crate) fn install_timer_api<'gc>(
         let mut state = cancel_state.borrow_mut();
         let before = state.timers.len();
         state.timers.retain(|timer| timer.id != token.id);
+        state.due_one_shots.remove(&token.id);
         // Whether there was anything to stop: a second cancel, or a cancel of
         // a one-shot that already fired, is not an error but is worth knowing.
         stack.replace(ctx, state.timers.len() != before);

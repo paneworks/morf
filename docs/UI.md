@@ -442,6 +442,27 @@ crossfade between two saturated colours should look like; `space` and
 ui.Rect { color = accent, behavior = { color = { duration = 300, space = "oklch", hue = "longer" } } }
 ```
 
+### Blending
+
+A translucent colour is mixed with what is under it in linear light, which
+is how light mixes and what morf does unless told otherwise. Browsers, Qt
+and GTK mix the sRGB-encoded values instead, and the two disagree on every
+translucent pixel: 50% white over black is `#bcbcbc` here and `#808080`
+there, and a 3.5% white hairline that is a hint in a browser is a visible
+line here. A design made in one of those, or ported from one, looks right
+only when mixed the same way:
+
+```lua
+morf.surface.blend = "srgb"              -- the shell's own surface
+morf.window.popup { root = menu, blend = "srgb" }   -- or any window surface
+```
+
+It is per surface, `"linear"` by default, and may change at any time; the
+surface rebuilds its pipelines when it does. Opaque colours, images and
+gradients' stops land on the same pixels either way — only the mixing
+differs, text's antialiasing included. `examples/blend-compare.lua` draws
+one design both ways.
+
 ### Gradients
 
 `gradient` on a `Rect` or an `Sdf` is one table: a `kind` (`linear`,
@@ -625,6 +646,31 @@ under a key of everything that shaped its pixels. One whose numbers move is
 drawn again for each frame they move in, on the CPU, at its on-screen size —
 cheap for an icon or a gauge, worth knowing for a path the size of the
 screen. `examples/path.lua` has one of each.
+
+### Keys
+
+A node with `on_key_pressed` or `on_key_released` is somewhere keys can
+go: the focused one of its surface (a click, a Tab, `focus = true`), or
+else the first. `on_key_pressed(keysym, text, modifiers, repeat)` runs
+for a press and for each of the keyboard's repeats of a held key, and
+`repeat` says which it is; `on_key_released(keysym, text, modifiers)`
+runs when the key comes up, on whatever has focus by then. Something that
+moves while a key is held — a game, a scrubber — tracks the press and the
+release and ignores the repeats:
+
+```lua
+local held = {}
+ui.MouseArea {
+  focus = true,
+  on_key_pressed = function(keysym, _, _, repeat_)
+    if not repeat_ then held[keysym] = true end
+  end,
+  on_key_released = function(keysym) held[keysym] = nil end,
+}
+```
+
+A text input types a repeat as it types a press, so a held Backspace
+keeps deleting.
 
 ### Entering
 
