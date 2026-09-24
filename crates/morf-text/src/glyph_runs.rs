@@ -168,9 +168,11 @@ impl TextSystem {
         // contours paired by position, resampled, rotated onto each other — so
         // one face's letter walks onto another's the same way it walks onto its
         // own. A face change is a morph, not a swap.
+        // Not skipped at travel 0: the paired outline has its own point
+        // count, and a morph that started from the raw one would change how
+        // many points it has on its first frame.
         let target = morph_to
             .filter(|other| *other != glyph || family_to != family)
-            .filter(|_| travel > 0.0)
             .and_then(|other| self.outline_points(other, family_to));
         match target {
             Some(to) => walk(&pair_up(from, to), travel.clamp(0.0, 1.0)),

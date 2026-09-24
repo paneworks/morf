@@ -346,38 +346,80 @@ fn looks_monospace(family: &str) -> bool {
         || family.contains("code")
 }
 
+/// The family fontconfig picks for a generic name (`sans-serif`), when it is
+/// installed where this font system can see it.
+///
+/// fontconfig is where a desktop says which face "sans-serif" means (the
+/// person's choice, their distribution's default); fontdb has no such idea
+/// and falls back to a fixed list, so a shell drew in a different face from
+/// every other application. `fc-match` is asked once, and not waited on for
+/// long: a missing or hung fontconfig leaves the fixed list in charge.
+fn fontconfig_family(fonts: &FontSystem, generic: &str) -> Option<String> {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+    let mut child = Command::new("fc-match")
+        .args(["-f", "%{family[0]}", generic])
+        .env_remove("LD_LIBRARY_PATH")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + Duration::from_secs(1);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    }
+    let mut name = String::new();
+    std::io::Read::read_to_string(child.stdout.as_mut()?, &mut name).ok()?;
+    installed_family(fonts, name.trim())
+}
+
 fn configure_generic_families(fonts: &mut FontSystem) {
-    let sans = preferred_family(
-        fonts,
-        &[
-            "Noto Sans",
-            "DejaVu Sans",
-            "Liberation Sans",
-            "Cantarell",
-            "Nimbus Sans",
-        ],
-        |monospaced| !monospaced,
-    );
-    let serif = preferred_family(
-        fonts,
-        &[
-            "Noto Serif",
-            "DejaVu Serif",
-            "Liberation Serif",
-            "Nimbus Roman",
-        ],
-        |monospaced| !monospaced,
-    );
-    let monospace = preferred_family(
-        fonts,
-        &[
-            "Noto Sans Mono",
-            "DejaVu Sans Mono",
-            "Liberation Mono",
-            "Nimbus Mono PS",
-        ],
-        |monospaced| monospaced,
-    );
+    let sans = fontconfig_family(fonts, "sans-serif").or_else(|| {
+        preferred_family(
+            fonts,
+            &[
+                "Noto Sans",
+                "DejaVu Sans",
+                "Liberation Sans",
+                "Cantarell",
+                "Nimbus Sans",
+            ],
+            |monospaced| !monospaced,
+        )
+    });
+    let serif = fontconfig_family(fonts, "serif").or_else(|| {
+        preferred_family(
+            fonts,
+            &[
+                "Noto Serif",
+                "DejaVu Serif",
+                "Liberation Serif",
+                "Nimbus Roman",
+            ],
+            |monospaced| !monospaced,
+        )
+    });
+    let monospace = fontconfig_family(fonts, "monospace").or_else(|| {
+        preferred_family(
+            fonts,
+            &[
+                "Noto Sans Mono",
+                "DejaVu Sans Mono",
+                "Liberation Mono",
+                "Nimbus Mono PS",
+            ],
+            |monospaced| monospaced,
+        )
+    });
     let db = fonts.db_mut();
     if let Some(family) = sans {
         db.set_sans_serif_family(family);
