@@ -291,9 +291,14 @@ impl LayerClient {
 
     /// Destroys one layer surface when it is open.
     pub fn close_layer(&mut self, id: u64) {
-        if self.state.layers.remove(&id).is_none() {
+        let Some(record) = self.state.layers.remove(&id) else {
             return;
-        }
+        };
+        self.state
+            .frames_outstanding
+            .borrow_mut()
+            .remove(&record.surface.wl_surface().id());
+        drop(record);
         self.forget_surface(SurfaceRole::Layer(id));
     }
 
@@ -338,8 +343,47 @@ impl LayerClient {
         let Some(surface) = self.layer_surface(id) else {
             return;
         };
+        self.request_frame_on(surface);
+    }
+
+    /// Asks `surface` for a frame callback and notes when, unless one is
+    /// already outstanding (the compositor answers every callback on the
+    /// same presentation, so the older request is the one that matters).
+    pub(crate) fn request_frame_on(&self, surface: &wl_surface::WlSurface) {
         let qh = self.queue.handle();
         surface.frame(&qh, FrameCallbackData(surface.clone()));
+        self.state
+            .frames_outstanding
+            .borrow_mut()
+            .entry(surface.id())
+            .or_insert_with(std::time::Instant::now);
+    }
+
+    /// How long `surface` has been waiting for a frame callback, if it is.
+    fn frame_wait(&self, surface: Option<&wl_surface::WlSurface>) -> Option<std::time::Duration> {
+        let surface = surface?;
+        self.state
+            .frames_outstanding
+            .borrow()
+            .get(&surface.id())
+            .map(std::time::Instant::elapsed)
+    }
+
+    /// How long a layer surface has waited for its frame callback, or
+    /// `None` when it is not waiting. A surface the compositor does not show
+    /// never gets one; painting it again then blocks a FIFO swapchain.
+    pub fn layer_frame_wait(&self, id: u64) -> Option<std::time::Duration> {
+        self.frame_wait(self.layer_surface(id))
+    }
+
+    /// [`Self::layer_frame_wait`] for a popup.
+    pub fn popup_frame_wait(&self, id: u64) -> Option<std::time::Duration> {
+        self.frame_wait(self.popup_surface(id))
+    }
+
+    /// [`Self::layer_frame_wait`] for a floating window.
+    pub fn floating_frame_wait(&self, id: u64) -> Option<std::time::Duration> {
+        self.frame_wait(self.floating_surface(id))
     }
 
     /// Commits pending state on one layer surface without attaching a buffer.

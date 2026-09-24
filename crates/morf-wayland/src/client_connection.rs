@@ -163,6 +163,7 @@ impl LayerClient {
             .ok()
             .map(DataControl::new);
         let mut state = LayerState {
+            frames_outstanding: std::cell::RefCell::new(HashMap::new()),
             registry: RegistryState::new(&globals),
             compositor,
             outputs: OutputState::new(&globals, &qh),

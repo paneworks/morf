@@ -293,10 +293,23 @@ pub(crate) fn paint_layer_surface(
     // not, so an animating configured layer surface was painted twice for every
     // tick — once by each — and the flag it was supposed to be gated on was
     // never cleared by the one that ignored it.
-    surface.needs_paint = false;
     let Some(renderer) = &mut surface.renderer else {
         return Ok(());
     };
+    // Still waiting for the last frame's callback: presenting again would
+    // block a FIFO swapchain until it comes, and on a surface the compositor
+    // is not showing it never does. Kept owed; the callback paints it. A
+    // surface that has never painted is exempt, since it is not mapped until
+    // it does and an unmapped surface's callback waits for that.
+    if surface.layout.is_some()
+        && client
+            .layer_frame_wait(window_layer_id(surface.id))
+            .is_some()
+    {
+        surface.needs_paint = true;
+        return Ok(());
+    }
+    surface.needs_paint = false;
     let config = surface
         .layer_config
         .clone()

@@ -91,3 +91,18 @@ fn resting_clears_the_cadence_so_motion_restarts_on_the_next_callback() {
         "the first frame of new motion is not skipped"
     );
 }
+
+#[test]
+fn a_hidden_surface_hands_the_clock_over_after_a_few_refreshes() {
+    // A slow frame is not a hidden surface: a few refreshes first, bounded
+    // so a very slow or very fast output still hands over in time.
+    assert_eq!(crate::surfaces::frame_stall(REFRESH), REFRESH * 4);
+    assert_eq!(
+        crate::surfaces::frame_stall(Duration::from_millis(4)),
+        Duration::from_millis(50)
+    );
+    assert_eq!(
+        crate::surfaces::frame_stall(Duration::from_millis(100)),
+        Duration::from_millis(250)
+    );
+}

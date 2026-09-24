@@ -140,7 +140,10 @@ pub(crate) fn primary_frame(
         for surface in state.layer_surfaces.values_mut() {
             if surface.updates_enabled && !surface.needs_paint {
                 surface.needs_paint = true;
+                // Committed, or the request waits for a commit that an idle
+                // surface never makes and the callback never comes.
                 client.request_layer_frame(window_layer_id(surface.id));
+                client.commit_layer(window_layer_id(surface.id));
             }
         }
     }

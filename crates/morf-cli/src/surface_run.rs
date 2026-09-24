@@ -235,6 +235,8 @@ pub(crate) fn run_surface(
         focused: HashMap::new(),
         touches: HashMap::new(),
         drag: None,
+        primary_deferred: false,
+        fallback_tick: None,
     };
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
     // A clipboard or drop read finishing on its thread rings every loop, so
@@ -246,11 +248,15 @@ pub(crate) fn run_surface(
             return Ok(());
         }
         // Until the compositor, a service thread, the clock, or a fallback.
+        // A refresh at most while the wall clock is standing in for the
+        // shell's frame callbacks, so motion keeps its rate.
+        let idle = if state.fallback_tick.is_some() {
+            state.refresh
+        } else {
+            Duration::from_millis(100)
+        };
         client
-            .dispatch_timeout_or(
-                until_next_second().min(Duration::from_millis(100)),
-                Some(wake.as_fd()),
-            )
+            .dispatch_timeout_or(until_next_second().min(idle), Some(wake.as_fd()))
             .map_err(|error| error.to_string())?;
         wake.drain();
         let next_clock = clock_text();
@@ -378,6 +384,29 @@ pub(crate) fn run_surface(
         apply_service_requests(&mut runtime, &mut client);
         apply_capture_releases(&mut runtime, &mut renderer);
         apply_window_surface_actions(&mut runtime, &client, &state.floating_surfaces);
+        advance_without_callbacks(&mut runtime, &client, &mut state)?;
+        // A surface still waiting for its last frame callback is not
+        // presented to again: under FIFO the present blocks until that
+        // callback, and a surface the compositor is not showing (a fallback
+        // toplevel under another, in cage) never gets one -- which froze this
+        // whole output, every other surface and IPC with it. The callback,
+        // when it comes, makes the paint.
+        if repaint && client.layer_frame_wait(PRIMARY_LAYER).is_some() {
+            state.primary_deferred = true;
+            for surface in state.layer_surfaces.values_mut() {
+                surface.needs_paint |= surface.updates_enabled;
+            }
+            repaint = false;
+            // The layer surfaces are not held by the primary's callback;
+            // each paints when its own allows.
+            for surface in state
+                .layer_surfaces
+                .values_mut()
+                .filter(|surface| surface.updates_enabled)
+            {
+                paint_layer_surface(&mut runtime, &client, surface)?;
+            }
+        }
         if repaint {
             let painted = Instant::now();
             renderer
@@ -439,6 +468,50 @@ pub(crate) fn run_surface(
 /// output's: the next paint starts from the scene as it is then.
 fn is_layout_error(error: &str) -> bool {
     error.contains("scene layout error") || error.contains("stale scene node handle")
+}
+
+/// Advances motion from the wall clock while the shell's own surface gets no
+/// frame callbacks.
+///
+/// Motion is ticked by that surface's callbacks, so when a nested compositor
+/// hides it -- cage shows one toplevel, and without layer-shell every surface
+/// is one -- every animation on every surface stopped. Past a few refreshes
+/// with its callback outstanding, the clock ticks at the measured refresh and
+/// the other surfaces paint on their own callbacks. The next real callback
+/// takes over again from a clean timebase.
+fn advance_without_callbacks(
+    runtime: &mut Runtime,
+    client: &LayerClient,
+    state: &mut SurfaceEventState,
+) -> Result<(), String> {
+    let stalled = client
+        .layer_frame_wait(PRIMARY_LAYER)
+        .is_some_and(|wait| wait > frame_stall(state.refresh));
+    if !stalled {
+        state.fallback_tick = None;
+        return Ok(());
+    }
+    let now = Instant::now();
+    let delta = match state.fallback_tick {
+        Some(last) if now - last < state.refresh => return Ok(()),
+        Some(last) => (now - last).min(Duration::from_millis(MAX_FRAME_DELTA_MS.into())),
+        None => Duration::ZERO,
+    };
+    state.fallback_tick = Some(now);
+    state.last_frame = None;
+    let frame = runtime
+        .tick_animations(delta)
+        .map_err(|error| error.to_string())?;
+    if frame.active || frame.changed > 0 || state.animating_shaders {
+        state.primary_deferred = true;
+        for surface in state.layer_surfaces.values_mut() {
+            if surface.updates_enabled {
+                surface.needs_paint = true;
+                paint_layer_surface(runtime, client, surface)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Says what the layout could not do, at most once a second, so a scene

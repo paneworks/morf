@@ -60,6 +60,7 @@ pub(crate) fn handle_surface_event(
         LayerEvent::Scale { id, .. } => layer_surface_scale(runtime, client, state, id)?,
         LayerEvent::Frame { id, time_ms } if id == PRIMARY_LAYER => {
             repaint |= primary_frame(runtime, client, state, time_ms)?;
+            repaint |= std::mem::take(&mut state.primary_deferred);
         }
         LayerEvent::Frame { id, .. } => layer_surface_frame(runtime, client, state, id)?,
         LayerEvent::Closed { id } if id == PRIMARY_LAYER => {
