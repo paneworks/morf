@@ -112,4 +112,5 @@ WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; m
 | rest layer (clock) | ported |
 | pets (service, four styles, panel `pet`, detail `pet.detail`, bar piece `pet`) | ported |
 | lock screen, lock/idle/session services, session panel | ported |
+| dock (`dock/`, `services/dock.lua`, `services/auto/dock.lua`) | ported |
 | everything else | in progress |
