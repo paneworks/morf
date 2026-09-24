@@ -20,6 +20,7 @@ local ui = require("morf.ui")
 local theme = require("theme")
 local settings = require("services.settings")
 local island = require("bar.island")
+local notch_fillet = require("bar.notch_fillet")
 
 local C = theme.color
 local bar = { pieces = {} }
@@ -254,28 +255,6 @@ local function live_zone(side, width_signal)
   }
 end
 
--- ------------------------------------------------------------ notch fillet --
-
---- The concave corner where the attached island meets the screen edge
---- (NotchFillet.qml): the square less a disc on its far corner, mirrored for
---- the left side.
-function bar.notch_fillet(values)
-  local r = theme.radius_notch
-  local size = 2 * r
-  local d = values.mirrored
-    and string.format("M%d 0 L0 0 A%d %d 0 0 1 %d %d Z", size, size, size, size, size)
-    or string.format("M0 0 L%d 0 A%d %d 0 0 0 0 %d Z", size, size, size, size)
-  return ui.Path {
-    x = values.x, y = values.y or 0,
-    width = size, height = size,
-    view_box = { 0, 0, size, size },
-    d = d,
-    fill_color = values.color,
-    visible = values.visible,
-    behavior = values.behavior,
-  }
-end
-
 -- ------------------------------------------------------------------- build --
 
 function bar.build(screen_width)
@@ -408,7 +387,7 @@ function bar.build(screen_width)
   -- edge. In the band they follow whichever edge is further out, the
   -- band's or the island's.
   local fillet_motion = { x = theme.behave("morph"), fill_color = theme.behave("fast") }
-  local notch_left = bar.notch_fillet {
+  local notch_left = notch_fillet {
     mirrored = true,
     x = function()
       local edge = unified() and math.min(band_x(), island_left()) or island_left()
@@ -418,7 +397,7 @@ function bar.build(screen_width)
     visible = function() return settings.islandAttached end,
     behavior = fillet_motion,
   }
-  local notch_right = bar.notch_fillet {
+  local notch_right = notch_fillet {
     x = function()
       return unified() and math.max(band_x() + band_w(), island_right()) or island_right()
     end,
