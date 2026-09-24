@@ -34,6 +34,7 @@ sense:
 | `bar/modules/` | `bar/modules/*.qml` | module chips and their details |
 | `bar/panels/` | `bar/island/*Panel.qml` | what the island opens into |
 | `bar/layers/` | `IslandRest`, `IslandSummary`, `OsdLayer`, `NotificationLayer` | the island's layers below a panel |
+| `fonts/` | `home/.local/share/fonts` | Grape Nuts, the notes' hand (OFL); morf puts it on the font path |
 | `bar/pieces/` | pieces of `Bar.qml` | what sits on the bar's sides |
 | `desktop/`, `dock/`, `deck/`, `lock/`, `capture/`, `settings/` | same | the other surfaces |
 
@@ -58,6 +59,12 @@ bar.register("battery", { build = function() return node end })
 -- bar/layers/osd.lua
 island.register_layer("osd", { size = function() return 260, 32, 10 end, build = function() ... end })
 ```
+
+A panel can also ask for more of the island while it is open: `paper`
+returns a colour to paint it instead of black (and drops its rim),
+`padding` returns its inner margin, and `declared = true` lays the panel
+out at its declared size from the first frame instead of resizing it with
+the capsule. An open note uses all three: the island becomes the note.
 
 A file that fails to load is logged and listed by `morf ipc call failed`;
 the rest of the shell still starts.
@@ -85,6 +92,12 @@ being written on:
 WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; morf ipc call controls; grim out.png'
 ```
 
+Verbs for a state the pointer would otherwise have to reach:
+`notes.open <key>`, `notes.new`, `board.open <key>`, `board.new`,
+`board.pick` (the month over the open task's day), `board.move <key>
+<lane> <slot>`, `deck.peek <key>`, `deck.reveal`, `deck.rest`,
+`deck.place <key> <edge>`, `module.notes`, `module.tasks`.
+
 ## Status
 
 | part | state |
@@ -92,4 +105,7 @@ WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; m
 | settings, theme, kit | ported |
 | island state, island, bar (grouped, spread) | ported |
 | rest layer (clock) | ported |
+| notes: service, panel (deck and paper), sticky, module | ported |
+| edge decks (`deck/`, `services/deck.lua`) | ported, one small surface per edge |
+| tasks: service, board, task row, day picker, module | ported; `tasks.days_with_tasks` for the calendar |
 | everything else | in progress |
