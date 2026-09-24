@@ -255,7 +255,10 @@ take one (a gradient, a decoration). It never runs per frame.
 
 ### Signals and state tables
 
-`morf.signal(name, value)` holds one scalar with `get`/`set`.
+`morf.signal(name, value)` holds one scalar with `get`/`set`. Signals and
+state tables may be made anywhere, a binding included: a module that holds
+state can be `require`d for the first time from inside one, and its signals
+join the flush that is running.
 
 `morf.state(table)` keeps a shape: each named field is a signal read and
 written through the proxy, a nested table is nested, an array is a list

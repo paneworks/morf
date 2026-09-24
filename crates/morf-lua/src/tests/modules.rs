@@ -65,6 +65,75 @@ fn require_caches_user_modules_in_package_loaded() {
 }
 
 #[test]
+fn a_binding_can_require_a_module_that_holds_state() {
+    // A module that keeps state creates its signals at its top level, and the
+    // first `require` of it can come from anywhere — including a binding,
+    // which runs inside a flush. The graph used to be taken out of reach for
+    // the whole flush, so that first `require` failed with "reactive graph is
+    // already running". Signals made mid-flush now join the flush.
+    let root = std::env::temp_dir().join(format!("morf-lazy-{}", std::process::id()));
+    let module = root.join("lua/user/lazy.lua");
+    fs::create_dir_all(module.parent().unwrap()).unwrap();
+    fs::write(
+        &module,
+        br#"
+            local morf = require("morf")
+            local M = {}
+            M.count = morf.signal("lazy.count", 7)
+            M.model = morf.state { label = "lazy" }
+            M.count:set(8)
+            return M
+        "#,
+    )
+    .unwrap();
+    let shell = root.join("shell.lua");
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            &shell.to_string_lossy(),
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local wanted = morf.signal("wanted", false)
+                _G.label = ui.Text {
+                    text = function()
+                        if not wanted:get() then return "idle" end
+                        local lazy = require("user.lazy")
+                        return lazy.model.label .. ":" .. tostring(lazy.count:get())
+                    end,
+                }
+                morf.ipc.want = function() wanted:set(true) end
+                morf.ipc.bump = function() require("user.lazy").count:set(9) end
+                morf.ipc.text = function() return _G.label.text end
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        runtime.call_ipc("text", &[]).unwrap(),
+        [IpcValue::String("idle".to_owned())]
+    );
+    runtime.call_ipc("want", &[]).unwrap();
+    let logs = runtime.take_logs();
+    assert!(
+        logs.iter()
+            .all(|log| !log.message.contains("already running")),
+        "{logs:?}"
+    );
+    assert_eq!(
+        runtime.call_ipc("text", &[]).unwrap(),
+        [IpcValue::String("lazy:8".to_owned())],
+        "the module ran inside the binding and its signals were read"
+    );
+    // And the binding follows the signal the module made.
+    runtime.call_ipc("bump", &[]).unwrap();
+    assert_eq!(
+        runtime.call_ipc("text", &[]).unwrap(),
+        [IpcValue::String("lazy:9".to_owned())]
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn ipc_registry_calls_named_bounded_handlers() {
     let mut runtime = Runtime::default();
     runtime

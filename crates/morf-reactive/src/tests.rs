@@ -293,3 +293,34 @@ fn removed_effects_stop_running_and_removed_signals_unsubscribe() {
     assert!(graph.write(source, 3).is_err());
     let _ = kept;
 }
+
+/// Drives one stepwise flush in which the effect makes its own signals the
+/// first time it runs, with the graph in hand the whole time.
+fn stepwise(graph: &mut Graph<i32>, input: SignalId, made: &mut Option<(SignalId, SignalId)>) {
+    let mut flush = Flush::default();
+    while let Some(pending) = graph.next_effect(&mut flush).unwrap() {
+        let (fresh, output) =
+            *made.get_or_insert_with(|| (graph.signal("fresh", 10), graph.signal("output", 0)));
+        let mut capture = EffectCapture::default();
+        let sum = capture.get(graph, input).unwrap() + capture.get(graph, fresh).unwrap();
+        capture.set(graph, output, sum).unwrap();
+        graph.complete_effect(&mut flush, pending, capture, Ok(()));
+    }
+    assert!(flush.finish().errors.is_empty());
+}
+
+#[test]
+fn a_stepwise_flush_lets_an_effect_make_signals_while_it_runs() {
+    let mut graph = Graph::default();
+    let input = graph.signal("input", 1);
+    graph.external_effect("sum", 0);
+    let mut made = None;
+    stepwise(&mut graph, input, &mut made);
+    let (fresh, output) = made.unwrap();
+    assert_eq!(*graph.read(output).unwrap(), 11);
+
+    // What it made is a dependency like any other.
+    graph.write(fresh, 20).unwrap();
+    stepwise(&mut graph, input, &mut made);
+    assert_eq!(*graph.read(output).unwrap(), 21);
+}

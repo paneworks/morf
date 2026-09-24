@@ -192,6 +192,9 @@ pub(crate) struct ReactiveState {
     pub(crate) handler_depth: u32,
     /// Whether something wrote while a handler was running.
     pub(crate) flush_pending: bool,
+    /// A flush is draining the graph. Another asked for meanwhile is folded
+    /// into it, and what removed nodes leave behind waits until it is done.
+    pub(crate) flushing: bool,
     pub(crate) logs: Vec<LogEntry>,
     /// Shaders the configuration registered, by name.
     ///
@@ -315,6 +318,9 @@ impl ReactiveState {
     /// Hands the graph what removed nodes left behind, when it is here to
     /// take them; while a flush holds it they wait for the next call.
     pub(crate) fn collect_graph_garbage(&mut self) {
+        if self.flushing {
+            return;
+        }
         let Some(graph) = self.graph.as_mut() else {
             return;
         };
@@ -405,6 +411,7 @@ impl ReactiveState {
             active: None,
             handler_depth: 0,
             flush_pending: false,
+            flushing: false,
             logs: Vec::new(),
             shaders: HashMap::new(),
             scene: Scene::new(),

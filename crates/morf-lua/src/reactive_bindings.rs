@@ -239,17 +239,63 @@ pub(crate) fn flush_reactive(
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
-    let mut graph = state
-        .borrow_mut()
-        .graph
-        .take()
-        .ok_or_else(|| "reactive graph is already running".to_owned())?;
+    {
+        let mut state = state.borrow_mut();
+        // A flush asked for from inside one — a binding that registers
+        // another, a module `require`d from a binding writing a signal — has
+        // nothing to do of its own: whatever it would have run is dirty in
+        // the graph, and the flush already under way drains it.
+        if state.flushing {
+            return Ok(());
+        }
+        if state.graph.is_none() {
+            return Err("reactive graph unavailable".to_owned());
+        }
+        state.flushing = true;
+    }
+    // Driven one effect at a time, with the graph left in the state between
+    // the steps rather than taken out for the whole flush. An effect is Lua,
+    // and Lua may create signals or effects of its own while it runs — the
+    // first `require` of a module that holds state does — so the graph has to
+    // be where Lua can reach it.
+    let mut flush = morf_reactive::Flush::default();
     let mut remaining = limits.frame_fuel;
-    let result = graph.flush_external(|token, effect| {
-        evaluate_effect(state, ctx, limits, &mut remaining, token, effect)
-    });
+    let result = loop {
+        let next = state
+            .borrow_mut()
+            .graph
+            .as_mut()
+            .expect("the graph stays in place during a flush")
+            .next_effect(&mut flush);
+        let pending = match next {
+            Ok(Some(pending)) => pending,
+            Ok(None) => break Ok(()),
+            Err(error) => break Err(error),
+        };
+        let mut capture = morf_reactive::EffectCapture::default();
+        let outcome = evaluate_effect(
+            state,
+            ctx,
+            limits,
+            &mut remaining,
+            pending.token(),
+            &mut capture,
+        );
+        state
+            .borrow_mut()
+            .graph
+            .as_mut()
+            .expect("the graph stays in place during a flush")
+            .complete_effect(&mut flush, pending, capture, outcome);
+    };
+    let result = result.map(|()| flush.finish());
 
     let mut state = state.borrow_mut();
+    state.flushing = false;
+    let graph = state
+        .graph
+        .take()
+        .expect("the graph stays in place during a flush");
     for signal in state.signals.clone() {
         if let Ok(value) = graph.read(signal) {
             state.values.insert(signal, value.clone());
