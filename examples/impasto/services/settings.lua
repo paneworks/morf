@@ -200,11 +200,20 @@ local function read_file()
   return out, text
 end
 
+-- Values spelled as upstream spells them, or as older versions of this
+-- port did, read as the port's own: upstream calls the single capsule
+-- "island" (SettingsService.qml barStyles), the port "capsule".
+local ALIASES = { barStyle = { island = "capsule" } }
+local function canonical(key, value)
+  local names = ALIASES[key]
+  return names and names[value] or value
+end
+
 local function load()
   local stored, text = read_file()
   last_text = text
   if not stored then return end
-  for key, value in pairs(stored) do values[key] = value end
+  for key, value in pairs(stored) do values[key] = canonical(key, value) end
 end
 
 local function save()
@@ -228,7 +237,7 @@ local function reread()
   last_text = text
   if not stored then return end
   for key, default in pairs(M.defaults) do
-    local value = stored[key]
+    local value = canonical(key, stored[key])
     if value == nil then value = copy(default) end
     if not equal(values[key], value) then
       values[key] = value
@@ -266,6 +275,7 @@ function M.set(key, value)
     unknown(key)
     return
   end
+  value = canonical(key, value)
   if not M.accepts(key, value) then
     morf.log("warn", "impasto: setting " .. key .. " is not a " .. type(M.defaults[key]))
     return
