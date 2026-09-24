@@ -108,7 +108,7 @@ local function save()
   saving = false
   local list = {}
   for i, row in ipairs(rows) do list[i] = row end
-  local ok, err = fs.write(M.path, json.encode({ notes = json.array(list) }, { pretty = true }))
+  local ok, err = fs.write(M.path, json.encode({ notes = json.array(list) }, true))
   if not ok then morf.log("warn", "impasto: could not save notes: " .. tostring(err)) end
 end
 
