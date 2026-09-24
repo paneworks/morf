@@ -428,6 +428,20 @@ impl Reactor {
         command.stdout(output(options.stdout));
         command.stderr(output(options.stderr));
         let child = command.spawn()?;
+        Ok(self.adopt(child, options))
+    }
+
+    /// Watches a child someone else started, through whatever fds were left
+    /// in its `stdout`, `stderr` and `stdin` slots.
+    ///
+    /// For a child that is not wired to plain pipes: a terminal hands in its
+    /// pseudo-terminal's master side twice, once as the output to read and
+    /// once as the input to write, and everything else — reads that stop
+    /// when the consumer is behind, queued writes, the pidfd, the reap — is
+    /// the same as for [`Reactor::spawn`]. `options` says only how the
+    /// output is delivered (`lines`, `max_line`, `max_output`), `timeout`
+    /// and `detached`; how the child was started is the caller's business.
+    pub fn adopt(&self, child: Child, options: SpawnOptions) -> IoHandle {
         let id = self.next_id();
         let shared = Arc::new(Shared::default());
         let handle = IoHandle {
@@ -441,7 +455,7 @@ impl Reactor {
             child: Box::new(child),
             options: Box::new(options),
         });
-        Ok(handle)
+        handle
     }
 
     /// Opens a connection without waiting for it. Whether it worked comes
