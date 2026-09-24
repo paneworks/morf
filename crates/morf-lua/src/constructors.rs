@@ -18,6 +18,9 @@ pub(crate) fn element_constructor<'gc>(
         let properties: Table = stack.consume(ctx)?;
         let node = create_node(&state, element);
         configure_element(&state, ctx, limits, node, properties).map_err(HostError)?;
+        if element == Element::TextInput {
+            crate::text_inputs::register(&mut state.borrow_mut(), node);
+        }
         if element == Element::Inset
             && state
                 .borrow()

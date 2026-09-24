@@ -5,8 +5,8 @@ use morf_wayland::{LayerClient, LayerEvent, PRIMARY_LAYER, SurfaceRole, physical
 use std::sync::mpsc;
 
 use crate::{
-    backdrop::*, capture::*, lock::*, pacing::*, paint::*, surface_layers::*, surface_touch::*,
-    surfaces::*,
+    backdrop::*, capture::*, lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*,
+    surface_touch::*, surfaces::*,
 };
 
 pub(crate) fn handle_surface_event(
@@ -259,6 +259,9 @@ pub(crate) fn handle_surface_event(
             state.pressed_button = button;
             if let Some(target) = hit.and_then(|hit| runtime.key_target_for_node(hit.node)) {
                 state.focused.insert(surface, target);
+                // A click on something that takes keys takes them from a text
+                // input; a click on anything else leaves the field typing.
+                repaint |= runtime.set_key_focus(Some(target));
             } else {
                 state.focused.remove(&surface);
             }
@@ -348,29 +351,9 @@ pub(crate) fn handle_surface_event(
             pressed: true,
             keysym,
             text,
+            modifiers,
             ..
-        } => {
-            let Some(root) = surface_root(
-                surface,
-                state.primary_root,
-                &state.popup_surfaces,
-                &state.floating_surfaces,
-                &state.layer_surfaces,
-            ) else {
-                return Ok(false);
-            };
-            let mut focused = state.focused.get(&surface).copied();
-            repaint |=
-                dispatch_key_in_subtree(runtime, root, &mut focused, keysym, text.as_deref());
-            match focused {
-                Some(node) => {
-                    state.focused.insert(surface, node);
-                }
-                None => {
-                    state.focused.remove(&surface);
-                }
-            }
-        }
+        } => repaint |= surface_key(runtime, state, surface, keysym, text.as_deref(), modifiers),
         LayerEvent::PopupConfigure { id, width, height } => {
             if let Some(surface) = state.popup_surfaces.get_mut(&id) {
                 let initial = surface.renderer.is_none();

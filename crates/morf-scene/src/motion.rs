@@ -440,5 +440,22 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "outline_color"
             | "fill_color"
             | "stroke_color"
+            // A text input's caret, selection and scroll are where it is
+            // looking, not how big it is: they move on every key, and each of
+            // them costing a layout pass would be a layout per keystroke.
+            | "cursor_position"
+            | "selection_start"
+            | "selection_end"
+            | "scroll_x"
+            | "scroll_y"
+            | "content_width"
+            | "content_height"
+            | "caret_visible"
+            | "caret_color"
+            | "caret_width"
+            | "selection_color"
+            | "selected_text_color"
+            | "placeholder_color"
+            | "focus"
     )
 }

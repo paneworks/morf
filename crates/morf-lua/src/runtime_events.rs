@@ -136,6 +136,8 @@ impl Runtime {
 
     /// Dispatches a compositor clipboard selection to registered Lua callbacks.
     pub fn dispatch_clipboard(&mut self, text: Option<String>) -> bool {
+        // Kept for a text input to paste, whether or not anybody subscribed.
+        self.reactive.borrow_mut().clipboard_text = text.clone();
         let callbacks = self.reactive.borrow().clipboard_callbacks.clone();
         let value = text.map_or(IpcValue::Nil, IpcValue::String);
         for callback in &callbacks {
@@ -297,6 +299,10 @@ impl Runtime {
         delete_after: u32,
         serial: u32,
     ) -> bool {
+        // What the input method committed goes into the focused text input
+        // before the configuration's own subscribers hear of it.
+        let edited = (commit.is_some() || delete_before > 0 || delete_after > 0)
+            && self.commit_text_input(commit.as_deref(), delete_before, delete_after);
         let callbacks = self.reactive.borrow().text_input_callbacks.clone();
         let args = [
             IpcValue::Boolean(focused),
@@ -317,7 +323,7 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("text input callback: {message}"));
             }
         }
-        !callbacks.is_empty()
+        edited || !callbacks.is_empty()
     }
 
     /// Returns the first key handler within one scene root.
@@ -336,7 +342,8 @@ impl Runtime {
         let state = self.reactive.borrow();
         let mut current = Some(node);
         while let Some(node) = current {
-            if state.handlers.contains_key(&(node, UiEvent::KeyPressed))
+            if (state.handlers.contains_key(&(node, UiEvent::KeyPressed))
+                || state.scene.element(node).ok() == Some(morf_scene::Element::TextInput))
                 && state.scene.bool_value(node, "enabled").unwrap_or(false)
                 && state.scene.bool_value(node, "visible").unwrap_or(false)
             {

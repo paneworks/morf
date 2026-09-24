@@ -17,6 +17,7 @@ pub(crate) fn text_command(
         morph_progress: 0.0,
         style: morf_layout::TextStyle::default(),
         decoration: None,
+        edit: None,
         node,
         bounds: Geometry {
             x: 0.0,

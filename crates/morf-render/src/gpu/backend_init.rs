@@ -323,6 +323,15 @@ impl WgpuBackend {
         &self.texture
     }
 
+    /// The shaper this renderer draws text with.
+    ///
+    /// Lent out so a text input's caret can be read off the very buffer its
+    /// glyphs are drawn from, rather than a second shaping of the same text
+    /// that could disagree with it by a subpixel.
+    pub fn text_system(&mut self) -> &mut morf_text::TextSystem {
+        &mut self.text
+    }
+
     /// Registers a compiled shader, building its pipeline.
     ///
     /// Called when a configuration loads, never while rendering: compiling a

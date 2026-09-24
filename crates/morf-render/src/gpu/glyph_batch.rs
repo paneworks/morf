@@ -1,5 +1,5 @@
 use crate::effects::color_array;
-use crate::{DrawCommand, DrawList, VerticalAlignment};
+use crate::{DrawCommand, DrawList, TextEdit, VerticalAlignment};
 use morf_layout::{Geometry, TextMeasurer, TextOptions, Transform2D};
 use morf_scene::{Color, DecorationLine, TextDecoration};
 use morf_text::{LineBand, RasterContent, RasterGlyph, TextSystem};
@@ -31,6 +31,8 @@ pub(crate) fn create_glyph_batch(
     let scale = scale_120.max(1) as f32 / 120.0;
     let mut glyphs = Vec::new();
     let mut bands: Vec<PreparedBand> = Vec::new();
+    // Drawn before any glyph, so a selection lies under the text it selects.
+    let mut under: Vec<PreparedBand> = Vec::new();
     for (command_index, command) in list.commands.iter().enumerate() {
         let DrawCommand::Text {
             node,
@@ -53,6 +55,7 @@ pub(crate) fn create_glyph_batch(
             morph_progress,
             style,
             decoration,
+            edit,
             ..
         } = command
         else {
@@ -93,32 +96,61 @@ pub(crate) fn create_glyph_batch(
         // outline are thresholds every label can ask for rather than a
         // privilege of large ones.
         let morphing = *morph_progress > 0.0 && !morph_to.is_empty();
-        let origin = (
-            bounds.x as f32 * scale,
-            (bounds.y + vertical_offset) as f32 * scale,
-        );
+        // A text input's content moves under its box as it scrolls; the box,
+        // and so the clip, stays where it is.
+        let (scroll_x, scroll_y) = edit.as_ref().map_or((0.0, 0.0), |edit| edit.scroll);
+        let content = Geometry {
+            x: bounds.x - scroll_x,
+            y: bounds.y + vertical_offset - scroll_y,
+            width: bounds.width,
+            height: bounds.height,
+        };
+        let origin = (content.x as f32 * scale, content.y as f32 * scale);
         // How much the field changes across one device pixel, from the size the
         // glyph is drawn at, so the edge can fade over exactly one pixel
         // without measuring anything.
         let ramp = morf_text::field_units_per_logical_px(*size as f32) / scale.max(f32::EPSILON);
-        let mut push = |glyph: RasterGlyph, morph: Option<RasterGlyph>, progress: f32| {
-            if glyph.width > 0 && glyph.height > 0 {
-                glyphs.push(PreparedGlyph {
-                    glyph,
-                    morph,
-                    morph_progress: progress,
-                    ramp,
-                    color: *color,
-                    color_overlay: *color_overlay,
-                    transform: *transform,
-                    command_index,
-                    field: glyph_field_uniform(*field_style, *size),
-                    outline_color: color_array(field_style.outline_color),
-                });
-            }
-        };
+        let mut push =
+            |glyph: RasterGlyph, morph: Option<RasterGlyph>, progress: f32, tint: Color| {
+                if glyph.width > 0 && glyph.height > 0 {
+                    glyphs.push(PreparedGlyph {
+                        glyph,
+                        morph,
+                        morph_progress: progress,
+                        ramp,
+                        color: tint,
+                        color_overlay: *color_overlay,
+                        transform: *transform,
+                        command_index,
+                        field: glyph_field_uniform(*field_style, *size),
+                        outline_color: color_array(field_style.outline_color),
+                    });
+                }
+            };
 
-        if morphing {
+        if let Some(edit) = edit {
+            let selected = edit.selected_text_color.alpha > 0.0 && !edit.selection.is_empty();
+            for (glyph, offset) in text_system.rasterize_at(*node, origin, scale) {
+                let tint = if selected && edit.selection.contains(&offset) {
+                    edit.selected_text_color
+                } else {
+                    *color
+                };
+                push(glyph, None, 0.0, tint);
+            }
+            let (selection, caret) = edit_bands(
+                text_system,
+                *node,
+                edit,
+                *horizontal_alignment,
+                content,
+                *color_overlay,
+                *transform,
+                command_index,
+            );
+            under.extend(selection);
+            bands.extend(caret);
+        } else if morphing {
             text_system.measure_target(
                 *node,
                 morph_to,
@@ -144,7 +176,7 @@ pub(crate) fn create_glyph_batch(
             for (glyph, partner, local) in
                 text_system.rasterize_pairs(*node, origin, scale, *morph_progress)
             {
-                push(glyph, partner, local);
+                push(glyph, partner, local, *color);
             }
             // Whatever the target has that the source does not is arriving
             // rather than leaving, so it runs the same interpolation backwards:
@@ -155,11 +187,11 @@ pub(crate) fn create_glyph_batch(
                 .into_iter()
                 .skip(own)
             {
-                push(glyph, None, 1.0 - *morph_progress);
+                push(glyph, None, 1.0 - *morph_progress, *color);
             }
         } else {
             for glyph in text_system.rasterize(*node, origin, scale, true) {
-                push(glyph, None, 0.0);
+                push(glyph, None, 0.0, *color);
             }
         }
         if let Some(decoration) = decoration {
@@ -180,7 +212,7 @@ pub(crate) fn create_glyph_batch(
             ));
         }
     }
-    if glyphs.is_empty() && bands.is_empty() {
+    if glyphs.is_empty() && bands.is_empty() && under.is_empty() {
         return Ok(None);
     }
     mask_atlas.prepare(queue, &glyphs)?;
@@ -188,6 +220,15 @@ pub(crate) fn create_glyph_batch(
     let mut instances = Vec::with_capacity(glyphs.len());
     let mut command_spans: Vec<Vec<GlyphSpan>> =
         (0..list.commands.len()).map(|_| Vec::new()).collect();
+    for band in under {
+        push_band(
+            &mut instances,
+            &mut command_spans,
+            band,
+            scale,
+            (target_width, target_height),
+        );
+    }
     for prepared in glyphs {
         let glyph = prepared.glyph;
         let key = GlyphKey::from_glyph(&glyph);
@@ -279,31 +320,118 @@ pub(crate) fn create_glyph_batch(
     // letters of every command so it lies over them, clipped and masked the
     // same way.
     for band in bands {
-        let (origin, axes) = transformed_quad(
-            band.transform,
-            band.rect,
-            f64::from(scale),
+        push_band(
+            &mut instances,
+            &mut command_spans,
+            band,
+            scale,
             (target_width, target_height),
         );
-        let instance = instances.len() as u32;
-        command_spans[band.command_index].push(GlyphSpan {
-            range: instance..instance + 1,
-            color: false,
-        });
-        instances.push(GlyphInstance {
-            origin,
-            axes,
-            color: color_array(band.color),
-            color_overlay: color_array(band.color_overlay),
-            // `z` past one is solid: no sample, the colour as it is.
-            mode: [0.0, 0.0, 2.0, 0.0],
-            ..GlyphInstance::default()
-        });
     }
     Ok(Some(GlyphBatch {
         instances,
         command_spans,
     }))
+}
+
+/// A solid quad through the glyph pipeline: a decoration, a selection, a
+/// caret. Clipped and masked with the command it belongs to.
+fn push_band(
+    instances: &mut Vec<GlyphInstance>,
+    command_spans: &mut [Vec<GlyphSpan>],
+    band: PreparedBand,
+    scale: f32,
+    target: (u32, u32),
+) {
+    let (origin, axes) = transformed_quad(band.transform, band.rect, f64::from(scale), target);
+    let instance = instances.len() as u32;
+    let spans = &mut command_spans[band.command_index];
+    if let Some(span) = spans.last_mut()
+        && !span.color
+        && span.range.end == instance
+    {
+        span.range.end = instance + 1;
+    } else {
+        spans.push(GlyphSpan {
+            range: instance..instance + 1,
+            color: false,
+        });
+    }
+    instances.push(GlyphInstance {
+        origin,
+        axes,
+        color: color_array(band.color),
+        color_overlay: color_array(band.color_overlay),
+        // `z` past one is solid: no sample, the colour as it is.
+        mode: [0.0, 0.0, 2.0, 0.0],
+        ..GlyphInstance::default()
+    });
+}
+
+/// A text input's selection rectangles and its caret, in surface space.
+///
+/// Read off the same shaped buffer the glyphs just came from, so the caret
+/// stands exactly where a letter would be typed.
+#[allow(clippy::too_many_arguments)]
+fn edit_bands(
+    text_system: &TextSystem,
+    node: morf_scene::NodeHandle,
+    edit: &TextEdit,
+    alignment: morf_layout::TextAlignment,
+    content: Geometry,
+    color_overlay: Color,
+    transform: Transform2D,
+    command_index: usize,
+) -> (Vec<PreparedBand>, Option<PreparedBand>) {
+    let map = text_system.caret_map(node).unwrap_or_default();
+    let selection = if edit.placeholder || edit.selection.is_empty() {
+        Vec::new()
+    } else {
+        map.selection(edit.selection.start, edit.selection.end)
+            .into_iter()
+            .map(|span| PreparedBand {
+                rect: Geometry {
+                    x: content.x + f64::from(span.x),
+                    y: content.y + f64::from(span.y),
+                    width: f64::from(span.width),
+                    height: f64::from(span.height),
+                },
+                color: edit.selection_color,
+                color_overlay,
+                transform,
+                command_index,
+            })
+            .collect()
+    };
+    let caret = edit.caret.map(|offset| {
+        let mut caret = map.caret(offset);
+        // The placeholder is not what the caret is in: it stands where the
+        // first letter typed would, which the alignment decides.
+        if edit.placeholder {
+            caret.x = match alignment {
+                morf_layout::TextAlignment::Center => content.width as f32 / 2.0,
+                morf_layout::TextAlignment::Right => content.width as f32,
+                _ => 0.0,
+            };
+        }
+        let width = edit.caret_width;
+        // Centred on the boundary, but never hanging off the left of the
+        // text, where the first letter's caret would be half clipped away.
+        let left = (f64::from(caret.x) - width / 2.0).max(f64::from(caret.x).min(0.0));
+        PreparedBand {
+            rect: Geometry {
+                x: content.x + left,
+                y: content.y + f64::from(caret.y),
+                width,
+                height: f64::from(caret.height),
+            },
+            color: edit.caret_color,
+            color_overlay,
+            transform,
+            command_index,
+        }
+    });
+    (selection, caret)
 }
 
 /// One decoration line, positioned, waiting to become an instance.

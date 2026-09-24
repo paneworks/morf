@@ -269,9 +269,8 @@ fn main() {
                 .unwrap_or_else(|error| panic!("{config}: shader pipeline: {error}"));
             shaders += 1;
         }
-        // Twice: the second frame takes the incremental path and reuses an
-        // effect layer's target. `FRAME_BENCH_GPU_FRAMES` draws more, each
-        // moved on so none is skipped, for timing the GPU (`MORF_GPU_WAIT=1`).
+        // Twice: the second frame is incremental and reuses an effect layer's
+        // target; `FRAME_BENCH_GPU_FRAMES` draws more, for `MORF_GPU_WAIT=1`.
         let frames: usize =
             std::env::var("FRAME_BENCH_GPU_FRAMES").map_or(2, |value| value.parse().unwrap_or(2));
         for _ in 0..frames.max(2) {
@@ -279,6 +278,7 @@ fn main() {
                 let _ = runtime.tick_animations(Duration::from_millis(16));
                 computed = layout(&runtime);
             }
+            runtime.sync_text_inputs(&computed, engine.backend_mut().text_system());
             engine
                 .render(&runtime.scene(), &computed, 120, |_| {})
                 .unwrap_or_else(|error| panic!("{config}: render: {error}"));

@@ -187,6 +187,12 @@ pub(crate) fn node_metatable<'gc>(
             }
             return Ok(CallbackReturn::Return);
         }
+        if element == Element::TextInput
+            && let Some(method) = text_input_method(ctx, &read_state, &key)
+        {
+            stack.replace(ctx, method);
+            return Ok(CallbackReturn::Return);
+        }
         let key = if key == "active_async" && element == Element::Loader {
             "active".to_owned()
         } else {
@@ -262,12 +268,87 @@ pub(crate) fn node_metatable<'gc>(
             HostError("nodes cannot be written to from inside a layout function".to_owned())
         })?;
         assign_scene_property(&mut state, node.handle, &property, value).map_err(HostError)?;
+        // A text input takes a write in at once, so the caret a handler
+        // reads back after setting `text` is already the one that text has.
+        if state.scene.element(node.handle).ok() == Some(Element::TextInput) {
+            crate::text_inputs::pull(&mut state, node.handle);
+            if property == "focus" {
+                crate::text_inputs::reconcile_focus(&mut state);
+            }
+        }
         Ok(CallbackReturn::Return)
     });
     let metatable = Table::new(&ctx);
     metatable.set_field(ctx, "__index", index);
     metatable.set_field(ctx, "__newindex", new_index);
     metatable
+}
+
+/// A text input's methods, called as `input:select(0, 4)`.
+///
+/// Offsets are bytes, as `cursor_position` is: the number of bytes before the
+/// place meant, so `text:sub(1, n)` is what lies before offset `n`.
+fn text_input_method<'gc>(
+    ctx: Context<'gc>,
+    state: &Rc<RefCell<ReactiveState>>,
+    name: &str,
+) -> Option<Callback<'gc>> {
+    use crate::text_inputs;
+    let state = Rc::clone(state);
+    let offset = |value: i64| value.max(0) as usize;
+    Some(match name {
+        "select" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let (node, start, end): (UserRef<NodeToken>, i64, i64) = stack.consume(ctx)?;
+            let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+            text_inputs::select(&mut state, node.handle, offset(start), offset(end));
+            Ok(CallbackReturn::Return)
+        }),
+        "select_all" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let node: UserRef<NodeToken> = stack.consume(ctx)?;
+            let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+            text_inputs::select_all(&mut state, node.handle);
+            Ok(CallbackReturn::Return)
+        }),
+        "deselect" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let node: UserRef<NodeToken> = stack.consume(ctx)?;
+            let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+            let cursor = state
+                .scene
+                .number(node.handle, "cursor_position")
+                .unwrap_or(0.0);
+            text_inputs::select(&mut state, node.handle, cursor as usize, cursor as usize);
+            Ok(CallbackReturn::Return)
+        }),
+        "insert" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let (node, text): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
+            let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+            let edited = text_inputs::insert(&mut state, node.handle, &text);
+            stack.replace(ctx, edited);
+            Ok(CallbackReturn::Return)
+        }),
+        "selected_text" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let node: UserRef<NodeToken> = stack.consume(ctx)?;
+            let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+            let text = text_inputs::selected_text(&mut state, node.handle);
+            stack.replace(ctx, luna::String::from_slice(&ctx, text.as_bytes()));
+            Ok(CallbackReturn::Return)
+        }),
+        "undo" | "redo" => {
+            let redo = name == "redo";
+            Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+                let node: UserRef<NodeToken> = stack.consume(ctx)?;
+                let mut state = state.try_borrow_mut().map_err(|_| busy())?;
+                let changed = text_inputs::history(&mut state, node.handle, redo);
+                stack.replace(ctx, changed);
+                Ok(CallbackReturn::Return)
+            })
+        }
+        _ => return None,
+    })
+}
+
+fn busy() -> HostError {
+    HostError("text inputs cannot be edited from inside a layout function".to_owned())
 }
 
 #[derive(Debug)]

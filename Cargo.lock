@@ -1398,6 +1398,7 @@ version = "0.1.3"
 dependencies = [
  "morf-scene",
  "taffy",
+ "unicode-segmentation",
 ]
 
 [[package]]

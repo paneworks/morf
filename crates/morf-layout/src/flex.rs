@@ -234,6 +234,32 @@ fn measure_leaf(
             height: known.height.unwrap_or(measured.height as f32),
         });
     }
+    // A field that wraps is as tall as its lines at the width it is offered,
+    // like text; one that does not keeps the size it measured.
+    if scene.element(node)? == Element::TextInput
+        && scene.bool_value(node, "multiline")?
+        && scene.bool_value(node, "wrap")?
+        && known.height.is_none()
+    {
+        let offered = known.width.or(match input.available_space.width {
+            AvailableSpace::Definite(width) => Some(width),
+            _ => None,
+        });
+        let shape = crate::text_input::InputShape::read(scene, node, offered.map(f64::from))?;
+        let line = shape.line_height();
+        let measured = text.measure(
+            node,
+            &shape.display.text,
+            &shape.family,
+            shape.size,
+            shape.options,
+        );
+        let size = requested.get(&node).copied().unwrap_or_default();
+        return Ok(Size {
+            width: known.width.unwrap_or(size.width as f32),
+            height: measured.height.max(line) as f32,
+        });
+    }
     let size = requested.get(&node).copied().unwrap_or_default();
     Ok(Size {
         width: known.width.unwrap_or(size.width as f32),

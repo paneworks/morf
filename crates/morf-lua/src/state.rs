@@ -199,6 +199,21 @@ pub(crate) struct ReactiveState {
     /// the host starts up, and a node only ever carries the program's hash.
     pub(crate) shaders: HashMap<String, RegisteredShader>,
     pub(crate) scene: Scene,
+    /// Every live text input's editing state.
+    pub(crate) text_inputs: HashMap<NodeHandle, crate::text_inputs::InputState>,
+    /// When each text input was made, so ties between them are settled the
+    /// same way every time.
+    pub(crate) text_input_order: HashMap<NodeHandle, u64>,
+    pub(crate) last_text_input: u64,
+    /// The text input that has the keyboard, if one does.
+    pub(crate) focused_input: Option<NodeHandle>,
+    /// Callbacks text inputs owe, run once whatever made them is done.
+    pub(crate) input_events: Vec<(NodeHandle, UiEvent, Vec<IpcValue>)>,
+    /// Whether those callbacks are being run, so running one does not start
+    /// running them again from inside itself.
+    pub(crate) draining_input_events: bool,
+    /// The clipboard's text as last seen, for a text input to paste.
+    pub(crate) clipboard_text: Option<String>,
     pub(crate) effect_runs: u64,
     pub(crate) clock: SignalId,
     pub(crate) handlers: HashMap<(NodeHandle, UiEvent), StashedClosure>,
@@ -391,6 +406,13 @@ impl ReactiveState {
             logs: Vec::new(),
             shaders: HashMap::new(),
             scene: Scene::new(),
+            text_inputs: HashMap::new(),
+            text_input_order: HashMap::new(),
+            last_text_input: 0,
+            focused_input: None,
+            input_events: Vec::new(),
+            draining_input_events: false,
+            clipboard_text: None,
             effect_runs: 0,
             clock,
             handlers: HashMap::new(),

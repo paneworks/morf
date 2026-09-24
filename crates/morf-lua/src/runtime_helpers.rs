@@ -29,7 +29,8 @@ pub(crate) fn key_targets_in(state: &ReactiveState, root: NodeHandle) -> Vec<Nod
     let mut targets = Vec::new();
     let mut pending = vec![root];
     while let Some(node) = pending.pop() {
-        if state.handlers.contains_key(&(node, UiEvent::KeyPressed))
+        if (state.handlers.contains_key(&(node, UiEvent::KeyPressed))
+            || state.scene.element(node).ok() == Some(morf_scene::Element::TextInput))
             && state.scene.bool_value(node, "enabled").unwrap_or(false)
             && state.scene.bool_value(node, "visible").unwrap_or(false)
         {
@@ -70,6 +71,13 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     state
         .handlers
         .retain(|(node, _), _| !removed.contains(node));
+    state.text_inputs.retain(|node, _| !removed.contains(node));
+    state
+        .text_input_order
+        .retain(|node, _| !removed.contains(node));
+    state
+        .input_events
+        .retain(|(node, _, _)| !removed.contains(node));
     state
         .timers
         .retain(|timer| timer.node.is_none_or(|node| !removed.contains(&node)));

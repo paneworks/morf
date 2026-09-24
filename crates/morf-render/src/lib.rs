@@ -15,6 +15,7 @@ mod field;
 mod gradient;
 mod paint;
 mod paint_fields;
+mod paint_text_input;
 mod sdf;
 
 pub use commands::*;

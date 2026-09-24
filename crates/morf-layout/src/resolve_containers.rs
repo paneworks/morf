@@ -95,14 +95,18 @@ impl Layout {
     ) -> Result<FastMap<NodeHandle, f64>, LayoutError> {
         let mut widths = FastMap::default();
         for (node, geometry) in &self.geometry {
-            if scene.element(*node)? != Element::Text {
+            let element = scene.element(*node)?;
+            if !matches!(element, Element::Text | Element::TextInput) {
                 continue;
             }
             if positive(scene.number(*node, "width")?).is_some() {
                 continue;
             }
-            let wraps =
-                scene.bool_value(*node, "wrap")? || scene.string_value(*node, "elide")? != "none";
+            let wraps = if element == Element::TextInput {
+                scene.bool_value(*node, "multiline")? && scene.bool_value(*node, "wrap")?
+            } else {
+                scene.bool_value(*node, "wrap")? || scene.string_value(*node, "elide")? != "none"
+            };
             let measured = self.implicit.get(node).map_or(0.0, |size| size.width);
             if wraps && geometry.width > 0.0 && (geometry.width - measured).abs() > 0.5 {
                 widths.insert(*node, geometry.width);

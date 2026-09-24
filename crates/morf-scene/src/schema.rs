@@ -159,6 +159,75 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("morph_progress", 0.0),
             ]);
         }
+        Element::TextInput => {
+            properties.extend([
+                // What the field holds. Written by the keyboard as much as by
+                // the configuration: an edit assigns it, which is what a
+                // binding on it hears.
+                string("text", ""),
+                // Shown, in its own colour, while `text` is empty.
+                string("placeholder", ""),
+                color("placeholder_color", Color::rgba8(0, 0, 0, 102)),
+                color("color", Color::rgba8(0, 0, 0, 255)),
+                // The same type vocabulary `Text` has, because it is the same
+                // shaper underneath.
+                number("font_size", 16.0),
+                number("font_weight", 400.0),
+                string("font_family", "sans-serif"),
+                string("font_source", ""),
+                any("line_height", Value::Number(1.2)),
+                number("letter_spacing", 0.0),
+                number("word_spacing", 0.0),
+                string("font_style", "normal"),
+                string("font_stretch", "normal"),
+                string("horizontal_alignment", "left"),
+                // Where a single line sits in a box taller than it. Several
+                // lines always start at the top and scroll.
+                string("vertical_alignment", "center"),
+                // Enter inserts a line rather than accepting, and up and down
+                // move between lines.
+                boolean("multiline", false),
+                // Whether several lines break at the width. A single line
+                // never wraps; it scrolls sideways under the caret instead.
+                boolean("wrap", true),
+                // Each character is drawn as `password_char`; copying and
+                // cutting are refused so the text cannot leave the field.
+                boolean("password", false),
+                string("password_char", "•"),
+                // The most characters the field takes. Zero is no limit.
+                number("max_length", 0.0),
+                // Selectable and copyable, but not editable.
+                boolean("read_only", false),
+                color("selection_color", Color::rgba8(53, 132, 228, 90)),
+                // Fully transparent keeps the text its own colour.
+                color("selected_text_color", Color::rgba8(0, 0, 0, 0)),
+                // Fully transparent means the text colour, as a layer's fill
+                // does in a field: one colour to change, not two.
+                color("caret_color", Color::rgba8(0, 0, 0, 0)),
+                number("caret_width", 2.0),
+                // Milliseconds each half of a blink lasts; zero holds still.
+                number("caret_blink_interval", 530.0),
+                // Where the caret is and where the selection started, as byte
+                // offsets into `text` — the number of bytes before them, so
+                // `text:sub(1, cursor_position)` is what is left of the caret.
+                // Both may be written to move them.
+                number("cursor_position", 0.0),
+                number("selection_start", 0.0),
+                number("selection_end", 0.0),
+                // How far the content has scrolled under the box, and how big
+                // it is: kept by the field so the caret stays in view, and
+                // readable so a `Flickable` or a scroll bar can follow.
+                number("scroll_x", 0.0),
+                number("scroll_y", 0.0),
+                number("content_width", 0.0),
+                number("content_height", 0.0),
+                // The blink's current half; the field writes it.
+                boolean("caret_visible", true),
+                // The pointer's shape over the field: the text beam, as any
+                // other field has it.
+                string("cursor", "text"),
+            ]);
+        }
         Element::Image => {
             properties.extend([
                 string("source", ""),
