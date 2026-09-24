@@ -101,6 +101,8 @@ pub(crate) struct PopupNodeAnchor {
 pub(crate) struct LuaEffect {
     pub(crate) closure: StashedClosure,
     pub(crate) sink: Option<EffectSink>,
+    /// The node whose removal ends a `morf.effect` given `owner = node`.
+    pub(crate) owner: Option<morf_scene::NodeHandle>,
 }
 
 #[derive(Clone, Default)]

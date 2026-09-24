@@ -103,7 +103,8 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         .filter(|(_, effect)| match &effect.sink {
             Some(EffectSink::Property(sink)) => removed.contains(&sink.node),
             Some(EffectSink::State(node) | EffectSink::Loop(node)) => removed.contains(node),
-            None => false,
+            // A `morf.effect` given `owner = node` goes with its node.
+            None => effect.owner.is_some_and(|owner| removed.contains(&owner)),
         })
         .map(|(token, _)| *token)
         .collect::<Vec<_>>();

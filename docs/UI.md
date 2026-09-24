@@ -275,6 +275,19 @@ A binding or `morf.effect` may itself build nodes with bindings (or make
 another effect): those are registered when the running flush ends and get
 their first run straight after, before the caller sees the result.
 
+`morf.effect(name, fn, options)` is a binding with no property: it runs
+for what it does, and again whenever what it read changes. It returns a
+handle; `handle:dispose()` takes it out of the graph for good, and
+`handle:alive()` says whether it still is. `options.owner = node` ties it
+to a node: removing the node disposes it, so an effect made while building
+a panel goes with the panel. If its first run fails, `morf.effect` returns
+`false, message, handle`.
+
+```lua
+local panel = ui.Item {}
+morf.effect("panel.follow", function() panel.visible = open:get() end, { owner = panel })
+```
+
 ### Signals and state tables
 
 `morf.signal(name, value)` holds one scalar with `get`/`set`. Signals and
