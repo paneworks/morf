@@ -136,6 +136,40 @@ calls back once: `(reply, nil)`, or `(nil, err)` on a refused connection,
   every connection is closed; nothing from the old configuration calls
   into the new one.
 
+## Compressed bytes and archives: `morf.encoding`, `morf.archive`
+
+A package manager's sync database, a downloaded tarball, a `.gz` log: bytes
+a configuration read with `morf.fs.read` or `morf.http`, inflated in memory.
+
+```lua
+local db = morf.fs.read("/var/lib/pacman/sync/core.db")      -- a gzip or zstd tar
+for _, member in ipairs(morf.archive.tar(db, { contents = true })) do
+  if member.name:match("/desc$") then parse(member.data) end
+end
+```
+
+- `morf.encoding.decompress(bytes, format, { max_size })` — `format` is
+  `"gzip"`, `"zlib"`, `"deflate"`, `"zstd"`, `"xz"` or `"lzma"`; `nil` or
+  `"auto"` goes by the magic number (gzip, zstd, xz and zlib have one).
+  Returns the bytes, or `nil, why` for corrupt input or an output longer
+  than `max_size` (default 64 MiB, at most 512 MiB) — the cap is checked
+  while inflating, so a small bomb never becomes a large allocation.
+- `morf.encoding.compression(bytes)` — the format a magic number names, or `nil`.
+- `morf.archive.tar(bytes, { contents, max_size, max_entries })` — every
+  member of a tar archive (ustar, GNU long names, pax paths) as `{ name,
+  type, size, mode, mtime, link, data }`: `type` is `file`, `directory`,
+  `symlink`, `hardlink`, `char`, `block` or `fifo`; `link` is there for
+  links; `data` only when `contents = true`. A gzip, zstd or xz archive is
+  inflated first, under `max_size`. At most `max_entries` members (default
+  100000); more, a bad header checksum, or a member running past the end is
+  `nil, why`.
+- `morf.archive.tar_read(bytes, name, options)` — one file's bytes, or
+  `nil, why`.
+
+All of it runs on the main loop: a few milliseconds for a small database,
+about a tenth of a second for 36 MB of tar, so read a large one when the
+answer is wanted, not in a binding.
+
 ## A program on a terminal: `ui.Terminal`
 
 A program that wants a terminal rather than pipes — anything that draws a

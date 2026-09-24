@@ -146,6 +146,45 @@ fn encoding_module_round_trips_and_digests() {
 }
 
 #[test]
+fn encoding_decompresses_and_archive_reads_a_tar() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "archive.lua",
+            br##"
+            local e, a = morf.encoding, morf.archive
+            local gz = e.hex_decode("1f8b0800000000000003cb48cdc9c95748afca2ce00200397c63560b000000")
+            assert(e.compression(gz) == "gzip")
+            assert(e.decompress(gz) == "hello gzip\n")
+            assert(e.decompress(gz, "gzip") == "hello gzip\n")
+            local none, why = e.decompress(gz, "gzip", { max_size = 4 })
+            assert(none == nil and why:find("exceeds"), why)
+            assert(e.decompress("plain") == nil)
+            assert(not pcall(e.decompress, gz, "gzip", { max_size = -1 }))
+            assert(select(2, e.decompress(gz, "rar")):find("unknown"))
+
+            -- `tar --format=gnu -c pkg-1.0-1 | zstd`: a directory and its desc.
+            local db = e.hex_decode("28b52ffd04681d030042840e10907d842248fdaa9a3a88dbb1394f42a70e68bd4034c79ef8e04725730c422ae6295d5b8b3d040c75deee29f89ff5e63da5f55ecc786206ad370f20602d2c9603f1039fc0aaa6c3ec713e69c0064fa7300e00edff67c2f703071c146036f1398ce28a04")
+            assert(e.compression(db) == "zstd")
+            local list = assert(a.tar(db))
+            assert(#list == 2, #list)
+            assert(list[1].name == "pkg-1.0-1/" and list[1].type == "directory")
+            assert(list[2].name == "pkg-1.0-1/desc" and list[2].type == "file" and list[2].size == 11, list[2].size)
+            assert(list[2].data == nil)
+            local full = a.tar(db, { contents = true })
+            assert(full[2].data == "%NAME%\npkg\n", full[2].data)
+            assert(a.tar_read(db, "pkg-1.0-1/desc") == full[2].data)
+            local missing, err = a.tar_read(db, "nope")
+            assert(missing == nil and err:find("no such"))
+            local capped, cerr = a.tar(db, { max_entries = 1 })
+            assert(capped == nil and cerr:find("more than 1"))
+            assert(a.tar("") and #a.tar("") == 0)
+            "##,
+        )
+        .unwrap();
+}
+
+#[test]
 fn log_writes_levels_and_stays_bounded() {
     let mut runtime = Runtime::default();
     runtime
