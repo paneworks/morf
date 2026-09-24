@@ -406,7 +406,6 @@ impl LayerClient {
         std::mem::take(&mut self.state.toplevels_changed)
     }
 
-    /// Whether the compositor reports its windows at all.
     /// Whether the compositor speaks layer-shell at all. Without it the
     /// shell's surface is an ordinary window, and there is no edge to hold,
     /// nothing to reserve and nothing to put a backdrop under.
@@ -414,6 +413,15 @@ impl LayerClient {
         self.state.layer_shell.is_some()
     }
 
+    /// Whether a layer surface opened after the shell's own lands where its
+    /// anchors, margins and size put it: through layer-shell, or without it
+    /// as a subsurface of the fallback toplevel, placed the same way. False
+    /// only with neither, when each would be a window of its own.
+    pub fn supports_layer_surfaces(&self) -> bool {
+        self.state.layer_shell.is_some() || self.state.subcompositor.is_some()
+    }
+
+    /// Whether the compositor reports its windows at all.
     pub fn supports_toplevels(&self) -> bool {
         self.state.toplevel_list.is_some()
     }

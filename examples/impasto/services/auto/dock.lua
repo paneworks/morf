@@ -64,7 +64,7 @@ end
 surface_for(dock.edge())
 local pending = {}
 
--- An edge surface: nothing without layer-shell (services/layer_shell.lua).
+-- An edge surface: nothing where it cannot be placed (services/layer_shell.lua).
 local layers = require("services.layer_shell").available
 
 -- Which surface is open, and how big.
