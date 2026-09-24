@@ -103,6 +103,39 @@ answers and the file clears the flag. The compositor keeps the session
 locked if that process dies. `-- lock window` shows the same screen as a
 plain overlay that holds nothing, to look at it.
 
+## The desk
+
+Modules on the wallpaper, on a grid, in four shapes (2x2, 4x2, 4x4, 8x2
+cells) and two themes (Modern figures, Analogue objects). The rows are
+`desktopWidgets` in the settings; `services/desktop.lua` owns them, the
+grid, collisions and the arranging state.
+
+A morf layer surface keeps its layer for life, so the original's one desk
+surface (raised to the top layer while arranging) is three here:
+
+- at rest the widgets are drawn into the wallpaper's own background
+  surface (`desktop/wallpaper.lua` → `desktop/desk.lua` `rest`), under
+  every window; its input is the widgets' controls and the right button on
+  the wallpaper, which opens the desk's menu;
+- while arranging, `impasto-desktop` on the top layer holds the board:
+  the wallpaper under a grid, every widget with its handles (drag to move,
+  corner to reshape, badge to remove, wheel to cycle shapes, click for the
+  inspector), the card of modules and the photo picker; Escape, a right
+  click or another workspace ends it;
+- `impasto-desktop-menu`, on the top layer only while the menu is open.
+
+The faces read `desktop/sources.lua`, which prefers the other ports'
+services (`services.audio`, `battery`, `media`, `tasks`, `notes`, ...)
+and stands in with the libraries while they are missing, and
+`services/weather|stats|github|claude.lua`, which read the lua-stdlib
+libraries (`lib.weather`, `lib.sysinfo`, `lib.github`, `lib.claude_usage`,
+`lib.packages`) and show an empty state until those land.
+
+`morf ipc call desk <verb>`: `edit`, `done`, `add <module> [col row]`,
+`remove <key>`, `select <key>`, `pick <key>`, `family <key> <2x2|4x2|4x4|8x2>`,
+`menu [key]`, `theme <modern|analogue>`, `style <capsule|accent|outline|bare>`,
+`list`.
+
 ## Testing
 
 Only in a nested, headless compositor — never on the desktop the shell is
@@ -125,6 +158,16 @@ the player, the session -- log what it would do instead
 <id>` opens a module's detail, `glance` the summary, `controls_edit`
 arranging.
 
+Unset the host's compositor sockets first (`HYPRLAND_INSTANCE_SIGNATURE`,
+`SWAYSOCK`, `NIRI_SOCKET`), or `lib.hyprland` in the nested shell talks to
+the live Hyprland; give it `XDG_CONFIG_HOME` of its own and a private
+session bus whose configuration lists no activatable services
+(`dbus-run-session --config-file=...`), or startup waits on the settings
+portal. `IMPASTO_INLINE_WALLPAPER=1` draws the wallpaper, the desk, its
+arranging board and its menu inside the main surface, since cage has no
+layer shell. The headless output is 1280x720, which the desk's grid makes
+11 by 5 cells.
+
 ## Status
 
 | part | state |
@@ -146,4 +189,5 @@ arranging.
 | network, Bluetooth, audio, battery, brightness, media, system, OSD, modules services | ported |
 | control centre (blocks, toggles, arranging), Wi-Fi and Bluetooth lists | ported |
 | battery, volume, brightness, network, Bluetooth, media, notifications, calendar modules | ported |
+| desk: `desktop/`, `services/desktop.lua`, `services/auto/desktop.lua` | ported (both themes, arranging, spectrum) |
 | everything else | in progress |
