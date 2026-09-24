@@ -65,3 +65,35 @@ from a folder, which is how the tests run.
 
 The tables handed out are shared and replaced whole on every sample: read
 them, do not change them.
+
+## weather
+
+The weather from keyless APIs: Open-Meteo (geocoding and forecast), with
+wttr.in as the fallback and as the answer when no place is given (it guesses
+from the address).
+
+```lua
+local weather = require("lib.weather")
+local here = weather.new { location = "Wageningen", units = "metric" }
+ui.Text { text = function()
+  local now = here:get()
+  if not now.available then return "" end
+  return ("%s %d%s %s"):format(now.glyph, now.temperature, now.units.temperature, now.condition)
+end }
+```
+
+`weather.new(options)`: `location` (a name, geocoded once) or `latitude`,
+`longitude` and `name`; `units` (`"metric"` or `"imperial"`); `interval` (ms
+between refreshes while read, default 30 min); `ttl` (seconds an answer is
+fresh, default 30 min); `cache_dir`; `fallback` (default true); and
+`geocoding_url`, `forecast_url`, `wttr_url` to point elsewhere.
+
+`here:get()` is a tracked read of `{ available, source, place, temperature,
+feels_like, humidity, wind_speed, wind_direction, code, condition, icon,
+glyph, is_day, high, low, hourly, daily, units, updated, stale }`. `hourly`
+is the next 24 hours and `daily` seven days, each entry with `time`,
+temperatures, `precipitation` (%), `code`, `condition`, `icon`, `glyph`.
+`icon` is a freedesktop icon name (`weather-showers`, `weather-clear-night`),
+`glyph` a Unicode symbol. `here:refresh()` asks again past the cache.
+Answers are cached on disk; offline, the last one comes back with `stale =
+true`. `weather.condition(code, is_day)` maps any WMO code.
