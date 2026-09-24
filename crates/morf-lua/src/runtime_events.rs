@@ -395,7 +395,7 @@ impl Runtime {
 
     /// Runs the bindings a host-side write made stale, when no handler
     /// will: the flush a handler's return would otherwise have been.
-    fn flush_after_event(&mut self) {
+    pub(crate) fn flush_after_event(&mut self) {
         let flush = {
             let mut state = self.reactive.borrow_mut();
             state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)

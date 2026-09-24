@@ -737,6 +737,18 @@ local area = ui.MouseArea { anchors = { fill = true } }
 ui.Rect { color = function() return area.pressed and "#444" or area.hovered and "#333" or "#222" end }
 ```
 
+### The wheel
+
+`on_wheel(surface_x, surface_y, pixel_x, pixel_y, step_x, step_y,
+local_x, local_y)` runs for a wheel turn or a touchpad scroll. The wheel
+bubbles: it goes to the topmost `MouseArea` under the pointer that has an
+`on_wheel`, passing over any that have none, so a switch or a button on a
+scrolling page does not swallow the page's scroll. A `Flickable` under the
+pointer scrolls itself — `content_x`/`content_y` move by the pixel delta,
+kept between zero and how far its children reach past its viewport — and
+one with nothing to scroll that way lets the wheel on to what is beneath
+it.
+
 ### Cursors
 
 `cursor = "pointer"` on a `MouseArea` is the pointer's shape while it is
