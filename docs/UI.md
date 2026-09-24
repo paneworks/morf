@@ -35,7 +35,7 @@ ui.Rect {
 |---|---|
 | containers | `Item`, `Inset`, `Flickable`, `Loader`, `Layout` |
 | painting | `Rect`, `ClipRect`, `Text`, `Image`, `Icon`, `Path`, `Sdf`, `SdfShape` |
-| input | `MouseArea` and `TextInput` (the kinds the pointer can hit), `DropArea` (the only kind a drag can) |
+| input | `MouseArea`, `TextInput` and `Terminal` (the kinds the pointer can hit), `DropArea` (the only kind a drag can) |
 | positioners | `Row`, `Column`, `Grid` with `columns` |
 | layouts | `Flex`, `Grid` with tracks |
 | lists | `Repeater`, `ListView`, `GridView`, `each` |
@@ -631,6 +631,93 @@ content has scrolled to keep the caret in view, and `content_width` /
 `:select(start, stop)`, `:select_all()`, `:deselect()`, `:insert(text)`,
 `:selected_text()`, `:undo()`, `:redo()`.
 
+### Terminal
+
+`ui.Terminal` is a terminal emulator: a program on a pseudo-terminal, its
+screen drawn as a grid of cells, the keyboard and the pointer going to it.
+Anything that runs in a terminal window runs in one — a shell, `btop`,
+`nvim`, `fzf` — inside the shell's own surfaces, with ordinary UI around it.
+
+```lua
+local term
+term = ui.Terminal {
+  command = { "btop" },            -- the argv; default: $SHELL
+  font_family = "monospace", font_size = 13, padding = 8,
+  colors = { foreground = "#d7dae0", background = "#0f1218", cursor = "#7aa2f7",
+             palette = { "#1d202f", "#f7768e", --[[ ... sixteen ]] } },
+  anchors = { fill = true }, focus = true,
+  on_exit = function(code, signal) panel.visible = false end,
+  on_title = function(title) end,
+  on_bell = function() end,
+}
+ui.Text { text = function() return term.title .. "  " .. term.columns .. "×" .. term.rows end }
+```
+
+How the program is started, all optional, read once when the node is made:
+`command` (never a shell unless it names one), `cwd`, `env` (added to what
+it inherits), and `scrollback`, the lines of history kept (10000, at most
+100000). The program starts the first time the node is laid out, at its
+real size; nothing runs for a terminal that is never on screen. It gets
+the terminal as its controlling tty in a session of its own (so `^C`, `^Z`
+and job control work), `TERM=xterm-256color`, `COLORTERM=truecolor`, and
+never morf's `LD_LIBRARY_PATH` (see [IO.md](IO.md)).
+
+The grid follows the node: its size in cells is its laid-out size, less
+`padding` on every side, over the cell the font makes (the face's advance
+by its ascent and descent, in whole pixels). A resize reaches the program
+as `SIGWINCH`. The node has no size of its own; give it one, or anchors, or
+a `layout.grow`.
+
+Kept by the runtime and read-only, each a property a binding follows:
+`columns`, `rows`, `title` (what the program last called itself, OSC 0/2),
+`running`, and `exit_code` (nil while it runs; 128 + the signal when a
+signal ended it; 127 when it could not be started, which is also said on
+the terminal itself). `on_exit(code, signal)` hears the same, and
+`on_clipboard(text)` hears a program asking to set the clipboard (OSC 52).
+`font_family`, `font_size`, `padding` and `colors` may change at any time.
+`colors` takes any colour notation; a colour the program sets itself (OSC
+4, 10, 11) wins over it.
+
+Methods:
+
+- `:write(text)` — bytes to the program, as if typed: `true`, or `false,
+  why`. What is written before the program has started waits for it.
+- `:paste(text)` — the same, wrapped in bracketed-paste markers when the
+  program asked for them (a shell, an editor), so it is not run line by line.
+- `:kill(signal)` — `"TERM"` unless named; whether it was running.
+- `:scroll(lines)` — up into the history by `lines`, down by a negative
+  number, back to the bottom with none; whether the view moved.
+- `:text()` — the screen as the view shows it, one line per row, trailing
+  blanks trimmed. For a test, or for reading what a program printed.
+- `:pid()` — the program's process id while it runs.
+
+Every key goes to the program — it is the terminal's while it has the
+keyboard, Tab and Escape included — encoded as xterm does: the arrows,
+Home/End, PageUp/PageDown, Insert/Delete and F1–F12 with their modifier
+forms, application cursor mode, Ctrl folding a letter to its control code,
+Alt as an Escape prefix. A click gives it the keyboard (its cursor is solid
+while it has it, an outline otherwise); so does `focus = true`, as for a
+text input. When the program asked for the mouse (btop, nvim with `mouse=a`,
+fzf) presses, releases, motion and the wheel are reported to it, in SGR
+form when it asked for that; otherwise the wheel scrolls the history, or is
+sent as arrow keys to a full-screen program that did not ask.
+
+Box drawing, block elements, braille and powerline separators are drawn
+from the cell's own geometry rather than a font, so frames join and
+graphs line up; everything else is the font's glyph (or a fallback face's)
+placed on its cell, whatever the font would have advanced it by. Bold,
+italic, dim, underline, strikeout, inverse and truecolor are drawn as the
+program asks.
+
+A terminal costs nothing while its program is quiet: output arrives through
+the same reactor as `morf.spawn`'s and is fed to the emulator as it comes,
+at most 256 KiB a turn of the loop, so `yes` shares the loop with everything
+else; a frame is drawn only when the screen changed, and only the rows that
+changed are repainted. A runtime has at most 16 terminals (`MORF_LIMITS`
+`terminals=N`); destroying the node hangs its program up (`SIGHUP`), and a
+reload ends them all. `examples/terminal.lua` runs btop in a panel;
+`examples/fzf_launcher.lua` is an application launcher that is fzf.
+
 ### Paths
 
 `ui.Path` is a shape written as SVG path data — a face, a ring gauge, a
@@ -832,6 +919,8 @@ ui.reparent(ui.Grid { columns = function() return win.width // 280 end }, root)
   per frame and run no Lua but `on_finished`.
 - A handler gets 100k Lua instructions; effects share a frame budget of
   1M. Exhaustion is logged, not fatal.
+- A terminal's program writing is a frame only when it changed the screen,
+  and the frame repaints the rows it changed.
 
 ## 8. Idioms to prefer
 
