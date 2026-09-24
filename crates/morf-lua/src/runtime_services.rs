@@ -22,6 +22,7 @@ impl Runtime {
         let mut greetd_messages = Vec::new();
         let mut udev_events = Vec::new();
         let mut status_updates = Vec::new();
+        let mut http_answers = Vec::new();
         let mut loaders = Vec::new();
         let mut loader_drops = Vec::new();
         let mut retained_destroys = Vec::new();
@@ -225,6 +226,29 @@ impl Runtime {
             for error in status_errors {
                 state.log(LogLevel::Warn, format!("status notifier: {error}"));
             }
+            // A cancelled request leaves here without a word, and dropping
+            // its task stops the worker; a finished one leaves with its
+            // answer, which is delivered below once the state is released.
+            state.http_requests.retain_mut(|entry| {
+                if entry.handle.cancelled.get() {
+                    return false;
+                }
+                let Some(outcome) = entry.task.poll() else {
+                    return true;
+                };
+                if let Some(callback) = entry.callback.take() {
+                    http_answers.push((
+                        callback,
+                        outcome,
+                        std::mem::take(&mut entry.url),
+                        entry.json.clone(),
+                        std::rc::Rc::clone(&entry.handle),
+                    ));
+                } else {
+                    entry.handle.done.set(true);
+                }
+                false
+            });
             retained_destroys.extend(state.retained_destroy_queue.drain());
             for watcher in state.transform_watchers.values_mut() {
                 if watcher.pending {
@@ -317,6 +341,20 @@ impl Runtime {
                 self.reactive
                     .borrow_mut()
                     .log(LogLevel::Warn, format!("PAM callback: {message}"));
+            }
+        }
+        for (callback, outcome, url, json, handle) in http_answers {
+            // Cancelled by an earlier callback in this same batch.
+            if handle.cancelled.get() {
+                continue;
+            }
+            handle.done.set(true);
+            if let Err(message) = self.run_handler(|ctx, limits| {
+                crate::api_http::execute_http_handler(ctx, &callback, outcome, &url, &json, limits)
+            }) {
+                self.reactive
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("http callback: {message}"));
             }
         }
         for callback in timers {

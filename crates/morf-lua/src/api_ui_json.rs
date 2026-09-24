@@ -11,7 +11,7 @@ pub(crate) fn install_ui_json_api<'gc>(
     state: Rc<RefCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
-) -> (Table<'gc>, Table<'gc>) {
+) -> (Table<'gc>, Table<'gc>, crate::api_http::JsonKinds) {
     let ui = Table::new(&ctx);
     for (name, element) in [
         ("Item", Element::Item),
@@ -289,5 +289,10 @@ pub(crate) fn install_ui_json_api<'gc>(
     json.set_field(ctx, "read_file", json_file_read);
     json.set_field(ctx, "write_file", json_file_write);
     morf.set_field(ctx, "json", json);
-    (ui, json)
+    let kinds = crate::api_http::JsonKinds {
+        array: array_metatable,
+        object: object_metatable,
+        null,
+    };
+    (ui, json, kinds)
 }

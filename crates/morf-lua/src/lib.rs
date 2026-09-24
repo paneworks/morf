@@ -13,6 +13,7 @@ mod api_fling;
 mod api_fs;
 mod api_group;
 mod api_host;
+mod api_http;
 mod api_image;
 mod api_menu;
 mod api_module;
