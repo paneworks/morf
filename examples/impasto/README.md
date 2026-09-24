@@ -35,6 +35,7 @@ sense:
 | `bar/panels/` | `bar/island/*Panel.qml` | what the island opens into |
 | `bar/layers/` | `IslandRest`, `IslandSummary`, `OsdLayer`, `NotificationLayer` | the island's layers below a panel |
 | `bar/pieces/` | pieces of `Bar.qml` | what sits on the bar's sides |
+| `pets/` | `components/Pet*.qml`, `components/pets/*` | the pets' four drawing styles, face, family, shelf |
 | `desktop/`, `dock/`, `deck/`, `lock/`, `capture/`, `settings/` | same | the other surfaces |
 
 ## How the parts plug in
@@ -92,4 +93,5 @@ WLR_BACKENDS=headless cage -- sh -c 'morf examples/impasto/init.lua & sleep 4; m
 | settings, theme, kit | ported |
 | island state, island, bar (grouped, spread) | ported |
 | rest layer (clock) | ported |
+| pets (service, four styles, panel `pet`, detail `pet.detail`, bar piece `pet`) | ported |
 | everything else | in progress |
