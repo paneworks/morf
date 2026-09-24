@@ -382,11 +382,35 @@ pub(crate) fn lock_variant(plain: &Path) -> PathBuf {
     plain.with_file_name(format!("{stem}-lock.sock"))
 }
 
+/// The instance name for a `WAYLAND_DISPLAY`. libwayland also takes an
+/// absolute path there, the socket itself (a sandbox's, a nested
+/// compositor's, a client pointed across runtime directories), and the shell
+/// refused to start under one: such a display is named by its last component
+/// and a hash of the whole path, so two sockets of the same name elsewhere
+/// stay two instances.
+pub(crate) fn display_instance(raw: &str) -> Result<String, String> {
+    if raw.starts_with('/') {
+        let last = Path::new(raw)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| "WAYLAND_DISPLAY names no socket".to_owned())?;
+        let hash = crate::socket_path::fnv1a(raw.as_bytes()) as u32;
+        return Ok(format!("{last}-{hash:08x}"));
+    }
+    if raw.is_empty() || raw.contains('/') {
+        return Err("WAYLAND_DISPLAY must be one path component".to_owned());
+    }
+    Ok(raw.to_owned())
+}
+
 /// The socket for a named instance, or for this display when none is named.
 pub(crate) fn socket_path_for(display: Option<&str>) -> Result<PathBuf, String> {
     let display = match display {
         Some(display) => display.to_owned(),
-        None => env::var("WAYLAND_DISPLAY").map_err(|_| "WAYLAND_DISPLAY is unset".to_owned())?,
+        None => display_instance(
+            &env::var("WAYLAND_DISPLAY").map_err(|_| "WAYLAND_DISPLAY is unset".to_owned())?,
+        )?,
     };
     if display.is_empty() || display.contains('/') {
         return Err("WAYLAND_DISPLAY must be one path component".to_owned());
