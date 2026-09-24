@@ -31,6 +31,14 @@ pub enum UiEvent {
     TouchReleased,
     /// A grabbed touch contact was cancelled.
     TouchCanceled,
+    /// A drag from another application moved over a `DropArea`.
+    ///
+    /// A drag's arrival and departure reuse `on_entered` and `on_exited`: a
+    /// `DropArea` is never under the pointer in the ordinary sense, so the two
+    /// names are free to mean the drag's.
+    DropMoved,
+    /// A drag was let go over a `DropArea` that accepted it.
+    Dropped,
 }
 
 /// Every event a configuration can handle, and the property it writes.
@@ -55,6 +63,8 @@ pub(crate) const EVENT_PROPERTIES: &[(UiEvent, &str)] = &[
     (UiEvent::TouchMoved, "on_touch_moved"),
     (UiEvent::TouchReleased, "on_touch_released"),
     (UiEvent::TouchCanceled, "on_touch_canceled"),
+    (UiEvent::DropMoved, "on_moved"),
+    (UiEvent::Dropped, "on_dropped"),
 ];
 
 impl UiEvent {

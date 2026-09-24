@@ -313,7 +313,14 @@ fn clipboard_bridges_publications_and_selections() {
         )
         .unwrap();
 
-    assert_eq!(runtime.take_clipboard_requests(), ["copied"]);
+    assert_eq!(
+        runtime.take_clipboard_requests(),
+        [ClipboardRequest {
+            data: b"copied".to_vec(),
+            mime: None,
+            primary: false,
+        }]
+    );
     assert!(runtime.dispatch_clipboard(Some("pasted".to_owned())));
     assert_eq!(
         runtime.call_ipc("clipboard.get", &[]).unwrap(),

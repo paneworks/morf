@@ -369,3 +369,56 @@ impl IpcValue {
         }
     }
 }
+
+/// One selection the configuration asked to own.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClipboardRequest {
+    /// The bytes every offered type answers with.
+    pub data: Vec<u8>,
+    /// The type to offer them as; `None` is text, offered under every name
+    /// text goes by.
+    pub mime: Option<String>,
+    /// The primary selection (middle-click paste) rather than the clipboard.
+    pub primary: bool,
+}
+
+/// One read of an offer the configuration asked for.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OfferReadRequest {
+    /// Runtime-local request identifier the answer comes back under.
+    pub id: u64,
+    /// The offer, by the identifier the host gave it.
+    pub offer: u64,
+    /// The type, or a shorthand the host resolves: `text`, `image`, `uris`.
+    pub mime: String,
+}
+
+/// A drag out of the shell the configuration asked to start.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DragRequest {
+    /// Offered as text.
+    pub text: Option<String>,
+    /// Offered as `text/uri-list`.
+    pub uris: Vec<String>,
+    /// Local paths, offered as `file://` URIs in the same list.
+    pub paths: Vec<String>,
+    /// Any other type, with its bytes.
+    pub data: Vec<(String, Vec<u8>)>,
+}
+
+/// Something on offer -- a selection or a drag -- as the host describes it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct OfferDescription {
+    /// The host's identifier, which a read names the offer by.
+    pub id: u64,
+    /// Every type the source can produce, in its own order.
+    pub mime_types: Vec<String>,
+    /// The type the target accepted, for a drag.
+    pub accepted: Option<String>,
+    /// Parsed `text/uri-list`, for a drop that offered one.
+    pub uris: Vec<String>,
+    /// The local paths among those URIs.
+    pub paths: Vec<String>,
+    /// The text, for a drop that offered some.
+    pub text: Option<String>,
+}

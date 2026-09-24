@@ -1,5 +1,54 @@
 use super::*;
 #[test]
+fn drop_areas_and_mouse_areas_hit_independently() {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    let drop = scene.create(Element::DropArea);
+    let button = scene.create(Element::MouseArea);
+    for (node, x) in [(drop, 0.0), (button, 10.0)] {
+        scene.assign(node, "x", x).unwrap();
+        scene.assign(node, "width", 30.0).unwrap();
+        scene.assign(node, "height", 10.0).unwrap();
+        scene.reparent(node, Some(root)).unwrap();
+    }
+    let layout = Layout::compute(
+        &scene,
+        root,
+        Size {
+            width: 100.0,
+            height: 40.0,
+        },
+        &mut FixedText,
+    )
+    .unwrap();
+    // The button is painted over the drop area, and still a drag finds the
+    // area beneath it while a click finds the button.
+    let hit = layout.drop_hit_test(&scene, 15.0, 5.0).unwrap().unwrap();
+    assert_eq!(hit.node, drop);
+    assert_eq!((hit.local_x, hit.local_y), (15.0, 5.0));
+    assert_eq!(
+        layout
+            .hit_test(&scene, 15.0, 5.0)
+            .unwrap()
+            .map(|hit| hit.node),
+        Some(button)
+    );
+    assert_eq!(
+        layout
+            .hit_test(&scene, 5.0, 5.0)
+            .unwrap()
+            .map(|hit| hit.node),
+        None
+    );
+    assert_eq!(layout.drop_hit_test(&scene, 35.0, 5.0).unwrap(), None);
+    // Both are part of the input region, or the compositor would never
+    // deliver a drag to the area at all.
+    assert_eq!(layout.input_geometry(&scene).unwrap().len(), 2);
+    scene.assign(drop, "enabled", false).unwrap();
+    assert_eq!(layout.drop_hit_test(&scene, 15.0, 5.0).unwrap(), None);
+}
+
+#[test]
 fn hit_test_uses_absolute_geometry_and_paint_order() {
     let mut scene = Scene::new();
     let root = scene.create(Element::Item);

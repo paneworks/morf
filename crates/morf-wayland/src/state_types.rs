@@ -93,6 +93,8 @@ use wayland_protocols_wlr::screencopy::v1::client::{
     zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1,
 };
 
+use crate::data_control::DataControl;
+use crate::offer_io::ReadDone;
 use crate::{client_surface::*, surface_types::*, types::*};
 
 /// Owned Wayland display and surface handles for graphics APIs.
@@ -262,6 +264,22 @@ pub(crate) struct LayerState {
     pub(crate) clipboard_rx: mpsc::Receiver<Option<String>>,
     pub(crate) clipboard_reads: Arc<AtomicUsize>,
     pub(crate) clipboard_writes: Arc<AtomicUsize>,
+    /// Data control, when the compositor offers either spelling of it.
+    pub(crate) data_control: Option<DataControl>,
+    /// The last offer identifier handed out; selections and drags share it.
+    pub(crate) next_offer_id: u64,
+    /// Where reader threads report, drained by `next_event`.
+    pub(crate) read_tx: mpsc::Sender<ReadDone>,
+    pub(crate) read_rx: mpsc::Receiver<ReadDone>,
+    /// Rung by a transfer thread when it finishes, so the loop wakes for it.
+    pub(crate) waker: Option<fn()>,
+    /// A drag from elsewhere currently over one of these surfaces, or dropped
+    /// on one and not yet finished.
+    pub(crate) drag: Option<DragState>,
+    /// The surface the pointer last pressed on: where a drag out starts.
+    pub(crate) pressed_surface: Option<wl_surface::WlSurface>,
+    /// A drag this client started, and what it answers with.
+    pub(crate) drag_source: Option<OwnedDrag>,
     pub(crate) latest_input_serial: Option<u32>,
     pub(crate) virtual_keyboard_manager: Option<ZwpVirtualKeyboardManagerV1>,
     pub(crate) virtual_keyboard: Option<ZwpVirtualKeyboardV1>,
@@ -335,6 +353,35 @@ pub(crate) struct LayerState {
     pub(crate) session_locks: SessionLockState,
     pub(crate) session_lock: Option<SessionLock>,
     pub(crate) lock_surfaces: Vec<LockSurface>,
+}
+
+/// A drag from another client, as far as this one has followed it.
+pub(crate) struct DragState {
+    pub(crate) id: u64,
+    pub(crate) surface: SurfaceRole,
+    pub(crate) mime_types: Vec<String>,
+    pub(crate) x: f64,
+    pub(crate) y: f64,
+    /// The serial of the `enter`, which every `accept` must quote.
+    pub(crate) serial: u32,
+    /// What this client last said it would take.
+    pub(crate) accepted: Option<String>,
+    /// Set by `drop`: from here the offer is read, not accepted.
+    pub(crate) dropped: bool,
+    /// Set once `finish` went out; nothing more may be read.
+    pub(crate) finished: bool,
+    /// Set once the drop event went out, so it goes out once.
+    pub(crate) announced: bool,
+    /// Prefetches still running before the drop is announced.
+    pub(crate) awaiting: usize,
+    pub(crate) uris: Vec<String>,
+    pub(crate) text: Option<String>,
+}
+
+/// A drag this client is the source of.
+pub(crate) struct OwnedDrag {
+    pub(crate) source: smithay_client_toolkit::data_device_manager::data_source::DragSource,
+    pub(crate) data: Vec<(String, Arc<Vec<u8>>)>,
 }
 
 pub(crate) struct OutputPowerControl {

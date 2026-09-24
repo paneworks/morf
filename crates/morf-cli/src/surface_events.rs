@@ -25,6 +25,11 @@ pub(crate) fn handle_surface_event(
         Ok(repaint) => return Ok(repaint),
         Err(event) => event,
     };
+    // Then selections and drags, which need the layout and the client.
+    let event = match crate::surface_drag::handle_data_event(runtime, client, state, event) {
+        Ok(repaint) => return repaint,
+        Err(event) => event,
+    };
     match event {
         LayerEvent::Configure { id, .. } | LayerEvent::Scale { id, .. } if id == PRIMARY_LAYER => {
             let (width, height) = client.physical_size();
@@ -74,6 +79,13 @@ pub(crate) fn handle_surface_event(
         LayerEvent::KeyboardFocus { active } => repaint |= runtime.dispatch_keyboard_focus(active),
         // Already taken above; named so a new event cannot slip past unmatched.
         LayerEvent::Screencopy { .. } | LayerEvent::CaptureOffer { .. } => {}
+        LayerEvent::Selection { .. }
+        | LayerEvent::OfferRead { .. }
+        | LayerEvent::DragEnter { .. }
+        | LayerEvent::DragMotion { .. }
+        | LayerEvent::DragLeave { .. }
+        | LayerEvent::Drop { .. }
+        | LayerEvent::DragSourceEnded { .. } => {}
         LayerEvent::InputMethod(state) => {
             repaint |= runtime.dispatch_input_method(
                 state.active,

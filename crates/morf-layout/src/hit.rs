@@ -26,8 +26,28 @@ pub struct Hit {
 impl Layout {
     /// Returns the topmost enabled MouseArea containing a surface-local point.
     pub fn hit_test(&self, scene: &Scene, x: f64, y: f64) -> Result<Option<Hit>, LayoutError> {
+        self.hit_element(scene, Element::MouseArea, x, y)
+    }
+
+    /// Returns the topmost enabled DropArea containing a surface-local point.
+    ///
+    /// Separate from [`Layout::hit_test`] and blind to MouseAreas, as that one
+    /// is blind to DropAreas: a drag passes over buttons on its way to a
+    /// target, and a click passes over targets on its way to a button. Neither
+    /// should stop the other.
+    pub fn drop_hit_test(&self, scene: &Scene, x: f64, y: f64) -> Result<Option<Hit>, LayoutError> {
+        self.hit_element(scene, Element::DropArea, x, y)
+    }
+
+    fn hit_element(
+        &self,
+        scene: &Scene,
+        element: Element,
+        x: f64,
+        y: f64,
+    ) -> Result<Option<Hit>, LayoutError> {
         for root in scene.roots().into_iter().rev() {
-            if let Some(hit) = self.hit_node(scene, root, Transform2D::IDENTITY, x, y)? {
+            if let Some(hit) = self.hit_node(scene, root, element, Transform2D::IDENTITY, x, y)? {
                 return Ok(Some(hit));
             }
         }
@@ -56,7 +76,8 @@ impl Layout {
             })
     }
 
-    /// Collects enabled MouseArea rectangles for the Wayland input region.
+    /// Collects enabled MouseArea and DropArea rectangles for the Wayland
+    /// input region.
     pub fn input_geometry(&self, scene: &Scene) -> Result<Vec<Geometry>, LayoutError> {
         let mut rectangles = Vec::new();
         for root in scene.roots() {
@@ -140,7 +161,9 @@ impl Layout {
             return Ok(());
         };
         let transform = inherited.then(node_transform(scene, node, geometry)?);
-        if scene.element(node)? == Element::MouseArea
+        // A DropArea takes input too: the compositor sends a drag only to the
+        // surface whose input region is under it.
+        if matches!(scene.element(node)?, Element::MouseArea | Element::DropArea)
             && let Some(geometry) = self.geometry(node)
         {
             rectangles.push(transform.bounds(geometry));
@@ -155,6 +178,7 @@ impl Layout {
         &self,
         scene: &Scene,
         node: NodeHandle,
+        element: Element,
         inherited: Transform2D,
         x: f64,
         y: f64,
@@ -177,20 +201,18 @@ impl Layout {
             return Ok(None);
         }
         for &child in scene.paint_order(node)?.iter().rev() {
-            if let Some(hit) = self.hit_node(scene, child, transform, x, y)? {
+            if let Some(hit) = self.hit_node(scene, child, element, transform, x, y)? {
                 return Ok(Some(hit));
             }
         }
         // The inverse point is measured in the space the node's own geometry
         // is resolved in, which is absolute; subtracting the node's origin is
         // what makes it node-local.
-        Ok(
-            (inside && scene.element(node)? == Element::MouseArea).then_some(Hit {
-                node,
-                local_x: local_x - geometry.x,
-                local_y: local_y - geometry.y,
-            }),
-        )
+        Ok((inside && scene.element(node)? == element).then_some(Hit {
+            node,
+            local_x: local_x - geometry.x,
+            local_y: local_y - geometry.y,
+        }))
     }
 }
 

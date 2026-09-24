@@ -13,6 +13,7 @@ mod pointer_cursor;
 mod services;
 mod supervisor;
 mod surface_actions;
+mod surface_drag;
 mod surface_events;
 mod surface_layers;
 mod surface_popups;

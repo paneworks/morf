@@ -69,33 +69,7 @@ pub(crate) fn install_host_service_api<'gc>(
     let output_power = Table::new(&ctx);
     output_power.set_field(ctx, "set", output_power_set);
     morf.set_field(ctx, "output_power", output_power);
-    let clipboard_set_state = Rc::clone(&state);
-    let clipboard_set = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let text: String = stack.consume(ctx)?;
-        if text.len() > 1_048_576 {
-            return Err(HostError("clipboard text limit reached".into()).into());
-        }
-        let mut state = clipboard_set_state.borrow_mut();
-        if state.clipboard_requests.len() >= 64 {
-            return Err(HostError("clipboard request limit reached".into()).into());
-        }
-        state.clipboard_requests.push(text);
-        Ok(CallbackReturn::Return)
-    });
-    let clipboard_subscribe_state = Rc::clone(&state);
-    let clipboard_subscribe = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let callback: Closure = stack.consume(ctx)?;
-        let mut state = clipboard_subscribe_state.borrow_mut();
-        if state.clipboard_callbacks.len() >= 64 {
-            return Err(HostError("clipboard callback limit reached".into()).into());
-        }
-        state.clipboard_callbacks.push(ctx.stash(callback));
-        Ok(CallbackReturn::Return)
-    });
-    let clipboard = Table::new(&ctx);
-    clipboard.set_field(ctx, "set", clipboard_set);
-    clipboard.set_field(ctx, "subscribe", clipboard_subscribe);
-    morf.set_field(ctx, "clipboard", clipboard);
+    crate::api_clipboard::install_clipboard_api(ctx, Rc::clone(&state), morf);
     // `morf.on_keyboard_focus(function(active) end)`: the keyboard came to
     // the shell's surface, or left it. With `keyboard_focus = "on_demand"`
     // a click anywhere else is what takes it away.

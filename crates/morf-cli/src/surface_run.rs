@@ -29,6 +29,9 @@ fn capabilities_of(
     ];
     for (name, supported) in [
         ("clipboard", client.supports_clipboard()),
+        ("data_control", client.supports_data_control()),
+        ("primary_selection", client.supports_primary_selection()),
+        ("drag_and_drop", client.supports_drag_and_drop()),
         ("virtual_keyboard", client.supports_virtual_keyboard()),
         ("input_method", client.supports_input_method()),
         ("text_input", client.supports_text_input()),
@@ -134,6 +137,13 @@ pub(crate) fn run_surface(
                 | LayerEvent::ShortcutsInhibited { .. }
                 | LayerEvent::Idle { .. }
                 | LayerEvent::Clipboard { .. }
+                | LayerEvent::Selection { .. }
+                | LayerEvent::OfferRead { .. }
+                | LayerEvent::DragEnter { .. }
+                | LayerEvent::DragMotion { .. }
+                | LayerEvent::DragLeave { .. }
+                | LayerEvent::Drop { .. }
+                | LayerEvent::DragSourceEnded { .. }
                 | LayerEvent::KeyboardFocus { .. }
                 | LayerEvent::InputMethod(_)
                 | LayerEvent::TextInput(_)
@@ -214,8 +224,12 @@ pub(crate) fn run_surface(
         pressed: None,
         focused: HashMap::new(),
         touches: HashMap::new(),
+        drag: None,
     };
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
+    // A clipboard or drop read finishing on its thread rings every loop, so
+    // this one wakes for its answer instead of at the next fallback tick.
+    client.set_waker(morf_io::wake_all);
     let mut layout_complaint: Option<Instant> = None;
     loop {
         if stop.load(Ordering::Acquire) {
@@ -263,6 +277,7 @@ pub(crate) fn run_surface(
             state.floating_surfaces.clear();
             state.layer_surfaces.clear();
             client = replacement;
+            client.set_waker(morf_io::wake_all);
             reserve = runtime.layer_surface_config().reserve;
             tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
                 output: name.clone(),

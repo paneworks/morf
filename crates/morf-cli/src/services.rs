@@ -52,11 +52,26 @@ pub(crate) fn apply_output_power_requests(runtime: &mut Runtime, client: &mut La
 }
 
 pub(crate) fn apply_clipboard_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+    // Data control first: no focus, no serial, any type. Without it only text
+    // can be set, and only once an input serial exists to set it with, so the
+    // requests wait for one.
+    if client.supports_data_control() {
+        for request in runtime.take_clipboard_requests() {
+            let primary = request.primary;
+            client.set_selection(crate::surface_drag::clipboard_payload(request), primary);
+        }
+        return;
+    }
     if !client.can_set_clipboard() {
         return;
     }
-    for text in runtime.take_clipboard_requests() {
-        client.set_clipboard(text);
+    for request in runtime.take_clipboard_requests() {
+        if request.mime.is_none()
+            && !request.primary
+            && let Ok(text) = String::from_utf8(request.data)
+        {
+            client.set_clipboard(text);
+        }
     }
 }
 

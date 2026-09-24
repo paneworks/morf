@@ -218,6 +218,43 @@ pub enum LayerEvent {
     },
     /// The compositor clipboard selection changed.
     Clipboard { text: Option<String> },
+    /// The selection changed, as data control sees it: with no focus needed,
+    /// and before anything is read. `offer` is `None` when it was cleared.
+    Selection {
+        /// Whether this is the primary selection (middle-click paste).
+        primary: bool,
+        offer: Option<OfferInfo>,
+    },
+    /// A read asked for with [`LayerClient::read_offer`] finished.
+    OfferRead {
+        request_id: u64,
+        result: Result<Vec<u8>, String>,
+    },
+    /// A drag from somewhere came over one of this client's surfaces.
+    DragEnter {
+        surface: SurfaceRole,
+        x: f64,
+        y: f64,
+        offer: OfferInfo,
+    },
+    /// The drag moved over the surface it entered.
+    DragMotion {
+        surface: SurfaceRole,
+        x: f64,
+        y: f64,
+    },
+    /// The drag left the surface without dropping, or was cancelled.
+    DragLeave { surface: SurfaceRole },
+    /// The drag was dropped here, and what it carries has been fetched.
+    Drop {
+        surface: SurfaceRole,
+        x: f64,
+        y: f64,
+        /// Boxed: the largest payload of any event, and events are moved often.
+        drop: Box<DropInfo>,
+    },
+    /// A drag this client started ended: dropped somewhere, or not.
+    DragSourceEnded { dropped: bool },
     /// The keyboard came to the primary surface, or left it for elsewhere.
     ///
     /// With on-demand focus, a click anywhere else takes the keyboard away,

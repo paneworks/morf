@@ -35,7 +35,7 @@ ui.Rect {
 |---|---|
 | containers | `Item`, `Inset`, `Flickable`, `Loader`, `Layout` |
 | painting | `Rect`, `ClipRect`, `Text`, `Image`, `Icon`, `Sdf`, `SdfShape` |
-| input | `MouseArea` (the only kind the pointer can hit) |
+| input | `MouseArea` (the only kind the pointer can hit), `DropArea` (the only kind a drag can) |
 | positioners | `Row`, `Column`, `Grid` with `columns` |
 | layouts | `Flex`, `Grid` with tracks |
 | lists | `Repeater`, `ListView`, `GridView`, `each` |
@@ -455,6 +455,42 @@ over the area, drawn by the compositor from its own theme. The names are
 the cursor-shape protocol's: `default`, `pointer`, `text`, `grab`,
 `grabbing`, `move`, `not_allowed`, `crosshair`, `ew_resize`, and the
 rest, spelled with underscores.
+
+### Drops and the clipboard
+
+A `DropArea` is where a drag from another application can land. `keys`
+lists what it takes, best first: exact types, `image/*`, `*`, or the
+shorthands `text`, `image` and `files` (a `text/uri-list`); empty takes
+anything. It is hit-tested like a `MouseArea` but separately from one, so a
+button painted over it neither blocks a drag nor is blocked by it.
+
+```lua
+ui.DropArea {
+  anchors = { fill = true },
+  keys = { "files", "text" },
+  on_entered = function(info) end,   -- info.mime_types, info.accepted (nil: refused), info.x, info.y
+  on_moved = function(x, y) end,     -- local, then surface coordinates
+  on_exited = function() end,        -- also after a drop, so a highlight clears in one place
+  on_dropped = function(drop)        -- drop.uris, drop.paths, drop.text already fetched
+    drop:read("image/png", function(bytes, err) end)  -- anything else, inside this handler
+  end,
+}
+```
+
+`morf.drag.start { text =, uris =, paths =, data = { [mime] = bytes } }`
+from an `on_pressed` or `on_drag_started` handler drags out of the shell;
+its optional second argument is told `true` if the drag was dropped.
+
+`morf.clipboard.watch(function(offer) end)` hears every copy, whether or
+not the shell has focus, through data control (`ext-data-control-v1`, or
+`zwlr-data-control-v1`); pass `{ primary = true }` for middle-click
+selections too. `offer.mime_types` says what is on offer and nothing is
+read until `offer:read(mime, function(bytes, err) end)` — `mime` may be
+`text` or `image` for the best of either. `morf.clipboard.set(data, mime)`
+owns the clipboard (`{ mime =, primary = true }` for options; no type means
+text), and `morf.clipboard.supported()` says whether data control is there
+once the shell has connected. `examples/clipboard-history.lua` is all of
+it together.
 
 ## 7. What makes a frame
 

@@ -209,8 +209,17 @@ pub(crate) struct ReactiveState {
     /// same number of milliseconds means two different things to the compositor.
     pub(crate) idle_callbacks: HashMap<(u32, bool), Vec<StashedClosure>>,
     pub(crate) output_power_requests: Vec<bool>,
-    pub(crate) clipboard_requests: Vec<String>,
+    pub(crate) clipboard_requests: Vec<ClipboardRequest>,
     pub(crate) clipboard_callbacks: Vec<StashedClosure>,
+    /// `morf.clipboard.watch` callbacks, each with whether it wants the
+    /// primary selection too.
+    pub(crate) clipboard_watchers: Vec<(StashedClosure, bool)>,
+    pub(crate) offer_reads: Vec<OfferReadRequest>,
+    pub(crate) offer_read_callbacks: HashMap<u64, StashedClosure>,
+    pub(crate) next_offer_read: u64,
+    pub(crate) drag_requests: Vec<DragRequest>,
+    /// Told once how the drag they started ended.
+    pub(crate) drag_end_callbacks: Vec<StashedClosure>,
     pub(crate) keyboard_focus_callbacks: Vec<StashedClosure>,
     pub(crate) backdrop_callbacks: Vec<StashedClosure>,
     pub(crate) screencopy_requests: Vec<ScreencopyRequest>,
@@ -390,6 +399,12 @@ impl ReactiveState {
             output_power_requests: Vec::new(),
             clipboard_requests: Vec::new(),
             clipboard_callbacks: Vec::new(),
+            clipboard_watchers: Vec::new(),
+            offer_reads: Vec::new(),
+            offer_read_callbacks: HashMap::new(),
+            next_offer_read: 0,
+            drag_requests: Vec::new(),
+            drag_end_callbacks: Vec::new(),
             keyboard_focus_callbacks: Vec::new(),
             backdrop_callbacks: Vec::new(),
             screencopy_requests: Vec::new(),
