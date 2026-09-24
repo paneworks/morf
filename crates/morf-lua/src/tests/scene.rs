@@ -283,6 +283,55 @@ fn key_handlers_receive_keysym_and_text() {
 }
 
 #[test]
+fn key_handlers_hear_repeats_and_releases() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "held.lua",
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local log = morf.signal("log", "")
+                local function note(entry) log:set(log:get() .. entry .. ";") end
+                ui.Item {
+                    ui.MouseArea {
+                        on_key_pressed = function(keysym, text, modifiers, repeat_)
+                            note("down " .. keysym .. " " .. tostring(text) .. " "
+                                .. modifiers .. " " .. tostring(repeat_))
+                        end,
+                        on_key_released = function(keysym, text, modifiers, extra)
+                            note("up " .. keysym .. " " .. modifiers .. " " .. tostring(extra))
+                        end,
+                    },
+                    ui.MouseArea {
+                        -- Releases alone make a node somewhere keys can go.
+                        on_key_released = function() end,
+                    },
+                    ui.Text { text = function() return log:get() end },
+                }
+            "#,
+        )
+        .unwrap();
+    let root = runtime.scene().roots()[0];
+    let children = runtime.scene().children(root).unwrap().to_vec();
+    let shift = KeyModifiers {
+        shift: true,
+        ..KeyModifiers::default()
+    };
+
+    assert!(runtime.dispatch_key(children[0], 65, Some("A"), shift));
+    assert!(runtime.dispatch_key_press(children[0], 65, Some("A"), shift, true));
+    assert!(runtime.dispatch_key_release(children[0], 65, Some("A"), KeyModifiers::default()));
+    assert_eq!(
+        runtime.scene().string_value(children[2], "text").unwrap(),
+        "down 65 A shift false;down 65 A shift true;up 65  nil;"
+    );
+    assert_eq!(runtime.key_target_for_node(children[1]), Some(children[1]));
+    // A node with no release handler takes a release without complaint.
+    assert!(!runtime.dispatch_key_release(children[2], 65, None, KeyModifiers::default()));
+}
+
+#[test]
 fn keyboard_focus_routes_ancestors_and_cycles() {
     let mut runtime = Runtime::default();
     runtime

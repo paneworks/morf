@@ -6,11 +6,33 @@ use morf_wayland::SurfaceRole;
 
 use crate::surfaces::*;
 
-/// One key pressed on a surface: into its subtree, remembering what has focus.
+/// What happened to a key.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum KeyAction {
+    /// Pressed; `repeat` when it is the keyboard repeating a held key.
+    Press { repeat: bool },
+    /// Released.
+    Release,
+}
+
+impl KeyAction {
+    /// The action a compositor key event describes.
+    pub(crate) fn of(pressed: bool, repeat: bool) -> Self {
+        if pressed {
+            Self::Press { repeat }
+        } else {
+            Self::Release
+        }
+    }
+}
+
+/// One key pressed or released on a surface: into its subtree, remembering
+/// what has focus.
 pub(crate) fn surface_key(
     runtime: &mut Runtime,
     state: &mut SurfaceEventState,
     surface: SurfaceRole,
+    action: KeyAction,
     keysym: u32,
     text: Option<&str>,
     modifiers: morf_wayland::KeyModifiers,
@@ -29,6 +51,7 @@ pub(crate) fn surface_key(
         runtime,
         root,
         &mut focused,
+        action,
         keysym,
         text,
         key_modifiers(modifiers),
@@ -40,10 +63,12 @@ pub(crate) fn surface_key(
     repaint
 }
 
-/// Routes one key press into a surface subtree, keeping its focus.
+/// Routes one key into a surface subtree, keeping its focus.
 ///
 /// Tab moves to the next focusable node and off the end again; anything else
-/// goes to whatever holds focus, or to the first thing that can take it.
+/// goes to whatever holds focus, or to the first thing that can take it. A
+/// release goes where a press would go now and never moves focus — so Tab's
+/// own release lands on the node Tab moved to.
 ///
 /// This exists as a function because the lock screen had its own copy that did
 /// neither — no traversal and no persistence, so every key went to the first
@@ -55,6 +80,7 @@ pub(crate) fn dispatch_key_in_subtree(
     runtime: &mut Runtime,
     root: NodeHandle,
     focused: &mut Option<NodeHandle>,
+    action: KeyAction,
     keysym: u32,
     text: Option<&str>,
     modifiers: KeyModifiers,
@@ -65,6 +91,15 @@ pub(crate) fn dispatch_key_in_subtree(
     let current = runtime
         .focused_text_input_in(root)
         .or(focused.filter(|node| runtime.node_in_subtree(root, *node)));
+    let repeat = match action {
+        KeyAction::Release => {
+            let Some(node) = current.or_else(|| runtime.first_key_target_in(root)) else {
+                return false;
+            };
+            return runtime.dispatch_key_release(node, keysym, text, modifiers);
+        }
+        KeyAction::Press { repeat } => repeat,
+    };
     if keysym == TAB {
         *focused = runtime.next_key_target_in(root, current);
         runtime.set_key_focus(*focused);
@@ -77,7 +112,7 @@ pub(crate) fn dispatch_key_in_subtree(
     if runtime.is_text_input(node) {
         runtime.set_key_focus(Some(node));
     }
-    runtime.dispatch_key(node, keysym, text, modifiers)
+    runtime.dispatch_key_press(node, keysym, text, modifiers, repeat)
 }
 
 /// The compositor's modifier state, as the runtime reads it.

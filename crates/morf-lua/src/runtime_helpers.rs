@@ -28,11 +28,17 @@ pub(crate) fn scene_node_in_subtree(scene: &Scene, root: NodeHandle, node: NodeH
     false
 }
 
+/// Whether a node has a handler for key presses or releases.
+pub(crate) fn handles_keys(state: &ReactiveState, node: NodeHandle) -> bool {
+    state.handlers.contains_key(&(node, UiEvent::KeyPressed))
+        || state.handlers.contains_key(&(node, UiEvent::KeyReleased))
+}
+
 pub(crate) fn key_targets_in(state: &ReactiveState, root: NodeHandle) -> Vec<NodeHandle> {
     let mut targets = Vec::new();
     let mut pending = vec![root];
     while let Some(node) = pending.pop() {
-        if (state.handlers.contains_key(&(node, UiEvent::KeyPressed))
+        if (handles_keys(state, node)
             || state.scene.element(node).ok() == Some(morf_scene::Element::TextInput))
             && state.scene.bool_value(node, "enabled").unwrap_or(false)
             && state.scene.bool_value(node, "visible").unwrap_or(false)

@@ -23,6 +23,8 @@ pub enum UiEvent {
     Wheel,
     /// A key was pressed while the target held focus.
     KeyPressed,
+    /// A key was released while the target held focus.
+    KeyReleased,
     /// A touch contact began on the target.
     TouchPressed,
     /// A grabbed touch contact moved.
@@ -68,6 +70,7 @@ pub(crate) const EVENT_PROPERTIES: &[(UiEvent, &str)] = &[
     (UiEvent::DragFinished, "on_drag_finished"),
     (UiEvent::Wheel, "on_wheel"),
     (UiEvent::KeyPressed, "on_key_pressed"),
+    (UiEvent::KeyReleased, "on_key_released"),
     (UiEvent::TouchPressed, "on_touch_pressed"),
     (UiEvent::TouchMoved, "on_touch_moved"),
     (UiEvent::TouchReleased, "on_touch_released"),

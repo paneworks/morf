@@ -120,12 +120,22 @@ pub(crate) fn handle_surface_event(
         }
         LayerEvent::Key {
             surface,
-            pressed: true,
+            pressed,
+            repeat,
             keysym,
             text,
             modifiers,
-            ..
-        } => repaint |= surface_key(runtime, state, surface, keysym, text.as_deref(), modifiers),
+        } => {
+            repaint |= surface_key(
+                runtime,
+                state,
+                surface,
+                KeyAction::of(pressed, repeat),
+                keysym,
+                text.as_deref(),
+                modifiers,
+            );
+        }
         LayerEvent::PopupConfigure { id, width, height } => {
             if let Some(surface) = state.popup_surfaces.get_mut(&id) {
                 let initial = surface.renderer.is_none();
@@ -238,8 +248,7 @@ pub(crate) fn handle_surface_event(
         | LayerEvent::TouchMotion { .. }
         | LayerEvent::TouchUp { .. }
         | LayerEvent::TouchCancel => {}
-        LayerEvent::Key { pressed: false, .. }
-        | LayerEvent::SessionLocked
+        LayerEvent::SessionLocked
         | LayerEvent::SessionLockFinished
         | LayerEvent::SessionLockConfigure { .. }
         | LayerEvent::SessionLockSurfaceRemoved { .. }

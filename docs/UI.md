@@ -626,6 +626,31 @@ drawn again for each frame they move in, on the CPU, at its on-screen size —
 cheap for an icon or a gauge, worth knowing for a path the size of the
 screen. `examples/path.lua` has one of each.
 
+### Keys
+
+A node with `on_key_pressed` or `on_key_released` is somewhere keys can
+go: the focused one of its surface (a click, a Tab, `focus = true`), or
+else the first. `on_key_pressed(keysym, text, modifiers, repeat)` runs
+for a press and for each of the keyboard's repeats of a held key, and
+`repeat` says which it is; `on_key_released(keysym, text, modifiers)`
+runs when the key comes up, on whatever has focus by then. Something that
+moves while a key is held — a game, a scrubber — tracks the press and the
+release and ignores the repeats:
+
+```lua
+local held = {}
+ui.MouseArea {
+  focus = true,
+  on_key_pressed = function(keysym, _, _, repeat_)
+    if not repeat_ then held[keysym] = true end
+  end,
+  on_key_released = function(keysym) held[keysym] = nil end,
+}
+```
+
+A text input types a repeat as it types a press, so a held Backspace
+keeps deleting.
+
 ### Entering
 
 `enter = { opacity = 0, translate_x = 32 }` on any node is where its
