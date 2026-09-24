@@ -234,6 +234,48 @@ function common.claude_mark(values)
   }
 end
 
+--- Whether the pointer is anywhere over a face, which a single MouseArea
+--- cannot say: hover here goes to the topmost area only, so a face's own
+--- buttons take it from the area under them. Every area of the face calls
+--- `enter` and `leave` (`hover(true|false)`), and `on_leave` runs when the
+--- pointer has been over none of them for a moment -- HoverHandler's
+--- `hovered` going false on a calendar face, which puts the month back.
+function common.region()
+  local r = { inside = false, listeners = {} }
+  local serial = 0
+  function r.enter() serial = serial + 1 r.inside = true end
+  function r.leave()
+    serial = serial + 1
+    r.inside = false
+    local mine = serial
+    -- Leaving one area and entering the next are two events of the same
+    -- motion; only a leave that nothing followed is the pointer going.
+    morf.timer(40, function()
+      if serial ~= mine or r.inside then return end
+      for _, fn in ipairs(r.listeners) do pcall(fn) end
+    end, false)
+  end
+  function r.hover(on) if on then r.enter() else r.leave() end end
+  function r.on_leave(fn) r.listeners[#r.listeners + 1] = fn end
+  return r
+end
+
+--- The region a face's areas report to: the widget's own (`ctx.region`),
+--- or one of the face's when it is built without a widget (the card).
+function common.region_of(ctx)
+  if not ctx.region then ctx.region = common.region() end
+  return ctx.region
+end
+
+--- A MouseArea that also tells the face's region where the pointer is.
+function common.area(ctx, values)
+  local region = common.region_of(ctx)
+  local entered, exited = values.on_entered, values.on_exited
+  values.on_entered = function(...) region.enter() if entered then return entered(...) end end
+  values.on_exited = function(...) region.leave() if exited then return exited(...) end end
+  return ui.MouseArea(values)
+end
+
 --- A layer that shadows its content, for faces drawn on the wallpaper.
 common.shadow_layer = function()
   return { enabled = true, shadow_color = morf.color("#000000"):alpha(0.6), shadow_blur = 8, shadow_offset_y = 2 }

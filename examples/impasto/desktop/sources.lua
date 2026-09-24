@@ -463,7 +463,7 @@ end
 
 -- ------------------------------------------------------------------- tasks --
 
--- The board's tasks, when that port has landed; empty until then.
+-- The board's tasks (services.tasks).
 S.tasks = {}
 local tasks_service = optional("services.tasks")
 function S.tasks.available() return tasks_service ~= nil end
@@ -523,6 +523,9 @@ function S.tasks.on(key)
   local list = tasks_service and call(tasks_service, "on", key) or {}
   return type(list) == "table" and list or {}
 end
+--- The next unfinished task due from today on, or nil.
+function S.tasks.next() return tasks_service and call(tasks_service, "next") or nil end
+function S.tasks.due_label(day) return tasks_service and call(tasks_service, "due_label", day) or (day or "") end
 function S.tasks.toggle(key) if tasks_service and tasks_service.toggle then pcall(tasks_service.toggle, key) end end
 
 -- ------------------------------------------------------------------- notes --
@@ -535,9 +538,12 @@ function S.notes.available() return notes_service ~= nil end
 --- The note a row names, or the newest: `{ key, title, body, items, updated }`.
 function S.notes.note_for(row)
   if not notes_service then return nil end
-  local note = call(notes_service, "note_for", row)
-  if note == nil and row and row.note then note = call(notes_service, "entry", row.note) end
-  if note == nil then note = call(notes_service, "newest") end
+  -- NotesService.noteFor: the note the row names while it is not archived,
+  -- else the newest.
+  local key = row and row.note or ""
+  local named = key ~= "" and call(notes_service, "entry", key) or nil
+  if type(named) == "table" and not named.archived then return named end
+  local note = call(notes_service, "newest")
   return type(note) == "table" and note or nil
 end
 function S.notes.open(key)

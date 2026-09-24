@@ -16,6 +16,7 @@
 --   select <key>           open a widget's inspector (arranging)
 --   family <key> <family>  change a widget's shape
 --   menu [key]             open the right-click menu (at the board's middle)
+--   day <key> [yyyy-mm-dd]  a calendar widget's day view (none: the month)
 --   theme <modern|analogue>
 --   list                   the rows, one per line
 
@@ -106,6 +107,13 @@ morf.ipc.desk = function(verb, a, b, c)
     local board = desk.board()
     desk.open_menu(a or "", tonumber(b) or board.width / 2, tonumber(c) or board.height / 2)
     return "open"
+  elseif verb == "day" then
+    -- A calendar widget's day view, as pressing a day would open it ("" or
+    -- nothing puts the month back).
+    local pick = require("desktop.faces.day_tasks").by_widget[a or ""]
+    if not pick then return "no calendar face for " .. tostring(a) end
+    pick.pick(b or "")
+    return pick.day()
   elseif verb == "theme" then
     settings.set("desktopTheme", a == "analogue" and "analogue" or "modern")
     return a or "modern"

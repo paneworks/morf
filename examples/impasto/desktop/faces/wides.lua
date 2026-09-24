@@ -303,14 +303,21 @@ function M.clock(ctx)
 end
 
 -- The week around today, Monday first; a dot under a day with tasks.
+-- Pressing a day with tasks shows that day's list, as on the 4x4; the week
+-- comes back by the arrow or when the pointer leaves.
 function M.calendar(ctx)
   local ink = ctx.ink
-  return face(ctx, {
+  local day_tasks = require("desktop.faces.day_tasks")
+  local pick = day_tasks.picker(ctx)
+  return day_tasks.over(ctx, pick, face(ctx, {
     label = function() return S.clock.format("%B") end,
     reading = function() return tostring(S.clock.now().day) end,
+    -- Today's count if any; else the next task due; else the weekday.
     note = function()
       local left = S.tasks.pending_on(S.tasks.today_key())
       if left > 0 then return left .. " to do today" end
+      local next = S.tasks.next()
+      if next then return next.text .. " · " .. S.tasks.due_label(next.due) end
       return S.clock.format("%A")
     end,
     extra_share = 0.5,
@@ -350,11 +357,19 @@ function M.calendar(ctx)
                 end },
             },
           },
+          common.area(ctx, {
+            anchors = { fill = true }, cursor = "pointer",
+            visible = function() return marks() ~= nil end,
+            on_clicked = function()
+              local d = date()
+              pick.pick(S.tasks.day_key(d.year, d.month, d.day))
+            end,
+          }),
         }
       end
       return ui.Row { width = w, height = h, table.unpack(days) }
     end,
-  })
+  }), 18)
 end
 
 function M.tasks(ctx)

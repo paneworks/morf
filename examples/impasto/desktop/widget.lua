@@ -36,6 +36,9 @@ function M.build(key, arranging)
   local function style() return desk.style_of(row()) end
   local function on_picture() local s = style() return s == "bare" or s == "outline" end
 
+  -- Where the pointer is over the widget, across the face's own areas.
+  local region = require("desktop.faces.common").region()
+
   -- The face, rebuilt when the model's one row names another.
   local faces = desk.face_model(key)
   local face_holder = ui.Repeater {
@@ -48,7 +51,7 @@ function M.build(key, arranging)
       return face.build {
         id = r.id, key = key, family = family, theme = desk.theme_of(r),
         ink = ink, row = row, width = size.width, height = size.height,
-        arranging = arranging,
+        arranging = arranging, region = region,
       }
     end,
   }
@@ -99,6 +102,7 @@ function M.build(key, arranging)
       -- one opens the widget's menu at the pointer.
       ui.MouseArea {
         anchors = { fill = true }, accepted_buttons = "right",
+        on_entered = region.enter, on_exited = region.leave,
         on_clicked = function(sx, sy)
           local b = desk.board()
           desk.open_menu(key, sx - b.x, sy - b.y)

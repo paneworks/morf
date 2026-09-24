@@ -7,6 +7,9 @@
 -- own.
 --
 --     task_row.build { task = function() return row end, width = 300, on_open = fn, dated = true }
+--
+-- `on_hover(bool)` hears the pointer come and go over the row, for a face
+-- that closes when the pointer leaves it.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -31,6 +34,7 @@ function task_row.build(values)
   local dated = values.dated ~= false
   local width = values.width or 300
   local hovered = kit.hover_signal("task_row")
+  local on_hover = values.on_hover or function() end
   local done = function() local t = task() return t and t.state == "done" end
   local late = function() return tasks.is_overdue(task()) end
   local day = kit.text {
@@ -49,8 +53,8 @@ function task_row.build(values)
     },
     ui.MouseArea {
       anchors = { fill = true }, cursor = "pointer",
-      on_entered = function() hovered:set(true) end,
-      on_exited = function() hovered:set(false) end,
+      on_entered = function() hovered:set(true) on_hover(true) end,
+      on_exited = function() hovered:set(false) on_hover(false) end,
       on_clicked = function() if values.on_open then values.on_open() end end,
     },
     -- The tick, over the row's area so its press is its own.
@@ -69,6 +73,9 @@ function task_row.build(values)
       },
       ui.MouseArea {
         anchors = { fill = true }, cursor = "pointer",
+        -- Over the tick is still over the row.
+        on_entered = function() hovered:set(true) on_hover(true) end,
+        on_exited = function() hovered:set(false) on_hover(false) end,
         on_clicked = function() local t = task() if t then tasks.toggle(t.key) end end,
       },
     },

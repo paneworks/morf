@@ -212,8 +212,14 @@ function M.clock(ctx)
   })
 end
 
+-- The date; the month is the 4x4 face. The square is today, so pressing it
+-- with tasks shows today's list, as a pressed day does on the larger faces;
+-- the square comes back by the arrow or when the pointer leaves.
 function M.calendar(ctx)
-  return face(ctx, {
+  local day_tasks = require("desktop.faces.day_tasks")
+  local pick = day_tasks.picker(ctx)
+  local has = function() return S.tasks.count_on(S.tasks.today_key()) > 0 end
+  local square = face(ctx, {
     label = function() return S.clock.format("%B") end,
     reading = function() return tostring(S.clock.now().day) end,
     note = function()
@@ -223,6 +229,15 @@ function M.calendar(ctx)
     end,
     mark = glyph { glyph = "󰃭", size = 30, color = ctx.ink.text },
   })
+  local node = ui.Item {
+    width = ctx.width, height = ctx.height,
+    square,
+    common.area(ctx, {
+      anchors = { fill = true }, cursor = "pointer", visible = has,
+      on_clicked = function() pick.pick(S.tasks.today_key()) end,
+    }),
+  }
+  return day_tasks.over(ctx, pick, node, 16)
 end
 
 function M.tasks(ctx)

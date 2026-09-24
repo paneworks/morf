@@ -1,7 +1,7 @@
 -- A desktop theme at tile size: the live clock face on the island's black.
 --
--- Port of ThemeSwatch.qml, shared by the inspector (and a settings page when
--- that port lands) so both previews match. The face is built at the 2x2
+-- Port of ThemeSwatch.qml, shared by the inspector and the settings page
+-- so both previews match. The face is built at the 2x2
 -- size and scaled down, so it is the very face the desk draws.
 
 local ui = require("morf.ui")

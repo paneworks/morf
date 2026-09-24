@@ -2,8 +2,8 @@
 -- title along the top when there is room.
 --
 -- Port of Clipboard.qml. The rows are the Modern faces' task rows
--- (desktop/faces/day_tasks.lua), over the board's tasks, which are empty
--- until that port lands.
+-- (desktop/faces/day_tasks.lua), over the board's tasks: the tick completes one,
+-- the rest of the row opens it on the board.
 
 local ui = require("morf.ui")
 local theme = require("theme")
