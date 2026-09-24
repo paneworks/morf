@@ -22,8 +22,8 @@ impl morf_layout::TextMeasurer for NoText {
 
 mod animation_groups;
 mod animation_playback;
-mod clipboard_dnd;
 mod audio;
+mod clipboard_dnd;
 mod config;
 mod core_api;
 mod diagnostics;
@@ -38,6 +38,7 @@ mod idle_input;
 mod image_ops;
 mod input_api;
 mod layer_surfaces;
+mod lib_sysinfo_web;
 mod lifecycle_io;
 mod modules;
 mod pam_session;
