@@ -178,15 +178,9 @@ end
 
 -- ------------------------------------------------------------- documents --
 
---- The older impasto's values, in this port's words.
+--- The QML impasto's values, in this port's words (services/settings.lua).
 local function translate(given)
-  local out = copy(given)
-  if out.barStyle == "island" then out.barStyle = "capsule" end
-  local formats = { ["HH:mm"] = "%H:%M", ["hh:mm AP"] = "%I:%M %p" }
-  if type(out.clockFormat) == "string" and formats[out.clockFormat] then
-    out.clockFormat = formats[out.clockFormat]
-  end
-  return out
+  return settings.from_upstream(given)
 end
 
 --- A document out of a file's text, or nil with why.
@@ -297,7 +291,8 @@ function M.export_to(id, path)
   local document = {
     impasto = M.FORMAT, name = found.name,
     wallpaper = tilde(M.wallpaper_of(id)), palette = M.palette_of(id),
-    settings = M.settings_of(id),
+    -- In the QML shell's words, so either shell reads the file.
+    settings = settings.to_upstream(M.settings_of(id)),
   }
   local ok, err = fs.write(file, json.encode(document, true) .. "\n")
   if ok then osd("󰈝", "Exported " .. found.name) else osd("󰀦", "Could not write that file") end

@@ -441,7 +441,7 @@ function M.release() watchers:set(math.max(0, watchers:get() - 1)) end
 local function watched()
   if watchers:get() > 0 or M.on_bar() then return true end
   local panel = island_state.open_panel()
-  return panel == "pet" or panel == "pet.detail"
+  return panel == "pet"
 end
 
 local minute
@@ -462,16 +462,21 @@ end)
 -- A trickle of experience for being out on the bar: only while hatched and
 -- awake, so a machine left on overnight earns nothing and an egg never
 -- hatches by itself. Keyed on the bar placement, i.e. whether a chip is
--- drawn. (The original also stops while the screen is locked; there is no
--- lock service here yet.)
+-- drawn, and stopped while the screen is locked, as the original. Every
+-- screen runs this; one of them pays (services/live.lua).
 M.company_every = 5 * 60000
 M.company_xp = 1
 
 local company
+local lock_service = require("services.lock")
+local live = require("services.live")
 morf.effect("impasto.pets.company", function()
-  local running = M.hatched() and M.on_bar() and M.mood() ~= "asleep"
+  local running = M.hatched() and M.on_bar() and M.mood() ~= "asleep" and not lock_service.locked()
   if running and not company then
-    company = morf.timer(M.company_every, function() M.reward(M.company_xp, nil) end, true)
+    company = morf.timer(M.company_every, function()
+      if lock_service.locked() or not live.here() then return end
+      M.reward(M.company_xp, nil)
+    end, true)
   elseif not running and company then
     company:cancel()
     company = nil

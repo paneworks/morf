@@ -8,6 +8,16 @@
 --
 -- The name is queued for, not taken: a shell that starts beside another
 -- daemon waits its turn instead of stealing it.
+--
+-- Every notification expires on its own clock from arrival, shown or not
+-- (critical ones never; a replacement starts its clock again), and the
+-- application is told it expired. Whatever closes it -- that clock, or the
+-- application itself -- takes it off the island; the history keeps it. One
+-- pushed out of the history by the limit is expired, so it cannot come back
+-- as new. Only what the island draws is claimed on the bus (body, markup,
+-- images): an application told "actions" sends buttons nobody shows. Each
+-- entry still carries its `actions`, and `M.invoke(id, key)` answers one,
+-- for a list that draws them.
 
 local daemon = require("lib.notifications")
 local settings = require("services.settings")
@@ -20,6 +30,8 @@ M.revision = morf.signal("impasto.notify.revision", 0)   -- bumps on any change
 
 local entries = {}      -- id -> entry (live or kept)
 local history = {}      -- newest first
+local seen = {}         -- id -> the entry table last handed over, for "new"
+local clocks = {}       -- id -> generation of its expiry timer
 local current_timer = 0
 local server
 
@@ -57,6 +69,9 @@ local function present(entry)
   if M.critical() and not is_critical then return end
   M.current:set(entry.id)
   current_timer = current_timer + 1
+  -- The daemon's own entries leave the island when they expire (below); the
+  -- shell's own have no daemon behind them, so the island times them out.
+  if entry.id > 0 then return end
   local mine = current_timer
   local timeout = timeout_for(entry)
   if timeout > 0 then
@@ -66,33 +81,75 @@ local function present(entry)
   end
 end
 
+--- Starts (or restarts) the clock of an open notification.
+local function expire_later(entry)
+  local timeout = timeout_for(entry)
+  clocks[entry.id] = (clocks[entry.id] or 0) + 1
+  if timeout <= 0 then return end
+  local mine = clocks[entry.id]
+  morf.timer(timeout, function()
+    if clocks[entry.id] ~= mine then return end
+    clocks[entry.id] = nil
+    if server and server.open(entry.id) then server.expire(entry.id) end
+  end, false)
+end
+
+-- Trims the history to its limit; what falls off is expired if still open.
+-- Returns the ids to expire, which the caller does once it is done with the
+-- list (expiring changes the list, which calls back in here).
+local function trim()
+  local expired = {}
+  while #history > M.HISTORY_LIMIT do
+    local gone = table.remove(history)
+    entries[gone.id] = nil
+    clocks[gone.id] = nil
+    if gone.id > 0 then expired[#expired + 1] = gone.id end
+  end
+  return expired
+end
+
 local function on_change(list)
-  local live = {}
+  local open = {}
+  local expired = {}
   for _, entry in ipairs(list) do
-    live[entry.id] = true
-    local known = entries[entry.id]
-    entries[entry.id] = entry
+    open[entry.id] = true
+    local known = seen[entry.id]
+    seen[entry.id] = entry
     if not known then
+      entries[entry.id] = entry
       table.insert(history, 1, entry)
-      while #history > M.HISTORY_LIMIT do
-        local gone = table.remove(history)
-        entries[gone.id] = nil
-      end
+      for _, id in ipairs(trim()) do expired[#expired + 1] = id end
+      expire_later(entry)
       present(entry)
     elseif known ~= entry then
-      -- A replacement (same id): keep its place in history, show it again.
-      for index, kept in ipairs(history) do
-        if kept.id == entry.id then history[index] = entry end
+      -- A replacement (same id): keep its place in history, start its clock
+      -- again, and show it again if it is on the island.
+      if entries[entry.id] then
+        entries[entry.id] = entry
+        for index, kept in ipairs(history) do
+          if kept.id == entry.id then history[index] = entry end
+        end
       end
+      expire_later(entry)
       if M.current:get() == entry.id then present(entry) end
     end
   end
-  -- Closed by its application: off the island, kept in history.
-  local shown = M.current:get()
-  if shown ~= 0 and not live[shown] and entries[shown] and entries[shown].closed_by_app then
-    M.current:set(0)
+  -- Gone from the daemon for any reason -- expired, closed by its
+  -- application, dismissed -- is gone from the island; the history keeps it.
+  for id in pairs(seen) do
+    if not open[id] then
+      seen[id] = nil
+      clocks[id] = nil
+    end
   end
+  local shown = M.current:get()
+  if shown > 0 and not open[shown] then M.current:set(0) end
   bump()
+  if server then
+    for _, id in ipairs(expired) do
+      if server.open(id) then server.expire(id) end
+    end
+  end
 end
 
 -- The shell's own notifications (a timer that ran out) are numbered down
@@ -120,12 +177,14 @@ function M.post(fields)
   }
   entries[entry.id] = entry
   table.insert(history, 1, entry)
-  while #history > M.HISTORY_LIMIT do
-    local gone = table.remove(history)
-    entries[gone.id] = nil
-  end
+  local expired = trim()
   present(entry)
   bump()
+  if server then
+    for _, id in ipairs(expired) do
+      if server.open(id) then server.expire(id) end
+    end
+  end
   return entry.id
 end
 
@@ -159,6 +218,13 @@ function M.clear()
   bump()
 end
 
+--- An action pressed on a notification: the application hears it, and the
+--- notification closes unless it asked to stay (resident).
+function M.invoke(id, key)
+  if not server or not server.open(id) then return false end
+  return server.invoke(id, key)
+end
+
 function M.toggle_dnd()
   local silence = not settings.doNotDisturb
   settings.set("doNotDisturb", silence)
@@ -170,10 +236,11 @@ function M.start()
   if server then return server end
   local started, why = daemon.serve {
     replace = false,
-    -- The library's own expiry takes a notification out of its list; the
-    -- island's timer and the history here decide what the person sees, so
-    -- the list keeps them until they are dismissed or closed by the app.
+    -- Every clock is this file's (`expire_later`), which knows the settings'
+    -- timeout and the cap; the library only keeps the open list.
+    expire = false,
     default_timeout_ms = 0,
+    capabilities = { "body", "body-markup", "icon-static" },
     on_change = on_change,
   }
   if not started then

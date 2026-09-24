@@ -41,32 +41,47 @@ local function on_key(keysym, text)
     return
   end
   if modifier(keysym) then return end
+  -- The key that wakes the screen only opens it and types nothing
+  -- (LockAccount.qml); once awake, keys reach the field.
+  local was_awake = st.awake
   lock.rouse()
+  if not was_awake then return end
   if keysym == KEY.RETURN or keysym == KEY.KP_ENTER then
     lock.submit()
   elseif keysym == KEY.BACKSPACE then
     lock.backspace()
   elseif text and text ~= "" and text:byte(1) >= 32 and text:byte(1) ~= 127 then
-    -- The key that wakes the screen is already the first letter.
     lock.type(text)
   end
 end
 
---- A ring-less battery chip in the bar's corner, where the machine has one.
-local function battery()
+-- The battery, read once a minute for every screen's chip.
+local battery_level
+local function battery_signal()
+  if battery_level ~= nil then return battery_level or nil end
   local base
   for _, entry in ipairs(morf.fs.list("/sys/class/power_supply") or {}) do
     if entry.name:match("^BAT") then base = "/sys/class/power_supply/" .. entry.name break end
   end
-  if not base then return nil end
-  local level = morf.signal("impasto.lock.battery", "")
+  if not base then
+    battery_level = false
+    return nil
+  end
+  battery_level = morf.signal("impasto.lock.battery", "")
   local function read()
     local capacity = (morf.fs.read(base .. "/capacity") or ""):match("%d+")
     local status = (morf.fs.read(base .. "/status") or ""):match("%a+") or ""
-    level:set(capacity and ((status == "Charging" and "󰂄 " or "󰁹 ") .. capacity .. "%") or "")
+    battery_level:set(capacity and ((status == "Charging" and "󰂄 " or "󰁹 ") .. capacity .. "%") or "")
   end
   read()
   morf.timer(60000, read, true)
+  return battery_level
+end
+
+--- A ring-less battery chip in the bar's corner, where the machine has one.
+local function battery()
+  local level = battery_signal()
+  if not level then return nil end
   local label = kit.text {
     text = function() return level:get() end,
     size = theme.size.small, weight = 600,
@@ -82,21 +97,21 @@ local function battery()
   }
 end
 
---- The whole lock, as one opaque root the size of `width()` x `height()`.
---- `screens` is how many outputs there are: the desk is the first screen's,
---- so only a lone screen can show it sharp.
+--- The whole lock, as one opaque root the size of `width()` x `height()`,
+--- over the desk of `output` (each output was photographed on its own).
 return function(values)
   local width, height = values.width, values.height
-  local screens = values.screens or 1
+
+  local desk, blurred = lock.pictures(values.output)
 
   -- 1 while the lock holds, 0 once it is answered.
   local held = function() return st.leaving and 0 or 1 end
-  local clearing = function() return screens == 1 and held() or 1 end
+  -- The blur and the wash lift off as the lock lets go, where the sharp
+  -- desk is there to be seen under them.
+  local clearing = function() return desk ~= "" and held() or 1 end
   local awake = function() return st.awake and 1 or 0 end
   local morph = { duration = math.max(1, theme.duration_morph()), easing = "in_out_cubic" }
   local rise = theme.behave("morph")
-
-  local desk, blurred = lock.pictures()
 
   local tree = {
     width = width, height = height,

@@ -17,6 +17,7 @@ local theme = require("theme")
 local kit = require("components.kit")
 local capture = require("services.capture")
 local capture_bar = require("capture.bar")
+local tr = require("services.tr")
 
 local C = theme.color
 local M = {}
@@ -152,7 +153,7 @@ local function build()
 
     ui.MouseArea {
       x = 0, y = 0, width = W, height = H,
-      cursor = function() return capture.shape() == "region" and "crosshair" or "default" end,
+      cursor = function() return capture.shape() == "region" and "crosshair" or tr("default") end,
       accepted_buttons = { "left", "right" },
       on_key_pressed = key,
       on_position_changed = function(sx, sy) move(sx, sy) end,

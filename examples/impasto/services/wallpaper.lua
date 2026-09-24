@@ -4,6 +4,11 @@
 -- picture to awww with a transition; here the shell draws the wallpaper
 -- itself (desktop/wallpaper.lua), so applying one is setting a path and a
 -- transition, and the picture's colours follow through the theme service.
+--
+-- Extensions are matched whatever their case (a camera's .JPG). The picture
+-- up is also a stable link, `$XDG_STATE_HOME/impasto-morf/current-wallpaper`,
+-- for anything outside the shell that wants it (hyprlock run by hand), as
+-- upstream's theme manager keeps one.
 
 local settings = require("services.settings")
 
@@ -35,7 +40,9 @@ function M.scan()
   local out = {}
   local entries = morf.fs.list(M.dir(), { depth = 2 }) or {}
   for _, entry in ipairs(entries) do
-    if entry.is_file and M.EXTENSIONS[entry.extension] then out[#out + 1] = entry.path end
+    if entry.is_file and M.EXTENSIONS[tostring(entry.extension or ""):lower()] then
+      out[#out + 1] = entry.path
+    end
   end
   table.sort(out)
   listed = out
@@ -57,6 +64,20 @@ local function transition_type(id)
   return id or "wipe"
 end
 
+M.state_dir = morf.fs.join(morf.fs.dir("state") or ((morf.fs.home() or "") .. "/.local/state"), "impasto-morf")
+M.link_path = morf.fs.join(M.state_dir, "current-wallpaper")
+
+--- Points the current-wallpaper link at `path`.
+local function link(path)
+  local fs = morf.fs
+  fs.mkdir(M.state_dir, { parents = true })
+  local ok, target = pcall(fs.read_link, M.link_path)
+  if ok and target == path then return end
+  fs.remove(M.link_path)
+  local made, err = fs.symlink(path, M.link_path)
+  if not made then morf.log("warn", "impasto: cannot update the current-wallpaper link: " .. tostring(err)) end
+end
+
 --- Puts a picture up, with the transition Settings names.
 function M.apply(path, transition)
   if not path or path == "" then return end
@@ -69,6 +90,7 @@ function M.apply(path, transition)
   M.current:set(path)
   M.generation:set(M.generation:get() + 1)
   settings.set("wallpaper", path)
+  link(path)
 end
 
 --- The next or previous picture in the folder.

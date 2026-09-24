@@ -7,10 +7,14 @@
 -- file clears that flag, and the process ends with the lock. So this file has
 -- two halves, one per process:
 --
---   the shell     `lock()` closes the island, photographs the desk, blurs a
---                 copy, and starts `morf init.lua -- lock`, then watches that
---                 process for as long as it lives. `locked()` and `secure()`
---                 are what the rest of the shell reads.
+--   the shell     `lock()` closes the island, photographs every screen's
+--                 desk, blurs a copy of each, and starts `morf init.lua --
+--                 lock`, then watches that process for as long as it lives.
+--                 `locked()` and `secure()` are what the rest of the shell
+--                 reads. `secure()` is the compositor's word, not a guess:
+--                 the lock writes it down only once the compositor confirms
+--                 the session is hidden, and a refused lock ends the lock
+--                 process, so nothing (a suspend) goes on as if it held.
 --
 --   the lock      `init.lua -- lock` builds lock/screen.lua over the two
 --                 pictures, and everything under "the lock's own state"
@@ -21,8 +25,8 @@
 -- the machine locked rather than open, and a crash in the bar cannot take the
 -- lock with it.
 --
--- The screenshot goes to the runtime directory (tmpfs, user-only) and the
--- lock deletes it as it lets go. The password is a plain local handed to PAM
+-- The screenshots go to the runtime directory (tmpfs, user-only), one per
+-- output, and the lock deletes them as it lets go. The password is a plain local handed to PAM
 -- and dropped; it is never a signal.
 
 local settings = require("services.settings")
@@ -35,8 +39,24 @@ local M = {}
 local fs = morf.fs
 
 M.dir = fs.join(morf.env("XDG_RUNTIME_DIR") or "/tmp", "impasto-morf")
-M.desk_path = fs.join(M.dir, "lock-desk.jpg")
-M.blur_path = fs.join(M.dir, "lock-blur.jpg")
+
+local function safe(name)
+  name = tostring(name or "")
+  if name == "" then name = "screen" end
+  return (name:gsub("[^%w%-_.]", "_"))
+end
+
+--- The desk of one output, and its blurred copy.
+function M.desk_path(output) return fs.join(M.dir, "lock-desk-" .. safe(output) .. ".jpg") end
+function M.blur_path(output) return fs.join(M.dir, "lock-blur-" .. safe(output) .. ".jpg") end
+
+local function remove_pictures()
+  for _, entry in ipairs(fs.list(M.dir) or {}) do
+    if entry.name:match("^lock%-desk%-.*%.jpg$") or entry.name:match("^lock%-blur%-.*%.jpg$") then
+      fs.remove(entry.path)
+    end
+  end
+end
 -- Written by the lock once it holds the screen; the shell reads it as
 -- "secure".
 M.held_path = fs.join(M.dir, "lock-held")
@@ -98,6 +118,9 @@ local function watch(pid)
     s.secure:set(false)
     s.locked:set(false)
     fs.remove(M.held_path)
+    -- A lock that never came up (refused, or no session lock at all)
+    -- leaves the pictures behind; nobody else will take them.
+    remove_pictures()
     release_claim()
     announce(false)
   end, true)
@@ -152,20 +175,22 @@ end
 
 --- The blur is done at a quarter of the size: blurred, the lost detail is
 --- the point, and a quarter of the pixels is a sixteenth of the work.
-local function blur_desk()
-  local shot = morf.image.info(M.desk_path)
-  if not shot then return launch() end
+--- `done()` runs once the blurred copy is written, or is not coming.
+local function blur_desk(output, done)
+  local source = M.desk_path(output)
+  local shot = morf.image.info(source)
+  if not shot then return done() end
   local w = math.max(1, math.floor(shot.width / 4))
   local h = math.max(1, math.floor(shot.height / 4))
   -- `lockBlur` is the original's blurMax, a radius in screen pixels; a
   -- Gaussian's sigma is about half its radius, then quartered with the size.
   local sigma = math.max(0.5, math.min(100, (settings.lockBlur or 32) / 6))
-  local queued = morf.image.process {
-    source = M.desk_path, output = M.blur_path, quality = 85,
+  local ok, queued = pcall(morf.image.process, {
+    source = source, output = M.blur_path(output), quality = 85,
     ops = { { "resize", w, h, "exact" }, { "blur", sigma } },
-    on_done = function() launch() end,
-  }
-  if not queued then launch() end
+    on_done = function() done() end,
+  })
+  if not ok or not queued then done() end
 end
 
 --- Locks: once the island has closed (or it would be in the picture), the
@@ -181,8 +206,7 @@ function M.lock()
   end
   fs.write(claim_file, "starting " .. tostring(morf.time.now_ms()))
   s.pending:set(true)
-  fs.remove(M.desk_path)
-  fs.remove(M.blur_path)
+  remove_pictures()
   local ok, island = pcall(require, "bar.island")
   local settle = 40
   if ok and island.state.expanded() then
@@ -197,15 +221,29 @@ function M.lock()
     end
   end, false)
   -- The screencopy reads the compositor, not this scene: two frames for the
-  -- closed island to be what is on screen.
+  -- closed island to be what is on screen. Every output is photographed,
+  -- so each lock surface lies over its own desk; the lock goes up once the
+  -- last picture is blurred (or failed).
   morf.timer(settle, function()
-    local screen = (morf.screens or {})[1]
-    local queued = pcall(morf.screencopy.save, {
-      path = M.desk_path, quality = 90,
-      output = screen and screen.name or nil,
-      on_done = function(done) if done then blur_desk() else launch() end end,
-    })
-    if not queued then launch() end
+    local outputs = {}
+    for _, screen in ipairs(morf.screens or {}) do
+      if screen.name and screen.name ~= "" then outputs[#outputs + 1] = screen.name end
+    end
+    if #outputs == 0 then return launch() end
+    local waiting = #outputs
+    local function one_done()
+      waiting = waiting - 1
+      if waiting == 0 then launch() end
+    end
+    for _, output in ipairs(outputs) do
+      local queued = pcall(morf.screencopy.save, {
+        path = M.desk_path(output), quality = 90, output = output,
+        on_done = function(done)
+          if done then blur_desk(output, one_done) else one_done() end
+        end,
+      })
+      if not queued then one_done() end
+    end
   end, false)
 end
 
@@ -315,12 +353,28 @@ function M.release()
   clear()
   if face_session then face_session:cancel() face_session = nil end
   morf.timer(theme.duration_morph(), function()
-    fs.remove(M.desk_path)
-    fs.remove(M.blur_path)
+    remove_pictures()
     fs.remove(M.held_path)
     morf.surface.session_lock = false
     if M.on_released then M.on_released() end
   end, false)
+end
+
+--- What PAM's answer means for the person at the lock. PAM reports a
+--- refusal as "Authentication failure" (PAM_AUTH_ERR, which faillock also
+--- uses) and a lockout as the maximum number of retries; anything else is
+--- the stack failing to check at all, which must not read as a wrong
+--- password.
+function M.verdict(why)
+  local reason = tostring(why or ""):lower()
+  if reason:find("maximum") or reason:find("too many") or reason:find("retries") then
+    return "Too many attempts"
+  end
+  if reason:find("authentication failure") or reason:find("permission denied")
+    or reason:find("user not known") or reason:find("insufficient credentials") then
+    return "Wrong password"
+  end
+  return "Authentication is unavailable"
 end
 
 --- Enter: the password to PAM, or on an empty field a look for a face.
@@ -344,10 +398,15 @@ function M.submit()
     -- The face got there first; the lock is already on its way out.
     if st.leaving or st.face_matched then return end
     st.failed = true
-    local reason = tostring(why or ""):lower()
-    st.message = (reason:find("maximum") or reason:find("too many")) and "Too many attempts"
-      or "Wrong password"
-    st.refusals = st.refusals + 1
+    local verdict = M.verdict(why)
+    st.message = verdict
+    -- Only a refused password shakes the field; a PAM that could not
+    -- check anything is said, and logged, but is nobody's mistake.
+    if verdict == "Authentication is unavailable" then
+      morf.log("warn", "impasto: PAM error while unlocking: " .. tostring(why))
+    else
+      st.refusals = st.refusals + 1
+    end
   end)
   attempt = nil
 end
@@ -365,6 +424,28 @@ local function face_available()
     and (exists("/usr/lib/security/pam_howdy.so") or exists("/lib/security/pam_howdy.so"))
 end
 
+-- howdy keeps its models where only root reads them, so the faces are
+-- listed through the setup's helper under pkexec (its policy lets the
+-- active user list without a password). The face is offered once a face is
+-- enrolled -- or while the list cannot be read at all, as upstream's
+-- `faceReady`, since a refused pkexec says nothing about the faces.
+local FACE_HELPER = "/usr/lib/impasto/face"
+local FACE_POLICY = "/usr/share/polkit-1/actions/org.impasto.face.policy"
+
+local function list_faces()
+  if not exists(FACE_HELPER) or not exists(FACE_POLICY) then return end
+  local act = require("services.act")
+  if act.dry then return end
+  act.collect("listing the enrolled faces", "pkexec", { FACE_HELPER, "list" }, function(text, ok)
+    if not ok then return end
+    local faces = 0
+    for line in (text or ""):gmatch("[^\n]+") do
+      if line:match("^%d+,") then faces = faces + 1 end
+    end
+    st.face_ready = face_available() and faces > 0
+  end, { timeout_ms = 10000 })
+end
+
 --- A scan starts only on an awake screen, never on its own: the camera
 --- would otherwise find the face that has just locked the screen.
 function M.wake()
@@ -374,6 +455,9 @@ end
 
 function M.scan()
   if not st.face_ready or st.leaving or st.face_matched or face_session then return end
+  -- Only while the compositor says the session is hidden (upstream's
+  -- `secure`): the camera is never for a lock that is not up.
+  if M.holding and morf.session_lock_state() ~= "locked" then return end
   local conversation = morf.pam.session("impasto-face", account.user)
   face_session = conversation
   local looked = false
@@ -411,20 +495,32 @@ end
 function M.begin_lock_process(hold)
   M.PASSWORD_SERVICE = password_service()
   st.face_ready = face_available()
+  if st.face_ready then list_faces() end
+  M.holding = hold
   if not hold then return end
-  -- There is no event for "the compositor says locked" in a configuration
-  -- yet; the lock's loop is running by the time a timer fires, and the
-  -- compositor answers the lock request within a round trip of it.
   fs.mkdir(M.dir)
-  morf.timer(400, function()
-    fs.write(M.held_path, tostring(morf.process_id or ""))
-  end, false)
+  -- "secure" is the compositor confirming the lock, written down for the
+  -- shell (which suspends only then). A refused lock, or one the
+  -- compositor ends by itself, ends this process: the shell sees it go and
+  -- knows the session is not hidden.
+  morf.on_session_lock_state(function(state)
+    if state == "locked" then
+      fs.write(M.held_path, tostring(morf.process_id or ""))
+    elseif state == "failed" or (state == "unlocked" and not st.leaving) then
+      morf.log("error", "impasto: the compositor " ..
+        (state == "failed" and "refused the lock" or "ended the lock"))
+      fs.remove(M.held_path)
+      remove_pictures()
+      morf.quit()
+    end
+  end)
 end
 
---- What the pictures are, for the lock surface: "" where there is none.
-function M.pictures()
-  return exists(M.desk_path) and M.desk_path or "",
-         exists(M.blur_path) and M.blur_path or ""
+--- What the pictures are for one output, for its lock surface: "" where
+--- there is none.
+function M.pictures(output)
+  local desk, blurred = M.desk_path(output), M.blur_path(output)
+  return exists(desk) and desk or "", exists(blurred) and blurred or ""
 end
 
 --- For previews and tests: put the lock in a state without anybody typing.

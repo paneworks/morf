@@ -30,17 +30,23 @@ function M.run(what, fn, ...)
   return a, b
 end
 
---- Starts a program by argv, never through a shell. Returns the process or
---- nil. `mutates` marks a program that changes the machine, which a dry
---- run does not start.
-function M.spawn(what, program, argv, mutates)
+--- Starts a program by argv, never through a shell. Returns the handle
+--- (`:kill`, `:running`, `:pid`) or nil. `mutates` marks a program that
+--- changes the machine, which a dry run does not start. `options` goes to
+--- `morf.spawn` as it is (`on_exit`, `on_stdout`, `detached`, ...).
+function M.spawn(what, program, argv, mutates, options)
   if mutates and M.dry then
     morf.log("info", "impasto: dry run, not " .. tostring(what))
     return nil
   end
-  local ok, process = pcall(morf.process, program, argv or {})
-  if not ok then return nil end
-  return process
+  local spec = {}
+  for key, value in pairs(options or {}) do spec[key] = value end
+  local command = { program }
+  for _, arg in ipairs(argv or {}) do command[#command + 1] = arg end
+  spec.command = command
+  local ok, handle = pcall(morf.spawn, spec)
+  if not ok or not handle then return nil end
+  return handle
 end
 
 --- Whether `program` is on PATH, found without a shell.
@@ -52,36 +58,30 @@ function M.which(program)
   return nil
 end
 
---- Runs a program to its end and hands `on_done(stdout, success)` what it
---- printed. The process is drained from a timer: the engine does not watch
---- a child for readiness. Gives up after `timeout_ms` (default 8000).
+--- Runs a program to its end and hands `on_done(stdout, success, result)`
+--- what it printed, when it exits (`morf.run`). Gives up after `timeout_ms`
+--- (default 8000). A `mutates` program is not run on a dry run, and
+--- `on_done` hears ("", false) at once.
 function M.collect(what, program, argv, on_done, options)
   options = options or {}
-  local process = M.spawn(what, program, argv, options.mutates)
-  if not process then
+  if options.mutates and M.dry then
+    morf.log("info", "impasto: dry run, not " .. tostring(what))
     if on_done then on_done("", false) end
     return false
   end
-  local out, waited, timer = {}, 0, nil
-  timer = morf.timer(options.poll_ms or 50, function()
-    waited = waited + (options.poll_ms or 50)
-    while true do
-      local ok, event = pcall(process.next, process)
-      if not ok or not event then break end
-      if event.kind == "stdout" then
-        out[#out + 1] = event.data
-      elseif event.kind == "exit" then
-        timer:cancel()
-        if on_done then on_done(table.concat(out), event.success) end
-        return
-      end
-    end
-    if waited >= (options.timeout_ms or 8000) then
-      timer:cancel()
-      pcall(process.kill, process)
-      if on_done then on_done(table.concat(out), false) end
-    end
+  local command = { program }
+  for _, arg in ipairs(argv or {}) do command[#command + 1] = arg end
+  local ok, handle = pcall(morf.run, command, {
+    timeout_ms = options.timeout_ms or 8000,
+    stdin = options.stdin,
+    env = options.env,
+  }, function(result)
+    if on_done then on_done(result.stdout or "", result.ok == true, result) end
   end)
+  if not ok or not handle then
+    if on_done then on_done("", false) end
+    return false
+  end
   return true
 end
 

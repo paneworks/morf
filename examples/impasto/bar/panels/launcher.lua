@@ -6,7 +6,8 @@
 -- windows, `!` starts a countdown and `'` searches the clipboard history.
 -- Up and Down (or the pointer) move one selection, Enter runs it, Tab steps
 -- down the list or enters the mode a row names, Escape closes, and
--- Alt+Delete forgets a clipboard entry. The island's height follows the
+-- Shift+Delete forgets a clipboard entry (plain Delete edits the text, and
+-- a forgotten entry cannot come back). The island's height follows the
 -- results when `launcherFits` is on.
 --
 -- `morf ipc call launcher` toggles it; `launcher_query <text>` opens it on a
@@ -324,7 +325,7 @@ local function build()
       elseif keysym == KEY.LEFT_TAB then move(-1)
       elseif keysym == KEY.PAGE_UP then move(-visible_rows())
       elseif keysym == KEY.PAGE_DOWN then move(visible_rows())
-      elseif (keysym == KEY.DELETE or keysym == KEY.KP_DELETE) and modifiers:find("alt") then
+      elseif (keysym == KEY.DELETE or keysym == KEY.KP_DELETE) and modifiers:find("shift") then
         forget_selected()
       end
     end,
@@ -411,12 +412,13 @@ morf.ipc.launcher_query = function(text)
 end
 
 morf.ipc.launcher_key = function(name)
-  if name == "up" then move(-1)
+  if name == "forget" then forget_selected()
+  elseif name == "up" then move(-1)
   elseif name == "down" then move(1)
   elseif name == "tab" then tab()
   elseif name == "enter" then run_selected()
   elseif name == "escape" then island.close()
-  else return "keys: up down tab enter escape" end
+  else return "keys: up down tab enter escape forget" end
   return tostring(selected:get())
 end
 

@@ -19,6 +19,7 @@ local setting = require("components.setting")
 local tab_strip = require("components.tab_strip")
 local hero = require("components.settings_hero")
 local palette_board = require("components.palette_board")
+local tr = require("services.tr")
 
 local C = theme.color
 local fast = function() return theme.behave("fast") end
@@ -146,8 +147,32 @@ local s = {
   tab = morf.signal("impasto.settings.tab", "island"),
   filter = morf.signal("impasto.settings.filter", ""),
   scroll = morf.signal("impasto.settings.scroll", 0),
+  -- True for a moment after the language changes: the page shown lets go
+  -- and is built again, in the new language.
+  relabel = morf.signal("impasto.settings.relabel", false),
 }
 M.state = s
+
+do
+  local seen = tr.language()
+  morf.effect("impasto.settings.language", function()
+    local now = tr.language()
+    if now == seen then return end
+    seen = now
+    morf.timer(1, function()
+      -- A page's module translates some of its text while it loads (its
+      -- option lists); loaded again, it does so in the new language.
+      for name in pairs(package.loaded) do
+        if type(name) == "string" and name:match("^settings%.")
+            and name ~= "settings.panel" and name ~= "settings.window" and name ~= "settings.appearance" then
+          package.loaded[name] = nil
+        end
+      end
+      s.relabel:set(true)
+      morf.timer(1, function() s.relabel:set(false) end, false)
+    end, false)
+  end)
+end
 
 local function first_tab(id)
   local entry = by_id[id]
@@ -197,12 +222,15 @@ end
 function M.matches(entry, term)
   term = (term or s.filter:get()):match("^%s*(.-)%s*$"):lower()
   if term == "" then return true end
-  if entry.label:lower():find(term, 1, true) or entry.keywords:find(term, 1, true)
-      or entry.blurb:lower():find(term, 1, true) then
+  -- In English and in the language shown.
+  local function has(text)
+    return text:lower():find(term, 1, true) or tr(text):lower():find(term, 1, true)
+  end
+  if has(entry.label) or entry.keywords:find(term, 1, true) or has(entry.blurb) then
     return true
   end
   for _, part in ipairs(entry.tabs) do
-    if part.label:lower():find(term, 1, true) then return true end
+    if has(part.label) then return true end
   end
   return false
 end
@@ -235,7 +263,8 @@ local function sidebar_entry(entry)
     },
     kit.text {
       anchors = { left = true, left_margin = 38, vertical_center = true },
-      text = entry.label, size = theme.size.small, width = M.SIDEBAR - 16 - 50, elide = "right",
+      text = function() return tr(entry.label) end,
+      size = theme.size.small, width = M.SIDEBAR - 16 - 50, elide = "right",
       weight = function() return active() and 600 or 400 end,
       color = function() return active() and C.accent() or C.text() end,
     },
@@ -258,7 +287,8 @@ local function sidebar(field_node)
       end,
       kit.text {
         anchors = { left = true, left_margin = 12, bottom = true, bottom_margin = 3 },
-        text = group.label, size = theme.size.label, weight = 600, letter_spacing = 0.8,
+        text = function() return tr(group.label) end,
+        size = theme.size.label, weight = 600, letter_spacing = 0.8,
         color = C.textMuted, opacity = 0.7,
       },
     }
@@ -314,7 +344,7 @@ function M.build(close)
     anchors = { fill = true },
     vertical_alignment = "center",
     text = s.filter:get(),
-    placeholder = "Search settings", placeholder_color = C.textMuted,
+    placeholder = function() return tr("Search settings") end, placeholder_color = C.textMuted,
     font_family = function() return theme.font() end,
     font_size = theme.size.small,
     color = C.text, caret_color = C.accent,
@@ -338,15 +368,23 @@ function M.build(close)
   local page_parts = { direction = "column", gap = M.GAP, align = "start", width = M.PAGE_W }
   page_parts[#page_parts + 1] = hero {
     icon = function() return by_id[s.section:get()].icon end,
-    title = function() return by_id[s.section:get()].label end,
+    title = function() return tr(by_id[s.section:get()].label) end,
   }
   for _, entry in ipairs(M.sections) do
     if #entry.tabs > 1 then
       page_parts[#page_parts + 1] = ui.Item {
         width = M.PAGE_W, height = 30,
         visible = function() return s.section:get() == entry.id end,
-        tab_strip { width = M.PAGE_W, tabs = entry.tabs, current = function() return s.tab:get() end,
-          on_picked = M.show },
+        -- Built again with the page when the language changes.
+        ui.Loader {
+          active = function() return not s.relabel:get() end,
+          source = function()
+            local shown = {}
+            for index, part in ipairs(entry.tabs) do shown[index] = { id = part.id, label = tr(part.label) } end
+            return tab_strip { width = M.PAGE_W, tabs = shown,
+              current = function() return s.tab:get() end, on_picked = M.show }
+          end,
+        },
       }
     end
   end
@@ -354,7 +392,7 @@ function M.build(close)
   local loaders = {}
   for _, entry in ipairs(M.sections) do
     loaders[#loaders + 1] = ui.Loader {
-      active = function() return s.section:get() == entry.id end,
+      active = function() return s.section:get() == entry.id and not s.relabel:get() end,
       source = function()
         local t0 = morf.time.now_ms()
         local ok, built = pcall(function()

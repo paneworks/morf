@@ -12,7 +12,12 @@
 -- the original did), the clipboard alone (`morf.clipboard.set`), satty to
 -- annotate it, or tesseract to read it as text. The last two are other
 -- programs, started by argv when they are installed and not offered when
--- they are not. The result is said by a notification.
+-- they are not. The result is flashed on the island (the original's OSD),
+-- not kept in the notification history.
+--
+-- Every screen's shell hears a capture key; only the screen being worked on
+-- opens the surface (services/live.lua, in services/auto/capture.lua), and
+-- it photographs its own output.
 --
 -- Shape and kind are remembered (`captureShape`, `captureKind`); the
 -- destination is a file again every time.
@@ -53,10 +58,11 @@ function M.offers(id)
   return id == "file" or id == "clipboard"
 end
 
---- Where saved captures go: $IMPASTO_CAPTURES, then $XDG_PICTURES_DIR,
---- then the XDG pictures folder (user-dirs.dirs), then the home folder.
+--- Where saved captures go: $IMPASTO_CAPTURES or $HYPRSHOT_DIR (both set
+--- in upstream's env.lua), then $XDG_PICTURES_DIR, then the XDG pictures
+--- folder (user-dirs.dirs), then the home folder.
 function M.directory()
-  for _, name in ipairs { "IMPASTO_CAPTURES", "XDG_PICTURES_DIR" } do
+  for _, name in ipairs { "IMPASTO_CAPTURES", "HYPRSHOT_DIR", "XDG_PICTURES_DIR" } do
     local value = morf.env(name)
     if value and value ~= "" then return fs.expand and fs.expand(value) or value end
   end
@@ -82,8 +88,9 @@ function M.set_to(id) if M.offers(id) then s.to:set(id) end end
 
 -- ------------------------------------------------------------------ screen --
 
--- The screen being photographed. One surface covers one screen, so the
--- first is the one; with Hyprland running, the focused monitor wins.
+-- The screen being photographed: this shell's own. One surface covers one
+-- screen, and the shell that opens it is the one on the screen being worked
+-- on (services/live.lua).
 M.screen_name = ""
 
 local function screen_entry()
@@ -110,41 +117,48 @@ function M.ratio()
   return w / screen.width
 end
 
-local function focused_monitor(callback)
-  local ok, hyprland = pcall(require, "lib.hyprland")
-  if not ok or not hyprland.available or not hyprland.available() then return callback("") end
-  hyprland.json("j/monitors", function(list)
-    for _, monitor in ipairs(type(list) == "table" and list or {}) do
-      if monitor.focused then return callback(tostring(monitor.name or "")) end
-    end
-    callback("")
-  end)
-end
-
 -- Windows on screen, for window mode: read once per opening, as the
 -- picture is still. `{ x, y, width, height }` in the surface's coordinates,
--- bottom to top.
+-- bottom to top. Only the workspaces this screen shows (its active one, and
+-- a special workspace open over it): a window on another workspace is not
+-- in the picture (CaptureOverlay.qml's `clientsOn(activeId)`).
 M.windows = {}
 
 local function load_windows()
   M.windows = {}
   local ok, hyprland = pcall(require, "lib.hyprland")
   if not ok or not hyprland.available or not hyprland.available() then return end
-  hyprland.json("j/clients", function(clients)
-    local screen = M.screen()
-    local out = {}
-    for _, client in ipairs(type(clients) == "table" and clients or {}) do
-      local at, size = client.at or {}, client.size or {}
-      if client.mapped ~= false and client.hidden ~= true then
-        out[#out + 1] = {
-          x = (tonumber(at[1]) or 0) - screen.x, y = (tonumber(at[2]) or 0) - screen.y,
-          width = tonumber(size[1]) or 0, height = tonumber(size[2]) or 0,
-          title = tostring(client.title or ""),
-          workspace = type(client.workspace) == "table" and client.workspace.id or nil,
-        }
+  hyprland.json("j/monitors", function(monitors)
+    hyprland.json("j/clients", function(clients)
+      monitors = type(monitors) == "table" and monitors or {}
+      clients = type(clients) == "table" and clients or {}
+      local screen = M.screen()
+      local shown = {}
+      for _, monitor in ipairs(monitors) do
+        if monitor.name == screen.name then
+          local active = type(monitor.activeWorkspace) == "table" and monitor.activeWorkspace.id
+          local special = type(monitor.specialWorkspace) == "table" and monitor.specialWorkspace.id
+          if active then shown[active] = true end
+          if special and special ~= 0 then shown[special] = true end
+        end
       end
-    end
-    M.windows = out
+      local out = {}
+      for _, client in ipairs(clients) do
+        local at, size = client.at or {}, client.size or {}
+        local workspace = type(client.workspace) == "table" and client.workspace.id or nil
+        local visible = next(shown) == nil or (workspace ~= nil and shown[workspace])
+          or client.pinned == true
+        if client.mapped ~= false and client.hidden ~= true and visible then
+          out[#out + 1] = {
+            x = (tonumber(at[1]) or 0) - screen.x, y = (tonumber(at[2]) or 0) - screen.y,
+            width = tonumber(size[1]) or 0, height = tonumber(size[2]) or 0,
+            title = tostring(client.title or ""),
+            workspace = type(client.workspace) == "table" and client.workspace.id or nil,
+          }
+        end
+      end
+      M.windows = out
+    end)
   end)
 end
 
@@ -159,12 +173,13 @@ end
 
 -- ---------------------------------------------------------------- notify --
 
+-- What happened, as the island's flash (CaptureService.qml `took`): the
+-- file's name, "Copied", "Opening the editor", the characters read, or why
+-- nothing was. `last` keeps the whole of it for `capture.last`.
 local function say(summary, body, icon)
   s.last:set(summary .. (body and body ~= "" and (": " .. body) or ""))
-  local ok, notify = pcall(require, "services.notifications")
-  if ok and notify.post then
-    notify.post { app = "Capture", summary = summary, body = body or "", icon = icon or "" }
-  end
+  local ok, osd = pcall(require, "services.osd")
+  if ok and osd.request then osd.request(icon or "󰹑", summary, -1) end
 end
 M.say = say
 
@@ -181,37 +196,35 @@ function M.open(shape, kind, destination, after)
   if kind and kind ~= "" then M.set_kind(kind) end
   s.to:set((destination and destination ~= "" and M.offers(destination)) and destination or "file")
   s.busy:set(true)
-  focused_monitor(function(name)
-    M.screen_name = name
-    local path = fs.join(runtime(), "impasto-grab-" .. morf.time.now_ms() .. ".png")
-    morf.timer(math.max(1, after or 1), function()
-      local queued, err = pcall(morf.screencopy.save, {
-        path = path, output = M.screen().name ~= "" and M.screen().name or nil,
-        on_done = function(done, info)
-          s.busy:set(false)
-          if not done then
-            say("Nothing was captured", tostring(info or ""), "󰀦")
-            return
-          end
-          local w, h = tonumber(info and info.width) or 0, tonumber(info and info.height) or 0
-          if w <= 0 then
-            local read = morf.image.info(path)
-            w, h = read and read.width or 0, read and read.height or 0
-          end
-          s.photo:set(path)
-          s.photo_w:set(w)
-          s.photo_h:set(h)
-          load_windows()
-          s.opened:set(s.opened:get() + 1)
-          s.active:set(true)
-        end,
-      })
-      if not queued then
+  M.screen_name = ((morf.screens or {})[1] or {}).name or ""
+  local path = fs.join(runtime(), "impasto-grab-" .. morf.time.now_ms() .. ".png")
+  morf.timer(math.max(1, after or 1), function()
+    local queued, err = pcall(morf.screencopy.save, {
+      path = path, output = M.screen().name ~= "" and M.screen().name or nil,
+      on_done = function(done, info)
         s.busy:set(false)
-        say("Nothing was captured", tostring(err), "󰀦")
-      end
-    end, false)
-  end)
+        if not done then
+          say("Nothing was captured", tostring(info or ""), "󰀦")
+          return
+        end
+        local w, h = tonumber(info and info.width) or 0, tonumber(info and info.height) or 0
+        if w <= 0 then
+          local read = morf.image.info(path)
+          w, h = read and read.width or 0, read and read.height or 0
+        end
+        s.photo:set(path)
+        s.photo_w:set(w)
+        s.photo_h:set(h)
+        load_windows()
+        s.opened:set(s.opened:get() + 1)
+        s.active:set(true)
+      end,
+    })
+    if not queued then
+      s.busy:set(false)
+      say("Nothing was captured", tostring(err), "󰀦")
+    end
+  end, false)
   return true
 end
 
@@ -226,45 +239,88 @@ end
 
 -- ---------------------------------------------------------------- deliver --
 
+-- The clipboard takes at most 32 MiB in one offer. The PNG is read whole
+-- (a blocking read, but of a file just written to tmpfs or the pictures
+-- folder, some milliseconds for a 4K screen); one past the cap is refused
+-- rather than cut short.
+local CLIPBOARD_MAX = 32 * 1024 * 1024
 local function copy_image(path)
-  local bytes = fs.read(path)
+  local stat = fs.stat(path)
+  if not stat or (stat.size or 0) <= 0 or stat.size > CLIPBOARD_MAX then return false end
+  local bytes = fs.read(path, CLIPBOARD_MAX)
   if not bytes or bytes == "" then return false end
   local ok = pcall(morf.clipboard.set, bytes, "image/png")
   return ok
 end
 
+-- Where tesseract keeps its language packs: $TESSDATA_PREFIX, then where
+-- the distributions put them.
+local TESSDATA = {
+  "/usr/share/tessdata", "/usr/share/tesseract-ocr/5/tessdata", "/usr/share/tesseract-ocr/4.00/tessdata",
+  "/usr/share/tesseract/tessdata", "/usr/local/share/tessdata",
+}
+
+--- The installed packs, by name ("eng", "spa"), from the *.traineddata in
+--- the tessdata folder: what `tesseract --list-langs` prints, without a
+--- process.
+function M.tesseract_languages()
+  local dirs = {}
+  local prefix = morf.env("TESSDATA_PREFIX")
+  if prefix and prefix ~= "" then
+    dirs[#dirs + 1] = prefix
+    dirs[#dirs + 1] = fs.join(prefix, "tessdata")
+  end
+  for _, dir in ipairs(TESSDATA) do dirs[#dirs + 1] = dir end
+  local installed = {}
+  for _, dir in ipairs(dirs) do
+    for _, entry in ipairs(fs.list(dir) or {}) do
+      local name = entry.name:match("^(.+)%.traineddata$")
+      if name then installed[name] = true end
+    end
+    if next(installed) then break end
+  end
+  return installed
+end
+
 -- tesseract's language packs are separate packages, and asking for a
 -- missing one fails: Spanish and English where installed, else English.
 local function languages(callback)
-  morf.run({ tools.text, "--list-langs" }, { timeout_ms = 10000 }, function(result)
-    local installed = {}
-    for line in tostring(result.stdout or ""):gmatch("[^\n]+") do installed[line:match("^%s*(.-)%s*$")] = true end
-    local wanted = {}
-    for _, name in ipairs { "spa", "eng" } do if installed[name] then wanted[#wanted + 1] = name end end
-    callback(#wanted > 0 and table.concat(wanted, "+") or "eng")
-  end)
+  local installed = M.tesseract_languages()
+  local wanted = {}
+  for _, name in ipairs { "spa", "eng" } do if installed[name] then wanted[#wanted + 1] = name end end
+  callback(#wanted > 0 and table.concat(wanted, "+") or "eng")
 end
 
 local function deliver(cut, destination, name)
   if destination == "file" then
+    -- Saved and copied, so there is nothing to choose at capture time; the
+    -- file's name only, as the folder is always the same.
     local copied = copy_image(cut)
-    say("Saved", fs.basename and fs.basename(cut) or cut, "󰹑")
+    say(cut:match("([^/]+)$") or cut, copied and "copied too" or "", "󰹑")
     M.saved = cut
     return copied
   end
   if destination == "clipboard" then
     local copied = copy_image(cut)
     fs.remove(cut)
-    say(copied and "Copied" or "Not copied", "The capture is on the clipboard", "󰹑")
+    say(copied and "Copied" or "Not copied", "", "󰹑")
     return
   end
   if destination == "editor" then
-    local saved = fs.join(M.directory(), name)
-    local child = morf.spawn {
-      command = { tools.editor, "--filename", cut, "--output-filename", saved, "--early-exit" },
-      detached = true,
-    }
-    say(child and "Opening the editor" or "satty would not start", "", "󰏫")
+    local folder = M.directory()
+    fs.mkdir(folder, { parents = true })
+    local saved = fs.join(folder, name)
+    local command = { tools.editor, "--filename", cut, "--output-filename", saved, "--early-exit" }
+    -- satty's own copy lives in its window, which --early-exit closes at
+    -- once; wl-copy keeps serving the picture after it has gone.
+    local wl_copy = act.which("wl-copy")
+    if wl_copy then
+      command[#command + 1] = "--copy-command"
+      command[#command + 1] = wl_copy
+    end
+    local child = morf.spawn { command = command, detached = true }
+    if not child then fs.remove(cut) end
+    say(child and "Opening the editor" or "satty would not start", "", child and "󰏫" or "󰀦")
     return
   end
   -- Read as text.
@@ -277,8 +333,8 @@ local function deliver(cut, destination, name)
         return
       end
       local copied = pcall(morf.clipboard.set, text)
-      say(copied and (utf8.len(text) or #text) .. " characters copied" or (#text .. " characters"),
-        text:sub(1, 120), "󱄽")
+      local count = utf8.len(text) or #text
+      say(copied and (count .. " characters copied") or (count .. " characters"), text:sub(1, 120), "󱄽")
     end)
   end)
 end

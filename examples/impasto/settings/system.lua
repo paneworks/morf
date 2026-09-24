@@ -15,6 +15,7 @@ local controls = require("components.controls")
 local setting = require("components.setting")
 local palette_board = require("components.palette_board")
 local profiles_part = require("settings.profiles_part")
+local tr = require("services.tr")
 
 local C = theme.color
 
@@ -59,14 +60,14 @@ local function profiles_tab(W)
   return {
     profiles_part.build(W),
     setting.group {
-      width = W, title = "Reset",
-      note = "Only the profile in use. The others are left as they were.",
+      width = W, title = tr("Reset"),
+      note = tr("Only the profile in use. The others are left as they were."),
       hint = "Reset returns every setting in this profile to its default. Your name, picture, screens and keyboard are kept.",
-      setting.row { width = W, label = "Where the settings live",
+      setting.row { width = W, label = tr("Where the settings live"),
         control = kit.text { text = settings.path:gsub("^" .. (fs.home() or "~"):gsub("%p", "%%%0"), "~"),
           mono = true, size = theme.size.label, color = C.textMuted } },
-      setting.row { width = W, label = "Reset this profile", reading = "Back to the defaults",
-        control = controls.pill { text = "Reset", icon = "󰜉", height = 30, width = 92,
+      setting.row { width = W, label = tr("Reset this profile"), reading = tr("Back to the defaults"),
+        control = controls.pill { text = tr("Reset"), icon = "󰜉", height = 30, width = 92,
           on_click = function() settings.reset_all() end } },
     },
   }
@@ -78,35 +79,35 @@ local function machine_tab(W)
   local cell = math.floor((W - 28 - 3 * 14) / 4)
   return {
     setting.group {
-      width = W, title = "This window", note = "The language of this window.",
+      width = W, title = tr("This window"), note = tr("The language of this window."),
       hint = "Only English is written for this port; the original also had Spanish.",
-      setting.row { width = W, label = "Language",
+      setting.row { width = W, label = tr("Language"),
         control = controls.segmented { options = { { id = "en", label = "English" } },
           current = function() return settings.language end,
           on_selected = function(id) settings.set("language", id) end } },
     },
     setting.group {
-      width = W, title = "This machine",
+      width = W, title = tr("This machine"),
       setting.block { width = W,
         ui.Row { gap = 14,
-          controls.figure { width = cell, label = "PROCESSOR", value = model, note = threads .. " threads" },
-          controls.figure { width = cell, label = "MEMORY",
+          controls.figure { width = cell, label = tr("PROCESSOR"), value = model, note = threads .. " threads" },
+          controls.figure { width = cell, label = tr("MEMORY"),
             value = total > 0 and string.format("%.1f GiB", total / 1073741824) or "—",
             note = math.floor(used * 100 + 0.5) .. "% in use" },
-          controls.figure { width = cell, label = "UPTIME",
-            value = function() morf.clock:get() return spell(uptime()) end, note = "since boot" },
-          controls.figure { width = cell, label = "VERSION", value = "morf " .. tostring(morf.version or "?"),
+          controls.figure { width = cell, label = tr("UPTIME"),
+            value = function() morf.clock:get() return spell(uptime()) end, note = tr("since boot") },
+          controls.figure { width = cell, label = tr("VERSION"), value = "morf " .. tostring(morf.version or "?"),
             note = "impasto, ported" },
         },
       },
     },
     setting.group {
-      width = W, title = "Night light", note = "Warmer colours for the evening.",
+      width = W, title = tr("Night light"), note = tr("Warmer colours for the evening."),
       hint = "The temperature is set under Displays.",
-      setting.switch_row { width = W, label = "Warm the screen",
+      setting.switch_row { width = W, label = tr("Warm the screen"),
         reading = function()
-          if not night.available() then return "Needs hyprsunset, which is not installed" end
-          return settings.nightLight and (settings.nightTemperature .. " K") or "Off"
+          if not night.available() then return tr("Needs hyprsunset, which is not installed") end
+          return settings.nightLight and (settings.nightTemperature .. " K") or tr("Off")
         end,
         checked = function() return settings.nightLight end,
         on_toggled = function(on) night.set(on) end },

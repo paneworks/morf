@@ -13,9 +13,18 @@
 --   { width, height, rowstride, has_alpha, bits_per_sample, channels, data }
 --   with `data` the raw pixel bytes as a list), category, desktop_entry,
 --   resident, transient
--- and two verbs on the server: `dismiss(id)` when the person closed it and
--- `invoke(id, key)` when they pressed an action, both of which tell the
--- application through the signals it is waiting on.
+-- and three verbs on the server: `dismiss(id)` when the person closed it,
+-- `expire(id)` when its time ran out, and `invoke(id, key)` when they
+-- pressed an action, each of which tells the application through the
+-- signals it is waiting on. An entry that has gone carries `closed_reason`
+-- (1 expired, 2 dismissed, 3 closed by its application, 4 other) and, when
+-- its application closed it, `closed_by_app`.
+--
+-- Options: `on_change(list)`, `replace` (default true), `default_timeout_ms`
+-- (5000), `expire` (default true: the library times entries out itself;
+-- false leaves every clock to the shell, which calls `expire`), and
+-- `capabilities`, what `GetCapabilities` answers -- only what the shell
+-- draws, since an application that is told "actions" sends buttons.
 
 local morf = require("morf")
 
@@ -52,7 +61,10 @@ function notifications.serve(options)
     next_id = 1,
     default_timeout_ms = options.default_timeout_ms or 5000,
     on_change = options.on_change or function() end,
+    capabilities = options.capabilities
+      or { "body", "actions", "persistence", "body-markup" },
   }
+  local expires = options.expire ~= false
   local by_id = {}
 
   local function changed()
@@ -63,6 +75,8 @@ function notifications.serve(options)
     local entry = by_id[id]
     if not entry then return false end
     by_id[id] = nil
+    entry.closed_reason = reason
+    if reason == CLOSED_BY_APP then entry.closed_by_app = true end
     for index, candidate in ipairs(server.list) do
       if candidate.id == id then
         table.remove(server.list, index)
@@ -129,9 +143,7 @@ function notifications.serve(options)
       -- Only what this shell will honour. Claiming `sound` and then being
       -- silent is worse than not claiming it.
       -- One argument of type `as`, not four strings.
-      service:reply(call.id, {
-        signature = "as", value = { "body", "actions", "persistence", "body-markup" },
-      })
+      service:reply(call.id, { signature = "as", value = server.capabilities })
     elseif m == "Notify" then
       local a = call.arguments
       local app, replaces, icon, summary, body, actions, hints, timeout =
@@ -174,7 +186,7 @@ function notifications.serve(options)
       end
       by_id[id] = entry
       -- Critical never expires on its own; that is what critical means.
-      if entry.timeout_ms > 0 and entry.urgency < 2 then
+      if expires and entry.timeout_ms > 0 and entry.urgency < 2 then
         morf.timer(entry.timeout_ms, function()
           if by_id[id] == entry then remove(id, EXPIRED) end
         end, false)
@@ -199,6 +211,16 @@ function notifications.serve(options)
   --- The person closed it.
   function server.dismiss(id)
     return remove(id, DISMISSED)
+  end
+
+  --- Its time ran out: gone, and the application is told it expired.
+  function server.expire(id)
+    return remove(id, EXPIRED)
+  end
+
+  --- Whether `id` is still open.
+  function server.open(id)
+    return by_id[id] ~= nil
   end
 
   --- The person pressed an action. Tells the application, then closes --

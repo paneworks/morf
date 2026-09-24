@@ -6,7 +6,8 @@
 -- Session.SetBrightness, which an active session may do unprivileged. An
 -- external monitor is set over DDC/CI with `ddcutil`, run directly by argv
 -- and only when it is installed and a screen other than a panel is
--- connected; without it the monitor simply is not listed.
+-- connected; without it the monitor simply is not listed. Which monitor is
+-- on which I2C bus is read from sysfs, and read again when outputs change.
 --
 -- The keys and every single reading follow the focused screen, or the first
 -- that can be dimmed.
@@ -106,25 +107,82 @@ end
 local ddcutil = act.which("ddcutil")
 M.ddc_available = ddcutil ~= nil
 
+local fs = morf.fs
+local live = require("services.live")
+local SHARED = fs.join(morf.env("XDG_RUNTIME_DIR") or "/tmp", "impasto-morf")
+-- What the last reading of each bus said, for the other screens: only one
+-- of them asks the monitors at load (services/live.lua).
+local LEVELS = fs.join(SHARED, "ddc-levels.json")
+
+local function load_levels()
+  local ok, levels = pcall(morf.json.decode, fs.read(LEVELS) or "{}")
+  return ok and type(levels) == "table" and levels or {}
+end
+
+local function save_level(bus, level, maximum)
+  fs.mkdir(SHARED)
+  local levels = load_levels()
+  levels[bus] = { level = level, maximum = maximum }
+  fs.write(LEVELS, morf.json.encode(levels))
+end
+
+-- One ddcutil on a bus at a time, whichever screen asks: two conversations
+-- on one I2C bus garble each other. The claim is a directory, made by
+-- exactly one runtime; one older than ten seconds belonged to a ddcutil
+-- that is gone.
+local function claim(bus)
+  local dir = fs.join(SHARED, "ddc-" .. bus .. ".busy")
+  fs.mkdir(SHARED)
+  if fs.mkdir(dir, { parents = false }) then return dir end
+  local stat = fs.stat(dir)
+  local now = os.time()
+  if stat and stat.modified and now - math.floor(tonumber(stat.modified) or now) > 10 then
+    fs.remove(dir, { recursive = true })
+    if fs.mkdir(dir, { parents = false }) then return dir end
+  end
+  return nil
+end
+
+-- Runs ddcutil on a slot's bus once the bus is free.
+local function on_bus(slot, what, argv, on_done, options)
+  local held = claim(slot.bus)
+  if not held then
+    morf.timer(250, function() on_bus(slot, what, argv, on_done, options) end, false)
+    return
+  end
+  act.collect(what, ddcutil, argv, function(text, ok)
+    fs.remove(held, { recursive = true })
+    on_done(text, ok)
+  end, options)
+end
+
+local read
+
 local function flush(slot)
   if slot.wanted < 0 or slot.busy then return end
   slot.written = slot.wanted
   slot.busy = true
-  local value = tostring(math.floor(slot.written / 100 * slot.ceiling + 0.5))
-  act.collect("setting " .. slot.name() .. " to " .. slot.written .. "%", ddcutil,
-    { "--bus", slot.bus, "--noverify", "--skip-ddc-checks", "setvcp", "10", value },
+  local value = math.floor(slot.written / 100 * slot.ceiling + 0.5)
+  on_bus(slot, "setting " .. slot.name() .. " to " .. slot.written .. "%",
+    { "--bus", slot.bus, "--noverify", "--skip-ddc-checks", "setvcp", "10", tostring(value) },
     function(_, ok)
       slot.busy = false
       if slot.wanted == slot.written or not ok then slot.wanted = -1 end
-      if ok then flush(slot) end
+      if ok then
+        save_level(slot.bus, value, slot.ceiling)
+        flush(slot)
+      elseif not act.dry then
+        -- The monitor said no, or did not answer: show what it has.
+        read(slot)
+      end
     end, { mutates = true })
 end
 
 -- "VCP 10 C <level> <maximum>"
-local function read(slot)
+read = function(slot)
   if slot.bus == "" or slot.busy or not ddcutil then return end
   slot.busy = true
-  act.collect("reading " .. slot.name(), ddcutil,
+  on_bus(slot, "reading " .. slot.name(),
     { "--bus", slot.bus, "--skip-ddc-checks", "getvcp", "10", "--brief" },
     function(text)
       slot.busy = false
@@ -135,6 +193,7 @@ local function read(slot)
       slot.answering:set(answering and true or false)
       if not answering then return end
       slot.ceiling = maximum
+      save_level(slot.bus, level, maximum)
       if slot.wanted < 0 then slot.level:set(math.floor(level / maximum * 100 + 0.5)) end
       flush(slot)
     end)
@@ -159,7 +218,8 @@ for _, slot in ipairs(ddc) do
 end
 
 --- Connector -> I2C bus, from `ddcutil detect --brief`. Its connector is
---- "card1-DP-1" where the compositor says "DP-1".
+--- "card1-DP-1" where the compositor says "DP-1". Kept for that text;
+--- detection itself reads sysfs (`M.scan`).
 function M.parse(text)
   local found = {}
   for block in (text .. "\n\n"):gmatch("(.-)\n%s*\n") do
@@ -169,6 +229,36 @@ function M.parse(text)
       if bus and connector then found[#found + 1] = { connector = connector, bus = bus } end
     end
   end
+  return found
+end
+
+--- Connector -> I2C bus, from sysfs: `/sys/class/drm/card*-<connector>/ddc`
+--- is the adapter the monitor's DDC lines are on, and its `i2c-dev` names
+--- the `/dev/i2c-N` ddcutil opens. `root` is for tests.
+function M.scan(root)
+  root = root or "/sys/class/drm"
+  local found = {}
+  for _, entry in ipairs(fs.list(root) or {}) do
+    local connector = entry.name:match("^card%d+%-(.+)$")
+    if connector and not is_panel(connector) then
+      local base = fs.join(root, entry.name)
+      local status = (fs.read(fs.join(base, "status")) or ""):match("^%s*(%S+)")
+      if status == "connected" then
+        -- The link names the adapter (`../../i2c-5`); its i2c-dev entry is
+        -- the same number, looked at when the link cannot be read.
+        local ok, link = pcall(fs.read_link, fs.join(base, "ddc"))
+        local bus = ok and link and tostring(link):match("i2c%-(%d+)/?$") or nil
+        if not bus then
+          for _, dev in ipairs(fs.list(fs.join(base, "ddc", "i2c-dev")) or {}) do
+            bus = dev.name:match("^i2c%-(%d+)$")
+            if bus then break end
+          end
+        end
+        if bus then found[#found + 1] = { connector = connector, bus = bus } end
+      end
+    end
+  end
+  table.sort(found, function(a, b) return a.connector < b.connector end)
   return found
 end
 
@@ -186,20 +276,47 @@ local function title_of(connector)
   return connector
 end
 
---- Asks ddcutil which monitors answer. A desk with only a laptop panel
---- never runs it.
+local function adopt(slot, known)
+  local level, maximum = known and tonumber(known.level), known and tonumber(known.maximum)
+  if not (level and maximum and maximum > 0) then return false end
+  slot.ceiling = maximum
+  slot.level:set(math.floor(level / maximum * 100 + 0.5))
+  slot.answering:set(true)
+  return true
+end
+
+--- Which monitors have a DDC bus, from sysfs. One screen then asks them for
+--- their levels; the others take the levels it wrote down. A desk with only
+--- a laptop panel never runs ddcutil.
 function M.detect()
-  if not ddcutil or not external() then return end
-  act.collect("detecting monitors", ddcutil, { "detect", "--brief" }, function(text)
-    local found = M.parse(text)
-    for index, slot in ipairs(ddc) do
-      local entry = found[index]
-      slot.bus = entry and entry.bus or ""
-      slot.title_signal:set(entry and title_of(entry.connector) or "")
-      slot.connector:set(entry and entry.connector or "")
-      if entry then read(slot) else slot.answering:set(false) end
+  if not ddcutil or not external() then
+    for _, slot in ipairs(ddc) do
+      slot.answering:set(false)
+      slot.connector:set("")
     end
-  end, { timeout_ms = 20000 })
+    return
+  end
+  local found = M.scan()
+  local asks = live.here()
+  local levels = asks and {} or load_levels()
+  for index, slot in ipairs(ddc) do
+    local entry = found[index]
+    slot.bus = entry and entry.bus or ""
+    slot.title_signal:set(entry and title_of(entry.connector) or "")
+    slot.connector:set(entry and entry.connector or "")
+    if not entry then
+      slot.answering:set(false)
+    elseif asks then
+      read(slot)
+    elseif not adopt(slot, levels[entry.bus]) then
+      -- The asking screen has not written yet: look again shortly, and ask
+      -- the monitor here if this has become the screen that asks.
+      morf.timer(3000, function()
+        if slot.bus ~= entry.bus then return end
+        if not adopt(slot, load_levels()[entry.bus]) and live.here() then read(slot) end
+      end, false)
+    end
+  end
 end
 
 -- ---------------------------------------------------------------- screens --
@@ -264,7 +381,21 @@ function M.refresh()
   for _, slot in ipairs(ddc) do read(slot) end
 end
 
--- A moment after load, so the first frame is not waiting on I2C.
+-- A moment after load, so the first frame is not waiting on I2C; again
+-- whenever a monitor comes or goes (morf.screens is kept current in place).
 morf.timer(1500, M.detect, false)
+local function outputs()
+  local names = {}
+  for _, screen in ipairs(morf.screens or {}) do names[#names + 1] = tostring(screen.name) end
+  table.sort(names)
+  return table.concat(names, ",")
+end
+local seen_outputs = outputs()
+morf.timer(2000, function()
+  local now = outputs()
+  if now == seen_outputs then return end
+  seen_outputs = now
+  morf.timer(1500, M.detect, false)
+end, true)
 
 return M

@@ -7,7 +7,8 @@
 -- which is what `lock.lock()` in the shell runs, after it has photographed
 -- the desk. `morf.surface.session_lock = true` makes morf take this file as
 -- an ext-session-lock client rather than a layer: every output gets a lock
--- surface drawing this one tree, the compositor hides everything else, and
+-- surface with a tree of its own (`morf.lock_surface`), over that output's
+-- own desk and at its own size; the compositor hides everything else, and
 -- keeps it hidden if this process dies -- a crash leaves the session locked
 -- rather than open. The lock falls when the file clears the flag, which the
 -- lock service does once PAM (or a face) has said yes; the process then
@@ -30,6 +31,11 @@ function M.build(options)
   local W = tonumber(screen.width) or 1920
   local H = tonumber(screen.height) or 1080
 
+  -- The lid, heard here too: opening it is somebody sitting down.
+  pcall(function()
+    require("services.lid").start { on_change = function(closed) if not closed then lock.rouse() end end }
+  end)
+
   morf.surface.namespace = "impasto-lock"
   morf.surface.width = W
   morf.surface.height = H
@@ -46,10 +52,22 @@ function M.build(options)
   end
   if options.preview then lock.preview(options.preview) end
 
+  if hold then
+    -- One tree per output, each over its own desk. Called again for an
+    -- output plugged in while locked.
+    morf.lock_surface(function(output)
+      return surface {
+        width = function() return tonumber(output.width) or W end,
+        height = function() return tonumber(output.height) or H end,
+        output = output.name,
+      }
+    end)
+    return nil
+  end
   return surface {
     width = function() return W end,
     height = function() return H end,
-    screens = #(morf.screens or {}) > 0 and #morf.screens or 1,
+    output = screen.name,
   }
 end
 

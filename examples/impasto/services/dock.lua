@@ -82,8 +82,10 @@ function M.opacity() return settings.dockOpacity / 100 end
 
 -- ---------------------------------------------------------------- pinned --
 
+-- The launcher spells desktop ids for the whole shell (without `.desktop`),
+-- so the dock's pins, the launcher's favourites and its history agree.
 local function id_of(id)
-  return (tostring(id or ""):gsub("%.desktop$", ""))
+  return require("services.launcher").desktop_id(id)
 end
 
 --- The pinned ids in their order, without `.desktop` (the original saved
@@ -160,7 +162,8 @@ local function claim(key, id, score)
 end
 
 local function index_applications()
-  local ok, entries = pcall(morf.desktop_entries)
+  -- The launcher's directories, flatpak's exported entries included.
+  local ok, entries = pcall(morf.desktop_entries, require("services.launcher").application_paths())
   if not ok or not entries then
     morf.log("warn", "impasto: dock: no desktop entries: " .. tostring(entries))
     return
@@ -549,7 +552,8 @@ M.focus_window = focus_window
 --- New instance. Unmatched windows have no entry to launch from.
 function M.launch(item)
   if not item or item.id == "" or not source then return end
-  local ok, err = pcall(source.launch, source, item.id)
+  -- Through the launcher, so a terminal program opens in a terminal window.
+  local ok, err = pcall(require("services.launcher").launch, item.id)
   if not ok then morf.log("warn", "impasto: dock: could not launch " .. item.id .. ": " .. tostring(err)) end
 end
 

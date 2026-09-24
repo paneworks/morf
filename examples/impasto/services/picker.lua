@@ -5,7 +5,9 @@
 -- (capture/picker.lua) shows that still picture with a magnifier under the
 -- pointer, and a click reads the pixel from the same picture with
 -- `morf.image.pixel`, copies its hex with `morf.clipboard.set` (no
--- trailing newline) and says so. Escape or a right click lets it go.
+-- trailing newline) and flashes it on the island. Escape or a right click
+-- lets it go. The key reaches every screen's shell; only the screen being
+-- worked on picks (services/auto/capture.lua).
 
 local fs = morf.fs
 local M = {}
@@ -127,10 +129,9 @@ function M.take(x, y)
     if not value or not value:match("^#%x%x%x%x%x%x$") then return end
     s.last:set(value)
     pcall(morf.clipboard.set, value)
-    local okn, notify = pcall(require, "services.notifications")
-    if okn and notify.post then
-      notify.post { app = "Colour picker", summary = value, body = "Copied to the clipboard", icon = M.icon }
-    end
+    -- Flashed on the island, as the original's OSD (PickerService.qml).
+    local okn, osd = pcall(require, "services.osd")
+    if okn and osd.request then osd.request(M.icon, value, -1) end
   end)
 end
 
