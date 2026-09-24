@@ -39,6 +39,7 @@ mod image_ops;
 mod input_api;
 mod layer_surfaces;
 mod lib_hyprland;
+mod lib_palette;
 mod lifecycle_io;
 mod modules;
 mod pam_session;
