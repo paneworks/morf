@@ -403,8 +403,19 @@ keyed by property like `behavior`: `from` (default: where it is), `to`,
 It runs in Rust between frames and ends with the node. `loop` may be a
 binding: returning another table restarts what changed, returning nil ends
 the loops, and a property whose loop ends goes back to its `from` (through
-its `behavior`, if it has one). A write to a looping property takes it over,
-as any write takes over an animation.
+its `behavior`, if it has one) — unless the loop says `hold = true`, when
+it stays wherever the motion had it, and a loop started on it again (with
+no `from`) goes on from there: a spinner that stops keeps its angle. A write
+to a looping property takes it over, as any write takes over an animation.
+
+```lua
+ui.Item {
+  loop = function()
+    if not busy:get() then return nil end
+    return { rotation = { to = 360, duration = 900, hold = true } }
+  end,
+}
+```
 
 ```lua
 ui.Item {

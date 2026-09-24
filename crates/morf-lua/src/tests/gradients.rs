@@ -258,3 +258,64 @@ fn busy_gradient_tiles_each_land_on_their_last_colour() {
         );
     }
 }
+
+#[test]
+fn a_delayed_gradient_retargeted_in_its_wait_or_its_travel_lands() {
+    // Flood's ripple put the wait in each cell's behaviour: a `delay` per
+    // cell, then the colour. A cell told twice -- while still waiting, and
+    // again while moving -- ends on the last colour, colour and gradient alike.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "flood.lua",
+            br##"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local colours = { "#e05050", "#50e050", "#5050e0", "#e0e050" }
+                local cells, held = {}, {}
+                for i = 1, 6 do
+                  held[i] = morf.signal("c" .. i, 1)
+                  local h = held[i]
+                  cells[i] = ui.Rect {
+                    width = 20, height = 20,
+                    color = function() return colours[h:get()] end,
+                    gradient = function()
+                      local c = colours[h:get()]
+                      return { angle = 180, stops = { c, { c, 0.5 }, "#000000" } }
+                    end,
+                    behavior = {
+                      color = { duration = 180, delay = i * 16, easing = "out_quad" },
+                      gradient = { duration = 180, delay = i * 16, easing = "out_quad" },
+                    },
+                  }
+                end
+                ui.Item { table.unpack(cells) }
+                morf.ipc.all = function(v) for i = 1, 6 do held[i]:set(v) end end
+            "##,
+        )
+        .unwrap();
+    runtime.call_ipc("all", &[IpcValue::Integer(2)]).unwrap();
+    runtime.tick_animations(Duration::from_millis(40)).unwrap();
+    runtime.call_ipc("all", &[IpcValue::Integer(3)]).unwrap();
+    for _ in 0..9 {
+        runtime.tick_animations(Duration::from_millis(16)).unwrap();
+    }
+    runtime.call_ipc("all", &[IpcValue::Integer(4)]).unwrap();
+    for _ in 0..40 {
+        runtime.tick_animations(Duration::from_millis(16)).unwrap();
+    }
+    let root = *runtime.scene().roots().last().unwrap();
+    let want = Color::parse("#e0e050").unwrap();
+    for cell in runtime.scene().children(root).unwrap().to_vec() {
+        let scene = runtime.scene();
+        assert_eq!(
+            scene.current(cell, "color").unwrap(),
+            scene.target(cell, "color").unwrap()
+        );
+        let gradient = Gradient::parse(scene.current(cell, "gradient").unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(gradient.stops[0].color, want);
+        assert_eq!(gradient.stops[1].color, want);
+    }
+}

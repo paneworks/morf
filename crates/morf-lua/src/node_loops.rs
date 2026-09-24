@@ -16,7 +16,8 @@
 //! `loop` may be a binding. Returning a different table restarts what changed,
 //! returning nil or `{}` ends every loop, and a loop that ends puts its
 //! property back where the loop started it (through the property's own
-//! `behavior`, when it has one).
+//! `behavior`, when it has one) -- unless it says `hold = true`, when the
+//! property stays wherever the motion had it.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -33,6 +34,9 @@ pub(crate) struct RunningLoop {
     spec: Value,
     /// Where the property rests once the loop ends: its `from`.
     rest: Value,
+    /// `hold = true`: an ended loop leaves the property where the motion
+    /// had it, instead of taking it back to `rest`.
+    hold: bool,
 }
 
 /// Starts, keeps, restarts or ends a node's loops to match `value`.
@@ -52,11 +56,15 @@ pub(crate) fn apply_loops(
         if wanted.contains_key(property) {
             continue;
         }
+        // Stopping leaves the value where the motion had it, and makes that
+        // the target; a held loop ends there.
         state
             .scene
             .stop_animation(node, property)
             .map_err(|error| error.to_string())?;
-        assign_scene_property(state, node, property, ended.rest.clone())?;
+        if !ended.hold {
+            assign_scene_property(state, node, property, ended.rest.clone())?;
+        }
     }
     let mut running = BTreeMap::new();
     for (property, spec) in wanted {
@@ -72,11 +80,12 @@ pub(crate) fn apply_loops(
             continue;
         }
         let parsed = LoopSpec::parse(&property, &spec)?;
+        let hold = parsed.hold;
         let from = match parsed.from {
             Some(from) => from,
             None => match &old {
-                Some(old) => old.rest.clone(),
-                None => state
+                Some(old) if !old.hold => old.rest.clone(),
+                _ => state
                     .scene
                     .current(node, &property)
                     .map_err(|error| error.to_string())?
@@ -87,7 +96,14 @@ pub(crate) fn apply_loops(
             .scene
             .animate_from(node, &property, from.clone(), parsed.to, parsed.behavior)
             .map_err(|error| format!("loop `{property}`: {error}"))?;
-        running.insert(property, RunningLoop { spec, rest: from });
+        running.insert(
+            property,
+            RunningLoop {
+                spec,
+                rest: from,
+                hold,
+            },
+        );
     }
     if !running.is_empty() {
         state.node_loops.insert(node, running);
@@ -96,6 +112,7 @@ pub(crate) fn apply_loops(
 }
 
 struct LoopSpec {
+    hold: bool,
     from: Option<Value>,
     to: Value,
     behavior: Behavior,
@@ -109,7 +126,7 @@ impl LoopSpec {
         for key in fields.keys() {
             if !matches!(
                 key.as_str(),
-                "from" | "to" | "duration" | "easing" | "alternate" | "loops" | "delay"
+                "from" | "to" | "duration" | "easing" | "alternate" | "loops" | "delay" | "hold"
             ) {
                 return Err(format!("loop `{property}` has no field `{key}`"));
             }
@@ -158,7 +175,13 @@ impl LoopSpec {
                 ));
             }
         };
+        let hold = match fields.get("hold") {
+            None => false,
+            Some(Value::Bool(value)) => *value,
+            Some(_) => return Err(format!("loop `{property}` hold must be a boolean")),
+        };
         Ok(Self {
+            hold,
             from: fields.get("from").cloned(),
             to,
             behavior: Behavior {
