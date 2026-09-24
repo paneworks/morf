@@ -3,4 +3,4 @@
 local bar = require("bar.bar")
 local chip = require("bar.modules.chip")
 
-bar.register("bluetooth", { build = function() return chip.piece("bluetooth") end })
+bar.register("bluetooth", { build = function(_, look) return chip.piece("bluetooth", look) end })

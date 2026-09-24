@@ -55,9 +55,13 @@ morf.surface.backdrop = false
 
 -- A click beside an open island closes it, and so does Escape; while a panel
 -- is open the keyboard is the island's.
+-- The keyboard stands down while the capture surface is up, so an open panel
+-- waits under it instead of taking its keys (Bar.qml's `holdsKeyboard`).
+local capture_ok, capture = pcall(require, "services.capture")
 morf.effect("impasto.keyboard", function()
   local open = island.state.expanded()
-  morf.surface.keyboard_focus = open and "exclusive" or "none"
+  local capturing = capture_ok and capture.active and capture.active() or false
+  morf.surface.keyboard_focus = (open and island.state.live() and not capturing) and "exclusive" or "none"
   morf.surface.backdrop = open
 end)
 morf.on_backdrop_click(function() island.close() end)
