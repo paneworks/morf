@@ -11,6 +11,13 @@
 --       size = function() return 560, 420 end,
 --       build = function(island) return ui.Item { ... } end,
 --     })
+--
+-- A panel may also say, while it is open, that the island is paper rather
+-- than black -- `paper = function() return colour or nil end` -- and how far
+-- its contents sit from the rim -- `padding = function() return 0 end`. An
+-- open note is both: the island becomes the note, to the edge. A panel that
+-- says `declared = true` is laid out at its declared size from the first
+-- frame rather than resized with the capsule.
 
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -44,12 +51,25 @@ local function panel_size()
   return 560, 420
 end
 
+local function panel_padding(panel)
+  if panel and panel.padding then return panel.padding() end
+  return theme.panel_padding
+end
+
+--- The paper colour the open panel asks for, or nil for the island's black.
+function island.paper()
+  if state.layer() ~= "panel" then return nil end
+  local panel = island.panels[state.open_panel()]
+  if panel and panel.paper then return panel.paper() end
+  return nil
+end
+
 --- The capsule's target size and inner padding for the current layer.
 function island.size()
   local layer = state.layer()
   if layer == "panel" then
     local w, h = panel_size()
-    return w, h, theme.panel_padding
+    return w, h, panel_padding(island.panels[state.open_panel()])
   end
   local entry = island.layers[layer]
   if entry and entry.size then
@@ -153,9 +173,21 @@ function island.build(place)
     children[#children + 1] = layer_loader("panel." .. name,
       function() return state.open_panel() == name end,
       function()
+        if panel.declared then
+          -- Laid out at the declared size from the first frame, inside the
+          -- padding, and uncovered by the capsule as it grows: nothing
+          -- reflows during the morph.
+          return ui.Item {
+            x = function() return panel_padding(panel) end,
+            y = function() return panel_padding(panel) end,
+            width = function() local w = panel.size() return w - 2 * panel_padding(panel) end,
+            height = function() local _, h = panel.size() return h - 2 * panel_padding(panel) end,
+            panel.build(island),
+          }
+        end
         return ui.Inset {
           anchors = { fill = true },
-          margin = theme.panel_padding,
+          margin = function() return panel_padding(panel) end,
           panel.build(island),
         }
       end)
@@ -170,12 +202,12 @@ function island.build(place)
       return math.min(height() / 2, theme.radius_large + 4)
     end,
     color = function()
-      if state.expanded() then return C.island end
+      if state.expanded() then return island.paper() or C.island end
       local layer = state.layer()
       if hovered:get() and (layer == "modules" or layer == "summary") then return C.islandSurfaceHover end
       return settings.islandAttached and C.island or C.islandSurface
     end,
-    border_width = 1,
+    border_width = function() return island.paper() and 0 or 1 end,
     border_color = C.islandBorder,
     behavior = {
       x = theme.behave("morph"),
