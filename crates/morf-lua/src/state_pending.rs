@@ -6,12 +6,13 @@
 //! is owed the answer. The runtime drains all of them in one pass.
 
 use luna::StashedClosure;
-use morf_io::{DbusProxy, DbusService, DbusSignal, FileWatcher, Timer as IoTimer};
+use morf_io::{DbusService, DbusSignal, FileWatcher, PendingReply, Timer as IoTimer};
 use morf_reactive::SignalId;
 use morf_scene::NodeHandle;
 use morf_services::{GreetdConversation, PamSession, PamTask, StatusNotifierHost, UdevMonitor};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
@@ -33,7 +34,27 @@ pub(crate) struct PendingTimer {
 }
 
 pub(crate) struct PendingDbusSignal {
+    /// Names the subscription to the handle `subscribe` returned, so it can
+    /// be closed.
+    pub(crate) id: u64,
     pub(crate) signal: DbusSignal,
+    pub(crate) callback: StashedClosure,
+    pub(crate) kind: DbusSignalKind,
+}
+
+/// How a subscription's callback is called.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DbusSignalKind {
+    /// `callback(body, info)`: the body as it always was, then a table with
+    /// the sender, the address and the body again.
+    Signal,
+    /// `callback(old_owner, new_owner, name)`, from `on_name_owner_changed`.
+    OwnerChanged,
+}
+
+/// A method call made with `call_async`, and who is owed the answer.
+pub(crate) struct PendingDbusReply {
+    pub(crate) reply: PendingReply,
     pub(crate) callback: StashedClosure,
 }
 
@@ -91,7 +112,26 @@ pub(crate) struct Prefers {
     pub(crate) reduced_motion: SignalId,
     pub(crate) accent_color: SignalId,
     pub(crate) scale: SignalId,
-    /// The portal's settings interface and its change signal, when there is
-    /// a portal to ask.
-    pub(crate) portal: Option<(DbusProxy, DbusSignal)>,
+    /// The settings portal, followed without ever being waited on; `None`
+    /// when there is no session bus to find one on.
+    pub(crate) portal: Option<PortalWatch>,
+    /// Preferences the host set itself (`set_preference`), which a portal
+    /// reading that was already on its way must not overwrite.
+    pub(crate) overridden: HashSet<&'static str>,
+}
+
+/// How `morf.prefers` follows the settings portal.
+///
+/// Nothing here blocks: the portal is asked only once it has an owner — a
+/// read of an absent portal would activate it, and activating a portal can
+/// take the whole of a call's timeout — and its answers are collected from a
+/// poll.
+pub(crate) struct PortalWatch {
+    /// `SettingChanged`, from whoever owns the portal's name.
+    pub(crate) changes: DbusSignal,
+    /// The portal's name changing hands: a portal that starts after the
+    /// shell is read when it arrives.
+    pub(crate) owner: DbusSignal,
+    /// Readings asked for and not yet answered: namespace, key, reply.
+    pub(crate) pending: Vec<(&'static str, &'static str, PendingReply)>,
 }

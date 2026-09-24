@@ -21,11 +21,10 @@ fn native_timer_callbacks_recompute_lua_bindings() {
             "#,
         )
         .unwrap();
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    while !runtime.poll_services() && std::time::Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(1));
-    }
     let root = runtime.scene().roots()[0];
+    poll_until(&mut runtime, |runtime| {
+        runtime.scene().string_value(root, "text").ok() == Some("1")
+    });
 
     assert_eq!(runtime.scene().string_value(root, "text").unwrap(), "1");
 }
@@ -74,10 +73,9 @@ fn loader_and_timer_build_native_scene_objects() {
         "loaded"
     );
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    while !runtime.poll_services() && std::time::Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(1));
-    }
+    poll_until(&mut runtime, |runtime| {
+        runtime.scene().string_value(children[2], "text").ok() == Some("1")
+    });
 
     assert_eq!(
         runtime.scene().string_value(children[2], "text").unwrap(),

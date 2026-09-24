@@ -101,6 +101,17 @@ pub(crate) struct DbusToken {
     pub(crate) proxy: DbusProxy,
 }
 
+/// What `subscribe` returns: the way to end a subscription.
+pub(crate) struct DbusSubscriptionToken {
+    pub(crate) id: u64,
+}
+
+/// A file descriptor from the bus, held for a configuration that cannot see
+/// into it. `None` once closed.
+pub(crate) struct DbusFdToken {
+    pub(crate) fd: RefCell<Option<morf_io::DbusFd>>,
+}
+
 pub(crate) struct DbusServiceToken {
     pub(crate) service: Rc<RefCell<DbusService>>,
 }

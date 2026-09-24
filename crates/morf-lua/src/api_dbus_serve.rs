@@ -130,6 +130,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
     let close_state = Rc::clone(&state);
     let service_close = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let service: UserRef<DbusServiceToken> = stack.consume(ctx)?;
+        service.service.borrow_mut().release();
         // Dropping the registration is what releases the name: the entry here
         // and the token hold the only two references, and `DbusService::drop`
         // hands the name to whoever is queued behind us.

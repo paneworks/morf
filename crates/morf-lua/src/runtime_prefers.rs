@@ -31,8 +31,11 @@ impl Runtime {
     /// What the settings portal does when a setting changes, offered here so
     /// a host without a portal — a lock screen, a test — can say the same.
     pub fn set_preference(&mut self, name: &str, value: IpcValue) -> Result<(), String> {
-        if !PREFERENCES.contains(&name) {
+        let Some(&name) = PREFERENCES.iter().find(|each| **each == name) else {
             return Err(format!("`{name}` is not a preference"));
+        };
+        if let Some(prefers) = &mut self.reactive.borrow_mut().prefers {
+            prefers.overridden.insert(name);
         }
         self.write_preference(name, value)?;
         self.lua
@@ -75,13 +78,47 @@ impl Runtime {
         let mut changes: Vec<(&'static str, IpcValue)> = Vec::new();
         let mut rewritten: Vec<usize> = Vec::new();
         {
-            let state = self.reactive.borrow();
+            let mut state = self.reactive.borrow_mut();
             if let Some(Prefers {
-                portal: Some((_, signal)),
+                portal: Some(portal),
+                overridden,
                 ..
-            }) = &state.prefers
+            }) = &mut state.prefers
             {
-                while let Some(Ok(value)) = signal.next_value(Duration::ZERO) {
+                // The portal arriving (or changing hands) is a reason to read
+                // it; it leaving is not, and what it said last stands.
+                let mut arrived = false;
+                while let Some(event) = portal.owner.next_event(Duration::ZERO) {
+                    if let Ok(DbusValue::List(parts)) = event.arguments
+                        && matches!(parts.get(2), Some(DbusValue::String(new)) if !new.is_empty())
+                    {
+                        arrived = true;
+                    }
+                }
+                if arrived {
+                    portal.pending = ask_portal();
+                }
+                // First readings, which a host's own setting outranks: it was
+                // made after the question went out, so it is the newer word.
+                portal.pending.retain(|(namespace, key, reply)| {
+                    let Some(answer) = reply.try_take() else {
+                        return true;
+                    };
+                    // `ReadOne` has one output, a variant, and a reply
+                    // decodes as the list of its outputs.
+                    let answer = answer.map(|value| match value {
+                        DbusValue::List(mut outputs) if outputs.len() == 1 => outputs.remove(0),
+                        other => other,
+                    });
+                    if let Ok(value) = answer
+                        && let Some(change) = preference_from_setting(namespace, key, value)
+                        && !overridden.contains(change.0)
+                    {
+                        changes.push(change);
+                    }
+                    false
+                });
+                while let Some(Ok(value)) = portal.changes.next_value(Duration::ZERO) {
                     let DbusValue::List(parts) = value else {
                         continue;
                     };

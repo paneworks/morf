@@ -21,7 +21,7 @@ const FAKE: &str = include_str!("lib_dbus_fake.lua");
 
 /// Runs `body` with `fake`, `morf`, `ui` and `done(text)` in scope, beside the
 /// examples so `require("lib.x")` finds the libraries, until `done` is called.
-fn run_with_fake(name: &str, body: &str) -> String {
+pub(super) fn run_with_fake(name: &str, body: &str) -> String {
     let script = format!(
         "local fake = (function()\n{FAKE}\nend)()\n\
          local morf = require(\"morf\")\n\
@@ -128,6 +128,9 @@ fn networkmanager_reads_the_tree_and_types_every_action() {
         local net = require("lib.networkmanager").connect({ dbus = fake.dbus, debounce_ms = 10 })
         local s = net.state
         local eq = fake.eq
+        -- Actions answer on a later turn; what they answered lands here.
+        local answered = {}
+        local function into(key) return function(value, err) answered[key] = value or err end end
 
         fake.steps({
             function()
@@ -173,7 +176,8 @@ fn networkmanager_reads_the_tree_and_types_every_action() {
                 eq(scan.args[1].signature, "a{sv}", "scan options typed")
 
                 -- An open network nobody saved: a new profile, no security.
-                eq(net.connect("cafe"), ROOT .. "/ActiveConnection/3", "connect open")
+                eq(net.connect("cafe", nil, nil, into("open")), true, "connect sent")
+                eq(answered.open, nil, "and not answered on the same turn")
                 local add = fake.calls_to("AddAndActivateConnection")[1]
                 eq(add.args[1].signature, "a{sa{sv}}", "settings typed")
                 eq(add.args[1].value["802-11-wireless"].ssid.signature, "ay", "ssid is bytes")
@@ -193,7 +197,7 @@ fn networkmanager_reads_the_tree_and_types_every_action() {
                 eq(sae.args[1].value["802-11-wireless-security"].psk, "sesame", "psk")
 
                 -- A saved network is activated as saved.
-                eq(net.connect("home"), ROOT .. "/ActiveConnection/2", "known connect")
+                assert(net.connect("home", nil, nil, into("known")))
                 local activate = fake.calls_to("ActivateConnection")[1]
                 eq(activate.args[1].signature, "o", "profile typed")
                 eq(activate.args[1].value, S1, "profile")
@@ -217,6 +221,14 @@ fn networkmanager_reads_the_tree_and_types_every_action() {
                 eq(set.value, false, "radio off")
             end,
             function()
+                eq(answered.open, ROOT .. "/ActiveConnection/3", "connect open")
+                eq(answered.known, ROOT .. "/ActiveConnection/2", "known connect")
+                for _, call in ipairs(fake.calls) do
+                    if call.method == "AddAndActivateConnection" or call.method == "RequestScan"
+                        or call.method == "Delete" or call.method == "Set" then
+                        eq(call.async, true, call.method .. " did not wait")
+                    end
+                end
                 eq(s.wifi_enabled, false, "radio state re-read")
                 -- A scan finished: strengths move without per-AP subscriptions.
                 fake.props("system", NM, AP .. "3", NM .. ".AccessPoint").Strength = 95
@@ -237,6 +249,7 @@ fn networkmanager_reads_the_tree_and_types_every_action() {
                 eq(s.available, false, "gone")
                 eq(s.access_points:len(), 0, "no access points")
                 eq(s.devices:len(), 0, "no devices")
+                eq(fake.subscribed("system", NM, DEV1, PROPS, "PropertiesChanged"), 0, "device watch closed")
                 eq(s.wifi.ssid, "", "no ssid")
                 local ok = net.connect("home")
                 eq(ok, nil, "nothing to connect with")
@@ -247,6 +260,7 @@ fn networkmanager_reads_the_tree_and_types_every_action() {
             function()
                 eq(s.available, true, "back")
                 eq(s.access_points:len(), 3, "rows back")
+                eq(fake.subscribed("system", NM, DEV1, PROPS, "PropertiesChanged"), 1, "and watched again")
             end,
         }, done)
         "#,
@@ -545,8 +559,8 @@ fn mpris_picks_the_active_player_and_interpolates_position() {
         local s = media.state
         local eq = fake.eq
         local function changed(name, props)
-            -- Every player shares the path, so any player's subscription
-            -- hears it; the library re-reads all of them.
+            -- Every player shares the path; the engine routes by sender, so
+            -- only this player's subscription hears it.
             fake.emit("session", name, PATH, PROPS, "PropertiesChanged", { PLAYER, props, {} })
         end
         fake.steps({
@@ -609,6 +623,10 @@ fn mpris_picks_the_active_player_and_interpolates_position() {
             end,
             function()
                 eq(s.count, 1, "beta left")
+                eq(fake.subscribed("session", BETA, PATH, PROPS, "PropertiesChanged"), 0,
+                    "and its subscription went with it")
+                eq(fake.subscribed("session", "org.mpris.MediaPlayer2.alpha", PATH, PROPS,
+                    "PropertiesChanged"), 1, "alpha's stays")
                 eq(s.active.name, "org.mpris.MediaPlayer2.alpha", "the pin went with it")
                 player("gamma", { PlaybackStatus = "Stopped", Metadata = {} }, "Gamma")
                 fake.emit("session", "org.freedesktop.DBus", "/org/freedesktop/DBus",
@@ -650,6 +668,7 @@ fn logind_reads_the_session_and_holds_inhibitors_by_process() {
             CanReboot = function() return "yes" end,
             CanPowerOff = function() return "yes" end,
             GetSession = function(args) if args[1] == "3" then return {{ REAL }} end error("no session") end,
+            Inhibit = function() return {{ fake.fd("inhibitor") }} end,
             ListInhibitors = function() return {{ {{ {{ "sleep", "NM", "networks", "delay", 0, 12 }} }} }} end,
             Suspend = ok, Reboot = ok, PowerOff = ok, Hibernate = ok,
         }})
@@ -660,11 +679,12 @@ fn logind_reads_the_session_and_holds_inhibitors_by_process() {
         }}, {{ Lock = ok, SetLockedHint = ok, SetBrightness = ok }})
 
         local login = require("lib.logind").connect({{
-            dbus = fake.dbus, backlight_dir = "{dir}", udev = false, inhibit_program = "true",
+            dbus = fake.dbus, backlight_dir = "{dir}", udev = false,
         }})
         local s = login.state
         local eq = fake.eq
         local locked, sleeping = 0, {{}}
+        local inhibitor, early
         login.on_lock(function() locked = locked + 1 end)
         login.on_prepare_for_sleep(function(going) sleeping[#sleeping + 1] = going end)
         fake.steps({{
@@ -704,13 +724,26 @@ fn logind_reads_the_session_and_holds_inhibitors_by_process() {
                 eq(fake.calls_to("PowerOff")[1].args[1], false, "not interactive")
                 assert(login.set_locked_hint(true))
                 eq(fake.calls_to("SetLockedHint")[1].args[1], true, "locked hint")
-                local handle = assert(login.inhibit("sleep", "me", "saving", "delay"))
-                eq(handle.argv[1], "--what=sleep", "what")
-                eq(handle.argv[4], "--mode=delay", "mode")
-                eq(handle.argv[5], "cat", "held by a pipe")
-                eq(handle.release(), true, "released")
-                eq(handle.release(), false, "once")
+                inhibitor = assert(login.inhibit("sleep", "me", "saving", "delay"))
+                local asked = fake.calls_to("Inhibit")[1]
+                eq(asked.args[1], "sleep", "what")
+                eq(asked.args[2], "me", "who")
+                eq(asked.args[3], "saving", "why")
+                eq(asked.args[4], "delay", "mode")
+                eq(inhibitor.held, false, "not until logind answers")
+                -- Released before the answer: the lock goes as it arrives.
+                early = assert(login.inhibit("idle", "me", "never mind", "block"))
+                eq(early.release(), true, "released early")
                 eq(login.can("reboot"), "yes", "asked now")
+            end,
+            function()
+                eq(inhibitor.held, true, "the lock is held by its descriptor")
+                eq(fake.fds[1]:is_open(), true, "open while held")
+                eq(inhibitor.release(), true, "released")
+                eq(inhibitor.release(), false, "once")
+                eq(fake.fds[1]:is_open(), false, "released means closed")
+                eq(fake.fds[2]:is_open(), false, "an early release closed it on arrival")
+                eq(early.held, false, "never held")
             end,
             function()
                 fake.emit("system", L, REAL, SESSION, "Lock", nil)
@@ -731,7 +764,7 @@ fn logind_reads_the_session_and_holds_inhibitors_by_process() {
 }
 
 /// Set in the child process that runs on a bus of its own.
-const PRIVATE_BUS: &str = "MORF_TEST_PRIVATE_SESSION_BUS";
+pub(super) const PRIVATE_BUS: &str = "MORF_TEST_PRIVATE_SESSION_BUS";
 
 /// A session bus that lets its one user do anything and activates nothing.
 const PRIVATE_BUS_CONFIG: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
@@ -766,20 +799,26 @@ fn services_over_a_private_session_bus() {
     // can be activated: a runtime starting up asks for the desktop portal,
     // and on a stock session bus that would launch one against the private
     // bus for nothing.
+    run_under_private_bus("tests::lib_dbus_services::private_bus_");
+}
+
+/// Re-runs the ignored tests matching `filter` in a child process under
+/// `dbus-run-session`, on a bus of its own; see the test above for why.
+pub(super) fn run_under_private_bus(filter: &str) {
     let Ok(test_binary) = std::env::current_exe() else {
         return;
     };
-    let config = std::env::temp_dir().join(format!("morf-private-bus-{}.conf", std::process::id()));
+    let config = std::env::temp_dir().join(format!(
+        "morf-private-bus-{}-{}.conf",
+        std::process::id(),
+        filter.replace(':', "_")
+    ));
     std::fs::write(&config, PRIVATE_BUS_CONFIG).unwrap();
     let status = std::process::Command::new("dbus-run-session")
         .arg(format!("--config-file={}", config.display()))
         .arg("--")
         .arg(test_binary)
-        .args([
-            "tests::lib_dbus_services::private_bus_",
-            "--ignored",
-            "--test-threads=1",
-        ])
+        .args([filter, "--ignored", "--test-threads=1"])
         .env(PRIVATE_BUS, "1")
         .status();
     let _ = std::fs::remove_file(&config);

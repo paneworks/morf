@@ -21,6 +21,7 @@ impl Runtime {
         let mut ready = Vec::new();
         let mut timers = Vec::new();
         let mut dbus_signals = Vec::new();
+        let mut dbus_replies = Vec::new();
         let mut dbus_calls = Vec::new();
         let mut pam_messages = Vec::new();
         let mut greetd_messages = Vec::new();
@@ -157,10 +158,26 @@ impl Runtime {
                 index += 1;
             }
             for subscription in &state.dbus_signals {
-                while let Some(value) = subscription.signal.next_value(Duration::ZERO) {
-                    dbus_signals.push((subscription.callback.clone(), value));
+                while let Some(event) = subscription.signal.next_event(Duration::ZERO) {
+                    dbus_signals.push((
+                        subscription.id,
+                        subscription.callback.clone(),
+                        subscription.kind,
+                        event,
+                    ));
                 }
             }
+            // An answer leaves the list as it is delivered, and so does one
+            // that missed its deadline; the rest wait for a later turn.
+            state
+                .dbus_replies
+                .retain(|entry| match entry.reply.try_take() {
+                    Some(reply) => {
+                        dbus_replies.push((entry.callback.clone(), reply));
+                        false
+                    }
+                    None => true,
+                });
             // A conversation says a few things per turn and then waits on a
             // person, so this never runs long. A finished session leaves the
             // list after its verdict is delivered, which is why the verdict is
@@ -424,22 +441,34 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("D-Bus call: {message}"));
             }
         }
-        for (callback, value) in dbus_signals {
-            let value = match value {
-                Ok(value) => value,
-                Err(message) => {
-                    self.reactive
-                        .borrow_mut()
-                        .log(LogLevel::Warn, format!("D-Bus signal: {message}"));
-                    continue;
-                }
-            };
-            if let Err(message) =
-                self.run_handler(|ctx, limits| execute_dbus_handler(ctx, &callback, value, limits))
-            {
+        for (callback, reply) in dbus_replies {
+            if let Err(message) = self.run_handler(|ctx, limits| {
+                execute_dbus_reply_handler(ctx, &callback, reply, limits)
+            }) {
                 self.reactive
                     .borrow_mut()
-                    .log(LogLevel::Warn, format!("D-Bus callback: {message}"));
+                    .log(LogLevel::Warn, format!("D-Bus reply callback: {message}"));
+            }
+        }
+        for (id, callback, kind, event) in dbus_signals {
+            // Closed by an earlier callback in this same batch: what was
+            // already read for it is not delivered, because "after close,
+            // nothing" is the promise `close` makes.
+            if !self
+                .reactive
+                .borrow()
+                .dbus_signals
+                .iter()
+                .any(|subscription| subscription.id == id)
+            {
+                continue;
+            }
+            if let Err(message) = self.run_handler(|ctx, limits| {
+                execute_dbus_signal_handler(ctx, &callback, event, kind, limits)
+            }) {
+                self.reactive
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("D-Bus signal: {message}"));
             }
         }
         for (callback, event) in udev_events {

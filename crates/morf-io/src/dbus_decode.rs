@@ -25,8 +25,10 @@ pub(crate) fn dynamic_value(value: &Value<'_>) -> Result<DbusValue, String> {
         Value::Array(value) => array_value(value)?,
         Value::Dict(value) => dict_value(value)?,
         Value::Structure(value) => structure_value(value)?,
+        // Duplicated out of the message, which closes its own copies when it
+        // goes. See `dbus_types` for why this is safe to hand onwards.
         #[cfg(unix)]
-        Value::Fd(_) => return Err("D-Bus file descriptors cannot cross into Lua".to_owned()),
+        Value::Fd(fd) => DbusValue::Fd(owned_fd(fd)?),
         #[allow(unreachable_patterns)]
         _ => return Err("D-Bus value is not supported".to_owned()),
     })
@@ -62,6 +64,45 @@ fn dict_value(value: &Dict<'_, '_>) -> Result<DbusValue, String> {
     Ok(DbusValue::Map(map))
 }
 
+/// A descriptor borrowed from a message, as one of our own.
+pub(crate) fn owned_fd(fd: &zbus::zvariant::Fd<'_>) -> Result<crate::dbus_types::DbusFd, String> {
+    use std::os::fd::AsFd;
+    fd.as_fd()
+        .try_clone_to_owned()
+        .map(crate::dbus_types::DbusFd::new)
+        .map_err(|error| format!("could not keep a D-Bus file descriptor: {error}"))
+}
+
+/// One signal as it arrived: who sent it, from where, and what it said.
+#[derive(Debug)]
+pub struct DbusSignalEvent {
+    /// The sender's unique name, which is what tells two services emitting
+    /// on the same path apart.
+    pub sender: String,
+    pub path: String,
+    pub interface: String,
+    pub member: String,
+    /// The body, decoded as a reply is.
+    pub arguments: Result<DbusValue, String>,
+}
+
+impl DbusSignalEvent {
+    /// Reads the header and decodes the body of one signal message.
+    pub fn from_message(message: &zbus::Message) -> Self {
+        let header = message.header();
+        Self {
+            sender: header.sender().map(ToString::to_string).unwrap_or_default(),
+            path: header.path().map(ToString::to_string).unwrap_or_default(),
+            interface: header
+                .interface()
+                .map(ToString::to_string)
+                .unwrap_or_default(),
+            member: header.member().map(ToString::to_string).unwrap_or_default(),
+            arguments: decode_message_value(message),
+        }
+    }
+}
+
 /// Blocking receiver for a filtered D-Bus signal stream.
 pub struct DbusSignal {
     pub(crate) events: mpsc::Receiver<zbus::Message>,
@@ -88,6 +129,12 @@ impl DbusSignal {
     /// Waits for the next signal message.
     pub fn next(&self, timeout: Duration) -> Option<zbus::Message> {
         self.events.recv_timeout(timeout).ok()
+    }
+
+    /// Waits for the next signal, with its sender and address.
+    pub fn next_event(&self, timeout: Duration) -> Option<DbusSignalEvent> {
+        self.next(timeout)
+            .map(|message| DbusSignalEvent::from_message(&message))
     }
 
     /// Waits for and decodes the next scalar signal body.
