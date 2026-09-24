@@ -13,6 +13,9 @@ impl Runtime {
     /// Polls native service jobs and runs completed callbacks with bounded fuel.
     pub fn poll_services(&mut self) -> bool {
         self.flush_lint();
+        // The shell's loop wakes at least ten times a second, which is what
+        // lets a caret blink without a timer of its own.
+        let blinked = self.blink_text_inputs();
         let appearance_changed = self.poll_appearance();
         let audio_changed = self.poll_audio();
         let mut ready = Vec::new();
@@ -336,6 +339,7 @@ impl Runtime {
         let service_changed = service_changed
             || appearance_changed
             || audio_changed
+            || blinked
             || !transform_callbacks.is_empty();
         for (callback, unlock_on_success, result) in ready {
             if unlock_on_success && result.is_ok() {

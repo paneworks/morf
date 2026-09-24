@@ -70,21 +70,14 @@ impl EventPoint {
 }
 
 impl Runtime {
-    /// Runs one bounded key handler with keysym and UTF-8 text arguments.
+    /// Runs one key with no modifiers held; see [`Runtime::dispatch_key`].
     pub fn dispatch_key_event(
         &mut self,
         node: NodeHandle,
         keysym: u32,
         text: Option<&str>,
     ) -> bool {
-        self.dispatch_ui_event_with_args(
-            node,
-            UiEvent::KeyPressed,
-            &[
-                IpcValue::Integer(keysym as i64),
-                text.map_or(IpcValue::Nil, |value| IpcValue::String(value.to_owned())),
-            ],
-        )
+        self.dispatch_key(node, keysym, text, crate::KeyModifiers::default())
     }
 
     /// Dispatches one touch event with contact identity and both coordinate
@@ -129,6 +122,40 @@ impl Runtime {
     /// click in the shell was dropped for exactly that reason. There is now no
     /// wrong one to reach for.
     pub fn dispatch_pointer(
+        &mut self,
+        node: NodeHandle,
+        event: UiEvent,
+        point: EventPoint,
+        delta: (f64, f64),
+    ) -> bool {
+        // A text input answers the pointer itself — a caret where it was
+        // pressed, a selection where it is dragged — and then its own
+        // handlers, if the configuration gave it any, hear it as usual.
+        let edited = self.is_text_input(node) && {
+            let local = (point.local_x, point.local_y);
+            {
+                let mut state = self.reactive.borrow_mut();
+                match event {
+                    UiEvent::Pressed => crate::text_inputs::press(&mut state, node, local),
+                    UiEvent::PointerMoved | UiEvent::Dragged | UiEvent::DragStarted => {
+                        crate::text_inputs::drag(&mut state, node, local);
+                    }
+                    UiEvent::Released | UiEvent::DragFinished => {
+                        crate::text_inputs::release(&mut state, node);
+                    }
+                    _ => {}
+                }
+            }
+            self.finish_text_input_work();
+            matches!(
+                event,
+                UiEvent::Pressed | UiEvent::PointerMoved | UiEvent::Dragged | UiEvent::Released
+            )
+        };
+        edited | self.dispatch_pointer_handler(node, event, point, delta)
+    }
+
+    fn dispatch_pointer_handler(
         &mut self,
         node: NodeHandle,
         event: UiEvent,
@@ -227,6 +254,10 @@ impl Runtime {
     /// Returns whether a MouseArea accepts one Linux input button code.
     pub fn accepts_pointer_button(&self, node: NodeHandle, button: u32) -> bool {
         let state = self.reactive.borrow();
+        // A text input places its caret with the primary button.
+        if state.scene.element(node).ok() == Some(morf_scene::Element::TextInput) {
+            return button == 0x110;
+        }
         let Ok(value) = state.scene.current(node, "accepted_buttons") else {
             return false;
         };

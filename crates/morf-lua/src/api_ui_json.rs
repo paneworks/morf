@@ -19,6 +19,7 @@ pub(crate) fn install_ui_json_api<'gc>(
         ("Rect", Element::Rect),
         ("ClipRect", Element::ClipRect),
         ("Text", Element::Text),
+        ("TextInput", Element::TextInput),
         ("Image", Element::Image),
         ("Icon", Element::Icon),
         ("Sdf", Element::Sdf),
@@ -69,7 +70,7 @@ pub(crate) fn install_ui_json_api<'gc>(
             other => format!("{other:?}"),
         };
         Err(HostError(format!(
-            "no ui kind `{key}`: the kinds are Item, Inset, Rect, ClipRect, Text, Image, Icon, Sdf, SdfShape, MouseArea, DropArea, Row, Column, Grid, Flex, Flickable, Loader, Timer, Layout, Repeater, ListView, GridView, each"
+            "no ui kind `{key}`: the kinds are Item, Inset, Rect, ClipRect, Text, TextInput, Image, Icon, Sdf, SdfShape, MouseArea, DropArea, Row, Column, Grid, Flex, Flickable, Loader, Timer, Layout, Repeater, ListView, GridView, each"
         ))
         .into())
     });

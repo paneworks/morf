@@ -82,5 +82,6 @@ mod alignment;
 mod basic;
 mod custom;
 mod flex;
+mod text_input;
 mod transforms;
 mod views;

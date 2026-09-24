@@ -197,6 +197,25 @@ impl Layout {
                     style: crate::text_style::TextStyle::from_scene(scene, node)?,
                 },
             ),
+            Element::TextInput => {
+                let width = self.text_widths.get(&node).copied();
+                let shape = crate::text_input::InputShape::read(scene, node, width)?;
+                let line = shape.line_height();
+                let measured = text.measure(
+                    node,
+                    &shape.display.text,
+                    &shape.family,
+                    shape.size,
+                    shape.options,
+                );
+                // Never shorter than a line, so an empty field with no
+                // placeholder is still somewhere to click; and a caret's
+                // width wider, so the caret at the end is not clipped away.
+                Size {
+                    width: measured.width + scene.number(node, "caret_width")?.max(0.0),
+                    height: measured.height.max(line),
+                }
+            }
             Element::Image | Element::Icon => {
                 let element = scene.element(node)?;
                 let source = if element == Element::Image {

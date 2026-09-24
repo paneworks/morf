@@ -35,7 +35,7 @@ ui.Rect {
 |---|---|
 | containers | `Item`, `Inset`, `Flickable`, `Loader`, `Layout` |
 | painting | `Rect`, `ClipRect`, `Text`, `Image`, `Icon`, `Sdf`, `SdfShape` |
-| input | `MouseArea` (the only kind the pointer can hit), `DropArea` (the only kind a drag can) |
+| input | `MouseArea` and `TextInput` (the kinds the pointer can hit), `DropArea` (the only kind a drag can) |
 | positioners | `Row`, `Column`, `Grid` with `columns` |
 | layouts | `Flex`, `Grid` with tracks |
 | lists | `Repeater`, `ListView`, `GridView`, `each` |
@@ -432,6 +432,68 @@ ui.Text {
   decoration = function() return refused:get() and { line = "under", color = theme.alert } or {} end,
 }
 ```
+
+### Text input
+
+`ui.TextInput` is text you can edit. It is set by the same shaper as
+`Text` and takes the same type properties (`font_family`, `font_size`,
+`font_weight`, `line_height`, `letter_spacing`, `word_spacing`,
+`font_style`, `font_stretch`, `horizontal_alignment`); everything it
+draws — `color`, `placeholder_color`, `selection_color`,
+`selected_text_color`, `caret_color`, `caret_width` — animates like any
+other number or colour.
+
+```lua
+local search -- declared first: the field's own callback names it
+search = ui.TextInput {
+  width = 320, height = 40, font_size = 16, color = "#e6e8ee",
+  placeholder = "Search…", placeholder_color = "#8b90a0", focus = true,
+  on_text_changed = function(text) query:set(text) end,
+  on_accepted = function(text) launch(text) end,
+  on_escape = function() search.text = "" end,
+}
+```
+
+`text` goes both ways: assigning it replaces what the field holds (and
+its undo history), and every edit the field makes assigns it — so a
+binding on `search.text` follows the keyboard. `on_text_changed(text)`
+fires for the field's own edits (typing, pasting, `:insert`), not for an
+assignment. `placeholder` shows while `text` is empty. `multiline = true`
+takes Enter as a new line (Ctrl+Enter accepts) and wraps at the width
+unless `wrap = false`; a single line never wraps and scrolls sideways under
+the caret instead. `password = true` draws each character as
+`password_char` and refuses copy and cut. `max_length` caps the
+characters (zero is no limit), `read_only` leaves it selectable but not
+editable, `caret_blink_interval` is the blink's half period in ms (zero
+holds still), and `vertical_alignment` places a single line in a taller
+box.
+
+The keys are the ones every text box has: arrows, Home/End (Ctrl for the
+whole text), Ctrl for a word at a time, Shift to select, Up/Down and
+PageUp/PageDown between lines, Ctrl+A, Ctrl+C/X/V (and Shift+Delete,
+Ctrl/Shift+Insert) through the compositor clipboard, Ctrl+Z and
+Ctrl+Shift+Z or Ctrl+Y, Enter to `on_accepted(text)`, Escape to
+`on_escape()`. A click places the caret, a double click selects a word, a
+triple click the line, and a drag selects. A key the field has no use for
+— Up in a single line, Ctrl+Q — goes to its own `on_key_pressed(keysym,
+text, modifiers)`, which is how a launcher moves its list from the search
+box. `modifiers` is a string such as `"ctrl+shift"`; every
+`on_key_pressed` receives it.
+
+A field has the keyboard when `focus` is true, and one field at a time
+does: a click, a Tab, or writing `focus = true` moves it, and
+`on_focus_changed(focused)` says so. While it has it, the compositor's
+input method (text-input-v3) is enabled for it and what the input method
+commits is typed into the field.
+
+The caret and the selection are properties too, as byte offsets —
+the number of bytes before them, so `text:sub(1, cursor_position)` is
+what lies left of the caret: `cursor_position`, `selection_start` and
+`selection_end`, each writable. `scroll_x`/`scroll_y` are how far the
+content has scrolled to keep the caret in view, and `content_width` /
+`content_height` how big it is, for a scroll bar to follow. Methods:
+`:select(start, stop)`, `:select_all()`, `:deselect()`, `:insert(text)`,
+`:selected_text()`, `:undo()`, `:redo()`.
 
 ### Entering
 

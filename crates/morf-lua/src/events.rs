@@ -39,6 +39,15 @@ pub enum UiEvent {
     DropMoved,
     /// A drag was let go over a `DropArea` that accepted it.
     Dropped,
+    /// A text input's text was edited, by a key, a paste or a method.
+    TextChanged,
+    /// Enter was pressed in a single-line text input, or Ctrl+Enter in a
+    /// multi-line one.
+    Accepted,
+    /// Escape was pressed in a text input.
+    Escape,
+    /// A text input gained or lost the keyboard.
+    FocusChanged,
 }
 
 /// Every event a configuration can handle, and the property it writes.
@@ -65,6 +74,10 @@ pub(crate) const EVENT_PROPERTIES: &[(UiEvent, &str)] = &[
     (UiEvent::TouchCanceled, "on_touch_canceled"),
     (UiEvent::DropMoved, "on_moved"),
     (UiEvent::Dropped, "on_dropped"),
+    (UiEvent::TextChanged, "on_text_changed"),
+    (UiEvent::Accepted, "on_accepted"),
+    (UiEvent::Escape, "on_escape"),
+    (UiEvent::FocusChanged, "on_focus_changed"),
 ];
 
 impl UiEvent {

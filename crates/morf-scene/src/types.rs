@@ -31,6 +31,9 @@ pub enum Element {
     ClipRect,
     /// Shaped text primitive.
     Text,
+    /// Editable text: a caret, a selection, and the keys and pointer that move
+    /// them. Single line unless `multiline` says otherwise.
+    TextInput,
     /// Raster or SVG image primitive.
     Image,
     /// XDG icon-theme image primitive.
@@ -76,6 +79,7 @@ impl Element {
             Self::Rect => "Rect",
             Self::ClipRect => "ClipRect",
             Self::Text => "Text",
+            Self::TextInput => "TextInput",
             Self::Image => "Image",
             Self::Icon => "Icon",
             Self::Sdf => "Sdf",

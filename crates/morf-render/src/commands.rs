@@ -8,6 +8,32 @@ mod sdf_types;
 
 pub use sdf_types::*;
 
+/// What a text input adds to its text: where it has scrolled to, what is
+/// selected, and where the caret is.
+///
+/// Offsets are into the shaped string — the dots of a password, not its
+/// letters — because it is the shaped string the glyphs came from.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextEdit {
+    /// How far the content has scrolled under the box.
+    pub scroll: (f64, f64),
+    /// The selected range, empty when nothing is.
+    pub selection: Range<usize>,
+    /// Behind the selected text.
+    pub selection_color: Color,
+    /// The selected text's own colour; fully transparent keeps the text's.
+    pub selected_text_color: Color,
+    /// The caret's offset, or nothing while it is hidden.
+    pub caret: Option<usize>,
+    /// The caret's colour, already resolved from the text's when unset.
+    pub caret_color: Color,
+    /// The caret's width in logical pixels.
+    pub caret_width: f64,
+    /// Whether the text drawn is the placeholder; its caret then stands at the
+    /// start of the line, wherever the alignment would put nothing.
+    pub placeholder: bool,
+}
+
 /// One ordered paint operation emitted from the scene graph.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DrawCommand {
@@ -103,6 +129,9 @@ pub enum DrawCommand {
         style: TextStyle,
         /// A line under, over or through the text, if it has one.
         decoration: Option<TextDecoration>,
+        /// The caret, selection and scroll of a text input; nothing for text
+        /// that is only read.
+        edit: Option<Box<TextEdit>>,
     },
     /// Rasterized image or theme icon.
     Texture {

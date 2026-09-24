@@ -402,6 +402,8 @@ pub(crate) fn normalize_font_weight(weight: f64) -> u16 {
     }
 }
 
+mod caret;
+mod edit;
 mod elide;
 mod families;
 mod glyph_fields;
@@ -409,6 +411,8 @@ mod glyph_fields;
 mod glyph_fields_reference;
 mod glyph_morph;
 mod glyph_steps;
+pub use caret::{CaretLine, CaretMap, CaretRect, SpanRect};
+pub use edit::{DEFAULT_HISTORY, EditBuffer};
 pub use families::{family_files, installed_families};
 pub use glyph_morph::CONTOUR_POINTS as GLYPH_CONTOUR_POINTS;
 /// A closed loop of an outline, for a caller pairing letters with shapes that
@@ -426,6 +430,8 @@ pub use glyph_fields::{
     field_units_per_logical_px,
 };
 
+#[cfg(test)]
+mod caret_tests;
 #[cfg(test)]
 mod probe_tests;
 #[cfg(test)]

@@ -113,6 +113,7 @@ impl LayerState {
             text: event.utf8,
             pressed,
             repeat,
+            modifiers: self.modifiers,
         });
     }
 }

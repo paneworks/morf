@@ -100,8 +100,16 @@ impl LayerClient {
 
     /// Creates and requests text-input-v3 for the current seat.
     pub fn enable_text_input(&mut self) -> bool {
+        let already = self.state.text_input_requested;
         self.state.text_input_requested = true;
-        if self.state.text_input.is_some() {
+        if let Some(text_input) = &self.state.text_input {
+            // Enabled on `enter` when asked for before it; asked for again
+            // after a disable, on a surface that already has the text input,
+            // there is no `enter` coming to do it.
+            if !already && self.state.text_input_pending.focused {
+                text_input.enable();
+                text_input.commit();
+            }
             return true;
         }
         let Some(manager) = &self.state.text_input_manager else {

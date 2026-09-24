@@ -66,5 +66,6 @@ mod damage;
 mod field_packing;
 mod fields;
 mod outline_boxes;
+mod text_input;
 mod transform_text;
 mod tree;

@@ -1,7 +1,7 @@
 use morf_layout::{Geometry, Layout, Transform2D, node_transform};
 use morf_scene::{Color, Element, NodeHandle, Scene};
 
-use crate::{commands::*, effects::*, paint_fields::*, sdf::*};
+use crate::{commands::*, effects::*, paint_fields::*, paint_text_input::*, sdf::*};
 
 #[derive(Clone, Copy)]
 pub(crate) struct PaintContext {
@@ -201,7 +201,19 @@ pub(crate) fn append_node(
                 .map_err(|error| RenderError::Scene(error.to_string()))?,
             decoration: morf_scene::TextDecoration::parse(scene.current(node, "decoration")?)
                 .map_err(RenderError::Scene)?,
+            edit: None,
         }),
+        Element::TextInput => {
+            list.commands.push(text_input_command(
+                scene,
+                node,
+                bounds,
+                transform,
+                clip,
+                &inherited,
+                color_overlay,
+            )?);
+        }
         Element::Image => list.commands.push(DrawCommand::Texture {
             node,
             bounds,

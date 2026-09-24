@@ -3,7 +3,6 @@ use morf_lua::{
     WorkspaceRequest,
 };
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_scene::NodeHandle;
 use morf_wayland::{
     BarConfig, KeyboardFocus, LayerAnchors, LayerClient, PRIMARY_LAYER, ShellLayer, ToplevelAction,
     physical_size,
@@ -459,35 +458,4 @@ pub(crate) fn layer_surface_closed(
     if state.layer_surfaces.remove(&id).is_some() {
         runtime.set_window_surface_visible(id, false);
     }
-}
-
-/// Routes one key press into a surface subtree, keeping its focus.
-///
-/// Tab moves to the next focusable node and off the end again; anything else
-/// goes to whatever holds focus, or to the first thing that can take it.
-///
-/// This exists as a function because the lock screen had its own copy that did
-/// neither — no traversal and no persistence, so every key went to the first
-/// focusable node in the tree. On the one surface whose entire purpose is to
-/// accept a password, a second field could not be reached at all.
-///
-/// Returns whether anything changed enough to want a repaint.
-pub(crate) fn dispatch_key_in_subtree(
-    runtime: &mut Runtime,
-    root: NodeHandle,
-    focused: &mut Option<NodeHandle>,
-    keysym: u32,
-    text: Option<&str>,
-) -> bool {
-    const TAB: u32 = 0xff09;
-    let current = focused.filter(|node| runtime.node_in_subtree(root, *node));
-    if keysym == TAB {
-        *focused = runtime.next_key_target_in(root, current);
-        return true;
-    }
-    let Some(node) = current.or_else(|| runtime.first_key_target_in(root)) else {
-        return false;
-    };
-    *focused = Some(node);
-    runtime.dispatch_key_event(node, keysym, text)
 }

@@ -5,7 +5,7 @@ use crate::helpers::LayoutError;
 use crate::layout::Layout;
 use crate::transform::node_transform;
 
-/// One hit-tested MouseArea together with the tested point inside that node.
+/// One hit-tested MouseArea or TextInput together with the tested point inside that node.
 ///
 /// The two coordinate spaces are deliberately distinct. A hit test is queried
 /// in *surface* space — the coordinates the compositor delivers, shared by
@@ -186,9 +186,12 @@ impl Layout {
         };
         let transform = inherited.then(node_transform(scene, node, geometry)?);
         // A DropArea takes input too: the compositor sends a drag only to the
-        // surface whose input region is under it.
-        if matches!(scene.element(node)?, Element::MouseArea | Element::DropArea)
-            && let Some(geometry) = self.geometry(node)
+        // surface whose input region is under it; and a text input takes the
+        // pointer itself.
+        if matches!(
+            scene.element(node)?,
+            Element::MouseArea | Element::DropArea | Element::TextInput
+        ) && let Some(geometry) = self.geometry(node)
         {
             rectangles.push(transform.bounds(geometry));
         }
@@ -233,15 +236,22 @@ impl Layout {
         // is resolved in, which is absolute; subtracting the node's origin is
         // what makes it node-local.
         Ok(
-            (inside && scene.element(node)? == target.element && (target.accept)(node)).then_some(
-                Hit {
+            (inside && wanted(scene.element(node)?, target.element) && (target.accept)(node))
+                .then_some(Hit {
                     node,
                     local_x: local_x - geometry.x,
                     local_y: local_y - geometry.y,
-                },
-            ),
+                }),
         )
     }
+}
+
+/// Whether a node of kind `found` answers a hit test looking for `sought`.
+///
+/// A text input answers the pointer's: a click places its caret and a drag
+/// selects, which no MouseArea laid over it could do for it.
+fn wanted(found: Element, sought: Element) -> bool {
+    found == sought || (sought == Element::MouseArea && found == Element::TextInput)
 }
 
 /// A node's four corner radii, falling back to the uniform one.

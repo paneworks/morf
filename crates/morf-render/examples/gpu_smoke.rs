@@ -90,6 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 morph_progress: 0.0,
                 style: morf_layout::TextStyle::default(),
                 decoration: None,
+                edit: None,
                 node: text,
                 bounds: Geometry {
                     x: 190.0,

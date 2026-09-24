@@ -222,6 +222,7 @@ impl LayerClient {
             pressed_surface: None,
             drag_source: None,
             latest_input_serial: None,
+            modifiers: KeyModifiers::default(),
             virtual_keyboard_manager,
             virtual_keyboard: None,
             virtual_keyboard_keymap: default_keymap(),

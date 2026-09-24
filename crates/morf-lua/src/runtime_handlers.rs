@@ -35,6 +35,9 @@ impl Runtime {
                 .borrow_mut()
                 .log(LogLevel::Warn, format!("after handler: {message}"));
         }
+        // A handler that edited a text input — `:insert`, `:select` — owes
+        // that field's callbacks, which could not run while it was running.
+        self.drain_input_events();
         result
     }
 }

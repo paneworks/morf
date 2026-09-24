@@ -11,7 +11,7 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crate::{capture::*, paint::*, surface_layers::*, surfaces::*};
+use crate::{capture::*, paint::*, surface_keys::*, surface_layers::*, surfaces::*};
 
 pub(crate) struct Worker {
     pub(crate) stop: Arc<AtomicBool>,
@@ -173,6 +173,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                     pressed: true,
                     keysym,
                     text,
+                    modifiers,
                     ..
                 } => {
                     // The same routing every other surface gets. This used to
@@ -189,6 +190,7 @@ pub(crate) fn run_lock(mut runtime: Runtime) -> Result<(), String> {
                         &mut focused,
                         keysym,
                         text.as_deref(),
+                        key_modifiers(modifiers),
                     );
                 }
                 LayerEvent::SessionLockFinished => {
@@ -375,6 +377,7 @@ pub(crate) fn paint_lock(
         },
         renderer.backend_mut(),
     )?;
+    runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
     let scene = runtime.scene();
     client.request_lock_frame(index);
     let scale = client.lock_scale_120(index).unwrap_or(120);
