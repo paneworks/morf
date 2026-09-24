@@ -106,9 +106,18 @@ function M.move_door(id, delta) settings.set("centreButtons", M.moved(M.buttons(
 local function lazy(name)
   return function() return require(name) end
 end
-local network, bluetooth, audio, system, notify, osd =
+local network, bluetooth, audio, system, notify, osd, clipboard =
   lazy("services.network"), lazy("services.bluetooth"), lazy("services.audio"),
-  lazy("services.system"), lazy("services.notifications"), lazy("services.osd")
+  lazy("services.system"), lazy("services.notifications"), lazy("services.osd"),
+  lazy("services.clipboard")
+
+-- hyprsunset is optional; looked for once, so the tile can say it is
+-- missing (SunsetService.qml:34-43).
+local night_found
+local function night_available()
+  if night_found == nil then night_found = require("services.night").available() end
+  return night_found
+end
 
 --- Airplane mode is Wi-Fi and Bluetooth both off; neither service owns it.
 function M.airborne()
@@ -165,9 +174,13 @@ M.tile_catalogue = {
       if bluetooth().available() and bluetooth().enabled() ~= turn_on then bluetooth().toggle() end
     end },
   { key = "nightlight", label = "Night light",
-    icon = function() return "󰖔" end,
-    detail = function() return settings.nightLight and (settings.nightTemperature .. " K") or "Off" end,
+    icon = function() return settings.nightLight and "󰃜" or "󰃝" end,
+    detail = function()
+      if not night_available() then return "Needs hyprsunset" end
+      return settings.nightLight and (settings.nightTemperature .. " K") or "Daylight"
+    end,
     active = function() return settings.nightLight end,
+    available = night_available,
     action = function() require("services.night").toggle() end },
   { key = "output", label = "Output",
     icon = function() return audio().icon() end,
@@ -205,9 +218,15 @@ M.tile_catalogue = {
   { key = "record", label = "Record", closes = true,
     icon = function() return "󰕧" end, detail = function() return "The screen" end,
     available = no },
+  -- A one-shot action, which also lists it in the launcher's `>`.
   { key = "clearClipboard", label = "Clear clipboard", closes = true,
-    icon = function() return "󰅍" end, detail = function() return "Nothing kept" end,
-    available = no },
+    icon = function() return "󰅍" end,
+    detail = function()
+      local n = clipboard().count()
+      return n == 1 and "1 entry kept" or (n .. " entries kept")
+    end,
+    available = function() return settings.clipboardHistory and clipboard().count() > 0 end,
+    action = function() clipboard().wipe() end },
 }
 
 local tiles_by_key = {}
