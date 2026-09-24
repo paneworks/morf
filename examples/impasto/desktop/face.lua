@@ -57,6 +57,12 @@ function M.build(ctx)
   local build = builder(ctx)
   if not build then return placeholder(ctx, "no face") end
   local ok, node = pcall(build, ctx)
+  if ok and node and ctx.id == "updates" then
+    -- The count is checked, and its age moves, while a face shows it.
+    local S = require("desktop.sources")
+    S.updates.subscribe()
+    return ui.Item { width = ctx.width, height = ctx.height, on_destroyed = S.updates.release, node }
+  end
   if ok and node then return node end
   morf.log("error", "impasto: the " .. ctx.id .. " face (" .. ctx.family .. ", " .. ctx.theme .. ") failed: " .. tostring(node))
   return placeholder(ctx, "failed")

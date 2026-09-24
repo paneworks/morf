@@ -313,6 +313,7 @@ end
 S.media.title = field("title")
 S.media.artist = field("artist")
 S.media.identity = field("identity")
+S.media.album = field("album")
 --- A local path for the art, or "".
 function S.media.art()
   if media_service and media_service.art then return call(media_service, "art") or "" end
@@ -342,6 +343,7 @@ S.media.next = transport("next", "next")
 S.media.previous = transport("previous", "previous")
 
 -- ------------------------------------------------------------------- timer --
+
 
 -- The bar's countdown, when its port has landed; a small one here until then.
 S.timer = {}
@@ -415,9 +417,10 @@ end
 
 -- ----------------------------------------------------------------- updates --
 
--- Pending packages through `lib.packages`, which lands in lua-stdlib
--- separately. Without it the faces say "cannot check".
+-- Pending packages: the updates service (UpdatesService), else a reader over
+-- `lib.packages`. Without either the faces say "cannot check".
 S.updates = {}
+local updates_service = optional("services.updates")
 local packages_ok, packages = pcall(require, "lib.packages")
 if not packages_ok then packages = nil end
 local packages_handle = nil
@@ -439,17 +442,23 @@ local function updates_now()
   return value
 end
 function S.updates.available()
+  if updates_service then return call(updates_service, "available") == true end
   local now = updates_now()
   if now.available ~= nil then return now.available == true end
   return type(now.managers) == "table" and #now.managers > 0
 end
-function S.updates.checking() return updates_now().checking == true end
+function S.updates.checking()
+  if updates_service then return call(updates_service, "checking") == true end
+  return updates_now().checking == true
+end
 function S.updates.count()
+  if updates_service then return tonumber(call(updates_service, "count")) or 0 end
   local now = updates_now()
   return tonumber(now.total or now.count) or 0
 end
 --- Names of pending packages, up to `n`, across the managers.
 function S.updates.packages(n)
+  if updates_service then return call(updates_service, "names", n) or {} end
   local now = updates_now()
   local out = {}
   for _, manager in ipairs(now.managers or {}) do
@@ -460,6 +469,11 @@ function S.updates.packages(n)
   end
   return out
 end
+--- "5 min ago", "just now", or "" before the first check.
+function S.updates.age() return updates_service and call(updates_service, "age") or "" end
+--- A face on screen keeps the count checked and the age moving.
+function S.updates.subscribe() if updates_service then call(updates_service, "subscribe") end end
+function S.updates.release() if updates_service then call(updates_service, "release") end end
 
 -- ------------------------------------------------------------------- tasks --
 

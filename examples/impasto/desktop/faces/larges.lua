@@ -41,7 +41,11 @@ function M.stats(ctx)
   return face(ctx, {
     label = "System",
     reading = function() return string.format("%d%%", math.floor(stats.cpu() + 0.5)) end,
-    note = function() return string.format("load %.2f · RAM %d%%", (stats.load()[1] or 0), math.floor(stats.memory_fraction() * 100 + 0.5)) end,
+    -- The load and how far back the graphs go (StatsService.window).
+    note = function()
+      local minutes = math.floor((stats.HISTORY or 100) * (stats.POLL_MS or 3000) / 60000 + 0.5)
+      return string.format("load %.2f · last %d min", (stats.load()[1] or 0), minutes)
+    end,
     mark = glyph { glyph = "󰻠", size = 30, color = ink.text },
     body = function(w, h)
       local traces = {

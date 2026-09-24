@@ -81,7 +81,7 @@ function M.build(key, arranging)
     anchors = { fill = true },
     layer = function()
       local r = row()
-      if on_picture() and r and r.id ~= "spectrum" and r.id ~= "notes" then
+      if on_picture() and r and r.id ~= "spectrum" then
         return { enabled = true, shadow_color = C.island:alpha(0.6), shadow_blur = 8, shadow_offset_y = 2 }
       end
       return { enabled = false }

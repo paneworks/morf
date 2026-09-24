@@ -50,7 +50,6 @@ function M.build(ctx)
   end
   return ui.Item {
     width = w, height = h,
-    layer = { enabled = true, shadow_color = morf.color("#000000"):alpha(0.35), shadow_blur = 10, shadow_offset_y = 2 },
     ui.Rect {
       anchors = { fill = true }, radius = theme.paper_radius,
       color = function()

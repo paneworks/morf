@@ -106,27 +106,40 @@ local function lattice()
   return ui.Item { table.unpack(cells) }
 end
 
--- The cell the held widget would drop into.
+-- The cell the held widget would drop into. It appears where it is headed,
+-- not from wherever it was last hidden, and only glides between cells
+-- (Desktop.qml's landing).
 local function landing()
-  local function box()
-    local family = desk.landing_family:get()
-    if family == "" then return nil end
-    return desk.box(desk.landing_col:get(), desk.landing_row:get(), family)
-  end
-  return ui.Rect {
-    visible = function() return box() ~= nil end,
-    x = function() local b = box() return b and b.x or 0 end,
-    y = function() local b = box() return b and b.y or 0 end,
-    width = function() local b = box() return b and b.width or 1 end,
-    height = function() local b = box() return b and b.height or 1 end,
-    behavior = {
-      x = theme.behave("fast"), y = theme.behave("fast"),
-      width = theme.behave("fast"), height = theme.behave("fast"),
-    },
+  local mark = ui.Rect {
+    visible = false, x = 0, y = 0, width = 1, height = 1,
     radius = theme.desktop_radius,
     color = function() return C.accent():alpha(0.14) end,
     border_color = C.accent, border_width = 2,
   }
+  local showing = false
+  morf.effect("impasto.desk.landing", function()
+    local family = desk.landing_family:get()
+    local col, row = desk.landing_col:get(), desk.landing_row:get()
+    if family == "" then
+      showing = false
+      mark.visible = false
+      return
+    end
+    local b = desk.box(col, row, family)
+    if showing then
+      local ms = math.max(1, theme.duration_fast())
+      local steps = {}
+      for _, property in ipairs { "x", "y", "width", "height" } do
+        steps[#steps + 1] = { node = mark, property = property, to = b[property], duration = ms, easing = theme.easing() }
+      end
+      morf.animation.play { { parallel = steps } }
+    else
+      mark.x, mark.y, mark.width, mark.height = b.x, b.y, b.width, b.height
+      mark.visible = true
+      showing = true
+    end
+  end, { owner = mark })
+  return mark
 end
 
 --- The board while arranging: above the windows, the whole screen.
