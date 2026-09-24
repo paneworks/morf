@@ -10,8 +10,10 @@
 //! - `drag X1 Y1 X2 Y2 W H STEPS`: press at the first point, move in
 //!   `STEPS` steps (a few milliseconds apart) to the second, release
 //! - `hover X1 Y1 X2 Y2 W H STEPS`: the same moves with no button held
-//! - `wait MS`: wait Meant for `WLR_BACKENDS=headless cage -- script`: a compositor
-//! with no input devices at all, where this is the only pointer there is.
+//! - `wait MS`: wait
+//!
+//! Meant for `WLR_BACKENDS=headless cage -- script`: a compositor with no
+//! input devices at all, where this is the only pointer there is.
 //! Never point it at a desktop someone is using.
 
 use std::time::{Duration, Instant};

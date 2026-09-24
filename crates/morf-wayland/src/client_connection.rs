@@ -204,6 +204,7 @@ impl LayerClient {
             touch: None,
             touch_points: HashMap::new(),
             keyboard_surface: None,
+            key_repeat: Default::default(),
             idle_notifier,
             idle_inhibit_manager,
             idle_inhibitor: None,

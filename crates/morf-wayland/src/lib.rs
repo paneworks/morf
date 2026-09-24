@@ -18,6 +18,7 @@ mod gamma;
 mod helpers;
 mod inhibit_handlers;
 mod input_handlers;
+mod key_repeat;
 mod layer_placement;
 pub mod mime;
 mod offer_io;
