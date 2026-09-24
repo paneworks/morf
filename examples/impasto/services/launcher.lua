@@ -33,6 +33,7 @@ local timer = require("services.timer")
 local clipboard = require("services.clipboard")
 local workspaces = require("services.workspaces")
 local calc = require("services.calc")
+local tr = require("services.tr")
 
 local fs = morf.fs
 local json = morf.json
@@ -120,7 +121,7 @@ function M.empty_text()
   if mode.id == "windows" and not workspaces.available() then
     return "No compositor to ask: the window list needs Hyprland"
   end
-  return mode.empty
+  return tr(mode.empty)
 end
 
 -- ----------------------------------------------------------- applications --
@@ -426,8 +427,8 @@ function M.desk(term)
   for _, mode in ipairs(M.modes) do
     if mode.id ~= "desk" and mode.prefix ~= ""
         and not (mode.id == "clipboard" and not settings.clipboardHistory) then
-      offer { kind = "mode", id = mode.id, icon = mode.icon, name = mode.label,
-        subtitle = mode.hint, sigil = mode.prefix }
+      offer { kind = "mode", id = mode.id, icon = mode.icon, name = tr(mode.label),
+        subtitle = tr(mode.hint), sigil = mode.prefix }
     end
   end
 

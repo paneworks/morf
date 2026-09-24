@@ -13,6 +13,7 @@ local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
 local kept = require("settings.kept_applications")
+local tr = require("services.tr")
 
 local C = theme.color
 
@@ -50,24 +51,24 @@ end
 local function results_part(W)
   local kept_rows = kept.rows(W)
   kept_rows.width = W
-  kept_rows.title = "Kept applications"
-  kept_rows.note = "They lead the list, and the dock keeps them too."
+  kept_rows.title = tr("Kept applications")
+  kept_rows.note = tr("They lead the list, and the dock keeps them too.")
   return {
     setting.group {
-      width = W, title = "The list",
-      note = "What the launcher lists with nothing typed, and how tall it gets.",
+      width = W, title = tr("The list"),
+      note = tr("What the launcher lists with nothing typed, and how tall it gets."),
       hint = "By use ranks applications by launches, with older launches counting for less; those kept on the dock come first until something else is used more.",
-      setting.row { width = W, label = "Order",
+      setting.row { width = W, label = tr("Order"),
         control = controls.segmented {
-          options = { { id = "recent", label = "By use" }, { id = "alphabetical", label = "Alphabetical" } },
+          options = { { id = "recent", label = tr("By use") }, { id = "alphabetical", label = tr("Alphabetical") } },
           current = function() return settings.launcherOrder end,
           on_selected = function(id) settings.set("launcherOrder", id) end } },
-      setting.slider { width = W, label = "Results shown", from = 4, to = 14,
+      setting.slider { width = W, label = tr("Results shown"), from = 4, to = 14,
         value = function() return settings.launcherResults end,
         reading = function() return settings.launcherResults .. " rows" end,
         on_moved = function(v) settings.set("launcherResults", v) end },
-      setting.switch_row { width = W, label = "As tall as the answer",
-        reading = function() return settings.launcherFits and "Only as tall as it needs" or "A fixed box" end,
+      setting.switch_row { width = W, label = tr("As tall as the answer"),
+        reading = function() return settings.launcherFits and tr("Only as tall as it needs") or tr("A fixed box") end,
         checked = function() return settings.launcherFits end,
         on_toggled = function(on) settings.set("launcherFits", on) end },
       setting.block { width = W, skeleton(W) },
@@ -119,13 +120,13 @@ end
 
 local function sigils_part(W)
   local group = {
-    width = W, title = "Sigils",
-    note = "Plain text searches applications, and a sigil in front switches mode. Click one to change it.",
+    width = W, title = tr("Sigils"),
+    note = tr("Plain text searches applications, and a sigil in front switches mode. Click one to change it."),
     hint = "One character each, not a letter, a digit or a space, and no two modes the same.",
   }
   for _, mode in ipairs(launcher.modes) do
     group[#group + 1] = setting.row {
-      width = W, label = mode.label, reading = mode.hint,
+      width = W, label = tr(mode.label), reading = tr(mode.hint),
       control = sigil_field(mode),
     }
   end
@@ -134,26 +135,26 @@ end
 
 local function clipboard_part(W)
   local off = function() return not settings.clipboardHistory end
-  local reason = "No history is being kept"
+  local reason = tr("No history is being kept")
   return {
     setting.group {
-      width = W, title = "Clipboard history",
-      note = "Everything copied, searchable from the launcher.",
+      width = W, title = tr("Clipboard history"),
+      note = tr("Everything copied, searchable from the launcher."),
       hint = "Copies from password managers are never stored, and turning the history off stops the watcher entirely.",
-      setting.switch_row { width = W, label = "Keep a history",
-        reading = function() return settings.clipboardHistory and "Watching" or "Nothing kept" end,
+      setting.switch_row { width = W, label = tr("Keep a history"),
+        reading = function() return settings.clipboardHistory and tr("Watching") or tr("Nothing kept") end,
         checked = function() return settings.clipboardHistory end,
         on_toggled = function(on) settings.set("clipboardHistory", on) end },
-      setting.slider { width = W, label = "Entries kept", from = 20, to = 500, step = 10,
+      setting.slider { width = W, label = tr("Entries kept"), from = 20, to = 500, step = 10,
         locked = off, reason = reason,
         value = function() return settings.clipboardKeep end,
         on_moved = function(v) settings.set("clipboardKeep", v) end },
-      setting.switch_row { width = W, label = "Keep images", locked = off, reason = reason,
-        reading = function() return settings.clipboardImages and "Pictures as well as text" or "Text only" end,
+      setting.switch_row { width = W, label = tr("Keep images"), locked = off, reason = reason,
+        reading = function() return settings.clipboardImages and tr("Pictures as well as text") or tr("Text only") end,
         checked = function() return settings.clipboardImages end,
         on_toggled = function(on) settings.set("clipboardImages", on) end },
-      setting.switch_row { width = W, label = "Empty it on lock", locked = off, reason = reason,
-        reading = function() return settings.clipboardWipeOnLock and "Thrown away on lock" or "Kept across a lock" end,
+      setting.switch_row { width = W, label = tr("Empty it on lock"), locked = off, reason = reason,
+        reading = function() return settings.clipboardWipeOnLock and tr("Thrown away on lock") or tr("Kept across a lock") end,
         checked = function() return settings.clipboardWipeOnLock end,
         on_toggled = function(on) settings.set("clipboardWipeOnLock", on) end },
     },

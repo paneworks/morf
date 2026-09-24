@@ -11,6 +11,7 @@ local settings = require("services.settings")
 local kit = require("components.kit")
 local capture = require("services.capture")
 local recorder = require("services.recorder")
+local tr = require("services.tr")
 
 local C = theme.color
 local M = {}
@@ -76,8 +77,8 @@ function M.build()
     { id = "file", label = "Save", icon = "󰆓" },
     { id = "clipboard", label = "Copy", icon = "󰆏" },
   }
-  if capture.offers("editor") then destinations[#destinations + 1] = { id = "editor", label = "Annotate", icon = "󰏫" } end
-  if capture.offers("text") then destinations[#destinations + 1] = { id = "text", label = "Read text", icon = "󱄽" } end
+  if capture.offers("editor") then destinations[#destinations + 1] = { id = "editor", label = tr("Annotate"), icon = "󰏫" } end
+  if capture.offers("text") then destinations[#destinations + 1] = { id = "text", label = tr("Read text"), icon = "󱄽" } end
 
   local photo = function() return capture.kind() == "photo" end
   local sound_shown = function() return capture.kind() == "video" and recorder.can_audio() end
@@ -89,16 +90,16 @@ function M.build()
     group {
       id = "shape", current = capture.shape, on_selected = capture.set_shape,
       options = {
-        { id = "region", label = "Region", icon = "󰩭" },
-        { id = "window", label = "Window", icon = "󰣆" },
-        { id = "screen", label = "Screen", icon = "󰍹" },
+        { id = "region", label = tr("Region"), icon = "󰩭" },
+        { id = "window", label = tr("Window"), icon = "󰣆" },
+        { id = "screen", label = tr("Screen"), icon = "󰍹" },
       },
     },
     rule(true),
     group {
       id = "kind", current = capture.kind, on_selected = capture.set_kind,
       options = {
-        { id = "photo", label = "Photo", icon = "󰄀" },
+        { id = "photo", label = tr("Photo"), icon = "󰄀" },
         { id = "video", label = "Video", icon = "󰕧" },
       },
     },

@@ -12,15 +12,16 @@ local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
 local swatch = require("components.swatch")
+local tr = require("services.tr")
 
 local C = theme.color
 
 local M = {}
 
-M.themes = { { id = "modern", label = "Modern" }, { id = "analogue", label = "Analogue" } }
+M.themes = { { id = "modern", label = tr("Modern") }, { id = "analogue", label = tr("Analogue") } }
 M.styles = {
-  { id = "capsule", label = "Capsule" }, { id = "accent", label = "Accent" },
-  { id = "outline", label = "Outline" }, { id = "bare", label = "No capsule" },
+  { id = "capsule", label = tr("Capsule") }, { id = "accent", label = tr("Accent") },
+  { id = "outline", label = tr("Outline") }, { id = "bare", label = tr("No capsule") },
 }
 
 local function note_of(list, id)
@@ -87,44 +88,44 @@ local function modules_part(W)
   end
   return {
     setting.group {
-      width = W, title = "Weather", note = "A city, a postcode or an airport code.",
+      width = W, title = tr("Weather"), note = tr("A city, a postcode or an airport code."),
       hint = "Left empty, wttr.in guesses from your connection's address, which can be far off.",
-      setting.field { width = W, label = "Location", placeholder = "Wherever the request comes from",
+      setting.field { width = W, label = tr("Location"), placeholder = tr("Wherever the request comes from"),
         value = settings.weatherPlace,
         on_edited = function(text) settings.set("weatherPlace", (text:match("^%s*(.-)%s*$"))) end },
     },
     setting.group {
-      width = W, title = "GitHub", note = "Whose public contribution graph to draw.",
+      width = W, title = "GitHub", note = tr("Whose public contribution graph to draw."),
       hint = "The graph is read from the public profile page, so no token or account is needed.",
-      setting.field { width = W, label = "Username", placeholder = "Nobody yet",
+      setting.field { width = W, label = tr("Username"), placeholder = tr("Nobody yet"),
         value = settings.githubUser,
         on_edited = function(text)
           settings.set("githubUser", (text:match("^%s*@?(.-)%s*$")))
         end },
     },
     setting.group {
-      width = W, title = "Pet", note = "How the creature is drawn, wherever it is drawn.",
+      width = W, title = tr("Pet"), note = tr("How the creature is drawn, wherever it is drawn."),
       hint = "The species decides the colour and what the creature is; the style decides how it is drawn.",
-      setting.tiles { width = W, label = "Style", tiles = pet_tiles,
+      setting.tiles { width = W, label = tr("Style"), tiles = pet_tiles,
         reading = function() return note_of(pets.styles, settings.petStyle) end },
     },
     setting.group {
-      width = W, title = "Notes",
-      note = "A note on the wallpaper is written the same way as one in the panel.",
-      setting.switch_row { width = W, label = "Handwriting",
-        reading = function() return settings.notesHandwriting and "The signature's script" or "The interface face" end,
+      width = W, title = tr("Notes"),
+      note = tr("A note on the wallpaper is written the same way as one in the panel."),
+      setting.switch_row { width = W, label = tr("Handwriting"),
+        reading = function() return settings.notesHandwriting and tr("The signature's script") or tr("The interface face") end,
         checked = function() return settings.notesHandwriting end,
         on_toggled = function(on) settings.set("notesHandwriting", on) end },
-      setting.switch_row { width = W, label = "Edges only on an empty workspace",
-        reading = function() return settings.deckOnEmpty and "Gone while a window is open" or "Over the windows" end,
+      setting.switch_row { width = W, label = tr("Edges only on an empty workspace"),
+        reading = function() return settings.deckOnEmpty and tr("Gone while a window is open") or tr("Over the windows") end,
         checked = function() return settings.deckOnEmpty end,
         on_toggled = function(on) settings.set("deckOnEmpty", on) end },
     },
     setting.group {
-      width = W, title = "Spectrum",
-      note = "Sound bars from whatever is playing, on the grid or along an edge.",
-      setting.switch_row { width = W, label = "Only on an empty workspace",
-        reading = function() return settings.spectrumOnEmpty and "Gone while a window is open" or "Under the windows" end,
+      width = W, title = tr("Spectrum"),
+      note = tr("Sound bars from whatever is playing, on the grid or along an edge."),
+      setting.switch_row { width = W, label = tr("Only on an empty workspace"),
+        reading = function() return settings.spectrumOnEmpty and tr("Gone while a window is open") or tr("Under the windows") end,
         checked = function() return settings.spectrumOnEmpty end,
         on_toggled = function(on) settings.set("spectrumOnEmpty", on) end },
     },
@@ -162,27 +163,27 @@ local function widgets_part(W, page)
   end
   return {
     setting.group {
-      width = W, title = "The desktop", note = "Widgets are arranged directly on the wallpaper.",
+      width = W, title = tr("The desktop"), note = tr("Widgets are arranged directly on the wallpaper."),
       hint = "Arranging brings the widgets in front of the windows, with a card of every module. This window closes so the desktop can be seen.",
-      setting.row { width = W, label = "Arrange the desktop",
+      setting.row { width = W, label = tr("Arrange the desktop"),
         locked = function() return desktop() == nil end,
         reason = "The desktop's widgets are not running in this shell",
         reading = function()
           local n = placed()
-          return n > 0 and (n .. " on the wallpaper") or "Nothing on the wallpaper yet"
+          return n > 0 and (n .. " on the wallpaper") or tr("Nothing on the wallpaper yet")
         end,
-        control = controls.pill { text = "Edit", height = 30, active = true, on_click = function()
+        control = controls.pill { text = tr("Edit"), height = 30, active = true, on_click = function()
           local d = desktop()
           if d then d.edit(true) page.close() end
         end } },
     },
     setting.group {
-      width = W, title = "Look",
-      note = "Every widget follows these unless it was given a look of its own.",
+      width = W, title = tr("Look"),
+      note = tr("Every widget follows these unless it was given a look of its own."),
       hint = "While arranging, click a widget to override these for it alone.",
-      setting.tiles { width = W, label = "Face", tiles = face_tiles },
-      setting.tiles { width = W, label = "Style", tiles = style_tiles },
-      setting.slider { width = W, label = "Background", from = 20, to = 100, step = 5, unit = "%",
+      setting.tiles { width = W, label = tr("Face"), tiles = face_tiles },
+      setting.tiles { width = W, label = tr("Style"), tiles = style_tiles },
+      setting.slider { width = W, label = tr("Background"), from = 20, to = 100, step = 5, unit = "%",
         value = function() return settings.desktopOpacity end,
         on_moved = function(v) settings.set("desktopOpacity", v) end },
     },

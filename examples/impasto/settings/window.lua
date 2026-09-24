@@ -14,6 +14,7 @@
 local ui = require("morf.ui")
 local panel = require("settings.panel")
 local theme = require("theme")
+local tr = require("services.tr")
 
 local M = {}
 
@@ -69,7 +70,7 @@ function M.open(section, part)
   if section and section ~= "" then panel.go(section, part) end
   if not window then
     window = morf.window.floating {
-      title = "Settings", app_id = "impasto-settings",
+      title = tr("Settings"), app_id = "impasto-settings",
       width = panel.WIDTH, height = panel.HEIGHT,
       minimum_width = panel.WIDTH, minimum_height = panel.HEIGHT,
       maximum_width = panel.WIDTH, maximum_height = panel.HEIGHT,

@@ -8,6 +8,7 @@ local service = require("services.controls")
 local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
+local tr = require("services.tr")
 
 local C = theme.color
 
@@ -53,19 +54,19 @@ end
 function M.build(page)
   return setting.page(page, function(W)
     local doors = {
-      width = W, title = "The top row",
+      width = W, title = tr("The top row"),
       note = "Session actions always sit on the left. These buttons, which open other panels and this window, fill the rest in this order.",
     }
     for _, door in ipairs(service.doors) do doors[#doors + 1] = order_row(W, door) end
     return {
       setting.group {
-        width = W, title = "The panel",
-        note = "A six by eight grid, arranged on the panel itself.",
+        width = W, title = tr("The panel"),
+        note = tr("A six by eight grid, arranged on the panel itself."),
         hint = "Edit shows the grid with a card of every block: drag a block onto the grid to place it, pull its corner to resize, and press its badge to remove it.",
-        setting.row { width = W, label = "Arrange the control centre",
+        setting.row { width = W, label = tr("Arrange the control centre"),
           control = ui.Row { gap = 8,
-            controls.pill { text = "Default layout", height = 30, on_click = function() service.restore() end },
-            controls.pill { text = "Edit", height = 30, active = true, on_click = function()
+            controls.pill { text = tr("Default layout"), height = 30, on_click = function() service.restore() end },
+            controls.pill { text = tr("Edit"), height = 30, active = true, on_click = function()
               service.edit(true)
               require("bar.island").open("controls")
               page.close()

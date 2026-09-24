@@ -27,6 +27,7 @@ local clock = require("bar.modules.clock")
 local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
+local tr = require("services.tr")
 
 local C = theme.color
 local fast = function() return theme.behave("fast") end
@@ -97,8 +98,8 @@ function M.catalogue()
 end
 
 function M.name_of(id)
-  if id == "workspaces" then return "Workspaces" end
-  if id == "split" then return "Split" end
+  if id == "workspaces" then return tr("Workspaces") end
+  if id == "split" then return tr("Split") end
   local door = modules.buttons()[id]
   if door then return door.name end
   return modules.entry(id).name
@@ -294,7 +295,7 @@ function M.new(values)
       children[#children + 1] = ui.Rect {
         width = 64, height = H, radius = function() return H() / 2 end,
         color = "#00000000", border_width = 1, border_color = C.islandBorder,
-        kit.text { anchors = { center_in = true }, text = "Empty", size = theme.size.label,
+        kit.text { anchors = { center_in = true }, text = tr("Empty"), size = theme.size.label,
           color = C.textMuted },
       }
     end
@@ -573,24 +574,24 @@ function M.new(values)
     },
     ui.Row {
       anchors = { right = true, right_margin = 14, top = true, top_margin = 12 }, gap = 6, align = "center",
-      controls.pill { text = "Remove", height = 26, on_click = remove_picked },
+      controls.pill { text = tr("Remove"), height = 26, on_click = remove_picked },
       controls.icon_button { icon = "󰅖", icon_size = 12, on_click = unpick },
     },
     kit.text {
-      x = 14, y = 46, text = "Nothing to set: it is drawn one way.", size = theme.size.label,
+      x = 14, y = 46, text = tr("Nothing to set: it is drawn one way."), size = theme.size.label,
       color = C.textMuted, visible = function() return not picked_module() end,
     },
     ui.Row {
       x = 14, y = 50, gap = 24,
       visible = picked_module,
       look_control("Shape",
-        { { id = "", label = "Like the bar" }, { id = "icon", label = "Icon" }, { id = "ring", label = "Ring" } },
+        { { id = "", label = tr("Like the bar") }, { id = "icon", label = tr("Icon") }, { id = "ring", label = tr("Ring") } },
         function() local p = picked() return p and p.shape or "" end,
         function(id) set_look { shape = id } end,
         function() local p = picked() return p ~= nil and modules.ringed[p.id] == true end),
       look_control("Figure",
-        { { id = "", label = "Like the bar" }, { id = "off", label = "No" },
-          { id = "hover", label = "On hover" }, { id = "on", label = "Always" } },
+        { { id = "", label = tr("Like the bar") }, { id = "off", label = tr("No") },
+          { id = "hover", label = tr("On hover") }, { id = "on", label = tr("Always") } },
         function() local p = picked() return p and p.figure or "" end,
         function(id) set_look { figure = id } end),
       ui.Item {
@@ -598,7 +599,7 @@ function M.new(values)
         visible = function() local p = picked() return p ~= nil and modules.runners[p.id] == true end,
         ui.Item { x = 0, y = 0, width = 200, height = 60,
           look_control("When",
-            { { id = "", label = "Always" }, { id = "running", label = "While it runs" } },
+            { { id = "", label = tr("Always") }, { id = "running", label = tr("While it runs") } },
             function() local p = picked() return p and p.when or "" end,
             function(id) set_look { when = id } end) },
       },

@@ -16,6 +16,7 @@ local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
 local canvas = require("settings.monitor_canvas")
+local tr = require("services.tr")
 
 local C = theme.color
 
@@ -93,15 +94,15 @@ function M.build(page)
   local arrangement = function(W)
     return {
       setting.group {
-        width = W, title = "The screens",
+        width = W, title = tr("The screens"),
         note = "As the compositor has them. Click one to see it.",
         hint = "Arranging screens is the compositor's own configuration, which this shell never writes.",
         setting.block { width = W,
           canvas.new { width = W - 28, height = 220, monitors = list,
             selected = function() local m = current() return m and m.key or "" end,
             on_picked = function(key) chosen:set(key) end } },
-        setting.row { width = W, label = "Arrangement",
-          reading = single and "One screen" or "Extended across all of them",
+        setting.row { width = W, label = tr("Arrangement"),
+          reading = single and "One screen" or tr("Extended across all of them"),
           control = kit.text { text = #list .. (#list == 1 and " screen" or " screens"),
             size = theme.size.small, color = C.textMuted } },
       },
@@ -118,7 +119,7 @@ function M.build(page)
     if made ~= "" then title = title .. " · " .. made end
     return {
       setting.group {
-        width = W, title = "Which screen", visible = not single,
+        width = W, title = tr("Which screen"), visible = not single,
         setting.row { width = W, label = "Showing", reading = made,
           control = controls.segmented { options = picker,
             current = function() local c = current() return c and c.key or "" end,
@@ -127,16 +128,16 @@ function M.build(page)
       setting.group {
         width = W, title = function() local c = current() return c and c.name or "" end,
         note = "As the compositor reports it.",
-        setting.row { width = W, label = "Resolution",
+        setting.row { width = W, label = tr("Resolution"),
           reading = function() local c = current() return string.format("%d × %d", c.width, c.height) end },
-        setting.row { width = W, label = "Refresh rate",
+        setting.row { width = W, label = tr("Refresh rate"),
           reading = function()
             local c = current()
             return c.refresh > 0 and string.format("%.2f Hz", c.refresh) or "Not reported here"
           end },
-        setting.row { width = W, label = "Scale",
+        setting.row { width = W, label = tr("Scale"),
           reading = function() return string.format("%.2f×", current().scale) end },
-        setting.row { width = W, label = "Rotation",
+        setting.row { width = W, label = tr("Rotation"),
           reading = function() return ROTATIONS[current().transform] or tostring(current().transform) end },
         setting.row { width = W, label = "Changing it",
           reading = "In the compositor's own configuration, which the shell leaves alone" },
@@ -147,9 +148,9 @@ function M.build(page)
   local lid = function(W)
     local tiles = {}
     for _, choice in ipairs {
-      { id = "off", label = "Switch it off", lit = false, external = true },
-      { id = "keep", label = "Leave it on", lit = true, external = true },
-      { id = "system", label = "The system decides", lit = true, external = false },
+      { id = "off", label = tr("Switch it off"), lit = false, external = true },
+      { id = "keep", label = tr("Leave it on"), lit = true, external = true },
+      { id = "system", label = tr("The system decides"), lit = true, external = false },
     } do
       tiles[#tiles + 1] = function(tw)
         return setting.tile {
@@ -164,25 +165,25 @@ function M.build(page)
     for _, m in ipairs(list) do if m ~= internal then others[#others + 1] = m.name end end
     return {
       setting.group {
-        width = W, title = "When the lid closes",
-        note = "Only applies with another screen connected.",
+        width = W, title = tr("When the lid closes"),
+        note = tr("Only applies with another screen connected."),
         hint = "Kept in the shell's settings. With nothing else connected, closing the lid is left to logind, which suspends.",
-        setting.tiles { width = W, label = "The laptop's screen", tiles = tiles,
-          locked = internal == nil, reason = "No laptop panel on this machine",
+        setting.tiles { width = W, label = tr("The laptop's screen"), tiles = tiles,
+          locked = internal == nil, reason = tr("No laptop panel on this machine"),
           reading = function()
             local p = settings.lidPolicy
-            if p == "off" then return "Switched off, and its workspaces move over" end
-            if p == "keep" then return "Left on behind the lid" end
-            return "Left to the system"
+            if p == "off" then return tr("Switched off, and its workspaces move over") end
+            if p == "keep" then return tr("Left on behind the lid") end
+            return tr("Left to the system")
           end },
       },
       setting.group {
-        width = W, title = "Right now", note = "The current state, as the shell sees it.",
-        setting.row { width = W, label = "The laptop's panel",
-          reading = internal and (internal.name .. " — on") or "Not on this machine",
+        width = W, title = tr("Right now"), note = "The current state, as the shell sees it.",
+        setting.row { width = W, label = tr("The laptop's panel"),
+          reading = internal and (internal.name .. " — on") or tr("Not on this machine"),
           control = kit.glyph { glyph = internal and "󰍹" or "󰶐", size = 13, color = C.textMuted } },
-        setting.row { width = W, label = "Other screens",
-          reading = #others == 0 and "None — the system handles the lid" or table.concat(others, ", "),
+        setting.row { width = W, label = tr("Other screens"),
+          reading = #others == 0 and tr("None — the system handles the lid") or table.concat(others, ", "),
           control = kit.text { text = tostring(#others), size = theme.size.small, color = C.textMuted } },
       },
     }
@@ -191,17 +192,17 @@ function M.build(page)
   local night_part = function(W)
     return {
       setting.group {
-        width = W, title = "Night light", note = "Warmer colours for the evening.",
+        width = W, title = tr("Night light"), note = tr("Warmer colours for the evening."),
         hint = "It adjusts the gamma ramp with hyprsunset, so screenshots keep their colours. There is no schedule: it stays on until you turn it off.",
-        setting.switch_row { width = W, label = "Warm the screen",
+        setting.switch_row { width = W, label = tr("Warm the screen"),
           reading = function()
-            if not night.available() then return "Needs hyprsunset, which is not installed" end
-            return settings.nightLight and (settings.nightTemperature .. " K") or "Off"
+            if not night.available() then return tr("Needs hyprsunset, which is not installed") end
+            return settings.nightLight and (settings.nightTemperature .. " K") or tr("Off")
           end,
           alarm = function() return not night.available() end,
           checked = function() return settings.nightLight end,
           on_toggled = function(on) night.set(on) end },
-        setting.slider { width = W, label = "Colour temperature", from = night.WARMEST, to = night.COOLEST,
+        setting.slider { width = W, label = tr("Colour temperature"), from = night.WARMEST, to = night.COOLEST,
           step = 100, unit = " K", figure_width = 70,
           value = function() return settings.nightTemperature end,
           on_moved = function(v) night.set_temperature(v) end },

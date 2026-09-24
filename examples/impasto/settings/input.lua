@@ -13,6 +13,7 @@ local settings = require("services.settings")
 local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
+local tr = require("services.tr")
 
 local C = theme.color
 local fast = function() return theme.behave("fast") end
@@ -20,10 +21,10 @@ local fast = function() return theme.behave("fast") end
 local M = {}
 
 M.switches = {
-  { id = "", label = "None" },
+  { id = "", label = tr("None") },
   { id = "grp:alt_shift_toggle", label = "Alt+Shift" },
   { id = "grp:win_space_toggle", label = "Super+Space" },
-  { id = "grp:caps_toggle", label = "Caps Lock" },
+  { id = "grp:caps_toggle", label = tr("Caps Lock") },
 }
 
 local function layouts()
@@ -39,10 +40,10 @@ local function keyboard_part(W)
   local field_text = controls.signal("input.layouts", settings.keyboardLayouts)
   return {
     setting.group {
-      width = W, title = "Layouts",
-      note = "Loaded in this order; the first is active at login.",
+      width = W, title = tr("Layouts"),
+      note = tr("Loaded in this order; the first is active at login."),
       hint = "Kept in the shell's settings; the compositor's own keyboard configuration is left as it is.",
-      setting.field { width = W, label = "Layouts", placeholder = "us",
+      setting.field { width = W, label = tr("Layouts"), placeholder = "us",
         reading = function()
           local n = #layouts()
           return n <= 1 and "One layout" or (n .. " layouts, comma-separated")
@@ -53,15 +54,15 @@ local function keyboard_part(W)
           local clean = text:gsub("%s+", "")
           settings.set("keyboardLayouts", clean ~= "" and clean or "us")
         end },
-      setting.row { width = W, label = "Switch between them",
-        locked = function() return #layouts() <= 1 end, reason = "Only one layout is loaded",
+      setting.row { width = W, label = tr("Switch between them"),
+        locked = function() return #layouts() <= 1 end, reason = tr("Only one layout is loaded"),
         control = controls.segmented { options = M.switches,
           current = function() return settings.keyboardSwitch end,
           on_selected = function(id) settings.set("keyboardSwitch", id) end } },
     },
     setting.group {
-      width = W, title = "Typing", note = "How fast a held key repeats, once it has started.",
-      setting.slider { width = W, label = "Key repeat rate", from = 10, to = 60, unit = "/s",
+      width = W, title = tr("Typing"), note = tr("How fast a held key repeats, once it has started."),
+      setting.slider { width = W, label = tr("Key repeat rate"), from = 10, to = 60, unit = "/s",
         value = function() return settings.keyRepeatRate end,
         on_moved = function(v) settings.set("keyRepeatRate", v) end },
     },
@@ -96,7 +97,7 @@ end
 
 local function pointer_part(W)
   local chips = { direction = "row", wrap = true, gap = 6, align = "start", width = W - 28 }
-  chips[#chips + 1] = colour_chip { id = "palette", label = "Palette" }
+  chips[#chips + 1] = colour_chip { id = "palette", label = tr("Palette") }
   for _, entry in ipairs(theme.fixed_colours) do chips[#chips + 1] = colour_chip(entry) end
   local flow = ui.Flex(chips)
   local cursor_preview = ui.Item {
@@ -117,28 +118,28 @@ local function pointer_part(W)
   }
   return {
     setting.group {
-      width = W, title = "Pointer",
+      width = W, title = tr("Pointer"),
       note = "Zero is the device's native speed; either side adjusts the acceleration.",
-      setting.slider { width = W, label = "Sensitivity", from = -1, to = 1, step = 0.05, decimals = 2,
+      setting.slider { width = W, label = tr("Sensitivity"), from = -1, to = 1, step = 0.05, decimals = 2,
         value = function() return settings.pointerSensitivity end,
         on_moved = function(v) settings.set("pointerSensitivity", v) end },
     },
     setting.group {
-      width = W, title = "The cursor",
+      width = W, title = tr("The cursor"),
       note = "One shape, sharp at any size — Palette follows the wallpaper.",
       hint = "Kept in the shell's settings for whoever sets the cursor; nothing is pushed to the compositor.",
       setting.block { width = W,
-        kit.text { text = "Cursor colour", size = theme.size.small, weight = 500 },
+        kit.text { text = tr("Cursor colour"), size = theme.size.small, weight = 500 },
         ui.Item { width = W - 28, height = function() return flow.layout_height or 0 end, flow } },
-      setting.slider { width = W, label = "Cursor size", from = 16, to = 48, unit = " px",
+      setting.slider { width = W, label = tr("Cursor size"), from = 16, to = 48, unit = " px",
         reading = function()
-          return settings.cursorSize == 24 and "24 px — the default" or (settings.cursorSize .. " px")
+          return settings.cursorSize == 24 and tr("24 px — the default") or (settings.cursorSize .. " px")
         end,
         figure_width = 130,
         value = function() return settings.cursorSize end,
         on_moved = function(v) settings.set("cursorSize", v) end },
       setting.row { width = W, label = "At that size", control = cursor_preview },
-      setting.switch_row { width = W, label = "Shake to find",
+      setting.switch_row { width = W, label = tr("Shake to find"),
         reading = function() return settings.shakeToFind and "Grows while it is shaken" or "Stays its size" end,
         checked = function() return settings.shakeToFind end,
         on_toggled = function(on) settings.set("shakeToFind", on) end },

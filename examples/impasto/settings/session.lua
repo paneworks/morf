@@ -17,6 +17,7 @@ local thumbnails = require("services.thumbnails")
 local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
+local tr = require("services.tr")
 
 local C = theme.color
 
@@ -62,7 +63,7 @@ local function you_rows(W)
       x = 14, anchors = { vertical_center = true }, gap = 16, align = "center",
       avatar(48),
       setting.label {
-        label = "Picture", width = W - 28 - 48 - 16 - 16 - 100,
+        label = tr("Picture"), width = W - 28 - 48 - 16 - 16 - 100,
         reading = function()
           if account.busy() == "picture" then return "Changing it on the account…" end
           if account.failure() ~= "" then return "Not changed: " .. account.failure() end
@@ -75,7 +76,7 @@ local function you_rows(W)
     ui.Item {
       anchors = { right = true, right_margin = 14, vertical_center = true }, width = 92, height = 30,
       visible = function() return account.avatar() ~= "" end,
-      controls.pill { text = "Clear", icon = "󰜉", height = 30, width = 92,
+      controls.pill { text = tr("Clear"), icon = "󰜉", height = 30, width = 92,
         on_click = function()
           if settings.userAvatar ~= "" then settings.set("userAvatar", "") else account.clear_picture() end
         end },
@@ -91,14 +92,14 @@ local function you_rows(W)
     },
   }
   return {
-    width = W, title = "You",
+    width = W, title = tr("You"),
     note = "Your name and picture, on the lock screen.",
     hint = "Changed on the account itself, so the lock and the login screen agree: the name through AccountsService, the picture through the setup's helper. Where the machine has neither, it is kept by the shell.",
     picture_row,
     setting.field { width = W, label = "Picture file", placeholder = "A path to an image",
       value = settings.userAvatar,
       on_edited = function(text) set_picture(text) end },
-    setting.field { width = W, label = "Name", placeholder = account.full_name ~= "" and account.full_name or account.user,
+    setting.field { width = W, label = tr("Name"), placeholder = account.full_name ~= "" and account.full_name or account.user,
       value = settings.userName ~= "" and settings.userName or account.full(),
       on_edited = function(text) account.set_name(text) end },
   }
@@ -107,7 +108,7 @@ end
 local function lock_part(W)
   local LockClock = require("lock.clock")
   local clock_tiles = {}
-  for _, style in ipairs { { id = "stacked", label = "Stacked" }, { id = "inline", label = "Inline" } } do
+  for _, style in ipairs { { id = "stacked", label = tr("Stacked") }, { id = "inline", label = tr("Inline") } } do
     clock_tiles[#clock_tiles + 1] = function(tw)
       return setting.tile {
         width = tw, stage_height = 120, caption = style.label,
@@ -137,14 +138,14 @@ local function lock_part(W)
   return {
     setting.group(you_rows(W)),
     setting.group {
-      width = W, title = "Clock", note = "The login screen always draws it stacked.",
-      setting.tiles { width = W, label = "Style", tiles = clock_tiles },
+      width = W, title = tr("Clock"), note = tr("The login screen always draws it stacked."),
+      setting.tiles { width = W, label = tr("Style"), tiles = clock_tiles },
     },
     setting.group {
-      width = W, title = "Background",
-      note = "Just enough to make the text underneath unreadable.",
+      width = W, title = tr("Background"),
+      note = tr("Just enough to make the text underneath unreadable."),
       hint = "The preview uses the wallpaper, since the lock screen's own photograph of the desk is taken when it locks. It is blurred the same way.",
-      setting.slider { width = W, label = "Blur", from = 8, to = 64, unit = " px",
+      setting.slider { width = W, label = tr("Blur"), from = 8, to = 64, unit = " px",
         value = function() return settings.lockBlur end,
         on_moved = function(v) settings.set("lockBlur", v) end },
       setting.block { width = W,
@@ -158,12 +159,12 @@ local function lock_part(W)
               return thumbnails.of(path, math.floor((W - 28) / 2), 80, blur_sigma() / 2)
             end,
           },
-          kit.text { anchors = { center_in = true }, text = "No wallpaper to show",
+          kit.text { anchors = { center_in = true }, text = tr("No wallpaper to show"),
             size = theme.size.small, color = C.textMuted,
             visible = function() return wallpaper.current:get() == "" end },
           ui.Rect {
             anchors = { center_in = true }, width = 196, height = 38, radius = 19, color = C.island,
-            kit.text { anchors = { center_in = true }, text = "Type to unlock", size = theme.size.small,
+            kit.text { anchors = { center_in = true }, text = tr("Type to unlock"), size = theme.size.small,
               color = C.textMuted },
           },
         },
@@ -172,30 +173,30 @@ local function lock_part(W)
   }
 end
 
-local function minutes(value) return value == 0 and "Never" or (value .. " min") end
+local function minutes(value) return value == 0 and tr("Never") or (value .. " min") end
 
 local function idle_part(W)
   return {
     setting.group {
-      width = W, title = "When you leave it alone", note = "All three are off by default.",
+      width = W, title = tr("When you leave it alone"), note = tr("All three are off by default."),
       hint = "The shell uses the compositor's idle notifications, and media that inhibits idle holds all three off.",
-      setting.slider { width = W, label = "Lock after", from = 0, to = 60, unit = " min",
+      setting.slider { width = W, label = tr("Lock after"), from = 0, to = 60, unit = " min",
         value = function() return settings.idleLock end,
         reading = function() return minutes(settings.idleLock) end,
         on_moved = function(v) settings.set("idleLock", v) end },
       -- Warns when the screen would go dark before the lock: the lock
       -- photographs the desk as it goes up.
-      setting.slider { width = W, label = "Screen off after", from = 0, to = 60, unit = " min",
+      setting.slider { width = W, label = tr("Screen off after"), from = 0, to = 60, unit = " min",
         figure_width = 150,
         value = function() return settings.idleScreen end,
         reading = function()
           local screen, lock = settings.idleScreen, settings.idleLock
-          if screen == 0 then return "Never" end
+          if screen == 0 then return tr("Never") end
           if lock == 0 or screen >= lock then return screen .. " min" end
           return screen .. " min · before the lock"
         end,
         on_moved = function(v) settings.set("idleScreen", v) end },
-      setting.slider { width = W, label = "Suspend after", from = 0, to = 60, unit = " min",
+      setting.slider { width = W, label = tr("Suspend after"), from = 0, to = 60, unit = " min",
         value = function() return settings.idleSuspend end,
         reading = function() return minutes(settings.idleSuspend) end,
         on_moved = function(v) settings.set("idleSuspend", v) end },

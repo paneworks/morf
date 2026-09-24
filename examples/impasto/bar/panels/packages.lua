@@ -20,6 +20,7 @@ local kit = require("components.kit")
 local controls = require("components.controls")
 local packages = require("services.packages")
 local updates = require("services.updates")
+local tr = require("services.tr")
 
 local C = theme.color
 local P = packages
@@ -125,7 +126,7 @@ local function row(slot_row)
 
   local pill = controls.pill {
     height = 26,
-    text = function() return installed() and "Remove" or "Install" end,
+    text = function() return installed() and tr("Remove") or "Install" end,
     icon = function() return installed() and "󰆴" or "󰇚" end,
     active = function() return not installed() end,
     enabled = function() return not P.busy() end,
@@ -239,7 +240,7 @@ end)
 local function empty_text()
   local view, term = P.view(), P.term()
   if view == "updates" then
-    if updates.checking() and updates.count() == 0 then return "Checking…" end
+    if updates.checking() and updates.count() == 0 then return tr("Checking…") end
     return term == "" and "Everything is up to date." or "No pending update is called that."
   end
   if view == "installed" then
@@ -326,7 +327,7 @@ local function build()
     current = P.view,
     on_selected = function(id) P.set_view(id) input.focus = true end,
     options = {
-      { id = "updates", label = function() local n = updates.count() return n > 0 and ("Updates · " .. n) or "Updates" end },
+      { id = "updates", label = function() local n = updates.count() return n > 0 and ("Updates · " .. n) or tr("Updates") end },
       { id = "installed", label = "Installed" },
       { id = "find", label = "Find" },
     },
@@ -353,7 +354,7 @@ local function build()
 
   local check = controls.pill {
     height = 26, icon = "󰑐",
-    text = function() return updates.checking() and "Checking…" or "Check" end,
+    text = function() return updates.checking() and tr("Checking…") or tr("Check") end,
     enabled = function() return not updates.checking() end,
     on_click = function() updates.refresh() end,
   }

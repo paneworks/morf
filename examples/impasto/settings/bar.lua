@@ -17,28 +17,29 @@ local setting = require("components.setting")
 local bar_preview = require("components.bar_preview")
 local chip = require("bar.modules.chip")
 local layout_editor = require("settings.layout_editor")
+local tr = require("services.tr")
 
 local C = theme.color
 
 local M = {}
 
 M.styles = {
-  { id = "grouped", label = "Grouped", note = "The workspaces, the island and the modules together in the middle." },
-  { id = "spread", label = "Spread", note = "The workspaces at one edge, the modules at the other, the island between them." },
-  { id = "capsule", label = "One island", note = "Everything inside a single capsule." },
+  { id = "grouped", label = tr("Grouped"), note = tr("The workspaces, the island and the modules together in the middle.") },
+  { id = "spread", label = tr("Spread"), note = tr("The workspaces at one edge, the modules at the other, the island between them.") },
+  { id = "capsule", label = tr("One island"), note = tr("Everything inside a single capsule.") },
 }
 M.clock_formats = {
-  { id = "%H:%M", label = "24-hour" },
-  { id = "%I:%M %p", label = "12-hour" },
+  { id = "%H:%M", label = tr("24-hour") },
+  { id = "%I:%M %p", label = tr("12-hour") },
 }
 M.chip_shapes = {
-  { id = "icon", label = "Icon", note = "The module's symbol." },
-  { id = "ring", label = "Ring", note = "A gauge around the symbol, for the modules that measure something." },
+  { id = "icon", label = tr("Icon"), note = "The module's symbol." },
+  { id = "ring", label = tr("Ring"), note = "A gauge around the symbol, for the modules that measure something." },
 }
 M.chip_figures = {
-  { id = "off", label = "No", note = "No figure beside it." },
-  { id = "hover", label = "On hover", note = "The figure while the pointer is on the chip." },
-  { id = "on", label = "Always", note = "The figure always beside it." },
+  { id = "off", label = tr("No"), note = "No figure beside it." },
+  { id = "hover", label = tr("On hover"), note = "The figure while the pointer is on the chip." },
+  { id = "on", label = tr("Always"), note = "The figure always beside it." },
 }
 M.beside_defaults = { "timer", "media" }
 
@@ -116,14 +117,14 @@ local function island_part(W)
     end
   end
   local beside_rows = {
-    width = W, title = "Beside the time",
-    note = "What is running sits either side of the time, two at most.",
+    width = W, title = tr("Beside the time"),
+    note = tr("What is running sits either side of the time, two at most."),
     hint = "A recording is always there and comes first. Then a countdown, then media; either still works from its chip on the bar when kept off the island.",
   }
   for _, id in ipairs(M.beside_defaults) do
     beside_rows[#beside_rows + 1] = setting.switch_row {
       width = W, label = modules.entry(id).name,
-      reading = function() return M.beside(id) and "On the island while it runs" or "Only where its chip is put" end,
+      reading = function() return M.beside(id) and tr("On the island while it runs") or tr("Only where its chip is put") end,
       checked = function() return M.beside(id) end,
       on_toggled = function(on) M.set_beside(id, on) end,
     }
@@ -131,63 +132,63 @@ local function island_part(W)
   local screens = #(morf.screens or {})
   return {
     setting.group {
-      width = W, title = "Shape",
-      note = "How the bar is drawn, and where the island meets the top edge.",
+      width = W, title = tr("Shape"),
+      note = tr("How the bar is drawn, and where the island meets the top edge."),
       hint = "The style keeps what is on the bar and only changes how it is drawn. What each side carries is arranged in The bar.",
-      setting.tiles { width = W, label = "Style", tiles = style_tiles,
+      setting.tiles { width = W, label = tr("Style"), tiles = style_tiles,
         reading = function() return note_of(M.styles, settings.barStyle) end },
-      setting.tiles { width = W, label = "Island", tiles = attach_tiles,
+      setting.tiles { width = W, label = tr("Island"), tiles = attach_tiles,
         reading = function()
-          return settings.islandAttached and "Cut into the top edge" or "Floating below the top edge"
+          return settings.islandAttached and tr("Cut into the top edge") or tr("Floating below the top edge")
         end },
-      setting.switch_row { width = W, label = "Span the whole screen",
+      setting.switch_row { width = W, label = tr("Span the whole screen"),
         reading = function()
-          return settings.barFullWidth and "As wide as the bar can be" or "As wide as the island needs"
+          return settings.barFullWidth and tr("As wide as the bar can be") or tr("As wide as the island needs")
         end,
         locked = function() return settings.barStyle ~= "capsule" end,
-        reason = "Only one island can span the screen",
+        reason = tr("Only one island can span the screen"),
         checked = function() return settings.barFullWidth end,
         on_toggled = function(on) settings.set("barFullWidth", on) end },
-      setting.switch_row { width = W, label = "On every screen",
+      setting.switch_row { width = W, label = tr("On every screen"),
         reading = function()
-          return settings.barEverywhere and "One on each, and the one you are on is the live one"
-            or "Only on the screen you are on"
+          return settings.barEverywhere and tr("One on each, and the one you are on is the live one")
+            or tr("Only on the screen you are on")
         end,
-        locked = screens < 2, reason = "Only one screen is on",
+        locked = screens < 2, reason = tr("Only one screen is on"),
         checked = function() return settings.barEverywhere end,
         on_toggled = function(on) settings.set("barEverywhere", on) end },
-      setting.switch_row { width = W, label = "A glance on hover",
+      setting.switch_row { width = W, label = tr("A glance on hover"),
         reading = function()
-          return settings.islandSummary and "Resting the pointer on the island opens it" or "Only a click opens anything"
+          return settings.islandSummary and tr("Resting the pointer on the island opens it") or tr("Only a click opens anything")
         end,
         checked = function() return settings.islandSummary end,
         on_toggled = function(on) settings.set("islandSummary", on) end },
     },
     setting.group {
-      width = W, title = "Clock",
-      note = "Shown on the resting island, and larger in the glance.",
-      hint = "Seconds make the clock repaint sixty times as often.",
-      setting.tiles { width = W, label = "Clock format", tiles = format_tiles },
-      setting.switch_row { width = W, label = "Show the date",
-        reading = function() return settings.clockShowsDate and "Beside the time" or "The time alone" end,
+      width = W, title = tr("Clock"),
+      note = tr("Shown on the resting island, and larger in the glance."),
+      hint = tr("Seconds make the clock repaint sixty times as often."),
+      setting.tiles { width = W, label = tr("Clock format"), tiles = format_tiles },
+      setting.switch_row { width = W, label = tr("Show the date"),
+        reading = function() return settings.clockShowsDate and tr("Beside the time") or tr("The time alone") end,
         checked = function() return settings.clockShowsDate end,
         on_toggled = function(on) settings.set("clockShowsDate", on) end },
-      setting.switch_row { width = W, label = "Show seconds",
+      setting.switch_row { width = W, label = tr("Show seconds"),
         checked = function() return settings.clockShowsSeconds end,
         on_toggled = function(on) settings.set("clockShowsSeconds", on) end },
     },
     setting.group(beside_rows),
     setting.group {
-      width = W, title = "Scale",
+      width = W, title = tr("Scale"),
       note = "The bar itself is the preview: it repaints as the sliders move.",
-      hint = "Everything on the bar scales with its height. The top margin is the gap to the screen edge (the island ignores it in notch mode), and the side margin is the inset from the left and right edges.",
-      setting.slider { width = W, label = "Bar height", from = 24, to = 48, unit = " px",
+      hint = tr("Everything on the bar scales with its height. The top margin is the gap to the screen edge (the island ignores it in notch mode), and the side margin is the inset from the left and right edges."),
+      setting.slider { width = W, label = tr("Bar height"), from = 24, to = 48, unit = " px",
         value = function() return settings.barHeight end,
         on_moved = function(v) settings.set("barHeight", v) end },
-      setting.slider { width = W, label = "Top margin", from = 0, to = 32, unit = " px",
+      setting.slider { width = W, label = tr("Top margin"), from = 0, to = 32, unit = " px",
         value = function() return settings.barMargin end,
         on_moved = function(v) settings.set("barMargin", v) end },
-      setting.slider { width = W, label = "Side margin", from = 0, to = 48, unit = " px",
+      setting.slider { width = W, label = tr("Side margin"), from = 0, to = 48, unit = " px",
         value = function() return settings.barSideMargin end,
         on_moved = function(v) settings.set("barSideMargin", v) end },
     },
@@ -247,18 +248,18 @@ local function modules_part(W)
   end
   return {
     setting.group {
-      width = W, title = "Chips",
-      note = "Every piece on the bar follows these unless it was given its own.",
+      width = W, title = tr("Chips"),
+      note = tr("Every piece on the bar follows these unless it was given its own."),
       hint = "Icon shows the module's symbol; Ring draws the gauge of a module that measures something as a circle around it, and the rest keep their symbol. On hover shows the figure only while the pointer is over the chip.",
-      setting.tiles { width = W, label = "Shape", tiles = shape_tiles,
+      setting.tiles { width = W, label = tr("Shape"), tiles = shape_tiles,
         reading = function() return note_of(M.chip_shapes, settings.chipShape) end },
-      setting.tiles { width = W, label = "Figure", tiles = figure_tiles,
+      setting.tiles { width = W, label = tr("Figure"), tiles = figure_tiles,
         reading = function() return note_of(M.chip_figures, settings.chipFigure) end },
     },
     setting.group {
-      width = W, title = "Layout", bare = true,
-      note = "Drag a piece from the catalogue onto the bar.",
-      hint = "Drop a piece on either half of the bar to place it on that side of the island; drag it along to move it or off the bar to remove it, and click it to give it its own shape and figure. Adjacent modules share a capsule, and a split starts a new one.",
+      width = W, title = tr("Layout"), bare = true,
+      note = tr("Drag a piece from the catalogue onto the bar."),
+      hint = tr("Drop a piece on either half of the bar to place it on that side of the island; drag it along to move it or off the bar to remove it, and click it to give it its own shape and figure. Adjacent modules share a capsule, and a split starts a new one."),
       layout_editor.new { width = W },
     },
   }
@@ -298,15 +299,15 @@ local function workspaces_part(W)
   local strip = ui.Rect(dots)
   return {
     setting.group {
-      width = W, title = "Workspaces",
-      note = "The shown workspaces are always drawn; the rest, up to the available count, appear only while they have windows.",
+      width = W, title = tr("Workspaces"),
+      note = tr("The shown workspaces are always drawn; the rest, up to the available count, appear only while they have windows."),
       setting.block { width = W, align = "center",
         ui.Item { width = W - 28, height = 28,
           ui.Item { anchors = { center_in = true }, width = function() return strip.width end, height = 28, strip } } },
-      setting.slider { width = W, label = "Workspaces shown", from = 1, to = 20,
+      setting.slider { width = W, label = tr("Workspaces shown"), from = 1, to = 20,
         value = function() return settings.workspaceCount end,
         on_moved = function(v) settings.set("workspaceCount", math.min(v, settings.workspaceMax)) end },
-      setting.slider { width = W, label = "Workspaces available", from = 4, to = 20,
+      setting.slider { width = W, label = tr("Workspaces available"), from = 4, to = 20,
         value = function() return settings.workspaceMax end,
         on_moved = function(v)
           settings.set("workspaceMax", v)
@@ -322,24 +323,24 @@ end
 local function notifications_part(W)
   return {
     setting.group {
-      width = W, title = "Notifications",
-      note = "New notifications appear briefly in the island.",
+      width = W, title = tr("Notifications"),
+      note = tr("New notifications appear briefly in the island."),
       hint = "The shell is the notification daemon: notifications without their own timeout use the time below, and critical ones stay until dismissed. Do not disturb only keeps them off the screen; they still collect in the control centre.",
-      setting.slider { width = W, label = "How long one stays", from = 2, to = 15, unit = " s",
+      setting.slider { width = W, label = tr("How long one stays"), from = 2, to = 15, unit = " s",
         value = function() return math.floor(settings.notificationTimeout / 1000 + 0.5) end,
         locked = function() return settings.doNotDisturb end,
-        reason = "Nothing is shown while Do not disturb is on",
+        reason = tr("Nothing is shown while Do not disturb is on"),
         on_moved = function(v) settings.set("notificationTimeout", v * 1000) end },
-      setting.switch_row { width = W, label = "Do not disturb",
-        reading = function() return settings.doNotDisturb and "Nothing takes the screen" or "Everything is shown" end,
+      setting.switch_row { width = W, label = tr("Do not disturb"),
+        reading = function() return settings.doNotDisturb and tr("Nothing takes the screen") or tr("Everything is shown") end,
         checked = function() return settings.doNotDisturb end,
         on_toggled = function() notifications.toggle_dnd() end },
-      setting.row { width = W, label = "Kept",
+      setting.row { width = W, label = tr("Kept"),
         reading = function()
           local count = #notifications.history()
-          return count > 0 and (count .. " in this session") or "Nothing kept"
+          return count > 0 and (count .. " in this session") or tr("Nothing kept")
         end,
-        control = controls.pill { text = "Clear", icon = "󰜉", height = 30, width = 92,
+        control = controls.pill { text = tr("Clear"), icon = "󰜉", height = 30, width = 92,
           enabled = function() return #notifications.history() > 0 end,
           on_click = function() notifications.clear() end } },
     },

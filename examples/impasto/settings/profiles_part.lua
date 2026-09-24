@@ -13,6 +13,7 @@ local thumbnails = require("services.thumbnails")
 local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
+local tr = require("services.tr")
 
 local C = theme.color
 
@@ -26,10 +27,10 @@ end
 --- A row's menu: rename, duplicate, export, delete.
 local function menu(W, id, s)
   local items = {
-    { id = "rename", label = "Rename", icon = "󰑕" },
-    { id = "duplicate", label = "Duplicate", icon = "󰆏" },
-    { id = "export", label = "Export to a file…", icon = "󰈝" },
-    { id = "delete", label = "Delete", icon = "󰆴", warn = true },
+    { id = "rename", label = tr("Rename"), icon = "󰑕" },
+    { id = "duplicate", label = tr("Duplicate"), icon = "󰆏" },
+    { id = "export", label = tr("Export to a file…"), icon = "󰈝" },
+    { id = "delete", label = tr("Delete"), icon = "󰆴", warn = true },
   }
   local row = { gap = 6, align = "center" }
   for _, item in ipairs(items) do
@@ -90,8 +91,8 @@ local function profile_row(W, id, s)
       kit.text {
         width = text_w, elide = "right", size = theme.size.label,
         text = function()
-          if asking() then return "Deleted for good — there is no undo" end
-          if naming() then return "Enter to keep the name · Esc to leave it" end
+          if asking() then return tr("Deleted for good — there is no undo") end
+          if naming() then return tr("Enter to keep the name · Esc to leave it") end
           return profiles.summary(id)
         end,
         color = function() return asking() and C.red() or C.textMuted() end,
@@ -103,16 +104,16 @@ local function profile_row(W, id, s)
       ui.Rect {
         width = 64, height = 26, radius = 13, color = "#00000000", border_width = 1, border_color = C.accent,
         visible = function() return in_use() and not asking() end,
-        kit.text { anchors = { center_in = true }, text = "In use", size = theme.size.small, color = C.accent },
+        kit.text { anchors = { center_in = true }, text = tr("In use"), size = theme.size.small, color = C.accent },
       },
       ui.Item { width = 92, height = 26, visible = function() return not in_use() and not asking() end,
-        controls.pill { text = "Switch", icon = "󰁔", height = 26, width = 92,
+        controls.pill { text = tr("Switch"), icon = "󰁔", height = 26, width = 92,
           on_click = function() s.menu:set("") profiles.switch_to(id) end } },
       ui.Item { width = 84, height = 26, visible = asking,
-        controls.pill { text = "Delete", icon = "󰆴", height = 26, width = 84, active = true,
+        controls.pill { text = tr("Delete"), icon = "󰆴", height = 26, width = 84, active = true,
           on_click = function() s.confirming:set("") profiles.remove(id) end } },
       ui.Item { width = 64, height = 26, visible = asking,
-        controls.pill { text = "Keep", height = 26, width = 64, on_click = function() s.confirming:set("") end } },
+        controls.pill { text = tr("Keep"), height = 26, width = 64, on_click = function() s.confirming:set("") end } },
       ui.Item { width = 32, height = 28, visible = function() return not asking() end,
         controls.icon_button { icon = "󰇘", icon_size = 13, active = menu_open,
           on_click = function() s.menu:set(menu_open() and "" or id) end } },
@@ -197,15 +198,15 @@ function M.build(W)
   local asking_path = function() return s.exporting:get() ~= "" or s.importing:get() end
 
   return setting.group {
-    width = W, title = "Profiles",
-    note = "Changes are saved to the profile in use as you make them.",
+    width = W, title = tr("Profiles"),
+    note = tr("Changes are saved to the profile in use as you make them."),
     hint = "A profile holds the bar, the desktop widgets and the notes on the edges, the dock, the launcher, the control centre, the look and the wallpaper with its palette. Your name, picture, screens and keyboard stay the same across all of them.",
     ui.Item { width = W, height = function() return list.layout_height or 0 end, watcher, list },
     setting.block { width = W, padding = 10,
       ui.Row { gap = 8,
-        controls.pill { text = "New profile", icon = "󰐕", height = 28,
+        controls.pill { text = tr("New profile"), icon = "󰐕", height = 28,
           on_click = function() s.menu:set("") s.renaming:set(profiles.create()) end },
-        controls.pill { text = "Import…", icon = "󰋺", height = 28,
+        controls.pill { text = tr("Import…"), icon = "󰋺", height = 28,
           on_click = function()
             s.menu:set("")
             s.exporting:set("")
@@ -226,7 +227,7 @@ function M.build(W)
       control = ui.Row { gap = 8, align = "center",
         path_holder,
         controls.pill { text = "Go", height = 30, active = true, on_click = act },
-        controls.pill { text = "Cancel", height = 30,
+        controls.pill { text = tr("Cancel"), height = 30,
           on_click = function() s.exporting:set("") s.importing:set(false) end },
       },
     },

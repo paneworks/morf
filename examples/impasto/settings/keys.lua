@@ -15,6 +15,7 @@ local theme = require("theme")
 local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
+local tr = require("services.tr")
 
 local C = theme.color
 
@@ -23,24 +24,24 @@ local M = {}
 -- The shell's own binds with impasto's default combinations, and the verb
 -- a compositor bind runs (`morf ipc call <verb>`).
 M.defaults = {
-  { verb = "launcher", label = "Launcher", keys = "SUPER + Space" },
-  { verb = "controls", label = "Control centre", keys = "SUPER + A" },
-  { verb = "overview", label = "Workspace overview", keys = "SUPER + TAB" },
-  { verb = "settings", label = "Settings", keys = "SUPER + comma" },
-  { verb = "appearance", label = "Appearance", keys = "SUPER + T" },
-  { verb = "palette", label = "Palette", keys = "SUPER + SHIFT + T" },
-  { verb = "stats", label = "System statistics", keys = "SUPER + U" },
-  { verb = "session", label = "Session menu", keys = "SUPER + X" },
-  { verb = "lock", label = "Lock the screen", keys = "SUPER + L" },
-  { verb = "pet", label = "Pet", keys = "SUPER + SHIFT + P" },
-  { verb = "games", label = "Games", keys = "SUPER + G" },
-  { verb = "notes", label = "Notes", keys = "SUPER + S" },
-  { verb = "board", label = "Task board", keys = "SUPER + K" },
-  { verb = "keys", label = "Keys", keys = "SUPER + H" },
-  { verb = "packages", label = "Packages", keys = "SUPER + I" },
-  { verb = "clipboard", label = "Clipboard history", keys = "SUPER + V" },
-  { verb = "capture", label = "Capture", keys = "SUPER + SHIFT + S" },
-  { verb = "record", label = "Record the screen", keys = "SUPER + SHIFT + R" },
+  { verb = "launcher", label = tr("Launcher"), keys = "SUPER + Space" },
+  { verb = "controls", label = tr("Control centre"), keys = "SUPER + A" },
+  { verb = "overview", label = tr("Workspace overview"), keys = "SUPER + TAB" },
+  { verb = "settings", label = tr("Settings"), keys = "SUPER + comma" },
+  { verb = "appearance", label = tr("Appearance"), keys = "SUPER + T" },
+  { verb = "palette", label = tr("Palette"), keys = "SUPER + SHIFT + T" },
+  { verb = "stats", label = tr("System statistics"), keys = "SUPER + U" },
+  { verb = "session", label = tr("Session menu"), keys = "SUPER + X" },
+  { verb = "lock", label = tr("Lock the screen"), keys = "SUPER + L" },
+  { verb = "pet", label = tr("Pet"), keys = "SUPER + SHIFT + P" },
+  { verb = "games", label = tr("Games"), keys = "SUPER + G" },
+  { verb = "notes", label = tr("Notes"), keys = "SUPER + S" },
+  { verb = "board", label = tr("Task board"), keys = "SUPER + K" },
+  { verb = "keys", label = tr("Keys"), keys = "SUPER + H" },
+  { verb = "packages", label = tr("Packages"), keys = "SUPER + I" },
+  { verb = "clipboard", label = tr("Clipboard history"), keys = "SUPER + V" },
+  { verb = "capture", label = tr("Capture"), keys = "SUPER + SHIFT + S" },
+  { verb = "record", label = tr("Record the screen"), keys = "SUPER + SHIFT + R" },
 }
 
 --- The shell's rows: `{ label, keys, note }`.
@@ -93,7 +94,7 @@ end
 --- The search field both parts share, quieter than the sidebar's.
 local function search(W, filter)
   local box = setting.text_box {
-    field_width = W, field_height = 28, placeholder = "Find a key or an action",
+    field_width = W, field_height = 28, placeholder = tr("Find a key or an action"),
     value = filter:get(),
     on_edited = function(text) filter:set(text) end,
   }
@@ -133,7 +134,7 @@ function M.build(page)
       }
     end
     return {
-      setting.heading { width = W, title = "The shell's own",
+      setting.heading { width = W, title = tr("The shell's own"),
         note = "Every key the shell answers, with the verb a compositor bind calls.",
         hint = "Changing a key is changing the compositor's bind; this shell never writes that file, so the sheet is read-only." },
       search(W, filter),
@@ -156,7 +157,7 @@ function M.build(page)
       rows:replace(out, "key")
     end)
     return {
-      setting.heading { width = W, title = "The compositor's",
+      setting.heading { width = W, title = tr("The compositor's"),
         note = "Windows, workspaces, the media keys — as Hyprland reports them.",
         hint = "Read from Hyprland's own list; edit them in its configuration." },
       search(W, filter),

@@ -11,6 +11,7 @@ local setting = require("components.setting")
 local app_icon = require("components.app_icon")
 local dock = require("services.dock")
 local launcher = require("services.launcher")
+local tr = require("services.tr")
 
 local C = theme.color
 
@@ -82,7 +83,7 @@ function M.rows(width)
       control = ui.Row {
         gap = 10, align = "center",
         app_icon.node { size = 20, name = function() local a = app() return a and a.icon or "" end },
-        controls.pill { text = "Keep", icon = "󰐃", height = 26, active = true,
+        controls.pill { text = tr("Keep"), icon = "󰐃", height = 26, active = true,
           on_click = function() local a = app() if a then dock.pin(a.id) end end },
       },
     }
