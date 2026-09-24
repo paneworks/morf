@@ -31,6 +31,8 @@ impl Runtime {
         let mut http_answers = Vec::new();
         let io_calls;
         let io_more;
+        let watch_calls;
+        let watch_more;
         let mut loaders = Vec::new();
         let mut loader_drops = Vec::new();
         let mut retained_destroys = Vec::new();
@@ -304,6 +306,7 @@ impl Runtime {
                 false
             });
             (io_calls, io_more) = state.io.collect();
+            (watch_calls, watch_more) = state.watches.collect();
             retained_destroys.extend(state.retained_destroy_queue.drain());
             for watcher in state.transform_watchers.values_mut() {
                 if watcher.pending {
@@ -430,7 +433,16 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("I/O callback: {message}"));
             }
         }
-        if io_more {
+        for call in &watch_calls {
+            if let Err(message) = self
+                .run_handler(|ctx, limits| crate::api_watch::execute_watch_call(ctx, call, limits))
+            {
+                self.reactive
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("fs.watch callback: {message}"));
+            }
+        }
+        if io_more || watch_more {
             // One turn's share is spent; the rest is for the next turn,
             // which this makes come at once rather than at the next event.
             morf_io::wake_all();

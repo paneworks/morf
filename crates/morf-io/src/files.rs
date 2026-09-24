@@ -1,16 +1,8 @@
 use std::fmt;
 use std::fs;
 use std::io;
-use std::mem::MaybeUninit;
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
-use std::thread::{self, JoinHandle};
 use std::time::Duration;
-
-use rustix::fs::inotify::{self, CreateFlags, ReadFlags, WatchFlags};
-use rustix::io::Errno;
 
 /// Readable and atomically writable filesystem path.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -266,79 +258,34 @@ pub enum FileEvent {
     Deleted,
 }
 
-/// Inotify-backed file event receiver.
+/// A file's changes, pulled.
+///
+/// A [`crate::Watch`] on the shared watcher, read with a timeout: no thread
+/// of its own. `Created` reads as `Changed`, as it always has.
 pub struct FileWatcher {
-    events: mpsc::Receiver<FileEvent>,
-    stop: Arc<AtomicBool>,
-    join: Option<JoinHandle<()>>,
+    watch: crate::Watch,
 }
 
 impl FileWatcher {
     fn new(path: &Path) -> io::Result<Self> {
-        let fd = inotify::init(CreateFlags::CLOEXEC | CreateFlags::NONBLOCK)?;
-        let parent = path.parent().unwrap_or_else(|| Path::new("."));
-        let name = path
-            .file_name()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "file has no name"))?
-            .as_bytes()
-            .to_vec();
-        inotify::add_watch(
-            &fd,
-            parent,
-            WatchFlags::MODIFY
-                | WatchFlags::CLOSE_WRITE
-                | WatchFlags::MOVED_TO
-                | WatchFlags::CREATE
-                | WatchFlags::DELETE,
-        )?;
-        let (tx, events) = mpsc::channel();
-        let stop = Arc::new(AtomicBool::new(false));
-        let worker_stop = Arc::clone(&stop);
-        let join = thread::spawn(move || {
-            let mut buffer = [MaybeUninit::uninit(); 4096];
-            let mut reader = inotify::Reader::new(fd, &mut buffer);
-            while !worker_stop.load(Ordering::Acquire) {
-                match reader.next() {
-                    Ok(event) => {
-                        if event.file_name().map(|value| value.to_bytes()) != Some(name.as_slice())
-                        {
-                            continue;
-                        }
-                        let flags = event.events();
-                        let event = if flags.intersects(ReadFlags::DELETE) {
-                            FileEvent::Deleted
-                        } else if flags.intersects(ReadFlags::MOVED_TO) {
-                            FileEvent::Moved
-                        } else {
-                            FileEvent::Changed
-                        };
-                        if tx.send(event).is_err() {
-                            break;
-                        }
-                        crate::wake_all();
-                    }
-                    Err(Errno::AGAIN) => thread::sleep(Duration::from_millis(10)),
-                    Err(_) => break,
-                }
-            }
-        });
+        if path.file_name().is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file has no name",
+            ));
+        }
         Ok(Self {
-            events,
-            stop,
-            join: Some(join),
+            watch: crate::Watch::new(path, crate::WatchOptions::default())?,
         })
     }
 
     pub fn next_event(&self, timeout: Duration) -> Option<FileEvent> {
-        self.events.recv_timeout(timeout).ok()
-    }
-}
-
-impl Drop for FileWatcher {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Release);
-        if let Some(join) = self.join.take() {
-            let _ = join.join();
-        }
+        self.watch
+            .next_timeout(timeout)
+            .map(|change| match change.kind {
+                crate::ChangeKind::Changed | crate::ChangeKind::Created => FileEvent::Changed,
+                crate::ChangeKind::Moved => FileEvent::Moved,
+                crate::ChangeKind::Deleted => FileEvent::Deleted,
+            })
     }
 }

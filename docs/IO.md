@@ -119,10 +119,59 @@ calls back once: `(reply, nil)`, or `(nil, err)` on a refused connection,
 `"timed out"`, or a reply over `max_bytes`. It returns a handle whose
 `:close()` abandons the request.
 
+## Watching files: `morf.fs.watch`
+
+For a file someone else writes — a settings file another screen saves, a
+history, a theme — or a folder whose contents come and go.
+
+```lua
+local w = morf.fs.watch(path, function(event)
+  -- event.path  the path that changed
+  -- event.kind  "changed" | "created" | "deleted" | "moved"
+  -- event.name  its name: for a folder's entry, relative to the folder
+end, { recursive = false })
+w:close()   w:closed()   w:path()
+```
+
+- **A file** is followed by name, through its folder, so a file that does
+  not exist yet can be watched: it is `created` when it appears. When its
+  folder does not exist either, the nearest one that does is watched and
+  the watch follows the folders down as they are made. `changed` is a
+  write, or the file replaced by a rename (how editors save); `deleted` and
+  `moved` are it going.
+- **A folder** reports its entries: made (`created`), written (`changed`),
+  removed or moved away. The folder itself going is `deleted` or `moved`
+  with its own path, after which it is watched as a path that does not
+  exist, until it comes back. `recursive = true` takes in every folder
+  below it too (at most 4096), and those made later.
+- **Bursts are coalesced**: what happened to one path between two turns of
+  the loop is one callback — a hundred writes are one `changed`, an editor's
+  move-aside-and-write is one `changed`, a file made and removed before the
+  loop looked is nothing, one removed and made again is `changed`. At most
+  64 callbacks per watch per turn; the rest wait for the next.
+
+It costs nothing while nothing changes. Every watch in the process shares
+one inotify descriptor and one thread, asleep in `poll` until the kernel
+has news, which then rings the loop the way a child's output does. Nothing
+is polled and there is no thread per watch.
+
+A watch lasts as long as its handle: `:close()` ends it (no callback runs
+after it, not even one already gathered), and so does the handle being
+collected — keep it in a variable that lives as long as the watch should —,
+a reload, and the runtime ending. `morf.fs.watch` raises for a call that
+is wrong (no path, no function, a bad option, more than the limit), and
+returns `nil, message` when the kernel refuses the watch.
+
+The older `morf.file(path):watch()` (`watcher:next(timeout)`) and
+`morf.file_view { watch_changes = true }` still work and sit on the same
+shared watcher, pulled rather than pushed; prefer `morf.fs.watch`.
+
 ## What is bounded, and what is cleaned up
 
 - A runtime runs at most 64 children and holds at most 64 connections;
   a call past that raises.
+- A runtime holds at most 256 file watches (`MORF_LIMITS=watches=N`); a
+  call past that raises. Closed watches do not count.
 - Each handle has at most 64 callbacks run per turn of the loop; the rest
   wait for the next turn, so one chatty child cannot starve the rest.
 - A child that prints faster than its callbacks keep up with is not read
@@ -133,8 +182,12 @@ calls back once: `(reply, nil)`, or `(nil, err)` on a refused connection,
   libraries a system binary must not load.
 - Every child is reaped. On a reload, or when morf exits, each child the
   configuration started is killed and reaped, except `detached` ones, and
-  every connection is closed; nothing from the old configuration calls
-  into the new one.
+  every connection is closed and every watch dropped; nothing from the old
+  configuration calls into the new one.
+- morf's own reload-on-save follows the configuration's `.lua` files
+  through the same shared watcher: it sleeps until one is written, waits
+  for 50 ms of quiet, and reloads when the files' sizes or times actually
+  differ — never by looking at every file on a timer.
 
 ## Compressed bytes and archives: `morf.encoding`, `morf.archive`
 

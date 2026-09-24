@@ -42,6 +42,7 @@ mod api_toplevels;
 mod api_transform;
 mod api_ui_json;
 mod api_view;
+mod api_watch;
 pub mod arguments;
 mod configure;
 mod configure_states;

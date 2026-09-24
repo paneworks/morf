@@ -49,6 +49,7 @@ mod examples;
 mod flush_construction;
 mod flushing;
 mod fs_time;
+mod fs_watch;
 mod gradients;
 mod harness;
 mod http;
