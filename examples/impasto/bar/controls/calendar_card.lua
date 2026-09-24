@@ -6,14 +6,17 @@
 -- either side are dimmed, and today takes the accent in its own month.
 -- The arrows and the wheel page through months; "Today" comes back.
 --
--- The original marked days with tasks due and turned into that day's list
--- on a click; the tasks service is another port, so the days here are not
--- marked yet.
+-- A dot under a day marks tasks due on it, in the accent while any is
+-- open and muted once all are done; clicking such a day turns the card
+-- into that day's list, with a way back in the corner. A row opens the
+-- task on the board (`on_panel("board")`).
 
 local ui = require("morf.ui")
 local theme = require("theme")
+local tasks = require("services.tasks")
 local kit = require("components.kit")
 local controls = require("components.controls")
+local task_row = require("components.task_row")
 
 local C = theme.color
 local M = {}
@@ -75,7 +78,15 @@ local MONTHS = { "January", "February", "March", "April", "May", "June", "July",
   "August", "September", "October", "November", "December" }
 M.MONTHS = MONTHS
 
---- `width` x `height`, `bare`, `padding`.
+-- Every card's picked day, for `morf ipc call calendar.pick <day>`, which
+-- does what a click on a day does.
+local pickers = setmetatable({}, { __mode = "k" })
+morf.ipc["calendar.pick"] = function(day)
+  for signal in pairs(pickers) do signal:set(day or "") end
+  return day or ""
+end
+
+--- `width` x `height`, `bare`, `padding`, `on_panel(name)` for a task row.
 function M.build(options)
   local width, height = options.width, options.height
   local padding = options.padding or 14
@@ -94,26 +105,63 @@ function M.build(options)
     }
   end
   local circle = math.min(cell_w, cell_h)
+  -- The day shown instead of the month, as a day key; "" for the month.
+  local picked = controls.signal("calendar.picked", "")
+  pickers[picked] = true
   for index = 1, 42 do
     local cell = function() return cells()[index] end
+    -- Tasks due that day, for days in the month shown.
+    local key = function()
+      local c = cell()
+      if not c.in_month then return "" end
+      local year, month = M.shown(offset:get())
+      return ("%04d-%02d-%02d"):format(year, month, c.day)
+    end
+    local due = function() local k = key() return k ~= "" and tasks.count_on(k) or 0 end
+    local pending = function() local k = key() return k ~= "" and tasks.pending_on(k) or 0 end
+    local label = kit.text {
+      text = function() return tostring(cell().day) end,
+      size = theme.size.small,
+      weight = function() return cell().today and 600 or 400 end,
+      color = function()
+        local c = cell()
+        if c.today then return C.accentText() end
+        return c.in_month and C.text() or C.textMuted()
+      end,
+      opacity = function() return cell().in_month and 1 or 0.35 end,
+    }
     grid[#grid + 1] = ui.Item {
       width = cell_w, height = cell_h,
       ui.Rect {
         anchors = { center_in = true }, width = circle, height = circle, radius = circle / 2,
         color = function() return cell().today and C.accent() or "#00000000" end,
         behavior = { color = theme.behave("fast") },
-        kit.text {
-          anchors = { center_in = true },
-          text = function() return tostring(cell().day) end,
-          size = theme.size.small,
-          weight = function() return cell().today and 600 or 400 end,
-          color = function()
-            local c = cell()
-            if c.today then return C.accentText() end
-            return c.in_month and C.text() or C.textMuted()
-          end,
-          opacity = function() return cell().in_month and 1 or 0.35 end,
+        -- Lifted a pixel over a dot.
+        ui.Item {
+          anchors = { horizontal_center = true },
+          y = function() return (circle - (label.layout_height or 13)) / 2 - (due() > 0 and 1 or 0) end,
+          width = function() return label.layout_width or 0 end,
+          height = function() return label.layout_height or 13 end,
+          label,
         },
+        -- Tasks due: accent while any is open, muted once all are done.
+        ui.Rect {
+          anchors = { horizontal_center = true, bottom = true, bottom_margin = 3 },
+          width = 3, height = 3, radius = 1.5,
+          visible = function() return due() > 0 end,
+          color = function()
+            if cell().today then return C.accentText() end
+            return pending() > 0 and C.accent() or C.textMuted()
+          end,
+        },
+      },
+      -- Only days with tasks can be clicked: they turn the card into the
+      -- day's list.
+      ui.MouseArea {
+        anchors = { fill = true },
+        visible = function() return due() > 0 end,
+        cursor = "pointer",
+        on_clicked = function() picked:set(key()) end,
       },
     }
   end
@@ -127,9 +175,72 @@ function M.build(options)
     local year = M.shown(offset:get())
     return tostring(year)
   end
+  -- The day: a way back, the date, how many are left, and a row per task;
+  -- a row opens the task on the board.
+  local due_list = function() return tasks.on(picked:get()) end
+  -- Built only while a day is picked; each row only while a task fills it.
+  local day_page = function()
+  local rows = { gap = 6 }
+  local max_rows = math.max(1, math.floor((inner_h - 24 - 1 - 12) / 30))
+  for index = 1, max_rows do
+    -- A row being taken down keeps its last task, so its bindings never
+    -- read nothing on the way out.
+    local last
+    local task = function() local t = due_list()[index] if t then last = t end return t or last end
+    rows[#rows + 1] = ui.Loader {
+      active = function() return due_list()[index] ~= nil end,
+      source = function()
+        return task_row.build {
+          task = task, width = inner_w, dated = false,
+          on_open = function()
+            local t = task()
+            if not t then return end
+            tasks.open(t.key)
+            if options.on_panel then options.on_panel("board") end
+          end,
+        }
+      end,
+    }
+  end
+  local count = kit.text {
+    anchors = { right = true, vertical_center = true },
+    text = function()
+      local list = due_list()
+      if #list == 0 then return "" end
+      local left = 0
+      for _, t in ipairs(list) do if t.state ~= "done" then left = left + 1 end end
+      return left .. " of " .. #list
+    end,
+    mono = true, size = theme.size.label, color = C.textMuted,
+  }
+  return ui.Column {
+    gap = 6,
+    ui.Item {
+      width = inner_w, height = 24,
+      ui.Row {
+        anchors = { left = true, vertical_center = true }, gap = 6, align = "center",
+        controls.icon_button { icon = "󰁍", icon_size = 13, width = 26, height = 24,
+          on_click = function() picked:set("") end },
+        kit.text {
+          width = function() return inner_w - 32 - (count.layout_width or 0) - 8 end, elide = "right",
+          text = function()
+            local at = tasks.date_of(picked:get())
+            return at and morf.time.format("%A %-d %B", at) or ""
+          end,
+          size = theme.size.small, weight = 600,
+        },
+      },
+      count,
+    },
+    controls.hairline { width = inner_w },
+    ui.Column(rows),
+  } end
+
   return controls.card {
     bare = options.bare, padding = padding, width = width, height = height,
+    ui.Loader { active = function() return picked:get() ~= "" end, source = day_page },
     ui.Column {
+      visible = function() return picked:get() == "" end,
       gap = gap,
       ui.Item {
         width = inner_w, height = header_h,

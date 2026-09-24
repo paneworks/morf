@@ -30,20 +30,21 @@ end
 --- The detail, at the module's declared size.
 function module.detail()
   local W = module.width - 8 - 28
-  local rows = {}
-  for i = 1, 3 do
-    local task = function() return tasks.queue()[i] end
-    rows[#rows + 1] = task_row.build {
-      task = task, width = W,
-      on_open = function() local t = task() if t then open_on(t.key) end end,
-    }
-  end
+  -- Each row is built only while a task fills it.
   local holders = {}
-  for i, row in ipairs(rows) do
-    holders[i] = ui.Item {
-      width = W, height = 24,
-      visible = function() return tasks.queue()[i] ~= nil end,
-      row,
+  for i = 1, 3 do
+    -- A row being taken down keeps its last task, so its bindings never
+    -- read nothing on the way out.
+    local last
+    local task = function() local t = tasks.queue()[i] if t then last = t end return t or last end
+    holders[i] = ui.Loader {
+      active = function() return tasks.queue()[i] ~= nil end,
+      source = function()
+        return task_row.build {
+          task = task, width = W,
+          on_open = function() local t = task() if t then open_on(t.key) end end,
+        }
+      end,
     }
   end
   return ui.Item {
