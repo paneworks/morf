@@ -327,7 +327,7 @@ function M.build(ctx)
   }
 
   -- --------------------------------------------------------- lyrics --
-  local LX, LW = 695, 290
+  local LX, LW = 680, 290
   local function lyric_line(offset)
     return kit.text {
       width = LW, horizontal_alignment = "center", elide = "right",
@@ -385,7 +385,7 @@ function M.build(ctx)
     },
     kit.hover(ctx.area {
       id = "media-lyrics-menu",
-      x = 282, y = 13, width = 40, height = 40, cursor = "pointer",
+      x = 268, y = 13, width = 40, height = 40, cursor = "pointer",
       kit.icon("more_vert", 22, function() return C.onSurface end, { anchors = { center_in = true } }),
     }, function(hovered) return hovered and C.surfaceContainerHighest or C.surfaceContainerHigh end, 12),
     ui.Column {

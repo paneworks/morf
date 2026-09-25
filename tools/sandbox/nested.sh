@@ -222,7 +222,13 @@ film() {
 }
 wait() { sleep \$1; }
 # A media player that plays nothing (fakeplayer.py), on the private bus.
-player() { asked player; /usr/bin/python3 "$HERE/fakeplayer.py" "\${1:-\$HOME/.local/share/wallpapers/japanese-castle-full-moon.jpeg}" > \$OUT/player.log 2>&1 & }
+# Its cover is ART, else a castle from the wallpapers, else a picture made here.
+player() {
+  asked player
+  art=\${1:-\$HOME/.local/share/wallpapers/japanese-castle-full-moon.jpeg}
+  [ -e "\$art" ] || { art=\$OUT/cover.png; magick -seed 7 -size 512x512 plasma:orange-purple "\$art"; }
+  /usr/bin/python3 "$HERE/fakeplayer.py" "\$art" > \$OUT/player.log 2>&1 &
+}
 # When a request was made: films are timed from it as well.
 asked() { REQ=\$(date +%s%N); echo "\$1 wall \$((REQ / 1000000))" >> \$OUT/marks; }
 # Headless, the nested session draws on an output of its own; visible, on
