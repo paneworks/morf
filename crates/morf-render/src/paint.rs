@@ -84,8 +84,8 @@ pub(crate) fn append_node(
     // composite, so a node with either and a mask gets a second layer around
     // its own for the mask: masked last, the mask cuts the shadow and the
     // effect's output as it cuts everything else.
-    let mask_wraps = alpha_mask.is_some()
-        && (effect.is_some() || layer_config.shadow_color.alpha > 0.0);
+    let mask_wraps =
+        alpha_mask.is_some() && (effect.is_some() || layer_config.shadow_color.alpha > 0.0);
     let outer_mask_layer = mask_wraps.then(|| {
         let index = list.layers.len();
         list.layers.push(plain_layer(
@@ -596,12 +596,7 @@ fn mask_source(scene: &Scene, node: NodeHandle) -> Result<Option<MaskSource>, Re
 }
 
 /// A layer that only groups: composited as it is, at full opacity.
-fn plain_layer(
-    node: NodeHandle,
-    start: usize,
-    parent: Option<usize>,
-    bounds: Geometry,
-) -> Layer {
+fn plain_layer(node: NodeHandle, start: usize, parent: Option<usize>, bounds: Geometry) -> Layer {
     Layer {
         node,
         commands: start..start,

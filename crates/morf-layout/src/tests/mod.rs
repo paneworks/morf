@@ -84,6 +84,7 @@ mod custom;
 mod flex;
 mod hidden;
 mod incremental;
+mod masks;
 mod matrix_stretch;
 mod text_input;
 mod transforms;

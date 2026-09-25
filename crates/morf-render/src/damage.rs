@@ -354,10 +354,7 @@ fn keyed_layers(
                     parent: None,
                     // Indices, like the range: which layer a mask is shows
                     // in the mask layer's parent and members.
-                    alpha_mask: layer.alpha_mask.map(|mask| AlphaMask {
-                        layer: 0,
-                        ..mask
-                    }),
+                    alpha_mask: layer.alpha_mask.map(|mask| AlphaMask { layer: 0, ..mask }),
                     mask_for: layer.mask_for.map(|_| 0),
                     ..layer.clone()
                 },

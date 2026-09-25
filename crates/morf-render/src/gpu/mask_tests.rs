@@ -38,7 +38,9 @@ fn green_square() -> (Scene, NodeHandle, NodeHandle) {
 /// A circle the size of the surface, given to `owner` as its mask.
 fn circle_mask(scene: &mut Scene, owner: NodeHandle) -> NodeHandle {
     let circle = scene.create(Element::Rect);
-    scene.assign(circle, "radius", f64::from(SIZE) / 2.0).unwrap();
+    scene
+        .assign(circle, "radius", f64::from(SIZE) / 2.0)
+        .unwrap();
     scene.assign(circle, "color", "#ffffffff").unwrap();
     scene.set_mask(owner, Some(circle)).unwrap();
     circle
@@ -75,7 +77,10 @@ fn a_node_mask_keeps_what_it_covers() {
     assert_eq!(at(&pixels, 61, 61)[3], 0, "every corner");
     // The circle's edge is antialiased into the square's alpha.
     let edge = at(&pixels, 9, 9)[3];
-    assert!(edge > 0 && edge < 255, "the rim at (9, 9) is partly covered: {edge}");
+    assert!(
+        edge > 0 && edge < 255,
+        "the rim at (9, 9) is partly covered: {edge}"
+    );
 }
 
 #[test]
@@ -117,10 +122,17 @@ fn a_gradient_mask_fades_the_edges() {
     let pixels = draw(&scene, root);
     // The default linear gradient runs top to bottom.
     assert!(at(&pixels, 32, 0)[3] < 20, "top {:?}", at(&pixels, 32, 0));
-    assert!(at(&pixels, 32, 63)[3] < 20, "bottom {:?}", at(&pixels, 32, 63));
+    assert!(
+        at(&pixels, 32, 63)[3] < 20,
+        "bottom {:?}",
+        at(&pixels, 32, 63)
+    );
     assert_eq!(at(&pixels, 32, 32)[3], 255, "the middle is whole");
     let fading = at(&pixels, 32, 8)[3];
-    assert!(fading > 60 && fading < 200, "halfway into the fade: {fading}");
+    assert!(
+        fading > 60 && fading < 200,
+        "halfway into the fade: {fading}"
+    );
     // Rows fade alike across the width.
     assert_eq!(at(&pixels, 4, 8)[3], fading);
 }
@@ -292,15 +304,17 @@ fn an_animated_mask_damages_what_it_changes() {
         width: f64::from(SIZE),
         height: f64::from(SIZE),
     };
-    let mut engine =
-        RenderEngine::new(pollster::block_on(WgpuBackend::new(SIZE, SIZE)).unwrap());
+    let mut engine = RenderEngine::new(pollster::block_on(WgpuBackend::new(SIZE, SIZE)).unwrap());
     let layout = Layout::compute(&scene, root, logical, &mut NoText).unwrap();
     engine.render(&scene, &layout, 120, |_| {}).unwrap();
     for (step, (target, property, value)) in steps.into_iter().enumerate() {
         scene.assign(target, property, value).unwrap();
         let layout = Layout::compute(&scene, root, logical, &mut NoText).unwrap();
         let damage = engine.render(&scene, &layout, 120, |_| {}).unwrap();
-        assert!(!damage.is_empty(), "step {step} ({property}) damaged nothing");
+        assert!(
+            !damage.is_empty(),
+            "step {step} ({property}) damaged nothing"
+        );
         let partial = engine.backend_mut().read_pixels();
         let mut fresh =
             RenderEngine::new(pollster::block_on(WgpuBackend::new(SIZE, SIZE)).unwrap());
