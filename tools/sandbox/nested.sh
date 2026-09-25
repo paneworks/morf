@@ -125,7 +125,6 @@ fi
 # same compositor effects.
 cat > "$H/hyprland.lua" <<'HYPR'
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
-hl.monitor({ output = "HEADLESS-A", mode = "1920x1080@60", position = "0x0", scale = 1 })
 hl.config({
   general = { gaps_in = 5, gaps_out = 10, border_size = 2, layout = "dwindle" },
   decoration = { rounding = 22, shadow = { enabled = false },
@@ -138,6 +137,17 @@ hl.config({
 hl.layer_rule({ name = "impasto-desktop-blur", match = { namespace = "^(impasto-desktop)$" },
   blur = true, ignore_alpha = 0.15 })
 HYPR
+# MONITORS: the headless outputs, left to right, as WxH[@scale] each
+# ("3840x2160 3840x2160 3456x2160" for a desk of three 4K screens); one
+# 1920x1080 by default.
+x=0; i=0
+for m in ${MONITORS:-1920x1080}; do
+  i=$((i+1)); name=HEADLESS-$(echo A B C D E F | cut -d' ' -f$i)
+  mode=${m%@*}; scale=1; case $m in *@*) scale=${m#*@};; esac
+  echo "hl.monitor({ output = \"$name\", mode = \"$mode@60\", position = \"${x}x0\", scale = $scale })" >> "$H/hyprland.lua"
+  x=$((x + ${mode%x*}))
+done
+MONITOR_COUNT=$i
 
 # cage renders with GL on a non-NVIDIA node (its EGL fails on NVIDIA and
 # falls back to pixman, whose screenshots can be a frame stale).
@@ -233,7 +243,8 @@ player() {
 asked() { REQ=\$(date +%s%N); echo "\$1 wall \$((REQ / 1000000))" >> \$OUT/marks; }
 # Headless, the nested session draws on an output of its own; visible, on
 # the window cage gives it.
-if [ -z "${VISIBLE:-}" ]; then hc output create headless HEADLESS-A >> \$OUT/hc.log 2>&1
+if [ -z "${VISIBLE:-}" ]; then
+  for n in $(echo A B C D E F | cut -d' ' -f1-$MONITOR_COUNT); do hc output create headless HEADLESS-\$n >> \$OUT/hc.log 2>&1; done
 else hc -j monitors | grep -q '"name"' || hc output create wayland >> \$OUT/hc.log 2>&1; fi
 sleep 1
 # awww paints impasto's wallpaper; a morf configuration of its own paints
