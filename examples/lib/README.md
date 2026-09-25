@@ -121,7 +121,13 @@ shapes.Shape { width = 96, height = 96, shape = function() return which:get() en
 | `shapes.polygon(vertices, { rounding })`, `shapes.star(points, inner, opts)`, `shapes.regular(sides, opts)`, `shapes.lobes(count, inner, opts)` | outlines of your own, for `path` and `curves` |
 | `shapes.curves(shape, segments)` | the normalised cubics themselves |
 
-Outlines are made once per name and kept (a few milliseconds each).
+Outlines are made once per name and kept. The named shapes at the defaults
+(a 100 square, 72 cubics) are also shipped ready-made in
+`lib/m3shapes_paths.lua`, written by `lib/m3shapes_gen.lua` (`cd examples &&
+lua5.4 lib/m3shapes_gen.lua > lib/m3shapes_paths.lua`): resampling one outline
+costs about a fifth of a module's instruction budget, reading one nothing.
+`segments = false` keeps an outline as it was made, for a shape that is only
+drawn.
 `examples/m3shapes.lua` shows every one.
 
 ## spectrum

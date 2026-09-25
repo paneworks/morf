@@ -327,11 +327,22 @@ end
 --- SVG path data for a shape, in a `size` square (100): for a `ui.Path`
 --- with `view_box = { 0, 0, size, size }`.
 local paths = {}
+-- The named shapes at the defaults, made ahead of time by
+-- lib/m3shapes_gen.lua: reading them costs nothing, where resampling one
+-- outline costs a good part of a module's instruction budget.
+local made
 function shapes.path(shape, opts)
   opts = opts or {}
   local size = opts.size or 100
   local segments = opts.segments
   if segments == nil then segments = shapes.SEGMENTS end
+  if type(shape) == "string" and size == 100 and segments == shapes.SEGMENTS and not opts.fresh then
+    if made == nil then
+      local ok, list = pcall(require, "lib.m3shapes_paths")
+      made = ok and type(list) == "table" and list or false
+    end
+    if made and made[shape] then return made[shape] end
+  end
   local key = type(shape) == "string" and (shape .. "/" .. size .. "/" .. tostring(segments))
   if key and paths[key] then return paths[key] end
   local curves = shapes.curves(shape, segments)
