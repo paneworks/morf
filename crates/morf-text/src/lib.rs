@@ -20,10 +20,13 @@ pub(crate) struct CachedBuffer {
     /// The runs it was set in, when it was: glyph metadata is an index into
     /// these, plus one.
     pub(crate) rich: Option<std::sync::Arc<morf_scene::RichText>>,
-    /// The variable-font axes its glyphs are drawn at, besides `wght`. Not
-    /// part of what it was shaped from: these do not move a glyph, so a
-    /// change of them is a new picture of the same layout, not a new layout.
+    /// The variable-font axes it was shaped at and its glyphs are drawn at,
+    /// besides `wght` (the weight): its own, and `opsz` at its size when
+    /// optical sizing is automatic.
     pub(crate) axes: Vec<morf_layout::FontAxis>,
+    /// Whether `opsz` among `axes` is the size's rather than the style's, so a
+    /// run set at a size of its own is drawn at that size's.
+    pub(crate) optical: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -545,6 +548,8 @@ pub use glyph_fields::{
     field_units_per_logical_px,
 };
 
+#[cfg(test)]
+mod axes_shaping_tests;
 #[cfg(test)]
 mod caret_tests;
 #[cfg(test)]

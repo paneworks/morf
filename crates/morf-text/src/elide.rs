@@ -10,8 +10,8 @@ use cosmic_text::{Align, Buffer, FontSystem, Shaping, Wrap};
 use morf_layout::{TextElide, TextOptions};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::style::{run_gain, text_attrs, text_metrics};
-use crate::{normalize_font_weight, resolve_family};
+use crate::resolve_family;
+use crate::style::{run_gain, shaping_weight, text_attrs, text_metrics};
 
 pub(crate) fn elided_text(
     fonts: &mut FontSystem,
@@ -98,12 +98,7 @@ fn wrapped_lines(
     buffer.set_wrap(Wrap::WordOrGlyph);
     buffer.set_text(
         text,
-        &text_attrs(
-            &family,
-            normalize_font_weight(options.font_weight),
-            size,
-            &options.style,
-        ),
+        &text_attrs(&family, shaping_weight(options), size, &options.style),
         Shaping::Advanced,
         None,
     );
@@ -141,12 +136,7 @@ pub(crate) fn shaped_width(
     buffer.set_wrap(Wrap::None);
     buffer.set_text(
         text,
-        &text_attrs(
-            &family,
-            normalize_font_weight(options.font_weight),
-            size,
-            &options.style,
-        ),
+        &text_attrs(&family, shaping_weight(options), size, &options.style),
         Shaping::Advanced,
         Some(Align::Left),
     );

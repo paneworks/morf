@@ -192,6 +192,53 @@ impl FontFeatures {
     }
 }
 
+/// morf: one axis of a variable font set to a value, in the font's own units
+/// (`wdth` 75, `opsz` 12). Compared and hashed by the value's bits.
+#[derive(Clone, Copy, Debug)]
+pub struct Variation {
+    pub tag: [u8; 4],
+    pub value: f32,
+}
+
+impl PartialEq for Variation {
+    fn eq(&self, other: &Self) -> bool {
+        self.tag == other.tag && self.value.to_bits() == other.value.to_bits()
+    }
+}
+
+impl Eq for Variation {}
+
+impl core::hash::Hash for Variation {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.tag.hash(state);
+        self.value.to_bits().hash(state);
+    }
+}
+
+/// morf: the axes of a variable font a run is shaped at, besides `wght`, which
+/// is the weight. An axis a face does not have is ignored.
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct FontVariations {
+    pub variations: Vec<Variation>,
+}
+
+impl FontVariations {
+    pub const fn new() -> Self {
+        Self {
+            variations: Vec::new(),
+        }
+    }
+
+    pub fn set(&mut self, tag: [u8; 4], value: f32) -> &mut Self {
+        self.variations.push(Variation { tag, value });
+        self
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.variations.is_empty()
+    }
+}
+
 /// A wrapper for letter spacing to get around that f32 doesn't implement Eq and Hash
 #[derive(Clone, Copy, Debug)]
 pub struct LetterSpacing(pub f32);
@@ -296,6 +343,8 @@ pub struct Attrs<'a> {
     /// Letter spacing (tracking) in EM
     pub letter_spacing_opt: Option<LetterSpacing>,
     pub font_features: FontFeatures,
+    /// morf: variable-font axes shaped at.
+    pub font_variations: FontVariations,
     pub text_decoration: TextDecoration,
 }
 
@@ -315,6 +364,7 @@ impl<'a> Attrs<'a> {
             metrics_opt: None,
             letter_spacing_opt: None,
             font_features: FontFeatures::new(),
+            font_variations: FontVariations::new(),
             text_decoration: TextDecoration::new(),
         }
     }
@@ -379,6 +429,12 @@ impl<'a> Attrs<'a> {
         self
     }
 
+    /// morf: set [`FontVariations`]
+    pub fn font_variations(mut self, font_variations: FontVariations) -> Self {
+        self.font_variations = font_variations;
+        self
+    }
+
     pub const fn underline(mut self, style: UnderlineStyle) -> Self {
         self.text_decoration.underline = style;
         self
@@ -415,6 +471,8 @@ impl<'a> Attrs<'a> {
             && self.stretch == other.stretch
             && self.style == other.style
             && self.weight == other.weight
+            // morf: a run is shaped at one point of the design space.
+            && self.font_variations == other.font_variations
     }
 }
 
@@ -453,6 +511,8 @@ pub struct AttrsOwned {
     /// Letter spacing (tracking) in EM
     pub letter_spacing_opt: Option<LetterSpacing>,
     pub font_features: FontFeatures,
+    /// morf: variable-font axes shaped at.
+    pub font_variations: FontVariations,
     pub text_decoration: TextDecoration,
 }
 
@@ -469,6 +529,7 @@ impl AttrsOwned {
             metrics_opt: attrs.metrics_opt,
             letter_spacing_opt: attrs.letter_spacing_opt,
             font_features: attrs.font_features.clone(),
+            font_variations: attrs.font_variations.clone(),
             text_decoration: attrs.text_decoration,
         }
     }
@@ -485,6 +546,7 @@ impl AttrsOwned {
             metrics_opt: self.metrics_opt,
             letter_spacing_opt: self.letter_spacing_opt,
             font_features: self.font_features.clone(),
+            font_variations: self.font_variations.clone(),
             text_decoration: self.text_decoration,
         }
     }

@@ -102,6 +102,90 @@ impl Font {
         &self.harfrust.borrow_owner().metrics
     }
 
+    /// morf: where `weight` and `variations` put this face, as normalized
+    /// coordinates (F2Dot14 bits) in its axis order, or `None` when the face
+    /// has none of those axes and its own instance is the one.
+    ///
+    /// Rounded to 1/64 of the way from an axis's default to either end, so an
+    /// axis that animates passes through at most 129 points. The shaper and
+    /// whoever rasterises the glyphs both ask this, so a run is shaped at
+    /// exactly the point its glyphs are drawn at.
+    pub fn variation_coords(
+        &self,
+        weight: fontdb::Weight,
+        variations: &crate::FontVariations,
+    ) -> Option<Vec<i16>> {
+        const STEP: f32 = 256.0;
+        if variations.is_empty() {
+            return None;
+        }
+        let font_ref = FontRef::from_index(self.data(), self.data.index).ok()?;
+        let axes = font_ref.axes();
+        if !variations
+            .variations
+            .iter()
+            .any(|variation| axes.get_by_tag(Tag::new(&variation.tag)).is_some())
+        {
+            return None;
+        }
+        let location = axes.location(
+            core::iter::once((Tag::new(b"wght"), f32::from(weight.0))).chain(
+                variations
+                    .variations
+                    .iter()
+                    .map(|variation| (Tag::new(&variation.tag), variation.value)),
+            ),
+        );
+        let coords: Vec<i16> = location
+            .coords()
+            .iter()
+            .map(|coord| {
+                let rounded = (f32::from(coord.to_bits()) / STEP).round() * STEP;
+                rounded.clamp(-16384.0, 16384.0) as i16
+            })
+            .collect();
+        // Every axis but the weight at its default is the face's own instance,
+        // whose weight is not rounded.
+        let wght = Tag::new(b"wght");
+        axes.iter()
+            .zip(&coords)
+            .any(|(axis, coord)| axis.tag() != wght && *coord != 0)
+            .then_some(coords)
+    }
+
+    /// morf: the shaper instance at [`Self::variation_coords`].
+    pub(crate) fn varied_instance(
+        &self,
+        weight: fontdb::Weight,
+        variations: &crate::FontVariations,
+    ) -> Option<harfrust::ShaperInstance> {
+        let coords = self.variation_coords(weight, variations)?;
+        let font_ref = FontRef::from_index(self.data(), self.data.index).ok()?;
+        Some(harfrust::ShaperInstance::from_coords(
+            &font_ref,
+            coords
+                .into_iter()
+                .map(skrifa::instance::NormalizedCoord::from_bits),
+        ))
+    }
+
+    /// morf: shapes with `instance` in place of the face's own.
+    pub(crate) fn with_varied_shaper<R>(
+        &self,
+        instance: &harfrust::ShaperInstance,
+        f: impl FnOnce(&harfrust::Shaper<'_>) -> R,
+    ) -> Option<R> {
+        let font_ref = FontRef::from_index(self.data(), self.data.index).ok()?;
+        let shaper = self
+            .harfrust
+            .borrow_owner()
+            .shaper_data
+            .shaper(&font_ref)
+            .instance(Some(instance))
+            .build();
+        Some(f(&shaper))
+    }
+
     #[cfg(feature = "peniko")]
     pub fn as_peniko(&self) -> PenikoFont {
         self.data.clone()

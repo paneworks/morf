@@ -164,41 +164,52 @@ fn shape_fallback(
         ));
     }
 
-    let language = buffer.language();
-    let key = harfrust::ShapePlanKey::new(Some(buffer.script()), buffer.direction())
-        .features(&rb_font_features)
-        .instance(Some(font.shaper_instance()))
-        .language(language.as_ref());
+    // morf: a run with variations is shaped at that point of the face's
+    // design space rather than the face's own (the weight's) instance.
+    let varied = font.varied_instance(attrs.weight, &attrs.font_variations);
+    let mut shape = |shaper: &harfrust::Shaper<'_>,
+                 instance: &harfrust::ShaperInstance,
+                 buffer: harfrust::UnicodeBuffer| {
+        let language = buffer.language();
+        let key = harfrust::ShapePlanKey::new(Some(buffer.script()), buffer.direction())
+            .features(&rb_font_features)
+            .instance(Some(instance))
+            .language(language.as_ref());
 
-    let shape_plan = match scratch
-        .shape_plan_cache
-        .iter()
-        .find(|(id, plan)| *id == font.id() && key.matches(plan))
-    {
-        Some((_font_id, plan)) => plan,
-        None => {
-            let plan = harfrust::ShapePlan::new(
-                font.shaper(),
-                buffer.direction(),
-                Some(buffer.script()),
-                buffer.language().as_ref(),
-                &rb_font_features,
-            );
-            if scratch.shape_plan_cache.len() >= NUM_SHAPE_PLANS {
-                scratch.shape_plan_cache.pop_front();
+        let shape_plan = match scratch
+            .shape_plan_cache
+            .iter()
+            .find(|(id, plan)| *id == font.id() && key.matches(plan))
+        {
+            Some((_font_id, plan)) => plan,
+            None => {
+                let plan = harfrust::ShapePlan::new(
+                    shaper,
+                    buffer.direction(),
+                    Some(buffer.script()),
+                    buffer.language().as_ref(),
+                    &rb_font_features,
+                );
+                if scratch.shape_plan_cache.len() >= NUM_SHAPE_PLANS {
+                    scratch.shape_plan_cache.pop_front();
+                }
+                scratch.shape_plan_cache.push_back((font.id(), plan));
+                &scratch
+                    .shape_plan_cache
+                    .back()
+                    .expect("we just pushed the shape plan")
+                    .1
             }
-            scratch.shape_plan_cache.push_back((font.id(), plan));
-            &scratch
-                .shape_plan_cache
-                .back()
-                .expect("we just pushed the shape plan")
-                .1
-        }
-    };
+        };
 
-    let glyph_buffer = font
-        .shaper()
-        .shape_with_plan(shape_plan, buffer, &rb_font_features);
+        shaper.shape_with_plan(shape_plan, buffer, &rb_font_features)
+    };
+    let glyph_buffer = match &varied {
+        Some(instance) => font
+            .with_varied_shaper(instance, |shaper| shape(shaper, instance, buffer))
+            .expect("the face parsed once already"),
+        None => shape(font.shaper(), font.shaper_instance(), buffer),
+    };
     let glyph_infos = glyph_buffer.glyph_infos();
     let glyph_positions = glyph_buffer.glyph_positions();
 
