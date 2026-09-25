@@ -161,3 +161,45 @@ fn an_effect_on_the_screens_revision_runs_when_outputs_change() {
         )
         .unwrap();
 }
+
+#[test]
+fn primary_is_a_tracked_read_and_its_callbacks_hear_each_change_once() {
+    let mut runtime = Runtime::for_screen(Limits::default(), output("DP-2", 0, 800, 600));
+    assert!(
+        runtime.is_primary(),
+        "a runtime nobody told otherwise is primary"
+    );
+    runtime
+        .execute(
+            "primary.lua",
+            br#"
+                assert(morf.primary() == true)
+                heard = {}
+                runs = 0
+                morf.on_primary(function(primary) heard[#heard + 1] = tostring(primary) end)
+                morf.effect("follow primary", function() morf.primary() runs = runs + 1 end)
+                morf.ipc.state = function()
+                    return tostring(morf.primary()) .. " " .. runs .. " " .. table.concat(heard, ",")
+                end
+            "#,
+        )
+        .unwrap();
+    let state = |runtime: &mut Runtime| runtime.call_ipc("state", &[]).unwrap();
+    assert_eq!(
+        state(&mut runtime),
+        vec![IpcValue::String("true 1 ".into())]
+    );
+    assert!(runtime.set_primary(false));
+    assert!(!runtime.is_primary());
+    assert_eq!(
+        state(&mut runtime),
+        vec![IpcValue::String("false 2 false".into())]
+    );
+    // The same answer again is no change.
+    assert!(!runtime.set_primary(false));
+    assert!(runtime.set_primary(true));
+    assert_eq!(
+        state(&mut runtime),
+        vec![IpcValue::String("true 3 false,true".into())]
+    );
+}

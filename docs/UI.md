@@ -327,6 +327,42 @@ once to hear whether it asks for this; one that does not is stopped at once
 and the shell waits for an output, as before. `morf check --screens 0` and
 `test.load(path, { screens = 0 })` load a configuration this way.
 
+Some duties belong to the shell, not to a screen: a bus name only one
+connection can own (a notification server, a tray watcher), a history only
+one writer should keep. Exactly one of the runtimes is the primary one, and
+`morf.primary()` says whether it is this one -- a tracked read, so a
+binding or an effect runs again when the duty moves -- and
+`morf.on_primary(function(is_primary) end)` hears each change (not the
+value it starts with, which `morf.primary()` already gives from the first
+line):
+
+```lua
+local server
+local function follow(primary)
+  if primary and not server then server = start_notification_server() end
+  if not primary and server then server.close() server = nil end
+end
+follow(morf.primary())
+morf.on_primary(follow)
+```
+
+Which one, and when it moves:
+
+- the output the compositor announced first is primary (the lowest
+  `wl_output` global); with no output, the outputless runtime; a runtime
+  alone in its process (`morf test`, `morf check`) always is;
+- it stays primary while other outputs are plugged, unplugged, moved or
+  rescaled, and across a reload -- the new runtime starts as primary;
+- only when its own runtime ends -- its output unplugged or switched off,
+  every output gone -- does the duty move, to the first-announced output
+  still lit (or to the outputless runtime, or to the first output that
+  comes back);
+- a runtime gives back every bus name `morf.dbus.serve` took when it ends,
+  and the next primary is told only after that: the name it asks for is
+  free, `"owned"` rather than `"taken"`. A reload gives the old runtime's
+  names back before the new file runs, so it finds them free too (a file
+  that fails to load leaves the shell without them until the next reload).
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).

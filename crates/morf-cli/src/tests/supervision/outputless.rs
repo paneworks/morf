@@ -31,7 +31,7 @@ const SHELL: &str = r#"
     if #morf.screens > 0 then morf.ui.Item {} end
 "#;
 
-fn output(name: &str, x: i32) -> ScreenInfo {
+pub(super) fn output(name: &str, x: i32) -> ScreenInfo {
     ScreenInfo {
         id: x as u32,
         name: Some(name.to_owned()),
@@ -43,7 +43,7 @@ fn output(name: &str, x: i32) -> ScreenInfo {
     }
 }
 
-fn named(outputs: &[ScreenInfo]) -> BTreeMap<String, ScreenInfo> {
+pub(super) fn named(outputs: &[ScreenInfo]) -> BTreeMap<String, ScreenInfo> {
     outputs
         .iter()
         .map(|screen| (screen.name.clone().unwrap(), screen.clone()))
@@ -51,19 +51,19 @@ fn named(outputs: &[ScreenInfo]) -> BTreeMap<String, ScreenInfo> {
 }
 
 /// What a test's workers were started with, in order.
-type Started = Arc<Mutex<Vec<(String, Option<Seed>)>>>;
+pub(super) type Started = Arc<Mutex<Vec<(String, Option<Seed>)>>>;
 
 /// Starts workers the way the supervisor does, with a stand-in for the
 /// per-output loop (which needs a compositor): the same runtime, seeded and
 /// handing over the same way, answering commands until it is stopped. The
 /// outputless worker is the real one, without a Wayland connection.
-fn spawner<'a>(
+pub(super) fn spawner<'a>(
     source: &'a str,
     handover: &'a Handover,
     tx: &'a mpsc::Sender<SupervisorMessage>,
     started: &'a Started,
-) -> impl FnMut(&str, &ScreenInfo, Option<Seed>) -> Worker + 'a {
-    move |name, screen, seed| {
+) -> impl FnMut(&str, &ScreenInfo, Option<Seed>, bool) -> Worker + 'a {
+    move |name, screen, seed, primary| {
         started
             .lock()
             .unwrap()
@@ -79,6 +79,7 @@ fn spawner<'a>(
             commands: command_rx,
             seed,
             handover: handover.clone(),
+            primary,
         };
         let join = if name == OUTPUTLESS {
             thread::spawn(move || {
@@ -97,11 +98,12 @@ fn spawner<'a>(
     }
 }
 
-fn stand_in(start: WorkerStart, screen: Screen) {
+pub(super) fn stand_in(start: WorkerStart, screen: Screen) {
     let mut runtime = Runtime::for_screen(Limits::default(), screen.clone());
     if let Some(seed) = start.seed.clone() {
         runtime.restore_reloadable_state(seed);
     }
+    runtime.set_primary(start.primary);
     crate::supervisor::execute_config(&mut runtime, &start.path, &start.source, start.policy)
         .unwrap();
     while !start.stop.load(Ordering::Acquire) {
@@ -112,7 +114,7 @@ fn stand_in(start: WorkerStart, screen: Screen) {
     start.handover.deposit(&mut runtime);
 }
 
-fn call(workers: &BTreeMap<String, Worker>, verb: &str) -> IpcReply {
+pub(super) fn call(workers: &BTreeMap<String, Worker>, verb: &str) -> IpcReply {
     handle_ipc(
         workers,
         &mut Vec::new(),
@@ -123,7 +125,7 @@ fn call(workers: &BTreeMap<String, Worker>, verb: &str) -> IpcReply {
     )
 }
 
-fn integer(reply: IpcReply) -> i64 {
+pub(super) fn integer(reply: IpcReply) -> i64 {
     assert!(reply.ok, "refused: {:?}", reply.error);
     match reply.result.first() {
         Some(WireValue::Integer(value)) => *value,
@@ -166,16 +168,17 @@ fn round_trip(outputs: &[ScreenInfo]) {
     let started = Started::default();
     let mut spawn = spawner(SHELL, &handover, &tx, &started);
     let mut workers = BTreeMap::new();
+    let mut primary = None;
     let lit = named(outputs);
 
-    reconcile_with(&mut workers, &lit, &handover, &mut spawn);
+    reconcile_with(&mut workers, &lit, &handover, &mut primary, &mut spawn);
     assert_eq!(workers.len(), outputs.len());
     assert_eq!(integer(call(&workers, "bump")), 1);
 
     // Every output gone: one runtime, for none of them, starting from what
     // the last output's kept.
     let dark = desired_workers(BTreeMap::new(), Outputless::Wanted);
-    reconcile_with(&mut workers, &dark, &handover, &mut spawn);
+    reconcile_with(&mut workers, &dark, &handover, &mut primary, &mut spawn);
     assert_eq!(workers.keys().collect::<Vec<_>>(), [OUTPUTLESS]);
     // IPC reaches it, `morf.screens` is empty, the capability says so, and
     // its timers run.
@@ -187,12 +190,12 @@ fn round_trip(outputs: &[ScreenInfo]) {
     assert!(wait_for(&workers, "ticks", 3) >= 3);
     assert_eq!(integer(call(&workers, "bump")), 2);
     // The same list again changes nothing.
-    reconcile_with(&mut workers, &dark, &handover, &mut spawn);
+    reconcile_with(&mut workers, &dark, &handover, &mut primary, &mut spawn);
     assert_eq!(started.lock().unwrap().len(), outputs.len() + 1);
 
     // The outputs come back: the outputless runtime goes, and every output's
     // starts from what it kept.
-    reconcile_with(&mut workers, &lit, &handover, &mut spawn);
+    reconcile_with(&mut workers, &lit, &handover, &mut primary, &mut spawn);
     assert_eq!(workers.len(), outputs.len());
     assert!(!workers.contains_key(OUTPUTLESS));
     assert!(integer(call(&workers, "screens")) >= 1);
@@ -238,10 +241,12 @@ fn a_hotplug_beside_a_lit_output_hands_nothing_over() {
     let started = Started::default();
     let mut spawn = spawner(SHELL, &handover, &tx, &started);
     let mut workers = BTreeMap::new();
+    let mut primary = None;
     reconcile_with(
         &mut workers,
         &named(&[output("A", 0)]),
         &handover,
+        &mut primary,
         &mut spawn,
     );
     assert_eq!(integer(call(&workers, "bump")), 1);
@@ -250,6 +255,7 @@ fn a_hotplug_beside_a_lit_output_hands_nothing_over() {
         &mut workers,
         &named(&[output("A", 0), output("B", 800)]),
         &handover,
+        &mut primary,
         &mut spawn,
     );
     // B leaves again: A is untouched and nothing is kept for later.
@@ -257,6 +263,7 @@ fn a_hotplug_beside_a_lit_output_hands_nothing_over() {
         &mut workers,
         &named(&[output("A", 0)]),
         &handover,
+        &mut primary,
         &mut spawn,
     );
     stop_workers(workers);
@@ -273,10 +280,12 @@ fn with_every_output_gone_a_shell_that_did_not_ask_waits() {
     // Draws only: it never said it runs with no output.
     let mut spawn = spawner("morf.ui.Item {}", &handover, &tx, &started);
     let mut workers = BTreeMap::new();
+    let mut primary = None;
     reconcile_with(
         &mut workers,
         &desired_workers(BTreeMap::new(), Outputless::Unknown),
         &handover,
+        &mut primary,
         &mut spawn,
     );
     // Run once to hear it; it says no and ends by itself.
@@ -295,6 +304,7 @@ fn with_every_output_gone_a_shell_that_did_not_ask_waits() {
         &mut workers,
         &desired_workers(BTreeMap::new(), Outputless::Unwanted),
         &handover,
+        &mut primary,
         &mut spawn,
     );
     assert!(workers.is_empty());
@@ -320,6 +330,7 @@ fn a_configuration_that_needs_a_screen_is_not_a_failed_shell() {
         commands: command_rx,
         seed: None,
         handover,
+        primary: true,
     };
     assert_eq!(run_outputless(start, false), Ok(()));
     assert!(matches!(
@@ -338,10 +349,12 @@ fn a_reload_while_outputless_says_whether_it_still_wants_to_be() {
     let started = Started::default();
     let mut spawn = spawner(SHELL, &handover, &tx, &started);
     let mut workers = BTreeMap::new();
+    let mut primary = None;
     reconcile_with(
         &mut workers,
         &desired_workers(BTreeMap::new(), Outputless::Wanted),
         &handover,
+        &mut primary,
         &mut spawn,
     );
     let (reply, result) = mpsc::sync_channel(1);

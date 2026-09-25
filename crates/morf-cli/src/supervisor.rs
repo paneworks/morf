@@ -128,6 +128,8 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
         Err(error) => (None, 0, Some(error)),
     };
     let mut workers = BTreeMap::new();
+    // The runtime that does what must be done once (`morf.primary()`).
+    let mut primary: Option<String> = None;
     let mut daemon_logs = Vec::new();
     let mut closures = VecDeque::new();
     // Brings the workers to the output list and what the configuration said
@@ -142,6 +144,7 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
             reconcile_workers(
                 &mut workers,
                 &desired_workers(named.clone(), outputless),
+                &mut primary,
                 &WorkerContext {
                     path: &path,
                     source: &source,
@@ -234,6 +237,12 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
                 if let Some(worker) = workers.remove(&output) {
                     worker.request_stop();
                     let _ = worker.join.join();
+                }
+                // The primary runtime's output went: the duty moves now, to
+                // an output still lit, rather than after the next probe --
+                // the runtime that held it has ended, its bus names with it.
+                if primary.as_deref() == Some(output.as_str()) {
+                    hand_over_primary(&workers, &mut primary);
                 }
                 daemon_logs.push(daemon_log(format!(
                     "output {output}: {error}; asking the compositor for its outputs again"

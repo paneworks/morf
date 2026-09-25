@@ -610,3 +610,39 @@ fn private_bus_signals_and_replies_ring_the_loop() {
     }
     assert!(flag(&mut runtime, "pinged"), "the signal was delivered");
 }
+
+#[test]
+#[ignore = "runs only inside dbus-run-session, started by the test above"]
+fn private_bus_a_runtime_gives_its_names_back_before_another_takes_them() {
+    if std::env::var(PRIVATE_BUS).is_err() {
+        return;
+    }
+    let name = format!("org.morf.test.primary.p{}", std::process::id());
+    // Held in a global, so the collector would never let it go by itself.
+    let serve = format!(
+        r#"
+        held, outcome = morf.dbus.serve("session", "{name}", "/org/morf/test/primary", false)
+        morf.ipc.outcome = function() return outcome end
+        "#
+    );
+    let outcome = |runtime: &mut Runtime| runtime.call_ipc("outcome", &[]).unwrap();
+    let owned = vec![IpcValue::String("owned".to_owned())];
+    let taken = vec![IpcValue::String("taken".to_owned())];
+    let mut first = Runtime::default();
+    first.execute("first.lua", serve.as_bytes()).unwrap();
+    assert_eq!(outcome(&mut first), owned);
+    let mut second = Runtime::default();
+    second.execute("second.lua", serve.as_bytes()).unwrap();
+    assert_eq!(outcome(&mut second), taken, "one owner at a time");
+    // Handing the duty over: the first gives its names back, and by the time
+    // that returns the bus has them free.
+    first.release_bus_names();
+    let mut third = Runtime::default();
+    third.execute("third.lua", serve.as_bytes()).unwrap();
+    assert_eq!(outcome(&mut third), owned);
+    // A runtime that ends does the same, whatever still refers to the name.
+    drop(third);
+    let mut fourth = Runtime::default();
+    fourth.execute("fourth.lua", serve.as_bytes()).unwrap();
+    assert_eq!(outcome(&mut fourth), owned);
+}

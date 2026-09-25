@@ -71,6 +71,9 @@ pub(crate) enum WorkerCommand {
     /// The configuration asked to lock the session: this worker takes the
     /// runtime it ran it with and becomes the lock.
     BecomeLock,
+    /// This worker's runtime is now the primary one, or no longer is
+    /// (`morf.primary()`).
+    Primary(bool),
 }
 
 pub(crate) enum SupervisorMessage {

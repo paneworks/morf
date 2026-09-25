@@ -62,6 +62,8 @@ pub(crate) fn install_module_api<'gc>(
         "clock",
         "timer",
         "screens",
+        "primary",
+        "on_primary",
         "variants",
         "list_model",
         "virtual_list",

@@ -153,6 +153,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
     service_metatable.set_field(ctx, "__index", service_methods);
     let service_metatable = ctx.stash(service_metatable);
 
+    let serve_state = Rc::clone(&state);
     let serve = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (bus, name, path, replace): (String, String, String, Option<bool>) =
             stack.consume(ctx)?;
@@ -166,12 +167,17 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         // restarts, and every one of these names is held by a shell.
         let (service, outcome) = DbusService::own(bus, &name, &path, replace.unwrap_or(true))
             .map_err(|error| HostError(error.to_string()))?;
-        let userdata = UserData::new_static(
-            &ctx,
-            DbusServiceToken {
-                service: Rc::new(RefCell::new(service)),
-            },
-        );
+        let service = Rc::new(RefCell::new(service));
+        // Remembered weakly: the runtime gives every name back when it ends
+        // (`Runtime::release_bus_names`), not whenever the collector gets to
+        // the handle -- which is what makes a handover of the primary
+        // runtime's duties clean.
+        {
+            let mut state = serve_state.borrow_mut();
+            state.owned_bus_names.retain(|weak| weak.strong_count() > 0);
+            state.owned_bus_names.push(Rc::downgrade(&service));
+        }
+        let userdata = UserData::new_static(&ctx, DbusServiceToken { service });
         userdata.set_metatable(ctx, Some(ctx.fetch(&service_metatable)));
         // Two values, and the second is the one that matters. Taking a name is
         // allowed to fail without being an error — somebody else runs the

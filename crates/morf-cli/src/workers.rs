@@ -73,6 +73,8 @@ pub(crate) struct WorkerStart {
     pub(crate) seed: Option<Seed>,
     /// Where this worker leaves its own when it ends.
     pub(crate) handover: Handover,
+    /// Whether its runtime starts as the primary one (`morf.primary()`).
+    pub(crate) primary: bool,
 }
 
 /// The workers the supervisor wants for an output list: one per named
@@ -100,43 +102,100 @@ pub(crate) struct WorkerContext<'a> {
 pub(crate) fn reconcile_workers(
     workers: &mut BTreeMap<String, Worker>,
     desired: &BTreeMap<String, ScreenInfo>,
+    primary: &mut Option<String>,
     context: &WorkerContext<'_>,
 ) {
-    reconcile_with(workers, desired, context.handover, |name, screen, seed| {
-        let (commands, command_rx) = mpsc::channel();
-        let stop = Arc::new(AtomicBool::new(false));
-        let join = spawn_worker(
-            name,
-            screen,
-            WorkerStart {
-                path: Arc::clone(context.path),
-                source: Arc::clone(context.source),
-                policy: context.policy,
-                tx: context.tx.clone(),
-                stop: Arc::clone(&stop),
-                commands: command_rx,
-                seed,
-                handover: context.handover.clone(),
-            },
-        );
-        Worker {
-            stop,
-            commands: WorkerSender::new(commands),
-            join,
-            screen: screen.clone(),
-        }
-    });
+    reconcile_with(
+        workers,
+        desired,
+        context.handover,
+        primary,
+        |name, screen, seed, is_primary| {
+            let (commands, command_rx) = mpsc::channel();
+            let stop = Arc::new(AtomicBool::new(false));
+            let join = spawn_worker(
+                name,
+                screen,
+                WorkerStart {
+                    path: Arc::clone(context.path),
+                    source: Arc::clone(context.source),
+                    policy: context.policy,
+                    tx: context.tx.clone(),
+                    stop: Arc::clone(&stop),
+                    commands: command_rx,
+                    seed,
+                    handover: context.handover.clone(),
+                    primary: is_primary,
+                },
+            );
+            Worker {
+                stop,
+                commands: WorkerSender::new(commands),
+                join,
+                screen: screen.clone(),
+            }
+        },
+    );
+}
+
+/// Which runtime is the primary one (`morf.primary()`), given the one that
+/// is now and the runtimes there are to be.
+///
+/// Exactly one while there is any runtime at all: the one that is stays, so
+/// the duty never moves because another output came, went or moved; when
+/// its runtime is gone (its output unplugged), the output the compositor
+/// announced first takes it -- the lowest `wl_output` global, ties by name
+/// -- and with no output the outputless runtime, the only one there is.
+pub(crate) fn elect_primary(
+    current: Option<&str>,
+    desired: &BTreeMap<String, ScreenInfo>,
+) -> Option<String> {
+    if let Some(current) = current
+        && desired.contains_key(current)
+    {
+        return Some(current.to_owned());
+    }
+    desired
+        .iter()
+        .min_by(|(a, first), (b, second)| first.id.cmp(&second.id).then_with(|| a.cmp(b)))
+        .map(|(name, _)| name.clone())
+}
+
+/// Moves the primary duty after the runtime holding it has ended, to one of
+/// `workers` -- already running -- and tells that one. The runtime that held
+/// it has been joined, so its bus names are free (`Runtime::drop` gives them
+/// back) before the next one hears it is primary.
+pub(crate) fn hand_over_primary(workers: &BTreeMap<String, Worker>, primary: &mut Option<String>) {
+    let live = workers
+        .iter()
+        .map(|(name, worker)| (name.clone(), worker.screen.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let next = elect_primary(primary.as_deref(), &live);
+    if next != *primary
+        && let Some(name) = &next
+        && let Some(worker) = workers.get(name)
+    {
+        let _ = worker.commands.send(WorkerCommand::Primary(true));
+    }
+    *primary = next;
 }
 
 /// Brings `workers` to `desired`: stops the ones whose output went or
 /// changed, then starts the missing ones with `spawn`. Crossing between the
 /// outputless runtime and per-output ones, the runtimes that start are handed
 /// the reloadable values the ones that stopped left behind.
+///
+/// `primary` names the primary runtime ([`elect_primary`]). It is decided
+/// once the stale runtimes have stopped: a runtime already running that
+/// takes it over is told so (`WorkerCommand::Primary`), and one started here
+/// starts with it (`spawn`'s last argument), so every runtime's
+/// configuration reads the right answer from its first line.
 pub(crate) fn reconcile_with(
     workers: &mut BTreeMap<String, Worker>,
     desired: &BTreeMap<String, ScreenInfo>,
     handover: &Handover,
-    mut spawn: impl FnMut(&str, &ScreenInfo, Option<Seed>) -> Worker,
+    primary: &mut Option<String>,
+    mut spawn: impl FnMut(&str, &ScreenInfo, Option<Seed>, bool) -> Worker,
 ) {
     let was_outputless = workers.contains_key(OUTPUTLESS);
     let crossing = workers.is_empty() || was_outputless != desired.contains_key(OUTPUTLESS);
@@ -150,6 +209,17 @@ pub(crate) fn reconcile_with(
         worker.request_stop();
         let _ = worker.join.join();
     }
+    // Every runtime that is going has gone -- and given its bus names back
+    // -- before any is told it is primary.
+    let next = elect_primary(primary.as_deref(), desired);
+    let was_primary = |name: &str| primary.as_deref() == Some(name);
+    if let Some(name) = &next
+        && !was_primary(name)
+        && let Some(worker) = workers.get(name)
+    {
+        let _ = worker.commands.send(WorkerCommand::Primary(true));
+    }
+    *primary = next;
     // Nothing starts: whatever was left is kept for whatever does.
     if desired.keys().all(|name| workers.contains_key(name)) {
         return;
@@ -159,7 +229,8 @@ pub(crate) fn reconcile_with(
         if workers.contains_key(name) {
             continue;
         }
-        let worker = spawn(name, screen, seed.clone());
+        let is_primary = primary.as_deref() == Some(name.as_str());
+        let worker = spawn(name, screen, seed.clone(), is_primary);
         workers.insert(name.clone(), worker);
     }
 }
@@ -388,6 +459,10 @@ pub(crate) fn handle_worker_command(
         // Only a worker whose configuration asked to lock is sent this, and
         // it hears it before it has a surface (surface_run.rs).
         WorkerCommand::BecomeLock => WorkerUpdate::default(),
+        WorkerCommand::Primary(primary) => WorkerUpdate {
+            repaint: runtime.set_primary(primary),
+            ..WorkerUpdate::default()
+        },
         WorkerCommand::Reload {
             path,
             source,
@@ -399,11 +474,18 @@ pub(crate) fn handle_worker_command(
                 Some(screen) => Runtime::for_screen(Limits::from_env().0, screen.clone()),
                 None => Runtime::new(Limits::from_env().0),
             };
-            // What the compositor and GPU can do did not change with the file.
+            // What the compositor and GPU can do did not change with the file,
+            // and neither did which runtime is the primary one.
             candidate.set_capabilities(&runtime.capability_pairs());
+            candidate.set_primary(runtime.is_primary());
             if !hard {
                 candidate.restore_reloadable_state(runtime.reloadable_state());
             }
+            // The new file serves the same names the old one did, and it has
+            // to find them free: a name refused because the runtime it
+            // replaces still held it would be given back a moment later, to
+            // nobody.
+            runtime.release_bus_names();
             let result = execute_config(&mut candidate, &path, &source, policy)
                 // With no output there is nothing to draw, so no root is owed.
                 .and_then(|()| match screen {
