@@ -168,6 +168,10 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("word_spacing", 0.0),
                 string("font_style", "normal"),
                 string("font_stretch", "normal"),
+                // A variable font's axes by their four-letter tags:
+                // `{ FILL = 1, GRAD = 0, opsz = 24, wght = 500 }`. A map of
+                // numbers, so a behavior moves it like any other number.
+                any("axes", Value::Map(BTreeMap::new())),
                 // `{ line, thickness, offset, color }`; empty is none.
                 any("decoration", Value::Map(BTreeMap::new())),
                 boolean("wrap", false),
@@ -218,6 +222,7 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("word_spacing", 0.0),
                 string("font_style", "normal"),
                 string("font_stretch", "normal"),
+                any("axes", Value::Map(BTreeMap::new())),
                 string("horizontal_alignment", "left"),
                 // Where a single line sits in a box taller than it. Several
                 // lines always start at the top and scroll.

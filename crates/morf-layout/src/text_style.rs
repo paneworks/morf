@@ -117,6 +117,42 @@ pub struct TextStyle {
     pub rich: Option<Arc<RichText>>,
     /// The colour of a link run that names none.
     pub link_color: Option<morf_scene::Color>,
+    /// A variable font's axis settings, in tag order.
+    pub axes: Vec<FontAxis>,
+}
+
+/// One variation axis of a variable font set to a value, in the font's own
+/// units: `wght` 100 to 900, `FILL` 0 to 1, `opsz` in points.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FontAxis {
+    /// The axis's four-letter OpenType tag.
+    pub tag: [u8; 4],
+    pub value: f32,
+}
+
+impl FontAxis {
+    /// Reads `{ FILL = 1, wght = 500 }`: four-letter tags to numbers.
+    pub fn parse_map(value: &Value) -> Result<Vec<Self>, String> {
+        let map = match value {
+            Value::Map(map) => map,
+            Value::Nil => return Ok(Vec::new()),
+            Value::List(list) if list.is_empty() => return Ok(Vec::new()),
+            _ => return Err("axes is a table of four-letter tags to numbers".to_owned()),
+        };
+        let mut axes = Vec::with_capacity(map.len());
+        for (name, value) in map {
+            let tag = <[u8; 4]>::try_from(name.as_bytes())
+                .ok()
+                .filter(|tag| tag.iter().all(|byte| (0x20..0x7f).contains(byte)))
+                .ok_or_else(|| format!("axes: `{name}` is not a four-letter axis tag"))?;
+            let value = match value {
+                Value::Number(number) if number.is_finite() => *number as f32,
+                _ => return Err(format!("axes: `{name}` must be a number")),
+            };
+            axes.push(Self { tag, value });
+        }
+        Ok(axes)
+    }
 }
 
 /// Markup parsed lately, so a label redrawn every frame is read once.
@@ -182,7 +218,21 @@ impl TextStyle {
                 },
                 _ => None,
             },
+            axes: if scene.has_property(node, "axes")? {
+                FontAxis::parse_map(scene.current(node, "axes")?)
+                    .map_err(|message| LayoutError::Scene(format!("Text: {message}")))?
+            } else {
+                Vec::new()
+            },
         })
+    }
+
+    /// The value set for one axis, if any.
+    pub fn axis(&self, tag: &[u8; 4]) -> Option<f32> {
+        self.axes
+            .iter()
+            .find(|axis| &axis.tag == tag)
+            .map(|axis| axis.value)
     }
 
     /// The style as a key: the numbers by their bits, so two equal styles

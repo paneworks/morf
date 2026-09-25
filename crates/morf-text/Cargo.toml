@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 morf-outline.workspace = true
 cosmic-text.workspace = true
+swash.workspace = true
 morf-layout.workspace = true
 morf-scene.workspace = true
 signed-distance-field.workspace = true

@@ -809,6 +809,32 @@ ui.Text {
 }
 ```
 
+A variable font's axes are `axes = { FILL = 1, GRAD = 0, opsz = 24, wght =
+500 }`: any four-letter OpenType tag the face defines, in its own units, on
+`Text` and `TextInput`. It is a map of numbers, so a `behavior` on `axes`
+moves every axis in it at once, the way Material Symbols fills an icon in
+when it is selected; give each state the same keys, or the map jumps
+rather than moves. `wght` is the weight (it wins over `font_weight`) and is
+the one axis shaping sees, so it moves the glyphs; the others are applied
+where glyphs are drawn and leave the layout where it is -- an axis that
+changes advances on some face (`opsz`, say) keeps the default ones. A tag
+the face does not have is ignored, and a face with none of them is drawn
+as it always was. Pictures of glyphs are kept per point of the design
+space, quantised to 1/64 of the way from an axis's default to either end,
+so an animation through an axis costs at most 65 pictures of each glyph
+however many frames it takes. `morf.font_axes(family)` lists what an
+installed family can move: `{ tag, min, default, max }` for each axis.
+
+```lua
+ui.Text {
+  text = "home", font_family = "Material Symbols Rounded", font_size = 24,
+  axes = function() return selected() and { FILL = 1, wght = 600 } or { FILL = 0, wght = 400 } end,
+  behavior = { axes = { duration = 250, easing = "out_cubic" } },
+}
+```
+
+See `examples/font_axes.lua`.
+
 Text is smoothed in subpixels (LCD, "ClearType") where that is safe, and
 in greyscale everywhere else. `morf.surface.subpixel_text` is `"auto"` by
 default: the stripe order comes from fontconfig's `rgba` (else the

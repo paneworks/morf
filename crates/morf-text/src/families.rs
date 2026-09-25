@@ -100,3 +100,62 @@ pub fn installed_families() -> &'static [String] {
         names
     })
 }
+
+/// One variation axis a face defines: its tag and range, in its own units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AxisRange {
+    /// The four-letter OpenType tag: `wght`, `FILL`, `opsz`, ...
+    pub tag: [u8; 4],
+    pub min: f32,
+    pub default: f32,
+    pub max: f32,
+}
+
+impl AxisRange {
+    /// The tag as text.
+    pub fn name(&self) -> String {
+        String::from_utf8_lossy(&self.tag).into_owned()
+    }
+}
+
+/// The variation axes an installed family's faces define, each once, in the
+/// order the first face that has it lists them; empty for a family that is
+/// not variable or not installed. What `axes` on a text node can move.
+pub fn family_axes(family: &str) -> Vec<AxisRange> {
+    let mut axes: Vec<AxisRange> = Vec::new();
+    for path in family_files(family) {
+        axes_in_file(&path, &mut axes);
+    }
+    axes
+}
+
+/// The axes a font file's faces define, added to `axes` where new.
+pub fn file_axes(path: &std::path::Path) -> Vec<AxisRange> {
+    let mut axes = Vec::new();
+    axes_in_file(path, &mut axes);
+    axes
+}
+
+fn axes_in_file(path: &std::path::Path, axes: &mut Vec<AxisRange>) {
+    let Ok(data) = std::fs::read(path) else {
+        return;
+    };
+    let faces = swash::FontDataRef::new(&data).map_or(0, |data| data.len());
+    for index in 0..faces {
+        let Some(font) = swash::FontRef::from_index(&data, index) else {
+            continue;
+        };
+        for axis in font.variations() {
+            let tag = axis.tag().to_be_bytes();
+            if axes.iter().any(|known| known.tag == tag) {
+                continue;
+            }
+            axes.push(AxisRange {
+                tag,
+                min: axis.min_value(),
+                default: axis.default_value(),
+                max: axis.max_value(),
+            });
+        }
+    }
+}

@@ -1613,6 +1613,7 @@ dependencies = [
  "morf-outline",
  "morf-scene",
  "signed-distance-field",
+ "swash",
  "unicode-segmentation",
 ]
 
