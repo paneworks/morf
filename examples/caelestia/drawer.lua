@@ -58,11 +58,21 @@ function M.new(spec)
   local function move(opening)
     if running then running:stop() end
     if opening then panel.visible = true end
+    local slide = {
+      node = panel, property = "translate_y", to = opening and 0 or tucked(),
+      duration = opening and theme.duration.drawer_open or theme.duration.drawer_close,
+      easing = opening and theme.ease.spatial or theme.ease.emphasized_accel,
+    }
+    -- The reference's contents fade in over the first hundred-odd
+    -- milliseconds of the slide; closing only slides.
+    if opening then spec.content.opacity = 0 end
     running = morf.animation.play {
       {
-        node = panel, property = "translate_y", to = opening and 0 or tucked(),
-        duration = opening and theme.duration.drawer_open or theme.duration.drawer_close,
-        easing = opening and theme.ease.spatial or theme.ease.emphasized_accel,
+        parallel = {
+          slide,
+          { node = spec.content, property = "opacity", to = 1, duration = opening and 150 or 1,
+            easing = theme.ease.standard_decel },
+        },
       },
       on_finished = function(reason)
         if reason == "completed" and not d.open:get() then panel.visible = false end

@@ -46,13 +46,14 @@ positional list of four numbers with "easing x1 must be a finite number".
 Either accept the array form (it is what every motion spec lists) or say
 "named fields" in the docs. `theme.lua` uses named fields.
 
-## 4. Runtime keyboard focus changes -- to verify
+## 4. Opacity of one layer in a field
 
-The launcher sets `morf.surface.keyboard_focus = "exclusive"` while it is
-open and `"none"` otherwise, so the fullscreen frame never takes the
-keyboard at rest. Tested headless (where keys reach the focused node
-regardless); needs a check on a real compositor that the layer surface is
-re-committed with the new interactivity.
+The reference fades a drawer's background in with its contents as it
+opens. The background here is a layer of the frame's field (so it can
+fillet into the frame), and a layer has no opacity of its own that blends
+with the rest of the field; fading the whole `Sdf` would fade the frame.
+The port fades only the contents. Needs `opacity` on `SdfShape` (the
+layer's coverage scaled before it is composed with the others).
 
 ## Engine fixes made in this branch
 
