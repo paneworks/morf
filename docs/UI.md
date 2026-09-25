@@ -1644,6 +1644,25 @@ ui.reparent(ui.Grid { columns = function() return win.width // 280 end }, root)
 - A terminal's program writing is a frame only when it changed the screen,
   and the frame repaints the rows it changed.
 
+### How much Lua may run at once
+
+Every piece of Lua runs on a budget of VM instructions, so a loop that
+never ends stops the piece it is in, not the shell. The budgets:
+
+| what | default | `MORF_LIMITS` key |
+|------|---------|-------------------|
+| the configuration file itself | 50 000 000 | `load` |
+| one module (`require`) | 20 000 000 | `module` |
+| one view delegate (a row, a panel built on demand) | 20 000 000 | `delegate` |
+| one handler, binding or effect | 1 000 000 | `handler` |
+| every effect of one pass together | 8 000 000 | `frame` |
+
+Building is loading's kind of work and gets loading's room; a handler
+answers something and must be quick. A handler that runs out stops with
+"Lua handler fuel exhausted after N instructions"; do heavy work in
+pieces (`morf.timer(1, ...)`) or off the loop. `MORF_LIMITS` takes
+comma-separated `key=N` (`MORF_LIMITS=module=40000000,handler=2000000`).
+
 ### What wakes a shell
 
 An idle shell sleeps until something happens, with no poll of its own: the

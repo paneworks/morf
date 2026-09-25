@@ -539,7 +539,7 @@ pub(crate) fn execute_module<'gc>(
 ) -> Result<LuaValue<'gc>, String> {
     let closure = Closure::load(ctx, Some(name), source).map_err(|error| error.to_string())?;
     let executor = Executor::start(ctx, closure.into(), ());
-    drive_executor(ctx, executor, limits, limits.effect_fuel, "module")?;
+    drive_executor(ctx, executor, limits, limits.module_fuel, "module")?;
     match executor.take_result::<LuaValue>(ctx) {
         Ok(Ok(value)) => Ok(value),
         Ok(Err(error)) => Err(error.to_string()),

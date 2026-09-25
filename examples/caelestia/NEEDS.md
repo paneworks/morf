@@ -12,26 +12,6 @@ menu, the bar's popouts, notifications and the OSD) adds these. Item 1
 bites again there: the bar's popouts keep the same list of areas
 (`popouts.area`), as the dashboard does.
 
-## 3. A module's instruction budget, stated and adjustable
-
-**What.** Loading a module (each `require`) runs under a fixed budget
-(`Limits::effect_fuel`, 1 000 000 instructions), and when it runs out the
-whole configuration fails to load: "Lua module fuel exhausted after
-1000000 instructions". The dashboard, once it built four tabs in one
-module, ran out -- most of it `lib/m3shapes` resampling a dozen outlines
-to 72 cubics each for the Media tab's backdrop. Nothing in docs/ mentions
-the limit, so the first a configuration hears of it is a shell that will
-not start.
-
-**Workaround in the port.** Each tab is its own module, built as it loads
-(each `require` gets a fresh budget), and `m3shapes.path(name, {
-segments = false })` skips the resampling for shapes that never morph.
-
-**API.** Document the budget in UI.md. Better: a
-per-configuration setting (`morf.limits { module_fuel = ... }` read
-before the rest loads) or a much larger allowance for the top-level load
-than for handlers, which is where a runaway loop matters.
-
 ## 4. Bindings written after construction
 
 **What.** `node.opacity = function() ... end` after a node is built fails
@@ -89,3 +69,6 @@ its new value) would do it in one place.
   (`on_key_pressed(keysym, text, modifiers, repeat, name)`), and
   `morf.keys.Down` is its keysym; the port compares names and its keysym
   table is gone (crates/morf-lua `keys`).
+- A module's budget: `require` loads on a budget of its own (20 million
+  instructions, `MORF_LIMITS=module=N`), a loading's not a handler's, and
+  the budgets are listed in docs/UI.md ("How much Lua may run at once").

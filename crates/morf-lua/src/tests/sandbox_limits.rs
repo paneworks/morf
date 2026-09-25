@@ -300,3 +300,34 @@ fn a_delegate_builds_past_a_handlers_budget_and_a_runaway_one_stops() {
         "{answer} {logs}"
     );
 }
+
+// A module builds what it defines -- a panel's nodes, a table of outlines --
+// and loads on a budget of its own, well past a handler's; one that never
+// ends is still stopped, and says it was a module.
+#[test]
+fn a_module_loads_past_a_handlers_budget_and_a_runaway_one_stops() {
+    let dir = std::env::temp_dir().join(format!("morf-module-fuel-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("heavy.lua"),
+        "local n = 0 for i = 1, 20000 do n = n + i end return n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("runaway.lua"), "while true do end").unwrap();
+    let mut runtime = Runtime::new(Limits {
+        effect_fuel: 10_000,
+        module_fuel: 1_000_000,
+        slice_fuel: 64,
+        ..Limits::default()
+    });
+    runtime.set_module_roots(vec![dir.clone()]);
+    runtime
+        .execute("heavy.lua", br#"assert(require("heavy") == 200010000)"#)
+        .unwrap();
+    let error = runtime
+        .execute("runaway.lua", br#"require("runaway")"#)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("module fuel exhausted"), "{error}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

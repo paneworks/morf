@@ -40,6 +40,10 @@ pub struct Limits {
     /// a budget nearer loading's: a board of widgets each drawing a face
     /// took most of a handler's million instructions.
     pub delegate_fuel: u64,
+    /// Maximum VM fuel granted to loading one module (`require`). A module
+    /// builds what it defines -- a whole panel's nodes, a table of
+    /// outlines -- which is loading's kind of work, not a handler's.
+    pub module_fuel: u64,
     /// Most `ui.Terminal` nodes that may exist at once: each is a program
     /// on a pseudo-terminal and a screen with its history.
     pub terminals: usize,
@@ -59,6 +63,7 @@ impl Default for Limits {
             effect_fuel: 1_000_000,
             frame_fuel: 8_000_000,
             delegate_fuel: 20_000_000,
+            module_fuel: 20_000_000,
             terminals: 16,
             watches: 256,
         }
@@ -68,7 +73,7 @@ impl Default for Limits {
 impl Limits {
     /// The defaults with any of `MORF_LIMITS` applied: comma-separated
     /// `load=N`, `memory=N` (bytes, or with a `k`/`m`/`g` suffix),
-    /// `handler=N`, `frame=N` and `delegate=N` (VM instructions), `terminals=N` and
+    /// `handler=N`, `frame=N`, `delegate=N` and `module=N` (VM instructions), `terminals=N` and
     /// `watches=N`. An
     /// entry that does not parse is ignored and named in the returned
     /// warnings.
@@ -111,6 +116,7 @@ impl Limits {
                 "handler" => limits.effect_fuel = number,
                 "frame" => limits.frame_fuel = number,
                 "delegate" => limits.delegate_fuel = number,
+                "module" => limits.module_fuel = number,
                 "terminals" => limits.terminals = usize::try_from(number).unwrap_or(usize::MAX),
                 "watches" => limits.watches = usize::try_from(number).unwrap_or(usize::MAX),
                 other => warnings.push(format!(
