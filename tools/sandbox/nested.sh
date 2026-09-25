@@ -9,11 +9,19 @@
 #     (power, root, other people's programs, the network and audio stacks):
 #     each call is logged in OUT/stubbed.log and does nothing.
 #
-# SHELL is "morf" (examples/impasto from the repo, or MORF_REPO) or "upstream"
+# SHELL is "morf" (examples/impasto from the repo, or MORF_REPO), "upstream"
 # (impasto on Quickshell, from UPSTREAM: a clone of
-# github.com/andreumassanet/impasto). STEPS is a file sourced inside, with:
-#   open PANEL   the same panel word for either shell
-#   close        close whatever is open
+# github.com/andreumassanet/impasto) or "caelestia" (caelestia-dots/shell, from
+# CAELESTIA: a clone, on the Quickshell its flake builds, CAELESTIA_PKG: the
+# output of `nix build CAELESTIA#caelestia-shell` -- see README.md). STEPS is
+# a file sourced inside, with:
+#   open PANEL   the same panel word for either impasto; for caelestia one of
+#                its global shortcuts (launcher dashboard sidebar utilities
+#                session showall lock nexus ...)
+#   close        close whatever is open (Escape)
+#   click X Y [B] move the nested pointer to X,Y and click (needs WLRCTL)
+#   ipc ARGS     caelestia: `qs ipc call ARGS`, e.g. `ipc drawers toggle osd`
+#   notify ARGS  caelestia: a real notify-send, on the private bus only
 #   shot LABEL   a screenshot of the nested output
 #   film LABEL N N screenshots back to back (timestamps in film-LABEL.times)
 #   hc ARGS      hyprctl on the nested instance only (refuses otherwise)
@@ -22,7 +30,10 @@
 # Environment: WORK (scratch root, default ${TMPDIR:-/tmp}/morf-sandbox),
 # UPSTREAM, MORF_REPO, BOOT (s before the steps), TIMEOUT, WALLPAPER,
 # RENDER_NODE (cage renders with GL here; pixman screenshots can be stale),
-# AWWW_BIN, INTER_DIR, WTYPE (tools taken from these when not on PATH).
+# AWWW_BIN, INTER_DIR, WTYPE, WLRCTL (tools taken from these when not on PATH),
+# CAELESTIA, CAELESTIA_PKG, CAEL_CONFIG (a shell.json to seed), CAEL_SCHEME (a
+# scheme.json to seed; without one caelestia keeps its built-in palette),
+# NIXGL (GL wrapper for the nix-built Quickshell, default nixGLIntel).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=${MORF_REPO:-$(cd "$HERE/../.." && pwd)}
@@ -34,18 +45,26 @@ OUT=$WORK/out/$KIND-$NAME; rm -rf "$OUT"; mkdir -p "$OUT"
 H=$WORK/home-$KIND; chmod -R u+w "$H" 2>/dev/null || true; rm -rf "$H"; mkdir -p "$H"
 UPHOME=$UPSTREAM/home
 WTYPE=${WTYPE:-$(command -v wtype || true)}
+WLRCTL=${WLRCTL:-$(command -v wlrctl || true)}
+CAELESTIA=${CAELESTIA:-$WORK/caelestia}
+CAELESTIA_PKG=${CAELESTIA_PKG:-$WORK/caelestia-pkg}
 
 # Both shells stand on the same ground: upstream's wallpapers and fonts, and
 # the person's own fonts read in place (their icons live in Nerd Fonts).
 mkdir -p "$H/.config" "$H/.local/share/fonts" "$H/.local/state" "$H/.cache" "$H/Pictures" "$H/Videos"
-cp -r "$UPHOME/.local/share/wallpapers" "$UPHOME/.local/share/impasto" "$H/.local/share/"
-cp -r "$UPHOME/.local/share/fonts/." "$H/.local/share/fonts/"
+if [ -d "$UPHOME" ]; then
+  cp -r "$UPHOME/.local/share/wallpapers" "$UPHOME/.local/share/impasto" "$H/.local/share/"
+  cp -r "$UPHOME/.local/share/fonts/." "$H/.local/share/fonts/"
+elif [ "$KIND" != caelestia ]; then
+  echo "no upstream impasto clone at $UPSTREAM" >&2; exit 1
+fi
 [ -d "$HOME/.fonts" ] && ln -s "$HOME/.fonts" "$H/.fonts"
 [ -d "$HOME/.local/share/fonts" ] && ln -s "$HOME/.local/share/fonts" "$H/.local/share/fonts/own"
 [ -n "${INTER_DIR:-}" ] && cp -r "$INTER_DIR/share/fonts" "$H/.local/share/fonts/inter"
 [ -f "$HOME/.config/fontconfig/fonts.conf" ] && mkdir -p "$H/.config/fontconfig" && cp "$HOME/.config/fontconfig/fonts.conf" "$H/.config/fontconfig/"
 [ "$KIND" = upstream ] && cp -r "$UPHOME/.config/quickshell" "$H/.config/"
-WALLPAPER=${WALLPAPER:-$H/.local/share/wallpapers/japanese-castle-full-moon.jpeg}
+if [ "$KIND" = caelestia ]; then WALLPAPER=${WALLPAPER:-}
+else WALLPAPER=${WALLPAPER:-$H/.local/share/wallpapers/japanese-castle-full-moon.jpeg}; fi
 
 mkdir -p "$H/shim"
 for c in systemctl loginctl pkexec sudo pkill killall kill kitten reboot poweroff shutdown \
@@ -54,6 +73,43 @@ for c in systemctl loginctl pkexec sudo pkill killall kill kitten reboot powerof
   printf '#!/bin/sh\necho "%s $*" >> "%s/stubbed.log"\nexit 0\n' "$c" "$OUT" > "$H/shim/$c"
   chmod +x "$H/shim/$c"
 done
+
+if [ "$KIND" = caelestia ]; then
+  [ -f "$CAELESTIA/shell.qml" ] || { echo "no caelestia clone at $CAELESTIA" >&2; exit 1; }
+  [ -x "$CAELESTIA_PKG/bin/caelestia-shell" ] || { echo "no caelestia build at $CAELESTIA_PKG" >&2; exit 1; }
+  # caelestia's own reach into the machine: its CLI (wallpaper, schemes,
+  # recording, screenshots), GPU probes, VPN clients, fingerprint and face
+  # unlock probes, ping, the session commands.
+  for c in swappy gpu-screen-recorder nvidia-smi lspci glxinfo warp-cli tailscale \
+           netbird wg-quick ping asdbctl fprintd-list howdy logout hibernate suspend app2unit; do
+    printf '#!/bin/sh\necho "%s $*" >> "%s/stubbed.log"\nexit 0\n' "$c" "$OUT" > "$H/shim/$c"
+    chmod +x "$H/shim/$c"
+  done
+  # Only logged, except that `caelestia wallpaper -f P` records P where the
+  # shell reads the current wallpaper, as the real CLI would.
+  cat > "$H/shim/caelestia" <<CAEL
+#!/bin/sh
+echo "caelestia \$*" >> "$OUT/stubbed.log"
+[ "\$1 \$2" = "wallpaper -f" ] && printf '%s' "\$3" > "$H/.local/state/caelestia/wallpaper/path.txt"
+exit 0
+CAEL
+  chmod +x "$H/shim/caelestia"
+  # Notifications stay real: the shell under test is the notification
+  # server, and notify-send only reaches the private bus.
+  rm "$H/shim/notify-send"
+  mkdir -p "$H/.config/caelestia" "$H/.local/state/caelestia/wallpaper" "$H/Pictures/Wallpapers"
+  if [ -n "${CAEL_CONFIG:-}" ]; then cp "$CAEL_CONFIG" "$H/.config/caelestia/shell.json"
+  else echo '{}' > "$H/.config/caelestia/shell.json"; fi
+  [ -n "${CAEL_SCHEME:-}" ] && cp "$CAEL_SCHEME" "$H/.local/state/caelestia/scheme.json"
+  # Its own wallpaper unless WALLPAPER says otherwise; the switcher lists
+  # ~/Pictures/Wallpapers.
+  cp "$CAELESTIA/assets/wallpaper.webp" "$H/Pictures/Wallpapers/"
+  [ -d "$H/.local/share/wallpapers" ] && cp "$H/.local/share/wallpapers/"* "$H/Pictures/Wallpapers/"
+  printf '%s' "${WALLPAPER:-$H/Pictures/Wallpapers/wallpaper.webp}" > "$H/.local/state/caelestia/wallpaper/path.txt"
+  # Never the flake's launcher (it puts the real ddcutil, brightnessctl,
+  # nmcli first on PATH): its environment minus PATH, and qs under it.
+  "$HERE/caelestia-env.sh" "$CAELESTIA_PKG" > "$H/caelestia-env"
+fi
 
 # A nested Hyprland config of our own -- never the person's, and not
 # upstream's either (its autostart starts daemons and a polkit agent) --
@@ -111,6 +167,12 @@ export HYPRLAND_INSTANCE_SIGNATURE=\$SIG WAYLAND_DISPLAY=\$HWL
 echo "cage=\$CAGE_DISPLAY nested=\$HWL sig=\$SIG runtime=\$XDG_RUNTIME_DIR" > \$OUT/env
 hc() { [ -S "\$RUN/hypr/\$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock" ] || { echo "REFUSING hc" >> \$OUT/refused; return 1; }; timeout 10 hyprctl --instance \$HYPRLAND_INSTANCE_SIGNATURE "\$@"; }
 k() { timeout 20 "$WTYPE" "\$@" >> \$OUT/input.log 2>&1; }
+# The pointer is the nested compositor's alone: moved by its own dispatcher,
+# clicked through a virtual pointer on its socket.
+click() {
+  hc dispatch "hl.dsp.cursor.move({ x = \$1, y = \$2 })" >> \$OUT/hc.log 2>&1
+  sleep 0.2; asked click; timeout 10 "$WLRCTL" pointer click \${3:-left} >> \$OUT/input.log 2>&1
+}
 shot() { timeout 20 grim \$OUT/\$1.png 2>>\$OUT/input.log; }
 film() {
   # The two clocks side by side once, so morf's log lines (stamped on the
@@ -131,11 +193,23 @@ wait() { sleep \$1; }
 asked() { REQ=\$(date +%s%N); echo "\$1 wall \$((REQ / 1000000))" >> \$OUT/marks; }
 hc output create headless HEADLESS-A >> \$OUT/hc.log 2>&1
 sleep 1
-awww-daemon > \$OUT/awww.log 2>&1 &
-AW=\$!
-sleep 1
-awww img "$WALLPAPER" --transition-type none >> \$OUT/awww.log 2>&1
-if [ "$KIND" = upstream ]; then
+if [ "$KIND" != caelestia ]; then
+  awww-daemon > \$OUT/awww.log 2>&1 &
+  AW=\$!
+  sleep 1
+  awww img "$WALLPAPER" --transition-type none >> \$OUT/awww.log 2>&1
+fi
+if [ "$KIND" = caelestia ]; then
+  # caelestia paints its own wallpaper. Its Quickshell and Qt come from nix,
+  # so it needs nix's GL driver too.
+  . "$H/caelestia-env"
+  \${NIXGL:-nixGLIntel} "\$QS" -p "$CAELESTIA" > \$OUT/shell.log 2>&1 &
+  S=\$!
+  open() { asked open; hc dispatch "hl.dsp.global(\\"caelestia:\$1\\")" >> \$OUT/hc.log 2>&1; }
+  close() { asked close; k -k Escape; }
+  ipc() { asked ipc; timeout 10 "\$QS" -p "$CAELESTIA" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
+  notify() { asked notify; timeout 10 /usr/bin/notify-send "\$@" >> \$OUT/hc.log 2>&1; }
+elif [ "$KIND" = upstream ]; then
   quickshell -p \$HOME/.config/quickshell > \$OUT/shell.log 2>&1 &
   S=\$!
   open() { asked open; hc dispatch "hl.dsp.global(\\"quickshell:\$1\\")" >> \$OUT/hc.log 2>&1; }
@@ -150,7 +224,7 @@ fi
 sleep \${BOOT:-15}
 [ -n "$WTYPE" ] && { timeout \${TIMEOUT:-240} "$WTYPE" -s 400000 > /dev/null 2>&1 & KP=\$!; }
 . "$STEPS"
-kill \$S \$AW 2>/dev/null
+kill \$S \${AW:-} 2>/dev/null
 sleep 1
 kill \$HP 2>/dev/null
 sleep 1
