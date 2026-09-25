@@ -87,3 +87,28 @@ fn a_threshold_subscribed_or_cancelled_later_is_reported_as_a_change() {
         "nobody hears it now"
     );
 }
+
+// Keeping the session awake can be read back: what was last asked for, and
+// the change the host applies.
+#[test]
+fn an_idle_inhibit_reads_back() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "inhibit.lua",
+            br#"
+                assert(morf.idle.inhibited() == false)
+                morf.idle.inhibit(true)
+                assert(morf.idle.inhibited() == true)
+            "#,
+        )
+        .unwrap();
+    assert_eq!(runtime.take_idle_inhibit_change(), Some(true));
+    runtime
+        .execute(
+            "off.lua",
+            br#"morf.idle.inhibit(false) assert(morf.idle.inhibited() == false)"#,
+        )
+        .unwrap();
+    assert_eq!(runtime.take_idle_inhibit_change(), Some(false));
+}

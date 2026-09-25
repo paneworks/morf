@@ -69,9 +69,17 @@ pub(crate) fn install_host_service_api<'gc>(
         state.idle_inhibit_changed = true;
         Ok(CallbackReturn::Return)
     });
+    // What was last asked for: whether this shell is keeping the session
+    // awake. Whether the compositor can is `morf.capabilities.idle_inhibit`.
+    let inhibited_state = Rc::clone(&state);
+    let idle_inhibited = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        stack.replace(ctx, inhibited_state.borrow().idle_inhibited);
+        Ok(CallbackReturn::Return)
+    });
     let idle = Table::new(&ctx);
     idle.set_field(ctx, "subscribe", idle_subscribe);
     idle.set_field(ctx, "inhibit", idle_inhibit);
+    idle.set_field(ctx, "inhibited", idle_inhibited);
     morf.set_field(ctx, "idle", idle);
     let output_power_state = Rc::clone(&state);
     let output_power_set = Callback::from_fn(&ctx, move |ctx, _, mut stack| {

@@ -5,8 +5,7 @@ dashboard). Each entry says what is missing, the API that would cover it,
 and why Lua cannot do it well. Work already under way elsewhere is marked
 **in progress** and only left as a TODO in the port.
 
-One entry is open (the idle inhibitor's read-back, phase 3 at the end);
-every other entry found so far is in the engine (below).
+Nothing open: every entry found so far is in the engine (below).
 
 Phase 2 (the other dashboard tabs, the launcher's pickers, the session
 menu, the bar's popouts, notifications and the OSD) found the entries
@@ -58,13 +57,6 @@ like the dashboard.
 
 ## Phase 3: the sidebar and the utilities
 
-Open:
-
-- **Reading the idle inhibitor back.** `morf.idle.inhibit(on)` is write-only:
-  there is no `morf.idle.inhibited()` (a tracked read of what the shell asked
-  for, and whether the compositor honours it -- no `zwp_idle_inhibit_manager_v1`
-  means nothing is held), and `morf test` has no `test.idle_inhibited()` to
-  go with `test.shortcuts_inhibited()`. The utilities' keep-awake switch keeps
-  its own signal and, in a dry run, logs instead of inhibiting, so the tests
-  read the log; with the read-back they would assert the request itself and
-  the switch could show "unavailable" where the protocol is missing.
+Nothing open. The idle inhibitor reads back: `morf.idle.inhibited()` is
+what the shell last asked for, and `morf.capabilities.idle_inhibit` says
+whether the compositor can hold one (docs/IO.md, "Idle").

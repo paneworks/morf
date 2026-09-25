@@ -49,6 +49,7 @@ fn capabilities_of(
         ("toplevels", client.supports_toplevels()),
         ("toplevel_control", client.supports_toplevel_control()),
         ("gamma_control", client.supports_gamma_control()),
+        ("idle_inhibit", client.supports_idle_inhibit()),
     ] {
         list.push((name.to_owned(), supported.to_string()));
     }

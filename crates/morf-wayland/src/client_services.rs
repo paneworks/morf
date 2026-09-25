@@ -355,6 +355,12 @@ impl LayerClient {
         self.state.workspace_handles.get(id)
     }
 
+    /// Whether the compositor lets a surface keep the session from idling
+    /// (`zwp_idle_inhibit_manager_v1`).
+    pub fn supports_idle_inhibit(&self) -> bool {
+        self.state.idle_inhibit_manager.is_some()
+    }
+
     /// Holds the session awake, and reports whether the compositor allows it.
     ///
     /// `false` means no compositor support rather than failure to apply: a

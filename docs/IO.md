@@ -357,3 +357,19 @@ other nodes, in [UI.md](UI.md#terminal).
 `morf.io.process_view`, `morf.process` and `morf.socket` still work: they
 are pulled rather than pushed (`:next(timeout)`, `:receive(n, timeout)`),
 so something has to ask them on a timer. Prefer the calls above.
+
+## Idle: `morf.idle`
+
+```lua
+local sub = morf.idle.subscribe(300000, function(idle) end)   -- after 5 minutes without input
+morf.idle.subscribe(60000, fn, true)   -- input only: counts even while something keeps the session awake
+sub:cancel()
+morf.idle.inhibit(true)                -- keep the session awake (a film, a presentation)
+morf.idle.inhibited()                  -- what was last asked for
+```
+
+`subscribe` calls back with `true` when the session has been idle that
+long and `false` when input comes back. `inhibit` holds an idle inhibitor
+on the shell's surface; whether the compositor has one to hold is
+`morf.capabilities.idle_inhibit`, so a "keep awake" switch can tell "off"
+from "cannot here".
