@@ -242,7 +242,11 @@ fn optical_sizing_is_auto_or_none_or_a_boolean() {
         )
         .unwrap();
     let scene = runtime.scene();
-    let sizing = |index: usize| scene.current(scene.roots()[index], "optical_sizing").unwrap();
+    let sizing = |index: usize| {
+        scene
+            .current(scene.roots()[index], "optical_sizing")
+            .unwrap()
+    };
     assert_eq!(sizing(0), &Value::String("auto".into()));
     assert_eq!(sizing(1), &Value::String("none".into()));
     assert_eq!(sizing(2), &Value::String("auto".into()));
