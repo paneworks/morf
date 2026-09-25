@@ -17,15 +17,6 @@ glyphs are drawn and "keeps the default advances", so `opsz` cannot give
 the wider setting. Needs `opsz` (ideally automatic from `font_size`, as
 CSS's `font-optical-sizing: auto` and Qt do) to reach shaping like `wght`.
 
-## 2. Opacity of one layer in a field
-
-The reference fades a drawer's background in with its contents as it
-opens. The background here is a layer of the frame's field (so it can
-fillet into the frame), and a layer has no opacity of its own that blends
-with the rest of the field; fading the whole `Sdf` would fade the frame.
-The port fades only the contents. Needs `opacity` on `SdfShape` (the
-layer's coverage scaled before it is composed with the others).
-
 ## Engine fixes made in this branch
 
 - A node's hover including its descendants: every node has a read-only
@@ -33,6 +24,10 @@ layer's coverage scaled before it is composed with the others).
   on top (docs/UI.md, "Hover and press"). The dashboard shuts on
   `panel.contains_pointer` going false instead of a hand-kept list of its
   areas.
+- Opacity of one layer in a field: `opacity` on an `SdfShape` fades that
+  layer, seam and all, without fading the rest of the field (docs/UI.md,
+  "Fields"). A drawer's background, a layer of the frame's field, now fades
+  in with its contents as the reference's does.
 
 - Headless runs (`morf check`/`render`/`test`) stretched a layer anchored at
   both ends of an axis to the screen even when it asked for a size; a
