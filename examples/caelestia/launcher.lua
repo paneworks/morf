@@ -170,7 +170,7 @@ local function delegate(entry)
         row_icon(row),
         ui.Column {
           gap = 3,
-          kit.text { text = row.name, font_size = theme.size.larger, color = function() return C.onSurface end },
+          kit.text { id = "launcher-name", text = row.name, font_size = theme.size.larger, color = function() return C.onSurface end },
           kit.text {
             text = row.description, font_size = theme.size.smaller,
             color = function() return C.onSurfaceVariant end,

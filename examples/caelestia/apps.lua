@@ -223,13 +223,73 @@ function M.search(query, limit)
     return out, "actions"
   end
   local hits = used.rank(query, rows, {
-    key = { "name", { "keywords", 0.5 }, { "description", 0.3 } },
+    key = { "name", { "keywords", 0.4 }, { "description", 0.2 } },
     id = "id",
-    limit = limit,
   })
   local out = {}
-  for _, hit in ipairs(hits) do out[#out + 1] = hit.item end
+  for _, hit in ipairs(M.strict(query, hits)) do
+    out[#out + 1] = hit.item
+    if limit and #out >= limit then break end
+  end
   return out, "apps"
+end
+
+--- Whether a match's characters are one unbroken run (bytes in order,
+--- each character right after the one before).
+local function contiguous(text, positions)
+  for i = 2, #(positions or {}) do
+    local prev = positions[i - 1]
+    local step = utf8.offset(text, 2, prev)
+    if not step or positions[i] ~= step then return false end
+  end
+  return true
+end
+
+--- Whether every run of matched characters starts a word: "lw" in
+--- "LibreOffice Writer", "ki" in "kitty", not "fire" strung through
+--- "LibreOffice Impress".
+local function at_words(text, positions)
+  local prev
+  for _, p in ipairs(positions or {}) do
+    local continues = prev and utf8.offset(text, 2, prev) == p
+    if not continues then
+      local before = p > 1 and text:sub(p - 1, p - 1) or ""
+      local here = text:sub(p, p)
+      local starts = p == 1 or before:match("[%s%-_%./]")
+        or (before:match("%l") and here:match("%u"))
+      if not starts then return false end
+    end
+    prev = p
+  end
+  return true
+end
+
+--- The fuzzy hits worth showing, as the reference is strict about them: a
+--- match in a name may skip letters only from one word to the start of the
+--- next; one found only in the keywords or the description must be the
+--- query as written, in one run; and nothing scoring under half the best
+--- hit's score is listed. "fire" finds Firefox, not LibreOffice with an f,
+--- an i, an r and an e somewhere in it.
+function M.strict(query, hits)
+  if (query or "") == "" then return hits end
+  local best = 0
+  for _, hit in ipairs(hits) do best = math.max(best, hit.score or 0) end
+  local out = {}
+  for _, hit in ipairs(hits) do
+    local ok = (hit.score or 0) >= best * 0.5
+    if ok and hit.key == "name" then
+      ok = at_words(tostring(hit.item.name or ""), hit.positions)
+    elseif ok then
+      -- Every term of the query in one run somewhere in that field.
+      local text = tostring(hit.item[hit.key] or ""):lower()
+      for term in query:lower():gmatch("%S+") do
+        if not text:find(term, 1, true) then ok = false break end
+      end
+      if ok and not query:find("%s") then ok = contiguous(tostring(hit.item[hit.key] or ""), hit.positions) end
+    end
+    if ok then out[#out + 1] = hit end
+  end
+  return out
 end
 
 --- Runs a row: launches an app (and remembers it), or an action. Returns
