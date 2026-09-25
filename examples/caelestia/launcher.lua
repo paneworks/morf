@@ -197,9 +197,10 @@ local function delegate(entry)
     ui.Rect {
       anchors = { fill = true },
       radius = 14,
+      -- The selection is drawn once, under the rows (the highlight below).
       color = function()
         if row.kind == "calc" then return C.surfaceContainer end
-        return is_selected(entry.key) and C.onSurface:alpha(0.15) or C.onSurface:alpha(0)
+        return C.onSurface:alpha(0)
       end,
       behavior = { color = { duration = theme.duration.small } },
     },
@@ -370,6 +371,29 @@ local empty = ui.Row {
   },
 }
 
+-- The selection: one rounded box in a distance field under the rows,
+-- tracking an item that springs from row to row -- sliding, squashing and
+-- stretching on the way -- rather than a highlight that jumps.
+local highlight = ui.Item {
+  id = "launcher-highlight",
+  x = 0, width = WIDTH - 2 * PAD, height = ROW,
+  y = function() return (math.max(1, M.selected:get()) - 1) * (ROW + ROW_GAP) end,
+  behavior = { y = kit.spring(380, 26) },
+  stretch = { stiffness = 300, damping = 15, scale = 0.1, max = 0.22 },
+  visible = function()
+    local first = M.results:get(1)
+    return M.count:get() > 0 and not (first and first.kind == "calc")
+  end,
+}
+local selection = ui.Sdf {
+  id = "launcher-selection",
+  anchors = { fill = true }, z = -1,
+  ui.SdfShape {
+    shape = "box", radius = 14, track = highlight,
+    fill_color = function() return C.onSurface:alpha(0.15) end,
+  },
+}
+
 local content = ui.Item {
   anchors = { fill = true },
   -- The results, bottom-up from the search field.
@@ -379,6 +403,8 @@ local content = ui.Item {
     height = function() return list_height(M.count:get()) end,
     visible = function() return not wide() end,
     clip = true,
+    selection,
+    highlight,
     ui.Repeater {
       as = "column", gap = ROW_GAP,
       model = M.results,
