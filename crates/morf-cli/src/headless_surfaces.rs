@@ -256,7 +256,11 @@ impl Headless {
 /// A surface's extent along one axis: the screen's when anchored to both
 /// edges or given none, what it asked for otherwise.
 fn stretched(near: bool, far: bool, asked: u32, screen: u32, content: u32) -> u32 {
-    if near && far {
+    // Layer shell: a size of zero on an axis anchored at both ends is the
+    // output's extent; a size given is kept, centred between the anchors,
+    // as a compositor does (a layer that forgets `height = 0` shows as a
+    // 32 px band on screen, and must show as one here too).
+    if near && far && asked == 0 {
         return screen;
     }
     if asked == 0 {
@@ -318,7 +322,16 @@ pub(crate) fn layer_stack(layer: &str) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::layer_stack;
+    use super::{layer_stack, stretched};
+
+    #[test]
+    fn a_layer_anchored_at_both_ends_stretches_only_when_it_asks_for_no_size() {
+        assert_eq!(stretched(true, true, 0, 1080, 40), 1080);
+        // The 32 px a layer gets by default stays 32 px, as on a compositor.
+        assert_eq!(stretched(true, true, 32, 1080, 40), 32);
+        assert_eq!(stretched(true, false, 0, 1080, 40), 40);
+        assert_eq!(stretched(false, false, 300, 1080, 40), 300);
+    }
 
     #[test]
     fn surfaces_compose_bottom_layer_first_and_keep_their_order_within_one() {

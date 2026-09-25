@@ -1,0 +1,13 @@
+# The states the caelestia port has so far, shot as caelestia-gallery.steps
+# shoots them (same pointer, keys and names), for side-by-side comparison.
+point 960 600; wait 1
+shot 00-rest
+open launcher; wait 1.5; shot 01-launcher
+k ki; wait 1.5; shot 02-launcher-search
+k -k BackSpace -k BackSpace; k ">"; wait 1.5; shot 03-launcher-actions
+close; wait 1.5
+open dashboard; wait 1.5; shot 05-dashboard
+click 879 45; wait 1.5; shot 06-dashboard-media
+click 670 45; wait 1
+point 960 800; close; wait 1.5
+shot 99-closed

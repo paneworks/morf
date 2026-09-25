@@ -52,6 +52,9 @@ function M.open_layer()
     namespace = "caelestia-wallpaper",
     layer = "background",
     anchors = { top = true, bottom = true, left = true, right = true },
+    -- Zero on both axes: the output's size (a layer is 32 px tall unless
+    -- told otherwise).
+    width = 0, height = 0,
     exclusive_zone = -1,
     keyboard_focus = "none",
     visible = true,

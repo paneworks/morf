@@ -41,6 +41,8 @@ test.describe("caelestia", function()
       if s.name == "caelestia-wallpaper" then wallpaper = s end
     end
     test.truthy(wallpaper and wallpaper.visible, "no wallpaper layer shown")
+    test.eq(wallpaper.width, W)
+    test.eq(wallpaper.height, H)
     test.truthy(test.find { id = "frame" }, "no frame")
     local bar = test.get { id = "bar" }
     test.eq(bar.width, 60)

@@ -34,6 +34,9 @@ morf.surface.width = 0
 morf.surface.height = 0
 morf.surface.layer = "top"
 morf.surface.keyboard_focus = "none"
+-- The whole output, whatever other surfaces reserve (our own reservers
+-- below among them).
+morf.surface.exclusive_zone = -1
 -- Windows keep inside the frame: the bar's width on the left, the frame's
 -- thickness everywhere else.
 morf.surface.reserve = { left = theme.BAR, top = theme.BORDER, right = theme.BORDER, bottom = theme.BORDER }

@@ -55,10 +55,11 @@ CAELESTIA_PKG=${CAELESTIA_PKG:-$WORK/caelestia-pkg}
 # Both shells stand on the same ground: upstream's wallpapers and fonts, and
 # the person's own fonts read in place (their icons live in Nerd Fonts).
 mkdir -p "$H/.config" "$H/.local/share/fonts" "$H/.local/state" "$H/.cache" "$H/Pictures" "$H/Videos"
-if [ -d "$UPHOME" ]; then
+if [ -d "$UPHOME/.local/share/wallpapers" ]; then
   cp -r "$UPHOME/.local/share/wallpapers" "$UPHOME/.local/share/impasto" "$H/.local/share/"
   cp -r "$UPHOME/.local/share/fonts/." "$H/.local/share/fonts/"
-elif [ "$KIND" != caelestia ]; then
+# caelestia, and a morf configuration other than impasto, bring their own.
+elif [ "$KIND" = upstream ] || { [ "$KIND" = morf ] && [ -z "${MORF_CONFIG:-}" ]; }; then
   echo "no upstream impasto clone at $UPSTREAM" >&2; exit 1
 fi
 [ -d "$HOME/.fonts" ] && ln -s "$HOME/.fonts" "$H/.fonts"
