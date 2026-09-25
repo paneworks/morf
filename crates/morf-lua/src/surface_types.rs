@@ -105,6 +105,11 @@ pub struct LayerSurfaceConfig {
     /// linear light) or `"srgb"` (encoded values, as browsers and Qt mix
     /// them).
     pub blend: String,
+    /// Subpixel (LCD) text: `"auto"` (the default: where fontconfig or the
+    /// output says the stripes run, and only where it is safe -- text drawn
+    /// straight onto an opaque rectangle), `"off"`, or `"rgb"`/`"bgr"` to
+    /// name the order outright.
+    pub subpixel_text: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -217,6 +222,7 @@ impl Default for LayerSurfaceConfig {
             backdrop: None,
             backdrop_dim: 0.0,
             blend: "linear".to_owned(),
+            subpixel_text: "auto".to_owned(),
         }
     }
 }

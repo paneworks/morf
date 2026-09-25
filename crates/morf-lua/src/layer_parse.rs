@@ -182,6 +182,18 @@ pub(crate) fn apply_layer_setting<'gc>(
             Ok(assign_layer_setting(&mut config.input_regions, regions))
         }
         "blend" => Ok(assign_layer_setting(&mut config.blend, parse_blend(value)?)),
+        "subpixel_text" => {
+            let LuaValue::String(value) = value else {
+                return Err("surface subpixel_text must be a string".into());
+            };
+            let value = value.display_lossy().to_string();
+            if !matches!(value.as_str(), "auto" | "off" | "rgb" | "bgr") {
+                return Err(format!(
+                    "surface subpixel_text `{value}` is not \"auto\", \"off\", \"rgb\" or \"bgr\""
+                ));
+            }
+            Ok(assign_layer_setting(&mut config.subpixel_text, value))
+        }
         "reserve" => Ok(assign_layer_setting(
             &mut config.reserve,
             parse_surface_reserve(ctx, value)?,
@@ -315,6 +327,7 @@ pub(crate) fn layer_setting_to_lua<'gc>(
         "backdrop" => config.backdrop.map_or(LuaValue::Nil, LuaValue::Boolean),
         "backdrop_dim" => LuaValue::Number(config.backdrop_dim),
         "blend" => LuaValue::String(ctx.intern(config.blend.as_bytes())),
+        "subpixel_text" => LuaValue::String(ctx.intern(config.subpixel_text.as_bytes())),
         "anchors" => {
             let anchors = Table::new(&ctx);
             anchors.set_field(ctx, "top", config.anchors.top);

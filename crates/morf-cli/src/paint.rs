@@ -172,6 +172,7 @@ pub(crate) fn paint_layer(
         crate::surface_run::register_shaders(runtime, renderer)?;
     }
     let scale_120 = client.layer_scale_120(layer).unwrap_or(120);
+    apply_subpixel(renderer, &config.subpixel_text, client, config.opaque);
     // `morf.surface.keyboard_focus` is read every paint, so a configuration
     // may take the keyboard for a page and hand it back after, without a
     // second surface. Sent only when it differs from the last paint's.
@@ -512,6 +513,12 @@ pub(crate) fn paint_auxiliary_surface(
     if let Some(blend) = blend {
         apply_blend(renderer, blend);
     }
+    apply_subpixel(
+        renderer,
+        &runtime.layer_surface_config().subpixel_text,
+        client,
+        false,
+    );
     let revision = runtime.scene().layout_revision_of(surface.root);
     let size = (surface.width, surface.height);
     // This surface's own scale, not the bar's. A popup opened from a panel on a
@@ -576,6 +583,31 @@ pub(crate) fn paint_auxiliary_surface(
 
 pub(crate) fn clock_text() -> String {
     jiff::Zoned::now().strftime("%H:%M:%S").to_string()
+}
+
+/// Draws a renderer's text in subpixels where this output and the
+/// configuration allow it (morf-render's lcd.rs has the rules), and tells it
+/// whether the surface is declared opaque. A change draws the next frame in
+/// full.
+pub(crate) fn apply_subpixel(
+    renderer: &mut RenderEngine<WgpuBackend>,
+    setting: &str,
+    client: &LayerClient,
+    opaque: bool,
+) {
+    let text = client.own_output().and_then(|output| {
+        morf_render::subpixel_text_for(
+            setting,
+            morf_render::font_subpixel(),
+            output.subpixel,
+            output.transform,
+        )
+    });
+    let backend = renderer.backend_mut();
+    let changed = backend.set_subpixel_text(text) | backend.set_opaque_surface(opaque);
+    if changed {
+        renderer.forget();
+    }
 }
 
 /// Puts a renderer in the blend space a surface's configuration names.

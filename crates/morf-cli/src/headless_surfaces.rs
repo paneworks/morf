@@ -29,6 +29,7 @@ pub(crate) fn headless_screens(count: usize, size: (u32, u32), scale: i32) -> Ve
             physical_size: None,
             scale: scale.max(1),
             transform: "normal",
+            subpixel: "unknown",
         })
         .collect()
 }

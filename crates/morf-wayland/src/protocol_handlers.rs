@@ -60,6 +60,7 @@ pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> S
             .then_some(info.physical_size),
         scale: info.scale_factor,
         transform: output_transform_name(info.transform),
+        subpixel: output_subpixel_name(info.subpixel),
     }
 }
 

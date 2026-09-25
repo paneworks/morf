@@ -163,23 +163,7 @@ pub(crate) fn build_glyph_pipeline(
         label: Some("morf glyph shader"),
         source: wgpu::ShaderSource::Wgsl(source.into()),
     });
-    let attributes = wgpu::vertex_attr_array![
-        0 => Float32x2,
-        1 => Float32x4,
-        2 => Float32x4,
-        3 => Float32x4,
-        4 => Float32x4,
-        5 => Float32x4,
-        6 => Float32x4,
-        7 => Float32x4,
-        8 => Float32x4,
-        9 => Float32x4,
-        10 => Float32x4,
-        11 => Float32x4,
-        12 => Float32x4,
-        13 => Float32x4,
-        14 => Float32
-    ];
+    let attributes = glyph_attributes();
     let buffers = [Some(wgpu::VertexBufferLayout {
         array_stride: mem::size_of::<GlyphInstance>() as u64,
         step_mode: wgpu::VertexStepMode::Instance,
@@ -214,6 +198,110 @@ pub(crate) fn build_glyph_pipeline(
         cache: None,
     });
     Some(pipeline)
+}
+
+/// The subpixel glyph pipeline (glyph_lcd.wgsl): the glyph pass's vertex
+/// layout and bindings, a fragment that writes a second colour, and a blend
+/// that mixes each channel by that colour's matching channel.
+///
+/// Only on a device opened with `DUAL_SOURCE_BLENDING`; one per blend space,
+/// stripe order and filter, which are pipeline constants.
+pub(crate) fn build_lcd_pipeline(
+    device: &wgpu::Device,
+    texture_layout: &wgpu::BindGroupLayout,
+    blend: BlendSpace,
+    text: crate::SubpixelText,
+) -> wgpu::RenderPipeline {
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("morf lcd glyph pipeline layout"),
+        bind_group_layouts: &[Some(texture_layout)],
+        immediate_size: 0,
+    });
+    // `enable` has to come before anything else in the module, the shared
+    // shapes included.
+    let source = format!(
+        "enable dual_source_blending;\n{}",
+        shader_source(include_str!("../glyph_lcd.wgsl"))
+    );
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("morf lcd glyph shader"),
+        source: wgpu::ShaderSource::Wgsl(source.into()),
+    });
+    let attributes = glyph_attributes();
+    let buffers = [Some(wgpu::VertexBufferLayout {
+        array_stride: mem::size_of::<GlyphInstance>() as u64,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &attributes,
+    })];
+    let gamma = match blend {
+        BlendSpace::Linear => 0.0,
+        BlendSpace::Srgb => 1.0,
+    };
+    let constants = [
+        ("MORF_GAMMA_BLEND", gamma),
+        ("MORF_LCD_BGR", f64::from(u8::from(text.bgr))),
+        ("MORF_LCD_SPREAD", f64::from(text.spread())),
+    ];
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("morf lcd glyph pipeline"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &buffers,
+            compilation_options: Default::default(),
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: super::target_format(blend),
+                blend: Some(wgpu::BlendState {
+                    color: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::One,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrc1,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::One,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                }),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: &constants,
+                ..Default::default()
+            },
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+/// The glyph instance, attribute by attribute, as both glyph pipelines read it.
+fn glyph_attributes() -> [wgpu::VertexAttribute; 15] {
+    wgpu::vertex_attr_array![
+        0 => Float32x2,
+        1 => Float32x4,
+        2 => Float32x4,
+        3 => Float32x4,
+        4 => Float32x4,
+        5 => Float32x4,
+        6 => Float32x4,
+        7 => Float32x4,
+        8 => Float32x4,
+        9 => Float32x4,
+        10 => Float32x4,
+        11 => Float32x4,
+        12 => Float32x4,
+        13 => Float32x4,
+        14 => Float32
+    ]
 }
 
 pub(crate) fn create_glyph_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer {

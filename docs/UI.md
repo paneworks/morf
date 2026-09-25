@@ -685,6 +685,32 @@ ui.Text {
 }
 ```
 
+Text is smoothed in subpixels (LCD, "ClearType") where that is safe, and
+in greyscale everywhere else. `morf.surface.subpixel_text` is `"auto"` by
+default: the stripe order comes from fontconfig's `rgba` (else the
+output's `wl_output.subpixel`), the fringe softening from its `lcdfilter`,
+and `"none"` or vertical stripes there mean greyscale. `"off"` turns it
+off; `"rgb"` or `"bgr"` name the order outright. Even then a glyph is drawn
+in subpixels only when all of these hold, because its fringes need a solid
+colour beneath them to mix with:
+
+- it is drawn straight onto an opaque `ui.Rect` of the same surface (solid
+  fill, no gradient, blur or shader; inside its rounded corners and a
+  translucent border), or the surface is `morf.surface.opaque`;
+- it is not inside an offscreen layer (an `opacity` below one, a
+  rotation, a rounded `ui.ClipRect`, a `blur`, a shadow, `layer`, an
+  effect shader);
+- it is only moved, not scaled, rotated or skewed; it is not mid-morph and
+  has no outline;
+- the surface is drawn at a whole-number scale on an output that is not
+  rotated or flipped, and the GPU can blend two colours per pixel
+  (dual-source blending; `MORF_NO_DUAL_SOURCE=1` pretends it cannot).
+
+A translucent card, a panel fading in, text over a picture: greyscale. The
+same label on a solid background: sharper, in colour fringes a third of a
+pixel wide. Nothing about the text itself changes -- its size, its
+metrics, where it wraps.
+
 ### Text in runs, and links
 
 A `Text` may be set in runs of their own style. `spans` is a list whose

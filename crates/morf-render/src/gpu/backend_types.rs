@@ -95,6 +95,16 @@ pub struct WgpuBackend {
     pub(crate) viewport_buffer: wgpu::Buffer,
     pub(crate) viewport_bind_group: wgpu::BindGroup,
     pub(crate) glyph_pipeline: wgpu::RenderPipeline,
+    /// Whether the device was opened with dual-source blending, which
+    /// subpixel text needs.
+    pub(crate) lcd_supported: bool,
+    /// Subpixel text as asked for, and the pipeline that draws it: both
+    /// `None` while it is off or the device cannot.
+    pub(crate) subpixel: Option<crate::SubpixelText>,
+    pub(crate) lcd_pipeline: Option<wgpu::RenderPipeline>,
+    /// The surface is declared opaque as a whole, so every pixel of it
+    /// counts as opaque ground for subpixel text.
+    pub(crate) opaque_surface: bool,
     pub(crate) glyph_layout: wgpu::BindGroupLayout,
     pub(crate) glyph_sampler: wgpu::Sampler,
     /// Nearest-texel sampling for images drawn with `smooth = false`.

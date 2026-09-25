@@ -109,11 +109,16 @@ pub(crate) fn transformed_quad(
 pub(crate) struct GlyphBatch {
     pub(crate) instances: Vec<GlyphInstance>,
     pub(crate) command_spans: Vec<Vec<GlyphSpan>>,
+    /// Per instance: a plain glyph from a field -- not colour, not a band,
+    /// only moved, not morphing, no outline -- which subpixel text may draw.
+    pub(crate) plain: Vec<bool>,
 }
 
 pub(crate) struct GlyphSpan {
     pub(crate) range: Range<u32>,
     pub(crate) color: bool,
+    /// Drawn with the subpixel pipeline (lcd_spans.rs).
+    pub(crate) lcd: bool,
 }
 
 pub(crate) const GLYPH_ATLAS_SIZE: u32 = 2048;

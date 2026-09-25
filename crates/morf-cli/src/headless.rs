@@ -20,7 +20,7 @@ use morf_wayland::SurfaceRole;
 
 use crate::config::LoadPolicy;
 use crate::headless_surfaces::headless_screens;
-use crate::supervisor::{execute_config, lua_screen, store_outputs};
+use crate::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};
 use crate::surfaces::{PointerInput, primary_surface_root};
 
 /// One frame of a 60 Hz output, which is what time advances by between
@@ -204,7 +204,15 @@ impl Headless {
                 ))
             })?,
         };
-        if let Err(error) = execute_config(&mut runtime, &options.path, &source, options.policy) {
+        if let Err(error) = execute_config_on(
+            &mut runtime,
+            &options.path,
+            &source,
+            options.policy,
+            // Its own list rather than the recorded one another run may be
+            // writing at the same moment.
+            &lua_screens(&screens),
+        ) {
             return Err(LoadFailure {
                 error,
                 logs: runtime.take_logs(),
