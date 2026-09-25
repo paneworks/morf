@@ -315,7 +315,12 @@ function M.apply_cursor(touched)
     name = name or last_theme or env("HYPRCURSOR_THEME") or env("XCURSOR_THEME")
     -- No theme of our own and none named: the one in use is unknown, and
     -- guessing would change it.
-    if not name then return end
+    if not name then
+      -- Said, rather than "only the size is applied" left standing while
+      -- nothing was.
+      s.cursor_note:set("The cursor theme in use is not known (HYPRCURSOR_THEME, XCURSOR_THEME), so the size is left alone")
+      return
+    end
     last_theme = name
     push("cursor", function() return config.cursor_plan(name, size) end)
   end
