@@ -381,6 +381,12 @@ for the animation's destination), `layout_*`, `morf.clock`. It returns a
 value: a number, a string, a colour, or a table for the properties that
 take one (a gradient, a decoration). It never runs per frame.
 
+A function assigned to a property later is a binding too, made then:
+`node.opacity = function() return shown:get() and 1 or 0 end` runs at
+once and follows what it reads, and takes the place of any binding the
+property had. A plain value written over a bound property is what it
+shows until the binding next runs.
+
 The time comes in three grains: `morf.clock` ("HH:MM:SS"),
 `morf.minute_clock` ("HH:MM") and `morf.hour_clock` ("HH"). Read the
 coarsest one that shows what you need: the shell wakes every second only

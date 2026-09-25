@@ -12,20 +12,6 @@ menu, the bar's popouts, notifications and the OSD) adds these. Item 1
 bites again there: the bar's popouts keep the same list of areas
 (`popouts.area`), as the dashboard does.
 
-## 4. Bindings written after construction
-
-**What.** `node.opacity = function() ... end` after a node is built fails
-the load ("scene properties do not support function values"); only a
-constructor takes a binding. The popouts wanted to add a cross-fade to
-pages built elsewhere.
-
-**Workaround.** Wrap the page in an `Item` that carries the binding.
-Fine here, but it adds a node per page and a component cannot be given a
-binding by its user after the fact.
-
-**API.** Accept a function wherever the constructor does (install it as
-the constructor would), or `node:bind(property, fn)`.
-
 ## 6. Watching the scheme change (not an engine gap)
 
 The reference's scheme and light/dark switches go through its own CLI,
@@ -72,3 +58,6 @@ its new value) would do it in one place.
 - A module's budget: `require` loads on a budget of its own (20 million
   instructions, `MORF_LIMITS=module=N`), a loading's not a handler's, and
   the budgets are listed in docs/UI.md ("How much Lua may run at once").
+- Bindings after construction: a function assigned to a node's property
+  is a binding, as in the constructor, and replaces any it had
+  (docs/UI.md, "Bindings").

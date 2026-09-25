@@ -361,6 +361,31 @@ pub(crate) fn node_metatable<'gc>(
             .map_err(HostError)?;
             return Ok(CallbackReturn::Return);
         }
+        // A function is a binding, as in a constructor: it replaces any the
+        // property had and runs at once.
+        if let LuaValue::Function(luna::Function::Closure(closure)) = value {
+            {
+                let state = state.try_borrow().map_err(|_| {
+                    HostError("nodes cannot be written to from inside a layout function".to_owned())
+                })?;
+                refuse_runtime_owned(&state, node.handle, &property).map_err(HostError)?;
+                if !state
+                    .scene
+                    .has_property(node.handle, &property)
+                    .map_err(|error| HostError(error.to_string()))?
+                {
+                    let element = state
+                        .scene
+                        .element(node.handle)
+                        .map_err(|error| HostError(error.to_string()))?;
+                    return Err(
+                        HostError(format!("unknown {element:?} property `{property}`")).into(),
+                    );
+                }
+            }
+            crate::reactive_bindings::rebind_property(&state, ctx, node.handle, property, closure);
+            return Ok(CallbackReturn::Return);
+        }
         let value = lua_to_scene(ctx, value, 0).map_err(HostError)?;
         // A write while the scene is borrowed by a layout pass -- from
         // inside a `ui.Layout` function -- is refused rather than allowed to

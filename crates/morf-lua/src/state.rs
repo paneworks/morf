@@ -136,6 +136,9 @@ pub(crate) const MAX_LOG_ENTRIES: usize = 2000;
 pub(crate) const MAX_LOG_MESSAGE: usize = 4096;
 
 pub(crate) struct ReactiveState {
+    /// The runtime's limits, for a binding made where they are not at hand
+    /// (a function assigned to a node's property).
+    pub(crate) limits: crate::Limits,
     pub(crate) graph: Option<Graph<IpcValue>>,
     pub(crate) values: HashMap<SignalId, IpcValue>,
     pub(crate) signals: Vec<SignalId>,
@@ -553,6 +556,7 @@ impl ReactiveState {
         values.insert(clock_hours, initial_clock);
         values.insert(session_lock, initial_lock);
         Self {
+            limits: crate::Limits::default(),
             graph: Some(graph),
             values,
             signals: vec![clock, clock_minutes, clock_hours, session_lock],

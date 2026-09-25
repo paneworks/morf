@@ -517,3 +517,51 @@ fn a_distance_field_composes_animatable_layers_from_lua() {
         .unwrap();
     assert_eq!(runtime.scene().number(layers[1], "blend").unwrap(), 40.0);
 }
+
+// A function assigned to a property after construction is a binding, as in
+// the constructor: it follows what it reads, a second one takes the first's
+// place, and the checks a constructor makes still hold.
+#[test]
+fn a_function_assigned_after_construction_is_a_binding() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "bind.lua",
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                width = morf.signal("width", 10)
+                other = morf.signal("other", 1)
+                runs = 0
+                node = ui.Rect { width = 5 }
+                node.width = function() runs = runs + 1 return width:get() * 2 end
+                assert(node.width == 20, "not run at once: " .. tostring(node.width))
+                width:set(30)
+                assert(node.width == 60, "did not follow: " .. tostring(node.width))
+                -- A second binding takes the first's place: the first no
+                -- longer runs when what it read changes.
+                node.width = function() return other:get() end
+                assert(node.width == 1)
+                local before = runs
+                width:set(40)
+                assert(runs == before, "the old binding still ran")
+                assert(node.width == 1)
+                other:set(7)
+                assert(node.width == 7)
+                -- The constructor's checks.
+                assert(not pcall(function() node.nonsense = function() return 1 end end))
+                local area = ui.MouseArea {}
+                assert(not pcall(function() area.hovered = function() return true end end))
+                -- Inside a handler as well.
+                morf.ipc.bind = function()
+                    node.height = function() return other:get() + 1 end
+                    return node.height
+                end
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        runtime.call_ipc("bind", &[]).unwrap(),
+        vec![IpcValue::Number(8.0)]
+    );
+}

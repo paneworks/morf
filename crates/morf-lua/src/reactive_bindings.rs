@@ -34,6 +34,34 @@ pub(crate) fn register_property_binding<'gc>(
     let _ = flush_reactive(state, ctx, limits);
 }
 
+/// A binding given after construction (`node.width = function() ... end`):
+/// it takes the place of any the property had, and runs at once.
+pub(crate) fn rebind_property<'gc>(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'gc>,
+    node: NodeHandle,
+    property: String,
+    closure: Closure<'gc>,
+) {
+    let limits = {
+        let mut state = state.borrow_mut();
+        let old = state
+            .effects
+            .iter()
+            .filter(|(_, effect)| {
+                matches!(&effect.sink, Some(EffectSink::Property(sink))
+                    if sink.node == node && sink.property == property)
+            })
+            .map(|(token, _)| *token)
+            .collect::<Vec<_>>();
+        for token in old {
+            crate::api_retention::dispose_effect(&mut state, token);
+        }
+        state.limits
+    };
+    register_property_binding(state, ctx, limits, node, property, closure);
+}
+
 pub(crate) fn register_state_binding<'gc>(
     state: &Rc<RefCell<ReactiveState>>,
     ctx: Context<'gc>,

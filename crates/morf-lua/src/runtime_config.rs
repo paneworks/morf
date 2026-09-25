@@ -25,6 +25,7 @@ impl Runtime {
         let mut lua = Lua::core();
         lua.set_memory_limit(Some(limits.memory));
         let reactive = Rc::new(RefCell::new(ReactiveState::new()));
+        reactive.borrow_mut().limits = limits;
         let module_roots = Rc::new(RefCell::new(default_module_roots()));
         install_reactive_api(
             &mut lua,
