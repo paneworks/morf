@@ -94,6 +94,35 @@ test.describe("impasto under a fake Hyprland", function()
       "nothing was lit")
   end)
 
+  -- Hyprland 0.56 stands a headless FALLBACK output in while nothing is lit,
+  -- and offers it as a wl_output: the shell runs on it, and must not count
+  -- it as a lit screen.
+  test.it("lights every screen when only Hyprland's fallback output is", function()
+    for _, m in ipairs(fake.monitors) do m.disabled = true end
+    fake.monitors[#fake.monitors + 1] = { id = 2, name = "FALLBACK", description = "", make = "", model = "",
+      serial = "", width = 1920, height = 1080, refreshRate = 60.0, x = 0, y = 0, scale = 1, transform = 0,
+      focused = true, dpmsStatus = true, vrr = false, disabled = false, mirrorOf = "none",
+      activeWorkspace = { id = 1, name = "1" }, specialWorkspace = { id = 0, name = "" },
+      availableModes = { "1920x1080@60.00Hz" } }
+    load()
+    until_(function() return sent('hl.monitor({ output = "desc:BOE 0x0BCA", disabled = false, mode = "preferred", position = "auto", scale = 1 })') end,
+      "nothing was lit")
+    test.eq(#fake.sent('output = "FALLBACK"'), 0, "a rule was pushed for the fallback output")
+  end)
+
+  -- Every screen off: Hyprland offers no output at all, and the shell runs
+  -- once with none (morf.surface.outputless), only to light one again.
+  test.it("lights every screen when none is, with no output to draw on", function()
+    for _, m in ipairs(fake.monitors) do m.disabled = true end
+    test.load("../impasto/init.lua", { screens = 0, env = { IMPASTO_DRY_RUN = false,
+      HYPRLAND_INSTANCE_SIGNATURE = fake.signature, XDG_RUNTIME_DIR = fake.runtime } })
+    test.eq(test.ipc("outputless"), true)
+    until_(function() return sent('hl.monitor({ output = "desc:BOE 0x0BCA", disabled = false, mode = "preferred", position = "auto", scale = 1 })') end,
+      "nothing was lit")
+    until_(function() return sent('hl.monitor({ output = "desc:Dell Inc. DELL U2720Q 7XJ1K", disabled = false') end,
+      "the second screen was not lit")
+  end)
+
   test.it("rebinds a key from the keys page, writes keys.tsv and reloads", function()
     load()
     test.eq(test.ipc("settings", "keys", "shell"), "keys")
