@@ -332,6 +332,12 @@ pub(crate) struct ReactiveState {
     /// the same kind of object as `morf.list_model` makes.
     pub(crate) model_metatable: Option<luna::StashedTable>,
     pub(crate) loaded_loaders: HashSet<NodeHandle>,
+    /// Loaders holding an item that is built but not shown: preloaded
+    /// ahead of being asked for, or kept after being let go.
+    pub(crate) dormant_loaders: HashSet<NodeHandle>,
+    /// Preloading loaders with nothing built yet, and since when; see
+    /// `Runtime::poll_services`.
+    pub(crate) preload_pending: HashMap<NodeHandle, std::time::Instant>,
     pub(crate) retention: Retention<NodeHandle>,
     pub(crate) retain_callbacks: HashMap<NodeHandle, RetainCallbacks>,
     pub(crate) retained_destroy_queue: HashSet<NodeHandle>,
@@ -640,6 +646,8 @@ impl ReactiveState {
             custom_layouts: HashMap::new(),
             model_metatable: None,
             loaded_loaders: HashSet::new(),
+            dormant_loaders: HashSet::new(),
+            preload_pending: HashMap::new(),
             retention: Retention::default(),
             retain_callbacks: HashMap::new(),
             retained_destroy_queue: HashSet::new(),

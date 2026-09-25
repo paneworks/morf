@@ -6,7 +6,7 @@ pub use gpu::dmabuf::{
     DmabufImage, DmabufPlane, DmabufSupport, FOURCC_ARGB8888, FOURCC_XRGB8888, MODIFIER_LINEAR,
     split_dev_t,
 };
-pub use gpu::{GpuError, GpuInfo, ShaderRegistration, WgpuBackend};
+pub use gpu::{GpuError, GpuInfo, ShaderRegistration, WgpuBackend, opened_device_count};
 
 /// The space translucent colours are mixed in when they are drawn over what
 /// is already there.

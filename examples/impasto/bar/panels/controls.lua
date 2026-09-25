@@ -312,6 +312,9 @@ end
 island.register("controls", {
   size = function() return service.panel_width_now(), service.panel_height end,
   build = M.build,
+  -- The panel a click on the island opens: built ahead while the shell is
+  -- still, so opening it is a morph and nothing else.
+  preload = true,
 })
 
 -- Closing the panel ends arranging.

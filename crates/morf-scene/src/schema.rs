@@ -70,6 +70,10 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
             boolean("active", true),
             boolean("loading", false),
             boolean("active_async", false),
+            // Hide the item when deactivated rather than destroy it.
+            boolean("keep", false),
+            // Build the item ahead of time, hidden, while nothing moves.
+            boolean("preload", false),
         ]),
         Element::Timer => {
             properties.extend([

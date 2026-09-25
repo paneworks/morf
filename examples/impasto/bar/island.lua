@@ -311,8 +311,10 @@ end
 -- built the moment the panel opens and faded in over the medium duration
 -- while the shape grows round them, and let go the moment it closes -- the
 -- shape shrinks back empty. Kept on screen through the shrink, a panel
--- reads as held open a beat after it was dismissed.
-local function panel_loader(predicate, build)
+-- reads as held open a beat after it was dismissed. A panel registered with
+-- `preload = true` has its next contents built while the shell is still,
+-- hidden, so opening it builds nothing -- and it is still fresh each time.
+local function panel_loader(predicate, build, preload)
   return ui.Item {
     anchors = { fill = true },
     opacity = function() return predicate() and 1 or 0 end,
@@ -321,6 +323,7 @@ local function panel_loader(predicate, build)
     ui.Loader {
       anchors = { fill = true },
       active = predicate,
+      preload = preload or false,
       source = build,
     },
   }
@@ -373,7 +376,7 @@ function island.build(place)
           margin = function() return panel_padding(panel) end,
           panel.build(island),
         }
-      end)
+      end, panel.preload)
   end
 
   local corner = function()

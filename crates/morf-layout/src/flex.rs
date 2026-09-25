@@ -21,11 +21,16 @@ use crate::flex_style::{is_flex_root, item_style};
 use crate::geometry::{Geometry, Size as EngineSize, TextMeasurer, TextOptions};
 use crate::helpers::{LayoutError, anchors, positive, text_alignment, text_elide};
 
+/// One node Taffy placed: its geometry, whether the engine still places its
+/// children, and where it sits from its Taffy parent's origin.
+pub(crate) type Flexed = (NodeHandle, Geometry, bool, (f64, f64));
+
 /// The Taffy tree for one flex root, and which engine node each id is.
 pub(crate) struct FlexTree {
     tree: TaffyTree<NodeHandle>,
     root: NodeId,
-    ids: FastMap<NodeHandle, NodeId>,
+    /// Which engine node each Taffy node is.
+    ids: FastMap<NodeId, NodeHandle>,
 }
 
 impl FlexTree {
@@ -45,7 +50,7 @@ impl FlexTree {
         scene: &Scene,
         node: NodeHandle,
         tree: &mut TaffyTree<NodeHandle>,
-        ids: &mut FastMap<NodeHandle, NodeId>,
+        ids: &mut FastMap<NodeId, NodeHandle>,
     ) -> Result<NodeId, LayoutError> {
         let style = item_style(scene, node)?;
         let id = if is_flex_root(scene, node)? {
@@ -78,7 +83,7 @@ impl FlexTree {
             tree.new_leaf_with_context(style, node)
         }
         .map_err(|error| LayoutError::Scene(error.to_string()))?;
-        ids.insert(node, id);
+        ids.insert(id, node);
         Ok(id)
     }
 
@@ -149,7 +154,7 @@ impl FlexTree {
         &self,
         scene: &Scene,
         origin: Geometry,
-    ) -> Result<Vec<(NodeHandle, Geometry, bool)>, LayoutError> {
+    ) -> Result<Vec<Flexed>, LayoutError> {
         let mut out = Vec::with_capacity(self.ids.len());
         self.collect(scene, self.root, origin.x, origin.y, &mut out)?;
         Ok(out)
@@ -161,7 +166,7 @@ impl FlexTree {
         id: NodeId,
         x: f64,
         y: f64,
-        out: &mut Vec<(NodeHandle, Geometry, bool)>,
+        out: &mut Vec<Flexed>,
     ) -> Result<(), LayoutError> {
         let children = self
             .tree
@@ -171,18 +176,17 @@ impl FlexTree {
             let layout = self.tree.unrounded_layout(child);
             let node = *self
                 .ids
-                .iter()
-                .find(|(_, candidate)| **candidate == child)
-                .map(|(node, _)| node)
+                .get(&child)
                 .ok_or_else(|| LayoutError::Scene("flex node without a scene node".into()))?;
+            let location = (f64::from(layout.location.x), f64::from(layout.location.y));
             let geometry = Geometry {
-                x: x + f64::from(layout.location.x),
-                y: y + f64::from(layout.location.y),
+                x: x + location.0,
+                y: y + location.1,
                 width: f64::from(layout.size.width),
                 height: f64::from(layout.size.height),
             };
             let leaf = !is_flex_root(scene, node)?;
-            out.push((node, geometry, leaf));
+            out.push((node, geometry, leaf, location));
             if !leaf {
                 self.collect(scene, child, geometry.x, geometry.y, out)?;
             }

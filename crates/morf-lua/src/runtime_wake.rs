@@ -97,12 +97,15 @@ pub enum DeadlineCause {
     Terminal,
     /// A tray host asks a watcher that did not answer again.
     TrayRetry,
+    /// A `Loader` with `preload` has an item to build ahead of time.
+    Preload,
 }
 
 impl DeadlineCause {
     pub fn name(self) -> &'static str {
         match self {
             Self::Timer => "timer",
+            Self::Preload => "preload",
             Self::Caret => "caret",
             Self::Image => "image",
             Self::DbusTimeout => "dbus-timeout",
@@ -206,7 +209,22 @@ impl Runtime {
             .filter_map(|subscription| subscription.host.next_deadline())
             .min()
             .map(|at| (at, DeadlineCause::TrayRetry));
-        [timers, caret, image, dbus, terminal, tray]
+        // Due at once while the scene is still; moving, only once it has
+        // waited as long as a preload waits for anything.
+        let still = !state.scene.has_motion();
+        let preload = state
+            .preload_pending
+            .values()
+            .min()
+            .map(|since| {
+                if still {
+                    *since
+                } else {
+                    *since + crate::runtime_services::PRELOAD_PATIENCE
+                }
+            })
+            .map(|at| (at, DeadlineCause::Preload));
+        [timers, caret, image, dbus, terminal, tray, preload]
             .into_iter()
             .flatten()
             .min_by_key(|(at, _)| *at)

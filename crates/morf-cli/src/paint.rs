@@ -12,7 +12,7 @@ pub(crate) fn paint(
     renderer: &mut RenderEngine<WgpuBackend>,
     client: &LayerClient,
     root: NodeHandle,
-    cache: Option<&CachedLayout>,
+    cache: Option<&mut CachedLayout>,
 ) -> Result<CachedLayout, String> {
     // `MORF_FRAME_LOG=1` prints how long each frame of the primary surface
     // took on the CPU side, submission included, so a configuration that
@@ -103,8 +103,53 @@ impl std::ops::Deref for CachedLayout {
     }
 }
 
+/// The layout a paint draws, and whether it is a new one.
+///
+/// Taken out of the cache rather than copied, since the paint hands back a
+/// new cache built round it. The cached layout itself when nothing it reads
+/// has moved; otherwise that layout brought up to date, redoing only the
+/// parts of the tree that moved ([`morf_layout::Layout::update_with`]); and
+/// a whole pass when there is nothing to start from, the scale changed, or
+/// `MORF_LAYOUT_FULL=1` asks for one every time (to compare the two).
+pub(crate) fn layout_for(
+    runtime: &mut Runtime,
+    cache: Option<&mut CachedLayout>,
+    root: NodeHandle,
+    (revision, size, scale_120): (u64, (u32, u32), u32),
+    text: &mut impl morf_layout::TextMeasurer,
+) -> Result<(Layout, bool), String> {
+    let available = Size {
+        width: size.0 as f64,
+        height: size.1 as f64,
+    };
+    let Some(cached) = cache else {
+        return Ok((runtime.compute_layout(root, available, text)?, true));
+    };
+    if cached.still_valid(revision, size, scale_120) {
+        return Ok((std::mem::take(&mut cached.layout), false));
+    }
+    // Whatever happens next, what is left in the cache is no longer this
+    // revision's: a paint that fails part way must not find it valid.
+    cached.revision = u64::MAX;
+    let mut layout = std::mem::take(&mut cached.layout);
+    if cached.scale_120 != scale_120 || full_layout_wanted() {
+        return Ok((runtime.compute_layout(root, available, text)?, true));
+    }
+    runtime.update_layout(&mut layout, root, available, text)?;
+    Ok((layout, true))
+}
+
+/// `MORF_LAYOUT_FULL=1`: lay every changed frame out whole, as before
+/// layouts were brought up to date piecemeal. For measuring the difference.
+fn full_layout_wanted() -> bool {
+    static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *WANTED.get_or_init(|| {
+        std::env::var_os("MORF_LAYOUT_FULL").is_some_and(|value| !value.is_empty() && value != "0")
+    })
+}
+
 /// `MORF_FRAME_LOG=2`: where one frame's time went, stage by stage, for any
-/// frame over 16 ms.
+/// frame over 16 ms, or over `MORF_FRAME_SPLIT_MS` when that is set.
 struct FrameSplit {
     on: bool,
     started: std::time::Instant,
@@ -137,8 +182,15 @@ impl FrameSplit {
     }
 
     fn finish(self) {
+        static THRESHOLD: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        let threshold = *THRESHOLD.get_or_init(|| {
+            std::env::var("MORF_FRAME_SPLIT_MS")
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(16.0)
+        });
         let total = self.started.elapsed().as_secs_f64() * 1000.0;
-        if !self.on || total < 16.0 {
+        if !self.on || total < threshold {
             return;
         }
         let parts = self
@@ -147,7 +199,10 @@ impl FrameSplit {
             .map(|(stage, ms)| format!("{stage} {ms:.1}"))
             .collect::<Vec<_>>()
             .join(", ");
-        eprintln!("frame split {total:.1} ms: {parts}");
+        eprintln!(
+            "{} frame split {total:.1} ms: {parts}",
+            crate::wake_plan::stamp()
+        );
     }
 }
 
@@ -158,7 +213,7 @@ pub(crate) fn paint_layer(
     layer: u64,
     root: NodeHandle,
     config: &LayerSurfaceConfig,
-    cache: Option<&CachedLayout>,
+    mut cache: Option<&mut CachedLayout>,
 ) -> Result<CachedLayout, String> {
     let (width, height) = client
         .layer_logical_size(layer)
@@ -174,7 +229,9 @@ pub(crate) fn paint_layer(
     // `morf.surface.keyboard_focus` is read every paint, so a configuration
     // may take the keyboard for a page and hand it back after, without a
     // second surface. Sent only when it differs from the last paint's.
-    if cache.is_none_or(|cached| cached.keyboard_focus != config.keyboard_focus)
+    if cache
+        .as_deref()
+        .is_none_or(|cached| cached.keyboard_focus != config.keyboard_focus)
         && let Some(focus) = keyboard_focus_of(&config.keyboard_focus)
     {
         client.set_layer_keyboard_focus(layer, focus);
@@ -183,28 +240,20 @@ pub(crate) fn paint_layer(
     // This surface's tree's revision, not the scene's: a clock ticking on
     // another surface leaves this layout as it was.
     let revision = runtime.scene().layout_revision_of(root);
-    let reusable = cache.filter(|cached| cached.still_valid(revision, (width, height), scale_120));
-    let layout = match reusable {
-        Some(cached) => cached.layout.clone(),
-        None => {
-            // Before the scene is borrowed for painting: a `ui.Layout`
-            // container's functions run in Lua during the pass.
-            let layout = runtime.compute_layout(
-                root,
-                Size {
-                    width: width as f64,
-                    height: height as f64,
-                },
-                renderer.backend_mut(),
-            )?;
-            // Only on a fresh layout: it is the one moment the answer can have
-            // changed, and the cached one has already been looked at.
-            split.mark("layout");
-            runtime.lint_layout(&layout, root);
-            split.mark("lint");
-            layout
-        }
-    };
+    let (layout, fresh) = layout_for(
+        runtime,
+        cache.as_deref_mut(),
+        root,
+        (revision, (width, height), scale_120),
+        renderer.backend_mut(),
+    )?;
+    if fresh {
+        // Only on a fresh layout: it is the one moment the answer can have
+        // changed, and the cached one has already been looked at.
+        split.mark("layout");
+        runtime.lint_layout(&layout, root);
+        split.mark("lint");
+    }
     // Every frame, not only a fresh layout's: a caret that moved without the
     // text changing still has to be scrolled into view.
     runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
@@ -221,7 +270,7 @@ pub(crate) fn paint_layer(
         // a surface that genuinely has no interactive area, so a shape that
         // stands for "the configured mask, unchanged" is stored instead.
         let input = vec![MASK_SENTINEL];
-        if cache.is_none_or(|cached| cached.input != input) {
+        if cache.as_deref().is_none_or(|cached| cached.input != input) {
             client
                 .set_layer_composed_input_region(layer, regions)
                 .map_err(|error| error.to_string())?;
@@ -245,7 +294,7 @@ pub(crate) fn paint_layer(
                 }
             })
             .collect::<Vec<_>>();
-        if cache.is_none_or(|cached| cached.input != input) {
+        if cache.as_deref().is_none_or(|cached| cached.input != input) {
             client.set_layer_input_region(layer, Some(&input));
         }
         input
@@ -295,7 +344,7 @@ pub(crate) fn paint_layer(
         // the effect predicting the motion. So the region is deliberately one
         // frame behind: it can only ever lag, and lag is the physical answer.
         let previous = cache
-            .map(|cached| cached.backdrop.clone())
+            .map(|cached| std::mem::take(&mut cached.backdrop))
             .unwrap_or_default();
         if previous != shapes && !previous.is_empty() {
             let rectangles =
@@ -332,6 +381,15 @@ pub(crate) fn paint_layer(
     split.mark("render");
     if damage.is_empty() {
         client.commit_layer(layer);
+    }
+    // After the frame is on its way, and only when nothing moves: text laid
+    // out but hidden -- a preloaded panel -- gets its glyphs made now, so
+    // the frame that shows it does not spend its time on them.
+    if fresh && !runtime.has_motion() {
+        renderer
+            .backend_mut()
+            .warm_hidden_text(&scene, &layout, root, scale_120);
+        split.mark("warm hidden text");
     }
     drop(scene);
     // After the render: what the images became is known once they were drawn.
@@ -389,7 +447,7 @@ pub(crate) fn paint_layer_surface(
         window_layer_id(surface.id),
         surface.root,
         &config,
-        surface.layout.as_ref(),
+        surface.layout.as_mut(),
     )?;
     // A binding on this tree's layout geometry (`layout_width`, ...) hears
     // the frame as it is observed, after the render, and may move the tree
@@ -523,21 +581,13 @@ pub(crate) fn paint_auxiliary_surface(
     // 1x screen but shown on a 2x one was drawn at 1x and stretched -- and on a
     // mixed-DPI desk that is most popups.
     let scale_120 = client.surface_scale_120(kind.role(surface.id));
-    let reusable = surface
-        .layout
-        .as_ref()
-        .filter(|cached| cached.still_valid(revision, size, scale_120));
-    let layout = match reusable {
-        Some(cached) => cached.layout.clone(),
-        None => runtime.compute_layout(
-            surface.root,
-            Size {
-                width: surface.width as f64,
-                height: surface.height as f64,
-            },
-            renderer.backend_mut(),
-        )?,
-    };
+    let (layout, _) = layout_for(
+        runtime,
+        surface.layout.as_mut(),
+        surface.root,
+        (revision, size, scale_120),
+        renderer.backend_mut(),
+    )?;
     runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
     let scene = runtime.scene();
     let (width, height) = physical_size((surface.width, surface.height), scale_120);

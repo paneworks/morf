@@ -11,6 +11,7 @@ use crate::custom::CustomLayout;
 use crate::flex::FlexTree;
 use crate::geometry::{Geometry, Size, TextMeasurer};
 use crate::helpers::{LayoutError, positive};
+use crate::incremental::Local;
 use crate::layout::Layout;
 
 impl Layout {
@@ -36,12 +37,48 @@ impl Layout {
             text,
         )?;
         let placed = flex.geometries(scene, geometry)?;
-        for (node, mut placed, leaf) in placed {
-            placed.x += scene.number(node, "transition_x")?;
-            placed.y += scene.number(node, "transition_y")?;
-            self.geometry.insert(node, placed);
+        if self.dirty.is_some() {
+            self.forget_hidden_flex_children(scene, root)?;
+        }
+        for (node, mut placed, leaf, (x, y)) in placed {
+            let transition = (
+                scene.number(node, "transition_x")?,
+                scene.number(node, "transition_y")?,
+            );
+            self.local.insert(node, Local::Flexed { x, y, transition });
+            placed.x += transition.0;
+            placed.y += transition.1;
             if leaf {
-                self.resolve_children(scene, node, text, host)?;
+                self.place(scene, node, placed, text, host)?;
+            } else {
+                self.geometry.insert(node, placed);
+            }
+        }
+        Ok(())
+    }
+
+    /// Drops what the last layout said about the hidden children of a flex
+    /// root and of the flex containers inside it.
+    ///
+    /// Taffy is never shown a hidden child, so a whole pass gives it and
+    /// everything under it no geometry at all; a layout brought up to date
+    /// must not keep the geometry it had while it was shown.
+    fn forget_hidden_flex_children(
+        &mut self,
+        scene: &Scene,
+        container: NodeHandle,
+    ) -> Result<(), LayoutError> {
+        for &child in scene.children(container)? {
+            if !scene.bool_value(child, "visible")? {
+                let mut pending = vec![child];
+                while let Some(node) = pending.pop() {
+                    self.local.remove(&node);
+                    if self.geometry.remove(&node).is_some() {
+                        pending.extend(scene.children(node)?.iter().copied());
+                    }
+                }
+            } else if crate::flex_style::is_flex_root(scene, child)? {
+                self.forget_hidden_flex_children(scene, child)?;
             }
         }
         Ok(())
@@ -75,14 +112,23 @@ impl Layout {
                 width: sizes[index].width,
                 height: sizes[index].height,
             });
+            let local = Local::Custom {
+                x: relative.x,
+                y: relative.y,
+                transition: (
+                    scene.number(child, "transition_x")?,
+                    scene.number(child, "transition_y")?,
+                ),
+            };
+            let (x, y) = local.position(geometry);
+            self.local.insert(child, local);
             let child_geometry = Geometry {
-                x: geometry.x + relative.x + scene.number(child, "transition_x")?,
-                y: geometry.y + relative.y + scene.number(child, "transition_y")?,
+                x,
+                y,
                 width: relative.width,
                 height: relative.height,
             };
-            self.geometry.insert(child, child_geometry);
-            self.resolve_children(scene, child, text, host)?;
+            self.place(scene, child, child_geometry, text, host)?;
         }
         Ok(())
     }

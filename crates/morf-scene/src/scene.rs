@@ -23,6 +23,7 @@ impl Scene {
             next_group: 0,
             layout_revision: 0,
             root_revisions: FastMap::default(),
+            detached_revisions: FastMap::default(),
             motion_scale: 1.0,
             start_on_tick: false,
             removed: Vec::new(),
@@ -58,6 +59,7 @@ impl Scene {
                 parent: None,
                 children: Vec::new(),
                 properties,
+                stamps: LayoutStamps::default(),
             }
         });
         // A new node is a tree of its own until it is given a parent.
@@ -144,14 +146,21 @@ impl Scene {
             self.nodes[old_parent]
                 .children
                 .retain(|node| node.id() != child_id);
+            // The parent it left has one child fewer, and the tree lost a
+            // node its last layout placed.
+            self.bump_layout(old_parent);
+            self.mark_detached(old_parent);
         }
         self.nodes[child_id].parent = parent_id;
         if let Some(parent) = parent_id {
             self.nodes[parent].children.push(child);
             // No longer a root, so no longer a tree with a revision of its own.
             self.root_revisions.remove(&child_id);
+            self.detached_revisions.remove(&child_id);
+            self.bump_layout(parent);
         }
         self.bump_layout(child_id);
+        self.nodes[child_id].stamps.attached = self.layout_revision;
         Ok(())
     }
 
@@ -231,17 +240,15 @@ impl Scene {
             self.nodes[parent]
                 .children
                 .retain(|handle| handle.id() != id);
+            self.bump_layout(parent);
+            self.mark_detached(parent);
         }
         let mut pending = vec![id];
         while let Some(current) = pending.pop() {
             pending.extend(self.nodes[current].children.iter().map(|child| child.id()));
-            self.behaviors.retain(|key, _| key.node != current);
-            self.animations.retain(|key, _| key.node != current);
-            self.physics.retain(|key, _| key.node != current);
-            self.physics_specs.retain(|key, _| key.node != current);
-            self.paused_physics.retain(|key| key.node != current);
             self.removed.push(NodeHandle(current));
             self.root_revisions.remove(&current);
+            self.detached_revisions.remove(&current);
             self.terminal_screens.remove(&current);
             // Its properties live in the scene's signal graph, not in the
             // node; they go with it or they stay allocated for the life of
@@ -253,6 +260,19 @@ impl Scene {
                 }
             }
         }
+        // Once for the whole subtree, not once a node: a panel of a thousand
+        // nodes let go with a few hundred behaviours was a few hundred
+        // thousand key comparisons, and several milliseconds of the turn
+        // that closed it.
+        let nodes = &self.nodes;
+        self.behaviors.retain(|key, _| nodes.contains_key(key.node));
+        self.animations
+            .retain(|key, _| nodes.contains_key(key.node));
+        self.physics.retain(|key, _| nodes.contains_key(key.node));
+        self.physics_specs
+            .retain(|key, _| nodes.contains_key(key.node));
+        self.paused_physics
+            .retain(|key| nodes.contains_key(key.node));
         self.retain_live_groups();
         Ok(())
     }

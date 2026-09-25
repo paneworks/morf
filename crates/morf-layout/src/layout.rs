@@ -4,6 +4,8 @@ use crate::helpers::reject_axis_conflict;
 
 use morf_scene::{Element, FastMap, NodeHandle, Scene};
 
+use crate::incremental::{Basis, Dirty, Local};
+
 use crate::attached::Attached;
 use crate::custom::{CustomLayout, NoCustom};
 use crate::distribute::align_across;
@@ -40,6 +42,16 @@ pub struct Layout {
     /// The first pass records those widths here; the second measures with
     /// them. Two passes, never more.
     pub(crate) text_widths: FastMap<NodeHandle, f64>,
+    /// What this layout was computed from, so the next can start from it.
+    pub(crate) basis: Option<Basis>,
+    /// The first of the two passes, when a second one ran: an incremental
+    /// update redoes both, each from its own last state.
+    pub(crate) first: Option<Box<Layout>>,
+    /// During a pass, which nodes it has to look at again; `None` for all.
+    pub(crate) dirty: Option<Dirty>,
+    /// How each node's position was worked out from its parent's, so a
+    /// subtree that has only moved can be moved without being laid out.
+    pub(crate) local: FastMap<NodeHandle, Local>,
 }
 
 /// Cached layout geometry used by native transform watchers.
@@ -79,20 +91,29 @@ impl Layout {
         text: &mut impl TextMeasurer,
         host: &mut dyn CustomLayout,
     ) -> Result<Self, LayoutError> {
+        let revision = scene.layout_revision();
         let mut layout = Self::default();
         layout.pass(scene, root, available, text, host)?;
         let constrained = layout.texts_to_remeasure(scene)?;
         if !constrained.is_empty() {
+            let first = layout.clone();
             layout.text_widths = constrained;
             layout.geometry.clear();
             layout.implicit.clear();
             layout.requested.clear();
+            layout.local.clear();
             layout.pass(scene, root, available, text, host)?;
+            layout.first = Some(Box::new(first));
         }
+        layout.basis = Some(Basis {
+            root,
+            available,
+            revision,
+        });
         Ok(layout)
     }
 
-    fn pass(
+    pub(crate) fn pass(
         &mut self,
         scene: &Scene,
         root: NodeHandle,
@@ -101,15 +122,12 @@ impl Layout {
         host: &mut dyn CustomLayout,
     ) -> Result<(), LayoutError> {
         self.measure_implicit(scene, root, text, host)?;
-        self.geometry.insert(
-            root,
-            Geometry {
-                width: available.width,
-                height: available.height,
-                ..Geometry::default()
-            },
-        );
-        self.resolve_children(scene, root, text, host)
+        let geometry = Geometry {
+            width: available.width,
+            height: available.height,
+            ..Geometry::default()
+        };
+        self.place(scene, root, geometry, text, host)
     }
 
     fn measure_implicit(
@@ -119,7 +137,40 @@ impl Layout {
         text: &mut impl TextMeasurer,
         host: &mut dyn CustomLayout,
     ) -> Result<Size, LayoutError> {
+        let status = self.status(scene, node)?;
+        let cached = self.implicit.get(&node).copied();
+        if !status.visit
+            && let Some(size) = cached
+        {
+            return Ok(size);
+        }
+        // A node that joined the tree since is new to this layout, and so
+        // is everything under it.
+        let forcing = status.fresh && !self.forcing();
+        if forcing {
+            self.force(true);
+        }
+        let size = self.measure_visited(scene, node, status.own, cached, text, host);
+        if forcing {
+            self.force(false);
+        }
+        size
+    }
+
+    fn measure_visited(
+        &mut self,
+        scene: &Scene,
+        node: NodeHandle,
+        own: bool,
+        cached: Option<Size>,
+        text: &mut impl TextMeasurer,
+        host: &mut dyn CustomLayout,
+    ) -> Result<Size, LayoutError> {
         let children = scene.children(node)?;
+        // Whether anything this node's own size is worked out from moved:
+        // its own properties, or a child's -- its position or visibility,
+        // or the size it asks for.
+        let mut moved = own || cached.is_none();
         let mut child_sizes = Vec::with_capacity(children.len());
         // What a positioner packs: the children it can show. An invisible
         // child keeps its own size, but a Row, Column or Grid gives it no
@@ -130,15 +181,32 @@ impl Layout {
             Element::Row | Element::Column | Element::Grid
         );
         for &child in children {
+            let status = self.status(scene, child)?;
             let implicit = self.measure_implicit(scene, child, text, host)?;
-            let requested = self.requested_size(scene, child, implicit)?;
-            self.requested.insert(child, requested);
+            let requested = match self.requested.get(&child) {
+                Some(&requested) if !status.visit => requested,
+                before => {
+                    let before = before.copied();
+                    let requested = self.requested_size(scene, child, implicit)?;
+                    self.requested.insert(child, requested);
+                    moved |= status.own || before != Some(requested);
+                    requested
+                }
+            };
             child_sizes.push(requested);
             if positioner && scene.bool_value(child, "visible")? {
                 shown_sizes.push(requested);
             }
         }
 
+        // Nothing it is sized from moved, so neither did its size -- except
+        // a flex root's, which Taffy works out from the whole subtree.
+        if !moved
+            && let Some(size) = cached
+            && !is_flex_root(scene, node)?
+        {
+            return Ok(size);
+        }
         if scene.element(node)? == Element::Custom {
             // Unconstrained here: the room on offer is whatever the node
             // asked for, or no limit. The place pass says what it got.
@@ -373,10 +441,12 @@ impl Layout {
         if parent_element == Element::Custom {
             return self.resolve_custom(scene, parent, parent_geometry, text, host);
         }
+        let mut inset = None;
         if parent_element == Element::ClipRect
             && scene.bool_value(parent, "content_inside_border")?
         {
             let border = scene.number(parent, "border_width")?.max(0.0);
+            inset = Some(border);
             parent_geometry.x += border;
             parent_geometry.y += border;
             parent_geometry.width = (parent_geometry.width - border * 2.0).max(0.0);
@@ -460,6 +530,14 @@ impl Layout {
         } else {
             None
         };
+        let scrolled = if parent_element == Element::Flickable {
+            Some((
+                scene.number(parent, "content_x")?,
+                scene.number(parent, "content_y")?,
+            ))
+        } else {
+            None
+        };
 
         // The grid cell the next shown child takes.
         let mut cell = 0;
@@ -523,17 +601,59 @@ impl Layout {
                 }
                 _ => {}
             }
-            geometry.x += parent_geometry.x;
-            geometry.y += parent_geometry.y;
-            if parent_element == Element::Flickable {
-                geometry.x -= scene.number(parent, "content_x")?;
-                geometry.y -= scene.number(parent, "content_y")?;
-            }
-            geometry.x += scene.number(child, "transition_x")?;
-            geometry.y += scene.number(child, "transition_y")?;
-            self.geometry.insert(child, geometry);
-            self.resolve_children(scene, child, text, host)?;
+            let local = Local::Placed {
+                x: geometry.x,
+                y: geometry.y,
+                inset,
+                scrolled,
+                transition: (
+                    scene.number(child, "transition_x")?,
+                    scene.number(child, "transition_y")?,
+                ),
+            };
+            let (x, y) = local.position(self.geometry[&parent]);
+            geometry.x = x;
+            geometry.y = y;
+            self.local.insert(child, local);
+            self.place(scene, child, geometry, text, host)?;
         }
         Ok(())
+    }
+
+    /// Gives `node` its geometry and places what is under it -- unless
+    /// nothing under it moved and it sits exactly where it did, when the
+    /// last layout's answer for the whole subtree still holds.
+    pub(crate) fn place(
+        &mut self,
+        scene: &Scene,
+        node: NodeHandle,
+        geometry: Geometry,
+        text: &mut impl TextMeasurer,
+        host: &mut dyn CustomLayout,
+    ) -> Result<(), LayoutError> {
+        let before = self.geometry.insert(node, geometry);
+        let status = self.status(scene, node)?;
+        if !status.visit
+            && let Some(before) = before
+        {
+            if before == geometry {
+                return Ok(());
+            }
+            // Moved, not resized, with nothing under it changed: everything
+            // under it moves with it, by the same arithmetic that put it
+            // where it was.
+            if before.width == geometry.width && before.height == geometry.height {
+                return self.move_children(scene, node, geometry);
+            }
+        }
+        let forcing = status.fresh && !self.forcing();
+        if forcing {
+            self.force(true);
+        }
+        let placed = self.resolve_children(scene, node, text, host);
+        if forcing {
+            self.force(false);
+        }
+        placed
     }
 }

@@ -50,7 +50,9 @@ mod shaders;
 mod targets;
 mod terminal_batch;
 mod textures;
+mod warm;
 
+pub use backend_init::opened_device_count;
 pub use backend_types::*;
 #[cfg(test)]
 mod backdrop_tests;

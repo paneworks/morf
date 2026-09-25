@@ -531,7 +531,7 @@ fn drive_surface(
                 &mut renderer,
                 &client,
                 state.primary_root,
-                Some(&state.layout),
+                Some(&mut state.layout),
             );
             slow(&name, "a frame", painting);
             match painted_frame {

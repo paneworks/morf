@@ -12,14 +12,38 @@ impl Scene {
     }
 
     /// Moves the layout revision, for the whole scene and for the tree
-    /// `node` is in now.
+    /// `node` is in now, and stamps `node` as changed.
     ///
     /// A move between trees changes both, so whatever moves a node calls this
     /// once before and once after.
+    ///
+    /// The stamp goes on the node itself (`own`) and on every ancestor
+    /// (`subtree`), in the one walk to the root the tree's revision needs
+    /// anyway, so an incremental layout can find what moved by descending
+    /// only into subtrees stamped since it was made.
     pub(crate) fn bump_layout(&mut self, node: NodeId) {
         self.layout_revision = self.layout_revision.wrapping_add(1);
+        let revision = self.layout_revision;
+        let Some(entry) = self.nodes.get_mut(node) else {
+            return;
+        };
+        entry.stamps.own = revision;
+        let mut current = node;
+        loop {
+            let entry = &mut self.nodes[current];
+            entry.stamps.subtree = revision;
+            match entry.parent {
+                Some(parent) => current = parent,
+                None => break,
+            }
+        }
+        self.root_revisions.insert(current, revision);
+    }
+
+    /// Records that the tree `node` is in lost a node just now.
+    pub(crate) fn mark_detached(&mut self, node: NodeId) {
         let root = self.root_id(node);
-        self.root_revisions.insert(root, self.layout_revision);
+        self.detached_revisions.insert(root, self.layout_revision);
     }
 
     /// The root of the tree a node is in: the node itself when it has no
@@ -29,6 +53,21 @@ impl Scene {
             node = parent;
         }
         node
+    }
+
+    /// When layout last had a reason to look at `node`; see [`LayoutStamps`].
+    pub fn layout_stamps(&self, node: NodeHandle) -> Result<LayoutStamps, SceneError> {
+        Ok(self.nodes[self.live(node)?].stamps)
+    }
+
+    /// The layout revision at which the tree `root` is in last lost a node,
+    /// removed or moved elsewhere; 0 if it never has.
+    ///
+    /// A layout of that tree made before this cannot be brought up to date
+    /// piecemeal: it still holds the geometry of nodes no longer there.
+    pub fn layout_detached_revision(&self, root: NodeHandle) -> u64 {
+        let root = self.root_id(root.id());
+        self.detached_revisions.get(&root).copied().unwrap_or(0)
     }
 
     /// How many times something layout reads has changed, anywhere.

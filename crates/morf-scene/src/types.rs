@@ -235,6 +235,11 @@ pub struct Scene {
     /// against the root of the tree it happened in, so a surface re-lays out
     /// only when its own tree moved; see [`Scene::layout_revision_of`].
     pub(crate) root_revisions: FastMap<NodeId, u64>,
+    /// The layout revision each tree last lost a node at, by its root: a
+    /// node removed, or moved out to somewhere else. An incremental layout
+    /// cannot tell which of the nodes it knows are gone, so a loss since it
+    /// was made sends it back to a whole pass.
+    pub(crate) detached_revisions: FastMap<NodeId, u64>,
     /// How fast motion runs: 1 is real time, 0 finishes everything at once.
     pub(crate) motion_scale: f64,
     /// See [`Scene::set_start_on_tick`].
@@ -289,6 +294,27 @@ pub(crate) struct Node {
     // a fresh Vec per call put hundreds of allocations in every frame.
     pub(crate) children: Vec<NodeHandle>,
     pub(crate) properties: FastMap<&'static str, PropertySlot>,
+    /// When layout last had a reason to look at this node, and at what.
+    pub(crate) stamps: LayoutStamps,
+}
+
+/// The layout revisions a node was last touched at, which is what lets a
+/// layout computed at one revision redo only what has moved since.
+///
+/// Each is a value of [`Scene::layout_revision`] at the time: a layout made
+/// at revision `r` knows a node is as it left it when all three are `<= r`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LayoutStamps {
+    /// Something layout reads on the node itself changed: a property, or
+    /// its list of children.
+    pub own: u64,
+    /// The node or something under it changed — the newest `own` in its
+    /// subtree, or its `attached`. A subtree whose `subtree` is old can be
+    /// taken from the last layout whole.
+    pub subtree: u64,
+    /// The node joined the tree it is in: nothing the last layout says
+    /// about it or anything under it can be trusted.
+    pub attached: u64,
 }
 
 #[derive(Clone, Copy)]
