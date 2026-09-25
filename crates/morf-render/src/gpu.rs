@@ -45,6 +45,10 @@ mod lcd_spans_tests;
 #[cfg(test)]
 mod lcd_tests;
 mod pipelines;
+mod present;
+#[cfg(test)]
+mod present_tests;
+mod present_wayland;
 mod shader_registry;
 mod shaders;
 mod targets;

@@ -149,7 +149,7 @@ impl WgpuBackend {
                 depth_or_array_layers: 1,
             },
         );
-        self.queue.submit(Some(encoder.finish()));
+        super::present::submit(&self.queue, Some(encoder.finish()), || {});
         let slice = buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {

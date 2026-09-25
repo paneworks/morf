@@ -1540,6 +1540,7 @@ dependencies = [
  "ash",
  "bytemuck",
  "kurbo",
+ "libc",
  "morf-image",
  "morf-layout",
  "morf-region",
@@ -1550,6 +1551,9 @@ dependencies = [
  "pollster",
  "raw-window-handle",
  "resvg",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
  "wgpu",
 ]
 
