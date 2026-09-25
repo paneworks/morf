@@ -71,6 +71,8 @@ mod field_tests;
 #[cfg(test)]
 mod inline_source_tests;
 #[cfg(test)]
+mod mask_tests;
+#[cfg(test)]
 mod partial_tests;
 #[cfg(test)]
 mod path_tests;

@@ -129,7 +129,14 @@ pub(crate) fn layers_keeping_pixels(
             None => Some(whole),
             Some(parent) => keeps.get(parent).copied().flatten(),
         };
-        let own = if layer.opacity < 1.0 || layer.blur > 0.0 || layer.shader.is_some() {
+        // An alpha mask changes every pixel it is composited through, and a
+        // mask's own pixels are read for their alpha alone.
+        let own = if layer.opacity < 1.0
+            || layer.blur > 0.0
+            || layer.shader.is_some()
+            || layer.alpha_mask.is_some()
+            || layer.mask_for.is_some()
+        {
             None
         } else {
             match &layer.mask {
