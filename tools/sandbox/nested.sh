@@ -244,13 +244,13 @@ if [ "$KIND" != caelestia ] && { [ "$KIND" != morf ] || [ -z "${MORF_CONFIG:-}" 
   sleep 1
   awww img "$WALLPAPER" --transition-type none >> \$OUT/awww.log 2>&1
 fi
+# Every shell gets the system's data dirs, as a login would have them --
+# not whatever a dev shell left in XDG_DATA_DIRS -- so a launcher lists the
+# installed applications, and the scratch data home first, as XDG says.
+export XDG_DATA_DIRS=/usr/local/share:/usr/share
 if [ "$KIND" = caelestia ]; then
   # caelestia paints its own wallpaper. Its Quickshell and Qt come from nix,
   # so it needs nix's GL driver too.
-  # The system's data dirs, as a login would have them -- not whatever a
-  # dev shell left in XDG_DATA_DIRS -- so the launcher lists the
-  # installed applications.
-  export XDG_DATA_DIRS=/usr/local/share:/usr/share
   . "$H/caelestia-env"
   \${NIXGL:-nixGLIntel} "\$QS" -p "$CAELESTIA" > \$OUT/shell.log 2>&1 &
   S=\$!
