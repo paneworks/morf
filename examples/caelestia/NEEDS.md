@@ -26,19 +26,7 @@ propagation. Or a `MouseArea { hover_through = true }` whose `hovered`
 ignores areas above it. The hit test already knows the answer; Lua can
 only approximate it.
 
-## 2. Optical size that changes advances
-
-The reference sets its text in Google Sans Flex, and Qt follows the face's
-`opsz` axis from the point size: small labels come out wider and more
-loosely spaced. At the same size ours are about 15 % narrower (a launcher
-description measures 330 px against the reference's 390 px). Variable axes
-now exist (`axes = { ... }`), and the port uses them for weights (`wght`)
-and filled icons (`FILL`), but an axis other than `wght` is applied where
-glyphs are drawn and "keeps the default advances", so `opsz` cannot give
-the wider setting. Needs `opsz` (ideally automatic from `font_size`, as
-CSS's `font-optical-sizing: auto` and Qt do) to reach shaping like `wght`.
-
-## 3. Opacity of one layer in a field
+## 2. Opacity of one layer in a field
 
 The reference fades a drawer's background in with its contents as it
 opens. The background here is a layer of the frame's field (so it can
@@ -59,3 +47,11 @@ layer's coverage scaled before it is composed with the others).
   layer declared after the shell's own surface covered it. They are now
   stacked by layer-shell layer (background, bottom, top, overlay), keeping
   declaration order within a layer (`crates/morf-cli`).
+- An axis other than `wght` reached only the rasteriser, so Google Sans
+  Flex's `opsz` could not widen small labels. Every axis is now shaped
+  (the vendored cosmic-text takes the axes), optical sizing is automatic
+  from the size in pixels as in CSS, and `kit.text` sets `opsz` to the size
+  in points (and `ROND` 25), as the reference's font builder does. The
+  Alacritty description, at the port's 15 px, measures 366 px where it
+  measured 333; at the reference's own `body.small` (12 pt, 16 px) it is
+  386 against the reference's 390.
