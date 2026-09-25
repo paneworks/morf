@@ -83,6 +83,7 @@ mod basic;
 mod custom;
 mod flex;
 mod hidden;
+mod incremental;
 mod text_input;
 mod transforms;
 mod views;

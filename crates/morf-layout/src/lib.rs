@@ -8,6 +8,7 @@ mod flex_style;
 mod geometry;
 mod helpers;
 mod hit;
+mod incremental;
 mod layout;
 mod reparent;
 mod resolve_containers;

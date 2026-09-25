@@ -162,4 +162,25 @@ impl Runtime {
         Layout::compute_with(&reactive.scene, root, available, text, &mut host)
             .map_err(|error| error.to_string())
     }
+
+    /// Brings `layout` up to date with the scene, redoing only what moved
+    /// since it was computed: [`Layout::update_with`]. The answer is the one
+    /// [`Runtime::compute_layout`] would give.
+    pub fn update_layout(
+        &mut self,
+        layout: &mut Layout,
+        root: NodeHandle,
+        available: Size,
+        text: &mut impl TextMeasurer,
+    ) -> Result<(), String> {
+        let reactive = self.reactive.borrow();
+        let mut host = LuaLayoutHost {
+            lua: &mut self.lua,
+            layouts: &reactive.custom_layouts,
+            limits: self.limits,
+        };
+        layout
+            .update_with(&reactive.scene, root, available, text, &mut host)
+            .map_err(|error| error.to_string())
+    }
 }
