@@ -26,6 +26,7 @@ mod scene_behavior;
 mod scene_default;
 mod scene_revision;
 mod schema;
+mod spline;
 mod terminal;
 mod types;
 
@@ -39,6 +40,7 @@ pub use hashing::*;
 pub use keyframes::*;
 pub use path_style::*;
 pub use rich_text::{MAX_SPANS, RichSpan, RichText};
+pub use spline::{MAX_SPLINE_SEGMENTS, MAX_SPLINES, intern_spline, spline_value};
 pub use terminal::*;
 pub use types::*;
 #[cfg(test)]

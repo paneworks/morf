@@ -7,6 +7,7 @@ use std::time::Duration;
 use morf_scene::Easing;
 use morf_services::{AuthMessageType, GreetdResponse};
 
+use crate::reactive_bindings::lua_to_scene;
 use crate::state::*;
 
 pub(crate) fn string_table<'gc>(
@@ -150,6 +151,34 @@ pub(crate) fn parse_easing<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Resu
     match value {
         LuaValue::Nil => Ok(Easing::Linear),
         LuaValue::String(value) => easing_named(&value.display_lossy().to_string()),
+        // A spline is read through the scene value it becomes, so a curve
+        // declared here and one a binding or a theme token hands back are
+        // checked by the same code.
+        LuaValue::Table(table) if !matches!(table.get_value(ctx, "spline"), LuaValue::Nil) => {
+            easing_from_scene(&lua_to_scene(ctx, value, 0)?)
+        }
+        // A theme token written as `{ spline = { ... } }`: a state keeps a
+        // nested table as a state of its own and the list in it as a model,
+        // so the points are read out of that model.
+        LuaValue::UserData(userdata) => {
+            let token = userdata
+                .downcast_static::<crate::state::StateToken>()
+                .map_err(
+                    |_| "easing must be a string, a cubic Bezier table or { spline = { ... } }",
+                )?;
+            let fields = token.fields.borrow();
+            let Some((_, model)) = fields.lists.get("spline") else {
+                return Err("an easing token must hold a `spline` list".to_owned());
+            };
+            let model = model.borrow();
+            let points = (0..model.len())
+                .map(|index| match model.get(index) {
+                    Some((_, morf_scene::Value::Number(value))) => Ok(*value),
+                    _ => Err("easing spline must be a list of numbers".to_owned()),
+                })
+                .collect::<Result<Vec<f64>, String>>()?;
+            Easing::spline(&points)
+        }
         LuaValue::Table(value) => {
             let read = |field| match value.get_value(ctx, field) {
                 LuaValue::Integer(value) => Ok(value as f64),
@@ -168,7 +197,9 @@ pub(crate) fn parse_easing<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Resu
                 y2: read("y2")?,
             })
         }
-        _ => Err("easing must be a string or cubic Bezier table".to_owned()),
+        _ => {
+            Err("easing must be a string, a cubic Bezier table or { spline = { ... } }".to_owned())
+        }
     }
 }
 
@@ -214,6 +245,19 @@ pub(crate) fn easing_from_scene(value: &morf_scene::Value) -> Result<Easing, Str
     match value {
         Value::Nil => Ok(Easing::Linear),
         Value::String(name) => easing_named(name),
+        Value::Map(fields) if fields.contains_key("spline") => {
+            let Some(Value::List(points)) = fields.get("spline") else {
+                return Err("easing spline must be a list of numbers".to_owned());
+            };
+            let points = points
+                .iter()
+                .map(|point| match point {
+                    Value::Number(value) => Ok(*value),
+                    _ => Err("easing spline must be a list of numbers".to_owned()),
+                })
+                .collect::<Result<Vec<f64>, String>>()?;
+            Easing::spline(&points)
+        }
         Value::Map(fields) => {
             let read = |field: &str| match fields.get(field) {
                 Some(Value::Number(value)) if value.is_finite() => Ok(*value),
@@ -231,6 +275,8 @@ pub(crate) fn easing_from_scene(value: &morf_scene::Value) -> Result<Easing, Str
                 y2: read("y2")?,
             })
         }
-        _ => Err("easing must be a string or cubic Bezier table".to_owned()),
+        _ => {
+            Err("easing must be a string, a cubic Bezier table or { spline = { ... } }".to_owned())
+        }
     }
 }

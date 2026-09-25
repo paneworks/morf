@@ -256,3 +256,44 @@ fn a_declared_behavior_does_not_animate_the_element_into_existence() {
     runtime.scene_mut().assign(node, "width", 100.0).unwrap();
     assert!(runtime.scene().is_animating(node, "width").unwrap());
 }
+
+#[test]
+fn a_spline_easing_is_accepted_wherever_a_curve_is() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "spline.lua",
+            br##"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local overshoot = { spline = { 0.2, 0, 0.3, 1.4, 0.6, 1.2, 0.75, 1.05, 0.9, 1, 1, 1 } }
+
+                -- Evaluated directly: through the joint exactly, above one.
+                local at_joint = morf.easing.value(overshoot, 0.6)
+                assert(math.abs(at_joint - 1.2) < 1e-6, "joint " .. at_joint)
+                assert(morf.easing.value(overshoot, 1) == 1, "ends at one")
+
+                -- Bad points are refused where they are written.
+                local ok = pcall(morf.easing.value, { spline = { 0.2, 0, 0.3, 1, 0.8, 1 } }, 0.5)
+                assert(not ok, "a spline that stops short of (1, 1) must be rejected")
+
+                -- On a behavior, and through a theme token.
+                local theme = morf.theme({ emphasized = overshoot })
+                ui.Item {
+                    width = 0,
+                    behavior = { width = { duration = 1000, easing = theme.emphasized, retarget = "restart" } },
+                }
+            "##,
+        )
+        .unwrap();
+    let node = runtime.scene().roots()[0];
+    runtime.scene_mut().assign(node, "width", 100.0).unwrap();
+    runtime.tick_animations(Duration::from_millis(600)).unwrap();
+    let width = runtime.scene().number(node, "width").unwrap();
+    assert!(
+        (width - 120.0).abs() < 0.05,
+        "the spline overshot to {width}"
+    );
+    runtime.tick_animations(Duration::from_millis(400)).unwrap();
+    assert_eq!(runtime.scene().number(node, "width").unwrap(), 100.0);
+}
