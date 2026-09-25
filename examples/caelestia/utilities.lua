@@ -492,6 +492,7 @@ local function toggle(t)
     },
     kit.icon(t.icon, 24, function() return on() and C.onPrimary or C.onSurfaceVariant end, {
       anchors = { center_in = true }, fill = t.fill or on,
+      behavior = { color = { duration = theme.duration.small } },
     }),
   }
   return area

@@ -30,7 +30,8 @@ local function notify()
   test.ipc("notify", "Download complete", "report.pdf has finished downloading", "normal", "Firefox")
   test.ipc("notify", "Battery low", "10% remaining, plug in the charger", "critical", "Battery")
   test.ipc("notify", "Alice", "are you coming tonight?", "normal", "Discord")
-  test.settle(7000)
+  test.advance(7000)
+  test.settle(500)
 end
 
 test.describe("caelestia drawers", function()
@@ -50,6 +51,12 @@ test.describe("caelestia drawers", function()
     test.settle(1500)
     test.click { id = "utilities-awake-switch" }
     film("utilities-switch", 16, 16)
+    test.settle(1000)
+    -- Off again, with the card settled (it shrinks after the thumb).
+    test.click { id = "utilities-awake-switch" }
+    film("utilities-switch-off", 16, 16)
+    test.settle(1000)
+    test.click { id = "utilities-awake-switch" }
     test.settle(1000)
     test.click { id = "utilities-toggle-dnd" }
     film("utilities-toggle", 16, 16)

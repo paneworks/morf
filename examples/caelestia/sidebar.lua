@@ -117,7 +117,7 @@ end
 
 -- A notification of an opened group: its summary and time, its body, and
 -- a dismiss and a copy button.
-local function item(n_of, k)
+local function item(n_of, k, tag)
   local function button(icon, id, action)
     return kit.hover(ui.MouseArea {
       id = id, width = 139, height = 30, cursor = "pointer",
@@ -148,8 +148,8 @@ local function item(n_of, k)
     },
     ui.Row {
       x = 10, y = 62, gap = 8,
-      button("close", "sidebar-dismiss-" .. k, function(n) notifs.forget(n.id) end),
-      button("content_copy", "sidebar-copy-" .. k, function(n)
+      button("close", "sidebar-dismiss-" .. tag, function(n) notifs.forget(n.id) end),
+      button("content_copy", "sidebar-copy-" .. tag, function(n)
         pcall(morf.clipboard.set, plain(n.body ~= "" and n.body or n.summary))
       end),
     },
@@ -167,7 +167,7 @@ local function group_row(i)
       return x and x.items[k] or nil
     end
     lines[k] = line(n_of, k, ROW_W - 66 - 16)
-    items[k] = item(n_of, k)
+    items[k] = item(n_of, k, i .. "-" .. k)
   end
   local shut = ui.Item { anchors = { fill = true }, visible = function() local x = g() return x ~= nil and not is_open(x.app) end, table.unpack(lines) }
   local open = ui.Item { anchors = { fill = true }, visible = function() local x = g() return x ~= nil and is_open(x.app) end, table.unpack(items) }
