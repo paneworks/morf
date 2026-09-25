@@ -71,13 +71,33 @@ fn open_with_dmabuf(
     ))
 }
 
+/// The one GPU instance of the process, which every backend opens its device
+/// through.
+///
+/// One per backend was what the Vulkan loader could not survive. Enumerating
+/// the physical devices of a fresh instance unloads the drivers that found
+/// none, and the loader edits its lists of instances and drivers as it does —
+/// while a device-level call from another thread, such as naming an object
+/// for the validation layer, walks those same lists to find its driver. Two
+/// outputs coming up at once, or the GPU tests run in parallel, crashed inside
+/// the loader. Destroying an instance edits the lists the same way. With one
+/// instance, made once and never destroyed, the drivers are sorted out once,
+/// before anything has a device to call through.
+fn shared_instance() -> wgpu::Instance {
+    static INSTANCE: std::sync::OnceLock<wgpu::Instance> = std::sync::OnceLock::new();
+    INSTANCE
+        .get_or_init(|| {
+            let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+            descriptor.backends = wgpu::Backends::VULKAN | wgpu::Backends::GL;
+            wgpu::Instance::new(descriptor)
+        })
+        .clone()
+}
+
 impl WgpuBackend {
     /// Selects a Vulkan or GLES adapter and creates an offscreen render target.
     pub async fn new(width: u32, height: u32) -> Result<Self, GpuError> {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::VULKAN | wgpu::Backends::GL;
-        let instance = wgpu::Instance::new(descriptor);
-        Self::initialize(instance, None, width, height).await
+        Self::initialize(shared_instance(), None, width, height).await
     }
 
     /// Creates a renderer presenting to an owned native window target.
@@ -85,9 +105,7 @@ impl WgpuBackend {
     where
         T: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
     {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::VULKAN | wgpu::Backends::GL;
-        let instance = wgpu::Instance::new(descriptor);
+        let instance = shared_instance();
         let surface = instance
             .create_surface(window)
             .map_err(|error| GpuError(format!("could not create GPU surface: {error}")))?;
