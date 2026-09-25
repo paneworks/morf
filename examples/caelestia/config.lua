@@ -45,6 +45,26 @@ return settings.open {
       weather_location = "",
       imperial = true,
     },
+    utilities = {
+      -- Where the recorder's recordings are listed from.
+      recordings = "~/Videos/Recordings",
+      -- What each action runs (`~/`, `$HOME` and `$DATE` expanded); an
+      -- empty list runs nothing.
+      commands = {
+        record_fullscreen = { "gpu-screen-recorder", "-w", "screen", "-f", "60",
+          "-o", "~/Videos/Recordings/recording_$DATE.mp4" },
+        record_region = { "sh", "-c", "gpu-screen-recorder -w region -region \"$(slurp -f '%wx%h+%x+%y')\" -f 60 -o \"$0\"",
+          "~/Videos/Recordings/recording_$DATE.mp4" },
+        record_stop = { "pkill", "-INT", "-f", "gpu-screen-recorder" },
+        mic_on = { "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "0" },
+        mic_off = { "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "1" },
+        settings = {},
+        -- Game mode on Hyprland: no animations, blur, gaps or rounding.
+        gamemode_on = { "hyprctl", "--batch",
+          "keyword animations:enabled 0; keyword decoration:blur:enabled 0; keyword general:gaps_in 0; keyword general:gaps_out 0; keyword decoration:rounding 0" },
+        gamemode_off = { "hyprctl", "reload" },
+      },
+    },
     session = {
       -- What each of the session menu's actions runs (`$USER` is the
       -- user's name).

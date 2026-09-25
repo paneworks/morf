@@ -59,6 +59,8 @@ local session = require("session")
 require("popouts")
 local osd = require("osd")
 local notifs = require("notifs")
+local utilities = require("utilities")
+local sidebar = require("sidebar")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -126,15 +128,17 @@ end
 morf.ipc.launcher = verb(launcher.drawer)
 morf.ipc.dashboard = verb(dashboard.drawer)
 morf.ipc.session = verb(session.drawer)
+morf.ipc.sidebar = verb(sidebar.drawer)
+morf.ipc.utilities = verb(utilities.drawer)
 morf.ipc.workspace = function(n)
   require("services").workspace.go(n)
   return require("services").workspace.active()
 end
 morf.ipc.osd = function() osd.flash() return true end
--- `notify SUMMARY [BODY [critical]]` raises a notification of the shell's
--- own, as the reference's toaster does.
-morf.ipc.notify = function(summary, body, urgency)
-  return notifs.push { summary = summary, body = body, urgency = urgency == "critical" and 2 or 1 }
+-- `notify SUMMARY [BODY [critical|normal [APP]]]` raises a notification of
+-- the shell's own, as the reference's toaster does.
+morf.ipc.notify = function(summary, body, urgency, app)
+  return notifs.push { summary = summary, body = body, urgency = urgency == "critical" and 2 or 1, app = app }
 end
 -- `popout NAME` opens the bar's popout NAME (network, bluetooth, power);
 -- `popout` alone shuts it.

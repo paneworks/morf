@@ -413,6 +413,126 @@ test.describe("caelestia", function()
     test.falsy(shown("notifications"))
   end)
 
+  test.it("opens and closes the utilities over IPC", function()
+    load()
+    test.falsy(shown("utilities"))
+    test.eq(test.ipc("utilities", "open"), true)
+    test.settle(1500)
+    test.truthy(shown("utilities"))
+    local d = drawer("utilities")
+    -- On the frame's bottom right corner, the reference's size.
+    test.near(d.x + d.width, W - 10, 1)
+    test.near(d.y + d.height, H - 10, 1)
+    test.eq(d.width, 430)
+    test.near(d.height, 451, 1)
+    test.truthy(test.find { id = "utilities-awake", visible = true })
+    test.truthy(test.find { id = "utilities-recorder", visible = true })
+    test.truthy(test.find { id = "utilities-toggles", visible = true })
+    test.truthy(test.find { text = "No recordings found", visible = true })
+    test.eq(test.ipc("drawers"), "utilities")
+    test.snapshot("caelestia-utilities.png", { surface = "screen" })
+    test.eq(test.ipc("utilities", "close"), false)
+    test.settle(1500)
+    test.falsy(shown("utilities"))
+  end)
+
+  test.it("runs none of the utilities' actions in a dry run", function()
+    load()
+    test.ipc("utilities", "open")
+    test.settle(1500)
+    test.clear_logs()
+    -- Keep awake: the card grows by the "Active since" chip.
+    test.click { id = "utilities-awake-switch" }
+    test.settle(1000)
+    test.near(test.get({ id = "utilities-awake" }).height, 128, 1)
+    test.truthy(test.find { id = "utilities-awake-chip", visible = true })
+    test.near(drawer("utilities").height, 493, 1)
+    test.click { id = "utilities-record" }
+    test.settle(500)
+    test.truthy(test.find { text = "Stop", visible = true }, "not recording")
+    test.click { id = "utilities-record" }
+    test.click { id = "utilities-toggle-mic" }
+    test.click { id = "utilities-toggle-gamemode" }
+    test.click { id = "utilities-toggle-settings" }
+    test.settle(500)
+    local said = {}
+    for _, l in ipairs(test.logs("info")) do said[#said + 1] = l.message end
+    said = table.concat(said, "\n")
+    test.truthy(said:find("keep awake on (dry run)", 1, true), "keep awake did not log")
+    test.truthy(said:find("utilities record_fullscreen (dry run): gpu-screen-recorder", 1, true), said)
+    test.truthy(said:find("utilities record_stop (dry run)", 1, true))
+    test.truthy(said:find("utilities mic_off (dry run)", 1, true))
+    test.truthy(said:find("utilities gamemode_on (dry run)", 1, true))
+    test.eq(#test.runs(), 0)
+    -- Do not disturb: a notification reaches the history, not a popup.
+    test.click { id = "utilities-toggle-dnd" }
+    test.ipc("notify", "Quiet", "no popup for this")
+    test.settle(1000)
+    test.falsy(shown("notifications"))
+    test.eq(#test.logs("error"), 0)
+  end)
+
+  test.it("opens the sidebar with the utilities under it, and closes both", function()
+    load()
+    test.eq(test.ipc("sidebar", "open"), true)
+    test.settle(1500)
+    test.truthy(shown("sidebar"))
+    test.truthy(shown("utilities"), "the utilities did not open with it")
+    local s, u = drawer("sidebar"), drawer("utilities")
+    -- From the frame's top edge down to the utilities, one column.
+    test.near(s.y, 10, 1)
+    test.near(s.x + s.width, W - 10, 1)
+    test.near(s.y + s.height, u.y, 1)
+    test.eq(s.x, u.x)
+    test.eq(test.get({ id = "sidebar-title" }).text, "Notifications")
+    test.truthy(test.find { id = "sidebar-empty-label", visible = true })
+    test.falsy(test.find { id = "sidebar-clear", visible = true })
+    test.snapshot("caelestia-sidebar.png", { surface = "screen" })
+    test.eq(test.ipc("sidebar", "close"), false)
+    test.settle(1500)
+    test.falsy(shown("sidebar"))
+    test.falsy(shown("utilities"))
+    test.eq(test.ipc("drawers"), "")
+  end)
+
+  test.it("keeps the notifications in the sidebar after their popups go, and clears them", function()
+    load()
+    test.ipc("notify", "Download complete", "report.pdf has finished downloading", "normal", "Firefox")
+    test.ipc("notify", "Second one", "another from firefox", "normal", "Firefox")
+    test.ipc("notify", "Alice", "are you coming tonight?", "normal", "Discord")
+    test.advance(7000)
+    test.settle(1000)
+    test.falsy(shown("notifications"), "the popups did not expire")
+    test.ipc("sidebar", "open")
+    test.settle(1500)
+    test.eq(test.get({ id = "sidebar-title" }).text, "3 notifications")
+    -- Grouped by application, the newest group on top.
+    test.eq(test.get({ id = "sidebar-group-app-1" }).text, "Discord")
+    test.eq(test.get({ id = "sidebar-group-app-2" }).text, "Firefox")
+    test.falsy(test.find { id = "sidebar-group-3", visible = true })
+    test.near(test.get({ id = "sidebar-group-1" }).height, 68, 1)
+    test.near(test.get({ id = "sidebar-group-2" }).height, 90, 1)
+    test.falsy(test.find { id = "sidebar-empty-label", visible = true })
+    test.snapshot("caelestia-sidebar-notifications.png", { surface = "screen" })
+    -- A group opens out to its notifications; one is dismissed from there.
+    test.click { id = "sidebar-group-expand-2" }
+    test.settle(1000)
+    test.truthy(test.get({ id = "sidebar-group-2" }).height > 200)
+    test.click { id = "sidebar-dismiss-2-1" }
+    test.settle(1000)
+    test.eq(test.get({ id = "sidebar-title" }).text, "2 notifications")
+    -- Clear all.
+    test.click { id = "sidebar-clear" }
+    test.settle(1500)
+    test.eq(test.get({ id = "sidebar-title" }).text, "Notifications")
+    test.truthy(test.find { id = "sidebar-empty-label", visible = true })
+    -- No popups while it is open.
+    test.ipc("notify", "Hidden", "under the sidebar")
+    test.settle(1000)
+    test.falsy(shown("notifications"))
+    test.eq(#test.logs("error"), 0)
+  end)
+
   test.it("shows the OSD on asking and shuts it after a while", function()
     load()
     test.falsy(shown("osd"))

@@ -25,6 +25,36 @@ local TOP, BOTTOM, LEFT = 6, 16, 15
 local MAX = 5
 
 M.list = morf.signal("caelestia.notifications", {})
+-- Every notification that came in, oldest first, until it is dismissed from
+-- the sidebar or cleared there: the popups go when they expire, the
+-- history stays. Each entry is a copy with `time` (seconds, when it came).
+M.history = morf.signal("caelestia.notifications.history", {})
+-- Do not disturb: notifications still reach the history, but no popup.
+M.dnd = morf.signal("caelestia.notifications.dnd", false)
+-- True while the sidebar is open (sidebar.lua sets it).
+M.covered = morf.signal("caelestia.notifications.covered", false)
+
+local seen = {}
+local function remember(n)
+  local list = M.history:get()
+  local out, replaced = {}, false
+  for i, e in ipairs(list) do
+    if e.id == n.id then
+      out[i] = n
+      replaced = true
+    else
+      out[i] = e
+    end
+  end
+  if not replaced then out[#out + 1] = n end
+  M.history:set(out)
+end
+local function record_of(n)
+  return {
+    id = n.id, app = n.app or "", summary = n.summary or "", body = n.body or "",
+    urgency = n.urgency or 1, icon = n.icon or "", time = morf.time.now(),
+  }
+end
 -- Which popups are opened out to their whole body.
 local open_ids = morf.signal("caelestia.notifications.open", {})
 
@@ -35,7 +65,13 @@ do
     local ok2, s = pcall(lib.serve, {
       on_change = function(list)
         local copy = {}
-        for i, n in ipairs(list) do copy[i] = n end
+        for i, n in ipairs(list) do
+          copy[i] = n
+          if not seen[n.id] and not n.transient then
+            seen[n.id] = true
+            remember(record_of(n))
+          end
+        end
         M.list:set(copy)
       end,
     })
@@ -57,6 +93,7 @@ function M.push(entry)
   for _, e in ipairs(M.list:get()) do list[#list + 1] = e end
   list[#list + 1] = n
   M.list:set(list)
+  remember(record_of(n))
   if n.urgency < 2 then morf.timer(entry.timeout_ms or 5000, function() M.dismiss(n.id) end, false) end
   return n.id
 end
@@ -68,6 +105,26 @@ function M.dismiss(id)
     if e.id ~= id then list[#list + 1] = e end
   end
   M.list:set(list)
+end
+
+--- Takes notification `id` out of the history (and its popup with it).
+function M.forget(id)
+  local out = {}
+  for _, e in ipairs(M.history:get()) do
+    if e.id ~= id then out[#out + 1] = e end
+  end
+  M.history:set(out)
+  for _, e in ipairs(M.list:get()) do
+    if e.id == id then M.dismiss(id) break end
+  end
+end
+
+--- Empties the history (and shuts every popup).
+function M.clear()
+  local ids = {}
+  for _, e in ipairs(M.list:get()) do ids[#ids + 1] = e.id end
+  for _, id in ipairs(ids) do M.dismiss(id) end
+  M.history:set({})
 end
 
 local function shown()
@@ -269,8 +326,9 @@ M.drawer = drawer.new {
   props = { anchors = { top = true, right = true } },
 }
 
+-- No popups while the sidebar shows the history, nor in do not disturb.
 morf.effect("caelestia.notifications.shown", function()
-  M.drawer.set(#M.list:get() > 0)
+  M.drawer.set(#M.list:get() > 0 and not M.covered:get() and not M.dnd:get())
 end)
 
 return M
