@@ -94,6 +94,8 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
             .animation_callbacks
             .retain(|(owner, _), _| owner != node);
         state.loaded_loaders.remove(node);
+        state.dormant_loaders.remove(node);
+        state.preload_pending.remove(node);
         state.node_loops.remove(node);
         state.terminals.remove(*node);
         state.images.remove(*node);

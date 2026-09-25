@@ -551,6 +551,28 @@ ui.Item {
 }
 ```
 
+### Loader
+
+`ui.Loader { active = ..., source = function() return node end }` builds
+its item by calling `source` when `active` turns true, and destroys it when
+`active` turns false. Two properties change when that work happens:
+
+- `keep = true`: let go, the item is hidden (its `visible` set false) rather
+  than destroyed, and shown again as it was the next time `active` turns
+  true. Its bindings keep running while it is hidden.
+- `preload = true`: while `active` is false, the item is built ahead of
+  time -- one Loader per turn, only while nothing animates (or once it has
+  waited 1.5 s for that) -- and held hidden. Turning `active` true shows it
+  without calling `source`. Without `keep` it is still destroyed when let
+  go, and the next one is built ahead the same way, so each opening gets a
+  fresh item and pays nothing for it. A `source` that fails while
+  preloading turns `preload` off and is left to fail where it is asked for.
+
+A preloaded or kept item's root `visible` belongs to the Loader. It is laid
+out while hidden, so its text is shaped, and the renderer makes its glyphs
+while the shell is idle: the frame that shows it has nothing left to do but
+draw.
+
 ### Destruction
 
 A node is destroyed when a `Loader` lets it go, when its `Repeater` row

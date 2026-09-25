@@ -382,6 +382,15 @@ pub(crate) fn paint_layer(
     if damage.is_empty() {
         client.commit_layer(layer);
     }
+    // After the frame is on its way, and only when nothing moves: text laid
+    // out but hidden -- a preloaded panel -- gets its glyphs made now, so
+    // the frame that shows it does not spend its time on them.
+    if fresh && !runtime.has_motion() {
+        renderer
+            .backend_mut()
+            .warm_hidden_text(&scene, &layout, root, scale_120);
+        split.mark("warm hidden text");
+    }
     drop(scene);
     // After the render: what the images became is known once they were drawn.
     runtime.sync_images(&layout, renderer.backend_mut().image_cache());

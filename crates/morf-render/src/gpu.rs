@@ -50,6 +50,7 @@ mod shaders;
 mod targets;
 mod terminal_batch;
 mod textures;
+mod warm;
 
 pub use backend_types::*;
 #[cfg(test)]
