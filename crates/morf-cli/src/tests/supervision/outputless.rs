@@ -380,3 +380,46 @@ fn a_reload_while_outputless_says_whether_it_still_wants_to_be() {
     assert_eq!(said, (OUTPUTLESS.to_owned(), false));
     stop_workers(workers);
 }
+
+#[test]
+fn going_dark_hands_over_what_the_primary_output_kept() {
+    // Each output keeps its own values; only the primary one's differ here.
+    // B, not primary, stops after A in name order, and used to leave its
+    // own for the outputless runtime.
+    let source = format!(
+        "{SHELL}\n morf.ipc.mine = function() if morf.primary() then count:set(10) end end"
+    );
+    let handover = Handover::default();
+    let (tx, _rx) = mpsc::channel();
+    let started = Started::default();
+    let mut spawn = spawner(&source, &handover, &tx, &started);
+    let mut workers = BTreeMap::new();
+    let mut primary = None;
+    reconcile_with(
+        &mut workers,
+        &named(&[output("A", 0), output("B", 800)]),
+        &handover,
+        &mut primary,
+        &mut spawn,
+    );
+    assert_eq!(primary.as_deref(), Some("A"));
+    for worker in workers.values() {
+        let (reply, answer) = mpsc::sync_channel(1);
+        worker
+            .commands
+            .send(WorkerCommand::Call {
+                target: "mine".to_owned(),
+                args: Vec::new(),
+                reply,
+            })
+            .unwrap();
+        answer
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+    }
+    let dark = desired_workers(BTreeMap::new(), Outputless::Wanted);
+    reconcile_with(&mut workers, &dark, &handover, &mut primary, &mut spawn);
+    assert_eq!(integer(call(&workers, "bump")), 11);
+    stop_workers(workers);
+}

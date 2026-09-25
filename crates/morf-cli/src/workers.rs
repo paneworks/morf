@@ -199,11 +199,15 @@ pub(crate) fn reconcile_with(
 ) {
     let was_outputless = workers.contains_key(OUTPUTLESS);
     let crossing = workers.is_empty() || was_outputless != desired.contains_key(OUTPUTLESS);
-    let stale = workers
+    let mut stale = workers
         .iter()
         .filter(|(name, worker)| desired.get(*name) != Some(&worker.screen))
         .map(|(name, _)| name.clone())
         .collect::<Vec<_>>();
+    // The primary goes last, so its values are the ones handed over: every
+    // output keeps its own, and one still behind on a verb the others heard
+    // would otherwise leave older ones for whatever starts next.
+    stale.sort_by_key(|name| primary.as_deref() == Some(name.as_str()));
     for name in stale {
         let worker = workers.remove(&name).expect("worker key is present");
         worker.request_stop();
