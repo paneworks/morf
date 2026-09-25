@@ -46,21 +46,6 @@ binding by its user after the fact.
 **API.** Accept a function wherever the constructor does (install it as
 the constructor would), or `node:bind(property, fn)`.
 
-## 5. Key names in `on_key_pressed`
-
-**What.** `on_key_pressed(keysym, ...)` is handed the X keysym as a
-number (65364 for Down), while `test.key` takes names and the docs write
-keys by name. Phase 1's launcher compared with `"Up"`/`"Down"`, so its
-arrow keys never did anything and no test noticed; phase 2 found it with
-the session menu.
-
-**Workaround.** `kit.KEY`/`kit.is_key` map the few names the port uses to
-their numbers.
-
-**API.** Hand the name too (`on_key_pressed(keysym, text, modifiers,
-repeat, name)`), or a `morf.keys.Down`-style table, so configurations do
-not carry keysym tables.
-
 ## 6. Watching the scheme change (not an engine gap)
 
 The reference's scheme and light/dark switches go through its own CLI,
@@ -100,3 +85,7 @@ its new value) would do it in one place.
   Alacritty description, at the port's 15 px, measures 366 px where it
   measured 333; at the reference's own `body.small` (12 pt, 16 px) it is
   386 against the reference's 390.
+- Key names: handlers are handed the key's X name as a fifth argument
+  (`on_key_pressed(keysym, text, modifiers, repeat, name)`), and
+  `morf.keys.Down` is its keysym; the port compares names and its keysym
+  table is gone (crates/morf-lua `keys`).

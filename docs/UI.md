@@ -1136,7 +1136,7 @@ Methods:
 
 Keys go to the program — it is the terminal's while it has the keyboard,
 Tab and Escape included — unless the terminal's own
-`on_key_pressed(keysym, text, modifiers, repeat)` returns `true`, which
+`on_key_pressed(keysym, text, modifiers, repeat, name)` returns `true`, which
 keeps that key from the program (a panel's Escape, a copy shortcut); any
 other return lets it through. They are encoded as xterm does: the arrows,
 Home/End, PageUp/PageDown, Insert/Delete and F1–F12 with their modifier
@@ -1380,10 +1380,14 @@ puts one on every edge, opened over IPC.
 
 A node with `on_key_pressed` or `on_key_released` is somewhere keys can
 go: the focused one of its surface (a click, a Tab, `focus = true`), or
-else the first. `on_key_pressed(keysym, text, modifiers, repeat)` runs
-for a press and for each of the keyboard's repeats of a held key, and
-`repeat` says which it is; `on_key_released(keysym, text, modifiers)`
-runs when the key comes up, on whatever has focus by then. Something that
+else the first. `on_key_pressed(keysym, text, modifiers, repeat, name)`
+runs for a press and for each of the keyboard's repeats of a held key, and
+`repeat` says which it is; `on_key_released(keysym, text, modifiers, nil,
+name)` runs when the key comes up, on whatever has focus by then. `name`
+is the key's X name (`"Down"`, `"Return"`, `"Escape"`, `"BackSpace"`,
+`"Page_Up"`, `"F5"`, `"space"`, a character for a printable key), so a
+handler compares names rather than numbers; `morf.keys` has every named
+key's keysym (`keysym == morf.keys.Down`). Something that
 moves while a key is held — a game, a scrubber — tracks the press and the
 release and ignores the repeats:
 

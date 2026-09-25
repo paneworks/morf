@@ -54,6 +54,7 @@ mod events;
 mod image_jobs;
 mod images;
 mod ipc_table;
+pub mod keys;
 mod layer_parse;
 mod layout_host;
 mod lua_values;

@@ -295,12 +295,13 @@ fn key_handlers_hear_repeats_and_releases() {
                 local function note(entry) log:set(log:get() .. entry .. ";") end
                 ui.Item {
                     ui.MouseArea {
-                        on_key_pressed = function(keysym, text, modifiers, repeat_)
+                        on_key_pressed = function(keysym, text, modifiers, repeat_, name)
                             note("down " .. keysym .. " " .. tostring(text) .. " "
-                                .. modifiers .. " " .. tostring(repeat_))
+                                .. modifiers .. " " .. tostring(repeat_) .. " " .. tostring(name))
                         end,
-                        on_key_released = function(keysym, text, modifiers, extra)
-                            note("up " .. keysym .. " " .. modifiers .. " " .. tostring(extra))
+                        on_key_released = function(keysym, text, modifiers, extra, name)
+                            note("up " .. keysym .. " " .. modifiers .. " " .. tostring(extra)
+                                .. " " .. tostring(name))
                         end,
                     },
                     ui.MouseArea {
@@ -322,10 +323,15 @@ fn key_handlers_hear_repeats_and_releases() {
     assert!(runtime.dispatch_key(children[0], 65, Some("A"), shift));
     assert!(runtime.dispatch_key_press(children[0], 65, Some("A"), shift, true));
     assert!(runtime.dispatch_key_release(children[0], 65, Some("A"), KeyModifiers::default()));
+    // A key's name comes fifth, the X name `morf.keys` has it under.
+    assert!(runtime.dispatch_key_press(children[0], 0xff54, None, KeyModifiers::default(), false));
     assert_eq!(
         runtime.scene().string_value(children[2], "text").unwrap(),
-        "down 65 A shift false;down 65 A shift true;up 65  nil;"
+        "down 65 A shift false A;down 65 A shift true A;up 65  nil A;down 65364 nil  false Down;"
     );
+    runtime
+        .execute("keys.lua", br#"assert(morf.keys.Down == 65364 and morf.keys.Return == 65293 and morf.keys.F5 == 65474)"#)
+        .unwrap();
     assert_eq!(runtime.key_target_for_node(children[1]), Some(children[1]));
     // A node with no release handler takes a release without complaint.
     assert!(!runtime.dispatch_key_release(children[2], 65, None, KeyModifiers::default()));

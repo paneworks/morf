@@ -3,7 +3,7 @@
 -- frames can be laid side by side (target/p2tmp/strip.sh does). Only useful
 -- with snapshots on:
 --
---     nixVulkanIntel morf test --no-dbus --snapshots DIR examples/tests/caelestia_motion_spec.lua
+--     nixVulkanIntel morf test --no-dbus --snapshots DIR tools/films/caelestia_motion_spec.lua
 
 local test = morf.test
 
@@ -11,7 +11,7 @@ local W, H = 1920, 1080
 
 local function load()
   for _, program in ipairs { "systemctl", "loginctl" } do test.stub_run(program, { code = 0 }) end
-  test.load("../caelestia/init.lua", {
+  test.load("../../examples/caelestia/init.lua", {
     size = { W, H },
     env = { CAELESTIA_WALLPAPER = "", CAELESTIA_FONT_FILE = "", CAELESTIA_DRY_RUN = "1" },
   })

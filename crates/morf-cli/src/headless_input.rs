@@ -138,46 +138,21 @@ impl Headless {
 /// `F5`), a few friendlier spellings (`Enter`, `Esc`), and any single
 /// character, whose keysym is its code point the way X assigns them.
 pub(crate) fn keysym(name: &str) -> Option<(u32, Option<String>)> {
-    let named = match name {
-        "Return" | "Enter" | "return" | "enter" => Some((0xff0d, Some("\r"))),
-        "Escape" | "Esc" | "escape" | "esc" => Some((0xff1b, None)),
-        "Tab" | "tab" => Some((0xff09, Some("\t"))),
-        "ISO_Left_Tab" => Some((0xfe20, None)),
-        "BackSpace" | "Backspace" | "backspace" => Some((0xff08, None)),
-        "Delete" | "delete" => Some((0xffff, None)),
-        "Insert" | "insert" => Some((0xff63, None)),
-        "Home" | "home" => Some((0xff50, None)),
-        "End" | "end" => Some((0xff57, None)),
-        "Left" | "left" => Some((0xff51, None)),
-        "Up" | "up" => Some((0xff52, None)),
-        "Right" | "right" => Some((0xff53, None)),
-        "Down" | "down" => Some((0xff54, None)),
-        "Page_Up" | "PageUp" | "pageup" => Some((0xff55, None)),
-        "Page_Down" | "PageDown" | "pagedown" => Some((0xff56, None)),
-        "space" | "Space" => Some((0x20, Some(" "))),
-        _ => None,
+    let keysym = morf_lua::keys::keysym(name)?;
+    // What the key types, as a keyboard's would.
+    let text = match keysym {
+        0xff0d => Some("\r".to_owned()),
+        0xff09 => Some("\t".to_owned()),
+        0x20 => Some(" ".to_owned()),
+        _ => {
+            let mut chars = name.chars();
+            match (chars.next(), chars.next()) {
+                (Some(only), None) => Some(only.to_string()),
+                _ => None,
+            }
+        }
     };
-    if let Some((keysym, text)) = named {
-        return Some((keysym, text.map(str::to_owned)));
-    }
-    if let Some(number) = name
-        .strip_prefix('F')
-        .and_then(|rest| rest.parse::<u32>().ok())
-        .filter(|number| (1..=35).contains(number))
-    {
-        return Some((0xffbe + number - 1, None));
-    }
-    let mut chars = name.chars();
-    let (Some(only), None) = (chars.next(), chars.next()) else {
-        return None;
-    };
-    let code = only as u32;
-    let keysym = if (0x20..=0x7e).contains(&code) || (0xa0..=0xff).contains(&code) {
-        code
-    } else {
-        0x0100_0000 + code
-    };
-    Some((keysym, Some(only.to_string())))
+    Some((keysym, text))
 }
 
 /// Reads the modifier names a key is pressed with.

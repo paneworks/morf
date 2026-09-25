@@ -180,11 +180,10 @@ local keys = ui.TextInput {
   width = 1, height = 1, opacity = 0,
   on_escape = function() M.drawer.set(false) end,
   on_accepted = function() M.run(order[M.focus:get()]) end,
-  on_key_pressed = function(keysym)
+  on_key_pressed = function(_, _, _, _, key)
     local n = #order
-    local key = kit.is_key
-    if key(keysym, "Up") or key(keysym, "ISO_Left_Tab") then M.focus:set((M.focus:get() - 2) % n + 1) return true end
-    if key(keysym, "Down") or key(keysym, "Tab") then M.focus:set(M.focus:get() % n + 1) return true end
+    if key == "Up" or key == "ISO_Left_Tab" then M.focus:set((M.focus:get() - 2) % n + 1) return true end
+    if key == "Down" or key == "Tab" then M.focus:set(M.focus:get() % n + 1) return true end
     return true
   end,
 }

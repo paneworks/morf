@@ -134,6 +134,7 @@ pub(crate) fn install_reactive_api(
         crate::api_fs::install_fs_api(ctx, morf, Rc::clone(&state));
         crate::api_watch::install_watch_api(ctx, Rc::clone(&state), morf, limits);
         crate::api_date::install_date_api(ctx, morf);
+        crate::keys::install_keys_api(ctx, morf);
         crate::api_encoding::install_encoding_api(ctx, morf);
         crate::api_text::install_text_api(ctx, morf);
         crate::api_encoding::install_archive_api(ctx, morf);

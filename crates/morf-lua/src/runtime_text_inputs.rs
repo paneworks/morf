@@ -340,8 +340,9 @@ fn key_args(
         text.map_or(IpcValue::Nil, |value| IpcValue::String(value.to_owned())),
         IpcValue::String(modifiers.name()),
     ];
-    if let Some(repeat) = repeat {
-        args.push(IpcValue::Boolean(repeat));
-    }
+    // The key's name comes fifth for a press and a release alike: after
+    // whether it repeats, which a release does not say.
+    args.push(repeat.map_or(IpcValue::Nil, IpcValue::Boolean));
+    args.push(crate::keys::name(keysym).map_or(IpcValue::Nil, IpcValue::String));
     args
 }
