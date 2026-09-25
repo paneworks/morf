@@ -39,6 +39,20 @@ test.describe("font axes", function()
     test.eq({ during.width, during.height }, { before.width, before.height })
   end)
 
+  test.it("sets a wider wdth wider, and small text at its own optical size", function()
+    local narrow = test.find { id = "wdth-50" }
+    if not narrow then
+      test.note("no face with a wdth axis here (FONT_AXES_FLEX=path names one)")
+      return
+    end
+    local normal, wide = test.get { id = "wdth-100" }, test.get { id = "wdth-151" }
+    test.truthy(narrow.width < normal.width and normal.width < wide.width,
+      ("widths %.1f, %.1f, %.1f"):format(narrow.width, normal.width, wide.width))
+    local auto, none = test.get { id = "optical-auto" }, test.get { id = "optical-none" }
+    test.truthy(math.abs(auto.width - none.width) > 1,
+      ("optical sizing moves the line: %.1f against %.1f"):format(auto.width, none.width))
+  end)
+
   test.it("draws the selection filling in, where there is a GPU", function()
     test.ipc("select", 3)
     local drawn, where
