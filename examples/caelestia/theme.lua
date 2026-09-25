@@ -67,8 +67,10 @@ if M.font_file ~= "" and not morf.fs.exists(M.font_file) then M.font_file = "" e
 M.icon_font = "Material Symbols Rounded"
 M.mono = "CaskaydiaCove Nerd Font, JetBrainsMono Nerd Font, monospace"
 
+-- In pixels. The reference sets type in points, which Qt draws at 4/3 of
+-- a pixel each on a 96 dpi screen: these are its sizes as they land.
 M.size = {
-  small = 11, smaller = 12, normal = 13, larger = 15, large = 18, extra = 28,
+  small = 14, smaller = 15, normal = 16, larger = 17.5, large = 20, extra = 30,
 }
 
 -- ------------------------------------------------------------------ sizes --

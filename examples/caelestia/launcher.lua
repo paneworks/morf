@@ -95,10 +95,10 @@ local function delegate(entry)
       align = "center",
       row_icon(row),
       ui.Column {
-        gap = 1,
+        gap = 3,
         kit.text { text = row.name, font_size = theme.size.larger, color = function() return C.onSurface end },
         kit.text {
-          text = row.description, font_size = theme.size.normal,
+          text = row.description, font_size = theme.size.smaller,
           color = function() return C.onSurfaceVariant end,
           width = WIDTH - 2 * PAD - 80, elide = "right",
         },
@@ -133,7 +133,7 @@ field = ui.TextInput {
   id = "launcher-search",
   x = 48, width = WIDTH - 2 * PAD - 48 - 44, height = SEARCH,
   vertical_alignment = "center",
-  font_family = theme.font, font_size = theme.size.larger,
+  font_family = theme.font, font_size = theme.size.normal,
   color = function() return C.onSurface end,
   placeholder = 'Type ">" for commands',
   placeholder_color = function() return C.onSurfaceVariant end,

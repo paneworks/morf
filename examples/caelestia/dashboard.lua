@@ -188,77 +188,76 @@ local function user_card()
   local sysinfo = require("lib.sysinfo")
   local face = morf.fs.home() .. "/.face"
   local has_face = morf.fs.exists(face)
+  local AV = 100
   local avatar = ui.Item {
-    width = 80, height = 80,
+    x = 43, y = 16, width = AV, height = AV,
     ui.Rect {
-      anchors = { fill = true }, radius = 40,
+      anchors = { fill = true }, radius = AV / 2,
       color = function() return C.surfaceContainerHighest end,
-      kit.icon("person_add", 36, function() return C.onSurfaceVariant end, {
+      kit.icon("person_add", 40, function() return C.onSurfaceVariant end, {
         anchors = { center_in = true }, visible = not has_face,
       }),
     },
     has_face and ui.ClipRect {
-      anchors = { fill = true }, radius = 40,
+      anchors = { fill = true }, radius = AV / 2,
       ui.Image { anchors = { fill = true }, source = face, fill_mode = "preserve_aspect_crop" },
     } or nil,
   }
   -- The distribution's badge: its logo on a primary cookie, over the
   -- avatar's shoulder.
   local badge = ui.Item {
-    x = -22, y = -2, width = 44, height = 44,
+    x = 18, y = 14, width = 50, height = 50,
     ui.Path {
       anchors = { fill = true }, view_box = { 0, 0, 100, 100 },
       d = shapes.path("cookie9"),
       fill_color = function() return C.primaryContainer end,
     },
     ui.Text {
-      anchors = { center_in = true }, text = "\u{f303}", font_family = theme.mono, font_size = 20,
+      anchors = { center_in = true }, text = "\u{f303}", font_family = theme.mono, font_size = 22,
       color = function() return C.onPrimaryContainer end,
     },
   }
   local chip_row = ui.Row {
     gap = 6, align = "center",
-    kit.icon("select_window", 16, function() return C.onSecondaryContainer end),
+    kit.icon("select_window", 17, function() return C.onSecondaryContainer end),
     kit.text {
-      text = function() return wm_name() end, font_size = theme.size.normal + 1,
+      text = function() return wm_name() end, font_size = theme.size.normal,
       color = function() return C.onSecondaryContainer end,
     },
   }
   local chip = ui.Rect {
     id = "dashboard-wm",
-    height = 32, radius = 16,
-    width = function() return (chip_row.layout_width or 0) + 26 end,
+    x = 152, y = 20, height = 36, radius = 18,
+    width = function() return (chip_row.layout_width or 0) + 28 end,
     color = function() return C.secondaryContainer end,
-    ui.Item { x = 13, anchors = { top = true, bottom = true }, width = function() return chip_row.layout_width or 0 end,
-      ui.Item { anchors = { center_in = true }, width = function() return chip_row.layout_width or 0 end, height = 20, chip_row } },
-  }
-  local uptime = ui.Row {
-    gap = 8, align = "center",
     ui.Item {
-      width = 30, height = 30,
-      ui.Path {
-        anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie6"),
-        fill_color = function() return C.tertiary end,
-      },
-      kit.icon("timer", 18, function() return C.onTertiary end, { anchors = { center_in = true } }),
+      x = 14, width = function() return chip_row.layout_width or 0 end, height = 36,
+      ui.Item { anchors = { vertical_center = true }, width = function() return chip_row.layout_width or 0 end, height = 22, chip_row },
     },
-    kit.text {
-      id = "dashboard-uptime",
-      font_size = theme.size.normal + 2,
-      text = function()
-        if not opened:get() then return "" end
-        return uptime_text((sysinfo.system() or {}).uptime)
-      end,
-    },
+  }
+  -- A thought bubble's tail from the avatar up to the chip.
+  local tail = ui.Item {
+    ui.Rect { x = 149, y = 58, width = 10, height = 10, radius = 5, color = function() return C.secondaryContainer end },
+    ui.Rect { x = 164, y = 51, width = 7, height = 7, radius = 3.5, color = function() return C.secondaryContainer end },
+  }
+  local uptime_badge = ui.Rect {
+    x = 111, y = 86, width = 44, height = 30, radius = 12,
+    color = function() return C.tertiary end,
+    kit.icon("timer", 19, function() return C.onTertiary end, { anchors = { center_in = true } }),
+  }
+  local uptime = kit.text {
+    id = "dashboard-uptime",
+    x = 164, y = 90, width = 340 - 164 - 12, elide = "right",
+    font_size = theme.size.normal,
+    text = function()
+      if not opened:get() then return "" end
+      return uptime_text((sysinfo.system() or {}).uptime)
+    end,
   }
   return kit.card {
     id = "dashboard-user",
     width = 340, height = ROW1,
-    ui.Row {
-      x = 42, anchors = { vertical_center = true }, gap = 16, align = "center",
-      ui.Item { width = 80, height = 80, avatar, badge },
-      ui.Column { gap = 16, chip, uptime },
-    },
+    avatar, badge, tail, chip, uptime_badge, uptime,
   }
 end
 
@@ -457,20 +456,36 @@ local function media_card()
       kit.icon(icon, 22, function() return C.onSurfaceVariant end, { anchors = { center_in = true } }),
     }, function(hovered) return hovered and C.surfaceContainerHighest or C.surfaceContainerHigh end, 22)
   end
-  local D = 170
-  local r = D / 2 - 3
-  local arc = ("M%g %g A%g %g 0 1 1 %g %g"):format(D / 2, 3, r, r, D / 2 - 0.01, 3)
+  local D = 176
+  local r = D / 2 - 4
+  -- From a little below the left of centre, over the top, to the right.
+  local a0 = math.rad(190)
+  local sx, sy = D / 2 + r * math.cos(a0), D / 2 - r * math.sin(a0)
+  local ex = D - sx
+  local arc = ("M%g %g A%g %g 0 1 1 %g %g"):format(sx, sy, r, r, ex, sy)
+  local ends = { sx, sy, ex }
   local cover = ui.Item {
     width = D, height = D,
+    -- The track's progress: an arc over the top, a dot at either end.
     ui.Path {
       anchors = { fill = true }, view_box = { 0, 0, D, D }, d = arc,
-      fill_color = "transparent", stroke_width = 4, stroke_cap = "round",
-      stroke_color = function() return C.primary end,
-      trim_start = 0.62, trim_end = 0.38 + 1,
-      visible = false,
+      fill_color = "transparent", stroke_width = 3, stroke_cap = "round",
+      stroke_color = function() return C.secondaryContainer end,
     },
     ui.Path {
-      anchors = { fill = true, margins = 18 }, view_box = { 0, 0, 100, 100 },
+      anchors = { fill = true }, view_box = { 0, 0, D, D }, d = arc,
+      fill_color = "transparent", stroke_width = 3, stroke_cap = "round",
+      stroke_color = function() return C.primary end,
+      trim_end = function()
+        local a = active()
+        if not a.length or a.length <= 0 then return 0 end
+        return math.min(1, (a.position or 0) / a.length)
+      end,
+    },
+    ui.Rect { x = ends[1] - 3, y = ends[2] - 3, width = 6, height = 6, radius = 3, color = function() return C.primary end },
+    ui.Rect { x = ends[3] - 3, y = ends[2] - 3, width = 6, height = 6, radius = 3, color = function() return C.primary end },
+    ui.Path {
+      anchors = { fill = true, margins = 20 }, view_box = { 0, 0, 100, 100 },
       d = shapes.path("cookie12"),
       fill_color = function() return C.surfaceContainerHighest end,
     },

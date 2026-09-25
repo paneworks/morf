@@ -91,7 +91,7 @@ local function workspaces()
     ui.Path {
       anchors = { center_in = true }, width = 21, height = 21,
       view_box = { 0, 0, 100, 100 },
-      d = shapes.path("cookie9"),
+      d = shapes.path("flower"),
       fill_color = function() return C.onPrimary end,
     },
   }
@@ -127,8 +127,8 @@ local function window_title()
       end
       return title
     end,
-    font_size = theme.size.normal,
-    letter_spacing = 1.2,
+    font_size = 15,
+    letter_spacing = 1.8,
     color = function() return C.primary end,
   }
   local turned = ui.Item {
@@ -143,7 +143,7 @@ local function window_title()
     },
   }
   return ui.Column {
-    align = "center", gap = 6,
+    align = "center", gap = 10,
     kit.icon("desktop_windows", 18, function() return C.primary end),
     turned,
   }
@@ -157,7 +157,7 @@ local function clock()
       horizontal_alignment = "center",
       width = 40,
       height = 17,
-      font_size = theme.size.larger,
+      font_size = 16,
       line_height = "17px",
       color = function() return C.tertiary end,
       text = function()
@@ -174,7 +174,7 @@ local function clock()
     part("%M"),
     twelve and kit.text {
       horizontal_alignment = "center", width = 40, height = 17,
-      font_size = theme.size.normal, line_height = "17px",
+      font_size = 15, line_height = "17px",
       color = function() return C.tertiary end,
       text = function() morf.minute_clock:get() return morf.time.format("%p"):lower() end,
     } or nil,
@@ -189,10 +189,10 @@ local function status()
   end
   return ui.Rect {
     id = "status",
-    width = 40, height = 96, radius = 20,
+    width = 40, height = 106, radius = 20,
     color = function() return C.surfaceContainer end,
     ui.Column {
-      y = 3, gap = 0,
+      y = 8, gap = 0,
       slot(services.network.icon, "status-network"),
       slot(services.bluetooth.icon, "status-bluetooth"),
       slot(services.power.icon, "status-power"),
@@ -231,9 +231,9 @@ function M.build()
       window_title(),
       ui.Item { width = 1, height = 1, layout = { grow = 1 } },
       clock(),
-      ui.Item { width = 1, height = 20 },
+      ui.Item { width = 1, height = 15 },
       status(),
-      ui.Item { width = 1, height = 9 },
+      ui.Item { width = 1, height = 3 },
       power(),
       ui.Item { width = 1, height = 10 },
     },
