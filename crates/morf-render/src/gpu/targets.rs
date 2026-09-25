@@ -24,8 +24,10 @@ pub(crate) fn create_target(
             | wgpu::TextureUsages::COPY_SRC
             | wgpu::TextureUsages::TEXTURE_BINDING,
         // A gamma-blended target is also read through an sRGB view, by the
-        // pass that hands it to an sRGB swapchain; see `composite_view`.
-        view_formats: &[format.add_srgb_suffix()],
+        // pass that hands it to an sRGB swapchain; see `composite_view`. And
+        // every target through a plain one, by the pass that copies its bytes
+        // into a buffer of this engine's own; see `plain_view`.
+        view_formats: &[format.add_srgb_suffix(), format.remove_srgb_suffix()],
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     (texture, view)
@@ -190,6 +192,36 @@ pub(crate) fn create_surface_state(
         view_formats: vec![],
     };
     surface.configure(device, &config);
+    let CompositePipeline {
+        pipeline,
+        layout: texture_layout,
+        sampler,
+    } = create_composite_pipeline(device, format);
+    let bind_group = create_composite_bind_group(device, &texture_layout, target_view, &sampler);
+    Ok(SurfaceState {
+        stale: false,
+        surface,
+        config,
+        pipeline,
+        texture_layout,
+        sampler,
+        bind_group,
+    })
+}
+
+/// The pass that copies the persistent target onto what is presented, and
+/// what it binds.
+pub(crate) struct CompositePipeline {
+    pub(crate) pipeline: wgpu::RenderPipeline,
+    pub(crate) layout: wgpu::BindGroupLayout,
+    pub(crate) sampler: wgpu::Sampler,
+}
+
+/// A composite pass writing `format`.
+pub(crate) fn create_composite_pipeline(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+) -> CompositePipeline {
     let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("morf composite texture layout"),
         entries: &[
@@ -217,7 +249,6 @@ pub(crate) fn create_surface_state(
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
     });
-    let bind_group = create_composite_bind_group(device, &texture_layout, target_view, &sampler);
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("morf composite pipeline layout"),
         bind_group_layouts: &[Some(&texture_layout)],
@@ -254,15 +285,11 @@ pub(crate) fn create_surface_state(
         multiview_mask: None,
         cache: None,
     });
-    Ok(SurfaceState {
-        stale: false,
-        surface,
-        config,
+    CompositePipeline {
         pipeline,
-        texture_layout,
+        layout: texture_layout,
         sampler,
-        bind_group,
-    })
+    }
 }
 
 /// The view of the persistent target the surface composite samples.
@@ -274,6 +301,16 @@ pub(crate) fn create_surface_state(
 pub(crate) fn composite_view(texture: &wgpu::Texture) -> wgpu::TextureView {
     texture.create_view(&wgpu::TextureViewDescriptor {
         format: Some(texture.format().add_srgb_suffix()),
+        ..Default::default()
+    })
+}
+
+/// The persistent target read as the bytes it holds, with no decoding:
+/// what a composite into a plain 8-bit buffer copies. Either blend space
+/// stores sRGB-encoded bytes, which is what a compositor wants.
+pub(crate) fn plain_view(texture: &wgpu::Texture) -> wgpu::TextureView {
+    texture.create_view(&wgpu::TextureViewDescriptor {
+        format: Some(texture.format().remove_srgb_suffix()),
         ..Default::default()
     })
 }

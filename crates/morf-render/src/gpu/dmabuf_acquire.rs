@@ -85,6 +85,7 @@ pub fn acquire(
         .map_err(|error| format!("could not end a command buffer: {error}"))?;
         let fence = unsafe { raw.create_fence(&vk::FenceCreateInfo::default(), None) }
             .map_err(|error| format!("could not create a fence: {error}"))?;
+        let held = super::present::submissions();
         let submitted = unsafe {
             raw.queue_submit(
                 raw_queue,
@@ -92,6 +93,7 @@ pub fn acquire(
                 fence,
             )
         };
+        drop(held);
         let waited =
             submitted.and_then(|()| unsafe { raw.wait_for_fences(&[fence], true, u64::MAX) });
         unsafe { raw.destroy_fence(fence, None) };

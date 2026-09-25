@@ -14,8 +14,14 @@ impl WgpuBackend {
     /// Rows come back with no padding, so a caller can index by `(y * width +
     /// x) * 4`. The target is sRGB, which is what an image file wants anyway.
     pub fn read_pixels(&mut self) -> Vec<u8> {
-        let width = self.width;
-        let height = self.height;
+        let texture = self.texture.clone();
+        self.read_texture(&texture)
+    }
+
+    /// A texture's bytes as it stores them, tightly packed, four a pixel.
+    pub(crate) fn read_texture(&self, texture: &wgpu::Texture) -> Vec<u8> {
+        let width = texture.width();
+        let height = texture.height();
         // Copies out of a texture want rows aligned to 256 bytes, which is 64
         // pixels — so the buffer is wider than the image and the rows are
         // repacked afterwards.
@@ -33,7 +39,7 @@ impl WgpuBackend {
             });
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
-                texture: &self.texture,
+                texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -52,7 +58,7 @@ impl WgpuBackend {
                 depth_or_array_layers: 1,
             },
         );
-        self.queue.submit([encoder.finish()]);
+        super::present::submit(&self.queue, [encoder.finish()], || {});
         let slice = buffer.slice(..);
         let (send, receive) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {

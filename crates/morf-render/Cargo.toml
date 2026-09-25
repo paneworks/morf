@@ -17,6 +17,12 @@ morf-shader.workspace = true
 morf-svg.workspace = true
 morf-text.workspace = true
 raw-window-handle.workspace = true
+# Presenting into buffers of the engine's own: the surface's connection, on a
+# queue of this crate's, and the dmabuf ioctls that carry a frame's fence.
+libc.workspace = true
+wayland-backend.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true
 resvg.workspace = true
 wgpu.workspace = true
 # The same ash wgpu-hal speaks, for the handful of Vulkan calls wgpu has no

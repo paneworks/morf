@@ -14,13 +14,13 @@ use morf_scene::{Color, Element, NodeHandle, Scene, Value};
 use crate::tests::NoText;
 use crate::*;
 
-const LOGICAL: f64 = 96.0;
+pub(super) const LOGICAL: f64 = 96.0;
 
-struct Desk {
-    scene: Scene,
-    root: NodeHandle,
+pub(super) struct Desk {
+    pub(super) scene: Scene,
+    pub(super) root: NodeHandle,
     /// Things to change between frames, and what to set them to.
-    steps: Vec<(NodeHandle, &'static str, Value)>,
+    pub(super) steps: Vec<(NodeHandle, &'static str, Value)>,
 }
 
 fn rect(scene: &mut Scene, parent: NodeHandle, element: Element, place: [f64; 4]) -> NodeHandle {
@@ -32,7 +32,7 @@ fn rect(scene: &mut Scene, parent: NodeHandle, element: Element, place: [f64; 4]
     node
 }
 
-fn desk() -> Desk {
+pub(super) fn desk() -> Desk {
     let mut scene = Scene::new();
     let root = scene.create(Element::Item);
     scene.assign(root, "width", LOGICAL).unwrap();
@@ -137,7 +137,7 @@ fn desk() -> Desk {
     Desk { scene, root, steps }
 }
 
-fn frame(
+pub(super) fn frame(
     engine: &mut RenderEngine<WgpuBackend>,
     scene: &Scene,
     root: NodeHandle,
@@ -151,7 +151,7 @@ fn frame(
     engine.render(scene, &layout, scale_120, |_| {}).unwrap()
 }
 
-fn largest_difference(left: &[u8], right: &[u8], width: u32) -> (u8, u32, u32) {
+pub(super) fn largest_difference(left: &[u8], right: &[u8], width: u32) -> (u8, u32, u32) {
     let mut worst = (0, 0, 0);
     for (index, (a, b)) in left.iter().zip(right).enumerate() {
         let difference = a.abs_diff(*b);

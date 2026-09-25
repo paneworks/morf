@@ -1,8 +1,36 @@
 use crate::SdfFieldInstance;
 use morf_image::ImageCache;
 use morf_text::{RasterContent, TextSystem};
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use std::collections::HashMap;
+use std::ffi::c_void;
+use std::ptr::NonNull;
+
+/// How many buffers a surface presents through at most
+/// (`MORF_PRESENT_BUFFERS` overrides it). A compositor holds the buffer it
+/// shows, the one committed after it, and -- until the GPU work that read it
+/// has finished -- the one before; on a busy GPU that one lingers. A fourth
+/// leaves one to draw into.
+fn ring_buffers() -> usize {
+    std::env::var("MORF_PRESENT_BUFFERS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|count| (1..=8).contains(count))
+        .unwrap_or(4)
+}
+
+/// A window's `wl_display` and `wl_surface`, when it is a Wayland one.
+fn wayland_handles(
+    window: &(impl HasWindowHandle + HasDisplayHandle),
+) -> Option<(NonNull<c_void>, NonNull<c_void>)> {
+    let RawWindowHandle::Wayland(surface) = window.window_handle().ok()?.as_raw() else {
+        return None;
+    };
+    let RawDisplayHandle::Wayland(display) = window.display_handle().ok()?.as_raw() else {
+        return None;
+    };
+    Some((display.display, surface.surface))
+}
 use wgpu::util::DeviceExt;
 
 use super::{
@@ -40,6 +68,7 @@ fn open_with_dmabuf(
     let physical = exposed.adapter.raw_physical_device();
     let extensions = dmabuf::supported_extensions(raw_instance, physical)?;
     let render_node = dmabuf::render_node(raw_instance, physical);
+    let sync_file = extensions.contains(&ash::khr::external_semaphore_fd::NAME);
     let open = unsafe {
         exposed.adapter.open_with_callback(
             descriptor.required_features,
@@ -67,6 +96,7 @@ fn open_with_dmabuf(
         dmabuf::DmabufSupport {
             render_node,
             queue_family,
+            sync_file,
         },
     ))
 }
@@ -202,7 +232,7 @@ async fn open_device(
             wgpu::Features::DUAL_SOURCE_BLENDING
         } else {
             wgpu::Features::empty()
-        },
+        } | super::profile::features(&adapter),
         required_limits: adapter_limits.clone(),
         ..Default::default()
     };
@@ -247,6 +277,44 @@ impl WgpuBackend {
         T: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
     {
         let instance = shared_instance();
+        // A Wayland surface is presented through buffers of this engine's
+        // own when it can be (`present`): then a frame costs what it
+        // changed. Anything else, or a device or compositor that cannot, gets
+        // the swapchain. `MORF_PRESENT=swapchain` asks for the swapchain.
+        let mut window = window;
+        if let Some(handles) = wayland_handles(&window)
+            && std::env::var("MORF_PRESENT").map_or(true, |value| value != "swapchain")
+        {
+            let mut backend = Self::initialize(instance.clone(), None, width, height).await?;
+            // Safety: the handles came from `window`, which the link keeps.
+            let linked = unsafe {
+                super::present_wayland::WaylandLink::connect(
+                    &backend.device,
+                    backend.dmabuf.as_ref(),
+                    handles,
+                    Box::new(window),
+                )
+            };
+            match linked {
+                Ok(link) => {
+                    backend.buffers = Some(super::present::BufferRing::new(
+                        &backend.device,
+                        &backend.texture,
+                        ring_buffers(),
+                        Some(link),
+                    ));
+                    return Ok(backend);
+                }
+                Err((error, returned)) => {
+                    if std::env::var_os("MORF_GPU_LOG").is_some() {
+                        eprintln!("morf: gpu: presenting through the swapchain: {error}");
+                    }
+                    window = *returned
+                        .downcast::<T>()
+                        .expect("the link hands back the window it was given");
+                }
+            }
+        }
         let surface = instance
             .create_surface(window)
             .map_err(|error| GpuError(format!("could not create GPU surface: {error}")))?;
@@ -402,6 +470,7 @@ impl WgpuBackend {
                 device_ready.as_secs_f64() * 1000.0
             );
         }
+        let profile = super::profile::GpuProfile::new(&device, &queue);
         Ok(Self {
             device,
             queue,
@@ -456,6 +525,8 @@ impl WgpuBackend {
             texture,
             view,
             surface,
+            buffers: None,
+            profile,
             width: width.max(1),
             height: height.max(1),
             info: GpuInfo {
@@ -469,6 +540,15 @@ impl WgpuBackend {
             external_textures: HashMap::new(),
             pending_exports: HashMap::new(),
         })
+    }
+
+    /// Whether this backend commits its surface itself, declaring each
+    /// frame's damage with the buffer that carries it. A host then declares
+    /// none of its own: a frame that finds no buffer free is committed with
+    /// nothing, so the compositor draws nothing for it, and its damage goes
+    /// with the next buffer.
+    pub fn declares_damage(&self) -> bool {
+        self.buffers.is_some()
     }
 
     /// Returns the selected hardware and backend identifiers.
@@ -502,6 +582,9 @@ impl WgpuBackend {
         let viewport = [self.width as f32, self.height as f32, self.elapsed, 0.0];
         self.queue
             .write_buffer(&self.viewport_buffer, 0, bytemuck::cast_slice(&viewport));
+        if let Some(buffers) = &mut self.buffers {
+            buffers.retarget(&self.device, &self.texture);
+        }
         if let Some(surface) = &mut self.surface {
             surface.config.width = self.width;
             surface.config.height = self.height;

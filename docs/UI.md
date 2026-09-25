@@ -1725,6 +1725,28 @@ A shell that wakes more than it should says why under `MORF_WAKE_LOG`:
 a `clock-seconds` every second is a binding reading `morf.clock` where
 the minute clock would do, a `timer` is a timer still running.
 
+### What a frame costs the GPU
+
+A frame repaints what changed and hands the compositor only that. On
+Wayland the renderer presents through buffers of its own (dmabufs it
+attaches and commits itself), each of which remembers the frame it last
+showed: a buffer coming back into use is brought up to date by copying
+only what changed while the compositor held it, and the commit declares
+only the frame's damage. A clock ticking on a 4K screen costs a tenth of a
+millisecond of GPU time, not the full-screen copy a swapchain needs every
+frame. When the device or the compositor cannot (no dmabuf export, no
+`zwp_linux_dmabuf_v1`, no common modifier, GLES) it presents through a
+swapchain as before.
+
+| Variable | Does |
+|---|---|
+| `MORF_GPU_PROFILE=1` | writes GPU timestamps between a frame's stages and prints them: offscreen layers, the surface pass, the copy onto what is presented; with the pixels the damage made the commands shade and the heaviest of them. Each frame waits for its timestamps, so only for measuring. The stages are wall time on the GPU, so a GPU the compositor keeps busy inflates them; the smallest of many frames is the frame's own cost |
+| `MORF_GPU_WAIT=1` | waits for each frame on the GPU and prints how long it took from submission: mostly time queued behind other clients' work on a busy GPU |
+| `MORF_PRESENT_LOG=1` | each frame's buffer, how many the compositor held, how long getting one took, what was copied into it, and every commit and release |
+| `MORF_PRESENT=swapchain` | presents through the swapchain instead (`MORF_PRESENT_MODE=fifo\|mailbox\|immediate` picks its mode) |
+| `MORF_PRESENT_BUFFERS=N` | how many buffers of its own a surface uses at most (default 4) |
+| `MORF_PRESENT_WAIT_MS=N` | how long a frame waits for the compositor to give a buffer back before it is skipped (default 250); a skipped frame's changes go with the next one |
+
 ## 8. Idioms to prefer
 
 - Reach for a container before a coordinate: a `Row` with `align`, a

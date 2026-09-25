@@ -473,6 +473,9 @@ impl RenderBackend for WgpuBackend {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("morf frame encoder"),
             });
+        if let Some(profile) = &self.profile {
+            profile.mark(&mut encoder, 0);
+        }
         let surface_frame = (
             DamageRect {
                 x: 0,
@@ -675,6 +678,9 @@ impl RenderBackend for WgpuBackend {
                 }
             }
         }
+        if let Some(profile) = &self.profile {
+            profile.mark(&mut encoder, 1);
+        }
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("morf frame"),
@@ -712,6 +718,14 @@ impl RenderBackend for WgpuBackend {
                 }
             }
         }
+        if let Some(profile) = &self.profile {
+            profile.mark(&mut encoder, 2);
+        }
+        // Buffers of the engine's own: only what the next one is missing is
+        // copied into it, and it goes out with the frame's damage.
+        if let Some(buffers) = &mut self.buffers {
+            buffers.encode(&self.device, &mut encoder, damage);
+        }
         let frame = if let Some(surface) = &mut self.surface {
             // `None` means this frame is skipped: there is no image to draw
             // into. Everything already encoded is still submitted below —
@@ -719,7 +733,7 @@ impl RenderBackend for WgpuBackend {
             // work is what the next frame composites, and throwing it away
             // would make a skipped frame cost more than a drawn one.
             let Some(frame) = acquire_frame(&self.device, surface)? else {
-                self.queue.submit(Some(encoder.finish()));
+                super::present::submit(&self.queue, Some(encoder.finish()), || {});
                 return Ok(());
             };
             let frame_view = frame
@@ -747,7 +761,17 @@ impl RenderBackend for WgpuBackend {
         } else {
             None
         };
-        self.queue.submit(Some(encoder.finish()));
+        if let Some(profile) = &self.profile {
+            profile.mark(&mut encoder, 3);
+            profile.resolve(&mut encoder);
+        }
+        let queue = &self.queue;
+        let buffers = &mut self.buffers;
+        super::present::submit(queue, Some(encoder.finish()), || {
+            if let Some(buffers) = buffers {
+                buffers.before_submit(queue);
+            }
+        });
         // `MORF_GPU_WAIT=1` waits for the GPU here and prints what it took:
         // the one way to see a frame's cost on the GPU rather than the CPU.
         static GPU_WAIT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -761,6 +785,19 @@ impl RenderBackend for WgpuBackend {
         }
         if let Some(frame) = frame {
             self.queue.present(frame);
+        }
+        if let Some(buffers) = &mut self.buffers {
+            buffers.present(&self.queue, damage);
+        }
+        if let Some(profile) = &self.profile {
+            let shading = super::profile::Shading::of(
+                list,
+                damage,
+                &reach,
+                |command| command_layers[command].is_some(),
+                scale_120,
+            );
+            profile.report(&self.device, &shading);
         }
         Ok(())
     }

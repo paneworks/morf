@@ -185,6 +185,11 @@ pub struct WgpuBackend {
     pub(crate) texture: wgpu::Texture,
     pub(crate) view: wgpu::TextureView,
     pub(crate) surface: Option<SurfaceState>,
+    /// Buffers of the engine's own it presents into instead of a swapchain,
+    /// when the platform allows; see `present`.
+    pub(crate) buffers: Option<super::present::BufferRing>,
+    /// `MORF_GPU_PROFILE`: timestamps between a frame's stages.
+    pub(crate) profile: Option<super::profile::GpuProfile>,
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) info: GpuInfo,

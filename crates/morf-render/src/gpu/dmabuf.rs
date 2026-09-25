@@ -33,13 +33,17 @@ pub const MODIFIER_LINEAR: u64 = 0;
 /// fifth says which DRM node the device is, so a compositor's offer can be
 /// checked against it: a buffer allocated on one GPU and captured into by
 /// another is a buffer full of noise. Optional, because a device without it
-/// can still export -- it just cannot prove it is the right one.
-pub(crate) const EXTENSIONS: [(&CStr, bool); 5] = [
+/// can still export -- it just cannot prove it is the right one. The sixth
+/// turns a finished frame into a sync file a dmabuf can carry, which is what
+/// presenting through buffers of this engine's own needs (`present`); a
+/// device without it presents through the swapchain.
+pub(crate) const EXTENSIONS: [(&CStr, bool); 6] = [
     (ash::khr::external_memory_fd::NAME, true),
     (ash::ext::external_memory_dma_buf::NAME, true),
     (ash::ext::image_drm_format_modifier::NAME, true),
     (ash::ext::queue_family_foreign::NAME, true),
     (ash::ext::physical_device_drm::NAME, false),
+    (ash::khr::external_semaphore_fd::NAME, false),
 ];
 
 /// What the device turned out to be able to do.
@@ -49,6 +53,9 @@ pub struct DmabufSupport {
     pub render_node: Option<(u32, u32)>,
     /// The queue family every wgpu command runs on.
     pub queue_family: u32,
+    /// Whether a semaphore can be exported as a sync file, so a frame drawn
+    /// into an exported image can say when it is finished.
+    pub sync_file: bool,
 }
 
 /// One plane of an exported image: the file descriptor and where the pixels
@@ -143,6 +150,7 @@ fn exportable_modifiers(
     instance: &ash::Instance,
     physical: vk::PhysicalDevice,
     format: vk::Format,
+    wanted: vk::FormatFeatureFlags,
 ) -> Vec<u64> {
     let mut list = vk::DrmFormatModifierPropertiesListEXT::default();
     let mut properties = vk::FormatProperties2::default().push_next(&mut list);
@@ -156,9 +164,6 @@ fn exportable_modifiers(
         .drm_format_modifier_properties(&mut entries);
     let mut properties = vk::FormatProperties2::default().push_next(&mut list);
     unsafe { instance.get_physical_device_format_properties2(physical, format, &mut properties) };
-    let wanted = vk::FormatFeatureFlags::SAMPLED_IMAGE
-        | vk::FormatFeatureFlags::TRANSFER_DST
-        | vk::FormatFeatureFlags::TRANSFER_SRC;
     entries
         .iter()
         .filter(|entry| entry.drm_format_modifier_plane_count == 1)
@@ -169,6 +174,16 @@ fn exportable_modifiers(
 
 /// The device's exportable modifiers for a fourcc, through wgpu's device.
 pub(crate) fn modifiers_for(device: &wgpu::Device, fourcc: u32) -> Vec<u64> {
+    modifiers_for_purpose(device, fourcc, Purpose::CAPTURE)
+}
+
+/// The device's exportable modifiers for a fourcc, for images made for
+/// `purpose`.
+pub(crate) fn modifiers_for_purpose(
+    device: &wgpu::Device,
+    fourcc: u32,
+    purpose: Purpose,
+) -> Vec<u64> {
     let Some(format) = vulkan_format(fourcc) else {
         return Vec::new();
     };
@@ -179,7 +194,72 @@ pub(crate) fn modifiers_for(device: &wgpu::Device, fourcc: u32) -> Vec<u64> {
         hal.shared_instance().raw_instance(),
         hal.raw_physical_device(),
         format,
+        purpose.features,
     )
+}
+
+/// What an exported image is for, which decides how it is made and what
+/// wgpu is told about it.
+#[derive(Clone, Copy)]
+pub(crate) struct Purpose {
+    label: &'static str,
+    /// The format features a modifier must offer to be chosen.
+    features: vk::FormatFeatureFlags,
+    usage: vk::ImageUsageFlags,
+    hal_usage: wgpu::wgt::TextureUses,
+    wgpu_usage: wgpu::TextureUsages,
+    /// The state wgpu starts tracking the texture in.
+    initial: wgpu::wgt::TextureUses,
+    /// Other formats it may be viewed as.
+    view_formats: &'static [wgpu::TextureFormat],
+}
+
+impl Purpose {
+    /// Filled by the compositor, then sampled here. `STORAGE_READ_ONLY` as
+    /// the starting state is deliberate: it is the one that maps to
+    /// `GENERAL`, the layout an image filled from outside is in, and the only
+    /// old layout a first barrier may name without being allowed to throw the
+    /// contents away.
+    pub(crate) const CAPTURE: Self = Self {
+        label: "morf dmabuf capture",
+        features: vk::FormatFeatureFlags::from_raw(
+            vk::FormatFeatureFlags::SAMPLED_IMAGE.as_raw()
+                | vk::FormatFeatureFlags::TRANSFER_DST.as_raw()
+                | vk::FormatFeatureFlags::TRANSFER_SRC.as_raw(),
+        ),
+        usage: vk::ImageUsageFlags::from_raw(
+            vk::ImageUsageFlags::SAMPLED.as_raw()
+                | vk::ImageUsageFlags::TRANSFER_DST.as_raw()
+                | vk::ImageUsageFlags::TRANSFER_SRC.as_raw(),
+        ),
+        hal_usage: wgpu::wgt::TextureUses::from_bits_truncate(
+            wgpu::wgt::TextureUses::RESOURCE.bits()
+                | wgpu::wgt::TextureUses::COPY_DST.bits()
+                | wgpu::wgt::TextureUses::COPY_SRC.bits(),
+        ),
+        wgpu_usage: wgpu::TextureUsages::from_bits_truncate(
+            wgpu::TextureUsages::TEXTURE_BINDING.bits()
+                | wgpu::TextureUsages::COPY_DST.bits()
+                | wgpu::TextureUsages::COPY_SRC.bits(),
+        ),
+        initial: wgpu::wgt::TextureUses::STORAGE_READ_ONLY,
+        view_formats: &[wgpu::TextureFormat::Bgra8UnormSrgb],
+    };
+
+    /// Drawn into here, then shown by the compositor: a surface's buffer.
+    /// It starts uninitialised, since its first frame is drawn in full.
+    pub(crate) const PRESENT: Self = Self {
+        label: "morf dmabuf present",
+        features: vk::FormatFeatureFlags::COLOR_ATTACHMENT,
+        usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+        hal_usage: wgpu::wgt::TextureUses::COLOR_TARGET,
+        wgpu_usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        initial: wgpu::wgt::TextureUses::UNINITIALIZED,
+        // Written through its own format only: the composite copies bytes
+        // that are already encoded, so no sRGB view (and no mutable-format
+        // image, which not every modifier allows) is needed.
+        view_formats: &[],
+    };
 }
 
 /// Creates an image the compositor can capture into, exported as a dmabuf.
@@ -194,6 +274,17 @@ pub fn export(
     fourcc: u32,
     offered: &[u64],
 ) -> Result<DmabufImage, String> {
+    export_for(device, (width, height), fourcc, offered, Purpose::CAPTURE)
+}
+
+/// Creates an image exported as a dmabuf, made for `purpose`.
+pub(crate) fn export_for(
+    device: &wgpu::Device,
+    (width, height): (u32, u32),
+    fourcc: u32,
+    offered: &[u64],
+    purpose: Purpose,
+) -> Result<DmabufImage, String> {
     let format =
         vulkan_format(fourcc).ok_or_else(|| format!("no Vulkan format for fourcc {fourcc:#x}"))?;
     let hal = unsafe { device.as_hal::<Vulkan>() }.ok_or("the device is not Vulkan")?;
@@ -202,7 +293,7 @@ pub fn export(
     let physical = hal.raw_physical_device();
     let queue_family = hal.queue_family_index();
 
-    let candidates = exportable_modifiers(instance, physical, format);
+    let candidates = exportable_modifiers(instance, physical, format, purpose.features);
     let modifiers = candidates
         .iter()
         .copied()
@@ -230,11 +321,7 @@ pub fn export(
         .array_layers(1)
         .samples(vk::SampleCountFlags::TYPE_1)
         .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
-        .usage(
-            vk::ImageUsageFlags::SAMPLED
-                | vk::ImageUsageFlags::TRANSFER_DST
-                | vk::ImageUsageFlags::TRANSFER_SRC,
-        )
+        .usage(purpose.usage)
         .sharing_mode(vk::SharingMode::EXCLUSIVE)
         .initial_layout(vk::ImageLayout::UNDEFINED)
         .push_next(&mut modifier_list)
@@ -340,16 +427,13 @@ pub fn export(
 
     // And as a wgpu texture. The Vulkan objects go to wgpu with a callback
     // that destroys them, so their life is the texture's and ends after the
-    // last command that read it. `STORAGE_READ_ONLY` as the starting state is
-    // deliberate: it is the one that maps to `GENERAL`, the layout an image
-    // filled from outside is in, and the only old layout a first barrier may
-    // name without being allowed to throw the contents away.
+    // last command that read it. The state it starts in is the purpose's.
     let raw_for_drop = raw.clone();
     let hal_texture = unsafe {
         hal.texture_from_raw(
             image,
             &wgpu::hal::TextureDescriptor {
-                label: Some("morf dmabuf capture"),
+                label: Some(purpose.label),
                 size: wgpu::Extent3d {
                     width,
                     height,
@@ -359,11 +443,9 @@ pub fn export(
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Bgra8Unorm,
-                usage: wgpu::wgt::TextureUses::RESOURCE
-                    | wgpu::wgt::TextureUses::COPY_DST
-                    | wgpu::wgt::TextureUses::COPY_SRC,
+                usage: purpose.hal_usage,
                 memory_flags: wgpu::hal::MemoryFlags::empty(),
-                view_formats: vec![wgpu::TextureFormat::Bgra8UnormSrgb],
+                view_formats: purpose.view_formats.to_vec(),
             },
             // Called by wgpu after the last command that used the texture
             // has completed, and the handles are ours: inside the enclosing
@@ -380,7 +462,7 @@ pub fn export(
         device.create_texture_from_hal::<Vulkan>(
             hal_texture,
             &wgpu::TextureDescriptor {
-                label: Some("morf dmabuf capture"),
+                label: Some(purpose.label),
                 size: wgpu::Extent3d {
                     width,
                     height,
@@ -390,12 +472,10 @@ pub fn export(
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Bgra8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_DST
-                    | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[wgpu::TextureFormat::Bgra8UnormSrgb],
+                usage: purpose.wgpu_usage,
+                view_formats: purpose.view_formats,
             },
-            wgpu::wgt::TextureUses::STORAGE_READ_ONLY,
+            purpose.initial,
         )
     };
     let _ = queue_family;
