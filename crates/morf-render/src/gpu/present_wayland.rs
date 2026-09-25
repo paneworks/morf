@@ -138,6 +138,15 @@ pub(crate) struct SlotLink {
     raw: ash::Device,
 }
 
+impl SlotLink {
+    /// Whether nothing reads or writes the buffer any more: every fence its
+    /// dmabuf carries has signalled.
+    pub(crate) fn idle(&self) -> bool {
+        export_sync_file(self.image.plane.fd.as_raw_fd(), DMA_BUF_SYNC_WRITE)
+            .is_none_or(|fence| signalled(&fence))
+    }
+}
+
 impl Drop for SlotLink {
     fn drop(&mut self) {
         self.buffer.destroy();

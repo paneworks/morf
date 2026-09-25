@@ -260,13 +260,26 @@ impl BufferRing {
         deadline: std::time::Instant,
     ) -> Option<usize> {
         for _ in 0..64 {
-            let free = self
-                .slots
-                .iter()
-                .enumerate()
-                .filter(|(_, slot)| !slot.busy.load(Ordering::Acquire))
-                .max_by_key(|(_, slot)| slot.painted.map_or(0, |frame| frame + 1))
-                .map(|(index, _)| index);
+            // Given back is not always done with: a compositor may release a
+            // buffer while its GPU still reads it. One it has finished with
+            // is taken first; drawing into another waits on the GPU for the
+            // read, and the queue is every output's, so each of them would
+            // wait behind it.
+            let freshest = |ready: bool| {
+                self.slots
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, slot)| !slot.busy.load(Ordering::Acquire))
+                    .filter(|(_, slot)| !ready || slot.link.as_ref().is_none_or(|link| link.idle()))
+                    .max_by_key(|(_, slot)| slot.painted.map_or(0, |frame| frame + 1))
+                    .map(|(index, _)| index)
+            };
+            let free = freshest(true).or_else(|| {
+                // Room for another is better than waiting on a read.
+                (self.slots.len() >= self.limit)
+                    .then(|| freshest(false))
+                    .flatten()
+            });
             if free.is_some() {
                 return free;
             }
