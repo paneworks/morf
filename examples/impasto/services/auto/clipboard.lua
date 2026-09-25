@@ -8,5 +8,5 @@ clipboard.start()
 -- depends on the other. Password-manager copies are never kept in the first
 -- place; this covers everything else.
 require("services.lock").on_change(function(locked)
-  if locked and settings.clipboardWipeOnLock then clipboard.wipe() end
+  if locked and settings.clipboardWipeOnLock and morf.primary() then clipboard.wipe() end
 end)

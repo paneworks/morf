@@ -251,4 +251,12 @@ function M.start()
   return server
 end
 
+-- `morf ipc call notifications.server`: the screen whose runtime is the
+-- notification daemon, and how many notifications it holds. Only that
+-- runtime answers.
+morf.ipc["notifications.server"] = function()
+  if not server then return nil end
+  return ((morf.screens or {})[1] or {}).name or "", #history
+end
+
 return M
