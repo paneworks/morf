@@ -100,6 +100,7 @@ pub(super) fn field_layer(x: f64, y: f64, size: f64, shape: Shape) -> SdfLayer {
         morph: 0.0,
         operation: Operation::Union,
         blend: 0.0,
+        opacity: 1.0,
         rotation: 0.0,
         matrix: [1.0, 0.0, 0.0, 1.0],
         blend_group: 0,

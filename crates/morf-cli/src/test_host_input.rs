@@ -77,6 +77,18 @@ pub(crate) fn motion(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<
     Ok(Vec::new())
 }
 
+/// The pointer leaving a surface -- the one named, else the one it is on --
+/// as a compositor says so when it moves off the surface's input region.
+pub(crate) fn leave(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
+    let subject = host.subject()?;
+    let surface = match (subject.pointer, optional_text(arguments.first())) {
+        (Some((surface, _, _)), None) => surface,
+        _ => role(subject, arguments.first())?,
+    };
+    subject.pointer(LayerEvent::PointerLeave { surface })?;
+    Ok(Vec::new())
+}
+
 pub(crate) fn wheel(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
     let horizontal = number(arguments.first(), "dx")?;
     let vertical = number(arguments.get(1), "dy")?;
@@ -147,6 +159,12 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
             let Some(layout) = &surface.layout else {
                 continue;
             };
+            // Where the pointer is on this surface, if it is on it.
+            let pointer = subject
+                .input
+                .pointer
+                .filter(|(role, _, _)| *role == surface.role)
+                .map(|(_, x, y)| (x, y));
             // (node, depth, parent, visible so far)
             let mut pending = vec![(surface.root, 0i64, None, surface.visible)];
             while let Some((node, depth, parent, shown)) = pending.pop() {
@@ -184,6 +202,14 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
                             IpcValue::Number(scene.number(node, "opacity").unwrap_or(1.0)),
                         ),
                         ("exiting", IpcValue::Boolean(scene.is_exiting(node))),
+                        (
+                            "contains_pointer",
+                            IpcValue::Boolean(
+                                pointer.is_some_and(|(x, y)| {
+                                    layout.contains_point(&scene, node, x, y)
+                                }),
+                            ),
+                        ),
                         ("depth", IpcValue::Integer(depth)),
                         ("surface", string(surface.label())),
                         ("surface_kind", string(surface.kind)),

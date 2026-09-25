@@ -64,6 +64,9 @@ pub(crate) fn animation_delta(previous: Option<u32>, time_ms: u32) -> Duration {
 /// over one lock surface per output. Both route input through the same code
 /// and differ only in how a surface's layout is found.
 pub(crate) struct PointerInput {
+    /// Where the pointer is: the surface it is over and its point there,
+    /// until it leaves. What `contains_pointer` is worked out against.
+    pub(crate) pointer: Option<(SurfaceRole, f64, f64)>,
     pub(crate) hovered: Option<(SurfaceRole, Hit)>,
     pub(crate) pressed: Option<(SurfaceRole, Hit, f64, f64, bool)>,
     /// The button behind `pressed`, so its release and click say which.
@@ -77,6 +80,7 @@ pub(crate) struct PointerInput {
 impl Default for PointerInput {
     fn default() -> Self {
         Self {
+            pointer: None,
             hovered: None,
             pressed: None,
             pressed_button: 0x110,

@@ -34,10 +34,27 @@ pub struct SdfFieldLayer {
     /// point from the field (once turned by `rotation`) into the shape's own
     /// frame. The identity for an ordinary layer.
     pub frame: [f32; 4],
-    /// `[blend group, distance scale, blend profile, unused]`. The scale is
+    /// `[blend group, distance scale, blend profile, fade]`. The scale is
     /// the map's smallest stretch, which keeps a distance measured in the
-    /// shape's frame from overstating the true one.
+    /// shape's frame from overstating the true one. The fade is one minus
+    /// the layer's opacity.
     pub meta: [f32; 4],
+}
+
+/// Two masks over a field's layers, bit `i` for layer `i`: the ones with no
+/// opacity, which the composition leaves out, and the ones partly there,
+/// which it mixes in. A whole layer is in neither.
+pub fn opacity_masks(layers: &[SdfLayer]) -> (u32, u32) {
+    let mut absent = 0;
+    let mut fading = 0;
+    for (index, layer) in layers.iter().take(MAX_FIELD_LAYERS).enumerate() {
+        if layer.opacity <= 0.0 {
+            absent |= 1 << index;
+        } else if layer.opacity < 1.0 {
+            fading |= 1 << index;
+        }
+    }
+    (absent, fading)
 }
 
 /// The inverse of a layer's linear map and how much it shrinks a distance.
@@ -111,7 +128,9 @@ pub struct SdfFieldMaterial {
     /// `[offset x, offset y, inner, unused]`.
     pub shadow: [f32; 4],
     pub shadow_color: [f32; 4],
-    /// `[unused, shadow blur, shadow spread, unused]`.
+    /// `[absent layers, shadow blur, shadow spread, fading layers]`: the
+    /// two layer masks of [`opacity_masks`], bit `i` for the field's layer
+    /// `i`, carried as floats (exact, sixteen bits).
     pub effects: [f32; 4],
     /// `[kind, centre x, centre y, radius]`; kind is 0 none, 1 linear, 2
     /// radial, 3 conic, and the centre and radius are fractions of the shape.
@@ -227,6 +246,10 @@ impl SdfFieldInstance {
         }
         let scale = scale_120.max(1) as f64 / 120.0;
         let first = layers.len();
+        // Which layers are not there at all, and which are partly: the
+        // shader leaves out the first and mixes the field with and without
+        // each of the second.
+        let (absent, fading) = opacity_masks(sources);
         for layer in sources.iter().take(MAX_FIELD_LAYERS) {
             let outline = polygon_params(layer, scale, outlines, text, drawings);
             let (frame, distance_scale) = layer_frame(layer.matrix);
@@ -236,7 +259,9 @@ impl SdfFieldInstance {
                     layer.blend_group as f32,
                     distance_scale,
                     layer.profile.code() as f32,
-                    0.0,
+                    // Stored as how far it has faded, so a zeroed layer is a
+                    // whole one.
+                    1.0 - layer.opacity.clamp(0.0, 1.0),
                 ],
                 kinds: [
                     layer.shape.code() as f32,
@@ -281,10 +306,10 @@ impl SdfFieldInstance {
             ],
             shadow_color: color_array(*shadow_color),
             effects: [
-                0.0,
+                absent as f32,
                 (shadow_blur * scale) as f32,
                 (shadow_spread * scale) as f32,
-                0.0,
+                fading as f32,
             ],
             gradient,
             gradient_extra,

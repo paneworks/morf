@@ -250,6 +250,7 @@ the primary before anything was.
 |------|---|
 | `test.click(x, y [, { button, surface }])`, `test.click(query)` | motion, press and release; `button` is `left` (default), `right`, `middle`, `back`, `forward` or a Linux button code |
 | `test.move(x, y)`, `test.press(x, y)`, `test.release(x, y)` | the pieces of a click |
+| `test.leave([{ surface }])` | the pointer leaving the surface it is on (or the one named), as a compositor says when it moves off the input region: `hovered` and every `contains_pointer` there go false |
 | `test.drag({ x1, y1 }, { x2, y2 }, { steps, button })` | press, move in steps, release |
 | `test.wheel(dx, dy [, { x, y, surface }])` | a wheel turn at the pointer (or `x, y`); positive `dy` scrolls down |
 | `test.key(name [, modifiers])` | one key pressed and released: an X keysym name (`Return`, `Escape`, `Tab`, `BackSpace`, `Left`, `Page_Down`, `F5`, …) or one character. `modifiers` is a list or a string: `"ctrl+shift"` |
@@ -262,7 +263,9 @@ A node is a table: `handle`, `element` (`"Text"`, `"MouseArea"`, …), `id`,
 surface, through every transform above it), `visible` (it, every ancestor
 and its surface shown, and not fully transparent), `opacity` (its own),
 `exiting` (it is playing its `exit`: drawn, but out of the layout and
-taking no input), `depth`, `parent` (a
+taking no input), `contains_pointer` (the pointer, where the last
+`test.move` left it on this surface, is inside the node's box -- what the
+node's own `contains_pointer` says once something reads it), `depth`, `parent` (a
 handle), `surface` (the label) and `surface_kind`. A node's `id` is an
 ordinary property every element has and nothing in the engine reads:
 `ui.Rect { id = "panel", ... }`.
@@ -310,6 +313,9 @@ or an exact `text`), or a function of the node returning true.
   the run's scratch data folder and started through impasto's launcher: a
   window per program, destroyed when it exits, kept up (with the exit code)
   when it fails.
+- `contains_pointer_spec.lua`: a configuration written in the spec, and a
+  panel's `contains_pointer` through pointer moves, a leave, a clip, and a
+  binding made while the pointer was already there.
 - `impasto_spec.lua`: loads `examples/impasto/init.lua` with
   `IMPASTO_DRY_RUN`, opens every panel over IPC and closes it, and checks
   that nothing landed in `morf ipc call failed`. Run it with

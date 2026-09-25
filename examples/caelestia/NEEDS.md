@@ -5,35 +5,7 @@ dashboard). Each entry says what is missing, the API that would cover it,
 and why Lua cannot do it well. Work already under way elsewhere is marked
 **in progress** and only left as a TODO in the port.
 
-## 1. Hover that includes a node's descendants
-
-**What.** The dashboard opens when the pointer reaches the top edge and
-shuts when the pointer leaves it. "Leaves it" means leaves the panel *and
-everything on it*. A `MouseArea`'s `hovered` is true only while it is the
-topmost area under the pointer, so a full-panel area stops being hovered
-the moment the pointer is over a tab, a calendar arrow or a media button.
-
-**Workaround in the port.** `dashboard.lua` registers every `MouseArea` it
-makes in a list and treats the panel as hovered while any of them is
-(`panel_hovered()`), plus a 150 ms grace timer. That breaks as soon as
-someone adds an area without going through the helper, and it cannot see
-areas a library builds.
-
-**API.** `contains_pointer` (read-only, like `hovered`) on any node: true
-while the pointer is inside the node's box through its transforms,
-regardless of what is on top -- Qt's `HoverHandler`/`containsMouse` with
-propagation. Or a `MouseArea { hover_through = true }` whose `hovered`
-ignores areas above it. The hit test already knows the answer; Lua can
-only approximate it.
-
-## 2. Opacity of one layer in a field
-
-The reference fades a drawer's background in with its contents as it
-opens. The background here is a layer of the frame's field (so it can
-fillet into the frame), and a layer has no opacity of its own that blends
-with the rest of the field; fading the whole `Sdf` would fade the frame.
-The port fades only the contents. Needs `opacity` on `SdfShape` (the
-layer's coverage scaled before it is composed with the others).
+Nothing open: every entry found so far is in the engine (below).
 
 Phase 2 (the other dashboard tabs, the launcher's pickers, the session
 menu, the bar's popouts, notifications and the OSD) adds these. Item 1
@@ -101,6 +73,15 @@ its new value) would do it in one place.
 
 ## Engine fixes made in this branch
 
+- A node's hover including its descendants: every node has a read-only
+  `contains_pointer`, true while the pointer is inside its box whatever is
+  on top (docs/UI.md, "Hover and press"). The dashboard shuts on
+  `panel.contains_pointer` going false instead of a hand-kept list of its
+  areas.
+- Opacity of one layer in a field: `opacity` on an `SdfShape` fades that
+  layer, seam and all, without fading the rest of the field (docs/UI.md,
+  "Fields"). A drawer's background, a layer of the frame's field, now fades
+  in with its contents as the reference's does.
 - Headless runs (`morf check`/`render`/`test`) stretched a layer anchored at
   both ends of an axis to the screen even when it asked for a size; a
   compositor keeps the asked size, centred. The port's wallpaper layer,

@@ -259,6 +259,10 @@ function test.move(x, y, options)
   host.move(px, py, opts.surface or surface)
 end
 
+function test.leave(options)
+  host.leave((options or {}).surface)
+end
+
 function test.press(x, y, options)
   local px, py, opts, surface = point(x, y, options)
   host.button(px, py, opts.button or "left", true, opts.surface or surface)

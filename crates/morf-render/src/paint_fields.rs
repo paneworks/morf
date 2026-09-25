@@ -25,6 +25,10 @@ pub(crate) struct FieldDefaults {
     /// Where the field itself is drawn: its node and every ancestor
     /// transform. A layer that tracks another node is placed relative to it.
     pub(crate) transform: Transform2D,
+    /// The opacity of every node between the field and here: a layer's own
+    /// is multiplied by it. One at the field itself, whose own opacity fades
+    /// the whole composition as a group instead.
+    pub(crate) opacity: f32,
 }
 
 /// Reads everything beneath a field that has a shape, in composition order.
@@ -50,7 +54,17 @@ pub(crate) fn field_layers(
         if !scene.bool_value(child, "visible")? || scene.is_mask(child) {
             continue;
         }
-        match scene.element(child)? {
+        let element = scene.element(child)?;
+        if element == Element::Sdf {
+            continue;
+        }
+        // A node's opacity fades the layers under it as it fades anything
+        // else it holds.
+        let defaults = FieldDefaults {
+            opacity: defaults.opacity * scene.number(child, "opacity")?.clamp(0.0, 1.0) as f32,
+            ..defaults
+        };
+        match element {
             Element::SdfShape => {
                 if let Some(layer) = shape_layer(scene, layout, child, defaults)? {
                     layers.push(layer);
@@ -64,7 +78,6 @@ pub(crate) fn field_layers(
                 // part of the same composition.
                 field_layers(scene, layout, child, defaults, layers)?;
             }
-            Element::Sdf => {}
             _ => field_layers(scene, layout, child, defaults, layers)?,
         }
     }
@@ -190,6 +203,7 @@ fn shape_layer(
         .clamp(0.0, 1.0),
         operation,
         blend: layer_blend(scene, node, defaults.blend)?,
+        opacity: defaults.opacity,
         rotation,
         matrix,
         blend_group: scene.number(node, "blend_group")?.clamp(0.0, 65_535.0) as u32,
@@ -248,6 +262,7 @@ fn rect_layer(
             Operation::Union
         },
         blend,
+        opacity: defaults.opacity,
         rotation: scene.number(node, "rotation")? as f32,
         matrix: IDENTITY_LINEAR,
         blend_group: 0,

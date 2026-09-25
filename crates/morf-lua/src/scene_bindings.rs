@@ -28,6 +28,10 @@ pub(crate) const LAYOUT_POSITION: &str = "layout_position";
 /// frame, for nothing.
 pub(crate) const LAYOUT_SIZE: &str = "layout_size";
 
+/// A node's `contains_pointer`: kept by the runtime for the nodes something
+/// read it of, and the pseudo-property a binding reading it depends on.
+pub(crate) const CONTAINS_POINTER: &str = "contains_pointer";
+
 pub(crate) fn bump_property_signal(
     state: &mut ReactiveState,
     node: NodeHandle,
@@ -231,6 +235,27 @@ pub(crate) fn node_metatable<'gc>(
                 return Ok(CallbackReturn::Return);
             }
         }
+        // Whether the pointer is inside the node's box, whatever is drawn
+        // over it. The host answers it for the nodes that have been asked
+        // about, each time the pointer moves; asking enrols the node.
+        if key == CONTAINS_POINTER {
+            let mut state = read_state.borrow_mut();
+            if let Some(active) = &mut state.active {
+                active
+                    .property_reads
+                    .insert((node.handle, CONTAINS_POINTER.to_owned(), false));
+            }
+            let value = match state.pointer_watch.get(&node.handle) {
+                Some(value) => *value,
+                None => {
+                    state.pointer_watch.insert(node.handle, false);
+                    state.pointer_watch_fresh.push(node.handle);
+                    false
+                }
+            };
+            stack.replace(ctx, LuaValue::Boolean(value));
+            return Ok(CallbackReturn::Return);
+        }
         if key == "stretch" {
             let stretch = read_state.borrow().scene.stretch(node.handle);
             let value = match stretch {
@@ -369,6 +394,9 @@ pub(crate) fn refuse_runtime_owned(
     node: NodeHandle,
     property: &str,
 ) -> Result<(), String> {
+    if property == CONTAINS_POINTER {
+        return Err("`contains_pointer` is read-only: the pointer sets it".to_owned());
+    }
     if matches!(property, "hovered" | "pressed")
         && state.scene.element(node).ok() == Some(Element::MouseArea)
     {
