@@ -23,6 +23,7 @@ pub(crate) fn blend_constants(blend: BlendSpace) -> &'static [(&'static str, f64
     }
 }
 
+mod backdrops;
 mod backend_init;
 mod backend_render;
 mod backend_types;
@@ -43,6 +44,8 @@ mod terminal_batch;
 mod textures;
 
 pub use backend_types::*;
+#[cfg(test)]
+mod backdrop_tests;
 #[cfg(test)]
 mod clip_tests;
 #[cfg(test)]

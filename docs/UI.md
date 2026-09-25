@@ -573,6 +573,39 @@ ui.Rect {
 The whole table is one property: a binding may return it, and a behavior
 on it moves every stop's colour and position at once.
 
+### Frosted glass
+
+`backdrop_blur` on a `Rect` or `ClipRect` takes a radius, in logical
+pixels: whatever the same surface drew beneath the shape — a wallpaper
+drawn inline, the panels under a popover — is blurred and drawn back
+inside it, corners and all, with the rect's own `color` over it as the
+tint. It needs nothing from the compositor, so it looks the same under
+cage, GNOME or a compositor with no blur at all. `backdrop_saturation`
+(1 by default) greys the backdrop towards 0 or deepens it above 1.
+
+```lua
+ui.Rect {
+  radius = 22,
+  color = morf.color("#1a1a1e"):alpha(0.55),  -- the tint over the blur
+  backdrop_blur = 24,
+  backdrop_saturation = 1.4,
+}
+```
+
+The radius is a Gaussian's standard deviation, as in a stylesheet's
+`blur()`, and stops at 96. The blur reads twice the radius past the edge,
+so the rim pulls in what lies beside the glass rather than darkening. It
+is done at half resolution and below, and kept: a panel blurs again only
+when something drawn beneath it within that reach changes, so a desk whose
+clocks tick on top of its panels blurs nothing after the first frame. A
+change under the glass repaints the whole panel.
+
+It only sees this surface. Over a separate wallpaper layer, or over other
+windows, the shape has nothing beneath it to blur; for that, `backdrop_blur
+= true` asks the compositor to blur behind the node instead, where it can
+(`morf.capabilities.backdrop_blur` says whether it can). One node takes one or
+the other; wrap it in an `Item` with `backdrop_blur = true` for both.
+
 ### Themes and preferences
 
 `morf.theme(tokens, options)` is a `morf.state` for appearance. A string

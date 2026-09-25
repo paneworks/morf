@@ -295,6 +295,7 @@ impl WgpuBackend {
             path_textures: HashMap::new(),
             path_outlines: Default::default(),
             layer_target_pool: Vec::new(),
+            backdrops: Default::default(),
             text: TextSystem::new(),
             drawings: morf_svg::SvgOutlines::new(),
             texture,
@@ -320,6 +321,14 @@ impl WgpuBackend {
         &self.info
     }
 
+    /// Waits until the GPU has finished everything submitted to it.
+    ///
+    /// For measuring a frame's cost on the GPU rather than the CPU's time to
+    /// record it; a shell never needs to.
+    pub fn wait_idle(&self) {
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+    }
+
     /// Recreates the physical target and updates shader viewport dimensions.
     pub(crate) fn resize_target(&mut self, width: u32, height: u32) {
         self.width = width.max(1);
@@ -332,6 +341,9 @@ impl WgpuBackend {
         );
         // The pooled layer targets are surface-sized, so a resize retires them.
         self.layer_target_pool.clear();
+        // So is the backdrops' scratch, and every region they were cut from.
+        self.backdrops.entries.clear();
+        self.backdrops.scratch = None;
         let viewport = [self.width as f32, self.height as f32, self.elapsed, 0.0];
         self.queue
             .write_buffer(&self.viewport_buffer, 0, bytemuck::cast_slice(&viewport));

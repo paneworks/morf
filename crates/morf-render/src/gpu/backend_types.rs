@@ -156,6 +156,9 @@ pub struct WgpuBackend {
     /// clears its target before drawing, so there is nothing to carry over and
     /// nothing to rebuild.
     pub(crate) layer_target_pool: Vec<(wgpu::Texture, wgpu::TextureView)>,
+    /// Frosted-glass backdrops: their blurred textures, kept until what is
+    /// beneath them changes, and the scratch target they are drawn from.
+    pub(crate) backdrops: super::backdrops::BackdropCache,
     pub(crate) text: TextSystem,
     /// Documents already read, so an icon is parsed and resampled once rather
     /// than once a frame.
