@@ -220,3 +220,87 @@ pub(crate) fn a_frame_and_a_tracked_sliding_panel_render_from_the_scene() {
         "the inside is open elsewhere"
     );
 }
+
+/// A 512 frame with panels on two edges in two groups, one of them sheared:
+/// large enough to be drawn as tiles.
+fn large_frame() -> (DrawList, Vec<SdfLayer>) {
+    let size = 512.0;
+    let mut scene = morf_scene::Scene::new();
+    let node = scene.create(morf_scene::Element::Sdf);
+    let whole = field_layer(0.0, 0.0, size, Shape::Box);
+    let mut hole = field_layer(12.0, 12.0, size - 24.0, Shape::Box);
+    hole.operation = Operation::Subtract;
+    hole.radii = [24.0; 4];
+    let mut layers = vec![whole, hole];
+    for (index, (x, y, w, h)) in [(180.0, 12.0, 150.0, 90.0), (12.0, 200.0, 80.0, 140.0)]
+        .into_iter()
+        .enumerate()
+    {
+        let mut panel = field_layer(x, y, w, Shape::Box);
+        panel.bounds.height = h;
+        panel.radii = [14.0; 4];
+        panel.operation = Operation::SmoothUnion;
+        panel.blend = 16.0;
+        panel.profile = BlendProfile::Circular;
+        panel.blend_group = index as u32 + 1;
+        layers.push(panel);
+    }
+    layers[3].matrix = [1.0, 0.1, 0.0, 1.0];
+    let mut command = field_command(node, layers.clone());
+    if let DrawCommand::Field { bounds, .. } = &mut command {
+        bounds.width = size;
+        bounds.height = size;
+    }
+    (
+        DrawList {
+            commands: vec![command],
+            layers: Vec::new(),
+        },
+        layers,
+    )
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+pub(crate) fn a_tiled_frame_paints_exactly_where_its_cpu_twin_says() {
+    let (list, layers) = large_frame();
+    // It is tiled: most of the inside is not drawn at all.
+    let tiles = crate::field_tiles(
+        &layers,
+        morf_layout::Geometry {
+            x: 0.0,
+            y: 0.0,
+            width: 512.0,
+            height: 512.0,
+        },
+        [0.0, 0.0, 512.0, 512.0],
+        1.0,
+        crate::Spill {
+            edge: 2.0,
+            shadow: None,
+            solid: true,
+        },
+    )
+    .expect("a large hollow frame is tiled");
+    let drawn: f32 = tiles
+        .iter()
+        .map(|tile| (tile.area[2] - tile.area[0]) * (tile.area[3] - tile.area[1]))
+        .sum();
+    assert!(drawn < 512.0 * 512.0 * 0.75, "{drawn} of the quad drawn");
+    let pixels = render_readback(&list, 512);
+    let mut checked = 0;
+    for y in 0..512 {
+        for x in 0..512 {
+            let distance = composed_distance(&layers, [x as f32 + 0.5, y as f32 + 0.5]);
+            let alpha = alpha_at(&pixels, 512, x, y);
+            if distance < -1.5 {
+                assert_eq!(alpha, 255, "inside at {x},{y} ({distance})");
+                checked += 1;
+            } else if distance > 1.5 {
+                assert_eq!(alpha, 0, "outside at {x},{y} ({distance})");
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 200_000, "{checked} pixels decided");
+}

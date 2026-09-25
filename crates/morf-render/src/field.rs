@@ -153,7 +153,7 @@ pub struct SdfFieldInstance {
     pub style: [f32; 4],
     /// Affine matrix, column major.
     pub transform: [f32; 4],
-    /// Affine translation in `xy`.
+    /// Affine translation in `xy`; `z` is which material is this field's.
     pub transform_offset: [f32; 4],
     /// Everything the surface can reach, in the node's own space: left, top,
     /// right, bottom.
@@ -322,7 +322,9 @@ impl SdfFieldInstance {
             transform_offset: [
                 (transform.matrix[4] * scale) as f32,
                 (transform.matrix[5] * scale) as f32,
-                0.0,
+                // Which material is this field's: its own instance index once, and
+                // no longer since a field may be drawn as several tiles.
+                (materials.len() - 1) as f32,
                 0.0,
             ],
             // A shader that owns its coverage paints across the whole node,
@@ -478,7 +480,7 @@ impl SdfFieldInstance {
             transform_offset: [
                 (transform.matrix[4] * scale) as f32,
                 (transform.matrix[5] * scale) as f32,
-                0.0,
+                (materials.len() - 1) as f32,
                 0.0,
             ],
             // A surface shader on a rectangle owns the whole node, exactly as
@@ -498,7 +500,10 @@ impl SdfFieldInstance {
     }
 }
 
+mod cull;
 pub(crate) mod glyph_layer;
 mod reach;
 
+pub use cull::{FIELD_TILE, FieldTile, composable, composed_distance};
+pub(crate) use cull::{Spill, field_tiles};
 pub use reach::*;

@@ -34,9 +34,9 @@ struct Layer {
 
 /// Everything about a field's surface that is not its shape.
 ///
-/// One per instance, read by `instance_index`, because there is exactly one of
-/// these per composed field and threading an index through the vertex
-/// attributes to say so would only be a way of getting it wrong. It lives in a
+/// One per composed field, found by the index the instance carries in
+/// `transform_offset.z` — not by the instance index, since a large field is
+/// drawn as several tiles that share one material. It lives in a
 /// storage buffer rather than in attributes because the quad pipeline this
 /// pass absorbed already used sixteen of them, and sixteen is the limit.
 struct Material {
@@ -153,7 +153,9 @@ fn vs_main(
     output.fill = fill;
     output.outline = outline;
     output.style = style;
-    output.material = instance_index;
+    // Carried rather than taken from the instance index: a field drawn as
+    // several tiles is several instances of one material.
+    output.material = u32(transform_offset.z + 0.5) | select(0u, 0x80000000u, transform_offset.w > 0.5);
     return output;
 }
 
@@ -729,8 +731,19 @@ fn gradient_fill(material: u32, local: vec2<f32>, flat_color: vec4<f32>) -> vec4
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let first = u32(input.style.z);
     let count = u32(input.style.w);
-    let material = materials[input.material];
-    let surface = compose(input.local, input.fill, first, count);
+    // The high bit marks a tile the host found deep inside a surface of one
+    // colour: every layer there would only agree that the pixel is filled.
+    let material_index = input.material & 0x7fffffffu;
+    let solid = (input.material & 0x80000000u) != 0u;
+    let material = materials[material_index];
+    var surface: Composed;
+    if solid {
+        surface.distance = -1.0e4;
+        surface.fill = layers[first].color;
+        surface.group = 0u;
+    } else {
+        surface = compose(input.local, input.fill, first, count);
+    }
     let distance = surface.distance;
 
     // The derivative gives one pixel of coverage whatever the surface scale,
@@ -752,7 +765,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let coverage = smoothstep(ramp, -ramp, distance - outset);
     let filled = smoothstep(ramp, -ramp, distance + inset);
 
-    var fill_color = gradient_fill(input.material, input.local, surface.fill);
+    var fill_color = gradient_fill(material_index, input.local, surface.fill);
     // Normalised across the node's own rectangle, which is what a shader means
     // by `uv` and what makes one read the same at any size.
     let shader_uv = (input.local - material.shape.xy) / max(material.shape.zw, vec2<f32>(0.000001));

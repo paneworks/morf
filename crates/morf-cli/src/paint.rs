@@ -380,6 +380,19 @@ pub(crate) fn paint_layer(
         })
         .map_err(|error| error.to_string())?;
     split.mark("render");
+    // What the frame repainted, beside how long it took: the one number that
+    // says whether a change cost its own area or the whole surface.
+    if frame_log_wanted() && !damage.is_empty() {
+        let area: u64 = damage
+            .iter()
+            .map(|rect| u64::from(rect.width) * u64::from(rect.height))
+            .sum();
+        eprintln!(
+            "{} layer {layer} damaged {area} px in {} rect(s)",
+            crate::wake_plan::stamp(),
+            damage.len()
+        );
+    }
     if damage.is_empty() {
         client.commit_layer(layer);
     }
