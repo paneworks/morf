@@ -499,6 +499,14 @@ fn hyprland_library_reconnects_when_the_stream_drops() {
         "assert(H.state.connected and seen.connects == 1)",
     );
     let monitors_before = fake.count("j/monitors all");
+    // The client hears it connected once the kernel queued the connection;
+    // the fake holds the stream only once its accept loop has taken it. A
+    // hang-up before that has nothing to hang up.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while fake.events.lock().unwrap().is_none() {
+        assert!(Instant::now() < deadline, "the fake never took the stream");
+        thread::sleep(Duration::from_millis(1));
+    }
 
     fake.hang_up();
     wait_for(
