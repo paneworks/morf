@@ -177,3 +177,19 @@ fn a_node_that_leaves_before_it_was_ever_placed_stays_at_its_own_x_and_y() {
     let geometry = layout.geometry(node).unwrap();
     assert_eq!((geometry.x, geometry.width), (7.0, 20.0));
 }
+
+#[test]
+fn a_fresh_layout_puts_a_leaving_node_where_the_last_one_placed_it() {
+    // A runner that lays out from nothing each frame, rather than bringing
+    // one layout up to date, still sees the node where it was.
+    let mut scene = Scene::new();
+    let (root, _, [_, b, c], _) = column(&mut scene);
+    let was = Layout::compute(&scene, root, AREA, &mut FixedText)
+        .unwrap()
+        .geometry(b)
+        .unwrap();
+    scene.begin_exit(b).unwrap();
+    let fresh = Layout::compute(&scene, root, AREA, &mut FixedText).unwrap();
+    assert_eq!(fresh.geometry(b), Some(was));
+    assert_eq!(fresh.geometry(c).unwrap().y, 20.0 + 30.0 + 5.0);
+}

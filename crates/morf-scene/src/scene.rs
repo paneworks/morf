@@ -33,6 +33,7 @@ impl Scene {
             stretch: FastMap::default(),
             stretch_clock: 0.0,
             exit_specs: FastMap::default(),
+            exit_placed: FastMap::default(),
             exiting: FastMap::default(),
         }
     }
@@ -258,6 +259,7 @@ impl Scene {
             self.tracks.remove(&current);
             self.stretch.remove(&current);
             self.exit_specs.remove(&current);
+            self.exit_placed.remove(&current);
             self.exiting.remove(&current);
             // Its properties live in the scene's signal graph, not in the
             // node; they go with it or they stay allocated for the life of

@@ -61,6 +61,8 @@ mod clip_tests;
 #[cfg(test)]
 mod drawer_tests;
 #[cfg(test)]
+mod exit_tests;
+#[cfg(test)]
 mod field_agreement_tests;
 #[cfg(test)]
 mod field_color_tests;

@@ -714,6 +714,21 @@ impl Layout {
         host: &mut dyn CustomLayout,
     ) -> Result<(), LayoutError> {
         let before = self.geometry.insert(node, geometry);
+        if scene.has_exits()
+            && !scene.is_exiting(node)
+            && let Some(parent) = scene.parent(node)?
+            && let Some(around) = self.geometry.get(&parent)
+        {
+            scene.note_placed(
+                node,
+                [
+                    geometry.x - around.x,
+                    geometry.y - around.y,
+                    geometry.width,
+                    geometry.height,
+                ],
+            );
+        }
         let status = self.status(scene, node)?;
         if !status.visit
             && let Some(before) = before

@@ -55,6 +55,7 @@ impl Scene {
         let id = self.live(node)?;
         let Some(mut exit) = exit else {
             self.exit_specs.remove(&id);
+            self.exit_placed.remove(&id);
             return Ok(());
         };
         let element = self.nodes[id].element;
@@ -69,7 +70,22 @@ impl Scene {
             *value = coerce(element, property, slot.kind, value.clone())?;
         }
         self.exit_specs.insert(id, exit);
+        self.exit_placed.entry(id).or_default();
         Ok(())
+    }
+
+    /// Whether any node has declared an exit: a layout with none to watch
+    /// for notes nothing.
+    pub fn has_exits(&self) -> bool {
+        !self.exit_placed.is_empty()
+    }
+
+    /// Notes where a node that declared an exit was placed, relative to its
+    /// parent's box: where it stays if it starts to leave. For the layout.
+    pub fn note_placed(&self, node: NodeHandle, frame: [f64; 4]) {
+        if let Some(placed) = self.exit_placed.get(&node.id()) {
+            placed.set(Some(frame));
+        }
     }
 
     /// How a node was declared to leave, if it was.
@@ -117,7 +133,9 @@ impl Scene {
                 restore,
                 behavior: spec.behavior,
                 origin,
-                frame: Cell::new(None),
+                // Where the last layout put it, if one has: every layout
+                // after keeps it there, a fresh one included.
+                frame: Cell::new(self.exit_placed.get(&id).and_then(Cell::get)),
                 done: false,
             },
         );

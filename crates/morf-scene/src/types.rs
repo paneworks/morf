@@ -265,6 +265,10 @@ pub struct Scene {
     pub(crate) stretch_clock: f64,
     /// How nodes that declared one leave: see [`crate::ExitSpec`].
     pub(crate) exit_specs: FastMap<NodeId, crate::ExitSpec>,
+    /// Where each node that declared an exit was last placed, relative to
+    /// its parent: the box it keeps when it starts to leave. Noted by the
+    /// layout through a shared reference, hence the cells.
+    pub(crate) exit_placed: FastMap<NodeId, std::cell::Cell<Option<[f64; 4]>>>,
     /// Nodes on their way out, drawn but out of the flow.
     pub(crate) exiting: FastMap<NodeId, crate::exit::Exiting>,
 }
