@@ -31,7 +31,7 @@ local ROW_W = 384
 local LINE = 22
 local GROUPS = 8        -- groups on show at most
 local LINES = 4         -- lines of a group shut, cards of one opened
-local ITEM_H = 102      -- a notification in an opened group
+local ITEM_H = 112      -- a notification in an opened group
 
 local function screen_height()
   morf.screens_revision()
@@ -92,7 +92,7 @@ end
 local function group_height(g)
   if not g then return 0 end
   local n = math.min(#g.items, LINES)
-  if is_open(g.app) then return 34 + n * (ITEM_H + 8) + 4 end
+  if is_open(g.app) then return 40 + n * ITEM_H + (n - 1) * 8 + 12 end
   return 12 + LINE + n * LINE + 12
 end
 
@@ -128,26 +128,26 @@ local function item(n_of, k, tag)
     end, 15)
   end
   return ui.Rect {
-    x = 66, y = 34 + (k - 1) * (ITEM_H + 8), width = ROW_W - 66 - 12, height = ITEM_H,
+    x = 66, y = 40 + (k - 1) * (ITEM_H + 8), width = ROW_W - 66 - 12, height = ITEM_H,
     radius = 12, color = function() return C.surfaceContainerHigh end,
     visible = function() return n_of() ~= nil end,
     kit.text {
-      x = 10, y = 8, width = 240, elide = "right",
+      x = 10, y = 10, width = 240, elide = "right",
       text = function() local n = n_of() return n and plain(n.summary) or "" end,
-      font_size = theme.size.larger, font_weight = 500,
+      font_size = theme.size.larger,
     },
     kit.text {
-      anchors = { right = true, right_margin = 10 }, y = 8,
+      anchors = { right = true, right_margin = 10 }, y = 10,
       text = function() local n = n_of() return n and ago(n.time) or "" end,
       font_size = theme.size.larger, color = function() return C.onSurfaceVariant end,
     },
     kit.text {
-      x = 10, y = 30, width = 286, elide = "right",
+      x = 10, y = 34, width = 286, elide = "right",
       text = function() local n = n_of() return n and plain(n.body) or "" end,
       font_size = theme.size.larger, color = function() return C.onSurfaceVariant end,
     },
     ui.Row {
-      x = 10, y = 62, gap = 8,
+      x = 10, y = 68, gap = 8,
       button("close", "sidebar-dismiss-" .. tag, function(n) notifs.forget(n.id) end),
       button("content_copy", "sidebar-copy-" .. tag, function(n)
         pcall(morf.clipboard.set, plain(n.body ~= "" and n.body or n.summary))

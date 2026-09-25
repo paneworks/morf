@@ -159,7 +159,7 @@ function M.elastic(node, axis, l0, r0, l1, r1, opts)
 end
 
 --- The contents of a drawer coming in (`coming`) or going: each of `nodes`
---- grows evenly about its own centre from 0.92 as it fades in, one a
+--- grows evenly about its own centre from 0.92 (`opts.from`) as it fades in, one a
 --- little after the other (`opts.stagger`, 26 ms; `opts.delay` before the
 --- first), or shrinks a touch and fades as they go. No offsets and no
 --- squash: at rest every node is exactly where and what it was. Returns the

@@ -5,7 +5,8 @@ dashboard). Each entry says what is missing, the API that would cover it,
 and why Lua cannot do it well. Work already under way elsewhere is marked
 **in progress** and only left as a TODO in the port.
 
-Nothing open: every entry found so far is in the engine (below).
+One entry is open (the idle inhibitor's read-back, phase 3 at the end);
+every other entry found so far is in the engine (below).
 
 Phase 2 (the other dashboard tabs, the launcher's pickers, the session
 menu, the bar's popouts, notifications and the OSD) found the entries
