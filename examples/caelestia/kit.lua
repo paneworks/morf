@@ -182,6 +182,54 @@ function M.shape(props)
   return shapes.Shape(props)
 end
 
+--- An M3 expressive shape as an inline SVG document, for an `SdfShape`'s
+--- `source`: a drawing is an outline to a field, so the shape unions, melts
+--- and morphs with the other layers.
+local svgs = {}
+function M.svg(name)
+  shapes = shapes or require("lib.m3shapes")
+  if not svgs[name] then
+    svgs[name] = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="%s"/></svg>')
+      :format(shapes.path(name))
+  end
+  return svgs[name]
+end
+
+--- A field layer in an M3 expressive shape that morphs, outline to outline,
+--- whenever `shape()` changes. `props` as an `SdfShape`'s, and `duration`,
+--- `easing`.
+function M.sdf_shape(props)
+  local source = props.shape
+  local current = type(source) == "function" and source() or source
+  local motion = { duration = props.duration or 450, easing = props.easing or theme.ease.spatial }
+  props.shape, props.duration, props.easing = nil, nil, nil
+  props.source = M.svg(current)
+  props.source_morph_to = M.svg(current)
+  props.morph_progress = 0
+  props.behavior = props.behavior or {}
+  props.behavior.morph_progress = motion
+  local node = ui.SdfShape(props)
+  if type(source) == "function" then
+    -- As lib/m3shapes' Shape: the two ends take turns, so a change never
+    -- jumps back to a start.
+    local at_end = false
+    morf.effect("caelestia.sdf_shape", function()
+      local name = source()
+      if name == current then return end
+      current = name
+      if at_end then
+        node.source = M.svg(name)
+        node.morph_progress = 0
+      else
+        node.source_morph_to = M.svg(name)
+        node.morph_progress = 1
+      end
+      at_end = not at_end
+    end, { owner = node })
+  end
+  return node
+end
+
 -- The loading indicator's shapes, in the order M3 expressive cycles them.
 local LOADING = { "soft_burst", "cookie9", "pentagon", "pill", "sunny", "cookie4", "oval", "flower" }
 

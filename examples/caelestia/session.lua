@@ -94,7 +94,20 @@ end
 
 local buttons = {}
 local order = {}
-for i, item in ipairs(ITEMS) do
+-- The buttons' backgrounds are layers of one field under them: drops that
+-- bud out of the frame one after another as the menu opens, swell under
+-- the pointer until they fuse with a neighbour, and morph their shape with
+-- their state (M3 expressive): a rounded square at rest, a nine-point
+-- cookie with the focus (turning slowly), a sunburst while pressed.
+-- Soft seams only while the drops bud; at rest the buttons are crisp.
+local budding = morf.signal("caelestia.session.budding", false)
+local layers = {
+  id = "session-field", anchors = { fill = true },
+  blend = function() return budding:get() and 20 or 0 end,
+  behavior = { blend = { duration = 300, easing = theme.ease.standard } },
+}
+local swell = kit.spring(420, 16)
+for _, item in ipairs(ITEMS) do
   if item.id == "picture" then
     buttons[#buttons + 1] = picture()
   else
@@ -107,32 +120,58 @@ for i, item in ipairs(ITEMS) do
       width = BUTTON, height = BUTTON, cursor = "pointer",
       on_entered = function() M.focus:set(index) end,
       on_clicked = function() M.run(item.id) end,
+      scale = function()
+        if area and area.pressed then return 0.94 end
+        return (area and area.hovered) and 1.14 or 1
+      end,
+      behavior = { scale = swell },
+      stretch = kit.STRETCH,
       kit.icon(item.icon, 36, function() return on() and C.onSecondaryContainer or C.onSurface end, {
         anchors = { center_in = true },
+        fill = on,
       }),
     }
-    -- M3 expressive: the button's shape morphs with its state -- a
-    -- rounded square at rest, a nine-point cookie with the focus, a
-    -- sunburst while pressed -- and the focused one turns slowly.
-    local wash = kit.shape {
+    layers[#layers + 1] = kit.sdf_shape {
       id = "session-" .. item.id .. "-shape",
-      anchors = { fill = true }, z = -1,
+      track = area,
+      operation = #layers == 0 and "union" or "smooth_union",
       shape = function()
         if area.pressed then return "sunny" end
         if on() then return "cookie9" end
         return "square"
       end,
-      color = function()
+      fill_color = function()
         if on() then return C.secondaryContainer end
         return area.hovered and C.surfaceContainerHigh or C.surfaceContainer
       end,
+      behavior = { fill_color = { duration = theme.duration.small } },
       loop = function()
         if not (on() and M.drawer.open:get()) then return nil end
         return { rotation = { to = 360, duration = 12000, hold = true } }
       end,
     }
-    ui.reparent(wash, area)
     buttons[#buttons + 1] = area
+  end
+end
+
+-- Opening, each button drops out of the frame's edge in turn: from beyond
+-- it, small, on the expressive spatial curve.
+local settle
+local function bud()
+  budding:set(true)
+  if settle then settle:cancel() end
+  settle = morf.timer(60 + #buttons * 55 + 420, function() settle = nil budding:set(false) end, false)
+  for k, node in ipairs(buttons) do
+    morf.animation.play {
+      {
+        parallel = {
+          { node = node, property = "translate_x", from = 110, to = 0, duration = 560,
+            easing = theme.ease.spatial, delay = 60 + (k - 1) * 55 },
+          { node = node, property = "scale", from = 0.35, to = 1, duration = 560,
+            easing = theme.ease.spatial, delay = 60 + (k - 1) * 55 },
+        },
+      },
+    }
   end
 end
 
@@ -152,6 +191,7 @@ local keys = ui.TextInput {
 
 local content = ui.Item {
   anchors = { fill = true },
+  ui.Sdf(layers),
   ui.Column { x = PAD, y = PAD, gap = GAP, table.unpack(buttons) },
   keys,
 }
@@ -183,6 +223,7 @@ end
 morf.effect("caelestia.session.open", function()
   local open = M.drawer.open:get()
   if open then
+    bud()
     M.focus:set(1)
     keys.focus = true
     morf.surface.keyboard_focus = "exclusive"

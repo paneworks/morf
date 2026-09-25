@@ -615,26 +615,33 @@ kit.collect(nil)
 
 -- ----------------------------------------------------------------- liquid --
 
--- While cards move, the field's seams are wide and soft, so neighbours
--- fuse; once they settle the seams close and the cards stand apart.
-local liquid = morf.signal("caelestia.dashboard.liquid", false)
-local calm
-local function stir(ms)
-  liquid:set(true)
-  if calm then calm:cancel() end
-  calm = morf.timer(ms, function() calm = nil liquid:set(false) end, false)
+-- While a tab's cards move, its field's seams are wide and soft, so
+-- neighbours fuse; once they settle the seams close to nothing and the
+-- cards stand crisp and apart, exactly as the reference's. One field per
+-- tab (a field draws at most sixteen layers, and a tab's cards are its
+-- own), laid under the pages.
+local liquid = { }
+for i = 1, #LAYERS do liquid[i] = morf.signal("caelestia.dashboard.liquid." .. i, false) end
+local calm = {}
+local function stir(i, ms)
+  liquid[i]:set(true)
+  if calm[i] then calm[i]:cancel() end
+  calm[i] = morf.timer(ms, function() calm[i] = nil liquid[i]:set(false) end, false)
 end
 
-local field = {
-  id = "dashboard-cards",
-  anchors = { fill = true },
-  blend = function() return liquid:get() and 30 or 1 end,
-  behavior = { blend = { duration = 420, easing = theme.ease.standard } },
-}
-for _, list in ipairs(LAYERS) do
-  for _, entry in ipairs(list) do field[#field + 1] = entry.shape end
+local cards_fields = {}
+for i, list in ipairs(LAYERS) do
+  if #list > 0 then
+    local field = {
+      id = "dashboard-cards-" .. i,
+      anchors = { fill = true },
+      blend = function() return liquid[i]:get() and 28 or 0 end,
+      behavior = { blend = { duration = 360, easing = theme.ease.standard } },
+    }
+    for _, entry in ipairs(list) do field[#field + 1] = entry.shape end
+    cards_fields[#cards_fields + 1] = ui.Sdf(field)
+  end
 end
-local cards_field = ui.Sdf(field)
 
 local running = {}
 --- The cards of tab `i` bud out (`coming`) -- each from small, a little
@@ -665,7 +672,7 @@ local function bud(i, coming)
     end
     running[i][#running[i] + 1] = morf.animation.play { { parallel = steps } }
   end
-  stir(coming and (700 + #(LAYERS[i] or {}) * 45) or 260)
+  stir(i, coming and (560 + #(LAYERS[i] or {}) * 45) or 240)
 end
 M.bud = bud
 
@@ -692,7 +699,7 @@ local track = ui.Row {
   behavior = { translate_x = SWITCH },
   table.unpack(pages),
 }
-ui.reparent(cards_field, strip)
+for _, f in ipairs(cards_fields) do ui.reparent(f, strip) end
 ui.reparent(track, strip)
 
 -- Behind everything on the panel, so the panel is in the surface's input
