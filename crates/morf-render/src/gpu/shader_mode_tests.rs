@@ -173,6 +173,8 @@ fn through_effect(body: &str, params: &[(&str, f32)], colour: Color) -> Vec<u8> 
             shadow_color: Color::rgba8(0, 0, 0, 0),
             shadow_blur: 0.0,
             shadow_offset: [0.0, 0.0],
+            alpha_mask: None,
+            mask_for: None,
             mask: None,
             shader: Some(ShaderBinding {
                 program: compiled.hash,

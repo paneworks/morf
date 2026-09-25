@@ -2,6 +2,8 @@ use std::time::Duration;
 
 use crate::*;
 
+mod mask;
+
 #[test]
 fn reparenting_preserves_identity_and_order() {
     let mut scene = Scene::new();

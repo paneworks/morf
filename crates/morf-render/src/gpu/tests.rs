@@ -324,6 +324,8 @@ pub(crate) fn srgb_blending_mixes_encoded_values_as_browsers_do() {
             shadow_color: clear,
             shadow_blur: 0.0,
             shadow_offset: [0.0; 2],
+            alpha_mask: None,
+            mask_for: None,
             mask: None,
             shader: None,
             bounds: Geometry {

@@ -132,7 +132,9 @@ impl DamageTracker {
                 .iter()
                 .any(|(bounds, changed_order)| *changed_order < order && overlaps(*bounds, reach))
             {
-                logical.push(command.bounds());
+                // And its antialiased rim, which the glass draws half a
+                // pixel past its shape.
+                logical.push(expand_geometry(command.bounds(), 1.0));
             }
         }
         self.scale_120 = scale_120;
@@ -350,6 +352,10 @@ fn keyed_layers(
                 layer: Layer {
                     commands: 0..0,
                     parent: None,
+                    // Indices, like the range: which layer a mask is shows
+                    // in the mask layer's parent and members.
+                    alpha_mask: layer.alpha_mask.map(|mask| AlphaMask { layer: 0, ..mask }),
+                    mask_for: layer.mask_for.map(|_| 0),
                     ..layer.clone()
                 },
                 parent: layer.parent.and_then(|parent| keys.get(parent).copied()),

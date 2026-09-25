@@ -95,6 +95,9 @@ pub struct WgpuBackend {
     pub(crate) viewport_buffer: wgpu::Buffer,
     pub(crate) viewport_bind_group: wgpu::BindGroup,
     pub(crate) glyph_pipeline: wgpu::RenderPipeline,
+    /// The layer composite through an alpha mask, built the first time a
+    /// frame has a mask: most shells never do.
+    pub(crate) mask_pipeline: Option<wgpu::RenderPipeline>,
     /// Whether the device was opened with dual-source blending, which
     /// subpixel text needs.
     pub(crate) lcd_supported: bool,

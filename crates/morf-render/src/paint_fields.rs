@@ -46,7 +46,8 @@ pub(crate) fn field_layers(
     layers: &mut Vec<SdfLayer>,
 ) -> Result<(), RenderError> {
     for &child in scene.children(node)? {
-        if !scene.bool_value(child, "visible")? {
+        // A mask is the field's mask, not one of its shapes.
+        if !scene.bool_value(child, "visible")? || scene.is_mask(child) {
             continue;
         }
         match scene.element(child)? {

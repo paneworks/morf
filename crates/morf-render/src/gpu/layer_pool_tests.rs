@@ -45,6 +45,8 @@ fn layer(
         shadow_color: Color::rgba8(0, 0, 0, 0),
         shadow_blur: 0.0,
         shadow_offset: [0.0, 0.0],
+        alpha_mask: None,
+        mask_for: None,
         mask: Some(LayerMask {
             bounds,
             transform: Transform2D::IDENTITY,

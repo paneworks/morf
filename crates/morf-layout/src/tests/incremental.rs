@@ -258,6 +258,11 @@ fn make(scene: &mut Scene, rng: &mut Rng, depth: usize) -> NodeHandle {
             let child = make(scene, rng, depth - 1);
             scene.reparent(child, Some(node)).unwrap();
         }
+        // Now and then a mask, laid out in the node's box.
+        if rng.chance(15) {
+            let mask = make(scene, rng, 1);
+            scene.set_mask(node, Some(mask)).unwrap();
+        }
     }
     node
 }
@@ -318,6 +323,15 @@ fn mutate(scene: &mut Scene, rng: &mut Rng, root: NodeHandle) {
             // Moved elsewhere in the same tree.
             let target = *rng.pick(&all);
             let _ = scene.reparent(node, Some(target));
+        }
+        15 if node != root && !scene.is_mask(node) => {
+            // A mask given, or taken away.
+            if scene.mask(node).is_some() && rng.chance(50) {
+                scene.set_mask(node, None).unwrap();
+            } else {
+                let mask = make(scene, rng, 1);
+                scene.set_mask(node, Some(mask)).unwrap();
+            }
         }
         14 if element == Element::Flickable => {
             scene.assign(node, "content_x", rng.number(30.0)).unwrap();

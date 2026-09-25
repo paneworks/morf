@@ -55,6 +55,8 @@ pub(crate) struct LayerTarget {
     pub(crate) shadow_bind_group: Option<wgpu::BindGroup>,
     pub(crate) shadow_instance: Option<u32>,
     pub(crate) shadow: Option<BlurChain>,
+    /// The mask's texture, for a layer composited through an alpha mask.
+    pub(crate) alpha_mask: Option<wgpu::BindGroup>,
 }
 
 pub(crate) struct BlurChain {

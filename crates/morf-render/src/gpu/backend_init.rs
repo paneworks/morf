@@ -412,6 +412,7 @@ impl WgpuBackend {
             viewport_buffer,
             viewport_bind_group,
             glyph_pipeline,
+            mask_pipeline: None,
             lcd_supported,
             subpixel: None,
             lcd_pipeline: None,
@@ -547,6 +548,7 @@ impl WgpuBackend {
         self.lcd_pipeline = self
             .subpixel
             .map(|text| build_lcd_pipeline(&self.device, &self.glyph_layout, blend, text));
+        self.mask_pipeline = None;
         self.blur_pipeline = build_blur_pipeline(&self.device, &self.blur_layout, blend);
         self.field_pipeline = build_field_pipeline(
             &self.device,

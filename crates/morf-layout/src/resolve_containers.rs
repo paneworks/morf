@@ -52,6 +52,7 @@ impl Layout {
                 self.place(scene, node, placed, text, host)?;
             } else {
                 self.geometry.insert(node, placed);
+                self.place_mask(scene, node, text, host)?;
             }
         }
         Ok(())
@@ -93,7 +94,12 @@ impl Layout {
         text: &mut impl TextMeasurer,
         host: &mut dyn CustomLayout,
     ) -> Result<(), LayoutError> {
-        let children = scene.children(parent)?.to_vec();
+        let children: Vec<NodeHandle> = scene
+            .children(parent)?
+            .iter()
+            .copied()
+            .filter(|child| !scene.is_mask(*child))
+            .collect();
         let sizes = children
             .iter()
             .map(|child| self.requested[child])

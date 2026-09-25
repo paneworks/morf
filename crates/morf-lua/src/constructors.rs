@@ -51,15 +51,19 @@ pub(crate) fn element_constructor<'gc>(
         if element == Element::TextInput {
             crate::text_inputs::register(&mut state.borrow_mut(), node);
         }
-        if element == Element::Inset
-            && state
-                .borrow()
+        if element == Element::Inset && {
+            let state = state.borrow();
+            let children = state
                 .scene
                 .children(node)
-                .map_err(|error| HostError(error.to_string()))?
-                .len()
+                .map_err(|error| HostError(error.to_string()))?;
+            // A mask is not the child an Inset insets.
+            children
+                .iter()
+                .filter(|child| !state.scene.is_mask(**child))
+                .count()
                 > 1
-        {
+        } {
             return Err(HostError("Inset accepts at most one child".into()).into());
         }
         stack.replace(ctx, node_userdata(ctx, Rc::clone(&state), node));
