@@ -328,7 +328,10 @@ M.drawer = drawer.new {
 
 -- No popups while the sidebar shows the history, nor in do not disturb.
 morf.effect("caelestia.notifications.shown", function()
-  M.drawer.set(#M.list:get() > 0 and not M.covered:get() and not M.dnd:get())
+  -- Popups drop in on the focused screen only; the history is every
+  -- screen's.
+  M.drawer.set(#M.list:get() > 0 and not M.covered:get() and not M.dnd:get()
+    and require("services").here())
 end)
 
 return M

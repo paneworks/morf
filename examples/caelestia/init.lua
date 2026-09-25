@@ -116,13 +116,29 @@ wallpaper.open_layer()
 
 -- -------------------------------------------------------------------- ipc --
 
+-- Every screen runs the shell and hears every verb. What opens appears on
+-- the focused screen only (`services.here()`); a close shuts it wherever it
+-- is. A screen that does nothing answers nothing, so the reply is the one
+-- that acted.
+local here = require("services").here
 local function verb(d)
   return function(how)
     how = how or "toggle"
+    if how == "close" then
+      d.set(false)
+      if here() then return d.is_open() end
+      return nil
+    end
+    if how ~= "open" and how ~= "toggle" and how ~= "state" then
+      error("`" .. tostring(how) .. "`: open, close, toggle or state")
+    end
+    if not here() then
+      -- Opened elsewhere now: shut here, so one screen has it at a time.
+      if how ~= "state" then d.set(false) end
+      return nil
+    end
     if how == "open" then d.set(true)
-    elseif how == "close" then d.set(false)
-    elseif how == "toggle" then d.toggle()
-    elseif how ~= "state" then error("`" .. tostring(how) .. "`: open, close, toggle or state") end
+    elseif how == "toggle" then d.toggle() end
     return d.is_open()
   end
 end
@@ -133,10 +149,15 @@ morf.ipc.session = verb(session.drawer)
 morf.ipc.sidebar = verb(sidebar.drawer)
 morf.ipc.utilities = verb(utilities.drawer)
 morf.ipc.workspace = function(n)
+  if not here() then return nil end
   require("services").workspace.go(n)
   return require("services").workspace.active()
 end
-morf.ipc.osd = function() osd.flash() return true end
+morf.ipc.osd = function()
+  if not here() then return nil end
+  osd.flash()
+  return true
+end
 -- `notify SUMMARY [BODY [critical|normal [APP]]]` raises a notification of
 -- the shell's own, as the reference's toaster does.
 morf.ipc.notify = function(summary, body, urgency, app)

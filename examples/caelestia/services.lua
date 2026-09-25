@@ -26,11 +26,44 @@ M.workspace = {}
 -- control answers.
 local local_workspace = morf.signal("caelestia.workspace", 1)
 
+-- The output this runtime draws on (every screen runs the shell once).
+local function screen_name()
+  return (morf.screens and morf.screens[1] and morf.screens[1].name) or ""
+end
+
+-- This screen's row in the compositor's monitors, if it has one.
+local function this_monitor()
+  local model = hyprland.state.monitors
+  local name = screen_name()
+  if not model or name == "" then return nil end
+  for i = 1, model:len() do
+    local row = model:get(i)
+    if row.name == name then return row end
+  end
+  return nil
+end
+
+--- The workspace on show on this screen: each monitor's bar shows its
+--- own, as the reference's do; the focused one's when this screen is not
+--- among the compositor's monitors.
 function M.workspace.active()
   if not hyprland.available() then return local_workspace:get() end
-  local id = hyprland.state.active_workspace.id
+  local monitor = this_monitor()
+  local id = monitor and monitor.active_workspace or hyprland.state.active_workspace.id
   if type(id) ~= "number" or id < 1 then return 1 end
   return id
+end
+
+--- Whether this screen is the one things opened by a key or a verb appear
+--- on: the focused monitor on Hyprland, the primary screen elsewhere.
+--- Every screen runs the shell and hears every verb; only this one acts.
+function M.here()
+  if hyprland.available() then
+    local focused = hyprland.state.focused_monitor
+    if focused and focused ~= "" then return focused == screen_name() end
+  end
+  if morf.primary then return morf.primary() end
+  return true
 end
 
 function M.workspace.occupied(id)

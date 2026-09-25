@@ -148,7 +148,8 @@ morf.effect("caelestia.osd.follow", function()
     if seen_brightness and now ~= seen_brightness then changed = true end
     seen_brightness = now
   end
-  if changed then M.flash() end
+  -- On the focused screen only: every screen hears the change.
+  if changed and require("services").here() then M.flash() end
 end)
 
 morf.effect("caelestia.osd.hover", function()
