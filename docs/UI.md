@@ -831,7 +831,7 @@ uppercase letter. Spaces split the query into terms that must all match.
 It works on characters, so accents and CJK match as whole characters; it
 does not fold accents (`e` does not find `é`). Ties go to the shorter
 text, then to the earlier item; an empty query keeps every item in order.
-Ranking 10,000 launcher-sized entries takes a millisecond or two, so it
+Ranking 10,000 entries of seventy characters takes a few milliseconds, so it
 can run on every keystroke. `morf.text.highlight(text, positions, style)`
 turns a match into `spans` for a `ui.Text`: the matched characters in
 runs carrying `style` (bold when none is given), the rest plain.
