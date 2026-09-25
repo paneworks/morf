@@ -26,6 +26,7 @@ mod api_io;
 mod api_log;
 mod api_menu;
 mod api_module;
+mod api_palette;
 mod api_pam;
 mod api_prefers;
 mod api_process;

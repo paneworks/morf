@@ -69,6 +69,7 @@ mod lib_sysinfo_web;
 mod lifecycle_io;
 mod masks;
 mod modules;
+mod palette_tty;
 mod pam_session;
 mod paths;
 mod prefers;

@@ -27,6 +27,7 @@ impl Runtime {
         let audio_changed = self.poll_audio();
         let terminals_changed = self.poll_terminals();
         let images_changed = self.poll_images();
+        let palettes_changed = self.poll_palette_listeners();
         drop(devices);
         let mut ready = Vec::new();
         let mut timers = Vec::new();
@@ -556,6 +557,7 @@ impl Runtime {
             || audio_changed
             || terminals_changed
             || images_changed
+            || palettes_changed
             || blinked
             || !transform_callbacks.is_empty();
         for (callback, unlock_on_success, result) in ready {

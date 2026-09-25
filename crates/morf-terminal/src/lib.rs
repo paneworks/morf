@@ -14,6 +14,7 @@
 
 mod emulator;
 pub mod input;
+pub mod palette;
 mod pty;
 
 pub use emulator::{Emulator, MAX_SCROLLBACK, Palette, ScreenStyle, SelectionKind, TerminalEvent};

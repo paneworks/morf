@@ -225,7 +225,7 @@ impl Drop for Pty {
 }
 
 /// The slave side of a freshly opened master.
-fn open_slave(master: &OwnedFd) -> io::Result<OwnedFd> {
+pub(crate) fn open_slave(master: &OwnedFd) -> io::Result<OwnedFd> {
     let flags = OpenptFlags::RDWR | OpenptFlags::NOCTTY | OpenptFlags::CLOEXEC;
     // Straight from the master (Linux 4.13 and later), which cannot open the
     // wrong device whatever happens in /dev/pts meanwhile.

@@ -373,3 +373,25 @@ long and `false` when input comes back. `inhibit` holds an idle inhibitor
 on the shell's surface; whether the compositor has one to hold is
 `morf.capabilities.idle_inhibit`, so a "keep awake" switch can tell "off"
 from "cannot here".
+
+## Colours from the desk's colour tool: `morf.terminal`
+
+Colour tools (pywal, wallust, lule) re-theme every open terminal by
+writing escape sequences to each `/dev/pts/*`: OSC 4 for the palette,
+OSC 10/11/12 for foreground, background and cursor. `morf.terminal.listen`
+opens a terminal of the shell's own that is one of those, so the tool's
+loop writes to it too and the shell hears the new colours as they are set.
+
+```lua
+local tty = morf.terminal.listen(function(palette, changed)
+  -- palette.colors[1..256] (colour 0 is [1]), palette.background,
+  -- palette.foreground, palette.cursor: morf.color values, nil until set.
+  -- changed: what this burst set (0..255, "background", ...).
+end)
+tty.path    -- "/dev/pts/7"
+tty:stop()
+morf.terminal.parse(text)   -- the same palette from a file of sequences (pywal's)
+```
+
+The palette gathers everything heard, so each call has the whole of it.
+A runtime keeps at most 8 listeners.

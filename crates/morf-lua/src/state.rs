@@ -392,6 +392,9 @@ pub(crate) struct ReactiveState {
     pub(crate) theme_sources: Vec<ThemeSource>,
     /// Theme colours easing to what was written to them.
     pub(crate) theme_fades: Vec<ThemeFade>,
+    /// `morf.terminal.listen`: terminals of our own hearing colour sequences.
+    pub(crate) palette_listeners: Vec<crate::api_palette::PaletteListener>,
+    pub(crate) next_palette_listener: u64,
     /// `morf.prefers` and where its answers come from.
     pub(crate) prefers: Option<Prefers>,
     /// `morf.audio`, installed with the runtime and started on first use.
@@ -696,6 +699,8 @@ impl ReactiveState {
             state_metatable: None,
             theme_sources: Vec::new(),
             theme_fades: Vec::new(),
+            palette_listeners: Vec::new(),
+            next_palette_listener: 0,
             prefers: None,
             audio: None,
             toplevels: None,
