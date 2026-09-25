@@ -86,6 +86,12 @@ pub struct LayerSurfaceConfig {
     /// configuration itself — `morf.surface.session_lock = true` — because
     /// what a file is for is the file's to say, not the command line's.
     pub session_lock: bool,
+    /// Whether the configuration keeps running while the compositor offers
+    /// no output at all -- every screen switched off, the dock unplugged --
+    /// in one runtime with nothing mapped, so its timers, IPC, D-Bus and
+    /// processes can still act (light a screen again, say). Off by default:
+    /// a configuration that only draws has nothing to do there.
+    pub outputless: bool,
     /// Whether a click anywhere else on the output should reach the
     /// configuration, through a blank surface under this one that covers
     /// the output. `None` never asked: the surface is only made when the
@@ -99,6 +105,11 @@ pub struct LayerSurfaceConfig {
     /// linear light) or `"srgb"` (encoded values, as browsers and Qt mix
     /// them).
     pub blend: String,
+    /// Subpixel (LCD) text: `"auto"` (the default: where fontconfig or the
+    /// output says the stripes run, and only where it is safe -- text drawn
+    /// straight onto an opaque rectangle), `"off"`, or `"rgb"`/`"bgr"` to
+    /// name the order outright.
+    pub subpixel_text: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -207,9 +218,11 @@ impl Default for LayerSurfaceConfig {
             exclusive_auto: false,
             opaque: false,
             session_lock: false,
+            outputless: false,
             backdrop: None,
             backdrop_dim: 0.0,
             blend: "linear".to_owned(),
+            subpixel_text: "auto".to_owned(),
         }
     }
 }

@@ -296,6 +296,37 @@ morf.effect("follow screens", function()
 end)
 ```
 
+With no output at all -- every screen switched off, the dock unplugged, a
+compositor that removes an output on DPMS -- there is nothing to draw on,
+and by default nothing runs until an output comes back. A configuration
+that has work to do then says so:
+
+```lua
+morf.surface.outputless = true
+if #morf.screens == 0 then
+  -- Only what makes sense with no screen: a timer, an IPC verb, a D-Bus
+  -- service, a process -- here, lighting a screen again.
+  morf.ipc["screen.on"] = function() morf.spawn { command = { "wlr-randr", "--output", "DP-1", "--on" } } end
+  return
+end
+-- ... the shell as usual ...
+```
+
+While the compositor offers no output, the shell runs the file once more, in
+one runtime of its own: `morf.screens` is empty, `morf.capabilities.outputless`
+is `true`, and every surface, window and layer it declares stays unmapped
+(no root is needed). Timers, `morf ipc`, D-Bus, file watches, processes, the
+idle notifications, clipboard, output power and gamma all work, and
+`morf.screens_revision()` moves as ever. When an output appears that
+runtime is stopped and the per-output ones start from scratch, as on any
+hotplug; values kept with `morf.reloadable(name, default)` go across in
+both directions (a counter bumped with every screen off is where it was
+when the screens come back), and anything longer-lived belongs in a file.
+A shell started with every screen already off runs the file with no output
+once to hear whether it asks for this; one that does not is stopped at once
+and the shell waits for an output, as before. `morf check --screens 0` and
+`test.load(path, { screens = 0 })` load a configuration this way.
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).
@@ -653,6 +684,32 @@ ui.Text {
   decoration = function() return refused:get() and { line = "under", color = theme.alert } or {} end,
 }
 ```
+
+Text is smoothed in subpixels (LCD, "ClearType") where that is safe, and
+in greyscale everywhere else. `morf.surface.subpixel_text` is `"auto"` by
+default: the stripe order comes from fontconfig's `rgba` (else the
+output's `wl_output.subpixel`), the fringe softening from its `lcdfilter`,
+and `"none"` or vertical stripes there mean greyscale. `"off"` turns it
+off; `"rgb"` or `"bgr"` name the order outright. Even then a glyph is drawn
+in subpixels only when all of these hold, because its fringes need a solid
+colour beneath them to mix with:
+
+- it is drawn straight onto an opaque `ui.Rect` of the same surface (solid
+  fill, no gradient, blur or shader; inside its rounded corners and a
+  translucent border), or the surface is `morf.surface.opaque`;
+- it is not inside an offscreen layer (an `opacity` below one, a
+  rotation, a rounded `ui.ClipRect`, a `blur`, a shadow, `layer`, an
+  effect shader);
+- it is only moved, not scaled, rotated or skewed; it is not mid-morph and
+  has no outline;
+- the surface is drawn at a whole-number scale on an output that is not
+  rotated or flipped, and the GPU can blend two colours per pixel
+  (dual-source blending; `MORF_NO_DUAL_SOURCE=1` pretends it cannot).
+
+A translucent card, a panel fading in, text over a picture: greyscale. The
+same label on a solid background: sharper, in colour fringes a third of a
+pixel wide. Nothing about the text itself changes -- its size, its
+metrics, where it wraps.
 
 ### Text in runs, and links
 

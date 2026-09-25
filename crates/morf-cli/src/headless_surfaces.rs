@@ -14,9 +14,10 @@ use crate::headless::{Headless, Surface};
 use crate::surface_popups::window_surface_effectively_visible;
 use crate::surfaces::primary_surface_root;
 
-/// The screens a headless run has: side by side, all the same size.
+/// The screens a headless run has: side by side, all the same size. None at
+/// all is the shell with every output gone.
 pub(crate) fn headless_screens(count: usize, size: (u32, u32), scale: i32) -> Vec<ScreenInfo> {
-    (0..count.max(1))
+    (0..count)
         .map(|index| ScreenInfo {
             id: index as u32 + 1,
             name: Some(format!("HEADLESS-{}", index + 1)),
@@ -28,6 +29,7 @@ pub(crate) fn headless_screens(count: usize, size: (u32, u32), scale: i32) -> Ve
             physical_size: None,
             scale: scale.max(1),
             transform: "normal",
+            subpixel: "unknown",
         })
         .collect()
 }
@@ -36,6 +38,11 @@ impl Headless {
     /// Works out the surfaces the configuration has asked for, and their
     /// sizes on this screen.
     pub(crate) fn refresh_surfaces(&mut self) {
+        if self.outputless {
+            // With no output nothing is mapped, whatever is declared.
+            self.surfaces.clear();
+            return;
+        }
         let mut previous = std::mem::take(&mut self.surfaces)
             .into_iter()
             .map(|surface| (surface.role, surface))

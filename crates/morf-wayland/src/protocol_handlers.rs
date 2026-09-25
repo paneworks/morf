@@ -60,6 +60,7 @@ pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> S
             .then_some(info.physical_size),
         scale: info.scale_factor,
         transform: output_transform_name(info.transform),
+        subpixel: output_subpixel_name(info.subpixel),
     }
 }
 
@@ -79,10 +80,13 @@ impl LayerState {
             .find_map(|(id, layer)| (surface == layer.surface.wl_surface()).then_some(*id))
     }
 
-    pub(crate) fn refresh_screens(&mut self) {
+    /// Re-reads the output list, leaving out `gone` (an output the toolkit
+    /// is about to forget), and queues `Screens` when it changed.
+    pub(crate) fn refresh_screens(&mut self, gone: Option<&wl_output::WlOutput>) {
         let screens = self
             .outputs
             .outputs()
+            .filter(|output| Some(output) != gone)
             .filter_map(|output| self.outputs.info(&output))
             .map(screen_info)
             .collect::<Vec<_>>();

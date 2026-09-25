@@ -46,7 +46,7 @@ fn a_hotplug_reaches_every_worker_runtime() {
 
     let update = handle_worker_command(
         &mut runtime,
-        &own,
+        Some(&own),
         LoadPolicy::default(),
         WorkerCommand::Screens(screens.to_vec()),
     );

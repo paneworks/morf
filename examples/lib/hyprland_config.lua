@@ -457,7 +457,12 @@ function M.outputs()
   local names = {}
   for _, row in ipairs(rows) do if row.id and row.id >= 0 then names[row.id] = row.name end end
   local out = {}
-  for index, row in ipairs(rows) do out[index] = M.describe(row, names) end
+  for _, row in ipairs(rows) do
+    -- Hyprland's own stand-in while no screen is lit (a headless output
+    -- it names FALLBACK) is not a screen: counted as lit, the shell never
+    -- noticed that nothing was, and never lit a real one again.
+    if row.name ~= "FALLBACK" then out[#out + 1] = M.describe(row, names) end
+  end
   return out
 end
 

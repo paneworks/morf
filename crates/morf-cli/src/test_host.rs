@@ -203,7 +203,8 @@ fn load(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, St
         );
     }
     if let Some(screens) = field(options_value, "screens") {
-        options.screens = number(Some(screens), "screens")?.clamp(1.0, 16.0) as usize;
+        // Zero is every output gone: the configuration runs outputless.
+        options.screens = number(Some(screens), "screens")?.clamp(0.0, 16.0) as usize;
     }
     options.args = list(field(options_value, "args"))
         .iter()

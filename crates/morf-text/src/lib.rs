@@ -379,22 +379,32 @@ fn fontconfig_answers() -> &'static [Option<String>; 3] {
 /// from the person's cache instead of rescanning every font into the new one.
 pub fn warm_font_preferences() {
     let _ = fontconfig_answers();
+    let _ = subpixel::font_subpixel();
 }
 
 /// What `fc-match` names for one generic family, or nothing when it is
 /// missing or slow.
 fn ask_fontconfig(generic: &str) -> Option<String> {
+    fc_match(&["-f", "%{family[0]}", generic])
+}
+
+/// `fc-match` with `args`, its answer trimmed, or nothing when it is
+/// missing, slow or says nothing.
+pub(crate) fn fc_match(args: &[&str]) -> Option<String> {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
     let mut child = Command::new("fc-match")
-        .args(["-f", "%{family[0]}", generic])
+        .args(args)
         .env_remove("LD_LIBRARY_PATH")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    let deadline = Instant::now() + Duration::from_secs(1);
+    // A few seconds at most, once: a large font collection behind an
+    // unwarmed cache takes fc-match past a second, and giving up then drew
+    // the shell in the wrong face and without subpixel text.
+    let deadline = Instant::now() + Duration::from_secs(3);
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
@@ -510,6 +520,8 @@ mod rich;
 pub use rich::{LinkRect, SpanBand, SpanLine};
 mod style;
 pub use style::LineBand;
+mod subpixel;
+pub use subpixel::{FontSubpixel, LcdFilter, SubpixelOrder, font_subpixel};
 mod terminal;
 pub use terminal::{CellFace, CellText, drawn_here};
 

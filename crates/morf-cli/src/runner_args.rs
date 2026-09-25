@@ -130,11 +130,14 @@ pub(crate) fn parse_runner(runner: Runner, rest: &[&str]) -> Result<RunnerArgs, 
             ("--size", _) => parsed.size = parse_size(&value(&mut rest, "--size")?)?,
             ("--screens", Runner::Check | Runner::Render) => {
                 let text = value(&mut rest, "--screens")?;
+                // `morf check --screens 0` loads it as the shell does once
+                // every output is gone; a render needs something to draw.
+                let least = usize::from(runner == Runner::Render);
                 parsed.screens = text
                     .parse::<usize>()
                     .ok()
-                    .filter(|count| (1..=16).contains(count))
-                    .ok_or_else(|| format!("--screens wants 1 to 16, not `{text}`"))?;
+                    .filter(|count| (least..=16).contains(count))
+                    .ok_or_else(|| format!("--screens wants {least} to 16, not `{text}`"))?;
             }
             ("--scale", Runner::Render | Runner::Test) => {
                 let text = value(&mut rest, "--scale")?;

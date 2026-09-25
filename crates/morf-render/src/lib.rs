@@ -47,6 +47,7 @@ mod damage;
 mod effects;
 mod field;
 mod gradient;
+mod lcd;
 mod paint;
 mod paint_fields;
 mod paint_text_input;
@@ -56,6 +57,10 @@ mod sdf;
 pub use commands::*;
 pub use damage::*;
 pub use field::*;
+pub use lcd::{
+    LCD_TAPS, SubpixelText, blend_stripes, stripe_centres, stripe_coverage, subpixel_text_for,
+};
+pub use morf_text::{FontSubpixel, LcdFilter, SubpixelOrder, font_subpixel};
 pub use path::PathPaint;
 pub use sdf::*;
 #[cfg(test)]

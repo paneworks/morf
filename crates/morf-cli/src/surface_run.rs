@@ -9,7 +9,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    backdrop::*, capture::*, config::*, lock::*, pacing::*, paint::*, services::*, supervisor::*,
+    backdrop::*, capture::*, lock::*, pacing::*, paint::*, services::*, supervisor::*,
     surface_actions::*, surface_events::*, surface_layers::*, surfaces::*, wake_plan::*,
     workers::*,
 };
@@ -55,15 +55,7 @@ fn capabilities_of(
     list
 }
 
-pub(crate) fn run_surface(
-    path: &Path,
-    source: &[u8],
-    screen: ScreenInfo,
-    policy: LoadPolicy,
-    tx: &mpsc::Sender<SupervisorMessage>,
-    stop: &AtomicBool,
-    commands: &mpsc::Receiver<WorkerCommand>,
-) -> Result<(), String> {
+pub(crate) fn run_surface(start: WorkerStart, screen: ScreenInfo) -> Result<(), String> {
     let name = screen
         .name
         .clone()
@@ -91,8 +83,33 @@ pub(crate) fn run_surface(
         },
         runtime_screen.clone(),
     );
+    // Values the outputless runtime kept while there was no output.
+    if let Some(seed) = start.seed.clone() {
+        runtime.restore_reloadable_state(seed);
+    }
+    let result = drive_surface(&mut runtime, &start, &name, &runtime_screen);
+    // Whatever ends this output, the next runtime can start from here.
+    start.handover.deposit(&mut runtime);
+    result
+}
+
+fn drive_surface(
+    runtime: &mut Runtime,
+    start: &WorkerStart,
+    name: &str,
+    runtime_screen: &Screen,
+) -> Result<(), String> {
+    let (path, source, policy, tx, stop, commands) = (
+        start.path.as_path(),
+        &start.source[..],
+        start.policy,
+        &start.tx,
+        &*start.stop,
+        &start.commands,
+    );
+    let name = name.to_owned();
     let loading = Instant::now();
-    execute_config(&mut runtime, path, source, policy)?;
+    execute_config(runtime, path, source, policy)?;
     slow(&name, "loading the configuration", loading);
     // A configuration that asks to lock the session is one client for every
     // output, not one layer per worker: the supervisor hears it and runs it
@@ -101,11 +118,12 @@ pub(crate) fn run_surface(
     let _ = tx.send(SupervisorMessage::Worker(WorkerMessage::Loaded {
         output: name.clone(),
         session_lock,
+        outputless: runtime.layer_surface_config().outputless,
     }));
     if session_lock {
-        return await_lock(runtime, path, stop, commands);
+        return await_lock(std::mem::take(runtime), path, stop, commands);
     }
-    primary_surface_root(&runtime)?;
+    primary_surface_root(runtime)?;
 
     let layer_config = runtime.layer_surface_config();
     let mut client = LayerClient::connect(runtime_bar_config(&layer_config, &name)?)
@@ -138,7 +156,7 @@ pub(crate) fn run_surface(
                     return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
                 }
                 LayerEvent::Screencopy { request_id, result } => {
-                    dispatch_screencopy(&mut runtime, None, request_id, result);
+                    dispatch_screencopy(runtime, None, request_id, result);
                 }
                 LayerEvent::CaptureOffer {
                     request_id,
@@ -149,7 +167,7 @@ pub(crate) fn run_surface(
                 } => {
                     // No renderer yet to export against: shared memory.
                     answer_capture_offer(
-                        &mut runtime,
+                        runtime,
                         None,
                         &mut client,
                         OfferedCapture {
@@ -224,7 +242,7 @@ pub(crate) fn run_surface(
     runtime.set_capabilities(&capabilities_of(&client, &mut renderer));
     slow(&name, "starting the GPU", gpu);
     let shaders = Instant::now();
-    register_shaders(&runtime, &mut renderer)?;
+    register_shaders(runtime, &mut renderer)?;
     slow(&name, "building shaders", shaders);
     let animating_shaders = runtime.shaders_animate();
     let started = Instant::now();
@@ -232,10 +250,10 @@ pub(crate) fn run_surface(
     runtime
         .update_clock(&clock)
         .map_err(|error| error.to_string())?;
-    apply_parent_transitions(&mut runtime, &mut renderer, &client)?;
-    let primary_root = primary_surface_root(&runtime)?;
+    apply_parent_transitions(runtime, &mut renderer, &client)?;
+    let primary_root = primary_surface_root(runtime)?;
     let first = Instant::now();
-    let layout = paint(&mut runtime, &mut renderer, &client, primary_root, None)?;
+    let layout = paint(runtime, &mut renderer, &client, primary_root, None)?;
     slow(&name, "the first frame", first);
     let windows_opening = Instant::now();
     let mut popup_surfaces = HashMap::new();
@@ -245,14 +263,14 @@ pub(crate) fn run_surface(
     runtime.take_layer_surface_change();
     apply_backdrop(&mut client, &runtime.layer_surface_config(), &name);
     let _ = sync_window_surfaces(
-        &mut runtime,
+        runtime,
         &mut client,
         &mut popup_surfaces,
         &mut floating_surfaces,
         &mut layer_surfaces,
         &name,
     )?;
-    apply_service_requests(&mut runtime, &mut client);
+    apply_service_requests(runtime, &mut client);
     slow(&name, "opening the other surfaces", windows_opening);
 
     let mut state = SurfaceEventState {
@@ -288,9 +306,9 @@ pub(crate) fn run_surface(
         // alarm, or the first thing that comes due on the clock. Nothing else:
         // an idle shell sleeps until one of those.
         let sleep = Sleep::plan_with(
-            &runtime,
+            runtime,
             std::mem::take(&mut follow_up) || client.has_queued_events(),
-            motion_deadline(&runtime, &client, &state),
+            motion_deadline(runtime, &client, &state),
             &mut pending_streak,
         );
         let slept = Instant::now();
@@ -326,7 +344,7 @@ pub(crate) fn run_surface(
         while let Ok(command) = commands.try_recv() {
             follow_up = true;
             let started_command = Instant::now();
-            let update = handle_worker_command(&mut runtime, &runtime_screen, policy, command);
+            let update = handle_worker_command(runtime, Some(runtime_screen), policy, command);
             slow(&name, "an IPC call", started_command);
             repaint |= update.repaint;
             recreate_surface |= update.recreate_surface;
@@ -338,10 +356,16 @@ pub(crate) fn run_surface(
             }
             if update.reloaded {
                 let _ = client.reset_gamma(None);
+                // What to do once every output is gone may have changed.
+                tx.send(SupervisorMessage::Worker(WorkerMessage::Outputless {
+                    output: name.clone(),
+                    wanted: runtime.layer_surface_config().outputless,
+                }))
+                .map_err(|_| "output supervisor stopped".to_owned())?;
             }
         }
         if recreate_surface {
-            let mut replacement = connect_runtime_surface(&runtime, &name)?;
+            let mut replacement = connect_runtime_surface(runtime, &name)?;
             replacement.set_idle_timeouts(&runtime.idle_timeouts());
             let (width, height) = replacement.physical_size();
             let backend = pollster::block_on(WgpuBackend::new_surface(
@@ -352,7 +376,7 @@ pub(crate) fn run_surface(
             .map_err(|error| error.to_string())?;
             renderer = RenderEngine::new(backend);
             // The adapter is new, so every pipeline it held is gone with it.
-            register_shaders(&runtime, &mut renderer)?;
+            register_shaders(runtime, &mut renderer)?;
             state.popup_surfaces.clear();
             state.floating_surfaces.clear();
             state.layer_surfaces.clear();
@@ -378,9 +402,9 @@ pub(crate) fn run_surface(
                 .map_err(|_| "output supervisor stopped".to_owned())?;
             return Ok(());
         }
-        apply_idle_inhibit(&mut runtime, &mut client);
-        apply_idle_timeouts(&mut runtime, &mut client);
-        apply_shortcuts_inhibit(&mut runtime, &mut client);
+        apply_idle_inhibit(runtime, &mut client);
+        apply_idle_timeouts(runtime, &mut client);
+        apply_shortcuts_inhibit(runtime, &mut client);
         if let Some(enabled) = runtime.take_watch_files_change() {
             tx.send(SupervisorMessage::WatchFiles(enabled))
                 .map_err(|_| "output supervisor stopped".to_owned())?;
@@ -398,7 +422,7 @@ pub(crate) fn run_surface(
                 reserve = config.reserve;
                 open_reserve_layers(&mut client, &config, &name)?;
             }
-            apply_primary_opaque(&runtime, &client);
+            apply_primary_opaque(runtime, &client);
             apply_backdrop(&mut client, &config, &name);
             // The mask lives in the same configuration and is re-derived when
             // the surface paints, so the new geometry owes one frame even when
@@ -407,9 +431,9 @@ pub(crate) fn run_surface(
         }
         if runtime.take_window_surface_change() {
             // The only thing that can move the primary root.
-            state.primary_root = primary_surface_root_keeping(&runtime, state.primary_root)?;
+            state.primary_root = primary_surface_root_keeping(runtime, state.primary_root)?;
             repaint |= sync_window_surfaces(
-                &mut runtime,
+                runtime,
                 &mut client,
                 &mut state.popup_surfaces,
                 &mut state.floating_surfaces,
@@ -417,13 +441,13 @@ pub(crate) fn run_surface(
                 &name,
             )?;
         }
-        apply_service_requests(&mut runtime, &mut client);
+        apply_service_requests(runtime, &mut client);
         while let Some(event) = client.next_event() {
             follow_up = true;
             let handling = Instant::now();
             let what = event_kind(&event);
             let handled = handle_surface_event(
-                &mut runtime,
+                runtime,
                 &mut renderer,
                 &mut client,
                 &mut state,
@@ -445,10 +469,10 @@ pub(crate) fn run_surface(
                 Err(error) => return Err(error),
             }
         }
-        apply_service_requests(&mut runtime, &mut client);
-        apply_capture_releases(&mut runtime, &mut renderer);
-        apply_window_surface_actions(&mut runtime, &client, &state.floating_surfaces);
-        advance_without_callbacks(&mut runtime, &client, &mut state)?;
+        apply_service_requests(runtime, &mut client);
+        apply_capture_releases(runtime, &mut renderer);
+        apply_window_surface_actions(runtime, &client, &state.floating_surfaces);
+        advance_without_callbacks(runtime, &client, &mut state)?;
         // A paint owed for longer than a stall is made without the callback.
         let owed = owed_paint_due(
             state.primary_deferred,
@@ -481,7 +505,7 @@ pub(crate) fn run_surface(
                 .values_mut()
                 .filter(|surface| surface.updates_enabled)
             {
-                paint_layer_surface(&mut runtime, &client, surface)?;
+                paint_layer_surface(runtime, &client, surface)?;
             }
         }
         if repaint {
@@ -497,10 +521,10 @@ pub(crate) fn run_surface(
             if !removed.is_empty() {
                 renderer.backend_mut().forget_nodes(&removed);
             }
-            apply_parent_transitions(&mut runtime, &mut renderer, &client)?;
+            apply_parent_transitions(runtime, &mut renderer, &client)?;
             let painting = Instant::now();
             let painted_frame = paint(
-                &mut runtime,
+                runtime,
                 &mut renderer,
                 &client,
                 state.primary_root,
@@ -520,21 +544,21 @@ pub(crate) fn run_surface(
                 .values_mut()
                 .filter(|surface| surface.updates_enabled)
             {
-                paint_popup_surface(&mut runtime, &client, surface)?;
+                paint_popup_surface(runtime, &client, surface)?;
             }
             for surface in state
                 .floating_surfaces
                 .values_mut()
                 .filter(|surface| surface.updates_enabled)
             {
-                paint_floating_surface(&mut runtime, &client, surface)?;
+                paint_floating_surface(runtime, &client, surface)?;
             }
             for surface in state
                 .layer_surfaces
                 .values_mut()
                 .filter(|surface| surface.updates_enabled)
             {
-                paint_layer_surface(&mut runtime, &client, surface)?;
+                paint_layer_surface(runtime, &client, surface)?;
             }
             // What this frame actually cost, which is what the next one is
             // paced against.
@@ -696,7 +720,7 @@ pub(crate) fn register_shaders(
 /// A worker whose configuration asked to lock the session waits here for the
 /// supervisor to say whether it is the one that becomes the lock (the first
 /// to ask) or stops.
-fn await_lock(
+pub(crate) fn await_lock(
     runtime: Runtime,
     path: &Path,
     stop: &AtomicBool,

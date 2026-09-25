@@ -20,7 +20,7 @@ use morf_wayland::SurfaceRole;
 
 use crate::config::LoadPolicy;
 use crate::headless_surfaces::headless_screens;
-use crate::supervisor::{execute_config, lua_screen, store_outputs};
+use crate::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};
 use crate::surfaces::{PointerInput, primary_surface_root};
 
 /// One frame of a 60 Hz output, which is what time advances by between
@@ -151,6 +151,8 @@ pub(crate) struct Headless {
     /// The surface a button was last pressed on: the one a compositor gives
     /// the keyboard to, and where keys go when a test names no surface.
     pub(crate) keyboard: Option<SurfaceRole>,
+    /// Loaded with no screen: nothing it declares is mapped.
+    pub(crate) outputless: bool,
 }
 
 impl Headless {
@@ -161,18 +163,30 @@ impl Headless {
             logs: Vec::new(),
         };
         let screens = headless_screens(options.screens, options.size, options.scale);
-        let own = screens
-            .get(options.screen_index)
-            .cloned()
-            .ok_or_else(|| failure(format!("there is no screen {}", options.screen_index + 1)))?;
+        // No screen at all is the shell with every output gone: the
+        // configuration runs as the outputless runtime does (outputless.rs).
+        let outputless = options.screens == 0;
+        let own = match outputless {
+            true => None,
+            false => Some(screens.get(options.screen_index).cloned().ok_or_else(|| {
+                failure(format!("there is no screen {}", options.screen_index + 1))
+            })?),
+        };
         // `execute_config` gives `morf.screens` the recorded outputs, the way
         // a worker is given the compositor's.
         store_outputs(&screens);
         let (limits, warnings) = Limits::from_env();
-        let mut runtime = Runtime::for_screen(limits, lua_screen(&own));
+        let mut runtime = match &own {
+            Some(own) => Runtime::for_screen(limits, lua_screen(own)),
+            None => Runtime::new(limits),
+        };
         runtime.use_virtual_clock();
         runtime.set_arguments(options.args.clone());
-        runtime.set_capabilities(&[("headless".to_owned(), "true".to_owned())]);
+        let mut capabilities = vec![("headless".to_owned(), "true".to_owned())];
+        if outputless {
+            capabilities.push(("outputless".to_owned(), "true".to_owned()));
+        }
+        runtime.set_capabilities(&capabilities);
         for warning in warnings {
             runtime.warn(warning);
         }
@@ -190,9 +204,25 @@ impl Headless {
                 ))
             })?,
         };
-        if let Err(error) = execute_config(&mut runtime, &options.path, &source, options.policy) {
+        if let Err(error) = execute_config_on(
+            &mut runtime,
+            &options.path,
+            &source,
+            options.policy,
+            // Its own list rather than the recorded one another run may be
+            // writing at the same moment.
+            &lua_screens(&screens),
+        ) {
             return Err(LoadFailure {
                 error,
+                logs: runtime.take_logs(),
+            });
+        }
+        if outputless && !runtime.layer_surface_config().outputless {
+            return Err(LoadFailure {
+                error: "the configuration does not run without an output \
+                        (morf.surface.outputless is not set)"
+                    .to_owned(),
                 logs: runtime.take_logs(),
             });
         }
@@ -210,6 +240,7 @@ impl Headless {
             last_frame: Duration::ZERO,
             pointer: None,
             keyboard: None,
+            outputless,
         };
         // The first frame, at time zero: what the shell draws before any
         // time has passed.

@@ -4,22 +4,142 @@ use morf_wayland::ScreenInfo;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self};
 use std::time::Duration;
 
 use crate::{
-    config::*, lock::*, paint::*, services::*, supervisor::*, surface_run::*, surfaces::*,
+    config::*, lock::*, outputless::*, paint::*, services::*, supervisor::*, surface_run::*,
+    surfaces::*,
 };
+
+/// Values a runtime marked `morf.reloadable`, carried to its replacement.
+pub(crate) type Seed = BTreeMap<String, morf_lua::IpcValue>;
+
+/// What a worker leaves behind when it ends.
+///
+/// Its reloadable values, for the runtimes that take over from it across the
+/// line between "some outputs" and "none": the outputless runtime starts from
+/// what the last output's had, and the outputs that come back start from
+/// what it had. And its log lines not yet read, which `morf log` shows with
+/// the supervisor's own: an output that went away took them with it before.
+#[derive(Clone, Default)]
+pub(crate) struct Handover(Arc<Mutex<Left>>);
+
+#[derive(Default)]
+struct Left {
+    seed: Option<Seed>,
+    logs: Vec<String>,
+}
+
+impl Handover {
+    fn left(&self) -> std::sync::MutexGuard<'_, Left> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Keeps a finished runtime's values and unread log lines; one with no
+    /// values leaves what an earlier one kept.
+    pub(crate) fn deposit(&self, runtime: &mut Runtime) {
+        let seed = runtime.reloadable_state();
+        let logs = runtime.take_logs();
+        let mut left = self.left();
+        if !seed.is_empty() {
+            left.seed = Some(seed);
+        }
+        left.logs.extend(logs.iter().map(LogEntry::to_wire));
+    }
+
+    pub(crate) fn take(&self) -> Option<Seed> {
+        self.left().seed.take()
+    }
+
+    /// The log lines finished workers left, in the order they ended.
+    pub(crate) fn take_logs(&self) -> Vec<String> {
+        std::mem::take(&mut self.left().logs)
+    }
+}
+
+/// Everything a worker thread is started with.
+pub(crate) struct WorkerStart {
+    pub(crate) path: Arc<PathBuf>,
+    pub(crate) source: Arc<[u8]>,
+    pub(crate) policy: LoadPolicy,
+    pub(crate) tx: mpsc::Sender<SupervisorMessage>,
+    pub(crate) stop: Arc<AtomicBool>,
+    pub(crate) commands: mpsc::Receiver<WorkerCommand>,
+    /// Reloadable values to start from, across an outputless handover.
+    pub(crate) seed: Option<Seed>,
+    /// Where this worker leaves its own when it ends.
+    pub(crate) handover: Handover,
+}
+
+/// The workers the supervisor wants for an output list: one per named
+/// output, or -- with none, unless the configuration said it does not want
+/// it -- the one outputless runtime, or nothing at all.
+pub(crate) fn desired_workers(
+    named: BTreeMap<String, ScreenInfo>,
+    outputless: Outputless,
+) -> BTreeMap<String, ScreenInfo> {
+    if !named.is_empty() || outputless == Outputless::Unwanted {
+        return named;
+    }
+    BTreeMap::from([(OUTPUTLESS.to_owned(), outputless_screen())])
+}
+
+/// What every worker the supervisor starts shares.
+pub(crate) struct WorkerContext<'a> {
+    pub(crate) path: &'a Arc<PathBuf>,
+    pub(crate) source: &'a Arc<[u8]>,
+    pub(crate) policy: LoadPolicy,
+    pub(crate) tx: &'a mpsc::Sender<SupervisorMessage>,
+    pub(crate) handover: &'a Handover,
+}
 
 pub(crate) fn reconcile_workers(
     workers: &mut BTreeMap<String, Worker>,
     desired: &BTreeMap<String, ScreenInfo>,
-    path: Arc<PathBuf>,
-    source: Arc<[u8]>,
-    policy: LoadPolicy,
-    tx: &mpsc::Sender<SupervisorMessage>,
+    context: &WorkerContext<'_>,
 ) {
+    reconcile_with(workers, desired, context.handover, |name, screen, seed| {
+        let (commands, command_rx) = mpsc::channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        let join = spawn_worker(
+            name,
+            screen,
+            WorkerStart {
+                path: Arc::clone(context.path),
+                source: Arc::clone(context.source),
+                policy: context.policy,
+                tx: context.tx.clone(),
+                stop: Arc::clone(&stop),
+                commands: command_rx,
+                seed,
+                handover: context.handover.clone(),
+            },
+        );
+        Worker {
+            stop,
+            commands: WorkerSender::new(commands),
+            join,
+            screen: screen.clone(),
+        }
+    });
+}
+
+/// Brings `workers` to `desired`: stops the ones whose output went or
+/// changed, then starts the missing ones with `spawn`. Crossing between the
+/// outputless runtime and per-output ones, the runtimes that start are handed
+/// the reloadable values the ones that stopped left behind.
+pub(crate) fn reconcile_with(
+    workers: &mut BTreeMap<String, Worker>,
+    desired: &BTreeMap<String, ScreenInfo>,
+    handover: &Handover,
+    mut spawn: impl FnMut(&str, &ScreenInfo, Option<Seed>) -> Worker,
+) {
+    let was_outputless = workers.contains_key(OUTPUTLESS);
+    let crossing = workers.is_empty() || was_outputless != desired.contains_key(OUTPUTLESS);
     let stale = workers
         .iter()
         .filter(|(name, worker)| desired.get(*name) != Some(&worker.screen))
@@ -30,51 +150,46 @@ pub(crate) fn reconcile_workers(
         worker.request_stop();
         let _ = worker.join.join();
     }
+    // Nothing starts: whatever was left is kept for whatever does.
+    if desired.keys().all(|name| workers.contains_key(name)) {
+        return;
+    }
+    let seed = handover.take().filter(|_| crossing);
     for (name, screen) in desired {
         if workers.contains_key(name) {
             continue;
         }
-        let output = name.clone();
-        let screen = screen.clone();
-        let worker_screen = screen.clone();
-        let path = Arc::clone(&path);
-        let source = Arc::clone(&source);
-        let tx = tx.clone();
-        let stop = Arc::new(AtomicBool::new(false));
-        let worker_stop = Arc::clone(&stop);
-        let (commands, command_rx) = mpsc::channel();
-        // Named after the output it drives, so anything reporting per-thread —
-        // a profiler, a panic, a frame counter — says which screen it means.
-        let join = thread::Builder::new()
-            .name(output.clone())
-            .spawn(move || {
-                if let Err(error) = run_surface(
-                    &path,
-                    &source,
-                    screen,
-                    policy,
-                    &tx,
-                    &worker_stop,
-                    &command_rx,
-                ) && !worker_stop.load(Ordering::Acquire)
-                {
-                    let _ = tx.send(SupervisorMessage::Worker(WorkerMessage::Failed {
-                        output,
-                        error,
-                    }));
-                }
-            })
-            .expect("worker thread");
-        workers.insert(
-            name.clone(),
-            Worker {
-                stop,
-                commands: WorkerSender::new(commands),
-                join,
-                screen: worker_screen,
-            },
-        );
+        let worker = spawn(name, screen, seed.clone());
+        workers.insert(name.clone(), worker);
     }
+}
+
+/// Starts the thread that runs the configuration for one output, or for none.
+fn spawn_worker(name: &str, screen: &ScreenInfo, start: WorkerStart) -> thread::JoinHandle<()> {
+    let output = name.to_owned();
+    let screen = screen.clone();
+    // Named after the output it drives, so anything reporting per-thread —
+    // a profiler, a panic, a frame counter — says which screen it means.
+    thread::Builder::new()
+        .name(output.clone())
+        .spawn(move || {
+            let tx = start.tx.clone();
+            let stop = Arc::clone(&start.stop);
+            let result = if output == OUTPUTLESS {
+                run_outputless(start, true)
+            } else {
+                run_surface(start, screen)
+            };
+            if let Err(error) = result
+                && !stop.load(Ordering::Acquire)
+            {
+                let _ = tx.send(SupervisorMessage::Worker(WorkerMessage::Failed {
+                    output,
+                    error,
+                }));
+            }
+        })
+        .expect("worker thread")
 }
 
 /// Hands every live worker the compositor's new output list, so each runtime's
@@ -219,7 +334,7 @@ pub(crate) struct WorkerUpdate {
 
 pub(crate) fn handle_worker_command(
     runtime: &mut Runtime,
-    screen: &Screen,
+    screen: Option<&Screen>,
     policy: LoadPolicy,
     command: WorkerCommand,
 ) -> WorkerUpdate {
@@ -279,14 +394,22 @@ pub(crate) fn handle_worker_command(
             hard,
             reply,
         } => {
-            let mut candidate = Runtime::for_screen(Limits::from_env().0, screen.clone());
+            // The outputless runtime has no output of its own.
+            let mut candidate = match screen {
+                Some(screen) => Runtime::for_screen(Limits::from_env().0, screen.clone()),
+                None => Runtime::new(Limits::from_env().0),
+            };
             // What the compositor and GPU can do did not change with the file.
             candidate.set_capabilities(&runtime.capability_pairs());
             if !hard {
                 candidate.restore_reloadable_state(runtime.reloadable_state());
             }
             let result = execute_config(&mut candidate, &path, &source, policy)
-                .and_then(|()| primary_surface_root(&candidate).map(|_| ()))
+                // With no output there is nothing to draw, so no root is owed.
+                .and_then(|()| match screen {
+                    Some(_) => primary_surface_root(&candidate).map(|_| ()),
+                    None => Ok(()),
+                })
                 .and_then(|()| {
                     candidate
                         .update_clock(clock_text())

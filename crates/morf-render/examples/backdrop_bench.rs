@@ -16,7 +16,9 @@
 //! waiting for the GPU alone, without the CPU's share.
 //!
 //! A second desk follows: thirty small rounded widgets, timed with the content
-//! of one of them changing and with the content of all of them changing.
+//! of one of them changing and with the content of all of them changing. And
+//! a third: a page of forty lines of text on an opaque ground with a clock
+//! ticking in its corner, drawn in greyscale and then in subpixels.
 
 use std::time::{Duration, Instant};
 
@@ -190,11 +192,78 @@ fn widgets(width: f64, height: f64) -> Desk {
     }
 }
 
+/// A page of text on an opaque ground, a clock in its corner.
+fn page(width: f64, height: f64) -> Desk {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    scene.assign(root, "width", width).unwrap();
+    scene.assign(root, "height", height).unwrap();
+    let ground = scene.create(Element::Rect);
+    scene.assign(ground, "width", width).unwrap();
+    scene.assign(ground, "height", height).unwrap();
+    scene.assign(ground, "color", "#fbfbf8").unwrap();
+    scene.reparent(ground, Some(root)).unwrap();
+    let mut panels = Vec::new();
+    for line in 0..40 {
+        let text = scene.create(Element::Text);
+        scene
+            .assign(
+                text,
+                "text",
+                "The quick brown fox jumps over the lazy dog, 0123456789 times over.",
+            )
+            .unwrap();
+        for (property, value) in [
+            ("x", 40.0),
+            ("y", 20.0 + f64::from(line) * 24.0),
+            ("width", 900.0),
+            ("height", 22.0),
+            ("font_size", 15.0),
+        ] {
+            scene.assign(text, property, value).unwrap();
+        }
+        scene.assign(text, "color", "#202124").unwrap();
+        scene.reparent(text, Some(root)).unwrap();
+        panels.push(text);
+    }
+    let clock = scene.create(Element::Text);
+    for (property, value) in [
+        ("x", width - 160.0),
+        ("y", 20.0),
+        ("width", 120.0),
+        ("height", 22.0),
+        ("font_size", 15.0),
+    ] {
+        scene.assign(clock, property, value).unwrap();
+    }
+    scene.assign(clock, "text", "12:00:00").unwrap();
+    scene.assign(clock, "color", "#202124").unwrap();
+    scene.reparent(clock, Some(root)).unwrap();
+    Desk {
+        scene,
+        root,
+        ground,
+        panels,
+        hands: vec![clock],
+    }
+}
+
 fn run(
     engine: &mut RenderEngine<WgpuBackend>,
     desk: &mut Desk,
     size: Size,
     frames: u32,
+    step: impl FnMut(&mut Desk, u32),
+) -> (Timing, u64) {
+    run_measured(engine, desk, size, frames, false, step)
+}
+
+fn run_measured(
+    engine: &mut RenderEngine<WgpuBackend>,
+    desk: &mut Desk,
+    size: Size,
+    frames: u32,
+    text: bool,
     mut step: impl FnMut(&mut Desk, u32),
 ) -> (Timing, u64) {
     let blurs = engine.backend_mut().backdrop_blurs();
@@ -202,7 +271,11 @@ fn run(
     let mut waits = Vec::new();
     for frame in 0..frames {
         step(desk, frame);
-        let layout = Layout::compute(&desk.scene, desk.root, size, &mut NoText).unwrap();
+        let layout = if text {
+            Layout::compute(&desk.scene, desk.root, size, engine.backend_mut()).unwrap()
+        } else {
+            Layout::compute(&desk.scene, desk.root, size, &mut NoText).unwrap()
+        };
         let start = Instant::now();
         engine.render(&desk.scene, &layout, 120, |_| {}).unwrap();
         let submitted = Instant::now();
@@ -302,4 +375,36 @@ fn main() {
     println!(
         "widgets  thirty 160x96 rounded: full repaint {first} | still {still} | one ticking {one} | all ticking {all}",
     );
+    for subpixel in [
+        None,
+        Some(morf_render::SubpixelText {
+            bgr: false,
+            filter: morf_render::LcdFilter::Default,
+        }),
+    ] {
+        let mut backend =
+            pollster::block_on(WgpuBackend::new(width, height)).expect("a GPU adapter");
+        if subpixel.is_some() && !backend.supports_subpixel_text() {
+            println!("text     subpixel: this adapter has no dual-source blending");
+            continue;
+        }
+        backend.set_subpixel_text(subpixel);
+        let mut engine = RenderEngine::new(backend);
+        let mut desk = page(size.width, size.height);
+        run_measured(&mut engine, &mut desk, size, 3, true, |_, _| {});
+        let (first, _) = run_measured(&mut engine, &mut desk, size, 1, true, |desk, _| {
+            desk.scene.assign(desk.root, "opacity", 0.999).unwrap();
+        });
+        let (ticking, _) = run_measured(&mut engine, &mut desk, size, 60, true, |desk, frame| {
+            let text = format!("12:00:{:02}", (frame + 1) % 60);
+            desk.scene.assign(desk.hands[0], "text", text).unwrap();
+        });
+        let _ = (&desk.panels, desk.ground);
+        let label = if subpixel.is_some() {
+            "subpixel"
+        } else {
+            "greyscale"
+        };
+        println!("text     forty lines, {label}: full repaint {first} | clock ticking {ticking}",);
+    }
 }

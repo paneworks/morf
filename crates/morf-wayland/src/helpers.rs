@@ -38,6 +38,18 @@ pub(crate) fn output_transform_name(transform: wl_output::Transform) -> &'static
     }
 }
 
+/// `wl_output.subpixel` as morf names it.
+pub(crate) fn output_subpixel_name(subpixel: wl_output::Subpixel) -> &'static str {
+    match subpixel {
+        wl_output::Subpixel::None => "none",
+        wl_output::Subpixel::HorizontalRgb => "horizontal_rgb",
+        wl_output::Subpixel::HorizontalBgr => "horizontal_bgr",
+        wl_output::Subpixel::VerticalRgb => "vertical_rgb",
+        wl_output::Subpixel::VerticalBgr => "vertical_bgr",
+        _ => "unknown",
+    }
+}
+
 pub(crate) fn default_keymap() -> Option<String> {
     let context = xkbcommon::xkb::Context::new(xkbcommon::xkb::CONTEXT_NO_FLAGS);
     xkbcommon::xkb::Keymap::new_from_names(

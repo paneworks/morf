@@ -89,6 +89,10 @@ pub struct ScreenInfo {
     pub physical_size: Option<(i32, i32)>,
     pub scale: i32,
     pub transform: &'static str,
+    /// How the output's subpixels are laid out, as `wl_output.subpixel`
+    /// says: `unknown`, `none`, `horizontal_rgb`, `horizontal_bgr`,
+    /// `vertical_rgb` or `vertical_bgr`.
+    pub subpixel: &'static str,
 }
 
 /// Pixel encoding returned by a compositor screencopy.

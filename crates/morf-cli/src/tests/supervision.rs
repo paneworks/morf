@@ -1,6 +1,7 @@
 mod frame;
 mod layers;
 mod layout_cache;
+mod outputless;
 mod pacing;
 mod popups;
 mod screens;
@@ -73,7 +74,7 @@ fn successful_reload_carries_opt_in_state() {
 
     let update = handle_worker_command(
         &mut runtime,
-        &screen,
+        Some(&screen),
         LoadPolicy::default(),
         WorkerCommand::Reload {
             path: Arc::new(PathBuf::from("shell.lua")),
@@ -120,7 +121,7 @@ fn hard_reload_discards_opt_in_state() {
 
     let update = handle_worker_command(
         &mut runtime,
-        &screen,
+        Some(&screen),
         LoadPolicy::default(),
         WorkerCommand::Reload {
             path: Arc::new(PathBuf::from("shell.lua")),
@@ -165,7 +166,7 @@ fn failed_reload_keeps_the_previous_runtime() {
 
     let update = handle_worker_command(
         &mut runtime,
-        &screen,
+        Some(&screen),
         LoadPolicy::default(),
         WorkerCommand::Reload {
             path: Arc::new(PathBuf::from("shell.lua")),
@@ -203,13 +204,13 @@ fn supervisor_dispatches_registered_ipc_handler() {
             if let Ok(command) = rx.recv_timeout(Duration::from_millis(10)) {
                 handle_worker_command(
                     &mut runtime,
-                    &Screen {
+                    Some(&Screen {
                         name: "test".into(),
                         width: None,
                         height: None,
                         scale: 1,
                         ..Screen::default()
-                    },
+                    }),
                     LoadPolicy::default(),
                     command,
                 );

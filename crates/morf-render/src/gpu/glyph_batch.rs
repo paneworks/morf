@@ -298,6 +298,7 @@ pub(crate) fn create_glyph_batch(
     mask_atlas.prepare(queue, &glyphs)?;
     color_atlas.prepare(queue, &glyphs)?;
     let mut instances = Vec::with_capacity(glyphs.len());
+    let mut plain = Vec::with_capacity(glyphs.len());
     let mut command_spans: Vec<Vec<GlyphSpan>> =
         (0..list.commands.len()).map(|_| Vec::new()).collect();
     for band in under {
@@ -308,6 +309,7 @@ pub(crate) fn create_glyph_batch(
             scale,
             (target_width, target_height),
         );
+        plain.push(false);
     }
     for prepared in glyphs {
         let glyph = prepared.glyph;
@@ -365,8 +367,16 @@ pub(crate) fn create_glyph_batch(
             spans.push(GlyphSpan {
                 range: instance..instance + 1,
                 color: color_glyph,
+                lcd: false,
             });
         }
+        plain.push(
+            glyph.content == RasterContent::Field
+                && super::lcd_spans::only_moves(prepared.transform)
+                && prepared.morph.is_none()
+                && prepared.morph_progress == 0.0
+                && (prepared.field[2] <= 0.0 || prepared.outline_color[3] <= 0.0),
+        );
         instances.push(GlyphInstance {
             origin,
             axes,
@@ -407,10 +417,12 @@ pub(crate) fn create_glyph_batch(
             scale,
             (target_width, target_height),
         );
+        plain.push(false);
     }
     Ok(Some(GlyphBatch {
         instances,
         command_spans,
+        plain,
     }))
 }
 
@@ -435,6 +447,7 @@ fn push_band(
         spans.push(GlyphSpan {
             range: instance..instance + 1,
             color: false,
+            lcd: false,
         });
     }
     instances.push(GlyphInstance {

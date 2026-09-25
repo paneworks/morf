@@ -10,7 +10,7 @@ use std::sync::{Arc, mpsc};
 use std::thread::{self};
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::{config::*, lock::*, services::*, workers::*};
+use crate::{config::*, lock::*, outputless::*, services::*, workers::*};
 
 /// What a worker ends with when the compositor closes its surface -- which is
 /// what a compositor does to every surface on an output it switches off or
@@ -84,14 +84,17 @@ fn daemon_log(message: String) -> String {
 
 pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> Result<(), String> {
     let probe = LayerClient::probe().map_err(|error| error.to_string())?;
-    let mut desired = named_screens(probe.screens())?;
+    let mut named = named_screens(probe.screens())?;
     // Seeded before the first worker exists, so the very first configuration
     // load already sees every output and not only the one it draws to.
     store_outputs(probe.screens());
     drop(probe);
-    if desired.is_empty() {
-        return Err("compositor advertised no named outputs".to_owned());
-    }
+    // With no output at all, the configuration is run once with none to
+    // hear whether it wants to be (`morf.surface.outputless`); one that does
+    // not is stopped at once and the shell waits for an output.
+    let mut outputless = Outputless::Unknown;
+    let handover = Handover::default();
+    let mut probing = false;
     // The file says what it is, and the only way to hear it is to run it.
     // The workers run it, once each, and say what it asked to be: one that
     // asks to be a session lock is one client for every output, not the
@@ -127,14 +130,33 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
     let mut workers = BTreeMap::new();
     let mut daemon_logs = Vec::new();
     let mut closures = VecDeque::new();
-    reconcile_workers(
-        &mut workers,
-        &desired,
-        Arc::clone(&path),
-        Arc::clone(&source),
-        policy,
-        &tx,
-    );
+    // Brings the workers to the output list and what the configuration said
+    // it wants with none; with no worker at all, the compositor is asked
+    // again until an output comes.
+    macro_rules! settle {
+        () => {{
+            if named.is_empty() {
+                // Surfaces closed because their outputs went are explained.
+                closures.clear();
+            }
+            reconcile_workers(
+                &mut workers,
+                &desired_workers(named.clone(), outputless),
+                &WorkerContext {
+                    path: &path,
+                    source: &source,
+                    policy,
+                    tx: &tx,
+                    handover: &handover,
+                },
+            );
+            if workers.is_empty() && !probing {
+                probing = true;
+                probe_later(&tx, Duration::from_secs(1));
+            }
+        }};
+    }
+    settle!();
 
     loop {
         match rx.recv() {
@@ -148,22 +170,35 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
                 if store_outputs(&screens) {
                     broadcast_screens(&workers, &screens);
                 }
-                desired = named_screens(&screens)?;
-                reconcile_workers(
-                    &mut workers,
-                    &desired,
-                    Arc::clone(&path),
-                    Arc::clone(&source),
-                    policy,
-                    &tx,
-                );
+                named = named_screens(&screens)?;
+                settle!();
             }
             Ok(SupervisorMessage::Worker(WorkerMessage::Screens { .. })) => {}
+            Ok(SupervisorMessage::Worker(WorkerMessage::Outputless { output, wanted }))
+                if workers.contains_key(&output) =>
+            {
+                outputless = Outputless::from_flag(wanted);
+                if named.is_empty() {
+                    settle!();
+                }
+            }
+            Ok(SupervisorMessage::Worker(WorkerMessage::Outputless { .. })) => {}
             Ok(SupervisorMessage::Worker(WorkerMessage::Loaded {
                 output,
                 session_lock,
+                outputless: wanted,
             })) => match loaded_step(session_lock, taken.is_some()) {
-                LoadedStep::Run => {}
+                LoadedStep::Run => {
+                    outputless = Outputless::from_flag(wanted);
+                    if output == OUTPUTLESS && !wanted {
+                        daemon_logs.push(daemon_log(
+                            "the compositor offers no output, and the configuration does not \
+                             run without one (morf.surface.outputless); waiting for an output"
+                                .to_owned(),
+                        ));
+                        settle!();
+                    }
+                }
                 LoadedStep::Refuse => {
                     stop_workers(workers);
                     return Err(taken.unwrap_or_default());
@@ -203,9 +238,13 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
                 daemon_logs.push(daemon_log(format!(
                     "output {output}: {error}; asking the compositor for its outputs again"
                 )));
-                probe_later(&tx, Duration::from_millis(250));
+                if !probing {
+                    probing = true;
+                    probe_later(&tx, Duration::from_millis(250));
+                }
             }
             Ok(SupervisorMessage::Probe) => {
+                probing = false;
                 match LayerClient::probe() {
                     Ok(probe) => {
                         let screens = probe.screens().to_vec();
@@ -213,25 +252,19 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
                         if store_outputs(&screens) {
                             broadcast_screens(&workers, &screens);
                         }
-                        desired = named_screens(&screens)?;
-                        reconcile_workers(
-                            &mut workers,
-                            &desired,
-                            Arc::clone(&path),
-                            Arc::clone(&source),
-                            policy,
-                            &tx,
-                        );
+                        named = named_screens(&screens)?;
+                        settle!();
                     }
                     Err(error) => {
                         daemon_logs.push(daemon_log(format!("asking for the outputs: {error}")));
+                        // With no worker there is no connection to hear an
+                        // output come back on, so the compositor is asked
+                        // again, only while there is none.
+                        if workers.is_empty() {
+                            probing = true;
+                            probe_later(&tx, Duration::from_secs(1));
+                        }
                     }
-                }
-                // With no worker there is no connection to hear an output
-                // come back on, so the compositor is asked again, only while
-                // there is none.
-                if workers.is_empty() {
-                    probe_later(&tx, Duration::from_secs(1));
                 }
             }
             Ok(SupervisorMessage::Ipc(incoming)) => {
@@ -250,6 +283,9 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
                         WireValue::Integer(started.elapsed().as_secs() as i64),
                     ])
                 } else {
+                    if matches!(incoming.request, IpcRequest::Log) {
+                        daemon_logs.extend(handover.take_logs());
+                    }
                     handle_ipc(&workers, &mut daemon_logs, &incoming.request)
                 };
                 incoming.reply(reply);
@@ -444,11 +480,23 @@ pub(crate) fn execute_config(
     source: &[u8],
     policy: LoadPolicy,
 ) -> Result<(), String> {
+    execute_config_on(runtime, path, source, policy, &known_outputs())
+}
+
+/// As [`execute_config`], with `morf.screens` given `screens` rather than
+/// the recorded outputs: the outputless runtime has none by definition.
+pub(crate) fn execute_config_on(
+    runtime: &mut Runtime,
+    path: &Path,
+    source: &[u8],
+    policy: LoadPolicy,
+    screens: &[Screen],
+) -> Result<(), String> {
     let roots = runtimepath_roots(path, policy.external_roots);
     // Applied before any Lua runs, so a configuration can measure itself
     // against the whole monitor layout while it loads. Index 1 of
     // `morf.screens` stays this runtime's own output.
-    runtime.set_screens(&known_outputs());
+    runtime.set_screens(screens);
     runtime.set_module_roots(roots.clone());
     runtime.set_shell_root(
         path.parent()

@@ -222,7 +222,7 @@ impl OutputHandler for LayerState {
         qh: &QueueHandle<Self>,
         output: wl_output::WlOutput,
     ) {
-        self.refresh_screens();
+        self.refresh_screens(None);
         if self.output_power_target.is_none()
             && let Some(mode) = self.output_power_mode
         {
@@ -237,7 +237,7 @@ impl OutputHandler for LayerState {
         _qh: &QueueHandle<Self>,
         output: wl_output::WlOutput,
     ) {
-        self.refresh_screens();
+        self.refresh_screens(None);
         let scale = self
             .outputs
             .info(&output)
@@ -269,7 +269,9 @@ impl OutputHandler for LayerState {
         _qh: &QueueHandle<Self>,
         output: wl_output::WlOutput,
     ) {
-        self.refresh_screens();
+        // Told before the toolkit forgets it: the list must leave it out here,
+        // or an output going away never changed the list at all.
+        self.refresh_screens(Some(&output));
         if let Some(index) = self
             .output_power
             .iter()

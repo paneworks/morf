@@ -24,6 +24,15 @@ if operands[1] == "lock" then
   return
 end
 
+-- With every screen off there is nothing to draw on, and something must
+-- still light one again: morf runs this file once with no output, and only
+-- the services that can do that start (services/outputless.lua).
+morf.surface.outputless = true
+if #(morf.screens or {}) == 0 then
+  require("services.outputless")
+  return
+end
+
 local ui = require("morf.ui")
 local theme = require("theme")
 local settings = require("services.settings")

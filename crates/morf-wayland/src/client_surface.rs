@@ -87,6 +87,16 @@ impl LayerClient {
         physical_size(self.logical_size(), self.scale_120())
     }
 
+    /// The output this client's surface was opened on, as it is now: its
+    /// transform and subpixel layout decide how text may be drawn on it.
+    pub fn own_output(&self) -> Option<ScreenInfo> {
+        let output = self.state.output_power_target.as_ref()?;
+        self.state
+            .outputs
+            .info(output)
+            .map(crate::protocol_handlers::screen_info)
+    }
+
     /// Returns the latest compositor output snapshot.
     pub fn screens(&self) -> &[ScreenInfo] {
         &self.state.screens

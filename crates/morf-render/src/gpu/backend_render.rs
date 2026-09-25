@@ -66,7 +66,7 @@ impl RenderBackend for WgpuBackend {
             outlines: field_outlines,
             shaders: field_shaders,
         } = collect_field_instances(list, scale_120, &mut self.text, &mut self.drawings);
-        let glyph_batch = create_glyph_batch(
+        let mut glyph_batch = create_glyph_batch(
             GlyphBatchContext {
                 queue: &self.queue,
                 mask_atlas: &mut self.glyph_mask_atlas,
@@ -122,6 +122,21 @@ impl RenderBackend for WgpuBackend {
             if !layer.commands.is_empty() {
                 child_layers.insert((layer.parent, layer.commands.start), layer_index);
             }
+        }
+        // Subpixel text, where it is safe (lcd.rs): at a whole-number scale,
+        // straight into the surface, over opaque ground.
+        if let Some(batch) = &mut glyph_batch
+            && self.lcd_pipeline.is_some()
+            && scale_120.is_multiple_of(120)
+        {
+            super::lcd_spans::mark_subpixel_glyphs(
+                batch,
+                list,
+                |command| command_layers[command].is_some(),
+                scale_120,
+                (self.width, self.height),
+                self.opaque_surface,
+            );
         }
         let backdrop_draws = self.prepare_backdrops(
             list,
@@ -283,7 +298,10 @@ impl RenderBackend for WgpuBackend {
             reach
         };
         macro_rules! draw_command {
-            ($pass:expr, $command_index:expr, $base_damage:expr, $frame:expr) => {{
+            ($pass:expr, $command_index:expr, $base_damage:expr, $frame:expr) => {
+                draw_command!($pass, $command_index, $base_damage, $frame, false)
+            };
+            ($pass:expr, $command_index:expr, $base_damage:expr, $frame:expr, $lcd:expr) => {{
                 let command_index = $command_index;
                 let command_damage = if let Some(clip) = list.commands[command_index].clip() {
                     physical_damage(clip, scale_120)
@@ -351,7 +369,13 @@ impl RenderBackend for WgpuBackend {
                     }
                     if let Some(batch) = &glyph_batch {
                         for span in &batch.command_spans[command_index] {
-                            $pass.set_pipeline(&self.glyph_pipeline);
+                            // Subpixel only where the surface itself is the
+                            // target: the same command drawn again beneath a
+                            // backdrop goes to a scratch texture.
+                            match (&self.lcd_pipeline, span.lcd && $lcd) {
+                                (Some(lcd), true) => $pass.set_pipeline(lcd),
+                                _ => $pass.set_pipeline(&self.glyph_pipeline),
+                            }
                             let atlas = if span.color {
                                 &self.glyph_color_atlas
                             } else {
@@ -651,7 +675,7 @@ impl RenderBackend for WgpuBackend {
                         command_index = list.layers[layer].commands.end.max(command_index + 1);
                     } else {
                         if command_layers[command_index].is_none() {
-                            draw_command!(pass, command_index, *damage, surface_frame);
+                            draw_command!(pass, command_index, *damage, surface_frame, true);
                         }
                         command_index += 1;
                     }

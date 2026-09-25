@@ -129,9 +129,20 @@ impl WgpuBackend {
             .map_err(|error| GpuError(format!("no compatible GPU adapter: {error}")))?;
         let adapter_info = adapter.get_info();
         let adapter_limits = adapter.limits();
+        // Subpixel text blends each channel by its own coverage, which takes
+        // a second fragment output to the blend unit. Asked for only where
+        // the adapter has it; without it text stays greyscale.
+        let lcd_supported = std::env::var_os("MORF_NO_DUAL_SOURCE").is_none()
+            && adapter
+                .features()
+                .contains(wgpu::Features::DUAL_SOURCE_BLENDING);
         let descriptor = wgpu::DeviceDescriptor {
             label: Some("morf device"),
-            required_features: wgpu::Features::empty(),
+            required_features: if lcd_supported {
+                wgpu::Features::DUAL_SOURCE_BLENDING
+            } else {
+                wgpu::Features::empty()
+            },
             required_limits: adapter_limits.clone(),
             ..Default::default()
         };
@@ -280,6 +291,10 @@ impl WgpuBackend {
             viewport_buffer,
             viewport_bind_group,
             glyph_pipeline,
+            lcd_supported,
+            subpixel: None,
+            lcd_pipeline: None,
+            opaque_surface: false,
             glyph_layout,
             glyph_sampler,
             nearest_sampler,
@@ -408,6 +423,9 @@ impl WgpuBackend {
             blend,
         )
         .expect("the glyph shader carries its own hook");
+        self.lcd_pipeline = self
+            .subpixel
+            .map(|text| build_lcd_pipeline(&self.device, &self.glyph_layout, blend, text));
         self.blur_pipeline = build_blur_pipeline(&self.device, &self.blur_layout, blend);
         self.field_pipeline = build_field_pipeline(
             &self.device,
@@ -427,6 +445,42 @@ impl WgpuBackend {
         self.effect_shaders.clear();
         self.resize_target(self.width, self.height);
         true
+    }
+
+    /// Whether this device can draw subpixel text at all.
+    pub fn supports_subpixel_text(&self) -> bool {
+        self.lcd_supported
+    }
+
+    /// Draws text in subpixels, where it is safe to (see `lcd.rs`), or not.
+    ///
+    /// Returns whether anything changed: the pipeline is built for the new
+    /// setting, and the next frame has to be drawn in full, since every
+    /// glyph already on the surface was drawn the old way. On a device
+    /// without dual-source blending it stays off.
+    pub fn set_subpixel_text(&mut self, text: Option<crate::SubpixelText>) -> bool {
+        let text = text.filter(|_| self.lcd_supported);
+        if text == self.subpixel {
+            return false;
+        }
+        self.subpixel = text;
+        self.lcd_pipeline =
+            text.map(|text| build_lcd_pipeline(&self.device, &self.glyph_layout, self.blend, text));
+        true
+    }
+
+    /// The subpixel text setting in force.
+    pub fn subpixel_text(&self) -> Option<crate::SubpixelText> {
+        self.subpixel
+    }
+
+    /// Whether the whole surface is declared opaque to the compositor, which
+    /// makes all of it ground subpixel text may be drawn on. Returns whether
+    /// it changed.
+    pub fn set_opaque_surface(&mut self, opaque: bool) -> bool {
+        let changed = self.opaque_surface != opaque;
+        self.opaque_surface = opaque;
+        changed
     }
 
     /// Returns the persistent target for copying or diagnostics.

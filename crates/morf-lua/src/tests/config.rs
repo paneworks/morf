@@ -115,9 +115,11 @@ fn layer_surface_settings_are_native_and_typed() {
             exclusive_auto: false,
             opaque: false,
             session_lock: false,
+            outputless: false,
             backdrop: None,
             backdrop_dim: 0.0,
             blend: "linear".to_owned(),
+            subpixel_text: "auto".to_owned(),
         }
     );
 }
