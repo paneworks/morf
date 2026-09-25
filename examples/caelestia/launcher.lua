@@ -69,7 +69,7 @@ end
 
 local function row_icon(row)
   if row.kind == "action" then
-    return kit.centred(32, 32, kit.icon(row.icon, 30, function() return C.onSurfaceVariant end))
+    return kit.centred(32, 32, kit.icon(row.icon, 34, function() return C.onSurfaceVariant end))
   end
   local hit = apps.icon(row.icon)
   if hit and hit.name then
