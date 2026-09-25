@@ -62,6 +62,7 @@ mod input_api;
 mod layer_surfaces;
 mod lib_dbus_services;
 mod lib_hyprland;
+mod lib_material;
 mod lib_palette;
 mod lib_sysinfo_web;
 mod lifecycle_io;

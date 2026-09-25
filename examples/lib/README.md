@@ -100,6 +100,33 @@ end, function(ok, replies) end)
   `plugin_available(option, cb)`, `reload(cb)`, `on_reload(fn)`.
 - Without Hyprland, `available()` is false and nothing is sent.
 
+## material
+
+`lib/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
+five tonal palettes placed around a source colour's hue, and every role
+(`primary`, `onPrimaryContainer`, `surfaceContainerHigh`, `outlineVariant`,
+the `*Fixed` roles, ...) at its tone for dark or light. This is what an M3
+shell's colour tool does, in Lua.
+
+```lua
+local material = require("lib.material")
+local s = material.scheme("#4a7fb5", { variant = "tonal_spot", mode = "dark" })
+s.primary  s.surfaceContainer  s.palettes.tertiary(70)
+material.from_image("~/Pictures/sea.jpg", { mode = "light" }, function(ok, s) ... end)
+```
+
+| call | what |
+|------|------|
+| `material.scheme(source, opts)` | every role as a `morf.color`; `source` is a colour or a hue. `opts.variant`: `tonal_spot` (default), `vibrant`, `expressive`, `neutral`, `monochrome`, `fidelity`, `content`, `rainbow`, `fruit_salad`; `opts.mode`: `dark` or `light` |
+| `material.palettes(source, variant)` | the six tonal palettes alone |
+| `material.score(swatches, opts)` | a picture's best source colours, best first (a colour's share and its neighbours' within 15 degrees of hue, and its chroma; greys do not count; `#4285f4` when nothing has colour) |
+| `material.from_image(path, opts, on_done)` | quantised off the loop, scored, and made a scheme: `on_done(true, s)` or `on_done(false, message)` |
+| `material.hex(s)` | the roles as `#rrggbb` |
+| `material.terminal(s)` | sixteen terminal colours and extras, in `lib/palette.lua`'s shape, for its writers |
+
+The palette rules and the score follow Material Color Utilities
+(Apache-2.0). There is one contrast level, the standard one.
+
 ## palette
 
 `lib/palette.lua` derives a whole desk's colours from a wallpaper: the
