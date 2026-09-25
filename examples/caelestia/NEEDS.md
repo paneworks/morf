@@ -28,7 +28,6 @@ CSS's `font-optical-sizing: auto` and Qt do) to reach shaping like `wght`.
   layer, seam and all, without fading the rest of the field (docs/UI.md,
   "Fields"). A drawer's background, a layer of the frame's field, now fades
   in with its contents as the reference's does.
-
 - Headless runs (`morf check`/`render`/`test`) stretched a layer anchored at
   both ends of an axis to the screen even when it asked for a size; a
   compositor keeps the asked size, centred. The port's wallpaper layer,
