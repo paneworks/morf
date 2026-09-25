@@ -62,7 +62,7 @@ function M.new(spec)
       {
         node = panel, property = "translate_y", to = opening and 0 or tucked(),
         duration = opening and theme.duration.drawer_open or theme.duration.drawer_close,
-        easing = opening and theme.ease.emphasized_decel or theme.ease.emphasized_accel,
+        easing = opening and theme.ease.spatial or theme.ease.emphasized_accel,
       },
       on_finished = function(reason)
         if reason == "completed" and not d.open:get() then panel.visible = false end

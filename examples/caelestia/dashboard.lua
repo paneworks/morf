@@ -628,10 +628,11 @@ morf.effect("caelestia.dashboard.hover", function()
       M.drawer.set(true)
     end
   elseif by_hover and M.drawer.open:get() then
-    -- A moment's grace, so a pointer crossing from the edge onto the panel
-    -- does not shut it.
+    -- A moment's grace (the reference shuts at once), so the pointer
+    -- crossing from the edge onto the panel, one area to the next, does
+    -- not shut it.
     if closing then closing:cancel() end
-    closing = morf.timer(150, function()
+    closing = morf.timer(50, function()
       closing = nil
       if not (trigger.hovered or panel_hovered()) then
         by_hover = false

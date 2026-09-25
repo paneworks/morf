@@ -91,15 +91,21 @@ M.ease = {
   standard_accel = { x1 = 0.3, y1 = 0, x2 = 1, y2 = 1 },
   emphasized_decel = { x1 = 0.05, y1 = 0.7, x2 = 0.1, y2 = 1 },
   emphasized_accel = { x1 = 0.3, y1 = 0, x2 = 0.8, y2 = 0.15 },
+  -- Material 3 Expressive's default spatial curve: out past the end by a
+  -- touch and back.
+  spatial = { x1 = 0.38, y1 = 1.21, x2 = 0.22, y2 = 1 },
   -- The emphasized curve: a slow start, then most of the way at once, then
   -- a long settle -- two segments (Material's own definition).
   emphasized = { spline = { 0.05, 0, 0.133333, 0.06, 0.166666, 0.4, 0.208333, 0.82, 0.25, 1, 1, 1 } },
 }
 
--- Durations measured off films of the reference (see NEEDS.md, "Motion").
+-- Durations and curves fitted to films of the reference in the sandbox
+-- (tools/sandbox/caelestia-motion.steps): a drawer opens on the spatial
+-- curve over about 450 ms, overshooting by about 1 % and settling, and
+-- closes on the emphasized accelerate curve in about 200 ms.
 M.duration = {
   small = 200, normal = 400, large = 600,
-  drawer_open = 400, drawer_close = 300,
+  drawer_open = 450, drawer_close = 200,
 }
 
 return M
