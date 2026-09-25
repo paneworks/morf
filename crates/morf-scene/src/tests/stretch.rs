@@ -111,3 +111,45 @@ fn a_layer_tracks_a_live_node_and_forgets_a_removed_one() {
     scene.remove(panel).unwrap();
     assert_eq!(scene.track(shape), None);
 }
+
+// A node standing still but drawn a hair off each frame -- float noise
+// through a transform -- is at rest: its stretch settles and stops asking
+// for frames. Before, any speed at all kept it "moving" for ever.
+#[test]
+fn a_node_at_rest_drawn_with_noise_settles() {
+    let mut scene = Scene::new();
+    let node = scene.create(Element::Item);
+    scene
+        .set_stretch(
+            node,
+            Some(Stretch {
+                scale: 0.16,
+                ..Stretch::default()
+            }),
+        )
+        .unwrap();
+    let identity = [1.0, 0.0, 0.0, 1.0];
+    // A real move first, so it has a stretch to settle from.
+    for frame in 0..10 {
+        scene
+            .tick_animations(std::time::Duration::from_millis(16))
+            .unwrap();
+        scene.observe_stretch(node, [100.0, 100.0 + frame as f64 * 8.0], identity);
+    }
+    assert!(scene.stretch_moving());
+    let mut settled_at = None;
+    for frame in 0..400 {
+        scene
+            .tick_animations(std::time::Duration::from_millis(16))
+            .unwrap();
+        // Sub-pixel noise, alternating: a third of a pixel a second at most.
+        let noise = if frame % 2 == 0 { 3e-3 } else { -3e-3 };
+        scene.observe_stretch(node, [100.0 + noise, 172.0 - noise], identity);
+        if !scene.stretch_moving() {
+            settled_at = Some(frame);
+            break;
+        }
+    }
+    assert!(settled_at.is_some(), "noise kept the stretch moving");
+    assert_eq!(scene.deformation(node), None);
+}

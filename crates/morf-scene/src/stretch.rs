@@ -91,7 +91,10 @@ impl Stretch {
     /// `1 / (1 + e)` across it, so the area stays what it was.
     pub fn target(&self, velocity: [f64; 2]) -> [f64; 3] {
         let speed = velocity[0].hypot(velocity[1]);
-        if speed <= f64::EPSILON || self.scale == 0.0 {
+        // Under a pixel a second is not motion: a node at rest drawn through
+        // a transform lands a hair off where it was, frame to frame, and that
+        // noise must not keep it (and the frames) going for ever.
+        if speed < STILL_SPEED || self.scale == 0.0 {
             return [0.0; 3];
         }
         let amount = (self.scale * speed / 1000.0).clamp(-self.max.min(0.9), self.max);
@@ -104,6 +107,11 @@ impl Stretch {
         ]
     }
 }
+
+/// Slower than this, in surface pixels a second, a node is standing still.
+const STILL_SPEED: f64 = 1.0;
+/// A deformation this small is none: the shape is at rest.
+const REST_VALUE: f64 = 1e-4;
 
 /// The spring's state for one stretching node.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -224,8 +232,8 @@ impl StretchState {
             *value = next.clamp(-0.9, 4.0);
             *rate = next_rate;
         }
-        let resting = target == [0.0; 3]
-            && self.value.iter().all(|value| value.abs() < 1e-4)
+        let resting = target.iter().all(|value| value.abs() < REST_VALUE)
+            && self.value.iter().all(|value| value.abs() < REST_VALUE)
             && self.rate.iter().all(|rate| rate.abs() < 1e-3);
         if resting {
             self.value = [0.0; 3];

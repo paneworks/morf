@@ -369,13 +369,48 @@ pub struct Pw {
     _library: Library,
 }
 
+/// Where a system keeps its libraries, for a build whose own loader does
+/// not look there: a binary linked in a Nix shell searches only its store
+/// paths, and a distro's libpipewire sits in /usr/lib.
+const SYSTEM_LIBRARY_DIRS: &[&str] = &[
+    "/usr/lib",
+    "/usr/lib64",
+    "/usr/lib/x86_64-linux-gnu",
+    "/lib/x86_64-linux-gnu",
+    "/usr/lib/aarch64-linux-gnu",
+    "/lib/aarch64-linux-gnu",
+    "/run/current-system/sw/lib",
+];
+
+/// libpipewire by its soname, as the loader finds it, or else from the
+/// system's library folders.
+fn open_library() -> Result<Library, String> {
+    const SONAME: &str = "libpipewire-0.3.so.0";
+    // SAFETY: loading libpipewire runs no initialisation beyond its own
+    // constructors, which only register types.
+    let first = match unsafe { Library::new(SONAME) } {
+        Ok(library) => return Ok(library),
+        Err(error) => error,
+    };
+    for dir in SYSTEM_LIBRARY_DIRS {
+        let path = std::path::Path::new(dir).join(SONAME);
+        if !path.exists() {
+            continue;
+        }
+        // SAFETY: as above.
+        if let Ok(library) = unsafe { Library::new(&path) } {
+            return Ok(library);
+        }
+    }
+    Err(format!("libpipewire-0.3 is not available: {first}"))
+}
+
 impl Pw {
     /// Opens the library, or explains why not.
     pub fn open() -> Result<Self, String> {
         // SAFETY: loading libpipewire runs no initialisation beyond its own
         // constructors, which only register types.
-        let library = unsafe { Library::new("libpipewire-0.3.so.0") }
-            .map_err(|error| format!("libpipewire-0.3 is not available: {error}"))?;
+        let library = open_library()?;
         macro_rules! symbol {
             ($name:literal) => {
                 // SAFETY: the type is the function's documented C signature.

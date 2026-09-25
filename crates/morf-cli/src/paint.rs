@@ -387,8 +387,21 @@ pub(crate) fn paint_layer(
             .iter()
             .map(|rect| u64::from(rect.width) * u64::from(rect.height))
             .sum();
+        // With `MORF_FRAME_LOG=2`, where: the node that keeps a shell drawing
+        // is found from the rectangle it repaints.
+        let rects = if split.on {
+            let listed = damage
+                .iter()
+                .take(4)
+                .map(|rect| format!("{}x{}+{}+{}", rect.width, rect.height, rect.x, rect.y))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!(": {listed}")
+        } else {
+            String::new()
+        };
         eprintln!(
-            "{} layer {layer} damaged {area} px in {} rect(s)",
+            "{} layer {layer} damaged {area} px in {} rect(s){rects}",
             crate::wake_plan::stamp(),
             damage.len()
         );
