@@ -125,6 +125,24 @@ pub fn name(keysym: u32) -> Option<String> {
     char::from_u32(code).map(|c| c.to_string())
 }
 
+/// `morf.keys`: every named key's keysym by its X name (`morf.keys.Down`),
+/// for comparing against the number a handler gets.
+pub(crate) fn install_keys_api<'gc>(ctx: luna::Context<'gc>, morf: luna::Table<'gc>) {
+    let keys = luna::Table::new(&ctx);
+    for (name, keysym) in NAMED {
+        keys.set_field(ctx, name, i64::from(*keysym));
+    }
+    for number in 1..=35u32 {
+        let name = format!("F{number}");
+        let _ = keys.set(
+            ctx,
+            ctx.intern(name.as_bytes()),
+            i64::from(0xffbe + number - 1),
+        );
+    }
+    morf.set_field(ctx, "keys", keys);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,22 +165,4 @@ mod tests {
         assert_eq!(keysym("nonsense"), None);
         assert_eq!(name(0xfe03), None);
     }
-}
-
-/// `morf.keys`: every named key's keysym by its X name (`morf.keys.Down`),
-/// for comparing against the number a handler gets.
-pub(crate) fn install_keys_api<'gc>(ctx: luna::Context<'gc>, morf: luna::Table<'gc>) {
-    let keys = luna::Table::new(&ctx);
-    for (name, keysym) in NAMED {
-        keys.set_field(ctx, *name, i64::from(*keysym));
-    }
-    for number in 1..=35u32 {
-        let name = format!("F{number}");
-        let _ = keys.set(
-            ctx,
-            ctx.intern(name.as_bytes()),
-            i64::from(0xffbe + number - 1),
-        );
-    }
-    morf.set_field(ctx, "keys", keys);
 }
