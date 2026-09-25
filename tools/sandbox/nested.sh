@@ -65,6 +65,8 @@ fi
 [ -d "$HOME/.fonts" ] && ln -s "$HOME/.fonts" "$H/.fonts"
 [ -d "$HOME/.local/share/fonts" ] && ln -s "$HOME/.local/share/fonts" "$H/.local/share/fonts/own"
 [ -n "${INTER_DIR:-}" ] && cp -r "$INTER_DIR/share/fonts" "$H/.local/share/fonts/inter"
+# EXTRA_FONTS: a folder of fonts a configuration under test brings.
+[ -n "${EXTRA_FONTS:-}" ] && cp -r "$EXTRA_FONTS" "$H/.local/share/fonts/extra"
 [ -f "$HOME/.config/fontconfig/fonts.conf" ] && mkdir -p "$H/.config/fontconfig" && cp "$HOME/.config/fontconfig/fonts.conf" "$H/.config/fontconfig/"
 [ "$KIND" = upstream ] && cp -r "$UPHOME/.config/quickshell" "$H/.config/"
 if [ "$KIND" = caelestia ]; then WALLPAPER=${WALLPAPER:-}
@@ -146,6 +148,16 @@ if [ -z "${RENDER_NODE:-}" ]; then
   done
 fi
 RUN=$(mktemp -d "${TMPDIR:-/tmp}/msXXXX"); chmod 700 "$RUN"
+# VISIBLE=1: the nested Hyprland opens as a window on the person's own
+# compositor, so they can watch -- and use -- the session under test.
+# (Under cage it would draw only headless: aquamarine brings up no windowed
+# output there.) Only the nested Hyprland is given their display, by
+# absolute path, through the proxy; everything else keeps the private
+# runtime dir, bus and HOME and never sees that socket.
+if [ -n "${VISIBLE:-}" ]; then
+  PARENT_DISPLAY="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/${WAYLAND_DISPLAY:-wayland-0}"
+  [ -S "$PARENT_DISPLAY" ] || { echo "VISIBLE: no display at $PARENT_DISPLAY"; exit 1; }
+fi
 cat > "$OUT/inner.sh" <<INNER
 #!/bin/sh
 RUN=$RUN; OUT=$OUT
@@ -154,7 +166,15 @@ RUN=$RUN; OUT=$OUT
 # are the machine's, and a shell under test would read and drive them.
 [ "\$DBUS_SYSTEM_BUS_ADDRESS" = "unix:path=\$RUN/no-system-bus" ] || { echo "REFUSING: system bus \$DBUS_SYSTEM_BUS_ADDRESS" > \$OUT/refused; exit 1; }
 CAGE_DISPLAY=\$WAYLAND_DISPLAY
-python3 "$HERE/wlproxy.py" \$RUN/wayland-parent \$RUN/\$CAGE_DISPLAY > \$OUT/proxy.log 2>&1 &
+# The parent: cage's socket in the private runtime dir, or, visible, the
+# person's display, which only the proxy (and through it the nested
+# Hyprland) connects to.
+case "\$CAGE_DISPLAY" in
+  /*) [ -n "${VISIBLE:-}" ] || { echo "REFUSING: parent display inside" > \$OUT/refused; exit 1; }; PARENT=\$CAGE_DISPLAY;;
+  *) PARENT=\$RUN/\$CAGE_DISPLAY;;
+esac
+unset WAYLAND_DISPLAY
+python3 "$HERE/wlproxy.py" \$RUN/wayland-parent \$PARENT > \$OUT/proxy.log 2>&1 &
 PP=\$!
 sleep 0.5
 env -u HYPRLAND_INSTANCE_SIGNATURE -u DISPLAY WAYLAND_DISPLAY=wayland-parent \
@@ -203,9 +223,14 @@ film() {
 wait() { sleep \$1; }
 # When a request was made: films are timed from it as well.
 asked() { REQ=\$(date +%s%N); echo "\$1 wall \$((REQ / 1000000))" >> \$OUT/marks; }
-hc output create headless HEADLESS-A >> \$OUT/hc.log 2>&1
+# Headless, the nested session draws on an output of its own; visible, on
+# the window cage gives it.
+if [ -z "${VISIBLE:-}" ]; then hc output create headless HEADLESS-A >> \$OUT/hc.log 2>&1
+else hc -j monitors | grep -q '"name"' || hc output create wayland >> \$OUT/hc.log 2>&1; fi
 sleep 1
-if [ "$KIND" != caelestia ]; then
+# awww paints impasto's wallpaper; a morf configuration of its own paints
+# its own, and a black awww layer would cover it.
+if [ "$KIND" != caelestia ] && { [ "$KIND" != morf ] || [ -z "${MORF_CONFIG:-}" ]; }; then
   awww-daemon > \$OUT/awww.log 2>&1 &
   AW=\$!
   sleep 1
@@ -266,11 +291,19 @@ sleep 1
 kill \$PP \${KP:-} \$VP 2>/dev/null
 INNER
 chmod +x "$OUT/inner.sh"
-env -u HYPRLAND_INSTANCE_SIGNATURE -u NIRI_SOCKET -u SWAYSOCK -u I3SOCK -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u DISPLAY \
-  HOME="$H" XDG_CONFIG_HOME="$H/.config" XDG_DATA_HOME="$H/.local/share" XDG_STATE_HOME="$H/.local/state" XDG_CACHE_HOME="$H/.cache" \
-  PATH="$H/shim:${AWWW_BIN:+$AWWW_BIN:}$PATH" XDG_RUNTIME_DIR="$RUN" DBUS_SYSTEM_BUS_ADDRESS="unix:path=$RUN/no-system-bus" \
-  WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDER_DRM_DEVICE=${RENDER_NODE:-/dev/dri/renderD128} \
-  timeout "${TIMEOUT:-240}" dbus-run-session --config-file="$HERE/dbus-session.conf" -- cage -- "$OUT/inner.sh" > "$OUT/cage.log" 2>&1 || true
+if [ -n "${VISIBLE:-}" ]; then
+  env -u HYPRLAND_INSTANCE_SIGNATURE -u NIRI_SOCKET -u SWAYSOCK -u I3SOCK -u WAYLAND_SOCKET -u DISPLAY \
+    HOME="$H" XDG_CONFIG_HOME="$H/.config" XDG_DATA_HOME="$H/.local/share" XDG_STATE_HOME="$H/.local/state" XDG_CACHE_HOME="$H/.cache" \
+    PATH="$H/shim:${AWWW_BIN:+$AWWW_BIN:}$PATH" XDG_RUNTIME_DIR="$RUN" DBUS_SYSTEM_BUS_ADDRESS="unix:path=$RUN/no-system-bus" \
+    WAYLAND_DISPLAY="$PARENT_DISPLAY" \
+    timeout "${TIMEOUT:-240}" dbus-run-session --config-file="$HERE/dbus-session.conf" -- "$OUT/inner.sh" > "$OUT/cage.log" 2>&1 || true
+else
+  env -u HYPRLAND_INSTANCE_SIGNATURE -u NIRI_SOCKET -u SWAYSOCK -u I3SOCK -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u DISPLAY \
+    HOME="$H" XDG_CONFIG_HOME="$H/.config" XDG_DATA_HOME="$H/.local/share" XDG_STATE_HOME="$H/.local/state" XDG_CACHE_HOME="$H/.cache" \
+    PATH="$H/shim:${AWWW_BIN:+$AWWW_BIN:}$PATH" XDG_RUNTIME_DIR="$RUN" DBUS_SYSTEM_BUS_ADDRESS="unix:path=$RUN/no-system-bus" \
+    WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDER_DRM_DEVICE=${RENDER_NODE:-/dev/dri/renderD128} \
+    timeout "${TIMEOUT:-240}" dbus-run-session --config-file="$HERE/dbus-session.conf" -- cage -- "$OUT/inner.sh" > "$OUT/cage.log" 2>&1 || true
+fi
 rm -rf "$RUN"
 cat "$OUT/refused" 2>/dev/null || true
 cat "$OUT/env" 2>/dev/null || true

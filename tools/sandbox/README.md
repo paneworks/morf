@@ -84,3 +84,16 @@ Not there in the sandbox: audio (no PipeWire, so the osd and media show
 nothing), Bluetooth, UPower and power profiles (no system bus), networks
 (nmcli is a stub), media players, and unlocking (PAM from nix finds no
 modules; nothing is typed). The weather comes from the network.
+
+## Watching it
+
+`VISIBLE=1` opens the nested Hyprland as a window on your own compositor
+instead of under a headless cage, so you can watch and use the session
+under test. Only that window touches your session; the runtime dir, bus,
+HOME and stubs stay private. `EXTRA_FONTS=DIR` adds a font folder to the
+scratch HOME. `caelestia-show.steps` is a short tour of the caelestia port
+that then leaves the session to you until `TIMEOUT`:
+
+    VISIBLE=1 TIMEOUT=3600 MORF_CONFIG=examples/caelestia/init.lua \
+      MORF_ENV="CAELESTIA_WALLPAPER=/path/to/wallpaper" \
+      tools/sandbox/nested.sh morf show tools/sandbox/caelestia-show.steps
