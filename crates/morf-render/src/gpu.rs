@@ -35,6 +35,9 @@ mod dmabuf_acquire;
 mod field_pass;
 mod glyph_batch;
 mod glyphs;
+mod layer_pool;
+#[cfg(test)]
+mod layer_pool_tests;
 mod layer_targets;
 mod pipelines;
 mod shader_registry;
@@ -58,6 +61,8 @@ mod field_shape_tests;
 mod field_tests;
 #[cfg(test)]
 mod inline_source_tests;
+#[cfg(test)]
+mod partial_tests;
 #[cfg(test)]
 mod path_tests;
 mod readback;

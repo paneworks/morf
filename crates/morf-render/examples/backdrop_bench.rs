@@ -7,9 +7,16 @@
 //!     [WALLPAPER.jpg] [WIDTHxHEIGHT] [RADIUS]
 //! ```
 //!
-//! Every frame is waited for, so the times are the GPU's. They are the median
-//! of each run: background load only adds time, and one slow frame should not
-//! move the answer.
+//! Every frame is waited for, so the times are the GPU's. Each is printed as
+//! the median of its run and, after the slash, the fastest frame: the GPU is
+//! shared with the compositor, so background load only ever adds time and the
+//! minimum is the closest reading of what the frame itself costs.
+//!
+//! `BENCH_WAIT=1` also prints, before each line, the part of every run spent
+//! waiting for the GPU alone, without the CPU's share.
+//!
+//! A second desk follows: thirty small rounded widgets, timed with the content
+//! of one of them changing and with the content of all of them changing.
 
 use std::time::{Duration, Instant};
 
@@ -117,9 +124,70 @@ fn desk(width: f64, height: f64, wallpaper: Option<&str>, blur: Option<f64>) -> 
     }
 }
 
-fn median(mut times: Vec<Duration>) -> Duration {
+/// Median and minimum of a run.
+#[derive(Clone, Copy)]
+struct Timing(Duration, Duration);
+
+impl std::fmt::Display for Timing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:>6.3}/{:>6.3} ms",
+            self.0.as_secs_f64() * 1e3,
+            self.1.as_secs_f64() * 1e3
+        )
+    }
+}
+
+fn timing(mut times: Vec<Duration>) -> Timing {
     times.sort();
-    times[times.len() / 2]
+    Timing(times[times.len() / 2], times[0])
+}
+
+/// Thirty small rounded widgets over a gradient, each with a bar inside that
+/// grows when it ticks.
+fn widgets(width: f64, height: f64) -> Desk {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    scene.assign(root, "width", width).unwrap();
+    scene.assign(root, "height", height).unwrap();
+    let ground = scene.create(Element::Rect);
+    scene.assign(ground, "width", width).unwrap();
+    scene.assign(ground, "height", height).unwrap();
+    scene.assign(ground, "color", "#1d3557").unwrap();
+    scene.reparent(ground, Some(root)).unwrap();
+    let mut panels = Vec::new();
+    let mut hands = Vec::new();
+    for index in 0..30 {
+        let (column, row) = (index % 6, index / 6);
+        let widget = scene.create(Element::ClipRect);
+        for (property, value) in [
+            ("x", 40.0 + f64::from(column) * 180.0),
+            ("y", 40.0 + f64::from(row) * 120.0),
+            ("width", 160.0),
+            ("height", 96.0),
+            ("radius", 14.0),
+        ] {
+            scene.assign(widget, property, value).unwrap();
+        }
+        scene.assign(widget, "color", "#1a1a1ecc").unwrap();
+        scene.reparent(widget, Some(root)).unwrap();
+        let bar = scene.create(Element::Rect);
+        for (property, value) in [("x", 12.0), ("y", 40.0), ("width", 40.0), ("height", 16.0)] {
+            scene.assign(bar, property, value).unwrap();
+        }
+        scene.assign(bar, "color", "#8ab4f8").unwrap();
+        scene.reparent(bar, Some(widget)).unwrap();
+        panels.push(widget);
+        hands.push(bar);
+    }
+    Desk {
+        scene,
+        root,
+        ground,
+        panels,
+        hands,
+    }
 }
 
 fn run(
@@ -128,18 +196,25 @@ fn run(
     size: Size,
     frames: u32,
     mut step: impl FnMut(&mut Desk, u32),
-) -> (Duration, u64) {
+) -> (Timing, u64) {
     let blurs = engine.backend_mut().backdrop_blurs();
     let mut times = Vec::new();
+    let mut waits = Vec::new();
     for frame in 0..frames {
         step(desk, frame);
         let layout = Layout::compute(&desk.scene, desk.root, size, &mut NoText).unwrap();
         let start = Instant::now();
         engine.render(&desk.scene, &layout, 120, |_| {}).unwrap();
+        let submitted = Instant::now();
         engine.backend_mut().wait_idle();
         times.push(start.elapsed());
+        waits.push(submitted.elapsed());
     }
-    (median(times), engine.backend_mut().backdrop_blurs() - blurs)
+    if std::env::var_os("BENCH_WAIT").is_some() && frames > 1 {
+        // Only the part spent waiting for the GPU, without the CPU's.
+        eprintln!("  (gpu wait {})", timing(waits));
+    }
+    (timing(times), engine.backend_mut().backdrop_blurs() - blurs)
 }
 
 fn main() {
@@ -188,23 +263,43 @@ fn main() {
         let (ticking, ticking_blurs) = run(&mut engine, &mut desk, size, 60, |desk, frame| {
             for hand in &desk.hands {
                 desk.scene
-                    .assign(*hand, "rotation", f64::from(frame) * 6.0)
+                    .assign(*hand, "rotation", f64::from(frame + 1) * 6.0)
                     .unwrap();
             }
         });
         let (changing, changing_blurs) = run(&mut engine, &mut desk, size, 60, |desk, frame| {
             // The wallpaper under every panel moves a pixel every frame.
             desk.scene
-                .assign(desk.ground, "x", f64::from(frame % 2))
+                .assign(desk.ground, "x", f64::from((frame + 1) % 2))
                 .unwrap();
         });
         let _ = &desk.panels;
         println!(
-            "{label}  full repaint {:>7.3} ms | still {:>6.3} ms ({still_blurs} blurs) | clock ticking in each {:>6.3} ms ({ticking_blurs} blurs) | wallpaper moving under all {:>6.3} ms ({changing_blurs} blurs)",
-            first.as_secs_f64() * 1e3,
-            still.as_secs_f64() * 1e3,
-            ticking.as_secs_f64() * 1e3,
-            changing.as_secs_f64() * 1e3,
+            "{label}  full repaint {first} | still {still} ({still_blurs} blurs) | clock ticking in each {ticking} ({ticking_blurs} blurs) | wallpaper moving under all {changing} ({changing_blurs} blurs)",
         );
     }
+    let backend = pollster::block_on(WgpuBackend::new(width, height)).expect("a GPU adapter");
+    let mut engine = RenderEngine::new(backend);
+    let mut desk = widgets(size.width, size.height);
+    run(&mut engine, &mut desk, size, 3, |_, _| {});
+    let (first, _) = run(&mut engine, &mut desk, size, 1, |desk, _| {
+        desk.scene.assign(desk.root, "opacity", 0.999).unwrap();
+    });
+    let (still, _) = run(&mut engine, &mut desk, size, 60, |_, _| {});
+    let (one, _) = run(&mut engine, &mut desk, size, 60, |desk, frame| {
+        desk.scene
+            .assign(desk.hands[7], "width", 40.0 + f64::from(frame % 60 + 1))
+            .unwrap();
+    });
+    let (all, _) = run(&mut engine, &mut desk, size, 60, |desk, frame| {
+        for bar in &desk.hands {
+            desk.scene
+                .assign(*bar, "width", 40.0 + f64::from(frame % 60 + 1))
+                .unwrap();
+        }
+    });
+    let _ = (&desk.panels, desk.ground);
+    println!(
+        "widgets  thirty 160x96 rounded: full repaint {first} | still {still} | one ticking {one} | all ticking {all}",
+    );
 }

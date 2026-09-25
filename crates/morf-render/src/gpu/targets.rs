@@ -1,7 +1,7 @@
 use crate::DamageRect;
 use wgpu::util::DeviceExt;
 
-use super::{backend_types::*, shaders::*, textures::*};
+use super::{backend_types::*, glyphs::GlyphInstance, shaders::*, textures::*};
 
 pub(crate) fn create_target(
     device: &wgpu::Device,
@@ -37,17 +37,18 @@ pub(crate) fn create_blur_chain(
     sampler: &wgpu::Sampler,
     (texture, source): (&wgpu::Texture, &wgpu::TextureView),
     offset: f32,
+    mut target: impl FnMut((u32, u32)) -> (wgpu::Texture, wgpu::TextureView),
 ) -> BlurChain {
     // The chain matches its source: its size, and the format of the blend
     // space it was rendered in.
-    let (width, height, format) = (texture.width(), texture.height(), texture.format());
+    let (width, height) = (texture.width(), texture.height());
     let half = ((width / 2).max(1), (height / 2).max(1));
     let quarter = ((width / 4).max(1), (height / 4).max(1));
     let sizes = [half, quarter, half, (width.max(1), height.max(1))];
     let mut textures = Vec::with_capacity(4);
     let mut views = Vec::with_capacity(4);
     for (target_width, target_height) in sizes {
-        let (texture, view) = create_target(device, target_width, target_height, format);
+        let (texture, view) = target((target_width, target_height));
         textures.push(texture);
         views.push(view);
     }
@@ -373,6 +374,85 @@ pub(crate) fn clamp_scissor(
     let width = right.saturating_sub(x);
     let height = bottom.saturating_sub(y);
     (width > 0 && height > 0).then_some((x, y, width, height))
+}
+
+/// The smallest rectangle holding both.
+pub(crate) fn union_damage(left: DamageRect, right: DamageRect) -> DamageRect {
+    let x = left.x.min(right.x);
+    let y = left.y.min(right.y);
+    let right_edge = (left.x + left.width).max(right.x + right.width);
+    let bottom = (left.y + left.height).max(right.y + right.height);
+    DamageRect {
+        x,
+        y,
+        width: right_edge - x,
+        height: bottom - y,
+    }
+}
+
+/// A rectangle a pixel larger on every side.
+pub(crate) fn grow_damage(rect: DamageRect) -> DamageRect {
+    let x = rect.x.saturating_sub(1);
+    let y = rect.y.saturating_sub(1);
+    DamageRect {
+        x,
+        y,
+        width: rect.x + rect.width + 1 - x,
+        height: rect.y + rect.height + 1 - y,
+    }
+}
+
+/// The surface pixels a textured quad covers, with a pixel of margin.
+pub(crate) fn quad_reach(instance: &GlyphInstance, (width, height): (u32, u32)) -> DamageRect {
+    let [x, y] = instance.origin;
+    let [ax, ay, bx, by] = instance.axes;
+    let corners = [
+        (x, y),
+        (x + ax, y + ay),
+        (x + bx, y + by),
+        (x + ax + bx, y + ay + by),
+    ];
+    let (mut left, mut top, mut right, mut bottom) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for (cx, cy) in corners {
+        let px = (cx + 1.0) * 0.5 * width as f32;
+        let py = (1.0 - cy) * 0.5 * height as f32;
+        left = left.min(px);
+        top = top.min(py);
+        right = right.max(px);
+        bottom = bottom.max(py);
+    }
+    let left = (left.floor() - 1.0).max(0.0) as u32;
+    let top = (top.floor() - 1.0).max(0.0) as u32;
+    let right = (right.ceil() + 1.0).max(0.0) as u32;
+    let bottom = (bottom.ceil() + 1.0).max(0.0) as u32;
+    DamageRect {
+        x: left,
+        y: top,
+        width: right.saturating_sub(left),
+        height: bottom.saturating_sub(top),
+    }
+}
+
+/// A scissor for `damage`, in surface pixels, on an attachment holding the
+/// `frame` part of the surface at its corner.
+pub(crate) fn local_scissor(damage: DamageRect, frame: DamageRect) -> Option<(u32, u32, u32, u32)> {
+    let inside = intersect_damage(damage, frame)?;
+    Some((
+        inside.x - frame.x,
+        inside.y - frame.y,
+        inside.width,
+        inside.height,
+    ))
+}
+
+/// A scissor for `damage`, in surface pixels, on an attachment holding the
+/// `frame` part of the surface at `origin`.
+pub(crate) fn placed_scissor(
+    damage: DamageRect,
+    (frame, origin): (DamageRect, (u32, u32)),
+) -> Option<(u32, u32, u32, u32)> {
+    let (x, y, width, height) = local_scissor(damage, frame)?;
+    Some((x + origin.0, y + origin.1, width, height))
 }
 
 pub(crate) fn intersect_damage(left: DamageRect, right: DamageRect) -> Option<DamageRect> {

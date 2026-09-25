@@ -71,13 +71,33 @@ fn open_with_dmabuf(
     ))
 }
 
+/// The one GPU instance of the process, which every backend opens its device
+/// through.
+///
+/// One per backend was what the Vulkan loader could not survive. Enumerating
+/// the physical devices of a fresh instance unloads the drivers that found
+/// none, and the loader edits its lists of instances and drivers as it does —
+/// while a device-level call from another thread, such as naming an object
+/// for the validation layer, walks those same lists to find its driver. Two
+/// outputs coming up at once, or the GPU tests run in parallel, crashed inside
+/// the loader. Destroying an instance edits the lists the same way. With one
+/// instance, made once and never destroyed, the drivers are sorted out once,
+/// before anything has a device to call through.
+fn shared_instance() -> wgpu::Instance {
+    static INSTANCE: std::sync::OnceLock<wgpu::Instance> = std::sync::OnceLock::new();
+    INSTANCE
+        .get_or_init(|| {
+            let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+            descriptor.backends = wgpu::Backends::VULKAN | wgpu::Backends::GL;
+            wgpu::Instance::new(descriptor)
+        })
+        .clone()
+}
+
 impl WgpuBackend {
     /// Selects a Vulkan or GLES adapter and creates an offscreen render target.
     pub async fn new(width: u32, height: u32) -> Result<Self, GpuError> {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::VULKAN | wgpu::Backends::GL;
-        let instance = wgpu::Instance::new(descriptor);
-        Self::initialize(instance, None, width, height).await
+        Self::initialize(shared_instance(), None, width, height).await
     }
 
     /// Creates a renderer presenting to an owned native window target.
@@ -85,9 +105,7 @@ impl WgpuBackend {
     where
         T: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
     {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::VULKAN | wgpu::Backends::GL;
-        let instance = wgpu::Instance::new(descriptor);
+        let instance = shared_instance();
         let surface = instance
             .create_surface(window)
             .map_err(|error| GpuError(format!("could not create GPU surface: {error}")))?;
@@ -294,7 +312,7 @@ impl WgpuBackend {
             image_textures: HashMap::new(),
             path_textures: HashMap::new(),
             path_outlines: Default::default(),
-            layer_target_pool: Vec::new(),
+            layer_pool: Default::default(),
             backdrops: Default::default(),
             text: TextSystem::new(),
             drawings: morf_svg::SvgOutlines::new(),
@@ -340,7 +358,7 @@ impl WgpuBackend {
             super::target_format(self.blend),
         );
         // The pooled layer targets are surface-sized, so a resize retires them.
-        self.layer_target_pool.clear();
+        self.layer_pool.clear();
         // So is the backdrops' scratch, and every region they were cut from.
         self.backdrops.entries.clear();
         self.backdrops.scratch = None;
@@ -519,24 +537,5 @@ impl WgpuBackend {
             self.texture_capacity,
             "morf texture instances",
         );
-    }
-}
-
-impl WgpuBackend {
-    /// A full-surface render target for one offscreen layer, reused each frame.
-    ///
-    /// The handles are reference counted, so the clone is a pointer bump rather
-    /// than an allocation; the pool grows to the deepest layer stack a frame has
-    /// needed and is emptied only by a resize.
-    pub(crate) fn layer_target(&mut self, index: usize) -> (wgpu::Texture, wgpu::TextureView) {
-        while self.layer_target_pool.len() <= index {
-            self.layer_target_pool.push(create_target(
-                &self.device,
-                self.width,
-                self.height,
-                super::target_format(self.blend),
-            ));
-        }
-        self.layer_target_pool[index].clone()
     }
 }

@@ -38,8 +38,17 @@ pub(crate) fn evict_image_textures(
 }
 
 pub(crate) struct LayerTarget {
-    pub(crate) _texture: wgpu::Texture,
+    pub(crate) texture: wgpu::Texture,
     pub(crate) view: wgpu::TextureView,
+    /// The part of the surface the target holds, in physical pixels, drawn
+    /// at the texture's top-left corner.
+    pub(crate) region: crate::DamageRect,
+    /// Where in the texture the region's top-left corner is: layers packed
+    /// into one atlas share a texture.
+    pub(crate) origin: (u32, u32),
+    /// The rectangles of the region drawn this frame; the rest of it is
+    /// cleared and never read.
+    pub(crate) reads: Vec<crate::DamageRect>,
     pub(crate) bind_group: wgpu::BindGroup,
     pub(crate) instance: u32,
     pub(crate) blur: Option<BlurChain>,
