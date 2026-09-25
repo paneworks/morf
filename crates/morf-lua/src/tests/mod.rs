@@ -47,6 +47,7 @@ mod drawers;
 mod entering;
 mod events_animation;
 mod examples;
+mod exiting;
 mod flush_construction;
 mod flushing;
 mod fs_time;

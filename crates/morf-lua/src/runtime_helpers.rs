@@ -84,6 +84,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     let removed = nodes.into_iter().collect::<HashSet<_>>();
     for node in &removed {
         state.retention.unregister(*node);
+        state.exit_registered.remove(node);
         state.retain_callbacks.remove(node);
         state.states.remove(node);
         state.views.remove(node);
@@ -209,16 +210,96 @@ pub(crate) fn finish_retained_destroy(
     run_destroyed_hooks(state, ctx, limits);
 }
 
+/// Starts a node on its way out, if it declared an `exit`: it stays in the
+/// tree, drawn and out of the flow, held in `retention` until the exit ends.
+/// `false` when it has no exit to play, and whoever let go of it removes it.
+pub(crate) fn begin_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bool {
+    if state.scene.is_exiting(node) {
+        return true;
+    }
+    if !matches!(state.scene.begin_exit(node), Ok(true)) {
+        return false;
+    }
+    if state.retention.state(node).is_none() {
+        state.retention.register(node);
+        state.exit_registered.insert(node);
+    }
+    let _ = state.retention.lock(node);
+    let _ = state.retention.begin_drop(node);
+    state.scene_revision = state.scene_revision.wrapping_add(1);
+    true
+}
+
+/// Takes back a node that was on its way out: it rejoins the flow and its
+/// properties go back to where they were aimed. `false` if it was not leaving.
+pub(crate) fn cancel_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bool {
+    if !state.scene.cancel_exit(node).unwrap_or(false) {
+        return false;
+    }
+    if state.exit_registered.remove(&node) {
+        state.retention.unregister(node);
+    } else {
+        let _ = state.retention.unlock(node);
+        let _ = state.retention.cancel_drop(node);
+    }
+    state.scene_revision = state.scene_revision.wrapping_add(1);
+    true
+}
+
+/// A node whose exit has ended: its hold on it goes, and unless something
+/// else still holds it, it is removed as it would have been at once.
+pub(crate) fn finish_node_exit(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'_>,
+    limits: Limits,
+    node: NodeHandle,
+) {
+    let destroy = {
+        let mut state = state.borrow_mut();
+        if !state.scene.contains(node) {
+            return;
+        }
+        let _ = state.retention.unlock(node);
+        state.retention.should_destroy(node).unwrap_or(true)
+    };
+    if destroy {
+        finish_retained_destroy(state, ctx, limits, node);
+    }
+}
+
+/// Lets go of a node the way a `Loader` or a list does: through its exit,
+/// if it has one, else at once.
+pub(crate) fn let_go_of_node(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'_>,
+    limits: Limits,
+    node: NodeHandle,
+) {
+    if begin_node_exit(&mut state.borrow_mut(), node) {
+        return;
+    }
+    remove_scene_subtree(&mut state.borrow_mut(), node);
+    run_destroyed_hooks(state, ctx, limits);
+}
+
 pub(crate) fn drop_retainable(
     state: &Rc<RefCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     node: NodeHandle,
 ) {
-    let registered = state.borrow().retention.state(node).is_some();
+    // Held by the configuration's own `retainable`, or not: either way an
+    // exit plays first, and holds it as a lock of its own.
+    let registered = {
+        let state = state.borrow();
+        state.retention.state(node).is_some() && !state.exit_registered.contains(&node)
+    };
+    let exiting = begin_node_exit(&mut state.borrow_mut(), node);
     if !registered {
-        remove_scene_subtree(&mut state.borrow_mut(), node);
-        run_destroyed_hooks(state, ctx, limits);
+        if !exiting {
+            remove_scene_subtree(&mut state.borrow_mut(), node);
+            run_destroyed_hooks(state, ctx, limits);
+        }
         return;
     }
     let callback = {

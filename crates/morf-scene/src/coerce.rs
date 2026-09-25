@@ -207,6 +207,25 @@ pub(crate) fn coerce(
                 )));
             }
         }
+        "axes" if matches!(element, Element::Text | Element::TextInput) => {
+            // An empty table is an empty map, so it moves to and from one.
+            if matches!(&value, Value::List(list) if list.is_empty()) || value == Value::Nil {
+                return Ok(Value::Map(Default::default()));
+            }
+            let Value::Map(axes) = &value else {
+                return Err(invalid(
+                    "axes is a table of four-letter tags to numbers".to_owned(),
+                ));
+            };
+            for (tag, number) in axes {
+                if tag.len() != 4 || !tag.bytes().all(|byte| (0x20..0x7f).contains(&byte)) {
+                    return Err(invalid(format!("`{tag}` is not a four-letter axis tag")));
+                }
+                if !matches!(number, Value::Number(number) if number.is_finite()) {
+                    return Err(invalid(format!("axis `{tag}` must be a number")));
+                }
+            }
+        }
         "font_stretch" => {
             if let Value::String(name) = &value
                 && !matches!(

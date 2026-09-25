@@ -175,3 +175,66 @@ pub(crate) fn a_decoration_is_a_band_under_the_line() {
         "the band adds ink"
     );
 }
+
+/// Where Material Symbols Rounded is installed, if it is and has a FILL axis.
+fn icon_font() -> Option<std::path::PathBuf> {
+    morf_text::family_files("Material Symbols Rounded")
+        .into_iter()
+        .find(|path| {
+            morf_text::file_axes(path)
+                .iter()
+                .any(|axis| &axis.tag == b"FILL")
+        })
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+pub(crate) fn a_fill_axis_fills_an_icon_on_screen() {
+    // The icon font's FILL axis, through the whole path: the style carries
+    // the axes, the text system draws the glyph's field at that point of the
+    // design space, and the atlas holds the two as two pictures -- rendered
+    // by one backend, one after the other, so a key that ignored the axes
+    // would hand back the first picture for the second.
+    let Some(path) = icon_font() else {
+        eprintln!("no Material Symbols Rounded with a FILL axis here; skipped");
+        return;
+    };
+    let mut scene = morf_scene::Scene::new();
+    let node = scene.create(morf_scene::Element::Text);
+    let command = |fill: f32| {
+        let mut command = text_command(node, "favorite", 96.0, DistanceFieldStyle::default());
+        if let DrawCommand::Text {
+            family,
+            font_source,
+            style,
+            ..
+        } = &mut command
+        {
+            *family = "Material Symbols Rounded".to_owned();
+            *font_source = path.to_string_lossy().into_owned();
+            style.axes = vec![morf_layout::FontAxis {
+                tag: *b"FILL",
+                value: fill,
+            }];
+        }
+        DrawList {
+            commands: vec![command],
+            layers: Vec::new(),
+        }
+    };
+    let mut backend = pollster::block_on(WgpuBackend::new(128, 128)).unwrap();
+    let mut draw = |fill| {
+        ink(
+            &crate::gpu::field_tests::read_frame(&mut backend, &command(fill), 128),
+            128,
+        )
+    };
+    let hollow = draw(0.0);
+    let half = draw(0.5);
+    let solid = draw(1.0);
+    assert!(hollow > 0.01, "the outline drew: {hollow}");
+    assert!(
+        half > hollow * 1.2 && solid > half * 1.2,
+        "filling in adds ink step by step: {hollow} {half} {solid}"
+    );
+}

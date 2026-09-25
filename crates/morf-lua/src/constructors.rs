@@ -485,6 +485,7 @@ pub(crate) fn construct_view<'gc>(
                     reuse_order: VecDeque::new(),
                     reuse_limit,
                     pool_root: None,
+                    exiting: Vec::new(),
                     column_extent,
                     positioned: virtualized,
                 },

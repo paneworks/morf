@@ -63,6 +63,12 @@ impl Runtime {
             .scene
             .tick_animations(delta)
             .map_err(|error| Error::Runtime(error.to_string()))?;
+        // Nodes whose exit has ended go now, with their `on_destroyed` hooks.
+        for &node in &frame.exited {
+            self.lua.enter(|ctx| {
+                crate::runtime_helpers::finish_node_exit(&self.reactive, ctx, self.limits, node);
+            });
+        }
         if frame.events.is_empty() && frame.groups.is_empty() {
             return Ok(frame);
         }

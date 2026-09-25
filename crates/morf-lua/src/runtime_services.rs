@@ -190,7 +190,34 @@ impl Runtime {
                     service_changed = true;
                 } else if requested && state.loaded_loaders.insert(node) {
                     state.preload_pending.remove(&node);
-                    loaders.push((node, factory));
+                    // Let go and asked for again before its item had finished
+                    // leaving: that item is taken back rather than built anew.
+                    let leaving = state
+                        .scene
+                        .children(node)
+                        .unwrap_or_default()
+                        .iter()
+                        .copied()
+                        .find(|child| state.scene.is_exiting(*child));
+                    if let Some(child) = leaving
+                        && crate::runtime_helpers::cancel_node_exit(&mut state, child)
+                    {
+                        for (property, value) in [
+                            ("loading", false),
+                            ("active_async", false),
+                            ("active", true),
+                        ] {
+                            let _ = assign_scene_property(
+                                &mut state,
+                                node,
+                                property,
+                                SceneValue::Bool(value),
+                            );
+                        }
+                        service_changed = true;
+                    } else {
+                        loaders.push((node, factory));
+                    }
                 } else if !requested
                     && keep
                     && state.loaded_loaders.contains(&node)

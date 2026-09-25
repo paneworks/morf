@@ -39,6 +39,26 @@ impl TextSystem {
         glyph: &PhysicalGlyph,
         field: bool,
     ) -> Option<RasterGlyph> {
+        self.raster_glyph_in(glyph, field, &[])
+    }
+
+    /// [`Self::raster_glyph`] at a point in a variable font's design space:
+    /// `axes` other than `wght`, which shaping has applied as the weight.
+    pub(crate) fn raster_glyph_in(
+        &mut self,
+        glyph: &PhysicalGlyph,
+        field: bool,
+        axes: &[morf_layout::FontAxis],
+    ) -> Option<RasterGlyph> {
+        let coords = if axes.is_empty() {
+            None
+        } else {
+            self.variations
+                .coords(&mut self.fonts, &glyph.cache_key, axes)
+        };
+        if let Some(coords) = coords {
+            return self.varied_glyph(glyph, field, &coords);
+        }
         if !field {
             return self.mask_glyph(glyph);
         }
@@ -273,6 +293,65 @@ impl TextSystem {
             area: area?,
             spread,
             frames: vec![None; MORPH_FRAMES],
+        })
+    }
+
+    /// A glyph at a point in its face's design space: a field from the
+    /// outline there, or a picture of it when a field is not wanted or the
+    /// glyph has no outline.
+    fn varied_glyph(
+        &mut self,
+        glyph: &PhysicalGlyph,
+        field: bool,
+        coords: &[i16],
+    ) -> Option<RasterGlyph> {
+        if field {
+            let (reference, _) = Self::field_key(glyph);
+            let key = crate::variations::varied_key(&reference, coords);
+            if !self.fields.contains_key(&key) {
+                let spread = field_spread_for(f32::from_bits(reference.font_size_bits));
+                let measured = self
+                    .variations
+                    .outline(&mut self.fonts, &reference, coords)
+                    .and_then(|commands| glyph_field(&commands, spread))
+                    .map(Rc::new);
+                // Kept apart from the plain fields' count: those are one per
+                // glyph for the life of the process, these one per step of
+                // an animation, and they are let go of when there are many.
+                self.varied_fields += 1;
+                if self.varied_fields > crate::variations::FIELD_CAPACITY {
+                    self.fields
+                        .retain(|key, _| !self.varied_field_keys.contains(key));
+                    self.varied_field_keys.clear();
+                    self.varied_fields = 1;
+                }
+                self.varied_field_keys.insert(key);
+                self.fields.insert(key, measured);
+            }
+            if let Some(field) = self.fields.get(&key).and_then(Option::as_ref) {
+                return Some(field_raster(glyph, key, field));
+            }
+        }
+        let image = self
+            .variations
+            .image(&mut self.fonts, &glyph.cache_key, coords)?;
+        let content = if crate::variations::is_color(&image) {
+            RasterContent::Color
+        } else {
+            RasterContent::Mask
+        };
+        Some(RasterGlyph {
+            cache_key: crate::variations::varied_key(&glyph.cache_key, coords),
+            x: (glyph.x + image.placement.left) as f32,
+            y: (glyph.y - image.placement.top) as f32,
+            width: image.placement.width,
+            height: image.placement.height,
+            draw_width: image.placement.width as f32,
+            draw_height: image.placement.height as f32,
+            content,
+            tint: None,
+            font_size: 0.0,
+            data: Rc::new(image.data.clone()),
         })
     }
 

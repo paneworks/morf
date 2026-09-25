@@ -365,6 +365,9 @@ pub struct AnimationFrame {
     pub events: Vec<AnimationEvent>,
     /// Animation groups that ended during or since the previous tick.
     pub groups: Vec<GroupEvent>,
+    /// Nodes whose exit animation ended this tick, each reported once:
+    /// their owners remove them now. See [`crate::Scene::begin_exit`].
+    pub exited: Vec<NodeHandle>,
     /// Whether another compositor frame callback is required.
     pub active: bool,
 }

@@ -613,7 +613,8 @@ draw.
 
 A node is destroyed when a `Loader` lets it go, when its `Repeater` row
 leaves the model, when `ui.destroy(node)` is called, or when any of its
-ancestors goes the same way. `on_destroyed = function() end` on any node
+ancestors goes the same way -- after its `exit` animation, if it declared
+one (see *Leaving*, section 6). `on_destroyed = function() end` on any node
 runs once then, deepest node first, so what the node's Lua made for it —
 a `morf.clipboard.watch`, a service subscription, a timer outside the tree
 — can be let go of. It runs as a handler once nothing else is running (never
@@ -869,6 +870,32 @@ ui.Text {
   decoration = function() return refused:get() and { line = "under", color = theme.alert } or {} end,
 }
 ```
+
+A variable font's axes are `axes = { FILL = 1, GRAD = 0, opsz = 24, wght =
+500 }`: any four-letter OpenType tag the face defines, in its own units, on
+`Text` and `TextInput`. It is a map of numbers, so a `behavior` on `axes`
+moves every axis in it at once, the way Material Symbols fills an icon in
+when it is selected; give each state the same keys, or the map jumps
+rather than moves. `wght` is the weight (it wins over `font_weight`) and is
+the one axis shaping sees, so it moves the glyphs; the others are applied
+where glyphs are drawn and leave the layout where it is -- an axis that
+changes advances on some face (`opsz`, say) keeps the default ones. A tag
+the face does not have is ignored, and a face with none of them is drawn
+as it always was. Pictures of glyphs are kept per point of the design
+space, quantised to 1/64 of the way from an axis's default to either end,
+so an animation through an axis costs at most 65 pictures of each glyph
+however many frames it takes. `morf.font_axes(family)` lists what an
+installed family can move: `{ tag, min, default, max }` for each axis.
+
+```lua
+ui.Text {
+  text = "home", font_family = "Material Symbols Rounded", font_size = 24,
+  axes = function() return selected() and { FILL = 1, wght = 600 } or { FILL = 0, wght = 400 } end,
+  behavior = { axes = { duration = 250, easing = "out_cubic" } },
+}
+```
+
+See `examples/font_axes.lua`.
 
 Text is smoothed in subpixels (LCD, "ClearType") where that is safe, and
 in greyscale everywhere else. `morf.surface.subpixel_text` is `"auto"` by
@@ -1364,6 +1391,49 @@ ui.Rect {
   behavior = { opacity = { duration = 220 }, translate_x = { kind = "spring", stiffness = 260 } },
 }
 ```
+
+`enter` may time itself instead: with a `duration` (and an `easing` and a
+`delay`, as a behavior has) every property it names travels to its
+declared value on that timing, whatever the node's behaviors say.
+
+### Leaving
+
+`exit = { opacity = 0, scale = 0.9, y = 10, duration = 200, easing =
+"in_cubic" }` on any node is how it leaves. When whatever holds it lets go
+-- a `Loader` turning inactive, its `Repeater` row removed from the model,
+`ui.destroy(node)` -- the node is not removed. It stays in the tree and is
+drawn as it animates to those values, and only when the animation ends is
+it removed, `on_destroyed` hooks and all. While it leaves it is out of the
+layout: its parent is sized and packed without it, so what it was pushing
+closes up at once, and it keeps the box it had relative to its parent
+(moved by whatever the exit does to its `x` and `y`, so `y = 10` drops it
+ten pixels from where it sat in a column). It takes no input. `duration`
+is 200 when not given; `delay` waits first; any property that animates can
+be named, the rest are simply set as it starts to leave.
+
+Put back before it has gone -- the `Loader` turns active again, the same
+row (an equal value) returns to the model, `ui.reparent` puts it
+somewhere -- the node is taken back rather than built anew: it rejoins
+the layout and every property its exit moved animates back to where it
+was aimed, on the exit's timing. `ui.destroy(node, true)` removes at once,
+exit or not. A node held by a `core.retainable` lock stays until both the
+lock and its exit let go. A reload drops the old runtime, exits and all.
+
+```lua
+ui.Repeater {
+  model = notifications,
+  delegate = function(n)
+    return ui.Rect {
+      width = 300, height = 64, radius = 14,
+      enter = { opacity = 0, translate_x = 40, duration = 260, easing = "out_cubic" },
+      exit = { opacity = 0, scale = 0.9, y = 10, duration = 240, easing = "in_cubic" },
+      ui.Text { x = 16, y = 12, text = n.title },
+    }
+  end,
+}
+```
+
+See `examples/exit.lua`.
 
 ### Hover and press
 
