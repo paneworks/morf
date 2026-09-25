@@ -254,6 +254,15 @@ pub struct Scene {
     /// signal: the scene records what it destroyed and whoever drives the frame
     /// hands the list to everything holding node-keyed state.
     pub(crate) removed: Vec<NodeHandle>,
+    /// The node each field layer follows, by layer: see [`Scene::set_track`].
+    /// A side table, as `shaders` is, because it names a node and a property
+    /// value cannot, and because almost no node has one.
+    pub(crate) tracks: FastMap<NodeId, NodeHandle>,
+    /// Squash-and-stretch springs, by node: see [`crate::Stretch`].
+    pub(crate) stretch: FastMap<NodeId, crate::stretch::StretchState>,
+    /// Seconds of motion ticked so far, the clock stretch velocities are
+    /// measured against.
+    pub(crate) stretch_clock: f64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

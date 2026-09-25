@@ -114,6 +114,35 @@ pub(crate) fn coerce(
                 )));
             }
         }
+        // A matrix is numbers in a fixed count, checked here so a wrong one is
+        // refused where it is written rather than drawn as nothing.
+        "transform_matrix" | "matrix"
+            if property == "transform_matrix" || element == Element::SdfShape =>
+        {
+            let lengths: &[usize] = if property == "matrix" { &[4] } else { &[4, 6] };
+            match &value {
+                Value::Nil => {}
+                Value::List(items)
+                    if lengths.contains(&items.len())
+                        && items
+                            .iter()
+                            .all(|item| matches!(item, Value::Number(n) if n.is_finite())) => {}
+                _ => {
+                    return Err(invalid(if property == "matrix" {
+                        "a list of four numbers { a, b, c, d }".to_owned()
+                    } else {
+                        "a list of six numbers { a, b, c, d, tx, ty } (or four)".to_owned()
+                    }));
+                }
+            }
+        }
+        "blend_profile" if element == Element::Sdf => {
+            if let Value::String(name) = &value
+                && !matches!(name.as_str(), "quadratic" | "circular")
+            {
+                return Err(invalid(format!("`{name}` is not quadratic or circular")));
+            }
+        }
         "cursor" => {
             if let Value::String(name) = &value
                 && !CURSOR_SHAPES.contains(&name.as_str())

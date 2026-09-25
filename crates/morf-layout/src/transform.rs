@@ -143,22 +143,12 @@ fn transform_signature(
             return Ok(None);
         };
         node.hash(&mut hasher);
-        for value in [
-            geometry.x,
-            geometry.y,
-            geometry.width,
-            geometry.height,
-            scene.number(node, "rotation")?,
-            scene.number(node, "scale")?,
-            scene.number(node, "scale_x")?,
-            scene.number(node, "scale_y")?,
-            scene.number(node, "skew_x")?,
-            scene.number(node, "skew_y")?,
-            scene.number(node, "translate_x")?,
-            scene.number(node, "translate_y")?,
-            scene.number(node, "transform_origin_x")?,
-            scene.number(node, "transform_origin_y")?,
-        ] {
+        // The transform itself rather than the properties behind it, so
+        // everything that moves a node — a matrix, a stretch — is heard.
+        for value in [geometry.x, geometry.y, geometry.width, geometry.height]
+            .into_iter()
+            .chain(node_transform(scene, node, *geometry)?.matrix)
+        {
             value.to_bits().hash(&mut hasher);
         }
     }
@@ -194,17 +184,72 @@ pub(crate) fn distributed_margin(available: f64, leading: f64, trailing: f64) ->
     (available * ratio).round()
 }
 
+/// Everything a node's own properties do to where it is drawn: `scale`,
+/// `rotation`, `skew`, `translate`, `transform_matrix` — and its stretch, when
+/// it has one.
+///
+/// The one place a node's transform is worked out: painting, hit testing, the
+/// transform watchers and a field layer tracking the node all come through
+/// here, so a pointer lands where the pixels are however the node is bent.
 pub fn node_transform(
     scene: &Scene,
     node: NodeHandle,
     geometry: Geometry,
 ) -> Result<Transform2D, LayoutError> {
+    let own = node_transform_unstretched(scene, node, geometry)?;
+    Ok(match scene.deformation(node) {
+        // About the centre as it is drawn, in the parent's frame, so the node
+        // stretches around where it is rather than around where it was laid.
+        Some(deformation) => {
+            let centre = own.point(
+                geometry.x + geometry.width / 2.0,
+                geometry.y + geometry.height / 2.0,
+            );
+            Transform2D::about(centre, deformation).then(own)
+        }
+        None => own,
+    })
+}
+
+/// A node's transform without its stretch: what its motion is measured by.
+pub fn node_transform_unstretched(
+    scene: &Scene,
+    node: NodeHandle,
+    geometry: Geometry,
+) -> Result<Transform2D, LayoutError> {
+    let origin = (
+        geometry.x + geometry.width * scene.number(node, "transform_origin_x")?,
+        geometry.y + geometry.height * scene.number(node, "transform_origin_y")?,
+    );
+    let trs = transform_parameters(scene, node, origin)?;
+    Ok(match scene.current(node, "transform_matrix")? {
+        Value::List(items) if matches!(items.len(), 4 | 6) => {
+            let number = |index: usize| match items.get(index) {
+                Some(Value::Number(value)) => *value,
+                _ => 0.0,
+            };
+            let linear = [number(0), number(1), number(2), number(3)];
+            // Inside scale, rotation and skew and about the same origin, the
+            // way a stylesheet's `transform` list reads right to left.
+            // `x' = a x + c y + tx`, as a stylesheet's `matrix()` reads.
+            let user = Transform2D {
+                matrix: [1.0, 0.0, 0.0, 1.0, number(4), number(5)],
+            }
+            .then(Transform2D::about(origin, linear));
+            trs.then(user)
+        }
+        _ => trs,
+    })
+}
+
+fn transform_parameters(
+    scene: &Scene,
+    node: NodeHandle,
+    origin: (f64, f64),
+) -> Result<Transform2D, LayoutError> {
     let scale = scene.number(node, "scale")?;
     Ok(Transform2D::affine(
-        (
-            geometry.x + geometry.width * scene.number(node, "transform_origin_x")?,
-            geometry.y + geometry.height * scene.number(node, "transform_origin_y")?,
-        ),
+        origin,
         TransformParameters {
             translation: [
                 scene.number(node, "translate_x")?,

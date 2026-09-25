@@ -12,6 +12,7 @@ mod incremental;
 mod layout;
 mod reparent;
 mod resolve_containers;
+mod stretch;
 mod text_input;
 mod text_style;
 mod transform;
@@ -25,8 +26,9 @@ pub use helpers::LayoutError;
 pub use hit::{Hit, link_at};
 pub use layout::{Layout, TransformTracker, TransformWatcher};
 pub use reparent::ReparentTransition;
+pub use stretch::observe_stretch;
 pub use text_input::{InputDisplay, InputShape};
 pub use text_style::{FontStretch, FontStyle, LineHeight, TextStyle, TextStyleKey};
-pub use transform::node_transform;
+pub use transform::{node_transform, node_transform_unstretched};
 #[cfg(test)]
 mod tests;

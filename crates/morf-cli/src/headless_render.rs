@@ -83,6 +83,7 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
     headless
         .runtime
         .sync_text_inputs(&layout, engine.backend_mut().text_system());
+    headless.runtime.observe_stretch(&layout);
     // Twice: the second frame is the incremental one, which reuses an effect
     // layer's target the way every frame after the first does.
     for _ in 0..2 {

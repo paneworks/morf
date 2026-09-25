@@ -234,6 +234,7 @@ pub(crate) fn paint_lock(
         renderer.backend_mut(),
     )?;
     runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
+    runtime.observe_stretch(&layout);
     let scene = runtime.scene();
     client.request_lock_frame(index);
     let scale = client.lock_scale_120(index).unwrap_or(120);

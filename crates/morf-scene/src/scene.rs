@@ -29,6 +29,9 @@ impl Scene {
             removed: Vec::new(),
             shaders: FastMap::default(),
             terminal_screens: FastMap::default(),
+            tracks: FastMap::default(),
+            stretch: FastMap::default(),
+            stretch_clock: 0.0,
         }
     }
 
@@ -250,6 +253,8 @@ impl Scene {
             self.root_revisions.remove(&current);
             self.detached_revisions.remove(&current);
             self.terminal_screens.remove(&current);
+            self.tracks.remove(&current);
+            self.stretch.remove(&current);
             // Its properties live in the scene's signal graph, not in the
             // node; they go with it or they stay allocated for the life of
             // the process, two per property per node ever made.
@@ -427,6 +432,7 @@ impl Scene {
                 .values()
                 .any(|animation| !animation.is_paused())
             || self.groups.values().any(|group| !group.paused)
+            || self.stretch_moving()
     }
 
     /// The animations that are running rather than paused: node, property,
@@ -449,6 +455,12 @@ impl Scene {
         } else {
             delta.mul_f64(self.motion_scale)
         };
+        // The stretch springs step when the frame's positions are seen, after
+        // layout; here their clock only moves, so a second surface reporting
+        // on the same tick is recognised as the same moment.
+        if !snap {
+            self.stretch_clock += delta.as_secs_f64();
+        }
         let mut frame = AnimationFrame {
             groups: self.tick_groups(delta)?,
             events: std::mem::take(&mut self.events),
@@ -577,8 +589,10 @@ impl Scene {
                 error.effect, error.message
             )));
         }
-        frame.active =
-            !self.animations.is_empty() || !self.physics.is_empty() || !self.groups.is_empty();
+        frame.active = !self.animations.is_empty()
+            || !self.physics.is_empty()
+            || !self.groups.is_empty()
+            || self.stretch_moving();
         Ok(frame)
     }
 }

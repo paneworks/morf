@@ -257,6 +257,7 @@ pub(crate) fn paint_layer(
     // Every frame, not only a fresh layout's: a caret that moved without the
     // text changing still has to be scrolled into view.
     runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
+    runtime.observe_stretch(&layout);
     split.mark("text inputs");
     let scene = runtime.scene();
     let input = if let Some(regions) = &config.input_regions {
@@ -589,6 +590,7 @@ pub(crate) fn paint_auxiliary_surface(
         renderer.backend_mut(),
     )?;
     runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
+    runtime.observe_stretch(&layout);
     let scene = runtime.scene();
     let (width, height) = physical_size((surface.width, surface.height), scale_120);
     kind.damage(client, surface.id, width, height)?;

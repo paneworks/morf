@@ -96,6 +96,31 @@ impl Transform2D {
         }
     }
 
+    /// A linear map `[a, b, c, d]` (column major: `x' = a x + c y`) applied
+    /// about a surface point, which it leaves where it was.
+    pub fn about(centre: (f64, f64), linear: [f64; 4]) -> Self {
+        let [a, b, c, d] = linear;
+        let (x, y) = centre;
+        Self {
+            matrix: [a, b, c, d, x - a * x - c * y, y - b * x - d * y],
+        }
+    }
+
+    /// The linear part's inverse, `[a, b, c, d]`, or nothing when it
+    /// collapses the plane onto a line.
+    pub fn linear_inverse(self) -> Option<[f64; 4]> {
+        let [a, b, c, d, _, _] = self.matrix;
+        let determinant = a * d - b * c;
+        (determinant.abs() > f64::EPSILON).then(|| {
+            [
+                d / determinant,
+                -b / determinant,
+                -c / determinant,
+                a / determinant,
+            ]
+        })
+    }
+
     /// Composes this transform after `inner`.
     pub fn then(self, inner: Self) -> Self {
         let [a, b, c, d, tx, ty] = self.matrix;
