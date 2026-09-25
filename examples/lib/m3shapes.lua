@@ -305,11 +305,13 @@ local function normalise(curves)
 end
 
 --- The cubics of a named shape (or of an outline from `polygon`/`star`),
---- normalised and cut into `segments` (`shapes.SEGMENTS`).
+--- normalised and cut into `segments` (`shapes.SEGMENTS`). `segments =
+--- false` leaves the outline as it was made -- far cheaper, for a shape
+--- that is only drawn, never morphed.
 local cache = {}
 function shapes.curves(shape, segments)
-  segments = segments or shapes.SEGMENTS
-  local key = type(shape) == "string" and (shape .. "/" .. segments) or nil
+  if segments == nil then segments = shapes.SEGMENTS end
+  local key = type(shape) == "string" and (shape .. "/" .. tostring(segments)) or nil
   if key and cache[key] then return cache[key] end
   local curves = shape
   if type(shape) == "string" then
@@ -317,7 +319,7 @@ function shapes.curves(shape, segments)
     if not make then error("m3shapes: no shape named " .. shape, 2) end
     curves = make()
   end
-  local out = normalise(resample(curves, segments))
+  local out = normalise(segments and resample(curves, segments) or curves)
   if key then cache[key] = out end
   return out
 end
@@ -328,9 +330,11 @@ local paths = {}
 function shapes.path(shape, opts)
   opts = opts or {}
   local size = opts.size or 100
-  local key = type(shape) == "string" and (shape .. "/" .. size .. "/" .. (opts.segments or shapes.SEGMENTS))
+  local segments = opts.segments
+  if segments == nil then segments = shapes.SEGMENTS end
+  local key = type(shape) == "string" and (shape .. "/" .. size .. "/" .. tostring(segments))
   if key and paths[key] then return paths[key] end
-  local curves = shapes.curves(shape, opts.segments)
+  local curves = shapes.curves(shape, segments)
   local function f(v) return string.format("%.2f", v * size) end
   local parts = { "M" .. f(curves[1][1]) .. " " .. f(curves[1][2]) }
   for _, c in ipairs(curves) do

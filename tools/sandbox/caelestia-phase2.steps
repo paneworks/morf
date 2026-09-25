@@ -1,0 +1,57 @@
+# Phase 2 of the caelestia port: the dashboard's other tabs and the switch
+# between them, the launcher's pickers and calculator, the session menu, the
+# bar's popouts and the OSD -- shot and filmed the same way for caelestia on
+# Quickshell and for the morf port (MORF_CONFIG=examples/caelestia/init.lua).
+point 960 800; wait 1
+open dashboard; wait 1.5
+FILM_GEOMETRY="440,0 1040x700"
+click 879 45; film tab-media 30; wait 1.5; shot 06-dashboard-media
+click 1089 45; film tab-performance 30; wait 2.5; shot 07-dashboard-performance
+click 1298 45; film tab-weather 30; wait 2; shot 08-dashboard-weather
+click 670 45; film tab-dashboard 30; wait 1
+point 960 800; close; wait 1.5
+FILM_GEOMETRY="560,440 800x640"
+open launcher; wait 1.5
+k ">scheme "; wait 1.5; shot 30-launcher-schemes
+k -k Down; wait 0.5; k -k Return; film scheme-apply 30; wait 2; shot 31-scheme-applied
+close; wait 1.5
+open launcher; wait 1.5
+k ">variant "; wait 1.5; shot 32-launcher-variants
+close; wait 1.5
+open launcher; wait 1.5
+k ">wallpaper "; wait 2; shot 33-launcher-wallpapers
+close; wait 1.5
+open launcher; wait 1.5
+k ">calc 2+3*4"; wait 1.5; shot 34-launcher-calc
+close; wait 1.5
+open launcher; wait 1.5
+k ">light"; wait 1; k -k Return; film mode-light 30; wait 2; shot 35-light
+open launcher; wait 1.5
+k ">dark"; wait 1; k -k Return; wait 2
+FILM_GEOMETRY="1600,200 320x680"
+open session; film session-open 30; wait 1; shot 40-session
+point 1862 445; wait 1; shot 41-session-hover
+point 960 800; wait 0.5
+close session; film session-close 30; wait 1.5
+FILM_GEOMETRY="0,500 520x580"
+point 30 943; film popout-network 30; wait 1.5; shot 50-popout-network
+point 30 973; film popout-switch 30; wait 1.5; shot 51-popout-bluetooth
+point 30 1003; wait 1.5; shot 52-popout-battery
+point 30 870; wait 2; shot 53-popout-clock
+point 30 150; wait 2; shot 54-popout-workspaces
+point 30 520; wait 2; shot 55-popout-window
+point 30 25; wait 2; shot 56-popout-logo
+point 960 600; film popout-leave 30; wait 1.5
+FILM_GEOMETRY="1600,200 320x680"
+ipc drawers toggle osd; film osd-open 30; wait 1.5; shot 60-osd
+close; wait 1.5
+FILM_GEOMETRY="1400,0 520x260"
+notify -a Firefox "Download complete" "report.pdf has finished downloading"; film notification-in 30; wait 1.5; shot 70-notification
+wait 8; shot 71-notification-gone
+point 960 800; wait 1
+player; wait 3
+open dashboard; wait 2; shot 80-dashboard-playing
+click 879 45; wait 2.5; shot 81-media-playing
+FILM_GEOMETRY="440,0 1040x700"
+film media-playing 20
+point 960 800; close; wait 1.5

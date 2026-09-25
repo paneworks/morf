@@ -1,13 +1,17 @@
 -- The dashboard: a drawer at the top of the frame with four tabs --
 -- Dashboard, Media, Performance, Weather. The Dashboard tab is here: the
 -- weather, who is logged in and for how long, the time stacked on its side,
--- a month calendar, three resource rings and the media card.
+-- a month calendar, three resource rings and the media card; the others
+-- are dashboard_media.lua, dashboard_performance.lua and
+-- dashboard_weather.lua. Each tab has its own size: switching tabs slides
+-- the pages sideways while the drawer eases to the new tab's size.
 --
 -- It opens over IPC, and when the pointer reaches the top edge of the frame
 -- above it; one opened that way closes again when the pointer leaves it.
 --
 -- Geometry measured off the reference at 1920x1080 (panel coordinates):
--- 872 x 538, 16 px padding, tabs 64 tall with a 3 px indicator and a hairline
+-- 872 x 538 on the Dashboard tab (Media 1032 x 418, Performance 987 x 484,
+-- Weather 870 x 660), 16 px padding, tabs 64 tall with a 3 px indicator and a hairline
 -- under them, cards from y = 84 in two rows (132 and 295 tall, 12 apart).
 
 local morf = require("morf")
@@ -22,22 +26,38 @@ local shapes = require("lib.m3shapes")
 local C = theme.color
 local M = {}
 
-local WIDTH, HEIGHT = 872, 538
 local PAD, GAP = 16, 12
+-- Each tab's page (the panel less its padding and the tabs).
+local PAGE = {
+  { 840, 439 },
+  { require("dashboard_media").WIDTH, require("dashboard_media").HEIGHT },
+  { require("dashboard_performance").WIDTH, require("dashboard_performance").HEIGHT },
+  { require("dashboard_weather").WIDTH, require("dashboard_weather").HEIGHT },
+}
 local TABS_H = 68            -- icons, labels, indicator and hairline
 local ROW1, ROW2 = 132, 295
 
-M.tab = morf.signal("caelestia.dashboard.tab", 1)
-local opened = morf.signal("caelestia.dashboard.shown", false)
+local state = require("dashboard_state")
+M.tab = state.tab
+
+--- The panel's size on tab `i`.
+function M.size(i)
+  local p = PAGE[i] or PAGE[1]
+  return p[1] + 2 * PAD, TABS_H + PAD + p[2] + PAD - 1
+end
+local function width() return (M.size(M.tab:get())) end
+local function height() local _, h = M.size(M.tab:get()) return h end
+
+-- The drawer's and the pages' pace between tabs, fitted to films of the
+-- reference: most of the way in the first hundred milliseconds, settled in
+-- about a third of a second.
+local SWITCH = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel }
+local opened = state.opened
 
 -- Every pointer area on the panel: the panel counts as hovered while any
 -- of them is (see NEEDS.md, "hover that contains its children").
-local areas = {}
-local function area(props)
-  local a = ui.MouseArea(props)
-  areas[#areas + 1] = a
-  return a
-end
+local areas = state.areas
+local area = state.area
 
 -- ------------------------------------------------------------------- tabs --
 
@@ -49,7 +69,9 @@ local TABS = {
 }
 
 local function tabs()
-  local width = (WIDTH - 2 * PAD) / #TABS
+  -- The tabs share the panel's width as it eases between tabs' sizes: a
+  -- row that grows each of them, so they follow the drawer as it moves.
+  local function slot() return (width() - 2 * PAD) / #TABS end
   local labels = {}
   local buttons = {}
   for i, t in ipairs(TABS) do
@@ -60,16 +82,26 @@ local function tabs()
       behavior = { color = { duration = theme.duration.small } },
     }
     labels[i] = label
-    buttons[#buttons + 1] = area {
+    local button
+    button = area {
       id = "dashboard-tab-" .. t.name:lower(),
-      width = width, height = TABS_H - 4, cursor = "pointer",
+      width = 10, height = TABS_H - 4, cursor = "pointer",
+      layout = { grow = 1 },
       on_clicked = function() M.tab:set(i) end,
       ui.Column {
-        anchors = { horizontal_center = true }, y = 6, gap = 4, align = "center",
+        anchors = { horizontal_center = true }, y = 8, gap = 4, align = "center",
         kit.icon(t.icon, 22, function() return on() and C.primary or C.onSurface end, { fill = on }),
         label,
       },
     }
+    -- The hovered tab lifts on a rounded wash, as the reference's.
+    local wash = ui.Rect {
+      anchors = { fill = true, top_margin = 6, bottom_margin = 1 }, radius = 10, z = -1,
+      color = function() return button.hovered and C.onSurface:alpha(0.06) or C.onSurface:alpha(0) end,
+      behavior = { color = { duration = theme.duration.small } },
+    }
+    ui.reparent(wash, button)
+    buttons[#buttons + 1] = button
   end
   -- The indicator: as wide as the chosen label, sliding under it.
   local indicator = ui.Rect {
@@ -84,19 +116,20 @@ local function tabs()
     x = function()
       local l = labels[M.tab:get()]
       local w = (l and l.layout_width or 80) + 4
-      return (M.tab:get() - 1) * width + (width - w) / 2
+      return (M.tab:get() - 1) * slot() + (slot() - w) / 2
     end,
-    behavior = {
-      x = { duration = theme.duration.normal, easing = theme.ease.emphasized },
-      width = { duration = theme.duration.normal, easing = theme.ease.emphasized },
-    },
+    behavior = { x = SWITCH, width = SWITCH },
   }
   return ui.Item {
-    x = PAD, width = WIDTH - 2 * PAD, height = TABS_H,
-    ui.Row { gap = 0, table.unpack(buttons) },
+    anchors = { left = true, right = true, left_margin = PAD, right_margin = PAD },
+    height = TABS_H,
+    ui.Flex {
+      anchors = { fill = true, bottom_margin = 4 }, direction = "row", padding = 0,
+      table.unpack(buttons),
+    },
     indicator,
     ui.Rect {
-      y = TABS_H - 1, width = WIDTH - 2 * PAD, height = 1,
+      anchors = { left = true, right = true }, y = TABS_H - 1, height = 1,
       color = function() return C.outlineVariant end,
     },
   }
@@ -104,34 +137,10 @@ end
 
 -- ---------------------------------------------------------------- weather --
 
-local weather
-local function here()
-  if not weather then
-    local location = config.get("services.weather_location")
-    weather = require("lib.weather").new {
-      location = location ~= "" and location or nil,
-      units = config.get("services.imperial") and "imperial" or "metric",
-    }
-  end
-  return weather:get()
-end
-
-local function weather_symbol(code, is_day)
-  code = tonumber(code) or -1
-  if code == 0 then return is_day == false and "clear_night" or "clear_day" end
-  if code == 1 or code == 2 then return is_day == false and "partly_cloudy_night" or "partly_cloudy_day" end
-  if code == 3 then return "cloud" end
-  if code == 45 or code == 48 then return "foggy" end
-  if (code >= 51 and code <= 67) or (code >= 80 and code <= 82) then return "rainy" end
-  if (code >= 71 and code <= 77) or code == 85 or code == 86 then return "weather_snowy" end
-  if code >= 95 then return "thunderstorm" end
-  return "cloud"
-end
-
 local function weather_card()
   local function now()
     if not opened:get() then return { available = false } end
-    return here()
+    return services.weather()
   end
   return kit.card {
     id = "dashboard-weather",
@@ -140,7 +149,7 @@ local function weather_card()
       anchors = { center_in = true }, gap = 18, align = "center",
       kit.icon(function()
         local w = now()
-        return w.available and weather_symbol(w.code, w.is_day) or "cloud"
+        return w.available and services.weather_symbol(w.code, w.is_day) or "cloud"
       end, 60, function() return C.secondary end),
       ui.Column {
         gap = 2, align = "center",
@@ -437,11 +446,8 @@ end
 -- ------------------------------------------------------------------ media --
 
 local function media_card()
-  local ok, mpris = pcall(require, "lib.mpris")
-  local media = ok and mpris.connect() or nil
-  local function active()
-    return media and media.state.available and media.state.active or {}
-  end
+  local media = services.media
+  local active = services.player
   local function field(name, fallback)
     return function()
       local v = active()[name]
@@ -548,34 +554,34 @@ local function dashboard_tab()
   }
 end
 
-local function placeholder(name)
-  return ui.Item {
-    width = WIDTH - 2 * PAD, height = ROW1 + GAP + ROW2,
-    kit.text {
-      anchors = { center_in = true },
-      text = name .. " is not ported yet",
-      color = function() return C.onSurfaceVariant end,
-    },
-  }
-end
-
 local pages = {
   dashboard_tab(),
-  placeholder("Media"),
-  placeholder("Performance"),
-  placeholder("Weather"),
+  require("dashboard_media").page,
+  require("dashboard_performance").page,
+  require("dashboard_weather").page,
 }
 
--- The tabs slide sideways, one page width apart, as the reference's do.
+-- Where page `i` starts along the track: the pages side by side, a
+-- padding's width apart on either side.
+local function offset(i)
+  local x = 0
+  for k = 1, i - 1 do x = x + PAGE[k][1] + PAD * 2 end
+  return x
+end
+
+-- The tabs slide sideways as the reference's do, while the drawer eases to
+-- the new tab's size: the strip is the panel less its padding, so it
+-- follows the drawer as it moves.
 local strip = ui.Item {
   id = "dashboard-pages",
-  x = PAD, y = TABS_H + PAD, width = WIDTH - 2 * PAD, height = ROW1 + GAP + ROW2,
+  anchors = { fill = true, left_margin = PAD, right_margin = PAD, top_margin = TABS_H + PAD, bottom_margin = PAD - 1 },
   clip = true,
 }
 local track = ui.Row {
   gap = PAD * 2,
-  translate_x = function() return -(M.tab:get() - 1) * (WIDTH - 2 * PAD + PAD * 2) end,
-  behavior = { translate_x = { duration = theme.duration.normal, easing = theme.ease.emphasized } },
+
+  translate_x = function() return -offset(M.tab:get()) end,
+  behavior = { translate_x = SWITCH },
   table.unpack(pages),
 }
 ui.reparent(track, strip)
@@ -592,9 +598,10 @@ local content = ui.Item {
 M.drawer = drawer.new {
   name = "dashboard",
   edge = "top",
-  width = WIDTH,
-  height = HEIGHT,
+  width = width,
+  height = height,
   content = content,
+  props = { behavior = { width = SWITCH, height = SWITCH } },
 }
 
 morf.effect("caelestia.dashboard.shown", function()
@@ -610,7 +617,7 @@ local by_hover = false
 local trigger = ui.MouseArea {
   id = "dashboard-trigger",
   anchors = { top = true, horizontal_center = true },
-  width = WIDTH, height = theme.BORDER,
+  width = width, height = theme.BORDER,
 }
 
 local function panel_hovered()
