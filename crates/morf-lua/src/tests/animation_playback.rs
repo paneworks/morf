@@ -201,6 +201,14 @@ fn lua_evaluates_timing_curves_directly() {
                 -- A cubic Bezier table is accepted wherever a curve name is.
                 local bezier = morf.easing.value({ x1 = 0.4, y1 = 0, x2 = 0.2, y2 = 1 }, 0.5)
                 assert(bezier > 0 and bezier < 1, "bezier out of range")
+                -- The same four numbers in order, as motion specs list them.
+                local listed = morf.easing.value({ 0.4, 0, 0.2, 1 }, 0.5)
+                assert(listed == bezier, "a listed bezier differs from the named one")
+                assert(not pcall(morf.easing.value, { 1.4, 0, 0.2, 1 }, 0.5), "x1 past 1 must be rejected")
+                assert(not pcall(morf.easing.value, { 0.4, 0, 0.2 }, 0.5), "three numbers are not a curve")
+                -- And on a behavior.
+                -- (a second root)
+                ui.Rect { x = 0, behavior = { x = { duration = 100, easing = { 0.05, 0.7, 0.1, 1 } } } }
 
                 -- Halfway in OkLab is the perceptual middle grey, lighter in
                 -- sRGB terms than the numeric midpoint; halfway in sRGB is it.
@@ -217,7 +225,7 @@ fn lua_evaluates_timing_curves_directly() {
             "##,
         )
         .unwrap();
-    assert_eq!(runtime.scene().roots().len(), 1);
+    assert_eq!(runtime.scene().roots().len(), 2);
 }
 
 #[test]

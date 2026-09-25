@@ -180,27 +180,41 @@ pub(crate) fn parse_easing<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Resu
             Easing::spline(&points)
         }
         LuaValue::Table(value) => {
-            let read = |field| match value.get_value(ctx, field) {
-                LuaValue::Integer(value) => Ok(value as f64),
-                LuaValue::Number(value) if value.is_finite() => Ok(value),
-                _ => Err(format!("easing {field} must be a finite number")),
+            // Named (`{ x1 = .., y1 = .. }`) or in order (`{ 0.05, 0.7, 0.1, 1 }`),
+            // as motion specs list them.
+            let positional = !matches!(value.get_value(ctx, 1), LuaValue::Nil);
+            let read = |field: &str, index: i64| {
+                let found = if positional {
+                    value.get_value(ctx, index)
+                } else {
+                    value.get_value(ctx, field)
+                };
+                match found {
+                    LuaValue::Integer(value) => Ok(value as f64),
+                    LuaValue::Number(value) if value.is_finite() => Ok(value),
+                    _ => Err(format!("easing {field} must be a finite number")),
+                }
             };
-            let x1 = read("x1")?;
-            let x2 = read("x2")?;
-            if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
-                return Err("easing x1 and x2 must be between 0 and 1".into());
-            }
-            Ok(Easing::CubicBezier {
-                x1,
-                y1: read("y1")?,
-                x2,
-                y2: read("y2")?,
-            })
+            cubic_bezier(
+                read("x1", 1)?,
+                read("y1", 2)?,
+                read("x2", 3)?,
+                read("y2", 4)?,
+            )
         }
         _ => {
             Err("easing must be a string, a cubic Bezier table or { spline = { ... } }".to_owned())
         }
     }
+}
+
+/// A cubic Bezier timing curve; its x controls must stay in 0..1 so time
+/// runs one way.
+fn cubic_bezier(x1: f64, y1: f64, x2: f64, y2: f64) -> Result<Easing, String> {
+    if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
+        return Err("easing x1 and x2 must be between 0 and 1".into());
+    }
+    Ok(Easing::CubicBezier { x1, y1, x2, y2 })
 }
 
 /// A timing curve by the name a behavior's `easing` takes.
@@ -239,7 +253,7 @@ pub(crate) fn easing_named(name: &str) -> Result<Easing, String> {
 }
 
 /// A timing curve from a value a binding returned: a name, or a cubic Bezier
-/// as `{ x1, y1, x2, y2 }`.
+/// as `{ x1 = .., y1 = .., x2 = .., y2 = .. }` or four numbers in that order.
 pub(crate) fn easing_from_scene(value: &morf_scene::Value) -> Result<Easing, String> {
     use morf_scene::Value;
     match value {
@@ -263,17 +277,22 @@ pub(crate) fn easing_from_scene(value: &morf_scene::Value) -> Result<Easing, Str
                 Some(Value::Number(value)) if value.is_finite() => Ok(*value),
                 _ => Err(format!("easing {field} must be a finite number")),
             };
-            let x1 = read("x1")?;
-            let x2 = read("x2")?;
-            if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
-                return Err("easing x1 and x2 must be between 0 and 1".into());
+            cubic_bezier(read("x1")?, read("y1")?, read("x2")?, read("y2")?)
+        }
+        Value::List(points) => {
+            let read = |index: usize, field: &str| match points.get(index) {
+                Some(Value::Number(value)) if value.is_finite() => Ok(*value),
+                _ => Err(format!("easing {field} must be a finite number")),
+            };
+            if points.len() != 4 {
+                return Err("a cubic Bezier easing is four numbers: x1, y1, x2, y2".to_owned());
             }
-            Ok(Easing::CubicBezier {
-                x1,
-                y1: read("y1")?,
-                x2,
-                y2: read("y2")?,
-            })
+            cubic_bezier(
+                read(0, "x1")?,
+                read(1, "y1")?,
+                read(2, "x2")?,
+                read(3, "y2")?,
+            )
         }
         _ => {
             Err("easing must be a string, a cubic Bezier table or { spline = { ... } }".to_owned())

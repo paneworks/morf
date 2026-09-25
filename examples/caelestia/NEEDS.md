@@ -38,15 +38,7 @@ glyphs are drawn and "keeps the default advances", so `opsz` cannot give
 the wider setting. Needs `opsz` (ideally automatic from `font_size`, as
 CSS's `font-optical-sizing: auto` and Qt do) to reach shaping like `wght`.
 
-## 3. Positional cubic Bézier easing
-
-`docs/UI.md` writes a Bézier easing as `{ x1, y1, x2, y2 }`; the parser only
-accepts the named-field table (`{ x1 = 0.05, y1 = 0.7, ... }`) and rejects a
-positional list of four numbers with "easing x1 must be a finite number".
-Either accept the array form (it is what every motion spec lists) or say
-"named fields" in the docs. `theme.lua` uses named fields.
-
-## 4. Opacity of one layer in a field
+## 3. Opacity of one layer in a field
 
 The reference fades a drawer's background in with its contents as it
 opens. The background here is a layer of the frame's field (so it can

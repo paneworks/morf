@@ -500,7 +500,7 @@ panel -- is not charged to it, so its first frame is its first value
 rather than a jump part of the way.
 `morf.animation.fling` coasts a property.
 
-An `easing` is a name (`"out_cubic"`), a cubic Bézier `{ x1, y1, x2, y2 }`,
+An `easing` is a name (`"out_cubic"`), a cubic Bézier `{ x1, y1, x2, y2 }` (four numbers in order, or those named fields),
 or a spline of several: `{ spline = { x1, y1, x2, y2, x, y, ... } }`, each
 six numbers a segment's two control points and its end, from `(0, 0)` to a
 last end of `(1, 1)` — Qt's `BezierSpline`. `x` is time and keeps moving
