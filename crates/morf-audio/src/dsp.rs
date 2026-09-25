@@ -7,6 +7,8 @@
 
 use std::f32::consts::PI;
 
+use crate::beat::{BeatEvent, BeatTracker};
+
 /// Samples the band analyser looks at: 2048 frames is about 43 ms at
 /// 48 kHz, enough to tell 30 Hz from 50 Hz.
 const FFT_SIZE: usize = 2048;
@@ -35,6 +37,8 @@ pub struct Meter {
     counted: usize,
     peak: [f32; 2],
     bands: Option<Bands>,
+    /// Beat detection, when asked for; none costs nothing.
+    beat: Option<BeatTracker>,
 }
 
 impl Meter {
@@ -56,9 +60,22 @@ impl Meter {
             counted: 0,
             peak: [0.0; 2],
             bands: (bands > 0).then(|| Bands::new(bands, 48_000)),
+            beat: None,
         };
         meter.set_format(48_000, 2);
         meter
+    }
+
+    /// Listens for beats and a tempo too; see [`crate::beat`].
+    pub fn with_beats(mut self, beat: bool) -> Self {
+        self.beat = beat.then(|| BeatTracker::new(self.rate));
+        self
+    }
+
+    /// Beats and tempo estimates since the last call, oldest first; never
+    /// any unless [`Meter::with_beats`] asked.
+    pub fn beats(&mut self) -> impl Iterator<Item = BeatEvent> + '_ {
+        self.beat.iter_mut().flat_map(BeatTracker::drain)
     }
 
     /// The format the samples arrive in.
@@ -70,10 +87,19 @@ impl Meter {
         if let Some(bands) = &mut self.bands {
             *bands = Bands::new(bands.count, rate);
         }
+        if let Some(beat) = &mut self.beat
+            && beat.rate() != rate.max(8_000)
+        {
+            *beat = BeatTracker::new(rate);
+        }
     }
 
     pub fn rate(&self) -> u32 {
         self.rate
+    }
+
+    pub fn channels(&self) -> u32 {
+        self.channels as u32
     }
 
     /// Forgets what it heard and reads as silence — for when samples stop
@@ -82,6 +108,9 @@ impl Meter {
     pub fn silence(&mut self) -> Reading {
         self.counted = 0;
         self.peak = [0.0; 2];
+        if let Some(beat) = &mut self.beat {
+            beat.silence();
+        }
         let bands = match &mut self.bands {
             Some(bands) => {
                 bands.ring.fill(0.0);
@@ -117,6 +146,9 @@ impl Meter {
             frames += 1;
         }
         self.counted += frames;
+        if let Some(beat) = &mut self.beat {
+            beat.push(samples, channels);
+        }
         if self.counted < self.window {
             return None;
         }
@@ -214,13 +246,13 @@ pub(crate) fn band_ranges(count: usize, rate: u32, size: usize) -> Vec<(usize, u
 }
 
 /// An in-place radix-2 FFT of one fixed size.
-struct Fft {
+pub(crate) struct Fft {
     size: usize,
     twiddles: Vec<(f32, f32)>,
 }
 
 impl Fft {
-    fn new(size: usize) -> Self {
+    pub(crate) fn new(size: usize) -> Self {
         debug_assert!(size.is_power_of_two());
         let twiddles = (0..size / 2)
             .map(|index| {
@@ -231,7 +263,7 @@ impl Fft {
         Self { size, twiddles }
     }
 
-    fn run(&self, data: &mut [(f32, f32)]) {
+    pub(crate) fn run(&self, data: &mut [(f32, f32)]) {
         let n = self.size;
         let bits = n.trailing_zeros();
         for index in 0..n {

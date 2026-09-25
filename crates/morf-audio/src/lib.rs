@@ -29,6 +29,7 @@
 //! channel, and each report pokes morf's loop awake ([`morf_io::wake_all`]),
 //! so a volume key's change reaches an on-screen display within a frame.
 
+pub mod beat;
 pub mod dsp;
 pub mod fake;
 mod model;
@@ -39,7 +40,8 @@ use std::collections::BTreeMap;
 use std::sync::mpsc;
 
 pub use model::{
-    AudioState, Changes, Device, DeviceKind, Direction, Level, ObjectId, Stream, Update,
+    AudioState, Beat, Changes, Device, DeviceKind, Direction, Level, ObjectId, Stream, Tempo,
+    Update,
 };
 
 /// Something asked of the server.
@@ -70,6 +72,8 @@ pub enum Command {
         device: Option<ObjectId>,
         rate_hz: f32,
         bands: usize,
+        /// Listen for beats and a tempo as well.
+        beat: bool,
     },
     StopMonitor {
         monitor: u64,
@@ -119,6 +123,10 @@ pub struct Poll {
     /// kept: several readings since the last poll are one, not a backlog.
     /// A silent reading last is kept as it is: the sound stopped.
     pub levels: Vec<Level>,
+    /// Every beat heard since the last poll, oldest first.
+    pub beats: Vec<Beat>,
+    /// The latest tempo estimate of each monitor whose estimate moved.
+    pub tempos: Vec<Tempo>,
     pub errors: Vec<String>,
 }
 
@@ -181,6 +189,7 @@ impl Audio {
             return poll;
         };
         let mut levels: BTreeMap<u64, Level> = BTreeMap::new();
+        let mut tempos: BTreeMap<u64, Tempo> = BTreeMap::new();
         while let Ok(update) = updates.try_recv() {
             match update {
                 Update::Level(level) => match levels.get_mut(&level.monitor) {
@@ -196,11 +205,16 @@ impl Audio {
                         levels.insert(level.monitor, level);
                     }
                 },
+                Update::Beat(beat) => poll.beats.push(beat),
+                Update::Tempo(tempo) => {
+                    tempos.insert(tempo.monitor, tempo);
+                }
                 Update::Error(message) => poll.errors.push(message),
                 update => poll.changes.merge(self.state.apply(update)),
             }
         }
         poll.levels = levels.into_values().collect();
+        poll.tempos = tempos.into_values().collect();
         poll
     }
 
@@ -251,6 +265,19 @@ impl Audio {
     /// Starts metering; levels arrive through [`Audio::poll`] under the
     /// returned id. `rate_hz` is held to 1–120, `bands` to [`dsp::MAX_BANDS`].
     pub fn monitor(&mut self, device: Option<ObjectId>, rate_hz: f32, bands: usize) -> u64 {
+        self.monitor_beats(device, rate_hz, bands, false)
+    }
+
+    /// [`Audio::monitor`], listening for beats too when `beat` is set: they
+    /// and the tempo estimate arrive through [`Audio::poll`] as well. Off,
+    /// the audio thread does no more than for a plain meter.
+    pub fn monitor_beats(
+        &mut self,
+        device: Option<ObjectId>,
+        rate_hz: f32,
+        bands: usize,
+        beat: bool,
+    ) -> u64 {
         let monitor = self.next_monitor;
         self.next_monitor += 1;
         self.control.send(Command::StartMonitor {
@@ -262,6 +289,7 @@ impl Audio {
                 30.0
             },
             bands: bands.min(dsp::MAX_BANDS),
+            beat,
         });
         monitor
     }

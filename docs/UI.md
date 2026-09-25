@@ -591,6 +591,25 @@ Constructors live beside it: `morf.color.rgb`, `hsl`, `hsv`, `lab`,
 stay apart. `c:ansi_style { bold = true }` and `c:paint(text)` colour a
 terminal.
 
+`morf.color.hct(hue, chroma, tone)` makes a colour in HCT, the space
+Material Design's schemes are built in: hue and chroma are CAM16's, tone
+is L\* (0 black to 100 white), so two colours of the same tone have the
+same contrast against a third whatever their hues. A chroma sRGB cannot
+show at that hue and tone is given up and the hue and tone kept, which is
+what makes "tone 40 of this hue" always a usable colour. `c:hct()` gives
+back `hue, chroma, tone`; `c:with { t = 30 }` changes the tone alone, and
+`{ h, c, t }` is a colour table like the others.
+`morf.color.tonal_palette(hue, chroma)` — or `tonal_palette(colour)`, for
+that colour's hue and chroma — is the colour at every tone: `p(40)`,
+`p[90]` and `p:tone(99)` are colours, `p.hue` and `p.chroma` what it was
+made from. The colour science is a port of Google's Material Color
+Utilities (Apache-2.0) and gives its published values.
+
+```lua
+local primary = morf.color.tonal_palette(morf.color "#6750a4")
+local theme = { primary = primary(40), on_primary = primary(100), container = primary(90) }
+```
+
 A colour animates in a space. The default is OkLab, which is what a
 crossfade between two saturated colours should look like; `space` and
 `hue` on the behavior choose otherwise:
@@ -782,6 +801,40 @@ was laid out — the rest of the text lets clicks through to whatever is
 beneath — and takes the node's `cursor` (`"pointer"`) over it. Where each
 link landed is the read-only `links`, a list of `{ href, x, y, width,
 height }` in the node's own space, kept current after every layout.
+
+### Fuzzy matching
+
+`morf.text.fuzzy(query, items, opts)` ranks a list the way a launcher or a
+picker wants it: items whose characters contain the query's, in order,
+best first. `items` are strings, or tables with `opts.key` naming the
+field to match — or a list of fields, each `"field"` or `{ "field",
+weight }`, where an item scores its best weighted field. `opts.limit`
+keeps the best few. Each result is `{ item, index, score, key, positions
+}`: the item itself, its index in `items`, the score, the field that
+matched, and the 1-based byte offsets (as `string.sub` counts) of the
+matched characters.
+
+```lua
+local hits = morf.text.fuzzy(query:get(), apps, { key = { "name", { "exec", 0.5 } }, limit = 30 })
+for _, hit in ipairs(hits) do
+  ui.Text { spans = morf.text.highlight(hit.item.name, hit.positions, { bold = true, color = theme.accent }) }
+end
+local score, positions = morf.text.fuzzy_score("ffx", "Firefox")   -- nil when it does not match
+```
+
+The scoring is fzf's kind: a match at the start of a word, a camelCase
+hump or a path component is worth more than one in the middle of a word,
+a run of consecutive matches keeps the bonus its first character earned,
+skipped characters cost a little, and the first character's bonus counts
+twice, so a prefix wins. It is case-insensitive unless the query has an
+uppercase letter. Spaces split the query into terms that must all match.
+It works on characters, so accents and CJK match as whole characters; it
+does not fold accents (`e` does not find `é`). Ties go to the shorter
+text, then to the earlier item; an empty query keeps every item in order.
+Ranking 10,000 entries of seventy characters takes a few milliseconds, so it
+can run on every keystroke. `morf.text.highlight(text, positions, style)`
+turns a match into `spans` for a `ui.Text`: the matched characters in
+runs carrying `style` (bold when none is given), the rest plain.
 
 ### Text input
 

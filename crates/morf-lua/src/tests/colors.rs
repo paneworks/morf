@@ -223,3 +223,52 @@ fn linear_light_is_the_shader_side_of_a_colour() {
     assert!((ipc_number(&mut runtime, "gray") - 0.2158).abs() < 0.001);
     assert!((ipc_number(&mut runtime, "alpha") - 0.5).abs() < 0.01);
 }
+
+#[test]
+fn hct_colours_and_tonal_palettes() {
+    // Hue, chroma and tone as Material Color Utilities computes them, and
+    // the tones of blue its palette test lists.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "hct.lua",
+            br##"
+                local morf = require("morf")
+                local function near(a, b, d) return math.abs(a - b) <= d end
+                local h, c, t = morf.color("#ff0000"):hct()
+                assert(near(h, 27.408, 0.001) and near(c, 113.357, 0.001) and near(t, 53.233, 0.01),
+                    h .. " " .. c .. " " .. t)
+                -- In gamut: back to the same colour.
+                assert(morf.color.hct(h, c, t):hex() == "#ff0000")
+                -- Out of gamut: tone and hue kept, chroma given up.
+                local vivid = morf.color.hct(140, 200, 50)
+                local vh, vc, vt = vivid:hct()
+                assert(near(vt, 50, 0.5) and near(vh, 140, 4) and vc < 200, vh .. " " .. vc .. " " .. vt)
+                assert(morf.color.hct(0, 0, 100):hex() == "#ffffff")
+                assert(morf.color.hct(0, 0, 0):hex() == "#000000")
+                assert(near(morf.color.hct(10, 20, 30, 0.5).a, 0.5, 0.01))
+                -- As a table, and changed by `with`.
+                assert(morf.color { h = h, c = c, t = t }:hex() == "#ff0000")
+                local _, _, darker = morf.color("#ff0000"):with({ t = 30 }):hct()
+                assert(near(darker, 30, 0.5), darker)
+
+                local blue = morf.color.tonal_palette(morf.color "#0000ff")
+                local expected = {
+                    [100] = "#ffffff", [95] = "#f1efff", [90] = "#e0e0ff", [80] = "#bec2ff",
+                    [70] = "#9da3ff", [60] = "#7c84ff", [50] = "#5a64ff", [40] = "#343dff",
+                    [30] = "#0000ef", [20] = "#0001ac", [10] = "#00006e", [0] = "#000000",
+                }
+                for tone, hex in pairs(expected) do
+                    assert(blue(tone):hex() == hex, tone .. ": " .. blue(tone):hex())
+                    assert(blue[tone]:hex() == hex)
+                    assert(blue:tone(tone):hex() == hex)
+                end
+                assert(near(blue.hue, 282.788, 0.001) and near(blue.chroma, 87.230, 0.001))
+                local neutral = morf.color.tonal_palette(270, 4)
+                local _, nc, nt = neutral(50):hct()
+                assert(near(nc, 4, 1) and near(nt, 50, 0.5))
+                assert(not pcall(morf.color.hct, "x", 1, 2))
+            "##,
+        )
+        .unwrap();
+}

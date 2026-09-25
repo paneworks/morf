@@ -60,6 +60,8 @@ fn with_channels<'gc>(
         _ => {
             if number("r").is_some() || number("g").is_some() || number("b").is_some() {
                 "rgb".to_owned()
+            } else if number("t").is_some() {
+                "hct".to_owned()
             } else if number("v").is_some() {
                 "hsv".to_owned()
             } else if number("s").is_some() {
@@ -134,6 +136,15 @@ fn with_channels<'gc>(
                 number("c").unwrap_or(lch.c),
                 number("h").unwrap_or(lch.h),
                 alpha.unwrap_or(lch.alpha),
+            )
+        }
+        "hct" => {
+            let [h, c, t] = crate::api_color_hct::to_hct(color);
+            crate::api_color_hct::from_hct(
+                number("h").unwrap_or(h),
+                number("c").unwrap_or(c),
+                number("t").unwrap_or(t),
+                alpha.unwrap_or(color.to_rgba_float().alpha),
             )
         }
         other => return Err(format!("unknown colour space `{other}`")),

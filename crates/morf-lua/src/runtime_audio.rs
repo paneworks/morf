@@ -102,7 +102,11 @@ impl Runtime {
             }
             let host = state.audio.as_mut().expect("checked above");
             for level in poll.levels {
-                let Some(callback) = host.monitors.get(&level.monitor) else {
+                let Some(callback) = host
+                    .monitors
+                    .get(&level.monitor)
+                    .and_then(|handlers| handlers.on_level.as_ref())
+                else {
                     continue;
                 };
                 let bands = if level.bands.is_empty() {
@@ -124,6 +128,33 @@ impl Runtime {
                         bands,
                     ],
                 ));
+            }
+            for beat in poll.beats {
+                if let Some(callback) = host
+                    .monitors
+                    .get(&beat.monitor)
+                    .and_then(|monitor| monitor.on_beat.as_ref())
+                {
+                    handlers.push((
+                        callback.clone(),
+                        vec![SceneValue::Number(f64::from(beat.strength))],
+                    ));
+                }
+            }
+            for tempo in poll.tempos {
+                let Some(monitor) = host.monitors.get_mut(&tempo.monitor) else {
+                    continue;
+                };
+                monitor.tempo = Some((tempo.bpm, tempo.confidence));
+                if let Some(callback) = &monitor.on_tempo {
+                    handlers.push((
+                        callback.clone(),
+                        vec![
+                            SceneValue::Number(f64::from(tempo.bpm)),
+                            SceneValue::Number(f64::from(tempo.confidence)),
+                        ],
+                    ));
+                }
             }
             for error in errors {
                 state.log(LogLevel::Warn, format!("audio: {error}"));
