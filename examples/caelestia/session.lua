@@ -111,13 +111,25 @@ for i, item in ipairs(ITEMS) do
         anchors = { center_in = true },
       }),
     }
-    local wash = ui.Rect {
-      anchors = { fill = true }, radius = 22, z = -1,
+    -- M3 expressive: the button's shape morphs with its state -- a
+    -- rounded square at rest, a nine-point cookie with the focus, a
+    -- sunburst while pressed -- and the focused one turns slowly.
+    local wash = kit.shape {
+      id = "session-" .. item.id .. "-shape",
+      anchors = { fill = true }, z = -1,
+      shape = function()
+        if area.pressed then return "sunny" end
+        if on() then return "cookie9" end
+        return "square"
+      end,
       color = function()
         if on() then return C.secondaryContainer end
         return area.hovered and C.surfaceContainerHigh or C.surfaceContainer
       end,
-      behavior = { color = { duration = theme.duration.small } },
+      loop = function()
+        if not (on() and M.drawer.open:get()) then return nil end
+        return { rotation = { to = 360, duration = 12000, hold = true } }
+      end,
     }
     ui.reparent(wash, area)
     buttons[#buttons + 1] = area

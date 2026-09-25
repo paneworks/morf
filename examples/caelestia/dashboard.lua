@@ -173,10 +173,23 @@ local function weather_card()
     width = 275, height = ROW1,
     ui.Row {
       anchors = { center_in = true }, gap = 18, align = "center",
-      kit.icon(function()
-        local w = now()
-        return w.available and services.weather_symbol(w.code, w.is_day) or "cloud"
-      end, 60, function() return C.secondary end),
+      -- While the weather is on its way, M3's loading indicator.
+      ui.Item {
+        width = 60, height = 60,
+        kit.icon(function()
+          local w = now()
+          return w.available and services.weather_symbol(w.code, w.is_day) or "cloud"
+        end, 60, function() return C.secondary end, {
+          anchors = { center_in = true },
+          visible = function() return now().available end,
+        }),
+        kit.loading(48, function() return C.secondary end, {
+          id = "dashboard-weather-loading",
+          anchors = { center_in = true },
+          active = function() return opened:get() and not now().available end,
+          visible = function() return not now().available end,
+        }),
+      },
       ui.Column {
         gap = 2, align = "center",
         kit.text {
@@ -359,10 +372,13 @@ local function calendar_card()
     local function day() return month().days[i] end
     cells[#cells + 1] = ui.Item {
       width = CELL_W, height = CELL_H,
-      ui.Path {
+      -- Today's marker morphs in each time the dashboard opens: a circle
+      -- that blooms into a cookie.
+      kit.shape {
         anchors = { center_in = true }, width = 34, height = 34,
-        view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie9"),
-        fill_color = function() return C.primary end,
+        shape = function() return opened:get() and "cookie9" or "circle" end,
+        duration = 700,
+        color = function() return C.primary end,
         visible = function() return day().today end,
       },
       kit.text {

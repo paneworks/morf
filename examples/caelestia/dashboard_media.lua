@@ -33,6 +33,11 @@ local BAR_X, BAR_W, BAR_Y = 387, 223, 186
 -- The bars the ring's dots follow, one per dot, 0 to 1. The monitor runs
 -- only while the tab is on screen and something plays.
 local bars = morf.signal("caelestia.media.bars", {})
+-- Beats heard: a count (the cover's shape turns on every fourth) and the
+-- last one's strength (the cover swells with it).
+local beats = morf.signal("caelestia.media.beats", 0)
+local pulse = morf.signal("caelestia.media.pulse", 0)
+local settle
 local meter
 
 local function listen(on)
@@ -48,12 +53,20 @@ local function listen(on)
         last = now
         bars:set(filter.step(bands or {}, dt))
       end,
+      beat = true,
+      on_beat = function(strength)
+        beats:set(beats:get() + 1)
+        pulse:set(math.max(0.3, math.min(1, strength or 0.5)))
+        if settle then settle:cancel() end
+        settle = morf.timer(90, function() settle = nil pulse:set(0) end, false)
+      end,
     })
     meter = ok and m or false
   elseif not on and meter then
     pcall(function() meter:stop() end)
     meter = nil
     bars:set({})
+    pulse:set(0)
   end
 end
 
@@ -135,23 +148,33 @@ function M.build(ctx)
     end,
     table.unpack(dots),
   }
+  -- The cover's cookie: it turns while the music plays, swells a little
+  -- on every beat the monitor hears, and every fourth beat morphs between
+  -- a nine- and a twelve-point cookie; paused, it settles back to nine.
+  local function cookie()
+    if not playing() then return "cookie9" end
+    return (beats:get() // 4) % 2 == 0 and "cookie9" or "cookie12"
+  end
   local cover = ui.Item {
     id = "media-cover-cookie",
     x = CX - COVER / 2, y = CY - COVER / 2, width = COVER, height = COVER,
+    scale = function() return 1 + 0.05 * pulse:get() end,
+    behavior = { scale = kit.spring(500, 18) },
     loop = function()
       if not (on_screen() and playing()) then return nil end
       return { rotation = { to = 360, duration = 60000, hold = true } }
     end,
-    ui.Path {
-      anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie9", { segments = false }),
-      fill_color = function() return C.surfaceContainerHigh end,
+    kit.shape {
+      id = "media-cover-shape",
+      anchors = { fill = true }, shape = cookie, duration = 600,
+      color = function() return C.surfaceContainerHigh end,
     },
     ui.Image {
       id = "media-tab-cover",
       anchors = { fill = true }, fill_mode = "preserve_aspect_crop",
       source = art,
       visible = function() return art() ~= "" end,
-      mask = ui.Path { view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie9", { segments = false }), fill_color = "#ffffff" },
+      mask = kit.shape { shape = cookie, duration = 600, color = "#ffffff" },
     },
   }
   local cover_icon = kit.icon("art_track", 96, function() return C.onSurfaceVariant end, {
@@ -397,8 +420,19 @@ function M.build(ctx)
       id = "media-no-lyrics",
       x = 0, y = 78, width = LW, gap = 10, align = "center",
       visible = function() local s = lyrics_status() return s ~= "synced" and s ~= "plain" end,
-      kit.icon(function() return lyrics_status() == "searching" and "search" or "sentiment_dissatisfied" end,
-        64, function() return C.onSurfaceVariant end, { width = LW, horizontal_alignment = "center" }),
+      ui.Item {
+        width = LW, height = 64,
+        kit.icon("sentiment_dissatisfied", 64, function() return C.onSurfaceVariant end, {
+          anchors = { center_in = true },
+          visible = function() return lyrics_status() ~= "searching" end,
+        }),
+        kit.loading(52, function() return C.primary end, {
+          id = "media-lyrics-loading",
+          anchors = { center_in = true },
+          active = function() return ctx.opened() and lyrics_status() == "searching" end,
+          visible = function() return lyrics_status() == "searching" end,
+        }),
+      },
       kit.text {
         width = LW, horizontal_alignment = "center",
         text = function() return lyrics_status() == "searching" and "Looking for lyrics" or "No lyrics found" end,

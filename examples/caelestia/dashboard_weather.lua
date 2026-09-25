@@ -87,10 +87,22 @@ function M.build(ctx)
     y = 84, width = M.WIDTH, height = 178, radius = 60,
     ui.Row {
       anchors = { center_in = true }, gap = 24, align = "center",
-      kit.icon(function()
-        local w = now()
-        return w.available and services.weather_symbol(w.code, w.is_day) or "cloud"
-      end, 136, function() return C.primary end),
+      ui.Item {
+        width = 136, height = 136,
+        kit.icon(function()
+          local w = now()
+          return w.available and services.weather_symbol(w.code, w.is_day) or "cloud"
+        end, 136, function() return C.primary end, {
+          anchors = { center_in = true },
+          visible = function() return now().available end,
+        }),
+        kit.loading(96, function() return C.primary end, {
+          id = "weather-loading",
+          anchors = { center_in = true },
+          active = function() return ctx.opened() and not now().available end,
+          visible = function() return not now().available end,
+        }),
+      },
       ui.Column {
         gap = 0,
         kit.text {

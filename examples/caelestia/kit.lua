@@ -204,7 +204,12 @@ end
 function M.switch(spec)
   local motion = { duration = theme.duration.small, easing = theme.ease.standard }
   local function on() return spec.on() == true end
-  return ui.MouseArea {
+  local area
+  -- The thumb springs across, grows when on and more when pressed, and
+  -- morphs: a circle off, a scalloped cookie on (M3 expressive).
+  local function thumb() return area and area.pressed and 28 or (on() and 24 or 16) end
+  local jump = M.spring(520, 22)
+  area = ui.MouseArea {
     id = spec.id, width = 52, height = 32, cursor = "pointer",
     anchors = spec.anchors, x = spec.x, y = spec.y,
     on_clicked = function() if spec.on_toggled then spec.on_toggled(not on()) end end,
@@ -215,16 +220,23 @@ function M.switch(spec)
       border_color = function() return C().outline end,
       behavior = { color = motion },
     },
-    ui.Rect {
-      y = 4, width = 24, height = 24, radius = 12,
-      x = function() return on() and 24 or 4 end,
-      color = function() return on() and C().onPrimary or C().outline end,
-      behavior = { x = motion, color = motion },
-      M.icon(function() return on() and "check" or "close" end, 16, function()
+    ui.Item {
+      x = function() return (on() and 36 or 16) - thumb() / 2 end,
+      y = function() return 16 - thumb() / 2 end,
+      width = thumb, height = thumb,
+      behavior = { x = jump, y = jump, width = jump, height = jump },
+      stretch = M.STRETCH,
+      M.shape {
+        anchors = { fill = true },
+        shape = function() return on() and "cookie12" or "circle" end,
+        color = function() return on() and C().onPrimary or C().outline end,
+      },
+      M.icon(function() return on() and "check" or "close" end, 14, function()
         return on() and C().primary or C().surfaceContainerHighest
-      end, { anchors = { center_in = true } }),
+      end, { anchors = { center_in = true }, visible = function() return thumb() >= 20 end }),
     },
   }
+  return area
 end
 
 --- A pill-shaped filled button: `icon`, `label`, `on_clicked`, `width`,
