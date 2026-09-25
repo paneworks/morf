@@ -23,7 +23,9 @@ M.FALLBACK_SOURCE = "#ffb0ca"
 
 local function initial()
   local source = config.get("theme.source")
-  if source == "" or source == "wallpaper" then source = M.FALLBACK_SOURCE end
+  if source == "" or source == "wallpaper" or source == "auto" or source == "lule" then
+    source = M.FALLBACK_SOURCE
+  end
   return material.scheme(source, { variant = config.get("theme.variant"), mode = config.get("theme.mode") })
 end
 
@@ -35,6 +37,24 @@ end
 -- A new scheme, variant or mode eases every colour there, as one.
 M.color = morf.theme(roles, { transition = { duration = 400, easing = "in_out_cubic" } })
 
+-- The colour tool's own palette (lule, pywal: terminal_colors.lua), beside
+-- the Material scheme: `theme.lule.accent`, `.background`, `.foreground`,
+-- `.cursor`, `.color0`..`.color15`. A part that wants the desk's terminal
+-- colours rather than Material's reads these; they ease to new values as
+-- the tool re-themes. Grey until a tool has set anything.
+local lule_tokens = { accent = "#888888", background = "#111111", foreground = "#eeeeee", cursor = "#888888" }
+for i = 0, 15 do lule_tokens["color" .. i] = "#888888" end
+M.lule = morf.theme(lule_tokens, { transition = { duration = 400, easing = "in_out_cubic" } })
+
+--- Puts the colour tool's palette in `theme.lule`.
+function M.apply_lule(tool)
+  if not tool then return end
+  if tool.accent then M.lule.accent = tool.accent end
+  for name, value in pairs(tool.palette or {}) do
+    if value and lule_tokens[name] then M.lule[name] = value end
+  end
+end
+
 --- Puts every role of scheme `s` in place.
 function M.apply(s)
   for name in pairs(roles) do
@@ -44,8 +64,8 @@ end
 
 --- The scheme for `source` (a colour, or "wallpaper" with `wallpaper` the
 --- picture's path), applied when it is made.
-function M.follow(source, wallpaper)
-  local opts = { variant = config.get("theme.variant"), mode = config.get("theme.mode") }
+function M.follow(source, wallpaper, mode)
+  local opts = { variant = config.get("theme.variant"), mode = mode or config.get("theme.mode") }
   if source ~= "wallpaper" and source ~= "" then
     M.apply(material.scheme(source, opts))
     return

@@ -202,6 +202,15 @@ used.record(app.id)
 used.rank(query, apps, { key = "name", id = "id", limit = 30 })   -- fuzzy hits, reordered
 ```
 
+## lule
+
+`lib/lule.lua` reads the scheme lule (a colour generator) writes to
+`$LULE_A/colors.json` (`~/.cache/lule`): `{ accent, background,
+foreground, cursor, theme, wallpaper, colors }`. `lule.watch()` is a signal
+kept current as lule rewrites it. For the colours themselves as the tool
+sets them on terminals, whatever the tool, see `morf.terminal.listen`
+(docs/IO.md); the caelestia port uses both, the file as the backup.
+
 ## material
 
 `lib/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:

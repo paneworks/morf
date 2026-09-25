@@ -13,8 +13,11 @@ return settings.open {
   path = path,
   defaults = {
     theme = {
-      -- "wallpaper", or a colour to build the scheme from.
-      source = "wallpaper",
+      -- What the Material scheme is built from: "lule" (the colour
+      -- tool's accent -- lule, pywal), "wallpaper", a colour, or "auto"
+      -- (lule when it has set anything, else the wallpaper). The tool's
+      -- own colours are theme.lule either way.
+      source = "auto",
       variant = "tonal_spot",
       mode = "dark",
     },

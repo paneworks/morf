@@ -43,8 +43,21 @@ morf.surface.reserve = { left = theme.BAR, top = theme.BORDER, right = theme.BOR
 
 -- ------------------------------------------------------------------ colour --
 
+-- Two palettes: `theme.color`, the Material scheme, built from
+-- `theme.source` -- "lule" (the colour tool's accent: lule, pywal; see
+-- terminal_colors.lua), "wallpaper", a colour, or "auto" (lule when it has
+-- set anything, else the wallpaper) -- and `theme.lule`, the tool's own
+-- colours as they are, for whatever wants them.
+local terminal_colors = require("terminal_colors")
+morf.effect("caelestia.lule", function() theme.apply_lule(terminal_colors.current:get()) end)
 morf.effect("caelestia.scheme", function()
-  theme.follow(config.get("theme.source"), wallpaper.current:get())
+  local source = config.get("theme.source")
+  local tool = terminal_colors.current:get()
+  if (source == "auto" or source == "lule") and tool then
+    theme.follow(tool.accent, nil, tool.mode)
+  else
+    theme.follow(source == "auto" and "wallpaper" or source, wallpaper.current:get())
+  end
   -- The variant and mode are read inside `follow`; name them here so a
   -- change of either re-runs this.
   config.get("theme.variant")
@@ -152,6 +165,11 @@ morf.ipc.workspace = function(n)
   if not here() then return nil end
   require("services").workspace.go(n)
   return require("services").workspace.active()
+end
+-- `lule`: the terminal the colour tool writes to, and the accents in use.
+morf.ipc.lule = function()
+  local tty = require("terminal_colors").tty
+  return tty and tty.path or "", theme.lule.accent:hex(), theme.color.primary:hex()
 end
 morf.ipc.osd = function()
   if not here() then return nil end

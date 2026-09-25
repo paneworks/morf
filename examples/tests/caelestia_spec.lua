@@ -12,13 +12,16 @@ local test = morf.test
 
 local W, H = 1920, 1080
 
-local function load()
+local function load(extra)
   for _, program in ipairs { "systemctl", "loginctl" } do test.stub_run(program, { code = 0 }) end
   test.load("../caelestia/init.lua", {
     size = { W, H },
     -- CAELESTIA_DRY_RUN: the session menu logs its commands instead of
     -- running them (and they are stubbed besides).
-    env = { CAELESTIA_WALLPAPER = "", CAELESTIA_FONT_FILE = "", CAELESTIA_DRY_RUN = "1" },
+    env = { CAELESTIA_WALLPAPER = "", CAELESTIA_FONT_FILE = "", CAELESTIA_DRY_RUN = "1",
+      -- Not the person's own colour tool's scheme.
+      LULE_A = "/nonexistent/lule", HOME = morf.env("XDG_CACHE_HOME"),
+      CAELESTIA_SETTINGS = extra and extra.settings or nil },
   })
   test.settle(2000)
 end
@@ -562,5 +565,26 @@ test.describe("caelestia", function()
     test.advance(3000)
     test.settle(1000)
     test.falsy(shown("osd"))
+  end)
+
+  test.it("takes the colour tool's colours from its own terminal", function()
+    -- Settings of its own: earlier tests chose a scheme colour.
+    load { settings = morf.fs.join(morf.env("XDG_CACHE_HOME"), "lule-test-settings.json") }
+    local path, lule_before = test.ipc("lule")
+    test.matches(path, "^/dev/pts/")
+    -- What lule's `colors_to_tty` writes to every terminal.
+    morf.fs.write(path, "\27]4;1;#3d8bff\27\\\27]11;#0b0d12\27\\\27]10;#e8ecf4\27\\", { atomic = false })
+    local lule_now, primary
+    test.wait(function()
+      local _
+      _, lule_now, primary = test.ipc("lule")
+      return lule_now ~= lule_before
+    end, 3000, "the shell did not hear the colours")
+    test.settle(1000)
+    _, lule_now, primary = test.ipc("lule")
+    test.eq(lule_now, "#3d8bff")
+    -- The Material scheme is built from that accent: a blue primary.
+    local h = morf.color(primary):hct()
+    test.truthy(h > 230 and h < 300, "primary " .. primary .. " is not the accent's blue")
   end)
 end)
