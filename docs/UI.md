@@ -848,6 +848,12 @@ ui.Rect { color = function() return theme.hover end }
 theme.accent = "#ff6600"   -- and every reader of hover follows
 ```
 
+`options.transition = { duration = ms, easing = ... }` eases a colour
+written to a token there from the one on show (in OkLab), frame by frame,
+instead of jumping: every reader follows the whole way, so a new scheme
+cross-fades the shell at once. Written again mid-way, it sets out from
+where it is. Other tokens change at once.
+
 `morf.prefers` is the desktop's own settings, read from the settings
 portal and kept current: `color_scheme` (`"dark"`, `"light"`, `"none"`),
 `contrast`, `accent_color` (a colour or nil), `reduced_motion`, and the

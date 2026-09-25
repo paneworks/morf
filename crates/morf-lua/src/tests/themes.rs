@@ -151,3 +151,70 @@ fn a_theme_rejects_what_it_cannot_derive_from() {
         "{error}"
     );
 }
+
+// A theme with a transition eases a colour written to it from the one on
+// show, frame by frame, and every reader follows; other tokens, and a
+// theme without one, change at once.
+#[test]
+fn a_theme_with_a_transition_eases_its_colours() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "fade.lua",
+            br##"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                theme = morf.theme({ accent = "#000000", name = "a" },
+                    { transition = { duration = 200, easing = "linear" } })
+                plain = morf.theme({ accent = "#000000" })
+                rect = ui.Rect { color = function() return theme.accent end }
+                function red() return math.floor(theme.accent.r * 255 + 0.5) end
+                theme.accent = "#ff0000"
+                theme.name = "b"
+                plain.accent = "#ff0000"
+                assert(theme.name == "b", "a string token waited")
+                assert(plain.accent:hex() == "#ff0000", "a theme without a transition waited")
+                assert(red() == 0, "the colour jumped: " .. red())
+            "##,
+        )
+        .unwrap();
+    assert!(runtime.has_motion(), "a fade keeps frames coming");
+    runtime.tick_animations(Duration::from_millis(100)).unwrap();
+    runtime
+        .execute(
+            "mid.lua",
+            br#"assert(red() > 60 and red() < 250, "not part way: " .. red())"#,
+        )
+        .unwrap();
+    let rect = runtime.scene().roots()[0];
+    let mid = runtime.scene().color_value(rect, "color").unwrap();
+    runtime.tick_animations(Duration::from_millis(150)).unwrap();
+    runtime
+        .execute(
+            "end.lua",
+            br##"assert(theme.accent:hex() == "#ff0000", theme.accent:hex())"##,
+        )
+        .unwrap();
+    assert!(!runtime.has_motion(), "a finished fade keeps drawing");
+    assert_ne!(
+        runtime.scene().color_value(rect, "color").unwrap(),
+        mid,
+        "the reader did not follow"
+    );
+    // Written again mid-way, it sets out from where it is.
+    runtime
+        .execute(
+            "again.lua",
+            br##"
+                theme.accent = "#0000ff"
+            "##,
+        )
+        .unwrap();
+    runtime.tick_animations(Duration::from_millis(100)).unwrap();
+    runtime
+        .execute(
+            "again-mid.lua",
+            br#"local c = theme.accent assert(c.r > 0.1 and c.b > 0.1, c:hex())"#,
+        )
+        .unwrap();
+}

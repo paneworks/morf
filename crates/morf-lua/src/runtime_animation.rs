@@ -44,7 +44,46 @@ impl Runtime {
     }
 
     pub fn has_motion(&self) -> bool {
-        self.reactive.borrow().scene.has_motion()
+        let state = self.reactive.borrow();
+        state.scene.has_motion() || !state.theme_fades.is_empty()
+    }
+
+    /// Moves every theme colour easing to a new value on by `delta`, and
+    /// hands each reader the colour on show.
+    fn advance_theme_fades(&mut self, delta: Duration) {
+        let writes = {
+            let mut state = self.reactive.borrow_mut();
+            if state.theme_fades.is_empty() {
+                return;
+            }
+            let mut writes = Vec::new();
+            state.theme_fades.retain_mut(|fade| {
+                fade.elapsed += delta;
+                let (colour, done) = fade.colour();
+                writes.push((fade.signal, IpcValue::Color(colour)));
+                !done
+            });
+            writes
+        };
+        {
+            let mut state = self.reactive.borrow_mut();
+            for (id, value) in writes {
+                if let Some(graph) = state.graph.as_mut()
+                    && graph.write(id, value.clone()).is_ok()
+                {
+                    state.values.insert(id, value);
+                }
+            }
+        }
+        let limits = self.limits;
+        let reactive = std::rc::Rc::clone(&self.reactive);
+        self.lua.enter(|ctx| {
+            if let Err(message) = crate::reactive_bindings::flush_reactive(&reactive, ctx, limits) {
+                reactive
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("theme transition: {message}"));
+            }
+        });
     }
 
     /// [`Self::tick_animations`] for a loop driven by a display's frames:
@@ -57,6 +96,7 @@ impl Runtime {
     }
 
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
+        self.advance_theme_fades(delta);
         let frame = self
             .reactive
             .borrow_mut()

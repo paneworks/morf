@@ -175,6 +175,26 @@ pub(crate) fn install_state_api<'gc>(
                 };
                 {
                     let mut state = state.borrow_mut();
+                    // A theme with a transition eases a colour there from the
+                    // one on show; the frames carry it (`advance_theme_fades`).
+                    if let (Some((duration, easing)), IpcValue::Color(to)) =
+                        (fields.transition, &value)
+                        && let Some(IpcValue::Color(from)) = state.values.get(&id).cloned()
+                        && !duration.is_zero()
+                    {
+                        state.theme_fades.retain(|fade| fade.signal != id);
+                        if from != *to {
+                            state.theme_fades.push(crate::state::ThemeFade {
+                                signal: id,
+                                from,
+                                to: *to,
+                                elapsed: std::time::Duration::ZERO,
+                                duration,
+                                easing,
+                            });
+                        }
+                        return Ok(CallbackReturn::Return);
+                    }
                     if let Some(active) = &mut state.active {
                         active.writes.push((id, value));
                         return Ok(CallbackReturn::Return);

@@ -12,16 +12,6 @@ menu, the bar's popouts, notifications and the OSD) adds these. Item 1
 bites again there: the bar's popouts keep the same list of areas
 (`popouts.area`), as the dashboard does.
 
-## 6. Watching the scheme change (not an engine gap)
-
-The reference's scheme and light/dark switches go through its own CLI,
-which the sandbox stubs, so whether it animates the change could not be
-filmed; `> scheme ` there lists nothing. The port applies a new scheme at
-once. If the reference cross-fades, every colour binding would need a
-colour `behavior` -- a theme-wide transition (`morf.theme(tokens, {
-transition = { duration = 400 } })`, every token read through it easing to
-its new value) would do it in one place.
-
 ## Engine fixes made in this branch
 
 - A node's hover including its descendants: every node has a read-only
@@ -61,3 +51,6 @@ its new value) would do it in one place.
 - Bindings after construction: a function assigned to a node's property
   is a binding, as in the constructor, and replaces any it had
   (docs/UI.md, "Bindings").
+- A theme-wide colour transition: `morf.theme(tokens, { transition = {
+  duration, easing } })` eases every colour written to it in OkLab, frame by
+  frame; the port's scheme, variant and mode changes cross-fade in 400 ms.

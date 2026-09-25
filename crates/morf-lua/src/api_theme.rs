@@ -108,6 +108,34 @@ pub(crate) fn install_theme_api<'gc>(
                 Some(LuaValue::Nil) | None => None,
                 Some(_) => return Err(HostError("theme `reloadable` is a name".into()).into()),
             };
+            // `transition = { duration = ms, easing = ... }`: a colour
+            // written later eases there instead of jumping.
+            let transition = match option("transition") {
+                Some(LuaValue::Table(spec)) => {
+                    let duration = match spec.get_value(ctx, "duration") {
+                        LuaValue::Integer(ms) if ms >= 0 => ms as f64,
+                        LuaValue::Number(ms) if ms.is_finite() && ms >= 0.0 => ms,
+                        LuaValue::Nil => 300.0,
+                        _ => {
+                            return Err(HostError(
+                                "theme transition `duration` is milliseconds".into(),
+                            )
+                            .into());
+                        }
+                    };
+                    let easing =
+                        crate::lua_values::parse_easing(ctx, spec.get_value(ctx, "easing"))
+                            .map_err(HostError)?;
+                    Some((
+                        std::time::Duration::from_secs_f64(duration / 1000.0),
+                        easing,
+                    ))
+                }
+                Some(LuaValue::Nil) | None => None,
+                Some(_) => {
+                    return Err(HostError("theme `transition` is a table".into()).into());
+                }
+            };
             let source = match option("source") {
                 Some(LuaValue::String(path)) => {
                     Some(expand_home(&path.display_lossy().to_string()))
@@ -180,6 +208,7 @@ pub(crate) fn install_theme_api<'gc>(
             let mut fields = token.fields.borrow_mut();
             fields.derived = derived;
             fields.theme = true;
+            fields.transition = transition;
             if let Some(path) = source {
                 let watched: HashMap<String, SignalId> = source_keys
                     .iter()

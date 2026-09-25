@@ -32,7 +32,8 @@ for name, value in pairs(initial()) do
   local ok, red = pcall(function() return value.r end)
   if type(value) ~= "string" and ok and type(red) == "number" then roles[name] = value end
 end
-M.color = morf.theme(roles)
+-- A new scheme, variant or mode eases every colour there, as one.
+M.color = morf.theme(roles, { transition = { duration = 400, easing = "in_out_cubic" } })
 
 --- Puts every role of scheme `s` in place.
 function M.apply(s)

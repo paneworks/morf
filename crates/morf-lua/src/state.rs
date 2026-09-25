@@ -55,6 +55,9 @@ pub(crate) struct StateFields {
     pub(crate) derived: HashMap<String, StashedClosure>,
     /// A theme: a string written to a field that names a colour becomes one.
     pub(crate) theme: bool,
+    /// A theme's `transition`: a colour written to a token eases there from
+    /// the one on show, over this long, on this curve.
+    pub(crate) transition: Option<(std::time::Duration, morf_scene::Easing)>,
     pub(crate) tables: HashMap<String, luna::StashedUserData>,
     pub(crate) lists: HashMap<String, (luna::StashedUserData, Rc<RefCell<ListModel>>)>,
 }
@@ -387,6 +390,8 @@ pub(crate) struct ReactiveState {
     pub(crate) state_metatable: Option<StashedTable>,
     /// Theme token files being watched.
     pub(crate) theme_sources: Vec<ThemeSource>,
+    /// Theme colours easing to what was written to them.
+    pub(crate) theme_fades: Vec<ThemeFade>,
     /// `morf.prefers` and where its answers come from.
     pub(crate) prefers: Option<Prefers>,
     /// `morf.audio`, installed with the runtime and started on first use.
@@ -690,6 +695,7 @@ impl ReactiveState {
             next_transform_watcher: 0,
             state_metatable: None,
             theme_sources: Vec::new(),
+            theme_fades: Vec::new(),
             prefers: None,
             audio: None,
             toplevels: None,
