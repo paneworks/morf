@@ -30,6 +30,8 @@ return settings.open {
     bar = {
       workspaces = { shown = 5 },
       clock = { twelve_hour = true },
+      -- What the Bluetooth popout's "Open settings" starts.
+      bluetooth_settings = { "blueman-manager" },
     },
     dashboard = {
       -- Opens when the pointer reaches the top edge over it.

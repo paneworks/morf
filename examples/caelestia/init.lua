@@ -56,6 +56,7 @@ end)
 local launcher = require("launcher")
 local dashboard = require("dashboard")
 local session = require("session")
+require("popouts")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -123,6 +124,13 @@ end
 morf.ipc.launcher = verb(launcher.drawer)
 morf.ipc.dashboard = verb(dashboard.drawer)
 morf.ipc.session = verb(session.drawer)
+-- `popout NAME` opens the bar's popout NAME (network, bluetooth, power);
+-- `popout` alone shuts it.
+morf.ipc.popout = function(name)
+  local popouts = require("popouts")
+  popouts.current:set(name or "")
+  return popouts.current:get()
+end
 morf.ipc.close = function()
   drawer.close_all()
   return true

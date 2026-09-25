@@ -62,6 +62,9 @@ local net = quiet_connect("networkmanager")
 local bt = quiet_connect("bluez")
 local power = quiet_connect("upower")
 
+-- The services themselves, for the popouts (nil when absent).
+M.net, M.bt, M.upower = net, bt, power
+
 M.network = {}
 
 --- A Material Symbols name for the connection.

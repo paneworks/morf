@@ -184,8 +184,13 @@ end
 -- ---------------------------------------------------------------- status --
 
 local function status()
+  -- Each icon opens its popout on hover (popouts.lua).
+  local popouts = require("popouts")
+  local POPOUT = { ["status-network"] = "network", ["status-bluetooth"] = "bluetooth", ["status-power"] = "power" }
   local function slot(name, id)
-    return kit.centred(40, 30, kit.icon(name, 18, function() return C.secondary end), { id = id })
+    return popouts.trigger(POPOUT[id],
+      kit.centred(40, 30, kit.icon(name, 18, function() return C.secondary end)),
+      { id = id, width = 40, height = 30 })
   end
   return ui.Rect {
     id = "status",
@@ -215,6 +220,8 @@ function M.build()
     id = "bar",
     width = theme.BAR,
     anchors = { top = true, bottom = true, left = true },
+    -- Anywhere on the bar keeps an open popout open.
+    require("popouts").area { anchors = { fill = true }, z = -1 },
     ui.Flex {
       anchors = { fill = true },
       direction = "column",

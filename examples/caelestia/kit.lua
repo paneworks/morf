@@ -6,6 +6,8 @@ local theme = require("theme")
 
 local M = {}
 
+local function C() return theme.color end
+
 --- The X keysyms `on_key_pressed` is handed, by name.
 M.KEY = {
   Up = 0xff52, Down = 0xff54, Left = 0xff51, Right = 0xff53,
@@ -76,6 +78,59 @@ function M.hover(area, color, radius)
   }
   ui.reparent(bg, area)
   return area
+end
+
+-- ---------------------------------------------------------------- controls --
+
+--- A Material 3 switch, 52 x 32: `on()` (a binding) and `on_toggled(now)`.
+--- Off, an outlined dark track and a small handle with a cross; on, a
+--- primary track and a large handle with a tick.
+function M.switch(spec)
+  local motion = { duration = theme.duration.small, easing = theme.ease.standard }
+  local function on() return spec.on() == true end
+  return ui.MouseArea {
+    id = spec.id, width = 52, height = 32, cursor = "pointer",
+    anchors = spec.anchors, x = spec.x, y = spec.y,
+    on_clicked = function() if spec.on_toggled then spec.on_toggled(not on()) end end,
+    ui.Rect {
+      anchors = { fill = true }, radius = 16,
+      color = function() return on() and C().primary or C().surfaceContainerHighest end,
+      border_width = function() return on() and 0 or 2 end,
+      border_color = function() return C().outline end,
+      behavior = { color = motion },
+    },
+    ui.Rect {
+      y = 4, width = 24, height = 24, radius = 12,
+      x = function() return on() and 24 or 4 end,
+      color = function() return on() and C().onPrimary or C().outline end,
+      behavior = { x = motion, color = motion },
+      M.icon(function() return on() and "check" or "close" end, 16, function()
+        return on() and C().primary or C().surfaceContainerHighest
+      end, { anchors = { center_in = true } }),
+    },
+  }
+end
+
+--- A pill-shaped filled button: `icon`, `label`, `on_clicked`, `width`,
+--- `height` (32), and `color`/`ink` (primaryContainer and its ink).
+function M.pill(spec)
+  local h = spec.height or 32
+  local color = spec.color or function() return C().primaryContainer end
+  local ink = spec.ink or function() return C().onPrimaryContainer end
+  local area = ui.MouseArea {
+    id = spec.id, width = spec.width, height = h, cursor = "pointer",
+    x = spec.x, y = spec.y, anchors = spec.anchors,
+    on_clicked = spec.on_clicked,
+    ui.Row {
+      anchors = { center_in = true }, gap = 8, align = "center",
+      spec.icon and M.icon(spec.icon, 18, ink) or nil,
+      M.text { text = spec.label, font_size = theme.size.normal, color = ink },
+    },
+  }
+  return M.hover(area, function(hovered)
+    local c = color()
+    return hovered and c:mix(ink(), 0.08) or c
+  end, h / 2)
 end
 
 -- ----------------------------------------------------------------- gauges --
