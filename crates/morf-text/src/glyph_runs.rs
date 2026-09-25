@@ -133,10 +133,23 @@ impl TextSystem {
         };
         let physical = crate::style::physical_glyphs_styled(cached, origin, scale);
         let axes = cached.axes.clone();
+        let optical = cached.optical;
+        // A run set at a size of its own was shaped at that size's `opsz`.
+        let mut sized = axes.clone();
         physical
             .into_iter()
             .filter_map(|(glyph, tint, font_size)| {
-                let mut raster = self.raster_glyph_in(&glyph, field, &axes)?;
+                let axes = if optical && font_size > 0.0 {
+                    for axis in &mut sized {
+                        if &axis.tag == b"opsz" {
+                            axis.value = font_size;
+                        }
+                    }
+                    &sized
+                } else {
+                    &axes
+                };
+                let mut raster = self.raster_glyph_in(&glyph, field, axes)?;
                 raster.tint = tint;
                 raster.font_size = font_size;
                 Some(raster)

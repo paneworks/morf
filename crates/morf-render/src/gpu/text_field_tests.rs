@@ -3,7 +3,7 @@ use morf_scene::{Color, NodeHandle};
 
 use crate::*;
 
-use crate::gpu::field_tests::{alpha_at, render_readback};
+use crate::gpu::field_tests::{alpha_at, read_frame, render_readback};
 
 /// A text command, sized and styled, with everything else left alone.
 pub(crate) fn text_command(
@@ -237,4 +237,102 @@ pub(crate) fn a_fill_axis_fills_an_icon_on_screen() {
         half > hollow * 1.2 && solid > half * 1.2,
         "filling in adds ink step by step: {hollow} {half} {solid}"
     );
+}
+
+/// Google Sans Flex, which has `wdth` and `opsz` axes that move advances.
+fn flex_font() -> Option<std::path::PathBuf> {
+    let store = "/nix/store/id27jgbl1sdj8mw04yrwx5bgsv4ap2xg-source/assets/google-sans-flex/GoogleSansFlex-VariableFont_GRAD,ROND,opsz,slnt,wdth,wght.ttf";
+    std::env::var_os("MORF_TEST_VARIABLE_FONT")
+        .map(std::path::PathBuf::from)
+        .into_iter()
+        .chain([std::path::PathBuf::from(store)])
+        .chain(morf_text::family_files("Google Sans Flex"))
+        .find(|path| {
+            morf_text::file_axes(path)
+                .iter()
+                .any(|axis| &axis.tag == b"wdth")
+        })
+}
+
+/// The rightmost column of a readback with any ink in it, plus one.
+fn ink_right(pixels: &[u8], size: u32) -> u32 {
+    (0..size)
+        .rev()
+        .find(|x| (0..size).any(|y| alpha_at(pixels, size, *x, y) > 32))
+        .map_or(0, |x| x + 1)
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+pub(crate) fn a_wdth_axis_is_drawn_as_wide_as_it_measures() {
+    // An axis that changes advances, through the whole path: the text is
+    // shaped at the axis, laid out by that width, and drawn with its glyphs
+    // where the shaper put them -- so the ink ends where the measured width
+    // says the line does, narrow or wide.
+    let Some(path) = flex_font() else {
+        eprintln!("no Google Sans Flex here; skipped");
+        return;
+    };
+    const SIZE: u32 = 256;
+    let text = "nnnnnn";
+    let mut scene = morf_scene::Scene::new();
+    let node = scene.create(morf_scene::Element::Text);
+    let style = |wdth: f32| morf_layout::TextStyle {
+        axes: vec![morf_layout::FontAxis {
+            tag: *b"wdth",
+            value: wdth,
+        }],
+        ..morf_layout::TextStyle::default()
+    };
+    let command = |wdth: f32| {
+        let mut command = text_command(node, text, 32.0, DistanceFieldStyle::default());
+        if let DrawCommand::Text {
+            family,
+            font_source,
+            style: drawn,
+            ..
+        } = &mut command
+        {
+            *family = "Google Sans Flex".to_owned();
+            *font_source = path.to_string_lossy().into_owned();
+            *drawn = style(wdth);
+        }
+        DrawList {
+            commands: vec![command],
+            layers: Vec::new(),
+        }
+    };
+    let measured = |wdth: f32| {
+        use morf_layout::TextMeasurer as _;
+        let mut text_system = morf_text::TextSystem::new();
+        text_system
+            .measure(
+                node,
+                text,
+                "Google Sans Flex",
+                32.0,
+                morf_layout::TextOptions {
+                    font_source: Some(path.to_string_lossy().into_owned()),
+                    style: style(wdth),
+                    ..morf_layout::TextOptions::default()
+                },
+            )
+            .width as f32
+    };
+    let mut backend = pollster::block_on(WgpuBackend::new(SIZE, SIZE)).unwrap();
+    let mut right = |wdth| ink_right(&read_frame(&mut backend, &command(wdth), SIZE), SIZE) as f32;
+    let (narrow, wide) = (right(50.0), right(151.0));
+    let (narrow_width, wide_width) = (measured(50.0), measured(151.0));
+    assert!(
+        wide > narrow * 1.3,
+        "wider is drawn wider: {narrow} against {wide}"
+    );
+    // The last `n` ends a right side bearing short of its advance: a pixel
+    // or two at 32 px, never past it.
+    for (ink, width) in [(narrow, narrow_width), (wide, wide_width)] {
+        assert!(
+            ink <= width + 1.0 && ink >= width - 5.0,
+            "ink ends at {ink}, measured {width}"
+        );
+    }
 }

@@ -5,11 +5,8 @@ use cosmic_text::{Align, Buffer, Shaping, Wrap};
 use morf_layout::{Size, TextAlignment, TextMeasurer, TextOptions};
 use morf_scene::NodeHandle;
 
-use crate::style::{run_gain, text_attrs, text_metrics};
-use crate::{
-    BufferKey, CachedBuffer, TextInput, TextSystem, elided_text, normalize_font_weight,
-    resolve_family,
-};
+use crate::style::{run_gain, shaping_weight, text_attrs, text_metrics};
+use crate::{BufferKey, CachedBuffer, TextInput, TextSystem, elided_text, resolve_family};
 
 impl TextSystem {
     /// Shapes and measures the text a node is morphing towards.
@@ -39,14 +36,9 @@ impl TextSystem {
     ) -> Size {
         self.load_font_source(options.font_source.as_deref());
         let size = size.max(1.0) as f32;
-        // A `wght` among the axes is the weight: shaping applies it, since
-        // it is the one axis that moves glyphs, and the rasteriser follows.
-        let font_weight = normalize_font_weight(
-            options
-                .style
-                .axis(b"wght")
-                .map_or(options.font_weight, f64::from),
-        );
+        // A `wght` among the axes is the weight; the other axes are shaped as
+        // variations, and the rasteriser follows both.
+        let font_weight = shaping_weight(&options);
         let input = TextInput {
             text: text.to_owned(),
             family: family.to_owned(),
@@ -68,9 +60,12 @@ impl TextSystem {
             alignment: options.alignment,
             rich: None,
             axes: Vec::new(),
+            optical: false,
         });
-        cached.axes = crate::variations::raster_axes(&options.style.axes);
         if cached.input.as_ref() != Some(&input) {
+            cached.axes = options.style.variation_axes(size);
+            cached.optical = options.style.optical_sizing == morf_layout::OpticalSizing::Auto
+                && options.style.axis(b"opsz").is_none();
             cached.buffer.set_metrics_and_size(
                 metrics,
                 options.width.map(|value| value as f32),

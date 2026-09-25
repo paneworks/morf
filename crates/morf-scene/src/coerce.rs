@@ -103,6 +103,17 @@ pub(crate) fn coerce(
                 )),
             };
         }
+        "optical_sizing" if matches!(element, Element::Text | Element::TextInput) => {
+            // CSS's words, or a boolean for whether it is on.
+            return match &value {
+                Value::Bool(true) => Ok(Value::String("auto".to_owned())),
+                Value::Bool(false) => Ok(Value::String("none".to_owned())),
+                Value::String(name) if matches!(name.as_str(), "auto" | "none") => Ok(value),
+                _ => Err(invalid(
+                    "optical_sizing is \"auto\", \"none\", true or false".to_owned(),
+                )),
+            };
+        }
         "anchors" => {
             // An anchor name nothing reads used to be dropped without a word,
             // and a node with a misspelt `center_in` simply sat in the corner.

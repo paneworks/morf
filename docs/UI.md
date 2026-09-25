@@ -876,16 +876,24 @@ A variable font's axes are `axes = { FILL = 1, GRAD = 0, opsz = 24, wght =
 `Text` and `TextInput`. It is a map of numbers, so a `behavior` on `axes`
 moves every axis in it at once, the way Material Symbols fills an icon in
 when it is selected; give each state the same keys, or the map jumps
-rather than moves. `wght` is the weight (it wins over `font_weight`) and is
-the one axis shaping sees, so it moves the glyphs; the others are applied
-where glyphs are drawn and leave the layout where it is -- an axis that
-changes advances on some face (`opsz`, say) keeps the default ones. A tag
-the face does not have is ignored, and a face with none of them is drawn
-as it always was. Pictures of glyphs are kept per point of the design
-space, quantised to 1/64 of the way from an axis's default to either end,
-so an animation through an axis costs at most 65 pictures of each glyph
+rather than moves. `wght` is the weight (it wins over `font_weight`). Every
+axis is shaped as well as drawn, so one that changes advances -- `wdth`, or
+`opsz` on a face like Google Sans Flex or Roboto Flex -- changes the width
+the text measures, and what is measured is what is drawn; an axis that
+animates re-lays the text out, and its parent with it. A tag the face does
+not have is ignored, and a face with none of them is drawn as it always
+was. Glyphs are shaped and drawn per point of the design space, quantised
+to 1/64 of the way from an axis's default to either end, so an animation
+through an axis costs at most 65 pictures (and layouts) of each glyph
 however many frames it takes. `morf.font_axes(family)` lists what an
 installed family can move: `{ tag, min, default, max }` for each axis.
+
+Optical sizing is automatic, as CSS's `font-optical-sizing: auto`: a face
+with an `opsz` axis is set at `opsz` equal to the font size in pixels (a
+run of `spans` with a size of its own at that size), so small labels get
+the face's wider, looser small-size design and large ones its tighter
+display cut. `axes = { opsz = ... }` names a size of its own;
+`optical_sizing = "none"` (or `false`) keeps the face's default.
 
 ```lua
 ui.Text {

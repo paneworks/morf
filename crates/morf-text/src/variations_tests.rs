@@ -24,6 +24,34 @@ pub(crate) fn font_with(tag: &[u8; 4]) -> Option<(String, PathBuf)> {
     ] {
         paths.extend(crate::family_files(family));
     }
+    first_with(paths, tag)
+}
+
+/// A face for setting words in with the axis `tag`: not an icon font.
+/// Google Sans Flex (`opsz`, `wdth` and more) from the Nix store when it is
+/// there, then Inter and Adwaita Sans (`opsz`).
+pub(crate) fn text_font_with(tag: &[u8; 4]) -> Option<(String, PathBuf)> {
+    let mut paths: Vec<PathBuf> = std::env::var_os("MORF_TEST_VARIABLE_FONT")
+        .map(|paths| std::env::split_paths(&paths).collect())
+        .unwrap_or_default();
+    paths.push(PathBuf::from(
+        "/nix/store/id27jgbl1sdj8mw04yrwx5bgsv4ap2xg-source/assets/google-sans-flex/GoogleSansFlex-VariableFont_GRAD,ROND,opsz,slnt,wdth,wght.ttf",
+    ));
+    paths.push(PathBuf::from(
+        "/nix/store/shisxgcl8mqahsi4wxr67s44pdwxkjgp-inter-4.1/share/fonts/truetype/InterVariable.ttf",
+    ));
+    for family in [
+        "Google Sans Flex",
+        "Inter Variable",
+        "Inter",
+        "Adwaita Sans",
+    ] {
+        paths.extend(crate::family_files(family));
+    }
+    first_with(paths, tag).filter(|(family, _)| !family.contains("Symbols"))
+}
+
+fn first_with(paths: Vec<PathBuf>, tag: &[u8; 4]) -> Option<(String, PathBuf)> {
     paths.into_iter().find_map(|path| {
         if !crate::file_axes(&path).iter().any(|axis| &axis.tag == tag) {
             return None;
@@ -35,7 +63,7 @@ pub(crate) fn font_with(tag: &[u8; 4]) -> Option<(String, PathBuf)> {
     })
 }
 
-fn options(path: &std::path::Path, axes: &[(&[u8; 4], f32)]) -> TextOptions {
+pub(crate) fn options(path: &std::path::Path, axes: &[(&[u8; 4], f32)]) -> TextOptions {
     TextOptions {
         font_source: Some(path.to_string_lossy().into_owned()),
         style: TextStyle {

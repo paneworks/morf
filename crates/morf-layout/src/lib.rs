@@ -28,7 +28,9 @@ pub use layout::{Layout, TransformTracker, TransformWatcher};
 pub use reparent::ReparentTransition;
 pub use stretch::observe_stretch;
 pub use text_input::{InputDisplay, InputShape};
-pub use text_style::{FontAxis, FontStretch, FontStyle, LineHeight, TextStyle, TextStyleKey};
+pub use text_style::{
+    FontAxis, FontStretch, FontStyle, LineHeight, OpticalSizing, TextStyle, TextStyleKey,
+};
 pub use transform::{node_transform, node_transform_unstretched};
 #[cfg(test)]
 mod tests;

@@ -224,3 +224,86 @@ fn axes_are_a_map_of_tags_a_behavior_moves_like_any_number() {
         "an empty table is an empty map"
     );
 }
+
+#[test]
+fn optical_sizing_is_auto_or_none_or_a_boolean() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "optical.lua",
+            br##"
+                local ui = require("morf.ui")
+                ui.Text { text = "a" }
+                ui.Text { text = "a", optical_sizing = false }
+                ui.Text { text = "a", optical_sizing = "auto" }
+                assert(not pcall(ui.Text, { optical_sizing = "yes" }))
+                assert(not pcall(ui.Text, { optical_sizing = 1 }))
+            "##,
+        )
+        .unwrap();
+    let scene = runtime.scene();
+    let sizing = |index: usize| {
+        scene
+            .current(scene.roots()[index], "optical_sizing")
+            .unwrap()
+    };
+    assert_eq!(sizing(0), &Value::String("auto".into()));
+    assert_eq!(sizing(1), &Value::String("none".into()));
+    assert_eq!(sizing(2), &Value::String("auto".into()));
+}
+
+/// Google Sans Flex, which has a `wdth` axis, when this machine has it.
+fn wide_face() -> Option<String> {
+    let store = "/nix/store/id27jgbl1sdj8mw04yrwx5bgsv4ap2xg-source/assets/google-sans-flex/GoogleSansFlex-VariableFont_GRAD,ROND,opsz,slnt,wdth,wght.ttf";
+    std::iter::once(std::path::PathBuf::from(store))
+        .chain(morf_text::family_files("Google Sans Flex"))
+        .find(|path| {
+            morf_text::file_axes(path)
+                .iter()
+                .any(|axis| &axis.tag == b"wdth")
+        })
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[test]
+fn an_axis_that_widens_text_moves_what_is_laid_out_after_it() {
+    let Some(face) = wide_face() else {
+        eprintln!("no Google Sans Flex here; skipped");
+        return;
+    };
+    let mut runtime = Runtime::default();
+    let source = format!(
+        r##"
+            local morf = require("morf")
+            local ui = require("morf.ui")
+            local wide = morf.signal("wide", false)
+            ui.Row {{
+                ui.Text {{
+                    text = "Terminal emulator", font_size = 16,
+                    font_family = "Google Sans Flex", font_source = {face:?},
+                    axes = function() return {{ wdth = wide:get() and 151 or 75 }} end,
+                }},
+                ui.Rect {{ width = 10, height = 10 }},
+            }}
+            morf.ipc.widen = function() wide:set(true) end
+        "##
+    );
+    runtime.execute("wdth.lua", source.as_bytes()).unwrap();
+    let root = runtime.scene().roots()[0];
+    let after = runtime.scene().children(root).unwrap()[1];
+    let available = morf_layout::Size {
+        width: 800.0,
+        height: 100.0,
+    };
+    let mut text = morf_text::TextSystem::new();
+    let mut layout = runtime.compute_layout(root, available, &mut text).unwrap();
+    let before = layout.geometry(after).unwrap().x;
+    runtime.call_ipc("widen", &[]).unwrap();
+    runtime
+        .update_layout(&mut layout, root, available, &mut text)
+        .unwrap();
+    let moved = layout.geometry(after).unwrap().x;
+    assert!(moved > before * 1.3, "{before} -> {moved}");
+    let whole = runtime.compute_layout(root, available, &mut text).unwrap();
+    assert_eq!(moved, whole.geometry(after).unwrap().x, "as a whole pass");
+}

@@ -1,21 +1,21 @@
 // Glyphs of a variable font set at axes of the configuration's choosing.
 //
-// cosmic-text shapes and rasterises a variable font at one point of its design
-// space: the default on every axis but `wght`, which it takes from the weight.
-// A text node's `axes` reach further -- `FILL`, `GRAD`, `opsz`, anything a
-// font defines -- and those are applied here, where glyphs are rasterised and
-// their outlines measured, with the font's own swash scaler.
+// Upstream cosmic-text shapes and rasterises a variable font at one point of
+// its design space: the default on every axis but `wght`, which it takes from
+// the weight. A text node's `axes` reach further -- `FILL`, `GRAD`, `opsz`,
+// `wdth`, anything a font defines -- and so does optical sizing, which sets
+// `opsz` from the size. The vendored cosmic-text shapes a run at those axes
+// (`Attrs::font_variations`), so an axis that changes advances changes the
+// layout; the glyphs are rasterised and their outlines measured here, with
+// the font's own swash scaler, at the point the shaper used: both ask
+// `Font::variation_coords`.
 //
 // The atlas and the field cache key on the point in design space as well as on
-// the glyph, so the location is quantised first: in normalized units (-1 to 1
-// across each axis, whatever its range in the font's own), to 1/64 of the way
-// from the default to either end. An animation of `FILL` from 0 to 1 then asks
-// for at most 65 pictures of each glyph however many frames it takes, and each
+// the glyph, so that point is quantised: in normalized units (-1 to 1 across
+// each axis, whatever its range in the font's own), to 1/64 of the way from
+// the default to either end. An animation of `FILL` from 0 to 1 then asks for
+// at most 65 pictures of each glyph however many frames it takes, and each
 // step is a quarter of a percent of the axis -- nothing an eye can see.
-//
-// Shaping still sees only `wght`. The axes an icon font animates -- fill,
-// grade -- are designed not to change a glyph's advance; one that does (an
-// optical size on some faces) keeps the default advances.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
@@ -25,10 +25,6 @@ use morf_layout::FontAxis;
 use morf_scene::FastMap;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::zeno::{Angle, Command, Format, Transform, Vector};
-
-/// One step of the quantised design space, in normalized F2Dot14 units:
-/// 1/64 of the way from the default to an end.
-const COORD_STEP: f32 = 256.0;
 
 /// Pictures and outlines kept at most, each; past it the cache starts over.
 /// An animation through the whole of an axis asks for 65 per glyph, so this
@@ -54,12 +50,13 @@ pub(crate) struct Variations {
     outlines: FastMap<u64, Option<Rc<[Command]>>>,
 }
 
-/// The axes that are not `wght`, which shaping already applies as the weight.
-pub(crate) fn raster_axes(axes: &[FontAxis]) -> Vec<FontAxis> {
-    axes.iter()
-        .filter(|axis| &axis.tag != b"wght")
-        .copied()
-        .collect()
+/// Axes as the shaper takes them.
+pub(crate) fn font_variations(axes: &[FontAxis]) -> cosmic_text::FontVariations {
+    let mut variations = cosmic_text::FontVariations::new();
+    for axis in axes {
+        variations.set(axis.tag, axis.value);
+    }
+    variations
 }
 
 /// A key for a glyph at a point: its own key and the point.
@@ -69,10 +66,6 @@ pub(crate) fn varied_key(key: &CacheKey, coords: &[i16]) -> u64 {
     coords.hash(&mut hasher);
     0x5641_5249_u64.hash(&mut hasher);
     hasher.finish()
-}
-
-fn quantise(coord: i16) -> i16 {
-    ((f32::from(coord) / COORD_STEP).round() * COORD_STEP).clamp(-16384.0, 16384.0) as i16
 }
 
 impl Variations {
@@ -98,45 +91,12 @@ impl Variations {
         if self.coords.len() >= CAPACITY {
             self.coords.clear();
         }
+        // The shaper asks the same question of the same face, so the glyphs
+        // are drawn at exactly the point their advances were measured at.
         let coords = fonts
             .get_font(key.font_id, key.font_weight)
-            .and_then(|font| {
-                let face = font.as_swash();
-                let variations = face.variations();
-                let named = axes
-                    .iter()
-                    .filter(|axis| {
-                        variations
-                            .find_by_tag(u32::from_be_bytes(axis.tag))
-                            .is_some()
-                    })
-                    .map(|axis| (u32::from_be_bytes(axis.tag), axis.value))
-                    .collect::<Vec<_>>();
-                if named.is_empty() {
-                    return None;
-                }
-                // The weight is shaping's, and a variable face's `wght` moves
-                // with it exactly as cosmic-text's own rasteriser moves it.
-                let weight = variations
-                    .find_by_tag(u32::from_be_bytes(*b"wght"))
-                    .map(|axis| {
-                        (
-                            u32::from_be_bytes(*b"wght"),
-                            f32::from(key.font_weight.0).clamp(axis.min_value(), axis.max_value()),
-                        )
-                    });
-                let settings = named.into_iter().chain(weight).map(|(tag, value)| {
-                    let clamped = variations.find_by_tag(tag).map_or(value, |axis| {
-                        value.clamp(axis.min_value(), axis.max_value())
-                    });
-                    (tag, clamped)
-                });
-                let coords = variations
-                    .normalized_coords(settings)
-                    .map(quantise)
-                    .collect::<Vec<_>>();
-                Some(Rc::from(coords))
-            });
+            .and_then(|font| font.variation_coords(key.font_weight, &font_variations(axes)))
+            .map(Rc::from);
         self.coords.insert(id, coords.clone());
         coords
     }
