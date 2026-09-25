@@ -200,12 +200,14 @@ theme.size = {
 
 -- -------------------------------------------------------------- motion --
 
--- The curves Settings offers, as cubic Beziers so they read the same here
--- as in Qt: OutCubic, OutQuint, OutBack, Linear.
+-- The curves Settings offers: OutCubic, OutQuint, OutBack, Linear. The
+-- engine's own named curves, which are Qt's formulas exactly (OutBack with
+-- Qt's overshoot, 1.70158) -- not the Bezier approximations of them, which
+-- leave a 380 ms morph a few pixels off Qt's on most of its frames.
 theme.curves = {
-  OutCubic = { x1 = 0.33, y1 = 1, x2 = 0.68, y2 = 1 },
-  OutQuint = { x1 = 0.22, y1 = 1, x2 = 0.36, y2 = 1 },
-  OutBack = { x1 = 0.34, y1 = 1.56, x2 = 0.64, y2 = 1 },
+  OutCubic = "out_cubic",
+  OutQuint = "out_quint",
+  OutBack = "out_back",
   Linear = "linear",
 }
 
@@ -220,11 +222,13 @@ function theme.duration_island_gone() return theme.duration_morph() + 40 end
 
 --- A behavior entry at one of the three speeds: `theme.behave("morph")`.
 --- Zero motion is a snap, not a zero-length tween the engine refuses.
+--- A write mid-flight starts over from where the value is, the whole
+--- duration and curve again, as a Qt Behavior does.
 function theme.behave(speed)
   local ms = speed == "fast" and theme.duration_fast()
     or speed == "medium" and theme.duration_medium()
     or theme.duration_morph()
-  return { duration = math.max(1, ms), easing = theme.easing() }
+  return { duration = math.max(1, ms), easing = theme.easing(), retarget = "restart" }
 end
 
 return theme

@@ -297,11 +297,30 @@ local function layer_loader(name, predicate, build, anchors)
   return ui.Item {
     anchors = anchors or { fill = true },
     opacity = function() return predicate() and 1 or 0 end,
-    behavior = { opacity = { duration = 110, easing = "out_cubic" } },
+    behavior = { opacity = { duration = 110, easing = theme.easing() } },
     enter = { opacity = 0 },
     ui.Loader {
       anchors = { fill = true },
       active = function() return keep:get() end,
+      source = build,
+    },
+  }
+end
+
+-- An open panel's contents, which DynamicIsland.qml's `panelLoader` holds:
+-- built the moment the panel opens and faded in over the medium duration
+-- while the shape grows round them, and let go the moment it closes -- the
+-- shape shrinks back empty. Kept on screen through the shrink, a panel
+-- reads as held open a beat after it was dismissed.
+local function panel_loader(predicate, build)
+  return ui.Item {
+    anchors = { fill = true },
+    opacity = function() return predicate() and 1 or 0 end,
+    behavior = { opacity = theme.behave("medium") },
+    enter = { opacity = 0 },
+    ui.Loader {
+      anchors = { fill = true },
+      active = predicate,
       source = build,
     },
   }
@@ -329,7 +348,7 @@ function island.build(place)
   -- One loader per panel, so switching panels swaps contents while the
   -- capsule morphs between their two sizes.
   for name, panel in pairs(island.panels) do
-    children[#children + 1] = layer_loader("panel." .. name,
+    children[#children + 1] = panel_loader(
       function() return state.open_panel() == name end,
       function()
         -- At the panel's declared size, not the capsule's: the capsule is

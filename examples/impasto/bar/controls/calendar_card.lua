@@ -92,7 +92,17 @@ function M.build(options)
   local padding = options.padding or 14
   local inner_w, inner_h = width - 2 * padding, height - 2 * padding
   local offset = controls.signal("calendar.offset", 0)
-  local cells = function() M.today:get() return M.cells(offset:get()) end
+  -- Worked out once per day and month shown, not once per reader: every
+  -- cell's half dozen bindings ask for the grid, and building it for each
+  -- was 42 x 42 tables and a pass over the calendar per binding -- twenty
+  -- milliseconds of the control centre opening. Both signals are still read
+  -- on every call, so the bindings still follow them.
+  local cached_key, cached = nil, nil
+  local cells = function()
+    local key = M.today:get() .. "|" .. offset:get()
+    if key ~= cached_key then cached_key, cached = key, M.cells(offset:get()) end
+    return cached
+  end
   local header_h, weekday_h, gap = 22, 16, 9
   local cell_w = (inner_w - 6 * 2) / 7
   local cell_h = (inner_h - header_h - gap - weekday_h - 2 - 5 * 2) / 6
