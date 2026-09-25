@@ -790,56 +790,14 @@ impl RenderBackend for WgpuBackend {
             buffers.present(&self.queue, damage);
         }
         if let Some(profile) = &self.profile {
-            let area = |rect: DamageRect| u64::from(rect.width) * u64::from(rect.height);
-            let pixels = damage.iter().map(|rect| area(*rect)).sum();
-            // What the damage makes each command shade: its reach, cut to
-            // its clip, over every damage rectangle.
-            let mut shaded: Vec<(u64, usize)> = list
-                .commands
-                .iter()
-                .enumerate()
-                .map(|(index, command)| {
-                    let clip = command
-                        .clip()
-                        .and_then(|clip| physical_damage(clip, scale_120));
-                    let total = damage
-                        .iter()
-                        .filter_map(|rect| {
-                            let hit = intersect_damage(*rect, reach[index]?)?;
-                            match (command.clip(), clip) {
-                                (Some(_), None) => None,
-                                (_, Some(clip)) => intersect_damage(hit, clip),
-                                (None, None) => Some(hit),
-                            }
-                        })
-                        .map(area)
-                        .sum::<u64>();
-                    (total, index)
-                })
-                .filter(|(total, _)| *total > 0)
-                .collect();
-            shaded.sort_unstable_by(|left, right| right.cmp(left));
-            let heaviest = shaded
-                .iter()
-                .take(4)
-                .map(|(total, index)| {
-                    let name = format!("{:?}", list.commands[*index]);
-                    let kind = name.split([' ', '{', '(']).next().unwrap_or("?").to_owned();
-                    let layered = if command_layers[*index].is_some() {
-                        " in a layer"
-                    } else {
-                        ""
-                    };
-                    format!("{kind}#{index}{layered} {total}")
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            profile.report(
-                &self.device,
-                pixels,
-                (shaded.iter().map(|(total, _)| total).sum(), shaded.len()),
-                &heaviest,
+            let shading = super::profile::Shading::of(
+                list,
+                damage,
+                &reach,
+                |command| command_layers[command].is_some(),
+                scale_120,
             );
+            profile.report(&self.device, &shading);
         }
         Ok(())
     }

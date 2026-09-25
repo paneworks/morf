@@ -9,6 +9,10 @@
 //! Each frame waits for its timestamps, so it is for measuring only. On a
 //! device without timestamp queries inside encoders it prints nothing.
 
+use super::targets::intersect_damage;
+use crate::DamageRect;
+use crate::effects::physical_damage;
+
 /// The stages timestamps are written between.
 pub(crate) const MARKS: [&str; 4] = ["start", "layers", "surface", "present"];
 
@@ -79,16 +83,15 @@ impl GpuProfile {
         encoder.copy_buffer_to_buffer(&self.resolved, 0, &self.readback, 0, self.resolved.size());
     }
 
-    /// Waits for the frame and prints what each stage took. `shaded` is how
-    /// many pixels the commands the damage reaches cover, and how many
-    /// commands; `heaviest` names the largest.
-    pub(crate) fn report(
-        &self,
-        device: &wgpu::Device,
-        pixels: u64,
-        (shaded, commands): (u64, usize),
-        heaviest: &str,
-    ) {
+    /// Waits for the frame and prints what each stage took, and what the
+    /// damage made the commands shade.
+    pub(crate) fn report(&self, device: &wgpu::Device, shading: &Shading) {
+        let Shading {
+            pixels,
+            shaded,
+            commands,
+            heaviest,
+        } = shading;
         let slice = self.readback.slice(..);
         let (send, receive) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -120,7 +123,73 @@ impl GpuProfile {
             "{} gpu profile {total:.2} ms for {pixels} damaged px: {}; {commands} commands shade {shaded} px ({:.1}x), most {heaviest}",
             super::present::stamp(),
             parts.join(", "),
-            shaded as f64 / pixels.max(1) as f64,
+            *shaded as f64 / (*pixels).max(1) as f64,
         );
+    }
+}
+
+/// What a frame's damage made its commands shade: each command's reach, cut
+/// to its clip, over every damage rectangle. An estimate -- a large field
+/// skips the tiles it cannot reach -- but it names what a frame is paying
+/// for.
+pub(crate) struct Shading {
+    /// Damaged pixels.
+    pixels: u64,
+    /// Pixels the commands the damage reaches cover, together.
+    shaded: u64,
+    /// How many commands the damage reaches.
+    commands: usize,
+    /// The four that shade the most.
+    heaviest: String,
+}
+
+impl Shading {
+    pub(crate) fn of(
+        list: &crate::DrawList,
+        damage: &[DamageRect],
+        reach: &[Option<DamageRect>],
+        layered: impl Fn(usize) -> bool,
+        scale_120: u32,
+    ) -> Self {
+        let area = |rect: DamageRect| u64::from(rect.width) * u64::from(rect.height);
+        let mut shaded: Vec<(u64, usize)> = list
+            .commands
+            .iter()
+            .enumerate()
+            .map(|(index, command)| {
+                let clip = command.clip().map(|clip| physical_damage(clip, scale_120));
+                let total = damage
+                    .iter()
+                    .filter_map(|rect| {
+                        let hit = intersect_damage(*rect, reach[index]?)?;
+                        match clip {
+                            Some(clip) => intersect_damage(hit, clip?),
+                            None => Some(hit),
+                        }
+                    })
+                    .map(area)
+                    .sum::<u64>();
+                (total, index)
+            })
+            .filter(|(total, _)| *total > 0)
+            .collect();
+        shaded.sort_unstable_by(|left, right| right.cmp(left));
+        let heaviest = shaded
+            .iter()
+            .take(4)
+            .map(|(total, index)| {
+                let name = format!("{:?}", list.commands[*index]);
+                let kind = name.split([' ', '{', '(']).next().unwrap_or("?");
+                let inside = if layered(*index) { " in a layer" } else { "" };
+                format!("{kind}#{index}{inside} {total}")
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        Self {
+            pixels: damage.iter().map(|rect| area(*rect)).sum(),
+            shaded: shaded.iter().map(|(total, _)| total).sum(),
+            commands: shaded.len(),
+            heaviest,
+        }
     }
 }
