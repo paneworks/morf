@@ -143,6 +143,26 @@ gives bars. Options (`spectrum.DEFAULTS`): `bars`, `rate_hz`, `noise`,
 `smoothing`, `gravity`, `spread`, `attack`, `release`, `auto`,
 `sensitivity`.
 
+## lyrics
+
+`lib/lyrics.lua` reads LRC (several times a line, `[offset:]`, word
+timings dropped), finds the line for a moment, and finds lyrics for a
+track: an `.lrc` beside the playing file, then lrclib.net (keyless), cached
+on disk for a week (a miss too).
+
+```lua
+local lyrics = require("lib.lyrics")
+local follow = lyrics.follow(require("lib.mpris").connect())
+ui.Text { text = function() return follow.line:get() end }
+```
+
+| call | what |
+|------|------|
+| `lyrics.parse(text)` | `{ lines = { { time, text } }, tags, synced }` |
+| `lyrics.index_at(parsed, seconds)` | the line being sung (0 before the first) |
+| `lyrics.find(track, on_done, opts)` | `on_done(parsed, source)` (`file`, `cache`, `lrclib`) or `on_done(nil, why)`; `opts`: `cache_dir`, `ttl`, `base`, `offline` |
+| `lyrics.follow(media, opts)` | signals `lines`, `index`, `line`, `next_line`, `status` (`none`, `searching`, `synced`, `plain`, `missing`), `source`; `stop()` |
+
 ## material
 
 `lib/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
