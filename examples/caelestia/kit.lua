@@ -177,8 +177,8 @@ function M.bud(nodes, coming, opts)
       }
     else
       steps = {
-        { node = n, property = "scale", to = 0.96, duration = 160, easing = theme.ease.emphasized_accel },
-        { node = n, property = "opacity", to = 0, duration = 120 },
+        { node = n, property = "scale", to = 0.96, duration = 160, easing = theme.ease.emphasized_accel, delay = (k - 1) * (opts.leave_stagger or 0) },
+        { node = n, property = "opacity", to = 0, duration = 120, delay = (k - 1) * (opts.leave_stagger or 0) },
       }
     end
     handles[#handles + 1] = morf.animation.play { { parallel = steps } }

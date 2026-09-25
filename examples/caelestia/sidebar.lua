@@ -200,7 +200,13 @@ local function group_row(i)
     kit.hover(ui.MouseArea {
       id = "sidebar-group-expand-" .. i,
       anchors = { right = true, right_margin = 17 }, y = 12, width = 38, height = 24, cursor = "pointer",
-      on_clicked = function() local x = g() if x then flip(x.app) end end,
+      on_clicked = function()
+        local x = g()
+        if not x then return end
+        flip(x.app)
+        -- Opening, its notifications come in evenly, one after the other.
+        if is_open(x.app) then kit.bud(items, true, { delay = 30, stagger = 40 }) end
+      end,
       ui.Row {
         anchors = { center_in = true }, gap = 2, align = "center",
         kit.text {
@@ -260,20 +266,23 @@ local empty = ui.Column {
 --- Clears the history: the groups fade and shrink a touch, one after the
 --- other, then go.
 local clearing
+local clear
 function M.clear()
   if clearing then return end
   local shown = {}
   for i = 1, GROUPS do if rows[i].visible then shown[#shown + 1] = rows[i] end end
   if #shown == 0 then notifs.clear() return end
-  kit.bud(shown, false)
-  clearing = morf.timer(180, function()
+  -- The button goes with them, last.
+  shown[#shown + 1] = clear
+  kit.bud(shown, false, { leave_stagger = 35 })
+  clearing = morf.timer(170 + 35 * (#shown - 1), function()
     clearing = nil
     notifs.clear()
     for _, r in ipairs(shown) do r.scale, r.opacity = 1, 1 end
   end, false)
 end
 
-local clear = kit.hover(ui.MouseArea {
+clear = kit.hover(ui.MouseArea {
   id = "sidebar-clear",
   anchors = { right = true, bottom = true, right_margin = 24, bottom_margin = 24 },
   width = 54, height = 54, cursor = "pointer",
@@ -362,12 +371,17 @@ morf.effect("caelestia.sidebar.bud", function()
   end
 end)
 
--- A notification arriving while the sidebar is open buds in at the top.
+-- A notification arriving while the sidebar is open buds in at the top;
+-- the last one going, "All up to date!" comes in the same way.
 local count = #notifs.history:get()
 morf.effect("caelestia.sidebar.arrival", function()
   local now = #notifs.history:get()
-  if now > count and M.drawer.open:get() then
-    running[#running + 1] = kit.bud({ rows[1] }, true, { delay = 0 })[1]
+  if M.drawer.open:get() then
+    if now > count then
+      running[#running + 1] = kit.bud({ rows[1] }, true, { delay = 0 })[1]
+    elseif now == 0 and count > 0 then
+      running[#running + 1] = kit.bud({ empty }, true, { delay = 0 })[1]
+    end
   end
   count = now
 end)
