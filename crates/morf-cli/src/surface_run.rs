@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 
 use crate::{
     backdrop::*, capture::*, lock::*, pacing::*, paint::*, services::*, supervisor::*,
-    surface_actions::*, surface_events::*, surface_layers::*, surfaces::*, wake_plan::*,
-    workers::*,
+    surface_actions::*, surface_events::*, surface_layers::*,
+    surface_pointer::answer_new_containment, surfaces::*, wake_plan::*, workers::*,
 };
 
 /// What this output can do, as name = value pairs.
@@ -301,6 +301,9 @@ fn drive_surface(
     // pick up (a popup to open, a reload asked for). One more turn, at once.
     let mut follow_up = false;
     let mut pending_streak = 0;
+    // A node first asked for its `contains_pointer` last turn, whose answer
+    // changed what bindings drew: this turn paints it.
+    let mut containment_repaint = false;
     loop {
         if stop.load(Ordering::Acquire) {
             return Ok(());
@@ -333,7 +336,7 @@ fn drive_surface(
         // Before the services, so a callback reading the time reads it as it
         // is now, not as it was when the loop last woke.
         let next_clock = clock_text();
-        let mut repaint = false;
+        let mut repaint = std::mem::take(&mut containment_repaint);
         if next_clock != clock {
             clock = next_clock;
             repaint |= runtime
@@ -566,6 +569,17 @@ fn drive_surface(
             // What this frame actually cost, which is what the next one is
             // paced against.
             state.pacer.observed(painted.elapsed());
+        }
+        // After the paints, so a node built this turn is laid out by now.
+        let layouts = LayerLayouts {
+            layout: &state.layout,
+            popups: &state.popup_surfaces,
+            floatings: &state.floating_surfaces,
+            layers: &state.layer_surfaces,
+        };
+        if answer_new_containment(runtime, &state.input, &layouts) {
+            containment_repaint = true;
+            follow_up = true;
         }
     }
 }

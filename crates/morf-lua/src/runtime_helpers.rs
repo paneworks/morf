@@ -98,6 +98,12 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         state.terminals.remove(*node);
         state.images.remove(*node);
         state.linked_texts.remove(node);
+        state.pointer_watch.remove(node);
+    }
+    if !state.pointer_watch_fresh.is_empty() {
+        state
+            .pointer_watch_fresh
+            .retain(|node| !removed.contains(node));
     }
     state
         .animation_callbacks

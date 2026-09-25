@@ -26,6 +26,12 @@ pub struct SdfLayer {
     pub operation: Operation,
     /// Seam radius for a smooth operation, in logical pixels.
     pub blend: f32,
+    /// How much of the layer is there, from 0 (as if it were absent) to 1:
+    /// the `SdfShape`'s (or `Rect`'s) own `opacity` times that of every node
+    /// between it and the field. The field's coverage and colour are mixed
+    /// between the composition without the layer and with it, so the seam
+    /// fades with the layer and the rest of the field does not change.
+    pub opacity: f32,
     /// Rotation about the layer centre, in degrees.
     pub rotation: f32,
     /// A linear map `[a, b, c, d]` (column major) the shape is drawn through

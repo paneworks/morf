@@ -1324,6 +1324,22 @@ another and a seam between two can be smooth. Each `SdfShape` says
   axes becomes the layer's size, so a stretched box keeps round corners; a
   turn or a shear rides in the layer's matrix. A hidden node takes its layer
   with it. `shape.track = nil` lets go.
+- `opacity` on an `SdfShape` (or a `Rect` in a field, or any node between
+  a layer and its field, multiplied down) fades that layer and nothing else.
+  The field is mixed between the composition without the layer and the one
+  with it, weighted by the opacity: at 0 it is as if the layer were not
+  there, at 1 it is whole, and in between the layer's shape, the seam it
+  makes with the others and its colour fade together, while the rest of the
+  field is untouched. A fading `subtract` half fills its hole; a drawer's
+  background filleted into a frame fades in with its contents and the frame
+  stays as it is. It animates like any number (`behavior`, `enter`,
+  `morf.animation`), and a frame of the fade repaints only where the layer
+  reaches. Several layers fading at once are each there or not
+  independently, every combination weighted; a field draws up to three
+  fading at the same time exactly (a fourth is drawn whole until it
+  settles), and a fading layer costs its field's pixels one composition per
+  combination while it fades, none once it has settled. The `Sdf`'s own
+  `opacity` still fades the whole field as one picture.
 
 A field whose layers alone moved repaints only where those layers were and
 are, widened by the seam: a panel sliding in a fullscreen frame costs the
@@ -1454,6 +1470,42 @@ property, so hover needs no signal and no `on_entered`:
 local area = ui.MouseArea { anchors = { fill = true } }
 ui.Rect { color = function() return area.pressed and "#444" or area.hovered and "#333" or "#222" end }
 ```
+
+Every node, of any kind, has `contains_pointer`, also read-only: the
+pointer is inside the node's box, whatever is drawn over it. `hovered` is
+one area at a time; `contains_pointer` is "the pointer is somewhere on this
+panel", buttons and all, which is what a panel that shuts when the pointer
+leaves it asks (Qt's `HoverHandler`, or `containsMouse` with propagation;
+a `MouseArea`'s own `contains_pointer` is the hover that looks through
+what is above it).
+
+```lua
+local panel = ui.Rect { width = 400, height = 300,
+  ui.MouseArea { anchors = { fill = true } },   -- takes the pointer here
+  ui.MouseArea { x = 20, y = 20, width = 80, height = 32 },
+}
+morf.effect("panel.leave", function()
+  if not panel.contains_pointer then close() end
+end)
+```
+
+- The box is the node's laid-out rectangle taken through every transform
+  above it and its own, animated values and a `stretch` included, and cut
+  by every ancestor that clips. A hidden or leaving node, and a node used
+  as a mask, contains nothing; a disabled one is still where it is drawn.
+- It follows the pointer the compositor sends. A surface hears the pointer
+  only over its input region -- its `MouseArea`s (and text inputs,
+  terminals, drop areas, links), or the `input_regions` it set -- so a
+  panel the pointer should be seen on needs an area under it, as above.
+  Off the region, or off the surface, it is false. Touch is not the
+  pointer.
+- It changes when the pointer moves, enters or leaves, as `hovered` does:
+  a panel sliding under a pointer that stays still is seen at the next
+  motion. A node read for the first time is answered at the end of that
+  turn, where the pointer is then.
+- It costs nothing for a node nobody reads: reading it once enrols the
+  node, and only enrolled nodes are tested, once per pointer motion. A
+  binding reading it re-runs only when it turns.
 
 ### The wheel
 

@@ -316,6 +316,14 @@ impl Headless {
         self.runtime.take_window_surface_change();
         self.runtime.take_layer_surface_change();
         self.layout_all();
+        // A node first asked for its `contains_pointer` is answered where
+        // the pointer is, now that it is laid out; if that changed what a
+        // binding drew, the surfaces are laid out again.
+        let layouts = crate::headless_input::Layouts(&self.surfaces);
+        if crate::surface_pointer::answer_new_containment(&mut self.runtime, &self.input, &layouts)
+        {
+            self.layout_all();
+        }
         // Twice: the poll is what turns a layout's lint into log lines.
         self.runtime.poll_services();
         self.logs.extend(self.runtime.take_logs());

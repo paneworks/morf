@@ -24,6 +24,7 @@ fn layer(x: f64, y: f64, width: f64, height: f64, operation: Operation) -> SdfLa
         morph: 0.0,
         operation,
         blend: 18.0,
+        opacity: 1.0,
         rotation: 0.0,
         matrix: [1.0, 0.0, 0.0, 1.0],
         blend_group: 0,
@@ -162,4 +163,42 @@ fn a_small_field_or_one_with_a_letter_is_drawn_whole() {
     layers[3].glyph = Some('8');
     layers[3].shape = Shape::Polygon;
     assert!(!composable(&layers));
+}
+
+/// The tile holding a physical point, if any is drawn there, and whether it
+/// is filled without the layers being walked.
+fn tile_at(tiles: &[crate::field::FieldTile], x: f32, y: f32) -> Option<bool> {
+    tiles
+        .iter()
+        .find(|tile| x >= tile.area[0] && x < tile.area[2] && y >= tile.area[1] && y < tile.area[3])
+        .map(|tile| tile.solid)
+}
+
+#[test]
+fn a_fading_layer_s_tiles_allow_for_it_being_there_and_not() {
+    // A plate with a hole cut in its middle, and the hole fading: the hole
+    // is drawn (part of the plate may show there) and not filled blindly.
+    let plate = layer(0.0, 0.0, 1920.0, 1080.0, Operation::Union);
+    let mut hole = layer(660.0, 240.0, 600.0, 600.0, Operation::Subtract);
+    hole.blend = 0.0;
+    let whole = tiles(&[plate.clone(), hole.clone()], 1.0);
+    assert_eq!(tile_at(&whole, 960.0, 540.0), None, "a whole hole is empty");
+    assert_eq!(
+        tile_at(&whole, 200.0, 540.0),
+        Some(true),
+        "the plate is solid"
+    );
+    hole.opacity = 0.5;
+    let fading = tiles(&[plate, hole], 1.0);
+    assert_eq!(tile_at(&fading, 960.0, 540.0), Some(false));
+    assert_eq!(tile_at(&fading, 200.0, 540.0), Some(true));
+    // A panel fading in over the empty inside of a frame is drawn where it
+    // would be, and nothing is solid there.
+    let mut layers = screen_frame();
+    layers[2].opacity = 0.3;
+    let fading = tiles(&layers, 1.0);
+    assert_eq!(tile_at(&fading, 960.0, 80.0), Some(false));
+    // At no opacity it is not there at all.
+    layers[2].opacity = 0.0;
+    assert_eq!(tile_at(&tiles(&layers, 1.0), 960.0, 80.0), None);
 }

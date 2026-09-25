@@ -117,10 +117,31 @@ test.describe("caelestia", function()
     test.move(W / 2 + 25, 300)
     test.settle(1500)
     test.truthy(shown("dashboard"), "leaving the edge onto the panel shut it")
+    -- Onto a tab: an area of its own over the panel, and still the panel.
+    test.move { id = "dashboard-tab-media" }
+    test.advance(500)
+    test.truthy(shown("dashboard"), "a tab on the panel shut it")
+    test.truthy(test.get({ id = "drawer-dashboard" }).contains_pointer)
     test.move(W / 2 + 25, 800)
     -- A moment's grace before it shuts: a timer, which settling does not wait for.
     test.advance(1500)
     test.falsy(shown("dashboard"), "leaving the panel did not shut it")
+  end)
+
+  test.it("fades a drawer's background in with its contents", function()
+    load()
+    test.ipc("dashboard", "open")
+    test.advance(60)
+    local background = test.get { id = "drawer-dashboard-background" }
+    test.truthy(background.opacity > 0 and background.opacity < 1,
+      "half way in, the background is partly there: " .. background.opacity)
+    test.snapshot("caelestia-dashboard-fading.png", { surface = "screen" })
+    test.settle(1500)
+    test.eq(test.get({ id = "drawer-dashboard-background" }).opacity, 1)
+    -- Closing only slides.
+    test.ipc("close")
+    test.advance(60)
+    test.eq(test.get({ id = "drawer-dashboard-background" }).opacity, 1)
   end)
 
   test.it("switches dashboard tabs", function()

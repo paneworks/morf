@@ -64,14 +64,23 @@ function M.new(spec)
       easing = opening and theme.ease.spatial or theme.ease.emphasized_accel,
     }
     -- The reference's contents fade in over the first hundred-odd
-    -- milliseconds of the slide; closing only slides.
-    if opening then spec.content.opacity = 0 end
+    -- milliseconds of the slide, and its background with them: the
+    -- background is a layer of the frame's field, whose own opacity fades
+    -- it -- fillet and all -- and leaves the frame as it is. Closing only
+    -- slides.
+    if opening then
+      spec.content.opacity = 0
+      d.shape.opacity = 0
+    end
+    local fade = { duration = opening and 150 or 1, easing = theme.ease.standard_decel }
     running = morf.animation.play {
       {
         parallel = {
           slide,
-          { node = spec.content, property = "opacity", to = 1, duration = opening and 150 or 1,
-            easing = theme.ease.standard_decel },
+          { node = spec.content, property = "opacity", to = 1,
+            duration = fade.duration, easing = fade.easing },
+          { node = d.shape, property = "opacity", to = 1,
+            duration = fade.duration, easing = fade.easing },
         },
       },
       on_finished = function(reason)
@@ -92,6 +101,7 @@ function M.new(spec)
   -- seam rounds that join), the reference's rounding on the far side.
   local near, far = 0, theme.ROUNDING
   d.shape = ui.SdfShape {
+    id = "drawer-" .. spec.name .. "-background",
     shape = "box",
     operation = "smooth_union",
     blend_group = groups,

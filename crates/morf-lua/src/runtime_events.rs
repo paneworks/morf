@@ -376,9 +376,53 @@ impl Runtime {
         assign_scene_property(&mut state, node, property, morf_scene::Value::Bool(value)).is_ok()
     }
 
+    /// Whether anything has read a node's `contains_pointer`: when nothing
+    /// has, a pointer event has no containment to work out.
+    pub fn has_pointer_watchers(&self) -> bool {
+        !self.reactive.borrow().pointer_watch.is_empty()
+    }
+
+    /// Every node something has read `contains_pointer` of: the ones the
+    /// host tests against the pointer when it moves.
+    pub fn pointer_watchers(&self) -> Vec<NodeHandle> {
+        self.reactive
+            .borrow()
+            .pointer_watch
+            .keys()
+            .copied()
+            .collect()
+    }
+
+    /// The nodes first read since this was last asked, for the host to
+    /// answer where the pointer is now rather than at its next motion.
+    pub fn take_fresh_pointer_watchers(&mut self) -> Vec<NodeHandle> {
+        std::mem::take(&mut self.reactive.borrow_mut().pointer_watch_fresh)
+    }
+
+    /// Records whether the pointer is inside each node, as the host worked
+    /// it out. A node nothing has read is ignored. The bindings that read
+    /// one that changed run at the next flush -- a handler's return, or
+    /// [`Runtime::flush_after_event`]. Returns whether any changed.
+    pub fn set_contains_pointer(&mut self, answers: &[(NodeHandle, bool)]) -> bool {
+        let mut changed = false;
+        {
+            let mut state = self.reactive.borrow_mut();
+            for &(node, inside) in answers {
+                match state.pointer_watch.get_mut(&node) {
+                    Some(value) if *value != inside => *value = inside,
+                    _ => continue,
+                }
+                changed = true;
+                state.flush_pending = true;
+                let _ = bump_property_signal(&mut state, node, CONTAINS_POINTER, false);
+            }
+        }
+        changed
+    }
+
     /// Runs the bindings a host-side write made stale, when no handler
     /// will: the flush a handler's return would otherwise have been.
-    pub(crate) fn flush_after_event(&mut self) {
+    pub fn flush_after_event(&mut self) {
         let flush = {
             let mut state = self.reactive.borrow_mut();
             state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)

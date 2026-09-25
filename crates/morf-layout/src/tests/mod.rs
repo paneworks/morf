@@ -80,6 +80,7 @@ impl TextMeasurer for WeightText {
 
 mod alignment;
 mod basic;
+mod contains;
 mod custom;
 mod exit;
 mod flex;

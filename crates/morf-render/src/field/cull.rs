@@ -85,16 +85,53 @@ fn prepare(layers: &[SdfLayer]) -> Vec<Prepared<'_>> {
 }
 
 /// The composed distance at `point`, in the same logical space as the
-/// layers' bounds: `field.wgsl`'s `compose`, on the CPU.
+/// layers' bounds: `field.wgsl`'s `compose`, on the CPU, with every layer
+/// that has any opacity at all.
 pub fn composed_distance(layers: &[SdfLayer], point: [f32; 2]) -> f32 {
-    compose(&prepare(layers), point)
+    compose(&prepare(layers), point, Take::Present)
 }
 
-fn compose(layers: &[Prepared<'_>], point: [f32; 2]) -> f32 {
+/// Which layers a CPU composition takes, when some are fading: a fading
+/// layer is there in some of the combinations the shader mixes and not in
+/// others.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Take {
+    /// Every layer with any opacity.
+    Present,
+    /// The combination that covers the most: fading layers that add
+    /// surface, and not those that take it away.
+    Most,
+    /// The one that covers the least: the other way about.
+    Least,
+}
+
+/// Whether a composition taking `take` includes the layer at `index`.
+fn takes(take: Take, index: usize, layer: &SdfLayer) -> bool {
+    if layer.opacity <= 0.0 {
+        return false;
+    }
+    if layer.opacity >= 1.0 || take == Take::Present {
+        return true;
+    }
+    // The first layer is where the composition starts, which adds.
+    let adds = index == 0
+        || matches!(
+            layer.operation,
+            Operation::Union | Operation::SmoothUnion | Operation::Xor
+        );
+    adds == (take == Take::Most)
+}
+
+fn compose(layers: &[Prepared<'_>], point: [f32; 2], take: Take) -> f32 {
     let mut accumulated = 1e20_f32;
     let mut group = 0;
     for (index, prepared) in layers.iter().enumerate() {
         let layer = prepared.layer;
+        // Left out as the shader leaves it out: joined to what is there as if
+        // it were not, which every operator answers from `1e20` for nothing.
+        if !takes(take, index, layer) {
+            continue;
+        }
         let offset = [point[0] - prepared.centre[0], point[1] - prepared.centre[1]];
         let turned = match prepared.turn {
             Some((sin, cos)) => [
@@ -182,6 +219,16 @@ pub(crate) fn field_tiles(
     if width * height < TILED_AREA || !composable(layers) {
         return None;
     }
+    // A fading xor both adds and takes away, so no one combination covers
+    // the most: the field is drawn whole while it fades.
+    let fading = layers
+        .iter()
+        .any(|layer| layer.opacity > 0.0 && layer.opacity < 1.0);
+    if layers.iter().any(|layer| {
+        layer.opacity > 0.0 && layer.opacity < 1.0 && layer.operation == Operation::Xor
+    }) {
+        return None;
+    }
     let scale = scale.max(1e-6) as f32;
     let seam = layers
         .iter()
@@ -196,24 +243,31 @@ pub(crate) fn field_tiles(
     // Whether anything can paint within `half` (a half diagonal, logical)
     // of `centre`.
     let prepared = prepare(layers);
+    // While a layer fades, a tile holds something if the combination that
+    // covers the most reaches it, and is filled throughout only if the one
+    // that covers the least does.
+    let (most, least) = if fading {
+        (Take::Most, Take::Least)
+    } else {
+        (Take::Present, Take::Present)
+    };
     let holds = |centre: [f32; 2], half: f32| {
         let reach = std::f32::consts::SQRT_2 * half + slack;
-        let here = compose(&prepared, centre);
+        let here = compose(&prepared, centre, most);
         if here <= reach {
             // Inside by more than anything can move the edge: filled
             // throughout, and by one colour when the layers have one.
-            return if spill.solid && here < -reach {
-                Held::Inside
-            } else {
-                Held::Edge
-            };
+            let inside = spill.solid
+                && here < -reach
+                && (!fading || compose(&prepared, centre, least) < -reach);
+            return if inside { Held::Inside } else { Held::Edge };
         }
         let shadowed = spill.shadow.as_ref().is_some_and(|shadow| {
             let moved = [
                 centre[0] - shadow.offset_x as f32,
                 centre[1] - shadow.offset_y as f32,
             ];
-            compose(&prepared, moved) - shadow.spread as f32 <= reach + shadow.blur as f32
+            compose(&prepared, moved, most) - shadow.spread as f32 <= reach + shadow.blur as f32
         });
         if shadowed { Held::Edge } else { Held::Nothing }
     };

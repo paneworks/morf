@@ -30,15 +30,6 @@ local ROW1, ROW2 = 132, 295
 M.tab = morf.signal("caelestia.dashboard.tab", 1)
 local opened = morf.signal("caelestia.dashboard.shown", false)
 
--- Every pointer area on the panel: the panel counts as hovered while any
--- of them is (see NEEDS.md, "hover that contains its children").
-local areas = {}
-local function area(props)
-  local a = ui.MouseArea(props)
-  areas[#areas + 1] = a
-  return a
-end
-
 -- ------------------------------------------------------------------- tabs --
 
 local TABS = {
@@ -60,7 +51,7 @@ local function tabs()
       behavior = { color = { duration = theme.duration.small } },
     }
     labels[i] = label
-    buttons[#buttons + 1] = area {
+    buttons[#buttons + 1] = ui.MouseArea {
       id = "dashboard-tab-" .. t.name:lower(),
       width = width, height = TABS_H - 4, cursor = "pointer",
       on_clicked = function() M.tab:set(i) end,
@@ -352,7 +343,7 @@ local function calendar_card()
     })
   end
   local function arrow(icon, delta, id)
-    return area {
+    return ui.MouseArea {
       id = id, width = 32, height = 32, cursor = "pointer",
       on_clicked = function() M.month_offset:set(M.month_offset:get() + delta) end,
       kit.icon(icon, 20, function() return C.onSurface end, { anchors = { center_in = true } }),
@@ -361,7 +352,7 @@ local function calendar_card()
   return kit.card {
     id = "dashboard-calendar",
     width = 380, height = ROW2,
-    area {
+    ui.MouseArea {
       anchors = { fill = true }, z = -1,
       on_wheel = function(_, _, _, _, _, step_y)
         if step_y ~= 0 then M.month_offset:set(M.month_offset:get() + (step_y > 0 and 1 or -1)) end
@@ -450,7 +441,7 @@ local function media_card()
     end
   end
   local function button(icon, action, id, wide)
-    return kit.hover(area {
+    return kit.hover(ui.MouseArea {
       id = id, width = wide and 72 or 44, height = 44, cursor = "pointer",
       on_clicked = function() if media then pcall(media[action]) end end,
       kit.icon(icon, 22, function() return C.onSurfaceVariant end, { anchors = { center_in = true } }),
@@ -580,7 +571,9 @@ local track = ui.Row {
 }
 ui.reparent(track, strip)
 
-local background = area { anchors = { fill = true }, z = -1 }
+-- Behind everything on the panel, so the panel is in the surface's input
+-- region: the pointer is seen anywhere on it, and `contains_pointer` with it.
+local background = ui.MouseArea { anchors = { fill = true }, z = -1 }
 
 local content = ui.Item {
   anchors = { fill = true },
@@ -613,11 +606,10 @@ local trigger = ui.MouseArea {
   width = WIDTH, height = theme.BORDER,
 }
 
+-- Anywhere on the panel, whatever is under the pointer there: a tab, a
+-- calendar arrow, a media button.
 local function panel_hovered()
-  for _, a in ipairs(areas) do
-    if a.hovered then return true end
-  end
-  return false
+  return M.drawer.panel.contains_pointer
 end
 
 --- The trigger, in a box as wide as the frame's opening so it centres
@@ -641,8 +633,7 @@ morf.effect("caelestia.dashboard.hover", function()
     end
   elseif by_hover and M.drawer.open:get() then
     -- A moment's grace (the reference shuts at once), so the pointer
-    -- crossing from the edge onto the panel, one area to the next, does
-    -- not shut it.
+    -- crossing from the edge onto the panel does not shut it.
     if closing then closing:cancel() end
     closing = morf.timer(50, function()
       closing = nil

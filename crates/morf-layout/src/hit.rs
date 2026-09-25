@@ -152,6 +152,55 @@ impl Layout {
             })
     }
 
+    /// Whether a surface-local point lies inside a node's box, whatever is
+    /// drawn over it: what a node's `contains_pointer` says.
+    ///
+    /// The point is taken back through every transform above the node and
+    /// its own, as a hit test takes it, and must also fall inside the box of
+    /// every ancestor that clips -- a row scrolled out of a clipped list does
+    /// not contain the pointer where it would have been drawn. A node that is
+    /// hidden (or under a hidden ancestor), leaving, used as a mask (or inside
+    /// one), not laid out by this layout, or behind a singular transform
+    /// contains nothing. `enabled` does not matter: a disabled panel is still
+    /// where it is drawn.
+    pub fn contains_point(&self, scene: &Scene, node: NodeHandle, x: f64, y: f64) -> bool {
+        let mut chain = vec![node];
+        let mut current = node;
+        while let Ok(Some(parent)) = scene.parent(current) {
+            chain.push(parent);
+            current = parent;
+        }
+        let mut transform = Transform2D::IDENTITY;
+        for &link in chain.iter().rev() {
+            if !scene.bool_value(link, "visible").unwrap_or(false)
+                || scene.is_exiting(link)
+                || scene.is_mask(link)
+            {
+                return false;
+            }
+            let Some(geometry) = self.geometry(link) else {
+                return false;
+            };
+            let Ok(own) = node_transform(scene, link, geometry) else {
+                return false;
+            };
+            transform = transform.then(own);
+            if link == node || scene.bool_value(link, "clip").unwrap_or(false) {
+                let Some((local_x, local_y)) = transform.inverse_point(x, y) else {
+                    return false;
+                };
+                let inside = local_x >= geometry.x
+                    && local_y >= geometry.y
+                    && local_x < geometry.x + geometry.width
+                    && local_y < geometry.y + geometry.height;
+                if !inside {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     /// A node's box in surface coordinates: the bounds of its four corners
     /// through every transform above it and its own. Nothing for a node this
     /// layout did not place.
