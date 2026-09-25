@@ -87,6 +87,9 @@ pub(crate) fn run_surface(start: WorkerStart, screen: ScreenInfo) -> Result<(), 
     if let Some(seed) = start.seed.clone() {
         runtime.restore_reloadable_state(seed);
     }
+    // Before the configuration runs, so it reads the answer from its first
+    // line; the supervisor says when the duty moves later.
+    runtime.set_primary(start.primary);
     let result = drive_surface(&mut runtime, &start, &name, &runtime_screen);
     // Whatever ends this output, the next runtime can start from here.
     start.handover.deposit(&mut runtime);

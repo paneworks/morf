@@ -7,7 +7,8 @@
 // coverages themselves, and the blend is `src + dst * (1 - src1)` channel by
 // channel. That is only right over something opaque -- over a transparent
 // pixel the fringes have nothing to mix with -- so the host draws only text
-// that lies on an opaque rectangle of the same surface this way; the rest goes
+// that lies on an opaque rectangle of the same target this way (the surface,
+// or a layer composited so that it keeps its pixels); the rest goes
 // through the greyscale glyph pipeline. Keep the taps in step with `lcd.rs`,
 // the CPU reference the tests hold this against.
 

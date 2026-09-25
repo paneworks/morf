@@ -124,7 +124,8 @@ impl RenderBackend for WgpuBackend {
             }
         }
         // Subpixel text, where it is safe (lcd.rs): at a whole-number scale,
-        // straight into the surface, over opaque ground.
+        // over opaque ground of the same target -- the surface, or a layer
+        // whose composite keeps its pixels.
         if let Some(batch) = &mut glyph_batch
             && self.lcd_pipeline.is_some()
             && scale_120.is_multiple_of(120)
@@ -132,7 +133,7 @@ impl RenderBackend for WgpuBackend {
             super::lcd_spans::mark_subpixel_glyphs(
                 batch,
                 list,
-                |command| command_layers[command].is_some(),
+                |command| command_layers[command],
                 scale_120,
                 (self.width, self.height),
                 self.opaque_surface,
@@ -369,9 +370,10 @@ impl RenderBackend for WgpuBackend {
                     }
                     if let Some(batch) = &glyph_batch {
                         for span in &batch.command_spans[command_index] {
-                            // Subpixel only where the surface itself is the
-                            // target: the same command drawn again beneath a
-                            // backdrop goes to a scratch texture.
+                            // Subpixel only into the target the glyph was
+                            // judged for (its layer, or the surface): the same
+                            // command drawn again beneath a backdrop goes to
+                            // a scratch texture cleared transparent.
                             match (&self.lcd_pipeline, span.lcd && $lcd) {
                                 (Some(lcd), true) => $pass.set_pipeline(lcd),
                                 _ => $pass.set_pipeline(&self.glyph_pipeline),
@@ -609,7 +611,7 @@ impl RenderBackend for WgpuBackend {
                                         list.layers[child].commands.end.max(command_index + 1);
                                 } else {
                                     if command_layers[command_index] == Some(layer_index) {
-                                        draw_command!(pass, command_index, read, frame);
+                                        draw_command!(pass, command_index, read, frame, true);
                                     }
                                     command_index += 1;
                                 }

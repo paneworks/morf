@@ -11,6 +11,13 @@
 --             so the index stays small and an image is a file `ui.Image`
 --             can show
 --
+-- Every screen's runtime runs this file, but only the primary one
+-- (`morf.primary()`) keeps what is copied: one copy, one entry, one writer
+-- of the index for what arrives. The others read the index back whenever it
+-- changes (as the settings are), and what a person does to the history on
+-- any screen -- forget one, wipe it -- is written there and read back by
+-- the rest.
+--
 -- Password managers mark their offers with `x-kde-passwordManagerHint`;
 -- those are never stored. A copy of something already kept moves it to the
 -- top instead of adding it again, which is also what restoring one does.
@@ -64,6 +71,9 @@ end
 -- ------------------------------------------------------------------ disk --
 
 local saving = false
+-- The index as this runtime last wrote or read it: a change to it that is
+-- not ours is another screen's, and is read back.
+local last_text
 
 local function save()
   saving = false
@@ -74,7 +84,9 @@ local function save()
       file = entry.file, preview = entry.preview, bytes = entry.bytes, copied = entry.copied,
     }
   end
-  local ok, err = fs.write(M.index_path, json.encode({ entries = out }))
+  local text = json.encode({ entries = out })
+  last_text = text
+  local ok, err = fs.write(M.index_path, text)
   if not ok then morf.log("warn", "impasto: could not save the clipboard history: " .. tostring(err)) end
 end
 
@@ -92,19 +104,17 @@ local function plain(value)
   return out
 end
 
-local function load()
-  local text = fs.read(M.index_path)
-  if not text or text == "" then return end
+-- The entries an index holds, or nil when it cannot be read as one.
+local function parse(text)
+  if not text or text == "" then return {} end
   local ok, decoded = pcall(json.decode, text)
-  if not ok or type(decoded) ~= "table" then
-    morf.log("warn", "impasto: the clipboard history is not JSON; starting a new one")
-    return
-  end
+  if not ok or type(decoded) ~= "table" then return nil end
   decoded = plain(decoded)
+  local out = {}
   for _, kept in ipairs(decoded.entries or {}) do
     if type(kept) == "table" and type(kept.key) == "string" and type(kept.file) == "string"
         and fs.exists(kept.file) then
-      entries[#entries + 1] = {
+      out[#out + 1] = {
         key = kept.key,
         hash = tostring(kept.hash or kept.key),
         kind = kept.kind == "image" and "image" or "text",
@@ -116,7 +126,34 @@ local function load()
       }
     end
   end
+  return out
 end
+
+local function load()
+  local text = fs.read(M.index_path)
+  last_text = text
+  local read = parse(text)
+  if not read then
+    morf.log("warn", "impasto: the clipboard history is not JSON; starting a new one")
+    return
+  end
+  entries = read
+end
+
+--- The index changed under this runtime: another screen kept a copy, or
+--- forgot one. Its entries replace ours -- unless ours are about to be
+--- written, which is the newer of the two.
+local function reread()
+  if saving then return end
+  local text = fs.read(M.index_path)
+  if text == last_text then return end
+  last_text = text
+  local read = parse(text)
+  if not read then return end
+  entries = read
+  bump()
+end
+M.reread = reread
 
 -- Deletes an entry's payload unless another entry still names the file.
 local function discard(entry)
@@ -305,7 +342,10 @@ function M.start()
   started = true
   load()
   bump()
+  require("services.watch").file(M.index_path, reread)
   local ok, err = pcall(morf.clipboard.watch, function(offer)
+    -- Only the primary runtime keeps copies; the others read them back.
+    if not morf.primary() then return end
     -- nil: the clipboard was emptied.
     if not offer or not settings.clipboardHistory then return end
     local offered = offer.mime_types or {}
@@ -343,12 +383,15 @@ morf.ipc.clipboard = function(arg)
     if not require("services.live").here() then return "elsewhere" end
     return require("services.launcher").toggle_clipboard()
   end
-  if arg == "wipe" then M.wipe() end
+  -- Every screen hears the verb; the primary one wipes, once.
+  if arg == "wipe" and morf.primary() then M.wipe() end
   local ok, supported = pcall(morf.clipboard.supported)
   return ("%d kept, data control %s"):format(#entries, (ok and supported) and "on" or "off")
 end
 
 morf.ipc.clipboard_add = function(text)
+  -- Kept once, by the primary runtime; the others read it back.
+  if not morf.primary() then return nil end
   if not text or text == "" then return "nothing to add" end
   -- `png:<path>` keeps that picture as a copied image.
   local path = text:match("^png:(.+)$")

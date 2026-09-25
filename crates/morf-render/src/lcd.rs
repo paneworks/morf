@@ -17,10 +17,15 @@
 //!   is not rotated or flipped (the stripes would run the other way);
 //! - the surface is drawn at a whole-number scale (at a fractional one the
 //!   buffer is resampled, and a third of a buffer pixel is no stripe);
-//! - the glyph is drawn straight into the surface, not into an offscreen
-//!   layer (which holds alpha of its own, and is composited later);
-//! - an opaque rectangle of the same surface lies beneath the whole glyph, or
-//!   the surface as a whole is declared opaque;
+//! - an opaque rectangle drawn before it into the same target lies beneath
+//!   the whole glyph: the surface, or the offscreen layer holding the glyph
+//!   (a layer's target starts transparent, so only its own fills count). A
+//!   surface declared opaque is ground everywhere on the surface itself;
+//! - inside a layer, compositing that layer leaves the glyph's pixels as
+//!   they are: an opacity of one, no blur and no effect shader, on it and
+//!   on every layer it is composited into, and the glyph clear of any
+//!   rounded mask's corners. An opaque pixel composited so is copied, its
+//!   fringes with it -- which is what makes a rounded panel's text subpixel;
 //! - the glyph is only moved, not scaled, rotated or skewed;
 //! - it is a plain fill: not mid-morph, and with no outline.
 

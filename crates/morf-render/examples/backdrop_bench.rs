@@ -18,7 +18,8 @@
 //! A second desk follows: thirty small rounded widgets, timed with the content
 //! of one of them changing and with the content of all of them changing. And
 //! a third: a page of forty lines of text on an opaque ground with a clock
-//! ticking in its corner, drawn in greyscale and then in subpixels.
+//! ticking in its corner, drawn in greyscale and then in subpixels, first on
+//! a plain rectangle and then inside a rounded panel (a layer).
 
 use std::time::{Duration, Instant};
 
@@ -193,12 +194,22 @@ fn widgets(width: f64, height: f64) -> Desk {
 }
 
 /// A page of text on an opaque ground, a clock in its corner.
-fn page(width: f64, height: f64) -> Desk {
+fn page(width: f64, height: f64, rounded: bool) -> Desk {
     let mut scene = Scene::new();
     let root = scene.create(Element::Item);
     scene.assign(root, "width", width).unwrap();
     scene.assign(root, "height", height).unwrap();
-    let ground = scene.create(Element::Rect);
+    // Rounded, the page is a panel: a clipping rectangle, so a layer, holding
+    // its own text.
+    let ground = scene.create(if rounded {
+        Element::ClipRect
+    } else {
+        Element::Rect
+    });
+    if rounded {
+        scene.assign(ground, "radius", 18.0).unwrap();
+    }
+    let parent = if rounded { ground } else { root };
     scene.assign(ground, "width", width).unwrap();
     scene.assign(ground, "height", height).unwrap();
     scene.assign(ground, "color", "#fbfbf8").unwrap();
@@ -223,7 +234,7 @@ fn page(width: f64, height: f64) -> Desk {
             scene.assign(text, property, value).unwrap();
         }
         scene.assign(text, "color", "#202124").unwrap();
-        scene.reparent(text, Some(root)).unwrap();
+        scene.reparent(text, Some(parent)).unwrap();
         panels.push(text);
     }
     let clock = scene.create(Element::Text);
@@ -238,7 +249,7 @@ fn page(width: f64, height: f64) -> Desk {
     }
     scene.assign(clock, "text", "12:00:00").unwrap();
     scene.assign(clock, "color", "#202124").unwrap();
-    scene.reparent(clock, Some(root)).unwrap();
+    scene.reparent(clock, Some(parent)).unwrap();
     Desk {
         scene,
         root,
@@ -375,13 +386,17 @@ fn main() {
     println!(
         "widgets  thirty 160x96 rounded: full repaint {first} | still {still} | one ticking {one} | all ticking {all}",
     );
-    for subpixel in [
+    let subpixels = [
         None,
         Some(morf_render::SubpixelText {
             bgr: false,
             filter: morf_render::LcdFilter::Default,
         }),
-    ] {
+    ];
+    for (rounded, subpixel) in [false, true]
+        .into_iter()
+        .flat_map(|rounded| subpixels.map(|subpixel| (rounded, subpixel)))
+    {
         let mut backend =
             pollster::block_on(WgpuBackend::new(width, height)).expect("a GPU adapter");
         if subpixel.is_some() && !backend.supports_subpixel_text() {
@@ -390,7 +405,7 @@ fn main() {
         }
         backend.set_subpixel_text(subpixel);
         let mut engine = RenderEngine::new(backend);
-        let mut desk = page(size.width, size.height);
+        let mut desk = page(size.width, size.height, rounded);
         run_measured(&mut engine, &mut desk, size, 3, true, |_, _| {});
         let (first, _) = run_measured(&mut engine, &mut desk, size, 1, true, |desk, _| {
             desk.scene.assign(desk.root, "opacity", 0.999).unwrap();
@@ -405,6 +420,13 @@ fn main() {
         } else {
             "greyscale"
         };
-        println!("text     forty lines, {label}: full repaint {first} | clock ticking {ticking}",);
+        let on = if rounded {
+            "in a rounded panel"
+        } else {
+            "on a rect"
+        };
+        println!(
+            "text     forty lines {on}, {label}: full repaint {first} | clock ticking {ticking}",
+        );
     }
 }

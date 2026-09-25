@@ -377,6 +377,14 @@ pub(crate) struct ReactiveState {
     /// output list change, how many times it has, and what it last was.
     pub(crate) screens_revision: Option<(SignalId, i64)>,
     pub(crate) screens_signature: String,
+    /// `morf.primary()`: the signal a binding follows to hear this runtime
+    /// become, or stop being, the primary one, and what it is now.
+    pub(crate) primary: Option<(SignalId, bool)>,
+    /// `morf.on_primary(fn)`: called with the new value when it changes.
+    pub(crate) primary_callbacks: Vec<StashedClosure>,
+    /// Every bus name `morf.dbus.serve` took, so a runtime that ends or
+    /// hands its duties over gives them back first.
+    pub(crate) owned_bus_names: Vec<std::rc::Weak<std::cell::RefCell<morf_io::DbusService>>>,
     pub(crate) dbus_services: Vec<PendingDbusService>,
     pub(crate) udev_monitors: Vec<PendingUdev>,
     pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
@@ -651,6 +659,9 @@ impl ReactiveState {
             toplevels: None,
             screens_revision: None,
             screens_signature: String::new(),
+            primary: None,
+            primary_callbacks: Vec::new(),
+            owned_bus_names: Vec::new(),
             dbus_signals: Vec::new(),
             next_dbus_signal_id: 0,
             dbus_replies: Vec::new(),

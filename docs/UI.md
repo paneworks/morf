@@ -327,6 +327,42 @@ once to hear whether it asks for this; one that does not is stopped at once
 and the shell waits for an output, as before. `morf check --screens 0` and
 `test.load(path, { screens = 0 })` load a configuration this way.
 
+Some duties belong to the shell, not to a screen: a bus name only one
+connection can own (a notification server, a tray watcher), a history only
+one writer should keep. Exactly one of the runtimes is the primary one, and
+`morf.primary()` says whether it is this one -- a tracked read, so a
+binding or an effect runs again when the duty moves -- and
+`morf.on_primary(function(is_primary) end)` hears each change (not the
+value it starts with, which `morf.primary()` already gives from the first
+line):
+
+```lua
+local server
+local function follow(primary)
+  if primary and not server then server = start_notification_server() end
+  if not primary and server then server.close() server = nil end
+end
+follow(morf.primary())
+morf.on_primary(follow)
+```
+
+Which one, and when it moves:
+
+- the output the compositor announced first is primary (the lowest
+  `wl_output` global); with no output, the outputless runtime; a runtime
+  alone in its process (`morf test`, `morf check`) always is;
+- it stays primary while other outputs are plugged, unplugged, moved or
+  rescaled, and across a reload -- the new runtime starts as primary;
+- only when its own runtime ends -- its output unplugged or switched off,
+  every output gone -- does the duty move, to the first-announced output
+  still lit (or to the outputless runtime, or to the first output that
+  comes back);
+- a runtime gives back every bus name `morf.dbus.serve` took when it ends,
+  and the next primary is told only after that: the name it asks for is
+  free, `"owned"` rather than `"taken"`. A reload gives the old runtime's
+  names back before the new file runs, so it finds them free too (a file
+  that fails to load leaves the shell without them until the next reload).
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).
@@ -694,12 +730,14 @@ off; `"rgb"` or `"bgr"` name the order outright. Even then a glyph is drawn
 in subpixels only when all of these hold, because its fringes need a solid
 colour beneath them to mix with:
 
-- it is drawn straight onto an opaque `ui.Rect` of the same surface (solid
-  fill, no gradient, blur or shader; inside its rounded corners and a
-  translucent border), or the surface is `morf.surface.opaque`;
-- it is not inside an offscreen layer (an `opacity` below one, a
-  rotation, a rounded `ui.ClipRect`, a `blur`, a shadow, `layer`, an
-  effect shader);
+- it is drawn onto an opaque `ui.Rect` (solid fill, no gradient, blur or
+  shader; inside its rounded corners and a translucent border) of the
+  same surface -- or the surface is `morf.surface.opaque` -- and, inside a
+  rounded `ui.ClipRect` or another offscreen layer, of that same layer:
+  the panel's own opaque fill counts, the surface beneath it does not;
+- no layer it is in is translucent (an `opacity` below one, so also
+  while one fades), blurred, or wears an effect shader, and it stays
+  clear of the rounded corners that clip it;
 - it is only moved, not scaled, rotated or skewed; it is not mid-morph and
   has no outline;
 - the surface is drawn at a whole-number scale on an output that is not
@@ -707,9 +745,9 @@ colour beneath them to mix with:
   (dual-source blending; `MORF_NO_DUAL_SOURCE=1` pretends it cannot).
 
 A translucent card, a panel fading in, text over a picture: greyscale. The
-same label on a solid background: sharper, in colour fringes a third of a
-pixel wide. Nothing about the text itself changes -- its size, its
-metrics, where it wraps.
+same label on a solid background or a solid rounded panel: sharper, in
+colour fringes a third of a pixel wide. Nothing about the text itself
+changes -- its size, its metrics, where it wraps.
 
 ### Text in runs, and links
 

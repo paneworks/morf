@@ -75,6 +75,7 @@ mod runtime_ipc;
 mod runtime_layout;
 mod runtime_lock_surface;
 mod runtime_prefers;
+mod runtime_primary;
 mod runtime_screens;
 mod runtime_services;
 mod runtime_session_lock;

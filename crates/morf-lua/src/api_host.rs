@@ -382,6 +382,53 @@ pub(crate) fn install_host_service_api<'gc>(
         }),
     );
 
+    // `morf.primary()`: whether this runtime is the one of the process that
+    // does what must be done once (a bus name, a shared file). Tracked, so a
+    // binding or an effect runs again when the duty moves here or away; a
+    // runtime nobody else shares a process with is primary.
+    {
+        let mut state = state.borrow_mut();
+        let signal = state
+            .graph
+            .as_mut()
+            .expect("the graph is not running at install")
+            .signal("primary", IpcValue::Boolean(true));
+        state.values.insert(signal, IpcValue::Boolean(true));
+        state.signals.push(signal);
+        state.primary = Some((signal, true));
+    }
+    let primary_state = Rc::clone(&state);
+    morf.set_field(
+        ctx,
+        "primary",
+        Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let mut state = primary_state.borrow_mut();
+            let Some((signal, primary)) = state.primary else {
+                stack.replace(ctx, true);
+                return Ok(CallbackReturn::Return);
+            };
+            if let Some(active) = &mut state.active {
+                active.reads.insert(signal);
+            }
+            stack.replace(ctx, primary);
+            Ok(CallbackReturn::Return)
+        }),
+    );
+    let on_primary_state = Rc::clone(&state);
+    morf.set_field(
+        ctx,
+        "on_primary",
+        Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let callback: Closure = stack.consume(ctx)?;
+            let mut state = on_primary_state.borrow_mut();
+            if state.primary_callbacks.len() >= 64 {
+                return Err(HostError("primary callback limit reached".into()).into());
+            }
+            state.primary_callbacks.push(ctx.stash(callback));
+            Ok(CallbackReturn::Return)
+        }),
+    );
+
     // Every window the compositor reports, filled by `Runtime::set_windows` and
     // updated in place. Empty here rather than absent so a configuration can
     // hold it and watch it from the first line, before any compositor has said

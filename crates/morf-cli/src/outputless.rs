@@ -70,6 +70,9 @@ pub(crate) fn run_outputless(start: WorkerStart, connect: bool) -> Result<(), St
     if let Some(seed) = start.seed.clone() {
         runtime.restore_reloadable_state(seed);
     }
+    // Before the configuration runs, so it reads the answer from its first
+    // line; the supervisor says when the duty moves later.
+    runtime.set_primary(start.primary);
     let result = drive_outputless(&mut runtime, &start, connect);
     start.handover.deposit(&mut runtime);
     result
