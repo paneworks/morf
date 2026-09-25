@@ -479,3 +479,102 @@ fn a_divisor_of_one_is_the_ordinary_build() {
         build(64, 64, std::slice::from_ref(&square)).unwrap(),
     );
 }
+
+/// Two half-planes meeting at a right angle: `x > 0` (a wall) and `y > 0`
+/// (a floor), as distances. Their union's inside corner is at the origin.
+fn corner(x: f32, y: f32) -> (f32, f32) {
+    (-x, -y)
+}
+
+#[test]
+fn a_circular_blend_is_a_quarter_circle_fillet() {
+    let r = 10.0;
+    let joint = |x: f32, y: f32| {
+        let (a, b) = corner(x, y);
+        combine_profiled(Operation::SmoothUnion, BlendProfile::Circular, a, b, r)
+    };
+    // The fillet is the circle of radius r centred at (-r, -r): every point
+    // on it is on the surface, and the arc's midpoint sits r(√2 - 1) out
+    // from the corner along the diagonal.
+    for step in 0..=8 {
+        let angle = std::f32::consts::FRAC_PI_2 * step as f32 / 8.0;
+        let (x, y) = (-r + r * angle.cos(), -r + r * angle.sin());
+        assert!(
+            joint(x, y).abs() < 1e-4,
+            "on the arc at {x},{y}: {}",
+            joint(x, y)
+        );
+    }
+    let bulge = r * (std::f32::consts::SQRT_2 - 1.0) / std::f32::consts::SQRT_2;
+    assert!(joint(-bulge, -bulge).abs() < 1e-4);
+    // Outside the band both shapes are exactly what they were.
+    assert_eq!(joint(-30.0, 5.0), -5.0);
+    assert_eq!(joint(5.0, -30.0), -5.0);
+    assert_eq!(joint(-30.0, -40.0), 30.0);
+    // The quadratic seam over the same radius fills the corner less: its
+    // surface crosses the diagonal nearer the corner than the arc does.
+    let quadratic = |x: f32, y: f32| {
+        let (a, b) = corner(x, y);
+        combine_profiled(Operation::SmoothUnion, BlendProfile::Quadratic, a, b, r)
+    };
+    assert!(
+        quadratic(-bulge, -bulge) > 0.0,
+        "quadratic stops short of the arc"
+    );
+    assert_eq!(quadratic(-2.0, -2.0).signum(), joint(-2.0, -2.0).signum());
+}
+
+#[test]
+fn a_circular_subtraction_rounds_the_cut_edge() {
+    let r = 6.0;
+    // Everything (-1e6 inside) minus the half-plane y < 0 minus x < 0: the
+    // quadrant x > 0, y > 0 with its outside corner rounded to radius r.
+    let everywhere = -1e6;
+    let cut = |x: f32, y: f32| {
+        let without_floor = combine_profiled(
+            Operation::Subtract,
+            BlendProfile::Circular,
+            everywhere,
+            y,
+            0.0,
+        );
+        combine_profiled(
+            Operation::SmoothSubtract,
+            BlendProfile::Circular,
+            without_floor,
+            x,
+            r,
+        )
+    };
+    // The corner itself is outside now; the arc centred at (r, r) is the edge.
+    assert!(cut(0.5, 0.5) > 0.0);
+    let diagonal = r - r / std::f32::consts::SQRT_2;
+    assert!(
+        cut(diagonal, diagonal).abs() < 1e-3,
+        "{}",
+        cut(diagonal, diagonal)
+    );
+    // Far along either edge, the edge is where it was.
+    assert!((cut(0.0, 50.0)).abs() < 1e-4);
+    assert!((cut(50.0, 0.0)).abs() < 1e-4);
+}
+
+#[test]
+fn the_profiles_agree_outside_the_seam_and_on_hard_operations() {
+    // Outside the band: at least one shape further than the radius.
+    for (a, b) in [(-3.0, 40.0), (25.0, 70.0), (-50.0, 20.0)] {
+        assert_eq!(
+            combine_profiled(Operation::SmoothUnion, BlendProfile::Circular, a, b, 8.0),
+            a.min(b)
+        );
+        assert_eq!(
+            combine_profiled(Operation::Union, BlendProfile::Circular, a, b, 8.0),
+            combine(Operation::Union, a, b, 8.0)
+        );
+    }
+    assert_eq!(
+        BlendProfile::parse("circular"),
+        Some(BlendProfile::Circular)
+    );
+    assert_eq!(BlendProfile::parse("cubic"), None);
+}

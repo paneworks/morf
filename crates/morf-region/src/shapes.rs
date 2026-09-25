@@ -272,6 +272,84 @@ pub fn combine(operation: Operation, accumulated: f32, layer: f32, blend: f32) -
     }
 }
 
+/// The shape of a smooth seam.
+///
+/// Both profiles leave the two shapes exactly as they were outside a band the
+/// width of the blend radius around where they meet; they differ in what they
+/// put inside it.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum BlendProfile {
+    /// The polynomial smooth minimum: a soft joint that also swells where two
+    /// shapes merely pass close to one another. What a field has always done.
+    #[default]
+    Quadratic,
+    /// A circular fillet: where two edges meet, the joint is an arc of the
+    /// blend radius tangent to both — a true quarter circle where they meet at
+    /// a right angle, the inverted corner of a panel growing out of a frame.
+    Circular,
+}
+
+impl BlendProfile {
+    /// Parses the name a configuration uses.
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "quadratic" => Some(Self::Quadratic),
+            "circular" => Some(Self::Circular),
+            _ => None,
+        }
+    }
+
+    /// The name a configuration reads back.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Quadratic => "quadratic",
+            Self::Circular => "circular",
+        }
+    }
+
+    /// The discriminant the shader switches on.
+    pub fn code(self) -> u32 {
+        self as u32
+    }
+}
+
+/// [`combine`] with a choice of seam: the CPU twin of the shader's profiled
+/// operators, and what the numbers in its tests are checked against.
+pub fn combine_profiled(
+    operation: Operation,
+    profile: BlendProfile,
+    accumulated: f32,
+    layer: f32,
+    blend: f32,
+) -> f32 {
+    if profile == BlendProfile::Quadratic {
+        return combine(operation, accumulated, layer, blend);
+    }
+    let r = blend.max(0.0001);
+    match operation {
+        Operation::SmoothUnion => round_union(accumulated, layer, r),
+        Operation::SmoothSubtract => round_intersect(accumulated, -layer, r),
+        Operation::SmoothIntersect => round_intersect(accumulated, layer, r),
+        other => combine(other, accumulated, layer, blend),
+    }
+}
+
+/// A union whose inside corner is an arc of radius `r`.
+///
+/// Outside the band where both shapes are nearer than `r` it is the plain
+/// minimum. Inside it the surface is the circle of radius `r` whose centre is
+/// `r` away from both — the fillet — which is why the joint of two
+/// perpendicular edges comes out as an exact quarter circle.
+fn round_union(a: f32, b: f32, r: f32) -> f32 {
+    r.max(a.min(b)) - length([(r - a).max(0.0), (r - b).max(0.0)])
+}
+
+/// The intersection twin of [`round_union`], and with the second shape
+/// negated, a subtraction whose cut edge is rounded the same way.
+fn round_intersect(a: f32, b: f32, r: f32) -> f32 {
+    (-r).min(a.max(b)) + length([(r + a).max(0.0), (r + b).max(0.0)])
+}
+
 fn smooth_union(a: f32, b: f32, k: f32) -> f32 {
     let h = (0.5 + 0.5 * (b - a) / k).clamp(0.0, 1.0);
     b * (1.0 - h) + a * h - k * h * (1.0 - h)

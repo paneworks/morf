@@ -103,6 +103,7 @@ impl RenderBackend for RecordingBackend {
 
 mod backdrop;
 mod damage;
+mod drawers;
 mod field_packing;
 mod fields;
 mod outline_boxes;

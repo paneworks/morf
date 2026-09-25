@@ -1,6 +1,6 @@
-use morf_layout::Layout;
-use morf_region::{Operation, Shape};
-use morf_scene::{Color, Element, NodeHandle, Scene};
+use morf_layout::{Geometry, Layout, Transform2D};
+use morf_region::{BlendProfile, Operation, Shape};
+use morf_scene::{Color, Element, NodeHandle, Scene, Value};
 
 use crate::{commands::*, effects::*, sdf::*};
 
@@ -20,6 +20,11 @@ pub(crate) struct FieldDefaults {
     /// colour and left alone every layer that named its own — half a field
     /// taking the tint and half of it ignoring it.
     pub(crate) overlay: Color,
+    /// The shape of every smooth seam in the field.
+    pub(crate) profile: BlendProfile,
+    /// Where the field itself is drawn: its node and every ancestor
+    /// transform. A layer that tracks another node is placed relative to it.
+    pub(crate) transform: Transform2D,
 }
 
 /// Reads everything beneath a field that has a shape, in composition order.
@@ -83,7 +88,37 @@ fn shape_layer(
     node: NodeHandle,
     defaults: FieldDefaults,
 ) -> Result<Option<SdfLayer>, RenderError> {
-    let Some(bounds) = layout.geometry(node) else {
+    let own_rotation = scene.number(node, "rotation")? as f32;
+    let own_matrix = layer_matrix(scene, node)?;
+    let own_radii = rect_radii(scene, node)?.map(|radius| radius as f32);
+    // A tracking layer is wherever its node is drawn; any other is where its
+    // own layout put it.
+    let placement = match scene.track(node) {
+        Some(target) => tracked_placement(
+            scene,
+            layout,
+            target,
+            defaults.transform,
+            TrackedLayer {
+                rotation: own_rotation,
+                matrix: own_matrix,
+                radii: own_radii,
+            },
+        )?,
+        None => layout.geometry(node).map(|bounds| Placement {
+            bounds,
+            rotation: own_rotation,
+            matrix: own_matrix,
+            radii: own_radii,
+        }),
+    };
+    let Some(Placement {
+        bounds,
+        rotation,
+        matrix,
+        radii,
+    }) = placement
+    else {
         return Ok(None);
     };
     // A named letter decides the family: it is one particular outline, not a
@@ -154,8 +189,11 @@ fn shape_layer(
         .clamp(0.0, 1.0),
         operation,
         blend: layer_blend(scene, node, defaults.blend)?,
-        rotation: scene.number(node, "rotation")? as f32,
-        radii: rect_radii(scene, node)?.map(|radius| radius as f32),
+        rotation,
+        matrix,
+        blend_group: scene.number(node, "blend_group")?.clamp(0.0, 65_535.0) as u32,
+        profile: defaults.profile,
+        radii,
         points: scene.number(node, "points")?.clamp(3.0, 64.0) as f32,
         inner_radius: scene.number(node, "inner_radius")?.clamp(0.01, 1.0) as f32,
         thickness: scene.number(node, "thickness")?.max(0.0) as f32,
@@ -210,6 +248,9 @@ fn rect_layer(
         },
         blend,
         rotation: scene.number(node, "rotation")? as f32,
+        matrix: IDENTITY_LINEAR,
+        blend_group: 0,
+        profile: defaults.profile,
         // All four, so a rect rounded on one edge keeps that shape once it is
         // part of a fused surface instead of collapsing to a single radius.
         radii: rect_radii(scene, node)?.map(|radius| radius as f32),
@@ -243,4 +284,125 @@ fn layer_color(
 fn layer_blend(scene: &Scene, node: NodeHandle, default_blend: f32) -> Result<f32, RenderError> {
     let own = scene.number(node, "blend").unwrap_or(0.0).max(0.0) as f32;
     Ok(if own > 0.0 { own } else { default_blend })
+}
+
+/// The identity as a column-major 2×2.
+pub(crate) const IDENTITY_LINEAR: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+
+/// Where a layer sits in its field and how it is bent.
+struct Placement {
+    bounds: Geometry,
+    rotation: f32,
+    matrix: [f32; 4],
+    radii: [f32; 4],
+}
+
+/// What a tracking layer adds of its own on top of its node's placement.
+struct TrackedLayer {
+    rotation: f32,
+    matrix: [f32; 4],
+    radii: [f32; 4],
+}
+
+/// A layer's own `matrix`, or the identity.
+fn layer_matrix(scene: &Scene, node: NodeHandle) -> Result<[f32; 4], RenderError> {
+    Ok(match scene.current(node, "matrix")? {
+        Value::List(items) if items.len() == 4 => {
+            let mut matrix = IDENTITY_LINEAR;
+            for (slot, item) in matrix.iter_mut().zip(items) {
+                if let Value::Number(value) = item {
+                    *slot = *value as f32;
+                }
+            }
+            matrix
+        }
+        _ => IDENTITY_LINEAR,
+    })
+}
+
+/// Where `target` is drawn, as a layer in the field drawn through `field`.
+///
+/// The target's layout box through every transform above it and its own —
+/// animated values, a stretch, a matrix — brought into the field's own space.
+/// A scale along the axes becomes the layer's size, so a stretched panel is
+/// still an exact rounded box with round corners; anything else (a turn, a
+/// shear, a stretch along a diagonal) rides in the layer's matrix.
+///
+/// Nothing when the target is hidden, or not laid out in this surface.
+fn tracked_placement(
+    scene: &Scene,
+    layout: &Layout,
+    target: NodeHandle,
+    field: Transform2D,
+    own: TrackedLayer,
+) -> Result<Option<Placement>, RenderError> {
+    let Some(geometry) = layout.geometry(target) else {
+        return Ok(None);
+    };
+    let mut current = Some(target);
+    while let Some(node) = current {
+        if !scene.bool_value(node, "visible")? {
+            return Ok(None);
+        }
+        current = scene.parent(node)?;
+    }
+    let Ok(drawn) = layout.chain_transform(scene, target) else {
+        return Ok(None);
+    };
+    let Some(field_inverse) = field.inverse() else {
+        return Ok(None);
+    };
+    let placed = field_inverse.then(drawn);
+    let centre = placed.point(
+        geometry.x + geometry.width / 2.0,
+        geometry.y + geometry.height / 2.0,
+    );
+    let [a, b, c, d, _, _] = placed.matrix;
+    // The node's map, then the layer's own turn and matrix inside it.
+    let linear = multiply(
+        [a as f32, b as f32, c as f32, d as f32],
+        multiply(rotation_matrix(own.rotation), own.matrix),
+    );
+    let axis_aligned = linear[1].abs() < 1e-6 && linear[2].abs() < 1e-6;
+    let (size, matrix, radii) = if axis_aligned && linear[0] > 0.0 && linear[3] > 0.0 {
+        let (sx, sy) = (f64::from(linear[0]), f64::from(linear[3]));
+        (
+            (geometry.width * sx, geometry.height * sy),
+            IDENTITY_LINEAR,
+            own.radii.map(|radius| radius * linear[0].min(linear[3])),
+        )
+    } else {
+        ((geometry.width, geometry.height), linear, own.radii)
+    };
+    Ok(Some(Placement {
+        bounds: Geometry {
+            x: centre.0 - size.0 / 2.0,
+            y: centre.1 - size.1 / 2.0,
+            width: size.0,
+            height: size.1,
+        },
+        rotation: 0.0,
+        matrix,
+        radii,
+    }))
+}
+
+/// `left * right`, both column major.
+fn multiply(left: [f32; 4], right: [f32; 4]) -> [f32; 4] {
+    [
+        left[0] * right[0] + left[2] * right[1],
+        left[1] * right[0] + left[3] * right[1],
+        left[0] * right[2] + left[2] * right[3],
+        left[1] * right[2] + left[3] * right[3],
+    ]
+}
+
+/// A clockwise turn by `degrees` on a surface whose `y` grows downwards, as
+/// the field's own `rotation` turns a layer.
+fn rotation_matrix(degrees: f32) -> [f32; 4] {
+    if degrees == 0.0 {
+        return IDENTITY_LINEAR;
+    }
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    [cos, sin, -sin, cos]
 }

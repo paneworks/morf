@@ -4,7 +4,7 @@ use morf_scene::{Color, NodeHandle};
 use super::*;
 use crate::*;
 
-use crate::{Operation, SdfLayer, Shape};
+use crate::{BlendProfile, Operation, SdfLayer, Shape};
 
 /// Renders one command into a `size`-square target and reads the pixels back.
 pub(super) fn render_readback(list: &DrawList, size: u32) -> Vec<u8> {
@@ -101,6 +101,9 @@ pub(super) fn field_layer(x: f64, y: f64, size: f64, shape: Shape) -> SdfLayer {
         operation: Operation::Union,
         blend: 0.0,
         rotation: 0.0,
+        matrix: [1.0, 0.0, 0.0, 1.0],
+        blend_group: 0,
+        profile: BlendProfile::Quadratic,
         radii: [0.0; 4],
         points: 5.0,
         inner_radius: 0.5,

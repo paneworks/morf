@@ -12,7 +12,7 @@
 //! untouched, and contributes no crossings, which leaves the winding untouched.
 
 use morf_layout::Geometry;
-use morf_region::{Operation, Shape};
+use morf_region::{BlendProfile, Operation, Shape};
 use morf_scene::Color;
 
 use crate::commands::SdfLayer;
@@ -120,6 +120,9 @@ fn glyph_layer_for(glyph: char) -> SdfLayer {
         operation: Operation::Union,
         blend: 0.0,
         rotation: 0.0,
+        matrix: [1.0, 0.0, 0.0, 1.0],
+        blend_group: 0,
+        profile: BlendProfile::Quadratic,
         radii: [0.0; 4],
         points: 5.0,
         inner_radius: 0.5,

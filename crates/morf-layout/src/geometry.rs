@@ -121,6 +121,16 @@ impl Transform2D {
         })
     }
 
+    /// The transform that undoes this one, or nothing when this one collapses
+    /// the plane onto a line.
+    pub fn inverse(self) -> Option<Self> {
+        let [a, b, c, d] = self.linear_inverse()?;
+        let [_, _, _, _, tx, ty] = self.matrix;
+        Some(Self {
+            matrix: [a, b, c, d, -(a * tx + c * ty), -(b * tx + d * ty)],
+        })
+    }
+
     /// Composes this transform after `inner`.
     pub fn then(self, inner: Self) -> Self {
         let [a, b, c, d, tx, ty] = self.matrix;

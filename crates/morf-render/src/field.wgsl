@@ -25,6 +25,11 @@ struct Layer {
     color: vec4<f32>,
     // Corner radii: top-left, top-right, bottom-right, bottom-left.
     radii: vec4<f32>,
+    // The inverse of the layer's linear map, column major: field (once
+    // turned) into the shape's own frame. The identity for most layers.
+    frame: vec4<f32>,
+    // [blend group, distance scale, blend profile, unused]
+    extras: vec4<f32>,
 };
 
 /// Everything about a field's surface that is not its shape.
@@ -406,10 +411,32 @@ fn combine_color_weight(
     }
 }
 
-fn combine(accumulated: f32, layer_distance: f32, operation: u32, blend: f32) -> f32 {
+/// A union whose inside corner is an arc of radius `r` tangent to both
+/// shapes — a quarter circle where two edges meet square — and the plain
+/// minimum everywhere at least one shape is further than `r`.
+fn round_union(a: f32, b: f32, r: f32) -> f32 {
+    return max(r, min(a, b)) - length(max(vec2<f32>(r - a, r - b), vec2<f32>(0.0)));
+}
+
+/// Its intersection twin; with the second shape negated, a rounded cut.
+fn round_intersect(a: f32, b: f32, r: f32) -> f32 {
+    return min(-r, max(a, b)) + length(max(vec2<f32>(r + a, r + b), vec2<f32>(0.0)));
+}
+
+fn combine(accumulated: f32, layer_distance: f32, operation: u32, blend: f32, profile: u32) -> f32 {
     // A smooth operator divides by its radius, so a zero radius is the hard
     // boolean rather than a division by zero.
     let k = max(blend, 0.0001);
+    // The circular profile: the same three smooth operators, with the seam an
+    // arc rather than a polynomial swell. `morf_region::combine_profiled` is
+    // its CPU twin.
+    if profile == 1u && operation >= 3u && operation <= 5u {
+        switch operation {
+            case 3u: { return round_union(accumulated, layer_distance, k); }
+            case 4u: { return round_intersect(accumulated, -layer_distance, k); }
+            default: { return round_intersect(accumulated, layer_distance, k); }
+        }
+    }
     switch operation {
         case 0u: { return min(accumulated, layer_distance); }
         case 1u: { return max(accumulated, -layer_distance); }
@@ -432,6 +459,10 @@ fn combine(accumulated: f32, layer_distance: f32, operation: u32, blend: f32) ->
 struct Composed {
     distance: f32,
     fill: vec4<f32>,
+    // The blend group of whichever layer the surface here belongs to: the
+    // one that last added the nearest surface. A layer in another non-zero
+    // group meets it with a hard edge.
+    group: u32,
 };
 
 /// Walks the field's layers and resolves them into one surface.
@@ -443,10 +474,19 @@ fn compose(local: vec2<f32>, base: vec4<f32>, first: u32, count: u32) -> Compose
     var out: Composed;
     out.distance = 1e20;
     out.fill = base;
+    out.group = 0u;
     for (var index = 0u; index < count; index = index + 1u) {
         let layer = layers[first + index];
-        let centred = rotate(local - layer.rect.xy, layer.extra.y);
-        let start = shape_distance(u32(layer.kinds.x), centred, layer);
+        let turned = rotate(local - layer.rect.xy, layer.extra.y);
+        // Into the shape's own frame through the inverse of its matrix, and
+        // the distance scaled back by the map's smallest stretch so it never
+        // overstates the distance on the surface.
+        let centred = vec2<f32>(
+            layer.frame.x * turned.x + layer.frame.z * turned.y,
+            layer.frame.y * turned.x + layer.frame.w * turned.y,
+        );
+        let scale = layer.extras.y;
+        let start = shape_distance(u32(layer.kinds.x), centred, layer) * scale;
         // The morph is a straight interpolation of the two distance fields.
         // Where the fields disagree about which side of the edge a point is on,
         // the crossing moves continuously between them, so the outline can
@@ -458,22 +498,32 @@ fn compose(local: vec2<f32>, base: vec4<f32>, first: u32, count: u32) -> Compose
         if layer.kinds.z > 0.0 && u32(layer.kinds.y) != u32(layer.kinds.x) {
             value = mix(
                 start,
-                shape_distance(u32(layer.kinds.y), centred, layer),
+                shape_distance(u32(layer.kinds.y), centred, layer) * scale,
                 layer.kinds.z,
             );
         }
+        let group = u32(layer.extras.x);
         if index == 0u {
             out.distance = value;
             out.fill = layer.color;
+            out.group = group;
         } else {
-            let weight = combine_color_weight(
-                out.distance,
-                value,
-                u32(layer.kinds.w),
-                layer.extra.z,
-            );
+            var operation = u32(layer.kinds.w);
+            // Two different non-zero groups do not blend: the smooth operator
+            // becomes its hard one where the surface here is the other's.
+            if operation >= 3u && operation <= 5u && group != 0u && out.group != 0u
+                && group != out.group {
+                operation = operation - 3u;
+            }
+            let weight = combine_color_weight(out.distance, value, operation, layer.extra.z);
             out.fill = mix(out.fill, layer.color, weight);
-            out.distance = combine(out.distance, value, u32(layer.kinds.w), layer.extra.z);
+            let before = out.distance;
+            out.distance = combine(before, value, operation, layer.extra.z, u32(layer.extras.z));
+            // Only an operator that adds surface can make it this layer's.
+            let adds = operation == 0u || operation == 3u || operation == 6u;
+            if adds && value < before {
+                out.group = group;
+            }
         }
     }
     return out;
