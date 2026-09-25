@@ -422,3 +422,69 @@ fn removing_nodes_frees_their_property_signals() {
     assert_eq!(scene.property_signal_count(), baseline);
     assert!(scene.children(root).unwrap().is_empty());
 }
+
+#[test]
+fn a_display_clock_starts_an_animation_on_the_tick_after_it_was_asked_for() {
+    let mut scene = Scene::new();
+    scene.set_start_on_tick(true);
+    let rect = scene.create(Element::Rect);
+    let behavior = Behavior::timed(Duration::from_millis(200), Easing::Linear);
+    scene.set_behavior(rect, "width", Some(behavior)).unwrap();
+    scene.assign(rect, "width", 100.0).unwrap();
+
+    // The frame after a stall: its delta is time the animation never had.
+    let frame = scene.tick_animations(Duration::from_millis(150)).unwrap();
+    assert_eq!(scene.number(rect, "width").unwrap(), 0.0);
+    assert!(frame.active);
+    scene.tick_animations(Duration::from_millis(100)).unwrap();
+    assert_eq!(scene.number(rect, "width").unwrap(), 50.0);
+
+    // Only its first tick is free: a later stall is time it had.
+    scene.tick_animations(Duration::from_millis(50)).unwrap();
+    assert_eq!(scene.number(rect, "width").unwrap(), 75.0);
+
+    // A hand-driven clock means its deltas exactly.
+    let mut manual = Scene::new();
+    let other = manual.create(Element::Rect);
+    manual.set_behavior(other, "width", Some(behavior)).unwrap();
+    manual.assign(other, "width", 100.0).unwrap();
+    manual.tick_animations(Duration::from_millis(100)).unwrap();
+    assert_eq!(manual.number(other, "width").unwrap(), 50.0);
+}
+
+#[test]
+fn a_restarting_behavior_retargets_like_qt_from_where_it_is_over_the_whole_curve() {
+    let mut scene = Scene::new();
+    let rect = scene.create(Element::Rect);
+    let behavior = Behavior {
+        keep_velocity: false,
+        ..Behavior::timed(Duration::from_millis(400), Easing::OutCubic)
+    };
+    scene.set_behavior(rect, "width", Some(behavior)).unwrap();
+    scene.assign(rect, "width", 400.0).unwrap();
+    scene.tick_animations(Duration::from_millis(100)).unwrap();
+    let from = scene.number(rect, "width").unwrap();
+    assert!(
+        from > 100.0,
+        "out_cubic is past a quarter at a quarter: {from}"
+    );
+
+    // Sent back mid-flight: out_cubic from `from` to 0 over the full 400 ms.
+    scene.assign(rect, "width", 0.0).unwrap();
+    scene.tick_animations(Duration::from_millis(0)).unwrap();
+    assert_eq!(scene.number(rect, "width").unwrap(), from);
+    scene.tick_animations(Duration::from_millis(200)).unwrap();
+    let eased = 1.0 - (1.0f64 - 0.5).powi(3);
+    let expected = from * (1.0 - eased);
+    let now = scene.number(rect, "width").unwrap();
+    assert!((now - expected).abs() < 0.5, "{now} vs {expected}");
+    // The whole duration again, not what was left of the first.
+    assert!(
+        scene
+            .tick_animations(Duration::from_millis(150))
+            .unwrap()
+            .active
+    );
+    scene.tick_animations(Duration::from_millis(51)).unwrap();
+    assert_eq!(scene.number(rect, "width").unwrap(), 0.0);
+}

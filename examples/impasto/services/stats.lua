@@ -5,7 +5,11 @@
 -- read one JSON line per interval; here the same files are read directly:
 -- /proc/stat (every core), /proc/meminfo, /proc/loadavg, /proc/uptime,
 -- /proc/net/dev, the hwmon sensors, and `morf.fs.disk` for each real mount.
--- Mounts and sensors are re-read only every tenth sample. When
+-- Mounts, and which sensors there are, are re-read only every tenth
+-- sample. The sensors themselves are read off the drawing thread
+-- (`morf.fs.read_async`): a hwmon read asks the firmware, and a laptop's
+-- dozen of them can take over 100 ms -- long enough to stall every
+-- animation on screen once per sample. When
 -- examples/lib/sysinfo.lua is present and offers `temperature()`, that is
 -- used instead of this file's own reader.
 --
@@ -201,24 +205,35 @@ local function tenths(value)
 end
 M.tenths = tenths
 
-local function read_temperature()
-  if sysinfo and type(sysinfo.temperature) == "function" then
-    local ok, t = pcall(sysinfo.temperature)
-    if ok and type(t) == "table" and t.celsius then return t end
-  end
-  local best
+-- Where the sensors are: every hwmon chip's `tempN_input`, with its label.
+-- Listing and labels are plain sysfs attributes and cheap; only the inputs
+-- ask the hardware, so only they go to `read_async`.
+local function find_sensors()
+  local found = {}
   for _, entry in ipairs(fs.list("/sys/class/hwmon") or {}) do
     local dir = fs.join("/sys/class/hwmon", entry.name)
     local name = (fs.read(fs.join(dir, "name")) or ""):match("^%s*(.-)%s*$")
     for index = 1, 16 do
-      local raw = fs.read(fs.join(dir, "temp" .. index .. "_input"))
-      local milli = raw and tonumber(raw:match("^%s*(%d+)"))
-      if milli then
-        local celsius = milli / 1000
-        if celsius > 5 and celsius < 125 and (not best or celsius > best.raw) then
-          local label = (fs.read(fs.join(dir, "temp" .. index .. "_label")) or ""):match("^%s*(.-)%s*$")
-          best = { raw = celsius, celsius = tenths(celsius), label = label ~= "" and label or name }
-        end
+      local input = fs.join(dir, "temp" .. index .. "_input")
+      if fs.exists(input) then
+        local label = (fs.read(fs.join(dir, "temp" .. index .. "_label")) or ""):match("^%s*(.-)%s*$")
+        found[#found + 1] = { path = input, label = label ~= "" and label or name }
+      end
+    end
+  end
+  return found
+end
+
+-- The hottest plausible reading among what `read_async` brought back.
+local function hottest(sensors, contents)
+  local best
+  for index, sensor in ipairs(sensors) do
+    local raw = contents[index]
+    local milli = type(raw) == "string" and tonumber(raw:match("^%s*(%d+)"))
+    if milli then
+      local celsius = milli / 1000
+      if celsius > 5 and celsius < 125 and (not best or celsius > best.raw) then
+        best = { raw = celsius, celsius = tenths(celsius), label = sensor.label }
       end
     end
   end
@@ -237,8 +252,12 @@ local function push(series, value)
 end
 
 local tick = 0
-function M.sample()
-  tick = tick + 1
+local sensors = {}
+local reading = false
+
+-- The part of a sample read on the drawing thread: /proc, which the kernel
+-- answers from memory, and the mounts.
+local function finish_sample()
   now.cpu, now.cores = read_cpu()
   now.memory_used, now.memory_total, now.swap_used, now.swap_total = read_memory()
   local a, b, c = (fs.read("/proc/loadavg") or ""):match("(%S+)%s+(%S+)%s+(%S+)")
@@ -249,8 +268,6 @@ function M.sample()
     now.disks = read_disks()
     now.model = read_model()
   end
-  -- Sensors change slowly but are what a hot machine watches: every sample.
-  now.temperature = read_temperature()
   -- The first CPU sample has no interval to measure over.
   if tick > 1 then
     push(history.cpu, now.cpu / 100)
@@ -261,6 +278,40 @@ function M.sample()
     now.ready = true
   end
   s.revision:set(s.revision:get() + 1)
+end
+
+--- Takes one sample. The sensors are read first, off the drawing thread --
+--- they change slowly but are what a hot machine watches, so every sample
+--- -- and the rest of the sample is taken when they are in, so every figure
+--- is from the same moment and the graphs move once.
+function M.sample()
+  if reading then return end
+  tick = tick + 1
+  if tick % 10 == 1 then sensors = find_sensors() end
+  if sysinfo and type(sysinfo.temperature) == "function" then
+    local ok, t = pcall(sysinfo.temperature)
+    now.temperature = ok and type(t) == "table" and t.celsius and t or nil
+    finish_sample()
+    return
+  end
+  if #sensors == 0 then
+    now.temperature = nil
+    finish_sample()
+    return
+  end
+  local paths = {}
+  for index, sensor in ipairs(sensors) do paths[index] = sensor.path end
+  local asked = sensors
+  reading = true
+  local queued = fs.read_async(paths, function(ok, contents)
+    reading = false
+    now.temperature = ok and hottest(asked, contents) or nil
+    finish_sample()
+  end)
+  if not queued then
+    reading = false
+    finish_sample()
+  end
 end
 
 --- For a test bench: `n` samples at once, with made-up movement, so a

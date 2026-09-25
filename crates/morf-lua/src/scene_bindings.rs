@@ -14,8 +14,19 @@ pub(crate) fn create_node(state: &Rc<RefCell<ReactiveState>>, element: Element) 
     state.scene.create(element)
 }
 
-/// The pseudo-property a binding depends on when it reads `layout_*`.
-pub(crate) const LAYOUT_GEOMETRY: &str = "layout_geometry";
+/// The pseudo-property a binding depends on when it reads `layout_x` or
+/// `layout_y`.
+pub(crate) const LAYOUT_POSITION: &str = "layout_position";
+/// The pseudo-property a binding depends on when it reads `layout_width` or
+/// `layout_height`.
+///
+/// Apart from the position because the two change apart. A label in a panel
+/// that is centred in a growing island moves on every frame of the morph and
+/// keeps its size; a binding that only sizes something to it (a dot under
+/// it, a highlight behind it) re-ran on every one of those frames when one
+/// signal stood for both -- forty-two calendar cells, three milliseconds a
+/// frame, for nothing.
+pub(crate) const LAYOUT_SIZE: &str = "layout_size";
 
 pub(crate) fn bump_property_signal(
     state: &mut ReactiveState,
@@ -217,9 +228,14 @@ pub(crate) fn node_metatable<'gc>(
         {
             let mut state = read_state.borrow_mut();
             if let Some(active) = &mut state.active {
+                let which = if matches!(axis, "x" | "y") {
+                    LAYOUT_POSITION
+                } else {
+                    LAYOUT_SIZE
+                };
                 active
                     .property_reads
-                    .insert((node.handle, LAYOUT_GEOMETRY.to_owned(), false));
+                    .insert((node.handle, which.to_owned(), false));
             }
             let value =
                 state

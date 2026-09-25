@@ -14,6 +14,11 @@
 //! a loop that queues faster than the workers drain is told no instead of
 //! growing a queue without end.
 //!
+//! The same pool reads files that may block: `morf.fs.read_async`. A
+//! sensor under `/sys/class/hwmon` can take tens of milliseconds to answer
+//! a read -- the firmware is asked, not a cache -- and a shell that samples
+//! a dozen of them on the drawing thread stalls every animation behind it.
+//!
 //! Teardown-safe by construction: the callbacks live here, in the runtime's
 //! state, and the workers only ever hold job data and a sender. When the
 //! runtime goes, the callbacks go with it; a worker that finishes afterwards
@@ -79,6 +84,11 @@ pub(crate) enum ImageJob {
         format: OutputFormat,
         quality: u8,
     },
+    /// Files read whole, each up to `limit` bytes, in order.
+    ReadFiles {
+        paths: Vec<PathBuf>,
+        limit: u64,
+    },
 }
 
 /// What a finished job hands its callback.
@@ -86,6 +96,8 @@ pub(crate) enum ImageOutcome {
     Info(ImageInfo, PathBuf),
     Pixel([u8; 4]),
     Palette(Vec<PaletteEntry>),
+    /// Each file's bytes, or `None` where it could not be read.
+    Files(Vec<Option<Vec<u8>>>),
 }
 
 type Finished = (u64, Result<ImageOutcome, String>);
@@ -211,6 +223,12 @@ fn run(job: ImageJob) -> Result<ImageOutcome, String> {
         ImageJob::Palette { source, count } => ops::palette(&source, count)
             .map(ImageOutcome::Palette)
             .map_err(|error| error.to_string()),
+        ImageJob::ReadFiles { paths, limit } => Ok(ImageOutcome::Files(
+            paths
+                .iter()
+                .map(|path| morf_io::fs::read(path, limit).ok())
+                .collect(),
+        )),
         ImageJob::SaveCapture {
             capture,
             region,

@@ -133,6 +133,9 @@ pub(crate) struct ReactiveState {
     pub(crate) graph: Option<Graph<IpcValue>>,
     pub(crate) values: HashMap<SignalId, IpcValue>,
     pub(crate) signals: Vec<SignalId>,
+    /// Signals the effects of the flush under way wrote, for the flush to
+    /// confirm against the graph when it ends.
+    pub(crate) flush_writes: Vec<SignalId>,
     pub(crate) property_signals: HashMap<(NodeHandle, String, bool), SignalId>,
     /// The graph's handle for each Lua effect token, so an effect can be
     /// forgotten when the node it drives is removed.
@@ -531,6 +534,7 @@ impl ReactiveState {
             values,
             signals: vec![clock, clock_minutes, clock_hours, session_lock],
             property_signals: HashMap::new(),
+            flush_writes: Vec::new(),
             effect_ids: HashMap::new(),
             dead_effects: Vec::new(),
             dead_signals: Vec::new(),

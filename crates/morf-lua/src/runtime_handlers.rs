@@ -26,6 +26,8 @@ impl Runtime {
             state.handler_depth = state.handler_depth.saturating_sub(1);
             state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)
         };
+        let _span =
+            flush.then(|| crate::profile::span(|| "engine: flush after a handler".to_owned()));
         if flush
             && let Err(message) = self
                 .lua

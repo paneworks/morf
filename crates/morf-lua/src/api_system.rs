@@ -79,6 +79,7 @@ pub(crate) fn install_system_service_api<'gc>(
 ) {
     let dbus_get = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (proxy, property): (UserRef<DbusToken>, String) = stack.consume(ctx)?;
+        let _span = crate::profile::span(|| format!("blocking D-Bus get {property}"));
         let value = proxy.proxy.get_value(&property).map_err(HostError)?;
         stack.replace(ctx, dbus_value_to_lua(ctx, value).map_err(HostError)?);
         Ok(CallbackReturn::Return)
@@ -89,6 +90,7 @@ pub(crate) fn install_system_service_api<'gc>(
         let (proxy, method, arguments): (UserRef<DbusToken>, String, Variadic<Vec<LuaValue>>) =
             stack.consume(ctx)?;
         let argument = positional_from_lua(ctx, arguments.0).map_err(HostError)?;
+        let _span = crate::profile::span(|| format!("blocking D-Bus call {method}"));
         let value = proxy
             .proxy
             .call_value_with(&method, &argument)
@@ -103,6 +105,7 @@ pub(crate) fn install_system_service_api<'gc>(
         let (proxy, method, arguments): (UserRef<DbusToken>, String, Variadic<Vec<LuaValue>>) =
             stack.consume(ctx)?;
         let argument = positional_from_lua(ctx, arguments.0).map_err(HostError)?;
+        let _span = crate::profile::span(|| format!("blocking D-Bus call {method}"));
         let value = proxy
             .proxy
             .call_value_with(&method, &argument)
@@ -114,6 +117,7 @@ pub(crate) fn install_system_service_api<'gc>(
         let (proxy, property, value): (UserRef<DbusToken>, String, LuaValue) =
             stack.consume(ctx)?;
         let value = lua_to_dbus(ctx, value, 0).map_err(HostError)?;
+        let _span = crate::profile::span(|| format!("blocking D-Bus set {property}"));
         proxy
             .proxy
             .set_value(&property, &value)
@@ -211,6 +215,7 @@ pub(crate) fn install_system_service_api<'gc>(
     });
     let dbus_introspect = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let proxy: UserRef<DbusToken> = stack.consume(ctx)?;
+        let _span = crate::profile::span(|| "blocking D-Bus introspect".to_owned());
         let xml = proxy
             .proxy
             .introspect()
@@ -238,6 +243,7 @@ pub(crate) fn install_system_service_api<'gc>(
             Option<i64>,
         ) = stack.consume(ctx)?;
         let bus = parse_bus(&bus)?;
+        let _span = crate::profile::span(|| format!("D-Bus connect {destination} {interface}"));
         // A second is right for reading a property and wrong for anything a
         // human is part of: BlueZ `Pair` does not return until the pairing
         // succeeds, fails, or times out well past it, and a caller with no way

@@ -161,6 +161,7 @@ pub(crate) fn evaluate_effect(
                 )
                 .map_err(|error| error.to_string())?;
             state.values.insert(signal, value);
+            state.flush_writes.push(signal);
         }
     }
     state_result?;
@@ -230,7 +231,10 @@ pub(crate) fn execute_handler_args(
             .map(|value| value.to_lua(ctx))
             .collect::<Vec<_>>(),
     );
-    let executor = Executor::start(ctx, ctx.fetch(closure).into(), args);
+    let function = ctx.fetch(closure);
+    let _span =
+        crate::profile::span(|| format!("handler {}", crate::profile::closure_origin(function)));
+    let executor = Executor::start(ctx, function.into(), args);
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
         Ok(Ok(())) => Ok(()),
@@ -263,7 +267,10 @@ pub(crate) fn execute_screencopy_handler(
             LuaValue::String(ctx.intern(error.as_bytes())),
         ]),
     };
-    let executor = Executor::start(ctx, ctx.fetch(closure).into(), args);
+    let function = ctx.fetch(closure);
+    let _span =
+        crate::profile::span(|| format!("handler {}", crate::profile::closure_origin(function)));
+    let executor = Executor::start(ctx, function.into(), args);
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
         Ok(Ok(())) => Ok(()),

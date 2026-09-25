@@ -246,3 +246,58 @@ fn a_chain_of_layout_bindings_settles_in_as_many_passes_as_it_is_long() {
     assert!(!settled.stable);
     assert_eq!(settled.passes, 1);
 }
+
+#[test]
+fn a_binding_on_layout_size_stays_still_while_its_node_only_moves() {
+    // A label in a panel that slides moves on every frame and keeps its
+    // size; the bindings sizing something to it used to re-run on every one
+    // of those frames, one signal standing for the whole rectangle.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "layout-split.lua",
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local sized, placed = 0, 0
+                local label = ui.Item { width = 40, height = 10 }
+                local slide = ui.Item { x = 0, width = 100, height = 20, label }
+                ui.Item { width = 300, height = 50, slide }
+                ui.Rect { width = function() sized = sized + 1 return label.layout_width or 0 end }
+                ui.Rect { x = function() placed = placed + 1 return label.layout_x or 0 end }
+                morf.ipc.slide = function() slide.x = 50 end
+                morf.ipc.grow = function() label.width = 60 end
+                morf.ipc.counts = function() return sized .. "/" .. placed end
+            "#,
+        )
+        .unwrap();
+    let root = runtime.scene().roots()[0];
+    let size = morf_layout::Size {
+        width: 300.0,
+        height: 50.0,
+    };
+    let frame = |runtime: &mut Runtime| {
+        let layout =
+            morf_layout::Layout::compute(&runtime.scene(), root, size, &mut super::NoText).unwrap();
+        runtime.observe_layout(&layout);
+    };
+    let counts = |runtime: &mut Runtime| runtime.call_ipc("counts", &[]).unwrap();
+    frame(&mut runtime);
+    assert_eq!(counts(&mut runtime), [IpcValue::String("2/2".into())]);
+
+    runtime.call_ipc("slide", &[]).unwrap();
+    frame(&mut runtime);
+    assert_eq!(
+        counts(&mut runtime),
+        [IpcValue::String("2/3".into())],
+        "moved, not resized"
+    );
+
+    runtime.call_ipc("grow", &[]).unwrap();
+    frame(&mut runtime);
+    assert_eq!(
+        counts(&mut runtime),
+        [IpcValue::String("3/3".into())],
+        "resized, not moved"
+    );
+}

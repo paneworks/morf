@@ -346,6 +346,7 @@ pub(crate) fn configure_behaviors<'gc>(
                     enabled: parse_enabled(ctx, behavior)?,
                     color_space: parse_color_space(ctx, behavior)?,
                     hue: parse_hue(ctx, behavior)?,
+                    keep_velocity: parse_retarget(ctx, behavior)?,
                 }),
             )
             .map_err(|error| error.to_string())?;
@@ -393,6 +394,24 @@ pub(crate) fn parse_repeat<'gc>(ctx: Context<'gc>, options: Table<'gc>) -> Resul
             name => Err(format!("unknown behavior loops mode `{name}`")),
         },
         _ => Err("behavior loops must be a pass count or a mode name".to_owned()),
+    }
+}
+
+/// `retarget = "blend" | "restart"`: whether a write to a moving property
+/// carries its speed into the new motion (`"blend"`, the default) or starts
+/// the animation over from where the property is (`"restart"`, Qt's
+/// Behavior). True for blend.
+pub(crate) fn parse_retarget<'gc>(ctx: Context<'gc>, options: Table<'gc>) -> Result<bool, String> {
+    match options.get_value(ctx, "retarget") {
+        LuaValue::Nil => Ok(true),
+        LuaValue::String(value) => match value.display_lossy().to_string().as_str() {
+            "blend" => Ok(true),
+            "restart" => Ok(false),
+            name => Err(format!(
+                "behavior retarget must be \"blend\" or \"restart\", not `{name}`"
+            )),
+        },
+        _ => Err("behavior retarget must be a string".to_owned()),
     }
 }
 

@@ -24,6 +24,7 @@ impl Scene {
             layout_revision: 0,
             root_revisions: FastMap::default(),
             motion_scale: 1.0,
+            start_on_tick: false,
             removed: Vec::new(),
             shaders: FastMap::default(),
             terminal_screens: FastMap::default(),
@@ -32,17 +33,16 @@ impl Scene {
 
     /// Allocates an element with every schema property initialized.
     pub fn create(&mut self, element: Element) -> NodeHandle {
-        let node = self.nodes.insert_with_key(|id| {
+        let node = self.nodes.insert_with_key(|_| {
             let properties = schema(element)
                 .into_iter()
                 .map(|spec| {
-                    let prefix = format!("{}[{:?}].{}", element.name(), id, spec.name);
-                    let current = self
-                        .properties
-                        .signal(format!("{prefix}.current"), spec.default.clone());
-                    let target = self
-                        .properties
-                        .signal(format!("{prefix}.target"), spec.default);
+                    // Named by the property alone: nothing subscribes to
+                    // these signals, so the name is never shown, and
+                    // formatting one per signal -- element, node, property,
+                    // level -- was most of what building a node cost.
+                    let current = self.properties.signal(spec.name, spec.default.clone());
+                    let target = self.properties.signal(spec.name, spec.default);
                     (
                         spec.name,
                         PropertySlot {
@@ -325,6 +325,7 @@ impl Scene {
             let initial_velocity = self
                 .animations
                 .get(&key)
+                .filter(|_| behavior.keep_velocity)
                 .map(Animation::velocity)
                 .unwrap_or_else(|| zero_velocity(&from));
             self.properties.write(slot.target, value.clone())?;
@@ -379,6 +380,22 @@ impl Scene {
         self.motion_scale
     }
 
+    /// Whether an animation's clock starts on the first tick after it was
+    /// asked for, rather than being charged that tick's whole delta.
+    ///
+    /// A loop driven by a display wants this. There a tick's delta is the
+    /// time since the previous frame, and an animation asked for between
+    /// two frames did not exist for most of it -- for all of it, and then
+    /// some, when the turn that asked also built a panel and held the loop.
+    /// Charged the delta, a 380 ms morph whose first frame came 100 ms late
+    /// is drawn a quarter of the way there on its first frame, and the eye
+    /// sees it jump. Started on the tick, its first frame is its start, as
+    /// it is when the shell was idle before it. Off by default: a clock
+    /// driven by hand (a test, a headless run) means its deltas exactly.
+    pub fn set_start_on_tick(&mut self, on: bool) {
+        self.start_on_tick = on;
+    }
+
     /// Whether a tick would move anything: an animation or group that is
     /// running rather than paused, or an ending not yet reported. What a loop
     /// asks before it keeps a clock ticking for motion.
@@ -426,7 +443,13 @@ impl Scene {
                 .expect("animation key vanished");
             let paused = animation.is_paused();
             let delayed = animation.is_delayed();
-            let complete = !animation.clock.update(delta.as_secs_f32());
+            let fresh = std::mem::take(&mut animation.fresh);
+            let step = if fresh && self.start_on_tick {
+                0.0
+            } else {
+                delta.as_secs_f32()
+            };
+            let complete = !animation.clock.update(step);
             // A settling animation lands exactly on its target; an endless one
             // is stopped at whatever point in the cycle the clock reports.
             let value = if complete && animation.settles() {

@@ -30,6 +30,7 @@ pub(crate) fn register_property_binding<'gc>(
         );
         state.register_external_effect(token, name);
     }
+    let _span = crate::profile::span(|| "engine: a binding's first run".to_owned());
     let _ = flush_reactive(state, ctx, limits);
 }
 
@@ -378,6 +379,7 @@ fn flush_graph(
             Err(error) => break Err(error),
         };
         let mut capture = morf_reactive::EffectCapture::default();
+        let _span = crate::profile::span(|| effect_label(state, ctx, &pending));
         let outcome = evaluate_effect(
             state,
             ctx,
@@ -395,15 +397,35 @@ fn flush_graph(
     };
     let result = result.map(|()| flush.finish());
 
+    let _span =
+        crate::profile::span(|| "engine: after a flush (signal copies, graph gc)".to_owned());
     let mut state = state.borrow_mut();
     state.flushing = false;
     let graph = state
         .graph
         .take()
         .expect("the graph stays in place during a flush");
-    for signal in state.signals.clone() {
-        if let Ok(value) = graph.read(signal) {
-            state.values.insert(signal, value.clone());
+    // The mirror Lua reads signals from is brought in line with the graph.
+    // Every write mirrors itself as it is made, so a clean flush only has to
+    // confirm what its effects wrote -- the graph may still have refused a
+    // write the effect already mirrored. A flush that failed may have rolled
+    // writes back wholesale (a loop restores every original), so after one,
+    // everything is copied. Copying everything after every flush cost a
+    // read and a clone per signal per flush, and building a panel flushes
+    // once per binding: tens of milliseconds on a panel of a thousand.
+    let failed = !matches!(&result, Ok(report) if report.errors.is_empty());
+    let written = std::mem::take(&mut state.flush_writes);
+    if failed {
+        for signal in state.signals.clone() {
+            if let Ok(value) = graph.read(signal) {
+                state.values.insert(signal, value.clone());
+            }
+        }
+    } else {
+        for signal in written {
+            if let Ok(value) = graph.read(signal) {
+                state.values.insert(signal, value.clone());
+            }
         }
     }
     state.graph = Some(graph);
@@ -426,5 +448,45 @@ fn flush_graph(
             state.log(LogLevel::Warn, message.clone());
             Err(message)
         }
+    }
+}
+
+/// What an effect is, for the profiler: a binding by the node path and
+/// property it drives, anything else by the name it was registered under,
+/// and either by where its function was written.
+fn effect_label(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'_>,
+    pending: &morf_reactive::PendingEffect,
+) -> String {
+    let state = state.borrow();
+    let Some(effect) = state.effects.get(&pending.token()) else {
+        return format!("effect {}", pending.name());
+    };
+    let origin = crate::profile::closure_origin(ctx.fetch(&effect.closure));
+    let node_path = |node: NodeHandle| {
+        let id = state
+            .scene
+            .string_value(node, "id")
+            .ok()
+            .filter(|id| !id.is_empty())
+            .map(|id| format!(" #{id}"))
+            .unwrap_or_default();
+        format!(
+            "{}{id}",
+            crate::runtime_config::lint_path(&state.scene, node)
+        )
+    };
+    match &effect.sink {
+        Some(EffectSink::Property(sink)) => {
+            format!(
+                "binding {}.{} ({origin})",
+                node_path(sink.node),
+                sink.property
+            )
+        }
+        Some(EffectSink::State(node)) => format!("binding {}.state ({origin})", node_path(*node)),
+        Some(EffectSink::Loop(node)) => format!("binding {}.loop ({origin})", node_path(*node)),
+        None => format!("effect {} ({origin})", pending.name()),
     }
 }

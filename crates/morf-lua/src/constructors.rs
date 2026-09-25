@@ -27,6 +27,7 @@ pub(crate) fn element_constructor<'gc>(
             }
             properties = clean;
         }
+        let _span = crate::profile::span(|| format!("construct ui.{element:?}"));
         let node = create_node(&state, element);
         configure_element(&state, ctx, limits, node, properties).map_err(HostError)?;
         if element == Element::Image {

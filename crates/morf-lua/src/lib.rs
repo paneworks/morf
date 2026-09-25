@@ -60,6 +60,7 @@ mod lua_values;
 mod model_revisions;
 mod node_loops;
 mod process_helpers;
+pub mod profile;
 mod reactive_bindings;
 mod reactive_execute;
 mod runtime_animation;

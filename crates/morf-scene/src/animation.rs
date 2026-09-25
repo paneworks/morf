@@ -211,6 +211,15 @@ pub struct Behavior {
     pub color_space: crate::color::ColorSpace,
     /// Which way round the wheel a polar colour space goes.
     pub hue: crate::color::HueDirection,
+    /// What a write does to a property already on its way somewhere.
+    ///
+    /// True (the default) carries the speed it had into the new motion, so a
+    /// retarget bends the path rather than kinking it. False is Qt's
+    /// `Behavior { NumberAnimation {} }`: the animation starts over from
+    /// where the property is, the whole duration and the whole easing curve
+    /// again, as if it had been at rest there -- what a port of a Qt shell
+    /// needs to move the way the original does.
+    pub keep_velocity: bool,
 }
 
 impl Default for Behavior {
@@ -225,6 +234,7 @@ impl Default for Behavior {
             color_space: crate::color::ColorSpace::default(),
             hue: crate::color::HueDirection::default(),
             enabled: true,
+            keep_velocity: true,
         }
     }
 }
@@ -350,6 +360,14 @@ pub(crate) struct Animation {
     pub(crate) preserve_velocity: bool,
     pub(crate) clock: Tween<f32>,
     pub(crate) behavior: Behavior,
+    /// Not yet ticked. The first tick after an animation starts is its
+    /// time zero, whatever that tick's delta: the delta measures the time
+    /// since the frame before, most of which passed before the animation
+    /// was asked for -- and after a stall (a panel built in the same turn,
+    /// a slow callback) it is a large share of the whole duration, which the
+    /// animation would otherwise skip, its first frame drawn already half
+    /// way there.
+    pub(crate) fresh: bool,
 }
 
 #[derive(Clone, Debug)]

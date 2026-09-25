@@ -49,6 +49,7 @@ impl Runtime {
             .get(verb)
             .cloned()
             .ok_or_else(|| Error::Runtime(format!("unknown IPC verb `{verb}`")))?;
+        let _span = crate::profile::span(|| format!("ipc {verb}"));
         self.run_handler(|ctx, limits| execute_ipc_handler(ctx, &handler, args, limits))
             .map_err(Error::Runtime)
     }
