@@ -30,6 +30,9 @@ pub(crate) struct LuaVirtualView {
     pub(crate) reuse_order: VecDeque<ModelId>,
     pub(crate) reuse_limit: usize,
     pub(crate) pool_root: Option<NodeHandle>,
+    /// Delegates of rows the model removed that are still playing their
+    /// exit, in the parent, out of its flow.
+    pub(crate) exiting: Vec<DelegateInstance>,
     pub(crate) column_extent: f64,
     /// Whether the view places its delegates itself (a scrolling view) or
     /// leaves that to its own node's kind (a `Repeater`, which may be a
@@ -66,6 +69,9 @@ pub(crate) struct CustomLayoutFns {
 pub(crate) struct DelegateInstance {
     pub(crate) node: NodeHandle,
     pub(crate) updater: Option<StashedClosure>,
+    /// The row it shows, as it was last given it: what a row put back while
+    /// this one is still leaving is matched against.
+    pub(crate) item: morf_scene::Value,
 }
 
 #[derive(Clone, Copy)]
@@ -341,6 +347,9 @@ pub(crate) struct ReactiveState {
     pub(crate) retention: Retention<NodeHandle>,
     pub(crate) retain_callbacks: HashMap<NodeHandle, RetainCallbacks>,
     pub(crate) retained_destroy_queue: HashSet<NodeHandle>,
+    /// Nodes held in `retention` only because they are on their way out:
+    /// taken back, they leave it again rather than stay registered.
+    pub(crate) exit_registered: HashSet<NodeHandle>,
     pub(crate) window_surfaces: HashMap<u64, WindowSurfaceConfig>,
     pub(crate) next_window_surface: u64,
     pub(crate) window_surfaces_changed: bool,
@@ -651,6 +660,7 @@ impl ReactiveState {
             retention: Retention::default(),
             retain_callbacks: HashMap::new(),
             retained_destroy_queue: HashSet::new(),
+            exit_registered: HashSet::new(),
             window_surfaces: HashMap::new(),
             surface_handlers: HashMap::new(),
             next_window_surface: 0,

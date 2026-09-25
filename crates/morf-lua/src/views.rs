@@ -8,8 +8,13 @@ use morf_scene::{
 };
 
 use crate::{
-    reactive_bindings::*, reactive_execute::*, runtime_helpers::remove_scene_subtree,
-    scene_bindings::*, serialization::*, state::*, types::*,
+    reactive_bindings::*,
+    reactive_execute::*,
+    runtime_helpers::{begin_node_exit, cancel_node_exit, remove_scene_subtree},
+    scene_bindings::*,
+    serialization::*,
+    state::*,
+    types::*,
 };
 
 pub(crate) fn execute_delegate(
@@ -44,6 +49,7 @@ pub(crate) fn execute_delegate(
     Ok(DelegateInstance {
         node: node.handle,
         updater,
+        item: item.clone(),
     })
 }
 
@@ -145,6 +151,21 @@ pub(crate) fn reconcile_lua_view(
             _ => None,
         })
         .collect::<HashSet<_>>();
+    // Rows the model let go of, as opposed to rows rebuilt: these play their
+    // delegate's exit, if it has one, before they are removed.
+    let removed_rows = changes
+        .iter()
+        .filter_map(|change| match change {
+            ListChange::Removed { id, .. } => Some(*id),
+            _ => None,
+        })
+        .collect::<HashSet<_>>();
+    // Whatever finished leaving since, or was removed some other way.
+    {
+        let state = state.borrow();
+        view.exiting
+            .retain(|instance| state.scene.is_exiting(instance.node));
+    }
     for id in &invalidated {
         if let Some(instance) = view.reusable.remove(id) {
             remove_scene_subtree(&mut state.borrow_mut(), instance.node);
@@ -180,6 +201,9 @@ pub(crate) fn reconcile_lua_view(
                 }
                 return Err(error);
             }
+            if let Some(instance) = view.active.get_mut(id) {
+                instance.item = item.clone();
+            }
             continue;
         }
         if !view.active.contains_key(id) || updated.contains(id) {
@@ -187,6 +211,20 @@ pub(crate) fn reconcile_lua_view(
                 view.reuse_order.retain(|candidate| candidate != id);
                 prepared.push((*id, *index, instance));
                 continue;
+            }
+            // The same row put back while its delegate is still leaving: that
+            // delegate is taken back, and animates back from where it got to.
+            if !removed_rows.contains(id)
+                && let Some(position) = view
+                    .exiting
+                    .iter()
+                    .position(|instance| instance.item == *item)
+            {
+                let instance = view.exiting.swap_remove(position);
+                if cancel_node_exit(&mut state.borrow_mut(), instance.node) {
+                    prepared.push((*id, *index, instance));
+                    continue;
+                }
             }
             let reusable_id = view.reuse_order.iter().copied().find(|candidate| {
                 view.reusable
@@ -200,6 +238,8 @@ pub(crate) fn reconcile_lua_view(
                     .reusable
                     .remove(&reusable_id)
                     .expect("reuse order contains a live delegate");
+                let mut instance = instance;
+                instance.item = item.clone();
                 let update = execute_delegate_updater(
                     ctx,
                     instance.updater.as_ref().expect("updater was checked"),
@@ -239,6 +279,11 @@ pub(crate) fn reconcile_lua_view(
         .collect::<Vec<_>>();
     for id in removed {
         let instance = view.active.remove(&id).expect("removed delegate is active");
+        if removed_rows.contains(&id) && begin_node_exit(&mut state.borrow_mut(), instance.node) {
+            // Stays where it is, drawn, until its exit ends.
+            view.exiting.push(instance);
+            continue;
+        }
         if invalidated.contains(&id) {
             remove_scene_subtree(&mut state.borrow_mut(), instance.node);
             continue;

@@ -179,6 +179,11 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
                         ("width", IpcValue::Number(rect.width)),
                         ("height", IpcValue::Number(rect.height)),
                         ("visible", IpcValue::Boolean(visible)),
+                        (
+                            "opacity",
+                            IpcValue::Number(scene.number(node, "opacity").unwrap_or(1.0)),
+                        ),
+                        ("exiting", IpcValue::Boolean(scene.is_exiting(node))),
                         ("depth", IpcValue::Integer(depth)),
                         ("surface", string(surface.label())),
                         ("surface_kind", string(surface.kind)),

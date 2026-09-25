@@ -99,6 +99,16 @@ impl<T: Copy + Eq + Hash> Retention<T> {
         Ok(())
     }
 
+    /// Takes back a drop that has not finished: the item was let go of and
+    /// then wanted again while something still held it.
+    pub fn cancel_drop(&mut self, item: T) -> Result<(), RetainError<T>> {
+        self.entries
+            .get_mut(&item)
+            .ok_or(RetainError::Unknown(item))?
+            .dropped = false;
+        Ok(())
+    }
+
     pub fn should_destroy(&self, item: T) -> Result<bool, RetainError<T>> {
         let state = self.entries.get(&item).ok_or(RetainError::Unknown(item))?;
         Ok(state.dropped && state.locks == 0)
@@ -118,6 +128,18 @@ mod tests {
         assert!(!retention.should_destroy(7).unwrap());
         retention.unlock(7).unwrap();
         assert!(retention.should_destroy(7).unwrap());
+    }
+
+    #[test]
+    fn a_cancelled_drop_is_not_destroyed_when_its_lock_goes() {
+        let mut retention = Retention::default();
+        retention.register(3);
+        retention.lock(3).unwrap();
+        retention.begin_drop(3).unwrap();
+        retention.cancel_drop(3).unwrap();
+        retention.unlock(3).unwrap();
+        assert!(!retention.should_destroy(3).unwrap());
+        assert_eq!(retention.cancel_drop(4), Err(RetainError::Unknown(4)));
     }
 
     #[test]
