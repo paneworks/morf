@@ -761,6 +761,67 @@ windows, the shape has nothing beneath it to blur; for that, `backdrop_blur
 (`morf.capabilities.backdrop_blur` says whether it can). One node takes one or
 the other; wrap it in an `Item` with `backdrop_blur = true` for both.
 
+### Masks
+
+`mask` on any node multiplies the alpha of everything the node and its
+subtree draw by the alpha of something else at the same point: what Qt's
+`MultiEffect` does with a `maskSource`, or an `OpacityMask`. It is one of
+two things.
+
+- **A node**, whose drawing is the mask: a rounded `Rect`, an `Sdf` of
+  shapes, a `Text` or an `Icon`, or any subtree. It is moved under the
+  node it masks and laid out in that node's box -- filling it when it asks
+  for no size and no anchors, otherwise placed by its own `x`, `y`, size
+  and anchors as a child of a plain `Item` is, whatever kind of container
+  the owner is. It moves, scales and animates with the owner, but it is
+  never drawn on its own and takes no input, and a positioner gives it no
+  place; a `Flickable`'s mask does not scroll. Colour does not matter,
+  only alpha: an opaque white rect keeps everything it covers. `mask =
+  nil` (or a table) takes it away and removes it; a hidden mask
+  (`visible = false`) masks nothing.
+- **A table with a `gradient`**, the same gradient a `Rect` takes (see
+  above), across the node's own box. Only the stops' alpha counts, and a
+  stop may be a bare number, which is that alpha: `stops = { 0, { 1, 0.1
+  }, { 1, 0.9 }, 0 }` fades in over the first tenth and out over the last.
+
+`mask_invert = true` keeps what the mask does not cover and cuts out what
+it does.
+
+```lua
+-- A list that fades out at its top and bottom edges, whatever it scrolls.
+ui.Flickable {
+  width = 320, height = 400,
+  mask = { gradient = { stops = { 0, { 1, 0.08 }, { 1, 0.92 }, 0 } } },
+  list,
+}
+
+-- An avatar cut to a circle, and a badge punched out of it.
+ui.Image {
+  source = avatar, width = 64, height = 64,
+  mask = ui.Sdf {
+    ui.SdfShape { shape = "circle", anchors = { fill = true } },
+    ui.SdfShape { shape = "circle", x = 44, y = 44, width = 24, height = 24,
+                  operation = "subtract" },
+  },
+}
+
+-- Text as a stencil over a gradient.
+ui.Rect {
+  width = 300, height = 80,
+  gradient = { angle = 90, stops = { "#ff5f6d", "#ffc371" } },
+  mask = ui.Text { text = "morf", font_size = 64, anchors = { center_in = true } },
+}
+```
+
+The masked subtree is drawn into an offscreen layer, and the mask into a
+second one covering exactly the same pixels; both are sized to what the
+frame's damage reads of the node, never the whole surface, and share their
+atlases and passes with the frame's other layers. A node with no mask
+costs nothing. The mask composes with the node's `opacity`, transforms,
+rounded clip and `layer` settings: a `layer.shadow_color` or an effect
+shader on a masked node is masked with it. Animating the mask repaints
+where it changed; toggling `mask_invert` repaints the node.
+
 ### Themes and preferences
 
 `morf.theme(tokens, options)` is a `morf.state` for appearance. A string
