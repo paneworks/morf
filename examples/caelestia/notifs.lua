@@ -99,6 +99,15 @@ local function plain(text)
 end
 
 local cards = {}
+local shapes = {}
+local layers = {
+  id = "notifications-field", anchors = { fill = true },
+  blend = function() return M.dripping:get() and 8 or 0 end,
+  behavior = { blend = { duration = 260 } },
+}
+M.dripping = morf.signal("caelestia.notifications.dripping", false)
+local dripping = M.dripping
+local dry
 for i = 1, MAX do
   local function n() return shown()[i] end
   local motion = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel }
@@ -110,7 +119,7 @@ for i = 1, MAX do
     visible = function() return n() ~= nil end,
     behavior = { height = motion },
     clip = true,
-    on_clicked = function() local x = n() if x then M.dismiss(x.id) end end,
+    on_clicked = function() M.dismiss_at(i) end,
     ui.Rect {
       x = 12, y = 8, width = 42, height = 42, radius = 21,
       color = function()
@@ -178,22 +187,76 @@ for i = 1, MAX do
         22, function() return C.onSurface end, { anchors = { center_in = true } }),
     }, function(hovered) return hovered and C.onSurface:alpha(0.08) or C.onSurface:alpha(0) end, 16),
   }
-  -- Built after the card, so its binding can read the card's hover.
-  local wash = ui.Rect {
-    anchors = { fill = true }, radius = 16, z = -1,
-    color = function()
+  -- The card's background is a layer of the popups' field (built after
+  -- the card, so its colour can read the card's hover).
+  shapes[i] = ui.SdfShape {
+    id = "notification-" .. i .. "-shape",
+    shape = "box", radius = 16, track = card,
+    operation = i == 1 and "union" or "smooth_union",
+    fill_color = function()
       local x = n()
       if x and x.urgency == 2 then return C.errorContainer end
       return card.hovered and C.surfaceContainerHigh or C.surfaceContainer
     end,
-    behavior = { color = { duration = theme.duration.small } },
+    behavior = { fill_color = { duration = theme.duration.small } },
   }
-  ui.reparent(wash, card)
+  layers[#layers + 1] = shapes[i]
   cards[i] = card
+end
+
+-- A new popup drops in from the frame's edge above: it slides down a
+-- little and grows evenly from just smaller, fading in, while the field's
+-- seams soften so it touches the cards below like liquid; dismissed, it
+-- lifts a little, shrinks a touch and fades. At rest the cards are crisp.
+local function drip(i, coming, done)
+  local node, shape = cards[i], shapes[i]
+  dripping:set(true)
+  if dry then dry:cancel() end
+  dry = morf.timer(coming and 520 or 260, function() dry = nil dripping:set(false) end, false)
+  local steps
+  if coming then
+    steps = {
+      { node = node, property = "translate_y", from = -24, to = 0, duration = 460, easing = theme.ease.spatial },
+      { node = node, property = "scale", from = 0.92, to = 1, duration = 460, easing = theme.ease.spatial },
+      { node = node, property = "opacity", from = 0, to = 1, duration = 200 },
+      { node = shape, property = "opacity", from = 0, to = 1, duration = 200 },
+    }
+  else
+    steps = {
+      { node = node, property = "translate_y", to = -16, duration = 200, easing = theme.ease.emphasized_accel },
+      { node = node, property = "scale", to = 0.94, duration = 200, easing = theme.ease.emphasized_accel },
+      { node = node, property = "opacity", to = 0, duration = 160 },
+      { node = shape, property = "opacity", to = 0, duration = 160 },
+    }
+  end
+  morf.animation.play {
+    { parallel = steps },
+    on_finished = function(reason)
+      if not coming then
+        node.translate_y, node.scale, node.opacity, shape.opacity = 0, 1, 1, 1
+      end
+      if done and reason == "completed" then done() end
+    end,
+  }
+end
+
+local count = #M.list:get()
+morf.effect("caelestia.notifications.drip", function()
+  local now = #M.list:get()
+  if now > count and cards[1] then drip(1, true) end
+  count = now
+end)
+
+--- Dismisses popup `i` the way a droplet goes: back up, then gone.
+function M.dismiss_at(i)
+  local x = shown()[i]
+  if not x then return end
+  drip(i, false, function() M.dismiss(x.id) end)
 end
 
 local content = ui.Item {
   anchors = { fill = true },
+  ui.Sdf(layers),
   ui.Column { x = LEFT, y = TOP, gap = GAP, table.unpack(cards) },
 }
 

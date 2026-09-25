@@ -52,7 +52,9 @@ end
 local function slider(id, value, set, icon)
   local held = false
   local function at(y) return 1 - math.max(0, math.min(1, (y - SLIDER_W / 2) / (SLIDER_H - SLIDER_W))) end
-  local motion = { duration = theme.duration.small, easing = theme.ease.standard_decel }
+  -- The level and the handle ride a spring that overshoots a touch and
+  -- settles like a liquid finding its level.
+  local motion = kit.spring(190, 9)
   local function top() return (SLIDER_H - SLIDER_W) * (1 - value()) end
   return ui.MouseArea {
     id = id, width = SLIDER_W, height = SLIDER_H, cursor = "pointer",

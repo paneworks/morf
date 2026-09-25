@@ -221,9 +221,17 @@ local function status()
   local popouts = require("popouts")
   local POPOUT = { ["status-network"] = "network", ["status-bluetooth"] = "bluetooth", ["status-power"] = "power" }
   local function slot(name, id)
-    return popouts.trigger(POPOUT[id],
-      kit.centred(40, 30, kit.icon(name, 18, function() return C.secondary end)),
-      { id = id, width = 40, height = 30 })
+    -- The icon swells under the pointer, on a spring with a little bounce.
+    local icon = kit.icon(name, 18, function() return C.secondary end)
+    local area = popouts.trigger(POPOUT[id], kit.centred(40, 30, icon), { id = id, width = 40, height = 30 })
+    local swell = ui.Item {
+      anchors = { fill = true },
+      scale = function() return area.hovered and 1.15 or 1 end,
+      behavior = { scale = kit.spring(460, 14) },
+    }
+    ui.reparent(swell, area)
+    ui.reparent(icon, swell)
+    return area
   end
   return ui.Rect {
     id = "status",
