@@ -163,6 +163,39 @@ ui.Text { text = function() return follow.line:get() end }
 | `lyrics.find(track, on_done, opts)` | `on_done(parsed, source)` (`file`, `cache`, `lrclib`) or `on_done(nil, why)`; `opts`: `cache_dir`, `ttl`, `base`, `offline` |
 | `lyrics.follow(media, opts)` | signals `lines`, `index`, `line`, `next_line`, `status` (`none`, `searching`, `synced`, `plain`, `missing`), `source`; `stop()` |
 
+## settings
+
+`lib/settings.lua` keeps a shell's preferences: nested defaults in the
+configuration, a JSON file holding only what differs, every leaf a signal,
+the file watched so another screen's runtime or an editor changes it live
+(only the keys that moved re-run). A value must have its default's type;
+keys the defaults lack are kept in the file untouched.
+
+```lua
+local config = require("lib.settings").open {
+  path = morf.config_path("shell.json"),
+  defaults = { appearance = { rounding = { scale = 1 } }, bar = { persistent = true } },
+}
+config.get("appearance.rounding.scale")   config.set("bar.persistent", false)
+config.values.bar.persistent = true       -- the same, through nested tables
+```
+
+`set` returns `true` or `false, why`; `reset(key)`, `flush()`, `keys()`,
+`accepts(key, value)`; `opts.legacy(decoded)` migrates an older file.
+
+## frecency
+
+`lib/frecency.lua` remembers launches, each halving in weight every
+`half_life` days (14), in a small JSON file, and ranks a launcher's
+`morf.text.fuzzy` results with it: by use alone for an empty query, and a
+bounded lift among comparable matches otherwise.
+
+```lua
+local used = require("lib.frecency").open { path = morf.state_path("launches.json") }
+used.record(app.id)
+used.rank(query, apps, { key = "name", id = "id", limit = 30 })   -- fuzzy hits, reordered
+```
+
 ## material
 
 `lib/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
