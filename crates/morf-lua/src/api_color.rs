@@ -57,7 +57,7 @@ pub(crate) fn color_of<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<C
     }
 }
 
-/// `{ r, g, b, a }`, `{ h, s, l }`, `{ h, s, v }`, `{ l, a, b }`, or any of
+/// `{ r, g, b, a }`, `{ h, s, l }`, `{ h, s, v }`, `{ l, a, b }`, `{ h, c, t }`, or any of
 /// those with `space = "..."` naming which.
 fn color_from_table<'gc>(ctx: Context<'gc>, table: Table<'gc>) -> Result<Color, String> {
     let number = |key: &str| match table.get_value(ctx, key) {
@@ -71,6 +71,8 @@ fn color_from_table<'gc>(ctx: Context<'gc>, table: Table<'gc>) -> Result<Color, 
         _ => {
             if number("r").is_some() {
                 "rgb".to_owned()
+            } else if number("t").is_some() {
+                "hct".to_owned()
             } else if number("v").is_some() {
                 "hsv".to_owned()
             } else if number("s").is_some() {
@@ -103,6 +105,7 @@ fn color_from_table<'gc>(ctx: Context<'gc>, table: Table<'gc>) -> Result<Color, 
         "xyz" => Color::from_xyz(need("x")?, need("y")?, need("z")?, alpha),
         "lms" => Color::from_lms(need("l")?, need("m")?, need("s")?, alpha),
         "cmyk" => from_cmyk(need("c")?, need("m")?, need("y")?, need("k")?),
+        "hct" => crate::api_color_hct::from_hct(need("h")?, need("c")?, need("t")?, alpha),
         other => return Err(format!("unknown colour space `{other}`")),
     })
 }
@@ -144,6 +147,7 @@ pub(crate) fn install_color_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let methods = Table::new(&ctx);
     install_color_methods(ctx, methods);
     crate::api_color_palette::install_palette_methods(ctx, methods);
+    crate::api_color_hct::install_hct_methods(ctx, methods);
     let methods = ctx.stash(methods);
 
     // Fields first -- `c.r`, `c.h` -- then the method table.
@@ -301,5 +305,6 @@ pub(crate) fn install_color_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     });
     color.set_field(ctx, "mix", mix);
     crate::api_color_palette::install_palette_constructors(ctx, color);
+    crate::api_color_hct::install_hct_constructors(ctx, color);
     morf.set_field(ctx, "color", color);
 }

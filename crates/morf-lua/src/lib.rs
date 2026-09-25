@@ -4,6 +4,7 @@ mod api_animation;
 mod api_audio;
 mod api_clipboard;
 mod api_color;
+mod api_color_hct;
 mod api_color_ops;
 mod api_color_palette;
 mod api_compositor;

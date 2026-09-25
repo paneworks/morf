@@ -591,6 +591,25 @@ Constructors live beside it: `morf.color.rgb`, `hsl`, `hsv`, `lab`,
 stay apart. `c:ansi_style { bold = true }` and `c:paint(text)` colour a
 terminal.
 
+`morf.color.hct(hue, chroma, tone)` makes a colour in HCT, the space
+Material Design's schemes are built in: hue and chroma are CAM16's, tone
+is L\* (0 black to 100 white), so two colours of the same tone have the
+same contrast against a third whatever their hues. A chroma sRGB cannot
+show at that hue and tone is given up and the hue and tone kept, which is
+what makes "tone 40 of this hue" always a usable colour. `c:hct()` gives
+back `hue, chroma, tone`; `c:with { t = 30 }` changes the tone alone, and
+`{ h, c, t }` is a colour table like the others.
+`morf.color.tonal_palette(hue, chroma)` — or `tonal_palette(colour)`, for
+that colour's hue and chroma — is the colour at every tone: `p(40)`,
+`p[90]` and `p:tone(99)` are colours, `p.hue` and `p.chroma` what it was
+made from. The colour science is a port of Google's Material Color
+Utilities (Apache-2.0) and gives its published values.
+
+```lua
+local primary = morf.color.tonal_palette(morf.color "#6750a4")
+local theme = { primary = primary(40), on_primary = primary(100), container = primary(90) }
+```
+
 A colour animates in a space. The default is OkLab, which is what a
 crossfade between two saturated colours should look like; `space` and
 `hue` on the behavior choose otherwise:

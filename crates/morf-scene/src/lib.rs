@@ -13,6 +13,7 @@ mod fling;
 mod gradient;
 mod groups;
 mod hashing;
+pub mod hct;
 mod keyframes;
 mod motion;
 mod motion_values;
