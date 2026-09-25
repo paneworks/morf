@@ -101,7 +101,8 @@ CAEL
   rm "$H/shim/notify-send"
   mkdir -p "$H/.config/caelestia" "$H/.local/state/caelestia/wallpaper" "$H/Pictures/Wallpapers"
   if [ -n "${CAEL_CONFIG:-}" ]; then cp "$CAEL_CONFIG" "$H/.config/caelestia/shell.json"
-  else echo '{}' > "$H/.config/caelestia/shell.json"; fi
+  # A fixed weather place, so it never looks the machine up by its address.
+  else echo '{ "services": { "weatherLocation": "Reykjavik" } }' > "$H/.config/caelestia/shell.json"; fi
   [ -n "${CAEL_SCHEME:-}" ] && cp "$CAEL_SCHEME" "$H/.local/state/caelestia/scheme.json"
   # Its own wallpaper unless WALLPAPER says otherwise; the switcher lists
   # ~/Pictures/Wallpapers.
@@ -146,6 +147,9 @@ cat > "$OUT/inner.sh" <<INNER
 #!/bin/sh
 RUN=$RUN; OUT=$OUT
 [ "\$XDG_RUNTIME_DIR" = "\$RUN" ] || { echo "REFUSING: runtime \$XDG_RUNTIME_DIR" > \$OUT/refused; exit 1; }
+# No system bus for anyone in here: BlueZ, UPower, NetworkManager and logind
+# are the machine's, and a shell under test would read and drive them.
+[ "\$DBUS_SYSTEM_BUS_ADDRESS" = "unix:path=\$RUN/no-system-bus" ] || { echo "REFUSING: system bus \$DBUS_SYSTEM_BUS_ADDRESS" > \$OUT/refused; exit 1; }
 CAGE_DISPLAY=\$WAYLAND_DISPLAY
 python3 "$HERE/wlproxy.py" \$RUN/wayland-parent \$RUN/\$CAGE_DISPLAY > \$OUT/proxy.log 2>&1 &
 PP=\$!
@@ -257,7 +261,7 @@ INNER
 chmod +x "$OUT/inner.sh"
 env -u HYPRLAND_INSTANCE_SIGNATURE -u NIRI_SOCKET -u SWAYSOCK -u I3SOCK -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u DISPLAY \
   HOME="$H" XDG_CONFIG_HOME="$H/.config" XDG_DATA_HOME="$H/.local/share" XDG_STATE_HOME="$H/.local/state" XDG_CACHE_HOME="$H/.cache" \
-  PATH="$H/shim:${AWWW_BIN:+$AWWW_BIN:}$PATH" XDG_RUNTIME_DIR="$RUN" \
+  PATH="$H/shim:${AWWW_BIN:+$AWWW_BIN:}$PATH" XDG_RUNTIME_DIR="$RUN" DBUS_SYSTEM_BUS_ADDRESS="unix:path=$RUN/no-system-bus" \
   WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDER_DRM_DEVICE=${RENDER_NODE:-/dev/dri/renderD128} \
   timeout "${TIMEOUT:-240}" dbus-run-session --config-file="$HERE/dbus-session.conf" -- cage -- "$OUT/inner.sh" > "$OUT/cage.log" 2>&1 || true
 rm -rf "$RUN"
