@@ -783,6 +783,40 @@ beneath — and takes the node's `cursor` (`"pointer"`) over it. Where each
 link landed is the read-only `links`, a list of `{ href, x, y, width,
 height }` in the node's own space, kept current after every layout.
 
+### Fuzzy matching
+
+`morf.text.fuzzy(query, items, opts)` ranks a list the way a launcher or a
+picker wants it: items whose characters contain the query's, in order,
+best first. `items` are strings, or tables with `opts.key` naming the
+field to match — or a list of fields, each `"field"` or `{ "field",
+weight }`, where an item scores its best weighted field. `opts.limit`
+keeps the best few. Each result is `{ item, index, score, key, positions
+}`: the item itself, its index in `items`, the score, the field that
+matched, and the 1-based byte offsets (as `string.sub` counts) of the
+matched characters.
+
+```lua
+local hits = morf.text.fuzzy(query:get(), apps, { key = { "name", { "exec", 0.5 } }, limit = 30 })
+for _, hit in ipairs(hits) do
+  ui.Text { spans = morf.text.highlight(hit.item.name, hit.positions, { bold = true, color = theme.accent }) }
+end
+local score, positions = morf.text.fuzzy_score("ffx", "Firefox")   -- nil when it does not match
+```
+
+The scoring is fzf's kind: a match at the start of a word, a camelCase
+hump or a path component is worth more than one in the middle of a word,
+a run of consecutive matches keeps the bonus its first character earned,
+skipped characters cost a little, and the first character's bonus counts
+twice, so a prefix wins. It is case-insensitive unless the query has an
+uppercase letter. Spaces split the query into terms that must all match.
+It works on characters, so accents and CJK match as whole characters; it
+does not fold accents (`e` does not find `é`). Ties go to the shorter
+text, then to the earlier item; an empty query keeps every item in order.
+Ranking 10,000 launcher-sized entries takes a millisecond or two, so it
+can run on every keystroke. `morf.text.highlight(text, positions, style)`
+turns a match into `spans` for a `ui.Text`: the matched characters in
+runs carrying `style` (bold when none is given), the rest plain.
+
 ### Text input
 
 `ui.TextInput` is text you can edit. It is set by the same shaper as

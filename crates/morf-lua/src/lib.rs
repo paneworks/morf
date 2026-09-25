@@ -36,6 +36,7 @@ mod api_signal;
 mod api_socket;
 mod api_state;
 mod api_system;
+mod api_text;
 mod api_theme;
 mod api_time;
 mod api_toplevels;

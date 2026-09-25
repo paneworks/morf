@@ -507,6 +507,7 @@ mod glyph_morph;
 mod glyph_steps;
 pub use caret::{CaretLine, CaretMap, CaretRect, SpanRect};
 pub use edit::{DEFAULT_HISTORY, EditBuffer};
+pub mod fuzzy;
 pub use families::{family_files, installed_families};
 pub use glyph_morph::CONTOUR_POINTS as GLYPH_CONTOUR_POINTS;
 /// A closed loop of an outline, for a caller pairing letters with shapes that
