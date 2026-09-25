@@ -393,3 +393,58 @@ fn metadata_names_parse_and_quote() {
         Some("x\"y")
     );
 }
+
+/// A decaying 1 kHz click every beat of `bpm`, stereo at 48 kHz.
+fn click_track(bpm: f32, seconds: f32) -> Vec<f32> {
+    let rate = 48_000.0;
+    let period = (60.0 / bpm * rate) as usize;
+    (0..(seconds * rate) as usize)
+        .flat_map(|index| {
+            let t = (index % period) as f32 / rate;
+            let sample =
+                (2.0 * std::f32::consts::PI * 1_000.0 * t).sin() * (-t * 300.0).exp() * 0.8;
+            [sample, sample]
+        })
+        .collect()
+}
+
+#[test]
+fn beats_and_tempo_arrive_through_poll_only_when_asked() {
+    let (backend, server) = fake::fake(Vec::new());
+    let mut audio = Audio::with_backend(backend);
+    let plain = audio.monitor(None, 30.0, 0);
+    let listening = audio.monitor_beats(None, 30.0, 0, true);
+    assert!(matches!(
+        server.commands().last(),
+        Some(Command::StartMonitor { beat: true, .. })
+    ));
+    let mut beats = Vec::new();
+    let mut tempo = None;
+    let track = click_track(120.0, 10.0);
+    // A second at a time, polled in between, as frames would.
+    for second in track.chunks(96_000) {
+        server.play(48_000, 2, second);
+        let poll = audio.poll();
+        assert!(poll.levels.iter().any(|level| level.monitor == plain));
+        beats.extend(poll.beats);
+        if let Some(latest) = poll.tempos.last() {
+            tempo = Some(*latest);
+        }
+    }
+    assert!(beats.iter().all(|beat| beat.monitor == listening));
+    assert!((18..=20).contains(&beats.len()), "{} beats", beats.len());
+    let tempo = tempo.expect("a tempo");
+    assert_eq!(tempo.monitor, listening);
+    assert!((tempo.bpm - 120.0).abs() < 2.0, "{} BPM", tempo.bpm);
+    assert!(tempo.confidence > 0.5);
+}
+
+#[test]
+fn a_meter_without_beats_reports_none() {
+    let mut meter = Meter::new(30.0, 0);
+    meter.push(&click_track(120.0, 5.0));
+    assert_eq!(meter.beats().count(), 0);
+    let mut meter = Meter::new(30.0, 0).with_beats(true);
+    meter.push(&click_track(120.0, 5.0));
+    assert!(meter.beats().count() > 5);
+}

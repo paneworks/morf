@@ -309,8 +309,103 @@ fn malformed_calls_raise() {
             assert(not pcall(audio.set_volume, -1, 0.5))
             assert(not pcall(audio.monitor, {}))
             assert(not pcall(audio.monitor, { on_level = print, bands = 1000 }))
+            assert(not pcall(audio.monitor, { on_level = print, on_beat = print }))
+            assert(not pcall(audio.monitor, { beat = "yes", on_beat = print }))
             assert(audio.nonsense == nil)
             "#,
         )
         .unwrap();
+}
+
+/// A decaying 1 kHz click every beat of `bpm`, stereo at 48 kHz.
+fn click_track(bpm: f32, seconds: f32) -> Vec<f32> {
+    let rate = 48_000.0;
+    let period = (60.0 / bpm * rate) as usize;
+    (0..(seconds * rate) as usize)
+        .flat_map(|index| {
+            let t = (index % period) as f32 / rate;
+            let sample =
+                (2.0 * std::f32::consts::PI * 1_000.0 * t).sin() * (-t * 300.0).exp() * 0.8;
+            [sample, sample]
+        })
+        .collect()
+}
+
+#[test]
+fn a_monitor_hears_beats_and_a_tempo() {
+    let (mut runtime, server) = runtime_with(machine());
+    runtime
+        .execute(
+            "beats.lua",
+            br#"
+            local morf = require("morf")
+            local ui = require("morf.ui")
+            local beats = morf.signal("beats", 0)
+            local tempo = morf.signal("tempo", "")
+            meter = morf.audio.monitor {
+                beat = true,
+                on_beat = function(strength)
+                    assert(strength > 0 and strength <= 1)
+                    beats:set(beats:get() + 1)
+                end,
+                on_tempo = function(bpm, confidence)
+                    tempo:set(string.format("%d %s", math.floor(bpm + 0.5), confidence > 0.5))
+                end,
+            }
+            assert(meter.bpm == nil and meter.confidence == nil)
+            ui.Text { text = function() return tostring(beats:get()) end }
+            ui.Text { text = function() return tempo:get() end }
+            morf.ipc.bpm = function() return math.floor(meter.bpm + 0.5) end
+            morf.ipc.stop = function() meter:stop() end
+            "#,
+        )
+        .unwrap();
+    runtime.poll_services();
+    for second in click_track(120.0, 10.0).chunks(96_000) {
+        server.play(48_000, 2, second);
+        runtime.poll_services();
+    }
+    let beats: usize = root_text(&runtime, 0).parse().unwrap();
+    assert!((18..=20).contains(&beats), "{beats} beats");
+    assert_eq!(root_text(&runtime, 1), "120 true");
+    assert!(matches!(
+        runtime.call_ipc("bpm", &[]).unwrap().as_slice(),
+        [IpcValue::Integer(120)] | [IpcValue::Number(120.0)]
+    ));
+    runtime.call_ipc("stop", &[]).unwrap();
+    assert!(server.monitors().is_empty());
+    server.play(48_000, 2, &click_track(120.0, 2.0));
+    runtime.poll_services();
+    assert_eq!(root_text(&runtime, 0), beats.to_string());
+}
+
+#[test]
+fn a_plain_monitor_hears_no_beats() {
+    let (mut runtime, server) = runtime_with(machine());
+    runtime
+        .execute(
+            "levels.lua",
+            br#"
+            local morf = require("morf")
+            local ui = require("morf.ui")
+            local levels = morf.signal("levels", 0)
+            local meter = morf.audio.monitor {
+                rate_hz = 10,
+                on_level = function() levels:set(levels:get() + 1) end,
+            }
+            ui.Text { text = function() return tostring(levels:get()) end }
+            morf.ipc.bpm = function() return meter.bpm == nil and "none" or "some" end
+            "#,
+        )
+        .unwrap();
+    runtime.poll_services();
+    for second in click_track(120.0, 4.0).chunks(96_000) {
+        server.play(48_000, 2, second);
+        runtime.poll_services();
+    }
+    assert_eq!(root_text(&runtime, 0), "4");
+    assert!(matches!(
+        runtime.call_ipc("bpm", &[]).unwrap().as_slice(),
+        [IpcValue::String(none)] if none == "none"
+    ));
 }

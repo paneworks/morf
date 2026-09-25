@@ -282,6 +282,46 @@ refusal is logged. The compositor restores an output the moment the shell
 lets go of it — on `reset`, on a reload (a new configuration starts from
 the outputs' own ramps), and when the shell exits for any reason.
 
+## Levels, bands and beats: `morf.audio.monitor`
+
+A monitor listens to a device — the default sink when `device` is `nil`,
+so what is playing — on the sound server's own thread, and hands the
+configuration what it measured, between frames:
+
+```lua
+local meter = morf.audio.monitor {
+  device = nil, rate_hz = 30, bands = 24,
+  on_level = function(left, right, bands) end,   -- peaks 0..1, and band energies 0..1
+  beat = true,
+  on_beat = function(strength) pulse:set(strength) end,
+  on_tempo = function(bpm, confidence) end,
+}
+meter.bpm, meter.confidence   -- the latest tempo estimate, or nil before there is one
+meter:stop()
+```
+
+`on_level` runs at most once a frame with the loudest peak since the last
+one. With `beat = true` the monitor also listens for beats (then
+`on_level` may be left out): `on_beat(strength)` runs for every beat, as
+soon as the loop wakes for it, `strength` being 0 to 1 against the beats
+of the last few seconds; `on_tempo(bpm, confidence)` runs when the tempo
+estimate moves, and `meter.bpm` reads the latest. `on_beat` and
+`on_tempo` without `beat = true` are an error; without it the audio thread
+does exactly what it did before.
+
+Beats are onsets: the spectrum of every 10 ms or so is compared with the
+last, and a rise across it that is a local peak and clears a threshold
+following the last half second (its mean, plus twice its spread, and at
+least half again the mean) is a beat — a kick, a snare, a strummed chord;
+steady sound, a drone or noise, makes none. The tempo is where the same
+rises repeat over the last six seconds, 60 to 200 BPM: it takes two or
+three seconds to appear, drifts to follow a slow change, and jumps only
+after a new tempo has been heard for about a second and a half. The
+confidence says how regular the beats are at that tempo, 0 to 1 — a click
+track is near 1, speech near 0. It costs a fraction of a percent of one
+core. An octave is ambiguous by nature: music with a strong half-time feel
+may read at half the tempo a dancer would clap.
+
 ## A program on a terminal: `ui.Terminal`
 
 A program that wants a terminal rather than pipes — anything that draws a

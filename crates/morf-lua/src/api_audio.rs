@@ -12,7 +12,11 @@
 //! audio.move_stream(stream_id, device_id)
 //! audio.on_changed(function(what) end)       -- what = { devices, streams, defaults, available }
 //! local meter = audio.monitor { device = nil, rate_hz = 30, bands = 16,
-//!     on_level = function(left, right, bands) end }
+//!     on_level = function(left, right, bands) end,
+//!     beat = true,                                   -- listen for beats too
+//!     on_beat = function(strength) end,              -- 0 to 1, as each lands
+//!     on_tempo = function(bpm, confidence) end }     -- as the estimate moves
+//! meter.bpm, meter.confidence                        -- the latest estimate, or nil
 //! meter:stop()
 //! ```
 //!
@@ -36,8 +40,13 @@ use morf_reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
 
 use crate::{
-    reactive_execute::drive_executor, scene_bindings::*, serialization::scene_to_lua, state::*,
-    surface_types::*, table_menu::table_number, types::*,
+    reactive_execute::drive_executor,
+    scene_bindings::*,
+    serialization::scene_to_lua,
+    state::*,
+    surface_types::*,
+    table_menu::{optional_closure, table_bool, table_number},
+    types::*,
 };
 
 /// How many `on_changed` handlers and monitors one configuration may hold.
@@ -58,8 +67,16 @@ pub(crate) struct AudioHost {
     pub(crate) revision: SignalId,
     pub(crate) revisions: i64,
     pub(crate) listeners: Vec<(u64, StashedClosure)>,
-    pub(crate) monitors: HashMap<u64, StashedClosure>,
+    pub(crate) monitors: HashMap<u64, MonitorHandlers>,
     pub(crate) next_listener: u64,
+}
+
+/// What one `morf.audio.monitor` calls, and the tempo it last heard.
+pub(crate) struct MonitorHandlers {
+    pub(crate) on_level: Option<StashedClosure>,
+    pub(crate) on_beat: Option<StashedClosure>,
+    pub(crate) on_tempo: Option<StashedClosure>,
+    pub(crate) tempo: Option<(f32, f32)>,
 }
 
 impl AudioHost {
@@ -459,12 +476,22 @@ pub(crate) fn install_audio_api<'gc>(
             let state = Rc::clone(&state);
             move |ctx, _, mut stack| {
                 let options: Table = stack.consume(ctx)?;
-                let callback = match options.get_value(ctx, "on_level") {
-                    LuaValue::Function(luna::Function::Closure(callback)) => callback,
-                    _ => {
-                        return Err(HostError("monitor needs an on_level function".into()).into());
-                    }
+                let beat = table_bool(ctx, options, "beat", false)
+                    .map_err(|error| HostError(format!("monitor {error}")))?;
+                let handlers = MonitorHandlers {
+                    on_level: optional_closure(ctx, options, "on_level").map_err(HostError)?,
+                    on_beat: optional_closure(ctx, options, "on_beat").map_err(HostError)?,
+                    on_tempo: optional_closure(ctx, options, "on_tempo").map_err(HostError)?,
+                    tempo: None,
                 };
+                if handlers.on_level.is_none() && !beat {
+                    return Err(HostError("monitor needs an on_level function".into()).into());
+                }
+                if !beat && (handlers.on_beat.is_some() || handlers.on_tempo.is_some()) {
+                    return Err(
+                        HostError("monitor on_beat and on_tempo need beat = true".into()).into(),
+                    );
+                }
                 let device = match options.get_value(ctx, "device") {
                     LuaValue::Nil => None,
                     value => Some(object_id(value, "monitor device")?),
@@ -484,10 +511,10 @@ pub(crate) fn install_audio_api<'gc>(
                     if host.monitors.len() >= MAX_MONITORS {
                         return Err(HostError("too many audio monitors running".into()).into());
                     }
-                    let id = host
-                        .started()
-                        .monitor(device, rate_hz as f32, bands as usize);
-                    host.monitors.insert(id, ctx.stash(callback));
+                    let id =
+                        host.started()
+                            .monitor_beats(device, rate_hz as f32, bands as usize, beat);
+                    host.monitors.insert(id, handlers);
                     id
                 };
                 let stop = Callback::from_fn(&ctx, {
@@ -501,9 +528,37 @@ pub(crate) fn install_audio_api<'gc>(
                         Ok(CallbackReturn::Return)
                     }
                 });
+                // `bpm` and `confidence` are read from the host as they are
+                // asked for, so they are always the latest.
+                let tempo = Callback::from_fn(&ctx, {
+                    let state = Rc::clone(&state);
+                    move |ctx, _, mut stack| {
+                        let (_, key): (Table, LuaValue) = stack.consume(ctx)?;
+                        let mut state = state.borrow_mut();
+                        let tempo = host(&mut state)
+                            .monitors
+                            .get(&id)
+                            .and_then(|handlers| handlers.tempo);
+                        let value = match (key, tempo) {
+                            (LuaValue::String(key), Some((bpm, confidence))) => {
+                                match key.as_bytes() {
+                                    b"bpm" => LuaValue::Number(f64::from(bpm)),
+                                    b"confidence" => LuaValue::Number(f64::from(confidence)),
+                                    _ => LuaValue::Nil,
+                                }
+                            }
+                            _ => LuaValue::Nil,
+                        };
+                        stack.replace(ctx, value);
+                        Ok(CallbackReturn::Return)
+                    }
+                });
                 let handle = Table::new(&ctx);
                 handle.set_field(ctx, "stop", stop);
                 handle.set_field(ctx, "id", id as i64);
+                let metatable = Table::new(&ctx);
+                metatable.set_field(ctx, "__index", tempo);
+                handle.set_metatable(ctx, Some(metatable));
                 stack.replace(ctx, handle);
                 Ok(CallbackReturn::Return)
             }

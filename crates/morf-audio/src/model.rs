@@ -127,6 +127,10 @@ pub enum Update {
     DefaultSource(Option<String>),
     /// Levels measured by a running monitor.
     Level(Level),
+    /// A beat heard by a monitor that listens for them.
+    Beat(Beat),
+    /// Its tempo estimate, as it moves.
+    Tempo(Tempo),
     /// Something went wrong that a configuration may want to hear about.
     Error(String),
 }
@@ -141,6 +145,23 @@ pub struct Level {
     pub right: f32,
     /// Band energies, 0 to 1, lowest frequency first; empty unless asked.
     pub bands: Vec<f32>,
+}
+
+/// A beat, the moment it was heard.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Beat {
+    pub monitor: u64,
+    /// How strong, 0 to 1, against the beats of the last few seconds.
+    pub strength: f32,
+}
+
+/// A monitor's tempo estimate.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tempo {
+    pub monitor: u64,
+    pub bpm: f32,
+    /// How regular the beats are at that tempo, 0 to 1.
+    pub confidence: f32,
 }
 
 /// What an update, or a run of them, changed.
@@ -228,7 +249,7 @@ impl AudioState {
                 changes.defaults = self.default_source != name;
                 self.default_source = name;
             }
-            Update::Level(_) | Update::Error(_) => {}
+            Update::Level(_) | Update::Beat(_) | Update::Tempo(_) | Update::Error(_) => {}
         }
         changes
     }

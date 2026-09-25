@@ -5,10 +5,14 @@
 //! default — so a test drives the same round trip a shell does, and can also
 //! read every command it was sent.
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use crate::beat::BeatEvent;
+use crate::dsp::Meter;
 use crate::{
-    AudioState, Backend, Command, Control, DeviceKind, Events, Level, ObjectId, Stream, Update,
+    AudioState, Backend, Beat, Command, Control, DeviceKind, Events, Level, ObjectId, Stream,
+    Tempo, Update,
 };
 
 #[derive(Default)]
@@ -18,6 +22,9 @@ struct Server {
     events: Option<Events>,
     commands: Vec<Command>,
     monitors: Vec<u64>,
+    /// A meter per running monitor, as the real server runs, for
+    /// [`FakeServer::play`].
+    meters: BTreeMap<u64, Meter>,
     echo: bool,
 }
 
@@ -83,6 +90,42 @@ impl FakeServer {
         lock(&self.server).echo = echo;
     }
 
+    /// Plays interleaved samples to every running monitor, through the same
+    /// meter the real server runs, in buffers of 1024 frames: levels, and
+    /// beats for a monitor that asked, come back as they would from it.
+    pub fn play(&self, rate: u32, channels: u32, samples: &[f32]) {
+        let mut server = lock(&self.server);
+        let mut updates = Vec::new();
+        for (&monitor, meter) in &mut server.meters {
+            if meter.rate() != rate || meter.channels() != channels.max(1) {
+                meter.set_format(rate, channels);
+            }
+            for chunk in samples.chunks(1024 * channels.max(1) as usize) {
+                if let Some(reading) = meter.push(chunk) {
+                    updates.push(Update::Level(Level {
+                        monitor,
+                        left: reading.left,
+                        right: reading.right,
+                        bands: reading.bands,
+                    }));
+                }
+                for event in meter.beats() {
+                    updates.push(match event {
+                        BeatEvent::Beat { strength } => Update::Beat(Beat { monitor, strength }),
+                        BeatEvent::Tempo { bpm, confidence } => Update::Tempo(Tempo {
+                            monitor,
+                            bpm,
+                            confidence,
+                        }),
+                    });
+                }
+            }
+        }
+        for update in updates {
+            server.send(update);
+        }
+    }
+
     /// Delivers a level to every running monitor.
     pub fn level(&self, left: f32, right: f32, bands: Vec<f32>) {
         let mut server = lock(&self.server);
@@ -125,8 +168,22 @@ impl Control for FakeControl {
         let mut server = lock(&self.server);
         server.commands.push(command.clone());
         match &command {
-            Command::StartMonitor { monitor, .. } => server.monitors.push(*monitor),
-            Command::StopMonitor { monitor } => server.monitors.retain(|id| id != monitor),
+            Command::StartMonitor {
+                monitor,
+                rate_hz,
+                bands,
+                beat,
+                ..
+            } => {
+                server.monitors.push(*monitor);
+                let mut meter = Meter::new(*rate_hz, *bands).with_beats(*beat);
+                meter.set_format(48_000, 2);
+                server.meters.insert(*monitor, meter);
+            }
+            Command::StopMonitor { monitor } => {
+                server.monitors.retain(|id| id != monitor);
+                server.meters.remove(monitor);
+            }
             _ => {}
         }
         if !server.echo {

@@ -33,10 +33,11 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 
+use crate::beat::BeatEvent;
 use crate::dsp::Meter;
 use crate::{
-    Backend, Command, Control, Device, DeviceKind, Direction, Events, Level, ObjectId, Stream,
-    Update,
+    Backend, Beat, Command, Control, Device, DeviceKind, Direction, Events, Level, ObjectId,
+    Stream, Tempo, Update,
 };
 use ffi::*;
 use pod::Pod;
@@ -694,6 +695,24 @@ unsafe extern "C" fn on_stream_param(data: *mut c_void, id: u32, value: *const S
         .set_format(rate.max(1) as u32, channels.max(1) as u32);
 }
 
+/// Reports what the meter's beat tracker heard, if it has one.
+fn send_beats(monitor: &mut Monitor) {
+    let id = monitor.id;
+    for event in monitor.meter.beats() {
+        monitor.events.send(match event {
+            BeatEvent::Beat { strength } => Update::Beat(Beat {
+                monitor: id,
+                strength,
+            }),
+            BeatEvent::Tempo { bpm, confidence } => Update::Tempo(Tempo {
+                monitor: id,
+                bpm,
+                confidence,
+            }),
+        });
+    }
+}
+
 unsafe extern "C" fn on_stream_process(data: *mut c_void) {
     // SAFETY: registered with the monitor as data; the buffer and its memory
     // are the stream's until queued back, and mapped (MAP_BUFFERS).
@@ -722,6 +741,7 @@ unsafe extern "C" fn on_stream_process(data: *mut c_void) {
                             bands: reading.bands,
                         }));
                     }
+                    send_beats(monitor);
                 }
             }
         }
@@ -1183,7 +1203,8 @@ impl Session {
                 device,
                 rate_hz,
                 bands,
-            } => self.start_monitor(monitor, device, rate_hz, bands),
+                beat,
+            } => self.start_monitor(monitor, device, rate_hz, bands, beat),
             Command::StopMonitor { monitor } => {
                 if let Some(monitor) = self.monitors.remove(&monitor) {
                     // SAFETY: the stream is ours; destroying it unhooks the
@@ -1267,7 +1288,14 @@ impl Session {
         }
     }
 
-    fn start_monitor(&mut self, id: u64, device: Option<ObjectId>, rate_hz: f32, bands: usize) {
+    fn start_monitor(
+        &mut self,
+        id: u64,
+        device: Option<ObjectId>,
+        rate_hz: f32,
+        bands: usize,
+        beat: bool,
+    ) {
         let mut props = vec![
             ("media.type", "Audio".to_owned()),
             ("media.category", "Capture".to_owned()),
@@ -1352,7 +1380,7 @@ impl Session {
                 id,
                 stream,
                 hook: SpaHook::zeroed(),
-                meter: Meter::new(rate_hz, bands),
+                meter: Meter::new(rate_hz, bands).with_beats(beat),
             });
             let data = (&raw mut *monitor).cast::<c_void>();
             (self.pw.stream_add_listener)(stream, &raw mut monitor.hook, &STREAM_EVENTS, data);
