@@ -66,7 +66,7 @@ local function tabs()
       on_clicked = function() M.tab:set(i) end,
       ui.Column {
         anchors = { horizontal_center = true }, y = 6, gap = 4, align = "center",
-        kit.icon(t.icon, 20, function() return on() and C.primary or C.onSurface end),
+        kit.icon(t.icon, 22, function() return on() and C.primary or C.onSurface end, { fill = on }),
         label,
       },
     }
@@ -195,12 +195,12 @@ local function user_card()
       anchors = { fill = true }, radius = AV / 2,
       color = function() return C.surfaceContainerHighest end,
       kit.icon("person_add", 40, function() return C.onSurfaceVariant end, {
-        anchors = { center_in = true }, visible = not has_face,
+        anchors = { center_in = true }, visible = not has_face, fill = true,
       }),
     },
-    has_face and ui.ClipRect {
-      anchors = { fill = true }, radius = AV / 2,
-      ui.Image { anchors = { fill = true }, source = face, fill_mode = "preserve_aspect_crop" },
+    has_face and ui.Image {
+      anchors = { fill = true }, source = face, fill_mode = "preserve_aspect_crop",
+      mask = ui.Rect { radius = AV / 2, color = "#ffffff" },
     } or nil,
   }
   -- The distribution's badge: its logo on a primary cookie, over the
@@ -489,7 +489,19 @@ local function media_card()
       d = shapes.path("cookie12"),
       fill_color = function() return C.surfaceContainerHighest end,
     },
-    kit.icon("art_track", 64, function() return C.onSurfaceVariant end, { anchors = { center_in = true } }),
+    kit.icon("art_track", 64, function() return C.onSurfaceVariant end, {
+      anchors = { center_in = true },
+      visible = function() return (active().art_url or "") == "" end,
+    }),
+    ui.Image {
+      id = "media-cover",
+      anchors = { fill = true, margins = 20 }, fill_mode = "preserve_aspect_crop",
+      source = function() return active().art_url or "" end,
+      visible = function() return (active().art_url or "") ~= "" end,
+      mask = ui.Path {
+        view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie12"), fill_color = "#ffffff",
+      },
+    },
   }
   return kit.card {
     id = "dashboard-media",

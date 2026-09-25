@@ -101,11 +101,11 @@ M.ease = {
 
 -- Durations and curves fitted to films of the reference in the sandbox
 -- (tools/sandbox/caelestia-motion.steps): a drawer opens on the spatial
--- curve over about 450 ms, overshooting by about 1 % and settling, and
+-- curve over about 470 ms (500 here films as ~470 in the same sandbox), overshooting by about 1 % and settling, and
 -- closes on the emphasized accelerate curve in about 200 ms.
 M.duration = {
   small = 200, normal = 400, large = 600,
-  drawer_open = 450, drawer_close = 200,
+  drawer_open = 500, drawer_close = 200,
 }
 
 return M

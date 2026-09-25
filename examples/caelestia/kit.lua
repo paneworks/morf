@@ -7,13 +7,25 @@ local theme = require("theme")
 local M = {}
 
 --- A Material Symbols Rounded icon by its ligature name (`"wifi_off"`).
---- `name` and `color` may be bindings.
+--- `name` and `color` may be bindings; `props.fill` (a boolean or a
+--- binding) fills it in through the face's FILL axis.
 function M.icon(name, size, color, props)
   props = props or {}
   props.text = name
   props.font_family = theme.icon_font
   props.font_size = size or 18
   props.color = color or function() return theme.color.onSurface end
+  if props.fill ~= nil then
+    local fill = props.fill
+    props.fill = nil
+    props.axes = function()
+      local on = fill
+      if type(fill) == "function" then on = fill() end
+      return { FILL = on and 1 or 0 }
+    end
+    props.behavior = props.behavior or {}
+    props.behavior.axes = { duration = theme.duration.small, easing = theme.ease.standard }
+  end
   return ui.Text(props)
 end
 
@@ -21,6 +33,7 @@ end
 function M.text(props)
   props.font_family = props.font_family or theme.font
   if theme.font_file ~= "" and props.font_source == nil then props.font_source = theme.font_file end
+  if props.font_weight and props.axes == nil then props.axes = { wght = props.font_weight } end
   props.font_size = props.font_size or theme.size.normal
   if props.color == nil then props.color = function() return theme.color.onSurface end end
   return ui.Text(props)

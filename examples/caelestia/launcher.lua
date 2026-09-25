@@ -85,6 +85,8 @@ local function delegate(entry)
   local area
   area = ui.MouseArea {
     id = "launcher-row-" .. entry.key,
+    enter = { opacity = 0, scale = 0.96, duration = theme.duration.small, easing = theme.ease.standard_decel },
+    exit = { opacity = 0, scale = 0.96, duration = 150, easing = theme.ease.standard_accel },
     width = WIDTH - 2 * PAD, height = ROW, cursor = "pointer",
     on_entered = function()
       for i = 1, M.results:len() do
