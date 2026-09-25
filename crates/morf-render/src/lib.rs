@@ -41,6 +41,7 @@ impl BlendSpace {
     }
 }
 
+mod backdrop;
 mod commands;
 mod damage;
 mod effects;

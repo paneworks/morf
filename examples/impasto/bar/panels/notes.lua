@@ -223,7 +223,11 @@ local function build_deck()
     ui.Item {
       y = ROOM_H - FOOTER, width = ROOM_W, height = FOOTER,
       kit.text {
-        anchors = { left = true, vertical_center = true },
+        -- The last row of the panel's column, as tall as what is in it: the
+        -- line alone sits on the bottom, and beside the pill it is centred
+        -- on the pill (NotesPanel.qml's footer RowLayout).
+        anchors = { left = true, bottom = true },
+        translate_y = function() return #notes.archived() > 0 and -6 or 0 end,
         width = ROOM_W - 150, elide = "right",
         mono = true, size = theme.size.small, color = C.textMuted,
         text = function()

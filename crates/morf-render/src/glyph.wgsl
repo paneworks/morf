@@ -223,7 +223,15 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         // A layer composited back: its target holds what its subtree wrote,
         // already in the space this pipeline writes, so it is not encoded
         // again.
-        return vec4<f32>(sampled.rgb * input.color.a, alpha);
+        var rgb = sampled.rgb;
+        if input.mode.x > 1.5 {
+            // A frosted backdrop, saturated by `field.x`. Premultiplied
+            // colour mixes with its own grey just as straight colour does;
+            // the clamp keeps a boosted channel within its alpha.
+            let grey = dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+            rgb = clamp(mix(vec3<f32>(grey), rgb, input.field.x), vec3<f32>(0.0), vec3<f32>(sampled.a));
+        }
+        return vec4<f32>(rgb * input.color.a, alpha);
     }
     let color = select(sampled.rgb * input.color.rgb, input.color.rgb, input.mode.z > 0.5);
     return morf_blend_output(

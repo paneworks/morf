@@ -60,6 +60,8 @@ end
 
 if not inline_mode then
   local board = morf.window.layer {
+    -- Mixed as Qt mixes, so translucent colours and type match the original.
+    blend = require("theme").blend,
     namespace = "impasto-desktop",
     layer = "top",
     anchors = { top = true, bottom = true, left = true, right = true },
@@ -70,6 +72,8 @@ if not inline_mode then
     root = arranging_root(WIDTH, HEIGHT),
   }
   local menu = morf.window.layer {
+    -- Mixed as Qt mixes, so translucent colours and type match the original.
+    blend = require("theme").blend,
     namespace = "impasto-desktop-menu",
     layer = "top",
     anchors = { top = true, bottom = true, left = true, right = true },

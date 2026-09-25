@@ -107,6 +107,8 @@ end
 --- Puts the wallpaper on a background layer of its own, one per screen.
 function M.open_layer(width, height)
   return morf.window.layer {
+    -- Mixed as Qt mixes, so translucent colours and type match the original.
+    blend = require("theme").blend,
     namespace = "impasto-wallpaper",
     layer = "background",
     anchors = { top = true, bottom = true, left = true, right = true },

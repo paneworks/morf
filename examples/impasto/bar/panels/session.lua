@@ -112,6 +112,9 @@ island.register("session", {
     for index, action in ipairs(session.actions) do tiles[#tiles + 1] = tile(index, action) end
     -- Sized by the island's inset, which keeps the panel's padding.
     return ui.Item {
+      -- The room the island gives the panel, inside its padding; without it
+      -- the tiles had nothing to grow into and shrank to their labels.
+      anchors = { fill = true },
       -- The keyboard is the panel's while it is open.
       ui.MouseArea {
         anchors = { fill = true },

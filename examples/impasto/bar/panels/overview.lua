@@ -215,7 +215,9 @@ local function build()
   -- between them (`island.room`, DynamicIsland.qml's `roomForPanel`).
   local inner_w = math.min(WIDTH, island.room()) - 2 * theme.panel_padding
   local inner_h = panel_height() - 2 * theme.panel_padding
-  local board_h = inner_h - CAPTION - GAP
+  -- The whole panel is the board, as OverviewPanel.qml's is: no caption
+  -- under it unless there is nothing to show.
+  local board_h = workspaces.available() and inner_h or inner_h - CAPTION - GAP
 
   -- The screen this panel is on decides the shape of a cell.
   local here = area_for(workspaces.monitor_of(workspaces.active_id()))
@@ -567,7 +569,7 @@ local function build()
         if not workspaces.available() then
           return "Hyprland is not running here, so there are no workspaces to show"
         end
-        return "Click a workspace to go there  ·  drag a window onto another to move it  ·  right-click a window to close it"
+        return ""
       end,
     },
   }

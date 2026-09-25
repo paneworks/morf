@@ -101,6 +101,7 @@ impl RenderBackend for RecordingBackend {
     }
 }
 
+mod backdrop;
 mod damage;
 mod field_packing;
 mod fields;

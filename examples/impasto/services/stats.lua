@@ -6,8 +6,8 @@
 -- /proc/stat (every core), /proc/meminfo, /proc/loadavg, /proc/uptime,
 -- /proc/net/dev, the hwmon sensors, and `morf.fs.disk` for each real mount.
 -- Mounts and sensors are re-read only every tenth sample. When
--- examples/lib/sysinfo.lua is present and offers `disks()` or
--- `temperature()`, those are used instead of this file's own readers.
+-- examples/lib/sysinfo.lua is present and offers `temperature()`, that is
+-- used instead of this file's own reader.
 --
 -- The sampler starts the first time something reads a figure (the bar's
 -- module, the panel) and then keeps going, so the history is continuous.
@@ -168,27 +168,24 @@ local REAL = { ext4 = true, ext3 = true, btrfs = true, xfs = true, f2fs = true, 
   exfat = true, zfs = true, bcachefs = true, ntfs3 = true, ntfs = true, jfs = true }
 
 local function read_disks()
-  if sysinfo and type(sysinfo.disks) == "function" then
-    local ok, list = pcall(sysinfo.disks)
-    if ok and type(list) == "table" and #list > 0 then return list end
-  end
-  -- Every real filesystem, once per device, then the four largest (what
-  -- stats.py took from `df`, sorted by size), not the first four mounted.
+  -- What stats.py took from `df`: every mounted real filesystem, each mount
+  -- on its own (a btrfs subvolume is a line of its own there too), the four
+  -- largest, in mount order among equals. Not `lib.sysinfo`'s list, which
+  -- keeps one mount per device and names it `mount`.
   local text = fs.read("/proc/mounts") or ""
-  local seen, out = {}, {}
-  for device, target, kind in text:gmatch("(%S+)%s+(%S+)%s+(%S+)[^\n]*") do
+  local out = {}
+  for _, target, kind in text:gmatch("(%S+)%s+(%S+)%s+(%S+)[^\n]*") do
     target = target:gsub("\\040", " ")
-    if REAL[kind] and not seen[device] and not target:find("^/boot") then
-      seen[device] = true
+    if REAL[kind] then
       local usage = fs.disk(target)
       if usage and (usage.total or 0) > 0 then
-        out[#out + 1] = { target = target, total = usage.total, used = usage.used }
+        out[#out + 1] = { target = target, total = usage.total, used = usage.used, order = #out }
       end
     end
   end
   table.sort(out, function(a, b)
     if a.total ~= b.total then return a.total > b.total end
-    return a.target < b.target
+    return a.order < b.order
   end)
   while #out > 4 do table.remove(out) end
   return out

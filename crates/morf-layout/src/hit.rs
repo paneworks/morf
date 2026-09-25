@@ -242,7 +242,12 @@ impl Layout {
             return Ok(());
         };
         let transform = inherited.then(node_transform(scene, node, geometry)?);
-        if scene.bool_value(node, "backdrop_blur")? {
+        // Only `true` is the compositor's: a number is a radius the engine
+        // blurs with itself, inside the surface.
+        if matches!(
+            scene.current(node, "backdrop_blur")?,
+            morf_scene::Value::Bool(true)
+        ) {
             regions.push((transform.bounds(geometry), corner_radii(scene, node)?));
         }
         for &child in scene.children(node)? {

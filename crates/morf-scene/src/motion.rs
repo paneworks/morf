@@ -426,6 +426,8 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "decoration"
             | "cursor"
             | "blur"
+            | "backdrop_blur"
+            | "backdrop_saturation"
             | "shadow_color"
             | "shadow_blur"
             | "shadow_spread"

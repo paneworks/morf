@@ -142,6 +142,23 @@ pub(crate) fn append_node(
     } else {
         RectShadow::none()
     };
+    // Frosted glass goes down first, so the rectangle's own fill tints it.
+    if painted
+        && matches!(element, Element::Rect | Element::ClipRect)
+        && let morf_scene::Value::Number(radius) = scene.current(node, "backdrop_blur")?
+        && radius.is_finite()
+        && *radius > 0.0
+    {
+        list.commands.push(DrawCommand::Backdrop {
+            node,
+            bounds,
+            transform,
+            clip,
+            radii,
+            radius: radius.min(MAX_BACKDROP_BLUR),
+            saturation: scene.number(node, "backdrop_saturation")?.max(0.0),
+        });
+    }
     match element {
         Element::Rect | Element::ClipRect if painted => list.commands.push(DrawCommand::Quad {
             node,

@@ -1,4 +1,4 @@
-use morf_layout::Layout;
+use morf_layout::{Geometry, Layout};
 use morf_scene::{NodeHandle, Scene};
 use std::collections::HashMap;
 use std::error::Error as StdError;
@@ -73,7 +73,9 @@ impl DamageTracker {
         }
         let previous = keyed_commands(&self.previous.commands);
         let current = keyed_commands(&next.commands);
-        let mut logical = Vec::new();
+        // Each changed area with the paint order it was drawn at, so a frosted
+        // panel can tell a change beneath it from one on top of it.
+        let mut changed: Vec<(Geometry, usize)> = Vec::new();
         for (key, (order, command)) in &current {
             match previous.get(key) {
                 Some((old_order, old)) if old_order == order && *old == *command => {}
@@ -84,18 +86,33 @@ impl DamageTracker {
                         .then(|| command.terminal_rows_changed(old))
                         .flatten()
                     {
-                        Some(rows) => logical.extend(rows),
+                        Some(rows) => changed.extend(rows.into_iter().map(|row| (row, *order))),
                         None => {
-                            logical.push(old.bounds());
-                            logical.push(command.bounds());
+                            changed.push((old.bounds(), (*old_order).min(*order)));
+                            changed.push((command.bounds(), *order));
                         }
                     }
                 }
-                None => logical.push(command.bounds()),
+                None => changed.push((command.bounds(), *order)),
             }
         }
-        for (key, (_, command)) in &previous {
+        for (key, (order, command)) in &previous {
             if !current.contains_key(key) {
+                changed.push((command.bounds(), *order));
+            }
+        }
+        let mut logical: Vec<Geometry> = changed.iter().map(|(bounds, _)| *bounds).collect();
+        // A change beneath frosted glass changes all of the glass: the blur
+        // spreads it, so the damage has to be the whole panel and not only
+        // the few pixels that moved underneath.
+        for (order, command) in next.commands.iter().enumerate() {
+            let Some(reach) = command.backdrop_reach() else {
+                continue;
+            };
+            if changed
+                .iter()
+                .any(|(bounds, changed_order)| *changed_order < order && overlaps(*bounds, reach))
+            {
                 logical.push(command.bounds());
             }
         }
@@ -211,6 +228,17 @@ impl<B: RenderBackend> RenderEngine<B> {
     pub fn backend_mut(&mut self) -> &mut B {
         &mut self.backend
     }
+}
+
+fn overlaps(left: Geometry, right: Geometry) -> bool {
+    left.width > 0.0
+        && left.height > 0.0
+        && right.width > 0.0
+        && right.height > 0.0
+        && left.x < right.x + right.width
+        && right.x < left.x + left.width
+        && left.y < right.y + right.height
+        && right.y < left.y + left.height
 }
 
 /// Indexes a frame's commands so that two commands can be compared against the

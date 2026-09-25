@@ -140,6 +140,8 @@ function M.run(command, options)
     },
   }
   entry.window = morf.window.floating {
+    -- Mixed as Qt mixes, so translucent colours and type match the original.
+    blend = require("theme").blend,
     title = options.title or command[1], app_id = "impasto-terminal",
     width = 900, height = 560,
     root = root,

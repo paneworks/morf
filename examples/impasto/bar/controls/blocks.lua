@@ -161,10 +161,15 @@ M.register("appearance", function(o)
     end
     return id
   end
-  local swatches = { gap = 4, align = "center" }
-  for _, name in ipairs { "accent", "green", "yellow", "red", "blue" } do
-    swatches[#swatches + 1] = ui.Rect { width = 11, height = 11, radius = 5.5, color = C[name],
-      border_width = 1, border_color = C.islandBorder }
+  -- The palette as ColorSwatch draws it: a two by two grid of the
+  -- preset's swatches, or of the adaptive palette's ground, surface,
+  -- accent and type (AppearanceCard.qml, ThemeService.adaptiveSwatches).
+  local palette_colors = function()
+    local id = themes.active_id:get()
+    for _, preset in ipairs(require("lib.palette").presets) do
+      if preset.id == id and preset.swatches then return preset.swatches end
+    end
+    return { C.background(), C.surface(), C.accent(), C.text() }
   end
   local chevron = kit.glyph {
     glyph = "󰅂", size = 14,
@@ -172,7 +177,7 @@ M.register("appearance", function(o)
     opacity = function() return hovered:get() and 1 or 0.7 end,
     behavior = { color = theme.behave("fast") },
   }
-  local swatch_row = ui.Row(swatches)
+  local swatch_row = require("components.swatch").colors { size = 11, colors = palette_colors }
   local text_w = function()
     return o.width - 24 - (swatch_row.layout_width or 63) - 10 - (chevron.layout_width or 14) - 10
   end

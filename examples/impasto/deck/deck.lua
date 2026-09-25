@@ -282,6 +282,8 @@ local function build_edge(edge)
     or edge == "right" and { right = true, top = true }
     or { left = true, bottom = true }
   local window = morf.window.layer {
+    -- Mixed as Qt mixes, so translucent colours and type match the original.
+    blend = require("theme").blend,
     namespace = "impasto-deck",
     layer = "top",
     keyboard_focus = "none",

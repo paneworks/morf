@@ -76,7 +76,11 @@ end
 function M.available() return M.now().available == true end
 function M.place()
   if settings.weatherPlace ~= "" then return settings.weatherPlace end
-  return M.now().place or ""
+  -- The town alone, as wttr.in's `areaName` is in the original; the library
+  -- names the country after it, which is `region` here.
+  local now = M.now()
+  local place = now.city or now.place or ""
+  return place:match("^%s*([^,]-)%s*,") or place
 end
 function M.temperature() return round(M.now().temperature) end
 function M.feels_like() local n = M.now() return round(n.feels_like or n.temperature) end

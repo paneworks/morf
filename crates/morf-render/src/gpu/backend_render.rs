@@ -108,6 +108,31 @@ impl RenderBackend for WgpuBackend {
         );
         let scale = scale_120.max(1) as f64 / 120.0;
         let layer_targets = self.build_layer_targets(list, &mut texture_batch, scale);
+        let mut command_layers = vec![None; list.commands.len()];
+        let mut child_layers = HashMap::new();
+        for (layer_index, layer) in list.layers.iter().enumerate() {
+            for owner in &mut command_layers[layer.commands.clone()] {
+                *owner = Some(layer_index);
+            }
+            // An empty layer owns no commands, so it must not claim the index
+            // of the one that follows it: the frame loop jumps to a layer's
+            // `commands.end` after drawing it, and for an empty layer that is
+            // the command it was standing in front of.
+            if !layer.commands.is_empty() {
+                child_layers.insert((layer.parent, layer.commands.start), layer_index);
+            }
+        }
+        let backdrop_draws = self.prepare_backdrops(
+            list,
+            &mut texture_batch,
+            (&command_layers, &child_layers),
+            scale_120,
+        );
+        let backdrop_scratch = backdrop_draws
+            .iter()
+            .flatten()
+            .any(|draw| draw.refresh.is_some())
+            .then(|| self.backdrop_scratch());
         self.ensure_textures(texture_batch.instances.len().max(1));
         self.ensure_glyphs(
             glyph_batch
@@ -158,20 +183,6 @@ impl RenderBackend for WgpuBackend {
                 0,
                 bytemuck::cast_slice(&texture_batch.instances),
             );
-        }
-        let mut command_layers = vec![None; list.commands.len()];
-        let mut child_layers = HashMap::new();
-        for (layer_index, layer) in list.layers.iter().enumerate() {
-            for owner in &mut command_layers[layer.commands.clone()] {
-                *owner = Some(layer_index);
-            }
-            // An empty layer owns no commands, so it must not claim the index
-            // of the one that follows it: the frame loop jumps to a layer's
-            // `commands.end` after drawing it, and for an empty layer that is
-            // the command it was standing in front of.
-            if !layer.commands.is_empty() {
-                child_layers.insert((layer.parent, layer.commands.start), layer_index);
-            }
         }
         macro_rules! draw_command {
             ($pass:expr, $command_index:expr, $base_damage:expr) => {{
@@ -228,6 +239,14 @@ impl RenderBackend for WgpuBackend {
                         $pass.set_bind_group(0, &image.bind_group, &[]);
                         $pass.set_vertex_buffer(0, self.texture_buffer.slice(..));
                         $pass.draw(0..6, instance..instance + 1);
+                    }
+                    if let Some(draw) = &backdrop_draws[command_index]
+                        && let Some(entry) = self.backdrops.entries.get(&draw.node)
+                    {
+                        $pass.set_pipeline(&self.glyph_pipeline);
+                        $pass.set_bind_group(0, &entry.bind_group, &[]);
+                        $pass.set_vertex_buffer(0, self.texture_buffer.slice(..));
+                        $pass.draw(0..6, draw.instance..draw.instance + 1);
                     }
                     if let Some(batch) = &glyph_batch {
                         for span in &batch.command_spans[command_index] {
@@ -304,7 +323,98 @@ impl RenderBackend for WgpuBackend {
             width: self.width,
             height: self.height,
         };
-        for layer_index in (0..list.layers.len()).rev() {
+        for step in super::backdrops::offscreen_order(list, &command_layers, &child_layers) {
+            let layer_index = match step {
+                super::backdrops::Offscreen::Layer(layer_index) => layer_index,
+                super::backdrops::Offscreen::Backdrop(command_index) => {
+                    let Some(draw) = &backdrop_draws[command_index] else {
+                        continue;
+                    };
+                    let (Some(ops), Some((scratch, scratch_view)), Some(entry)) = (
+                        &draw.refresh,
+                        &backdrop_scratch,
+                        self.backdrops.entries.get(&draw.node),
+                    ) else {
+                        continue;
+                    };
+                    let region = entry.region();
+                    // What is beneath, drawn again from scratch: the
+                    // surface's own target still has last frame's glass in it.
+                    {
+                        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("morf backdrop beneath"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: scratch_view,
+                                depth_slice: None,
+                                resolve_target: None,
+                                // Only the region is cleared and read: ten
+                                // panels are not ten clears of the screen.
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            ..Default::default()
+                        });
+                        pass.set_scissor_rect(region.x, region.y, region.width, region.height);
+                        pass.set_pipeline(&self.clear_pipeline);
+                        pass.set_bind_group(0, &self.viewport_bind_group, &[]);
+                        pass.draw(0..3, 0..1);
+                        for op in ops {
+                            match *op {
+                                super::backdrops::BeneathOp::Command(index) => {
+                                    draw_command!(pass, index, region)
+                                }
+                                super::backdrops::BeneathOp::Layer(layer) => {
+                                    draw_layer!(pass, layer, region)
+                                }
+                            }
+                        }
+                    }
+                    encoder.copy_texture_to_texture(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: scratch,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d {
+                                x: region.x,
+                                y: region.y,
+                                z: 0,
+                            },
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &entry.source,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        wgpu::Extent3d {
+                            width: region.width,
+                            height: region.height,
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                    for (blur_pass, level) in &entry.passes {
+                        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("morf backdrop blur"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: entry.level_view(*level),
+                                depth_slice: None,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            ..Default::default()
+                        });
+                        pass.set_pipeline(&self.blur_pipeline);
+                        pass.set_bind_group(0, &blur_pass.bind_group, &[]);
+                        pass.draw(0..3, 0..1);
+                    }
+                    continue;
+                }
+            };
             let layer = &list.layers[layer_index];
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

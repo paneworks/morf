@@ -216,6 +216,28 @@ pub enum DrawCommand {
         /// Layers in composition order; the first establishes the field.
         layers: Vec<SdfLayer>,
     },
+    /// Frosted glass: what this surface has already drawn beneath a rounded
+    /// rectangle, blurred and drawn back inside it.
+    ///
+    /// Emitted just before the rectangle's own fill, which then tints it. The
+    /// backend blurs at reduced resolution and keeps the result until what is
+    /// beneath changes, so a still desk costs one textured quad per panel.
+    Backdrop {
+        /// Source scene node.
+        node: NodeHandle,
+        /// Logical surface bounds of the shape.
+        bounds: Geometry,
+        /// Composed node and ancestor transform.
+        transform: Transform2D,
+        /// Intersected ancestor clip in logical surface coordinates.
+        clip: Option<Geometry>,
+        /// Corner radii in top-left clockwise order.
+        radii: [f64; 4],
+        /// Logical blur radius, already capped at [`MAX_BACKDROP_BLUR`].
+        radius: f64,
+        /// Saturation of the blurred backdrop, 1 unchanged and 0 grey.
+        saturation: f64,
+    },
     /// A terminal's screen: a grid of cells, each drawn at its own column
     /// and row whatever the font would have advanced it by.
     Terminal {
@@ -233,6 +255,33 @@ pub enum DrawCommand {
         /// comparing two is a pointer comparison when nothing changed.
         screen: std::sync::Arc<morf_scene::TerminalScreen>,
     },
+}
+
+/// The largest backdrop blur radius, in logical pixels.
+///
+/// Past this a frosted panel is a flat wash of the average colour anyway, and
+/// every doubling of the radius is another pass over the region.
+pub const MAX_BACKDROP_BLUR: f64 = 96.0;
+
+impl DrawCommand {
+    /// For a backdrop, the area it reads beneath itself: its shape widened by
+    /// how far the blur reaches, so the edge of the glass pulls in what lies
+    /// just outside it rather than darkening towards nothing.
+    pub fn backdrop_reach(&self) -> Option<Geometry> {
+        let Self::Backdrop {
+            bounds,
+            transform,
+            radius,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        Some(crate::effects::expand_geometry(
+            transform.bounds(*bounds),
+            radius * 2.0,
+        ))
+    }
 }
 
 /// A compiled shader attached to a node, and the values it was given.
@@ -327,6 +376,7 @@ impl DrawCommand {
             | Self::Texture { node, .. }
             | Self::Path { node, .. }
             | Self::Field { node, .. }
+            | Self::Backdrop { node, .. }
             | Self::Terminal { node, .. } => *node,
         }
     }
@@ -355,6 +405,9 @@ impl DrawCommand {
                 bounds, transform, ..
             }
             | Self::Texture {
+                bounds, transform, ..
+            }
+            | Self::Backdrop {
                 bounds, transform, ..
             }
             | Self::Terminal {
@@ -404,6 +457,7 @@ impl DrawCommand {
             | Self::Texture { clip, .. }
             | Self::Path { clip, .. }
             | Self::Field { clip, .. }
+            | Self::Backdrop { clip, .. }
             | Self::Terminal { clip, .. } => *clip,
         }
     }

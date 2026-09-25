@@ -52,6 +52,8 @@ morf.surface.keyboard_focus = "none"
 morf.surface.exclusive_zone = -1
 morf.surface.reserve = { top = theme.bar_reserve() }
 morf.surface.backdrop = false
+-- Translucent colours and type mixed as Qt mixes them, as the original was.
+morf.surface.blend = theme.blend
 
 -- A click beside an open island closes it, and so does Escape; while a panel
 -- is open the keyboard is the island's.
