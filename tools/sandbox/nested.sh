@@ -18,7 +18,8 @@
 #   open PANEL   the same panel word for either impasto; for caelestia one of
 #                its global shortcuts (launcher dashboard sidebar utilities
 #                session showall lock nexus ...)
-#   close        close whatever is open (Escape; caelestia: every open drawer)
+#   close [D]    close whatever is open (Escape; caelestia: drawer D, else
+#                every open drawer)
 #   point X Y    move the nested pointer to X,Y (hover)
 #   click X Y [B] move it there and click B (left, right, middle)
 #   scroll N     N wheel steps where the pointer is (negative: up)
@@ -228,12 +229,16 @@ if [ "$KIND" = caelestia ]; then
     else hc dispatch "hl.dsp.global(\\"caelestia:\$1\\")" >> \$OUT/hc.log 2>&1; fi
   }
   # Not every drawer closes on Escape (the dashboard closes on leave), so
-  # every open one is toggled shut over IPC.
+  # drawers are toggled shut over IPC: the one named (one call, for films),
+  # or every open one (found first; the request is stamped after).
   close() {
-    asked close
+    if [ -n "\${1:-}" ]; then asked close; qsipc drawers toggle \$1 >> \$OUT/hc.log; return; fi
+    open_ones=""
     for d in \$(qsipc drawers list); do
-      [ "\$(qsipc drawers isOpen \$d)" = 1 ] && qsipc drawers toggle \$d >> \$OUT/hc.log
+      [ "\$(qsipc drawers isOpen \$d)" = 1 ] && open_ones="\$open_ones \$d"
     done
+    asked close
+    for d in \$open_ones; do qsipc drawers toggle \$d >> \$OUT/hc.log; done
   }
   ipc() { asked ipc; qsipc "\$@" >> \$OUT/hc.log; }
   notify() { asked notify; timeout 10 /usr/bin/notify-send "\$@" >> \$OUT/hc.log 2>&1; }

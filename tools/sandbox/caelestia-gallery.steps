@@ -1,0 +1,39 @@
+point 960 600; wait 1
+shot 00-rest
+open launcher; wait 1.5; shot 01-launcher
+k ki; wait 1.5; shot 02-launcher-search
+k -k BackSpace -k BackSpace; k ">"; wait 1.5; shot 03-launcher-actions
+k "wallpaper "; wait 2; shot 04-launcher-wallpapers
+close; wait 1.5
+open dashboard; wait 1.5; shot 05-dashboard
+click 879 45; wait 1.5; shot 06-dashboard-media
+click 1089 45; wait 2.5; shot 07-dashboard-performance
+click 1298 45; wait 2; shot 08-dashboard-weather
+click 670 45; wait 1
+point 960 800; close; wait 1.5
+open sidebar; wait 1.5; shot 09-sidebar
+close; wait 1.5
+open utilities; wait 1.5; shot 10-utilities
+close; wait 1.5
+open session; wait 1.5; shot 11-session
+close; wait 1.5
+ipc drawers toggle osd; wait 1.5; shot 12-osd
+close; wait 1.5
+point 30 520; wait 1.5; shot 13-bar-hover-window
+point 30 150; wait 1.5; shot 14-bar-hover-workspaces
+point 30 837; wait 1.5; shot 15-bar-hover-calendar
+point 30 943; wait 1.5; shot 16-bar-hover-network
+point 30 973; wait 1.5; shot 17-bar-hover-bluetooth
+point 30 1003; wait 1.5; shot 18-bar-hover-battery
+point 960 600; wait 1.5
+notify -a Firefox "Download complete" "report.pdf has finished downloading"; wait 1.5; shot 19-notification
+notify -u critical -a Battery "Battery low" "10% remaining, plug in the charger"; wait 1.5; shot 20-notification-critical
+ipc toaster info "Toast" "A toast from the toaster IPC" "info"; wait 1.5; shot 21-toast
+wait 6
+open sidebar; wait 1.5; shot 22-sidebar-with-notifs
+close; wait 1.5
+open showall; wait 1.5; shot 23-showall
+close; wait 1.5
+ipc nexus open; wait 3; shot 24-nexus
+k -k Escape; wait 1.5
+open lock; wait 3; shot 25-lock

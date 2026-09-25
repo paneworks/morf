@@ -1,0 +1,21 @@
+point 960 800; wait 1
+FILM_GEOMETRY="540,0 900x580"
+open dashboard; film dashboard-open 30; wait 1
+close dashboard; film dashboard-close 30; wait 1
+FILM_GEOMETRY="630,500 660x580"
+open launcher; film launcher-open 30; wait 1
+close launcher; film launcher-close 30; wait 1
+FILM_GEOMETRY="1400,0 520x1080"
+open sidebar; film sidebar-open 30; wait 1
+close sidebar; film sidebar-close 30; wait 1
+FILM_GEOMETRY="1400,560 520x520"
+open utilities; film utilities-open 30; wait 1
+close utilities; film utilities-close 30; wait 1
+FILM_GEOMETRY="1700,300 220x520"
+open session; film session-open 30; wait 1
+close session; film session-close 30; wait 1
+FILM_GEOMETRY="1400,0 520x200"
+notify -a Firefox "Download complete" "report.pdf has finished downloading"; film notification-in 30; wait 1
+FILM_GEOMETRY="0,700 520x380"
+point 30 943; film bar-popout-network 30; wait 1
+point 960 600; film bar-popout-leave 30; wait 1
