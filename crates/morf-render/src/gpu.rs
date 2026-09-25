@@ -41,6 +41,8 @@ mod layer_pool_tests;
 mod layer_targets;
 mod lcd_spans;
 #[cfg(test)]
+mod lcd_spans_tests;
+#[cfg(test)]
 mod lcd_tests;
 mod pipelines;
 mod shader_registry;
