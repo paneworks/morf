@@ -246,11 +246,6 @@ impl Scene {
         let mut pending = vec![id];
         while let Some(current) = pending.pop() {
             pending.extend(self.nodes[current].children.iter().map(|child| child.id()));
-            self.behaviors.retain(|key, _| key.node != current);
-            self.animations.retain(|key, _| key.node != current);
-            self.physics.retain(|key, _| key.node != current);
-            self.physics_specs.retain(|key, _| key.node != current);
-            self.paused_physics.retain(|key| key.node != current);
             self.removed.push(NodeHandle(current));
             self.root_revisions.remove(&current);
             self.detached_revisions.remove(&current);
@@ -265,6 +260,19 @@ impl Scene {
                 }
             }
         }
+        // Once for the whole subtree, not once a node: a panel of a thousand
+        // nodes let go with a few hundred behaviours was a few hundred
+        // thousand key comparisons, and several milliseconds of the turn
+        // that closed it.
+        let nodes = &self.nodes;
+        self.behaviors.retain(|key, _| nodes.contains_key(key.node));
+        self.animations
+            .retain(|key, _| nodes.contains_key(key.node));
+        self.physics.retain(|key, _| nodes.contains_key(key.node));
+        self.physics_specs
+            .retain(|key, _| nodes.contains_key(key.node));
+        self.paused_physics
+            .retain(|key| nodes.contains_key(key.node));
         self.retain_live_groups();
         Ok(())
     }

@@ -20,11 +20,14 @@ impl Runtime {
         self.flush_lint();
         // The loop wakes when the caret is due to turn over
         // (`Runtime::next_deadline`), so it blinks without a timer of its own.
+        let devices =
+            crate::profile::span(|| "engine: appearance, audio, terminals, images".to_owned());
         let blinked = self.blink_text_inputs();
         let appearance_changed = self.poll_appearance();
         let audio_changed = self.poll_audio();
         let terminals_changed = self.poll_terminals();
         let images_changed = self.poll_images();
+        drop(devices);
         let mut ready = Vec::new();
         let mut timers = Vec::new();
         let mut dbus_signals = Vec::new();
@@ -46,6 +49,7 @@ impl Runtime {
         let mut transform_callbacks = Vec::new();
         let mut service_changed = false;
         {
+            let _collect = crate::profile::span(|| "engine: timers, loaders and buses".to_owned());
             let mut state = self.reactive.borrow_mut();
             let mut index = 0;
             while index < state.pam_tasks.len() {
@@ -415,6 +419,7 @@ impl Runtime {
                 }
             }
         }
+        let letting_go = crate::profile::span(|| "engine: letting go of nodes".to_owned());
         for node in retained_destroys {
             self.lua
                 .enter(|ctx| finish_retained_destroy(&self.reactive, ctx, self.limits, node));
@@ -424,6 +429,7 @@ impl Runtime {
             self.lua
                 .enter(|ctx| drop_retainable(&self.reactive, ctx, self.limits, node));
         }
+        drop(letting_go);
         let asked_for = loaders.len();
         for (index, (node, factory)) in loaders.into_iter().chain(preloads).enumerate() {
             // Built ahead of being asked for: kept hidden, and `active`

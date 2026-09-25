@@ -233,10 +233,29 @@ fn main() {
     }
     run_phase(&mut runtime, &mut all, 20);
     report("at rest", &all);
-    runtime.call_ipc(open, &[]).expect("open verb");
+    // What the request itself costs: the handler, and the turn after it
+    // that builds or lets go of what it asked for.
+    let request = |runtime: &mut Runtime, verb: &str| {
+        morf_lua::profile::set_enabled(true);
+        morf_lua::profile::clear();
+        let started = Instant::now();
+        runtime.call_ipc(verb, &[]).expect("verb");
+        runtime.poll_services();
+        let took = started.elapsed().as_secs_f64() * 1000.0;
+        println!("`{verb}` request and the turn after it: {took:.2} ms");
+        for line in morf_lua::profile::report(8) {
+            println!("    {line}");
+        }
+        morf_lua::profile::set_enabled(false);
+    };
+    // Settled first, so a preloading Loader has built what it preloads.
+    for _ in 0..4 {
+        runtime.poll_services();
+    }
+    request(&mut runtime, open);
     run_phase(&mut runtime, &mut all, 40);
     report(&format!("`{open}` (40 frames)"), &all);
-    runtime.call_ipc(close, &[]).expect("close verb");
+    request(&mut runtime, close);
     run_phase(&mut runtime, &mut all, 40);
     report(&format!("`{close}` (40 frames)"), &all);
 }
