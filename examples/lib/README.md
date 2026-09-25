@@ -124,6 +124,25 @@ shapes.Shape { width = 96, height = 96, shape = function() return which:get() en
 Outlines are made once per name and kept (a few milliseconds each).
 `examples/m3shapes.lua` shows every one.
 
+## spectrum
+
+`lib/spectrum.lua` turns the bands `morf.audio.monitor` measures into
+visualiser bars: a noise floor, a sensitivity that follows the music's
+loudness, a little memory on the way up, a fall under gravity, and peaks
+that lean on their neighbours.
+
+```lua
+local spectrum = require("lib.spectrum")
+local vis = spectrum.new { bars = 24 }      -- vis.bars: a signal of 24 levels, 0 to 1
+ui.Rect { height = function() return 4 + 60 * (vis.bars:get()[3] or 0) end }
+vis:stop()
+```
+
+`spectrum.filter(opts)` is the same shaping, pure: `f.step(bands, dt)`
+gives bars. Options (`spectrum.DEFAULTS`): `bars`, `rate_hz`, `noise`,
+`smoothing`, `gravity`, `spread`, `attack`, `release`, `auto`,
+`sensitivity`.
+
 ## material
 
 `lib/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
