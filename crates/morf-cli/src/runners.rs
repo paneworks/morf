@@ -159,16 +159,21 @@ fn options(args: &RunnerArgs, screen_index: usize) -> LoadOptions {
 fn check(args: &RunnerArgs) -> Result<bool, String> {
     let config = args.files[0].display().to_string();
     let (mut errors, mut warnings) = (0usize, 0usize);
-    for screen_index in 0..args.screens {
+    // `--screens 0`: one pass, as the shell runs it once every output is gone.
+    for screen_index in 0..args.screens.max(1) {
         let options = options(args, screen_index);
-        println!(
-            "{config} on HEADLESS-{} ({}x{}, {} screen{})",
-            screen_index + 1,
-            args.size.0,
-            args.size.1,
-            args.screens,
-            if args.screens == 1 { "" } else { "s" }
-        );
+        if args.screens == 0 {
+            println!("{config} with no output");
+        } else {
+            println!(
+                "{config} on HEADLESS-{} ({}x{}, {} screen{})",
+                screen_index + 1,
+                args.size.0,
+                args.size.1,
+                args.screens,
+                if args.screens == 1 { "" } else { "s" }
+            );
+        }
         let mut headless = match Headless::load(&options) {
             Ok(headless) => headless,
             Err(failure) => {

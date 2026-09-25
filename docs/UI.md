@@ -296,6 +296,37 @@ morf.effect("follow screens", function()
 end)
 ```
 
+With no output at all -- every screen switched off, the dock unplugged, a
+compositor that removes an output on DPMS -- there is nothing to draw on,
+and by default nothing runs until an output comes back. A configuration
+that has work to do then says so:
+
+```lua
+morf.surface.outputless = true
+if #morf.screens == 0 then
+  -- Only what makes sense with no screen: a timer, an IPC verb, a D-Bus
+  -- service, a process -- here, lighting a screen again.
+  morf.ipc["screen.on"] = function() morf.spawn { command = { "wlr-randr", "--output", "DP-1", "--on" } } end
+  return
+end
+-- ... the shell as usual ...
+```
+
+While the compositor offers no output, the shell runs the file once more, in
+one runtime of its own: `morf.screens` is empty, `morf.capabilities.outputless`
+is `true`, and every surface, window and layer it declares stays unmapped
+(no root is needed). Timers, `morf ipc`, D-Bus, file watches, processes, the
+idle notifications, clipboard, output power and gamma all work, and
+`morf.screens_revision()` moves as ever. When an output appears that
+runtime is stopped and the per-output ones start from scratch, as on any
+hotplug; values kept with `morf.reloadable(name, default)` go across in
+both directions (a counter bumped with every screen off is where it was
+when the screens come back), and anything longer-lived belongs in a file.
+A shell started with every screen already off runs the file with no output
+once to hear whether it asks for this; one that does not is stopped at once
+and the shell waits for an output, as before. `morf check --screens 0` and
+`test.load(path, { screens = 0 })` load a configuration this way.
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).

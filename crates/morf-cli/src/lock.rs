@@ -95,6 +95,14 @@ pub(crate) enum WorkerMessage {
     Loaded {
         output: String,
         session_lock: bool,
+        /// Whether it asked to keep running with no output
+        /// (`morf.surface.outputless`).
+        outputless: bool,
+    },
+    /// A reload changed `morf.surface.outputless`.
+    Outputless {
+        output: String,
+        wanted: bool,
     },
     Screens {
         output: String,

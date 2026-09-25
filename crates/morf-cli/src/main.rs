@@ -14,6 +14,7 @@ mod headless_surfaces;
 mod lock;
 mod lock_ipc;
 mod lock_outputs;
+mod outputless;
 mod pacing;
 mod paint;
 mod pointer_cursor;

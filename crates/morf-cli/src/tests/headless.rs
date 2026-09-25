@@ -316,3 +316,30 @@ fn each_spec_file_starts_from_an_empty_home() {
     assert!(base.join("bus").is_dir(), "the private bus is left alone");
     let _ = std::fs::remove_dir_all(&base);
 }
+
+// `--screens 0`, `test.load(path, { screens = 0 })`: the shell once every
+// output is gone. Only a configuration that asked runs; it maps nothing and
+// its timers and IPC go on.
+#[test]
+fn with_no_screen_only_a_configuration_that_asked_runs_and_maps_nothing() {
+    let mut options = LoadOptions::new(PathBuf::from("headless-test.lua"));
+    options.screens = 0;
+    options.source = Some(COUNTER.as_bytes().to_vec());
+    let refused = Headless::load(&options)
+        .err()
+        .expect("a drawing-only file is refused");
+    assert!(refused.error.contains("morf.surface.outputless"));
+
+    let source = format!(
+        "morf.surface.outputless = true\n{COUNTER}\n\
+         morf.ipc.screens = function() return #morf.screens end"
+    );
+    options.source = Some(source.into_bytes());
+    let mut headless =
+        Headless::load(&options).unwrap_or_else(|failure| panic!("{}", failure.error));
+    assert!(headless.surfaces.is_empty());
+    assert_eq!(ask(&mut headless, "screens"), IpcValue::Integer(0));
+    headless.advance(Duration::from_millis(600), Duration::ZERO);
+    assert_eq!(ask(&mut headless, "ticks"), IpcValue::Integer(2));
+    assert!(headless.surfaces.is_empty());
+}

@@ -157,6 +157,12 @@ pub(crate) fn apply_layer_setting<'gc>(
             };
             Ok(assign_layer_setting(&mut config.session_lock, value))
         }
+        "outputless" => {
+            let LuaValue::Boolean(value) = value else {
+                return Err("surface outputless must be a boolean".into());
+            };
+            Ok(assign_layer_setting(&mut config.outputless, value))
+        }
         "keyboard_focus" => {
             let LuaValue::String(value) = value else {
                 return Err("surface keyboard_focus must be a string".into());
@@ -305,6 +311,7 @@ pub(crate) fn layer_setting_to_lua<'gc>(
         "keyboard_focus" => LuaValue::String(ctx.intern(config.keyboard_focus.as_bytes())),
         "opaque" => LuaValue::Boolean(config.opaque),
         "session_lock" => LuaValue::Boolean(config.session_lock),
+        "outputless" => LuaValue::Boolean(config.outputless),
         "backdrop" => config.backdrop.map_or(LuaValue::Nil, LuaValue::Boolean),
         "backdrop_dim" => LuaValue::Number(config.backdrop_dim),
         "blend" => LuaValue::String(ctx.intern(config.blend.as_bytes())),
