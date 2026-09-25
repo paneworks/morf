@@ -1,11 +1,14 @@
 -- The launcher's lists: installed applications, ranked by `morf.text.fuzzy`
 -- and lifted by how often and how lately each was launched from here
 -- (lib/frecency.lua); and, after the action prefix (">"), the shell's own
--- actions.
+-- actions, and the pickers some of them open: "> scheme " (source
+-- colours), "> variant " (Material 3 scheme variants), "> wallpaper " (the
+-- pictures in ~/Pictures/Wallpapers) and "> calc " (calc.lua).
 
 local morf = require("morf")
 local frecency = require("lib.frecency")
 local config = require("config")
+local calc = require("calc")
 
 local M = {}
 
@@ -59,7 +62,7 @@ local used = frecency.open { path = morf.state_path("caelestia-launches.json") }
 -- `run(query)` returns what the launcher does next: "close", or a new query.
 M.ACTIONS = {
   { id = "calc", name = "Calculator", description = "Do simple maths equations", icon = "calculate",
-    run = function() return "=" end },
+    run = function() return "> calc " end },
   { id = "scheme", name = "Scheme", description = "Change the current colour scheme", icon = "palette",
     run = function() return "> scheme " end },
   { id = "wallpaper", name = "Wallpaper", description = "Change the current wallpaper", icon = "image",
@@ -68,16 +71,8 @@ M.ACTIONS = {
     run = function() return "> variant " end },
   { id = "random", name = "Random", description = "Switch to a random wallpaper", icon = "casino",
     run = function()
-      local dir = morf.fs.home() .. "/Pictures/Wallpapers"
-      local ok, entries = pcall(morf.fs.list, dir)
-      local pics = {}
-      local PICTURE = { jpg = true, jpeg = true, png = true, webp = true }
-      if ok and type(entries) == "table" then
-        for _, e in ipairs(entries) do
-          if e.is_file and PICTURE[(e.extension or ""):lower()] then pics[#pics + 1] = e.path end
-        end
-      end
-      if #pics > 0 then require("wallpaper").set(pics[math.random(#pics)]) end
+      local pics = M.wallpapers()
+      if #pics > 0 then require("wallpaper").set(pics[math.random(#pics)].path) end
       return "close"
     end },
   { id = "light", name = "Light", description = "Change the scheme to light mode", icon = "light_mode",
@@ -87,19 +82,145 @@ M.ACTIONS = {
 }
 for _, a in ipairs(M.ACTIONS) do a.kind = "action" end
 
+-- ---------------------------------------------------------------- pickers --
+
+--- The source colours "> scheme " offers: the wallpaper's, then named
+--- ones. Each builds a Material 3 scheme through lib/material.lua.
+M.SCHEMES = {
+  { id = "wallpaper", name = "Dynamic", description = "Colours from the wallpaper", color = nil },
+  { id = "#ffb0ca", name = "Rosé", description = "A soft pink" },
+  { id = "#f4a261", name = "Apricot", description = "A warm orange" },
+  { id = "#e9c46a", name = "Saffron", description = "A mellow yellow" },
+  { id = "#8fbf7f", name = "Sage", description = "A quiet green" },
+  { id = "#4fb3bf", name = "Lagoon", description = "A clear teal" },
+  { id = "#7aa2f7", name = "Cornflower", description = "A calm blue" },
+  { id = "#b39ddb", name = "Lavender", description = "A light violet" },
+  { id = "#e57373", name = "Coral", description = "A bright red" },
+  { id = "#9e9e9e", name = "Graphite", description = "Hardly any colour" },
+}
+
+--- The variants "> variant " offers, in lib/material.lua's names.
+M.VARIANTS = {
+  { id = "vibrant", name = "Vibrant", icon = "sentiment_very_dissatisfied",
+    description = "Colours at their fullest, the accents pushed to the edge of the gamut." },
+  { id = "tonal_spot", name = "Tonal Spot", icon = "android",
+    description = "The default: calm, pastel accents with a little colour in the greys." },
+  { id = "expressive", name = "Expressive", icon = "compare_arrows",
+    description = "The accents turned away from the source's hue for a livelier mix." },
+  { id = "fidelity", name = "Fidelity", icon = "compare",
+    description = "Keeps the source colour as it is, however bright or dark." },
+  { id = "content", name = "Content", icon = "sentiment_satisfied",
+    description = "Much like fidelity: follows the source closely." },
+  { id = "fruit_salad", name = "Fruit Salad", icon = "nutrition",
+    description = "Playful: the accents wander well away from the source's hue." },
+  { id = "rainbow", name = "Rainbow", icon = "looks",
+    description = "Playful: bright accents over plain grey surfaces." },
+  { id = "neutral", name = "Neutral", icon = "contrast",
+    description = "Almost grey: only a hint of the source colour." },
+  { id = "monochrome", name = "Monochrome", icon = "filter_b_and_w",
+    description = "Greys only, with no colour at all." },
+}
+
+local PICTURE = { jpg = true, jpeg = true, png = true, webp = true, gif = true }
+
+--- The pictures in ~/Pictures/Wallpapers (and the current one), by name:
+--- `{ path, name }` each.
+function M.wallpapers()
+  local dir = morf.fs.home() .. "/Pictures/Wallpapers"
+  local ok, entries = pcall(morf.fs.list, dir)
+  local out, seen = {}, {}
+  if ok and type(entries) == "table" then
+    for _, e in ipairs(entries) do
+      if e.is_file and PICTURE[(e.extension or ""):lower()] and not seen[e.path] then
+        seen[e.path] = true
+        out[#out + 1] = { path = e.path, name = e.name or e.path:match("([^/]+)$") }
+      end
+    end
+  end
+  local current = require("wallpaper").current:get()
+  if current ~= "" and not seen[current] then
+    out[#out + 1] = { path = current, name = current:match("([^/]+)$") }
+  end
+  table.sort(out, function(a, b) return a.name:lower() < b.name:lower() end)
+  return out
+end
+
 -- ----------------------------------------------------------------- search --
 
---- What `query` finds: a list of rows (apps or actions), best first.
+local function picked(list, term, kind, make)
+  local hits = morf.text.fuzzy(term, list, { key = { "name", { "description", 0.3 } } })
+  local out = {}
+  for _, hit in ipairs(hits) do out[#out + 1] = make(hit.item) end
+  return out
+end
+
+--- What `query` finds: `rows, mode` -- rows best first (apps, actions,
+--- schemes, variants, wallpapers or one calculation) and the mode the
+--- launcher draws them in: "apps", "actions", "schemes", "variants",
+--- "wallpapers" or "calc".
 function M.search(query, limit)
   local prefix = config.get("launcher.action_prefix")
   if query:sub(1, #prefix) == prefix then
-    local term = query:sub(#prefix + 1):match("^%s*(.-)%s*$")
-    -- TODO(phase 2): the scheme, wallpaper and variant pickers that
-    -- "> scheme " and friends open in the reference.
+    local rest = query:sub(#prefix + 1):gsub("^%s+", "")
+    local word, after = rest:match("^(%a+)%s(.*)$")
+    word = word and word:lower()
+    if word == "scheme" then
+      local source = config.get("theme.source")
+      return picked(M.SCHEMES, after:match("^%s*(.-)%s*$"), "scheme", function(item)
+        return {
+          kind = "scheme", id = item.id, name = item.name, icon = "palette",
+          description = item.id == "wallpaper" and item.description or (item.description .. " · " .. item.id),
+          color = item.id ~= "wallpaper" and item.id or nil, current = source == item.id,
+          run = function() config.set("theme.source", item.id) return "close" end,
+        }
+      end), "schemes"
+    elseif word == "variant" then
+      local variant = config.get("theme.variant")
+      return picked(M.VARIANTS, after:match("^%s*(.-)%s*$"), "variant", function(item)
+        return {
+          kind = "variant", id = item.id, name = item.name, icon = item.icon, description = item.description,
+          current = variant == item.id,
+          run = function() config.set("theme.variant", item.id) return "close" end,
+        }
+      end), "variants"
+    elseif word == "wallpaper" then
+      local term = after:match("^%s*(.-)%s*$")
+      local list = M.wallpapers()
+      local out = {}
+      if term == "" then
+        out = list
+      else
+        for _, hit in ipairs(morf.text.fuzzy(term, list, { key = "name" })) do out[#out + 1] = hit.item end
+      end
+      local rows = {}
+      for _, w in ipairs(out) do
+        rows[#rows + 1] = {
+          kind = "wallpaper", id = w.path, name = w.name, description = w.path, icon = "image", path = w.path,
+          run = function() require("wallpaper").set(w.path) return "close" end,
+        }
+      end
+      return rows, "wallpapers"
+    elseif word == "calc" then
+      local value, shown, result = calc.evaluate(after)
+      if not value then
+        return { {
+          kind = "calc", id = "calc", name = after:match("^%s*(.-)%s*$") == "" and "Type an expression" or shown,
+          description = "", icon = "function", failed = true, run = function() return "keep" end,
+        } }, "calc"
+      end
+      return { {
+        kind = "calc", id = "calc", name = shown, description = result, icon = "function", result = result,
+        run = function()
+          pcall(morf.clipboard.set, result)
+          return "close"
+        end,
+      } }, "calc"
+    end
+    local term = rest:match("^%s*(.-)%s*$")
     local hits = morf.text.fuzzy(term, M.ACTIONS, { key = { "name", { "description", 0.3 } } })
     local out = {}
     for _, hit in ipairs(hits) do out[#out + 1] = hit.item end
-    return out
+    return out, "actions"
   end
   local hits = used.rank(query, rows, {
     key = { "name", { "keywords", 0.5 }, { "description", 0.3 } },
@@ -108,7 +229,7 @@ function M.search(query, limit)
   })
   local out = {}
   for _, hit in ipairs(hits) do out[#out + 1] = hit.item end
-  return out
+  return out, "apps"
 end
 
 --- Runs a row: launches an app (and remembers it), or an action. Returns
