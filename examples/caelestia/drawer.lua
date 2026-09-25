@@ -21,21 +21,29 @@ M.all = {}
 
 local groups = 0
 
---- `spec`: `name`, `edge` ("top" or "bottom"), `width`, `height` (numbers
---- or bindings), `content` (a node, laid out in the panel), `props` (more
---- properties for the panel).
+--- `spec`: `name`, `edge` ("top", "bottom", "left" or "right"), `width`,
+--- `height` (numbers or bindings), `content` (a node, laid out in the
+--- panel), `props` (more properties for the panel: a side drawer is
+--- centred on its edge unless they place it, `y` for one).
 function M.new(spec)
   groups = groups + 1
   local d = { name = spec.name, edge = spec.edge }
   d.open = morf.signal("caelestia.drawer." .. spec.name, false)
-  local sign = spec.edge == "top" and -1 or 1
+  local sign = (spec.edge == "top" or spec.edge == "left") and -1 or 1
+  local across = spec.edge == "left" or spec.edge == "right"
+  local axis = across and "translate_x" or "translate_y"
 
   local props = spec.props or {}
   props.id = "drawer-" .. spec.name
   props.width = spec.width
   props.height = spec.height
-  props.anchors = spec.edge == "top" and { top = true, horizontal_center = true }
-    or { bottom = true, horizontal_center = true }
+  local ANCHORS = {
+    top = { top = true, horizontal_center = true },
+    bottom = { bottom = true, horizontal_center = true },
+    left = { left = true, vertical_center = true },
+    right = { right = true, vertical_center = true },
+  }
+  props.anchors = props.anchors or ANCHORS[spec.edge]
   props.visible = false
   props.behavior = props.behavior or {}
   -- The results of a search change the launcher's height: it follows at
@@ -49,17 +57,19 @@ function M.new(spec)
   --- How far the panel moves to be out of sight: its size and the seam, so
   --- not even the fillet of its far edge dents the frame.
   local function tucked()
-    local h = panel.height_target or panel.height or 0
-    return sign * (h + theme.SEAM + theme.BORDER + 2)
+    local size
+    if across then size = panel.width_target or panel.width or 0
+    else size = panel.height_target or panel.height or 0 end
+    return sign * (size + theme.SEAM + theme.BORDER + 2)
   end
-  panel.translate_y = tucked()
+  panel[axis] = tucked()
 
   local running
   local function move(opening)
     if running then running:stop() end
     if opening then panel.visible = true end
     local slide = {
-      node = panel, property = "translate_y", to = opening and 0 or tucked(),
+      node = panel, property = axis, to = opening and 0 or tucked(),
       duration = opening and theme.duration.drawer_open or theme.duration.drawer_close,
       easing = opening and theme.ease.spatial or theme.ease.emphasized_accel,
     }
@@ -91,15 +101,17 @@ function M.new(spec)
   -- Its background in the frame's field: square on the frame's side (the
   -- seam rounds that join), the reference's rounding on the far side.
   local near, far = 0, theme.ROUNDING
+  local e = spec.edge
+  local function r(a, b) return (e == a or e == b) and near or far end
   d.shape = ui.SdfShape {
     shape = "box",
     operation = "smooth_union",
     blend_group = groups,
     track = panel,
-    top_left_radius = spec.edge == "top" and near or far,
-    top_right_radius = spec.edge == "top" and near or far,
-    bottom_left_radius = spec.edge == "bottom" and near or far,
-    bottom_right_radius = spec.edge == "bottom" and near or far,
+    top_left_radius = r("top", "left"),
+    top_right_radius = r("top", "right"),
+    bottom_left_radius = r("bottom", "left"),
+    bottom_right_radius = r("bottom", "right"),
   }
 
   function d.set(on) d.open:set(on and true or false) end

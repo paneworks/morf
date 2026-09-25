@@ -203,10 +203,7 @@ end
 local function power()
   return kit.hover(ui.MouseArea {
     id = "power", width = 40, height = 40, cursor = "pointer",
-    on_clicked = function()
-      -- TODO(phase 2): the session drawer on the right edge.
-      morf.log("info", "caelestia: power pressed (the session menu is not ported yet)")
-    end,
+    on_clicked = function() require("session").drawer.toggle() end,
     kit.icon("power_settings_new", 20, function() return C.error end, { anchors = { center_in = true } }),
   }, function(hovered) return hovered and C.onSurface:alpha(0.08) or C.onSurface:alpha(0) end, 20)
 end

@@ -336,11 +336,12 @@ field = ui.TextInput {
   on_accepted = function() M.activate(chosen()) end,
   on_escape = function() M.drawer.set(false) end,
   on_key_pressed = function(keysym)
-    if keysym == "Up" then move(-1) return true end
-    if keysym == "Down" then move(1) return true end
-    if keysym == "Tab" then move(1) return true end
-    if wide() and keysym == "Left" then move(-1) return true end
-    if wide() and keysym == "Right" then move(1) return true end
+    local key = kit.is_key
+    if key(keysym, "Up") then move(-1) return true end
+    if key(keysym, "Down") then move(1) return true end
+    if key(keysym, "Tab") then move(1) return true end
+    if wide() and key(keysym, "Left") then move(-1) return true end
+    if wide() and key(keysym, "Right") then move(1) return true end
   end,
 }
 

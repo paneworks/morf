@@ -9,7 +9,7 @@
 --
 --     morf examples/caelestia/init.lua
 --     morf ipc call launcher          -- toggle; or `launcher open`, `launcher close`
---     morf ipc call dashboard         -- the same
+--     morf ipc call dashboard         -- the same; `session` too
 --     morf ipc call close             -- every drawer
 --
 -- The frame, the bar and the drawers are one fullscreen layer surface; only
@@ -55,6 +55,7 @@ end)
 
 local launcher = require("launcher")
 local dashboard = require("dashboard")
+local session = require("session")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -91,6 +92,8 @@ local panels = {
     right_margin = theme.BORDER, bottom_margin = theme.BORDER,
   },
   clip = true,
+  -- The desk dims under the session menu.
+  session.dim(),
 }
 for _, d in ipairs(drawer.all) do panels[#panels + 1] = d.panel end
 
@@ -119,11 +122,19 @@ end
 
 morf.ipc.launcher = verb(launcher.drawer)
 morf.ipc.dashboard = verb(dashboard.drawer)
+morf.ipc.session = verb(session.drawer)
 morf.ipc.close = function()
   drawer.close_all()
   return true
 end
-morf.ipc.drawers = function()
+-- `drawers` lists the open drawers; `drawers toggle NAME` (open, close)
+-- acts on one by name, as the reference's IPC does.
+morf.ipc.drawers = function(how, name)
+  if how ~= nil and how ~= "list" then
+    local d = drawer[name or ""]
+    if not d then error("`" .. tostring(name) .. "`: no such drawer") end
+    return verb(d)(how)
+  end
   local open = {}
   for _, d in ipairs(drawer.all) do
     if d.is_open() then open[#open + 1] = d.name end

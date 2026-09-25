@@ -13,9 +13,12 @@ local test = morf.test
 local W, H = 1920, 1080
 
 local function load()
+  for _, program in ipairs { "systemctl", "loginctl" } do test.stub_run(program, { code = 0 }) end
   test.load("../caelestia/init.lua", {
     size = { W, H },
-    env = { CAELESTIA_WALLPAPER = "", CAELESTIA_FONT_FILE = "" },
+    -- CAELESTIA_DRY_RUN: the session menu logs its commands instead of
+    -- running them (and they are stubbed besides).
+    env = { CAELESTIA_WALLPAPER = "", CAELESTIA_FONT_FILE = "", CAELESTIA_DRY_RUN = "1" },
   })
   test.settle(2000)
 end
@@ -213,6 +216,14 @@ test.describe("caelestia", function()
     test.settle(1500)
     test.snapshot("caelestia-dashboard-monochrome.png", { surface = "screen" })
     test.eq(#test.logs("error"), 0)
+    -- Back to the default, for the tests after this one (the settings file
+    -- outlives a load).
+    test.ipc("launcher", "open")
+    test.settle(1500)
+    test.type(">variant tonal")
+    test.settle(800)
+    test.key("Return")
+    test.settle(800)
   end)
 
   test.it("lists schemes, and a scheme sets the source colour", function()
@@ -229,6 +240,12 @@ test.describe("caelestia", function()
     test.key("Return")
     test.settle(1500)
     test.falsy(shown("launcher"))
+    test.ipc("launcher", "open")
+    test.settle(1500)
+    test.type(">scheme dynamic")
+    test.settle(800)
+    test.key("Return")
+    test.settle(800)
   end)
 
   test.it("shows no results as the reference does", function()
@@ -254,5 +271,59 @@ test.describe("caelestia", function()
     test.key("Escape")
     test.settle(1500)
     test.falsy(shown("launcher"))
+  end)
+  test.it("opens the session menu from the power button, and runs nothing until asked", function()
+    load()
+    test.click { id = "power" }
+    test.settle(1500)
+    test.truthy(shown("session"), "the power button did not open it")
+    local d = drawer("session")
+    test.near(d.x + d.width, W - 10, 1)
+    test.near(d.y + d.height / 2, H / 2, 1)
+    test.eq(#test.runs(), 0)
+    test.snapshot("caelestia-session.png", { surface = "screen" })
+    -- Down to shut down, then Escape: nothing ran.
+    test.key("Down")
+    test.key("Escape")
+    test.settle(1500)
+    test.falsy(shown("session"))
+    test.eq(#test.runs(), 0)
+    -- Again, and Return on shut down.
+    test.ipc("session", "open")
+    test.settle(1500)
+    test.key("Down")
+    test.key("Return")
+    test.settle(1500)
+    test.falsy(shown("session"))
+    local said
+    for _, line in ipairs(test.logs("info")) do
+      if line.message:find("session shutdown (dry run): systemctl poweroff", 1, true) then said = true end
+    end
+    test.truthy(said, "shut down was not asked for")
+    test.eq(#test.runs(), 0)
+  end)
+
+  test.it("shuts the session menu on a click on the desk", function()
+    load()
+    test.ipc("drawers", "toggle", "session")
+    test.settle(1500)
+    test.truthy(shown("session"))
+    test.click(800, 500)
+    test.settle(1500)
+    test.falsy(shown("session"))
+    test.eq(#test.runs(), 0)
+  end)
+  test.it("moves the launcher's highlight with the arrow keys", function()
+    load()
+    test.ipc("launcher", "open")
+    test.settle(1500)
+    test.type(">")
+    test.settle(800)
+    -- Calculator first, Scheme second: Down and Return opens the schemes.
+    test.key("Down")
+    test.key("Return")
+    test.settle(800)
+    test.eq(test.get({ id = "launcher-search" }).text, "> scheme ")
+    test.truthy(test.find { text = "Dynamic" })
   end)
 end)

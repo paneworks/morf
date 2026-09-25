@@ -6,6 +6,17 @@ local theme = require("theme")
 
 local M = {}
 
+--- The X keysyms `on_key_pressed` is handed, by name.
+M.KEY = {
+  Up = 0xff52, Down = 0xff54, Left = 0xff51, Right = 0xff53,
+  Tab = 0xff09, ISO_Left_Tab = 0xfe20, Return = 0xff0d, KP_Enter = 0xff8d, Escape = 0xff1b,
+}
+
+--- Whether `keysym` is the key named `name`.
+function M.is_key(keysym, name)
+  return keysym == M.KEY[name] or keysym == name
+end
+
 --- A Material Symbols Rounded icon by its ligature name (`"wifi_off"`).
 --- `name` and `color` may be bindings; `props.fill` (a boolean or a
 --- binding) fills it in through the face's FILL axis.
