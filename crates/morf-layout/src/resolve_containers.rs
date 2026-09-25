@@ -40,7 +40,11 @@ impl Layout {
         if self.dirty.is_some() {
             self.forget_hidden_flex_children(scene, root)?;
         }
+        let mut containers = vec![root];
         for (node, mut placed, leaf, (x, y)) in placed {
+            if !leaf {
+                containers.push(node);
+            }
             let transition = (
                 scene.number(node, "transition_x")?,
                 scene.number(node, "transition_y")?,
@@ -52,6 +56,14 @@ impl Layout {
                 self.place(scene, node, placed, text, host)?;
             } else {
                 self.geometry.insert(node, placed);
+            }
+        }
+        // Taffy is not shown a child on its way out; it keeps its own box.
+        for container in containers {
+            for &child in scene.children(container)? {
+                if scene.is_exiting(child) {
+                    self.place_exiting(scene, container, child, text, host)?;
+                }
             }
         }
         Ok(())
@@ -93,7 +105,15 @@ impl Layout {
         text: &mut impl TextMeasurer,
         host: &mut dyn CustomLayout,
     ) -> Result<(), LayoutError> {
-        let children = scene.children(parent)?.to_vec();
+        // The host places the children in the flow; one on its way out keeps
+        // its own box.
+        let (leaving, children): (Vec<NodeHandle>, Vec<NodeHandle>) = scene
+            .children(parent)?
+            .iter()
+            .partition(|&&child| scene.is_exiting(child));
+        for child in leaving {
+            self.place_exiting(scene, parent, child, text, host)?;
+        }
         let sizes = children
             .iter()
             .map(|child| self.requested[child])

@@ -74,7 +74,8 @@ impl FlexTree {
                 {
                     return Err(LayoutError::AxisConflict { axis: "flex" });
                 }
-                if scene.bool_value(child, "visible")? {
+                // A child on its way out is placed apart, where it was.
+                if scene.bool_value(child, "visible")? && !scene.is_exiting(child) {
                     children.push(Self::add(scene, child, tree, ids)?);
                 }
             }

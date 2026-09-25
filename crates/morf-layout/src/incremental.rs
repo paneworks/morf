@@ -292,6 +292,9 @@ impl Layout {
         host: &mut dyn CustomLayout,
     ) -> Result<(), LayoutError> {
         let revision = scene.layout_revision();
+        // Before anything is thrown away or overwritten: where each node that
+        // has started to leave was, so it stays there.
+        self.capture_exit_frames(scene);
         let basis = self.basis.filter(|basis| {
             basis.root == root
                 && scene.contains(root)
