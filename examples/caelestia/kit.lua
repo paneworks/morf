@@ -75,7 +75,8 @@ function M.card(props)
   if not collector then return ui.Rect(props) end
   local radius, color = props.radius, props.color
   props.radius, props.color = nil, nil
-  props.stretch = props.stretch or M.STRETCH
+  -- Cards grow in place, evenly about their centres (the default
+  -- origin): no squash and stretch, which skewed them as they grew.
   local node = ui.Item(props)
   local entry = { node = node, radius = radius, color = color }
   entry.shape = ui.SdfShape {

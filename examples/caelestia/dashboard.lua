@@ -642,7 +642,7 @@ for i, list in ipairs(LAYERS) do
     local field = {
       id = "dashboard-cards-" .. i,
       anchors = { fill = true },
-      blend = function() return liquid[i]:get() and 28 or 0 end,
+      blend = function() return liquid[i]:get() and 6 or 0 end,
       behavior = { blend = { duration = 360, easing = theme.ease.standard } },
     }
     for _, entry in ipairs(list) do field[#field + 1] = entry.shape end
@@ -651,9 +651,11 @@ for i, list in ipairs(LAYERS) do
 end
 
 local running = {}
---- The cards of tab `i` bud out (`coming`) -- each from small, a little
---- above where it sits, on the expressive spatial spring, one after the
---- other -- or melt back up and away.
+--- The cards of tab `i` come in (`coming`) -- each grows evenly about its
+--- own centre from a little smaller as it fades in, one just after the
+--- other -- or shrink a touch and fade as they go. While they move the
+--- field's seams soften a little, so neighbours touch like liquid; at rest
+--- they are crisp and apart.
 local function bud(i, coming)
   for _, r in ipairs(running[i] or {}) do r:stop() end
   running[i] = {}
@@ -661,25 +663,22 @@ local function bud(i, coming)
     local n = entry.node
     local steps
     if coming then
-      local ms = 640
-      local ease = theme.ease.spatial
+      local delay = 40 + (k - 1) * 22
       steps = {
-        { node = n, property = "scale", from = 0.2, to = 1, duration = ms, easing = ease, delay = 30 + (k - 1) * 45 },
-        { node = n, property = "translate_y", from = -70, to = 0, duration = ms, easing = ease, delay = 30 + (k - 1) * 45 },
-        { node = n, property = "opacity", from = 0, to = 1, duration = 260, delay = 140 + (k - 1) * 45 },
+        { node = n, property = "scale", from = 0.92, to = 1, duration = 420, easing = theme.ease.spatial, delay = delay },
+        { node = n, property = "opacity", from = 0, to = 1, duration = 220, delay = delay },
+        { node = entry.shape, property = "opacity", from = 0, to = 1, duration = 220, delay = delay },
       }
     else
-      local ms = 190
-      local ease = theme.ease.emphasized_accel
       steps = {
-        { node = n, property = "scale", to = 0.3, duration = ms, easing = ease },
-        { node = n, property = "translate_y", to = -50, duration = ms, easing = ease },
+        { node = n, property = "scale", to = 0.96, duration = 160, easing = theme.ease.emphasized_accel },
         { node = n, property = "opacity", to = 0, duration = 120 },
+        { node = entry.shape, property = "opacity", to = 0, duration = 120 },
       }
     end
     running[i][#running[i] + 1] = morf.animation.play { { parallel = steps } }
   end
-  stir(i, coming and (560 + #(LAYERS[i] or {}) * 45) or 240)
+  stir(i, coming and (420 + #(LAYERS[i] or {}) * 22) or 200)
 end
 M.bud = bud
 
