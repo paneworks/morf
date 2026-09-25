@@ -100,6 +100,30 @@ end, function(ok, replies) end)
   `plugin_available(option, cb)`, `reload(cb)`, `on_reload(fn)`.
 - Without Hyprland, `available()` is false and nothing is sent.
 
+## m3shapes
+
+`lib/m3shapes.lua` draws Material 3's expressive shapes (cookie, clover,
+sunny, burst, gem, pill, arch, heart, ...: `shapes.NAMES`) as `ui.Path`
+outlines. Each is a polygon with per-corner rounding, cut into the same
+number of cubics (`shapes.SEGMENTS`, 72) starting at the top, so
+`morph_to` walks any one onto any other.
+
+```lua
+local shapes = require("lib.m3shapes")
+ui.Path { width = 48, height = 48, view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie9"), fill_color = accent }
+shapes.Shape { width = 96, height = 96, shape = function() return which:get() end, color = accent, easing = "out_back" }
+```
+
+| call | what |
+|------|------|
+| `shapes.path(shape, { size, segments })` | SVG path data in a `size` square (100) |
+| `shapes.Shape(props)` | a `ui.Path` that morphs when `shape` (a name or a function returning one) changes; `color`, `duration` (350), `easing`; other props pass through |
+| `shapes.polygon(vertices, { rounding })`, `shapes.star(points, inner, opts)`, `shapes.regular(sides, opts)`, `shapes.lobes(count, inner, opts)` | outlines of your own, for `path` and `curves` |
+| `shapes.curves(shape, segments)` | the normalised cubics themselves |
+
+Outlines are made once per name and kept (a few milliseconds each).
+`examples/m3shapes.lua` shows every one.
+
 ## material
 
 `lib/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
