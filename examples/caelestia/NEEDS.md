@@ -54,3 +54,16 @@ like the dashboard.
 - A theme-wide colour transition: `morf.theme(tokens, { transition = {
   duration, easing } })` eases every colour written to it in OkLab, frame by
   frame; the port's scheme, variant and mode changes cross-fade in 400 ms.
+
+## Phase 3: the sidebar and the utilities
+
+Open:
+
+- **Reading the idle inhibitor back.** `morf.idle.inhibit(on)` is write-only:
+  there is no `morf.idle.inhibited()` (a tracked read of what the shell asked
+  for, and whether the compositor honours it -- no `zwp_idle_inhibit_manager_v1`
+  means nothing is held), and `morf test` has no `test.idle_inhibited()` to
+  go with `test.shortcuts_inhibited()`. The utilities' keep-awake switch keeps
+  its own signal and, in a dry run, logs instead of inhibiting, so the tests
+  read the log; with the read-back they would assert the request itself and
+  the switch could show "unavailable" where the protocol is missing.
