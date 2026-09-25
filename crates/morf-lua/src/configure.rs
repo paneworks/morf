@@ -106,7 +106,9 @@ pub(crate) fn configure_element<'gc>(
                 .insert(node, ctx.stash(closure));
             continue;
         }
-        if matches!(property.as_str(), "stretch" | "track") {
+        if matches!(property.as_str(), "stretch" | "track")
+            || (property == "mask" && !matches!(value, LuaValue::Function(_)))
+        {
             assign_engine_relation(&mut state.borrow_mut(), ctx, node, &property, value)?;
             continue;
         }
@@ -233,6 +235,32 @@ pub(crate) fn assign_engine_relation<'gc>(
                 .set_stretch(node, spec)
                 .map_err(|error| error.to_string())?;
         }
+        // A node is kept as the mask (and moved under this one); a table is
+        // a gradient, which replaces it; nothing takes either away.
+        "mask" => match value {
+            LuaValue::UserData(userdata) => {
+                let mask = userdata
+                    .downcast_static::<NodeToken>()
+                    .map_err(|_| "mask must be a morf node, a table or nil".to_owned())?
+                    .handle;
+                state
+                    .scene
+                    .set_mask(node, Some(mask))
+                    .map_err(|error| error.to_string())?;
+            }
+            LuaValue::Nil | LuaValue::Boolean(false) | LuaValue::Table(_) => {
+                state
+                    .scene
+                    .set_mask(node, None)
+                    .map_err(|error| error.to_string())?;
+                let value = match value {
+                    LuaValue::Table(_) => lua_to_scene(ctx, value, 0)?,
+                    _ => morf_scene::Value::Nil,
+                };
+                crate::scene_bindings::assign_scene_property(state, node, "mask", value)?;
+            }
+            _ => return Err("mask must be a morf node, a table or nil".to_owned()),
+        },
         _ => {
             let element = state
                 .scene

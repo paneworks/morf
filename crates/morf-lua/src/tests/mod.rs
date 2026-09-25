@@ -65,6 +65,7 @@ mod lib_hyprland;
 mod lib_palette;
 mod lib_sysinfo_web;
 mod lifecycle_io;
+mod masks;
 mod modules;
 mod pam_session;
 mod paths;

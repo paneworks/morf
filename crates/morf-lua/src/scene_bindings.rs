@@ -224,6 +224,13 @@ pub(crate) fn node_metatable<'gc>(
             }
             return Ok(CallbackReturn::Return);
         }
+        if key == "mask" {
+            let mask = read_state.borrow().scene.mask(node.handle);
+            if let Some(mask) = mask {
+                stack.replace(ctx, node_userdata(ctx, Rc::clone(&read_state), mask));
+                return Ok(CallbackReturn::Return);
+            }
+        }
         if key == "stretch" {
             let stretch = read_state.borrow().scene.stretch(node.handle);
             let value = match stretch {
@@ -315,7 +322,7 @@ pub(crate) fn node_metatable<'gc>(
     });
     let new_index = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (node, property, value): (UserRef<NodeToken>, String, LuaValue) = stack.consume(ctx)?;
-        if matches!(property.as_str(), "stretch" | "track") {
+        if matches!(property.as_str(), "stretch" | "track" | "mask") {
             let mut state = state.try_borrow_mut().map_err(|_| {
                 HostError("nodes cannot be written to from inside a layout function".to_owned())
             })?;
