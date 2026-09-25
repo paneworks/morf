@@ -263,6 +263,10 @@ pub struct Scene {
     /// Seconds of motion ticked so far, the clock stretch velocities are
     /// measured against.
     pub(crate) stretch_clock: f64,
+    /// How nodes that declared one leave: see [`crate::ExitSpec`].
+    pub(crate) exit_specs: FastMap<NodeId, crate::ExitSpec>,
+    /// Nodes on their way out, drawn but out of the flow.
+    pub(crate) exiting: FastMap<NodeId, crate::exit::Exiting>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

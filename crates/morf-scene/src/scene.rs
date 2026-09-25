@@ -32,6 +32,8 @@ impl Scene {
             tracks: FastMap::default(),
             stretch: FastMap::default(),
             stretch_clock: 0.0,
+            exit_specs: FastMap::default(),
+            exiting: FastMap::default(),
         }
     }
 
@@ -255,6 +257,8 @@ impl Scene {
             self.terminal_screens.remove(&current);
             self.tracks.remove(&current);
             self.stretch.remove(&current);
+            self.exit_specs.remove(&current);
+            self.exiting.remove(&current);
             // Its properties live in the scene's signal graph, not in the
             // node; they go with it or they stay allocated for the life of
             // the process, two per property per node ever made.
@@ -589,6 +593,7 @@ impl Scene {
                 error.effect, error.message
             )));
         }
+        frame.exited = self.finished_exits();
         frame.active = !self.animations.is_empty()
             || !self.physics.is_empty()
             || !self.groups.is_empty()
