@@ -100,9 +100,13 @@ pub(crate) fn append_node(
         layer: outer_mask_layer.or(inherited.layer),
         ..inherited
     };
+    // A shape a field absorbed and that holds nothing else is faded by the
+    // field, as a layer of it: an offscreen target for it would be empty.
+    let faded_by_field =
+        absorbed && element == Element::SdfShape && scene.children(node)?.is_empty();
     let creates_layer = alpha_mask.is_some()
         || layer_config.enabled
-        || node_opacity < 1.0
+        || (node_opacity < 1.0 && !faded_by_field)
         || (rotation != 0.0 && !absorbed)
         || rounded_clip
         || layer_blur > 0.0
@@ -324,6 +328,7 @@ pub(crate) fn append_node(
                 profile: BlendProfile::parse(scene.string_value(node, "blend_profile")?)
                     .unwrap_or_default(),
                 transform,
+                opacity: 1.0,
             };
             field_layers(scene, layout, node, defaults, &mut layers)?;
             // A composition with nothing in it has no zero crossing and would

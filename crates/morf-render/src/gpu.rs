@@ -67,6 +67,8 @@ mod field_agreement_tests;
 #[cfg(test)]
 mod field_color_tests;
 #[cfg(test)]
+mod field_opacity_tests;
+#[cfg(test)]
 mod field_shape_tests;
 #[cfg(test)]
 mod field_tests;

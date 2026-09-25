@@ -15,6 +15,7 @@ struct Drawer {
     scene: Scene,
     root: NodeHandle,
     panel: NodeHandle,
+    background: NodeHandle,
 }
 
 /// A frame — the screen minus a rounded inner box — and a panel under its
@@ -88,7 +89,12 @@ fn drawer(stretch: bool) -> Drawer {
     }
     scene.reparent(field, Some(root)).unwrap();
     scene.reparent(panel, Some(root)).unwrap();
-    Drawer { scene, root, panel }
+    Drawer {
+        scene,
+        root,
+        panel,
+        background,
+    }
 }
 
 impl Drawer {
@@ -283,4 +289,87 @@ fn sliding_a_panel_damages_the_panel_and_not_the_frame() {
     let (_, list) = drawer.frame();
     assert!(tracker.diff(&list, 120).is_empty(), "a still frame is free");
     assert!(!drawer.scene.has_motion(), "and asks for no more frames");
+}
+
+#[test]
+fn a_layer_s_opacity_reaches_its_field_and_nothing_else() {
+    let mut drawer = drawer(false);
+    drawer
+        .scene
+        .assign(drawer.background, "opacity", 0.4)
+        .unwrap();
+    let (_, list) = drawer.frame();
+    let layers = field_layers(&list);
+    assert!((layers[2].opacity - 0.4).abs() < 1e-6);
+    assert_eq!(layers[0].opacity, 1.0);
+    // Faded by the field as one of its layers: no offscreen target for a
+    // shape that paints nothing of its own.
+    assert!(list.layers.is_empty(), "{:?}", list.layers);
+}
+
+#[test]
+fn fading_a_layer_damages_the_layer_and_not_the_frame() {
+    let mut drawer = drawer(false);
+    drawer
+        .scene
+        .assign(drawer.panel, "translate_y", 0.0)
+        .unwrap();
+    drawer
+        .scene
+        .assign(drawer.background, "opacity", 0.0)
+        .unwrap();
+    for _ in 0..40 {
+        drawer.frame();
+    }
+    let mut tracker = DamageTracker::default();
+    let (layout, mut list) = drawer.frame();
+    let full: u64 = tracker
+        .diff(&list, 120)
+        .iter()
+        .map(|rect| u64::from(rect.width) * u64::from(rect.height))
+        .sum();
+    tracker.retain(&mut list);
+    let panel = drawn(&drawer, &layout);
+    drawer
+        .scene
+        .set_behavior(
+            drawer.background,
+            "opacity",
+            Some(Behavior::timed(Duration::from_millis(160), Easing::Linear)),
+        )
+        .unwrap();
+    drawer
+        .scene
+        .assign(drawer.background, "opacity", 1.0)
+        .unwrap();
+    let mut faded = Vec::new();
+    for _ in 0..14 {
+        let (_, mut list) = drawer.frame();
+        let opacity = field_layers(&list)[2].opacity;
+        let moved = faded.last() != Some(&opacity);
+        faded.push(opacity);
+        let damage = tracker.diff(&list, 120);
+        tracker.retain(&mut list);
+        assert_eq!(!damage.is_empty(), moved, "a frame of the fade repaints");
+        let reach = expand_geometry(panel, SEAM * 2.5 + 4.0);
+        let area: u64 = damage
+            .iter()
+            .map(|rect| u64::from(rect.width) * u64::from(rect.height))
+            .sum();
+        for rect in &damage {
+            let inside = f64::from(rect.x) >= reach.x.floor()
+                && f64::from(rect.y) >= reach.y.floor()
+                && f64::from(rect.x + rect.width) <= (reach.x + reach.width).ceil()
+                && f64::from(rect.y + rect.height) <= (reach.y + reach.height).ceil();
+            assert!(inside, "{rect:?} is outside the panel's reach {reach:?}");
+        }
+        assert!(
+            area * 5 < full,
+            "a frame of the fade damaged {area} of {full}"
+        );
+    }
+    // It animated, through the values in between, to whole.
+    assert!(faded.iter().any(|opacity| *opacity > 0.2 && *opacity < 0.8));
+    assert!(faded.windows(2).all(|pair| pair[1] >= pair[0]));
+    assert_eq!(*faded.last().unwrap(), 1.0);
 }

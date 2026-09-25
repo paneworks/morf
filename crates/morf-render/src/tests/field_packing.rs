@@ -239,6 +239,7 @@ fn a_blend_widens_the_area_a_field_may_reach() {
             morph: 0.0,
             operation: Operation::SmoothUnion,
             blend,
+            opacity: 1.0,
             rotation: 0.0,
             matrix: [1.0, 0.0, 0.0, 1.0],
             blend_group: 0,

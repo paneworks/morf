@@ -28,7 +28,8 @@ struct Layer {
     // The inverse of the layer's linear map, column major: field (once
     // turned) into the shape's own frame. The identity for most layers.
     frame: vec4<f32>,
-    // [blend group, distance scale, blend profile, unused]
+    // [blend group, distance scale, blend profile, fade]. The fade is one
+    // minus the layer's opacity, so a zeroed layer is a whole one.
     extras: vec4<f32>,
 };
 
@@ -48,7 +49,9 @@ struct Material {
     // [offset x, offset y, inner, unused]
     shadow: vec4<f32>,
     shadow_color: vec4<f32>,
-    // [unused, shadow blur, shadow spread, unused]
+    // [absent layers, shadow blur, shadow spread, fading layers]. The two
+    // masks are bit `i` for the field's layer `i`: a layer with no opacity,
+    // left out of the composition, and one partly there, mixed in.
     effects: vec4<f32>,
     // [kind, centre x, centre y, radius]. Kind is 0 none, 1 linear, 2 radial,
     // 3 conic; the centre and radius are fractions of `shape`.
@@ -471,13 +474,19 @@ struct Composed {
 ///
 /// Factored out because a shadow is the same composition sampled at an offset
 /// point: one function, called twice, rather than a second copy of the loop
-/// that could drift from this one.
-fn compose(local: vec2<f32>, base: vec4<f32>, first: u32, count: u32) -> Composed {
+/// that could drift from this one. A layer whose bit is set in `omit` is left
+/// out as if it were not there: nothing but a composition joined to an
+/// empty one, which every operator already answers (a union with nothing is
+/// the layer, a subtraction from nothing is nothing).
+fn compose(local: vec2<f32>, base: vec4<f32>, first: u32, count: u32, omit: u32) -> Composed {
     var out: Composed;
     out.distance = 1e20;
     out.fill = base;
     out.group = 0u;
     for (var index = 0u; index < count; index = index + 1u) {
+        if ((omit >> index) & 1u) != 0u {
+            continue;
+        }
         let layer = layers[first + index];
         let turned = rotate(local - layer.rect.xy, layer.extra.y);
         // Into the shape's own frame through the inverse of its matrix, and
@@ -736,13 +745,17 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let material_index = input.material & 0x7fffffffu;
     let solid = (input.material & 0x80000000u) != 0u;
     let material = materials[material_index];
+    // Layers with no opacity are left out; layers partly there are mixed in
+    // further down. Both masks are empty for almost every field.
+    let absent = u32(material.effects.x + 0.5);
+    let fading = select(u32(material.effects.w + 0.5), 0u, solid);
     var surface: Composed;
     if solid {
         surface.distance = -1.0e4;
         surface.fill = layers[first].color;
         surface.group = 0u;
     } else {
-        surface = compose(input.local, input.fill, first, count);
+        surface = compose(input.local, input.fill, first, count, absent);
     }
     let distance = surface.distance;
 
@@ -762,10 +775,137 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let outset = select(select(0.0, width, alignment >= 1.5), width * 0.5, alignment == 1.0);
     let inset = width - outset;
 
-    let coverage = smoothstep(ramp, -ramp, distance - outset);
-    let filled = smoothstep(ramp, -ramp, distance + inset);
+    var coverage = smoothstep(ramp, -ramp, distance - outset);
+    var filled = smoothstep(ramp, -ramp, distance + inset);
+    var flat_fill = surface.fill;
 
-    var fill_color = gradient_fill(material_index, input.local, surface.fill);
+    // A shadow is this same composition, moved and dilated. Dilating a
+    // signed distance field is subtraction — no need to grow every layer's
+    // rectangle and hope the corners follow, which is what the rounded-box
+    // shadow used to do. `shadowed` is how much of it falls here: outside,
+    // the moved surface's coverage; inside, the part of this surface the
+    // moved one does not cover.
+    let casts = material.shadow_color.a > 0.0;
+    let spread = material.effects.z;
+    let shadow_softness = max(material.effects.y, edge);
+    let inner = material.shadow.z > 0.5;
+    let offset_point = input.local - material.shadow.xy;
+    var shadowed = 0.0;
+    if casts && fading == 0u {
+        let shadow_distance = compose(offset_point, input.fill, first, count, absent).distance - spread;
+        shadowed = select(
+            smoothstep(shadow_softness, -shadow_softness, shadow_distance),
+            coverage * smoothstep(-shadow_softness, shadow_softness, shadow_distance),
+            inner,
+        );
+    }
+
+    // A layer partly there. Opacity means the field is mixed between the
+    // composition without the layer and the one with it, weighted by the
+    // opacity: at 0 it is as if the layer were absent, at 1 it is whole, and
+    // in between its shape, the seam it makes with the others and its colour
+    // fade together while everything it does not touch stays as it was.
+    // Several layers fading at once are each there or not independently, so
+    // every combination is composed and weighted by how likely it is -- up to
+    // three of them; a fourth fading at the same time is drawn whole.
+    //
+    // Two passes, because each combination's edge wants its own derivative
+    // and a derivative cannot be taken in a branch only some fields take:
+    // the combinations are composed in the branch, their derivatives taken
+    // after it, where every pixel is, and they are shaded in a second branch.
+    var part_distance: array<f32, 8>;
+    var part_fill: array<vec4<f32>, 8>;
+    var part_weight: array<f32, 8>;
+    var part_shadow: array<f32, 8>;
+    var subsets = 0u;
+    if fading != 0u {
+        var which: array<u32, 3>;
+        var fades = 0u;
+        for (var index = 0u; index < count && fades < 3u; index = index + 1u) {
+            if ((fading >> index) & 1u) != 0u {
+                which[fades] = index;
+                fades = fades + 1u;
+            }
+        }
+        subsets = 1u << fades;
+        for (var subset = 0u; subset < subsets; subset = subset + 1u) {
+            var weight = 1.0;
+            var omit = absent;
+            for (var slot = 0u; slot < fades; slot = slot + 1u) {
+                let opacity = 1.0 - layers[first + which[slot]].extras.w;
+                if ((subset >> slot) & 1u) != 0u {
+                    weight = weight * opacity;
+                } else {
+                    weight = weight * (1.0 - opacity);
+                    omit = omit | (1u << which[slot]);
+                }
+            }
+            part_weight[subset] = weight;
+            if weight <= 0.0 {
+                continue;
+            }
+            let part = compose(input.local, input.fill, first, count, omit);
+            part_distance[subset] = part.distance;
+            part_fill[subset] = part.fill;
+            if casts {
+                part_shadow[subset] =
+                    compose(offset_point, input.fill, first, count, omit).distance - spread;
+            }
+        }
+    }
+    let part_edge = array<f32, 8>(
+        fwidth(part_distance[0]),
+        fwidth(part_distance[1]),
+        fwidth(part_distance[2]),
+        fwidth(part_distance[3]),
+        fwidth(part_distance[4]),
+        fwidth(part_distance[5]),
+        fwidth(part_distance[6]),
+        fwidth(part_distance[7]),
+    );
+    if fading != 0u {
+        coverage = 0.0;
+        filled = 0.0;
+        shadowed = 0.0;
+        var painted = vec3<f32>(0.0);
+        var painted_alpha = 0.0;
+        for (var subset = 0u; subset < subsets; subset = subset + 1u) {
+            let weight = part_weight[subset];
+            if weight <= 0.0 {
+                continue;
+            }
+            // The same ramp the whole path takes, from this combination's
+            // own derivative.
+            let part_ramp = select(
+                0.0001,
+                max(input.style.y, max(part_edge[subset], 0.0001) * 0.5),
+                antialiased,
+            );
+            let d = part_distance[subset];
+            let part_coverage = smoothstep(part_ramp, -part_ramp, d - outset);
+            let part_filled = smoothstep(part_ramp, -part_ramp, d + inset);
+            let fill = part_fill[subset];
+            coverage = coverage + weight * part_coverage;
+            filled = filled + weight * part_filled;
+            painted = painted + weight * part_filled * fill.a * fill.rgb;
+            painted_alpha = painted_alpha + weight * part_filled * fill.a;
+            if casts {
+                let shadow_distance = part_shadow[subset];
+                shadowed = shadowed + weight * select(
+                    smoothstep(shadow_softness, -shadow_softness, shadow_distance),
+                    part_coverage * smoothstep(-shadow_softness, shadow_softness, shadow_distance),
+                    inner,
+                );
+            }
+        }
+        // The fill as a colour and the alpha that, times `filled`, gives back
+        // exactly the paint the combinations laid down.
+        if painted_alpha > 0.000001 && filled > 0.000001 {
+            flat_fill = vec4<f32>(painted / painted_alpha, painted_alpha / filled);
+        }
+    }
+
+    var fill_color = gradient_fill(material_index, input.local, flat_fill);
     // Normalised across the node's own rectangle, which is what a shader means
     // by `uv` and what makes one read the same at any size.
     let shader_uv = (input.local - material.shape.xy) / max(material.shape.zw, vec2<f32>(0.000001));
@@ -778,29 +918,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     );
 
     var result = shape;
-    if material.shadow_color.a > 0.0 {
-        // A shadow is this same composition, moved and dilated. Dilating a
-        // signed distance field is subtraction — no need to grow every layer's
-        // rectangle and hope the corners follow, which is what the rounded-box
-        // shadow used to do.
-        let spread = material.effects.z;
-        let shadow_softness = max(material.effects.y, edge);
-        let inner = material.shadow.z > 0.5;
-        let offset_point = input.local - material.shadow.xy;
-        let shadow_distance =
-            compose(offset_point, input.fill, first, count).distance - spread;
+    if casts {
         if inner {
             // Inside the surface, darkened where the offset shape is *not*.
-            let amount = material.shadow_color.a
-                * coverage
-                * smoothstep(-shadow_softness, shadow_softness, shadow_distance);
+            let amount = material.shadow_color.a * shadowed;
             result = vec4<f32>(
                 mix(result.rgb, material.shadow_color.rgb * result.a, amount),
                 result.a,
             );
         } else {
-            let alpha = material.shadow_color.a
-                * smoothstep(shadow_softness, -shadow_softness, shadow_distance);
+            let alpha = material.shadow_color.a * shadowed;
             let layer = vec4<f32>(material.shadow_color.rgb * alpha, alpha);
             result = shape + layer * (1.0 - shape.a);
         }

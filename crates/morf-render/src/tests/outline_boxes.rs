@@ -119,6 +119,7 @@ fn glyph_layer_for(glyph: char) -> SdfLayer {
         morph: 0.0,
         operation: Operation::Union,
         blend: 0.0,
+        opacity: 1.0,
         rotation: 0.0,
         matrix: [1.0, 0.0, 0.0, 1.0],
         blend_group: 0,

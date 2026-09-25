@@ -1316,6 +1316,22 @@ another and a seam between two can be smooth. Each `SdfShape` says
   axes becomes the layer's size, so a stretched box keeps round corners; a
   turn or a shear rides in the layer's matrix. A hidden node takes its layer
   with it. `shape.track = nil` lets go.
+- `opacity` on an `SdfShape` (or a `Rect` in a field, or any node between
+  a layer and its field, multiplied down) fades that layer and nothing else.
+  The field is mixed between the composition without the layer and the one
+  with it, weighted by the opacity: at 0 it is as if the layer were not
+  there, at 1 it is whole, and in between the layer's shape, the seam it
+  makes with the others and its colour fade together, while the rest of the
+  field is untouched. A fading `subtract` half fills its hole; a drawer's
+  background filleted into a frame fades in with its contents and the frame
+  stays as it is. It animates like any number (`behavior`, `enter`,
+  `morf.animation`), and a frame of the fade repaints only where the layer
+  reaches. Several layers fading at once are each there or not
+  independently, every combination weighted; a field draws up to three
+  fading at the same time exactly (a fourth is drawn whole until it
+  settles), and a fading layer costs its field's pixels one composition per
+  combination while it fades, none once it has settled. The `Sdf`'s own
+  `opacity` still fades the whole field as one picture.
 
 A field whose layers alone moved repaints only where those layers were and
 are, widened by the seam: a panel sliding in a fullscreen frame costs the
