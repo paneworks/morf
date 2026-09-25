@@ -185,6 +185,8 @@ local function build()
 end
 
 M.window = morf.window.layer {
+  -- Mixed as Qt mixes, so translucent colours and type match the original.
+  blend = require("theme").blend,
   namespace = "impasto-capture",
   layer = "overlay",
   anchors = { top = true, bottom = true, left = true, right = true },

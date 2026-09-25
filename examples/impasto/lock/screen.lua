@@ -37,6 +37,7 @@ function M.build(options)
   end)
 
   morf.surface.namespace = "impasto-lock"
+  morf.surface.blend = require("theme").blend
   morf.surface.width = W
   morf.surface.height = H
   morf.surface.anchors = { top = true, left = true, right = true, bottom = true }

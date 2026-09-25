@@ -176,6 +176,8 @@ function weather.parse_wttr(data, units, now)
     wind_direction = num(current.winddirDegree) or COMPASS[current.winddir16Point],
     is_day = is_day,
     place = place and (country and (place .. ", " .. country) or place) or nil,
+    -- The two halves of `place`, for a caption with room for one.
+    city = place, region = country,
     hourly = {},
     daily = {},
   }, WWO[num(current.weatherCode)], is_day)
@@ -272,6 +274,7 @@ function Weather:_finish(done, value)
   value.units = UNITS[self.units]
   value.updated = morf.time.now()
   value.place = value.place or self.place_name or self.name or self.location
+  value.region = value.region or self.region_name
   poll.cache_write(self:_cache_path(), value)
   done(value)
 end
@@ -347,7 +350,10 @@ function Weather:_fetch(done)
       end
       self.latitude, self.longitude = found.latitude, found.longitude
       local parts = { found.name }
-      if found.country and found.country ~= morf.json.null then parts[#parts + 1] = found.country end
+      if found.country and found.country ~= morf.json.null then
+        parts[#parts + 1] = found.country
+        self.region_name = found.country
+      end
       self.place_name = table.concat(parts, ", ")
       self:_forecast(done)
     end)

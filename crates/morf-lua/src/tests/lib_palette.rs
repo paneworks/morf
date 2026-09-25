@@ -159,6 +159,36 @@ fn every_picture_keeps_the_contrast_floors_in_both_modes() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// `rule = "impasto"` is theme_manager.py's `build_palette` token for token:
+/// the accent it picks, grounds stepped from it, fixed type.
+#[test]
+fn the_impasto_rule_is_the_originals_arithmetic() {
+    let dir = scratch("palette-impasto");
+    pictures(&dir);
+    let mut runtime = runtime();
+    let source = format!(
+        r##"{PRELUDE}
+        assert(palette.from_image("{base}/dark.png", {{ rule = "impasto", cache = false }},
+            answer("dark", function(p)
+                return table.concat({{ p.accent:hex(), p.background:hex(), p.surface:hex(),
+                    p.surfaceHover:hex(), p.border:hex(), p.text:hex(), p.textMuted:hex(),
+                    p.accentText:hex() }}, " ")
+            end)))
+        "##,
+        base = dir.display()
+    );
+    runtime.execute("impasto.lua", source.as_bytes()).unwrap();
+    let result = pump(&mut runtime, "dark");
+    // The teal band, quantised to (20, 140, 149): background (17 + 20·.04,
+    // 19 + 140·.04, 24 + 149·.05) floored, then +14, +16/+16/+18, +16/+16/+20;
+    // its luma is just over 0.45, so the type on it is the dark one.
+    assert_eq!(
+        result, "#148c95 #11181f #1f262d #2f363f #3f4653 #eef2f7 #94a1b2 #11111b",
+        "{result}"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn a_picture_gives_the_same_palette_every_time_and_the_second_is_cached() {
     let dir = scratch("palette-cache");

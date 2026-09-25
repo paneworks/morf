@@ -126,7 +126,14 @@ theme.dock_menu_width = 250
 theme.dock_menu_row = 30
 theme.dock_menu_padding = 6
 theme.dock_lift = 1.125
+-- How every surface mixes translucent colours: as Qt does, in sRGB values.
+-- In linear light a 55% black capsule is lighter than the original's, and
+-- light type on dark antialiases a weight heavier.
+theme.blend = "srgb"
 theme.desktop_radius = 22
+-- How far a translucent widget blurs the wallpaper under it: what the
+-- original's Hyprland layer rule did (blur size 6, 2 passes).
+theme.desktop_blur = 20
 theme.dock_radius = theme.desktop_radius
 theme.radius_small = 8
 theme.radius_medium = 12

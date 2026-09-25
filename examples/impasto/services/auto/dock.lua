@@ -44,6 +44,8 @@ local function surface_for(edge)
   if existing then return existing end
   local _, _, w, h = view.surface_box(WIDTH, HEIGHT, edge)
   local window = morf.window.layer {
+    -- Mixed as Qt mixes, so translucent colours and type match the original.
+    blend = require("theme").blend,
     namespace = "impasto-dock",
     layer = "top",
     anchors = anchors_for(edge),
@@ -95,6 +97,8 @@ end)
 
 -- The menu's surface: built now, mapped only while the menu is open.
 local menu_window = morf.window.layer {
+  -- Mixed as Qt mixes, so translucent colours and type match the original.
+  blend = require("theme").blend,
   namespace = "impasto-dock-menu",
   layer = "overlay",
   anchors = { top = true, bottom = true, left = true, right = true },

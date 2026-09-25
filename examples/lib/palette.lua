@@ -410,7 +410,56 @@ end
 --- (true).
 -- The derivation is two halves, so `from_image` can run them in two turns
 -- of the loop: the tokens, then the terminal set and the painting.
+-- impasto's own rule, token for token (theme_manager.py build_palette): the
+-- accent as it picks it, among the swatches as they come, grounds tinted
+-- from it by fixed steps, and fixed type and semantic colours. For a desk
+-- that should look like the original's rather than like this library's.
+local function impasto_tokens(swatches)
+  local best, best_score, colorful, colorful_sat
+  for _, entry in ipairs(swatches) do
+    local s = describe(entry, #swatches)
+    if s.sat > 0.2 and s.luma > 0.2 and s.luma < 0.85 then
+      local score = s.sat * 2 + (1 - math.abs(s.luma - 0.55))
+      if not best_score or score > best_score then best, best_score = s, score end
+    end
+    if s.sat > 0.1 and (not colorful_sat or s.sat > colorful_sat) then
+      colorful, colorful_sat = s, s.sat
+    end
+  end
+  local picked = best or colorful
+  local rgb = picked and picked.color:rgb() or { r = 137 / 255, g = 180 / 255, b = 250 / 255 }
+  local r, g, b = rgb.r * 255, rgb.g * 255, rgb.b * 255
+  local function hex(red, green, blue)
+    local function byte(v) return math.floor(math.max(0, math.min(255, v))) end
+    return string.format("#%02x%02x%02x", byte(red), byte(green), byte(blue))
+  end
+  local bg = { 17 + r * 0.04, 19 + g * 0.04, 24 + b * 0.05 }
+  local surface = { bg[1] + 14, bg[2] + 14, bg[3] + 14 }
+  local hover = { surface[1] + 16, surface[2] + 16, surface[3] + 18 }
+  local border = { hover[1] + 16, hover[2] + 16, hover[3] + 20 }
+  local luma = 0.2126 * r / 255 + 0.7152 * g / 255 + 0.0722 * b / 255
+  local tokens = {
+    background = hex(bg[1], bg[2], bg[3]),
+    surface = hex(surface[1], surface[2], surface[3]),
+    surfaceHover = hex(hover[1], hover[2], hover[3]),
+    border = hex(border[1], border[2], border[3]),
+    text = "#eef2f7",
+    textMuted = "#94a1b2",
+    accent = hex(r, g, b),
+    accentHover = hex(r * 1.15 + 15, g * 1.15 + 15, b * 1.15 + 15),
+    accentText = luma > 0.45 and "#11111b" or "#ffffff",
+    red = "#f38ba8", green = "#a6e3a1", yellow = "#f9e2af", blue = "#89b4fa",
+  }
+  local t = {}
+  for name, value in pairs(tokens) do t[name] = ink_of(value) end
+  return {
+    inks = t,
+    extra = { mode = "dark", picked = picked and picked.hex or "#89b4fa", swatches = {} },
+  }
+end
+
 local function derive_tokens(swatches, opts)
+  if opts.rule == "impasto" then return impasto_tokens(swatches) end
   local list = {}
   for _, entry in ipairs(swatches) do list[#list + 1] = describe(entry, #swatches) end
   table.sort(list, function(a, b)
@@ -736,7 +785,7 @@ end
 
 local OPTION_KEYS = {
   "mode", "accent", "fallback_accent", "population_weight", "min_population",
-  "hue_pull", "hue_shift", "cyan_is_accent", "count",
+  "hue_pull", "hue_shift", "cyan_is_accent", "count", "rule",
 }
 
 local function signature(path, stat, opts)

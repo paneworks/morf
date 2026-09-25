@@ -70,6 +70,8 @@ function M.open(section, part)
   if section and section ~= "" then panel.go(section, part) end
   if not window then
     window = morf.window.floating {
+      -- Mixed as Qt mixes, so translucent colours and type match the original.
+      blend = require("theme").blend,
       title = tr("Settings"), app_id = "impasto-settings",
       width = panel.WIDTH, height = panel.HEIGHT,
       minimum_width = panel.WIDTH, minimum_height = panel.HEIGHT,

@@ -62,7 +62,7 @@ end
 function M.refresh_adaptive()
   local path = wallpaper.current:get()
   if path == "" then return end
-  palette.from_image(path, { mode = "dark" }, function(ok, p)
+  palette.from_image(path, { mode = "dark", rule = "impasto", count = 24 }, function(ok, p)
     if not ok then
       morf.log("warn", "impasto: no palette from " .. path .. ": " .. tostring(p))
       return

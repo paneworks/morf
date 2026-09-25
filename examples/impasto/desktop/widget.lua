@@ -64,8 +64,15 @@ function M.build(key, arranging)
     border_color = ink.border,
     border_width = function() return style() == "accent" and 0 or 1 end,
     -- What impasto asked of Hyprland with a layer rule: the wallpaper
-    -- behind a translucent capsule blurred.
-    backdrop_blur = function() return desk.opacity_of(row()) < 100 end,
+    -- behind a translucent capsule blurred. At rest the widgets are drawn
+    -- on the wallpaper's own surface, so the engine blurs it, on any
+    -- compositor; while arranging they are above the windows, where only
+    -- the compositor can, and is asked to.
+    backdrop_blur = function()
+      if desk.opacity_of(row()) >= 100 then return false end
+      if arranging then return true end
+      return theme.desktop_blur
+    end,
     behavior = { color = theme.behave("medium") },
   }
   local outline = ui.Rect {
