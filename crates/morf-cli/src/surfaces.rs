@@ -609,7 +609,7 @@ pub(crate) fn connect_runtime_surface(
             match event {
                 LayerEvent::Configure { id, .. } if id == PRIMARY_LAYER => return Ok(client),
                 LayerEvent::Closed { id } if id == PRIMARY_LAYER => {
-                    return Err("layer surface was closed".to_owned());
+                    return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
                 }
                 _ => {}
             }

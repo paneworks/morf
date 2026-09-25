@@ -57,6 +57,30 @@ test.describe("hyprland_config plans", function()
     test.eq(config.monitors_plan({ { output = 'A" }) os.exit() --' } }, "lua"), nil)
   end)
 
+  test.it("reads a devices answer with a bare none in it", function()
+    -- Hyprland 0.56 with a virtual keyboard (wtype, wayvnc) connected.
+    local hyprland = require("lib.hyprland")
+    local raw = '{"keyboards": [{"name": "kb", "active_layout_index": 0, "active_keymap": "English (US)", "main": true},'
+      .. '\n{"name": "hl-virtual-keyboard-wtype", "active_layout_index": none, "active_keymap": "none", "main": false}],'
+      .. ' "switches": [\n\n]}'
+    test.falsy(pcall(morf.json.decode, raw))
+    local value = morf.json.decode(hyprland.repaired_json(raw))
+    test.eq(value.keyboards[1].active_keymap, "English (US)")
+    test.eq(value.keyboards[2].name, "hl-virtual-keyboard-wtype")
+    test.eq(value.keyboards[2].active_keymap, "none")
+  end)
+
+  test.it("offers the mode a screen is in though the EDID does not list it", function()
+    local described = config.describe({ name = "HEADLESS-2", width = 1024, height = 768, refresh_rate = 60.0,
+      available_modes = { "1920x1080@60.00Hz" } })
+    test.eq(described.mode, "1024x768@60.00")
+    test.eq(#described.modes, 2)
+    test.eq(described.resolutions[2].width, 1024)
+    -- Listed once when it is listed.
+    test.eq(#config.describe({ name = "eDP-1", width = 1920, height = 1080, refresh_rate = 60.0,
+      available_modes = { "1920x1080@60.00Hz" } }).modes, 1)
+  end)
+
   test.it("parses and groups modes", function()
     local modes = config.parse_modes { "1920x1080@60.00Hz", "2560x1440@144.00Hz", "2560x1440@59.95Hz", "1920x1080@60.00Hz" }
     test.eq(#modes, 3)
@@ -119,6 +143,11 @@ for _, flavour in ipairs { "lua", "hyprlang" } do
       fake.monitors[2].disabled = true
       test.wait(function() fake.serve() return test.ipc("outputs") ~= "" end, 5000, "no outputs")
       test.eq(test.ipc("outputs"), "DP-2:true:preferred eDP-1:false:1920x1200@60.00")
+    end)
+
+    test.it("reads the keyboards though a virtual one has no layout index", function()
+      test.wait(function() fake.serve() return test.ipc("keyboard") ~= ":" end, 5000, "no keyboards")
+      test.eq(test.ipc("keyboard"), "at-translated-set-2-keyboard:English (US)")
     end)
   end)
 end

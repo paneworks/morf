@@ -392,6 +392,13 @@ pub(crate) fn paint_layer_surface(
         &config,
         surface.layout.as_ref(),
     )?;
+    // A binding on this tree's layout geometry (`layout_width`, ...) hears
+    // the frame as it is observed, after the render, and may move the tree
+    // again: centred on its own measured width, a capture toolbar was drawn
+    // where the first frame put it, off centre, until something else
+    // repainted a surface that never does by itself. One more paint is owed;
+    // the frame callback `paint_layer` asked for makes it.
+    surface.needs_paint = runtime.scene().layout_revision_of(surface.root) != painted.revision;
     surface.layout = Some(painted);
     Ok(())
 }
@@ -549,6 +556,12 @@ pub(crate) fn paint_auxiliary_surface(
     // After the render: what the images became is known once they were drawn.
     runtime.sync_images(&layout, renderer.backend_mut().image_cache());
     runtime.observe_layout(&layout);
+    // A binding on the layout moved this tree as the frame was observed (see
+    // `paint_layer_surface`): the frame callback repaints it, asked for here
+    // when the render did not.
+    if damage.is_empty() && runtime.scene().layout_revision_of(surface.root) != revision {
+        kind.request_frame(client, surface.id);
+    }
     surface.layout = Some(CachedLayout {
         layout,
         revision,

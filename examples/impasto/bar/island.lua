@@ -399,7 +399,7 @@ function island.build(place)
       cursor = function() return state.expanded() and "default" or "pointer" end,
       on_entered = function() on_hover(true) end,
       on_exited = function() on_hover(false) end,
-      on_clicked = function(button)
+      on_clicked = function(_, _, _, _, button)
         if state.expanded() or button ~= "left" then return end
         held:set(true)
         state.open("controls")

@@ -466,7 +466,7 @@ local function write_keys()
   local text = M.tsv_text()
   local on_disk = fs.read(M.tsv_path) or ""
   if on_disk == text then return end
-  act.run("write the profile's keys and reload Hyprland", function()
+  act.compositor("write the profile's keys and reload Hyprland", function()
     fs.mkdir(M.dir)
     fs.write(M.tsv_path, text)
     fs.write(M.lua_path, M.lua_text())

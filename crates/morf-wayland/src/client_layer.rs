@@ -225,6 +225,16 @@ impl LayerClient {
                 placed: None,
             },
         );
+        if id == PRIMARY_LAYER
+            && let Some(surface) = self
+                .state
+                .layers
+                .get(&id)
+                .map(|record| record.surface.wl_surface().clone())
+        {
+            self.state
+                .inhibit_surface_shortcuts(SurfaceRole::Layer(id), &surface, &qh);
+        }
         if self.state.layer_shell.is_none() {
             if id == PRIMARY_LAYER {
                 self.state.reparent_subsurfaces(&qh);
@@ -337,6 +347,7 @@ impl LayerClient {
 
     /// Destroys one layer surface when it is open.
     pub fn close_layer(&mut self, id: u64) {
+        self.state.release_surface_shortcuts(SurfaceRole::Layer(id));
         let Some(record) = self.state.layers.remove(&id) else {
             return;
         };

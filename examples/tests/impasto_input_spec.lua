@@ -187,6 +187,28 @@ test.describe("impasto desk", function()
     test.ne(test.ipc("layer"), "panel", "the island stayed open")
     test.falsy(test.find { text = "Arrange widgets", visible = true }, "the desk's menu opened")
   end)
+
+  -- A click handler's button is its fifth argument; these two read the
+  -- first (a coordinate) and never saw "left" or "right".
+  test.it("a click on the island opens the control centre", function()
+    load()
+    test.click(640, 31)
+    test.settle(2000)
+    test.eq(test.ipc("layer"), "panel", "the island did not open")
+  end)
+
+  test.it("a right click on a window in the overview closes it", function()
+    load()
+    test.eq(test.ipc("workspaces_demo", "on"), "demo")
+    test.eq(test.ipc("overview"), "overview")
+    test.settle(2000)
+    test.clear_logs()
+    test.click(160, 120, { button = "right" })
+    test.settle(500)
+    local said = {}
+    for _, entry in ipairs(test.logs("info")) do said[#said + 1] = tostring(entry.message or entry) end
+    test.contains(table.concat(said, "\n"), "would dispatch closewindow")
+  end)
 end)
 
 test.describe("impasto control centre", function()

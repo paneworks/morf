@@ -140,7 +140,12 @@ morf.ipc.failed = function() return table.concat(failed, "\n") end
 for _, name in ipairs { "controls", "launcher", "overview", "wifi", "bluetooth", "session", "notes", "board", "games", "keys", "stats" } do
   morf.ipc[name] = function()
     island.toggle(name)
-    return island.state.open_panel()
+    -- Every screen's shell hears the verb and only the live one opens the
+    -- panel; the others stay quiet, or the first screen's "" was the reply
+    -- while the panel opened on the second.
+    local open = island.state.open_panel()
+    if open == "" and not require("services.live").here() then return end
+    return open
   end
 end
 morf.ipc.close = function() island.close() return "" end
@@ -222,7 +227,12 @@ end
 -- control centre's settings door and the bar's settings button ask through
 -- `modules.request_settings`.
 local settings_window = require("settings.window")
+-- One settings window, not one per screen: every runtime hears the verb,
+-- and only the live one (services/live.lua) answers it. The others stay
+-- quiet, so the reply is the live one's.
+local function settings_here() return require("services.live").here() end
 morf.ipc.settings = function(section, part)
+  if not settings_here() then return end
   settings_window.toggle(section, part)
   return settings_window.visible() and require("settings.panel").section() or "closed"
 end

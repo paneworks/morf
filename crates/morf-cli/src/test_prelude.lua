@@ -169,6 +169,9 @@ end
 
 function test.surfaces() return host.surfaces() end
 function test.now() return host.now() end
+--- Whether the configuration holds the compositor's shortcuts off it now
+--- (`morf.shortcuts.inhibit`).
+function test.shortcuts_inhibited() return host.shortcuts_inhibited() end
 
 function test.advance(ms) host.advance(ms or 16, 0) end
 function test.settle(limit_ms) return host.settle(limit_ms or 5000) end

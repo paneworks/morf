@@ -226,6 +226,18 @@ portal. `IMPASTO_INLINE_WALLPAPER=1` draws the wallpaper, the desk, its
 arranging board and its menu inside the main surface, since cage has no
 layer shell. The headless output is 1280x720, which the desk's grid makes
 11 by 5 cells.
+
+Against a test Hyprland of its own (one nested in the headless cage, with
+its own `HYPRLAND_INSTANCE_SIGNATURE` under a private `XDG_RUNTIME_DIR`),
+`IMPASTO_LIVE_COMPOSITOR=1` next to `IMPASTO_DRY_RUN=1` lets what goes to the
+compositor through (options, monitor rules, reloads, the keys file) while
+the machine is still left alone. cage 0.3.1 offers xdg_wm_base v5 and
+Hyprland 0.56's Wayland backend binds v6, so it needs a proxy between them
+that advertises v6 (v6 only adds a toplevel state), and its screens are
+headless outputs made with `hyprctl output create headless`. Binds typed
+with wtype fire only with `input:resolve_binds_by_sym = true` (wtype sends
+a keymap of its own), and a wtype held open (`wtype -s 400000`) keeps the
+seat's keyboard, so the first key of each call is not lost.
 The settings window: `settings [section] [part]` opens it on a page (or
 closes it when no page is named), `settings_scroll <pixels>` scrolls the
 page, `layout_drop <from> <index-or-id> <over> <at>` makes the drop a drag

@@ -1,16 +1,69 @@
 use morf_io::{IpcReply, IpcRequest, IpcServer, IpcValue as WireValue};
 use morf_lua::{LogEntry, LogLevel, Runtime, Screen};
 use morf_wayland::{LayerClient, ScreenInfo};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread::{self};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::{config::*, lock::*, services::*, workers::*};
+
+/// What a worker ends with when the compositor closes its surface -- which is
+/// what a compositor does to every surface on an output it switches off or
+/// loses, often before it says the output is gone.
+pub(crate) const SURFACE_CLOSED: &str = "layer surface was closed";
+
+/// Closed surfaces taken in a minute before the shell stops: one closed on
+/// every output the shell is given would otherwise be asked for forever.
+const CLOSURES_PER_MINUTE: usize = 5;
+
+/// What the supervisor does when a worker fails.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum FailureStep {
+    /// Something is wrong with the shell: stop it.
+    Stop,
+    /// Its output went away: let that worker go and ask for the outputs again.
+    Probe,
+}
+
+/// Decides a worker's failure. A closed surface is an output switched off
+/// or unplugged -- the shell's last one included, when Hyprland switches to
+/// its fallback output -- and the shell stopping for it left the machine
+/// with no shell at all, and nothing to light a screen again.
+pub(crate) fn failure_step(
+    error: &str,
+    closures: &mut VecDeque<Instant>,
+    now: Instant,
+) -> FailureStep {
+    if error != SURFACE_CLOSED {
+        return FailureStep::Stop;
+    }
+    while closures
+        .front()
+        .is_some_and(|at| now.duration_since(*at) >= Duration::from_secs(60))
+    {
+        closures.pop_front();
+    }
+    closures.push_back(now);
+    if closures.len() > CLOSURES_PER_MINUTE {
+        FailureStep::Stop
+    } else {
+        FailureStep::Probe
+    }
+}
+
+/// Sends `Probe` after `delay`, from a thread of its own.
+fn probe_later(tx: &mpsc::Sender<SupervisorMessage>, delay: Duration) {
+    let tx = tx.clone();
+    thread::spawn(move || {
+        thread::sleep(delay);
+        let _ = tx.send(SupervisorMessage::Probe);
+    });
+}
 
 /// Packs one of the supervisor's own messages the way a worker's arrive.
 ///
@@ -73,6 +126,7 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
     };
     let mut workers = BTreeMap::new();
     let mut daemon_logs = Vec::new();
+    let mut closures = VecDeque::new();
     reconcile_workers(
         &mut workers,
         &desired,
@@ -136,8 +190,49 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
                 }
             },
             Ok(SupervisorMessage::Worker(WorkerMessage::Failed { output, error })) => {
-                stop_workers(workers);
-                return Err(format!("output {output}: {error}"));
+                if failure_step(&error, &mut closures, Instant::now()) == FailureStep::Stop {
+                    stop_workers(workers);
+                    return Err(format!("output {output}: {error}"));
+                }
+                // That output is going away; the others are not. Asked again
+                // shortly, once the compositor has said what is left.
+                if let Some(worker) = workers.remove(&output) {
+                    worker.request_stop();
+                    let _ = worker.join.join();
+                }
+                daemon_logs.push(daemon_log(format!(
+                    "output {output}: {error}; asking the compositor for its outputs again"
+                )));
+                probe_later(&tx, Duration::from_millis(250));
+            }
+            Ok(SupervisorMessage::Probe) => {
+                match LayerClient::probe() {
+                    Ok(probe) => {
+                        let screens = probe.screens().to_vec();
+                        drop(probe);
+                        if store_outputs(&screens) {
+                            broadcast_screens(&workers, &screens);
+                        }
+                        desired = named_screens(&screens)?;
+                        reconcile_workers(
+                            &mut workers,
+                            &desired,
+                            Arc::clone(&path),
+                            Arc::clone(&source),
+                            policy,
+                            &tx,
+                        );
+                    }
+                    Err(error) => {
+                        daemon_logs.push(daemon_log(format!("asking for the outputs: {error}")));
+                    }
+                }
+                // With no worker there is no connection to hear an output
+                // come back on, so the compositor is asked again, only while
+                // there is none.
+                if workers.is_empty() {
+                    probe_later(&tx, Duration::from_secs(1));
+                }
             }
             Ok(SupervisorMessage::Ipc(incoming)) => {
                 if incoming.peer.uid != owner {

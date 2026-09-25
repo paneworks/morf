@@ -197,6 +197,15 @@ fn an_instance_is_named_by_its_display() {
         socket_path_for(Some("../escape")).unwrap_err(),
         "WAYLAND_DISPLAY must be one path component"
     );
+    // libwayland takes an absolute path as the socket itself; it names an
+    // instance of its own, apart from a socket of the same name elsewhere.
+    use crate::config::display_instance;
+    let nested = display_instance("/run/user/1000/nested/wayland-1").unwrap();
+    assert!(nested.starts_with("wayland-1-"), "{nested}");
+    assert_ne!(nested, display_instance("/tmp/other/wayland-1").unwrap());
+    assert_eq!(display_instance("wayland-1").unwrap(), "wayland-1");
+    assert!(display_instance("a/b").is_err());
+    assert!(display_instance("/").is_err());
     let args = ["-i", "wayland-7", "kill"].map(std::ffi::OsString::from);
     assert!(matches!(
         parse_command(&args),

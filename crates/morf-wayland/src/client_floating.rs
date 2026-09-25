@@ -52,6 +52,9 @@ impl LayerClient {
         let qh = self.queue.handle();
         self.state
             .track_aux_scale(SurfaceRole::Floating(id), window.wl_surface(), &qh);
+        let surface = window.wl_surface().clone();
+        self.state
+            .inhibit_surface_shortcuts(SurfaceRole::Floating(id), &surface, &qh);
         window.wl_surface().commit();
         self.state.floatings.insert(id, window);
         self.connection
@@ -61,6 +64,8 @@ impl LayerClient {
 
     /// Destroys the current floating window when present.
     pub fn close_floating(&mut self, id: u64) {
+        self.state
+            .release_surface_shortcuts(SurfaceRole::Floating(id));
         self.state.floatings.remove(&id);
         self.state.aux_scales.remove(&SurfaceRole::Floating(id));
         self.state.floating_sizes.remove(&id);

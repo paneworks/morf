@@ -356,12 +356,16 @@ fn snapshot(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>
 /// Installs every host function into the spec's runtime.
 pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
     type Handler = fn(&mut TestHost, &[IpcValue]) -> Result<Vec<IpcValue>, String>;
-    let handlers: [(&'static str, Handler); 24] = [
+    let handlers: [(&'static str, Handler); 25] = [
         ("load", load),
         ("surfaces", |host, _| surfaces(host)),
         ("now", |host, _| {
             let now = host.subject()?.now();
             Ok(vec![IpcValue::Integer(now.as_millis() as i64)])
+        }),
+        ("shortcuts_inhibited", |host, _| {
+            let held = host.subject()?.runtime.shortcuts_inhibited();
+            Ok(vec![IpcValue::Boolean(held)])
         }),
         ("wall_ms", |host, _| {
             Ok(vec![IpcValue::Integer(

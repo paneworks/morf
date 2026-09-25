@@ -110,6 +110,12 @@ impl Runtime {
         })
     }
 
+    /// Whether the shell currently asks for the compositor's shortcuts to be
+    /// held off it (what `morf.shortcuts.inhibit` last said).
+    pub fn shortcuts_inhibited(&self) -> bool {
+        self.reactive.borrow().shortcuts_inhibited
+    }
+
     /// Delivers the compositor's answer to that request.
     pub fn dispatch_shortcuts_inhibited(&mut self, active: bool) -> bool {
         let callbacks = self.reactive.borrow().shortcuts_callbacks.clone();

@@ -82,7 +82,14 @@ function M.new(options)
     if rest == "monitors all" or rest == "monitors" then return json.encode(self.monitors) end
     if rest == "workspaces" then return json.encode(self.workspaces) end
     if rest == "clients" then return "[]" end
-    if rest == "devices" then return '{"keyboards":[]}' end
+    -- As Hyprland 0.56 writes it: a keyboard with no layout active (a
+    -- virtual one) has a bare `none` for its index, which is not JSON.
+    if rest == "devices" then
+      return options.devices or ('{\n"mice": [\n\n],\n"keyboards": [\n    {\n        "name": "at-translated-set-2-keyboard",\n'
+        .. '        "layout": "us,de",\n        "active_layout_index": 0,\n        "active_keymap": "English (US)",\n        "main": true\n    },\n'
+        .. '    {\n        "name": "hl-virtual-keyboard-wtype",\n        "layout": "us",\n        "active_layout_index": none,\n'
+        .. '        "active_keymap": "none",\n        "main": false\n    }\n]\n}')
+    end
     if rest == "submap" then return '"default"' end
     if rest == "binds" then return json.encode(self.binds) end
     local option = rest:match("^getoption (.+)$")

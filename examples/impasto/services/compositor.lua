@@ -148,7 +148,7 @@ function M.cursor_note() return s.cursor_note:get() end
 
 local function push(what, build)
   if not M.available() or not live.here() then return end
-  act.run("push the " .. what .. " to Hyprland", function()
+  act.compositor("push the " .. what .. " to Hyprland", function()
     config.apply(build, function(ok, replies)
       if not ok then
         morf.log("warn", "impasto: Hyprland did not take the " .. what .. ": "
@@ -315,7 +315,12 @@ function M.apply_cursor(touched)
     name = name or last_theme or env("HYPRCURSOR_THEME") or env("XCURSOR_THEME")
     -- No theme of our own and none named: the one in use is unknown, and
     -- guessing would change it.
-    if not name then return end
+    if not name then
+      -- Said, rather than "only the size is applied" left standing while
+      -- nothing was.
+      s.cursor_note:set("The cursor theme in use is not known (HYPRCURSOR_THEME, XCURSOR_THEME), so the size is left alone")
+      return
+    end
     last_theme = name
     push("cursor", function() return config.cursor_plan(name, size) end)
   end

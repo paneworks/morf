@@ -143,6 +143,23 @@ function M.remember(key, fields)
   end)
 end
 
+--- Switches a screen off or on. Off keeps the mode it is in when the rule
+--- names none, so lighting it again brings that mode back rather than the
+--- compositor's preferred one (a screen set to a lower mode, or a custom
+--- one, came back in another).
+function M.switch(key, on)
+  local fields = { disabled = not on }
+  if not on then
+    local m = M.find(key)
+    local a = M.arrangement(true)
+    local kept = a and type(a.monitors) == "table" and a.monitors[key] or nil
+    if m and not m.disabled and m.mode and m.mode ~= "preferred" and not (kept and kept.mode) then
+      fields.mode = m.mode
+    end
+  end
+  return M.remember(key, fields)
+end
+
 --- Every screen's position at once: `{ [key] = { x, y } }`.
 function M.remember_positions(places)
   change(function(kept)
@@ -164,7 +181,7 @@ function M.forget()
   store[M.profile()] = nil
   settings.set("displays", store)
   if M.available() and live.here() then
-    act.run("reload Hyprland to forget the arrangement", function() config.reload() return true end)
+    act.compositor("reload Hyprland to forget the arrangement", function() config.reload() return true end)
   end
 end
 
@@ -285,7 +302,7 @@ local function send(what, rules)
     disturbed = true
     if hyprland and hyprland.refresh then hyprland.refresh() end
   end, false)
-  act.run(what, function()
+  act.compositor(what, function()
     config.apply(function(how) return config.monitors_plan(rules, how) end, function(ok, replies)
       if not ok then
         morf.log("warn", "impasto: Hyprland did not take the monitor rules: "
@@ -329,7 +346,7 @@ rescue = function()
     if not m.disabled then lit[#lit + 1] = { name = m.name, workspace = m.workspace } end
   end
   local workspaces = (hyprland.snapshot().workspaces) or {}
-  act.run("bring workspaces back to lit screens", function()
+  act.compositor("bring workspaces back to lit screens", function()
     config.apply(function(how) return config.rehome_plan(lit, workspaces, M.primary_name(), how) end)
     return true
   end)
@@ -385,7 +402,7 @@ function M.lid(closed)
   if others == 0 then return true end
   if closed and settings.lidPolicy ~= "off" then return true end
   -- Opening always lights the panel, whatever the policy.
-  M.remember(M.key(panel), { disabled = closed })
+  M.switch(M.key(panel), not closed)
   return true
 end
 

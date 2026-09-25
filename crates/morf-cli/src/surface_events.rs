@@ -74,7 +74,7 @@ pub(crate) fn handle_surface_event(
         }
         LayerEvent::Frame { id, .. } => layer_surface_frame(runtime, client, state, id)?,
         LayerEvent::Closed { id } if id == PRIMARY_LAYER => {
-            return Err("layer surface was closed".to_owned());
+            return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
         }
         LayerEvent::Closed { id } => layer_surface_closed(runtime, client, state, id),
         LayerEvent::Idle {

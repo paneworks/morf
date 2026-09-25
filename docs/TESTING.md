@@ -231,6 +231,7 @@ by the configuration only, not by programs it starts.
 | `test.settle(limit_ms)` | steps frames until nothing moves -- no animation running, no layout converging, no service with news -- or `limit_ms` (default 5000) has passed; returns the virtual milliseconds it took |
 | `test.wait(predicate, timeout_ms, message)` | for answers from real processes: steps frames while waiting up to `timeout_ms` (default 2000) of **wall** time for `predicate()` to return something true, and returns it |
 | `test.now()` | the virtual clock, in milliseconds since load |
+| `test.shortcuts_inhibited()` | whether the configuration asks the compositor to hold its shortcuts off it now (`morf.shortcuts.inhibit`) |
 
 Every input call and `test.ipc` is followed by a frame of no time, so the
 layout a following `test.find` reads already shows what it did; effects run

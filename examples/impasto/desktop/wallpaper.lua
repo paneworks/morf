@@ -113,6 +113,9 @@ function M.open_layer(width, height)
     exclusive_zone = -1,
     keyboard_focus = "none",
     width = width, height = height,
+    -- A layer surface starts closed: without this the wallpaper was built
+    -- and never shown under a compositor with layer shell.
+    visible = true,
     root = M.build(width, height),
   }
 end

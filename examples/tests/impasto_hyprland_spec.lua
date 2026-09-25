@@ -81,6 +81,10 @@ test.describe("impasto under a fake Hyprland", function()
     -- The workspace left on the dark panel is brought over.
     until_(function() return sent('hl.dsp.workspace.move({ workspace = 1, monitor = "DP-2" })') end, "workspace 1 stranded")
     test.eq(test.ipc("display", "DP-2", "scale", "99"), "refused")
+    -- Lit again in the mode it was switched off in, not the preferred one.
+    test.eq(test.ipc("display", "eDP-1", "on"), "ok")
+    until_(function() return sent('hl.monitor({ output = "desc:BOE 0x0BCA", disabled = false, mode = "1920x1200@60.00"') end,
+      "not lit again in its own mode: " .. table.concat(fake.sent("BOE"), " | "):sub(-400))
   end)
 
   test.it("lights every screen when none is", function()
@@ -98,9 +102,13 @@ test.describe("impasto under a fake Hyprland", function()
     test.click({ text = "SUPER + SPACE", visible = true })
     test.settle(500)
     test.truthy(test.find({ text = "Press the keys…", visible = true }), "the editor did not open")
+    -- Recording holds the compositor's binds off the shell, or a combination
+    -- Hyprland already binds would fire there and never reach the field.
+    test.truthy(test.shortcuts_inhibited(), "the compositor's shortcuts were not held off while recording")
     test.key("k", "super", { surface = test.find({ text = "SUPER + SPACE", visible = true }).surface })
     test.settle(500)
     test.truthy(test.find({ text = "SUPER + K", visible = true }), "the draft is not shown")
+    test.falsy(test.shortcuts_inhibited(), "the shortcuts were still held once the keys were caught")
     test.click({ text = "Apply", visible = true })
     until_(function() return sent("/reload") end, "Hyprland was not reloaded")
     local state = morf.fs.dir("state")
@@ -173,6 +181,35 @@ test.describe("impasto under a fake hyprlang Hyprland", function()
     local conf = morf.fs.read(morf.fs.join(morf.fs.dir("state"), "impasto-morf", "keys.conf")) or ""
     test.contains(conf, "unbind = SUPER, SPACE\nbindd = SUPER, K, Shell · Open the launcher, exec, morf ipc call launcher")
     test.contains(conf, "unbind = SUPER, A\nbindd = SUPER, J, Shell · Open the control centre, exec, morf ipc call controls")
+  end)
+end)
+
+test.describe("impasto on a screen that is not the focused one", function()
+  test.before_each(function()
+    local monitor = function(id, name, x, focused)
+      return { id = id, name = name, description = "", make = "", model = "", serial = "",
+        width = 1280, height = 720, refreshRate = 60.0, x = x, y = 0, scale = 1, transform = 0,
+        focused = focused, dpmsStatus = true, vrr = false, disabled = false, mirrorOf = "none",
+        activeWorkspace = { id = id + 1, name = tostring(id + 1) }, specialWorkspace = { id = 0, name = "" },
+        availableModes = { "1280x720@60.00Hz" } }
+    end
+    fake = fake_hyprland.new { monitors = { monitor(0, "HEADLESS-1", 0, false), monitor(1, "HEADLESS-2", 1280, true) } }
+  end)
+  test.after_each(function() fake.close() end)
+
+  test.it("leaves the settings window to the focused screen's shell", function()
+    -- Every screen's shell hears `settings`; two windows used to open, one
+    -- over the other, and the one clicked was not the one that pushed.
+    test.load("../impasto/init.lua", { size = { 1280, 720 }, screens = 2,
+      env = { IMPASTO_DRY_RUN = "1", HYPRLAND_INSTANCE_SIGNATURE = fake.signature, XDG_RUNTIME_DIR = fake.runtime } })
+    until_(function() return (test.ipc("live") or ""):find("at rest", 1, true) ~= nil end, "HEADLESS-1 never saw HEADLESS-2 focused")
+    test.eq(test.ipc("settings", "keys"), nil)
+    test.settle(500)
+    for _, surface in ipairs(test.surfaces()) do
+      test.ne(surface.kind, "floating", "a settings window opened on the screen at rest")
+    end
+    -- A panel verb is answered by the screen that opens it, not this one.
+    test.eq(test.ipc("launcher"), nil)
   end)
 end)
 

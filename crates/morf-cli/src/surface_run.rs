@@ -135,7 +135,7 @@ pub(crate) fn run_surface(
             match event {
                 LayerEvent::Configure { id, .. } if id == PRIMARY_LAYER => break 'configured,
                 LayerEvent::Closed { id } if id == PRIMARY_LAYER => {
-                    return Err("layer surface was closed".to_owned());
+                    return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
                 }
                 LayerEvent::Screencopy { request_id, result } => {
                     dispatch_screencopy(&mut runtime, None, request_id, result);

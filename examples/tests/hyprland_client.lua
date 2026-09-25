@@ -17,4 +17,8 @@ morf.ipc.outputs = function()
   table.sort(out)
   return table.concat(out, " ")
 end
+morf.ipc.keyboard = function()
+  local state = require("lib.hyprland").state
+  return tostring(state.keyboard) .. ":" .. tostring(state.keyboard_layout)
+end
 ui.Rect { width = 10, height = 10 }
