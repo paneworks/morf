@@ -33,7 +33,17 @@ M.revision = morf.signal("impasto.wallpaper.revision", 0)
 local listed = {}
 
 --- The folder the pictures are kept in.
-function M.dir() return morf.fs.expand(settings.wallpaperDir) end
+-- The default folder lives in the data home, wherever XDG_DATA_HOME puts
+-- it (a sandbox, another user's layout); a folder the user chose is taken
+-- as written.
+function M.dir()
+  local dir = settings.wallpaperDir
+  if dir == settings.defaults.wallpaperDir then
+    local data = morf.env("XDG_DATA_HOME") or ""
+    if data ~= "" then return morf.fs.join(data, "wallpapers") end
+  end
+  return morf.fs.expand(dir)
+end
 
 --- Lists the folder again; the list is sorted by name.
 function M.scan()
