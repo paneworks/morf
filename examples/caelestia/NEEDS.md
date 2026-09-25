@@ -5,28 +5,7 @@ dashboard). Each entry says what is missing, the API that would cover it,
 and why Lua cannot do it well. Work already under way elsewhere is marked
 **in progress** and only left as a TODO in the port.
 
-## 1. Hover that includes a node's descendants
-
-**What.** The dashboard opens when the pointer reaches the top edge and
-shuts when the pointer leaves it. "Leaves it" means leaves the panel *and
-everything on it*. A `MouseArea`'s `hovered` is true only while it is the
-topmost area under the pointer, so a full-panel area stops being hovered
-the moment the pointer is over a tab, a calendar arrow or a media button.
-
-**Workaround in the port.** `dashboard.lua` registers every `MouseArea` it
-makes in a list and treats the panel as hovered while any of them is
-(`panel_hovered()`), plus a 150 ms grace timer. That breaks as soon as
-someone adds an area without going through the helper, and it cannot see
-areas a library builds.
-
-**API.** `contains_pointer` (read-only, like `hovered`) on any node: true
-while the pointer is inside the node's box through its transforms,
-regardless of what is on top -- Qt's `HoverHandler`/`containsMouse` with
-propagation. Or a `MouseArea { hover_through = true }` whose `hovered`
-ignores areas above it. The hit test already knows the answer; Lua can
-only approximate it.
-
-## 2. Optical size that changes advances
+## 1. Optical size that changes advances
 
 The reference sets its text in Google Sans Flex, and Qt follows the face's
 `opsz` axis from the point size: small labels come out wider and more
@@ -38,7 +17,7 @@ glyphs are drawn and "keeps the default advances", so `opsz` cannot give
 the wider setting. Needs `opsz` (ideally automatic from `font_size`, as
 CSS's `font-optical-sizing: auto` and Qt do) to reach shaping like `wght`.
 
-## 3. Opacity of one layer in a field
+## 2. Opacity of one layer in a field
 
 The reference fades a drawer's background in with its contents as it
 opens. The background here is a layer of the frame's field (so it can
@@ -48,6 +27,12 @@ The port fades only the contents. Needs `opacity` on `SdfShape` (the
 layer's coverage scaled before it is composed with the others).
 
 ## Engine fixes made in this branch
+
+- A node's hover including its descendants: every node has a read-only
+  `contains_pointer`, true while the pointer is inside its box whatever is
+  on top (docs/UI.md, "Hover and press"). The dashboard shuts on
+  `panel.contains_pointer` going false instead of a hand-kept list of its
+  areas.
 
 - Headless runs (`morf check`/`render`/`test`) stretched a layer anchored at
   both ends of an axis to the screen even when it asked for a size; a

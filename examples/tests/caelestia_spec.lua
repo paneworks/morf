@@ -117,6 +117,11 @@ test.describe("caelestia", function()
     test.move(W / 2 + 25, 300)
     test.settle(1500)
     test.truthy(shown("dashboard"), "leaving the edge onto the panel shut it")
+    -- Onto a tab: an area of its own over the panel, and still the panel.
+    test.move { id = "dashboard-tab-media" }
+    test.advance(500)
+    test.truthy(shown("dashboard"), "a tab on the panel shut it")
+    test.truthy(test.get({ id = "drawer-dashboard" }).contains_pointer)
     test.move(W / 2 + 25, 800)
     -- A moment's grace before it shuts: a timer, which settling does not wait for.
     test.advance(1500)
