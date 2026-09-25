@@ -9,7 +9,7 @@
 --
 --     morf examples/caelestia/init.lua
 --     morf ipc call launcher          -- toggle; or `launcher open`, `launcher close`
---     morf ipc call dashboard         -- the same
+--     morf ipc call dashboard         -- the same; `session` too
 --     morf ipc call close             -- every drawer
 --
 -- The frame, the bar and the drawers are one fullscreen layer surface; only
@@ -55,6 +55,10 @@ end)
 
 local launcher = require("launcher")
 local dashboard = require("dashboard")
+local session = require("session")
+require("popouts")
+local osd = require("osd")
+local notifs = require("notifs")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -91,6 +95,8 @@ local panels = {
     right_margin = theme.BORDER, bottom_margin = theme.BORDER,
   },
   clip = true,
+  -- The desk dims under the session menu.
+  session.dim(),
 }
 for _, d in ipairs(drawer.all) do panels[#panels + 1] = d.panel end
 
@@ -119,11 +125,38 @@ end
 
 morf.ipc.launcher = verb(launcher.drawer)
 morf.ipc.dashboard = verb(dashboard.drawer)
+morf.ipc.session = verb(session.drawer)
+morf.ipc.workspace = function(n)
+  require("services").workspace.go(n)
+  return require("services").workspace.active()
+end
+morf.ipc.osd = function() osd.flash() return true end
+-- `notify SUMMARY [BODY [critical]]` raises a notification of the shell's
+-- own, as the reference's toaster does.
+morf.ipc.notify = function(summary, body, urgency)
+  return notifs.push { summary = summary, body = body, urgency = urgency == "critical" and 2 or 1 }
+end
+-- `popout NAME` opens the bar's popout NAME (network, bluetooth, power);
+-- `popout` alone shuts it.
+morf.ipc.popout = function(name)
+  local popouts = require("popouts")
+local osd = require("osd")
+local notifs = require("notifs")
+  popouts.current:set(name or "")
+  return popouts.current:get()
+end
 morf.ipc.close = function()
   drawer.close_all()
   return true
 end
-morf.ipc.drawers = function()
+-- `drawers` lists the open drawers; `drawers toggle NAME` (open, close)
+-- acts on one by name, as the reference's IPC does.
+morf.ipc.drawers = function(how, name)
+  if how ~= nil and how ~= "list" then
+    local d = drawer[name or ""]
+    if not d then error("`" .. tostring(name) .. "`: no such drawer") end
+    return verb(d)(how)
+  end
   local open = {}
   for _, d in ipairs(drawer.all) do
     if d.is_open() then open[#open + 1] = d.name end

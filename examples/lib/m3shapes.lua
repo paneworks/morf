@@ -305,11 +305,13 @@ local function normalise(curves)
 end
 
 --- The cubics of a named shape (or of an outline from `polygon`/`star`),
---- normalised and cut into `segments` (`shapes.SEGMENTS`).
+--- normalised and cut into `segments` (`shapes.SEGMENTS`). `segments =
+--- false` leaves the outline as it was made -- far cheaper, for a shape
+--- that is only drawn, never morphed.
 local cache = {}
 function shapes.curves(shape, segments)
-  segments = segments or shapes.SEGMENTS
-  local key = type(shape) == "string" and (shape .. "/" .. segments) or nil
+  if segments == nil then segments = shapes.SEGMENTS end
+  local key = type(shape) == "string" and (shape .. "/" .. tostring(segments)) or nil
   if key and cache[key] then return cache[key] end
   local curves = shape
   if type(shape) == "string" then
@@ -317,7 +319,7 @@ function shapes.curves(shape, segments)
     if not make then error("m3shapes: no shape named " .. shape, 2) end
     curves = make()
   end
-  local out = normalise(resample(curves, segments))
+  local out = normalise(segments and resample(curves, segments) or curves)
   if key then cache[key] = out end
   return out
 end
@@ -325,12 +327,25 @@ end
 --- SVG path data for a shape, in a `size` square (100): for a `ui.Path`
 --- with `view_box = { 0, 0, size, size }`.
 local paths = {}
+-- The named shapes at the defaults, made ahead of time by
+-- lib/m3shapes_gen.lua: reading them costs nothing, where resampling one
+-- outline costs a good part of a module's instruction budget.
+local made
 function shapes.path(shape, opts)
   opts = opts or {}
   local size = opts.size or 100
-  local key = type(shape) == "string" and (shape .. "/" .. size .. "/" .. (opts.segments or shapes.SEGMENTS))
+  local segments = opts.segments
+  if segments == nil then segments = shapes.SEGMENTS end
+  if type(shape) == "string" and size == 100 and segments == shapes.SEGMENTS and not opts.fresh then
+    if made == nil then
+      local ok, list = pcall(require, "lib.m3shapes_paths")
+      made = ok and type(list) == "table" and list or false
+    end
+    if made and made[shape] then return made[shape] end
+  end
+  local key = type(shape) == "string" and (shape .. "/" .. size .. "/" .. tostring(segments))
   if key and paths[key] then return paths[key] end
-  local curves = shapes.curves(shape, opts.segments)
+  local curves = shapes.curves(shape, segments)
   local function f(v) return string.format("%.2f", v * size) end
   local parts = { "M" .. f(curves[1][1]) .. " " .. f(curves[1][2]) }
   for _, c in ipairs(curves) do

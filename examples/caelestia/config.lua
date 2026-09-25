@@ -30,6 +30,8 @@ return settings.open {
     bar = {
       workspaces = { shown = 5 },
       clock = { twelve_hour = true },
+      -- What the Bluetooth popout's "Open settings" starts.
+      bluetooth_settings = { "blueman-manager" },
     },
     dashboard = {
       -- Opens when the pointer reaches the top edge over it.
@@ -42,6 +44,16 @@ return settings.open {
     services = {
       weather_location = "",
       imperial = true,
+    },
+    session = {
+      -- What each of the session menu's actions runs (`$USER` is the
+      -- user's name).
+      commands = {
+        logout = { "loginctl", "terminate-user", "$USER" },
+        shutdown = { "systemctl", "poweroff" },
+        hibernate = { "systemctl", "hibernate" },
+        reboot = { "systemctl", "reboot" },
+      },
     },
   },
 }

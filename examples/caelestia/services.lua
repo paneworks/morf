@@ -21,7 +21,13 @@ end
 
 M.workspace = {}
 
+-- Off Hyprland there are no workspaces to switch; the bar still moves its
+-- indicator where it is clicked (and `workspace N` over IPC), so the
+-- control answers.
+local local_workspace = morf.signal("caelestia.workspace", 1)
+
 function M.workspace.active()
+  if not hyprland.available() then return local_workspace:get() end
   local id = hyprland.state.active_workspace.id
   if type(id) ~= "number" or id < 1 then return 1 end
   return id
@@ -37,11 +43,13 @@ function M.workspace.occupied(id)
 end
 
 function M.workspace.go(id)
-  if hyprland.available() then hyprland.dispatch("workspace", tostring(id)) end
+  if hyprland.available() then hyprland.dispatch("workspace", tostring(id))
+  else local_workspace:set(math.max(1, math.floor(tonumber(id) or 1))) end
 end
 
 function M.workspace.step(delta)
-  if hyprland.available() then hyprland.dispatch("workspace", (delta > 0 and "r+1" or "r-1")) end
+  if hyprland.available() then hyprland.dispatch("workspace", (delta > 0 and "r+1" or "r-1"))
+  else local_workspace:set(math.max(1, local_workspace:get() + (delta > 0 and 1 or -1))) end
 end
 
 -- ---------------------------------------------------------------- window --
@@ -61,6 +69,9 @@ end
 local net = quiet_connect("networkmanager")
 local bt = quiet_connect("bluez")
 local power = quiet_connect("upower")
+
+-- The services themselves, for the popouts (nil when absent).
+M.net, M.bt, M.upower = net, bt, power
 
 M.network = {}
 
@@ -118,6 +129,70 @@ function M.power.icon()
     if profiles.available then return PROFILE_ICON[profiles.active] or "balance" end
   end
   return "balance"
+end
+
+-- ----------------------------------------------------------------- media --
+
+-- MPRIS players on the session bus (lib/mpris.lua), or nil without one.
+do
+  local ok, mpris = pcall(require, "lib.mpris")
+  if ok then
+    local ok2, media = pcall(mpris.connect)
+    if ok2 then M.media = media end
+  end
+end
+
+--- The active player's state (`{}` when there is none).
+function M.player()
+  local media = M.media
+  if not media or not media.state.available then return {} end
+  return media.state.active or {}
+end
+
+--- Whether something is loaded in a player.
+function M.playing_something()
+  local a = M.player()
+  return (a.title or "") ~= "" or (a.name or "") ~= ""
+end
+
+--- `m:ss` for seconds.
+function M.duration(seconds)
+  seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+  local h, m, s = seconds // 3600, (seconds % 3600) // 60, seconds % 60
+  if h > 0 then return ("%d:%02d:%02d"):format(h, m, s) end
+  return ("%d:%02d"):format(m, s)
+end
+
+-- --------------------------------------------------------------- weather --
+
+local weather
+
+--- The weather where the settings say (or where the address says), read
+--- through lib/weather.lua: `{ available, ... }`.
+function M.weather()
+  if not weather then
+    local config = require("config")
+    local location = config.get("services.weather_location")
+    weather = require("lib.weather").new {
+      location = location ~= "" and location or nil,
+      units = config.get("services.imperial") and "imperial" or "metric",
+    }
+  end
+  return weather:get()
+end
+
+--- A Material Symbols name for a WMO weather code.
+function M.weather_symbol(code, is_day)
+  code = tonumber(code) or -1
+  if code == 0 then return is_day == false and "clear_night" or "clear_day" end
+  if code == 1 or code == 2 then return is_day == false and "partly_cloudy_night" or "partly_cloudy_day" end
+  if code == 3 then return "cloud" end
+  if code == 45 or code == 48 then return "foggy" end
+  if (code >= 51 and code <= 57) then return "rainy" end
+  if (code >= 61 and code <= 67) or (code >= 80 and code <= 82) then return "rainy" end
+  if (code >= 71 and code <= 77) or code == 85 or code == 86 then return "weather_snowy" end
+  if code >= 95 then return "thunderstorm" end
+  return "cloud"
 end
 
 -- ---------------------------------------------------------------- system --

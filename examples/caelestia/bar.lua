@@ -55,30 +55,35 @@ local function workspaces()
     local active = services.workspace.active()
     return math.floor((active - 1) / shown) * shown + 1
   end
+  -- The pill is one distance field: a dot per workspace, and the active
+  -- workspace's disc, which rolls from dot to dot on a spring, squashing
+  -- and stretching as it goes and melting into each dot it passes (a
+  -- smooth union: the dots bulge towards it and pinch off behind).
+  local grow = kit.spring(420, 24)
+  local layers = {}
   local slots = {}
   for i = 1, shown do
     local id = function() return first() + i - 1 end
-    slots[#slots + 1] = ui.Item {
+    local centre = PILL_PAD + (i - 1) * SLOT + SLOT / 2
+    local function size() return services.workspace.occupied(id()) and 10 or 7 end
+    layers[#layers + 1] = ui.SdfShape {
+      id = "workspace-dot-" .. i,
+      shape = "circle",
+      operation = i == 1 and "union" or "smooth_union",
+      x = function() return 20 - size() / 2 end,
+      y = function() return centre - size() / 2 end,
+      width = size, height = size,
+      fill_color = function()
+        return services.workspace.occupied(id()) and C.onSurfaceVariant or C.outlineVariant
+      end,
+      behavior = { x = grow, y = grow, width = grow, height = grow, fill_color = { duration = theme.duration.small } },
+    }
+    slots[#slots + 1] = ui.MouseArea {
       id = "workspace-slot-" .. i,
-      width = 40, height = SLOT,
-      ui.Rect {
-        anchors = { center_in = true },
-        width = function() return services.workspace.occupied(id()) and 10 or 8 end,
-        height = function() return services.workspace.occupied(id()) and 10 or 8 end,
-        radius = 5,
-        color = function()
-          return services.workspace.occupied(id()) and C.onSurfaceVariant or C.outlineVariant
-        end,
-        behavior = { color = { duration = theme.duration.small } },
-      },
-      ui.MouseArea {
-        anchors = { fill = true }, cursor = "pointer",
-        on_clicked = function() services.workspace.go(id()) end,
-      },
+      width = 40, height = SLOT, cursor = "pointer",
+      on_clicked = function() services.workspace.go(id()) end,
     }
   end
-  -- The active one: a disc that slides from slot to slot, with a cookie
-  -- cut into it.
   local indicator = ui.Item {
     id = "workspace-active",
     x = 4, width = 32, height = 32,
@@ -86,23 +91,51 @@ local function workspaces()
       local active = services.workspace.active()
       return PILL_PAD + (active - first()) * SLOT + (SLOT - 32) / 2
     end,
-    behavior = { y = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel } },
-    ui.Rect { anchors = { fill = true }, radius = 16, color = function() return C.primary end },
+    behavior = { y = kit.spring(230, 19) },
+    stretch = kit.STRETCH,
+    -- The flower rolls as the disc does: a quarter turn per workspace.
     ui.Path {
       anchors = { center_in = true }, width = 21, height = 21,
       view_box = { 0, 0, 100, 100 },
       d = shapes.path("flower"),
       fill_color = function() return C.onPrimary end,
+      rotation = function() return services.workspace.active() * 90 end,
+      behavior = { rotation = kit.spring(160, 16) },
     },
   }
+  layers[#layers + 1] = ui.SdfShape {
+    id = "workspace-active-shape",
+    shape = "box", radius = 16,
+    operation = "smooth_union",
+    track = indicator,
+    fill_color = function() return C.primary end,
+  }
+  -- The dots and the disc melt into one another only while the disc
+  -- travels; at rest each is crisp.
+  local rolling = morf.signal("caelestia.workspaces.rolling", false)
+  local still
+  local last = services.workspace.active()
+  morf.effect("caelestia.workspaces.rolling", function()
+    local now = services.workspace.active()
+    if now == last then return end
+    last = now
+    rolling:set(true)
+    if still then still:cancel() end
+    still = morf.timer(420, function() still = nil rolling:set(false) end, false)
+  end)
+  layers.id = "workspace-field"
+  layers.anchors = { fill = true }
+  layers.blend = function() return rolling:get() and 11 or 0 end
+  layers.behavior = { blend = { duration = 220, easing = theme.ease.standard } }
   return ui.Rect {
     id = "workspaces",
     width = 40,
     height = shown * SLOT + 2 * PILL_PAD,
     radius = 20,
     color = function() return C.surfaceContainer end,
-    ui.Column { y = PILL_PAD, gap = 0, table.unpack(slots) },
+    ui.Sdf(layers),
     indicator,
+    ui.Column { y = PILL_PAD, gap = 0, table.unpack(slots) },
     ui.MouseArea {
       anchors = { fill = true }, z = -1,
       on_wheel = function(_, _, _, _, _, step_y)
@@ -184,8 +217,21 @@ end
 -- ---------------------------------------------------------------- status --
 
 local function status()
+  -- Each icon opens its popout on hover (popouts.lua).
+  local popouts = require("popouts")
+  local POPOUT = { ["status-network"] = "network", ["status-bluetooth"] = "bluetooth", ["status-power"] = "power" }
   local function slot(name, id)
-    return kit.centred(40, 30, kit.icon(name, 18, function() return C.secondary end), { id = id })
+    -- The icon swells under the pointer, on a spring with a little bounce.
+    local icon = kit.icon(name, 18, function() return C.secondary end)
+    local area = popouts.trigger(POPOUT[id], kit.centred(40, 30, icon), { id = id, width = 40, height = 30 })
+    local swell = ui.Item {
+      anchors = { fill = true },
+      scale = function() return area.hovered and 1.15 or 1 end,
+      behavior = { scale = kit.spring(460, 14) },
+    }
+    ui.reparent(swell, area)
+    ui.reparent(icon, swell)
+    return area
   end
   return ui.Rect {
     id = "status",
@@ -203,10 +249,7 @@ end
 local function power()
   return kit.hover(ui.MouseArea {
     id = "power", width = 40, height = 40, cursor = "pointer",
-    on_clicked = function()
-      -- TODO(phase 2): the session drawer on the right edge.
-      morf.log("info", "caelestia: power pressed (the session menu is not ported yet)")
-    end,
+    on_clicked = function() require("session").drawer.toggle() end,
     kit.icon("power_settings_new", 20, function() return C.error end, { anchors = { center_in = true } }),
   }, function(hovered) return hovered and C.onSurface:alpha(0.08) or C.onSurface:alpha(0) end, 20)
 end
@@ -218,6 +261,8 @@ function M.build()
     id = "bar",
     width = theme.BAR,
     anchors = { top = true, bottom = true, left = true },
+    -- Anywhere on the bar keeps an open popout open.
+    require("popouts").area { anchors = { fill = true }, z = -1 },
     ui.Flex {
       anchors = { fill = true },
       direction = "column",

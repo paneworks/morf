@@ -221,6 +221,14 @@ film() {
   done
 }
 wait() { sleep \$1; }
+# A media player that plays nothing (fakeplayer.py), on the private bus.
+# Its cover is ART, else a castle from the wallpapers, else a picture made here.
+player() {
+  asked player
+  art=\${1:-\$HOME/.local/share/wallpapers/japanese-castle-full-moon.jpeg}
+  [ -e "\$art" ] || { art=\$OUT/cover.png; magick -seed 7 -size 512x512 plasma:orange-purple "\$art"; }
+  /usr/bin/python3 "$HERE/fakeplayer.py" "\$art" > \$OUT/player.log 2>&1 &
+}
 # When a request was made: films are timed from it as well.
 asked() { REQ=\$(date +%s%N); echo "\$1 wall \$((REQ / 1000000))" >> \$OUT/marks; }
 # Headless, the nested session draws on an output of its own; visible, on
@@ -280,6 +288,8 @@ else
   S=\$!
   open() { asked open; timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
   close() { asked close; timeout 10 "$REPO/target/release/morf" ipc call close >> \$OUT/hc.log 2>&1; }
+  ipc() { asked ipc; timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
+  notify() { asked notify; timeout 10 /usr/bin/notify-send "\$@" >> \$OUT/hc.log 2>&1; }
 fi
 sleep \${BOOT:-15}
 [ -n "$WTYPE" ] && { timeout \${TIMEOUT:-240} "$WTYPE" -s 400000 > /dev/null 2>&1 & KP=\$!; }

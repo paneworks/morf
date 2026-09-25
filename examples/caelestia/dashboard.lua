@@ -1,13 +1,17 @@
 -- The dashboard: a drawer at the top of the frame with four tabs --
 -- Dashboard, Media, Performance, Weather. The Dashboard tab is here: the
 -- weather, who is logged in and for how long, the time stacked on its side,
--- a month calendar, three resource rings and the media card.
+-- a month calendar, three resource rings and the media card; the others
+-- are dashboard_media.lua, dashboard_performance.lua and
+-- dashboard_weather.lua. Each tab has its own size: switching tabs slides
+-- the pages sideways while the drawer eases to the new tab's size.
 --
 -- It opens over IPC, and when the pointer reaches the top edge of the frame
 -- above it; one opened that way closes again when the pointer leaves it.
 --
 -- Geometry measured off the reference at 1920x1080 (panel coordinates):
--- 872 x 538, 16 px padding, tabs 64 tall with a 3 px indicator and a hairline
+-- 872 x 538 on the Dashboard tab (Media 1032 x 418, Performance 987 x 484,
+-- Weather 870 x 660), 16 px padding, tabs 64 tall with a 3 px indicator and a hairline
 -- under them, cards from y = 84 in two rows (132 and 295 tall, 12 apart).
 
 local morf = require("morf")
@@ -22,13 +26,44 @@ local shapes = require("lib.m3shapes")
 local C = theme.color
 local M = {}
 
-local WIDTH, HEIGHT = 872, 538
 local PAD, GAP = 16, 12
+-- The cards of each tab are not rectangles but layers of one distance
+-- field under the pages (kit.collect): they bud out as the dashboard opens
+-- or a tab comes in, fuse into one another while they move, and pull apart
+-- as they settle.
+local LAYERS = { {}, {}, {}, {} }
+kit.collect(LAYERS[2]) require("dashboard_media")
+kit.collect(LAYERS[3]) require("dashboard_performance")
+kit.collect(LAYERS[4]) require("dashboard_weather")
+kit.collect(LAYERS[1])
+-- Each tab's page (the panel less its padding and the tabs).
+local PAGE = {
+  { 840, 439 },
+  { require("dashboard_media").WIDTH, require("dashboard_media").HEIGHT },
+  { require("dashboard_performance").WIDTH, require("dashboard_performance").HEIGHT },
+  { require("dashboard_weather").WIDTH, require("dashboard_weather").HEIGHT },
+}
 local TABS_H = 68            -- icons, labels, indicator and hairline
 local ROW1, ROW2 = 132, 295
 
-M.tab = morf.signal("caelestia.dashboard.tab", 1)
-local opened = morf.signal("caelestia.dashboard.shown", false)
+local state = require("dashboard_state")
+M.tab = state.tab
+
+--- The panel's size on tab `i`.
+function M.size(i)
+  local p = PAGE[i] or PAGE[1]
+  return p[1] + 2 * PAD, TABS_H + PAD + p[2] + PAD - 1
+end
+local function width() return (M.size(M.tab:get())) end
+local function height() local _, h = M.size(M.tab:get()) return h end
+
+-- The drawer's and the pages' pace between tabs, fitted to films of the
+-- reference: most of the way in the first hundred milliseconds, settled in
+-- about a third of a second.
+local SWITCH = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel }
+local opened = state.opened
+
+local area = state.area
 
 -- ------------------------------------------------------------------- tabs --
 
@@ -40,7 +75,9 @@ local TABS = {
 }
 
 local function tabs()
-  local width = (WIDTH - 2 * PAD) / #TABS
+  -- The tabs share the panel's width as it eases between tabs' sizes: a
+  -- row that grows each of them, so they follow the drawer as it moves.
+  local function slot() return (width() - 2 * PAD) / #TABS end
   local labels = {}
   local buttons = {}
   for i, t in ipairs(TABS) do
@@ -51,88 +88,124 @@ local function tabs()
       behavior = { color = { duration = theme.duration.small } },
     }
     labels[i] = label
-    buttons[#buttons + 1] = ui.MouseArea {
+    local button
+    button = ui.MouseArea {
       id = "dashboard-tab-" .. t.name:lower(),
-      width = width, height = TABS_H - 4, cursor = "pointer",
+      width = 10, height = TABS_H - 4, cursor = "pointer",
+      layout = { grow = 1 },
       on_clicked = function() M.tab:set(i) end,
       ui.Column {
-        anchors = { horizontal_center = true }, y = 6, gap = 4, align = "center",
+        anchors = { horizontal_center = true }, y = 8, gap = 4, align = "center",
         kit.icon(t.icon, 22, function() return on() and C.primary or C.onSurface end, { fill = on }),
         label,
       },
     }
+    -- The hovered tab lifts on a rounded wash, as the reference's.
+    local wash = ui.Rect {
+      anchors = { fill = true, top_margin = 6, bottom_margin = 1 }, radius = 10, z = -1,
+      color = function() return button.hovered and C.onSurface:alpha(0.06) or C.onSurface:alpha(0) end,
+      behavior = { color = { duration = theme.duration.small } },
+    }
+    ui.reparent(wash, button)
+    buttons[#buttons + 1] = button
   end
-  -- The indicator: as wide as the chosen label, sliding under it.
-  local indicator = ui.Rect {
+  -- The indicator: as wide as the chosen label, under it. It is a layer
+  -- of a small distance field with the hairline beneath it, which it melts
+  -- into at its foot; moving to another tab it stretches out ahead, the
+  -- edge in front first and the one behind after (kit.elastic), and draws
+  -- itself in at the new tab.
+  local function span(i, panel_width)
+    local l = labels[i]
+    local w = (l and l.layout_width or 80) + 4
+    local s = (panel_width - 2 * PAD) / #TABS
+    local x = (i - 1) * s + (s - w) / 2
+    return x, x + w
+  end
+  local indicator = ui.Item {
     id = "dashboard-tab-indicator",
     y = TABS_H - 4, height = 3,
-    top_left_radius = 3, top_right_radius = 3,
-    color = function() return C.primary end,
-    width = function()
-      local l = labels[M.tab:get()]
-      return (l and l.layout_width or 80) + 4
-    end,
-    x = function()
-      local l = labels[M.tab:get()]
-      local w = (l and l.layout_width or 80) + 4
-      return (M.tab:get() - 1) * width + (width - w) / 2
-    end,
-    behavior = {
-      x = { duration = theme.duration.normal, easing = theme.ease.emphasized },
-      width = { duration = theme.duration.normal, easing = theme.ease.emphasized },
+    x = 0, width = 0,
+  }
+  local tab_moving = morf.signal("caelestia.dashboard.indicator.moving", false)
+  local tab_still
+  local shown_tab, moved = 1, false
+  morf.effect("caelestia.dashboard.indicator", function()
+    local tab = M.tab:get()
+    -- Until the first switch it follows the label's width as it is laid
+    -- out; after, each switch runs from tab to tab.
+    local l1, r1 = span(tab, width())
+    if tab == shown_tab then
+      if not moved then indicator.x, indicator.width = l1, r1 - l1 end
+      return
+    end
+    local from = shown_tab
+    shown_tab, moved = tab, true
+    local l0, r0 = span(from, M.size(from))
+    kit.elastic(indicator, "x", l0, r0, l1, r1, { duration = 520 })
+    tab_moving:set(true)
+    if tab_still then tab_still:cancel() end
+    tab_still = morf.timer(560, function() tab_still = nil tab_moving:set(false) end, false)
+  end)
+  local field = ui.Sdf {
+    id = "dashboard-tab-field",
+    anchors = { left = true, right = true }, y = TABS_H - 8, height = 8,
+    -- A soft foot on the hairline only while it travels.
+    blend = function() return tab_moving:get() and 4 or 0 end,
+    behavior = { blend = { duration = 200 } },
+    ui.SdfShape {
+      shape = "box", operation = "union",
+      anchors = { left = true, right = true }, y = 7, height = 1,
+      fill_color = function() return C.outlineVariant end,
+    },
+    ui.SdfShape {
+      id = "dashboard-tab-indicator-shape",
+      shape = "box", operation = "smooth_union",
+      top_left_radius = 1.5, top_right_radius = 1.5,
+      track = indicator,
+      fill_color = function() return C.primary end,
     },
   }
   return ui.Item {
-    x = PAD, width = WIDTH - 2 * PAD, height = TABS_H,
-    ui.Row { gap = 0, table.unpack(buttons) },
-    indicator,
-    ui.Rect {
-      y = TABS_H - 1, width = WIDTH - 2 * PAD, height = 1,
-      color = function() return C.outlineVariant end,
+    anchors = { left = true, right = true, left_margin = PAD, right_margin = PAD },
+    height = TABS_H,
+    ui.Flex {
+      anchors = { fill = true, bottom_margin = 4 }, direction = "row", padding = 0,
+      table.unpack(buttons),
     },
+    field,
+    indicator,
   }
 end
 
 -- ---------------------------------------------------------------- weather --
 
-local weather
-local function here()
-  if not weather then
-    local location = config.get("services.weather_location")
-    weather = require("lib.weather").new {
-      location = location ~= "" and location or nil,
-      units = config.get("services.imperial") and "imperial" or "metric",
-    }
-  end
-  return weather:get()
-end
-
-local function weather_symbol(code, is_day)
-  code = tonumber(code) or -1
-  if code == 0 then return is_day == false and "clear_night" or "clear_day" end
-  if code == 1 or code == 2 then return is_day == false and "partly_cloudy_night" or "partly_cloudy_day" end
-  if code == 3 then return "cloud" end
-  if code == 45 or code == 48 then return "foggy" end
-  if (code >= 51 and code <= 67) or (code >= 80 and code <= 82) then return "rainy" end
-  if (code >= 71 and code <= 77) or code == 85 or code == 86 then return "weather_snowy" end
-  if code >= 95 then return "thunderstorm" end
-  return "cloud"
-end
-
 local function weather_card()
   local function now()
     if not opened:get() then return { available = false } end
-    return here()
+    return services.weather()
   end
   return kit.card {
     id = "dashboard-weather",
     width = 275, height = ROW1,
     ui.Row {
       anchors = { center_in = true }, gap = 18, align = "center",
-      kit.icon(function()
-        local w = now()
-        return w.available and weather_symbol(w.code, w.is_day) or "cloud"
-      end, 60, function() return C.secondary end),
+      -- While the weather is on its way, M3's loading indicator.
+      ui.Item {
+        width = 60, height = 60,
+        kit.icon(function()
+          local w = now()
+          return w.available and services.weather_symbol(w.code, w.is_day) or "cloud"
+        end, 60, function() return C.secondary end, {
+          anchors = { center_in = true },
+          visible = function() return now().available end,
+        }),
+        kit.loading(48, function() return C.secondary end, {
+          id = "dashboard-weather-loading",
+          anchors = { center_in = true },
+          active = function() return opened:get() and not now().available end,
+          visible = function() return not now().available end,
+        }),
+      },
       ui.Column {
         gap = 2, align = "center",
         kit.text {
@@ -315,10 +388,13 @@ local function calendar_card()
     local function day() return month().days[i] end
     cells[#cells + 1] = ui.Item {
       width = CELL_W, height = CELL_H,
-      ui.Path {
+      -- Today's marker morphs in each time the dashboard opens: a circle
+      -- that blooms into a cookie.
+      kit.shape {
         anchors = { center_in = true }, width = 34, height = 34,
-        view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie9"),
-        fill_color = function() return C.primary end,
+        shape = function() return opened:get() and "cookie9" or "circle" end,
+        duration = 700,
+        color = function() return C.primary end,
         visible = function() return day().today end,
       },
       kit.text {
@@ -428,11 +504,8 @@ end
 -- ------------------------------------------------------------------ media --
 
 local function media_card()
-  local ok, mpris = pcall(require, "lib.mpris")
-  local media = ok and mpris.connect() or nil
-  local function active()
-    return media and media.state.available and media.state.active or {}
-  end
+  local media = services.media
+  local active = services.player
   local function field(name, fallback)
     return function()
       local v = active()[name]
@@ -539,36 +612,100 @@ local function dashboard_tab()
   }
 end
 
-local function placeholder(name)
-  return ui.Item {
-    width = WIDTH - 2 * PAD, height = ROW1 + GAP + ROW2,
-    kit.text {
-      anchors = { center_in = true },
-      text = name .. " is not ported yet",
-      color = function() return C.onSurfaceVariant end,
-    },
-  }
-end
-
 local pages = {
   dashboard_tab(),
-  placeholder("Media"),
-  placeholder("Performance"),
-  placeholder("Weather"),
+  require("dashboard_media").page,
+  require("dashboard_performance").page,
+  require("dashboard_weather").page,
 }
+kit.collect(nil)
 
--- The tabs slide sideways, one page width apart, as the reference's do.
+-- ----------------------------------------------------------------- liquid --
+
+-- While a tab's cards move, its field's seams are wide and soft, so
+-- neighbours fuse; once they settle the seams close to nothing and the
+-- cards stand crisp and apart, exactly as the reference's. One field per
+-- tab (a field draws at most sixteen layers, and a tab's cards are its
+-- own), laid under the pages.
+local liquid = { }
+for i = 1, #LAYERS do liquid[i] = morf.signal("caelestia.dashboard.liquid." .. i, false) end
+local calm = {}
+local function stir(i, ms)
+  liquid[i]:set(true)
+  if calm[i] then calm[i]:cancel() end
+  calm[i] = morf.timer(ms, function() calm[i] = nil liquid[i]:set(false) end, false)
+end
+
+local cards_fields = {}
+for i, list in ipairs(LAYERS) do
+  if #list > 0 then
+    local field = {
+      id = "dashboard-cards-" .. i,
+      anchors = { fill = true },
+      blend = function() return liquid[i]:get() and 6 or 0 end,
+      behavior = { blend = { duration = 360, easing = theme.ease.standard } },
+    }
+    for _, entry in ipairs(list) do field[#field + 1] = entry.shape end
+    cards_fields[#cards_fields + 1] = ui.Sdf(field)
+  end
+end
+
+local running = {}
+--- The cards of tab `i` come in (`coming`) -- each grows evenly about its
+--- own centre from a little smaller as it fades in, one just after the
+--- other -- or shrink a touch and fade as they go. While they move the
+--- field's seams soften a little, so neighbours touch like liquid; at rest
+--- they are crisp and apart.
+local function bud(i, coming)
+  for _, r in ipairs(running[i] or {}) do r:stop() end
+  running[i] = {}
+  for k, entry in ipairs(LAYERS[i] or {}) do
+    local n = entry.node
+    local steps
+    if coming then
+      local delay = 40 + (k - 1) * 22
+      steps = {
+        { node = n, property = "scale", from = 0.92, to = 1, duration = 420, easing = theme.ease.spatial, delay = delay },
+        { node = n, property = "opacity", from = 0, to = 1, duration = 220, delay = delay },
+        { node = entry.shape, property = "opacity", from = 0, to = 1, duration = 220, delay = delay },
+      }
+    else
+      steps = {
+        { node = n, property = "scale", to = 0.96, duration = 160, easing = theme.ease.emphasized_accel },
+        { node = n, property = "opacity", to = 0, duration = 120 },
+        { node = entry.shape, property = "opacity", to = 0, duration = 120 },
+      }
+    end
+    running[i][#running[i] + 1] = morf.animation.play { { parallel = steps } }
+  end
+  stir(i, coming and (420 + #(LAYERS[i] or {}) * 22) or 200)
+end
+M.bud = bud
+
+-- Where page `i` starts along the track: the pages side by side, a
+-- padding's width apart on either side.
+local function offset(i)
+  local x = 0
+  for k = 1, i - 1 do x = x + PAGE[k][1] + PAD * 2 end
+  return x
+end
+
+-- The tabs slide sideways as the reference's do, while the drawer eases to
+-- the new tab's size: the strip is the panel less its padding, so it
+-- follows the drawer as it moves.
 local strip = ui.Item {
   id = "dashboard-pages",
-  x = PAD, y = TABS_H + PAD, width = WIDTH - 2 * PAD, height = ROW1 + GAP + ROW2,
+  anchors = { fill = true, left_margin = PAD, right_margin = PAD, top_margin = TABS_H + PAD, bottom_margin = PAD - 1 },
   clip = true,
 }
 local track = ui.Row {
   gap = PAD * 2,
-  translate_x = function() return -(M.tab:get() - 1) * (WIDTH - 2 * PAD + PAD * 2) end,
-  behavior = { translate_x = { duration = theme.duration.normal, easing = theme.ease.emphasized } },
+
+  translate_x = function() return -offset(M.tab:get()) end,
+  behavior = { translate_x = SWITCH },
   table.unpack(pages),
 }
+for _, f in ipairs(cards_fields) do ui.reparent(f, strip) end
 ui.reparent(track, strip)
 
 -- Behind everything on the panel, so the panel is in the surface's input
@@ -585,13 +722,30 @@ local content = ui.Item {
 M.drawer = drawer.new {
   name = "dashboard",
   edge = "top",
-  width = WIDTH,
-  height = HEIGHT,
+  width = width,
+  height = height,
   content = content,
+  props = { behavior = { width = SWITCH, height = SWITCH } },
 }
 
 morf.effect("caelestia.dashboard.shown", function()
   opened:set(M.drawer.open:get())
+end)
+
+-- Opening, the chosen tab's cards bud out of the drawer as it grows;
+-- closing, they melt back as it withdraws. Switching tabs, the outgoing
+-- cards melt while the incoming ones bud, all in the one field.
+local was_open, was_tab = false, M.tab:get()
+morf.effect("caelestia.dashboard.liquid", function()
+  local open, tab = M.drawer.open:get(), M.tab:get()
+  if open ~= was_open then
+    was_open = open
+    bud(tab, open)
+  elseif open and tab ~= was_tab then
+    bud(was_tab, false)
+    bud(tab, true)
+  end
+  was_tab = tab
 end)
 
 -- ------------------------------------------------------------- hover open --
@@ -603,7 +757,7 @@ local by_hover = false
 local trigger = ui.MouseArea {
   id = "dashboard-trigger",
   anchors = { top = true, horizontal_center = true },
-  width = WIDTH, height = theme.BORDER,
+  width = width, height = theme.BORDER,
 }
 
 -- Anywhere on the panel, whatever is under the pointer there: a tab, a
