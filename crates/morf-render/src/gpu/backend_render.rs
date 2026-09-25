@@ -473,6 +473,9 @@ impl RenderBackend for WgpuBackend {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("morf frame encoder"),
             });
+        if let Some(profile) = &self.profile {
+            profile.mark(&mut encoder, 0);
+        }
         let surface_frame = (
             DamageRect {
                 x: 0,
@@ -675,6 +678,9 @@ impl RenderBackend for WgpuBackend {
                 }
             }
         }
+        if let Some(profile) = &self.profile {
+            profile.mark(&mut encoder, 1);
+        }
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("morf frame"),
@@ -711,6 +717,9 @@ impl RenderBackend for WgpuBackend {
                     }
                 }
             }
+        }
+        if let Some(profile) = &self.profile {
+            profile.mark(&mut encoder, 2);
         }
         // Buffers of the engine's own: only what the next one is missing is
         // copied into it, and it goes out with the frame's damage.
@@ -752,6 +761,10 @@ impl RenderBackend for WgpuBackend {
         } else {
             None
         };
+        if let Some(profile) = &self.profile {
+            profile.mark(&mut encoder, 3);
+            profile.resolve(&mut encoder);
+        }
         let queue = &self.queue;
         let buffers = &mut self.buffers;
         super::present::submit(queue, Some(encoder.finish()), || {
@@ -775,6 +788,58 @@ impl RenderBackend for WgpuBackend {
         }
         if let Some(buffers) = &mut self.buffers {
             buffers.present(&self.queue, damage);
+        }
+        if let Some(profile) = &self.profile {
+            let area = |rect: DamageRect| u64::from(rect.width) * u64::from(rect.height);
+            let pixels = damage.iter().map(|rect| area(*rect)).sum();
+            // What the damage makes each command shade: its reach, cut to
+            // its clip, over every damage rectangle.
+            let mut shaded: Vec<(u64, usize)> = list
+                .commands
+                .iter()
+                .enumerate()
+                .map(|(index, command)| {
+                    let clip = command
+                        .clip()
+                        .and_then(|clip| physical_damage(clip, scale_120));
+                    let total = damage
+                        .iter()
+                        .filter_map(|rect| {
+                            let hit = intersect_damage(*rect, reach[index]?)?;
+                            match (command.clip(), clip) {
+                                (Some(_), None) => None,
+                                (_, Some(clip)) => intersect_damage(hit, clip),
+                                (None, None) => Some(hit),
+                            }
+                        })
+                        .map(area)
+                        .sum::<u64>();
+                    (total, index)
+                })
+                .filter(|(total, _)| *total > 0)
+                .collect();
+            shaded.sort_unstable_by(|left, right| right.cmp(left));
+            let heaviest = shaded
+                .iter()
+                .take(4)
+                .map(|(total, index)| {
+                    let name = format!("{:?}", list.commands[*index]);
+                    let kind = name.split([' ', '{', '(']).next().unwrap_or("?").to_owned();
+                    let layered = if command_layers[*index].is_some() {
+                        " in a layer"
+                    } else {
+                        ""
+                    };
+                    format!("{kind}#{index}{layered} {total}")
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            profile.report(
+                &self.device,
+                pixels,
+                (shaded.iter().map(|(total, _)| total).sum(), shaded.len()),
+                &heaviest,
+            );
         }
         Ok(())
     }

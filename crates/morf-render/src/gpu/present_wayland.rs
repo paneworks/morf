@@ -108,13 +108,20 @@ impl Dispatch<ZwpLinuxBufferParamsV1, ()> for LinkState {
 impl Dispatch<WlBuffer, Arc<AtomicBool>> for LinkState {
     fn event(
         _: &mut Self,
-        _: &WlBuffer,
+        buffer: &WlBuffer,
         event: wl_buffer::Event,
         busy: &Arc<AtomicBool>,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
         if let wl_buffer::Event::Release = event {
+            if super::present::log_wanted() {
+                eprintln!(
+                    "{} morf: present: released {}",
+                    super::present::stamp(),
+                    buffer.id().protocol_id()
+                );
+            }
             busy.store(false, Ordering::Release);
         }
     }
@@ -252,9 +259,11 @@ impl WaylandLink {
     }
 
     /// Reads the socket for this queue until something arrives or `deadline`
-    /// passes. Returns whether anything did.
+    /// passes -- at least once, without waiting, when it already has.
+    /// Returns whether anything did.
     pub(crate) fn wait_release(&mut self, deadline: Instant) -> bool {
-        loop {
+        // Bounded: a socket busy with other queues' events cannot hold it.
+        for _ in 0..64 {
             if self.queue.dispatch_pending(&mut self.state).unwrap_or(0) > 0 {
                 self.dispatch();
                 return true;
@@ -264,9 +273,6 @@ impl WaylandLink {
                 continue;
             };
             let left = deadline.saturating_duration_since(Instant::now());
-            if left.is_zero() {
-                return false;
-            }
             let mut poll = [libc::pollfd {
                 fd: guard.connection_fd().as_raw_fd(),
                 events: libc::POLLIN,
@@ -276,7 +282,7 @@ impl WaylandLink {
                 libc::poll(
                     poll.as_mut_ptr(),
                     1,
-                    left.as_millis().clamp(1, i32::MAX as u128) as i32,
+                    left.as_millis().min(i32::MAX as u128) as i32,
                 )
             };
             if ready > 0 {
@@ -290,6 +296,7 @@ impl WaylandLink {
                 }
             }
         }
+        false
     }
 
     /// A new buffer of `size`, exported, wrapped as a `wl_buffer`.
@@ -438,6 +445,13 @@ impl WaylandLink {
             Err(_) => {
                 let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
             }
+        }
+        if super::present::log_wanted() {
+            eprintln!(
+                "{} morf: present: committed {}",
+                super::present::stamp(),
+                link.buffer.id().protocol_id()
+            );
         }
         self.surface.attach(Some(&link.buffer), 0, 0);
         for rect in damage {

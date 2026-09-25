@@ -235,8 +235,31 @@ impl BufferRing {
         if let Some(wayland) = &mut self.wayland {
             wayland.dispatch();
         }
-        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(250);
-        loop {
+        let started = std::time::Instant::now();
+        let deadline = started + release_wait();
+        let acquired = self.acquire_until(device, deadline);
+        if log_wanted() {
+            let busy = self
+                .slots
+                .iter()
+                .filter(|slot| slot.busy.load(Ordering::Acquire))
+                .count();
+            eprintln!(
+                "{} morf: present: buffer {acquired:?} of {} ({busy} held) after {:.1} ms",
+                stamp(),
+                self.slots.len(),
+                started.elapsed().as_secs_f64() * 1e3
+            );
+        }
+        acquired
+    }
+
+    fn acquire_until(
+        &mut self,
+        device: &wgpu::Device,
+        deadline: std::time::Instant,
+    ) -> Option<usize> {
+        for _ in 0..64 {
             let free = self
                 .slots
                 .iter()
@@ -261,9 +284,15 @@ impl BufferRing {
                 self.slots.push(slot);
                 return Some(self.slots.len() - 1);
             }
-            // All of them are on screen or queued there. Wait for one back,
-            // a while, and skip this frame if none comes: its damage is in
-            // the history and reaches the next buffer drawn.
+            // All of them are on screen or queued there: the compositor is
+            // behind. Wait for one back, as a swapchain's acquire does, but
+            // not for ever: past `release_wait` the frame is skipped. Its
+            // damage is in the history and reaches the next buffer drawn.
+            //
+            // Skipping at once instead looks kinder to the output's thread
+            // and was measured worse: on a compositor that holds three or four
+            // buffers for a quarter of a second, it drew twice the frames
+            // offscreen and handed over half as many.
             let waited = self
                 .wayland
                 .as_mut()
@@ -272,6 +301,7 @@ impl BufferRing {
                 return None;
             }
         }
+        None
     }
 
     /// Records the frame's damage, and the copy of what the next buffer is
@@ -292,6 +322,25 @@ impl BufferRing {
         };
         let slot = &mut self.slots[index];
         let rects = repaint(&self.history, slot.painted, self.size);
+        if log_wanted() {
+            let area: u64 =
+                rects
+                    .as_ref()
+                    .map_or(u64::from(self.size.0) * u64::from(self.size.1), |rects| {
+                        rects
+                            .iter()
+                            .map(|rect| u64::from(rect.width) * u64::from(rect.height))
+                            .sum()
+                    });
+            eprintln!(
+                "{} morf: present: copying {area} px into buffer {index} ({})",
+                stamp(),
+                slot.painted.map_or("new".to_owned(), |frame| format!(
+                    "{} frames old",
+                    self.history.frame() - frame
+                ))
+            );
+        }
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("morf buffer composite"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -399,6 +448,39 @@ impl super::backend_types::WgpuBackend {
         }
         pixels
     }
+}
+
+/// `MORF_PRESENT_LOG=1`: every frame's buffer, how many the compositor
+/// held, and how long getting one took.
+pub(crate) fn log_wanted() -> bool {
+    static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *WANTED.get_or_init(|| std::env::var_os("MORF_PRESENT_LOG").is_some())
+}
+
+/// `[12345.678]`: monotonic milliseconds, as every diagnostic line starts.
+pub(crate) fn stamp() -> String {
+    let mut now = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: `now` is a valid, writable timespec for the call's duration.
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut now) };
+    format!(
+        "[{:.3}]",
+        now.tv_sec as f64 * 1000.0 + now.tv_nsec as f64 / 1_000_000.0
+    )
+}
+
+/// How long a frame waits for the compositor to give a buffer back before it
+/// is skipped: a quarter of a second, unless `MORF_PRESENT_WAIT_MS` says.
+fn release_wait() -> std::time::Duration {
+    static WAIT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    std::time::Duration::from_millis(*WAIT.get_or_init(|| {
+        std::env::var("MORF_PRESENT_WAIT_MS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(250)
+    }))
 }
 
 /// A buffer with nothing behind it but a texture: the tests' ring.

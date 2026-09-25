@@ -6,9 +6,18 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::ptr::NonNull;
 
-/// How many buffers a surface presents through at most: one on screen, one
-/// the compositor may not have let go of yet, one to draw into.
-const RING_BUFFERS: usize = 3;
+/// How many buffers a surface presents through at most
+/// (`MORF_PRESENT_BUFFERS` overrides it). A compositor holds the buffer it
+/// shows, the one committed after it, and -- until the GPU work that read it
+/// has finished -- the one before; on a busy GPU that one lingers. A fourth
+/// leaves one to draw into.
+fn ring_buffers() -> usize {
+    std::env::var("MORF_PRESENT_BUFFERS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|count| (1..=8).contains(count))
+        .unwrap_or(4)
+}
 
 /// A window's `wl_display` and `wl_surface`, when it is a Wayland one.
 fn wayland_handles(
@@ -223,7 +232,7 @@ async fn open_device(
             wgpu::Features::DUAL_SOURCE_BLENDING
         } else {
             wgpu::Features::empty()
-        },
+        } | super::profile::features(&adapter),
         required_limits: adapter_limits.clone(),
         ..Default::default()
     };
@@ -291,7 +300,7 @@ impl WgpuBackend {
                     backend.buffers = Some(super::present::BufferRing::new(
                         &backend.device,
                         &backend.texture,
-                        RING_BUFFERS,
+                        ring_buffers(),
                         Some(link),
                     ));
                     return Ok(backend);
@@ -461,6 +470,7 @@ impl WgpuBackend {
                 device_ready.as_secs_f64() * 1000.0
             );
         }
+        let profile = super::profile::GpuProfile::new(&device, &queue);
         Ok(Self {
             device,
             queue,
@@ -516,6 +526,7 @@ impl WgpuBackend {
             view,
             surface,
             buffers: None,
+            profile,
             width: width.max(1),
             height: height.max(1),
             info: GpuInfo {
@@ -529,6 +540,15 @@ impl WgpuBackend {
             external_textures: HashMap::new(),
             pending_exports: HashMap::new(),
         })
+    }
+
+    /// Whether this backend commits its surface itself, declaring each
+    /// frame's damage with the buffer that carries it. A host then declares
+    /// none of its own: a frame that finds no buffer free is committed with
+    /// nothing, so the compositor draws nothing for it, and its damage goes
+    /// with the next buffer.
+    pub fn declares_damage(&self) -> bool {
+        self.buffers.is_some()
     }
 
     /// Returns the selected hardware and backend identifiers.

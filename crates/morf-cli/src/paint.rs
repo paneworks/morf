@@ -363,8 +363,14 @@ pub(crate) fn paint_layer(
     let surface = client
         .layer_surface(layer)
         .ok_or_else(|| "layer surface disappeared while painting".to_owned())?;
+    // A backend presenting through its own buffers declares the damage with
+    // the buffer itself (`WgpuBackend::declares_damage`).
+    let declare = !renderer.backend_mut().declares_damage();
     let damage = renderer
         .render(&scene, &layout, scale_120, |damage| {
+            if !declare {
+                return;
+            }
             // What actually changed, rather than the whole surface. A
             // compositor recomposites the area a client declares, so a
             // fullscreen overlay that declares everything costs a full screen
@@ -619,7 +625,9 @@ pub(crate) fn paint_auxiliary_surface(
     runtime.observe_stretch(&layout);
     let scene = runtime.scene();
     let (width, height) = physical_size((surface.width, surface.height), scale_120);
-    kind.damage(client, surface.id, width, height)?;
+    if !renderer.backend_mut().declares_damage() {
+        kind.damage(client, surface.id, width, height)?;
+    }
     let damage = renderer
         .render(&scene, &layout, scale_120, |_| {})
         .map_err(|error| error.to_string())?;
