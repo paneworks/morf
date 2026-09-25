@@ -158,6 +158,34 @@ function M.elastic(node, axis, l0, r0, l1, r1, opts)
   return running[node]
 end
 
+--- The contents of a drawer coming in (`coming`) or going: each of `nodes`
+--- grows evenly about its own centre from 0.92 as it fades in, one a
+--- little after the other (`opts.stagger`, 26 ms; `opts.delay` before the
+--- first), or shrinks a touch and fades as they go. No offsets and no
+--- squash: at rest every node is exactly where and what it was. Returns the
+--- handles, for `stop`.
+function M.bud(nodes, coming, opts)
+  opts = opts or {}
+  local handles = {}
+  for k, n in ipairs(nodes) do
+    local steps
+    if coming then
+      local delay = (opts.delay or 40) + (k - 1) * (opts.stagger or 26)
+      steps = {
+        { node = n, property = "scale", from = opts.from or 0.92, to = 1, duration = 420, easing = theme.ease.spatial, delay = delay },
+        { node = n, property = "opacity", from = 0, to = 1, duration = 220, delay = delay },
+      }
+    else
+      steps = {
+        { node = n, property = "scale", to = 0.96, duration = 160, easing = theme.ease.emphasized_accel },
+        { node = n, property = "opacity", to = 0, duration = 120 },
+      }
+    end
+    handles[#handles + 1] = morf.animation.play { { parallel = steps } }
+  end
+  return handles
+end
+
 -- --------------------------------------------------------------- shapes --
 
 local shapes -- lib/m3shapes, loaded on first use

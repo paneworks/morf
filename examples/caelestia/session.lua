@@ -146,7 +146,7 @@ for _, item in ipairs(ITEMS) do
       end,
       behavior = { fill_color = { duration = theme.duration.small } },
       loop = function()
-        if not (on() and M.drawer.open:get()) then return nil end
+        if not (on() and M.drawer and M.drawer.open:get()) then return nil end
         return { rotation = { to = 360, duration = 12000, hold = true } }
       end,
     }
