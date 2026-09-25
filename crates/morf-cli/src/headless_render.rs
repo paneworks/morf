@@ -127,12 +127,16 @@ pub(crate) fn render_surface(
 pub(crate) fn render_screen(headless: &mut Headless, scale: u32) -> Result<Picture, String> {
     let (width, height) = (headless.screen.0 * scale, headless.screen.1 * scale);
     let mut canvas = vec![0u8; (width * height * 4) as usize];
-    let order = (0..headless.surfaces.len())
+    let mut order = (0..headless.surfaces.len())
         .filter(|index| {
             let surface = &headless.surfaces[*index];
             surface.visible && matches!(surface.kind, "primary" | "layer")
         })
         .collect::<Vec<_>>();
+    // Bottom layer first, as a compositor stacks them: a background layer
+    // declared after the shell's own surface is still under it. Within a
+    // layer, the order they were declared in.
+    order.sort_by_key(|index| headless.surfaces[*index].stack);
     for index in order {
         let (x, y) = headless.surfaces[index].position;
         let picture = draw(headless, index, scale)?;

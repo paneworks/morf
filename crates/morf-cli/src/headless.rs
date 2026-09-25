@@ -92,6 +92,9 @@ pub(crate) struct Surface {
     /// nothing useful for a floating window, which the compositor places.
     pub(crate) position: (i32, i32),
     pub(crate) visible: bool,
+    /// Where a layer-shell compositor stacks it: 0 background, 1 bottom,
+    /// 2 top, 3 overlay. `screen` composes surfaces in this order.
+    pub(crate) stack: u8,
     pub(crate) blend: String,
     pub(crate) layout: Option<Layout>,
     /// The tree revision and size `layout` was computed for.

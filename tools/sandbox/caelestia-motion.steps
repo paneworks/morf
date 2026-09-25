@@ -1,0 +1,26 @@
+# Drawer motion and the dashboard's hover edge, for caelestia on Quickshell
+# and for the morf port alike (MORF_CONFIG=examples/caelestia/init.lua):
+# films of each drawer opening and closing, cropped to it, and where along
+# the top edge the pointer opens the dashboard.
+point 960 800; wait 1
+shot 00-rest
+FILM_GEOMETRY="540,0 900x580"
+open dashboard; film dashboard-open 30; wait 1
+close dashboard; film dashboard-close 30; wait 1
+FILM_GEOMETRY="630,500 660x580"
+open launcher; film launcher-open 30; wait 1
+shot 01-launcher
+close launcher; film launcher-close 30; wait 1
+FILM_GEOMETRY="540,0 900x580"
+point 985 2; film hover-open 30; wait 1
+point 985 300; wait 1.5; shot 02-hover-on-panel
+point 985 800; film hover-leave 30; wait 1.5
+shot 03-hover-after-leave
+point 985 20; wait 1.5; shot 04-hover-y20
+point 985 800; wait 1.5
+point 985 9; wait 1.5; shot 05-hover-y9
+point 985 800; wait 1.5
+point 400 2; wait 1.5; shot 06-hover-x400
+point 985 800; wait 1.5
+point 1500 2; wait 1.5; shot 07-hover-x1500
+point 985 800; wait 1.5
