@@ -373,9 +373,15 @@ end)
 
 -- ------------------------------------------------------------------- hover --
 
+-- The bar items that open a popout.
+local triggers = {}
+
+-- Whether the pointer is on the panel (whatever is under it there) or on
+-- a bar item that keeps it open.
 local function over()
-  for _, a in ipairs(areas) do
-    if a.hovered then return true end
+  if M.drawer.panel.contains_pointer then return true end
+  for _, a in ipairs(triggers) do
+    if a.contains_pointer then return true end
   end
   return false
 end
@@ -388,6 +394,7 @@ function M.trigger(name, child, props)
   props.height = props.height or child.height
   props[#props + 1] = child
   local a = area(props)
+  triggers[#triggers + 1] = a
   morf.effect("caelestia.popout.trigger." .. (props.id or tostring(#areas)), function()
     if a.hovered and name then M.current:set(name) end
   end)

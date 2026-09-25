@@ -8,9 +8,9 @@ and why Lua cannot do it well. Work already under way elsewhere is marked
 Nothing open: every entry found so far is in the engine (below).
 
 Phase 2 (the other dashboard tabs, the launcher's pickers, the session
-menu, the bar's popouts, notifications and the OSD) adds these. Item 1
-bites again there: the bar's popouts keep the same list of areas
-(`popouts.area`), as the dashboard does.
+menu, the bar's popouts, notifications and the OSD) found the entries
+below, all now in the engine too; the popouts shut on `contains_pointer`
+like the dashboard.
 
 ## Engine fixes made in this branch
 
