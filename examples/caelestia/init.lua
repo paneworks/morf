@@ -57,6 +57,8 @@ local launcher = require("launcher")
 local dashboard = require("dashboard")
 local session = require("session")
 require("popouts")
+local osd = require("osd")
+local notifs = require("notifs")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -124,10 +126,18 @@ end
 morf.ipc.launcher = verb(launcher.drawer)
 morf.ipc.dashboard = verb(dashboard.drawer)
 morf.ipc.session = verb(session.drawer)
+morf.ipc.osd = function() osd.flash() return true end
+-- `notify SUMMARY [BODY [critical]]` raises a notification of the shell's
+-- own, as the reference's toaster does.
+morf.ipc.notify = function(summary, body, urgency)
+  return notifs.push { summary = summary, body = body, urgency = urgency == "critical" and 2 or 1 }
+end
 -- `popout NAME` opens the bar's popout NAME (network, bluetooth, power);
 -- `popout` alone shuts it.
 morf.ipc.popout = function(name)
   local popouts = require("popouts")
+local osd = require("osd")
+local notifs = require("notifs")
   popouts.current:set(name or "")
   return popouts.current:get()
 end
