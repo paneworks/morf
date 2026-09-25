@@ -136,8 +136,11 @@ pub(crate) fn log_wake(output: &str, woke: Woke, sleep: &Sleep, slept: Instant) 
         None => "nothing".to_owned(),
     };
     eprintln!(
-        "morf: output {output}: wake: {} after {:.1} ms (planned: {planned})",
+        "{} morf: output {output}: wake: {} after {:.1} ms (planned: {planned})",
+        stamp(),
         wake_cause(woke, sleep),
         slept.elapsed().as_secs_f64() * 1000.0,
     );
 }
+
+pub(crate) use morf_lua::profile::stamp;

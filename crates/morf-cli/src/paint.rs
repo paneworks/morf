@@ -28,12 +28,10 @@ pub(crate) fn paint(
         cache,
     );
     if let Some(started) = started {
-        static FIRST: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-        let since = FIRST.get_or_init(std::time::Instant::now).elapsed();
         eprintln!(
-            "frame on {} at {:.0} ms took {:.2} ms",
+            "{} frame on {} took {:.2} ms",
+            crate::wake_plan::stamp(),
             std::thread::current().name().unwrap_or("?"),
-            since.as_secs_f64() * 1000.0,
             started.elapsed().as_secs_f64() * 1000.0
         );
     }

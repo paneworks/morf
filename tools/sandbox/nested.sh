@@ -113,14 +113,22 @@ hc() { [ -S "\$RUN/hypr/\$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock" ] || { echo 
 k() { timeout 20 "$WTYPE" "\$@" >> \$OUT/input.log 2>&1; }
 shot() { timeout 20 grim \$OUT/\$1.png 2>>\$OUT/input.log; }
 film() {
+  # The two clocks side by side once, so morf's log lines (stamped on the
+  # monotonic clock) line up with the frames (timed on the wall clock).
+  echo "clocks \$(python3 -c 'import time; print(time.clock_gettime_ns(time.CLOCK_MONOTONIC) // 1000000, time.time_ns() // 1000000)')" >> \$OUT/marks
   n=0; t0=\$(date +%s%N)
+  echo "film \$1 wall \$((t0 / 1000000))" >> \$OUT/marks
   while [ \$n -lt \$2 ]; do
     timeout 5 grim -t ppm \${FILM_GEOMETRY:+-g "\$FILM_GEOMETRY"} \$OUT/film-\$1-\$(printf %03d \$n).ppm 2>/dev/null
-    echo "\$n \$(( (\$(date +%s%N) - t0) / 1000000 ))" >> \$OUT/film-\$1.times
+    now=\$(date +%s%N)
+    # Since the film began, and since the last open or close was asked for.
+    echo "\$n \$(( (now - t0) / 1000000 )) \$(( (now - \${REQ:-t0}) / 1000000 ))" >> \$OUT/film-\$1.times
     n=\$((n+1))
   done
 }
 wait() { sleep \$1; }
+# When a request was made: films are timed from it as well.
+asked() { REQ=\$(date +%s%N); echo "\$1 wall \$((REQ / 1000000))" >> \$OUT/marks; }
 hc output create headless HEADLESS-A >> \$OUT/hc.log 2>&1
 sleep 1
 awww-daemon > \$OUT/awww.log 2>&1 &
@@ -130,14 +138,14 @@ awww img "$WALLPAPER" --transition-type none >> \$OUT/awww.log 2>&1
 if [ "$KIND" = upstream ]; then
   quickshell -p \$HOME/.config/quickshell > \$OUT/shell.log 2>&1 &
   S=\$!
-  open() { hc dispatch "hl.dsp.global(\\"quickshell:\$1\\")" >> \$OUT/hc.log 2>&1; }
-  close() { k -k Escape; }
+  open() { asked open; hc dispatch "hl.dsp.global(\\"quickshell:\$1\\")" >> \$OUT/hc.log 2>&1; }
+  close() { asked close; k -k Escape; }
 else
   cd "$REPO"
-  env IMPASTO_LIVE_COMPOSITOR=1 IMPASTO_DRY_RUN=1 nixVulkanIntel "$REPO/target/release/morf" examples/impasto/init.lua > \$OUT/shell.log 2>&1 &
+  env IMPASTO_LIVE_COMPOSITOR=1 IMPASTO_DRY_RUN=1 ${MORF_ENV:-} nixVulkanIntel "$REPO/target/release/morf" examples/impasto/init.lua > \$OUT/shell.log 2>&1 &
   S=\$!
-  open() { timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
-  close() { timeout 10 "$REPO/target/release/morf" ipc call close >> \$OUT/hc.log 2>&1; }
+  open() { asked open; timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
+  close() { asked close; timeout 10 "$REPO/target/release/morf" ipc call close >> \$OUT/hc.log 2>&1; }
 fi
 sleep \${BOOT:-15}
 [ -n "$WTYPE" ] && { timeout \${TIMEOUT:-240} "$WTYPE" -s 400000 > /dev/null 2>&1 & KP=\$!; }

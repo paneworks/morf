@@ -241,6 +241,7 @@ pub(crate) fn parse_step_behavior<'gc>(
         enabled: true,
         color_space: parse_color_space(ctx, table)?,
         hue: parse_hue(ctx, table)?,
+        keep_velocity: true,
     })
 }
 

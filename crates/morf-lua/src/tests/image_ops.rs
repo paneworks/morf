@@ -293,3 +293,41 @@ fn pixels_become_a_source_every_renderer_can_draw() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn files_read_async_arrive_in_order_on_a_later_turn() {
+    let dir = scratch("read-async");
+    std::fs::write(dir.join("one"), "first\n").unwrap();
+    std::fs::write(dir.join("two"), "second").unwrap();
+    let mut runtime = Runtime::default();
+    let source = format!(
+        r##"
+        results = {{}}
+        morf.ipc.result = function(key) return results[key] end
+        local base = "{base}"
+        local sync = false
+        assert(morf.fs.read_async({{ base .. "/one", base .. "/missing", base .. "/two" }},
+            function(ok, contents)
+                assert(ok and #contents == 3)
+                results.files = contents[1] .. "|" .. tostring(contents[2]) .. "|" .. contents[3]
+                    .. "|" .. tostring(sync)
+            end))
+        assert(morf.fs.read_async(base .. "/two", function(ok, contents)
+            results.one = tostring(contents[1])
+        end, 3))
+        -- Never within the call itself.
+        sync = true
+        assert(not pcall(morf.fs.read_async, {{ 7 }}, function() end))
+        assert(not pcall(morf.fs.read_async, base .. "/one", function() end, -1))
+        "##,
+        base = dir.display()
+    );
+    runtime.execute("read.lua", source.as_bytes()).unwrap();
+    assert_eq!(pump(&mut runtime, "files"), "first\n|false|second|true");
+    assert_eq!(
+        pump(&mut runtime, "one"),
+        "false",
+        "over the limit is not read"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

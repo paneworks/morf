@@ -119,6 +119,28 @@ calls back once: `(reply, nil)`, or `(nil, err)` on a refused connection,
 `"timed out"`, or a reply over `max_bytes`. It returns a handle whose
 `:close()` abandons the request.
 
+## Reading off the loop: `morf.fs.read_async`
+
+`morf.fs.read` answers at once, which is right for almost everything. A
+few files are not memory but hardware: a hwmon sensor under
+`/sys/class/hwmon` asks the firmware, and on a laptop one read can take
+tens of milliseconds -- a dozen of them, sampled every few seconds, held
+the loop for 120 ms each time, and every animation on screen with it.
+
+```lua
+morf.fs.read_async({ a, b, c }, function(ok, contents)
+  -- contents[i]: the text of the i-th path, or false where it could not
+  -- be read (missing, unreadable, or larger than the limit)
+end, limit)
+```
+
+The files are read on a worker thread, in order, and the callback runs on
+a later turn of the loop -- never inside the call. `paths` is a list (at
+most 256) or one path; `limit` is the most bytes a file may have (default
+16 MiB) -- a sysfs attribute reports a size of 4096 whatever it holds, so
+leave it out there. Returns `true`, or `nil, message` when too much work
+is already queued; a call that is wrong (not a path, a bad limit) raises.
+
 ## Watching files: `morf.fs.watch`
 
 For a file someone else writes — a settings file another screen saves, a

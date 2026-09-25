@@ -11,6 +11,7 @@ use crate::{
 impl Runtime {
     /// Polls native service jobs and runs completed callbacks with bounded fuel.
     pub fn poll_services(&mut self) -> bool {
+        let _bookkeeping = crate::profile::span(|| "engine: services bookkeeping".to_owned());
         self.flush_lint();
         // The loop wakes when the caret is due to turn over
         // (`Runtime::next_deadline`), so it blinks without a timer of its own.
@@ -158,13 +159,15 @@ impl Runtime {
                     let timer = &state.timers[index];
                     if wake_log_wanted() {
                         eprintln!(
-                            "morf: timer {} fired ({:.0} ms{})",
+                            "{} morf: timer {} fired ({:.0} ms{})",
+                            crate::profile::stamp(),
                             timer.origin,
                             interval.as_secs_f64() * 1000.0,
                             if timer.repeat { ", repeating" } else { "" }
                         );
                     }
                     timers.push(DueTimer {
+                        origin: std::rc::Rc::clone(&timer.origin),
                         id: timer.id,
                         node: timer.node,
                         repeat: timer.repeat,
@@ -342,6 +345,16 @@ impl Runtime {
                 .enter(|ctx| drop_retainable(&self.reactive, ctx, self.limits, node));
         }
         for (node, factory) in loaders {
+            let _span = crate::profile::span(|| {
+                let state = self.reactive.borrow();
+                let origin = self
+                    .lua
+                    .enter(|ctx| crate::profile::closure_origin(ctx.fetch(&factory)));
+                format!(
+                    "loader build {} ({origin})",
+                    crate::runtime_config::lint_path(&state.scene, node)
+                )
+            });
             let result = self
                 .lua
                 .enter(|ctx| execute_node_factory(ctx, &factory, self.limits));
@@ -389,7 +402,10 @@ impl Runtime {
                 }
             }
         }
-        service_changed |= self.sync_pending_views();
+        service_changed |= {
+            let _span = crate::profile::span(|| "engine: views and repeaters".to_owned());
+            self.sync_pending_views()
+        };
         // Whether a repaint is owed is decided after the callbacks below have
         // run, by asking whether the scene actually changed. A callback merely
         // firing is not a reason to render: a 16ms timer that polls a file and
@@ -426,6 +442,7 @@ impl Runtime {
             }
         }
         for (callback, outcome, url, json, handle) in http_answers {
+            let _span = crate::profile::span(|| "http callback".to_owned());
             // Cancelled by an earlier callback in this same batch.
             if handle.cancelled.get() {
                 continue;
@@ -440,6 +457,7 @@ impl Runtime {
             }
         }
         for call in &io_calls {
+            let _span = crate::profile::span(|| "I/O callback".to_owned());
             if let Err(message) =
                 self.run_handler(|ctx, limits| crate::api_io::execute_io_call(ctx, call, limits))
             {
@@ -449,6 +467,7 @@ impl Runtime {
             }
         }
         for call in &watch_calls {
+            let _span = crate::profile::span(|| "fs.watch callback".to_owned());
             if let Err(message) = self
                 .run_handler(|ctx, limits| crate::api_watch::execute_watch_call(ctx, call, limits))
             {
@@ -463,12 +482,14 @@ impl Runtime {
             morf_io::wake_all();
         }
         for DueTimer {
+            origin,
             id,
             node,
             repeat,
             callback,
         } in timers
         {
+            let _span = crate::profile::span(|| format!("timer {origin}"));
             // Collected before this turn's other callbacks, loader drops and
             // earlier timers ran, any of which may have stopped this one or
             // torn its node down. A timer fires only if it is still wanted.
@@ -484,6 +505,7 @@ impl Runtime {
             }
         }
         for (callback, revision) in transform_callbacks {
+            let _span = crate::profile::span(|| "transform callback".to_owned());
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_handler_args(
                     ctx,
@@ -498,6 +520,7 @@ impl Runtime {
             }
         }
         for (callback, event) in pam_messages {
+            let _span = crate::profile::span(|| "PAM session".to_owned());
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_pam_session_handler(ctx, &callback, event, limits)
             }) {
@@ -516,6 +539,7 @@ impl Runtime {
             }
         }
         for (callback, call) in dbus_calls {
+            let _span = crate::profile::span(|| "D-Bus call handler".to_owned());
             if let Err(message) = self
                 .run_handler(|ctx, limits| execute_dbus_call_handler(ctx, &callback, call, limits))
             {
@@ -525,6 +549,7 @@ impl Runtime {
             }
         }
         for (callback, reply) in dbus_replies {
+            let _span = crate::profile::span(|| "D-Bus reply callback".to_owned());
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_dbus_reply_handler(ctx, &callback, reply, limits)
             }) {
@@ -534,6 +559,7 @@ impl Runtime {
             }
         }
         for (id, callback, kind, event) in dbus_signals {
+            let _span = crate::profile::span(|| "D-Bus signal callback".to_owned());
             // Closed by an earlier callback in this same batch: what was
             // already read for it is not delivered, because "after close,
             // nothing" is the promise `close` makes.
@@ -555,6 +581,7 @@ impl Runtime {
             }
         }
         for (callback, event) in udev_events {
+            let _span = crate::profile::span(|| "udev callback".to_owned());
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_dbus_handler(ctx, &callback, udev_event_value(event), limits)
             }) {
@@ -564,6 +591,7 @@ impl Runtime {
             }
         }
         for (callback, items) in status_updates {
+            let _span = crate::profile::span(|| "status notifier callback".to_owned());
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_dbus_handler(ctx, &callback, status_notifier_value(items), limits)
             }) {
@@ -573,7 +601,10 @@ impl Runtime {
                 );
             }
         }
-        self.poll_image_jobs();
+        {
+            let _span = crate::profile::span(|| "engine: image jobs".to_owned());
+            self.poll_image_jobs();
+        }
         service_changed || self.reactive.borrow().scene_revision != revision_before
     }
 }
@@ -602,6 +633,7 @@ impl Runtime {
 
 /// A timer that came due this turn, as collected before any callback ran.
 struct DueTimer {
+    origin: std::rc::Rc<str>,
     id: u64,
     node: Option<NodeHandle>,
     repeat: bool,

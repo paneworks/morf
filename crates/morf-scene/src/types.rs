@@ -237,6 +237,8 @@ pub struct Scene {
     pub(crate) root_revisions: FastMap<NodeId, u64>,
     /// How fast motion runs: 1 is real time, 0 finishes everything at once.
     pub(crate) motion_scale: f64,
+    /// See [`Scene::set_start_on_tick`].
+    pub(crate) start_on_tick: bool,
     /// Nodes destroyed since anyone last asked.
     ///
     /// Every cache keyed on a node lives outside this crate — shaped text

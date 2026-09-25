@@ -27,6 +27,7 @@ impl Animation {
             preserve_velocity,
             clock,
             behavior,
+            fresh: true,
         }
     }
 

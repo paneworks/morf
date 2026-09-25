@@ -142,6 +142,18 @@ fn execute_image_handler(
                     }
                     LuaValue::Table(list)
                 }
+                ImageOutcome::Files(files) => {
+                    let list = Table::new(&ctx);
+                    for (index, file) in files.iter().enumerate() {
+                        let value = match file {
+                            Some(bytes) => LuaValue::String(luna::String::from_slice(&ctx, bytes)),
+                            None => LuaValue::Boolean(false),
+                        };
+                        list.set(ctx, index as i64 + 1, value)
+                            .map_err(|error| error.to_string())?;
+                    }
+                    LuaValue::Table(list)
+                }
             };
             Variadic(vec![LuaValue::Boolean(true), value])
         }

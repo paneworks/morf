@@ -274,7 +274,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                 }
                 LayerEvent::SessionLockFrame { time_ms, .. } => {
                     let frame = runtime
-                        .tick_animations(animation_delta(last_frame, time_ms))
+                        .tick_frame_animations(animation_delta(last_frame, time_ms))
                         .map_err(|error| error.to_string())?;
                     last_frame = frame.active.then_some(time_ms);
                     repaint |= frame.active || frame.changed > 0;

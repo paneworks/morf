@@ -1,5 +1,6 @@
 //! Reactive signal graph for morf.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error as StdError;
 use std::fmt;
@@ -14,7 +15,10 @@ new_key_type! {
 }
 
 struct Signal<T> {
-    name: String,
+    /// For diagnostics only. Borrowed where it can be: a scene makes two
+    /// signals for every property of every node it builds, and formatting a
+    /// name for each was most of what building a node cost.
+    name: Cow<'static, str>,
     value: T,
     subscribers: HashSet<EffectId>,
     producer: Option<EffectId>,
@@ -139,7 +143,7 @@ pub struct EffectContext<'a, T> {
 
 impl<T: Clone + PartialEq + 'static> EffectContext<'_, T> {
     /// Allocates a signal while an external effect captures dependencies.
-    pub fn signal(&mut self, name: impl Into<String>, value: T) -> SignalId {
+    pub fn signal(&mut self, name: impl Into<Cow<'static, str>>, value: T) -> SignalId {
         self.graph.signal(name, value)
     }
 
@@ -204,6 +208,11 @@ impl PendingEffect {
     pub fn token(&self) -> u64 {
         self.token
     }
+
+    /// The name the effect was registered under.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 /// A generational signal arena with dynamic dependency capture.
@@ -235,7 +244,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
     }
 
     /// Allocates a named signal and returns its generational handle.
-    pub fn signal(&mut self, name: impl Into<String>, value: T) -> SignalId {
+    pub fn signal(&mut self, name: impl Into<Cow<'static, str>>, value: T) -> SignalId {
         self.signals.insert(Signal {
             name: name.into(),
             value,
@@ -329,7 +338,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
                     .dependencies
                     .iter()
                     .filter_map(|signal| self.signals.get(*signal))
-                    .map(|signal| signal.name.clone())
+                    .map(|signal| signal.name.to_string())
                     .collect::<Vec<_>>();
                 signals.sort();
                 DependencyEntry {
@@ -554,7 +563,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
                     .originals
                     .entry(signal)
                     .or_insert_with(|| (slot.value.clone(), slot.producer));
-                written_names.push(slot.name.clone());
+                written_names.push(slot.name.to_string());
             }
             self.write_from(signal, value, Some(effect))
                 .map_err(|error| error.to_string())?;

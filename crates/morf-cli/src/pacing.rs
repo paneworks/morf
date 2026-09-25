@@ -106,7 +106,7 @@ pub(crate) fn primary_frame(
     let mut repaint = false;
     let delta = animation_delta(state.last_frame, time_ms);
     let frame = runtime
-        .tick_animations(delta)
+        .tick_frame_animations(delta)
         .map_err(|error| error.to_string())?;
     // Carried forward only while motion continues, so the next run of
     // animation starts from a clean timebase rather than inheriting

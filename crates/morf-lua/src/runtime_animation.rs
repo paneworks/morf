@@ -47,6 +47,15 @@ impl Runtime {
         self.reactive.borrow().scene.has_motion()
     }
 
+    /// [`Self::tick_animations`] for a loop driven by a display's frames:
+    /// an animation asked for since the last frame starts on this one, its
+    /// first frame drawn at its start however long the gap before it was
+    /// (see `Scene::set_start_on_tick`).
+    pub fn tick_frame_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
+        self.reactive.borrow_mut().scene.set_start_on_tick(true);
+        self.tick_animations(delta)
+    }
+
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
         let frame = self
             .reactive

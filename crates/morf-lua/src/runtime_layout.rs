@@ -68,19 +68,29 @@ impl Runtime {
             state
                 .property_signals
                 .keys()
-                .filter(|(_, property, _)| property == LAYOUT_GEOMETRY)
-                .map(|(node, _, _)| *node)
-                .filter(|node| {
-                    layout
-                        .geometry(*node)
-                        .is_some_and(|now| state.transform_tracker.geometry(*node) != Some(now))
+                .filter_map(|(node, property, _)| {
+                    let size = match property.as_str() {
+                        LAYOUT_SIZE => true,
+                        LAYOUT_POSITION => false,
+                        _ => return None,
+                    };
+                    let now = layout.geometry(*node)?;
+                    let before = state.transform_tracker.geometry(*node);
+                    let changed = match before {
+                        None => true,
+                        Some(before) if size => {
+                            before.width != now.width || before.height != now.height
+                        }
+                        Some(before) => before.x != now.x || before.y != now.y,
+                    };
+                    changed.then_some((*node, if size { LAYOUT_SIZE } else { LAYOUT_POSITION }))
                 })
                 .collect::<Vec<_>>()
         };
         let mut state = self.reactive.borrow_mut();
         state.transform_tracker.update(layout);
-        for node in &moved {
-            let _ = bump_property_signal(&mut state, *node, LAYOUT_GEOMETRY, false);
+        for (node, which) in &moved {
+            let _ = bump_property_signal(&mut state, *node, which, false);
         }
         drop(state);
         if !moved.is_empty()

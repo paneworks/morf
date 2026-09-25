@@ -573,8 +573,10 @@ fn drive_surface(
 /// Says, on stderr, when one stage of the loop held the output longer than a
 /// person notices: a configuration that blocks in a handler, a layout that
 /// takes a quarter second. Silent for anything quicker; `MORF_SLOW_MS` sets
-/// the threshold (default 150).
-fn slow(name: &str, what: &str, since: Instant) {
+/// the threshold (default 150). Under `MORF_PROFILE`, a slow stage also says
+/// whose work filled it, the costliest first; either way what the profiler
+/// gathered is dropped here, so the next stage starts clean.
+pub(crate) fn slow(name: &str, what: &str, since: Instant) {
     static THRESHOLD: std::sync::OnceLock<u128> = std::sync::OnceLock::new();
     let threshold = *THRESHOLD.get_or_init(|| {
         std::env::var("MORF_SLOW_MS")
@@ -584,9 +586,17 @@ fn slow(name: &str, what: &str, since: Instant) {
     });
     let took = since.elapsed().as_millis();
     if took >= threshold {
-        eprintln!("morf: output {name}: {what} took {took} ms");
+        eprintln!("{} morf: output {name}: {what} took {took} ms", stamp());
+        for line in morf_lua::profile::report(PROFILE_LINES) {
+            eprintln!("    {line}");
+        }
+    } else {
+        morf_lua::profile::clear();
     }
 }
+
+/// How many of a slow stage's costliest pieces of work `MORF_PROFILE` names.
+const PROFILE_LINES: usize = 12;
 
 /// What an event is, for `slow`.
 fn event_kind(event: &LayerEvent) -> &'static str {
@@ -638,7 +648,7 @@ fn advance_without_callbacks(
     state.fallback_tick = Some(now);
     state.last_frame = None;
     let frame = runtime
-        .tick_animations(delta)
+        .tick_frame_animations(delta)
         .map_err(|error| error.to_string())?;
     if frame.active || frame.changed > 0 || state.animating_shaders {
         state.primary_deferred = true;

@@ -119,8 +119,68 @@ macro_rules! fail {
     }};
 }
 
-pub(crate) fn install_fs_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
+/// The most files one `fs.read_async` reads.
+const MAX_ASYNC_FILES: usize = 256;
+
+pub(crate) fn install_fs_api<'gc>(
+    ctx: Context<'gc>,
+    morf: Table<'gc>,
+    state: std::rc::Rc<std::cell::RefCell<crate::state::ReactiveState>>,
+) {
     let fs = Table::new(&ctx);
+
+    // `read_async({ path, ... }, function(ok, contents) end)`: the files are
+    // read on a worker, and the callback gets, on a later turn, a list in
+    // the same order -- each file's text, or `false` where it could not be
+    // read. For files whose read may block: a sensor, a slow mount.
+    fs.set_field(
+        ctx,
+        "read_async",
+        Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let (paths, callback, limit): (LuaValue, luna::Closure, LuaValue) =
+                stack.consume(ctx)?;
+            let paths = match paths {
+                LuaValue::Table(list) => {
+                    let mut out = Vec::new();
+                    for index in 1..=MAX_ASYNC_FILES as i64 + 1 {
+                        let value = list.get_value(ctx, index);
+                        if value.is_nil() {
+                            break;
+                        }
+                        if out.len() == MAX_ASYNC_FILES {
+                            return Err(HostError(format!(
+                                "fs.read_async reads at most {MAX_ASYNC_FILES} files"
+                            ))
+                            .into());
+                        }
+                        out.push(path_of(value, "fs.read_async")?);
+                    }
+                    out
+                }
+                value => vec![path_of(value, "fs.read_async")?],
+            };
+            let limit = match limit {
+                LuaValue::Nil => DEFAULT_READ,
+                LuaValue::Integer(limit) => u64::try_from(limit)
+                    .ok()
+                    .filter(|limit| *limit <= MAX_BYTES)
+                    .ok_or_else(|| {
+                        HostError(format!("fs.read_async limit must be 0..{MAX_BYTES}"))
+                    })?,
+                _ => return Err(HostError("fs.read_async limit must be an integer".into()).into()),
+            };
+            let job = crate::image_jobs::ImageJob::ReadFiles { paths, limit };
+            let submitted = state
+                .borrow_mut()
+                .image_jobs
+                .submit(job, Some(ctx.stash(callback)));
+            match submitted {
+                Ok(()) => stack.replace(ctx, true),
+                Err(message) => fail!(stack, ctx, message),
+            }
+            Ok(CallbackReturn::Return)
+        }),
+    );
 
     fs.set_field(
         ctx,

@@ -72,7 +72,10 @@ wide; it can be `visible = false`.
 
 What the frame actually gave a node is readable as `node.layout_x`,
 `layout_y`, `layout_width`, `layout_height`. A binding that reads one is
-re-run when a frame moves the node:
+re-run when a frame changes it: one that reads the size, when the node is
+resized; one that reads the position, when it moves. (A label inside a
+panel that slides or grows moves on every frame and keeps its size; a
+binding on its size stays still.)
 
 ```lua
 local box = ui.Item { anchors = { fill = true } }
@@ -487,6 +490,14 @@ installed after construction, so nothing animates its own creation;
 `enter` (section 6) says where a first frame starts instead.
 Animated *current* values do not re-run bindings; read `_target` for the
 destination, or use a `morf.transform_watcher` for the moving value.
+A write while the property is still moving goes on from where it is, over
+the whole duration again, carrying its speed into the new path;
+`retarget = "restart"` drops the speed and runs the whole easing curve
+again from there, which is what Qt's `Behavior { NumberAnimation {} }`
+does. On the display, an animation starts on the first frame after it was
+asked for: a frame that came late -- the turn that asked also built a
+panel -- is not charged to it, so its first frame is its first value
+rather than a jump part of the way.
 `morf.animation.fling` coasts a property.
 
 `morf.animation.play { ... }` runs a group: its array part is a sequence of
@@ -1278,8 +1289,33 @@ printed on stderr:
 | Variable | Prints |
 |---|---|
 | `MORF_WAKE_LOG=1` | every wake and its cause: `compositor`, `wake fd` (a service thread), or `deadline: timer`, `caret`, `image`, `dbus-timeout`, `terminal`, `tray-retry`, `clock-seconds`, `clock-minutes`, `clock-hours`, `fallback`, `pending` (the last turn left work), with how long it slept; each timer as it fires, named by the `file:line` that made it (`ui.Timer at …` for a node); and, every two seconds while anything animates, what is moving (`path.property`, marked `(loops)` when it never ends) |
-| `MORF_FRAME_LOG=1` | every painted frame and what it cost |
+| `MORF_FRAME_LOG=1` | every painted frame and what it cost; `=2` also splits any frame over 16 ms into layout, render and the rest |
 | `MORF_SLOW_MS=N` | any stage of a turn that held the output longer than N ms (default 150) |
+| `MORF_PROFILE=1` | with each slow stage, whose work filled it (below) |
+
+Every line these print starts with the time, `[12345.678]`: milliseconds
+on the monotonic clock (`CLOCK_MONOTONIC`, Python's `time.monotonic()`), so
+a log can be lined up with a screen recording or another process's log.
+
+`MORF_PROFILE=1` names what a slow stage spent its time on, the costliest
+first, each with its own time (what it ran itself), its total (with what
+it called), and how often it ran:
+
+```
+[3302451.528] morf: output DP-1: services, timers and callbacks took 74 ms
+      10.98 ms own   69.51 ms total    1x  loader build … > ClipRect > Item > Loader (bar.island:359)
+       9.20 ms own   20.34 ms total  251x  construct ui.Rect
+       4.12 ms own    4.12 ms total   42x  binding Rect.color (bar.controls.calendar_card:153)
+     126.46 ms own  126.46 ms total    1x  handler services.stats:44
+```
+
+A `binding` is named by the node path and property it drives, an `effect`
+by the name `morf.effect` gave it, a `handler` (a timer, a callback, a
+click) by the `file:line` of its function; a `timer`, `loader build`,
+`ipc` verb or `construct ui.X` holds whatever ran inside it. `blocking
+D-Bus call`, `get` and `set` are the synchronous `morf.dbus` calls -- a
+turn that waits on the bus says so. `engine: …` is the engine's own
+bookkeeping between them. Off, it costs nothing.
 
 A shell that wakes more than it should says why under `MORF_WAKE_LOG`:
 a `clock-seconds` every second is a binding reading `morf.clock` where
