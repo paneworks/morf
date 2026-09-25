@@ -1,6 +1,7 @@
 -- Small pieces every part of the shell uses: a Material Symbols icon, text
 -- in the shell's face, a rounded card.
 
+local morf = require("morf")
 local ui = require("morf.ui")
 local theme = require("theme")
 
@@ -79,13 +80,120 @@ end
 --- Gives a MouseArea a rounded background whose colour follows its hover:
 --- `color(hovered)`. (Built after the area, so the binding can read it.)
 function M.hover(area, color, radius)
+  radius = radius or 0
   local bg = ui.Rect {
-    anchors = { fill = true }, z = -1, radius = radius or 0,
+    anchors = { fill = true }, z = -1,
+    -- M3 expressive: pressed, a round button squares up, and springs back.
+    radius = function() return area.pressed and radius * 0.45 or radius end,
     color = function() return color(area.hovered) end,
-    behavior = { color = { duration = theme.duration.small } },
+    behavior = {
+      color = { duration = theme.duration.small },
+      radius = ui.spring { stiffness = 520, damping = 22 },
+    },
   }
   ui.reparent(bg, area)
   return area
+end
+
+-- ----------------------------------------------------------------- motion --
+
+--- A spring for a `behavior`: the port's one feel for things that move
+--- under a hand (selections, thumbs, indicators).
+function M.spring(stiffness, damping)
+  return ui.spring { stiffness = stiffness or 320, damping = damping or 24 }
+end
+
+--- Squash and stretch for something that travels (see UI.md, `stretch`).
+M.STRETCH = { stiffness = 260, damping = 14, scale = 0.14, max = 0.3 }
+
+--- Moves a bar from `[l0, r0]` to `[l1, r1]` along `axis` ("x" or "y")
+--- the way an M3 indicator does: the edge in front leaves first and fast,
+--- the one behind follows, so the bar stretches out towards its target and
+--- draws itself in there. `node`'s position and size are driven with dense
+--- keyframes of the two edges' curves.
+local running = setmetatable({}, { __mode = "k" })
+function M.elastic(node, axis, l0, r0, l1, r1, opts)
+  opts = opts or {}
+  local size = axis == "x" and "width" or "height"
+  local duration = opts.duration or 500
+  local lead = opts.lead or theme.ease.emphasized_decel
+  local trail = opts.trail or theme.ease.standard
+  local forward = l1 >= l0
+  -- The leading edge covers its way in the first 55 % of the time, the
+  -- trailing one starts a little late and takes the rest.
+  local function edge(from, to, t, leading)
+    local u
+    if leading then u = math.min(1, t / 0.55)
+    else u = math.max(0, math.min(1, (t - 0.18) / 0.82)) end
+    local k = morf.easing.value(leading and lead or trail, u)
+    return from + (to - from) * k
+  end
+  local pos, len = {}, {}
+  local N = 16
+  for i = 0, N do
+    local t = i / N
+    local l = edge(l0, l1, t, not forward)
+    local r = edge(r0, r1, t, forward)
+    pos[#pos + 1] = { at = t, value = l }
+    len[#len + 1] = { at = t, value = math.max(0, r - l) }
+  end
+  if running[node] then running[node]:stop() end
+  running[node] = morf.animation.play {
+    {
+      parallel = {
+        { node = node, property = axis, duration = duration, keyframes = pos },
+        { node = node, property = size, duration = duration, keyframes = len },
+      },
+    },
+  }
+  return running[node]
+end
+
+-- --------------------------------------------------------------- shapes --
+
+local shapes -- lib/m3shapes, loaded on first use
+
+--- An M3 expressive shape that morphs whenever `shape()` changes (see
+--- lib/m3shapes: `shapes.Shape`). `props` as a `ui.Path`'s; `color` a
+--- binding; `duration`, `easing`.
+function M.shape(props)
+  shapes = shapes or require("lib.m3shapes")
+  props.easing = props.easing or theme.ease.spatial
+  props.duration = props.duration or 450
+  return shapes.Shape(props)
+end
+
+-- The loading indicator's shapes, in the order M3 expressive cycles them.
+local LOADING = { "soft_burst", "cookie9", "pentagon", "pill", "sunny", "cookie4", "oval", "flower" }
+
+--- M3 expressive's loading indicator: a shape that morphs from one to the
+--- next every 650 ms while turning, in `color`, `size` across. `active()`
+--- (a binding, default always) runs it; stopped, it rests.
+function M.loading(size, color, props)
+  props = props or {}
+  local step = morf.signal("caelestia.loading." .. tostring(props.id or math.random(1e9)), 1)
+  local active = props.active or function() return true end
+  props.active = nil
+  local timer
+  morf.effect("caelestia.loading.run." .. tostring(step), function()
+    if active() then
+      if not timer then
+        timer = morf.timer(650, function() step:set(step:get() % #LOADING + 1) end, true)
+      end
+    elseif timer then
+      timer:cancel()
+      timer = nil
+    end
+  end)
+  props.width, props.height = size, size
+  props.shape = function() return LOADING[step:get()] end
+  props.color = color
+  props.duration = 500
+  props.loop = function()
+    if not active() then return nil end
+    return { rotation = { to = 360, duration = 2600, hold = true } }
+  end
+  return M.shape(props)
 end
 
 -- ---------------------------------------------------------------- controls --

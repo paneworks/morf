@@ -55,30 +55,35 @@ local function workspaces()
     local active = services.workspace.active()
     return math.floor((active - 1) / shown) * shown + 1
   end
+  -- The pill is one distance field: a dot per workspace, and the active
+  -- workspace's disc, which rolls from dot to dot on a spring, squashing
+  -- and stretching as it goes and melting into each dot it passes (a
+  -- smooth union: the dots bulge towards it and pinch off behind).
+  local grow = kit.spring(420, 24)
+  local layers = {}
   local slots = {}
   for i = 1, shown do
     local id = function() return first() + i - 1 end
-    slots[#slots + 1] = ui.Item {
+    local centre = PILL_PAD + (i - 1) * SLOT + SLOT / 2
+    local function size() return services.workspace.occupied(id()) and 10 or 7 end
+    layers[#layers + 1] = ui.SdfShape {
+      id = "workspace-dot-" .. i,
+      shape = "circle",
+      operation = i == 1 and "union" or "smooth_union",
+      x = function() return 20 - size() / 2 end,
+      y = function() return centre - size() / 2 end,
+      width = size, height = size,
+      fill_color = function()
+        return services.workspace.occupied(id()) and C.onSurfaceVariant or C.outlineVariant
+      end,
+      behavior = { x = grow, y = grow, width = grow, height = grow, fill_color = { duration = theme.duration.small } },
+    }
+    slots[#slots + 1] = ui.MouseArea {
       id = "workspace-slot-" .. i,
-      width = 40, height = SLOT,
-      ui.Rect {
-        anchors = { center_in = true },
-        width = function() return services.workspace.occupied(id()) and 10 or 8 end,
-        height = function() return services.workspace.occupied(id()) and 10 or 8 end,
-        radius = 5,
-        color = function()
-          return services.workspace.occupied(id()) and C.onSurfaceVariant or C.outlineVariant
-        end,
-        behavior = { color = { duration = theme.duration.small } },
-      },
-      ui.MouseArea {
-        anchors = { fill = true }, cursor = "pointer",
-        on_clicked = function() services.workspace.go(id()) end,
-      },
+      width = 40, height = SLOT, cursor = "pointer",
+      on_clicked = function() services.workspace.go(id()) end,
     }
   end
-  -- The active one: a disc that slides from slot to slot, with a cookie
-  -- cut into it.
   local indicator = ui.Item {
     id = "workspace-active",
     x = 4, width = 32, height = 32,
@@ -86,23 +91,37 @@ local function workspaces()
       local active = services.workspace.active()
       return PILL_PAD + (active - first()) * SLOT + (SLOT - 32) / 2
     end,
-    behavior = { y = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel } },
-    ui.Rect { anchors = { fill = true }, radius = 16, color = function() return C.primary end },
+    behavior = { y = kit.spring(230, 19) },
+    stretch = kit.STRETCH,
+    -- The flower rolls as the disc does: a quarter turn per workspace.
     ui.Path {
       anchors = { center_in = true }, width = 21, height = 21,
       view_box = { 0, 0, 100, 100 },
       d = shapes.path("flower"),
       fill_color = function() return C.onPrimary end,
+      rotation = function() return services.workspace.active() * 90 end,
+      behavior = { rotation = kit.spring(160, 16) },
     },
   }
+  layers[#layers + 1] = ui.SdfShape {
+    id = "workspace-active-shape",
+    shape = "box", radius = 16,
+    operation = "smooth_union",
+    track = indicator,
+    fill_color = function() return C.primary end,
+  }
+  layers.id = "workspace-field"
+  layers.anchors = { fill = true }
+  layers.blend = 10
   return ui.Rect {
     id = "workspaces",
     width = 40,
     height = shown * SLOT + 2 * PILL_PAD,
     radius = 20,
     color = function() return C.surfaceContainer end,
-    ui.Column { y = PILL_PAD, gap = 0, table.unpack(slots) },
+    ui.Sdf(layers),
     indicator,
+    ui.Column { y = PILL_PAD, gap = 0, table.unpack(slots) },
     ui.MouseArea {
       anchors = { fill = true }, z = -1,
       on_wheel = function(_, _, _, _, _, step_y)

@@ -21,7 +21,13 @@ end
 
 M.workspace = {}
 
+-- Off Hyprland there are no workspaces to switch; the bar still moves its
+-- indicator where it is clicked (and `workspace N` over IPC), so the
+-- control answers.
+local local_workspace = morf.signal("caelestia.workspace", 1)
+
 function M.workspace.active()
+  if not hyprland.available() then return local_workspace:get() end
   local id = hyprland.state.active_workspace.id
   if type(id) ~= "number" or id < 1 then return 1 end
   return id
@@ -37,11 +43,13 @@ function M.workspace.occupied(id)
 end
 
 function M.workspace.go(id)
-  if hyprland.available() then hyprland.dispatch("workspace", tostring(id)) end
+  if hyprland.available() then hyprland.dispatch("workspace", tostring(id))
+  else local_workspace:set(math.max(1, math.floor(tonumber(id) or 1))) end
 end
 
 function M.workspace.step(delta)
-  if hyprland.available() then hyprland.dispatch("workspace", (delta > 0 and "r+1" or "r-1")) end
+  if hyprland.available() then hyprland.dispatch("workspace", (delta > 0 and "r+1" or "r-1"))
+  else local_workspace:set(math.max(1, local_workspace:get() + (delta > 0 and 1 or -1))) end
 end
 
 -- ---------------------------------------------------------------- window --

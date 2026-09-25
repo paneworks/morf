@@ -126,6 +126,10 @@ end
 morf.ipc.launcher = verb(launcher.drawer)
 morf.ipc.dashboard = verb(dashboard.drawer)
 morf.ipc.session = verb(session.drawer)
+morf.ipc.workspace = function(n)
+  require("services").workspace.go(n)
+  return require("services").workspace.active()
+end
 morf.ipc.osd = function() osd.flash() return true end
 -- `notify SUMMARY [BODY [critical]]` raises a notification of the shell's
 -- own, as the reference's toaster does.

@@ -100,22 +100,54 @@ local function tabs()
     ui.reparent(wash, button)
     buttons[#buttons + 1] = button
   end
-  -- The indicator: as wide as the chosen label, sliding under it.
-  local indicator = ui.Rect {
+  -- The indicator: as wide as the chosen label, under it. It is a layer
+  -- of a small distance field with the hairline beneath it, which it melts
+  -- into at its foot; moving to another tab it stretches out ahead, the
+  -- edge in front first and the one behind after (kit.elastic), and draws
+  -- itself in at the new tab.
+  local function span(i, panel_width)
+    local l = labels[i]
+    local w = (l and l.layout_width or 80) + 4
+    local s = (panel_width - 2 * PAD) / #TABS
+    local x = (i - 1) * s + (s - w) / 2
+    return x, x + w
+  end
+  local indicator = ui.Item {
     id = "dashboard-tab-indicator",
     y = TABS_H - 4, height = 3,
-    top_left_radius = 3, top_right_radius = 3,
-    color = function() return C.primary end,
-    width = function()
-      local l = labels[M.tab:get()]
-      return (l and l.layout_width or 80) + 4
-    end,
-    x = function()
-      local l = labels[M.tab:get()]
-      local w = (l and l.layout_width or 80) + 4
-      return (M.tab:get() - 1) * slot() + (slot() - w) / 2
-    end,
-    behavior = { x = SWITCH, width = SWITCH },
+    x = 0, width = 0,
+  }
+  local shown_tab, moved = 1, false
+  morf.effect("caelestia.dashboard.indicator", function()
+    local tab = M.tab:get()
+    -- Until the first switch it follows the label's width as it is laid
+    -- out; after, each switch runs from tab to tab.
+    local l1, r1 = span(tab, width())
+    if tab == shown_tab then
+      if not moved then indicator.x, indicator.width = l1, r1 - l1 end
+      return
+    end
+    local from = shown_tab
+    shown_tab, moved = tab, true
+    local l0, r0 = span(from, M.size(from))
+    kit.elastic(indicator, "x", l0, r0, l1, r1, { duration = 520 })
+  end)
+  local field = ui.Sdf {
+    id = "dashboard-tab-field",
+    anchors = { left = true, right = true }, y = TABS_H - 8, height = 8,
+    blend = 3,
+    ui.SdfShape {
+      shape = "box", operation = "union",
+      anchors = { left = true, right = true }, y = 7, height = 1,
+      fill_color = function() return C.outlineVariant end,
+    },
+    ui.SdfShape {
+      id = "dashboard-tab-indicator-shape",
+      shape = "box", operation = "smooth_union",
+      top_left_radius = 1.5, top_right_radius = 1.5,
+      track = indicator,
+      fill_color = function() return C.primary end,
+    },
   }
   return ui.Item {
     anchors = { left = true, right = true, left_margin = PAD, right_margin = PAD },
@@ -124,11 +156,8 @@ local function tabs()
       anchors = { fill = true, bottom_margin = 4 }, direction = "row", padding = 0,
       table.unpack(buttons),
     },
+    field,
     indicator,
-    ui.Rect {
-      anchors = { left = true, right = true }, y = TABS_H - 1, height = 1,
-      color = function() return C.outlineVariant end,
-    },
   }
 end
 
