@@ -224,13 +224,23 @@ function lyrics.follow(media, opts)
       show(lyrics.index_at(parsed, media.position()))
     end, opts)
   end)
-  local timer = morf.timer(opts.tick_ms or 100, function()
-    if parsed.synced and media.state.active.playing then
-      show(lyrics.index_at(parsed, media.position()))
+  -- The line is looked up only while synced lyrics play: an idle shell is
+  -- not woken ten times a second for a song that is not there.
+  local timer
+  local ticking = morf.effect(name .. ".tick", function()
+    local run = f.status:get() == "synced" and media.state.active.playing == true
+    if run and not timer then
+      timer = morf.timer(opts.tick_ms or 100, function()
+        show(lyrics.index_at(parsed, media.position()))
+      end, true)
+    elseif not run and timer then
+      timer:cancel()
+      timer = nil
     end
-  end, true)
+  end)
   function f.stop()
-    if timer then timer:cancel() end
+    if timer then timer:cancel() timer = nil end
+    if ticking and ticking.dispose then ticking:dispose() end
     if effect and effect.dispose then effect:dispose() end
   end
   return f
