@@ -41,6 +41,20 @@ pub(crate) fn text_attrs<'a>(
         .style(slant)
         .stretch(stretch)
         .letter_spacing(style.letter_spacing as f32 / size.max(1.0))
+        .font_variations(crate::variations::font_variations(
+            &style.variation_axes(size),
+        ))
+}
+
+/// The weight text is shaped at: a `wght` among the axes wins over
+/// `font_weight`.
+pub(crate) fn shaping_weight(options: &morf_layout::TextOptions) -> u16 {
+    crate::normalize_font_weight(
+        options
+            .style
+            .axis(b"wght")
+            .map_or(options.font_weight, f64::from),
+    )
 }
 
 pub(crate) fn text_metrics(size: f32, style: &TextStyle) -> Metrics {

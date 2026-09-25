@@ -102,6 +102,27 @@ impl FontStretch {
     }
 }
 
+/// Whether a face's optical size follows the font size.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum OpticalSizing {
+    /// A face with an `opsz` axis is set at the font size in pixels, unless
+    /// `axes` names `opsz` -- CSS's `font-optical-sizing: auto`.
+    #[default]
+    Auto,
+    /// `opsz` stays at the face's default unless `axes` names it.
+    None,
+}
+
+impl OpticalSizing {
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "auto" => Some(Self::Auto),
+            "none" => Some(Self::None),
+            _ => None,
+        }
+    }
+}
+
 /// Everything about how text is set besides its family, size and weight.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TextStyle {
@@ -119,6 +140,8 @@ pub struct TextStyle {
     pub link_color: Option<morf_scene::Color>,
     /// A variable font's axis settings, in tag order.
     pub axes: Vec<FontAxis>,
+    /// Whether `opsz` follows the size when `axes` does not name it.
+    pub optical_sizing: OpticalSizing,
 }
 
 /// One variation axis of a variable font set to a value, in the font's own
@@ -224,7 +247,37 @@ impl TextStyle {
             } else {
                 Vec::new()
             },
+            optical_sizing: if scene.has_property(node, "optical_sizing")? {
+                let name = scene.string_value(node, "optical_sizing")?;
+                OpticalSizing::parse(name).ok_or_else(|| {
+                    LayoutError::Scene(format!(
+                        "Text: optical_sizing `{name}` is not auto or none"
+                    ))
+                })?
+            } else {
+                OpticalSizing::Auto
+            },
         })
+    }
+
+    /// The axes a face of this style is set at at `size` pixels, besides
+    /// `wght` (the weight, which shaping has already): those `axes` names,
+    /// and `opsz` at the size when optical sizing is automatic and `axes`
+    /// does not name it. A face without one of them ignores it.
+    pub fn variation_axes(&self, size: f32) -> Vec<FontAxis> {
+        let mut axes: Vec<FontAxis> = self
+            .axes
+            .iter()
+            .filter(|axis| &axis.tag != b"wght")
+            .copied()
+            .collect();
+        if self.optical_sizing == OpticalSizing::Auto && self.axis(b"opsz").is_none() {
+            axes.push(FontAxis {
+                tag: *b"opsz",
+                value: size,
+            });
+        }
+        axes
     }
 
     /// The value set for one axis, if any.
@@ -253,12 +306,18 @@ impl TextStyle {
             link_color: self
                 .link_color
                 .map(|color| [color.red, color.green, color.blue, color.alpha].map(f32::to_bits)),
+            axes: self
+                .axes
+                .iter()
+                .map(|axis| (axis.tag, axis.value.to_bits()))
+                .collect(),
+            optical_sizing: self.optical_sizing,
         }
     }
 }
 
 /// A text style as a hashable key.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TextStyleKey {
     line_kind: u8,
     line_value: u64,
@@ -268,4 +327,7 @@ pub struct TextStyleKey {
     font_stretch: FontStretch,
     rich: u64,
     link_color: Option<[u32; 4]>,
+    /// Every axis moves glyphs, so every axis is part of the layout.
+    axes: Vec<([u8; 4], u32)>,
+    optical_sizing: OpticalSizing,
 }

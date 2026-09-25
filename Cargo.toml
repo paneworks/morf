@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# Vendored dependencies are patched sources, not members: they are neither
+# linted nor tested as ours.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.3"
@@ -62,6 +65,15 @@ morf-services = { path = "crates/morf-services" }
 morf-terminal = { path = "crates/morf-terminal" }
 morf-text = { path = "crates/morf-text" }
 morf-wayland = { path = "crates/morf-wayland" }
+
+# cosmic-text 0.19.0 with one change: `Attrs::variations`, a variable font's
+# axes beyond `wght`, reaching the shaper. Upstream shapes every face at its
+# default point but for the weight, so an axis that changes advances (`opsz`,
+# `wdth`) was drawn at one width and measured at another. The patch is in
+# `vendor/cosmic-text` (its changes are marked `morf:`); dropping it means
+# going back to measuring such axes at their defaults.
+[patch.crates-io]
+cosmic-text = { path = "vendor/cosmic-text" }
 
 [profile.release]
 # Speed, not size. This was `"s"`, which asks the optimiser to keep the binary

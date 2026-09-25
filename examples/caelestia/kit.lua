@@ -46,8 +46,16 @@ end
 function M.text(props)
   props.font_family = props.font_family or theme.font
   if theme.font_file ~= "" and props.font_source == nil then props.font_source = theme.font_file end
-  if props.font_weight and props.axes == nil then props.axes = { wght = props.font_weight } end
   props.font_size = props.font_size or theme.size.normal
+  -- The reference's font builder sets `opsz` to the size in points (morf's
+  -- automatic optical sizing, like CSS's, uses pixels, which reads a size
+  -- larger and sets it tighter) and `ROND` 25 on every face. A face without
+  -- those axes ignores them.
+  if props.axes == nil and type(props.font_size) == "number" then
+    props.axes = { opsz = props.font_size * 3 / 4, ROND = 25, wght = props.font_weight }
+  elseif props.font_weight and props.axes == nil then
+    props.axes = { wght = props.font_weight }
+  end
   if props.color == nil then props.color = function() return theme.color.onSurface end end
   return ui.Text(props)
 end

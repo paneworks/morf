@@ -126,7 +126,11 @@ pub(crate) fn span_attrs<'a>(
         let span_size = span_size as f32;
         attrs = attrs
             .metrics(text_metrics(span_size, style))
-            .letter_spacing(style.letter_spacing as f32 / span_size.max(1.0));
+            .letter_spacing(style.letter_spacing as f32 / span_size.max(1.0))
+            // Optically sized at its own size.
+            .font_variations(crate::variations::font_variations(
+                &style.variation_axes(span_size),
+            ));
     } else {
         let _ = size;
     }

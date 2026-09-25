@@ -3,7 +3,9 @@
 --
 -- A strip of Material Symbols icons: the selected one fills in (FILL 0 -> 1)
 -- and grows bolder, the way a navigation rail marks where you are. Below it,
--- a line set at every weight of whichever variable sans is installed.
+-- a line set at every weight of whichever variable sans is installed, and,
+-- where a face with a `wdth` axis is found, lines at three widths and a small
+-- line with and without optical sizing.
 --
 --     morf render examples/font_axes.lua -o axes.png
 --     morf test examples/tests/font_axes_spec.lua
@@ -15,8 +17,8 @@ local ui = require("morf.ui")
 
 morf.surface.namespace = "font-axes"
 morf.surface.anchors = {}
-morf.surface.width = 560
-morf.surface.height = 260
+morf.surface.width = 620
+morf.surface.height = 310
 
 local ICONS = { "home", "search", "favorite", "notifications", "settings" }
 local ICON_FAMILY = "Material Symbols Rounded"
@@ -103,6 +105,56 @@ for weight = 100, 900, 200 do
   }
 end
 
+-- Axes that move the glyphs apart as well as reshape them: a face with a
+-- `wdth` axis (Google Sans Flex, Roboto Flex, or the file FONT_AXES_FLEX
+-- names) set at three widths, and a small line of it with optical sizing
+-- on (`opsz` follows the size, the default) and off.
+local flex_file = (morf.env and morf.env("FONT_AXES_FLEX")) or ""
+if flex_file ~= "" and not morf.fs.exists(flex_file) then flex_file = "" end
+local flex
+for _, family in ipairs { "Google Sans Flex", "Roboto Flex" } do
+  if flex_file ~= "" or has_axis(family, "wdth") then
+    flex = family
+    break
+  end
+end
+
+local flex_rows = {}
+if flex then
+  local function flex_text(props)
+    props.font_family = flex
+    if flex_file ~= "" then props.font_source = flex_file end
+    props.color = props.color or "#e8eaf6"
+    return ui.Text(props)
+  end
+  local widths = {}
+  for _, wdth in ipairs { 50, 100, 151 } do
+    widths[#widths + 1] = flex_text {
+      id = "wdth-" .. wdth, text = "Width " .. wdth, font_size = 24,
+      axes = { wdth = wdth },
+    }
+  end
+  flex_rows[1] = ui.Row { id = "widths", gap = 22, table.unpack(widths) }
+  flex_rows[2] = ui.Row {
+    id = "optical", gap = 22,
+    flex_text { id = "optical-auto", text = "Optical size at 12 px", font_size = 12 },
+    flex_text {
+      id = "optical-none", text = "Optical size at 12 px", font_size = 12,
+      optical_sizing = "none", color = "#9aa0ae",
+    },
+  }
+end
+
+local rows = flex_rows
+rows[#rows + 1] = ui.Text {
+  id = "caption",
+  text = (icons_fill and "" or "(no " .. ICON_FAMILY .. " with a FILL axis here) ")
+    .. "icons: " .. ICON_FAMILY .. " · weights: " .. sans
+    .. " · widths: " .. (flex or "(no face with a wdth axis here)"),
+  font_size = 13,
+  color = "#9aa0ae",
+}
+
 ui.Rect {
   id = "panel",
   anchors = { fill = true },
@@ -112,12 +164,6 @@ ui.Rect {
     x = 24, y = 20, gap = 18,
     ui.Row { id = "tabs", gap = 14, table.unpack(tabs) },
     ui.Row { id = "weights", gap = 22, table.unpack(weights) },
-    ui.Text {
-      id = "caption",
-      text = (icons_fill and "" or "(no " .. ICON_FAMILY .. " with a FILL axis here) ")
-        .. "icons: " .. ICON_FAMILY .. " · weights: " .. sans,
-      font_size = 13,
-      color = "#9aa0ae",
-    },
+    table.unpack(rows),
   },
 }

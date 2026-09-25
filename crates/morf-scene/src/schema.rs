@@ -177,6 +177,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 // `{ FILL = 1, GRAD = 0, opsz = 24, wght = 500 }`. A map of
                 // numbers, so a behavior moves it like any other number.
                 any("axes", Value::Map(BTreeMap::new())),
+                // `auto` sets a face's `opsz` axis to the font size unless
+                // `axes` names it, as CSS does; `none` leaves it at its default.
+                string("optical_sizing", "auto"),
                 // `{ line, thickness, offset, color }`; empty is none.
                 any("decoration", Value::Map(BTreeMap::new())),
                 boolean("wrap", false),
@@ -228,6 +231,7 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 string("font_style", "normal"),
                 string("font_stretch", "normal"),
                 any("axes", Value::Map(BTreeMap::new())),
+                string("optical_sizing", "auto"),
                 string("horizontal_alignment", "left"),
                 // Where a single line sits in a box taller than it. Several
                 // lines always start at the top and scroll.

@@ -1,0 +1,15 @@
+# A tour of the caelestia port for someone watching a VISIBLE=1 sandbox,
+# then the session left to them (the run ends at TIMEOUT). Nothing repeats.
+point 960 600; wait 3
+open launcher; wait 3
+k ki; wait 3
+k -k BackSpace -k BackSpace; k ">"; wait 3
+close; wait 2
+open dashboard; wait 4
+click 879 45; wait 3
+click 670 45; wait 3
+point 960 800; close; wait 2
+# Yours from here: hover the top edge for the dashboard, the power button,
+# the bar; `morf ipc call launcher` is not reachable from outside, so the
+# tour opened it once.
+wait 3600
