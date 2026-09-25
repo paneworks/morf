@@ -94,6 +94,147 @@ fn shared_instance() -> wgpu::Instance {
         .clone()
 }
 
+/// One opened GPU device, which every backend on that adapter draws with.
+///
+/// Opening a device is most of what bringing a surface up costs -- a few
+/// hundred milliseconds on a laptop's integrated GPU, for every layer
+/// surface, popup and output -- and each one held its own copy of every
+/// driver-side structure. The surfaces of one process draw on one GPU, so
+/// they share one device and one queue; each keeps its own swapchain,
+/// targets, pipelines and atlases.
+#[derive(Clone)]
+pub(crate) struct SharedDevice {
+    adapter: wgpu::Adapter,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    dmabuf: Option<crate::gpu::dmabuf::DmabufSupport>,
+    lcd_supported: bool,
+}
+
+/// The devices opened so far, one per adapter.
+///
+/// Usually one. A second appears only when a surface cannot be presented
+/// from an adapter already open -- an output wired to another GPU -- which
+/// is asked of each adapter before its device is reused.
+fn shared_devices() -> &'static std::sync::Mutex<Vec<SharedDevice>> {
+    static DEVICES: std::sync::OnceLock<std::sync::Mutex<Vec<SharedDevice>>> =
+        std::sync::OnceLock::new();
+    DEVICES.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// `MORF_GPU_SHARED=0`: every backend opens a device of its own, as before
+/// devices were shared. For measuring the difference.
+fn sharing_wanted() -> bool {
+    static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *WANTED.get_or_init(|| std::env::var("MORF_GPU_SHARED").map_or(true, |value| value != "0"))
+}
+
+/// How many devices this process has opened, for tests and diagnostics.
+pub fn opened_device_count() -> usize {
+    OPENED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+static OPENED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// The device to draw `surface` with (or offscreen, without one): an open
+/// one whose adapter can present to it, or a new one.
+///
+/// Two outputs coming up at once may both find nothing to share and open a
+/// device each; the second to finish takes the first's instead, and its own
+/// is dropped, so the process still ends up with one.
+async fn device_for(
+    instance: &wgpu::Instance,
+    surface: Option<&wgpu::Surface<'static>>,
+) -> Result<SharedDevice, GpuError> {
+    if !sharing_wanted() {
+        return open_device(instance, surface).await;
+    }
+    let reusable = |devices: &[SharedDevice]| {
+        devices
+            .iter()
+            .find(|shared| {
+                surface.is_none_or(|surface| shared.adapter.is_surface_supported(surface))
+            })
+            .cloned()
+    };
+    let lock = || {
+        shared_devices()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    };
+    let found = reusable(&lock());
+    if let Some(shared) = found {
+        return Ok(shared);
+    }
+    let opened = open_device(instance, surface).await?;
+    let mut devices = lock();
+    if let Some(shared) = reusable(&devices) {
+        return Ok(shared);
+    }
+    devices.push(opened.clone());
+    Ok(opened)
+}
+
+async fn open_device(
+    instance: &wgpu::Instance,
+    surface: Option<&wgpu::Surface<'static>>,
+) -> Result<SharedDevice, GpuError> {
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::LowPower,
+            force_fallback_adapter: false,
+            compatible_surface: surface,
+            apply_limit_buckets: false,
+        })
+        .await
+        .map_err(|error| GpuError(format!("no compatible GPU adapter: {error}")))?;
+    let adapter_limits = adapter.limits();
+    // Subpixel text blends each channel by its own coverage, which takes
+    // a second fragment output to the blend unit. Asked for only where
+    // the adapter has it; without it text stays greyscale.
+    let lcd_supported = std::env::var_os("MORF_NO_DUAL_SOURCE").is_none()
+        && adapter
+            .features()
+            .contains(wgpu::Features::DUAL_SOURCE_BLENDING);
+    let descriptor = wgpu::DeviceDescriptor {
+        label: Some("morf device"),
+        required_features: if lcd_supported {
+            wgpu::Features::DUAL_SOURCE_BLENDING
+        } else {
+            wgpu::Features::empty()
+        },
+        required_limits: adapter_limits.clone(),
+        ..Default::default()
+    };
+    // Through wgpu-hal when the device can export dmabufs, so the
+    // extensions that need enabling at creation are enabled; through wgpu
+    // as usual otherwise, which is the same device without them.
+    let (device, queue, dmabuf) = match open_with_dmabuf(instance, &adapter, &descriptor) {
+        Some((device, queue, support)) => (device, queue, Some(support)),
+        None => {
+            let (device, queue) = adapter
+                .request_device(&descriptor)
+                .await
+                .map_err(|error| GpuError(format!("could not create GPU device: {error}")))?;
+            (device, queue, None)
+        }
+    };
+    // A validation error -- a surface a nested compositor briefly will not
+    // configure, say -- is logged and the frame is skipped, rather than a
+    // panic that takes the output's thread with it.
+    device.on_uncaptured_error(std::sync::Arc::new(|error: wgpu::Error| {
+        eprintln!("morf: gpu: {error}");
+    }));
+    OPENED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Ok(SharedDevice {
+        adapter,
+        device,
+        queue,
+        dmabuf,
+        lcd_supported,
+    })
+}
+
 impl WgpuBackend {
     /// Selects a Vulkan or GLES adapter and creates an offscreen render target.
     pub async fn new(width: u32, height: u32) -> Result<Self, GpuError> {
@@ -118,53 +259,17 @@ impl WgpuBackend {
         width: u32,
         height: u32,
     ) -> Result<Self, GpuError> {
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::LowPower,
-                force_fallback_adapter: false,
-                compatible_surface: surface.as_ref(),
-                apply_limit_buckets: false,
-            })
-            .await
-            .map_err(|error| GpuError(format!("no compatible GPU adapter: {error}")))?;
+        let started = std::time::Instant::now();
+        let opened_before = opened_device_count();
+        let SharedDevice {
+            adapter,
+            device,
+            queue,
+            dmabuf,
+            lcd_supported,
+        } = device_for(&instance, surface.as_ref()).await?;
+        let device_ready = started.elapsed();
         let adapter_info = adapter.get_info();
-        let adapter_limits = adapter.limits();
-        // Subpixel text blends each channel by its own coverage, which takes
-        // a second fragment output to the blend unit. Asked for only where
-        // the adapter has it; without it text stays greyscale.
-        let lcd_supported = std::env::var_os("MORF_NO_DUAL_SOURCE").is_none()
-            && adapter
-                .features()
-                .contains(wgpu::Features::DUAL_SOURCE_BLENDING);
-        let descriptor = wgpu::DeviceDescriptor {
-            label: Some("morf device"),
-            required_features: if lcd_supported {
-                wgpu::Features::DUAL_SOURCE_BLENDING
-            } else {
-                wgpu::Features::empty()
-            },
-            required_limits: adapter_limits.clone(),
-            ..Default::default()
-        };
-        // Through wgpu-hal when the device can export dmabufs, so the
-        // extensions that need enabling at creation are enabled; through wgpu
-        // as usual otherwise, which is the same device without them.
-        let (device, queue, dmabuf) = match open_with_dmabuf(&instance, &adapter, &descriptor) {
-            Some((device, queue, support)) => (device, queue, Some(support)),
-            None => {
-                let (device, queue) = adapter
-                    .request_device(&descriptor)
-                    .await
-                    .map_err(|error| GpuError(format!("could not create GPU device: {error}")))?;
-                (device, queue, None)
-            }
-        };
-        // A validation error -- a surface a nested compositor briefly will not
-        // configure, say -- is logged and the frame is skipped, rather than a
-        // panic that takes the output's thread with it.
-        device.on_uncaptured_error(std::sync::Arc::new(|error: wgpu::Error| {
-            eprintln!("morf: gpu: {error}");
-        }));
         let viewport_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("morf viewport layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -281,6 +386,22 @@ impl WgpuBackend {
             })
             .transpose()?;
 
+        // `MORF_GPU_LOG=1`: what bringing a backend up cost, and how much of
+        // it was the device.
+        if std::env::var_os("MORF_GPU_LOG").is_some() {
+            eprintln!(
+                "morf: gpu: backend {}x{} ready in {:.1} ms; device {} in {:.1} ms",
+                width,
+                height,
+                started.elapsed().as_secs_f64() * 1000.0,
+                if opened_device_count() > opened_before {
+                    "opened"
+                } else {
+                    "shared"
+                },
+                device_ready.as_secs_f64() * 1000.0
+            );
+        }
         Ok(Self {
             device,
             queue,

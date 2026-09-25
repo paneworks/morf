@@ -235,7 +235,21 @@ test.describe("impasto bar", function()
     test.settle(500)
     test.eq(test.ipc("bluetooth_demo", "Andreu's WH-1000XM4 Headphones"), "Andreu's WH-1000XM4 Headphones")
     test.advance(32)
-    local text = test.get { text = "Andreu's WH-1000XM4 Headphones" }
+    -- The chip's, not the one in the control centre, which is built ahead
+    -- and waits hidden inside the island.
+    local function in_island(node)
+      local handle = node.parent
+      while handle do
+        local up = test.find(function(n) return n.handle == handle end)
+        if not up then return false end
+        if up.id == "island" then return true end
+        handle = up.parent
+      end
+      return false
+    end
+    local text = test.get(function(n)
+      return n.text == "Andreu's WH-1000XM4 Headphones" and not in_island(n)
+    end)
     -- Up its ancestors: the capsule is the first box as tall as the bar's
     -- capsules that holds more than the chip, and it clips.
     local clipped_by = {}

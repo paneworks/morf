@@ -157,6 +157,9 @@ impl Runtime {
                 }
                 let keep = state.scene.bool_value(node, "keep").unwrap_or(false);
                 let preload = state.scene.bool_value(node, "preload").unwrap_or(false);
+                // A hidden item stays while the Loader holds it for a reason:
+                // kept, or built ahead of being asked for.
+                let preloaded_and_waiting = preload && state.dormant_loaders.contains(&node);
                 if requested && state.dormant_loaders.remove(&node) {
                     // Built already: shown, not built again.
                     let children = state.scene.children(node).unwrap_or_default().to_vec();
@@ -207,10 +210,8 @@ impl Runtime {
                     service_changed = true;
                 } else if !requested
                     && state.loaded_loaders.contains(&node)
-                    // A hidden item stays while the Loader holds it for a
-                    // reason: kept, or built ahead of being asked for.
-                    && !(state.dormant_loaders.contains(&node) && (keep || preload))
                     && !keep
+                    && !preloaded_and_waiting
                 {
                     state.loaded_loaders.remove(&node);
                     state.dormant_loaders.remove(&node);

@@ -365,3 +365,41 @@ pub(crate) fn glyph_shelves_reserve_padding_and_wrap_rows() {
     assert_eq!(allocator.allocate(1022, 20), Some((1025, 1)));
     assert_eq!(allocator.allocate(1, 1), Some((1, 23)));
 }
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn backends_share_one_device_and_draw_side_by_side() {
+    // Opened once for the process: every backend after the first, on any
+    // thread, draws with the device the first one opened.
+    let first = pollster::block_on(WgpuBackend::new(8, 8)).unwrap();
+    let opened = crate::opened_device_count();
+    let others = (0..4)
+        .map(|index| {
+            std::thread::spawn(move || {
+                let mut backend = pollster::block_on(WgpuBackend::new(8, 8)).unwrap();
+                let shade = 40 * (index + 1);
+                let list = DrawList {
+                    commands: vec![test_quad(
+                        morf_scene::Scene::new().create(morf_scene::Element::Rect),
+                        Color::rgba8(shade, 0, 0, 255),
+                        Color::rgba8(0, 0, 0, 0),
+                        0.0,
+                    )],
+                    layers: Vec::new(),
+                };
+                let pixels = crate::gpu::field_tests::read_frame(&mut backend, &list, 8);
+                (backend.device.clone(), shade, pixels[0])
+            })
+        })
+        .collect::<Vec<_>>();
+    for other in others {
+        let (device, shade, red) = other.join().unwrap();
+        assert!(device == first.device, "the same device");
+        // Each drew its own frame into its own target on the shared queue.
+        assert!(
+            (i32::from(red) - i32::from(shade)).abs() <= 24,
+            "drew its own red: {red} for {shade}"
+        );
+    }
+    assert_eq!(crate::opened_device_count(), opened, "and opened no other");
+}
