@@ -320,7 +320,7 @@ local function build()
         on_exited = function() hovered:set(false) end,
         -- Left focuses, right closes, middle toggles floating; the panel
         -- stays open for the last two.
-        on_clicked = function(button)
+        on_clicked = function(_, _, _, _, button)
           if button == "right" then
             workspaces.close_window(address)
             return
