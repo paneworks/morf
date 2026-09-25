@@ -18,8 +18,10 @@
 #   open PANEL   the same panel word for either impasto; for caelestia one of
 #                its global shortcuts (launcher dashboard sidebar utilities
 #                session showall lock nexus ...)
-#   close        close whatever is open (Escape)
-#   click X Y [B] move the nested pointer to X,Y and click (needs WLRCTL)
+#   close        close whatever is open (Escape; caelestia: every open drawer)
+#   point X Y    move the nested pointer to X,Y (hover)
+#   click X Y [B] move it there and click B (left, right, middle)
+#   scroll N     N wheel steps where the pointer is (negative: up)
 #   ipc ARGS     caelestia: `qs ipc call ARGS`, e.g. `ipc drawers toggle osd`
 #   notify ARGS  caelestia: a real notify-send, on the private bus only
 #   shot LABEL   a screenshot of the nested output
@@ -30,7 +32,7 @@
 # Environment: WORK (scratch root, default ${TMPDIR:-/tmp}/morf-sandbox),
 # UPSTREAM, MORF_REPO, BOOT (s before the steps), TIMEOUT, WALLPAPER,
 # RENDER_NODE (cage renders with GL here; pixman screenshots can be stale),
-# AWWW_BIN, INTER_DIR, WTYPE, WLRCTL (tools taken from these when not on PATH),
+# AWWW_BIN, INTER_DIR, WTYPE (tools taken from these when not on PATH),
 # CAELESTIA, CAELESTIA_PKG, CAEL_CONFIG (a shell.json to seed), CAEL_SCHEME (a
 # scheme.json to seed; without one caelestia keeps its built-in palette),
 # NIXGL (GL wrapper for the nix-built Quickshell, default nixGLIntel).
@@ -45,7 +47,6 @@ OUT=$WORK/out/$KIND-$NAME; rm -rf "$OUT"; mkdir -p "$OUT"
 H=$WORK/home-$KIND; chmod -R u+w "$H" 2>/dev/null || true; rm -rf "$H"; mkdir -p "$H"
 UPHOME=$UPSTREAM/home
 WTYPE=${WTYPE:-$(command -v wtype || true)}
-WLRCTL=${WLRCTL:-$(command -v wlrctl || true)}
 CAELESTIA=${CAELESTIA:-$WORK/caelestia}
 CAELESTIA_PKG=${CAELESTIA_PKG:-$WORK/caelestia-pkg}
 
@@ -79,10 +80,11 @@ if [ "$KIND" = caelestia ]; then
   [ -x "$CAELESTIA_PKG/bin/caelestia-shell" ] || { echo "no caelestia build at $CAELESTIA_PKG" >&2; exit 1; }
   # caelestia's own reach into the machine: its CLI (wallpaper, schemes,
   # recording, screenshots), GPU probes, VPN clients, fingerprint and face
-  # unlock probes, ping, the session commands.
+  # unlock probe (it answers "nothing enrolled"), ping, the session commands.
   for c in swappy gpu-screen-recorder nvidia-smi lspci glxinfo warp-cli tailscale \
-           netbird wg-quick ping asdbctl fprintd-list howdy logout hibernate suspend app2unit; do
-    printf '#!/bin/sh\necho "%s $*" >> "%s/stubbed.log"\nexit 0\n' "$c" "$OUT" > "$H/shim/$c"
+           netbird wg-quick ping asdbctl fprintd-list logout hibernate suspend app2unit; do
+    code=0; [ "$c" = fprintd-list ] && code=1
+    printf '#!/bin/sh\necho "%s $*" >> "%s/stubbed.log"\nexit %s\n' "$c" "$OUT" "$code" > "$H/shim/$c"
     chmod +x "$H/shim/$c"
   done
   # Only logged, except that `caelestia wallpaper -f P` records P where the
@@ -167,12 +169,15 @@ export HYPRLAND_INSTANCE_SIGNATURE=\$SIG WAYLAND_DISPLAY=\$HWL
 echo "cage=\$CAGE_DISPLAY nested=\$HWL sig=\$SIG runtime=\$XDG_RUNTIME_DIR" > \$OUT/env
 hc() { [ -S "\$RUN/hypr/\$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock" ] || { echo "REFUSING hc" >> \$OUT/refused; return 1; }; timeout 10 hyprctl --instance \$HYPRLAND_INSTANCE_SIGNATURE "\$@"; }
 k() { timeout 20 "$WTYPE" "\$@" >> \$OUT/input.log 2>&1; }
-# The pointer is the nested compositor's alone: moved by its own dispatcher,
-# clicked through a virtual pointer on its socket.
-click() {
-  hc dispatch "hl.dsp.cursor.move({ x = \$1, y = \$2 })" >> \$OUT/hc.log 2>&1
-  sleep 0.2; asked click; timeout 10 "$WLRCTL" pointer click \${3:-left} >> \$OUT/input.log 2>&1
-}
+# The pointer is the nested compositor's alone: one virtual pointer on its
+# socket for the whole run (vpointer.py), fed through a FIFO.
+mkfifo \$RUN/pointer
+python3 "$HERE/vpointer.py" \$RUN/pointer 1920 1080 >> \$OUT/input.log 2>&1 &
+VP=\$!
+pointer() { timeout 5 sh -c 'echo "\$1" > \$2' _ "\$1" \$RUN/pointer; }
+point() { asked point; pointer "to \$1 \$2"; }
+click() { point \$1 \$2; sleep 0.2; asked click; pointer "click \${3:-left}"; }
+scroll() { asked scroll; pointer "scroll \$1"; }
 shot() { timeout 20 grim \$OUT/\$1.png 2>>\$OUT/input.log; }
 film() {
   # The two clocks side by side once, so morf's log lines (stamped on the
@@ -202,12 +207,31 @@ fi
 if [ "$KIND" = caelestia ]; then
   # caelestia paints its own wallpaper. Its Quickshell and Qt come from nix,
   # so it needs nix's GL driver too.
+  # The system's data dirs, as a login would have them -- not whatever a
+  # dev shell left in XDG_DATA_DIRS -- so the launcher lists the
+  # installed applications.
+  export XDG_DATA_DIRS=/usr/local/share:/usr/share
   . "$H/caelestia-env"
   \${NIXGL:-nixGLIntel} "\$QS" -p "$CAELESTIA" > \$OUT/shell.log 2>&1 &
   S=\$!
-  open() { asked open; hc dispatch "hl.dsp.global(\\"caelestia:\$1\\")" >> \$OUT/hc.log 2>&1; }
-  close() { asked close; k -k Escape; }
-  ipc() { asked ipc; timeout 10 "\$QS" -p "$CAELESTIA" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
+  qsipc() { timeout 10 "\$QS" -p "$CAELESTIA" ipc call "\$@" 2>> \$OUT/hc.log; }
+  # Its global shortcuts, as its keybinds send them -- except the launcher,
+  # which toggles on the key's release, and a dispatched global only
+  # presses: that one goes through its IPC toggle instead.
+  open() {
+    asked open
+    if [ "\$1" = launcher ]; then qsipc drawers toggle launcher >> \$OUT/hc.log
+    else hc dispatch "hl.dsp.global(\\"caelestia:\$1\\")" >> \$OUT/hc.log 2>&1; fi
+  }
+  # Not every drawer closes on Escape (the dashboard closes on leave), so
+  # every open one is toggled shut over IPC.
+  close() {
+    asked close
+    for d in \$(qsipc drawers list); do
+      [ "\$(qsipc drawers isOpen \$d)" = 1 ] && qsipc drawers toggle \$d >> \$OUT/hc.log
+    done
+  }
+  ipc() { asked ipc; qsipc "\$@" >> \$OUT/hc.log; }
   notify() { asked notify; timeout 10 /usr/bin/notify-send "\$@" >> \$OUT/hc.log 2>&1; }
 elif [ "$KIND" = upstream ]; then
   quickshell -p \$HOME/.config/quickshell > \$OUT/shell.log 2>&1 &
@@ -228,7 +252,7 @@ kill \$S \${AW:-} 2>/dev/null
 sleep 1
 kill \$HP 2>/dev/null
 sleep 1
-kill \$PP \${KP:-} 2>/dev/null
+kill \$PP \${KP:-} \$VP 2>/dev/null
 INNER
 chmod +x "$OUT/inner.sh"
 env -u HYPRLAND_INSTANCE_SIGNATURE -u NIRI_SOCKET -u SWAYSOCK -u I3SOCK -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u DISPLAY \
