@@ -134,7 +134,7 @@ if [ "$KIND" = upstream ]; then
   close() { k -k Escape; }
 else
   cd "$REPO"
-  env IMPASTO_LIVE_COMPOSITOR=1 IMPASTO_DRY_RUN=1 nixVulkanIntel "$REPO/target/release/morf" examples/impasto/init.lua > \$OUT/shell.log 2>&1 &
+  env IMPASTO_LIVE_COMPOSITOR=1 IMPASTO_DRY_RUN=1 ${MORF_ENV:-} nixVulkanIntel "$REPO/target/release/morf" examples/impasto/init.lua > \$OUT/shell.log 2>&1 &
   S=\$!
   open() { timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
   close() { timeout 10 "$REPO/target/release/morf" ipc call close >> \$OUT/hc.log 2>&1; }
