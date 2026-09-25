@@ -345,6 +345,17 @@ utilities.drawer.shape.top_left_radius = function()
   return M.drawer.open:get() and 0 or theme.ROUNDING
 end
 
+--- A click on the desk shuts the sidebar (and the utilities with it): an
+--- invisible catcher under the panels, there only while it is open.
+function M.catcher()
+  return ui.MouseArea {
+    id = "sidebar-catcher",
+    anchors = { fill = true },
+    visible = function() return M.drawer.open:get() end,
+    on_clicked = function() M.drawer.set(false) end,
+  }
+end
+
 -- Opening it opens the utilities; closing it closes them. No popups drop
 -- in over it.
 local was = false

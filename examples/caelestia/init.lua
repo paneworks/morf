@@ -99,6 +99,8 @@ local panels = {
   clip = true,
   -- The desk dims under the session menu.
   session.dim(),
+  -- A click on the desk shuts the sidebar.
+  require("sidebar").catcher(),
 }
 for _, d in ipairs(drawer.all) do panels[#panels + 1] = d.panel end
 
