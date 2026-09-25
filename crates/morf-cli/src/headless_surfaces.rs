@@ -77,6 +77,7 @@ impl Headless {
                     size,
                     position: placed(&config, size, self.screen),
                     visible: true,
+                    stack: layer_stack(&config.layer),
                     blend: config.blend.clone(),
                     layout: None,
                     laid: None,
@@ -99,6 +100,11 @@ impl Headless {
             let visible =
                 window_surface_effectively_visible(surface.id, &by_id, &mut HashSet::new());
             let fallback = self.root_size(surface.root);
+            let stack = match &surface.kind {
+                WindowSurfaceKind::Layer(config) => layer_stack(&config.layer),
+                // A popup or window is above every layer but the overlay.
+                _ => 2,
+            };
             let (role, kind, name, size, position, blend) = match &surface.kind {
                 WindowSurfaceKind::Popup(config) => (
                     SurfaceRole::Popup(surface.id),
@@ -162,6 +168,7 @@ impl Headless {
                 size,
                 position,
                 visible,
+                stack,
                 blend,
                 layout: None,
                 laid: None,
@@ -296,4 +303,31 @@ fn placed(
             config.margin_bottom,
         ),
     )
+}
+
+/// A layer-shell layer's place in the stack, bottom first; an unknown name
+/// is `top`, the layer a surface gets when it names none.
+pub(crate) fn layer_stack(layer: &str) -> u8 {
+    match layer {
+        "background" => 0,
+        "bottom" => 1,
+        "overlay" => 3,
+        _ => 2,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::layer_stack;
+
+    #[test]
+    fn surfaces_compose_bottom_layer_first_and_keep_their_order_within_one() {
+        // Declared order: the shell's own surface (top), then a wallpaper
+        // (background), a dock (top), a lock curtain (overlay), a desk (bottom).
+        let declared = ["top", "background", "top", "overlay", "bottom"];
+        let mut order = (0..declared.len()).collect::<Vec<_>>();
+        order.sort_by_key(|index| layer_stack(declared[*index]));
+        assert_eq!(order, vec![1, 4, 0, 2, 3]);
+        assert_eq!(layer_stack(""), layer_stack("top"));
+    }
 }
