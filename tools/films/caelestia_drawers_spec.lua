@@ -68,6 +68,15 @@ test.describe("caelestia drawers", function()
     test.click { id = "utilities-recordings" }
     test.settle(1000)
     test.snapshot("rest-utilities-recordings.png", { surface = "screen" })
+    test.click { id = "utilities-recordings" }
+    test.settle(1000)
+    -- The recorder's modes: the selection slides to the row under the
+    -- pointer.
+    test.click { id = "utilities-record-mode" }
+    test.settle(800)
+    local row = test.get { id = "utilities-mode-region" }
+    test.move(row.x + row.width / 2, row.y + row.height / 2)
+    film("utilities-mode", 14, 16)
   end)
 
   test.it("sidebar: empty, at rest, opening and closing", function()

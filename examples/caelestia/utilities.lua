@@ -149,12 +149,12 @@ local function switch(spec)
     ui.Item {
       y = 1, width = 28, height = 28,
       x = function() return on() and 23 or 1 end,
-      behavior = { x = { duration = 300, easing = theme.ease.emphasized_decel } },
+      behavior = { x = { duration = 300, easing = theme.ease.standard } },
       ui.Item {
         anchors = { fill = true },
         -- A whole turn across, so at rest it is as it was.
         rotation = function() return on() and 360 or 0 end,
-        behavior = { rotation = { duration = 300, easing = theme.ease.emphasized_decel } },
+        behavior = { rotation = { duration = 300, easing = theme.ease.standard } },
         kit.shape {
           id = spec.id .. "-thumb",
           anchors = { fill = true },
@@ -303,7 +303,7 @@ end
 local function mode_menu()
   local rows = {}
   for _, m in ipairs(MODES) do
-    rows[#rows + 1] = kit.hover(ui.MouseArea {
+    rows[#rows + 1] = ui.MouseArea {
       id = "utilities-mode-" .. m.id,
       width = 160, height = 40, cursor = "pointer",
       on_clicked = function() M.mode:set(m.id) menu_open:set(false) end,
@@ -312,17 +312,29 @@ local function mode_menu()
         kit.icon(m.icon, 20, function() return C.onSurface end),
         kit.text { text = m.label, font_size = theme.size.normal },
       },
-    }, function(hovered)
-      if M.mode:get() == m.id then return C.secondaryContainer end
-      return hovered and C.onSurface:alpha(0.08) or C.onSurface:alpha(0)
-    end, 12)
+    }
   end
+  -- The selection is one blob under the rows: it slides to the row under
+  -- the pointer (else the chosen mode's) and settles there, square to it.
+  local function at()
+    for i, r in ipairs(rows) do if r.hovered then return i end end
+    for i, m in ipairs(MODES) do if m.id == M.mode:get() then return i end end
+    return 1
+  end
+  local blob = ui.Rect {
+    id = "utilities-mode-blob",
+    x = 6, width = 160, height = 40, radius = 12,
+    y = function() return 6 + (at() - 1) * 40 end,
+    color = function() return C.secondaryContainer end,
+    behavior = { y = ui.spring { stiffness = 420, damping = 41 } },
+  }
   local menu = ui.Rect {
     id = "utilities-mode-menu",
     anchors = { right = true, right_margin = 16 }, y = 68, z = 10,
     width = 172, height = #MODES * 40 + 12, radius = 16,
     color = function() return C.surfaceContainerHigh end,
     visible = function() return menu_open:get() end,
+    blob,
     ui.Column { x = 6, y = 6, gap = 0, table.unpack(rows) },
   }
   morf.effect("caelestia.utilities.menu.bud", function()
