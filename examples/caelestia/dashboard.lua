@@ -27,6 +27,15 @@ local C = theme.color
 local M = {}
 
 local PAD, GAP = 16, 12
+-- The cards of each tab are not rectangles but layers of one distance
+-- field under the pages (kit.collect): they bud out as the dashboard opens
+-- or a tab comes in, fuse into one another while they move, and pull apart
+-- as they settle.
+local LAYERS = { {}, {}, {}, {} }
+kit.collect(LAYERS[2]) require("dashboard_media")
+kit.collect(LAYERS[3]) require("dashboard_performance")
+kit.collect(LAYERS[4]) require("dashboard_weather")
+kit.collect(LAYERS[1])
 -- Each tab's page (the panel less its padding and the tabs).
 local PAGE = {
   { 840, 439 },
@@ -602,6 +611,63 @@ local pages = {
   require("dashboard_performance").page,
   require("dashboard_weather").page,
 }
+kit.collect(nil)
+
+-- ----------------------------------------------------------------- liquid --
+
+-- While cards move, the field's seams are wide and soft, so neighbours
+-- fuse; once they settle the seams close and the cards stand apart.
+local liquid = morf.signal("caelestia.dashboard.liquid", false)
+local calm
+local function stir(ms)
+  liquid:set(true)
+  if calm then calm:cancel() end
+  calm = morf.timer(ms, function() calm = nil liquid:set(false) end, false)
+end
+
+local field = {
+  id = "dashboard-cards",
+  anchors = { fill = true },
+  blend = function() return liquid:get() and 30 or 1 end,
+  behavior = { blend = { duration = 420, easing = theme.ease.standard } },
+}
+for _, list in ipairs(LAYERS) do
+  for _, entry in ipairs(list) do field[#field + 1] = entry.shape end
+end
+local cards_field = ui.Sdf(field)
+
+local running = {}
+--- The cards of tab `i` bud out (`coming`) -- each from small, a little
+--- above where it sits, on the expressive spatial spring, one after the
+--- other -- or melt back up and away.
+local function bud(i, coming)
+  for _, r in ipairs(running[i] or {}) do r:stop() end
+  running[i] = {}
+  for k, entry in ipairs(LAYERS[i] or {}) do
+    local n = entry.node
+    local steps
+    if coming then
+      local ms = 640
+      local ease = theme.ease.spatial
+      steps = {
+        { node = n, property = "scale", from = 0.2, to = 1, duration = ms, easing = ease, delay = 30 + (k - 1) * 45 },
+        { node = n, property = "translate_y", from = -70, to = 0, duration = ms, easing = ease, delay = 30 + (k - 1) * 45 },
+        { node = n, property = "opacity", from = 0, to = 1, duration = 260, delay = 140 + (k - 1) * 45 },
+      }
+    else
+      local ms = 190
+      local ease = theme.ease.emphasized_accel
+      steps = {
+        { node = n, property = "scale", to = 0.3, duration = ms, easing = ease },
+        { node = n, property = "translate_y", to = -50, duration = ms, easing = ease },
+        { node = n, property = "opacity", to = 0, duration = 120 },
+      }
+    end
+    running[i][#running[i] + 1] = morf.animation.play { { parallel = steps } }
+  end
+  stir(coming and (700 + #(LAYERS[i] or {}) * 45) or 260)
+end
+M.bud = bud
 
 -- Where page `i` starts along the track: the pages side by side, a
 -- padding's width apart on either side.
@@ -626,6 +692,7 @@ local track = ui.Row {
   behavior = { translate_x = SWITCH },
   table.unpack(pages),
 }
+ui.reparent(cards_field, strip)
 ui.reparent(track, strip)
 
 -- Behind everything on the panel, so the panel is in the surface's input
@@ -650,6 +717,22 @@ M.drawer = drawer.new {
 
 morf.effect("caelestia.dashboard.shown", function()
   opened:set(M.drawer.open:get())
+end)
+
+-- Opening, the chosen tab's cards bud out of the drawer as it grows;
+-- closing, they melt back as it withdraws. Switching tabs, the outgoing
+-- cards melt while the incoming ones bud, all in the one field.
+local was_open, was_tab = false, M.tab:get()
+morf.effect("caelestia.dashboard.liquid", function()
+  local open, tab = M.drawer.open:get(), M.tab:get()
+  if open ~= was_open then
+    was_open = open
+    bud(tab, open)
+  elseif open and tab ~= was_tab then
+    bud(was_tab, false)
+    bud(tab, true)
+  end
+  was_tab = tab
 end)
 
 -- ------------------------------------------------------------- hover open --

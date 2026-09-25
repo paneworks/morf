@@ -62,10 +62,29 @@ function M.text(props)
 end
 
 --- A card: a surfaceContainer box with the large rounding.
+--- While a collector is set (`M.collect(list)`), a card is not a `Rect`
+--- but an item whose background is a layer of a distance field someone
+--- else builds: `list` gets `{ node, radius, color, shape }` for each, so
+--- the cards of a page can merge, bud and melt as one liquid surface.
+local collector
+function M.collect(list) collector = list end
+
 function M.card(props)
   props.radius = props.radius or theme.ROUNDING
   if props.color == nil then props.color = function() return theme.color.surfaceContainer end end
-  return ui.Rect(props)
+  if not collector then return ui.Rect(props) end
+  local radius, color = props.radius, props.color
+  props.radius, props.color = nil, nil
+  props.stretch = props.stretch or M.STRETCH
+  local node = ui.Item(props)
+  local entry = { node = node, radius = radius, color = color }
+  entry.shape = ui.SdfShape {
+    shape = "box", radius = radius, track = node,
+    operation = #collector == 0 and "union" or "smooth_union",
+    fill_color = color,
+  }
+  collector[#collector + 1] = entry
+  return node
 end
 
 --- An item centred in a box of `w` x `h`.
