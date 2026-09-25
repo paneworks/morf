@@ -110,9 +110,23 @@ local function workspaces()
     track = indicator,
     fill_color = function() return C.primary end,
   }
+  -- The dots and the disc melt into one another only while the disc
+  -- travels; at rest each is crisp.
+  local rolling = morf.signal("caelestia.workspaces.rolling", false)
+  local still
+  local last = services.workspace.active()
+  morf.effect("caelestia.workspaces.rolling", function()
+    local now = services.workspace.active()
+    if now == last then return end
+    last = now
+    rolling:set(true)
+    if still then still:cancel() end
+    still = morf.timer(420, function() still = nil rolling:set(false) end, false)
+  end)
   layers.id = "workspace-field"
   layers.anchors = { fill = true }
-  layers.blend = 10
+  layers.blend = function() return rolling:get() and 11 or 0 end
+  layers.behavior = { blend = { duration = 220, easing = theme.ease.standard } }
   return ui.Rect {
     id = "workspaces",
     width = 40,

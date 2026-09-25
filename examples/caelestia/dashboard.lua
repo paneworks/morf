@@ -126,6 +126,8 @@ local function tabs()
     y = TABS_H - 4, height = 3,
     x = 0, width = 0,
   }
+  local tab_moving = morf.signal("caelestia.dashboard.indicator.moving", false)
+  local tab_still
   local shown_tab, moved = 1, false
   morf.effect("caelestia.dashboard.indicator", function()
     local tab = M.tab:get()
@@ -140,11 +142,16 @@ local function tabs()
     shown_tab, moved = tab, true
     local l0, r0 = span(from, M.size(from))
     kit.elastic(indicator, "x", l0, r0, l1, r1, { duration = 520 })
+    tab_moving:set(true)
+    if tab_still then tab_still:cancel() end
+    tab_still = morf.timer(560, function() tab_still = nil tab_moving:set(false) end, false)
   end)
   local field = ui.Sdf {
     id = "dashboard-tab-field",
     anchors = { left = true, right = true }, y = TABS_H - 8, height = 8,
-    blend = 3,
+    -- A soft foot on the hairline only while it travels.
+    blend = function() return tab_moving:get() and 4 or 0 end,
+    behavior = { blend = { duration = 200 } },
     ui.SdfShape {
       shape = "box", operation = "union",
       anchors = { left = true, right = true }, y = 7, height = 1,
