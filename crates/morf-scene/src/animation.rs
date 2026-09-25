@@ -64,10 +64,24 @@ pub enum Easing {
         /// Second control point y coordinate.
         y2: f64,
     },
+    /// Cubic segments end to end from `(0, 0)` to `(1, 1)`: `x1, y1, x2,
+    /// y2, x, y` per segment, as Qt's `BezierSpline` takes them. `y` may
+    /// leave `[0, 1]`, which is how a curve overshoots. Interned by
+    /// [`crate::intern_spline`], so the curve is shared and `Easing` stays
+    /// `Copy`.
+    Spline(&'static [f64]),
 }
 
 impl Easing {
+    /// A spline easing from its flat point list, checked and interned.
+    pub fn spline(points: &[f64]) -> Result<Self, String> {
+        crate::spline::intern_spline(points).map(Self::Spline)
+    }
+
     pub fn value_at(self, progress: f64) -> f64 {
+        if let Self::Spline(points) = self {
+            return crate::spline::spline_value(points, progress);
+        }
         f64::from(self.animato().apply(progress.clamp(0.0, 1.0) as f32))
     }
 
@@ -139,6 +153,9 @@ impl Easing {
             Self::CubicBezier { x1, y1, x2, y2 } => {
                 animato::Easing::CubicBezier(x1 as f32, y1 as f32, x2 as f32, y2 as f32)
             }
+            // The clock runs straight and the curve is applied on top of it:
+            // animato's own easings are function pointers and a spline is data.
+            Self::Spline(_) => animato::Easing::Linear,
         }
     }
 }

@@ -190,8 +190,14 @@ impl Layout {
         Ok(rectangles)
     }
 
-    /// Accumulates the transform chain from the scene root down to one node.
-    fn chain_transform(&self, scene: &Scene, node: NodeHandle) -> Result<Transform2D, LayoutError> {
+    /// Accumulates the transform chain from the scene root down to one node:
+    /// where the node is drawn on its surface, every transform above it and
+    /// its own (a stretch included) applied.
+    pub fn chain_transform(
+        &self,
+        scene: &Scene,
+        node: NodeHandle,
+    ) -> Result<Transform2D, LayoutError> {
         let mut chain = vec![node];
         let mut current = node;
         while let Some(parent) = scene.parent(current)? {

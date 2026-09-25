@@ -290,6 +290,9 @@ pub(crate) fn append_node(
                 color: apply_overlay(scene.color_value(node, "fill_color")?, color_overlay),
                 morph: scene.number(node, "morph_progress")?.clamp(0.0, 1.0) as f32,
                 overlay: color_overlay,
+                profile: BlendProfile::parse(scene.string_value(node, "blend_profile")?)
+                    .unwrap_or_default(),
+                transform,
             };
             field_layers(scene, layout, node, defaults, &mut layers)?;
             // A composition with nothing in it has no zero crossing and would

@@ -70,6 +70,16 @@ impl Animation {
     pub(crate) fn value(&self) -> Value {
         let progress = if self.preserve_velocity {
             self.progress()
+        } else if let Easing::Spline(points) = self.behavior.easing {
+            // The clock was built linear for a spline; the curve goes on here,
+            // on the raw progress and before a backward pass mirrors it, which
+            // is what the clock does with an easing of its own.
+            let eased = crate::spline::spline_value(points, f64::from(self.clock.progress()));
+            if self.clock.is_ping_pong_reversed() {
+                1.0 - eased
+            } else {
+                eased
+            }
         } else {
             f64::from(self.clock.value())
         };
@@ -409,6 +419,10 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "translate_y"
             | "transform_origin_x"
             | "transform_origin_y"
+            | "transform_matrix"
+            | "matrix"
+            | "blend_group"
+            | "blend_profile"
             | "rotation"
             | "opacity"
             | "color"

@@ -11,7 +11,9 @@ pub mod scaled;
 mod shapes;
 
 pub use scaled::{COVERED_EDGE_GRID, build_scaled};
-pub use shapes::{Operation, Shape, ShapeParams, combine, distance};
+pub use shapes::{
+    BlendProfile, Operation, Shape, ShapeParams, combine, combine_profiled, distance,
+};
 
 const MAX_PIXELS: usize = 16_777_216;
 const MAX_RECTS: usize = 65_536;

@@ -214,6 +214,35 @@ pub(crate) fn node_metatable<'gc>(
             stack.replace(ctx, method);
             return Ok(CallbackReturn::Return);
         }
+        if key == "track" && element == Element::SdfShape {
+            let target = read_state.borrow().scene.track(node.handle);
+            match target {
+                Some(target) => {
+                    stack.replace(ctx, node_userdata(ctx, Rc::clone(&read_state), target))
+                }
+                None => stack.replace(ctx, LuaValue::Nil),
+            }
+            return Ok(CallbackReturn::Return);
+        }
+        if key == "stretch" {
+            let stretch = read_state.borrow().scene.stretch(node.handle);
+            let value = match stretch {
+                Some(stretch) => SceneValue::Map(
+                    [
+                        ("stiffness", stretch.stiffness),
+                        ("damping", stretch.damping),
+                        ("scale", stretch.scale),
+                        ("max", stretch.max),
+                    ]
+                    .into_iter()
+                    .map(|(key, value)| (key.to_owned(), SceneValue::Number(value)))
+                    .collect(),
+                ),
+                None => SceneValue::Nil,
+            };
+            stack.replace(ctx, scene_to_lua(ctx, &value).map_err(HostError)?);
+            return Ok(CallbackReturn::Return);
+        }
         let key = if key == "active_async" && element == Element::Loader {
             "active".to_owned()
         } else {
@@ -286,6 +315,20 @@ pub(crate) fn node_metatable<'gc>(
     });
     let new_index = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (node, property, value): (UserRef<NodeToken>, String, LuaValue) = stack.consume(ctx)?;
+        if matches!(property.as_str(), "stretch" | "track") {
+            let mut state = state.try_borrow_mut().map_err(|_| {
+                HostError("nodes cannot be written to from inside a layout function".to_owned())
+            })?;
+            crate::configure::assign_engine_relation(
+                &mut state,
+                ctx,
+                node.handle,
+                &property,
+                value,
+            )
+            .map_err(HostError)?;
+            return Ok(CallbackReturn::Return);
+        }
         let value = lua_to_scene(ctx, value, 0).map_err(HostError)?;
         // A write while the scene is borrowed by a layout pass -- from
         // inside a `ui.Layout` function -- is refused rather than allowed to

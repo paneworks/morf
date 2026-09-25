@@ -500,6 +500,42 @@ panel -- is not charged to it, so its first frame is its first value
 rather than a jump part of the way.
 `morf.animation.fling` coasts a property.
 
+An `easing` is a name (`"out_cubic"`), a cubic Bézier `{ x1, y1, x2, y2 }`,
+or a spline of several: `{ spline = { x1, y1, x2, y2, x, y, ... } }`, each
+six numbers a segment's two control points and its end, from `(0, 0)` to a
+last end of `(1, 1)` — Qt's `BezierSpline`. `x` is time and keeps moving
+forwards; `y` is free, which is how a curve overshoots and settles in more
+than one step. It is accepted wherever an easing is: behaviors, `enter`,
+transitions, `morf.animation.play`, loops, `morf.easing.*`, and a theme
+token holding one (`morf.theme { emphasized = { spline = { ... } } }`).
+
+```lua
+local settle = { spline = { 0.05, 0.7, 0.1, 1.04, 0.62, 1.03, 0.78, 1.01, 0.9, 1.0, 1, 1 } }
+ui.Item { behavior = { translate_y = { duration = 460, easing = settle } } }
+```
+
+`stretch = { stiffness, damping, scale, max }` (or `stretch = true`) makes
+any node squash and stretch with its own motion. The engine measures where
+the node is drawn from frame to frame — whatever moves it: a behavior, a
+spring, a parent, a layout change — and a damped spring pulls a deformation
+towards one set by that velocity: `scale` longer along the motion per 1000
+px/s (0.12), and narrower across it so the area stays, never more than
+`max` (0.35). When the motion stops the spring overshoots and settles back
+to square; `stiffness` (260) and `damping` (16) are the spring's, critical
+damping being `2 * sqrt(stiffness)`. The deformation is a symmetric 2×2
+matrix about the node's centre on its rendered transform, so the children
+bend with it, a pointer is mapped through it, and an `SdfShape` tracking
+the node (below) bends the same way. It is nothing per frame to set up and
+nothing at all at rest: a spring that has settled asks for no frames.
+`node.stretch = false` takes it away. A jump — a node that was somewhere
+else a tenth of a second ago — is not speed and does not stretch.
+
+`transform_matrix = { a, b, c, d, tx, ty }` (or just `{ a, b, c, d }`) on
+any node is an affine map applied about `transform_origin`, inside
+`scale`, `rotation` and `skew` (a stylesheet's `transform` read right to
+left): `x' = a·x + c·y + tx`, `y' = b·x + d·y + ty`. Children and hit
+testing follow it; it animates like any list of numbers.
+
 `morf.animation.play { ... }` runs a group: its array part is a sequence of
 steps, each `{ node, property, to, from, duration, easing, delay }`, a
 `{ pause = ms }`, a `{ keyframes = { { at, value, easing }, ... } }` track,
@@ -1160,6 +1196,73 @@ under a key of everything that shaped its pixels. One whose numbers move is
 drawn again for each frame they move in, on the CPU, at its on-screen size —
 cheap for an icon or a gauge, worth knowing for a path the size of the
 screen. `examples/path.lua` has one of each.
+
+### Fields
+
+A `ui.Sdf` is one surface composed from the shapes beneath it — every
+`SdfShape`, and every `Rect` however deeply the positioners nest — resolved
+per pixel as distance fields, so shapes union, subtract and morph into one
+another and a seam between two can be smooth. Each `SdfShape` says
+`shape` (`circle`, `box`, `capsule`, `star`, `ring`, …), `operation`
+(`union`, `subtract`, `intersect`, `smooth_union`, `smooth_subtract`,
+`smooth_intersect`, `xor`) and `blend` (the seam's radius; the field's own
+`blend` when it names none).
+
+- `blend_profile` on the `Sdf`: `"quadratic"` (the default) is a soft
+  polynomial seam that also swells where two shapes merely pass close;
+  `"circular"` makes the seam a true arc of the blend radius tangent to
+  both shapes and leaves them exact everywhere else — where an edge meets
+  another square on, a quarter-circle fillet. Both work for smooth unions
+  and smooth subtractions.
+- `blend_group` on an `SdfShape`: two layers in different non-zero groups
+  meet with a hard edge whatever their operation; group 0 (the default)
+  blends with everything. Two panels in groups 1 and 2 each fillet into a
+  frame in group 0 and do not bridge to one another.
+- `matrix = { a, b, c, d }` on an `SdfShape`: a linear map the shape is
+  drawn through about its centre, after `rotation`. The distance is scaled
+  so the edge stays one pixel soft however the map stretches it.
+- `track = node` on an `SdfShape`: the layer's rectangle is wherever that
+  node is drawn this frame — its layout box through every transform above
+  it and its own, animated values and a `stretch` included — worked out by
+  the renderer as it paints, with nothing running in Lua. A scale along the
+  axes becomes the layer's size, so a stretched box keeps round corners; a
+  turn or a shear rides in the layer's matrix. A hidden node takes its layer
+  with it. `shape.track = nil` lets go.
+
+A field whose layers alone moved repaints only where those layers were and
+are, widened by the seam: a panel sliding in a fullscreen frame costs the
+panel, not the screen.
+
+A drawer growing out of a frame round the screen is all of these: the
+frame is the screen minus a rounded inner box, the drawer's background is
+a box tracking the drawer, joined by a circular seam, and the drawer
+slides and stretches:
+
+```lua
+local THICK, SEAM = 10, 18
+local panel = ui.Item {
+  anchors = { top = true, horizontal_center = true }, width = 420, height = 150,
+  translate_y = function() return opened:get() and 0 or -(150 + THICK + SEAM + 2) end,
+  behavior = { translate_y = { duration = 460, easing = "out_back" } },
+  stretch = { stiffness = 240, damping = 13, scale = 0.16 },
+  ui.Text { x = 22, y = 18, text = "hello", color = "#e6e1f0" },
+}
+ui.Item {
+  anchors = { fill = true },
+  ui.Sdf {
+    anchors = { fill = true }, fill_color = "#1c1b22",
+    blend = SEAM, blend_profile = "circular",
+    ui.SdfShape { shape = "box", anchors = { fill = true } },
+    ui.SdfShape { shape = "box", anchors = { fill = true, margins = THICK }, radius = 22, operation = "subtract" },
+    ui.SdfShape { shape = "box", radius = 18, operation = "smooth_union", blend_group = 1, track = panel },
+  },
+  ui.Item { anchors = { fill = true, margins = THICK }, clip = true, panel },
+}
+```
+
+Tuck a closed drawer further out than the seam (`size + THICK + SEAM`),
+or the fillet of its far edge still dimples the frame. `examples/drawers.lua`
+puts one on every edge, opened over IPC.
 
 ### Keys
 

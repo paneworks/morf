@@ -30,6 +30,47 @@ pub struct SdfFieldLayer {
     pub color: [f32; 4],
     /// Corner radii, top-left clockwise.
     pub radii: [f32; 4],
+    /// The inverse of the layer's linear map, column major: what takes a
+    /// point from the field (once turned by `rotation`) into the shape's own
+    /// frame. The identity for an ordinary layer.
+    pub frame: [f32; 4],
+    /// `[blend group, distance scale, blend profile, unused]`. The scale is
+    /// the map's smallest stretch, which keeps a distance measured in the
+    /// shape's frame from overstating the true one.
+    pub meta: [f32; 4],
+}
+
+/// The inverse of a layer's linear map and how much it shrinks a distance.
+///
+/// A distance measured in the shape's own frame is multiplied by the map's
+/// smallest singular value, which never overstates the distance on the
+/// surface: the edge stays exactly where it is, and the soft ramp either
+/// side of it stays a pixel wide rather than widening where the map
+/// stretches. A map that flattens the plane has no inverse; the layer is left
+/// as it was rather than drawn through infinities.
+pub fn layer_frame(matrix: [f32; 4]) -> ([f32; 4], f32) {
+    let [a, b, c, d] = matrix.map(f64::from);
+    let determinant = a * d - b * c;
+    if determinant.abs() < 1e-9 || matrix == [1.0, 0.0, 0.0, 1.0] {
+        return ([1.0, 0.0, 0.0, 1.0], 1.0);
+    }
+    let trace = a * a + b * b + c * c + d * d;
+    let smallest = ((trace
+        - (trace * trace - 4.0 * determinant * determinant)
+            .max(0.0)
+            .sqrt())
+        / 2.0)
+        .max(0.0)
+        .sqrt();
+    (
+        [
+            (d / determinant) as f32,
+            (-b / determinant) as f32,
+            (-c / determinant) as f32,
+            (a / determinant) as f32,
+        ],
+        smallest as f32,
+    )
 }
 
 /// How an outline sits against the shape's edge.
@@ -112,7 +153,7 @@ pub struct SdfFieldInstance {
     pub style: [f32; 4],
     /// Affine matrix, column major.
     pub transform: [f32; 4],
-    /// Affine translation in `xy`.
+    /// Affine translation in `xy`; `z` is which material is this field's.
     pub transform_offset: [f32; 4],
     /// Everything the surface can reach, in the node's own space: left, top,
     /// right, bottom.
@@ -188,7 +229,15 @@ impl SdfFieldInstance {
         let first = layers.len();
         for layer in sources.iter().take(MAX_FIELD_LAYERS) {
             let outline = polygon_params(layer, scale, outlines, text, drawings);
+            let (frame, distance_scale) = layer_frame(layer.matrix);
             layers.push(SdfFieldLayer {
+                frame,
+                meta: [
+                    layer.blend_group as f32,
+                    distance_scale,
+                    layer.profile.code() as f32,
+                    0.0,
+                ],
                 kinds: [
                     layer.shape.code() as f32,
                     layer.morph_to.code() as f32,
@@ -273,7 +322,9 @@ impl SdfFieldInstance {
             transform_offset: [
                 (transform.matrix[4] * scale) as f32,
                 (transform.matrix[5] * scale) as f32,
-                0.0,
+                // Which material is this field's: its own instance index once, and
+                // no longer since a field may be drawn as several tiles.
+                (materials.len() - 1) as f32,
                 0.0,
             ],
             // A shader that owns its coverage paints across the whole node,
@@ -351,6 +402,8 @@ impl SdfFieldInstance {
             extra: [0.0; 4],
             color: color_array(*color),
             radii: radii.map(|radius| (radius.max(0.0) * scale) as f32),
+            frame: [1.0, 0.0, 0.0, 1.0],
+            meta: [0.0, 1.0, 0.0, 0.0],
         });
         let GradientMaterial {
             gradient,
@@ -427,7 +480,7 @@ impl SdfFieldInstance {
             transform_offset: [
                 (transform.matrix[4] * scale) as f32,
                 (transform.matrix[5] * scale) as f32,
-                0.0,
+                (materials.len() - 1) as f32,
                 0.0,
             ],
             // A surface shader on a rectangle owns the whole node, exactly as
@@ -447,7 +500,10 @@ impl SdfFieldInstance {
     }
 }
 
+mod cull;
 pub(crate) mod glyph_layer;
 mod reach;
 
+pub use cull::{FIELD_TILE, FieldTile, composable, composed_distance};
+pub(crate) use cull::{Spill, field_tiles};
 pub use reach::*;

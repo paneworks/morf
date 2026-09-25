@@ -2,7 +2,7 @@ use morf_layout::Geometry;
 // The one shape vocabulary, shared with the input-region rasteriser so a
 // star-shaped node is clickable as a star. Re-exported, so naming a shape does
 // not oblige a caller to depend on `morf-region` directly.
-pub use morf_region::{Operation, Shape, ShapeParams};
+pub use morf_region::{BlendProfile, Operation, Shape, ShapeParams};
 use morf_scene::Color;
 
 /// One analytic distance field, and how it joins the composition.
@@ -28,6 +28,16 @@ pub struct SdfLayer {
     pub blend: f32,
     /// Rotation about the layer centre, in degrees.
     pub rotation: f32,
+    /// A linear map `[a, b, c, d]` (column major) the shape is drawn through
+    /// about its centre, after `rotation`: the identity for an ordinary
+    /// layer. A layer tracking a sheared or stretched node carries the node's
+    /// linear transform here.
+    pub matrix: [f32; 4],
+    /// Which layers this one blends with: two in different non-zero groups
+    /// meet with a hard edge whatever the operation says.
+    pub blend_group: u32,
+    /// The shape of this layer's smooth seam.
+    pub profile: BlendProfile,
     /// Corner radii — top-left, top-right, bottom-right, bottom-left — for the
     /// shapes that have corners. A rect absorbed into a field keeps all four.
     pub radii: [f32; 4],

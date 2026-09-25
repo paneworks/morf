@@ -320,6 +320,7 @@ fn main() {
                 computed = settled(&mut runtime, root, size, engine.backend_mut(), &config);
             }
             runtime.sync_text_inputs(&computed, engine.backend_mut().text_system());
+            runtime.observe_stretch(&computed);
             engine
                 .render(&runtime.scene(), &computed, 120, |_| {})
                 .unwrap_or_else(|error| panic!("{config}: render: {error}"));

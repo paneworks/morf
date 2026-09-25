@@ -43,6 +43,7 @@ mod core_api;
 mod dbus_private;
 mod destroying;
 mod diagnostics;
+mod drawers;
 mod entering;
 mod events_animation;
 mod examples;

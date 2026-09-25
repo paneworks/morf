@@ -274,6 +274,7 @@ impl Headless {
             {
                 if let Some(layout) = &self.surfaces[index].layout {
                     self.runtime.sync_text_inputs(layout, &mut self.text);
+                    self.runtime.observe_stretch(layout);
                 }
                 continue;
             }
@@ -285,6 +286,7 @@ impl Headless {
                     self.runtime.lint_layout(&settled.layout, root);
                     self.runtime
                         .sync_text_inputs(&settled.layout, &mut self.text);
+                    self.runtime.observe_stretch(&settled.layout);
                     let revision = self.runtime.scene().layout_revision_of(root);
                     let surface = &mut self.surfaces[index];
                     surface.stable = settled.stable;

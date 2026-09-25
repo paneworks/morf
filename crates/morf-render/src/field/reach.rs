@@ -122,16 +122,27 @@ pub struct ShadowReach {
 /// layer covers a different rectangle than the one it was given — and the quad
 /// is built from those rectangles. Taking the unrotated bounds meant a rotated
 /// non-square layer was sliced flat by the very quad meant to contain it.
-fn rotated_half_extents(layer: &SdfLayer) -> (f64, f64) {
+///
+/// A layer's matrix bends it further, inside the rotation: the box becomes a
+/// parallelogram, and what it reaches is that parallelogram's own box.
+pub(crate) fn rotated_half_extents(layer: &SdfLayer) -> (f64, f64) {
     let half_width = layer.bounds.width / 2.0;
     let half_height = layer.bounds.height / 2.0;
-    if layer.rotation == 0.0 {
+    if layer.rotation == 0.0 && layer.matrix == [1.0, 0.0, 0.0, 1.0] {
         return (half_width, half_height);
     }
     let (sin, cos) = f64::from(layer.rotation).to_radians().sin_cos();
+    let [a, b, c, d] = layer.matrix.map(f64::from);
+    // Rotation times matrix, column major.
+    let k = [
+        cos * a - sin * b,
+        sin * a + cos * b,
+        cos * c - sin * d,
+        sin * c + cos * d,
+    ];
     (
-        half_width * cos.abs() + half_height * sin.abs(),
-        half_width * sin.abs() + half_height * cos.abs(),
+        half_width * k[0].abs() + half_height * k[2].abs(),
+        half_width * k[1].abs() + half_height * k[3].abs(),
     )
 }
 

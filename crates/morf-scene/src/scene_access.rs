@@ -118,6 +118,46 @@ impl Scene {
         self.terminal_screens.get(&node.0)
     }
 
+    /// Makes a field layer follow another node's rendered geometry, or stop.
+    ///
+    /// The layer's rectangle is then wherever `target` is drawn this frame —
+    /// its layout box through every transform above it and its own, a stretch
+    /// included — resolved by the renderer as it paints, so a layer follows
+    /// a node that a behavior or a spring is moving without the configuration
+    /// doing anything per frame.
+    pub fn set_track(
+        &mut self,
+        node: NodeHandle,
+        target: Option<NodeHandle>,
+    ) -> Result<(), SceneError> {
+        let id = self.live(node)?;
+        match target {
+            Some(target) => {
+                self.live(target)?;
+                if target == node {
+                    return Err(SceneError::InvalidPropertyValue {
+                        element: self.element(node)?.name(),
+                        property: "track".to_owned(),
+                        message: "a layer cannot follow itself".to_owned(),
+                    });
+                }
+                self.tracks.insert(id, target);
+            }
+            None => {
+                self.tracks.remove(&id);
+            }
+        }
+        Ok(())
+    }
+
+    /// The node a field layer follows, if it follows one that still exists.
+    pub fn track(&self, node: NodeHandle) -> Option<NodeHandle> {
+        self.tracks
+            .get(&node.0)
+            .copied()
+            .filter(|target| self.nodes.contains_key(target.0))
+    }
+
     /// The shader attached to a node.
     pub fn node_shader(&self, node: NodeHandle) -> Option<&NodeShader> {
         self.shaders.get(&node.0)

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use morf_scene::{Behavior, Element, NodeHandle, Scene, Value};
+use morf_scene::{Behavior, Easing, Element, NodeHandle, Scene, Stretch, Value};
 
 use crate::*;
 
@@ -84,6 +84,7 @@ mod custom;
 mod flex;
 mod hidden;
 mod incremental;
+mod matrix_stretch;
 mod text_input;
 mod transforms;
 mod views;

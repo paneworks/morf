@@ -258,7 +258,8 @@ impl RenderBackend for WgpuBackend {
                     // A configuration's shader may move its quad anywhere, so
                     // a command wearing one is drawn wherever there is damage.
                     let shaded = field_indices[index]
-                        .is_some_and(|instance| field_shaders[instance as usize].is_some());
+                        .as_ref()
+                        .is_some_and(|instances| field_shaders[instances.start as usize].is_some());
                     if shaded {
                         return Some(DamageRect {
                             x: 0,
@@ -318,12 +319,12 @@ impl RenderBackend for WgpuBackend {
                     && let Some((x, y, width, height)) = placed_scissor(command_damage, $frame)
                 {
                     $pass.set_scissor_rect(x, y, width, height);
-                    if let Some(instance) = field_indices[command_index] {
+                    if let Some(instances) = field_indices[command_index].clone() {
                         // A shader replaces the pipeline rather than switching
                         // inside it: WGSL cannot swap a function at run time,
                         // and a uniform branch would make every node without a
                         // shader pay for the ones that have one.
-                        let program = field_shaders[instance as usize]
+                        let program = field_shaders[instances.start as usize]
                             .as_ref()
                             .and_then(|binding| self.shaders.get(&binding.program));
                         match program {
@@ -351,7 +352,7 @@ impl RenderBackend for WgpuBackend {
                         $pass.set_vertex_buffer(0, self.field_buffer.slice(..));
                         // Four vertices as a strip: the shader expands the quad
                         // by the outline and the softened edge itself.
-                        $pass.draw(0..4, instance..instance + 1);
+                        $pass.draw(0..4, instances);
                     }
                     if let Some(instance) = texture_batch.command_instances[command_index] {
                         let image = &texture_batch.images[instance as usize];

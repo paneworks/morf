@@ -95,8 +95,14 @@ impl DamageTracker {
                 Some((old_order, old)) => {
                     // A terminal whose screen alone changed damages the rows
                     // that did, not its whole rectangle.
+                    // And a field whose layers alone moved damages where they
+                    // were and are, not its whole reach.
                     match (old_order == order)
-                        .then(|| command.terminal_rows_changed(old))
+                        .then(|| {
+                            command
+                                .terminal_rows_changed(old)
+                                .or_else(|| command.field_layers_changed(old))
+                        })
                         .flatten()
                     {
                         Some(rows) => changed.extend(rows.into_iter().map(|row| (row, *order))),

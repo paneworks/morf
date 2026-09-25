@@ -263,6 +263,8 @@ mod gradient;
 mod groups;
 mod physics;
 mod playback;
+mod spline;
+mod stretch;
 
 #[test]
 fn the_layout_revision_moves_only_when_geometry_does() {

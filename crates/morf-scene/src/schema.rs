@@ -41,6 +41,11 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         number("transform_origin_y", 0.5),
         number("transition_x", 0.0),
         number("transition_y", 0.0),
+        // An affine map `{ a, b, c, d, tx, ty }` (or just `{ a, b, c, d }`)
+        // applied about the transform origin, inside `scale`, `rotation` and
+        // `skew`: the node is drawn through it, its children with it, and a
+        // pointer is mapped back through it.
+        any("transform_matrix", Value::Nil),
         boolean("enabled", true),
         boolean("focus", false),
         // Whether Tab moves the keyboard away from this node while it has
@@ -347,6 +352,12 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 // field stroke centred; they are one outline now, so both are
                 // sayable on either.
                 string("stroke_alignment", "centre"),
+                // The shape of a smooth seam. `quadratic` is the polynomial
+                // blend a field has always had: soft, and it swells where two
+                // shapes merely come close. `circular` rounds the joint with
+                // an arc of the blend radius and leaves both shapes exact
+                // outside it — the concave fillet where a panel meets a frame.
+                string("blend_profile", "quadratic"),
             ]);
         }
         Element::SdfShape => {
@@ -413,6 +424,17 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("inner_radius", 0.5),
                 number("thickness", 0.0),
                 number("angle", 90.0),
+                // A linear map `{ a, b, c, d }` the shape is drawn through
+                // about its centre, after `rotation`: a shear, a squash, a
+                // mirror. The distance is scaled back so the edge stays one
+                // pixel soft however the map stretches it.
+                any("matrix", Value::Nil),
+                // Which layers this one blends with. Two layers in different
+                // non-zero groups meet with a hard edge even when the
+                // operation is smooth; group 0 blends with everything. Four
+                // panels coming out of one frame blend into the frame and
+                // not into one another.
+                number("blend_group", 0.0),
             ]);
         }
         Element::Path => {

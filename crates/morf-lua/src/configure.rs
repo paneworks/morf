@@ -106,6 +106,10 @@ pub(crate) fn configure_element<'gc>(
                 .insert(node, ctx.stash(closure));
             continue;
         }
+        if matches!(property.as_str(), "stretch" | "track") {
+            assign_engine_relation(&mut state.borrow_mut(), ctx, node, &property, value)?;
+            continue;
+        }
         refuse_runtime_owned(&state.borrow(), node, &property)?;
         if let Some(event) = handler_event(&property) {
             let LuaValue::Function(Function::Closure(closure)) = value else {
@@ -204,6 +208,57 @@ pub(crate) fn configure_element<'gc>(
             _ => return Err("state must be a string or binding function".into()),
         }
     }
+    Ok(())
+}
+
+/// `stretch` on any node and `track` on a field layer: settings the engine
+/// keeps beside the node rather than as properties, because one names another
+/// node and the other is a spring the engine runs, and almost no node has
+/// either. Written at construction or later through the node, the same way.
+pub(crate) fn assign_engine_relation<'gc>(
+    state: &mut ReactiveState,
+    ctx: Context<'gc>,
+    node: NodeHandle,
+    property: &str,
+    value: LuaValue<'gc>,
+) -> Result<(), String> {
+    match property {
+        "stretch" => {
+            if matches!(value, LuaValue::Function(_)) {
+                return Err("stretch is a setting, not a binding: give it a table or true".into());
+            }
+            let spec = morf_scene::Stretch::from_value(&lua_to_scene(ctx, value, 0)?)?;
+            state
+                .scene
+                .set_stretch(node, spec)
+                .map_err(|error| error.to_string())?;
+        }
+        _ => {
+            let element = state
+                .scene
+                .element(node)
+                .map_err(|error| error.to_string())?;
+            if element != morf_scene::Element::SdfShape {
+                return Err(format!("unknown {element:?} property `track`"));
+            }
+            let target = match value {
+                LuaValue::Nil | LuaValue::Boolean(false) => None,
+                LuaValue::UserData(userdata) => Some(
+                    userdata
+                        .downcast_static::<NodeToken>()
+                        .map_err(|_| "track must be a morf node or nil".to_owned())?
+                        .handle,
+                ),
+                _ => return Err("track must be a morf node or nil".to_owned()),
+            };
+            state
+                .scene
+                .set_track(node, target)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    state.scene_revision = state.scene_revision.wrapping_add(1);
+    state.flush_pending = true;
     Ok(())
 }
 

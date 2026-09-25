@@ -56,6 +56,22 @@ impl Runtime {
         }
     }
 
+    /// Tells every stretching node in a frame's layout where it is, so its
+    /// spring steps before the frame is painted.
+    ///
+    /// Between layout and paint, on every frame — not only a fresh layout's:
+    /// a node sliding on `translate_x` moves without its layout changing.
+    /// Free when nothing in the scene stretches.
+    pub fn observe_stretch(&mut self, layout: &Layout) {
+        let mut state = self.reactive.borrow_mut();
+        if !state.scene.has_stretch() {
+            return;
+        }
+        if let Err(error) = morf_layout::observe_stretch(&mut state.scene, layout) {
+            state.log(LogLevel::Warn, format!("stretch: {error}"));
+        }
+    }
+
     /// Updates native transform watchers from one rendered surface layout.
     ///
     /// Also where a binding on `layout_width` and its kin hears that the
