@@ -56,6 +56,10 @@ impl FlexTree {
         let id = if is_flex_root(scene, node)? {
             let mut children = Vec::new();
             for &child in scene.children(node)? {
+                // A mask is placed in the root's box afterwards, not by Taffy.
+                if scene.is_mask(child) {
+                    continue;
+                }
                 // A child the scene no longer has, still listed here, is a
                 // bookkeeping fault worth naming: which container, which slot.
                 if scene.element(child).is_err() {

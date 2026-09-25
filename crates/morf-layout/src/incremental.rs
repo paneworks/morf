@@ -226,6 +226,15 @@ impl Layout {
         origin: Geometry,
     ) -> Result<(), LayoutError> {
         for &child in scene.children(container)? {
+            // A mask is placed as a plain child is, in the container's box.
+            if scene.is_mask(child) {
+                if let Some(local) = self.local.get(&child).copied()
+                    && let Some(placed) = self.move_one(child, local, origin)
+                {
+                    self.move_children(scene, child, placed)?;
+                }
+                continue;
+            }
             let Some(local @ Local::Flexed { x, y, .. }) = self.local.get(&child).copied() else {
                 continue;
             };

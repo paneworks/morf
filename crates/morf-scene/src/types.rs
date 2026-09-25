@@ -258,6 +258,10 @@ pub struct Scene {
     /// A side table, as `shaders` is, because it names a node and a property
     /// value cannot, and because almost no node has one.
     pub(crate) tracks: FastMap<NodeId, NodeHandle>,
+    /// The node whose subtree masks each masked node: see [`Scene::set_mask`].
+    pub(crate) masks: FastMap<NodeId, NodeHandle>,
+    /// The other way round: the node each mask masks.
+    pub(crate) mask_owners: FastMap<NodeId, NodeHandle>,
     /// Squash-and-stretch springs, by node: see [`crate::Stretch`].
     pub(crate) stretch: FastMap<NodeId, crate::stretch::StretchState>,
     /// Seconds of motion ticked so far, the clock stretch velocities are

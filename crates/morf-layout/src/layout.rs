@@ -193,6 +193,10 @@ impl Layout {
                     requested
                 }
             };
+            // A mask is laid out in its owner's box, so it asks for no room.
+            if scene.is_mask(child) {
+                continue;
+            }
             child_sizes.push(requested);
             if positioner && scene.bool_value(child, "visible")? {
                 shown_sizes.push(requested);
@@ -374,7 +378,8 @@ impl Layout {
             // not the other way round.
             | Element::Terminal => {
                 let mut bounds = Size::default();
-                for (child, size) in children.iter().zip(child_sizes) {
+                let placed = children.iter().filter(|child| !scene.is_mask(**child));
+                for (child, size) in placed.zip(child_sizes) {
                     bounds.width = bounds.width.max(scene.number(*child, "x")? + size.width);
                     bounds.height = bounds.height.max(scene.number(*child, "y")? + size.height);
                 }
@@ -436,10 +441,12 @@ impl Layout {
         let mut parent_geometry = self.geometry[&parent];
         let parent_element = scene.element(parent)?;
         if is_flex_root(scene, parent)? {
-            return self.resolve_flex(scene, parent, parent_geometry, text, host);
+            self.resolve_flex(scene, parent, parent_geometry, text, host)?;
+            return self.place_mask(scene, parent, text, host);
         }
         if parent_element == Element::Custom {
-            return self.resolve_custom(scene, parent, parent_geometry, text, host);
+            self.resolve_custom(scene, parent, parent_geometry, text, host)?;
+            return self.place_mask(scene, parent, text, host);
         }
         let mut inset = None;
         if parent_element == Element::ClipRect
@@ -460,8 +467,8 @@ impl Layout {
         let shown = if packed || parent_element == Element::Grid {
             children
                 .iter()
-                .map(|&child| scene.bool_value(child, "visible"))
-                .collect::<Result<Vec<_>, _>>()?
+                .map(|&child| Ok(scene.bool_value(child, "visible")? && !scene.is_mask(child)))
+                .collect::<Result<Vec<_>, LayoutError>>()?
         } else {
             Vec::new()
         };
@@ -542,6 +549,9 @@ impl Layout {
         // The grid cell the next shown child takes.
         let mut cell = 0;
         for (index, &child) in children.iter().enumerate() {
+            if scene.is_mask(child) {
+                continue;
+            }
             let size = self.requested[&child];
             let visible = shown.get(index).copied().unwrap_or(true);
             let anchors = anchors(scene.current(child, "anchors")?)?;
@@ -617,7 +627,63 @@ impl Layout {
             self.local.insert(child, local);
             self.place(scene, child, geometry, text, host)?;
         }
-        Ok(())
+        self.place_mask(scene, parent, text, host)
+    }
+
+    /// Places `owner`'s mask, if it has one, in `owner`'s own box.
+    ///
+    /// Whatever kind of container the owner is, the mask is placed as a plain
+    /// parent places a child — by its `x`, `y`, size and anchors — and with
+    /// none of them it fills the box. It is never scrolled: a list that fades
+    /// at its edges keeps its fade where the edges are.
+    pub(crate) fn place_mask(
+        &mut self,
+        scene: &Scene,
+        owner: NodeHandle,
+        text: &mut impl TextMeasurer,
+        host: &mut dyn CustomLayout,
+    ) -> Result<(), LayoutError> {
+        let Some(mask) = scene.mask(owner) else {
+            return Ok(());
+        };
+        let owner_geometry = self.geometry[&owner];
+        let size = match self.requested.get(&mask) {
+            Some(size) => *size,
+            None => {
+                let implicit = self.measure_implicit(scene, mask, text, host)?;
+                self.requested_size(scene, mask, implicit)?
+            }
+        };
+        let anchors = anchors(scene.current(mask, "anchors")?)?;
+        let sized = positive(scene.number(mask, "width")?).is_some()
+            || positive(scene.number(mask, "height")?).is_some();
+        let mut geometry = Geometry {
+            x: scene.number(mask, "x")?,
+            y: scene.number(mask, "y")?,
+            width: size.width,
+            height: size.height,
+        };
+        if anchors.is_empty() && !sized {
+            geometry.width = owner_geometry.width;
+            geometry.height = owner_geometry.height;
+        } else {
+            apply_anchors(owner_geometry, anchors, &mut geometry);
+        }
+        let local = Local::Placed {
+            x: geometry.x,
+            y: geometry.y,
+            inset: None,
+            scrolled: None,
+            transition: (
+                scene.number(mask, "transition_x")?,
+                scene.number(mask, "transition_y")?,
+            ),
+        };
+        let (x, y) = local.position(owner_geometry);
+        geometry.x = x;
+        geometry.y = y;
+        self.local.insert(mask, local);
+        self.place(scene, mask, geometry, text, host)
     }
 
     /// Gives `node` its geometry and places what is under it -- unless

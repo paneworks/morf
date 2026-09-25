@@ -16,6 +16,11 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         boolean("visible", true),
         number("opacity", 1.0),
         any("layer", Value::Map(BTreeMap::new())),
+        // An alpha mask over the node and its subtree: `{ gradient = ... }`
+        // here; a node given as the mask lives in `Scene::set_mask` instead.
+        any("mask", Value::Map(BTreeMap::new())),
+        // Whether the mask keeps what it covers (false) or cuts it out.
+        boolean("mask_invert", false),
         color("color_overlay", Color::rgba8(0, 0, 0, 0)),
         number("z", 0.0),
         boolean("clip", element == Element::ClipRect),
