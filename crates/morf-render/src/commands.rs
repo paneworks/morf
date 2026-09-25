@@ -682,6 +682,21 @@ pub struct Layer {
     pub shader: Option<ShaderBinding>,
     /// Logical bounds affected by this layer.
     pub bounds: Geometry,
+    /// Another layer whose alpha multiplies this one's as it is composited:
+    /// the node's `mask`.
+    pub alpha_mask: Option<AlphaMask>,
+    /// For a layer that is another's alpha mask, that layer. It is rendered
+    /// over exactly the region its owner is, and never composited itself.
+    pub mask_for: Option<usize>,
+}
+
+/// Where a layer's alpha mask was rendered, and how it is applied.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AlphaMask {
+    /// The layer holding the mask, listed right after its owner's commands.
+    pub layer: usize,
+    /// Keeps what the mask does not cover rather than what it does.
+    pub invert: bool,
 }
 
 /// Rounded geometry applied while compositing an offscreen layer.

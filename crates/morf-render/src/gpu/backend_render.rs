@@ -188,6 +188,15 @@ impl RenderBackend for WgpuBackend {
                     .is_some_and(|draw| draw.refresh.is_some())
             },
         );
+        if self.mask_pipeline.is_none()
+            && list.layers.iter().any(|layer| layer.alpha_mask.is_some())
+        {
+            self.mask_pipeline = Some(super::pipelines::build_mask_pipeline(
+                &self.device,
+                &self.glyph_layout,
+                self.blend,
+            ));
+        }
         self.layer_pool.begin_frame();
         let layer_targets =
             self.build_layer_targets(list, &mut texture_batch, scale, &regions, &stages);
@@ -395,9 +404,11 @@ impl RenderBackend for WgpuBackend {
         macro_rules! draw_layer {
             ($pass:expr, $layer_index:expr, $base_damage:expr, $frame:expr) => {{
                 let layer_index = $layer_index;
+                // A mask is read by the layer it masks, never drawn itself.
                 // A layer nothing reads this frame was not rendered, and the
                 // damage here does not reach it either.
-                if let Some(target) = &layer_targets[layer_index]
+                if list.layers[layer_index].mask_for.is_none()
+                    && let Some(target) = &layer_targets[layer_index]
                     && let Some(layer_damage) =
                         physical_damage(list.layers[layer_index].bounds, scale_120)
                             .and_then(|bounds| intersect_damage($base_damage, bounds))
@@ -435,9 +446,25 @@ impl RenderBackend for WgpuBackend {
                         $pass.set_vertex_buffer(0, self.texture_buffer.slice(..));
                         $pass.draw(0..6, instance..instance + 1);
                     }
-                    $pass.set_bind_group(0, &target.bind_group, &[]);
-                    $pass.set_vertex_buffer(0, self.texture_buffer.slice(..));
-                    $pass.draw(0..6, target.instance..target.instance + 1);
+                    let masked = match (&target.alpha_mask, &self.mask_pipeline) {
+                        (Some(mask), Some(pipeline)) => {
+                            $pass.set_pipeline(pipeline);
+                            $pass.set_bind_group(1, mask, &[]);
+                            true
+                        }
+                        _ => false,
+                    };
+                    // A mask whose target is missing covers nothing: the
+                    // layer shows only where the mask is inverted.
+                    let hidden = !masked
+                        && list.layers[layer_index]
+                            .alpha_mask
+                            .is_some_and(|mask| !mask.invert);
+                    if !hidden {
+                        $pass.set_bind_group(0, &target.bind_group, &[]);
+                        $pass.set_vertex_buffer(0, self.texture_buffer.slice(..));
+                        $pass.draw(0..6, target.instance..target.instance + 1);
+                    }
                 }
             }};
         }

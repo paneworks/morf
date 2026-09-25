@@ -121,6 +121,7 @@ impl Layout {
         text: &mut impl TextMeasurer,
         host: &mut dyn CustomLayout,
     ) -> Result<(), LayoutError> {
+        self.capture_exit_frames(scene);
         self.measure_implicit(scene, root, text, host)?;
         let geometry = Geometry {
             width: available.width,
@@ -172,6 +173,9 @@ impl Layout {
         // or the size it asks for.
         let mut moved = own || cached.is_none();
         let mut child_sizes = Vec::with_capacity(children.len());
+        // The children the node is sized from: not one on its way out, which
+        // keeps the box it had and takes no room.
+        let mut flow = Vec::with_capacity(children.len());
         // What a positioner packs: the children it can show. An invisible
         // child keeps its own size, but a Row, Column or Grid gives it no
         // room and no gap, as a `Flex` already does and QML's do.
@@ -193,7 +197,13 @@ impl Layout {
                     requested
                 }
             };
+            // A mask is laid out in its owner's box, and a node on its way out
+            // keeps its own: neither asks for room.
+            if scene.is_mask(child) || scene.is_exiting(child) {
+                continue;
+            }
             child_sizes.push(requested);
+            flow.push(child);
             if positioner && scene.bool_value(child, "visible")? {
                 shown_sizes.push(requested);
             }
@@ -374,7 +384,7 @@ impl Layout {
             // not the other way round.
             | Element::Terminal => {
                 let mut bounds = Size::default();
-                for (child, size) in children.iter().zip(child_sizes) {
+                for (child, size) in flow.iter().zip(child_sizes) {
                     bounds.width = bounds.width.max(scene.number(*child, "x")? + size.width);
                     bounds.height = bounds.height.max(scene.number(*child, "y")? + size.height);
                 }
@@ -436,10 +446,12 @@ impl Layout {
         let mut parent_geometry = self.geometry[&parent];
         let parent_element = scene.element(parent)?;
         if is_flex_root(scene, parent)? {
-            return self.resolve_flex(scene, parent, parent_geometry, text, host);
+            self.resolve_flex(scene, parent, parent_geometry, text, host)?;
+            return self.place_mask(scene, parent, text, host);
         }
         if parent_element == Element::Custom {
-            return self.resolve_custom(scene, parent, parent_geometry, text, host);
+            self.resolve_custom(scene, parent, parent_geometry, text, host)?;
+            return self.place_mask(scene, parent, text, host);
         }
         let mut inset = None;
         if parent_element == Element::ClipRect
@@ -460,8 +472,12 @@ impl Layout {
         let shown = if packed || parent_element == Element::Grid {
             children
                 .iter()
-                .map(|&child| scene.bool_value(child, "visible"))
-                .collect::<Result<Vec<_>, _>>()?
+                .map(|&child| {
+                    Ok(scene.bool_value(child, "visible")?
+                        && !scene.is_mask(child)
+                        && !scene.is_exiting(child))
+                })
+                .collect::<Result<Vec<_>, LayoutError>>()?
         } else {
             Vec::new()
         };
@@ -542,6 +558,13 @@ impl Layout {
         // The grid cell the next shown child takes.
         let mut cell = 0;
         for (index, &child) in children.iter().enumerate() {
+            if scene.is_mask(child) {
+                continue;
+            }
+            if scene.is_exiting(child) {
+                self.place_exiting(scene, parent, child, text, host)?;
+                continue;
+            }
             let size = self.requested[&child];
             let visible = shown.get(index).copied().unwrap_or(true);
             let anchors = anchors(scene.current(child, "anchors")?)?;
@@ -617,7 +640,133 @@ impl Layout {
             self.local.insert(child, local);
             self.place(scene, child, geometry, text, host)?;
         }
-        Ok(())
+        self.place_mask(scene, parent, text, host)
+    }
+
+    /// Places `owner`'s mask, if it has one, in `owner`'s own box.
+    ///
+    /// Whatever kind of container the owner is, the mask is placed as a plain
+    /// parent places a child — by its `x`, `y`, size and anchors — and with
+    /// none of them it fills the box. It is never scrolled: a list that fades
+    /// at its edges keeps its fade where the edges are.
+    pub(crate) fn place_mask(
+        &mut self,
+        scene: &Scene,
+        owner: NodeHandle,
+        text: &mut impl TextMeasurer,
+        host: &mut dyn CustomLayout,
+    ) -> Result<(), LayoutError> {
+        let Some(mask) = scene.mask(owner) else {
+            return Ok(());
+        };
+        let owner_geometry = self.geometry[&owner];
+        let size = match self.requested.get(&mask) {
+            Some(size) => *size,
+            None => {
+                let implicit = self.measure_implicit(scene, mask, text, host)?;
+                self.requested_size(scene, mask, implicit)?
+            }
+        };
+        let anchors = anchors(scene.current(mask, "anchors")?)?;
+        let sized = positive(scene.number(mask, "width")?).is_some()
+            || positive(scene.number(mask, "height")?).is_some();
+        let mut geometry = Geometry {
+            x: scene.number(mask, "x")?,
+            y: scene.number(mask, "y")?,
+            width: size.width,
+            height: size.height,
+        };
+        if anchors.is_empty() && !sized {
+            geometry.width = owner_geometry.width;
+            geometry.height = owner_geometry.height;
+        } else {
+            apply_anchors(owner_geometry, anchors, &mut geometry);
+        }
+        let local = Local::Placed {
+            x: geometry.x,
+            y: geometry.y,
+            inset: None,
+            scrolled: None,
+            transition: (
+                scene.number(mask, "transition_x")?,
+                scene.number(mask, "transition_y")?,
+            ),
+        };
+        let (x, y) = local.position(owner_geometry);
+        geometry.x = x;
+        geometry.y = y;
+        self.local.insert(mask, local);
+        self.place(scene, mask, geometry, text, host)
+    }
+
+    /// Fixes the box each node that has started to leave keeps, from where
+    /// this layout last placed it, relative to its parent: before a pass
+    /// overwrites either. A node this layout never placed is left for one
+    /// that did, or for [`Layout::place_exiting`] to fix where it is now.
+    pub(crate) fn capture_exit_frames(&self, scene: &Scene) {
+        for node in scene.exiting_nodes() {
+            if scene.exit_frame(node).is_some() {
+                continue;
+            }
+            let Some(parent) = scene.parent(node).ok().flatten() else {
+                continue;
+            };
+            let (Some(own), Some(around)) = (self.geometry.get(&node), self.geometry.get(&parent))
+            else {
+                continue;
+            };
+            scene.fix_exit_frame(
+                node,
+                [own.x - around.x, own.y - around.y, own.width, own.height],
+            );
+        }
+    }
+
+    /// Places a node on its way out: in the box it keeps relative to its
+    /// parent, whatever its parent's rules would do with it, taking no room
+    /// from its siblings. See [`morf_scene::Scene::begin_exit`].
+    pub(crate) fn place_exiting(
+        &mut self,
+        scene: &Scene,
+        parent: NodeHandle,
+        child: NodeHandle,
+        text: &mut impl TextMeasurer,
+        host: &mut dyn CustomLayout,
+    ) -> Result<(), LayoutError> {
+        let frame = match scene.exit_frame(child) {
+            Some(frame) => frame,
+            None => {
+                // Never placed before it started to leave: where its own
+                // `x` and `y` put it, at the size it asks for.
+                let size = self.requested.get(&child).copied().unwrap_or_default();
+                scene.fix_exit_frame(
+                    child,
+                    [
+                        scene.number(child, "x")?,
+                        scene.number(child, "y")?,
+                        size.width,
+                        size.height,
+                    ],
+                );
+                scene.exit_frame(child).unwrap_or_default()
+            }
+        };
+        let local = Local::Placed {
+            x: frame[0],
+            y: frame[1],
+            inset: None,
+            scrolled: None,
+            transition: (0.0, 0.0),
+        };
+        let (x, y) = local.position(self.geometry[&parent]);
+        self.local.insert(child, local);
+        let geometry = Geometry {
+            x,
+            y,
+            width: frame[2],
+            height: frame[3],
+        };
+        self.place(scene, child, geometry, text, host)
     }
 
     /// Gives `node` its geometry and places what is under it -- unless
@@ -632,6 +781,21 @@ impl Layout {
         host: &mut dyn CustomLayout,
     ) -> Result<(), LayoutError> {
         let before = self.geometry.insert(node, geometry);
+        if scene.has_exits()
+            && !scene.is_exiting(node)
+            && let Some(parent) = scene.parent(node)?
+            && let Some(around) = self.geometry.get(&parent)
+        {
+            scene.note_placed(
+                node,
+                [
+                    geometry.x - around.x,
+                    geometry.y - around.y,
+                    geometry.width,
+                    geometry.height,
+                ],
+            );
+        }
         let status = self.status(scene, node)?;
         if !status.visit
             && let Some(before) = before

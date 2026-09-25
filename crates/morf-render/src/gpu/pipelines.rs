@@ -200,6 +200,56 @@ pub(crate) fn build_glyph_pipeline(
     Some(pipeline)
 }
 
+/// The layer composite through an alpha mask (mask.wgsl): the glyph pass's
+/// vertex layout, the layer's texture at group zero and the mask's at group
+/// one, both in the glyph texture layout.
+pub(crate) fn build_mask_pipeline(
+    device: &wgpu::Device,
+    texture_layout: &wgpu::BindGroupLayout,
+    blend: BlendSpace,
+) -> wgpu::RenderPipeline {
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("morf mask composite pipeline layout"),
+        bind_group_layouts: &[Some(texture_layout), Some(texture_layout)],
+        immediate_size: 0,
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("morf mask composite shader"),
+        source: wgpu::ShaderSource::Wgsl(shader_source(include_str!("../mask.wgsl")).into()),
+    });
+    let attributes = glyph_attributes();
+    let buffers = [Some(wgpu::VertexBufferLayout {
+        array_stride: mem::size_of::<GlyphInstance>() as u64,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &attributes,
+    })];
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("morf mask composite pipeline"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &buffers,
+            compilation_options: Default::default(),
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: super::target_format(blend),
+                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
 /// The subpixel glyph pipeline (glyph_lcd.wgsl): the glyph pass's vertex
 /// layout and bindings, a fragment that writes a second colour, and a blend
 /// that mixes each channel by that colour's matching channel.

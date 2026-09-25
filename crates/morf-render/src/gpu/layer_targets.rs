@@ -250,7 +250,46 @@ impl WgpuBackend {
                 shadow_bind_group,
                 shadow_instance,
                 shadow,
+                alpha_mask: None,
             }));
+        }
+        // A mask is listed after the layer it masks, so its target is known
+        // only now. It holds the same region, so the composite finds it at
+        // the same point of its quad: only where in its texture differs.
+        for index in 0..list.layers.len() {
+            let Some(alpha_mask) = list.layers[index].alpha_mask else {
+                continue;
+            };
+            let Some(Some(mask)) = layer_targets.get(alpha_mask.layer) else {
+                continue;
+            };
+            let (width, height) = (mask.texture.width() as f32, mask.texture.height() as f32);
+            let uv = [
+                mask.origin.0 as f32 / width,
+                mask.origin.1 as f32 / height,
+                mask.region.width as f32 / width,
+                mask.region.height as f32 / height,
+            ];
+            let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("morf alpha mask bind group"),
+                layout: &self.glyph_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&mask.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.glyph_sampler),
+                    },
+                ],
+            });
+            if let Some(target) = layer_targets[index].as_mut() {
+                let instance = &mut texture_batch.instances[target.instance as usize];
+                instance.morph_uv = uv;
+                instance.field[0] = if alpha_mask.invert { 1.0 } else { 0.0 };
+                target.alpha_mask = Some(group);
+            }
         }
         layer_targets
     }

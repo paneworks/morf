@@ -88,7 +88,10 @@ impl Layout {
         let content_y = scene.number(node, "content_y").unwrap_or(0.0);
         let (mut width, mut height) = (0.0_f64, 0.0_f64);
         for &child in scene.children(node).ok()? {
-            if !scene.bool_value(child, "visible").unwrap_or(false) {
+            if !scene.bool_value(child, "visible").unwrap_or(false)
+                || scene.is_mask(child)
+                || scene.is_exiting(child)
+            {
                 continue;
             }
             let Some(child_geometry) = self.geometry(child) else {
@@ -257,6 +260,9 @@ impl Layout {
             regions.push((transform.bounds(geometry), corner_radii(scene, node)?));
         }
         for &child in scene.children(node)? {
+            if scene.is_mask(child) {
+                continue;
+            }
             self.collect_backdrop_geometry(scene, child, transform, regions)?;
         }
         Ok(())
@@ -269,7 +275,11 @@ impl Layout {
         inherited: Transform2D,
         rectangles: &mut Vec<Geometry>,
     ) -> Result<(), LayoutError> {
-        if !scene.bool_value(node, "visible")? || !scene.bool_value(node, "enabled")? {
+        // A node on its way out is drawn, and nothing else: no input.
+        if !scene.bool_value(node, "visible")?
+            || !scene.bool_value(node, "enabled")?
+            || scene.is_exiting(node)
+        {
             return Ok(());
         }
         let Some(geometry) = self.geometry(node) else {
@@ -294,6 +304,10 @@ impl Layout {
             rectangles.push(transform.bounds(geometry));
         }
         for &child in scene.children(node)? {
+            // A mask is drawn only as a mask, and takes no input.
+            if scene.is_mask(child) {
+                continue;
+            }
             self.collect_input_geometry(scene, child, transform, rectangles)?;
         }
         Ok(())
@@ -308,7 +322,11 @@ impl Layout {
         x: f64,
         y: f64,
     ) -> Result<Option<Hit>, LayoutError> {
-        if !scene.bool_value(node, "visible")? || !scene.bool_value(node, "enabled")? {
+        // A node on its way out is drawn, and nothing else: no input.
+        if !scene.bool_value(node, "visible")?
+            || !scene.bool_value(node, "enabled")?
+            || scene.is_exiting(node)
+        {
             return Ok(None);
         }
         let Some(geometry) = self.geometry(node) else {

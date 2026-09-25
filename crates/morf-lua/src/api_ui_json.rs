@@ -131,8 +131,10 @@ pub(crate) fn install_ui_json_api<'gc>(
             ),
             _ => return Err(HostError("parent must be a morf node or nil".into()).into()),
         };
-        reparent_state
-            .borrow_mut()
+        let mut state = reparent_state.borrow_mut();
+        // Put somewhere while it was leaving: it is wanted after all.
+        crate::runtime_helpers::cancel_node_exit(&mut state, child.handle);
+        state
             .scene
             .reparent(child.handle, parent)
             .map_err(|error| HostError(error.to_string()))?;
@@ -144,10 +146,18 @@ pub(crate) fn install_ui_json_api<'gc>(
     // `on_destroyed` hooks, deepest first. A Repeater's delegate is its
     // model's to remove, not this.
     let destroy_state = Rc::clone(&state);
+    // A node with an `exit` plays it first; `ui.destroy(node, true)` does not.
     let destroy = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let node: UserRef<NodeToken> = stack.consume(ctx)?;
-        crate::runtime_helpers::remove_scene_subtree(&mut destroy_state.borrow_mut(), node.handle);
-        crate::reactive_bindings::run_destroyed_hooks(&destroy_state, ctx, limits);
+        let (node, now): (UserRef<NodeToken>, Option<bool>) = stack.consume(ctx)?;
+        if now == Some(true) {
+            crate::runtime_helpers::remove_scene_subtree(
+                &mut destroy_state.borrow_mut(),
+                node.handle,
+            );
+            crate::reactive_bindings::run_destroyed_hooks(&destroy_state, ctx, limits);
+        } else {
+            crate::runtime_helpers::let_go_of_node(&destroy_state, ctx, limits, node.handle);
+        }
         Ok(CallbackReturn::Return)
     });
     ui.set_field(ctx, "destroy", destroy);

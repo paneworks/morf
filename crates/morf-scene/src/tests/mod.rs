@@ -2,6 +2,8 @@ use std::time::Duration;
 
 use crate::*;
 
+mod mask;
+
 #[test]
 fn reparenting_preserves_identity_and_order() {
     let mut scene = Scene::new();
@@ -259,6 +261,7 @@ fn smoothed_motion_obeys_velocity_limit() {
     assert_eq!(scene.number(item, "x").unwrap(), 100.0);
 }
 
+mod exit;
 mod gradient;
 mod groups;
 mod physics;

@@ -20,6 +20,10 @@ pub(crate) struct CachedBuffer {
     /// The runs it was set in, when it was: glyph metadata is an index into
     /// these, plus one.
     pub(crate) rich: Option<std::sync::Arc<morf_scene::RichText>>,
+    /// The variable-font axes its glyphs are drawn at, besides `wght`. Not
+    /// part of what it was shaped from: these do not move a glyph, so a
+    /// change of them is a new picture of the same layout, not a new layout.
+    pub(crate) axes: Vec<morf_layout::FontAxis>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -146,6 +150,12 @@ pub struct TextSystem {
     fields: FastMap<u64, Option<Rc<FieldImage>>>,
     /// Cell metrics, shaped characters and drawn cells for terminals.
     terminal: terminal::TerminalCache,
+    /// Glyphs at a point in a variable font's design space.
+    variations: variations::Variations,
+    /// Which of `fields` are at such a point, and how many were measured
+    /// since they were last let go of.
+    varied_field_keys: HashSet<u64>,
+    varied_fields: usize,
 }
 
 /// Pixel format of one rasterized glyph image.
@@ -229,6 +239,9 @@ impl TextSystem {
             font_sources: HashSet::new(),
             fields: FastMap::default(),
             terminal: terminal::TerminalCache::default(),
+            variations: variations::Variations::default(),
+            varied_field_keys: HashSet::new(),
+            varied_fields: 0,
         };
         if let Some(paths) = std::env::var_os("MORF_FONT_PATH") {
             for path in std::env::split_paths(&paths) {
@@ -508,7 +521,7 @@ mod glyph_steps;
 pub use caret::{CaretLine, CaretMap, CaretRect, SpanRect};
 pub use edit::{DEFAULT_HISTORY, EditBuffer};
 pub mod fuzzy;
-pub use families::{family_files, installed_families};
+pub use families::{AxisRange, family_axes, family_files, file_axes, installed_families};
 pub use glyph_morph::CONTOUR_POINTS as GLYPH_CONTOUR_POINTS;
 /// A closed loop of an outline, for a caller pairing letters with shapes that
 /// are not letters.
@@ -524,6 +537,7 @@ pub use style::LineBand;
 mod subpixel;
 pub use subpixel::{FontSubpixel, LcdFilter, SubpixelOrder, font_subpixel};
 mod terminal;
+mod variations;
 pub use terminal::{CellFace, CellText, drawn_here};
 
 pub use glyph_fields::{
@@ -541,3 +555,5 @@ mod rich_tests;
 mod style_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod variations_tests;

@@ -100,9 +100,12 @@ impl TextSystem {
         let Some(cached) = self.buffers.get(&BufferKey::own(node)) else {
             return Vec::new();
         };
+        let axes = cached.axes.clone();
         crate::style::physical_glyphs_at(cached, origin, scale)
             .into_iter()
-            .filter_map(|(glyph, offset)| Some((self.raster_glyph(&glyph, true)?, offset)))
+            .filter_map(|(glyph, offset)| {
+                Some((self.raster_glyph_in(&glyph, true, &axes)?, offset))
+            })
             .collect()
     }
 
@@ -129,10 +132,11 @@ impl TextSystem {
             return Vec::new();
         };
         let physical = crate::style::physical_glyphs_styled(cached, origin, scale);
+        let axes = cached.axes.clone();
         physical
             .into_iter()
             .filter_map(|(glyph, tint, font_size)| {
-                let mut raster = self.raster_glyph(&glyph, field)?;
+                let mut raster = self.raster_glyph_in(&glyph, field, &axes)?;
                 raster.tint = tint;
                 raster.font_size = font_size;
                 Some(raster)

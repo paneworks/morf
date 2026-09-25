@@ -107,6 +107,7 @@ mod damage;
 mod drawers;
 mod field_packing;
 mod fields;
+mod masks;
 mod outline_boxes;
 mod paths;
 mod text_input;

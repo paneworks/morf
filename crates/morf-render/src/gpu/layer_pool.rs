@@ -146,6 +146,15 @@ pub(crate) fn layer_regions(
     }
     let mut regions: Vec<Option<LayerRegion>> = vec![None; list.layers.len()];
     for (index, layer) in list.layers.iter().enumerate() {
+        // A mask holds exactly what the layer it masks holds, pixel for
+        // pixel: the composite reads both at one point of one quad. Even an
+        // empty one, which is then a cleared region, and masks everything.
+        if let Some(owner) = layer.mask_for {
+            if owner < index {
+                regions[index] = regions[owner].clone();
+            }
+            continue;
+        }
         if layer.commands.is_empty() {
             continue;
         }

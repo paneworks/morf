@@ -613,7 +613,8 @@ draw.
 
 A node is destroyed when a `Loader` lets it go, when its `Repeater` row
 leaves the model, when `ui.destroy(node)` is called, or when any of its
-ancestors goes the same way. `on_destroyed = function() end` on any node
+ancestors goes the same way -- after its `exit` animation, if it declared
+one (see *Leaving*, section 6). `on_destroyed = function() end` on any node
 runs once then, deepest node first, so what the node's Lua made for it —
 a `morf.clipboard.watch`, a service subscription, a timer outside the tree
 — can be let go of. It runs as a handler once nothing else is running (never
@@ -761,6 +762,67 @@ windows, the shape has nothing beneath it to blur; for that, `backdrop_blur
 (`morf.capabilities.backdrop_blur` says whether it can). One node takes one or
 the other; wrap it in an `Item` with `backdrop_blur = true` for both.
 
+### Masks
+
+`mask` on any node multiplies the alpha of everything the node and its
+subtree draw by the alpha of something else at the same point: what Qt's
+`MultiEffect` does with a `maskSource`, or an `OpacityMask`. It is one of
+two things.
+
+- **A node**, whose drawing is the mask: a rounded `Rect`, an `Sdf` of
+  shapes, a `Text` or an `Icon`, or any subtree. It is moved under the
+  node it masks and laid out in that node's box -- filling it when it asks
+  for no size and no anchors, otherwise placed by its own `x`, `y`, size
+  and anchors as a child of a plain `Item` is, whatever kind of container
+  the owner is. It moves, scales and animates with the owner, but it is
+  never drawn on its own and takes no input, and a positioner gives it no
+  place; a `Flickable`'s mask does not scroll. Colour does not matter,
+  only alpha: an opaque white rect keeps everything it covers. `mask =
+  nil` (or a table) takes it away and removes it; a hidden mask
+  (`visible = false`) masks nothing.
+- **A table with a `gradient`**, the same gradient a `Rect` takes (see
+  above), across the node's own box. Only the stops' alpha counts, and a
+  stop may be a bare number, which is that alpha: `stops = { 0, { 1, 0.1
+  }, { 1, 0.9 }, 0 }` fades in over the first tenth and out over the last.
+
+`mask_invert = true` keeps what the mask does not cover and cuts out what
+it does.
+
+```lua
+-- A list that fades out at its top and bottom edges, whatever it scrolls.
+ui.Flickable {
+  width = 320, height = 400,
+  mask = { gradient = { stops = { 0, { 1, 0.08 }, { 1, 0.92 }, 0 } } },
+  list,
+}
+
+-- An avatar cut to a circle, and a badge punched out of it.
+ui.Image {
+  source = avatar, width = 64, height = 64,
+  mask = ui.Sdf {
+    ui.SdfShape { shape = "circle", anchors = { fill = true } },
+    ui.SdfShape { shape = "circle", x = 44, y = 44, width = 24, height = 24,
+                  operation = "subtract" },
+  },
+}
+
+-- Text as a stencil over a gradient.
+ui.Rect {
+  width = 300, height = 80,
+  gradient = { angle = 90, stops = { "#ff5f6d", "#ffc371" } },
+  mask = ui.Text { text = "morf", font_size = 64, anchors = { center_in = true } },
+}
+```
+
+The masked subtree is drawn into an offscreen layer, and the mask into a
+second one covering exactly the same pixels; both are sized to what the
+frame's damage reads of the node, never the whole surface, and share their
+atlases and passes with the frame's other layers. A node with no mask
+costs nothing. The mask composes with the node's `opacity`, transforms,
+rounded clip and `layer` settings: a `layer.shadow_color` or an effect
+shader on a masked node is masked with it. Animating the mask repaints
+where it changed; toggling `mask_invert` repaints the node.
+
 ### Themes and preferences
 
 `morf.theme(tokens, options)` is a `morf.state` for appearance. A string
@@ -808,6 +870,32 @@ ui.Text {
   decoration = function() return refused:get() and { line = "under", color = theme.alert } or {} end,
 }
 ```
+
+A variable font's axes are `axes = { FILL = 1, GRAD = 0, opsz = 24, wght =
+500 }`: any four-letter OpenType tag the face defines, in its own units, on
+`Text` and `TextInput`. It is a map of numbers, so a `behavior` on `axes`
+moves every axis in it at once, the way Material Symbols fills an icon in
+when it is selected; give each state the same keys, or the map jumps
+rather than moves. `wght` is the weight (it wins over `font_weight`) and is
+the one axis shaping sees, so it moves the glyphs; the others are applied
+where glyphs are drawn and leave the layout where it is -- an axis that
+changes advances on some face (`opsz`, say) keeps the default ones. A tag
+the face does not have is ignored, and a face with none of them is drawn
+as it always was. Pictures of glyphs are kept per point of the design
+space, quantised to 1/64 of the way from an axis's default to either end,
+so an animation through an axis costs at most 65 pictures of each glyph
+however many frames it takes. `morf.font_axes(family)` lists what an
+installed family can move: `{ tag, min, default, max }` for each axis.
+
+```lua
+ui.Text {
+  text = "home", font_family = "Material Symbols Rounded", font_size = 24,
+  axes = function() return selected() and { FILL = 1, wght = 600 } or { FILL = 0, wght = 400 } end,
+  behavior = { axes = { duration = 250, easing = "out_cubic" } },
+}
+```
+
+See `examples/font_axes.lua`.
 
 Text is smoothed in subpixels (LCD, "ClearType") where that is safe, and
 in greyscale everywhere else. `morf.surface.subpixel_text` is `"auto"` by
@@ -1303,6 +1391,49 @@ ui.Rect {
   behavior = { opacity = { duration = 220 }, translate_x = { kind = "spring", stiffness = 260 } },
 }
 ```
+
+`enter` may time itself instead: with a `duration` (and an `easing` and a
+`delay`, as a behavior has) every property it names travels to its
+declared value on that timing, whatever the node's behaviors say.
+
+### Leaving
+
+`exit = { opacity = 0, scale = 0.9, y = 10, duration = 200, easing =
+"in_cubic" }` on any node is how it leaves. When whatever holds it lets go
+-- a `Loader` turning inactive, its `Repeater` row removed from the model,
+`ui.destroy(node)` -- the node is not removed. It stays in the tree and is
+drawn as it animates to those values, and only when the animation ends is
+it removed, `on_destroyed` hooks and all. While it leaves it is out of the
+layout: its parent is sized and packed without it, so what it was pushing
+closes up at once, and it keeps the box it had relative to its parent
+(moved by whatever the exit does to its `x` and `y`, so `y = 10` drops it
+ten pixels from where it sat in a column). It takes no input. `duration`
+is 200 when not given; `delay` waits first; any property that animates can
+be named, the rest are simply set as it starts to leave.
+
+Put back before it has gone -- the `Loader` turns active again, the same
+row (an equal value) returns to the model, `ui.reparent` puts it
+somewhere -- the node is taken back rather than built anew: it rejoins
+the layout and every property its exit moved animates back to where it
+was aimed, on the exit's timing. `ui.destroy(node, true)` removes at once,
+exit or not. A node held by a `core.retainable` lock stays until both the
+lock and its exit let go. A reload drops the old runtime, exits and all.
+
+```lua
+ui.Repeater {
+  model = notifications,
+  delegate = function(n)
+    return ui.Rect {
+      width = 300, height = 64, radius = 14,
+      enter = { opacity = 0, translate_x = 40, duration = 260, easing = "out_cubic" },
+      exit = { opacity = 0, scale = 0.9, y = 10, duration = 240, easing = "in_cubic" },
+      ui.Text { x = 16, y = 12, text = n.title },
+    }
+  end,
+}
+```
+
+See `examples/exit.lua`.
 
 ### Hover and press
 

@@ -30,8 +30,13 @@ impl Scene {
             shaders: FastMap::default(),
             terminal_screens: FastMap::default(),
             tracks: FastMap::default(),
+            masks: FastMap::default(),
+            mask_owners: FastMap::default(),
             stretch: FastMap::default(),
             stretch_clock: 0.0,
+            exit_specs: FastMap::default(),
+            exit_placed: FastMap::default(),
+            exiting: FastMap::default(),
         }
     }
 
@@ -154,6 +159,13 @@ impl Scene {
             self.bump_layout(old_parent);
             self.mark_detached(old_parent);
         }
+        // A mask moved anywhere but under the node it masks stops masking.
+        if let Some(owner) = self.mask_owners.get(&child_id).copied()
+            && parent_id != Some(owner.id())
+        {
+            self.mask_owners.remove(&child_id);
+            self.masks.remove(&owner.id());
+        }
         self.nodes[child_id].parent = parent_id;
         if let Some(parent) = parent_id {
             self.nodes[parent].children.push(child);
@@ -223,6 +235,20 @@ impl Scene {
         node: NodeHandle,
     ) -> Result<std::borrow::Cow<'_, [NodeHandle]>, SceneError> {
         let children = self.children(node)?;
+        // A mask is drawn only as its owner's mask, and hit never.
+        if !self.mask_owners.is_empty() && children.iter().any(|child| self.is_mask(*child)) {
+            let z = |child: &NodeHandle| match self.current(*child, "z") {
+                Ok(Value::Number(z)) => *z,
+                _ => 0.0,
+            };
+            let mut sorted: Vec<NodeHandle> = children
+                .iter()
+                .copied()
+                .filter(|child| !self.is_mask(*child))
+                .collect();
+            sorted.sort_by(|a, b| z(a).total_cmp(&z(b)));
+            return Ok(std::borrow::Cow::Owned(sorted));
+        }
         let z = |child: &NodeHandle| match self.current(*child, "z") {
             Ok(Value::Number(z)) => *z,
             _ => 0.0,
@@ -254,7 +280,14 @@ impl Scene {
             self.detached_revisions.remove(&current);
             self.terminal_screens.remove(&current);
             self.tracks.remove(&current);
+            self.masks.remove(&current);
+            if let Some(owner) = self.mask_owners.remove(&current) {
+                self.masks.remove(&owner.id());
+            }
             self.stretch.remove(&current);
+            self.exit_specs.remove(&current);
+            self.exit_placed.remove(&current);
+            self.exiting.remove(&current);
             // Its properties live in the scene's signal graph, not in the
             // node; they go with it or they stay allocated for the life of
             // the process, two per property per node ever made.
@@ -589,6 +622,7 @@ impl Scene {
                 error.effect, error.message
             )));
         }
+        frame.exited = self.finished_exits();
         frame.active = !self.animations.is_empty()
             || !self.physics.is_empty()
             || !self.groups.is_empty()

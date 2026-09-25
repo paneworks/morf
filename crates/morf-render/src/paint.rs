@@ -72,7 +72,36 @@ pub(crate) fn append_node(
     // and the frame loop then stepped over that command: a rotated shape inside
     // a field silently ate whatever was drawn next.
     let absorbed = inherited.in_field && absorbed_by_field(element);
-    let creates_layer = layer_config.enabled
+    // An alpha mask composites the subtree through another picture, so it
+    // needs the subtree in a layer of its own. A shape a field absorbed has
+    // no subtree of its own to mask.
+    let alpha_mask = if absorbed {
+        None
+    } else {
+        mask_source(scene, node)?
+    };
+    // A shadow is taken from the layer's alpha and an effect shader owns the
+    // composite, so a node with either and a mask gets a second layer around
+    // its own for the mask: masked last, the mask cuts the shadow and the
+    // effect's output as it cuts everything else.
+    let mask_wraps =
+        alpha_mask.is_some() && (effect.is_some() || layer_config.shadow_color.alpha > 0.0);
+    let outer_mask_layer = mask_wraps.then(|| {
+        let index = list.layers.len();
+        list.layers.push(plain_layer(
+            node,
+            list.commands.len(),
+            inherited.layer,
+            Geometry::default(),
+        ));
+        index
+    });
+    let inherited = PaintContext {
+        layer: outer_mask_layer.or(inherited.layer),
+        ..inherited
+    };
+    let creates_layer = alpha_mask.is_some()
+        || layer_config.enabled
         || node_opacity < 1.0
         || (rotation != 0.0 && !absorbed)
         || rounded_clip
@@ -99,6 +128,8 @@ pub(crate) fn append_node(
             ],
             mask: None,
             bounds: Geometry::default(),
+            alpha_mask: None,
+            mask_for: None,
         });
         index
     });
@@ -377,6 +408,8 @@ pub(crate) fn append_node(
                 transform,
                 radii: radii.map(|radius| (radius - border).max(0.0)),
             }),
+            alpha_mask: None,
+            mask_for: None,
             // A layer's bounds are where it lands on the surface — the
             // scissor it is composited through — so they carry every
             // ancestor transform. The mask keeps the untransformed inner
@@ -471,7 +504,114 @@ pub(crate) fn append_node(
             blurred
         };
     }
+    if let (Some(source), Some(own)) = (alpha_mask, layer) {
+        let host = outer_mask_layer.unwrap_or(own);
+        if let Some(outer) = outer_mask_layer {
+            let end = list.commands.len();
+            list.layers[outer].commands.end = end;
+            // What the inner layer reaches — its blur, its shadow — and not
+            // only what its commands do.
+            list.layers[outer].bounds = list.layers[own].bounds;
+        }
+        let invert = scene.bool_value(node, "mask_invert")?;
+        let index = list.layers.len();
+        list.layers.push(Layer {
+            mask_for: Some(host),
+            ..plain_layer(
+                node,
+                list.commands.len(),
+                list.layers[host].parent,
+                list.layers[host].bounds,
+            )
+        });
+        match source {
+            MaskSource::Gradient(gradient) => list.commands.push(DrawCommand::Quad {
+                node,
+                bounds,
+                transform,
+                clip,
+                color: Color::rgba8(255, 255, 255, 255),
+                color_overlay: Color::rgba8(0, 0, 0, 0),
+                gradient: Some(gradient),
+                radii: [0.0; 4],
+                border_width: 0.0,
+                antialiasing: true,
+                border_pixel_aligned: false,
+                border_color: Color::rgba8(0, 0, 0, 0),
+                blur: 0.0,
+                shadow_color: Color::rgba8(0, 0, 0, 0),
+                shadow_blur: 0.0,
+                shadow_spread: 0.0,
+                shadow_offset_x: 0.0,
+                shadow_offset_y: 0.0,
+                shadow_inner: false,
+                shader: None,
+            }),
+            MaskSource::Node(mask) => append_node(
+                scene,
+                layout,
+                mask,
+                PaintContext {
+                    transform,
+                    clip,
+                    overlay: Color::rgba8(0, 0, 0, 0),
+                    layer: Some(index),
+                    in_field: false,
+                    color: None,
+                },
+                list,
+            )?,
+        }
+        list.layers[index].commands.end = list.commands.len();
+        list.layers[host].alpha_mask = Some(AlphaMask {
+            layer: index,
+            invert,
+        });
+    }
     Ok(())
+}
+
+/// What masks a node: the subtree it was given as its mask, while that is
+/// visible, or else the gradient its `mask` property holds.
+#[derive(Clone)]
+enum MaskSource {
+    Gradient(morf_scene::Gradient),
+    Node(NodeHandle),
+}
+
+fn mask_source(scene: &Scene, node: NodeHandle) -> Result<Option<MaskSource>, RenderError> {
+    if let Some(mask) = scene.mask(node)
+        && scene.bool_value(mask, "visible")?
+    {
+        return Ok(Some(MaskSource::Node(mask)));
+    }
+    let value = scene.current(node, "mask")?;
+    // Nearly every node has none, and an empty table has nothing to parse.
+    if matches!(value, morf_scene::Value::Map(entries) if entries.is_empty()) {
+        return Ok(None);
+    }
+    Ok(morf_scene::MaskSpec::parse(value)
+        .map_err(RenderError::Scene)?
+        .map(|spec| MaskSource::Gradient(spec.gradient)))
+}
+
+/// A layer that only groups: composited as it is, at full opacity.
+fn plain_layer(node: NodeHandle, start: usize, parent: Option<usize>, bounds: Geometry) -> Layer {
+    Layer {
+        node,
+        commands: start..start,
+        parent,
+        opacity: 1.0,
+        blur: 0.0,
+        shadow_color: Color::rgba8(0, 0, 0, 0),
+        shadow_blur: 0.0,
+        shadow_offset: [0.0, 0.0],
+        mask: None,
+        shader: None,
+        bounds,
+        alpha_mask: None,
+        mask_for: None,
+    }
 }
 
 /// A rect's drop shadow, read only as far as it is visible.

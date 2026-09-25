@@ -127,6 +127,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             shadow_color: Color::rgba8(0, 0, 0, 160),
             shadow_blur: 8.0,
             shadow_offset: [3.0, 4.0],
+            alpha_mask: None,
+            mask_for: None,
             mask: Some(LayerMask {
                 bounds: Geometry {
                     x: 0.0,

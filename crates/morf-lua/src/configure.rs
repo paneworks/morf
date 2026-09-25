@@ -57,6 +57,10 @@ pub(crate) fn configure_element<'gc>(
         .iter()
         .find(|(name, _)| name == "loop")
         .map(|(_, value)| *value);
+    let named_exit = named
+        .iter()
+        .find(|(name, _)| name == "exit")
+        .map(|(_, value)| *value);
     let mut state_selector = None;
     if let Some((_, states)) = named.iter().find(|(name, _)| name == "states") {
         let transitions = named
@@ -88,7 +92,14 @@ pub(crate) fn configure_element<'gc>(
     for (property, value) in named {
         if matches!(
             property.as_str(),
-            "behavior" | "states" | "transitions" | "shader" | "shader_params" | "enter" | "loop"
+            "behavior"
+                | "states"
+                | "transitions"
+                | "shader"
+                | "shader_params"
+                | "enter"
+                | "exit"
+                | "loop"
         ) {
             continue;
         }
@@ -106,7 +117,9 @@ pub(crate) fn configure_element<'gc>(
                 .insert(node, ctx.stash(closure));
             continue;
         }
-        if matches!(property.as_str(), "stretch" | "track") {
+        if matches!(property.as_str(), "stretch" | "track")
+            || (property == "mask" && !matches!(value, LuaValue::Function(_)))
+        {
             assign_engine_relation(&mut state.borrow_mut(), ctx, node, &property, value)?;
             continue;
         }
@@ -152,15 +165,33 @@ pub(crate) fn configure_element<'gc>(
     // before the behaviors, so they land without animating; the declared
     // values go back in after, so the behaviors carry the node from the one
     // to the other. A property with no behavior simply arrives.
-    let entering = match named_enter {
+    let (entering, entrance) = match named_enter {
         Some(enter) => enter_values(state, ctx, node, enter)?,
-        None => Vec::new(),
+        None => (Vec::new(), None),
     };
     if let Some(behavior) = named_behavior {
         configure_behaviors(state, ctx, node, behavior)?;
     }
     for (property, settled) in entering {
-        assign_scene_property(&mut state.borrow_mut(), node, &property, settled)?;
+        match entrance {
+            // Timed by the entrance itself, whatever behaviors say.
+            Some(timing) => {
+                let mut state = state.borrow_mut();
+                let start = state
+                    .scene
+                    .current(node, &property)
+                    .map_err(|error| error.to_string())?
+                    .clone();
+                state
+                    .scene
+                    .animate_from(node, &property, start, settled, timing)
+                    .map_err(|error| error.to_string())?;
+            }
+            None => assign_scene_property(&mut state.borrow_mut(), node, &property, settled)?,
+        }
+    }
+    if let Some(exit) = named_exit {
+        configure_exit(state, ctx, node, exit)?;
     }
     // After the behaviors and the entrance, so a loop starts from where the
     // node was declared to be rather than from a schema default.
@@ -233,6 +264,32 @@ pub(crate) fn assign_engine_relation<'gc>(
                 .set_stretch(node, spec)
                 .map_err(|error| error.to_string())?;
         }
+        // A node is kept as the mask (and moved under this one); a table is
+        // a gradient, which replaces it; nothing takes either away.
+        "mask" => match value {
+            LuaValue::UserData(userdata) => {
+                let mask = userdata
+                    .downcast_static::<NodeToken>()
+                    .map_err(|_| "mask must be a morf node, a table or nil".to_owned())?
+                    .handle;
+                state
+                    .scene
+                    .set_mask(node, Some(mask))
+                    .map_err(|error| error.to_string())?;
+            }
+            LuaValue::Nil | LuaValue::Boolean(false) | LuaValue::Table(_) => {
+                state
+                    .scene
+                    .set_mask(node, None)
+                    .map_err(|error| error.to_string())?;
+                let value = match value {
+                    LuaValue::Table(_) => lua_to_scene(ctx, value, 0)?,
+                    _ => morf_scene::Value::Nil,
+                };
+                crate::scene_bindings::assign_scene_property(state, node, "mask", value)?;
+            }
+            _ => return Err("mask must be a morf node, a table or nil".to_owned()),
+        },
         _ => {
             let element = state
                 .scene
@@ -271,21 +328,101 @@ pub(crate) fn handler_event(property: &str) -> Option<UiEvent> {
 
 /// Puts the `enter` values in place and hands back what each property is
 /// meant to settle at.
+/// The words in an `enter` or `exit` table that say how, not what.
+const TIMING_KEYS: [&str; 3] = ["duration", "easing", "delay"];
+
+/// An `enter` or `exit` table's own timing, when it gives a `duration`:
+/// milliseconds, an easing, and a delay.
+fn entrance_timing<'gc>(
+    ctx: Context<'gc>,
+    table: Table<'gc>,
+    what: &str,
+    default_duration: Option<f64>,
+) -> Result<Option<Behavior>, String> {
+    let duration = match table.get_value(ctx, "duration") {
+        LuaValue::Nil => match default_duration {
+            Some(duration) => duration,
+            None => return Ok(None),
+        },
+        LuaValue::Integer(value) => value as f64,
+        LuaValue::Number(value) if value.is_finite() => value,
+        _ => return Err(format!("{what} duration must be milliseconds")),
+    };
+    let delay = table_number(ctx, table, "delay", 0.0)?;
+    if duration < 0.0 || delay < 0.0 {
+        return Err(format!("{what} duration and delay cannot be negative"));
+    }
+    Ok(Some(Behavior {
+        duration: Duration::from_secs_f64(duration / 1_000.0),
+        delay: Duration::from_secs_f64(delay / 1_000.0),
+        easing: parse_easing(ctx, table.get_value(ctx, "easing"))?,
+        ..Behavior::default()
+    }))
+}
+
+/// `exit = { opacity = 0, scale = 0.9, duration = 200, easing = "in_cubic" }`:
+/// how the node leaves when whatever holds it lets it go.
+fn configure_exit<'gc>(
+    state: &Rc<RefCell<ReactiveState>>,
+    ctx: Context<'gc>,
+    node: NodeHandle,
+    value: LuaValue<'gc>,
+) -> Result<(), String> {
+    let table = match value {
+        LuaValue::Nil | LuaValue::Boolean(false) => {
+            return state
+                .borrow_mut()
+                .scene
+                .set_exit(node, None)
+                .map_err(|error| error.to_string());
+        }
+        LuaValue::Table(table) => table,
+        _ => return Err("exit must be a property-keyed table".to_owned()),
+    };
+    let behavior = entrance_timing(ctx, table, "exit", Some(200.0))?.expect("a default duration");
+    let mut values = Vec::new();
+    for (property, to) in table.iter(ctx) {
+        let LuaValue::String(property) = property else {
+            return Err("exit keys must be property names".to_owned());
+        };
+        let property = property.display_lossy().to_string();
+        if TIMING_KEYS.contains(&property.as_str()) {
+            continue;
+        }
+        values.push((property, lua_to_scene(ctx, to, 0)?));
+    }
+    values.sort_by(|a, b| a.0.cmp(&b.0));
+    state
+        .borrow_mut()
+        .scene
+        .set_exit(node, Some(morf_scene::ExitSpec { values, behavior }))
+        .map_err(|error| format!("exit: {error}"))
+}
+
+type Entrance = (Vec<(String, morf_scene::Value)>, Option<Behavior>);
+
 fn enter_values<'gc>(
     state: &Rc<RefCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: NodeHandle,
     value: LuaValue<'gc>,
-) -> Result<Vec<(String, morf_scene::Value)>, String> {
+) -> Result<Entrance, String> {
     let LuaValue::Table(table) = value else {
         return Err("enter must be a property-keyed table".to_owned());
     };
+    let timing = entrance_timing(ctx, table, "enter", None)?;
     let mut entering = Vec::new();
     for (property, start) in table.iter(ctx) {
         let LuaValue::String(property) = property else {
             return Err("enter keys must be property names".to_owned());
         };
         let property = property.display_lossy().to_string();
+        if TIMING_KEYS.contains(&property.as_str()) {
+            if timing.is_none() {
+                return Err(format!("enter `{property}` goes with a `duration`"));
+            }
+            continue;
+        }
         let start = lua_to_scene(ctx, start, 0)?;
         let settled = state
             .borrow()
@@ -296,7 +433,7 @@ fn enter_values<'gc>(
         assign_scene_property(&mut state.borrow_mut(), node, &property, start)?;
         entering.push((property, settled));
     }
-    Ok(entering)
+    Ok((entering, timing))
 }
 
 pub(crate) fn configure_behaviors<'gc>(

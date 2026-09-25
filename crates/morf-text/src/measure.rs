@@ -39,7 +39,14 @@ impl TextSystem {
     ) -> Size {
         self.load_font_source(options.font_source.as_deref());
         let size = size.max(1.0) as f32;
-        let font_weight = normalize_font_weight(options.font_weight);
+        // A `wght` among the axes is the weight: shaping applies it, since
+        // it is the one axis that moves glyphs, and the rasteriser follows.
+        let font_weight = normalize_font_weight(
+            options
+                .style
+                .axis(b"wght")
+                .map_or(options.font_weight, f64::from),
+        );
         let input = TextInput {
             text: text.to_owned(),
             family: family.to_owned(),
@@ -60,7 +67,9 @@ impl TextSystem {
             word_spacing: 0.0,
             alignment: options.alignment,
             rich: None,
+            axes: Vec::new(),
         });
+        cached.axes = crate::variations::raster_axes(&options.style.axes);
         if cached.input.as_ref() != Some(&input) {
             cached.buffer.set_metrics_and_size(
                 metrics,

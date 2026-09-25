@@ -93,6 +93,23 @@ pub(crate) fn install_shell_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "font_families", font_families);
+    // The variation axes an installed family defines, `{ tag, min, default,
+    // max }` each: what a text node's `axes` can move, and how far.
+    let font_axes = Callback::from_fn(&ctx, |ctx, _, mut stack| {
+        let family: String = stack.consume(ctx)?;
+        let table = Table::new(&ctx);
+        for (index, axis) in morf_text::family_axes(&family).iter().enumerate() {
+            let entry = Table::new(&ctx);
+            entry.set(ctx, "tag", axis.name().as_str())?;
+            entry.set(ctx, "min", f64::from(axis.min))?;
+            entry.set(ctx, "default", f64::from(axis.default))?;
+            entry.set(ctx, "max", f64::from(axis.max))?;
+            table.set(ctx, index as i64 + 1, entry)?;
+        }
+        stack.replace(ctx, table);
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "font_axes", font_axes);
     // What this configuration was started with. Three views of the same words:
     // `args` is what was typed, in order and unaltered; `options` is the flags
     // resolved into names and values; `operands` is what was left over. A

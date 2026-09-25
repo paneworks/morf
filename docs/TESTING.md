@@ -260,7 +260,9 @@ the primary before anything was.
 A node is a table: `handle`, `element` (`"Text"`, `"MouseArea"`, …), `id`,
 `text` (for text nodes), `x`, `y`, `width`, `height` (its box on its
 surface, through every transform above it), `visible` (it, every ancestor
-and its surface shown, and not fully transparent), `depth`, `parent` (a
+and its surface shown, and not fully transparent), `opacity` (its own),
+`exiting` (it is playing its `exit`: drawn, but out of the layout and
+taking no input), `depth`, `parent` (a
 handle), `surface` (the label) and `surface_kind`. A node's `id` is an
 ordinary property every element has and nothing in the engine reads:
 `ui.Rect { id = "panel", ... }`.

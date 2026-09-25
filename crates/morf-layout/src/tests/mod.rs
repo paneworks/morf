@@ -81,9 +81,11 @@ impl TextMeasurer for WeightText {
 mod alignment;
 mod basic;
 mod custom;
+mod exit;
 mod flex;
 mod hidden;
 mod incremental;
+mod masks;
 mod matrix_stretch;
 mod text_input;
 mod transforms;

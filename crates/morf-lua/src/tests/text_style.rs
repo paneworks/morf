@@ -174,3 +174,53 @@ fn text_in_runs_places_its_links_and_a_click_on_one_follows_it() {
         [IpcValue::String("https://morf.dev/?a=1&b=2".into())]
     );
 }
+
+#[test]
+fn axes_are_a_map_of_tags_a_behavior_moves_like_any_number() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "axes.lua",
+            br##"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                local on = morf.signal("on", false)
+                icon = ui.Text {
+                    text = "home",
+                    axes = function() return { FILL = on:get() and 1 or 0, wght = 400 } end,
+                    behavior = { axes = { duration = 100, easing = "linear" } },
+                }
+                plain = ui.Text { text = "x", axes = {} }
+                morf.ipc.select = function() on:set(true) end
+                morf.ipc.fill = function() return icon.axes.FILL end
+                assert(not pcall(ui.Text, { axes = { weight = 400 } }))
+                assert(not pcall(ui.Text, { axes = { FILL = "full" } }))
+                assert(not pcall(ui.Text, { axes = 3 }))
+            "##,
+        )
+        .unwrap();
+    let fill = |runtime: &mut Runtime| match runtime.call_ipc("fill", &[]).unwrap()[..] {
+        [IpcValue::Number(value)] => value,
+        ref other => panic!("{other:?}"),
+    };
+    assert_eq!(fill(&mut runtime), 0.0);
+    runtime.call_ipc("select", &[]).unwrap();
+    runtime
+        .tick_animations(std::time::Duration::from_millis(50))
+        .unwrap();
+    assert!(
+        (fill(&mut runtime) - 0.5).abs() < 0.01,
+        "half way: {}",
+        fill(&mut runtime)
+    );
+    runtime
+        .tick_animations(std::time::Duration::from_millis(60))
+        .unwrap();
+    assert_eq!(fill(&mut runtime), 1.0);
+    let plain = runtime.scene().roots()[1];
+    assert_eq!(
+        runtime.scene().current(plain, "axes").unwrap(),
+        &Value::Map(Default::default()),
+        "an empty table is an empty map"
+    );
+}
