@@ -198,6 +198,51 @@ fn a_mouse_area_says_whether_it_is_hovered_and_pressed() {
 }
 
 #[test]
+fn any_node_says_whether_it_contains_the_pointer() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "contains.lua",
+            br#"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                panel = ui.Rect { width = 10, height = 10 }
+                runs = 0
+                ui.Text { text = function()
+                    runs = runs + 1
+                    return panel.contains_pointer and "in" or "out"
+                end }
+                morf.ipc.runs = function() return runs end
+                morf.ipc.write = function() panel.contains_pointer = true end
+            "#,
+        )
+        .unwrap();
+    let panel = runtime.scene().roots()[0];
+    assert_eq!(text(&runtime, 1), "out");
+    // Reading it enrolled the panel, and only the panel.
+    assert_eq!(runtime.pointer_watchers(), vec![panel]);
+    assert_eq!(runtime.take_fresh_pointer_watchers(), vec![panel]);
+    assert!(runtime.take_fresh_pointer_watchers().is_empty());
+    assert!(runtime.set_contains_pointer(&[(panel, true)]));
+    runtime.flush_after_event();
+    assert_eq!(text(&runtime, 1), "in");
+    // The same answer again is no change, and runs nothing.
+    assert!(!runtime.set_contains_pointer(&[(panel, true)]));
+    runtime.flush_after_event();
+    assert_eq!(
+        runtime.call_ipc("runs", &[]).unwrap(),
+        vec![crate::IpcValue::Integer(2)]
+    );
+    let error = runtime.call_ipc("write", &[]).unwrap_err().to_string();
+    assert!(error.contains("read-only"), "{error}");
+    // A removed node is forgotten.
+    runtime
+        .execute("drop.lua", br#"require("morf.ui").destroy(panel, true)"#)
+        .unwrap();
+    assert!(!runtime.has_pointer_watchers());
+}
+
+#[test]
 fn a_disposed_effect_never_runs_again() {
     let mut runtime = Runtime::default();
     runtime

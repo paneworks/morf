@@ -1447,6 +1447,42 @@ local area = ui.MouseArea { anchors = { fill = true } }
 ui.Rect { color = function() return area.pressed and "#444" or area.hovered and "#333" or "#222" end }
 ```
 
+Every node, of any kind, has `contains_pointer`, also read-only: the
+pointer is inside the node's box, whatever is drawn over it. `hovered` is
+one area at a time; `contains_pointer` is "the pointer is somewhere on this
+panel", buttons and all, which is what a panel that shuts when the pointer
+leaves it asks (Qt's `HoverHandler`, or `containsMouse` with propagation;
+a `MouseArea`'s own `contains_pointer` is the hover that looks through
+what is above it).
+
+```lua
+local panel = ui.Rect { width = 400, height = 300,
+  ui.MouseArea { anchors = { fill = true } },   -- takes the pointer here
+  ui.MouseArea { x = 20, y = 20, width = 80, height = 32 },
+}
+morf.effect("panel.leave", function()
+  if not panel.contains_pointer then close() end
+end)
+```
+
+- The box is the node's laid-out rectangle taken through every transform
+  above it and its own, animated values and a `stretch` included, and cut
+  by every ancestor that clips. A hidden or leaving node, and a node used
+  as a mask, contains nothing; a disabled one is still where it is drawn.
+- It follows the pointer the compositor sends. A surface hears the pointer
+  only over its input region -- its `MouseArea`s (and text inputs,
+  terminals, drop areas, links), or the `input_regions` it set -- so a
+  panel the pointer should be seen on needs an area under it, as above.
+  Off the region, or off the surface, it is false. Touch is not the
+  pointer.
+- It changes when the pointer moves, enters or leaves, as `hovered` does:
+  a panel sliding under a pointer that stays still is seen at the next
+  motion. A node read for the first time is answered at the end of that
+  turn, where the pointer is then.
+- It costs nothing for a node nobody reads: reading it once enrols the
+  node, and only enrolled nodes are tested, once per pointer motion. A
+  binding reading it re-runs only when it turns.
+
 ### The wheel
 
 `on_wheel(surface_x, surface_y, pixel_x, pixel_y, step_x, step_y,

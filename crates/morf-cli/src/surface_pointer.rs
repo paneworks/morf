@@ -32,6 +32,10 @@ pub(crate) fn handle_pointer_event(
             let hit = hit_layout
                 .hit_test(&runtime.scene(), x, y)
                 .map_err(|error| error.to_string())?;
+            input.pointer = Some((surface, x, y));
+            // Before `hovered` moves, and flushed with it: a binding reading
+            // both sees them change together.
+            repaint |= update_containment(runtime, input, layouts, None);
             // Hover is compared by node, not by hit: the same node under a
             // moving pointer is still the same hover, even though its local
             // coordinates change with every motion event.
@@ -49,6 +53,7 @@ pub(crate) fn handle_pointer_event(
                 }
             }
             input.hovered = next_hovered;
+            runtime.flush_after_event();
             crate::pointer_cursor::hover_changed(runtime, client, entered, left);
             if let Some(hit) = hit {
                 repaint |= runtime.dispatch_pointer(
@@ -90,12 +95,20 @@ pub(crate) fn handle_pointer_event(
         }
         LayerEvent::PointerLeave { surface } => {
             if input
+                .pointer
+                .is_some_and(|(pointer_surface, _, _)| pointer_surface == surface)
+            {
+                input.pointer = None;
+                repaint |= update_containment(runtime, input, layouts, None);
+            }
+            if input
                 .hovered
                 .is_some_and(|(hovered_surface, _)| hovered_surface == surface)
                 && let Some((_, hit)) = input.hovered.take()
             {
                 repaint |= runtime.dispatch_ui_event(hit.node, UiEvent::PointerExited);
             }
+            runtime.flush_after_event();
         }
         LayerEvent::PointerAxis {
             surface,
@@ -260,4 +273,58 @@ pub(crate) fn handle_pointer_event(
         other => return Ok(Err(other)),
     }
     Ok(Ok(repaint))
+}
+
+/// Works out `contains_pointer` for the nodes something has read it of --
+/// `nodes`, or all of them -- against where the pointer is now, and records
+/// the ones that changed. Their bindings run at the next flush; the caller
+/// flushes. Nothing at all when no node has been asked about.
+///
+/// A node is tested on the layout of the surface the pointer is over; one on
+/// any other surface, or anywhere once the pointer has left, is outside.
+pub(crate) fn update_containment(
+    runtime: &mut Runtime,
+    input: &PointerInput,
+    layouts: &dyn SurfaceLayouts,
+    nodes: Option<Vec<morf_scene::NodeHandle>>,
+) -> bool {
+    if !runtime.has_pointer_watchers() {
+        return false;
+    }
+    let nodes = nodes.unwrap_or_else(|| runtime.pointer_watchers());
+    if nodes.is_empty() {
+        return false;
+    }
+    let answers = {
+        let scene = runtime.scene();
+        let under = input
+            .pointer
+            .and_then(|(surface, x, y)| Some((layouts.layout_of(surface)?, x, y)));
+        nodes
+            .into_iter()
+            .map(|node| {
+                let inside =
+                    under.is_some_and(|(layout, x, y)| layout.contains_point(&scene, node, x, y));
+                (node, inside)
+            })
+            .collect::<Vec<_>>()
+    };
+    runtime.set_contains_pointer(&answers)
+}
+
+/// Answers the nodes first asked about since the last turn, where the
+/// pointer is now, and runs what reads them. Once per turn, after the
+/// layouts; nothing when nothing new was asked.
+pub(crate) fn answer_new_containment(
+    runtime: &mut Runtime,
+    input: &PointerInput,
+    layouts: &dyn SurfaceLayouts,
+) -> bool {
+    let fresh = runtime.take_fresh_pointer_watchers();
+    if fresh.is_empty() {
+        return false;
+    }
+    let changed = update_containment(runtime, input, layouts, Some(fresh));
+    runtime.flush_after_event();
+    changed
 }
