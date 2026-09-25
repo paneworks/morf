@@ -31,7 +31,8 @@
 #   k ARGS       wtype on the nested display          wait S   sleep
 #
 # Environment: WORK (scratch root, default ${TMPDIR:-/tmp}/morf-sandbox),
-# UPSTREAM, MORF_REPO, BOOT (s before the steps), TIMEOUT, WALLPAPER,
+# UPSTREAM, MORF_REPO, MORF_CONFIG (the configuration the morf kind runs,
+# default examples/impasto/init.lua; MORF_ENV adds NAME=value pairs), BOOT (s before the steps), TIMEOUT, WALLPAPER,
 # RENDER_NODE (cage renders with GL here; pixman screenshots can be stale),
 # AWWW_BIN, INTER_DIR, WTYPE (tools taken from these when not on PATH),
 # CAELESTIA, CAELESTIA_PKG, CAEL_CONFIG (a shell.json to seed), CAEL_SCHEME (a
@@ -249,7 +250,7 @@ elif [ "$KIND" = upstream ]; then
   close() { asked close; k -k Escape; }
 else
   cd "$REPO"
-  env IMPASTO_LIVE_COMPOSITOR=1 IMPASTO_DRY_RUN=1 ${MORF_ENV:-} nixVulkanIntel "$REPO/target/release/morf" examples/impasto/init.lua > \$OUT/shell.log 2>&1 &
+  env IMPASTO_LIVE_COMPOSITOR=1 IMPASTO_DRY_RUN=1 ${MORF_ENV:-} nixVulkanIntel "$REPO/target/release/morf" ${MORF_CONFIG:-examples/impasto/init.lua} > \$OUT/shell.log 2>&1 &
   S=\$!
   open() { asked open; timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
   close() { asked close; timeout 10 "$REPO/target/release/morf" ipc call close >> \$OUT/hc.log 2>&1; }
