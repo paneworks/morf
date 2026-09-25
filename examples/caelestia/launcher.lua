@@ -30,6 +30,11 @@ M.count = morf.signal("caelestia.launcher.count", 0)
 
 local function max_shown() return config.get("launcher.max_shown") end
 
+local by_key = {}
+
+--- The full row behind a model entry.
+local function row_of(entry) return entry and by_key[entry.key] end
+
 -- The results follow the query.
 morf.effect("caelestia.launcher.search", function()
   local q = M.query:get()
@@ -37,7 +42,14 @@ morf.effect("caelestia.launcher.search", function()
   local out = {}
   for i = 1, math.min(#found, max_shown()) do
     local row = found[i]
-    out[i] = { key = row.kind .. ":" .. row.id, row = row }
+    local key = row.kind .. ":" .. row.id
+    -- A model row is plain data; the row itself (an action's function
+    -- among it) stays in Lua, by key.
+    by_key[key] = row
+    out[i] = {
+      key = key, kind = row.kind, id = row.id, name = row.name,
+      description = row.description, icon = row.icon,
+    }
   end
   M.results:replace(out, "key")
   M.count:set(#out)
@@ -69,7 +81,7 @@ local function row_icon(row)
 end
 
 local function delegate(entry)
-  local row = entry.row
+  local row = row_of(entry) or entry
   local area
   area = ui.MouseArea {
     id = "launcher-row-" .. entry.key,
@@ -140,7 +152,7 @@ field = ui.TextInput {
   caret_color = function() return C.onSurface end,
   selection_color = function() return C.primary:alpha(0.4) end,
   on_text_changed = function(text) M.query:set(text) end,
-  on_accepted = function() M.activate((M.results:get(M.selected:get()) or {}).row) end,
+  on_accepted = function() M.activate(row_of(M.results:get(M.selected:get()))) end,
   on_escape = function() M.drawer.set(false) end,
   on_key_pressed = function(keysym)
     if keysym == "Up" then move(-1) return true end
