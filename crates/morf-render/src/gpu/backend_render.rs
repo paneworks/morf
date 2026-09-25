@@ -4,7 +4,9 @@ use morf_layout::{Size, TextMeasurer, TextOptions};
 use morf_scene::{Element, NodeHandle};
 use std::collections::HashMap;
 
-use super::{backend_types::*, batches::*, glyph_batch::*, targets::*, textures::*};
+use super::{
+    backend_types::*, batches::*, glyph_batch::*, glyphs::GlyphInstance, targets::*, textures::*,
+};
 
 impl TextMeasurer for WgpuBackend {
     fn measure(
@@ -107,7 +109,6 @@ impl RenderBackend for WgpuBackend {
             &mut texture_batch,
         );
         let scale = scale_120.max(1) as f64 / 120.0;
-        let layer_targets = self.build_layer_targets(list, &mut texture_batch, scale);
         let mut command_layers = vec![None; list.commands.len()];
         let mut child_layers = HashMap::new();
         for (layer_index, layer) in list.layers.iter().enumerate() {
@@ -133,6 +134,48 @@ impl RenderBackend for WgpuBackend {
             .flatten()
             .any(|draw| draw.refresh.is_some())
             .then(|| self.backdrop_scratch());
+        // What each layer has to hold this frame: where the damage composites
+        // it, and where a backdrop blurring again composites it beneath itself.
+        let backdrop_reads: Vec<(DamageRect, Vec<usize>)> = backdrop_draws
+            .iter()
+            .flatten()
+            .filter_map(|draw| {
+                let ops = draw.refresh.as_ref()?;
+                let entry = self.backdrops.entries.get(&draw.node)?;
+                let layers = ops
+                    .iter()
+                    .filter_map(|op| match *op {
+                        super::backdrops::BeneathOp::Layer(layer) => Some(layer),
+                        super::backdrops::BeneathOp::Command(_) => None,
+                    })
+                    .collect();
+                Some((entry.region(), layers))
+            })
+            .collect();
+        let regions = super::layer_pool::layer_regions(
+            list,
+            damage,
+            &backdrop_reads,
+            scale_120,
+            (self.width, self.height),
+        );
+        let stages = super::layer_pool::schedule(
+            list,
+            &super::backdrops::offscreen_order(list, &command_layers, &child_layers),
+            &regions
+                .iter()
+                .map(|region| region.as_ref().map(|region| region.bounds))
+                .collect::<Vec<_>>(),
+            |command| {
+                backdrop_draws[command]
+                    .as_ref()
+                    .is_some_and(|draw| draw.refresh.is_some())
+            },
+        );
+        self.layer_pool.begin_frame();
+        let layer_targets =
+            self.build_layer_targets(list, &mut texture_batch, scale, &regions, &stages);
+        self.layer_pool.end_frame();
         self.ensure_textures(texture_batch.instances.len().max(1));
         self.ensure_glyphs(
             glyph_batch
@@ -184,18 +227,76 @@ impl RenderBackend for WgpuBackend {
                 bytemuck::cast_slice(&texture_batch.instances),
             );
         }
+        // Where each command can put pixels: its bounds, and every quad it is
+        // drawn with, since a glyph may reach past the box it was laid out in.
+        // A damage rectangle that misses it skips its draws — a clock ticking
+        // in ten panels is ten small rectangles, and each used to issue every
+        // draw of the surface, scissored to nothing.
+        let reach: Vec<Option<DamageRect>> = {
+            let target = (self.width, self.height);
+            let mut reach: Vec<Option<DamageRect>> = list
+                .commands
+                .iter()
+                .enumerate()
+                .map(|(index, command)| {
+                    // A configuration's shader may move its quad anywhere, so
+                    // a command wearing one is drawn wherever there is damage.
+                    let shaded = field_indices[index]
+                        .is_some_and(|instance| field_shaders[instance as usize].is_some());
+                    if shaded {
+                        return Some(DamageRect {
+                            x: 0,
+                            y: 0,
+                            width: self.width,
+                            height: self.height,
+                        });
+                    }
+                    // A pixel of margin for the antialiased edge.
+                    physical_damage(command.bounds(), scale_120).map(grow_damage)
+                })
+                .collect();
+            let mut widen = |index: usize, instance: &GlyphInstance| {
+                let quad = quad_reach(instance, target);
+                reach[index] = Some(reach[index].map_or(quad, |seen| union_damage(seen, quad)));
+            };
+            for (index, instance) in texture_batch.command_instances.iter().enumerate() {
+                if let Some(instance) = instance {
+                    widen(index, &texture_batch.instances[*instance as usize]);
+                }
+            }
+            for (index, draw) in backdrop_draws.iter().enumerate() {
+                if let Some(draw) = draw {
+                    widen(index, &texture_batch.instances[draw.instance as usize]);
+                }
+            }
+            if let Some(batch) = &glyph_batch {
+                for (index, spans) in batch.command_spans.iter().enumerate() {
+                    for span in spans {
+                        for instance in
+                            &batch.instances[span.range.start as usize..span.range.end as usize]
+                        {
+                            widen(index, instance);
+                        }
+                    }
+                }
+            }
+            reach
+        };
         macro_rules! draw_command {
-            ($pass:expr, $command_index:expr, $base_damage:expr) => {{
+            ($pass:expr, $command_index:expr, $base_damage:expr, $frame:expr) => {{
                 let command_index = $command_index;
                 let command_damage = if let Some(clip) = list.commands[command_index].clip() {
                     physical_damage(clip, scale_120)
                         .and_then(|clip| intersect_damage($base_damage, clip))
                 } else {
                     Some($base_damage)
-                };
+                }
+                .filter(|damage| {
+                    reach[command_index]
+                        .is_some_and(|reach| intersect_damage(*damage, reach).is_some())
+                });
                 if let Some(command_damage) = command_damage
-                    && let Some((x, y, width, height)) =
-                        clamp_scissor(command_damage, self.width, self.height)
+                    && let Some((x, y, width, height)) = placed_scissor(command_damage, $frame)
                 {
                     $pass.set_scissor_rect(x, y, width, height);
                     if let Some(instance) = field_indices[command_index] {
@@ -265,15 +366,16 @@ impl RenderBackend for WgpuBackend {
             }};
         }
         macro_rules! draw_layer {
-            ($pass:expr, $layer_index:expr, $base_damage:expr) => {{
+            ($pass:expr, $layer_index:expr, $base_damage:expr, $frame:expr) => {{
                 let layer_index = $layer_index;
-                if let Some(layer_damage) =
-                    physical_damage(list.layers[layer_index].bounds, scale_120)
-                        .and_then(|bounds| intersect_damage($base_damage, bounds))
-                    && let Some((x, y, width, height)) =
-                        clamp_scissor(layer_damage, self.width, self.height)
+                // A layer nothing reads this frame was not rendered, and the
+                // damage here does not reach it either.
+                if let Some(target) = &layer_targets[layer_index]
+                    && let Some(layer_damage) =
+                        physical_damage(list.layers[layer_index].bounds, scale_120)
+                            .and_then(|bounds| intersect_damage($base_damage, bounds))
+                    && let Some((x, y, width, height)) = placed_scissor(layer_damage, $frame)
                 {
-                    let target = &layer_targets[layer_index];
                     $pass.set_scissor_rect(x, y, width, height);
                     // An effect shader composites the layer instead of the
                     // plain texture pass: by now the subtree is a texture, so
@@ -317,16 +419,21 @@ impl RenderBackend for WgpuBackend {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("morf frame encoder"),
             });
-        let full_damage = DamageRect {
-            x: 0,
-            y: 0,
-            width: self.width,
-            height: self.height,
-        };
-        for step in super::backdrops::offscreen_order(list, &command_layers, &child_layers) {
-            let layer_index = match step {
-                super::backdrops::Offscreen::Layer(layer_index) => layer_index,
-                super::backdrops::Offscreen::Backdrop(command_index) => {
+        let surface_frame = (
+            DamageRect {
+                x: 0,
+                y: 0,
+                width: self.width,
+                height: self.height,
+            },
+            (0, 0),
+        );
+        for stage in &stages {
+            let layers: &[usize] = match stage {
+                super::layer_pool::Stage::Atlas(layers) => layers,
+                super::layer_pool::Stage::Solo(layer) => std::slice::from_ref(layer),
+                super::layer_pool::Stage::Backdrop(command_index) => {
+                    let command_index = *command_index;
                     let Some(draw) = &backdrop_draws[command_index] else {
                         continue;
                     };
@@ -363,10 +470,10 @@ impl RenderBackend for WgpuBackend {
                         for op in ops {
                             match *op {
                                 super::backdrops::BeneathOp::Command(index) => {
-                                    draw_command!(pass, index, region)
+                                    draw_command!(pass, index, region, surface_frame)
                                 }
                                 super::backdrops::BeneathOp::Layer(layer) => {
-                                    draw_layer!(pass, layer, region)
+                                    draw_layer!(pass, layer, region, surface_frame)
                                 }
                             }
                         }
@@ -415,47 +522,31 @@ impl RenderBackend for WgpuBackend {
                     continue;
                 }
             };
-            let layer = &list.layers[layer_index];
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("morf subtree layer"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &layer_targets[layer_index].view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    ..Default::default()
-                });
-                let mut command_index = layer.commands.start;
-                while command_index < layer.commands.end {
-                    if let Some(child) = child_layers
-                        .get(&(Some(layer_index), command_index))
-                        .copied()
-                    {
-                        draw_layer!(pass, child, full_damage);
-                        command_index = list.layers[child].commands.end.max(command_index + 1);
-                    } else {
-                        if command_layers[command_index] == Some(layer_index) {
-                            draw_command!(pass, command_index, full_damage);
-                        }
-                        command_index += 1;
-                    }
-                }
-            }
-            let target = &layer_targets[layer_index];
-            for blur in [target.blur.as_ref(), target.shadow.as_ref()]
-                .into_iter()
-                .flatten()
-            {
-                for (pass_index, blur_pass) in blur.passes.iter().enumerate() {
+            // One pass per texture. An atlas stage is normally one texture;
+            // one too large for a single texture spilled into more.
+            let mut remaining: Vec<usize> = layers
+                .iter()
+                .copied()
+                .filter(|layer| layer_targets[*layer].is_some())
+                .collect();
+            while let Some(&first) = remaining.first() {
+                let texture = layer_targets[first]
+                    .as_ref()
+                    .expect("filtered above")
+                    .texture
+                    .clone();
+                let (batch, rest): (Vec<usize>, Vec<usize>) =
+                    remaining.iter().copied().partition(|layer| {
+                        layer_targets[*layer]
+                            .as_ref()
+                            .is_some_and(|target| target.texture == texture)
+                    });
+                remaining = rest;
+                {
                     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("morf dual-kawase pass"),
+                        label: Some("morf subtree layers"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &blur.views[pass_index],
+                            view: &layer_targets[first].as_ref().expect("filtered above").view,
                             depth_slice: None,
                             resolve_target: None,
                             ops: wgpu::Operations {
@@ -465,9 +556,68 @@ impl RenderBackend for WgpuBackend {
                         })],
                         ..Default::default()
                     });
-                    pass.set_pipeline(&self.blur_pipeline);
-                    pass.set_bind_group(0, &blur_pass.bind_group, &[]);
-                    pass.draw(0..3, 0..1);
+                    for &layer_index in &batch {
+                        let layer = &list.layers[layer_index];
+                        let target = layer_targets[layer_index].as_ref().expect("filtered above");
+                        // The target holds `region` of the surface at `origin`:
+                        // the viewport shifts the surface's coordinates onto
+                        // it, so every instance is drawn exactly as it would be
+                        // into the surface.
+                        let (region, origin) = (target.region, target.origin);
+                        let frame = (region, origin);
+                        pass.set_viewport(
+                            origin.0 as f32 - region.x as f32,
+                            origin.1 as f32 - region.y as f32,
+                            self.width as f32,
+                            self.height as f32,
+                            0.0,
+                            1.0,
+                        );
+                        for &read in &target.reads {
+                            let mut command_index = layer.commands.start;
+                            while command_index < layer.commands.end {
+                                if let Some(child) = child_layers
+                                    .get(&(Some(layer_index), command_index))
+                                    .copied()
+                                {
+                                    draw_layer!(pass, child, read, frame);
+                                    command_index =
+                                        list.layers[child].commands.end.max(command_index + 1);
+                                } else {
+                                    if command_layers[command_index] == Some(layer_index) {
+                                        draw_command!(pass, command_index, read, frame);
+                                    }
+                                    command_index += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                for &layer_index in &batch {
+                    let target = layer_targets[layer_index].as_ref().expect("filtered above");
+                    for blur in [target.blur.as_ref(), target.shadow.as_ref()]
+                        .into_iter()
+                        .flatten()
+                    {
+                        for (pass_index, blur_pass) in blur.passes.iter().enumerate() {
+                            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                label: Some("morf dual-kawase pass"),
+                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                    view: &blur.views[pass_index],
+                                    depth_slice: None,
+                                    resolve_target: None,
+                                    ops: wgpu::Operations {
+                                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                        store: wgpu::StoreOp::Store,
+                                    },
+                                })],
+                                ..Default::default()
+                            });
+                            pass.set_pipeline(&self.blur_pipeline);
+                            pass.set_bind_group(0, &blur_pass.bind_group, &[]);
+                            pass.draw(0..3, 0..1);
+                        }
+                    }
                 }
             }
         }
@@ -497,11 +647,11 @@ impl RenderBackend for WgpuBackend {
                 let mut command_index = 0;
                 while command_index < list.commands.len() {
                     if let Some(layer) = child_layers.get(&(None, command_index)).copied() {
-                        draw_layer!(pass, layer, *damage);
+                        draw_layer!(pass, layer, *damage, surface_frame);
                         command_index = list.layers[layer].commands.end.max(command_index + 1);
                     } else {
                         if command_layers[command_index].is_none() {
-                            draw_command!(pass, command_index, *damage);
+                            draw_command!(pass, command_index, *damage, surface_frame);
                         }
                         command_index += 1;
                     }

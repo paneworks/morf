@@ -60,22 +60,35 @@ impl DamageTracker {
                     .collect(),
             );
         }
-        if self.previous.layers != next.layers {
-            let damage = self
-                .previous
-                .commands
-                .iter()
-                .chain(&next.commands)
-                .filter_map(|command| physical_damage(command.bounds(), scale_120))
-                .collect();
-            self.scale_120 = scale_120;
-            return merge_damage(damage);
-        }
-        let previous = keyed_commands(&self.previous.commands);
-        let current = keyed_commands(&next.commands);
+        let previous_keys = command_keys(&self.previous.commands);
+        let current_keys = command_keys(&next.commands);
+        let previous = keyed_commands(&self.previous.commands, &previous_keys);
+        let current = keyed_commands(&next.commands, &current_keys);
         // Each changed area with the paint order it was drawn at, so a frosted
         // panel can tell a change beneath it from one on top of it.
         let mut changed: Vec<(Geometry, usize)> = Vec::new();
+        // A layer that composites differently — it moved, turned, faded, took
+        // or lost a command — changes everything it covers, before and after,
+        // even where none of its commands did. Only those areas: a clock hand
+        // turning inside one panel used to repaint the whole surface, because
+        // any change to any layer did.
+        let previous_layers = keyed_layers(&self.previous, &previous_keys);
+        let current_layers = keyed_layers(next, &current_keys);
+        for (key, shape) in &current_layers {
+            match previous_layers.get(key) {
+                Some(old) if old == shape => {}
+                Some(old) => {
+                    changed.push((old.layer.bounds, old.start.min(shape.start)));
+                    changed.push((shape.layer.bounds, shape.start));
+                }
+                None => changed.push((shape.layer.bounds, shape.start)),
+            }
+        }
+        for (key, old) in &previous_layers {
+            if !current_layers.contains_key(key) {
+                changed.push((old.layer.bounds, old.start));
+            }
+        }
         for (key, (order, command)) in &current {
             match previous.get(key) {
                 Some((old_order, old)) if old_order == order && *old == *command => {}
@@ -251,17 +264,93 @@ fn overlaps(left: Geometry, right: Geometry) -> bool {
 /// changing it would repaint nothing. The occurrence index is what separates
 /// them, and it is stable because paint always emits a node's commands in the
 /// same order.
-fn keyed_commands(commands: &[DrawCommand]) -> HashMap<(NodeHandle, u32), (usize, &DrawCommand)> {
+fn keyed_commands<'a>(
+    commands: &'a [DrawCommand],
+    keys: &[(NodeHandle, u32)],
+) -> HashMap<(NodeHandle, u32), (usize, &'a DrawCommand)> {
+    commands
+        .iter()
+        .zip(keys)
+        .enumerate()
+        .map(|(order, (command, key))| (*key, (order, command)))
+        .collect()
+}
+
+/// Each command's key, in paint order: its node and which of that node's
+/// commands it is.
+fn command_keys(commands: &[DrawCommand]) -> Vec<(NodeHandle, u32)> {
     let mut emitted: HashMap<NodeHandle, u32> = HashMap::new();
     commands
         .iter()
-        .enumerate()
-        .map(|(order, command)| {
+        .map(|command| {
             let node = command.node();
             let occurrence = emitted.entry(node).or_default();
             let key = (node, *occurrence);
             *occurrence += 1;
-            (key, (order, command))
+            key
+        })
+        .collect()
+}
+
+/// How one layer composites, independent of where it sits in the lists.
+struct LayerShape {
+    /// The layer itself, with its command range and parent index cleared: a
+    /// line of text added elsewhere shifts every range without changing how
+    /// anything looks.
+    layer: Layer,
+    /// Its parent, by key rather than index.
+    parent: Option<(NodeHandle, u32)>,
+    /// Which commands it holds, by key, hashed.
+    members: u64,
+    /// Where it starts in paint order, for telling what lies beneath a
+    /// backdrop; not part of how it looks.
+    start: usize,
+}
+
+impl PartialEq for LayerShape {
+    fn eq(&self, other: &Self) -> bool {
+        self.layer == other.layer && self.parent == other.parent && self.members == other.members
+    }
+}
+
+/// Every layer by its node and which of that node's layers it is — a bordered
+/// `ClipRect` makes two — with how it composites.
+fn keyed_layers(
+    list: &DrawList,
+    command_keys: &[(NodeHandle, u32)],
+) -> HashMap<(NodeHandle, u32), LayerShape> {
+    use std::hash::{Hash, Hasher};
+    let mut emitted: HashMap<NodeHandle, u32> = HashMap::new();
+    let keys: Vec<(NodeHandle, u32)> = list
+        .layers
+        .iter()
+        .map(|layer| {
+            let occurrence = emitted.entry(layer.node).or_default();
+            let key = (layer.node, *occurrence);
+            *occurrence += 1;
+            key
+        })
+        .collect();
+    list.layers
+        .iter()
+        .zip(&keys)
+        .map(|(layer, key)| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            command_keys
+                .get(layer.commands.clone())
+                .unwrap_or_default()
+                .hash(&mut hasher);
+            let shape = LayerShape {
+                layer: Layer {
+                    commands: 0..0,
+                    parent: None,
+                    ..layer.clone()
+                },
+                parent: layer.parent.and_then(|parent| keys.get(parent).copied()),
+                members: hasher.finish(),
+                start: layer.commands.start,
+            };
+            (*key, shape)
         })
         .collect()
 }

@@ -332,3 +332,75 @@ fn a_clip_rect_repaints_when_only_its_fill_changes() {
         "changing only the fill has to repaint it"
     );
 }
+
+/// Two rounded panels side by side, a hand turned inside the first by `turn`
+/// degrees, and the second at `opacity`.
+fn two_panels(turn: f64, opacity: f64) -> DrawList {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    scene.assign(root, "width", 200.0).unwrap();
+    scene.assign(root, "height", 100.0).unwrap();
+    let mut panels = Vec::new();
+    for x in [0.0, 100.0] {
+        let panel = scene.create(Element::ClipRect);
+        for (property, value) in [("x", x), ("width", 90.0), ("height", 90.0), ("radius", 8.0)] {
+            scene.assign(panel, property, value).unwrap();
+        }
+        scene.reparent(panel, Some(root)).unwrap();
+        panels.push(panel);
+    }
+    let hand = scene.create(Element::Rect);
+    for (property, value) in [("x", 40.0), ("y", 10.0), ("width", 4.0), ("height", 30.0)] {
+        scene.assign(hand, property, value).unwrap();
+    }
+    scene.assign(hand, "rotation", turn).unwrap();
+    scene.reparent(hand, Some(panels[0])).unwrap();
+    scene.assign(panels[1], "opacity", opacity).unwrap();
+    let layout = Layout::compute(
+        &scene,
+        root,
+        Size {
+            width: 200.0,
+            height: 100.0,
+        },
+        &mut NoText,
+    )
+    .unwrap();
+    DrawList::from_scene(&scene, &layout).unwrap()
+}
+
+fn span(damage: &[DamageRect]) -> (u32, u32) {
+    let left = damage.iter().map(|rect| rect.x).min().unwrap();
+    let right = damage.iter().map(|rect| rect.x + rect.width).max().unwrap();
+    (left, right)
+}
+
+#[test]
+fn a_layer_that_changes_damages_only_what_it_covers() {
+    // A turning hand is a layer, and turning it changes that layer. Any change
+    // to any layer used to repaint the whole surface.
+    let mut tracker = DamageTracker::default();
+    diff_frame(&mut tracker, two_panels(10.0, 1.0), 120);
+    let damage = diff_frame(&mut tracker, two_panels(20.0, 1.0), 120);
+    let (left, right) = span(&damage);
+    assert!(
+        left >= 20 && right <= 70,
+        "only around the hand: {damage:?}"
+    );
+    // A layer that composites differently with the same commands — a fade —
+    // damages all of itself, and nothing of its neighbour.
+    let damage = diff_frame(&mut tracker, two_panels(20.0, 0.5), 120);
+    let (left, right) = span(&damage);
+    assert!(left >= 99, "only the faded panel: {damage:?}");
+    assert!(right >= 190, "and all of it: {damage:?}");
+    // A layer that goes away damages where it was.
+    let damage = diff_frame(&mut tracker, two_panels(20.0, 1.0), 120);
+    assert!(
+        span(&damage).0 >= 99,
+        "the panel that stopped fading: {damage:?}"
+    );
+    assert!(
+        diff_frame(&mut tracker, two_panels(20.0, 1.0), 120).is_empty(),
+        "unchanged layers damage nothing"
+    );
+}

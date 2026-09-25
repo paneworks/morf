@@ -294,7 +294,7 @@ impl WgpuBackend {
             image_textures: HashMap::new(),
             path_textures: HashMap::new(),
             path_outlines: Default::default(),
-            layer_target_pool: Vec::new(),
+            layer_pool: Default::default(),
             backdrops: Default::default(),
             text: TextSystem::new(),
             drawings: morf_svg::SvgOutlines::new(),
@@ -340,7 +340,7 @@ impl WgpuBackend {
             super::target_format(self.blend),
         );
         // The pooled layer targets are surface-sized, so a resize retires them.
-        self.layer_target_pool.clear();
+        self.layer_pool.clear();
         // So is the backdrops' scratch, and every region they were cut from.
         self.backdrops.entries.clear();
         self.backdrops.scratch = None;
@@ -519,24 +519,5 @@ impl WgpuBackend {
             self.texture_capacity,
             "morf texture instances",
         );
-    }
-}
-
-impl WgpuBackend {
-    /// A full-surface render target for one offscreen layer, reused each frame.
-    ///
-    /// The handles are reference counted, so the clone is a pointer bump rather
-    /// than an allocation; the pool grows to the deepest layer stack a frame has
-    /// needed and is emptied only by a resize.
-    pub(crate) fn layer_target(&mut self, index: usize) -> (wgpu::Texture, wgpu::TextureView) {
-        while self.layer_target_pool.len() <= index {
-            self.layer_target_pool.push(create_target(
-                &self.device,
-                self.width,
-                self.height,
-                super::target_format(self.blend),
-            ));
-        }
-        self.layer_target_pool[index].clone()
     }
 }

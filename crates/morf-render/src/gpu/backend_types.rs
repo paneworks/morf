@@ -146,16 +146,10 @@ pub struct WgpuBackend {
     /// and the path data already parsed.
     pub(crate) path_textures: HashMap<u64, TextureImage>,
     pub(crate) path_outlines: crate::path::PathOutlines,
-    /// Full-surface render targets, one per offscreen layer, kept between
-    /// frames.
-    ///
-    /// Every layer — every rotation, rounded clip, blur, shadow or opacity
-    /// below one — renders through one of these, and they used to be created
-    /// fresh on every frame: a full-screen GPU texture per layer, sixty times a
-    /// second, discarded each time. They are all the same size and every pass
-    /// clears its target before drawing, so there is nothing to carry over and
-    /// nothing to rebuild.
-    pub(crate) layer_target_pool: Vec<(wgpu::Texture, wgpu::TextureView)>,
+    /// Offscreen layer targets, kept between frames and handed to whichever
+    /// layer fits: each layer is rendered only over what is read of it, into
+    /// a texture about that size. See `layer_pool`.
+    pub(crate) layer_pool: super::layer_pool::LayerPool,
     /// Frosted-glass backdrops: their blurred textures, kept until what is
     /// beneath them changes, and the scratch target they are drawn from.
     pub(crate) backdrops: super::backdrops::BackdropCache,
