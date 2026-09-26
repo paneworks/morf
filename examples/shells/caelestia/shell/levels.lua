@@ -91,7 +91,7 @@ function M.build()
       kit.icon(function()
         local k = shown:get()
         return k ~= "" and icon[k]() or "volume_up"
-      end, math.max(12, math.floor(D * 0.2)), function() return C.onPrimary end),
+      end, math.max(16, math.floor(D * 0.3)), function() return C.onPrimary end),
       -- The value's digits morph from one reading to the next.
       kit.morph_number {
         id = "levels-value",

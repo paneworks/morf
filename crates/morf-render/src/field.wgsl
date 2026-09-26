@@ -370,7 +370,9 @@ fn shape_distance(kind: u32, point: vec2<f32>, layer: Layer) -> f32 {
             // Every contour is resampled to the same length when the outline
             // is built, so the stride is known here rather than sent. It must
             // match `morf_text::GLYPH_CONTOUR_POINTS`, which a test asserts.
-            return sd_polygon(point, u32(layer.params.x), 96u, u32(layer.extra.w));
+            // `thickness` makes a letter or a drawing heavier: its outline
+            // grown by that much, a bold that needs no bold face.
+            return sd_polygon(point, u32(layer.params.x), 96u, u32(layer.extra.w)) - layer.params.w;
         }
         default: { return sd_cross(point, half, layer.params.w); }
     }

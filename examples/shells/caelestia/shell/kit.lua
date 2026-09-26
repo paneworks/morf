@@ -311,7 +311,8 @@ end
 --- there from the old, contour onto contour, rather than being swapped.
 --- `spec`: `id`, `value` (a function: a number or a string of digits),
 --- `size` (the digits' height), `color` (a function), `digits` (the most it
---- shows, 3), `duration` (260), `font` (a family). The number is centred in
+--- shows, 3), `duration` (260), `font` (a family), `weight` (how much the
+--- outline is grown: bold by default). The number is centred in
 --- a box `digits` wide; a digit coming or going (9 to 10) takes its place at
 --- once, the others morph.
 function M.morph_number(spec)
@@ -328,6 +329,8 @@ function M.morph_number(spec)
       shape = "glyph", morph_to = "glyph",
       glyph = "", glyph_morph_to = "",
       font_family = family, font_family_morph_to = family,
+      -- Bold: the outline grown (`thickness` on a letter).
+      thickness = spec.weight or math.max(0.6, size * 0.055),
       x = (i - 1) * dw, y = 0, width = dw, height = size,
       morph_progress = 0,
       behavior = { morph_progress = motion, x = motion },

@@ -436,6 +436,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("bottom_left_radius", -1.0),
                 number("points", 5.0),
                 number("inner_radius", 0.5),
+                // A ring's or a cross's wall; for a letter or a drawing, how
+                // much heavier it is drawn -- its outline grown by this much,
+                // a bold that needs no bold face.
                 number("thickness", 0.0),
                 number("angle", 90.0),
                 // A linear map `{ a, b, c, d }` the shape is drawn through
