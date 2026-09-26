@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.1.5] - 2026-09-26
+
+### <!-- 0 -->⛰️  Features
+
+- Letters at a weight, and no seam where contours overlap
+- The speaker and the microphone, each a page of its own
+- Thickness makes a letter or a drawing heavier
+- The wallpaper is lule's
+- Numbers that morph, a backlight heard at once, covers from the web
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- An animation nothing shows is not motion
+- The media progress stops following the track while hidden
+- The pills' digits without the grown outline
+- Smaller numbers in the pills' discs
+- No GL in the GPU instance when there is Vulkan
+- Say so when there is no Vulkan driver for the GPU
+
+### <!-- 2 -->🚜 Refactor
+
+- Shells and demos, each where it belongs
+
+### <!-- 5 -->🎨 Styling
+
+- Rustfmt
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Merge main into develop
+- Merge develop to main
+- Merge develop to main
+
+### Build
+
+- Release builds keep function names; tools/morf-stuck.sh
+
 ## [0.1.4] - 2026-09-26
 
 ### <!-- 0 -->⛰️  Features
