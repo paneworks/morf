@@ -78,6 +78,9 @@ function polkit_agent.serve(options)
   local on_done = options.on_done or function() end
   local on_failure = options.on_failure or function() end
   local retries = options.retries or 0
+  -- What passes between the agent and the helper, never the answers:
+  -- `trace(text)`, for finding out why a request went nowhere.
+  local trace = options.trace or function() end
   local path = options.path or "/org/morf/PolkitAgent"
 
   local service, outcome = morf.dbus.serve("system", "", path, false)
@@ -152,7 +155,8 @@ function polkit_agent.serve(options)
   --- on its command line and the cookie on stdin. The lines it speaks are
   --- the same either way.
   function run_helper(request, user)
-    local generation = request.generation or 0
+    request.generation = request.generation or 0
+    local generation = request.generation
     local buffer = ""
     local function feed(data)
       buffer = buffer .. data
@@ -166,6 +170,7 @@ function polkit_agent.serve(options)
       end
     end
     local ok, socket = pcall(morf.socket, HELPER_SOCKET)
+    trace("helper socket: " .. (ok and "connected" or tostring(socket)))
     if ok and socket then
       request.socket = socket
       socket:send(user .. "\n" .. request.cookie .. "\n")
@@ -194,8 +199,10 @@ function polkit_agent.serve(options)
       if not current() then tick:cancel() return end
       if socket_ then
         for _ = 1, 32 do
-          local data = socket_:receive(4096, 1)
+          local read, data = pcall(socket_.receive, socket_, 4096, 1)
+          if not read then trace("helper socket: " .. tostring(data)) lost("the helper went away") return end
           if data == nil then break end
+          trace("helper said: " .. data:gsub("\n", "\\n"))
           -- The far end closed: a helper that leaves without a verdict
           -- failed, whatever it said.
           if data == "" then lost("the helper went away") return end
