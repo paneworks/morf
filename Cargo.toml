@@ -90,7 +90,9 @@ opt-level = 3
 # wgpu, and none of those are the same crate.
 lto = "thin"
 codegen-units = 16
-strip = true
+# The debug info goes, the function names stay: a crash report or a stack
+# taken from a shell that froze says where it was, for a few MB.
+strip = "debuginfo"
 
 # What to ship. Everything above, plus the last few percent, for the one build
 # an hour of linking is worth: `cargo build --profile dist`.
