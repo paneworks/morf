@@ -117,11 +117,38 @@ fn shared_instance() -> wgpu::Instance {
     static INSTANCE: std::sync::OnceLock<wgpu::Instance> = std::sync::OnceLock::new();
     INSTANCE
         .get_or_init(|| {
-            let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-            descriptor.backends = wgpu::Backends::VULKAN | wgpu::Backends::GL;
-            wgpu::Instance::new(descriptor)
+            // Vulkan alone when there is a Vulkan GPU: an instance with GL in
+            // it also makes an EGL surface for every output, from each
+            // output's own thread, and EGL fails that (`BadAccess`) with a
+            // panic -- a second screen took the whole shell down even with
+            // Vulkan doing the drawing. GL only where there is no Vulkan.
+            let make = |backends| {
+                let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+                descriptor.backends = backends;
+                wgpu::Instance::new(descriptor)
+            };
+            let vulkan = make(wgpu::Backends::VULKAN);
+            let found = ready(vulkan.enumerate_adapters(wgpu::Backends::VULKAN));
+            if found.is_empty() {
+                make(wgpu::Backends::VULKAN | wgpu::Backends::GL)
+            } else {
+                vulkan
+            }
         })
         .clone()
+}
+
+/// A native wgpu future's answer: they are ready when made, and this polls
+/// until it is, without a runtime to wait in.
+fn ready<T>(future: impl std::future::Future<Output = T>) -> T {
+    let mut future = std::pin::pin!(future);
+    let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+    loop {
+        if let std::task::Poll::Ready(value) = future.as_mut().poll(&mut context) {
+            return value;
+        }
+        std::thread::yield_now();
+    }
 }
 
 /// One opened GPU device, which every backend on that adapter draws with.
