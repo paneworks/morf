@@ -230,4 +230,41 @@ function M.vpn_page(kind, w, h, detail)
   return ui.Flickable { width = w, height = h, clip = true, ui.Column(nodes) }
 end
 
+-- -------------------------------------------------------------------- tor --
+
+--- Tor: the system's tor service, its state, and where to point things.
+function M.tor_page(w, h)
+  local t = services.tor
+  if not t then
+    return ui.Item { width = w, height = h, note(w, "Tor is not installed.") }
+  end
+  local WORDS = { off = "Off", starting = "Starting", on = "Running", stopping = "Stopping", failed = "Could not start" }
+  return ui.Flickable {
+    width = w, height = h, clip = true,
+    ui.Column { gap = 12, width = w,
+      row_card(w, {
+        id = "tor-service",
+        icon = "travel_explore",
+        name = "Tor",
+        on = t.on,
+        detail = function()
+          local p = t.phase:get()
+          local pr = t.progress:get()
+          return (WORDS[p] or p) .. ((p == "on" or p == "starting") and pr ~= "" and (" · " .. pr) or "")
+        end,
+        on_word = "Start", off_word = "Stop",
+        toggle = function(on) t.set(on) end,
+      }),
+      row_card(w, {
+        id = "tor-socks",
+        icon = "lan",
+        name = "SOCKS proxy",
+        on = function() return t.phase:get() == "on" end,
+        detail = function() return ("127.0.0.1:%d"):format(t.socks) end,
+      }),
+      note(w, "Starting it runs the system's tor service until it is stopped or the machine restarts; it is never enabled, so every boot is without it. Point a browser or an app at the SOCKS proxy to go through it."),
+    },
+  }
+end
+
 return M

@@ -356,6 +356,24 @@ M.TOGGLES = {
     end,
   },
   {
+    -- Tor: the system's tor service, started and stopped -- never enabled,
+    -- so it is off again after every boot.
+    id = "tor", icon = "travel_explore", name = "Tor", detail = "tor",
+    present = function() return services.tor ~= nil end,
+    on = function() return services.tor ~= nil and services.tor.on() end,
+    set = function(now) if services.tor then services.tor.set(now) end end,
+    status = function()
+      local t = services.tor
+      if not t then return "Not installed" end
+      local p = t.phase:get()
+      if p == "starting" then return "Starting…" end
+      if p == "stopping" then return "Stopping…" end
+      if p == "failed" then return "Could not start" end
+      if p == "on" then return ("SOCKS %d"):format(t.socks) end
+      return "Off"
+    end,
+  },
+  {
     -- Airplane mode: every radio off at once -- Wi-Fi, Bluetooth, mobile
     -- data -- and back as they were.
     id = "airplane", icon = "flight", name = "Airplane mode",
@@ -618,6 +636,7 @@ M.DETAILS = {
   { key = "wired", name = "Wired", build = function(w, h) return require("net_pages").wired_page(w, h) end },
   { key = "mesh", name = "Mesh", build = function(w, h) return require("net_pages").vpn_page("mesh", w, h, M.detail) end },
   { key = "tunnel", name = "Tunnel", build = function(w, h) return require("net_pages").vpn_page("tunnel", w, h, M.detail) end },
+  { key = "tor", name = "Tor", build = function(w, h) return require("net_pages").tor_page(w, h) end },
 }
 function M.page(w, h)
   local main = ui.Item {

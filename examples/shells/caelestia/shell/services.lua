@@ -134,6 +134,58 @@ do
   end
 end
 
+-- Tor (lib/tor.lua), where it is installed: the system's tor service,
+-- started and stopped from the quick settings and never enabled, so every
+-- boot starts without it. Up is told by its SOCKS port listening -- a look
+-- at /proc every few seconds, no command.
+do
+  local installed = morf.fs.exists("/usr/bin/tor") or morf.fs.exists("/usr/local/bin/tor")
+  local ok, tor = pcall(require, "lib.tor")
+  if ok and installed then
+    local t = tor.new { unit = "tor.service", socks = 9050 }
+    -- "off", "starting", "on", "stopping" or "failed"
+    local phase = morf.signal("caelestia.tor.phase", t.up() and "on" or "off")
+    local progress = morf.signal("caelestia.tor.progress", "")
+    local function look()
+      local up = t.up()
+      local p = phase:get()
+      if up then
+        if p ~= "stopping" and p ~= "on" then phase:set("on") end
+        if p == "starting" or p == "on" then
+          t.bootstrap(function(pct, what)
+            progress:set(pct and (pct < 100 and ("%d%% · %s"):format(pct, what or "") or "Connected") or "")
+          end)
+        end
+      elseif p ~= "starting" and p ~= "failed" and p ~= "off" then
+        phase:set("off")
+      end
+    end
+    morf.timer(4000, look, true)
+    M.tor = { phase = phase, progress = progress, socks = t.socks }
+    function M.tor.on() local p = phase:get() return p == "on" or p == "starting" end
+    function M.tor.set(on)
+      local dry = morf.env and morf.env("CAELESTIA_DRY_RUN")
+      if dry and dry ~= "" and dry ~= "0" then
+        morf.log("info", "caelestia: tor " .. (on and "start" or "stop") .. " (dry run)")
+        phase:set(on and "on" or "off")
+        return
+      end
+      phase:set(on and "starting" or "stopping")
+      progress:set("")
+      local verb = on and t.start or t.stop
+      verb(function(done, why)
+        if not done then
+          morf.log("warn", "caelestia: tor " .. (on and "start" or "stop") .. " failed: " .. tostring(why or ""))
+          phase:set(on and "failed" or (t.up() and "on" or "off"))
+          return
+        end
+        phase:set(on and (t.up() and "on" or "starting") or "off")
+        look()
+      end)
+    end
+  end
+end
+
 M.network = {}
 
 --- A Material Symbols name for the connection.

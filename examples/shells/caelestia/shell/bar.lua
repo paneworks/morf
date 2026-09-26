@@ -243,12 +243,18 @@ function M.build()
     require("utilities").detail:set("")
   end
   local function status(id, icon_fn)
-    return button(id, ITEM, open_settings, kit.icon(icon_fn, 20, function() return C.onSurface end,
-      { anchors = { center_in = true }, fill = true }))
+    return ui.Item {
+      id = id, width = ITEM - 6, height = ITEM - 6,
+      kit.icon(icon_fn, 20, function() return C.onSurface end, { anchors = { center_in = true }, fill = true }),
+    }
   end
   local function tail(vertical)
     local v = vertical and "-v" or ""
     local nodes = { gap = 2, align = "center" }
+    -- Tor, while it runs.
+    local onion = status("bar-tor" .. v, function() return "travel_explore" end)
+    onion.visible = function() local t = services.tor return t ~= nil and t.on() end
+    nodes[#nodes + 1] = onion
     -- The ring mode, while it is not sound.
     local ring = status("bar-ringer" .. v, function()
       local r = services.ringer
@@ -277,7 +283,29 @@ function M.build()
         text = function() local b = battery() return b and ("%d%%"):format(math.floor(b.percentage + 0.5)) or "" end,
       }
     end
-    return (vertical and ui.Column or ui.Row)(nodes)
+    -- One segment, one click: all of it opens the quick settings.
+    local row = (vertical and ui.Column or ui.Row)(nodes)
+    local area
+    area = ui.MouseArea {
+      id = "bar-status" .. v, cursor = "pointer",
+      width = function() return vertical and ITEM or (row.layout_width or 160) + 16 end,
+      height = function() return vertical and (row.layout_height or 160) + 16 or ITEM end,
+      on_clicked = open_settings,
+      ui.Rect {
+        anchors = { fill = true }, radius = 10,
+        color = function()
+          local s = package.loaded["sidebar"]
+          if s and s.drawer and s.drawer.open and s.drawer.open:get() then return C.primary:alpha(0.16) end
+          return (area and area.hovered) and C.onSurface:alpha(0.07) or C.onSurface:alpha(0)
+        end,
+        behavior = { color = { duration = theme.duration.small } },
+      },
+      ui.Item { anchors = { center_in = true },
+        width = function() return row.layout_width or 0 end,
+        height = function() return row.layout_height or 0 end,
+        row },
+    }
+    return area, row
   end
 
   -- ------------------------------------------------------------ time --
@@ -337,9 +365,9 @@ function M.build()
   -- Well in from the frame's corners.
   local PAD = 34
   local head_h = ui.Row { gap = 10, align = "center", logo(""), windows("row") }
-  local tail_h = tail(false)
+  local tail_h, row_h = tail(false)
   local head_v = ui.Column { gap = 8, align = "center", logo("-v"), windows("column") }
-  local tail_v = tail(true)
+  local tail_v, row_v = tail(true)
   return ui.Item {
     id = "bar",
     visible = function() return M.on() end,
@@ -354,7 +382,7 @@ function M.build()
       ui.Item { anchors = { center_in = true }, width = 190, height = ITEM, clock(false) },
       ui.Item {
         anchors = { right = true, right_margin = PAD, vertical_center = true }, height = ITEM,
-        width = function() return tail_h.layout_width or 200 end,
+        width = function() return (row_h.layout_width or 160) + 16 end,
         tail_h,
       },
     },
@@ -365,7 +393,7 @@ function M.build()
       ui.Item { anchors = { center_in = true }, width = ITEM + 4, height = 64, clock(true) },
       ui.Item {
         anchors = { bottom = true, bottom_margin = PAD, horizontal_center = true }, width = ITEM,
-        height = function() return tail_v.layout_height or 200 end,
+        height = function() return (row_v.layout_height or 160) + 16 end,
         tail_v,
       },
     },
