@@ -25,12 +25,13 @@ local TOP, BOTTOM, LEFT = 6, 16, 15
 local MAX = 5
 
 M.list = morf.signal("caelestia.notifications", {})
--- Every notification that came in, oldest first, until it is dismissed:
--- the popups go when they expire, the history stays. Each entry is a copy with `time` (seconds, when it came).
+-- Every notification that came in, oldest first, until it is dismissed from
+-- the sidebar or cleared there: the popups go when they expire, the
+-- history stays. Each entry is a copy with `time` (seconds, when it came).
 M.history = morf.signal("caelestia.notifications.history", {})
 -- Do not disturb: notifications still reach the history, but no popup.
 M.dnd = morf.signal("caelestia.notifications.dnd", false)
--- True while something else shows the history, and the popups keep away.
+-- True while the sidebar is open (sidebar.lua sets it).
 M.covered = morf.signal("caelestia.notifications.covered", false)
 
 local seen = {}
@@ -325,7 +326,7 @@ M.drawer = drawer.new {
   props = { anchors = { top = true, right = true } },
 }
 
--- No popups while the history is on show, nor in do not disturb.
+-- No popups while the sidebar shows the history, nor in do not disturb.
 morf.effect("caelestia.notifications.shown", function()
   -- Popups drop in on the focused screen only; the history is every
   -- screen's.

@@ -55,7 +55,7 @@ like the dashboard.
   duration, easing } })` eases every colour written to it in OkLab, frame by
   frame; the port's scheme, variant and mode changes cross-fade in 400 ms.
 
-## Phase 3: the right edge (the sidebar and utilities, since replaced by the workspace rail)
+## Phase 3: the sidebar and the utilities
 
 Nothing open. The idle inhibitor reads back: `morf.idle.inhibited()` is
 what the shell last asked for, and `morf.capabilities.idle_inhibit` says

@@ -72,7 +72,8 @@ local session = require("session")
 require("popouts")
 local osd = require("osd")
 local notifs = require("notifs")
-local rail = require("rail")
+local utilities = require("utilities")
+local sidebar = require("sidebar")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -111,6 +112,8 @@ local panels = {
   clip = true,
   -- The desk dims under the session menu.
   session.dim(),
+  -- A click on the desk shuts the sidebar.
+  require("sidebar").catcher(),
 }
 for _, d in ipairs(drawer.all) do panels[#panels + 1] = d.panel end
 
@@ -119,14 +122,18 @@ ui.Item {
   ui.Sdf(field),
   bar.build(),
   ui.Item(panels),
-  -- The workspaces again, down the right edge: a pill each, the active one
-  -- popping out into a numbered bud when it changes.
-  rail.build(),
   dashboard.edge_trigger(),
-  -- The bottom edge under the launcher opens it.
+  -- The bottom edge under the launcher opens it; the middle of the right
+  -- edge opens the sidebar (and the utilities under it).
   require("hover").edge {
     name = "launcher", drawer = launcher.drawer, edge = "bottom",
     length = launcher.width, setting = "launcher.hover",
+  },
+  require("hover").edge {
+    name = "sidebar", drawer = sidebar.drawer, edge = "right",
+    length = function() return math.floor((morf.screens[1] and morf.screens[1].height or 1080) / 3) end,
+    panels = { sidebar.drawer.panel, require("utilities").drawer.panel },
+    setting = "sidebar.hover",
   },
 }
 
@@ -164,6 +171,8 @@ end
 morf.ipc.launcher = verb(launcher.drawer)
 morf.ipc.dashboard = verb(dashboard.drawer)
 morf.ipc.session = verb(session.drawer)
+morf.ipc.sidebar = verb(sidebar.drawer)
+morf.ipc.utilities = verb(utilities.drawer)
 morf.ipc.workspace = function(n)
   if not here() then return nil end
   require("services").workspace.go(n)
@@ -188,6 +197,8 @@ end
 -- `popout` alone shuts it.
 morf.ipc.popout = function(name)
   local popouts = require("popouts")
+local osd = require("osd")
+local notifs = require("notifs")
   popouts.current:set(name or "")
   return popouts.current:get()
 end
