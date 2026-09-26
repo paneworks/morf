@@ -88,6 +88,9 @@ return settings.open {
       enabled = "auto",
       -- top, bottom, left or right.
       side = "top",
+      -- "on" or "off": each window's title beside its icon, along a top or
+      -- bottom bar.
+      titles = "on",
     },
     keyboard = {
       -- Up by itself when a program asks for text and no real keyboard

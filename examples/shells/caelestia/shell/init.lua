@@ -123,6 +123,8 @@ local panels = {
   session.dim(),
   -- A click on the desk shuts the sidebar, and the launcher.
   require("sidebar").catcher(),
+  -- And the dashboard, however it was opened.
+  dashboard.catcher(),
   ui.MouseArea {
     id = "launcher-catcher",
     anchors = { fill = true },

@@ -85,6 +85,16 @@ function M.page(w, h)
         label("Position"),
         ui.Row { x = 18, y = 42, gap = 8, table.unpack(side_buttons) },
       }),
+      card(128, {
+        id = "bar-titles",
+        label("Window titles"),
+        ui.Row { x = 18, y = 42, gap = 8,
+          choice("bar-titles-on", "title", "Shown", function() return config.get("bar.titles") ~= "off" end,
+            function() config.set("bar.titles", "on") end, (w - 36 - 8) / 2),
+          choice("bar-titles-off", "apps", "Icons only", function() return config.get("bar.titles") == "off" end,
+            function() config.set("bar.titles", "off") end, (w - 36 - 8) / 2),
+        },
+      }),
       kit.text {
         width = w, wrap = true, font_size = theme.size.small,
         color = function() return C.onSurfaceVariant end,

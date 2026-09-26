@@ -779,6 +779,18 @@ end
 
 --- The trigger, in a box as wide as the frame's opening so it centres
 --- over the dashboard.
+--- A click on the desk shuts the dashboard, as it does the sidebar: one
+--- opened by a click (the bar's clock, the battery page) has no pointer
+--- leaving it to shut it otherwise.
+function M.catcher()
+  return ui.MouseArea {
+    id = "dashboard-catcher",
+    anchors = { fill = true },
+    visible = function() return M.drawer.open:get() end,
+    on_clicked = function() M.drawer.set(false) end,
+  }
+end
+
 function M.edge_trigger()
   return ui.Item {
     anchors = { fill = true, left_margin = theme.LEFT, right_margin = theme.BORDER },

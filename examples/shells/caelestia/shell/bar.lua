@@ -72,20 +72,6 @@ function M.set_side(side) config.set("bar.side", side) end
 
 -- ------------------------------------------------------------------ parts --
 
-local DISTRO = {
-  arch = "\u{f303}", debian = "\u{f306}", ubuntu = "\u{f31b}", fedora = "\u{f30a}", nixos = "\u{f313}",
-  manjaro = "\u{f312}", opensuse = "\u{f314}", ["opensuse-tumbleweed"] = "\u{f314}", gentoo = "\u{f30d}",
-  void = "\u{f32e}", endeavouros = "\u{f322}", linuxmint = "\u{f30e}", pop = "\u{f32a}", alpine = "\u{f300}",
-  artix = "\u{f31f}", centos = "\u{f304}", elementary = "\u{f309}", kali = "\u{f327}", raspbian = "\u{f315}",
-}
-local LOGO_FONT = "Iosevka Nerd Font"
-
-local function distro_glyph()
-  local ok, text = pcall(morf.fs.read, "/etc/os-release")
-  local id = ok and type(text) == "string" and (text:match("\nID=\"?([%w%-]+)") or text:match("^ID=\"?([%w%-]+)")) or ""
-  return DISTRO[id] or "\u{f31a}" -- tux
-end
-
 local function button(id, size, on_clicked, child, hint)
   local area
   area = ui.MouseArea {
@@ -151,54 +137,95 @@ end
 function M.build()
   local apps = require("apps")
   local hyprland = services.hyprland
-  local function inner() return M.vertical() and M.WIDE or M.THICK end
-  local ITEM = 32
+  local ITEM = 34
 
-  -- The windows of the workspace on show, by their icons; the focused one
-  -- lit. A click brings one forward.
-  local function icon_of(client)
-    local hit = apps.icon((client.class or ""):lower()) or apps.icon(client.class or "")
-      or apps.icon(client.initial_class or "")
-    if hit and hit.name then return ui.Icon { anchors = { center_in = true }, width = 22, height = 22, name = hit.name, source_width = 44, source_height = 44 } end
-    if hit and hit.path then return ui.Image { anchors = { center_in = true }, width = 22, height = 22, source = hit.path, fill_mode = "preserve_aspect_fit" } end
-    return kit.icon("select_window", 20, function() return C.onSurfaceVariant end, { anchors = { center_in = true } })
-  end
-  local function window_delegate(client)
-      local function here()
-        return client.workspace == services.workspace.active() and not client.hidden
-      end
-      local function focused()
-        return hyprland.state.active_window.address == client.address
-      end
-      local b = button("bar-window-" .. tostring(client.address), ITEM, function()
-        pcall(hyprland.dispatch, "focuswindow", "address:" .. tostring(client.address))
-      end, icon_of(client))
-      return ui.Item {
-        width = function() return here() and ITEM or 0 end,
-        height = function() return here() and ITEM or 0 end,
-        visible = here,
-        b,
-        ui.Rect {
-          anchors = { horizontal_center = true, bottom = true }, width = 12, height = 3, radius = 2,
-          visible = focused, color = function() return C.primary end,
-        },
-      }
-  end
-  local function windows(as)
-    if not hyprland then return ui.Item {} end
-    return ui.Repeater { as = as, gap = 2, model = hyprland.state.clients, delegate = window_delegate }
-  end
-
+  -- The logo: the author's mark, in the theme's colour. A click opens the
+  -- launcher.
+  local mark = require("logo")
   local function logo(suffix)
     return button("bar-logo" .. suffix, ITEM, function()
       local ok, launcher = pcall(require, "launcher")
-      if ok then launcher.drawer.set(true) end
-    end, ui.Text {
-      anchors = { center_in = true }, text = distro_glyph(), font_family = LOGO_FONT, font_size = 20,
-      color = function() return C.primary end,
+      if ok then launcher.drawer.set(not launcher.drawer.open:get()) end
+    end, ui.Item {
+      anchors = { center_in = true }, width = 24, height = 24,
+      ui.Path {
+        x = 24 * mark.offset_x / 100, y = 0, width = 24 * mark.scale_x, height = 24,
+        view_box = mark.view_box, d = mark.d,
+        fill_color = function() return C.primary end,
+      },
     })
   end
 
+  -- --------------------------------------------------------- windows --
+  -- A button per window of the workspace on show, after Dash to Panel: the
+  -- app's icon (and its title, when `bar.titles` is on and the bar lies
+  -- along), a pill behind the focused one, a light behind the one under
+  -- the pointer, and a mark on the bar's inner edge -- wide for the focused
+  -- window, a dot for the rest. A click focuses it.
+  local function titles() return config.get("bar.titles") ~= "off" and not M.vertical() end
+  local function icon_of(client)
+    local hit = apps.icon((client.class or ""):lower()) or apps.icon(client.class or "")
+      or apps.icon((client.initial_class or ""):lower())
+    if hit and hit.name then
+      return ui.Icon { width = 22, height = 22, name = hit.name, source_width = 44, source_height = 44 }
+    end
+    if hit and hit.path then
+      return ui.Image { width = 22, height = 22, source = hit.path, fill_mode = "preserve_aspect_fit" }
+    end
+    return kit.icon("select_window", 22, function() return C.onSurfaceVariant end)
+  end
+  local TITLE_W = 140
+  local function window_delegate(client)
+    local function here() return client.workspace == services.workspace.active() and not client.hidden end
+    local function focused() return hyprland.state.active_window.address == client.address end
+    local function wide() return titles() and ITEM + 8 + TITLE_W or ITEM + 6 end
+    local area
+    area = ui.MouseArea {
+      id = "bar-window-" .. tostring(client.address),
+      cursor = "pointer",
+      width = function() return here() and wide() or 0 end,
+      height = function() return here() and ITEM or 0 end,
+      visible = here,
+      on_clicked = function()
+        pcall(hyprland.dispatch, "focuswindow", "address:" .. tostring(client.address))
+      end,
+      ui.Rect {
+        anchors = { fill = true }, radius = 10,
+        color = function()
+          if focused() then return C.primary:alpha(0.16) end
+          if area and area.hovered then return C.onSurface:alpha(0.07) end
+          return C.onSurface:alpha(0)
+        end,
+        behavior = { color = { duration = theme.duration.small } },
+      },
+      ui.Row {
+        x = 7, anchors = { vertical_center = true }, gap = 8, align = "center",
+        icon_of(client),
+        kit.text {
+          visible = titles, width = TITLE_W - 4, elide = "right",
+          font_size = theme.size.small, font_weight = 500,
+          text = function() return client.title ~= "" and client.title or client.class end,
+          color = function() return focused() and C.onSurface or C.onSurfaceVariant end,
+        },
+      },
+      -- The mark on the bar's inner edge.
+      ui.Rect {
+        height = 3, radius = 2,
+        width = function() return focused() and 18 or 5 end,
+        x = function() return (wide() - (focused() and 18 or 5)) / 2 end,
+        y = function() return M.side() == "bottom" and 0 or ITEM - 3 end,
+        color = function() return focused() and C.primary or C.onSurfaceVariant:alpha(0.7) end,
+        behavior = { width = { duration = theme.duration.small }, x = { duration = theme.duration.small } },
+      },
+    }
+    return area
+  end
+  local function windows(as)
+    if not hyprland then return ui.Item {} end
+    return ui.Repeater { as = as, gap = 6, model = hyprland.state.clients, delegate = window_delegate }
+  end
+
+  -- ----------------------------------------------------------- status --
   local function open_settings(detail)
     return function()
       local ok, s = pcall(require, "sidebar")
@@ -210,38 +237,9 @@ function M.build()
     return button(id, ITEM, open_settings(detail), kit.icon(icon_fn, 20, function() return C.onSurface end,
       { anchors = { center_in = true }, fill = true }))
   end
-
-  local now = morf.signal("caelestia.bar.clock", "")
-  local function tick() now:set(morf.time.format("%H:%M", morf.time.now())) end
-  tick()
-  morf.timer(1000, tick, true)
-  local function clock(vertical)
-    return ui.MouseArea {
-      id = "bar-clock" .. (vertical and "-v" or ""), cursor = "pointer",
-      width = vertical and ITEM or 56, height = vertical and 44 or ITEM,
-      on_clicked = function() require("dashboard").drawer.set(true) end,
-      kit.text {
-        anchors = { center_in = true }, horizontal_alignment = "center",
-        text = function()
-          local t = now:get()
-          return vertical and (t:gsub(":", "\n")) or t
-        end,
-        font_size = theme.size.normal, font_weight = 700,
-        color = function() return C.onSurface end,
-      },
-    }
-  end
-
-  -- Laid along the bar: logo and windows from its start, the status and
-  -- the time at its end.
-  local function along(nodes)
-    local props = { gap = 4, align = "center" }
-    for _, n in ipairs(nodes) do props[#props + 1] = n end
-    return props
-  end
   local function tail(vertical)
     local v = vertical and "-v" or ""
-    local nodes = {
+    local nodes = { gap = 2, align = "center",
       status("bar-network" .. v, network_icon, "network"),
       status("bar-sound" .. v, volume_icon, "sound"),
       status("bar-battery" .. v, battery_icon, "power"),
@@ -253,14 +251,54 @@ function M.build()
         text = function() local b = battery() return b and ("%d%%"):format(math.floor(b.percentage + 0.5)) or "" end,
       }
     end
-    nodes[#nodes + 1] = clock(vertical)
-    return (vertical and ui.Column or ui.Row)(along(nodes))
+    return (vertical and ui.Column or ui.Row)(nodes)
   end
-  local head_h = ui.Row(along { logo(""), windows("row") })
-  local tail_h = tail(false)
-  local head_v = ui.Column(along { logo("-v"), windows("column") })
-  local tail_v = tail(true)
 
+  -- ------------------------------------------------------------ time --
+  -- The date and the time, in the middle; a click opens the dashboard, and
+  -- another shuts it.
+  local stamp = morf.signal("caelestia.bar.clock", { "", "" })
+  local function tick()
+    local t = morf.time.now()
+    stamp:set({ morf.time.format("%H:%M", t), morf.time.format("%a %-d %b", t) })
+  end
+  tick()
+  morf.timer(1000, tick, true)
+  local function toggle_dashboard()
+    local d = require("dashboard").drawer
+    d.set(not d.open:get())
+  end
+  local function clock(vertical)
+    local area
+    area = ui.MouseArea {
+      id = "bar-clock" .. (vertical and "-v" or ""), cursor = "pointer",
+      width = vertical and ITEM + 4 or 190, height = vertical and 64 or ITEM,
+      on_clicked = toggle_dashboard,
+      ui.Rect {
+        anchors = { fill = true }, radius = 10,
+        color = function()
+          if require("dashboard").drawer.open:get() then return C.primary:alpha(0.16) end
+          return (area and area.hovered) and C.onSurface:alpha(0.07) or C.onSurface:alpha(0)
+        end,
+        behavior = { color = { duration = theme.duration.small } },
+      },
+      vertical and ui.Column {
+        anchors = { center_in = true }, gap = 0, align = "center",
+        kit.text { text = function() return (stamp:get()[1]:sub(1, 2)) end, font_weight = 700 },
+        kit.text { text = function() return (stamp:get()[1]:sub(4, 5)) end, font_weight = 700 },
+        kit.text { text = function() return (morf.time.format("%d", morf.time.now())) end,
+          font_size = theme.size.small - 3, color = function() return C.onSurfaceVariant end },
+      } or ui.Row {
+        anchors = { center_in = true }, gap = 10, align = "center",
+        kit.text { text = function() return stamp:get()[2] end, font_size = theme.size.small,
+          color = function() return C.onSurfaceVariant end },
+        kit.text { text = function() return stamp:get()[1] end, font_weight = 700 },
+      },
+    }
+    return area
+  end
+
+  -- ---------------------------------------------------------- layout --
   local function strip()
     local w, h = screen()
     local i = M.insets()
@@ -270,7 +308,11 @@ function M.build()
     if side == "left" then return 0, 0, i.left + theme.LEFT, h end
     return w - i.right - theme.BORDER, 0, i.right + theme.BORDER, h
   end
-  local PAD = 18
+  local PAD = 16
+  local head_h = ui.Row { gap = 10, align = "center", logo(""), windows("row") }
+  local tail_h = tail(false)
+  local head_v = ui.Column { gap = 8, align = "center", logo("-v"), windows("column") }
+  local tail_v = tail(true)
   return ui.Item {
     id = "bar",
     visible = function() return M.on() end,
@@ -282,6 +324,7 @@ function M.build()
       visible = function() return not M.vertical() end,
       anchors = { fill = true },
       ui.Item { x = PAD, width = 1, anchors = { vertical_center = true }, height = ITEM, head_h },
+      ui.Item { anchors = { center_in = true }, width = 190, height = ITEM, clock(false) },
       ui.Item {
         anchors = { right = true, right_margin = PAD, vertical_center = true }, height = ITEM,
         width = function() return tail_h.layout_width or 200 end,
@@ -292,6 +335,7 @@ function M.build()
       visible = function() return M.vertical() end,
       anchors = { fill = true },
       ui.Item { y = PAD, height = 1, anchors = { horizontal_center = true }, width = ITEM, head_v },
+      ui.Item { anchors = { center_in = true }, width = ITEM + 4, height = 64, clock(true) },
       ui.Item {
         anchors = { bottom = true, bottom_margin = PAD, horizontal_center = true }, width = ITEM,
         height = function() return tail_v.layout_height or 200 end,
