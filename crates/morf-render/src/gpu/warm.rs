@@ -72,6 +72,11 @@ impl WgpuBackend {
         root: NodeHandle,
         scale_120: u32,
     ) -> usize {
+        // It runs between frames, when nothing moves: a turn of it must not
+        // become the reason the next frame is late. What does not fit in the
+        // budget is done on the next quiet turn.
+        const BUDGET: std::time::Duration = std::time::Duration::from_millis(3);
+        let started = std::time::Instant::now();
         let scale = scale_120.max(1) as f32 / 120.0;
         let mut hidden_text = Vec::new();
         let mut pending = vec![(root, false)];
@@ -79,22 +84,54 @@ impl WgpuBackend {
             let hidden = hidden || !scene.bool_value(node, "visible").unwrap_or(true);
             if hidden && scene.element(node) == Ok(Element::Text) && layout.geometry(node).is_some()
             {
-                hidden_text.push(node);
+                // Warmed already, looking as it does now: nothing to do.
+                let look = text_look(scene, node, scale_120);
+                if self.warmed_text.get(&node) != Some(&look) {
+                    hidden_text.push((node, look));
+                }
             }
             if let Ok(children) = scene.children(node) {
                 pending.extend(children.iter().map(|&child| (child, hidden)));
             }
         }
-        if hidden_text.is_empty() {
-            return 0;
+        // Nodes gone from the scene are forgotten.
+        if self.warmed_text.len() > 4096 {
+            self.warmed_text
+                .retain(|node, _| scene.element(*node).is_ok());
         }
-        let mut glyphs = Vec::new();
-        for node in hidden_text {
-            glyphs.extend(self.text.rasterize(node, (0.0, 0.0), scale, true));
+        let mut added = 0;
+        for (node, look) in hidden_text {
+            if started.elapsed() > BUDGET {
+                break;
+            }
+            let glyphs = self.text.rasterize(node, (0.0, 0.0), scale, true);
+            added += self.glyph_mask_atlas.warm(&self.queue, &glyphs)
+                + self.glyph_color_atlas.warm(&self.queue, &glyphs);
+            self.warmed_text.insert(node, look);
         }
-        self.glyph_mask_atlas.warm(&self.queue, &glyphs)
-            + self.glyph_color_atlas.warm(&self.queue, &glyphs)
+        added
     }
+}
+
+/// What a text node's glyphs depend on, as one number.
+fn text_look(scene: &Scene, node: NodeHandle, scale_120: u32) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    scale_120.hash(&mut hasher);
+    for property in ["text", "font_family", "font_style"] {
+        scene
+            .string_value(node, property)
+            .unwrap_or("")
+            .hash(&mut hasher);
+    }
+    for property in ["font_size", "font_weight", "letter_spacing"] {
+        scene
+            .number(node, property)
+            .unwrap_or(0.0)
+            .to_bits()
+            .hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 #[cfg(test)]

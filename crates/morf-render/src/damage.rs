@@ -92,6 +92,9 @@ impl DamageTracker {
         for (key, (order, command)) in &current {
             match previous.get(key) {
                 Some((old_order, old)) if old_order == order && *old == *command => {}
+                // Nothing drawn before or after: no pixel changed.
+                Some((_, old)) if old.draws_nothing() && command.draws_nothing() => {}
+                None if command.draws_nothing() => {}
                 Some((old_order, old)) => {
                     // A terminal whose screen alone changed damages the rows
                     // that did, not its whole rectangle.
@@ -116,7 +119,7 @@ impl DamageTracker {
             }
         }
         for (key, (order, command)) in &previous {
-            if !current.contains_key(key) {
+            if !current.contains_key(key) && !command.draws_nothing() {
                 changed.push((command.bounds(), *order));
             }
         }

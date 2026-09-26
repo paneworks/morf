@@ -491,6 +491,7 @@ impl WgpuBackend {
             nearest_sampler,
             glyph_mask_atlas,
             glyph_color_atlas,
+            warmed_text: std::collections::HashMap::new(),
             blur_pipeline,
             blur_layout,
             blur_sampler,

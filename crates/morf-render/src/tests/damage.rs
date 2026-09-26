@@ -404,3 +404,39 @@ fn a_layer_that_changes_damages_only_what_it_covers() {
         "unchanged layers damage nothing"
     );
 }
+
+/// A rectangle that shows nothing -- a transparent catcher over the screen --
+/// is no damage when it appears, goes or changes while still showing
+/// nothing; the frame it becomes visible, its area is.
+#[test]
+fn a_rectangle_that_shows_nothing_is_no_damage() {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    scene.assign(root, "width", 100.0).unwrap();
+    scene.assign(root, "height", 100.0).unwrap();
+    let catcher = scene.create(Element::Rect);
+    scene.assign(catcher, "width", 100.0).unwrap();
+    scene.assign(catcher, "height", 100.0).unwrap();
+    scene.assign(catcher, "color", "#00000000").unwrap();
+    scene.assign(catcher, "visible", false).unwrap();
+    scene.reparent(catcher, Some(root)).unwrap();
+    let size = Size {
+        width: 100.0,
+        height: 100.0,
+    };
+    let frame = |scene: &Scene| {
+        let layout = Layout::compute(scene, root, size, &mut NoText).unwrap();
+        DrawList::from_scene(scene, &layout).unwrap()
+    };
+    let mut tracker = DamageTracker::default();
+    diff_frame(&mut tracker, frame(&scene), 120);
+    // Shown, but transparent: nothing to repaint.
+    scene.assign(catcher, "visible", true).unwrap();
+    assert!(diff_frame(&mut tracker, frame(&scene), 120).is_empty());
+    // Moved, still transparent: nothing.
+    scene.assign(catcher, "x", 10.0).unwrap();
+    assert!(diff_frame(&mut tracker, frame(&scene), 120).is_empty());
+    // Given a colour: its area.
+    scene.assign(catcher, "color", "#00000080").unwrap();
+    assert!(!diff_frame(&mut tracker, frame(&scene), 120).is_empty());
+}

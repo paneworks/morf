@@ -114,6 +114,9 @@ pub struct WgpuBackend {
     pub(crate) nearest_sampler: wgpu::Sampler,
     pub(crate) glyph_mask_atlas: GlyphAtlas,
     pub(crate) glyph_color_atlas: GlyphAtlas,
+    /// Hidden text already warmed, by what it looked like then: a node is
+    /// warmed again only when its text or style moved (`warm_hidden_text`).
+    pub(crate) warmed_text: std::collections::HashMap<morf_scene::NodeHandle, u64>,
     pub(crate) blur_pipeline: wgpu::RenderPipeline,
     pub(crate) blur_layout: wgpu::BindGroupLayout,
     pub(crate) blur_sampler: wgpu::Sampler,

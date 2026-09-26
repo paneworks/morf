@@ -40,6 +40,10 @@ pub(crate) fn collect_field_instances(
     // instance data: it selects the pipeline itself.
     let mut shaders = Vec::new();
     for (command_index, command) in list.commands.iter().enumerate() {
+        // Shading a rectangle that shows nothing would cost its whole area.
+        if command.draws_nothing() {
+            continue;
+        }
         if let Some(instance) = SdfFieldInstance::from_command(
             command,
             scale_120,

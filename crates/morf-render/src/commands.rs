@@ -381,6 +381,33 @@ impl DrawCommand {
         }
     }
 
+    /// Whether the command leaves every pixel as it was: a rectangle with no
+    /// fill, overlay, gradient, border, shadow or shader that shows -- a
+    /// transparent catcher over the screen, a dimmer at rest. It stays in the
+    /// list (a layer's reach may be measured by it) but is neither shaded
+    /// nor damage.
+    pub(crate) fn draws_nothing(&self) -> bool {
+        let Self::Quad {
+            color,
+            color_overlay,
+            gradient,
+            border_width,
+            border_color,
+            shadow_color,
+            shader,
+            ..
+        } = self
+        else {
+            return false;
+        };
+        color.alpha <= 0.0
+            && color_overlay.alpha <= 0.0
+            && gradient.is_none()
+            && (*border_width <= 0.0 || border_color.alpha <= 0.0)
+            && shadow_color.alpha <= 0.0
+            && shader.is_none()
+    }
+
     pub(crate) fn bounds(&self) -> Geometry {
         let bounds = match self {
             Self::Quad {
