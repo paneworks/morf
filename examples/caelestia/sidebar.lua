@@ -1,9 +1,12 @@
--- The sidebar: a drawer down the frame's right edge with the notification
--- history -- grouped by application, the newest group on top, each with
--- its count, opening out to every notification in it with a dismiss and a
--- copy button -- a button that clears them all, and "All up to date!" when
--- there are none. Opening it opens the utilities too, under it, as one
--- column; closing it closes both. While it is open no popups drop in.
+-- The sidebar: a drawer the frame's full height down its right edge, with
+-- tabs (tabbed.lua): Settings (utilities.lua: the sliders, the quick
+-- settings tiles with their pages -- network, Bluetooth, sound -- power,
+-- keep awake, the recorder) and Notifications -- the history grouped by
+-- application, the newest group on top, each with its count, opening out
+-- to every notification in it with a dismiss and a copy button, a button
+-- that clears them all, and "All up to date!" when there are none. While
+-- the notifications are on show no popups drop in. More tabs are one more
+-- entry in `TABS`.
 --
 -- Measured off the reference at 1920x1080: 430 wide, from the frame's top
 -- edge down to the utilities; the history is a surfaceContainerLow card
@@ -39,10 +42,12 @@ local function screen_height()
   return (s and s.height) or 1080
 end
 
---- The drawer's height: from the frame's top edge down to the utilities.
+--- The drawer's height: the frame's opening, top to bottom.
 function M.height()
-  return screen_height() - 2 * theme.BORDER - utilities.height()
+  return screen_height() - 2 * theme.BORDER
 end
+local tabbed = require("tabbed")
+local function page_h() return M.height() - tabbed.TABS_H - 2 * tabbed.PAD end
 
 -- ----------------------------------------------------------------- groups --
 
@@ -230,7 +235,7 @@ for i = 1, GROUPS do rows[i] = group_row(i) end
 
 -- ------------------------------------------------------------------ panel --
 
-local function pane_height() return M.height() - TOP - 17 end
+local function pane_height() return page_h() end
 
 local list = ui.Item {
   x = 12, y = 51, width = ROW_W,
@@ -299,7 +304,7 @@ clear = kit.hover(ui.MouseArea {
 
 local pane = ui.Rect {
   id = "sidebar-history",
-  x = LEFT, y = TOP, width = CARD_W, height = pane_height,
+  width = CARD_W, height = pane_height,
   radius = utilities.RADIUS,
   color = function() return C.surfaceContainerLow end,
   kit.text {
@@ -318,35 +323,38 @@ local pane = ui.Rect {
   clear,
 }
 
-local content = ui.Item {
-  anchors = { fill = true },
-  ui.MouseArea { anchors = { fill = true }, z = -1 },
-  pane,
-  ui.Rect {
-    x = LEFT, width = CARD_W, height = 1,
-    y = function() return M.height() - 1 end,
-    color = function() return C.outlineVariant end,
-  },
+M.TABS = {
+  { key = "settings", name = "Settings", icon = "tune", build = utilities.page },
+  { key = "notifications", name = "Notifications", icon = "notifications", build = function() return pane end },
 }
+
+local panel = tabbed.new {
+  id = "sidebar", width = WIDTH, height = M.height, tabs = M.TABS,
+  on_tab = function(key)
+    utilities.shown(key == "settings")
+    if key == "notifications" then
+      local shown = {}
+      for i = 1, GROUPS do shown[#shown + 1] = rows[i] end
+      kit.bud(shown, true, { delay = 90, stagger = 30 })
+    end
+  end,
+}
+M.panel = panel
+M.tab = panel.tab
+M.select = panel.select
+M.showing = panel.showing
 
 M.drawer = drawer.new {
   name = "sidebar",
   edge = "right",
   width = WIDTH,
   height = M.height,
-  content = content,
+  content = panel.content,
   props = { anchors = { top = true, right = true } },
 }
 
--- It stands on the utilities: its foot is square, and theirs where they
--- meet it.
-M.drawer.shape.bottom_left_radius = 0
-utilities.drawer.shape.top_left_radius = function()
-  return M.drawer.open:get() and 0 or theme.ROUNDING
-end
-
---- A click on the desk shuts the sidebar (and the utilities with it): an
---- invisible catcher under the panels, there only while it is open.
+--- A click on the desk shuts the sidebar: an invisible catcher under the
+--- panels, there only while it is open.
 function M.catcher()
   return ui.MouseArea {
     id = "sidebar-catcher",
@@ -356,30 +364,29 @@ function M.catcher()
   }
 end
 
--- Opening it opens the utilities; closing it closes them. No popups drop
--- in over it.
-local was = false
-morf.effect("caelestia.sidebar.utilities", function()
-  local open = M.drawer.open:get()
-  notifs.covered:set(open)
-  if open == was then return end
-  was = open
-  utilities.drawer.set(open)
+-- No popups drop in while the history is on show.
+morf.effect("caelestia.sidebar.covered", function()
+  notifs.covered:set(M.drawer.open:get() and panel.showing("notifications"))
 end)
 
--- Opening, the history comes in, then its groups one after the other, each
--- growing evenly about its centre as it fades in.
+-- Opening, the chosen page comes in, the settings' cards one after the
+-- other, the notifications' groups likewise.
+local was = false
 local running = {}
 morf.effect("caelestia.sidebar.bud", function()
   local open = M.drawer.open:get()
+  if open == was then return end
+  was = open
   for _, h in ipairs(running) do h:stop() end
-  -- The history is a tall card: it grows from nearer its size.
-  running = kit.bud({ pane }, open, { from = 0.97 })
-  if open then
+  running = {}
+  if panel.showing("settings") then
+    utilities.shown(open)
+  elseif open then
     local shown = {}
     for i = 1, GROUPS do shown[#shown + 1] = rows[i] end
-    for _, h in ipairs(kit.bud(shown, true, { delay = 90, stagger = 30 })) do running[#running + 1] = h end
+    running = kit.bud(shown, true, { delay = 90, stagger = 30 })
   end
+  panel.shown(open)
 end)
 
 -- A notification arriving while the sidebar is open buds in at the top;

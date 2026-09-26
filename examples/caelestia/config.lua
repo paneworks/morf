@@ -44,6 +44,10 @@ return settings.open {
       -- Opens when the pointer reaches the middle of the right edge.
       hover = true,
     },
+    leftbar = {
+      -- Opens when the pointer reaches the left edge above the rail.
+      hover = true,
+    },
     launcher = {
       -- Opens when the pointer reaches the bottom edge under it.
       hover = true,

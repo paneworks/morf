@@ -70,8 +70,8 @@ local dashboard = require("dashboard")
 local session = require("session")
 local osd = require("osd")
 local notifs = require("notifs")
-local utilities = require("utilities")
 local sidebar = require("sidebar")
+local leftbar = require("leftbar")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -127,7 +127,7 @@ ui.Item {
   ui.Item(panels),
   dashboard.edge_trigger(),
   -- The bottom edge under the launcher opens it; the middle of the right
-  -- edge opens the sidebar (and the utilities under it).
+  -- edge opens the sidebar; the left edge above the rail, the left panel.
   require("hover").edge {
     name = "launcher", drawer = launcher.drawer, edge = "bottom",
     length = launcher.width, setting = "launcher.hover",
@@ -135,8 +135,16 @@ ui.Item {
   require("hover").edge {
     name = "sidebar", drawer = sidebar.drawer, edge = "right",
     length = function() return math.floor((morf.screens[1] and morf.screens[1].height or 1080) / 3) end,
-    panels = { sidebar.drawer.panel, require("utilities").drawer.panel },
     setting = "sidebar.hover",
+  },
+  require("hover").edge {
+    name = "leftbar", drawer = leftbar.drawer, edge = "left",
+    from = function() return theme.BORDER + theme.ROUNDING end,
+    length = function()
+      local h = (morf.screens[1] and morf.screens[1].height) or 1080
+      return math.max(40, math.floor(h / 4) - 8 - theme.BORDER - theme.ROUNDING)
+    end,
+    setting = "leftbar.hover",
   },
 }
 
@@ -174,8 +182,27 @@ end
 morf.ipc.launcher = verb(launcher.drawer)
 morf.ipc.dashboard = verb(dashboard.drawer)
 morf.ipc.session = verb(session.drawer)
-morf.ipc.sidebar = verb(sidebar.drawer)
-morf.ipc.utilities = verb(utilities.drawer)
+-- `sidebar [how [TAB]]`: TAB is settings or notifications. `utilities`
+-- is the sidebar on its settings; `settings PAGE` opens one of their pages
+-- (network, bluetooth, sound).
+morf.ipc.sidebar = function(how, tab)
+  if tab and here() then
+    if not sidebar.select(tab) then error("`" .. tostring(tab) .. "`: no such tab") end
+  end
+  return verb(sidebar.drawer)(how)
+end
+morf.ipc.utilities = function(how)
+  if here() and how ~= "close" then sidebar.select("settings") end
+  return verb(sidebar.drawer)(how)
+end
+morf.ipc.settings = function(page)
+  if not here() then return nil end
+  sidebar.select("settings")
+  require("utilities").detail:set(page or "")
+  sidebar.drawer.set(true)
+  return page or ""
+end
+morf.ipc.leftbar = verb(leftbar.drawer)
 morf.ipc.workspace = function(n)
   if not here() then return nil end
   require("services").workspace.go(n)

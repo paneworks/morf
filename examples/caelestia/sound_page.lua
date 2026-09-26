@@ -1,4 +1,5 @@
--- The dashboard's Sound tab: everything about sound in one place.
+-- The Sound page of the right panel's settings: everything about sound in
+-- one place.
 --
 --   Output   the default output's volume, mute, and each of its channels
 --            on its own slider (left and right, or channel 1, 2, ...)
@@ -20,10 +21,9 @@ local kit = require("kit")
 local C = theme.color
 local M = {}
 
-M.WIDTH, M.HEIGHT = 840, 560
 local GAP, PAD = 12, 16
-local COL_W = (M.WIDTH - GAP) / 2
-local INNER = COL_W - 2 * PAD
+-- The cards' width, set by `build` (the page is one column of them).
+local COL_W, INNER = 408, 408 - 2 * PAD
 local MAX_CHANNELS = 8
 
 local audio = morf.audio
@@ -115,7 +115,7 @@ end
 
 -- ------------------------------------------------------------------ output --
 
-local function output_card()
+local function output_card(height)
   local function vol() local s = sink() return s and s.volume or 0 end
   local channels = {}
   for i = 1, MAX_CHANNELS do
@@ -151,7 +151,7 @@ local function output_card()
   end
   return kit.card {
     id = "sound-output",
-    width = COL_W, height = 250,
+    width = COL_W, height = height,
     title("Output", mute_button("sound-output-mute", sink, "volume_off", "volume_up")),
     ui.Column {
       x = PAD, y = PAD + 38, gap = 4,
@@ -178,14 +178,14 @@ local function output_card()
   }
 end
 
-local function devices_card()
+local function devices_card(height)
   return kit.card {
     id = "sound-devices",
-    width = COL_W, height = M.HEIGHT - 250 - GAP,
+    width = COL_W, height = height,
     clip = true,
     title("Output device"),
     ui.Column {
-      x = PAD, y = PAD + 38, gap = 4, width = INNER, height = M.HEIGHT - 250 - GAP - PAD - 38 - PAD,
+      x = PAD, y = PAD + 38, gap = 4, width = INNER, height = function() return height() - PAD - 38 - PAD end,
       visible = available,
       ui.Repeater {
         as = "column", gap = 4,
@@ -275,7 +275,7 @@ local function app_row(row)
   }
 end
 
-local function apps_card()
+local function apps_card(height)
   local function playing()
     if not available() then return 0 end
     local n, streams = 0, audio.streams
@@ -286,11 +286,11 @@ local function apps_card()
   end
   return kit.card {
     id = "sound-apps",
-    width = COL_W, height = 330,
+    width = COL_W, height = height,
     clip = true,
     title("Apps"),
     ui.Column {
-      x = PAD, y = PAD + 38, gap = 6, width = INNER, height = 330 - PAD - 38 - PAD,
+      x = PAD, y = PAD + 38, gap = 6, width = INNER, height = function() return height() - PAD - 38 - PAD end,
       visible = available,
       ui.Repeater {
         as = "column", gap = 6,
@@ -310,10 +310,10 @@ end
 
 -- ------------------------------------------------------------------- input --
 
-local function input_card()
+local function input_card(height)
   return kit.card {
     id = "sound-input",
-    width = COL_W, height = M.HEIGHT - 330 - GAP,
+    width = COL_W, height = height,
     clip = true,
     title("Input", mute_button("sound-input-mute", source, "mic_off", "mic")),
     ui.Column {
@@ -341,19 +341,24 @@ local function input_card()
   }
 end
 
-function M.build()
+--- The page, `w` wide and `h()` tall: the output with its channels, the
+--- outputs, the input and its inputs at their own sizes, and the apps in
+--- what is left.
+function M.build(w, h)
+  COL_W, INNER = w, w - 2 * PAD
+  local OUT_H, DEV_H, IN_H = 250, 150, 200
+  local apps_h = function() return math.max(120, h() - OUT_H - DEV_H - IN_H - 3 * GAP) end
   return ui.Item {
-    id = "dashboard-sound-tab",
-    width = M.WIDTH, height = M.HEIGHT,
-    ui.Row {
+    id = "sound-page",
+    width = w, height = h, clip = true,
+    ui.Column {
       gap = GAP,
-      ui.Column { gap = GAP, output_card(), devices_card() },
-      ui.Column { gap = GAP, apps_card(), input_card() },
+      output_card(OUT_H),
+      devices_card(function() return DEV_H end),
+      input_card(IN_H),
+      apps_card(apps_h),
     },
   }
 end
-
--- Built as the module loads, with its own instruction budget.
-M.page = M.build()
 
 return M

@@ -156,9 +156,10 @@ morf.effect("caelestia.osd.follow", function()
     seen_brightness = now
   end
   -- On the focused screen only: every screen hears the change. Not while
-  -- the utilities, whose own sliders show it, are open.
-  local utilities = package.loaded["utilities"]
-  local shown_there = type(utilities) == "table" and utilities.drawer and utilities.drawer.open:get()
+  -- the settings, whose own sliders show it, are open.
+  local sidebar = package.loaded["sidebar"]
+  local shown_there = type(sidebar) == "table" and sidebar.drawer and sidebar.drawer.open:get()
+    and sidebar.showing("settings")
   if changed and not shown_there and require("services").here() then M.flash() end
 end)
 
