@@ -1,4 +1,4 @@
-//! The pure-Lua libraries in `examples/lib` that watch the machine and the
+//! The pure-Lua libraries in `library/lib` that watch the machine and the
 //! web: sysinfo, weather, github, packages, claude_usage.
 //!
 //! Each runs inside a real runtime with `examples/` as a module root. The

@@ -95,6 +95,7 @@ pub(crate) fn run() -> Result<(), String> {
         Command::Log { follow, level } => follow_logs(follow, level)?,
         Command::List { json, show_dead } => list_instances(json, show_dead)?,
         Command::Info => print_info()?,
+        Command::Types(dir) => write_types(&dir)?,
         Command::Runner(args) => return crate::runners::run(args),
         Command::Client(request) => {
             let reply = ipc_call(socket_path()?, &request).map_err(|error| error.to_string())?;
@@ -157,6 +158,8 @@ pub(crate) enum Command {
     },
     /// Everything about this machine, this display and the instance on it.
     Info,
+    /// The API as Lua language server definitions, written into a folder.
+    Types(PathBuf),
     /// `check`, `render` or `test`: a configuration with no compositor.
     Runner(crate::runner_args::RunnerArgs),
     Client(IpcRequest),
@@ -210,6 +213,7 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         ["list", rest @ ..] => parse_list(rest),
         ["bundle", rest @ ..] => parse_bundle(rest),
         ["info"] => Ok(Command::Info),
+        ["types", dir] => Ok(Command::Types(PathBuf::from(dir))),
         ["check", rest @ ..] => runner(crate::runner_args::Runner::Check, rest, policy),
         ["render", rest @ ..] => runner(crate::runner_args::Runner::Render, rest, policy),
         ["test", rest @ ..] => runner(crate::runner_args::Runner::Test, rest, policy),
@@ -504,4 +508,19 @@ fn parse_list(rest: &[&str]) -> Result<Command, String> {
         }
     }
     Ok(Command::List { json, show_dead })
+}
+
+/// `morf types DIR`: this build's API as LuaLS definitions (`---@meta`), so
+/// an editor pointed at DIR completes and checks `morf.*` and `ui.*`.
+fn write_types(dir: &std::path::Path) -> Result<(), String> {
+    for (relative, contents) in morf_lua::generate_types() {
+        let path = dir.join(relative);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("{}: {error}", parent.display()))?;
+        }
+        std::fs::write(&path, contents).map_err(|error| format!("{}: {error}", path.display()))?;
+        println!("{}", path.display());
+    }
+    Ok(())
 }

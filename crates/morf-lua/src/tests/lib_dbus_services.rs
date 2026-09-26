@@ -1,4 +1,4 @@
-//! The system-service libraries in `examples/lib`, against fake services.
+//! The system-service libraries in `library/lib`, against fake services.
 //!
 //! NetworkManager, BlueZ, UPower, MPRIS and logind are pure Lua on top of the
 //! engine's generic D-Bus client, and every one of them can change the

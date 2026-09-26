@@ -45,6 +45,7 @@ pub use keyframes::*;
 pub use mask::*;
 pub use path_style::*;
 pub use rich_text::{MAX_SPANS, RichSpan, RichText};
+pub use schema::{ELEMENTS, PropertyInfo, element_schemas};
 pub use spline::{MAX_SPLINE_SEGMENTS, MAX_SPLINES, intern_spline, spline_value};
 pub use stretch::{STRETCH_MAX_GAP, Stretch, spring_step};
 pub use terminal::*;

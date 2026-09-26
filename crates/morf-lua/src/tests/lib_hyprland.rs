@@ -1,4 +1,4 @@
-//! `examples/lib/hyprland.lua` against a fake Hyprland.
+//! `library/lib/hyprland.lua` against a fake Hyprland.
 //!
 //! The library is pure Lua over `morf.socket`, so what needs testing is the
 //! conversation: that it asks the request socket the right questions, reads

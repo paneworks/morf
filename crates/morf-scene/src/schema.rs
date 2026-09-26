@@ -596,3 +596,64 @@ pub(crate) fn color(name: &'static str, default: Color) -> PropertySpec {
         default: Value::Color(default),
     }
 }
+
+/// Every element, as the configuration names it (`ui.Rect`), in declaration
+/// order.
+pub const ELEMENTS: &[Element] = &[
+    Element::Item,
+    Element::Inset,
+    Element::Rect,
+    Element::ClipRect,
+    Element::Text,
+    Element::TextInput,
+    Element::Image,
+    Element::Icon,
+    Element::Sdf,
+    Element::SdfShape,
+    Element::Path,
+    Element::MouseArea,
+    Element::DropArea,
+    Element::Row,
+    Element::Column,
+    Element::Grid,
+    Element::Flickable,
+    Element::Loader,
+    Element::Timer,
+    Element::Flex,
+    Element::Custom,
+    Element::Terminal,
+];
+
+/// One property as the outside sees it: its name, its kind (`number`,
+/// `boolean`, `string`, `color`, `any`) and its default.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PropertyInfo {
+    pub name: &'static str,
+    pub kind: &'static str,
+    pub default: Value,
+}
+
+/// Every element's name and properties: for tools that describe the API
+/// (`morf types`), so what they say is what the engine takes.
+pub fn element_schemas() -> Vec<(&'static str, Vec<PropertyInfo>)> {
+    ELEMENTS
+        .iter()
+        .map(|&element| {
+            let properties = schema(element)
+                .into_iter()
+                .map(|spec| PropertyInfo {
+                    name: spec.name,
+                    kind: match spec.kind {
+                        PropertyType::Any => "any",
+                        PropertyType::Bool => "boolean",
+                        PropertyType::Number => "number",
+                        PropertyType::String => "string",
+                        PropertyType::Color => "color",
+                    },
+                    default: spec.default,
+                })
+                .collect();
+            (element.name(), properties)
+        })
+        .collect()
+}

@@ -1,6 +1,6 @@
 -- A stand-in for `morf.dbus`, answering from Lua tables.
 --
--- The service libraries in `examples/lib` take their bus through a `dbus`
+-- The service libraries in `library/lib` take their bus through a `dbus`
 -- option, and this is what a test hands them: a registry of objects with
 -- properties and methods, replying in the shapes the engine's decoder
 -- produces (a method's outputs as a list, a lone scalar bare, variants

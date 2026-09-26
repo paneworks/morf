@@ -1,4 +1,4 @@
-//! `examples/lib/material.lua`: Material 3 schemes over `morf.color`'s HCT,
+//! `library/lib/material.lua`: Material 3 schemes over `morf.color`'s HCT,
 //! and the source colour of a picture.
 
 use std::path::Path;

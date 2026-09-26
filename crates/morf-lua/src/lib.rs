@@ -100,6 +100,7 @@ mod table_menu;
 mod terminals;
 mod text_inputs;
 mod types;
+mod types_gen;
 mod views;
 mod window_events;
 mod window_geometry;
@@ -118,5 +119,6 @@ pub use serialization::runtimepath_roots;
 pub use surface_types::*;
 pub use text_inputs::KeyModifiers;
 pub use types::*;
+pub use types_gen::generate_types;
 #[cfg(test)]
 mod tests;

@@ -16,9 +16,9 @@ pub(crate) fn default_module_roots() -> Vec<PathBuf> {
 }
 
 /// Where `require` looks for a configuration at `config`: its own folder,
-/// then, when `external`, every `MORF_RUNTIME_PATH` entry and the user's
-/// `$XDG_DATA_HOME/morf/site` (or `~/.local/share/morf/site`), without
-/// duplicates.
+/// then, when `external`, every `MORF_RUNTIME_PATH` entry, the user's
+/// `$XDG_DATA_HOME/morf/site` (or `~/.local/share/morf/site`) and the
+/// installed library `$XDG_DATA_HOME/morf/library`, without duplicates.
 ///
 /// Public so every host that runs a configuration -- the shell, the frame
 /// bench -- resolves modules the same way; a bench that looked only beside
@@ -31,10 +31,17 @@ pub fn runtimepath_roots(config: &std::path::Path, external: bool) -> Vec<PathBu
         .collect::<Vec<_>>();
     if external {
         roots.extend(default_module_roots());
-        if let Some(data) = std::env::var_os("XDG_DATA_HOME") {
-            roots.push(PathBuf::from(data).join("morf/site"));
-        } else if let Some(home) = std::env::var_os("HOME") {
-            roots.push(PathBuf::from(home).join(".local/share/morf/site"));
+        let data = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share"))
+            });
+        if let Some(data) = data {
+            // The user's own modules first, then the library `make install`
+            // puts beside the binary: `require("lib.material")` from any
+            // configuration, wherever it lives.
+            roots.push(data.join("morf/site"));
+            roots.push(data.join("morf/library"));
         }
     }
     let mut unique = Vec::new();

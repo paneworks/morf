@@ -1,4 +1,4 @@
-//! `examples/lib/palette.lua`: a desk's colours derived from a picture, in
+//! `library/lib/palette.lua`: a desk's colours derived from a picture, in
 //! pure Lua over `morf.image`, `morf.color`, `morf.fs` and `morf.json`.
 
 use std::path::{Path, PathBuf};
