@@ -587,6 +587,7 @@ impl WgpuBackend {
             view,
             surface,
             buffers: None,
+            skipped: false,
             profile,
             width: width.max(1),
             height: height.max(1),

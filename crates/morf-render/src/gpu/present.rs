@@ -299,13 +299,14 @@ impl BufferRing {
             }
             // All of them are on screen or queued there: the compositor is
             // behind. Wait for one back, as a swapchain's acquire does, but
-            // not for ever: past `release_wait` the frame is skipped. Its
-            // damage is in the history and reaches the next buffer drawn.
+            // briefly: past `release_wait` the frame is skipped. Its damage
+            // is in the history and reaches the next buffer drawn, and the
+            // loop owes the paint.
             //
-            // Skipping at once instead looks kinder to the output's thread
-            // and was measured worse: on a compositor that holds three or four
-            // buffers for a quarter of a second, it drew twice the frames
-            // offscreen and handed over half as many.
+            // Not skipping at once: that drew twice the frames offscreen and
+            // handed over half as many. Not a quarter of a second either: a
+            // compositor on a busy GPU held all four that long several times
+            // a minute, and each time the output froze, input and all.
             let waited = self
                 .wayland
                 .as_mut()
@@ -485,14 +486,17 @@ pub(crate) fn stamp() -> String {
 }
 
 /// How long a frame waits for the compositor to give a buffer back before it
-/// is skipped: a quarter of a second, unless `MORF_PRESENT_WAIT_MS` says.
+/// is skipped: about a refresh and a half, unless `MORF_PRESENT_WAIT_MS`
+/// says. The wait holds the output's whole loop -- input, IPC, every other
+/// surface -- so it is short: a skipped frame is owed, and painted on the
+/// next callback (`WgpuBackend::take_skipped`), rather than waited for.
 fn release_wait() -> std::time::Duration {
     static WAIT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     std::time::Duration::from_millis(*WAIT.get_or_init(|| {
         std::env::var("MORF_PRESENT_WAIT_MS")
             .ok()
             .and_then(|value| value.parse().ok())
-            .unwrap_or(250)
+            .unwrap_or(24)
     }))
 }
 

@@ -80,6 +80,10 @@ function M.layer()
     exclusive_zone = -1,
     keyboard_focus = "none",
     visible = true,
+    -- Opaque: a solid fill under the picture, so the compositor draws
+    -- nothing of its own under it -- one full-screen layer fewer to blend
+    -- on every redraw of whatever sits over it.
+    opaque = true,
     root = ui.Item {
       anchors = { fill = true },
       ui.Rect { anchors = { fill = true }, color = function() return theme.color.surface end },

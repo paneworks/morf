@@ -550,6 +550,17 @@ fn drive_surface(
                 Some(&mut state.layout),
             );
             slow(&name, "a frame", painting);
+            // Skipped for want of a buffer: owed, and painted on the next
+            // callback (or when the callback is overdue).
+            if renderer.backend_mut().take_skipped() {
+                state.primary_deferred = true;
+                // Nothing committed, so no callback may be coming: ask for
+                // one, or the owed paint waits for whatever paints next.
+                if client.layer_frame_wait(PRIMARY_LAYER).is_none() {
+                    client.request_layer_frame(PRIMARY_LAYER);
+                    client.commit_layer(PRIMARY_LAYER);
+                }
+            }
             match painted_frame {
                 Ok(layout) => state.layout = layout,
                 Err(error) if is_layout_error(&error) => {

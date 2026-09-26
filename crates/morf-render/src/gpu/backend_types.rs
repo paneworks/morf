@@ -220,6 +220,9 @@ pub struct WgpuBackend {
     /// Buffers of the engine's own it presents into instead of a swapchain,
     /// when the platform allows; see `present`.
     pub(crate) buffers: Option<super::present::BufferRing>,
+    /// The last frame went to no buffer: the compositor held them all. A
+    /// paint is owed; see [`WgpuBackend::take_skipped`].
+    pub(crate) skipped: bool,
     /// `MORF_GPU_PROFILE`: timestamps between a frame's stages.
     pub(crate) profile: Option<super::profile::GpuProfile>,
     pub(crate) width: u32,

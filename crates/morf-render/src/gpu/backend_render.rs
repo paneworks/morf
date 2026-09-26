@@ -729,7 +729,7 @@ impl RenderBackend for WgpuBackend {
         // Buffers of the engine's own: only what the next one is missing is
         // copied into it, and it goes out with the frame's damage.
         if let Some(buffers) = &mut self.buffers {
-            buffers.encode(&self.device, &mut encoder, damage);
+            self.skipped = !buffers.encode(&self.device, &mut encoder, damage);
         }
         let frame = if let Some(surface) = &mut self.surface {
             // `None` means this frame is skipped: there is no image to draw
@@ -738,6 +738,7 @@ impl RenderBackend for WgpuBackend {
             // work is what the next frame composites, and throwing it away
             // would make a skipped frame cost more than a drawn one.
             let Some(frame) = acquire_frame(&self.device, surface)? else {
+                self.skipped = true;
                 super::present::submit(&self.queue, Some(encoder.finish()), || {});
                 return Ok(());
             };

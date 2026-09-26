@@ -254,6 +254,12 @@ fn overlaps(left: Geometry, right: Geometry) -> bool {
 }
 
 impl WgpuBackend {
+    /// Whether the last frame was skipped for want of a buffer, cleared by
+    /// asking. The caller owes the surface a paint.
+    pub fn take_skipped(&mut self) -> bool {
+        std::mem::take(&mut self.skipped)
+    }
+
     /// Decides, for every backdrop in the list, whether it blurs again this
     /// frame, and adds the quad that draws it. Returns one slot per command.
     ///
