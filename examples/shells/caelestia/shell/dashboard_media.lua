@@ -220,10 +220,17 @@ function M.build(ctx)
       return v or ""
     end
   end
+  -- Where the track has got to, followed only while this is on screen: the
+  -- position ticks every second and the bar eases over a second, so a bar
+  -- that followed it off screen was an animation that never ended -- every
+  -- output repainting, all the time, for as long as music played.
+  local last = 0
   local function fraction()
+    if not on_screen() then return last end
     local a = active()
-    if not a.length or a.length <= 0 then return 0 end
-    return math.max(0, math.min(1, (a.position or 0) / a.length))
+    if not a.length or a.length <= 0 then last = 0 return 0 end
+    last = math.max(0, math.min(1, (a.position or 0) / a.length))
+    return last
   end
   local WAVE = 38
   local function wave_path(width)

@@ -540,11 +540,18 @@ local function media_card()
       anchors = { fill = true }, view_box = { 0, 0, D, D }, d = arc,
       fill_color = "transparent", stroke_width = 3, stroke_cap = "round",
       stroke_color = function() return C.primary end,
-      trim_end = function()
-        local a = active()
-        if not a.length or a.length <= 0 then return 0 end
-        return math.min(1, (a.position or 0) / a.length)
-      end,
+      -- Followed only while the dashboard is open: shut, the position
+      -- ticking every second would repaint every output for nothing.
+      trim_end = (function()
+        local last = 0
+        return function()
+          if not opened:get() then return last end
+          local a = active()
+          if not a.length or a.length <= 0 then last = 0 return 0 end
+          last = math.min(1, (a.position or 0) / a.length)
+          return last
+        end
+      end)(),
     },
     ui.Rect { x = ends[1] - 3, y = ends[2] - 3, width = 6, height = 6, radius = 3, color = function() return C.primary end },
     ui.Rect { x = ends[3] - 3, y = ends[2] - 3, width = 6, height = 6, radius = 3, color = function() return C.primary end },
