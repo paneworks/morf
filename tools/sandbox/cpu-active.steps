@@ -1,0 +1,19 @@
+# cpu-active.steps: the shell's CPU while things move -- panels opening and
+# shutting, workspaces switching, the OSD -- each for a few seconds, and at
+# rest between. OUT/cpu.log.
+PID=$(pgrep -n -x morf)
+hz=$(getconf CLK_TCK)
+t() { awk '{print $14+$15}' /proc/$PID/stat; }
+mark() { T0=$(t); S0=$(date +%s%N); }
+report() {
+  t1=$(t); s1=$(date +%s%N)
+  ms=$(( (s1 - S0) / 1000000 ))
+  echo "$1: cpu $(( (t1 - T0) * 1000 * 100 / hz / ms ))% over ${ms}ms" >> "$OUT/cpu.log"
+}
+wait 8
+mark; wait 5; report "rest"
+mark; i=0; while [ $i -lt 4 ]; do point 3830 1080; wait 1.2; point 1900 1080; wait 1.2; i=$((i+1)); done; report "sidebar in and out x4"
+mark; i=0; while [ $i -lt 4 ]; do hc dispatch workspace $((i % 3 + 2)) >/dev/null; wait 1.5; i=$((i+1)); done; report "workspace switch x4"
+mark; i=0; while [ $i -lt 4 ]; do ipc osd; wait 1.2; i=$((i+1)); done; report "osd x4"
+mark; i=0; while [ $i -lt 3 ]; do ipc dashboard open; wait 1.2; ipc dashboard close; wait 0.8; i=$((i+1)); done; report "dashboard x3"
+mark; wait 5; report "rest again"

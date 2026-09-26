@@ -349,6 +349,13 @@ impl Drop for DbusService {
         // immediately rather than waiting for the connection to be noticed as
         // gone.
         self.release();
+        // The reader thread holds the connection, blocked on its socket, for
+        // as long as the socket is open: left be, it and the connection lived
+        // on after the service -- a thread, a socket and a bus connection
+        // for every runtime that came and went (an output unplugged and
+        // plugged back, a screen asleep and awake). Closed, the bus hangs up,
+        // the reader's next read ends, and it returns.
+        let _ = self.connection.clone().close();
         drop(self.join.take());
     }
 }

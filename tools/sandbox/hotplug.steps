@@ -1,0 +1,22 @@
+# hotplug.steps: outputs unplugged and plugged back, five times; the
+# shell's threads, sockets and bus connections after each. OUT/cpu.log.
+PID=$(pgrep -n -x morf)
+count() {
+  thr=$(ls /proc/$PID/task | wc -l)
+  socks=$(ls -l /proc/$PID/fd 2>/dev/null | grep -c socket)
+  zb=$(for t in /proc/$PID/task/*; do cat $t/comm; done | grep -c zbus)
+  echo "$1: threads $thr sockets $socks zbus $zb" >> "$OUT/cpu.log"
+}
+wait 6
+count "start"
+i=0
+while [ $i -lt 5 ]; do
+  hc output create headless HOTPLUG-$i >/dev/null 2>&1 || true
+  wait 4
+  count "plugged $i"
+  hc output remove HOTPLUG-$i >/dev/null 2>&1 || true
+  wait 4
+  count "unplugged $i"
+  i=$((i + 1))
+done
+for t in /proc/$PID/task/*; do cat $t/comm; done | sort | uniq -c | sort -rn | head -8 >> "$OUT/cpu.log"

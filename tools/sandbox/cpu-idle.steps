@@ -1,0 +1,23 @@
+# cpu-idle.steps: the shell's threads and CPU at rest, then while a panel
+# is open, then at rest again. Writes OUT/cpu.log. For MONITORS="..." runs.
+PID=$(pgrep -n -x morf)
+sample() {
+  label=$1; secs=$2
+  t0=$(awk '{print $14+$15}' /proc/$PID/stat)
+  sleep "$secs"
+  t1=$(awk '{print $14+$15}' /proc/$PID/stat)
+  thr=$(ls /proc/$PID/task | wc -l)
+  hz=$(getconf CLK_TCK)
+  socks=$(ls -l /proc/$PID/fd 2>/dev/null | grep -c socket)
+  rss=$(awk "/VmRSS/{print \$2}" /proc/$PID/status)
+  echo "$label: cpu $(( (t1 - t0) * 100 / hz / secs ))% threads $thr sockets $socks rss ${rss}kB" >> "$OUT/cpu.log"
+  for t in /proc/$PID/task/*; do cat $t/comm; done | sort | uniq -c | sort -rn | head -6 >> "$OUT/cpu.log"
+}
+wait 6
+sample "rest" 20
+sample "rest, later" 30
+sample "rest, later still" 30
+point 1900 540; wait 2
+sample "sidebar open, pointer still" 10
+point 900 540; wait 3
+sample "rest again" 20

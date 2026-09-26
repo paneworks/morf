@@ -486,3 +486,37 @@ fn a_service_with_no_name_answers_on_its_unique_one() {
     service.reply(call.id, &DbusValue::Nil).unwrap();
     assert!(caller.join().unwrap().is_ok());
 }
+
+#[test]
+fn a_service_dropped_leaves_the_bus() {
+    // Its reader thread held the connection, blocked on the socket, after
+    // the service had gone: a thread, a socket and a bus connection for
+    // every runtime that came and went. Gone now means gone from the bus.
+    const PATH: &str = "/org/morf/Dropped";
+    let Ok((service, _)) = DbusService::own(Bus::Session, "", PATH, false) else {
+        return;
+    };
+    let unique = service.name().to_owned();
+    drop(service);
+    let bus = DbusProxy::connect(
+        Bus::Session,
+        "org.freedesktop.DBus",
+        "/org/freedesktop/DBus",
+        "org.freedesktop.DBus",
+    )
+    .expect("the bus answers");
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let owned = bus
+            .call_value_with("NameHasOwner", &DbusValue::String(unique.clone()))
+            .expect("the bus says whether a name has an owner");
+        if owned == DbusValue::Bool(false) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "{unique} is still on the bus after its service was dropped"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+}
