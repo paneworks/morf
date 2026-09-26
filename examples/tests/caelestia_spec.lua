@@ -144,14 +144,15 @@ test.describe("caelestia", function()
     test.falsy(shown("launcher"), "leaving the panel did not shut it")
   end)
 
-  test.it("opens the sidebar from the middle of the right edge, and shuts it on leaving", function()
+  test.it("opens the sidebar near the right edge, and shuts it on leaving", function()
     load()
-    test.move(W - 4, 200)
+    test.move(W - 40, H / 2)
     test.settle(1000)
-    test.falsy(shown("sidebar"), "the top of the right edge opened it")
-    test.move(W - 4, H / 2)
+    test.falsy(shown("sidebar"), "the desk opened it")
+    -- Near the edge, anywhere down it, the level pills among it.
+    test.move(W - 14, 200)
     test.settle(1500)
-    test.truthy(shown("sidebar"), "the middle of the right edge did not open it")
+    test.truthy(shown("sidebar"), "near the right edge did not open it")
     -- Onto the panel: still open.
     local d = drawer("sidebar")
     test.move(d.x + d.width / 2, d.y + d.height - 100)
@@ -417,7 +418,7 @@ test.describe("caelestia", function()
     test.near(d.x + d.width, W - 10, 1)
     test.near(d.y, 10, 1)
     test.near(d.height, H - 20, 1)
-    test.eq(d.width, 430)
+    test.eq(d.width, 450)
     for _, id in ipairs { "utilities-sliders", "utilities-volume", "utilities-brightness", "utilities-toggles",
       "utilities-power", "utilities-awake", "utilities-recorder" } do
       test.truthy(test.find { id = id, visible = true }, id .. " not shown")
@@ -442,11 +443,11 @@ test.describe("caelestia", function()
     test.truthy(test.find { id = "bluetooth-page", visible = true })
     test.truthy(test.find { text = "No Bluetooth adapter", visible = true })
     local detail = test.get { id = "settings-detail" }
-    test.near(detail.x, drawer("sidebar").x + 11, 1, "the page did not slide in")
+    test.near(detail.x, drawer("sidebar").x + 31, 1, "the page did not slide in")
     test.snapshot("caelestia-settings-bluetooth.png", { surface = "screen" })
     test.click { id = "settings-back" }
     test.settle(1000)
-    test.near(test.get({ id = "utilities" }).x, drawer("sidebar").x + 11, 1, "the settings did not come back")
+    test.near(test.get({ id = "utilities" }).x, drawer("sidebar").x + 31, 1, "the settings did not come back")
     -- Straight to a page over IPC; shut, the panel forgets it.
     test.eq(test.ipc("settings", "network"), "network")
     test.settle(1000)
@@ -455,7 +456,7 @@ test.describe("caelestia", function()
     test.settle(1000)
     test.ipc("sidebar", "open")
     test.settle(1500)
-    test.near(test.get({ id = "utilities" }).x, drawer("sidebar").x + 11, 1)
+    test.near(test.get({ id = "utilities" }).x, drawer("sidebar").x + 31, 1)
     test.eq(#test.logs("error"), 0)
   end)
 
@@ -506,30 +507,31 @@ test.describe("caelestia", function()
     -- To the settings by its tab.
     test.click { id = "sidebar-tab-settings" }
     test.settle(1000)
-    test.near(test.get({ id = "utilities" }).x, drawer("sidebar").x + 11, 1)
+    test.near(test.get({ id = "utilities" }).x, drawer("sidebar").x + 31, 1)
     test.eq(test.ipc("sidebar", "close"), false)
     test.settle(1500)
     test.falsy(shown("sidebar"))
     test.eq(test.ipc("drawers"), "")
   end)
 
-  test.it("has a left panel, the sidebar's twin, opened from the left edge above the rail", function()
+  test.it("has a left panel, the sidebar's twin, opened near the left edge; the rail rides out with it", function()
     load()
-    test.move(4, 150)
+    local pill = test.get { id = "rail-pill-5" }
+    test.move(14, pill.y + 10)
     test.settle(1500)
-    test.truthy(shown("leftbar"), "the left edge above the rail did not open it")
+    test.truthy(shown("leftbar"), "near the pills did not open it")
     local d = drawer("leftbar")
     test.near(d.x, 10, 1)
     test.near(d.height, H - 20, 1)
     test.truthy(test.find { id = "leftbar-tab-assistant", visible = true })
+    -- The pills now stand in the panel's far strip, between it and the desk.
+    pill = test.get { id = "rail-pill-5" }
+    test.near(pill.x + pill.width / 2, d.x + d.width - 10, 1, "the pills did not ride out")
     test.snapshot("caelestia-leftbar.png", { surface = "screen" })
     test.move(W / 2, H / 2)
     test.advance(1500)
     test.falsy(shown("leftbar"), "leaving it did not shut it")
-    -- The rail's pills still take a click.
-    test.click { id = "rail-slot-3" }
-    test.settle(300)
-    test.falsy(shown("leftbar"))
+    test.near(test.get({ id = "rail-pill-5" }).x + 3, 5, 0.5, "the pills did not come back")
   end)
 
   test.it("shuts the sidebar on a click on the desk, not on one on itself", function()
@@ -583,21 +585,24 @@ test.describe("caelestia", function()
     test.eq(#test.logs("error"), 0)
   end)
 
-  test.it("shows the OSD on asking and shuts it after a while", function()
+  test.it("shows a change as the right edge's level pill swelling out, then sinking", function()
     load()
-    test.falsy(shown("osd"))
+    for _, kind in ipairs { "volume", "brightness" } do
+      local pill = test.get { id = "levels-" .. kind }
+      test.near(pill.x + pill.width / 2, W - 5, 0.5)
+      -- The workspace pills' size exactly.
+      test.near(pill.height, test.get({ id = "rail-pill-1" }).height, 0.5)
+    end
     test.ipc("osd")
     test.settle(1000)
-    test.truthy(shown("osd"))
-    local d = drawer("osd")
-    test.near(d.x + d.width, W - 10, 1)
-    test.near(d.y + d.height / 2, H / 2, 1)
-    test.truthy(test.find { id = "osd-volume", visible = true })
-    test.truthy(test.find { id = "osd-brightness", visible = true })
+    local swell, bud = test.get { id = "levels-swell" }, test.get { id = "levels-bud" }
+    test.truthy(swell.x < W - 10, "the frame did not swell out")
+    test.near(bud.width, test.get({ id = "rail-pill-1" }).height, 0.5, "the disc is not the pills' height")
+    test.near(test.get({ id = "levels-volume" }).opacity, 1, 0.01, "the pill did not light")
     test.snapshot("caelestia-osd.png", { surface = "screen" })
     test.advance(3000)
     test.settle(1000)
-    test.falsy(shown("osd"))
+    test.truthy(test.get({ id = "levels-swell" }).x > W, "it did not sink back")
   end)
 
   test.it("takes the colour tool's colours from its own terminal", function()
@@ -632,10 +637,8 @@ test.describe("caelestia", function()
     local first, last = test.get { id = "rail-pill-1" }, test.get { id = "rail-pill-10" }
     test.near(first.y, (H - track) / 2, 1)
     test.near(last.y + last.height, (H + track) / 2, 1)
+    test.near(first.opacity, 1, 0.01)
     test.near(test.get({ id = "rail-pill-5" }).opacity, 0.6, 0.01)
-    test.move(5, test.get({ id = "rail-pill-5" }).y + 10)
-    test.settle(400)
-    test.near(test.get({ id = "rail-pill-5" }).opacity, 0.9, 0.01, "hover did not lift it")
     test.eq(#test.logs("error"), 0)
   end)
 
@@ -688,13 +691,6 @@ test.describe("caelestia", function()
     test.eq(#test.logs("error"), 0)
   end)
 
-  test.it("switches workspace from a pill", function()
-    load()
-    test.click { id = "rail-slot-7" }
-    test.settle(300)
-    test.eq(test.get({ id = "rail-number" }).text, "7")
-    test.eq(test.ipc("workspace", 7), 7)
-  end)
 
   -- Looked at only: headless runs may reach the machine's own sound
   -- server, so nothing here is clicked.

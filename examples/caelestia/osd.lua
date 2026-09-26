@@ -1,29 +1,16 @@
--- The on-screen display: a slim drawer on the right edge with two upright
--- sliders, the output's volume and the screen's brightness. It opens when
--- either changes (from anywhere: keys, another program) and shuts two
--- seconds after the last change unless the pointer is on it; dragging or
--- scrolling a slider sets it. Over IPC: `drawers toggle osd`, `osd`.
+-- The on-screen display's workings: the output's volume and the screen's
+-- brightness, read and set, their icons, and the watch that shows a
+-- change -- from anywhere: keys, another program -- as the right edge's
+-- level pills swelling out (levels.lua). Over IPC: `osd`.
 --
 -- The volume is `morf.audio`'s default output; the brightness is the
 -- backlight lib/sysinfo.lua reads (and writes when it may). Without either
--- the slider rests at zero, as the reference's do in the sandbox.
---
--- Measured off the reference at 1920x1080: 52 x 346, centred on the right
--- edge; sliders 30 wide and 152 tall, 13 px in, 12 apart; a 30 px handle.
+-- the level rests at zero.
 
 local morf = require("morf")
-local ui = require("morf.ui")
 local theme = require("theme")
-local kit = require("kit")
-local drawer = require("drawer")
 
-local C = theme.color
 local M = {}
-
-local WIDTH, PAD = 52, 11
-local SLIDER_W, SLIDER_H, GAP = 30, 152, 12
-local HEIGHT = 2 * 17 + 2 * SLIDER_H + GAP
-local HOLD = 2000
 
 local audio = morf.audio
 local sysinfo = require("lib.sysinfo")
@@ -49,45 +36,6 @@ function M.set_brightness(v)
   pcall(sysinfo.set_brightness, math.max(1, math.min(100, v * 100)))
 end
 
-local function slider(id, value, set, icon)
-  local held = false
-  local function at(y) return 1 - math.max(0, math.min(1, (y - SLIDER_W / 2) / (SLIDER_H - SLIDER_W))) end
-  -- The level and the handle ride a spring that overshoots a touch and
-  -- settles like a liquid finding its level.
-  local motion = kit.spring(190, 9)
-  local function top() return (SLIDER_H - SLIDER_W) * (1 - value()) end
-  return ui.MouseArea {
-    id = id, width = SLIDER_W, height = SLIDER_H, cursor = "pointer",
-    on_pressed = function(_, _, _, y) held = true set(at(y)) end,
-    on_released = function() held = false end,
-    on_dragged = function(_, _, _, _, _, y) if held then set(at(y)) end end,
-    on_wheel = function(_, _, _, _, _, step_y)
-      if step_y ~= 0 then set(value() + (step_y > 0 and -0.05 or 0.05)) end
-    end,
-    ui.Rect {
-      anchors = { fill = true }, radius = SLIDER_W / 2,
-      color = function() return C.surfaceContainer end,
-    },
-    -- The level, up from the bottom to the handle.
-    ui.Rect {
-      x = 0, width = SLIDER_W, radius = SLIDER_W / 2,
-      y = function() return top() end,
-      height = function() return SLIDER_H - top() end,
-      color = function() return C.primary end,
-      opacity = function() return value() > 0.01 and 1 or 0 end,
-      behavior = { y = motion, height = motion },
-    },
-    ui.Rect {
-      id = id .. "-handle",
-      x = 0, width = SLIDER_W, height = SLIDER_W, radius = SLIDER_W / 2,
-      y = top,
-      color = function() return C.inverseSurface end,
-      behavior = { y = motion },
-      kit.icon(icon, 18, function() return C.inverseOnSurface end, { anchors = { center_in = true } }),
-    },
-  }
-end
-
 local volume, brightness = M.volume, M.brightness
 local set_volume, set_brightness = M.set_volume, M.set_brightness
 
@@ -105,37 +53,9 @@ function M.brightness_icon()
   return "brightness_high"
 end
 
-local volume_slider = slider("osd-volume", function() return (volume()) end, set_volume, M.volume_icon)
-local brightness_slider = slider("osd-brightness", brightness, set_brightness, M.brightness_icon)
-
-local content = ui.Item {
-  anchors = { fill = true },
-  ui.Column { x = PAD, y = 17, gap = GAP, volume_slider, brightness_slider },
-}
-
-M.drawer = drawer.new {
-  name = "osd",
-  edge = "right",
-  width = WIDTH,
-  height = HEIGHT,
-  content = content,
-}
-
--- Opens on a change, shuts after a while unless the pointer is on it.
-local hide
-local function over() return volume_slider.hovered or brightness_slider.hovered end
-local function linger()
-  if hide then hide:cancel() end
-  hide = morf.timer(HOLD, function()
-    hide = nil
-    if over() then linger() else M.drawer.set(false) end
-  end, false)
-end
-
---- Shows the OSD for a moment.
-function M.flash()
-  M.drawer.set(true)
-  linger()
+--- Shows `kind` ("volume", the default, or "brightness") for a moment.
+function M.flash(kind)
+  require("levels").pop(kind or "volume")
 end
 
 -- A change is a reading that moved from one known value to another: the
@@ -144,15 +64,15 @@ local seen_volume, seen_brightness
 morf.effect("caelestia.osd.follow", function()
   local v, muted, known_v = volume()
   local b, known_b = brightness()
-  local changed = false
+  local changed
   if known_v then
     local now = ("%.3f/%s"):format(v, tostring(muted))
-    if seen_volume and now ~= seen_volume then changed = true end
+    if seen_volume and now ~= seen_volume then changed = "volume" end
     seen_volume = now
   end
   if known_b then
     local now = ("%.3f"):format(b)
-    if seen_brightness and now ~= seen_brightness then changed = true end
+    if seen_brightness and now ~= seen_brightness then changed = "brightness" end
     seen_brightness = now
   end
   -- On the focused screen only: every screen hears the change. Not while
@@ -160,11 +80,7 @@ morf.effect("caelestia.osd.follow", function()
   local sidebar = package.loaded["sidebar"]
   local shown_there = type(sidebar) == "table" and sidebar.drawer and sidebar.drawer.open:get()
     and sidebar.showing("settings")
-  if changed and not shown_there and require("services").here() then M.flash() end
-end)
-
-morf.effect("caelestia.osd.hover", function()
-  if over() and hide then linger() end
+  if changed and not shown_there and require("services").here() then M.flash(changed) end
 end)
 
 return M

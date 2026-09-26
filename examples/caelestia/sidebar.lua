@@ -27,7 +27,8 @@ local utilities = require("utilities")
 local C = theme.color
 local M = {}
 
-local WIDTH = 430
+-- The pages, and the strip on the near side the level pills ride out to.
+local WIDTH = theme.SIDE_W + theme.STRIP
 local LEFT, TOP = 16, 6
 local CARD_W = 408
 local ROW_W = 384
@@ -329,7 +330,7 @@ M.TABS = {
 }
 
 local panel = tabbed.new {
-  id = "sidebar", width = WIDTH, height = M.height, tabs = M.TABS,
+  id = "sidebar", width = theme.SIDE_W, height = M.height, tabs = M.TABS,
   on_tab = function(key)
     utilities.shown(key == "settings")
     if key == "notifications" then
@@ -349,7 +350,7 @@ M.drawer = drawer.new {
   edge = "right",
   width = WIDTH,
   height = M.height,
-  content = panel.content,
+  content = ui.Item { anchors = { fill = true, left_margin = theme.STRIP }, panel.content },
   props = { anchors = { top = true, right = true } },
 }
 

@@ -16,7 +16,8 @@ local tabbed = require("tabbed")
 local C = theme.color
 local M = {}
 
-M.WIDTH = 430
+-- The pages, and the strip on the far side the workspace rail rides out to.
+M.WIDTH = theme.SIDE_W + theme.STRIP
 
 local function screen_height()
   morf.screens_revision()
@@ -48,7 +49,7 @@ M.TABS = {
   { key = "assistant", name = "Assistant", icon = "forum", build = placeholder("forum", "Nothing here yet") },
 }
 
-local panel = tabbed.new { id = "leftbar", width = M.WIDTH, height = M.height, tabs = M.TABS }
+local panel = tabbed.new { id = "leftbar", width = theme.SIDE_W, height = M.height, tabs = M.TABS }
 M.panel = panel
 
 M.drawer = drawer.new {

@@ -102,6 +102,10 @@ for _, d in ipairs(drawer.all) do field[#field + 1] = d.shape end
 -- The rail's swell is the frame's too.
 local rail_node = rail.build()
 field[#field + 1] = rail.shape
+-- And the levels' swell, down the right edge.
+local levels = require("levels")
+local levels_node = levels.build()
+field[#field + 1] = levels.shape
 
 local panels = {
   id = "opening",
@@ -124,17 +128,23 @@ ui.Item {
   -- The workspaces down the left edge: a pill each, the active one popping
   -- out into a numbered bud when it changes.
   rail_node,
+  levels_node,
   ui.Item(panels),
   dashboard.edge_trigger(),
-  -- The bottom edge under the launcher opens it; the middle of the right
-  -- edge opens the sidebar; the left edge above the rail, the left panel.
+  -- The bottom edge under the launcher opens it.
   require("hover").edge {
     name = "launcher", drawer = launcher.drawer, edge = "bottom",
     length = launcher.width, setting = "launcher.hover",
   },
+  -- Near the right edge, anywhere down it, the sidebar opens; near the
+  -- left edge (the rail's pills with it), the left panel.
   require("hover").edge {
     name = "sidebar", drawer = sidebar.drawer, edge = "right",
-    length = function() return math.floor((morf.screens[1] and morf.screens[1].height or 1080) / 3) end,
+    from = function() return theme.BORDER + theme.ROUNDING end,
+    length = function()
+      local h = (morf.screens[1] and morf.screens[1].height) or 1080
+      return h - 2 * (theme.BORDER + theme.ROUNDING)
+    end,
     setting = "sidebar.hover",
   },
   require("hover").edge {
@@ -142,7 +152,7 @@ ui.Item {
     from = function() return theme.BORDER + theme.ROUNDING end,
     length = function()
       local h = (morf.screens[1] and morf.screens[1].height) or 1080
-      return math.max(40, math.floor(h / 4) - 8 - theme.BORDER - theme.ROUNDING)
+      return h - 2 * (theme.BORDER + theme.ROUNDING)
     end,
     setting = "leftbar.hover",
   },

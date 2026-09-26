@@ -1,8 +1,8 @@
 -- Opening a drawer by touching the frame's edge where it lives.
 --
 -- A thin strip on the frame's border -- the bottom edge under the
--- launcher, the middle of the right edge beside the sidebar, the left edge
--- above the workspace rail beside the left panel -- opens its
+-- launcher, the right edge beside the sidebar, the left edge beside the
+-- left panel (the sides' pills under them) -- opens its
 -- drawer when the pointer reaches it. A drawer opened this way shuts again
 -- once the pointer has left the strip and every panel that belongs to it,
 -- after a moment's grace for the crossing from the edge onto the panel. One
@@ -18,12 +18,14 @@ local M = {}
 -- How long the pointer may be off both the strip and the panel before a
 -- drawer opened by hover shuts: enough to cross the frame's seam.
 local GRACE_MS = 120
+-- How far into the opening a side strip reaches: near the edge is enough.
+local NEAR = 8
 
 --- A strip on one edge that opens `opts.drawer` on hover. Options:
 --- `name`, `drawer`, `edge` ("bottom", "right" or "left"), `length` (a
---- function: the strip's length along the edge), `from` (for "left": a
---- function, where the strip starts down the edge; the right and bottom
---- strips are centred), `panels` (the panels that keep it
+--- function: the strip's length along the edge), `from` (for the sides: a
+--- function, where the strip starts down the edge; the bottom one is
+--- centred), `panels` (the panels that keep it
 --- open; the drawer's own by default), `setting` (a boolean setting that
 --- turns it off). Returns the node to place over the whole screen.
 function M.edge(opts)
@@ -37,16 +39,17 @@ function M.edge(opts)
       width = opts.length, height = theme.BORDER,
     }
   elseif opts.edge == "left" then
+    -- Near the edge, not only on it: a little way into the opening.
     strip = ui.MouseArea {
       id = opts.name .. "-trigger",
       x = 0, y = opts.from,
-      width = theme.LEFT, height = opts.length,
+      width = theme.LEFT + NEAR, height = opts.length,
     }
   else
     strip = ui.MouseArea {
       id = opts.name .. "-trigger",
-      anchors = { right = true, vertical_center = true },
-      width = theme.BORDER, height = opts.length,
+      anchors = { right = true }, y = opts.from or 0,
+      width = theme.BORDER + NEAR, height = opts.length,
     }
   end
 

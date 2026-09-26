@@ -1,5 +1,7 @@
 -- The rail: the workspaces down the frame's left edge, where the bar was,
--- as a line of pills -- ten of them, the group of ten the active workspace is in.
+-- as a line of pills -- ten of them, the group of ten the active workspace
+-- is in. Only to look at: the pointer near them opens the left panel, and
+-- the rail rides out with it to the panel's far edge.
 -- When the workspace changes, the frame swells out beside the old
 -- workspace's pill, as a drawer grows out of it, and the pill rides out
 -- into the swell, opening into a disc with the number. The swell flows
@@ -74,25 +76,10 @@ function M.build()
       -- (the bud below), and hands over in a frame where the two are the
       -- same shape.
     }
-    local area = ui.MouseArea {
-      id = "rail-slot-" .. i,
-      cursor = "pointer",
-      x = 0,
-      y = function() local g = M.geometry() return g.top + (i - 1) * (g.item + g.gap) end,
-      width = theme.LEFT,
-      height = function() return M.geometry().item end,
-      on_clicked = function() services.workspace.go(id()) end,
-      on_wheel = function(_, _, _, _, _, step_y)
-        if step_y ~= 0 then services.workspace.step(step_y > 0 and 1 or -1) end
-      end,
-      pill,
-    }
-    -- Bound once the area exists: it reads the area's hover.
-    pill.opacity = function()
-      if lit:get() == id() then return 1 end
-      return area.hovered and 0.9 or 0.6
-    end
-    pills[i] = area
+    -- Only to look at: the pointer near them opens the left panel.
+    pill.y = function() local g = M.geometry() return g.top + (i - 1) * (g.item + g.gap) end
+    pill.opacity = function() return lit:get() == id() and 1 or 0.6 end
+    pills[i] = pill
   end
 
   -- The swell: a box in the frame's own field (`M.shape`, which init.lua
@@ -337,7 +324,7 @@ function M.build()
     pop(id)
   end)
 
-  return ui.Item {
+  local root = ui.Item {
     id = "rail",
     anchors = { fill = true },
     visible = enabled,
@@ -346,6 +333,13 @@ function M.build()
     field,
     bud,
   }
+  -- The left panel opening carries the rail out with it, to the strip on
+  -- its far side: between the panel and the desk.
+  local leftbar = require("leftbar")
+  kit.ride("rail", root, leftbar.drawer,
+    function() return theme.SIDE_W + theme.STRIP / 2 + theme.LEFT / 2 end,
+    function() return leftbar.drawer.panel.width + theme.SEAM + theme.BORDER + 2 end)
+  return root
 end
 
 return M
