@@ -137,31 +137,37 @@ test.describe("caelestia", function()
     test.falsy(shown("launcher"), "the bottom edge opened the launcher")
     local d = drawer("capture")
     test.near(d.y + d.height, H - 10, 1)
-    for _, id in ipairs { "capture-region", "capture-window", "capture-screen" } do
+    for _, id in ipairs { "capture-target-region", "capture-target-window", "capture-target-screen",
+      "capture-screenshot", "capture-record", "capture-folder" } do
       test.truthy(test.find { id = id, visible = true }, id .. " not shown")
     end
     test.snapshot("caelestia-capture.png", { surface = "screen" })
     test.clear_logs()
     test.click { id = "capture-delay-3" }
-    test.click { id = "capture-screen" }
+    test.click { id = "capture-target-screen" }
+    test.click { id = "capture-screenshot" }
     test.settle(1000)
     test.falsy(shown("capture"), "it stayed in the picture")
     local said = function()
       for _, l in ipairs(test.logs("info")) do
-        if l.message:find("screenshot_screen (dry run)", 1, true) then return true end
+        if l.message:find("capture screenshot_screen (dry run)", 1, true) then return true end
       end
       return false
     end
     test.falsy(said(), "it did not wait the delay")
     test.advance(3000)
     test.truthy(said(), "the screenshot was not taken")
-    -- The recorder, on its tab.
+    -- Recording the same target, from the same place: Record, then Stop.
     test.ipc("capture", "open")
     test.settle(1500)
-    test.click { id = "utilities-record" }
-    test.settle(500)
+    test.click { id = "capture-record" }
+    test.advance(3500)
+    test.ipc("capture", "open")
+    test.settle(1500)
     test.truthy(test.find { text = "Stop", visible = true }, "not recording")
-    test.click { id = "utilities-record" }
+    test.click { id = "capture-record" }
+    test.settle(300)
+    test.truthy(test.find { text = "Record", visible = true }, "not stopped")
     test.eq(#test.runs(), 0)
     -- The launcher is a key's, and floats in the middle; a click away shuts it.
     test.ipc("launcher", "open")
@@ -496,14 +502,6 @@ test.describe("caelestia", function()
     test.settle(1000)
     test.near(test.get({ id = "utilities-awake" }).height, 128, 1)
     test.truthy(test.find { id = "utilities-awake-chip", visible = true })
-    test.ipc("capture", "open")
-    test.settle(1500)
-    test.click { id = "utilities-record" }
-    test.settle(500)
-    test.truthy(test.find { text = "Stop", visible = true }, "not recording")
-    test.click { id = "utilities-record" }
-    test.ipc("utilities", "open")
-    test.settle(1500)
     test.click { id = "utilities-toggle-mic" }
     test.click { id = "utilities-toggle-gamemode" }
     test.click { id = "utilities-toggle-settings" }
@@ -512,8 +510,6 @@ test.describe("caelestia", function()
     for _, l in ipairs(test.logs("info")) do said[#said + 1] = l.message end
     said = table.concat(said, "\n")
     test.truthy(said:find("keep awake on (dry run)", 1, true), "keep awake did not log")
-    test.truthy(said:find("utilities record_fullscreen (dry run): gpu-screen-recorder", 1, true), said)
-    test.truthy(said:find("utilities record_stop (dry run)", 1, true))
     test.truthy(said:find("utilities mic_off (dry run)", 1, true))
     test.truthy(said:find("utilities gamemode_on (dry run)", 1, true))
     test.eq(#test.runs(), 0)

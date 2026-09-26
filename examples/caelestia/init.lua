@@ -220,16 +220,17 @@ morf.ipc.settings = function(page)
   return page or ""
 end
 morf.ipc.leftbar = verb(leftbar.drawer)
--- `capture [how]` opens the capture drawer. `screenshot WHAT`
--- takes one at once: region, window or screen.
+-- `capture [how]` opens the capture drawer. `screenshot [WHAT]` and
+-- `record [WHAT]` (again: stop) take one at once, of
+-- region, window or screen (the chosen one by default).
 morf.ipc.capture = verb(capture.drawer)
 morf.ipc.screenshot = function(what)
   if not here() then return nil end
-  what = what or "region"
-  if what ~= "region" and what ~= "window" and what ~= "screen" then
-    error("`" .. tostring(what) .. "`: region, window or screen")
-  end
   return capture.shoot(what)
+end
+morf.ipc.record = function(what)
+  if not here() then return nil end
+  return capture.record(what)
 end
 morf.ipc.workspace = function(n)
   if not here() then return nil end
