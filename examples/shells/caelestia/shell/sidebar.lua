@@ -37,10 +37,10 @@ local GROUPS = 8        -- groups on show at most
 local LINES = 4         -- lines of a group shut, cards of one opened
 local ITEM_H = 112      -- a notification in an opened group
 
+-- The desk's height: the screen, less the bar when it is up.
 local function screen_height()
-  morf.screens_revision()
-  local s = morf.screens[1]
-  return (s and s.height) or 1080
+  local _, _, _, h = require("bar").desk()
+  return h
 end
 
 --- The drawer's height: the frame's opening, top to bottom.

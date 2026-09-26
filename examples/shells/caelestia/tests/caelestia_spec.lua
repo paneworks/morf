@@ -36,21 +36,19 @@ local function shown(name)
 end
 
 test.describe("caelestia", function()
-  test.it("loads the frame, the rail and a wallpaper layer", function()
+  test.it("loads the frame and the rail, and leaves the wallpaper to the compositor", function()
     load()
     local surfaces = test.surfaces()
     test.eq(surfaces[1].kind, "primary")
     test.eq(surfaces[1].width, W)
     test.eq(surfaces[1].height, H)
-    local wallpaper
+    -- wallpaper.draw is off by default: hyprpaper (lule's) paints the desk.
     for _, s in ipairs(surfaces) do
-      if s.name == "caelestia-wallpaper" then wallpaper = s end
+      test.ne(s.name, "caelestia-wallpaper", "the shell opened a wallpaper layer it was not asked for")
     end
-    test.truthy(wallpaper and wallpaper.visible, "no wallpaper layer shown")
-    test.eq(wallpaper.width, W)
-    test.eq(wallpaper.height, H)
     test.truthy(test.find { id = "frame" }, "no frame")
-    test.falsy(test.find { id = "bar" }, "the bar is back")
+    -- The bar (bar.lua) is down on a desk unless asked for.
+    test.falsy(test.find { id = "bar", visible = true }, "the bar is back")
     test.get { id = "rail" }
     test.falsy(shown("launcher"))
     test.falsy(shown("dashboard"))

@@ -75,6 +75,7 @@ local sidebar = require("sidebar")
 local leftbar = require("leftbar")
 local capture = require("capture")
 local keyboard = require("keyboard")
+local bar = require("bar")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -90,13 +91,13 @@ local field = {
   shadow_color = "#000000a0",
   shadow_blur = 6,
   ui.SdfShape { shape = "box", anchors = { fill = true } },
+  -- The opening, drawn back on the bar's side when it is up.
   ui.SdfShape {
     shape = "box",
-    anchors = {
-      fill = true,
-      left_margin = theme.LEFT, top_margin = theme.BORDER,
-      right_margin = theme.BORDER, bottom_margin = theme.BORDER,
-    },
+    x = function() local x = bar.desk() return x + theme.LEFT end,
+    y = function() local _, y = bar.desk() return y + theme.BORDER end,
+    width = function() local _, _, w = bar.desk() return w - theme.LEFT - theme.BORDER end,
+    height = function() local _, _, _, h = bar.desk() return h - 2 * theme.BORDER end,
     radius = theme.ROUNDING,
     operation = "subtract",
   },
@@ -134,6 +135,16 @@ for _, d in ipairs(drawer.all) do panels[#panels + 1] = d.panel end
 ui.Item {
   anchors = { fill = true },
   ui.Sdf(field),
+  -- The bar, in the frame's edge, when it is up.
+  bar.build(),
+  -- The desk: the screen less the bar. Everything that hangs off the
+  -- frame's edges lives in it, so it stays on the opening's edge.
+  ui.Item {
+  id = "desk",
+  x = function() local x = bar.desk() return x end,
+  y = function() local _, y = bar.desk() return y end,
+  width = function() local _, _, w = bar.desk() return w end,
+  height = function() local _, _, _, h = bar.desk() return h end,
   -- The workspaces down the left edge: a pill each, the active one popping
   -- out into a numbered bud when it changes.
   rail_node,
@@ -151,7 +162,7 @@ ui.Item {
     name = "sidebar", drawer = sidebar.drawer, edge = "right",
     from = function() return theme.BORDER + theme.ROUNDING end,
     length = function()
-      local h = (morf.screens[1] and morf.screens[1].height) or 1080
+      local _, _, _, h = bar.desk()
       return h - 2 * (theme.BORDER + theme.ROUNDING)
     end,
     setting = "sidebar.hover",
@@ -160,12 +171,22 @@ ui.Item {
     name = "leftbar", drawer = leftbar.drawer, edge = "left",
     from = function() return theme.BORDER + theme.ROUNDING end,
     length = function()
-      local h = (morf.screens[1] and morf.screens[1].height) or 1080
+      local _, _, _, h = bar.desk()
       return h - 2 * (theme.BORDER + theme.ROUNDING)
     end,
     setting = "leftbar.hover",
   },
+  },
 }
+
+-- Windows keep inside the opening: the frame, and the bar when it is up.
+morf.effect("caelestia.bar.reserve", function()
+  local i = bar.insets()
+  morf.surface.reserve = {
+    left = theme.LEFT + i.left, top = theme.BORDER + i.top,
+    right = theme.BORDER + i.right, bottom = theme.BORDER + i.bottom,
+  }
+end)
 
 if config.get("wallpaper.draw") then wallpaper.open_layer() end
 

@@ -19,10 +19,10 @@ local M = {}
 -- The pages, and the strip on the far side the workspace rail rides out to.
 M.WIDTH = theme.SIDE_W + theme.STRIP
 
+-- The desk's height: the screen, less the bar when it is up.
 local function screen_height()
-  morf.screens_revision()
-  local s = morf.screens[1]
-  return (s and s.height) or 1080
+  local _, _, _, h = require("bar").desk()
+  return h
 end
 
 function M.height() return screen_height() - 2 * theme.BORDER end

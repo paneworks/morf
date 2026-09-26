@@ -21,10 +21,10 @@ local M = {}
 local PILL_W = 6
 local HOLD = 1500
 
+-- The desk this lives in: the screen, less the bar when it is up.
 local function screen()
-  morf.screens_revision()
-  local s = morf.screens[1]
-  return (s and s.width) or 1920, (s and s.height) or 1080
+  local _, _, w, h = require("bar").desk()
+  return w, h
 end
 
 --- The pills' measures: the workspace rail's pills exactly -- their

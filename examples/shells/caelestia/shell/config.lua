@@ -82,6 +82,13 @@ return settings.open {
       -- How long the numbered bud stays out after a switch, in ms.
       hold = 800,
     },
+    bar = {
+      -- "on", "off", or "auto": up on a narrow screen (a phone), down on a
+      -- desk. The quick settings' Bar tile sets it.
+      enabled = "auto",
+      -- top, bottom, left or right.
+      side = "top",
+    },
     keyboard = {
       -- Up by itself when a program asks for text and no real keyboard
       -- is attached (a tablet, a detached keyboard); by hand either way.

@@ -301,6 +301,18 @@ M.TOGGLES = {
     end,
   },
   {
+    -- The bar: up or down, and a ">" to where it goes.
+    id = "bar", icon = "toolbar", name = "Bar", detail = "bar",
+    on = function() return require("bar").on() end,
+    set = function(now) require("bar").set_on(now) end,
+    status = function()
+      local b = require("bar")
+      if not b.on() then return "Off" end
+      local side = b.side()
+      return side:sub(1, 1):upper() .. side:sub(2)
+    end,
+  },
+  {
     id = "settings", icon = "settings", fill = true, name = "Settings",
     status = function() return "Open" end,
     on = function() return false end,
@@ -462,6 +474,7 @@ M.DETAILS = {
   { key = "sound", name = "Sound", build = function(w, h) return require("sound_page").output_page(w, h) end },
   { key = "microphone", name = "Microphone", build = function(w, h) return require("sound_page").input_page(w, h) end },
   { key = "power", name = "Power", build = function(w, h) return require("power_page").page(w, h) end },
+  { key = "bar", name = "Bar", build = function(w, h) return require("bar_page").page(w, h) end },
 }
 function M.page(w, h)
   local main = ui.Item {

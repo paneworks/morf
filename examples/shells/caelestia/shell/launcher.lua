@@ -654,8 +654,8 @@ local content = ui.Item {
 -- Hung from a fixed point near the top of the screen: results change the
 -- panel's height downwards only, and the search never moves.
 local function top_margin()
-  local s = morf.screens[1]
-  return math.floor(((s and s.height) or 1080) * 0.16)
+  local _, _, _, h = require("bar").desk()
+  return math.floor(h * 0.16)
 end
 
 M.drawer = drawer.new {
