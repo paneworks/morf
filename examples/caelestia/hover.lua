@@ -1,8 +1,7 @@
 -- Opening a drawer by touching the frame's edge where it lives.
 --
 -- A thin strip on the frame's border -- the bottom edge under the
--- launcher, the middle of the right edge beside the sidebar -- opens its
--- drawer when the pointer reaches it. A drawer opened this way shuts again
+-- launcher -- opens its drawer when the pointer reaches it. A drawer opened this way shuts again
 -- once the pointer has left the strip and every panel that belongs to it,
 -- after a moment's grace for the crossing from the edge onto the panel. One
 -- opened by a key or a verb stays until it is shut.
