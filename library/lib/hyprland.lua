@@ -856,13 +856,25 @@ local function apply_event(name, a, b)
     end
     rebuild()
   elseif name == "windowtitlev2" then
-    if a == state.active_window.address then state.active_window.title = b end
+    -- A title changes often (a spinner in a terminal's, many times a
+    -- second): only its own row is touched, never the whole rebuild.
+    if a == state.active_window.address and state.active_window.title ~= b then
+      state.active_window.title = b
+    end
     for _, client in ipairs(latest.clients or {}) do
       if type(client) == "table" and address_of(client.address) == a then
         client.title = b
       end
     end
-    rebuild()
+    for index, row in ipairs(rows.clients or {}) do
+      if row.address == a then
+        if row.title ~= b then
+          row.title = b
+          state.clients:set(index, row)
+        end
+        break
+      end
+    end
   elseif name == "fullscreen" then
     state.fullscreen = a
   elseif name == "urgent" then
@@ -941,6 +953,39 @@ local function disconnect(why)
   schedule_reconnect()
 end
 
+-- Title lines, held back: a terminal with a spinner in its title sends ten
+-- a second, and nothing may be watching. Unless someone listens for them,
+-- only each window's latest is kept and applied once a second.
+local TITLE_HOLD_MS = 1000
+local held_titles = nil
+
+local function listened(name)
+  local list = listeners[name]
+  return list ~= nil and #list > 0
+end
+
+local function apply_held_titles()
+  local held = held_titles
+  held_titles = nil
+  for _, line in pairs(held or {}) do handle_line(line) end
+end
+
+-- True when `line` is a title that was held back (or, the old address-only
+-- form, dropped): nothing more to do with it now.
+local function hold_title(line)
+  if line:sub(1, 11) ~= "windowtitle" then return false end
+  if listened("windowtitlev2") or listened("windowtitle") or listened("*") then return false end
+  if line:sub(1, 13) == "windowtitle>>" then return true end
+  if line:sub(1, 15) ~= "windowtitlev2>>" then return false end
+  local address = line:match("^windowtitlev2>>([^,]*)") or ""
+  if not held_titles then
+    held_titles = {}
+    morf.timer(TITLE_HOLD_MS, function() protected("titles", apply_held_titles) end, false)
+  end
+  held_titles[address] = line
+  return true
+end
+
 local function on_line(line)
   -- The engine cuts a line one byte past the limit, so an overlong one is
   -- recognisable here and dropped whole rather than parsed in part.
@@ -948,6 +993,7 @@ local function on_line(line)
     log.warn("hyprland: dropping an event line over", settings.line_limit, "bytes")
     return
   end
+  if hold_title(line) then return end
   if #line > 0 then handle_line(line) end
   flush_dirty()
 end

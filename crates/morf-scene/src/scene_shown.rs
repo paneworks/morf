@@ -14,6 +14,13 @@ use std::collections::HashMap;
 use crate::types::{NodeHandle, NodeId, Scene};
 
 impl Scene {
+    /// Whether a change to `property` of `node` can be seen now: the
+    /// node and its ancestors shown (for its own opacity or visibility,
+    /// its ancestors).
+    pub fn change_is_shown(&self, node: NodeHandle, property: &str) -> bool {
+        self.change_shows(node.0, property, &mut HashMap::new())
+    }
+
     /// Whether a change to `property` of `node` shows. A node's own opacity
     /// or visibility changing shows whenever its ancestors do: that is how
     /// a fade in from nothing starts. `cache` holds what was found per node

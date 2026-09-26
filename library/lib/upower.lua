@@ -172,12 +172,18 @@ function upower.connect(options)
     return true
   end
 
-  local function read_display()
-    local p = client.get_all(name, DISPLAY, DEVICE)
-    if not p then
-      assign(state.display, empty_display())
-      return
-    end
+  -- Each device's properties as last read, so a change signal -- which
+  -- carries the new values -- is merged in without asking the bus again.
+  local props = {}
+
+  local function merged(path, changed)
+    local p = props[path]
+    if not p then return nil end
+    for key, value in pairs(changed or {}) do p[key] = value end
+    return p
+  end
+
+  local function show_display(p)
     local row = upower.device_row(DISPLAY, p)
     assign(state.display, {
       present = row.present, percentage = row.percentage, state = row.state,
@@ -187,30 +193,63 @@ function upower.connect(options)
     })
   end
 
+  local function read_display()
+    local p = client.get_all(name, DISPLAY, DEVICE)
+    props[DISPLAY] = p or nil
+    if not p then
+      assign(state.display, empty_display())
+      return
+    end
+    show_display(p)
+  end
+
   local schedule = dbus_client.debounce(options.debounce_ms or 60, function() refresh_devices() end)
 
-  function refresh_devices()
-    local paths = client.call1(name, ROOT, NAME, "EnumerateDevices")
-    local list, peripherals = {}, {}
-    local present = {}
-    for _, path in ipairs(type(paths) == "table" and paths or {}) do
-      local p = client.get_all(name, path, DEVICE)
-      if p then
-        present[path] = true
-        watch(path, function() schedule() end)
-        local row = upower.device_row(path, p)
-        list[#list + 1] = row
-        if not row.power_supply and row.kind ~= "line_power" and row.present then
-          peripherals[#peripherals + 1] = row
-        end
+  local function publish_devices(list)
+    local peripherals = {}
+    for _, row in ipairs(list) do
+      if not row.power_supply and row.kind ~= "line_power" and row.present then
+        peripherals[#peripherals + 1] = row
       end
     end
-    unwatch_missing(present)
     table.sort(list, function(a, b) return a.path < b.path end)
     table.sort(peripherals, function(a, b) return a.path < b.path end)
     rows = list
     state.devices:replace(list, "path")
     state.peripherals:replace(peripherals, "path")
+  end
+
+  -- One device changed: its row alone is rebuilt, from what the signal said.
+  local function device_changed(path, changed)
+    local p = merged(path, changed)
+    if not p then return schedule() end
+    local list = {}
+    for _, row in ipairs(rows) do
+      list[#list + 1] = row.path == path and upower.device_row(path, p) or row
+    end
+    publish_devices(list)
+  end
+
+  function refresh_devices()
+    local paths = client.call1(name, ROOT, NAME, "EnumerateDevices")
+    local list = {}
+    local present = {}
+    for _, path in ipairs(type(paths) == "table" and paths or {}) do
+      local p = client.get_all(name, path, DEVICE)
+      if p then
+        present[path] = true
+        props[path] = p
+        watch(path, function(_, changed, invalidated)
+          if next(invalidated or {}) then schedule() else device_changed(path, changed) end
+        end)
+        list[#list + 1] = upower.device_row(path, p)
+      end
+    end
+    for path in pairs(props) do
+      if path ~= DISPLAY and not present[path] then props[path] = nil end
+    end
+    unwatch_missing(present)
+    publish_devices(list)
   end
 
   local function clear_devices()
@@ -287,7 +326,10 @@ function upower.connect(options)
     if changed.LidIsClosed ~= nil then state.lid_is_closed = changed.LidIsClosed == true end
     if changed.LidIsPresent ~= nil then state.lid_is_present = changed.LidIsPresent == true end
   end)
-  watch(DISPLAY, function() read_display() end)
+  watch(DISPLAY, function(_, changed, invalidated)
+    local p = not next(invalidated or {}) and merged(DISPLAY, changed)
+    if p then show_display(p) else read_display() end
+  end)
   client.on_signal(name, ROOT, NAME, "DeviceAdded", function() schedule() end)
   client.on_signal(name, ROOT, NAME, "DeviceRemoved", function(body)
     local path = dbus_client.first(body)

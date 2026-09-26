@@ -548,7 +548,10 @@ impl Runtime {
         // firing is not a reason to render: a 16ms timer that polls a file and
         // finds it unchanged would otherwise force a full render of every
         // output sixty times a second, forever.
-        let revision_before = self.reactive.borrow().scene_revision;
+        let (revision_before, hidden_before) = {
+            let state = self.reactive.borrow();
+            (state.scene_revision, state.hidden_revisions)
+        };
         // Timers, loaders and views are in step with the scene as it is now;
         // what the callbacks below change is for the next turn to pick up.
         self.reactive.borrow_mut().polled_revision = revision_before;
@@ -743,7 +746,13 @@ impl Runtime {
             let _span = crate::profile::span(|| "engine: image jobs".to_owned());
             self.poll_image_jobs();
         }
-        service_changed || self.reactive.borrow().scene_revision != revision_before
+        // Changes to nodes nothing shows are not painted: a hidden panel's
+        // chart that follows a counter every second would otherwise draw
+        // every output every second for a picture nobody sees.
+        let state = self.reactive.borrow();
+        let bumps = state.scene_revision.wrapping_sub(revision_before);
+        let hidden = state.hidden_revisions.wrapping_sub(hidden_before);
+        service_changed || bumps > hidden
     }
 }
 

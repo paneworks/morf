@@ -14,6 +14,15 @@ pub(crate) fn create_node(state: &Rc<RefCell<ReactiveState>>, element: Element) 
     state.scene.create(element)
 }
 
+/// A property of `node` changed: the scene moved on, and -- unless nothing
+/// shows the node -- owes a paint.
+fn bump_revision(state: &mut ReactiveState, node: NodeHandle, property: &str) {
+    state.scene_revision = state.scene_revision.wrapping_add(1);
+    if !state.scene.change_is_shown(node, property) {
+        state.hidden_revisions = state.hidden_revisions.wrapping_add(1);
+    }
+}
+
 /// The pseudo-property a binding depends on when it reads `layout_x` or
 /// `layout_y`.
 pub(crate) const LAYOUT_POSITION: &str = "layout_position";
@@ -96,7 +105,7 @@ pub(crate) fn assign_scene_property(
         .map_err(|error| error.to_string())?
         != &old_target;
     if current_changed || target_changed {
-        state.scene_revision = state.scene_revision.wrapping_add(1);
+        bump_revision(state, node, property);
         // A binding that reads this property is now stale. Inside a handler
         // the flush comes when the handler returns; outside one, at the next
         // signal write or clock tick, as it always did.
@@ -139,7 +148,7 @@ pub(crate) fn animate_scene_property(
         .map_err(|error| error.to_string())?
         != &old_current
     {
-        state.scene_revision = state.scene_revision.wrapping_add(1);
+        bump_revision(state, node, property);
         bump_property_signal(state, node, property, false)?;
     }
     if state

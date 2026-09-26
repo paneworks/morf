@@ -178,6 +178,9 @@ pub(crate) struct ReactiveState {
     /// that moved on since may hold a timer to start or a loader to fill,
     /// which is work for the next turn rather than for the next wake.
     pub(crate) polled_revision: u64,
+    /// How many of the scene's revisions were a property of a node nothing
+    /// shows: work for the loop, not a reason to paint.
+    pub(crate) hidden_revisions: u64,
     pub(crate) reload_seed: HashMap<String, IpcValue>,
     pub(crate) reloadable: HashMap<String, SignalId>,
     pub(crate) reload_request: Option<bool>,
@@ -579,6 +582,7 @@ impl ReactiveState {
             model_revisions: HashMap::new(),
             scene_revision: 0,
             polled_revision: 0,
+            hidden_revisions: 0,
             reload_seed: HashMap::new(),
             reloadable: HashMap::new(),
             reload_request: None,
