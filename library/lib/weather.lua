@@ -379,4 +379,17 @@ function Weather:_fetch(done)
   end
 end
 
+--- A Material Symbols name for a WMO weather code, day or night.
+function weather.material_symbol(code, is_day)
+  code = tonumber(code) or -1
+  if code == 0 then return is_day == false and "clear_night" or "clear_day" end
+  if code == 1 or code == 2 then return is_day == false and "partly_cloudy_night" or "partly_cloudy_day" end
+  if code == 3 then return "cloud" end
+  if code == 45 or code == 48 then return "foggy" end
+  if (code >= 51 and code <= 67) or (code >= 80 and code <= 82) then return "rainy" end
+  if (code >= 71 and code <= 77) or code == 85 or code == 86 then return "weather_snowy" end
+  if code >= 95 then return "thunderstorm" end
+  return "cloud"
+end
+
 return weather
