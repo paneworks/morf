@@ -41,6 +41,19 @@ local function handlers(options)
 end
 
 --- The PAM services a lock uses: the password's, and the reader's (or nil).
+---
+--- The reader -- a fingerprint, a face -- is listened to on a stack of its
+--- own, `/etc/pam.d/morf-lock-reader`, and only when there is one. A stack
+--- that goes on to a password after the reader (`login`, `system-auth`)
+--- cannot be listened to: when the reader gives up it asks for the password,
+--- the listener has none to give, and pam_faillock counts that as a failed
+--- login -- a lock listening in a loop locked its own person out in
+--- seconds. The reader's stack is the module and nothing to fall through
+--- to, e.g.
+---
+---     auth  sufficient  pam_fprintd.so      (or pam_gaze.so, pam_howdy.so)
+---     auth  required    pam_deny.so
+---     account include   system-auth
 function auth.lock_services()
   local password = "login"
   for _, service in ipairs { "morf-lock", "system-auth" } do
@@ -49,7 +62,7 @@ function auth.lock_services()
       break
     end
   end
-  local reader = password ~= "login" and morf.fs.exists("/etc/pam.d/login") and "login" or nil
+  local reader = morf.fs.exists("/etc/pam.d/morf-lock-reader") and "morf-lock-reader" or nil
   return password, reader
 end
 
@@ -58,7 +71,10 @@ end
 local Lock = {}
 Lock.__index = Lock
 
---- A lock's door: PAM, for `options.user`.
+--- A lock's door: PAM, for `options.user`. The reader is listened to from
+--- the start unless `options.listen` is false; then `door:listen()` and
+--- `door:stop()` say when (a lock listens while its way in is open, and a
+--- camera is not kept on while the clock is looked at).
 function auth.lock(options)
   local password_service, reader_service = auth.lock_services()
   local door = setmetatable({
@@ -69,7 +85,7 @@ function auth.lock(options)
     working = false,
     done = false,
   }, Lock)
-  door:listen()
+  if options.listen ~= false then door:listen() end
   return door
 end
 
@@ -93,6 +109,7 @@ end
 -- the door; a no starts it listening again, since a reader that gave up is
 -- not a reader that refused.
 function Lock:listen()
+  self.wanted = true
   if not self.reader_service or self.listening or self.done or not self.user then return end
   local ok, session = pcall(morf.pam.session, self.reader_service, self.user)
   if not ok or not session then return end
@@ -108,8 +125,8 @@ function Lock:listen()
       self.listening = nil
       if m.ok then
         self:finish()
-      elseif not self.done then
-        morf.timer(1500, function() self:listen() end, false)
+      elseif not self.done and self.wanted then
+        morf.timer(1500, function() if self.wanted then self:listen() end end, false)
       end
     end
   end)
@@ -123,6 +140,7 @@ function Lock:finish()
 end
 
 function Lock:stop()
+  self.wanted = false
   local listening = self.listening
   self.listening = nil
   if listening then pcall(function() listening:cancel() end) end

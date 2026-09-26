@@ -1,16 +1,23 @@
--- caelestia's lock screen: the frame round the screen closes in, and out of
--- its bottom edge a panel swells up -- one liquid surface, frame and panel
--- fused -- carrying the time, the one who is logged in and a place for the
--- password, with the weather beside it and whatever is playing. The right
--- password (or a finger, when the machine has a reader) and the panel sinks
--- back into the edge, the frame opens and the desk is there again.
+-- caelestia's lock screen, in two stages -- a phone's, and a desk's too.
+--
+-- At rest it is a thing to look at: the time, large, the date and the
+-- weather under it, whatever is playing as a row with its controls, and a
+-- small swell on the frame's bottom edge saying where the way in is. A key,
+-- a click or a swipe up and that swell rises into the unlock sheet -- one
+-- liquid surface with the frame -- carrying the account in its cookie, the
+-- pill for the password and whatever PAM has to say (a face being looked
+-- for, a finger). The first key typed is already the password's. Escape on
+-- an empty field, or a while with nothing typed, and the sheet sinks back.
+-- On a phone (a screen taller than wide, or no keyboard attached) the sheet
+-- carries the on-screen keyboard. The right password and all of it sinks
+-- into the edge, the frame opens, and the desk is there again.
 --
 --   morf -c caelestia/lock               the lock, held under ext-session-lock
 --   morf -c caelestia/lock -- window     the same, in a window, holding nothing
 --
 -- Its own file: nothing here reaches into the shell's folder. What the lock
 -- and the greeter share is in the library -- lib.auth (PAM and greetd),
--- lib.accounts, lib.lule and lib.material for the colours.
+-- lib.accounts, lib.lule and lib.material for the colours, lib.osk.
 
 local morf = require("morf")
 local ui = require("morf.ui")
@@ -19,8 +26,13 @@ local material = require("lib.material")
 local shapes = require("lib.m3shapes")
 local accounts = require("lib.accounts")
 local auth = require("lib.auth")
+local osk = require("lib.osk")
 
 local HELD = morf.operands[1] ~= "window"
+-- `-- window preview`: never asks PAM -- any password but "wrong" opens it.
+-- For pictures and tests: a lock that asked PAM and was killed mid-way
+-- would count as a failed login.
+local PREVIEW = not HELD and morf.operands[2] == "preview"
 
 local screen = morf.screens[1]
 local W = (screen and screen.width) or 1920
@@ -83,8 +95,11 @@ local busy = morf.signal("lock.busy", false)
 local message = morf.signal("lock.message", "")
 local bad = morf.signal("lock.bad", false)
 local shake = morf.signal("lock.shake", 0)
--- in: the panel out and the content on; "opening": all of it going away.
-local phase = morf.signal("lock.phase", "closed")
+-- "closed" (coming in), "rest", "sheet" (the way in is open), "opening"
+-- (unlocked: all of it going away).
+local stage = morf.signal("lock.stage", "closed")
+-- How far a swipe has pulled the sheet up, 0..1, while it is being drawn.
+local pull = morf.signal("lock.pull", 0)
 
 local function say(words, wrong)
   message:set(words or "")
@@ -97,32 +112,94 @@ end
 
 local door
 local function lift()
-  phase:set("opening")
+  stage:set("opening")
   say("")
-  morf.timer(520, function()
+  morf.timer(560, function()
     if HELD then morf.surface.session_lock = false else morf.quit() end
   end, false)
 end
-door = auth.lock {
+local handlers = {
   user = me.name,
+  listen = false,
   on_busy = function(b) busy:set(b) end,
   on_info = function(words, wrong) if not busy:get() then say(words, wrong) end end,
   on_failed = function(why)
     say(why ~= "" and why or "Wrong password", true)
     clear()
-    shake:set(shake:get() + 1)
+    shake:set(1)
+    morf.timer(70, function() shake:set(0) end, false)
   end,
   on_open = lift,
 }
+if PREVIEW then
+  door = {
+    submit = function(_, pw)
+      handlers.on_busy(true)
+      morf.timer(700, function()
+        handlers.on_busy(false)
+        if pw == "wrong" then handlers.on_failed("Wrong password") else lift() end
+      end, false)
+    end,
+    listen = function() end, stop = function() end,
+  }
+else
+  door = auth.lock(handlers)
+end
+
+-- Back to rest after a while with the sheet up and nothing typed.
+local idle
+local function poke()
+  if idle then idle:cancel() end
+  idle = morf.timer(15000, function()
+    idle = nil
+    if stage:get() == "sheet" and typed:get() == 0 and not busy:get() then
+      stage:set("rest")
+      say("")
+    end
+  end, false)
+end
+
+local function open_sheet()
+  if stage:get() ~= "rest" then return end
+  stage:set("sheet")
+  pull:set(0)
+  poke()
+end
 
 local function submit()
-  if busy:get() or phase:get() == "opening" then return end
+  if busy:get() or stage:get() ~= "sheet" then return end
   if password == "" then
     say("Type your password", false)
     return
   end
   say("")
   door:submit(password)
+end
+
+local MAX_DOTS = 18
+local function type_text(t)
+  if #password >= 256 then return end
+  password = password .. t
+  typed:set(math.min(#password, MAX_DOTS))
+  if bad:get() then say("") end
+  poke()
+end
+local function backspace()
+  password = password:sub(1, -2)
+  typed:set(math.min(#password, MAX_DOTS))
+  poke()
+end
+local function escape()
+  if #password == 0 then
+    -- Looked at in a window, it holds nothing: Escape at rest is the way
+    -- out, in case the door will not open.
+    if stage:get() == "rest" and not HELD then morf.quit() return end
+    stage:set("rest")
+    say("")
+  else
+    clear()
+    say("")
+  end
 end
 
 -- --------------------------------------------------------------- the time --
@@ -135,49 +212,107 @@ morf.timer(1000, function()
   day:set(now("%A, %-d %B"))
 end, true)
 
--- ------------------------------------------------------------- the frame --
+-- -------------------------------------------------------------- geometry --
 
--- The frame and the panel are one distance field: the panel is a box that
--- rises out of the frame's bottom edge and melts into it where they meet.
 local BORDER = s(10)
 local ROUND = s(25)
-local PW, PH = s(1180), s(600)
-local PX, PY = math.floor((W - PW) / 2), math.floor((H - PH) / 2)
-local GROW = { duration = 620, easing = "out_back" }
+local PORTRAIT = H > W
+-- The on-screen keyboard: on a phone, or wherever no keyboard is attached.
+local ONSCREEN = PORTRAIT or not select(2, pcall(function() return require("lib.keyboards").attached() end))
 
-local function panel_open() return phase:get() == "in" end
+local SW = math.min(s(600), W - 2 * s(20))
+local AV = s(96)
+local FIELD_W, FIELD_H = math.min(s(380), SW - s(48)), s(58)
+local kb
+if ONSCREEN then
+  kb = osk.new {
+    prefix = "lock.osk", width = SW - s(24), mode = "full", numbers = true,
+    look = {
+      panel = function() return C.surfaceContainer end,
+      key = function() return C.surfaceContainerHighest end,
+      key_dim = function() return C.surfaceContainerHigh end,
+      accent = function() return C.primary end,
+      on_accent = function() return C.onPrimary end,
+      text = function() return C.onSurface end,
+      dim = function() return C.onSurfaceVariant end,
+      press = function() return C.secondaryContainer end,
+      font = FONT, icons = ICONS,
+    },
+    send = function(event)
+      if event.text then type_text(event.text)
+      elseif event.key == "backspace" then backspace()
+      elseif event.key == "enter" then submit()
+      elseif event.key == "escape" then escape() end
+    end,
+  }
+end
+local function kb_h() return kb and (kb.height() + s(16)) or 0 end
+-- The sheet: the account, the pill, a line for what PAM says; the keyboard
+-- under them on a phone.
+local SHEET_TOP = s(28) + AV + s(12) + s(30) + s(20) + FIELD_H + s(10) + s(24) + s(24)
+local function sheet_h() return SHEET_TOP + kb_h() end
+
+-- The swell's height as it stands: a bud at rest, the sheet up, a swipe
+-- in between.
+local BUD_W, BUD_H = s(132), s(16)
+local function up()
+  local st = stage:get()
+  if st == "sheet" then return 1 end
+  if st == "rest" then return pull:get() end
+  return 0
+end
+local function swell_h()
+  local st = stage:get()
+  if st == "closed" or st == "opening" then return BORDER end
+  return BORDER + BUD_H + (sheet_h() - BUD_H) * up()
+end
+local function swell_w()
+  local st = stage:get()
+  if st == "closed" or st == "opening" then return BUD_W end
+  return BUD_W + (SW - BUD_W) * up()
+end
+local GROW = { duration = 560, easing = "out_back" }
+local SETTLE = { duration = 420, easing = "out_cubic" }
+-- Follows a finger at once, and eases the rest of the way.
+local function swell_motion() return pull:get() > 0 and stage:get() == "rest" and { duration = 60 } or GROW end
+
+-- ------------------------------------------------------------- the frame --
+
+-- The frame and the swell are one distance field: the swell is a box that
+-- rises out of the frame's bottom edge and melts into it where they meet.
 local frame = ui.Sdf {
   anchors = { fill = true },
   ui.SdfShape {
     shape = "box", x = 0, y = 0, width = W, height = H,
     fill_color = function() return C.surface end,
   },
-  -- The opening in the frame: the desk shows through until the lock is in.
+  -- The opening in the frame: shut while the lock comes in and goes.
   ui.SdfShape {
     shape = "box", operation = "subtract", radius = ROUND,
-    x = function() return phase:get() == "closed" and 0 or BORDER end,
-    y = function() return phase:get() == "closed" and 0 or BORDER end,
-    width = function() return phase:get() == "closed" and W or W - 2 * BORDER end,
-    height = function() return phase:get() == "closed" and H or H - 2 * BORDER end,
-    behavior = { x = GROW, y = GROW, width = GROW, height = GROW },
+    x = function() return stage:get() == "closed" and 0 or BORDER end,
+    y = function() return stage:get() == "closed" and 0 or BORDER end,
+    width = function() return stage:get() == "closed" and W or W - 2 * BORDER end,
+    height = function() return stage:get() == "closed" and H or H - 2 * BORDER end,
+    behavior = { x = SETTLE, y = SETTLE, width = SETTLE, height = SETTLE },
   },
-  -- The panel, out of the bottom edge.
   ui.SdfShape {
-    shape = "box", operation = "smooth_union", blend = s(28), radius = s(36),
-    fill_color = function() return C.surfaceContainer end,
-    x = function() return panel_open() and PX or math.floor(W / 2 - s(90)) end,
-    y = function() return panel_open() and PY or H - BORDER end,
-    width = function() return panel_open() and PW or s(180) end,
-    height = function() return panel_open() and PH or BORDER end,
-    behavior = { x = GROW, y = GROW, width = GROW, height = GROW },
+    id = "lock-swell",
+    shape = "box", operation = "smooth_union", blend = s(26),
+    radius = function() return up() > 0.5 and s(38) or s(12) end,
+    fill_color = function() return up() > 0.5 and C.surfaceContainer or C.surface end,
+    x = function() return math.floor((W - swell_w()) / 2) end,
+    y = function() return H - swell_h() end,
+    width = swell_w,
+    height = function() return swell_h() + s(40) end,
+    behavior = { x = GROW, y = GROW, width = GROW, height = GROW, radius = SETTLE,
+      fill_color = { duration = 300 } },
   },
 }
 
--- The desk under it: the wallpaper, blurred and dimmed, fading in as the
--- lock closes and out as it opens.
+-- The desk under it: the wallpaper, blurred and dimmed.
 local backdrop = ui.Item {
   anchors = { fill = true },
-  opacity = function() return phase:get() == "in" and 1 or 0 end,
+  opacity = function() return (stage:get() == "rest" or stage:get() == "sheet") and 1 or 0 end,
   behavior = { opacity = { duration = 420, easing = "out_cubic" } },
   ui.Rect { anchors = { fill = true }, color = function() return C.surface end },
   WALLPAPER ~= "" and ui.Image {
@@ -185,25 +320,151 @@ local backdrop = ui.Item {
   } or ui.Item {},
   ui.Rect {
     anchors = { fill = true }, backdrop_blur = s(28),
-    color = function() return C.surface:alpha(0.35) end,
+    color = function() return stage:get() == "sheet" and C.surface:alpha(0.55) or C.surface:alpha(0.3) end,
+    behavior = { color = { duration = 420 } },
   },
 }
 
--- --------------------------------------------------------------- content --
+-- ------------------------------------------------------------ at rest --
 
-local function shown(delay)
-  return {
-    opacity = function() return panel_open() and 1 or 0 end,
-    behavior = { opacity = { duration = 320, delay = delay or 260 } },
-  }
-end
 local function with(base, extra)
   for k, v in pairs(extra) do base[k] = v end
   return base
 end
+local function resting() return stage:get() == "rest" or stage:get() == "sheet" end
 
--- The account: its face cut into a cookie, or its initial on one.
-local AV = s(124)
+-- The weather, beside the date, where it can be had.
+local weather = {}
+do
+  local ok, lib = pcall(require, "lib.weather")
+  if ok then
+    local w = lib.new { units = "metric" }
+    local function now_w() return w:get() or {} end
+    weather = {
+      icon(function() local n = now_w() return lib.material_symbol(n.code, n.is_day) end, s(26),
+        function() return C.onSurfaceVariant end,
+        { visible = function() return now_w().temperature ~= nil end }),
+      text {
+        font_size = s(22), color = function() return C.onSurfaceVariant end,
+        visible = function() return now_w().temperature ~= nil end,
+        text = function()
+          local n = now_w()
+          return n.temperature and ("%d°"):format(math.floor(n.temperature + 0.5)) or ""
+        end,
+      },
+    }
+  end
+end
+
+-- What is playing, as a row: art in a turning cookie, the title, controls.
+local media_row
+do
+  local ok, media = pcall(function() return require("lib.mpris").connect() end)
+  if ok and media then
+    local function active() return media.state.active or {} end
+    local function control(action) pcall(media[action]) end
+    local function button(id, name, action, strong)
+      local area
+      area = ui.MouseArea {
+        id = id, width = s(44), height = s(44), cursor = "pointer",
+        on_clicked = function() control(action) end,
+        scale = function() return (area and area.pressed) and 0.9 or 1 end,
+        behavior = { scale = ui.spring { stiffness = 700, damping = 18 } },
+        ui.Rect {
+          anchors = { fill = true }, radius = s(22),
+          color = function() return strong and C.primary or C.surfaceContainerHighest end,
+        },
+        icon(name, s(22), strong and C.onPrimary or C.onSurface, { anchors = { center_in = true } }),
+      }
+      return area
+    end
+    local art = function() return require("lib.remote").file(active().art_url or "") end
+    local RW, RH = math.min(s(560), W - 2 * s(40)), s(84)
+    local cookie12 = shapes.path("cookie12", { segments = false })
+    media_row = ui.Rect {
+      id = "lock-media", width = RW, height = RH, radius = RH / 2,
+      color = function() return C.surfaceContainer:alpha(0.82) end,
+      visible = function() return (active().title or "") ~= "" end,
+      ui.Item {
+        x = s(12), anchors = { vertical_center = true }, width = s(60), height = s(60),
+        ui.Path {
+          anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = cookie12,
+          fill_color = function() return C.secondaryContainer end,
+        },
+        ui.Image {
+          anchors = { fill = true }, fill_mode = "preserve_aspect_crop", source = art,
+          visible = function() return art() ~= "" end,
+          mask = ui.Path { anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = cookie12, fill_color = "#ffffff" },
+        },
+        loop = function()
+          if not active().playing then return nil end
+          return { rotation = { to = 360, duration = 30000, hold = true } }
+        end,
+      },
+      ui.Column {
+        x = s(86), anchors = { vertical_center = true }, gap = s(2),
+        text { width = RW - s(86) - s(170), elide = "right", font_size = s(16), font_weight = 600,
+          text = function() return active().title or "" end },
+        text { width = RW - s(86) - s(170), elide = "right", font_size = s(14),
+          color = function() return C.onSurfaceVariant end,
+          text = function() return active().artist or "" end },
+      },
+      ui.Row {
+        anchors = { right = true, right_margin = s(14), vertical_center = true }, gap = s(8),
+        button("lock-media-previous", "skip_previous", "previous"),
+        button("lock-media-play", function() return active().playing and "pause" or "play_arrow" end, "play_pause", true),
+        button("lock-media-next", "skip_next", "next"),
+      },
+    }
+  end
+end
+
+-- The time at rest sits a third of the way down; with the sheet up it
+-- steps aside above it, smaller.
+local CLOCK_Y = PORTRAIT and math.floor(H * 0.12) or math.floor(H * 0.2)
+local glance = ui.Column {
+  id = "lock-glance",
+  anchors = { horizontal_center = true }, gap = s(6), align = "center",
+  y = function()
+    if stage:get() == "sheet" then
+      return math.max(s(40), math.floor((H - BORDER - sheet_h()) / 2 - s(150)))
+    end
+    return CLOCK_Y
+  end,
+  scale = function() return stage:get() == "sheet" and 0.72 or 1 end,
+  opacity = function() return resting() and 1 or 0 end,
+  behavior = { y = GROW, scale = GROW, opacity = { duration = 320 } },
+  text {
+    id = "lock-clock", text = function() return clock:get() end,
+    font_size = PORTRAIT and s(132) or s(168), font_weight = 600, color = C.primary,
+  },
+  ui.Row((function()
+    local row = { gap = s(10), align = "center",
+      text { text = function() return day:get() end, font_size = s(22), color = C.onSurfaceVariant } }
+    for _, node in ipairs(weather) do row[#row + 1] = node end
+    return row
+  end)()),
+  ui.Item { width = 1, height = s(34) },
+  media_row or ui.Item { width = 1, height = 1 },
+}
+
+-- Where the way in is: a chevron bobbing over the bud, and what to do.
+local hint = ui.Column {
+  anchors = { horizontal_center = true },
+  y = H - BORDER - BUD_H - s(74), gap = s(2), align = "center",
+  opacity = function() return (stage:get() == "rest" and pull:get() < 0.1) and 1 or 0 end,
+  behavior = { opacity = { duration = 260 } },
+  icon("keyboard_arrow_up", s(30), function() return C.onSurfaceVariant end, {
+    loop = { translate_y = { from = 0, to = -s(6), duration = 900, alternate = true, easing = "in_out_sine" } },
+  }),
+  text {
+    text = ONSCREEN and "Swipe up to unlock" or "Type or click to unlock",
+    font_size = s(14), color = function() return C.onSurfaceVariant end,
+  },
+}
+
+-- -------------------------------------------------------------- the sheet --
+
 local cookie = shapes.path("cookie9", { segments = false })
 local avatar = ui.Item {
   width = AV, height = AV,
@@ -211,21 +472,21 @@ local avatar = ui.Item {
   ui.Path {
     anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = cookie,
     fill_color = function() return C.primaryContainer end,
-    loop = { rotation = { to = 360, duration = 80000 } },
+    loop = function()
+      return { rotation = { to = 360, duration = busy:get() and 2400 or 60000, hold = true } }
+    end,
   },
   me.face and ui.Image {
     anchors = { fill = true }, fill_mode = "preserve_aspect_crop", source = me.face,
     mask = ui.Path { anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = cookie, fill_color = "#ffffff" },
   } or text {
-    anchors = { center_in = true }, text = me.initial or "?", font_size = s(52), font_weight = 600,
+    anchors = { center_in = true }, text = me.initial or "?", font_size = s(42), font_weight = 600,
     color = C.onPrimaryContainer,
   },
 }
 
 -- The password: a pill, a dot for each character, each popping in.
-local FIELD_W, FIELD_H = s(360), s(58)
 local DOT = s(12)
-local MAX_DOTS = 18
 local dots = {}
 for i = 1, MAX_DOTS do
   dots[i] = ui.Rect {
@@ -239,7 +500,7 @@ end
 local field = ui.Item {
   id = "lock-field",
   width = FIELD_W, height = FIELD_H,
-  translate_x = function() return (shake:get() % 2 == 1) and s(10) or 0 end,
+  translate_x = function() return shake:get() == 1 and s(12) or 0 end,
   behavior = { translate_x = ui.spring { stiffness = 900, damping = 9 } },
   ui.Rect {
     anchors = { fill = true }, radius = FIELD_H / 2,
@@ -254,10 +515,7 @@ local field = ui.Item {
     text = "Password", color = C.onSurfaceVariant, font_size = s(16),
     visible = function() return typed:get() == 0 end,
   },
-  ui.Row {
-    x = s(56), anchors = { vertical_center = true }, gap = s(7),
-    table.unpack(dots),
-  },
+  ui.Row { x = s(56), anchors = { vertical_center = true }, gap = s(7), table.unpack(dots) },
   ui.MouseArea {
     id = "lock-submit",
     anchors = { right = true, right_margin = s(7), vertical_center = true },
@@ -273,171 +531,95 @@ local field = ui.Item {
   },
 }
 
--- The weather, where it can be had.
-local weather_card
-do
-  local ok, lib = pcall(require, "lib.weather")
-  if ok then
-    local w = lib.new { units = "metric" }
-    local function now() return w:get() or {} end
-    weather_card = ui.Rect(with({
-      width = s(300), height = s(180), radius = s(26),
-      color = function() return C.surfaceContainerHigh end,
-      icon(function() local n = now() return lib.material_symbol(n.code, n.is_day) end, s(56), C.primary,
-        { x = s(24), y = s(26) }),
-      text {
-        x = s(96), y = s(28), font_size = s(40), font_weight = 600,
-        text = function()
-          local n = now()
-          return n.temperature and ("%d°"):format(math.floor(n.temperature + 0.5)) or "--"
-        end,
-      },
-      text {
-        x = s(24), y = s(104), width = s(252), elide = "right", font_size = s(17), font_weight = 500,
-        text = function() return now().condition or "" end,
-      },
-      text {
-        x = s(24), y = s(134), width = s(252), elide = "right", font_size = s(14),
-        color = C.onSurfaceVariant,
-        text = function() return now().place or "" end,
-      },
-    }, shown(320)))
-  end
-end
-
--- What is playing, and its controls: the lock does not stop the music.
-local media_card
-do
-  local ok, media = pcall(function() return require("lib.mpris").connect() end)
-  if ok and media then
-    local function active() return media.state.active or {} end
-    local function control(action) pcall(media[action]) end
-    local function button(id, name, action, strong)
-      return ui.MouseArea {
-        id = id, width = s(44), height = s(44), cursor = "pointer",
-        on_clicked = function() control(action) end,
-        ui.Rect {
-          anchors = { fill = true }, radius = s(22),
-          color = function() return strong and C.primary or C.surfaceContainerHighest end,
-        },
-        icon(type(name) == "function" and name or name, s(22), strong and C.onPrimary or C.onSurface,
-          { anchors = { center_in = true } }),
-      }
-    end
-    local art = function()
-      local url = active().art_url or ""
-      return require("lib.remote").file(url)
-    end
-    media_card = ui.Rect(with({
-      width = s(300), height = s(300), radius = s(26),
-      color = function() return C.surfaceContainerHigh end,
-      visible = function() return (active().title or "") ~= "" end,
-      ui.Item {
-        x = s(90), y = s(22), width = s(120), height = s(120),
-        ui.Path {
-          anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie12", { segments = false }),
-          fill_color = function() return C.secondaryContainer end,
-        },
-        ui.Image {
-          anchors = { fill = true }, fill_mode = "preserve_aspect_crop", source = art,
-          visible = function() return art() ~= "" end,
-          mask = ui.Path {
-            anchors = { fill = true }, view_box = { 0, 0, 100, 100 },
-            d = shapes.path("cookie12", { segments = false }), fill_color = "#ffffff",
-          },
-        },
-        loop = function()
-          if not active().playing then return nil end
-          return { rotation = { to = 360, duration = 30000, hold = true } }
-        end,
-      },
-      text {
-        x = s(20), y = s(156), width = s(260), horizontal_alignment = "center", elide = "right",
-        font_size = s(17), font_weight = 600, text = function() return active().title or "" end,
-      },
-      text {
-        x = s(20), y = s(182), width = s(260), horizontal_alignment = "center", elide = "right",
-        font_size = s(14), color = C.onSurfaceVariant, text = function() return active().artist or "" end,
-      },
-      ui.Row {
-        anchors = { horizontal_center = true }, y = s(226), gap = s(10),
-        button("lock-media-previous", "skip_previous", "previous"),
-        button("lock-media-play", function() return active().playing and "pause" or "play_arrow" end, "play_pause", true),
-        button("lock-media-next", "skip_next", "next"),
-      },
-    }, shown(380)))
-  end
-end
-
-local centre = ui.Column(with({
-  anchors = { horizontal_center = true }, y = PY + s(56), gap = s(4), align = "center",
-  text {
-    id = "lock-clock", text = function() return clock:get() end,
-    font_size = s(112), font_weight = 600, color = C.primary,
-  },
-  text { text = function() return day:get() end, font_size = s(22), color = C.onSurfaceVariant },
-  ui.Item { width = 1, height = s(26) },
+local sheet_nodes = {
+  x = s(12), y = s(28), width = SW - s(24), gap = 0, align = "center",
   avatar,
-  ui.Item { width = 1, height = s(10) },
-  text { text = me.label or me.name, font_size = s(22), font_weight = 600 },
-  ui.Item { width = 1, height = s(18) },
+  ui.Item { width = 1, height = s(12) },
+  text { text = me.label ~= "" and me.label or me.name, font_size = s(20), font_weight = 600, height = s(30) },
+  ui.Item { width = 1, height = s(20) },
   field,
   ui.Item { width = 1, height = s(10) },
   text {
-    id = "lock-message", height = s(22),
+    id = "lock-message", height = s(24), width = SW - s(48), horizontal_alignment = "center", elide = "right",
     text = function() return message:get() end, font_size = s(15),
     color = function() return bad:get() and C.error or C.onSurfaceVariant end,
   },
-}, shown(240)))
-
--- A placeholder only where the card could not be made: one built up front
--- and replaced is left with no parent, and a lock surface holds exactly one
--- root -- the lock would not start.
-weather_card = weather_card or ui.Item {}
-media_card = media_card or ui.Item {}
-
-local sides = ui.Item {
-  anchors = { fill = true },
-  ui.Item(with({ x = PX + s(36), y = PY + s(56), width = s(300), height = s(400), weather_card }, {})),
-  ui.Item(with({ x = PX + PW - s(336), y = PY + s(56), width = s(300), height = s(400), media_card }, {})),
+  ui.Item { width = 1, height = s(24) },
+}
+if kb then sheet_nodes[#sheet_nodes + 1] = kb.node end
+local sheet = ui.Item {
+  id = "lock-sheet",
+  x = math.floor((W - SW) / 2), width = SW,
+  y = function() return H - BORDER - sheet_h() end,
+  height = sheet_h,
+  opacity = function() return stage:get() == "sheet" and 1 or 0 end,
+  translate_y = function() return stage:get() == "sheet" and 0 or s(60) end,
+  behavior = { opacity = { duration = 260, delay = 120 },
+    translate_y = GROW },
+  visible = function() return stage:get() == "sheet" or stage:get() == "opening" end,
+  ui.Column(sheet_nodes),
 }
 
 -- ------------------------------------------------------------ the screen --
 
 -- Opaque from the first frame: a lock that let the desk show through for
 -- a moment would not be a lock, and morf will not hold one that could.
-ui.Rect {
+local surface
+surface = ui.Rect {
   anchors = { fill = true },
   color = C.surface:alpha(1),
   backdrop,
   frame,
-  sides,
-  centre,
-  -- Under everything that can be clicked: the keys, for the whole screen.
+  glance,
+  hint,
+  sheet,
+  -- Under everything that can be clicked: a click or a swipe up opens the
+  -- sheet, and the keys go where they belong.
   ui.MouseArea {
+    id = "lock-open",
     anchors = { fill = true }, z = -1,
+    on_clicked = function() open_sheet() end,
+    on_dragged = function(_, _, _, dy)
+      if stage:get() ~= "rest" then return end
+      pull:set(math.max(0, math.min(1, -dy / s(360))))
+    end,
+    on_drag_finished = function()
+      if stage:get() ~= "rest" then return end
+      if pull:get() > 0.3 then open_sheet() else pull:set(0) end
+    end,
     on_key_pressed = function(keysym, typed_text)
       local RETURN, KP_ENTER, BACKSPACE, ESCAPE = 0xff0d, 0xff8d, 0xff08, 0xff1b
-      if phase:get() ~= "in" or busy:get() then return end
+      local st = stage:get()
+      if st ~= "rest" and st ~= "sheet" then return end
+      if busy:get() then return end
+      if keysym == ESCAPE then escape() return end
+      -- Any other key at rest opens the way in, and a character is the
+      -- password's first.
+      if st == "rest" then open_sheet() end
       if keysym == RETURN or keysym == KP_ENTER then
         submit()
       elseif keysym == BACKSPACE then
-        password = password:sub(1, -2)
-        typed:set(math.min(#password, MAX_DOTS))
-      elseif keysym == ESCAPE then
-        -- Looked at in a window, it holds nothing: Escape on an empty
-        -- field is the way out, in case the door will not open.
-        if not HELD and #password == 0 then morf.quit() return end
-        clear()
-        say("")
+        backspace()
       elseif typed_text and typed_text ~= "" and typed_text:byte(1) >= 32 then
-        password = password .. typed_text
-        typed:set(math.min(#password, MAX_DOTS))
-        if bad:get() then say("") end
+        type_text(typed_text)
       end
     end,
   },
 }
 
--- In: the frame closes, the panel rises out of it.
-morf.timer(30, function() phase:set("in") end, false)
+-- The reader (a finger, a face) is listened to while the way in is open.
+morf.effect("lock.listen", function()
+  if stage:get() == "sheet" then door:listen() else door:stop() end
+end)
+
+-- In a window, `morf ipc call stage sheet` puts it where a test wants it;
+-- a held lock answers no such thing.
+if not HELD then
+  morf.ipc.stage = function(to)
+    if to == "sheet" then stage:set("rest") open_sheet() elseif to == "rest" then stage:set("rest") end
+    return stage:get()
+  end
+end
+
+-- In: the frame closes and the bud comes up out of it.
+morf.timer(30, function() stage:set("rest") end, false)
