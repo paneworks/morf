@@ -149,6 +149,19 @@ pub(crate) fn primary_frame(
         // paint that shows where it landed.
         repaint = true;
     }
+    // `MORF_FRAME_LOG=2`: every callback, and what the pacer made of it --
+    // whether a slow cadence is the compositor's or this surface's choice.
+    if advanced && crate::paint::frame_split_wanted() {
+        eprintln!(
+            "{} {}: callback after {:.1} ms: {} (cost {:.1} ms, every {})",
+            morf_lua::profile::stamp(),
+            std::thread::current().name().unwrap_or("?"),
+            delta.as_secs_f64() * 1000.0,
+            if repaint { "paint" } else { "skip" },
+            state.pacer.cost.map_or(0.0, |cost| cost.as_secs_f64() * 1000.0),
+            state.pacer.interval(state.refresh),
+        );
+    }
     // Configured layer surfaces have no clock of their own; the shell's
     // tick is what tells them a repaint is due, and a surface that is
     // already idle needs a frame callback to come back on.

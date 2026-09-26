@@ -1,3 +1,4 @@
+use morf_scene::NodeHandle;
 use std::time::Duration;
 
 use morf_scene::AnimationFrame;
@@ -41,6 +42,41 @@ impl Runtime {
         lines.dedup();
         lines.truncate(max);
         lines
+    }
+
+    /// What changed for layout under `root` since the layout at revision
+    /// `since`: the nodes stamped since, one line each, at most `max`, and
+    /// how many there were. For `MORF_FRAME_LOG=2`, when a layout is slow.
+    pub fn layout_report(&self, root: NodeHandle, since: u64, max: usize) -> (usize, Vec<String>) {
+        let state = self.reactive.borrow();
+        let scene = &state.scene;
+        let mut count = 0;
+        let mut lines = Vec::new();
+        let mut pending = vec![root];
+        while let Some(node) = pending.pop() {
+            let Ok(stamps) = scene.layout_stamps(node) else {
+                continue;
+            };
+            if stamps.subtree <= since {
+                continue;
+            }
+            if stamps.own > since {
+                count += 1;
+                if lines.len() < max {
+                    let id = scene
+                        .string_value(node, "id")
+                        .ok()
+                        .filter(|id| !id.is_empty())
+                        .map(|id| format!(" #{id}"))
+                        .unwrap_or_default();
+                    lines.push(format!("{}{id}", crate::runtime_config::lint_path(scene, node)));
+                }
+            }
+            if let Ok(children) = scene.children(node) {
+                pending.extend(children.iter().copied());
+            }
+        }
+        (count, lines)
     }
 
     pub fn has_motion(&self) -> bool {

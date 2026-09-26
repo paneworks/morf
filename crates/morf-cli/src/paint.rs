@@ -130,12 +130,26 @@ pub(crate) fn layout_for(
     }
     // Whatever happens next, what is left in the cache is no longer this
     // revision's: a paint that fails part way must not find it valid.
+    let since = cached.revision;
     cached.revision = u64::MAX;
     let mut layout = std::mem::take(&mut cached.layout);
     if cached.scale_120 != scale_120 || full_layout_wanted() {
         return Ok((runtime.compute_layout(root, available, text)?, true));
     }
+    let started = std::time::Instant::now();
     runtime.update_layout(&mut layout, root, available, text)?;
+    // A slow layout says what moved to need it.
+    if frame_split_wanted() && started.elapsed() > std::time::Duration::from_millis(8) {
+        let (count, lines) = runtime.layout_report(root, since, 8);
+        eprintln!(
+            "{} layout took {:.1} ms for {count} changed nodes:",
+            morf_lua::profile::stamp(),
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+        for line in lines {
+            eprintln!("    {line}");
+        }
+    }
     Ok((layout, true))
 }
 
@@ -146,6 +160,12 @@ fn full_layout_wanted() -> bool {
     *WANTED.get_or_init(|| {
         std::env::var_os("MORF_LAYOUT_FULL").is_some_and(|value| !value.is_empty() && value != "0")
     })
+}
+
+/// Whether `MORF_FRAME_LOG=2` asks for each frame's detail.
+pub(crate) fn frame_split_wanted() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("MORF_FRAME_LOG").is_ok_and(|value| value == "2"))
 }
 
 /// `MORF_FRAME_LOG=2`: where one frame's time went, stage by stage, for any
@@ -159,9 +179,7 @@ struct FrameSplit {
 
 impl FrameSplit {
     fn start() -> Self {
-        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        let on =
-            *ON.get_or_init(|| std::env::var("MORF_FRAME_LOG").is_ok_and(|value| value == "2"));
+        let on = frame_split_wanted();
         let now = std::time::Instant::now();
         Self {
             on,
