@@ -18,6 +18,7 @@ mod streams;
 mod timer;
 mod wake;
 mod watch;
+mod watch_sysfs;
 
 pub use dbus_decode::{DbusSignal, DbusSignalEvent};
 pub use dbus_serve::{DbusCall, DbusService, NameOutcome};

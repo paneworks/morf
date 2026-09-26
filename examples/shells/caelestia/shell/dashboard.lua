@@ -555,13 +555,13 @@ local function media_card()
     },
     kit.icon("art_track", 64, function() return C.onSurfaceVariant end, {
       anchors = { center_in = true },
-      visible = function() return (active().art_url or "") == "" end,
+      visible = function() return require("lib.remote").file(active().art_url) == "" end,
     }),
     ui.Image {
       id = "media-cover",
       anchors = { fill = true, margins = 20 }, fill_mode = "preserve_aspect_crop",
-      source = function() return active().art_url or "" end,
-      visible = function() return (active().art_url or "") ~= "" end,
+      source = function() return require("lib.remote").file(active().art_url) end,
+      visible = function() return require("lib.remote").file(active().art_url) ~= "" end,
       mask = ui.Path {
         view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie12"), fill_color = "#ffffff",
       },

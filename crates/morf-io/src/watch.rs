@@ -30,6 +30,10 @@
 //! it, the watch is told its own path `Changed` instead, meaning "look
 //! again", as it is when the kernel's own queue overflows.
 //!
+//! - **A sysfs attribute** (a file under `/sys`): inotify never fires
+//!   there, so the attribute itself is polled beside the inotify descriptor
+//!   and the kernel's `sysfs_notify` is a `Changed` (see `watch_sysfs`).
+//!
 //! The thread starts with the first watch and stops when the last one is
 //! dropped.
 
@@ -176,6 +180,8 @@ struct Inner {
 struct Service {
     inotify: OwnedFd,
     wake: OwnedFd,
+    /// The sysfs attributes watched, by subscription, polled for `POLLPRI`.
+    attributes: Mutex<Vec<(u64, Arc<OwnedFd>)>>,
     stop: AtomicBool,
     inner: Mutex<Inner>,
     ready: Condvar,
@@ -232,6 +238,7 @@ impl Service {
         let service = Arc::new(Self {
             inotify: inotify::init(CreateFlags::CLOEXEC | CreateFlags::NONBLOCK)?,
             wake: eventfd(0, EventfdFlags::CLOEXEC | EventfdFlags::NONBLOCK)?,
+            attributes: Mutex::new(Vec::new()),
             stop: AtomicBool::new(false),
             inner: Mutex::new(Inner::default()),
             ready: Condvar::new(),
@@ -256,22 +263,51 @@ impl Service {
         let mut buffer = [MaybeUninit::<u8>::uninit(); 16 * 1024];
         let mut raw = Vec::new();
         loop {
-            let mut fds = [
+            // The attributes as they are now: a watch added or dropped rings
+            // `wake`, and the next turn polls the new set.
+            let attributes = lock(&self.attributes).clone();
+            let mut fds = vec![
                 PollFd::new(&self.inotify, PollFlags::IN),
                 PollFd::new(&self.wake, PollFlags::IN),
             ];
+            for (_, fd) in &attributes {
+                fds.push(PollFd::new(&**fd, PollFlags::PRI | PollFlags::ERR));
+            }
             match poll(&mut fds, None) {
                 Ok(_) => {}
                 Err(Errno::INTR) => continue,
                 Err(_) => return,
             }
             let woken = !fds[1].revents().is_empty();
+            let changed = attributes
+                .iter()
+                .zip(&fds[2..])
+                .filter(|(_, fd)| !fd.revents().is_empty())
+                .map(|((id, fd), _)| (*id, Arc::clone(fd)))
+                .collect::<Vec<_>>();
+            drop(fds);
             if self.stop.load(Ordering::Acquire) {
                 return;
             }
             if woken {
                 let mut count = [0u8; 8];
                 let _ = rustix::io::read(&self.wake, &mut count);
+            }
+            if !changed.is_empty() {
+                let mut inner = lock(&self.inner);
+                for (id, fd) in &changed {
+                    crate::watch_sysfs::rearm(fd);
+                    if let Some(subscription) = inner.subscriptions.get_mut(id) {
+                        subscription.pending.push(FsChange {
+                            path: subscription.target.clone(),
+                            name: file_name(&subscription.target),
+                            kind: ChangeKind::Changed,
+                        });
+                    }
+                }
+                drop(inner);
+                self.ready.notify_all();
+                crate::wake_all();
             }
             raw.clear();
             let mut reader = inotify::Reader::new(&self.inotify, &mut buffer);
@@ -462,6 +498,19 @@ impl Service {
                 pending: Pending::default(),
             },
         );
+        let target = inner.subscriptions[&id].target.clone();
+        match crate::watch_sysfs::open_attribute(&target) {
+            Ok(Some(fd)) => {
+                lock(&self.attributes).push((id, Arc::new(fd)));
+                self.ring();
+                return Ok(id);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                self.forget(&mut inner, id);
+                return Err(error);
+            }
+        }
         if let Err(error) = self.arm(&mut inner, id) {
             self.forget(&mut inner, id);
             return Err(error);
@@ -469,7 +518,19 @@ impl Service {
         Ok(id)
     }
 
+    /// Wakes the thread to poll its set anew.
+    fn ring(&self) {
+        let _ = rustix::io::write(&self.wake, &1u64.to_ne_bytes());
+    }
+
     fn forget(&self, inner: &mut Inner, id: u64) {
+        let mut attributes = lock(&self.attributes);
+        let before = attributes.len();
+        attributes.retain(|(held, _)| *held != id);
+        if attributes.len() != before {
+            drop(attributes);
+            self.ring();
+        }
         if let Some(subscription) = inner.subscriptions.remove(&id) {
             for wd in subscription.armed.into_keys() {
                 self.release(inner, wd, id);

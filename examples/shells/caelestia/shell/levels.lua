@@ -53,7 +53,6 @@ function M.build()
   }
   local icon = { volume = osd.volume_icon, brightness = osd.brightness_icon }
   local function muted() local _, m = osd.volume() return m end
-  local motion = kit.spring(190, 9)
 
   local shown = morf.signal("caelestia.levels.shown", "")
   local pills = {}
@@ -93,15 +92,17 @@ function M.build()
         local k = shown:get()
         return k ~= "" and icon[k]() or "volume_up"
       end, math.max(14, math.floor(D * 0.26)), function() return C.onPrimary end),
-      kit.text {
+      -- The value's digits morph from one reading to the next.
+      kit.morph_number {
         id = "levels-value",
-        text = function()
+        value = function()
           local k = shown:get()
           if k == "" then return "" end
-          return ("%d"):format(math.floor(value[k]() * 100 + 0.5))
+          return math.floor(value[k]() * 100 + 0.5)
         end,
-        font_size = math.max(11, math.floor(D * 0.3)), font_weight = 800,
+        size = math.max(11, math.floor(D * 0.3)),
         color = function() return C.onPrimary end,
+        duration = 220,
       },
     },
   }
@@ -112,7 +113,8 @@ function M.build()
       local k = shown:get()
       return M.geometry().tops[k ~= "" and k or "volume"] - PAD
     end,
-    behavior = { y = motion },
+    -- Eased, not sprung: a spring stepped by slow frames never settles.
+    behavior = { y = { duration = 200, easing = theme.ease.standard } },
     bud,
   }
   M.shape = ui.SdfShape {
@@ -154,9 +156,9 @@ function M.build()
       across = morf.animation.play {
         {
           parallel = {
-            { node = swell, property = "x", to = out_x(), duration = theme.duration.drawer_open, easing = theme.ease.spatial },
-            { node = bud, property = "scale", from = 0.6, to = 1, duration = 380, easing = theme.ease.spatial, delay = 120 },
-            { node = bud, property = "opacity", from = 0, to = 1, duration = 180, delay = 120 },
+            { node = swell, property = "x", to = out_x(), duration = 300, easing = theme.ease.spatial },
+            { node = bud, property = "scale", from = 0.6, to = 1, duration = 300, easing = theme.ease.spatial, delay = 60 },
+            { node = bud, property = "opacity", from = 0, to = 1, duration = 140, delay = 60 },
           },
         },
       }

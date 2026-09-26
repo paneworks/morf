@@ -306,6 +306,67 @@ function M.slider(spec)
   return area
 end
 
+--- A number whose digits morph into the next ones: each digit is a glyph in
+--- a distance field (`shape = "glyph"`), and a new digit in its place walks
+--- there from the old, contour onto contour, rather than being swapped.
+--- `spec`: `id`, `value` (a function: a number or a string of digits),
+--- `size` (the digits' height), `color` (a function), `digits` (the most it
+--- shows, 3), `duration` (260), `font` (a family). The number is centred in
+--- a box `digits` wide; a digit coming or going (9 to 10) takes its place at
+--- once, the others morph.
+function M.morph_number(spec)
+  local size = spec.size
+  local n = spec.digits or 3
+  local dw = math.floor(size * 0.62 + 0.5)
+  local family = spec.font or (theme.font:match("^%s*([^,]+)") or "sans-serif")
+  local motion = { duration = spec.duration or 260, easing = theme.ease.standard }
+  local slots, state = {}, {}
+  local field = { id = spec.id, width = n * dw, height = size, fill_color = spec.color }
+  for i = 1, n do
+    slots[i] = ui.SdfShape {
+      id = spec.id and (spec.id .. "-digit-" .. i) or nil,
+      shape = "glyph", morph_to = "glyph",
+      glyph = "", glyph_morph_to = "",
+      font_family = family, font_family_morph_to = family,
+      x = (i - 1) * dw, y = 0, width = dw, height = size,
+      morph_progress = 0,
+      behavior = { morph_progress = motion, x = motion },
+    }
+    state[i] = { shown = "", at_end = false }
+    field[#field + 1] = slots[i]
+  end
+  local node = ui.Sdf(field)
+  morf.effect("caelestia.morph_number" .. (spec.id and ("." .. spec.id) or ""), function()
+    local text = tostring(spec.value() or "")
+    if #text > n then text = text:sub(-n) end
+    local lead = n - #text
+    for i = 1, n do
+      local c = i > lead and text:sub(i - lead, i - lead) or ""
+      local slot, st = slots[i], state[i]
+      -- Centred: the digits there are, in the middle of the box.
+      slot.x = (i - 1) * dw - lead * dw / 2
+      if c ~= st.shown then
+        if st.shown == "" or c == "" then
+          -- Coming or going: no outline to walk from, so it is simply there.
+          slot.glyph, slot.glyph_morph_to = c, c
+          st.at_end = false
+          slot.morph_progress = 0
+        elseif st.at_end then
+          slot.glyph = c
+          slot.morph_progress = 0
+          st.at_end = false
+        else
+          slot.glyph_morph_to = c
+          slot.morph_progress = 1
+          st.at_end = true
+        end
+        st.shown = c
+      end
+    end
+  end, { owner = node })
+  return node
+end
+
 --- An M3 expressive shape that morphs whenever `shape()` changes (see
 --- lib/m3shapes: `shapes.Shape`). `props` as a `ui.Path`'s; `color` a
 --- binding; `duration`, `easing`.

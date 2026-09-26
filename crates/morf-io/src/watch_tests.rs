@@ -302,3 +302,22 @@ fn the_old_pull_api_sits_on_the_shared_watcher() {
     fs::write(&file, "b").unwrap();
     assert_eq!(watcher.next_event(WAIT), Some(crate::FileEvent::Changed));
 }
+
+#[test]
+fn a_sysfs_attribute_is_watched_by_poll_and_quiet_until_it_changes() {
+    // inotify never fires on sysfs; the attribute is polled instead, and
+    // nothing arrives while nothing changes. (What wakes it -- the kernel's
+    // sysfs_notify, a backlight set -- cannot be caused from a test.)
+    let path = std::path::Path::new("/sys/class/net/lo/operstate");
+    if !path.exists() {
+        return;
+    }
+    let watch = Watch::new(path, WatchOptions::default()).expect("a sysfs attribute can be watched");
+    assert!(watch.next_timeout(Duration::from_millis(150)).is_none(), "a change nobody made");
+    // A second one beside it, and the first dropped: the thread keeps polling
+    // the one left, and stops with the last.
+    let other = Watch::new(path, WatchOptions::default()).unwrap();
+    drop(watch);
+    assert!(other.next_timeout(Duration::from_millis(50)).is_none());
+    drop(other);
+}

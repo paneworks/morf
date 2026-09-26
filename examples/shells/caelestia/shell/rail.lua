@@ -93,14 +93,20 @@ function M.build()
   local function tucked_x(g) return -(swell_w(g) + theme.SEAM + 2) end
 
   local number = morf.signal("caelestia.rail.number", "")
-  local label = kit.text {
+  -- The number: its digits morph from one workspace's to the next.
+  local label = ui.Item {
     id = "rail-number",
     anchors = { center_in = true },
-    text = function() return number:get() end,
-    font_size = math.max(12, math.floor(g0.item * 0.45)),
-    font_weight = 800,
-    color = function() return C.onPrimary end,
+    width = 3 * math.floor(math.floor(g0.item * 0.5) * 0.62 + 0.5),
+    height = math.floor(g0.item * 0.5),
     opacity = 0,
+    kit.morph_number {
+      id = "rail-digits",
+      value = function() return number:get() end,
+      size = math.floor(g0.item * 0.5),
+      color = function() return C.onPrimary end,
+      duration = 300,
+    },
   }
   local bud = ui.Item {
     id = "rail-bud",
@@ -210,7 +216,8 @@ function M.build()
   local last -- the workspace the bud last showed
   local function whole(id) return ("%d"):format(math.floor(id + 0.5)) end
 
-  -- The number comes up into the bud, or goes down out of it.
+  -- The number comes up into the bud, or goes down out of it; between
+-- workspaces its digits morph (kit.morph_number).
   local function number_in(from_below, delay)
     stop(words)
     local rise = M.geometry().item * 0.3
@@ -246,7 +253,7 @@ function M.build()
     -- it is that pill's accent, in the same frame.
     number_out(true)
     stop(across)
-    local steps = reach(false, 420, theme.ease.emphasized_accel, 80)
+    local steps = reach(false, 300, theme.ease.emphasized_accel, 60)
     local id = last
     across = morf.animation.play {
       { parallel = steps },
@@ -273,43 +280,42 @@ function M.build()
       swell.x, swell.y, swell.height = tucked_x(g), from - PAD, g.item + 2 * PAD
       bud.x, bud.y, bud.width, bud.height = g.pill_x, from, PILL_W, g.item
       label.opacity = 0
-      number:set(whole(id))
+      -- It comes out with the number of where it was, which morphs into
+      -- the one of where it goes as it travels there.
+      number:set(whole(last or id))
       shown:set(true)
       lit:set(0)
       stop(across)
-      across = morf.animation.play { { parallel = reach(true, theme.duration.drawer_open, theme.ease.spatial) } }
-      number_in(down, 220)
+      across = morf.animation.play { { parallel = reach(true, 300, theme.ease.spatial) } }
+      number_in(down, 90)
       if from ~= y then
-        travel = morf.timer(320, function()
+        travel = morf.timer(140, function()
           travel = nil
+          number:set(whole(id))
           stop(along)
-          along = morf.animation.play { { parallel = stretch_to(y - PAD, g.item + 2 * PAD, 480) } }
+          along = morf.animation.play { { parallel = stretch_to(y - PAD, g.item + 2 * PAD, 320) } }
         end, false)
+      else
+        number:set(whole(id))
       end
     else
       -- Out already, or on its way back: out again, flowing to the new
       -- pill, the number rolling over.
       if swell.x < -0.5 then
         stop(across)
-        across = morf.animation.play { { parallel = reach(true, 360, theme.ease.spatial) } }
+        across = morf.animation.play { { parallel = reach(true, 260, theme.ease.spatial) } }
       end
       if math.abs(swell.y - (y - PAD)) > 0.5 then
         stop(along)
-        along = morf.animation.play { { parallel = stretch_to(y - PAD, g.item + 2 * PAD, 440) } }
+        along = morf.animation.play { { parallel = stretch_to(y - PAD, g.item + 2 * PAD, 300) } }
       end
-      if number:get() ~= whole(id) then
-        number_out(not down, function(reason)
-          if reason ~= "completed" then return end
-          number:set(whole(id))
-          number_in(down, 0)
-        end)
-      elseif label.opacity < 1 then
-        number_in(down, 0)
-      end
+      -- The digits morph on to the new number.
+      number:set(whole(id))
+      if label.opacity < 1 then number_in(down, 0) end
     end
     last = id
     if hide then hide:cancel() end
-    hide = morf.timer((config.get("rail.hold") or 800) + (travel and 800 or 0), function()
+    hide = morf.timer((config.get("rail.hold") or 800) + (travel and 460 or 0), function()
       hide = nil
       tuck()
     end, false)

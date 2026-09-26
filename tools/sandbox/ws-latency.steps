@@ -1,0 +1,9 @@
+# ws-latency.steps: when each workspace switch was asked for, on the same
+# clock as the shell's frame log (monotonic ms), for the latency to the
+# first frame that answers it. OUT/latency.log.
+wait 8
+for n in 2 5 3 6; do
+  echo "dispatch $n $(awk '{printf "%.3f", $1*1000}' /proc/uptime)" >> "$OUT/latency.log"
+  hc dispatch workspace $n >/dev/null
+  wait 2.5
+done

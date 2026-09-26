@@ -665,6 +665,7 @@ local SAMPLERS = {
 }
 
 local sources = {}
+local watch_backlights -- below: the backlights' own change notices
 
 for name, entry in pairs(SAMPLERS) do
   local sample = entry[1]
@@ -695,6 +696,22 @@ sources.processes = poll.source {
 --- The sources, by name, for `pin`, `refresh`, `running` and `error`.
 sysinfo.sources = sources
 
+-- A backlight says when it changes: the kernel notifies whoever polls its
+-- `actual_brightness` (morf.fs.watch does, for a file under /sys), so a
+-- change from a key or another program shows at once rather than on the
+-- next sample. The sample on its timer stays, for a driver that does not.
+local backlight_watches = {}
+watch_backlights = function(light)
+  if not (fs.watch and light) then return end
+  for _, device in ipairs(light.devices or {}) do
+    if backlight_watches[device.name] == nil then
+      local ok, handle = pcall(fs.watch, path("/sys/class/backlight/" .. device.name .. "/actual_brightness"),
+        function() sources.backlight:refresh() end)
+      backlight_watches[device.name] = ok and handle or false
+    end
+  end
+end
+
 --- CPU: `{ usage, cores = { {name, usage, frequency} }, count, frequency (MHz,
 --- mean), frequencies, load = {1, 5, 15}, running, threads, model }`.
 function sysinfo.cpu()
@@ -719,7 +736,11 @@ function sysinfo.network() return sources.network:get() end
 function sysinfo.battery() return sources.battery:get() end
 --- `{ name, brightness, max, percent, writable, set(percent) (only when
 --- writable), devices = { ... } }`.
-function sysinfo.backlight() return sources.backlight:get() end
+function sysinfo.backlight()
+  local light = sources.backlight:get()
+  watch_backlights(light)
+  return light
+end
 --- `{ os, os_id, os_version, os_release, kernel, hostname, user, uptime (s) }`.
 function sysinfo.system() return sources.system:get() end
 --- `{ count, by_cpu = { {pid, name, state, cpu, memory, memory_percent} }, by_memory }`.

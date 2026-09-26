@@ -670,6 +670,9 @@ test.describe("caelestia", function()
 
   test.it("carries the old workspace's pill out in a swell of the frame, down to the new one's", function()
     load()
+    -- The digit on show in the disc's last place: its glyphs morph, so it
+    -- is whichever end the morph is nearer.
+    local function digit() return test.get({ id = "rail-digits-digit-3" }).text end
     local p1 = test.get { id = "rail-pill-1" }
     test.near(p1.opacity, 1, 0.01, "the first workspace's pill is not lit")
     test.ipc("workspace", 4)
@@ -683,6 +686,7 @@ test.describe("caelestia", function()
     test.near(bud.y, p1.y, 1, "the drop did not leave the old pill")
     test.near(bud.height, p1.height, 1, "the drop is not the pill's size")
     test.truthy(bud.width > 6, "it did not open out")
+    test.eq(digit(), "1", "it did not leave with the number of where it was")
     local swell = test.get { id = "rail-swell" }
     test.truthy(swell.x + swell.width >= bud.x + bud.width, "the disc is outside the frame's swell")
     test.advance(800)
@@ -694,7 +698,7 @@ test.describe("caelestia", function()
     swell = test.get { id = "rail-swell" }
     test.near(swell.x, 0, 0.5, "the frame did not swell out")
     local number = test.get { id = "rail-number" }
-    test.eq(number.text, "4", "not a whole number")
+    test.eq(digit(), "4", "the digits did not morph to where it went")
     test.near(number.opacity, 1, 0.01)
     test.truthy(test.get({ id = "rail-pill-1" }).opacity < 1, "the old pill stayed lit")
     test.snapshot("caelestia-rail-bud.png", { surface = "screen" })
@@ -704,7 +708,7 @@ test.describe("caelestia", function()
     bud, pill = test.get { id = "rail-bud" }, test.get { id = "rail-pill-7" }
     test.near(bud.y, pill.y, 1)
     test.near(bud.height, pill.height, 1)
-    test.eq(test.get({ id = "rail-number" }).text, "7")
+    test.eq(digit(), "7")
     -- Then it merges into that pill, which lights.
     test.advance(2500)
     bud = test.get { id = "rail-bud" }

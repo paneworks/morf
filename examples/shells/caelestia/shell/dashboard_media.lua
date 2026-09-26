@@ -122,7 +122,8 @@ function M.build(ctx)
   end
 
   -- ------------------------------------------------------- the cover --
-  local art = function() return active().art_url or "" end
+  -- A web address (Spotify's covers are) is fetched once to the cache.
+  local art = function() return require("lib.remote").file(active().art_url) end
   local dots = {}
   for i = 1, DOTS do
     local a = (i - 1) / DOTS * 2 * math.pi

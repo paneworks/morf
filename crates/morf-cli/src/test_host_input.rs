@@ -191,7 +191,13 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
                             )),
                         ),
                         ("id", string(read("id").unwrap_or_default())),
-                        ("text", read("text").map_or(IpcValue::Nil, string)),
+                        (
+                            "text",
+                            read("text")
+                                .map(str::to_owned)
+                                .or_else(|| shown_glyph(&scene, node))
+                                .map_or(IpcValue::Nil, string),
+                        ),
                         ("x", IpcValue::Number(rect.x)),
                         ("y", IpcValue::Number(rect.y)),
                         ("width", IpcValue::Number(rect.width)),
@@ -234,6 +240,19 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
         })
         .collect();
     Ok(vec![IpcValue::Table(Arc::new(IpcTable::List(rows)))])
+}
+
+/// A glyph shape's text: the glyph its morph is nearer (`glyph`, or
+/// `glyph_morph_to` past halfway), so a number drawn as morphing glyphs reads
+/// as text does.
+fn shown_glyph(scene: &morf_scene::Scene, node: morf_scene::NodeHandle) -> Option<String> {
+    if scene.string_value(node, "shape").ok()? != "glyph" {
+        return None;
+    }
+    let late = scene.number(node, "morph_progress").unwrap_or(0.0) > 0.5
+        && scene.string_value(node, "morph_to").ok() == Some("glyph");
+    let name = if late { "glyph_morph_to" } else { "glyph" };
+    scene.string_value(node, name).ok().map(str::to_owned)
 }
 
 /// A node's text and its descendants', in order, joined by spaces.
