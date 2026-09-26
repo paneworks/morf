@@ -512,8 +512,12 @@ make.recipe{
       line("kept", kept)
     end
     assert(oslo.run{ "mkdir", "-p", shell }.ok, "could not make " .. shell)
-    -- -L: the repo's symlinks (examples/lib) become files, so the copy stands alone.
+    -- -L: the example's links become files, so the copy stands alone -- all but its link to the
+    -- library, which `make install` keeps current: a copy would hide every later install.
     assert(oslo.run{ "cp", "-rL", source .. "/.", shell }.ok, "could not copy " .. source)
+    if oslo.run{ "test", "-L", source .. "/lib" }.ok then
+      assert(oslo.run{ "rm", "-rf", shell .. "/lib" }.ok, "could not leave out the library")
+    end
     -- The editor's view of the engine and the library, beside the shell.
     local data = (os.getenv("XDG_DATA_HOME") or (home .. "/.local/share")) .. "/morf/library"
     if oslo.fs.stat(data .. "/luarc.template.json") then
