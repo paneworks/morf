@@ -7,6 +7,7 @@
 --   make dist       the binary for this machine's own libraries, not the store's
 --   make bundle     a configuration and morf as one binary: target/dist/<name>
 --   make install    the binary to ~/.local/bin, the library to ~/.local/share/morf/library
+--   make apply --example NAME   examples/NAME as your shell: ~/.config/morf/NAME/shell, the default
 --
 -- At an oslo prompt in this directory `make` is enough; everywhere else it is `oslo make`.
 -- CI has no oslo, so it calls the language's own tool -- nothing here is on the release path.
@@ -485,6 +486,53 @@ make.recipe{
   end,
 }
 make.alias("i", "install")
+
+-- An example as the person's own shell. `make install` is morf and its library; which shell to run
+-- is theirs, so it is a recipe of its own. A named shell is a folder of parts, each with its own
+-- init.lua -- ~/.config/morf/NAME/{shell,lock,greet}/init.lua -- run by `morf -c NAME[/PART]`;
+-- ~/.config/morf/default is a link to the one a bare `morf` runs. A shell folder already there is
+-- kept beside the new one, never overwritten.
+make.recipe{
+  name = "apply",
+  desc = "examples/NAME as ~/.config/morf/NAME/shell, and the default shell",
+  params = { { "--example", desc = "the example's name, e.g. caelestia" } },
+  run = function(a)
+    local name = a.example
+    assert(type(name) == "string" and name ~= "" and not name:find("/", 1, true),
+           "which example? make apply --example NAME (a folder under examples/)")
+    local source = "examples/" .. name
+    assert(oslo.fs.stat(source .. "/init.lua"), source .. "/init.lua is not there")
+    local home = os.getenv("HOME")
+    local root = (os.getenv("XDG_CONFIG_HOME") or (home .. "/.config")) .. "/morf"
+    local folder = root .. "/" .. name
+    local shell = folder .. "/shell"
+    if oslo.fs.stat(shell) then
+      local kept = shell .. ".bak-" .. os.date("%Y%m%d-%H%M%S")
+      assert(oslo.run{ "mv", shell, kept }.ok, "could not move " .. shell .. " aside")
+      line("kept", kept)
+    end
+    assert(oslo.run{ "mkdir", "-p", shell }.ok, "could not make " .. shell)
+    -- -L: the repo's symlinks (examples/lib) become files, so the copy stands alone.
+    assert(oslo.run{ "cp", "-rL", source .. "/.", shell }.ok, "could not copy " .. source)
+    -- The editor's view of the engine and the library, beside the shell.
+    local data = (os.getenv("XDG_DATA_HOME") or (home .. "/.local/share")) .. "/morf/library"
+    if oslo.fs.stat(data .. "/luarc.template.json") then
+      oslo.run{ "cp", data .. "/luarc.template.json", shell .. "/.luarc.json" }
+    end
+    -- The default: a link, so switching is one `make apply` away and nothing is copied twice.
+    local default = root .. "/default"
+    local stat = oslo.run{ "test", "-e", default, "-a", "!", "-L", default }
+    assert(not stat.ok, default .. " is a folder of its own, not a link; move it aside first")
+    assert(oslo.run{ "ln", "-sfn", name, default }.ok, "could not point " .. default .. " at " .. name)
+    line("shell", shell .. "/init.lua")
+    line("default", default .. " -> " .. name)
+    if oslo.fs.stat(root .. "/shell.lua") then
+      print(oslo.ui.style("note", { fg = "yellow" }) ..
+            dim("   " .. root .. "/shell.lua is there and a bare `morf` runs it first"))
+    end
+    print(dim("run: morf   (or morf -c " .. name .. ")"))
+  end,
+}
 
 -- The link the ordinary build makes, held to: only the machine's libraries may be dynamic.
 -- Anything else appearing in NEEDED -- a crate growing a native dependency -- fails the gate here

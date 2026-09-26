@@ -360,3 +360,69 @@ fn an_unknown_leading_option_is_still_refused() {
     let args = ["--colour", "red"].map(std::ffi::OsString::from);
     assert!(parse_command(&args).is_err());
 }
+
+#[test]
+fn a_linked_configuration_runs_from_where_it_really_is() {
+    // `make apply` makes `~/.config/morf/default` a link to a named shell:
+    // its modules are beside the file linked to, not beside the link.
+    let root = std::env::temp_dir().join(format!("morf-linked-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("caelestia/shell")).unwrap();
+    fs::write(root.join("caelestia/shell/init.lua"), "").unwrap();
+    std::os::unix::fs::symlink("caelestia", root.join("default")).unwrap();
+    let real = fs::canonicalize(root.join("caelestia/shell/init.lua")).unwrap();
+    let linked = crate::config::followed(root.join("default/shell/init.lua"));
+    assert_eq!(linked, real);
+    assert_eq!(
+        runtimepath_roots(&linked, false),
+        vec![real.parent().unwrap().to_path_buf()]
+    );
+    // One that is not there stays as given, for the error to name it.
+    assert_eq!(
+        crate::config::followed(PathBuf::from("no-such.lua")),
+        PathBuf::from("no-such.lua")
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_named_shell_has_parts() {
+    let root = std::env::temp_dir().join(format!("morf-parts-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    // SAFETY: the tests that read XDG_CONFIG_HOME are this one alone.
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", &root) };
+    let morf = root.join("morf");
+    let named = |name: &str| crate::config::named_config_path(name);
+    assert_eq!(
+        named("caelestia").unwrap(),
+        morf.join("caelestia/shell/init.lua")
+    );
+    assert_eq!(
+        named("caelestia/lock").unwrap(),
+        morf.join("caelestia/lock/init.lua")
+    );
+    assert_eq!(
+        named("caelestia/greet").unwrap(),
+        morf.join("caelestia/greet/init.lua")
+    );
+    assert!(named("caelestia/bar").is_err());
+    assert!(named("a/b/c").is_err());
+    assert!(named("..").is_err());
+    // The old layout, NAME/shell.lua, is still found.
+    fs::create_dir_all(morf.join("old")).unwrap();
+    fs::write(morf.join("old/shell.lua"), "").unwrap();
+    assert_eq!(named("old").unwrap(), morf.join("old/shell.lua"));
+    // Bare: the default's shell, unless the old shell.lua is there.
+    assert_eq!(
+        crate::config::default_config_path().unwrap(),
+        morf.join("default/shell/init.lua")
+    );
+    fs::write(morf.join("shell.lua"), "").unwrap();
+    assert_eq!(
+        crate::config::default_config_path().unwrap(),
+        morf.join("shell.lua")
+    );
+    unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
+    let _ = fs::remove_dir_all(&root);
+}
