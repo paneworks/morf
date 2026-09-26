@@ -180,6 +180,13 @@ impl crate::Runtime {
                     continue;
                 }
                 apply(&mut listener.colors, &changes);
+                if std::env::var_os("MORF_PALETTE_LOG").is_some() {
+                    eprintln!(
+                        "morf: {} heard {} colour(s)",
+                        listener.tty.path().display(),
+                        changes.len()
+                    );
+                }
                 calls.push((
                     listener.callback.clone(),
                     vec![palette_value(&listener.colors), changed_value(&changes)],

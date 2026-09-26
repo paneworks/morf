@@ -50,11 +50,12 @@ impl Runtime {
 
     /// Moves every theme colour easing to a new value on by `delta`, and
     /// hands each reader the colour on show.
-    fn advance_theme_fades(&mut self, delta: Duration) {
+    /// Returns how many colours moved.
+    fn advance_theme_fades(&mut self, delta: Duration) -> usize {
         let writes = {
             let mut state = self.reactive.borrow_mut();
             if state.theme_fades.is_empty() {
-                return;
+                return 0;
             }
             let mut writes = Vec::new();
             state.theme_fades.retain_mut(|fade| {
@@ -65,6 +66,7 @@ impl Runtime {
             });
             writes
         };
+        let moved = writes.len();
         {
             let mut state = self.reactive.borrow_mut();
             for (id, value) in writes {
@@ -84,6 +86,7 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("theme transition: {message}"));
             }
         });
+        moved
     }
 
     /// [`Self::tick_animations`] for a loop driven by a display's frames:
@@ -96,13 +99,20 @@ impl Runtime {
     }
 
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
-        self.advance_theme_fades(delta);
-        let frame = self
+        let fading = self.advance_theme_fades(delta);
+        let mut frame = self
             .reactive
             .borrow_mut()
             .scene
             .tick_animations(delta)
             .map_err(|error| Error::Runtime(error.to_string()))?;
+        // A theme fade is motion the scene does not know of: the loop reads
+        // this frame to decide whether to keep the frames coming, and a fade
+        // it did not see stood still until something else drew.
+        if fading > 0 {
+            frame.active = true;
+            frame.changed += fading;
+        }
         // Nodes whose exit has ended go now, with their `on_destroyed` hooks.
         for &node in &frame.exited {
             self.lua.enter(|ctx| {

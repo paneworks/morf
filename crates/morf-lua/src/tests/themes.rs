@@ -244,4 +244,19 @@ fn a_theme_fade_asks_for_its_first_frame() {
         runtime.has_pending_work(),
         "the fade waits for someone else's frame"
     );
+    // And each frame of it says so, or the loop stops asking for frames
+    // after the first: the scene alone knows nothing of a theme fade.
+    let frame = runtime.tick_frame_animations(Duration::ZERO).unwrap();
+    assert!(frame.active, "a fading theme is not motion to the loop");
+    let frame = runtime
+        .tick_frame_animations(Duration::from_millis(100))
+        .unwrap();
+    assert!(frame.active && frame.changed > 0);
+    runtime
+        .tick_frame_animations(Duration::from_millis(200))
+        .unwrap();
+    let frame = runtime
+        .tick_frame_animations(Duration::from_millis(16))
+        .unwrap();
+    assert!(!frame.active, "the fade never ends");
 }
