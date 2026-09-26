@@ -96,6 +96,7 @@ end
 local function wide() return M.mode:get() == "wallpapers" end
 
 local function width() return wide() and WIDE or WIDTH end
+M.width = width
 
 local function height()
   local body = wide() and CAROUSEL or list_height(M.count:get())

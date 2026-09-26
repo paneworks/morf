@@ -40,7 +40,13 @@ return settings.open {
       -- Opens when the pointer reaches the top edge over it.
       hover = true,
     },
+    sidebar = {
+      -- Opens when the pointer reaches the middle of the right edge.
+      hover = true,
+    },
     launcher = {
+      -- Opens when the pointer reaches the bottom edge under it.
+      hover = true,
       max_shown = 7,
       action_prefix = ">",
     },

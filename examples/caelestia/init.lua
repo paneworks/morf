@@ -123,6 +123,18 @@ ui.Item {
   bar.build(),
   ui.Item(panels),
   dashboard.edge_trigger(),
+  -- The bottom edge under the launcher opens it; the middle of the right
+  -- edge opens the sidebar (and the utilities under it).
+  require("hover").edge {
+    name = "launcher", drawer = launcher.drawer, edge = "bottom",
+    length = launcher.width, setting = "launcher.hover",
+  },
+  require("hover").edge {
+    name = "sidebar", drawer = sidebar.drawer, edge = "right",
+    length = function() return math.floor((morf.screens[1] and morf.screens[1].height or 1080) / 3) end,
+    panels = { sidebar.drawer.panel, require("utilities").drawer.panel },
+    setting = "sidebar.hover",
+  },
 }
 
 wallpaper.open_layer()
