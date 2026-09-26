@@ -1,9 +1,9 @@
--- The dashboard: a drawer at the top of the frame with four tabs --
--- Dashboard, Media, Performance, Weather. The Dashboard tab is here: the
+-- The dashboard: a drawer at the top of the frame with five tabs --
+-- Dashboard, Media, Performance, Weather, Sound. The Dashboard tab is here: the
 -- weather, who is logged in and for how long, the time stacked on its side,
 -- a month calendar, three resource rings and the media card; the others
 -- are dashboard_media.lua, dashboard_performance.lua and
--- dashboard_weather.lua. Each tab has its own size: switching tabs slides
+-- dashboard_weather.lua and dashboard_sound.lua. Each tab has its own size: switching tabs slides
 -- the pages sideways while the drawer eases to the new tab's size.
 --
 -- It opens over IPC, and when the pointer reaches the top edge of the frame
@@ -31,10 +31,11 @@ local PAD, GAP = 16, 12
 -- field under the pages (kit.collect): they bud out as the dashboard opens
 -- or a tab comes in, fuse into one another while they move, and pull apart
 -- as they settle.
-local LAYERS = { {}, {}, {}, {} }
+local LAYERS = { {}, {}, {}, {}, {} }
 kit.collect(LAYERS[2]) require("dashboard_media")
 kit.collect(LAYERS[3]) require("dashboard_performance")
 kit.collect(LAYERS[4]) require("dashboard_weather")
+kit.collect(LAYERS[5]) require("dashboard_sound")
 kit.collect(LAYERS[1])
 -- Each tab's page (the panel less its padding and the tabs).
 local PAGE = {
@@ -42,6 +43,7 @@ local PAGE = {
   { require("dashboard_media").WIDTH, require("dashboard_media").HEIGHT },
   { require("dashboard_performance").WIDTH, require("dashboard_performance").HEIGHT },
   { require("dashboard_weather").WIDTH, require("dashboard_weather").HEIGHT },
+  { require("dashboard_sound").WIDTH, require("dashboard_sound").HEIGHT },
 }
 local TABS_H = 68            -- icons, labels, indicator and hairline
 local ROW1, ROW2 = 132, 295
@@ -72,6 +74,7 @@ local TABS = {
   { name = "Media", icon = "queue_music" },
   { name = "Performance", icon = "speed" },
   { name = "Weather", icon = "cloud" },
+  { name = "Sound", icon = "volume_up" },
 }
 
 local function tabs()
@@ -617,6 +620,7 @@ local pages = {
   require("dashboard_media").page,
   require("dashboard_performance").page,
   require("dashboard_weather").page,
+  require("dashboard_sound").page,
 }
 kit.collect(nil)
 

@@ -190,6 +190,89 @@ end
 
 local shapes -- lib/m3shapes, loaded on first use
 
+--- A Material 3 expressive slider: a tall rounded track, the active part
+--- in the primary colour up to a slim handle with a gap either side, the
+--- icon inside the track's start and the value at its end (inside the
+--- active part once the handle gets there). The level rides a spring; the
+--- handle narrows while held. `spec`: `id`, `width`, `height` (44),
+--- `value` (a function, 0 to 1), `set` (called with 0 to 1), `icon` (a
+--- name or a function; none for a bare slider), `label` (false hides the
+--- value).
+function M.slider(spec)
+  local W, H = spec.width, spec.height or 44
+  local GAP = 6
+  local value, set = spec.value, spec.set
+  local held = morf.signal("caelestia.slider." .. spec.id .. ".held", false)
+  local motion = M.spring(190, 9)
+  local function at(x) return math.max(0, math.min(1, (x - H / 2) / (W - H))) end
+  -- The handle's centre: its travel keeps the track's rounded ends clear.
+  local function hx() return H / 2 + (W - H) * math.max(0, math.min(1, value())) end
+  local function grip() return held:get() and 2 or 4 end
+  local C = theme.color
+  local area = ui.MouseArea {
+    id = spec.id, width = W, height = H + 8, cursor = "pointer",
+    on_pressed = function(_, _, x) held:set(true) set(at(x)) end,
+    on_released = function() held:set(false) end,
+    on_dragged = function(_, _, _, _, x) if held:get() then set(at(x)) end end,
+    on_wheel = function(_, _, _, _, _, step_y)
+      if step_y ~= 0 then set(math.max(0, math.min(1, value() + (step_y > 0 and -0.05 or 0.05)))) end
+    end,
+    -- The rest of the track, from past the handle to the end.
+    ui.Rect {
+      y = 4, height = H,
+      x = function() return hx() + grip() / 2 + GAP end,
+      width = function() return math.max(0, W - (hx() + grip() / 2 + GAP)) end,
+      top_left_radius = 6, bottom_left_radius = 6,
+      top_right_radius = H / 2, bottom_right_radius = H / 2,
+      color = function() return C.surfaceContainerHighest end,
+      behavior = { x = motion, width = motion },
+    },
+    -- The active part, from the start to short of the handle.
+    ui.Rect {
+      id = spec.id .. "-level",
+      x = 0, y = 4, height = H,
+      width = function() return math.max(0, hx() - grip() / 2 - GAP) end,
+      top_left_radius = H / 2, bottom_left_radius = H / 2,
+      top_right_radius = 6, bottom_right_radius = 6,
+      color = function() return C.primary end,
+      behavior = { width = motion },
+    },
+    -- The handle: a slim bar standing past the track.
+    ui.Rect {
+      id = spec.id .. "-handle",
+      y = 0, height = H + 8, radius = 2,
+      x = function() return hx() - grip() / 2 end,
+      width = grip,
+      color = function() return C.primary end,
+      behavior = { x = motion, width = { duration = 150 } },
+    },
+  }
+  local size = math.floor(H / 2)
+  if spec.icon then
+    ui.reparent(M.icon(spec.icon, size, function()
+      return hx() - GAP > size + 18 and C.onPrimary or C.onSurfaceVariant
+    end, { x = math.floor(H / 2 - size / 2), y = 4 + (H - size) / 2 }), area)
+  end
+  if spec.label ~= false then
+    ui.reparent(M.text {
+      id = spec.id .. "-value",
+      width = 40, horizontal_alignment = "right",
+      anchors = { vertical_center = true },
+      x = function()
+        if hx() > W - 64 then return hx() - GAP - 10 - 40 end
+        return W - 14 - 40
+      end,
+      text = function() return ("%d"):format(math.floor(value() * 100 + 0.5)) end,
+      font_size = H >= 40 and theme.size.normal or theme.size.small,
+      color = function()
+        return hx() > W - 64 and C.onPrimary or C.onSurfaceVariant
+      end,
+      behavior = { x = motion },
+    }, area)
+  end
+  return area
+end
+
 --- An M3 expressive shape that morphs whenever `shape()` changes (see
 --- lib/m3shapes: `shapes.Shape`). `props` as a `ui.Path`'s; `color` a
 --- binding; `duration`, `easing`.

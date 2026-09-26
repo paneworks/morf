@@ -656,4 +656,21 @@ test.describe("caelestia", function()
     test.eq(test.get({ id = "rail-number" }).text, "7")
     test.eq(test.ipc("workspace", 7), 7)
   end)
+
+  -- Looked at only: headless runs may reach the machine's own sound
+  -- server, so nothing here is clicked.
+  test.it("has a Sound tab with the output, its channels, the apps and the input", function()
+    load()
+    test.ipc("dashboard", "open")
+    test.settle(800)
+    test.click { id = "dashboard-tab-sound" }
+    test.settle(1500)
+    local d = drawer("dashboard")
+    test.eq(d.width, 840 + 32)
+    for _, id in ipairs { "sound-output", "sound-devices", "sound-apps", "sound-input" } do
+      test.truthy(test.find { id = id, visible = true }, id .. " not shown")
+    end
+    test.snapshot("caelestia-sound.png", { surface = "screen" })
+    test.eq(#test.logs("error"), 0)
+  end)
 end)
