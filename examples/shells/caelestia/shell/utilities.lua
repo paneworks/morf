@@ -181,6 +181,55 @@ local local_state = {
   gamemode = morf.signal("caelestia.utilities.gamemode", false),
 }
 
+--- The VPNs that are up: NetworkManager's, and the mesh ones by their
+--- links (no command run), by name.
+function M.vpn_names()
+  local names = {}
+  local n = services.net
+  if n and n.state.available then
+    local model = n.state.vpn_connections
+    for i = 1, model:len() do
+      local v = model:get(i)
+      if v.active and not require("net_pages").is_mesh_link(v.id) then names[#names + 1] = v.id end
+    end
+  end
+  local ok, vpns = pcall(require, "lib.vpns")
+  if ok then
+    -- A link is read, not watched: re-read as the network changes.
+    if n and n.state.available then n.state.devices:len() end
+    for _, name in ipairs(vpns.links()) do names[#names + 1] = name end
+  end
+  return names
+end
+
+--- Airplane mode on: what was on is remembered, then every radio is shut;
+--- off, what was on comes back.
+function M.set_airplane(on)
+  local net, bt, modem = services.net, services.bt, services.modem
+  if dry_run() then
+    morf.log("info", "caelestia: airplane mode " .. (on and "on" or "off") .. " (dry run)")
+    config.set("airplane.on", on == true)
+    return
+  end
+  if on then
+    config.set("airplane.was", {
+      wifi = net ~= nil and net.state.available and net.state.wifi_enabled == true,
+      bluetooth = bt ~= nil and bt.state.available and bt.state.powered == true,
+      mobile = modem ~= nil and modem.state.data == true,
+    })
+    if net and net.state.available then pcall(net.set_wifi, false) pcall(net.set_wwan, false) end
+    if bt and bt.state.available then pcall(bt.set_powered, false) end
+  else
+    local was = config.get("airplane.was") or {}
+    if net and net.state.available then
+      if was.wifi then pcall(net.set_wifi, true) end
+      if was.mobile then pcall(net.set_wwan, true) end
+    end
+    if bt and bt.state.available and was.bluetooth then pcall(bt.set_powered, true) end
+  end
+  config.set("airplane.on", on == true)
+end
+
 M.TOGGLES = {
   {
     id = "wifi", icon = "wifi", name = "Wi-Fi", detail = "network",
@@ -231,6 +280,78 @@ M.TOGGLES = {
       if dry_run() then morf.log("info", "caelestia: bluetooth " .. (now and "on" or "off") .. " (dry run)") end
       local_state.bluetooth:set(now)
     end,
+  },
+  {
+    -- Wired: the first wired port's state, a click connects or disconnects
+    -- it; ">" lists every port.
+    id = "wired", name = "Wired", detail = "wired",
+    icon = function()
+      local n = services.net
+      return (n and n.state.available and n.state.wired.carrier == false) and "settings_ethernet" or "lan"
+    end,
+    on = function()
+      local n = services.net
+      return n ~= nil and n.state.available and n.state.wired.connected == true
+    end,
+    set = function(now)
+      local n = services.net
+      if not (n and n.state.available) then return end
+      local port = n.state.wired.device
+      if port == "" then return end
+      if dry_run() then morf.log("info", "caelestia: wired " .. tostring(now) .. " (dry run)") return end
+      if now then pcall(n.connect_device, port) else pcall(n.disconnect, port) end
+    end,
+    status = function()
+      local n = services.net
+      if not (n and n.state.available) then return nil end
+      local w = n.state.wired
+      if w.device == "" then return "No port" end
+      if w.connected then return w.ip4 ~= "" and w.ip4 or "Connected" end
+      return w.carrier and "Disconnected" or "No cable"
+    end,
+  },
+  {
+    -- A phone's mobile data. Without a modem it says so, crossed out.
+    id = "mobile", name = "Mobile data",
+    icon = function()
+      local m = services.modem
+      if not m then return "signal_cellular_nodata" end
+      return m.state.data and "signal_cellular_alt" or "signal_cellular_off"
+    end,
+    on = function() return services.modem ~= nil and services.modem.state.data end,
+    set = function(now)
+      local m = services.modem
+      if not m then return end
+      if dry_run() then morf.log("info", "caelestia: mobile data " .. tostring(now) .. " (dry run)") return end
+      pcall(m.set_data, now)
+    end,
+    status = function()
+      local m = services.modem
+      if not m then return "No modem" end
+      local s = m.state
+      if s.locked then return "SIM locked" end
+      if not s.data then return "Off" end
+      return (s.technology ~= "" and (s.technology .. " · ") or "") .. (s.operator ~= "" and s.operator or "On")
+    end,
+  },
+  {
+    -- VPNs: NetworkManager's and the mesh ones; ">" (or a click) for each.
+    id = "vpn", icon = "vpn_lock", name = "VPN", detail = "vpn",
+    on = function() return #M.vpn_names() > 0 end,
+    set = function() M.detail:set("vpn") end,
+    status = function()
+      local names = M.vpn_names()
+      if #names == 0 then return "Off" end
+      return table.concat(names, ", ")
+    end,
+  },
+  {
+    -- Airplane mode: every radio off at once -- Wi-Fi, Bluetooth, mobile
+    -- data -- and back as they were.
+    id = "airplane", icon = "flight", name = "Airplane mode",
+    on = function() return config.get("airplane.on") == true end,
+    set = function(now) M.set_airplane(now) end,
+    status = function() return config.get("airplane.on") == true and "On" or "Off" end,
   },
   {
     id = "sound", name = "Sound", detail = "sound",
@@ -316,20 +437,6 @@ M.TOGGLES = {
     end,
   },
   {
-    -- A phone's mobile data: only where there is a modem.
-    id = "mobile", name = "Mobile data", icon = "signal_cellular_alt",
-    present = function() return services.modem ~= nil end,
-    on = function() return services.modem ~= nil and services.modem.state.data end,
-    set = function(now) if services.modem then pcall(services.modem.set_data, now) end end,
-    status = function()
-      local m = services.modem
-      if not m then return nil end
-      local s = m.state
-      if not s.data then return "Off" end
-      return (s.technology ~= "" and (s.technology .. " · ") or "") .. (s.operator ~= "" and s.operator or "On")
-    end,
-  },
-  {
     -- The bar: up or down, and a ">" to where it goes.
     id = "bar", icon = "toolbar", name = "Bar", detail = "bar",
     on = function() return require("bar").on() end,
@@ -339,20 +446,6 @@ M.TOGGLES = {
       if not b.on() then return "Off" end
       local side = b.side()
       return side:sub(1, 1):upper() .. side:sub(2)
-    end,
-  },
-  {
-    id = "settings", icon = "settings", fill = true, name = "Settings",
-    status = function() return "Open" end,
-    on = function() return false end,
-    set = function() M.run("settings") end,
-  },
-  {
-    id = "gamemode", icon = "gamepad", name = "Game mode",
-    on = function() return local_state.gamemode:get() end,
-    set = function(now)
-      M.run(now and "gamemode_on" or "gamemode_off")
-      local_state.gamemode:set(now)
     end,
   },
   {
@@ -512,6 +605,8 @@ M.DETAILS = {
   { key = "microphone", name = "Microphone", build = function(w, h) return require("sound_page").input_page(w, h) end },
   { key = "power", name = "Power", build = function(w, h) return require("power_page").page(w, h) end },
   { key = "bar", name = "Bar", build = function(w, h) return require("bar_page").page(w, h) end },
+  { key = "wired", name = "Wired", build = function(w, h) return require("net_pages").wired_page(w, h) end },
+  { key = "vpn", name = "VPN", build = function(w, h) return require("net_pages").vpn_page(w, h, M.detail) end },
 }
 function M.page(w, h)
   local main = ui.Item {

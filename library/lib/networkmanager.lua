@@ -350,6 +350,9 @@ function networkmanager.connect(options)
             or device.HwAddress or "",
           ip4 = first_address(iface(device.Ip4Config or "", IP4)),
           connection = active and active.id or "",
+          -- A wired port's: whether a cable is in, and at what speed (Mb/s).
+          carrier = wired ~= nil and wired.Carrier == true,
+          speed = wired and wired.Speed or 0,
         }
         device_rows[#device_rows + 1] = row
 
@@ -634,6 +637,31 @@ function networkmanager.connect(options)
   function net.set_wifi(enabled, done)
     done = done or nothing
     return client.set_async(name, ROOT, IFACE, "WirelessEnabled", enabled == true, action_timeout,
+      function(ok, err)
+        schedule()
+        done(ok and true or nil, err)
+      end)
+  end
+
+  --- Brings an interface up with whatever profile suits it -- a wired
+  --- port that was disconnected, say. `done(ok, err)`.
+  function net.connect_device(interface, done)
+    done = done or nothing
+    local device
+    for _, row in ipairs(snapshot.devices) do
+      if row.interface == interface then device = row end
+    end
+    if not device then return nil, "no device " .. tostring(interface) end
+    return call_manager("ActivateConnection", { o("/"), o(device.path), o("/") }, function(ok, err)
+      schedule()
+      done(ok and true or nil, err)
+    end)
+  end
+
+  --- Mobile broadband (WWAN) on or off, as a phone's mobile data.
+  function net.set_wwan(enabled, done)
+    done = done or nothing
+    return client.set_async(name, ROOT, IFACE, "WwanEnabled", enabled == true, action_timeout,
       function(ok, err)
         schedule()
         done(ok and true or nil, err)

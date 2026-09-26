@@ -508,15 +508,14 @@ test.describe("caelestia", function()
     test.settle(1000)
     test.truthy(test.find { text = "^Since ", visible = true } or test.find { id = "utilities-toggle-awake", visible = true })
     test.click { id = "utilities-toggle-mic" }
-    test.click { id = "utilities-toggle-gamemode" }
-    test.click { id = "utilities-toggle-settings" }
+    test.click { id = "utilities-toggle-airplane" }
     test.settle(500)
     local said = {}
     for _, l in ipairs(test.logs("info")) do said[#said + 1] = l.message end
     said = table.concat(said, "\n")
     test.truthy(said:find("keep awake on (dry run)", 1, true), "keep awake did not log")
     test.truthy(said:find("utilities mic_off (dry run)", 1, true))
-    test.truthy(said:find("utilities gamemode_on (dry run)", 1, true))
+    test.truthy(said:find("airplane mode on (dry run)", 1, true), "airplane mode did not log")
     test.eq(#test.runs(), 0)
     -- Do not disturb: a notification reaches the history, not a popup.
     test.click { id = "utilities-toggle-dnd" }

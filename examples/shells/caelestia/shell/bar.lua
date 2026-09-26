@@ -112,7 +112,8 @@ end
 -- A phone's mobile network: bars by its signal, or off.
 local function mobile_icon()
   local m = services.modem
-  if not m then return "signal_cellular_off" end
+  -- No modem: the bars crossed out, so the place is always there.
+  if not m then return "signal_cellular_nodata" end
   local s = m.state
   if s.locked then return "signal_cellular_connected_no_internet_0_bar" end
   if not s.registered then return "signal_cellular_off" end
@@ -266,9 +267,9 @@ function M.build()
     end, "")
     ring.visible = function() local r = services.ringer return r ~= nil and r.state.mode ~= "sound" end
     nodes[#nodes + 1] = ring
-    -- A phone's mobile network, with its generation.
+    -- A phone's mobile network, with its generation; crossed out without one.
+    nodes[#nodes + 1] = status("bar-mobile" .. v, mobile_icon, "")
     if services.modem then
-      nodes[#nodes + 1] = status("bar-mobile" .. v, mobile_icon, "")
       if not vertical then
         nodes[#nodes + 1] = kit.text {
           font_size = theme.size.small - 2, font_weight = 700,

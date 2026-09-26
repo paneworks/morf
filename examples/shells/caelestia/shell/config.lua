@@ -93,6 +93,8 @@ return settings.open {
       -- bottom bar.
       titles = "on",
     },
+    -- Airplane mode, and what was on before it (to bring back).
+    airplane = { on = false, was = { wifi = false, bluetooth = false, mobile = false } },
     -- sound, vibrate or silent (lib/ringer.lua; vibrate where feedbackd is).
     ringer = { mode = "sound" },
     keyboard = {
