@@ -38,7 +38,7 @@ local kb = osk.new {
   prefix = "caelestia.osk",
   width = M.WIDTH - 2 * PAD,
   mode = "full",
-  numbers = true,
+  numbers = false,
   send = function(e)
     if dry_run() then
       morf.log("warn", "caelestia: keyboard (dry run): " .. tostring(e.text or e.key) .. ((e.mods and e.mods.shift) and " +shift" or ""))

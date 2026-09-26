@@ -6,7 +6,7 @@
 --   local kb = osk.new {
 --     width = 900,                    -- laid out across this
 --     mode = "full",                  -- see MODES
---     numbers = true,                 -- "full": the number row shown (kb.numbers)
+--     numbers = false,                -- "full": a number row over the letters (kb.numbers)
 --     look = { ... },                 -- colours and face; see `look` below
 --     send = osk.sender(),            -- where keys go (the default)
 --     on_pattern = function(dots) end,-- "pattern": { 1, 5, 9, ... }
@@ -261,7 +261,9 @@ function osk.new(options)
   local SMALL = math.floor(KH * 0.26)
 
   local mode = morf.signal(named("mode"), options.mode or "full")
-  local numbers = morf.signal(named("numbers"), options.numbers ~= false)
+  -- The number row over the letters: off unless asked for (the digits are
+  -- on the top row's long press, and on ?123).
+  local numbers = morf.signal(named("numbers"), options.numbers == true)
   local page = morf.signal(named("page"), "letters")
   local shift = morf.signal(named("shift"), "off") -- off, once, lock
   local mods = { ctrl = morf.signal(named("ctrl"), "off"), alt = morf.signal(named("alt"), "off"),
