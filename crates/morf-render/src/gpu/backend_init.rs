@@ -513,6 +513,8 @@ impl WgpuBackend {
             field_shader_default,
             shaders: HashMap::new(),
             effect_shaders: HashMap::new(),
+            shader_instances: HashMap::new(),
+            shader_frame: 0,
             elapsed: 0.0,
             images: ImageCache::default(),
             image_textures: HashMap::new(),
@@ -649,6 +651,7 @@ impl WgpuBackend {
         .expect("the field shader carries its own hook");
         self.shaders.clear();
         self.effect_shaders.clear();
+        self.shader_instances.clear();
         self.resize_target(self.width, self.height);
         true
     }

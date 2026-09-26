@@ -3,6 +3,7 @@ use morf_scene::NodeHandle;
 use crate::ShaderBinding;
 
 use super::backend_types::*;
+use super::shader_registry::create_shader_instance;
 
 // Shader sources, with the shared distance functions in front of them.
 
@@ -115,7 +116,7 @@ pub(crate) fn fullscreen_source(body: &str) -> String {
 pub(crate) const FULLSCREEN: &str = include_str!("../fullscreen.wgsl");
 
 impl WgpuBackend {
-    /// Writes each shader's uniform block for this frame.
+    /// Writes each shaded node's uniform block and data for this frame.
     ///
     /// The frame's own values — the clock and the surface size — sit at a fixed
     /// offset the compiler reserved, so writing them does not depend on what a
@@ -123,24 +124,22 @@ impl WgpuBackend {
     /// compiler computed, which is the same computation the generated WGSL was
     /// built from, so the two cannot drift.
     ///
-    /// One write per distinct program rather than per node: several nodes
-    /// sharing a shader share its uniforms, which is right for the clock and
-    /// wrong for per-node parameters — the last node's values win. Making them
-    /// per-node needs a dynamic offset into one buffer, which is the next step
-    /// and not this one.
-    /// Layers are passed alongside the commands because an effect shader is a
+    /// One block per node rather than per program. Every `write_buffer` lands
+    /// before any of the frame's commands run, so nodes sharing one block would
+    /// all draw with whichever was written last — which is how a row of bars
+    /// wearing one shader came out as one bar drawn many times. Each node's
+    /// buffers are made the first frame it draws with a program, kept while it
+    /// does, and dropped the first frame it no longer does; the pipeline stays
+    /// the program's.
+    ///
+    /// Layers are read alongside the commands because an effect shader is a
     /// different thing in two ways that both land here: its parameters live on
     /// the layer it turned into rather than on any command, and it is
     /// registered in its own table because it splices into a different
     /// pipeline. Looking only at the commands and only at `shaders` left every
     /// effect in the session reading zeros for everything it declared, which
     /// looks exactly like an effect that does nothing.
-    pub(crate) fn write_shader_uniforms(
-        &mut self,
-        bindings: &[Option<ShaderBinding>],
-        layers: &[crate::Layer],
-        scale_120: u32,
-    ) {
+    pub(crate) fn write_shader_uniforms(&mut self, list: &crate::DrawList, scale_120: u32) {
         // The clock rides in the viewport uniform's third slot so the *vertex*
         // stage can read it: a shader that displaces a corner needs the time
         // before there is a fragment to hand it to.
@@ -148,8 +147,11 @@ impl WgpuBackend {
         self.queue
             .write_buffer(&self.viewport_buffer, 0, bytemuck::cast_slice(&viewport));
         if self.shaders.is_empty() && self.effect_shaders.is_empty() {
+            self.shader_instances.clear();
             return;
         }
+        self.shader_frame += 1;
+        let frame = self.shader_frame;
         let scale = scale_120.max(1) as f32 / 120.0;
         let header = [
             self.width as f32 / scale,
@@ -157,23 +159,79 @@ impl WgpuBackend {
             self.elapsed,
             0.0,
         ];
-        for binding in bindings.iter().flatten() {
-            if let Some(program) = self.shaders.get(&binding.program) {
-                Self::write_shader_block(&self.queue, program, binding, &header);
-            }
+        let commands = list.commands.iter().filter_map(|command| {
+            command_shader(command).map(|binding| (command.node(), binding, false))
+        });
+        let layers = list.layers.iter().filter_map(|layer| {
+            layer
+                .shader
+                .as_ref()
+                .map(|binding| (layer.node, binding, true))
+        });
+        for (node, binding, effect) in commands.chain(layers) {
+            let registry = if effect {
+                &self.effect_shaders
+            } else {
+                &self.shaders
+            };
+            let Some(program) = registry.get(&binding.program) else {
+                continue;
+            };
+            let key = ShaderInstanceKey {
+                node,
+                program: binding.program,
+                effect,
+            };
+            let instance = self.shader_instances.entry(key).or_insert_with(|| {
+                create_shader_instance(&self.device, &self.field_shader_layout, program, frame)
+            });
+            instance.frame = frame;
+            Self::write_shader_block(&self.queue, program, instance, binding, &header);
         }
-        for binding in layers.iter().filter_map(|layer| layer.shader.as_ref()) {
-            if let Some(program) = self.effect_shaders.get(&binding.program) {
-                Self::write_shader_block(&self.queue, program, binding, &header);
-            }
+        // A node that went away, or took its shader off, or changed to
+        // another, leaves its buffers behind: drop them, or a list that
+        // recycles its rows would grow this without end.
+        if self
+            .shader_instances
+            .values()
+            .any(|instance| instance.frame != frame)
+        {
+            self.shader_instances
+                .retain(|_, instance| instance.frame == frame);
         }
     }
 
-    /// Fills one program's uniform block: the frame's own values, then whatever
+    /// The buffers a command or a layer draws its shader with this frame.
+    ///
+    /// `None` when it wears none, or a program nothing registered, which the
+    /// draw treats as no shader at all.
+    pub(crate) fn shader_instance(
+        &self,
+        node: NodeHandle,
+        binding: Option<&ShaderBinding>,
+        effect: bool,
+    ) -> Option<(&ShaderProgram, &ShaderInstance)> {
+        let binding = binding?;
+        let registry = if effect {
+            &self.effect_shaders
+        } else {
+            &self.shaders
+        };
+        let program = registry.get(&binding.program)?;
+        let instance = self.shader_instances.get(&ShaderInstanceKey {
+            node,
+            program: binding.program,
+            effect,
+        })?;
+        Some((program, instance))
+    }
+
+    /// Fills one node's uniform block: the frame's own values, then whatever
     /// the configuration declared, at the offsets the compiler computed.
     fn write_shader_block(
         queue: &wgpu::Queue,
         program: &ShaderProgram,
+        instance: &ShaderInstance,
         binding: &ShaderBinding,
         header: &[f32; 4],
     ) {
@@ -188,17 +246,30 @@ impl WgpuBackend {
                 block[start..start + 4].copy_from_slice(&value.to_le_bytes());
             }
         }
-        queue.write_buffer(&program.uniforms, 0, &block);
+        queue.write_buffer(&instance.uniforms, 0, &block);
         // Data blocks are the configuration's own numbers, written whole each
         // frame: they are small, and a diff would cost more to track than the
-        // write costs to do.
-        if let Some((buffers, _)) = &program.data {
+        // write costs to do. A block given more values than it declared is
+        // cut to its length rather than written past its end.
+        if let Some((buffers, _)) = &instance.data {
             for (buffer, values) in buffers.iter().zip(&binding.data) {
+                let room = (buffer.size() / 4) as usize;
+                let values = &values[..values.len().min(room)];
                 if !values.is_empty() {
                     queue.write_buffer(buffer, 0, bytemuck::cast_slice(values));
                 }
             }
         }
+    }
+}
+
+/// The shader a command wears, if it is one that can wear one.
+pub(crate) fn command_shader(command: &crate::DrawCommand) -> Option<&ShaderBinding> {
+    match command {
+        crate::DrawCommand::Field { shader, .. } | crate::DrawCommand::Quad { shader, .. } => {
+            shader.as_ref()
+        }
+        _ => None,
     }
 }
 

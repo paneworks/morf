@@ -26,6 +26,11 @@ pub(super) fn read_frame(backend: &mut WgpuBackend, list: &DrawList, size: u32) 
             120,
         )
         .unwrap();
+    read_back(backend, size)
+}
+
+/// Reads what the target holds now, without drawing anything first.
+pub(super) fn read_back(backend: &mut WgpuBackend, size: u32) -> Vec<u8> {
     let bytes_per_row = size.next_multiple_of(64) * 4;
     let buffer = backend.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("morf field test readback"),
