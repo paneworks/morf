@@ -480,6 +480,18 @@ fn drive_surface(
         apply_capture_releases(runtime, &mut renderer);
         apply_window_surface_actions(runtime, &client, &state.floating_surfaces);
         advance_without_callbacks(runtime, &client, &mut state)?;
+        // Motion with nothing to drive it: started where no turn noticed (a
+        // binding flushed after an animation's `on_finished`, say) while no
+        // frame callback is outstanding. The callbacks are its clock, and
+        // only a paint asks for one -- without this it waits, frozen, for
+        // whatever paints next: a pill that stays lit, a swell that shows
+        // seconds late.
+        if !repaint
+            && client.layer_frame_wait(PRIMARY_LAYER).is_none()
+            && runtime.has_motion()
+        {
+            repaint = true;
+        }
         // A paint owed for longer than a stall is made without the callback.
         let owed = owed_paint_due(
             state.primary_deferred,
