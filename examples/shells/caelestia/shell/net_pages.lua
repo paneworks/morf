@@ -133,41 +133,38 @@ end
 -- -------------------------------------------------------------------- vpn --
 
 --- Whether a connection is a mesh VPN's own tunnel.
-function M.is_mesh_link(name)
-  name = tostring(name or "")
-  return name:match("^netbird") ~= nil or name:match("^wt%d") ~= nil
-    or name:match("^tailscale") ~= nil or name:match("^zt") ~= nil or name:match("^zerotier") ~= nil
-end
+function M.is_mesh_link(name) return require("lib.vpns").is_mesh_link(name) end
 
-function M.vpn_page(w, h, detail)
+local NAMES = { netbird = "NetBird", tailscale = "Tailscale", zerotier = "ZeroTier",
+  mullvad = "Mullvad", protonvpn = "Proton VPN" }
+local KIND_TOOLS = { mesh = { "netbird", "tailscale", "zerotier" }, tunnel = { "mullvad", "protonvpn" } }
+
+--- The page for one kind of VPN: "mesh" (NetBird, Tailscale, ZeroTier) or
+--- "tunnel" (Mullvad, Proton VPN, and NetworkManager's VPN and WireGuard
+--- profiles -- where Proton's app keeps its connections).
+function M.vpn_page(kind, w, h, detail)
   local vpns = require("lib.vpns")
-  -- The settings' detail page on show: utilities.detail, handed in (the
-  -- module is still loading when this is built).
-  local shown = function() return detail:get() == "vpn" end
-  -- lib.vpns keeps its rows in this signal (a name is a signal's identity);
-  -- the commands run only while the page is on show.
-  local rows = vpns.rows
+  local shown = function() return detail:get() == kind end
+  local rows = vpns.rows[kind]
   local holding = false
   -- Started and stopped a moment after the page comes and goes, outside
   -- the effect: what an effect makes is the effect's.
-  morf.effect("caelestia.vpn.watch", function()
+  morf.effect("caelestia.vpn.watch." .. kind, function()
     local on = shown()
     morf.timer(1, function()
       if on and not holding then
         holding = true
-        vpns.watch(8000)
+        vpns.watch(kind, 8000)
       elseif not on and holding then
         holding = false
-        vpns.release()
+        vpns.release(kind)
       end
     end, false)
   end)
 
   local nodes = { gap = 10, width = w }
-  -- NetworkManager's own: VPN and WireGuard profiles.
   local net = services.net
-  if net and net.state then
-    -- Only when it has a VPN of its own (the mesh's tunnels are below).
+  if kind == "tunnel" and net and net.state then
     nodes[#nodes + 1] = kit.text { text = "NetworkManager", font_size = theme.size.small,
       color = function() return C.onSurfaceVariant end,
       visible = function()
@@ -182,8 +179,8 @@ function M.vpn_page(w, h, detail)
       model = net.state.vpn_connections,
       delegate = function(v)
         -- A mesh VPN's own tunnel (netbird0, tailscale0, zt*) is listed by
-        -- NetworkManager too; it belongs to the mesh below, and switching it
-        -- off here would pull it from under the mesh's own daemon.
+        -- NetworkManager too: it is the Mesh page's, and switching it off
+        -- here would pull it from under the mesh's own daemon.
         if M.is_mesh_link(v.id) then return ui.Item { width = 0, height = 0, visible = false } end
         return row_card(w, {
           id = "vpn-nm-" .. tostring(v.uuid),
@@ -198,19 +195,18 @@ function M.vpn_page(w, h, detail)
         })
       end,
     }
+    nodes[#nodes + 1] = kit.text { text = "Apps", font_size = theme.size.small,
+      color = function() return C.onSurfaceVariant end }
   end
-  -- The mesh VPNs, by their own commands.
-  nodes[#nodes + 1] = kit.text { text = "Mesh", font_size = theme.size.small,
-    color = function() return C.onSurfaceVariant end }
-  for _, id in ipairs { "netbird", "tailscale", "zerotier" } do
+  for _, id in ipairs(KIND_TOOLS[kind]) do
     local function row()
       for _, r in ipairs(rows:get()) do if r.id == id then return r end end
       return nil
     end
     local card = row_card(w, {
       id = "vpn-" .. id,
-      icon = "hub",
-      name = ({ netbird = "NetBird", tailscale = "Tailscale", zerotier = "ZeroTier" })[id],
+      icon = kind == "mesh" and "hub" or "shield",
+      name = NAMES[id],
       on = function() local r = row() return r ~= nil and r.up end,
       detail = function()
         local r = row()
@@ -218,16 +214,19 @@ function M.vpn_page(w, h, detail)
         return r.detail .. (r.address ~= "" and (" · " .. r.address) or "")
       end,
       can = function() local r = row() return r ~= nil and r.can_toggle end,
-      on_word = "Up", off_word = "Down",
+      on_word = kind == "mesh" and "Up" or "Connect", off_word = kind == "mesh" and "Down" or "Disconnect",
       toggle = function(on)
         if dry_run() then morf.log("info", "caelestia: " .. id .. " " .. tostring(on) .. " (dry run)") return end
         vpns.set(id, on)
       end,
     })
+    -- Only the ones installed, once they have been looked for.
     card.visible = function() return #rows:get() == 0 or row() ~= nil end
     nodes[#nodes + 1] = card
   end
-  nodes[#nodes + 1] = note(w, "ZeroTier's own command needs root to list its networks: it is shown by its link, and switched with zerotier-cli.")
+  nodes[#nodes + 1] = note(w, kind == "mesh"
+    and "ZeroTier's own command needs root to list its networks: it is shown by its link, and switched with zerotier-cli."
+    or "Proton VPN's app keeps its connections in NetworkManager, above; its command-line client, when installed, is here.")
   return ui.Flickable { width = w, height = h, clip = true, ui.Column(nodes) }
 end
 

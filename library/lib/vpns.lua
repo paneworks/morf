@@ -1,13 +1,21 @@
--- The mesh VPNs a machine runs beside NetworkManager's own: NetBird,
--- Tailscale and ZeroTier, each through its own command -- what it says,
--- and up or down where its command lets a user say so.
+-- The VPNs a machine runs beside NetworkManager's own, each through its
+-- own command -- what it says, and up or down where its command lets a
+-- user say so. Two kinds:
+--
+--   mesh     a private network of one's own machines: NetBird, Tailscale,
+--            ZeroTier
+--   tunnel   the way out to the internet through somewhere else: Mullvad,
+--            Proton VPN (its command-line client; its app's connections
+--            are NetworkManager's)
 --
 --   local vpns = require("lib.vpns")
---   local mesh = vpns.watch()            -- a signal of rows, read while it is read
---   for _, v in ipairs(mesh:get()) do print(v.name, v.up, v.address, v.detail) end
+--   vpns.watch("mesh")                   -- read now and every so often ...
+--   vpns.rows.mesh:get()                 -- ... into this signal
+--   vpns.release("mesh")
 --   vpns.set("netbird", true, function(ok, why) end)
+--   vpns.links("tunnel")                 -- up by their links: cheap, no command
 --
--- A row: `{ id, name, installed, up, address, detail, can_toggle }`.
+-- A row: `{ id, name, kind, installed, up, address, detail, can_toggle }`.
 -- ZeroTier's own command wants root to list its networks, so without that
 -- it is told by its interface (a `zt*` link) and is not switched from here.
 
@@ -16,9 +24,11 @@ local morf = require("morf")
 local vpns = {}
 
 local TOOLS = {
-  { id = "netbird", name = "NetBird", command = "netbird" },
-  { id = "tailscale", name = "Tailscale", command = "tailscale" },
-  { id = "zerotier", name = "ZeroTier", command = "zerotier-cli" },
+  { id = "netbird", name = "NetBird", command = "netbird", kind = "mesh" },
+  { id = "tailscale", name = "Tailscale", command = "tailscale", kind = "mesh" },
+  { id = "zerotier", name = "ZeroTier", command = "zerotier-cli", kind = "mesh" },
+  { id = "mullvad", name = "Mullvad", command = "mullvad", kind = "tunnel" },
+  { id = "protonvpn", name = "Proton VPN", command = "protonvpn-cli", kind = "tunnel" },
 }
 
 local function run(argv, done)
@@ -48,14 +58,29 @@ local function link_up(prefix)
   return nil
 end
 
---- The mesh VPNs that are up, by their links alone -- no command run:
---- cheap enough for a status icon to ask every time. `{ "NetBird", ... }`.
-function vpns.links()
+--- The VPNs of `kind` ("mesh" or "tunnel") that are up, by their links
+--- alone -- no command run: cheap enough for a status icon to ask every
+--- time. `{ "NetBird", ... }`.
+function vpns.links(kind)
   local out = {}
-  if link_up("wt") or link_up("netbird") then out[#out + 1] = "NetBird" end
-  if link_up("tailscale") then out[#out + 1] = "Tailscale" end
-  if link_up("zt") or link_up("zerotier") then out[#out + 1] = "ZeroTier" end
+  if kind ~= "tunnel" then
+    if link_up("wt") or link_up("netbird") then out[#out + 1] = "NetBird" end
+    if link_up("tailscale") then out[#out + 1] = "Tailscale" end
+    if link_up("zt") or link_up("zerotier") then out[#out + 1] = "ZeroTier" end
+  end
+  if kind ~= "mesh" then
+    if link_up("wg0-mullvad") or link_up("wg-mullvad") then out[#out + 1] = "Mullvad" end
+    if link_up("proton") or link_up("pvpn") then out[#out + 1] = "Proton VPN" end
+  end
   return out
+end
+
+--- Whether a NetworkManager connection is a mesh VPN's own tunnel (the
+--- mesh daemons' interfaces show up there too).
+function vpns.is_mesh_link(name)
+  name = tostring(name or "")
+  return name:match("^netbird") ~= nil or name:match("^wt%d") ~= nil
+    or name:match("^tailscale") ~= nil or name:match("^zt") ~= nil or name:match("^zerotier") ~= nil
 end
 
 local READ = {}
@@ -93,24 +118,49 @@ function READ.zerotier(done)
   done { up = link ~= nil, address = "", detail = link and ("Up on " .. link) or "Down", can_toggle = false }
 end
 
+function READ.mullvad(done)
+  run({ "mullvad", "status", "--json" }, function(r)
+    local ok, data = pcall(morf.json.decode, tostring(r.stdout or ""))
+    if not ok or type(data) ~= "table" then done { up = false, detail = "Not running" } return end
+    local st = tostring(data.state or "")
+    local loc = type(data.details) == "table" and data.details.location or {}
+    local where = table.concat({ loc.city or "", loc.country or "" }, ", "):gsub("^, ", ""):gsub(", $", "")
+    local words = { connected = "Connected", connecting = "Connecting", disconnected = "Off", disconnecting = "Disconnecting", error = "Error" }
+    done { up = st == "connected", address = st == "connected" and (loc.ipv4 or "") or "",
+      detail = (words[st] or st) .. (st == "connected" and where ~= "" and (" · " .. where) or "") }
+  end)
+end
+
+function READ.protonvpn(done)
+  run({ "protonvpn-cli", "status" }, function(r)
+    local out = tostring(r.stdout or "")
+    local server = out:match("Server:%s*([^\n]+)")
+    local up = server ~= nil or out:match("Connected") ~= nil and not out:match("No active")
+    done { up = up == true, address = out:match("IP:%s*([%d%.]+)") or "",
+      detail = up and ("Connected" .. (server and (" · " .. server) or "")) or "Off" }
+  end)
+end
+
 local UP = {
+  mullvad = { { "mullvad", "connect" }, { "mullvad", "disconnect" } },
+  protonvpn = { { "protonvpn-cli", "connect", "--fastest" }, { "protonvpn-cli", "disconnect" } },
   netbird = { { "netbird", "up" }, { "netbird", "down" } },
   tailscale = { { "tailscale", "up" }, { "tailscale", "down" } },
 }
 
---- Reads every installed tool now; `done(rows)`.
-function vpns.read(done)
+--- Reads every installed tool of `kind` now; `done(rows)`.
+function vpns.read(kind, done)
   local rows, pending = {}, 0
   local list = {}
   for _, t in ipairs(TOOLS) do
-    if installed(t.command) then list[#list + 1] = t end
+    if (kind == nil or t.kind == kind) and installed(t.command) then list[#list + 1] = t end
   end
   if #list == 0 then done(rows) return end
   pending = #list
   for index, t in ipairs(list) do
     READ[t.id](function(info)
       rows[index] = {
-        id = t.id, name = t.name, installed = true,
+        id = t.id, name = t.name, kind = t.kind, installed = true,
         up = info.up == true, address = info.address or "", detail = info.detail or "",
         can_toggle = info.can_toggle ~= false and UP[t.id] ~= nil,
       }
@@ -122,29 +172,32 @@ end
 
 -- Made as the module loads: a signal made inside a binding or an effect is
 -- that binding's, and goes with it.
-local signal = morf.signal("lib.vpns.rows", {})
-local timer, readers = nil, 0
+vpns.rows = {
+  mesh = morf.signal("lib.vpns.mesh", {}),
+  tunnel = morf.signal("lib.vpns.tunnel", {}),
+}
+local timers, readers = {}, { mesh = 0, tunnel = 0 }
 
---- The rows, as a signal (what `watch` keeps current).
-vpns.rows = signal
-
---- A signal of the rows, read again every `interval_ms` (10 s) while
---- anything holds it -- `vpns.release()` when done.
-function vpns.watch(interval_ms)
-  readers = readers + 1
-  if not timer then
-    local function again() vpns.read(function(rows) signal:set(rows) end) end
-    again()
-    timer = morf.timer(interval_ms or 10000, again, true)
-  end
-  return signal
+local function refresh(kind)
+  vpns.read(kind, function(rows) vpns.rows[kind]:set(rows) end)
 end
 
-function vpns.release()
-  readers = math.max(0, readers - 1)
-  if readers == 0 and timer then
-    timer:cancel()
-    timer = nil
+--- Reads `kind` now and every `interval_ms` (10 s) while anything holds
+--- it -- `vpns.release(kind)` when done.
+function vpns.watch(kind, interval_ms)
+  readers[kind] = readers[kind] + 1
+  if not timers[kind] then
+    refresh(kind)
+    timers[kind] = morf.timer(interval_ms or 10000, function() refresh(kind) end, true)
+  end
+  return vpns.rows[kind]
+end
+
+function vpns.release(kind)
+  readers[kind] = math.max(0, readers[kind] - 1)
+  if readers[kind] == 0 and timers[kind] then
+    timers[kind]:cancel()
+    timers[kind] = nil
   end
 end
 
@@ -155,7 +208,9 @@ function vpns.set(id, up, done)
   if not argv then done(nil, "not switched from here") return end
   run(argv, function(r)
     done(r.ok and true or nil, r.stderr)
-    if signal then vpns.read(function(rows) signal:set(rows) end) end
+    for _, t in ipairs(TOOLS) do
+      if t.id == id then refresh(t.kind) end
+    end
   end)
 end
 

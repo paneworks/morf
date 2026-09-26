@@ -181,23 +181,24 @@ local local_state = {
   gamemode = morf.signal("caelestia.utilities.gamemode", false),
 }
 
---- The VPNs that are up: NetworkManager's, and the mesh ones by their
---- links (no command run), by name.
-function M.vpn_names()
+--- The VPNs of `kind` that are up, by name: the mesh ones and the tunnel
+--- apps by their links (no command run), and for tunnels NetworkManager's
+--- own VPN and WireGuard profiles.
+function M.vpn_names(kind)
   local names = {}
   local n = services.net
-  if n and n.state.available then
+  local ok, vpns = pcall(require, "lib.vpns")
+  if kind == "tunnel" and n and n.state.available then
     local model = n.state.vpn_connections
     for i = 1, model:len() do
       local v = model:get(i)
-      if v.active and not require("net_pages").is_mesh_link(v.id) then names[#names + 1] = v.id end
+      if v.active and not (ok and vpns.is_mesh_link(v.id)) then names[#names + 1] = v.id end
     end
   end
-  local ok, vpns = pcall(require, "lib.vpns")
   if ok then
     -- A link is read, not watched: re-read as the network changes.
     if n and n.state.available then n.state.devices:len() end
-    for _, name in ipairs(vpns.links()) do names[#names + 1] = name end
+    for _, name in ipairs(vpns.links(kind)) do names[#names + 1] = name end
   end
   return names
 end
@@ -335,14 +336,23 @@ M.TOGGLES = {
     end,
   },
   {
-    -- VPNs: NetworkManager's and the mesh ones; ">" (or a click) for each.
-    id = "vpn", icon = "vpn_lock", name = "VPN", detail = "vpn",
-    on = function() return #M.vpn_names() > 0 end,
-    set = function() M.detail:set("vpn") end,
+    -- Mesh VPNs: one's own machines (NetBird, Tailscale, ZeroTier).
+    id = "mesh", icon = "hub", name = "Mesh", detail = "mesh",
+    on = function() return #M.vpn_names("mesh") > 0 end,
+    set = function() M.detail:set("mesh") end,
     status = function()
-      local names = M.vpn_names()
-      if #names == 0 then return "Off" end
-      return table.concat(names, ", ")
+      local names = M.vpn_names("mesh")
+      return #names == 0 and "Off" or table.concat(names, ", ")
+    end,
+  },
+  {
+    -- Tunnel VPNs: out to the internet through elsewhere (Mullvad, Proton).
+    id = "tunnel", icon = "vpn_lock", name = "Tunnel", detail = "tunnel",
+    on = function() return #M.vpn_names("tunnel") > 0 end,
+    set = function() M.detail:set("tunnel") end,
+    status = function()
+      local names = M.vpn_names("tunnel")
+      return #names == 0 and "Off" or table.concat(names, ", ")
     end,
   },
   {
@@ -606,7 +616,8 @@ M.DETAILS = {
   { key = "power", name = "Power", build = function(w, h) return require("power_page").page(w, h) end },
   { key = "bar", name = "Bar", build = function(w, h) return require("bar_page").page(w, h) end },
   { key = "wired", name = "Wired", build = function(w, h) return require("net_pages").wired_page(w, h) end },
-  { key = "vpn", name = "VPN", build = function(w, h) return require("net_pages").vpn_page(w, h, M.detail) end },
+  { key = "mesh", name = "Mesh", build = function(w, h) return require("net_pages").vpn_page("mesh", w, h, M.detail) end },
+  { key = "tunnel", name = "Tunnel", build = function(w, h) return require("net_pages").vpn_page("tunnel", w, h, M.detail) end },
 }
 function M.page(w, h)
   local main = ui.Item {
