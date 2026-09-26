@@ -214,6 +214,6 @@ function M.build(ctx)
 end
 
 -- Built as the module loads, with its own instruction budget.
-M.page = M.build(require("dashboard_state").context(4))
+M.page = M.build(require("dashboard_state").context(5))
 
 return M

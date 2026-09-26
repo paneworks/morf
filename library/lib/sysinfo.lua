@@ -548,17 +548,60 @@ local function sample_battery()
         full = charge_full and charge_full * voltage
         rate = current and current * voltage
       end
+      -- As designed, for the health: energy_full_design, or the charge's
+      -- at the design voltage (else the present one).
+      local design = number_at(base .. "/energy_full_design")
+      if not design then
+        local charge_design = number_at(base .. "/charge_full_design")
+        local v_design = (number_at(base .. "/voltage_min_design") or 0) / 1e6
+        if v_design <= 0 then v_design = voltage end
+        design = charge_design and charge_design * v_design
+      end
+      local status = text_at(base .. "/status") or "Unknown"
+      local temp = number_at(base .. "/temp")
+      local cycles = number_at(base .. "/cycle_count")
+      -- The kinds of charging it knows ("[Trickle] Fast Standard ..."), the
+      -- bracketed one on.
+      local modes, mode = {}, nil
+      for word in (text_at(base .. "/charge_types") or ""):gmatch("%S+") do
+        local on = word:match("^%[(.+)%]$")
+        modes[#modes + 1] = on or word
+        if on then mode = on end
+      end
       local battery = {
         name = supply.name,
-        status = text_at(base .. "/status") or "Unknown",
+        status = status,
         capacity = number_at(base .. "/capacity"),
         energy = now and now / 1e6 or nil,         -- Wh
         energy_full = full and full / 1e6 or nil,  -- Wh
+        energy_design = design and design / 1e6 or nil, -- Wh
         power = rate and math.abs(rate) / 1e6 or nil, -- W
+        -- Signed: negative while it drains.
+        rate = rate and (status == "Discharging" and -1 or 1) * math.abs(rate) / 1e6 or nil,
+        voltage = voltage > 0 and voltage or nil,  -- V
+        voltage_design = (number_at(base .. "/voltage_min_design") or 0) / 1e6,
+        temperature = temp and temp / 10 or nil,   -- °C (the driver's tenths)
+        cycles = (cycles and cycles > 0) and cycles or nil,
+        vendor = text_at(base .. "/manufacturer") or "",
+        model = text_at(base .. "/model_name") or "",
+        serial = text_at(base .. "/serial_number") or "",
+        technology = text_at(base .. "/technology") or "",
+        level = text_at(base .. "/capacity_level") or "",
+        charge_limit = number_at(base .. "/charge_control_end_threshold"),
+        charge_start = number_at(base .. "/charge_control_start_threshold"),
+        charge_modes = modes, charge_mode = mode,
       }
       if not battery.capacity and now and full and full > 0 then
         battery.capacity = 100 * now / full
       end
+      if battery.energy_full and battery.energy_design and battery.energy_design > 0 then
+        battery.health = math.min(100, 100 * battery.energy_full / battery.energy_design)
+      end
+      local key = "bat:" .. supply.name
+      ring(key .. ":percent").push(battery.capacity or 0)
+      ring(key .. ":power").push(battery.power or 0)
+      ring(key .. ":voltage").push(battery.voltage or 0)
+      ring(key .. ":temperature").push(battery.temperature or 0)
       out.batteries[#out.batteries + 1] = battery
       energy_now = energy_now + (now or 0)
       energy_full = energy_full + (full or 0)
@@ -1028,7 +1071,7 @@ local SAMPLERS = {
   temperatures = { sample_temperatures, 5000 },
   gpu = { sample_gpu, 2000 },
   network = { sample_network, 2000 },
-  battery = { sample_battery, 30000 },
+  battery = { sample_battery, 3000 },
   backlight = { sample_backlight, 5000 },
   system = { sample_system, 60000 },
 }
@@ -1132,7 +1175,7 @@ local FEEDS = { cpu = "cpu", load = "cpu", memory = "memory", swap = "memory",
 --- `rx:wlan0`, `tx:wlan0`, `fan0`.
 local PREFIXED = { { "^core%d+$", "cpu" }, { "^gpu:", "gpu" }, { "^gpumem:", "gpu" },
   { "^gpuenc:", "gpu" }, { "^gpudec:", "gpu" }, { "^disk:", "drives" },
-  { "^rx:", "network" }, { "^tx:", "network" }, { "^fan%d+$", "fans" } }
+  { "^rx:", "network" }, { "^tx:", "network" }, { "^fan%d+$", "fans" }, { "^bat:", "battery" } }
 function sysinfo.history(name)
   local feed = FEEDS[name]
   for _, rule in ipairs(PREFIXED) do

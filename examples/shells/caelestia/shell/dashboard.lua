@@ -31,16 +31,18 @@ local PAD, GAP = 16, 12
 -- field under the pages (kit.collect): they bud out as the dashboard opens
 -- or a tab comes in, fuse into one another while they move, and pull apart
 -- as they settle.
-local LAYERS = { {}, {}, {}, {} }
+local LAYERS = { {}, {}, {}, {}, {} }
 kit.collect(LAYERS[2]) require("dashboard_media")
 kit.collect(LAYERS[3]) require("dashboard_performance")
-kit.collect(LAYERS[4]) require("dashboard_weather")
+kit.collect(LAYERS[4]) require("dashboard_battery")
+kit.collect(LAYERS[5]) require("dashboard_weather")
 kit.collect(LAYERS[1])
 -- Each tab's page (the panel less its padding and the tabs).
 local PAGE = {
   { 840, 439 },
   { require("dashboard_media").WIDTH, require("dashboard_media").HEIGHT },
   { require("dashboard_performance").WIDTH, require("dashboard_performance").HEIGHT },
+  { require("dashboard_battery").WIDTH, require("dashboard_battery").HEIGHT },
   { require("dashboard_weather").WIDTH, require("dashboard_weather").HEIGHT },
 }
 local TABS_H = 68            -- icons, labels, indicator and hairline
@@ -71,6 +73,7 @@ local TABS = {
   { name = "Dashboard", icon = "dashboard" },
   { name = "Media", icon = "queue_music" },
   { name = "Performance", icon = "speed" },
+  { name = "Battery", icon = "battery_charging_full" },
   { name = "Weather", icon = "cloud" },
 }
 
@@ -623,6 +626,7 @@ local pages = {
   dashboard_tab(),
   require("dashboard_media").page,
   require("dashboard_performance").page,
+  require("dashboard_battery").page,
   require("dashboard_weather").page,
 }
 kit.collect(nil)

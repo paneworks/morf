@@ -439,63 +439,29 @@ end
 
 -- ------------------------------------------------------------------- power --
 
--- The battery and the power profile, as the bar's power popout had them.
-local PROFILES = {
-  { id = "power-saver", icon = "energy_savings_leaf", name = "Power saver" },
-  { id = "balanced", icon = "balance", name = "Balanced" },
-  { id = "performance", icon = "rocket_launch", name = "Performance" },
-}
-local POWER_H = 124
+-- The battery, as one row: its charge and state, and a ">" to the Power
+-- page (utilities' detail "power"), where the profile, the battery's health
+-- and the rest of power live.
+local POWER_H = 64
 
 local function power()
-  local function up() return services.upower end
-  local function active()
-    local u = up()
-    local a = u and u.state.available and u.state.profiles.active or ""
-    -- Without power-profiles-daemon the machine runs balanced.
-    return a == "" and "balanced" or a
-  end
   local function battery()
-    local u = up()
+    local u = services.upower
     local d = u and u.state.available and u.state.display or {}
     return d.present and d or nil
   end
-  local buttons = {}
-  for _, p in ipairs(PROFILES) do
-    local function on() return active() == p.id end
-    local area
-    area = ui.MouseArea {
-      id = "utilities-profile-" .. p.id,
-      width = (CARD_W - 32 - 16) / 3, height = 44, cursor = "pointer",
-      on_clicked = function()
-        local u = up()
-        if dry_run() then morf.log("info", "caelestia: power profile " .. p.id .. " (dry run)") return end
-        if u then pcall(u.set_profile, p.id) end
-      end,
-      ui.Rect {
-        anchors = { fill = true },
-        radius = function() return on() and 12 or 22 end,
-        color = function()
-          local base = on() and C.primary or C.surfaceContainerHighest
-          if area and area.hovered then return base:mix(on() and C.onPrimary or C.onSurface, 0.08) end
-          return base
-        end,
-        behavior = { color = { duration = theme.duration.small }, radius = kit.spring(260, 16) },
-      },
-      ui.Row {
-        anchors = { center_in = true }, gap = 6, align = "center",
-        kit.icon(p.icon, 20, function() return on() and C.onPrimary or C.onSurfaceVariant end),
-        kit.text {
-          text = p.name, font_size = theme.size.small,
-          color = function() return on() and C.onPrimary or C.onSurface end,
-        },
-      },
-    }
-    buttons[#buttons + 1] = area
-  end
-  return kit.card {
+  local area
+  area = ui.MouseArea {
     id = "utilities-power",
-    width = CARD_W, height = POWER_H, radius = M.RADIUS,
+    width = CARD_W, height = POWER_H, cursor = "pointer",
+    on_clicked = function() M.detail:set("power") end,
+    kit.card {
+      anchors = { fill = true }, radius = M.RADIUS,
+      color = function()
+        local base = C.surfaceContainer
+        return (area and area.hovered) and base:mix(C.onSurface, 0.04) or base
+      end,
+    },
     kit.icon(function()
       local b = battery()
       if not b then return "power" end
@@ -505,10 +471,10 @@ local function power()
       if pct > 50 then return "battery_5_bar" end
       if pct > 20 then return "battery_3_bar" end
       return "battery_alert"
-    end, 22, function() return C.onSurfaceVariant end, { x = 16, y = 17 }),
+    end, 24, function() return C.primary end, { x = 18, anchors = { vertical_center = true }, fill = true }),
     kit.text {
       id = "utilities-battery",
-      x = 46, y = 16,
+      x = 54, anchors = { vertical_center = true },
       text = function()
         local b = battery()
         if not b then return "On mains power" end
@@ -517,8 +483,10 @@ local function power()
       end,
       font_size = theme.size.large,
     },
-    ui.Row { x = 16, y = 62, gap = 8, table.unpack(buttons) },
+    kit.icon("chevron_right", 24, function() return C.onSurfaceVariant end,
+      { anchors = { right = true, right_margin = 16, vertical_center = true } }),
   }
+  return area
 end
 
 -- -------------------------------------------------------------------- page --
@@ -543,6 +511,7 @@ M.DETAILS = {
   { key = "bluetooth", name = "Bluetooth", build = function(w, h) return require("connectivity").bluetooth_page(w, h) end },
   { key = "sound", name = "Sound", build = function(w, h) return require("sound_page").output_page(w, h) end },
   { key = "microphone", name = "Microphone", build = function(w, h) return require("sound_page").input_page(w, h) end },
+  { key = "power", name = "Power", build = function(w, h) return require("power_page").page(w, h) end },
 }
 function M.page(w, h)
   local main = ui.Item {
