@@ -44,6 +44,19 @@ pub use model::{
     Update,
 };
 
+/// How long a monitor holds what it measured before handing it on.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MonitorDelay {
+    /// At once.
+    None,
+    /// This many milliseconds.
+    Fixed(f32),
+    /// As long as the device it listens to takes to play what it is given
+    /// (a Bluetooth headset's quarter of a second), less the analysis's own
+    /// lag; following the default output when that is what it listens to.
+    Device,
+}
+
 /// Something asked of the server.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Command {
@@ -74,6 +87,8 @@ pub enum Command {
         bands: usize,
         /// Listen for beats and a tempo as well.
         beat: bool,
+        /// How long readings and beats are held before they are handed on.
+        delay: MonitorDelay,
     },
     StopMonitor {
         monitor: u64,
@@ -303,6 +318,20 @@ impl Audio {
         bands: usize,
         beat: bool,
     ) -> u64 {
+        self.monitor_delayed(device, rate_hz, bands, beat, MonitorDelay::None)
+    }
+
+    /// [`Audio::monitor_beats`], with what it measures held back by `delay`
+    /// -- so a picture of the sound lands when the sound is heard, not when
+    /// it leaves for a device that takes a quarter of a second to play it.
+    pub fn monitor_delayed(
+        &mut self,
+        device: Option<ObjectId>,
+        rate_hz: f32,
+        bands: usize,
+        beat: bool,
+        delay: MonitorDelay,
+    ) -> u64 {
         let monitor = self.next_monitor;
         self.next_monitor += 1;
         self.control.send(Command::StartMonitor {
@@ -315,6 +344,7 @@ impl Audio {
             },
             bands: bands.min(dsp::MAX_BANDS),
             beat,
+            delay,
         });
         monitor
     }

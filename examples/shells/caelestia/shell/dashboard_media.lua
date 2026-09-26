@@ -46,7 +46,10 @@ local function listen(on)
     local clock = morf.elapsed_timer()
     local last = clock:elapsed_ms()
     local ok, m = pcall(morf.audio.monitor, {
-      rate_hz = 30, bands = 48,
+      -- Held back as long as the output takes to play it (a Bluetooth
+      -- headset's quarter of a second), so the ring moves with what is
+      -- heard rather than ahead of it.
+      rate_hz = 60, bands = 48, delay = "device",
       on_level = function(_, _, bands)
         local now = clock:elapsed_ms()
         local dt = (now - last) / 1000

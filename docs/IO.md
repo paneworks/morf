@@ -335,7 +335,7 @@ configuration what it measured, between frames:
 
 ```lua
 local meter = morf.audio.monitor {
-  device = nil, rate_hz = 30, bands = 24,
+  device = nil, rate_hz = 30, bands = 24, delay = "device",
   on_level = function(left, right, bands) end,   -- peaks 0..1, and band energies 0..1
   beat = true,
   on_beat = function(strength) pulse:set(strength) end,
@@ -346,7 +346,11 @@ meter:stop()
 ```
 
 `on_level` runs at most once a frame with the loudest peak since the last
-one. With `beat = true` the monitor also listens for beats (then
+one. `delay` holds what the monitor measured back before handing it on:
+milliseconds, or `"device"` for as long as the device takes to play what it
+is given -- a Bluetooth headset's quarter of a second -- so a picture of the
+music lands when the music is heard, and follows the default output as it
+changes. With `beat = true` the monitor also listens for beats (then
 `on_level` may be left out): `on_beat(strength)` runs for every beat, as
 soon as the loop wakes for it, `strength` being 0 to 1 against the beats
 of the last few seconds; `on_tempo(bpm, confidence)` runs when the tempo

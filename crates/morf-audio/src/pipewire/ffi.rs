@@ -33,6 +33,8 @@ pub const PARAM_PROPS: u32 = 2;
 pub const PARAM_ENUM_FORMAT: u32 = 3;
 pub const PARAM_FORMAT: u32 = 4;
 pub const PARAM_ROUTE: u32 = 13;
+/// SPA_PARAM_Latency: how long a node takes to play (or capture) what passes.
+pub const PARAM_LATENCY: u32 = 15;
 
 /// `enum pw_direction` / `enum spa_direction`.
 pub const DIRECTION_INPUT: u32 = 0;

@@ -26,7 +26,7 @@
 mod ffi;
 pub(crate) mod pod;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ffi::{CString, c_char, c_int, c_void};
 use std::ptr;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -36,8 +36,8 @@ use std::time::{Duration, Instant};
 use crate::beat::BeatEvent;
 use crate::dsp::Meter;
 use crate::{
-    Backend, Beat, Command, Control, Device, DeviceKind, Direction, Events, Level, ObjectId,
-    Stream, Tempo, Update,
+    Backend, Beat, Command, Control, Device, DeviceKind, Direction, Events, Level, MonitorDelay,
+    ObjectId, Stream, Tempo, Update,
 };
 use ffi::*;
 use pod::Pod;
@@ -394,6 +394,9 @@ struct Node {
     volumes: Vec<f32>,
     muted: bool,
     reported: Option<Update>,
+    /// How long it takes to play what it is given, from its Latency param
+    /// (the input side of a sink): 250 ms and more for a Bluetooth headset.
+    latency: Duration,
 }
 
 struct Route {
@@ -422,7 +425,41 @@ struct Monitor {
     stream: *mut c_void,
     hook: SpaHook,
     meter: Meter,
+    /// The device it listens to, or none for the default output.
+    device: Option<u32>,
+    delay: MonitorDelay,
+    /// What `delay` comes to now.
+    hold: Duration,
+    /// Measured, and waiting for its time.
+    held: VecDeque<(Instant, Update)>,
 }
+
+impl Monitor {
+    /// Hands `update` on when its delay has passed.
+    fn emit(&mut self, update: Update) {
+        if self.hold.is_zero() && self.held.is_empty() {
+            self.events.send(update);
+        } else {
+            self.held.push_back((Instant::now() + self.hold, update));
+        }
+    }
+
+    /// Hands on whatever has waited long enough. Samples arrive every
+    /// quantum (a few milliseconds) while anything plays, which is the
+    /// clock this runs on.
+    fn release(&mut self) {
+        let now = Instant::now();
+        while self.held.front().is_some_and(|(due, _)| *due <= now) {
+            if let Some((_, update)) = self.held.pop_front() {
+                self.events.send(update);
+            }
+        }
+    }
+}
+
+/// The band analysis looks at 2048 frames: at 48 kHz its picture is of
+/// sound about 21 ms old already, which a device's delay need not repeat.
+const ANALYSIS_LAG: Duration = Duration::from_millis(21);
 
 struct Session {
     pw: Arc<Pw>,
@@ -588,6 +625,10 @@ unsafe extern "C" fn on_node_param(
             && let Some(value) = pod::read(value)
         {
             (*session).node_props(id, &value);
+        } else if param == PARAM_LATENCY
+            && let Some(value) = pod::read(value)
+        {
+            (*session).node_latency(id, &value);
         }
     }
 }
@@ -698,8 +739,9 @@ unsafe extern "C" fn on_stream_param(data: *mut c_void, id: u32, value: *const S
 /// Reports what the meter's beat tracker heard, if it has one.
 fn send_beats(monitor: &mut Monitor) {
     let id = monitor.id;
-    for event in monitor.meter.beats() {
-        monitor.events.send(match event {
+    let events: Vec<BeatEvent> = monitor.meter.beats().collect();
+    for event in events {
+        monitor.emit(match event {
             BeatEvent::Beat { strength } => Update::Beat(Beat {
                 monitor: id,
                 strength,
@@ -734,14 +776,16 @@ unsafe extern "C" fn on_stream_process(data: *mut c_void) {
                     let samples =
                         std::slice::from_raw_parts(start.cast::<f32>(), size as usize / 4);
                     if let Some(reading) = monitor.meter.push(samples) {
-                        monitor.events.send(Update::Level(Level {
-                            monitor: monitor.id,
+                        let id = monitor.id;
+                        monitor.emit(Update::Level(Level {
+                            monitor: id,
                             left: reading.left,
                             right: reading.right,
                             bands: reading.bands,
                         }));
                     }
                     send_beats(monitor);
+                    monitor.release();
                 }
             }
         }
@@ -813,8 +857,8 @@ impl Session {
                                 add_listener(object, hook, &NODE_EVENTS, data);
                             }
                             if let Some(subscribe) = methods.subscribe_params {
-                                let mut ids = [PARAM_PROPS];
-                                subscribe(object, ids.as_mut_ptr(), 1);
+                                let mut ids = [PARAM_PROPS, PARAM_LATENCY];
+                                subscribe(object, ids.as_mut_ptr(), 2);
                             }
                         },
                     )
@@ -836,6 +880,7 @@ impl Session {
                         volumes: Vec::new(),
                         muted: false,
                         reported: None,
+                        latency: Duration::ZERO,
                     },
                 );
                 if this.ready && this.pending_sync.is_none() {
@@ -1004,6 +1049,63 @@ impl Session {
         self.report(id);
     }
 
+    /// A node's Latency param: the input side of a sink says how long what
+    /// it is given takes to be heard.
+    fn node_latency(&mut self, id: u32, value: &Pod) {
+        // SPA_PARAM_LATENCY_direction and _maxNs.
+        const DIRECTION: u32 = 1;
+        const MAX_NS: u32 = 7;
+        if value.property(DIRECTION).and_then(Pod::as_id) != Some(DIRECTION_INPUT) {
+            return;
+        }
+        let ns = match value.property(MAX_NS) {
+            Some(Pod::Long(ns)) => (*ns).max(0) as u64,
+            Some(Pod::Int(ns)) => (*ns).max(0) as u64,
+            _ => return,
+        };
+        let Some(node) = self.nodes.get_mut(&id) else {
+            return;
+        };
+        let latency = Duration::from_nanos(ns);
+        if node.latency != latency {
+            node.latency = latency;
+            self.refresh_monitor_delays();
+        }
+    }
+
+    /// Works out again how long each monitor holds what it measured: a
+    /// device's delay moves when it changes codec, and the default output
+    /// moves when a headset connects.
+    fn refresh_monitor_delays(&mut self) {
+        let default = self.default_sink.clone();
+        let default_node = default.clone().and_then(|name| {
+            self.nodes
+                .iter()
+                .find(|(_, node)| node.props.get("node.name") == Some(&name))
+                .map(|(id, _)| *id)
+        });
+        for monitor in self.monitors.values_mut() {
+            monitor.hold = match monitor.delay {
+                MonitorDelay::None => Duration::ZERO,
+                MonitorDelay::Fixed(ms) => Duration::from_secs_f32(ms.clamp(0.0, 5000.0) / 1000.0),
+                MonitorDelay::Device => monitor
+                    .device
+                    .or(default_node)
+                    .and_then(|id| self.nodes.get(&id))
+                    .map_or(Duration::ZERO, |node| node.latency.saturating_sub(ANALYSIS_LAG)),
+            };
+            if std::env::var_os("MORF_AUDIO_LOG").is_some() {
+                eprintln!(
+                    "morf: audio: monitor {} holds {} ms (default {:?} = node {:?})",
+                    monitor.id,
+                    monitor.hold.as_millis(),
+                    self.default_sink,
+                    default_node
+                );
+            }
+        }
+    }
+
     fn node_props(&mut self, id: u32, value: &Pod) {
         let Some(node) = self.nodes.get_mut(&id) else {
             return;
@@ -1063,6 +1165,7 @@ impl Session {
             _ => return,
         }
         self.report_defaults();
+        self.refresh_monitor_delays();
     }
 
     fn report_defaults(&mut self) {
@@ -1204,7 +1307,15 @@ impl Session {
                 rate_hz,
                 bands,
                 beat,
-            } => self.start_monitor(monitor, device, rate_hz, bands, beat),
+                delay,
+            } => {
+                self.start_monitor(monitor, device, rate_hz, bands, beat);
+                if let Some(started) = self.monitors.get_mut(&monitor) {
+                    started.device = device;
+                    started.delay = delay;
+                }
+                self.refresh_monitor_delays();
+            }
             Command::StopMonitor { monitor } => {
                 if let Some(monitor) = self.monitors.remove(&monitor) {
                     // SAFETY: the stream is ours; destroying it unhooks the
@@ -1381,6 +1492,10 @@ impl Session {
                 stream,
                 hook: SpaHook::zeroed(),
                 meter: Meter::new(rate_hz, bands).with_beats(beat),
+                device: None,
+                delay: MonitorDelay::None,
+                hold: Duration::ZERO,
+                held: VecDeque::new(),
             });
             let data = (&raw mut *monitor).cast::<c_void>();
             (self.pw.stream_add_listener)(stream, &raw mut monitor.hook, &STREAM_EVENTS, data);

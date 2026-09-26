@@ -529,6 +529,20 @@ pub(crate) fn install_audio_api<'gc>(
                     value => Some(object_id(value, "monitor device")?),
                 };
                 let rate_hz = table_number(ctx, options, "rate_hz", 30.0).map_err(HostError)?;
+                // `delay`: milliseconds, or "device" for as long as the device
+                // takes to play what it is given (a Bluetooth headset's 250 ms).
+                let delay = match options.get_value(ctx, "delay") {
+                    LuaValue::Nil => morf_audio::MonitorDelay::None,
+                    LuaValue::Integer(ms) => morf_audio::MonitorDelay::Fixed(ms as f32),
+                    LuaValue::Number(ms) => morf_audio::MonitorDelay::Fixed(ms as f32),
+                    LuaValue::String(word) if word.as_bytes() == b"device" => morf_audio::MonitorDelay::Device,
+                    _ => {
+                        return Err(HostError(
+                            "monitor delay must be milliseconds or \"device\"".into(),
+                        )
+                        .into());
+                    }
+                };
                 let bands = table_number(ctx, options, "bands", 0.0).map_err(HostError)?;
                 if !(0.0..=morf_audio::dsp::MAX_BANDS as f64).contains(&bands) {
                     return Err(HostError(format!(
@@ -543,9 +557,13 @@ pub(crate) fn install_audio_api<'gc>(
                     if host.monitors.len() >= MAX_MONITORS {
                         return Err(HostError("too many audio monitors running".into()).into());
                     }
-                    let id =
-                        host.started()
-                            .monitor_beats(device, rate_hz as f32, bands as usize, beat);
+                    let id = host.started().monitor_delayed(
+                        device,
+                        rate_hz as f32,
+                        bands as usize,
+                        beat,
+                        delay,
+                    );
                     host.monitors.insert(id, handlers);
                     id
                 };
