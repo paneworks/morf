@@ -82,6 +82,11 @@ return settings.open {
       -- How long the numbered bud stays out after a switch, in ms.
       hold = 800,
     },
+    keyboard = {
+      -- Up by itself when a program asks for text and no real keyboard
+      -- is attached (a tablet, a detached keyboard); by hand either way.
+      auto = true,
+    },
     services = {
       weather_location = "",
       imperial = false,

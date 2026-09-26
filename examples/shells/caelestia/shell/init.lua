@@ -74,6 +74,7 @@ local notifs = require("notifs")
 local sidebar = require("sidebar")
 local leftbar = require("leftbar")
 local capture = require("capture")
+local keyboard = require("keyboard")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -235,6 +236,8 @@ morf.ipc.leftbar = verb(leftbar.drawer)
 -- `record [WHAT]` (again: stop) take one at once, of
 -- region, window or screen (the chosen one by default).
 morf.ipc.capture = verb(capture.drawer)
+-- `keyboard [how]`: the on-screen keyboard, for a key to bind.
+morf.ipc.keyboard = verb(keyboard.drawer)
 morf.ipc.screenshot = function(what)
   if not here() then return nil end
   return capture.shoot(what)
