@@ -170,42 +170,6 @@ local function switch(spec)
   return area
 end
 
-local function keep_awake()
-  local chip_text = kit.text {
-    text = function() return "Active since " .. awake_since:get() end,
-    font_size = theme.size.small, color = function() return C.onPrimary end,
-    anchors = { center_in = true },
-  }
-  return kit.card {
-    id = "utilities-awake",
-    width = CARD_W, radius = M.RADIUS, clip = true,
-    height = function() return M.awake:get() and 128 or 86 end,
-    behavior = { height = motion },
-    ui.Item {
-      width = CARD_W, height = 86,
-      badge("coffee", function() return M.awake:get() end),
-      heading("Keep awake", function()
-        return M.awake:get() and "Preventing sleep mode" or "Normal power management"
-      end, 250),
-      switch {
-        id = "utilities-awake-switch",
-        anchors = { right = true, right_margin = 16, vertical_center = true },
-        on = function() return M.awake:get() end,
-        on_toggled = M.set_awake,
-      },
-    },
-    ui.Rect {
-      id = "utilities-awake-chip",
-      x = 16, y = 86, height = 26, radius = 13,
-      width = function() return (chip_text.layout_width or 150) + 24 end,
-      color = function() return C.primary end,
-      opacity = function() return M.awake:get() and 1 or 0 end,
-      behavior = { opacity = { duration = theme.duration.small } },
-      chip_text,
-    },
-  }
-end
-
 -- ----------------------------------------------------------------- toggles --
 
 -- Off the machine's services (none in a sandbox) a toggle keeps its own
@@ -300,6 +264,43 @@ M.TOGGLES = {
     end,
   },
   {
+    -- The battery: its charge, and a ">" to the Power page (profiles,
+    -- health, how it charges). A tap opens the page too.
+    id = "battery", name = "Battery", detail = "power",
+    icon = function()
+      local u = services.upower
+      local d = u and u.state.available and u.state.display or {}
+      if not d.present then return "power" end
+      if d.charging then return "battery_charging_full" end
+      local pct = d.percentage or 0
+      if pct > 90 then return "battery_full" end
+      if pct > 50 then return "battery_5_bar" end
+      if pct > 20 then return "battery_3_bar" end
+      return "battery_alert"
+    end,
+    on = function()
+      local u = services.upower
+      local d = u and u.state.available and u.state.display or {}
+      return d.charging == true
+    end,
+    set = function() M.detail:set("power") end,
+    status = function()
+      local u = services.upower
+      local d = u and u.state.available and u.state.display or {}
+      if not d.present then return "On mains power" end
+      return ("%d%%%s"):format(math.floor((d.percentage or 0) + 0.5), d.charging and ", charging" or "")
+    end,
+  },
+  {
+    id = "awake", icon = "coffee", name = "Keep awake",
+    on = function() return M.awake:get() end,
+    set = function(now) M.set_awake(now) end,
+    status = function()
+      if not M.awake:get() then return "Off" end
+      return "Since " .. awake_since:get()
+    end,
+  },
+  {
     id = "settings", icon = "settings", fill = true, name = "Settings",
     status = function() return "Open" end,
     on = function() return false end,
@@ -326,7 +327,8 @@ M.detail = morf.signal("caelestia.settings.detail", "")
 
 local TILE_H, TILE_GAP = 60, 8
 local TILE_W = (CARD_W - 24 - TILE_GAP) / 2
-local TILES_H = 24 + 4 * TILE_H + 3 * TILE_GAP
+local TILE_ROWS = math.ceil(#M.TOGGLES / 2)
+local TILES_H = 24 + TILE_ROWS * TILE_H + (TILE_ROWS - 1) * TILE_GAP
 
 --- A quick setting as Android draws one: a tile with its icon, its name
 --- and how it is, filled when on. A click on it toggles it; the ">" at its
@@ -439,65 +441,13 @@ end
 
 -- ------------------------------------------------------------------- power --
 
--- The battery, as one row: its charge and state, and a ">" to the Power
--- page (utilities' detail "power"), where the profile, the battery's health
--- and the rest of power live.
-local POWER_H = 64
-
-local function power()
-  local function battery()
-    local u = services.upower
-    local d = u and u.state.available and u.state.display or {}
-    return d.present and d or nil
-  end
-  local area
-  area = ui.MouseArea {
-    id = "utilities-power",
-    width = CARD_W, height = POWER_H, cursor = "pointer",
-    on_clicked = function() M.detail:set("power") end,
-    kit.card {
-      anchors = { fill = true }, radius = M.RADIUS,
-      color = function()
-        local base = C.surfaceContainer
-        return (area and area.hovered) and base:mix(C.onSurface, 0.04) or base
-      end,
-    },
-    kit.icon(function()
-      local b = battery()
-      if not b then return "power" end
-      if b.charging then return "battery_charging_full" end
-      local pct = b.percentage or 0
-      if pct > 90 then return "battery_full" end
-      if pct > 50 then return "battery_5_bar" end
-      if pct > 20 then return "battery_3_bar" end
-      return "battery_alert"
-    end, 24, function() return C.primary end, { x = 18, anchors = { vertical_center = true }, fill = true }),
-    kit.text {
-      id = "utilities-battery",
-      x = 54, anchors = { vertical_center = true },
-      text = function()
-        local b = battery()
-        if not b then return "On mains power" end
-        local pct = math.floor((b.percentage or 0) + 0.5)
-        return ("Battery %d%%%s"):format(pct, b.charging and ", charging" or "")
-      end,
-      font_size = theme.size.large,
-    },
-    kit.icon("chevron_right", 24, function() return C.onSurfaceVariant end,
-      { anchors = { right = true, right_margin = 16, vertical_center = true } }),
-  }
-  return area
-end
-
 -- -------------------------------------------------------------------- page --
 
-local cards = { sliders(), toggles(), power(), keep_awake() }
+local cards = { sliders(), toggles() }
 
 --- The page's height: the cards and their gaps.
 function M.height()
-  local h = 3 * GAP + SLIDERS_H + TILES_H + POWER_H
-  h = h + (M.awake:get() and 128 or 86)
-  return h
+  return GAP + SLIDERS_H + TILES_H
 end
 
 

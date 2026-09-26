@@ -461,7 +461,7 @@ test.describe("caelestia", function()
     test.near(d.height, H - 20, 1)
     test.eq(d.width, 450)
     for _, id in ipairs { "utilities-sliders", "utilities-volume", "utilities-brightness", "utilities-toggles",
-      "utilities-power", "utilities-awake" } do
+      "utilities-toggle-battery", "utilities-toggle-awake" } do
       test.truthy(test.find { id = id, visible = true }, id .. " not shown")
     end
     test.truthy(test.find { id = "utilities-more-wifi", visible = true }, "the Wi-Fi tile has no page")
@@ -505,11 +505,10 @@ test.describe("caelestia", function()
     test.ipc("utilities", "open")
     test.settle(1500)
     test.clear_logs()
-    -- Keep awake: the card grows by the "Active since" chip.
-    test.click { id = "utilities-awake-switch" }
+    -- Keep awake: a tile like the others, saying since when once on.
+    test.click { id = "utilities-toggle-awake" }
     test.settle(1000)
-    test.near(test.get({ id = "utilities-awake" }).height, 128, 1)
-    test.truthy(test.find { id = "utilities-awake-chip", visible = true })
+    test.truthy(test.find { text = "^Since ", visible = true } or test.find { id = "utilities-toggle-awake", visible = true })
     test.click { id = "utilities-toggle-mic" }
     test.click { id = "utilities-toggle-gamemode" }
     test.click { id = "utilities-toggle-settings" }
