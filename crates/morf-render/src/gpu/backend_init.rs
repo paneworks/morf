@@ -205,6 +205,32 @@ async fn device_for(
     Ok(opened)
 }
 
+/// Says so, once and loudly, when the GPU found is not a Vulkan one on real
+/// hardware. The machine then has no Vulkan driver for its GPU (only another
+/// vendor's, or none), and morf falls back to OpenGL -- which cannot drive
+/// several outputs from their own threads -- or to a CPU renderer, which
+/// draws every pixel of every screen on the processor. Nothing else would
+/// tell the person why the shell is slow, hot or did not start.
+fn warn_if_not_vulkan(info: &wgpu::AdapterInfo) {
+    static SAID: std::sync::Once = std::sync::Once::new();
+    let software = info.device_type == wgpu::DeviceType::Cpu;
+    if info.backend == wgpu::Backend::Vulkan && !software {
+        return;
+    }
+    SAID.call_once(|| {
+        eprintln!(
+            "morf: gpu: drawing with {:?} on {} ({}){} -- no Vulkan driver for this \
+             machine's GPU was found. Install one (vulkan-intel, vulkan-radeon, or \
+             nvidia's): without it morf is slow{} and may not start on several screens.",
+            info.backend,
+            info.name,
+            info.driver,
+            if software { ", a CPU renderer" } else { "" },
+            if software { " and burns the processor" } else { "" },
+        );
+    });
+}
+
 async fn open_device(
     instance: &wgpu::Instance,
     surface: Option<&wgpu::Surface<'static>>,
@@ -218,6 +244,7 @@ async fn open_device(
         })
         .await
         .map_err(|error| GpuError(format!("no compatible GPU adapter: {error}")))?;
+    warn_if_not_vulkan(&adapter.get_info());
     let adapter_limits = adapter.limits();
     // Subpixel text blends each channel by its own coverage, which takes
     // a second fragment output to the blend unit. Asked for only where
