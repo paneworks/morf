@@ -7,8 +7,14 @@
 -- A session has one agent. While another holds the job (hyprpolkitagent,
 -- polkit-gnome) the authority refuses this one, and it asks again every
 -- minute, so it takes over as soon as the other is gone. `polkit.agent`
--- "off" leaves the job to the other for good. Every screen runs the shell
--- and the first to register is the agent, so the dialog opens there.
+-- "off" leaves the job to the other for good.
+--
+-- Every screen runs the shell, and one of them (`morf.primary()`) is the
+-- agent; the dialog opens on the screen in use. The agent tells every
+-- screen how each request stands (`morf.broadcast("polkit", "view", ...)`),
+-- the focused one draws it, and the answer goes back the same way to the
+-- one holding the request -- inside this process, through the shell's own
+-- IPC socket, never on a command line.
 --
 -- The badge says where it is: a slowly turning cookie while it asks, the
 -- loading shapes while the password is checked, a burst in the error
@@ -42,9 +48,11 @@ local typed = morf.signal("caelestia.polkit.typed", 0)
 local shake = morf.signal("caelestia.polkit.shake", 0)
 M.registered = morf.signal("caelestia.polkit.registered", false)
 
--- The live request, and the password: plain locals, never signals.
-local current
+-- The request this screen is showing, by id, and the password: plain
+-- locals, never signals.
+local viewing
 local password = ""
+local seen_failures = 0
 
 local function dry_run()
   local v = morf.env and morf.env("CAELESTIA_DRY_RUN")
@@ -66,18 +74,22 @@ local function clear()
   if keys then keys.text = "" end
 end
 
+-- To every screen, or to this one alone where there is no shell socket to
+-- broadcast through (a headless test).
+local send
+
 function M.submit()
-  if not current or M.phase:get() == "checking" or M.phase:get() == "done" then return end
+  if not viewing or M.phase:get() == "checking" or M.phase:get() == "done" then return end
   if password == "" then return end
   local answer = password
   clear()
   M.phase:set("checking")
   M.info:set("")
-  current.answer(answer)
+  send("answer", viewing, answer)
 end
 
 function M.cancel()
-  if current then current.cancel() end
+  if viewing then send("cancel", viewing) end
 end
 
 keys = ui.TextInput {
@@ -307,80 +319,155 @@ morf.effect("caelestia.polkit.open", function()
   end
 end)
 
--- -------------------------------------------------------------- the agent --
+-- --------------------------------------------------------------- the view --
 
-local function show(request)
-  current = request
-  M.request:set({
-    message = request.message ~= "" and request.message or "An application wants to do something that needs your password.",
-    action = request.action_id or "", user = request.user or "",
-    prompt = request.prompt or "", echo = request.echo == true,
-  })
-  if not M.drawer.open:get() then
+local here = require("services").here
+
+--- How a request stands, from the screen that holds it. The screen in use
+--- opens the dialog on a request it has not seen; the rest leave it be.
+local function view(id, message, action, user, prompt, phase, info, failures)
+  failures = tonumber(failures) or 0
+  local final = phase == "done" or phase == "refused"
+  if viewing ~= id then
+    if final or not here() then return end
+    viewing = id
+    seen_failures = 0
     clear()
-    M.phase:set("asking")
-    M.info:set("")
     -- The dashboard hangs from the same edge.
     local ok, dashboard = pcall(require, "dashboard")
     if ok and dashboard.drawer then dashboard.drawer.set(false) end
     M.drawer.set(true)
   end
+  M.request:set({
+    message = (message and message ~= "") and message or "An application wants to do something that needs your password.",
+    action = action or "", user = user or "", prompt = prompt or "",
+  })
+  M.phase:set(phase or "asking")
+  M.info:set(info or "")
+  if failures > seen_failures then
+    seen_failures = failures
+    M.shake()
+  end
+  if final then
+    viewing = nil
+    clear()
+    morf.timer(phase == "done" and 650 or 900, function()
+      if not viewing then
+        M.drawer.set(false)
+        M.request:set(false)
+        M.info:set("")
+      end
+    end, false)
+  end
 end
 
-local function done(ok, why)
-  current = nil
-  clear()
-  M.phase:set(ok and "done" or "refused")
-  if not ok and why and why ~= "" and not tostring(why):find("cancel") then M.info:set(tostring(why)) end
-  morf.timer(ok and 650 or 900, function()
-    if not current then
-      M.drawer.set(false)
-      M.request:set(false)
-      M.info:set("")
-    end
-  end, false)
+-- ------------------------------------------------------------ the holder --
+
+-- The requests this screen holds -- the agent's, or a demo's -- by id:
+-- `{ request, phase, info, failures }`.
+local held = {}
+local count = 0
+
+local function publish(id)
+  local entry = held[id]
+  if not entry then return end
+  local r = entry.request
+  send("view", id, r.message or "", r.action_id or "", r.user or "", r.prompt or "",
+    entry.phase, entry.info, entry.failures)
+  if entry.phase == "done" or entry.phase == "refused" then held[id] = nil end
+end
+
+--- Takes a request in and says how it stands; `request.id` is its id here.
+local function hold(request)
+  local id = request.id
+  if not id then
+    count = count + 1
+    id = tostring(morf.screens and morf.screens[1] and morf.screens[1].name or "") .. "." .. count
+    request.id = id
+  end
+  local entry = held[id]
+  if not entry then
+    entry = { request = request, phase = "asking", info = "", failures = 0 }
+    held[id] = entry
+  end
+  -- What PAM said: a prompt, or a line to show ("look at the camera").
+  if request.info and request.info ~= "" then
+    entry.info = request.info
+    request.info = nil
+  end
+  if request.prompt and entry.phase == "checking" then entry.phase = "asking" end
+  publish(id)
+end
+
+local function wrong(request)
+  local entry = held[request.id]
+  if not entry then return end
+  entry.phase, entry.info, entry.failures = "wrong", "Wrong password, try again", entry.failures + 1
+  publish(request.id)
+end
+
+local function finished(request, ok, why)
+  local entry = held[request.id]
+  if not entry then return end
+  entry.phase = ok and "done" or "refused"
+  entry.info = (not ok and why and not tostring(why):find("cancel")) and tostring(why) or ""
+  publish(request.id)
+end
+
+local function answer(id, pw)
+  local entry = held[id]
+  if not entry then return end
+  entry.phase, entry.info = "checking", ""
+  publish(id)
+  entry.request.answer(pw or "")
+end
+
+local function cancel(id)
+  local entry = held[id]
+  if entry then entry.request.cancel() end
+end
+
+--- Every screen's `polkit` verb, for what the screens say to each other.
+function M.message(kind, ...)
+  if kind == "view" then view(...)
+  elseif kind == "answer" then answer(...)
+  elseif kind == "cancel" then cancel(...) end
+end
+
+function send(kind, ...)
+  if morf.broadcast and morf.broadcast("polkit", kind, ...) then return end
+  M.message(kind, ...)
 end
 
 --- A request as polkit would send one, for trying the dialog out
---- (`morf ipc call polkit demo`, dry runs only): any password but "wrong"
---- is taken.
+--- (`morf ipc call polkit demo`): any password but "wrong" is taken, and
+--- it goes nowhere.
 function M.demo()
   local fake = { action_id = "org.freedesktop.systemd1.manage-units", user = morf.env("USER") or "you",
     message = "Authentication is required to start 'tor.service'.", prompt = "Password: " }
   function fake.answer(pw)
     morf.timer(900, function()
-      if pw == "wrong" then
-        M.phase:set("wrong")
-        M.info:set("Wrong password, try again")
-        M.shake()
-      else
-        done(true)
-      end
+      if pw == "wrong" then wrong(fake) else finished(fake, true) end
     end, false)
   end
-  function fake.cancel() done(false, "cancelled") end
-  show(fake)
+  function fake.cancel() finished(fake, false, "cancelled") end
+  hold(fake)
 end
+
+-- -------------------------------------------------------------- the agent --
 
 local agent
 local function register()
   if agent or config.get("polkit.agent") == "off" or dry_run() then return true end
+  -- One screen is the agent; the rest only ever draw.
+  if morf.primary and not morf.primary() then return false, "not the primary screen" end
   local ok, lib = pcall(require, "lib.polkit_agent")
   if not ok then return true end
   local served, a, why = pcall(lib.serve, {
     retries = RETRIES,
-    on_request = function(request)
-      -- A prompt or a message from PAM: the request as it now stands.
-      if request.info and request.info ~= "" then M.info:set(request.info) request.info = nil end
-      if request.prompt and M.phase:get() == "checking" then M.phase:set("asking") end
-      show(request)
-    end,
-    on_failure = function()
-      M.phase:set("wrong")
-      M.info:set("Wrong password, try again")
-      M.shake()
-    end,
-    on_done = function(_, ok2, reason) done(ok2, reason) end,
+    on_request = hold,
+    on_failure = wrong,
+    on_done = function(request, ok2, reason) finished(request, ok2, reason) end,
   })
   if served and a then
     agent = a
@@ -392,7 +479,7 @@ local function register()
 end
 
 -- A moment after the shell is up, and then every minute while another
--- agent has the job.
+-- agent has the job (or this screen becomes the primary one).
 local retry
 morf.timer(1500, function()
   local ok, why = register()

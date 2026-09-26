@@ -2,6 +2,7 @@
 
 mod api_animation;
 mod api_audio;
+mod api_broadcast;
 mod api_clipboard;
 mod api_color;
 mod api_color_hct;
@@ -107,6 +108,7 @@ mod window_geometry;
 mod window_methods;
 mod window_parse;
 
+pub use api_broadcast::set_shell_socket;
 pub use api_gamma::GammaRequest;
 pub use events::*;
 pub use ipc_table::IpcTable;

@@ -124,7 +124,14 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
     // and answers on a socket of its own, so a taken socket is only an
     // error once the file has shown it is not a lock.
     let (mut server, owner, taken) = match bind_shell_socket(&tx) {
-        Ok((server, owner)) => (Some(server), owner, None),
+        Ok((server, owner)) => {
+            // `morf.broadcast` sends through it: one output's shell calling
+            // every output's.
+            if let Ok(path) = socket_path() {
+                morf_lua::set_shell_socket(path);
+            }
+            (Some(server), owner, None)
+        }
         Err(error) => (None, 0, Some(error)),
     };
     let mut workers = BTreeMap::new();
