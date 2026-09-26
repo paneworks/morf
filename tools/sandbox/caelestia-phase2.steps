@@ -1,7 +1,7 @@
 # Phase 2 of the caelestia port: the dashboard's other tabs and the switch
 # between them, the launcher's pickers and calculator, the session menu, the
 # bar's popouts and the OSD -- shot and filmed the same way for caelestia on
-# Quickshell and for the morf port (MORF_CONFIG=examples/caelestia/init.lua).
+# Quickshell and for the morf port (MORF_CONFIG=examples/shells/caelestia/shell/init.lua).
 point 960 800; wait 1
 open dashboard; wait 1.5
 FILM_GEOMETRY="440,0 1040x700"

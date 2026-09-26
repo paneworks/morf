@@ -452,7 +452,7 @@ fn malformed_calls_raise() {
 #[test]
 fn panacea_proc_runs_and_streams_without_a_tick() {
     let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/panacea/proc-test.lua")
+        .join("../../examples/shells/panacea/shell/proc-test.lua")
         .to_string_lossy()
         .into_owned();
     let mut runtime = Runtime::default();

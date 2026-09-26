@@ -462,7 +462,7 @@ tree of bindings on the model, and `update(model, msg, send)` is the one
 place the model changes. `send(msg)` returns a handler; `send_with(fn)`
 builds the message from the handler's arguments; `dispatch(msg)` delivers
 one from code that is not a handler. A message that is a function runs
-and its return is the message. See `examples/polkit.lua`.
+and its return is the message. See `examples/demos/desktop/polkit.lua`.
 
 ### States
 
@@ -712,7 +712,7 @@ morf.window.popup { root = menu, blend = "srgb" }   -- or any window surface
 It is per surface, `"linear"` by default, and may change at any time; the
 surface rebuilds its pipelines when it does. Opaque colours, images and
 gradients' stops land on the same pixels either way — only the mixing
-differs, text's antialiasing included. `examples/blend-compare.lua` draws
+differs, text's antialiasing included. `examples/demos/sdf/blend-compare.lua` draws
 one design both ways.
 
 ### Gradients
@@ -915,7 +915,7 @@ ui.Text {
 }
 ```
 
-See `examples/font_axes.lua`.
+See `examples/demos/text/font_axes.lua`.
 
 Text is smoothed in subpixels (LCD, "ClearType") where that is safe, and
 in greyscale everywhere else. `morf.surface.subpixel_text` is `"auto"` by
@@ -1173,8 +1173,8 @@ at most 256 KiB a turn of the loop, so `yes` shares the loop with everything
 else; a frame is drawn only when the screen changed, and only the rows that
 changed are repainted. A runtime has at most 16 terminals (`MORF_LIMITS`
 `terminals=N`); destroying the node hangs its program up (`SIGHUP`), and a
-reload ends them all. `examples/terminal.lua` runs btop in a panel;
-`examples/fzf_launcher.lua` is an application launcher that is fzf.
+reload ends them all. `examples/demos/text/terminal.lua` runs btop in a panel;
+`examples/demos/text/fzf_launcher.lua` is an application launcher that is fzf.
 
 ### Images
 
@@ -1303,7 +1303,7 @@ A path that is not changing costs a texture lookup: what was drawn is kept
 under a key of everything that shaped its pixels. One whose numbers move is
 drawn again for each frame they move in, on the CPU, at its on-screen size —
 cheap for an icon or a gauge, worth knowing for a path the size of the
-screen. `examples/path.lua` has one of each.
+screen. `examples/demos/sdf/path.lua` has one of each.
 
 ### Fields
 
@@ -1385,7 +1385,7 @@ ui.Item {
 ```
 
 Tuck a closed drawer further out than the seam (`size + THICK + SEAM`),
-or the fillet of its far edge still dimples the frame. `examples/drawers.lua`
+or the fillet of its far edge still dimples the frame. `examples/demos/motion/drawers.lua`
 puts one on every edge, opened over IPC.
 
 ### Keys
@@ -1473,7 +1473,7 @@ ui.Repeater {
 }
 ```
 
-See `examples/exit.lua`.
+See `examples/demos/motion/exit.lua`.
 
 ### Hover and press
 
@@ -1576,7 +1576,7 @@ read until `offer:read(mime, function(bytes, err) end)` — `mime` may be
 `text` or `image` for the best of either. `morf.clipboard.set(data, mime)`
 owns the clipboard (`{ mime =, primary = true }` for options; no type means
 text), and `morf.clipboard.supported()` says whether data control is there
-once the shell has connected. `examples/clipboard-history.lua` is all of
+once the shell has connected. `examples/demos/desktop/clipboard-history.lua` is all of
 it together.
 
 ### Window size and closing

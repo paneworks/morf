@@ -154,8 +154,8 @@ fn the_example_types_into_the_field_it_focuses() {
     let mut runtime = Runtime::default();
     runtime
         .execute(
-            "examples/text-input.lua",
-            include_bytes!("../../../../../examples/text-input.lua"),
+            "examples/demos/text/text-input.lua",
+            include_bytes!("../../../../../examples/demos/text/text-input.lua"),
         )
         .unwrap();
     let root = runtime.scene().roots()[0];

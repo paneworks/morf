@@ -160,7 +160,7 @@ lua5.4 lib/m3shapes_gen.lua > lib/m3shapes_paths.lua`): resampling one outline
 costs about a fifth of a module's instruction budget, reading one nothing.
 `segments = false` keeps an outline as it was made, for a shape that is only
 drawn.
-`examples/m3shapes.lua` shows every one.
+`examples/demos/sdf/m3shapes.lua` shows every one.
 
 ## spectrum
 

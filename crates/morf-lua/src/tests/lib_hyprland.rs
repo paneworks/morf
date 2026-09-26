@@ -205,7 +205,7 @@ fn fake_hyprland(tag: &str) -> Instance {
 
 fn examples_script() -> String {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/hyprland-test.lua")
+        .join("../../library/hyprland-test.lua")
         .to_string_lossy()
         .into_owned()
 }

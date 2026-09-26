@@ -10,8 +10,8 @@ fn fluid_transform_example_animates_square_to_circle_in_rust() {
     let mut runtime = Runtime::default();
     runtime
         .execute(
-            "examples/fluid-transform.lua",
-            include_bytes!("../../../../examples/fluid-transform.lua"),
+            "examples/demos/motion/fluid-transform.lua",
+            include_bytes!("../../../../examples/demos/motion/fluid-transform.lua"),
         )
         .unwrap();
     runtime.tick_animations(Duration::from_secs(2)).unwrap();
@@ -51,8 +51,8 @@ fn morph_stack_example_combines_native_animation_and_geometry() {
     let mut runtime = Runtime::default();
     runtime
         .execute(
-            "examples/morph-stack.lua",
-            include_bytes!("../../../../examples/morph-stack.lua"),
+            "examples/demos/sdf/morph-stack.lua",
+            include_bytes!("../../../../examples/demos/sdf/morph-stack.lua"),
         )
         .unwrap();
     runtime.tick_animations(Duration::from_secs(2)).unwrap();
@@ -93,8 +93,8 @@ fn motion_lab_example_drives_loops_shapes_and_field_edges_in_rust() {
     let mut runtime = Runtime::default();
     runtime
         .execute(
-            "examples/motion-lab.lua",
-            include_bytes!("../../../../examples/motion-lab.lua"),
+            "examples/demos/motion/motion-lab.lua",
+            include_bytes!("../../../../examples/demos/motion/motion-lab.lua"),
         )
         .unwrap();
     let root = runtime.scene().roots()[0];
@@ -172,8 +172,8 @@ fn clipboard_history_example_keeps_copies_and_drops() {
     let mut runtime = Runtime::default();
     runtime
         .execute(
-            "examples/clipboard-history.lua",
-            include_bytes!("../../../../examples/clipboard-history.lua"),
+            "examples/demos/desktop/clipboard-history.lua",
+            include_bytes!("../../../../examples/demos/desktop/clipboard-history.lua"),
         )
         .unwrap();
     assert!(runtime.watches_clipboard());

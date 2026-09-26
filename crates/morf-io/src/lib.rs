@@ -25,7 +25,7 @@ pub use dbus_types::*;
 pub use files::*;
 pub use http::*;
 pub mod fs {
-    //! Filesystem operations; see [`crate::fsops`].
+    //! Filesystem operations: every function of the crate's `fsops`.
     pub use crate::fsops::*;
 }
 pub use ipc::*;

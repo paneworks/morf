@@ -1,6 +1,6 @@
 # sandbox
 
-Runs a shell under test -- morf with `examples/impasto`, upstream impasto on
+Runs a shell under test -- morf with `examples/shells/impasto`, upstream impasto on
 Quickshell, or caelestia-dots/shell on Quickshell, the last two as references
 -- inside a nested Hyprland that is itself a client of a headless cage,
 sealed off from the session of whoever runs it: private runtime dir and
@@ -94,6 +94,6 @@ HOME and stubs stay private. `EXTRA_FONTS=DIR` adds a font folder to the
 scratch HOME. `caelestia-show.steps` is a short tour of the caelestia port
 that then leaves the session to you until `TIMEOUT`:
 
-    VISIBLE=1 TIMEOUT=3600 MORF_CONFIG=examples/caelestia/init.lua \
+    VISIBLE=1 TIMEOUT=3600 MORF_CONFIG=examples/shells/caelestia/shell/init.lua \
       MORF_ENV="CAELESTIA_WALLPAPER=/path/to/wallpaper" \
       tools/sandbox/nested.sh morf show tools/sandbox/caelestia-show.steps

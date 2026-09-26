@@ -315,7 +315,7 @@ pub(crate) fn a_helper_function_survives_to_the_gpu() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_crt_effect_compiles_and_reworks_what_it_samples() {
-    // The shader from `examples/crt-terminal.lua`, which is the most demanding
+    // The shader from `examples/demos/render/crt-terminal.lua`, which is the most demanding
     // thing the language has been asked to emit in anger: six parameters, a
     // helper taking and returning a vector, five texture taps at computed
     // offsets, integer modulo on a coordinate derived from the resolution, and
@@ -405,7 +405,7 @@ pub(crate) fn a_crt_effect_compiles_and_reworks_what_it_samples() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_chromatic_effect_pulls_the_channels_apart() {
-    // The shader from `examples/sdf-blobs-chroma.lua`: a 32-bit hash for the
+    // The shader from `examples/demos/sdf/sdf-blobs-chroma.lua`: a 32-bit hash for the
     // tear, three texture taps at different offsets, and an alpha taken from
     // whichever channel found something. A white square in, and the fringe on
     // its edge is the whole point — the channels have to disagree there or the

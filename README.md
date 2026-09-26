@@ -28,7 +28,7 @@ cargo run --package morf-cli -- shell.lua
 Run the interactive transformation example with:
 
 ```sh
-EXAMPLE=examples/fluid-transform.lua oslo make run
+EXAMPLE=examples/demos/motion/fluid-transform.lua oslo make run
 ```
 
 Clicking its shape animates square-to-circle radius, color, origin-aware non-uniform scale, skew, rotation, shadows, and spring translation. The animation clock and interpolation remain in Rust; Lua only changes targets.
@@ -36,7 +36,7 @@ Clicking its shape animates square-to-circle radius, color, origin-aware non-uni
 Run the combined animation, polygon morph, and signed-distance-field example:
 
 ```sh
-EXAMPLE=examples/morph-stack.lua oslo make run
+EXAMPLE=examples/demos/sdf/morph-stack.lua oslo make run
 ```
 
 Animato advances the native tween and spring state — the timing — and signeddistance fields decide what a frame looks like — the view. Analytic fields are composed and morphed in the fragment shader; reusable raster masks are converted to cached distance fields. Morf still owns the compositor frame clock.
@@ -47,14 +47,14 @@ An infinite Lua loop is terminated when its fuel budget is exhausted rather than
 
 ## Writing UI
 
-How nodes are sized and placed, how state reaches them, and what makes a frame: [`docs/UI.md`](docs/UI.md). The examples under `examples/` are the runnable versions of each section.
+How nodes are sized and placed, how state reaches them, and what makes a frame: [`docs/UI.md`](docs/UI.md). The demos under `examples/demos/` are the runnable versions of each section; whole shells are under `examples/shells/` (see [`examples/README.md`](examples/README.md)).
 
 ## Testing a configuration
 
-`morf check`, `morf render` and `morf test` run a configuration with no compositor: nothing connects to Wayland and time is virtual. `check` loads it, lays out every surface and reports Lua errors and lint; `render` draws a surface to a PNG with the real GPU renderer; `test` runs Lua spec files that click, type, advance time and call IPC. See [`docs/TESTING.md`](docs/TESTING.md) and the specs in `examples/tests/`.
+`morf check`, `morf render` and `morf test` run a configuration with no compositor: nothing connects to Wayland and time is virtual. `check` loads it, lays out every surface and reports Lua errors and lint; `render` draws a surface to a PNG with the real GPU renderer; `test` runs Lua spec files that click, type, advance time and call IPC. See [`docs/TESTING.md`](docs/TESTING.md) and the specs in each shell's `tests/`, `examples/demos/tests/` and `library/tests/`.
 
 ```sh
 morf check shell.lua --strict
 nixVulkanIntel morf render shell.lua -o shell.png --surface screen
-morf test examples/tests/counter_spec.lua
+morf test examples/demos/tests/counter_spec.lua
 ```

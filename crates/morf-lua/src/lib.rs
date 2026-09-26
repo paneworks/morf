@@ -115,7 +115,7 @@ pub use runtime_input::*;
 pub use runtime_layout::SettledLayout;
 pub use runtime_session_lock::SessionLockState;
 pub use runtime_wake::{ClockPrecision, DeadlineCause};
-pub use serialization::runtimepath_roots;
+pub use serialization::{project_library, runtimepath_roots};
 pub use surface_types::*;
 pub use text_inputs::KeyModifiers;
 pub use types::*;

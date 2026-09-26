@@ -74,7 +74,7 @@ pub(crate) fn install() {
 
 /// Puts a crash screen up, when the session asked for one.
 ///
-/// `MORF_CRASH_SCREEN` names a configuration -- `examples/crash.lua` is one --
+/// `MORF_CRASH_SCREEN` names a configuration -- `examples/demos/desktop/crash.lua` is one --
 /// and it is started as a new shell with the report's path as its argument.
 /// Started through a shell with a one-second delay, because the process this
 /// runs in is the one dying: it still holds the IPC socket, and a replacement

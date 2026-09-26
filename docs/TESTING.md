@@ -87,8 +87,8 @@ are warnings too. `--wait MS` spreads that much real time over the run, for
 a configuration whose first screen depends on a process or a bus answering.
 
 ```
-$ IMPASTO_DRY_RUN=1 morf check examples/impasto/init.lua --private-bus --isolate --size 1280x720
-examples/impasto/init.lua on HEADLESS-1 (1280x720, 1 screen)
+$ IMPASTO_DRY_RUN=1 morf check examples/shells/impasto/shell/init.lua --private-bus --isolate --size 1280x720
+examples/shells/impasto/shell/init.lua on HEADLESS-1 (1280x720, 1 screen)
   surface primary                   1280x720   at 0,0  157 nodes
   surface layer:impasto-dock        1280x131   at 0,589  32 nodes
   surface layer:impasto-picker      1280x720   at 0,0  hidden  13 nodes
@@ -122,7 +122,7 @@ is), and the pixels are written as a PNG with straight alpha.
 It needs a Vulkan driver. From the Nix shell that means one of the wrappers:
 
 ```sh
-nixVulkanIntel morf render examples/terminal.lua -o terminal.png
+nixVulkanIntel morf render examples/demos/text/terminal.lua -o terminal.png
 ```
 
 With no adapter it stops with `no GPU to render with (...)` and exit status 1.
@@ -169,10 +169,10 @@ fails alone and the rest still run. Output is TAP:
 
 ```
 TAP version 13
-# examples/tests/counter_spec.lua
+# examples/demos/tests/counter_spec.lua
 ok 1 - counter counts clicks on the button (100 ms)
 not ok 2 - counter is ready after a second of its own time (104 ms)
-#   examples/tests/counter_spec.lua:58: expected "ready", got "starting"
+#   examples/demos/tests/counter_spec.lua:58: expected "ready", got "starting"
 #   the configuration said:
 #     warn: timer callback: runtime error: counter.lua:21: ...
 1..2
@@ -304,7 +304,7 @@ or an exact `text`), or a function of the node returning true.
 - `counter.lua` and `counter_spec.lua`: a small configuration and a spec
   that uses every kind of call -- clicks, the wheel, keys, typed text, a
   timer, a stubbed command, IPC, finding by id, text and predicate.
-- `terminal_spec.lua`: `examples/terminal.lua`, with btop (or top) really
+- `terminal_spec.lua`: `examples/demos/text/terminal.lua`, with btop (or top) really
   running on its pseudo-terminal, waited for on the wall clock.
 - `watch_destroy_spec.lua`: `morf.fs.watch` hearing a file in the run's
   scratch state directory (waited for on the wall clock), and
@@ -316,15 +316,15 @@ or an exact `text`), or a function of the node returning true.
 - `contains_pointer_spec.lua`: a configuration written in the spec, and a
   panel's `contains_pointer` through pointer moves, a leave, a clip, and a
   binding made while the pointer was already there.
-- `impasto_spec.lua`: loads `examples/impasto/init.lua` with
+- `impasto_spec.lua`: loads `examples/shells/impasto/shell/init.lua` with
   `IMPASTO_DRY_RUN`, opens every panel over IPC and closes it, and checks
   that nothing landed in `morf ipc call failed`. Run it with
   `--private-bus`: impasto's notification server owns a bus name.
 
 ```sh
-morf test examples/tests/counter_spec.lua examples/tests/terminal_spec.lua
-morf test --private-bus examples/tests/impasto_spec.lua
-nixVulkanIntel morf test examples/tests/counter_spec.lua   # with snapshots
+morf test examples/demos/tests/counter_spec.lua examples/demos/tests/terminal_spec.lua
+morf test --private-bus examples/shells/impasto/tests/impasto_spec.lua
+nixVulkanIntel morf test examples/demos/tests/counter_spec.lua   # with snapshots
 ```
 
 ## What is not simulated

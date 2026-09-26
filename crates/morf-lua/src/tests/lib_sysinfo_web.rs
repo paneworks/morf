@@ -1,7 +1,7 @@
 //! The pure-Lua libraries in `library/lib` that watch the machine and the
 //! web: sysinfo, weather, github, packages, claude_usage.
 //!
-//! Each runs inside a real runtime with `examples/` as a module root. The
+//! Each runs inside a real runtime with `library/` as a module root. The
 //! machine is a folder of fake /proc and /sys files, the web is a server on
 //! loopback serving recorded answers, the package tools are an injected
 //! runner, and the transcripts are written by the test. Nothing here needs
@@ -12,10 +12,10 @@ use std::time::{Duration, Instant};
 use super::*;
 
 fn examples_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../library")
 }
 
-/// Runs `source` with `examples/` as a module root and pumps the loop until
+/// Runs `source` with `library/` as a module root and pumps the loop until
 /// the `seen` text contains `done` (or the deadline passes). Returns the text.
 /// Any log line -- a handler that raised or ran out of fuel -- fails the test.
 fn run(source: &str, seconds: u64) -> String {

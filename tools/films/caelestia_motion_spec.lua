@@ -11,7 +11,7 @@ local W, H = 1920, 1080
 
 local function load()
   for _, program in ipairs { "systemctl", "loginctl" } do test.stub_run(program, { code = 0 }) end
-  test.load("../../examples/caelestia/init.lua", {
+  test.load("../../examples/shells/caelestia/shell/init.lua", {
     size = { W, H },
     env = { CAELESTIA_WALLPAPER = "", CAELESTIA_FONT_FILE = "", CAELESTIA_DRY_RUN = "1" },
   })

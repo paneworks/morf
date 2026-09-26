@@ -58,7 +58,7 @@ impl Sleep {
         Self::plan_with(runtime, pending, motion, &mut 0)
     }
 
-    /// As [`Self::plan`], counting in `streak` the turns taken at once for
+    /// As `plan` (the tests' form), counting in `streak` the turns taken at once for
     /// work the runtime held. Work a turn cannot clear -- a view whose model
     /// changed and whose reconcile keeps failing -- must not spin the loop:
     /// past a few turns in a row it waits for the next wake like the rest.

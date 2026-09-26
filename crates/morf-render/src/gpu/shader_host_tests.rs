@@ -249,7 +249,7 @@ pub(crate) fn a_switch_and_an_exact_texel_read_reach_the_driver() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_loop_can_walk_a_data_block_by_a_computed_index() {
-    // What `examples/sdf-blobs-crt.lua` is built on. A merged distance field is
+    // What `examples/demos/sdf/sdf-blobs-crt.lua` is built on. A merged distance field is
     // one draw and carries one shader, so the only way a shader can shade each
     // blob in that blob's own coordinates is to be told where the blobs are and
     // work it out per pixel. That means a loop whose index is computed, reading

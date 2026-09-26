@@ -1,0 +1,7 @@
+# The island opening and closing (the controls panel), filmed for comparing
+# impasto on morf against upstream: `film` shoots back to back from the
+# request, cropped to where the island grows.
+point 960 700; wait 3
+open controls; film open 30
+wait 1.5
+close; film close 30

@@ -109,7 +109,11 @@ pub(crate) fn run_spec(
         .to_path_buf();
     let host = Rc::new(RefCell::new(TestHost::new(spec_dir.clone(), args.clone())));
     let mut runtime = Runtime::new(spec_limits());
-    runtime.set_module_roots(vec![spec_dir.clone()]);
+    // The spec's own folder, and its project's library: a spec of a library
+    // module requires it as a shell would.
+    let mut roots = vec![spec_dir.clone()];
+    roots.extend(morf_lua::project_library(path));
+    runtime.set_module_roots(roots);
     runtime.set_shell_root(spec_dir);
     install(&mut runtime, &host);
     runtime

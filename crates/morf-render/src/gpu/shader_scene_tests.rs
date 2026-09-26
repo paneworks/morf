@@ -130,7 +130,7 @@ fn an_effect_beside_its_content_leaves_it_alone() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_material_shader_on_a_field_sizes_itself_from_its_own_derivatives() {
-    // What `examples/sdf-blobs-crt.lua` relies on. A material shader is not
+    // What `examples/demos/sdf/sdf-blobs-crt.lua` relies on. A material shader is not
     // told how large the node it is colouring is — `resolution` is the surface,
     // not the node — so the per-blob tube takes its own width in pixels from
     // the rate `uv` changes per pixel. That has to survive the real paint path,
@@ -223,7 +223,7 @@ fn a_material_shader_on_a_field_sizes_itself_from_its_own_derivatives() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn an_effect_shader_can_carry_a_data_block() {
-    // What `examples/sdf-blobs-chroma.lua` needs: an effect that is told where
+    // What `examples/demos/sdf/sdf-blobs-chroma.lua` needs: an effect that is told where
     // the blobs are, so it can pick its axis per pixel.
     //
     // Effect shaders are built on the glyph pipeline rather than the field one,
@@ -315,7 +315,7 @@ fn an_effect_shader_can_carry_a_data_block() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_shift_stated_in_pixels_moves_by_that_many_pixels() {
-    // `examples/sdf-blobs-chroma.lua` states its aberration in pixels, because
+    // `examples/demos/sdf/sdf-blobs-chroma.lua` states its aberration in pixels, because
     // a fringe written as a fraction of the surface is far too easy to ask for
     // an enormous amount of by accident — and once the shift is wide enough to
     // reach a neighbouring blob it samples that blob's colour, which reads as

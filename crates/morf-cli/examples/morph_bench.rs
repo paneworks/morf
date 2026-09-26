@@ -8,7 +8,7 @@
 //!
 //! ```sh
 //! IMPASTO_DRY_RUN=1 cargo run --release -p morf-cli --example morph_bench -- \
-//!     examples/impasto/init.lua controls close
+//!     examples/shells/impasto/shell/init.lua controls close
 //! ```
 //!
 //! Text is shaped by the real text system, since shaping is part of what a

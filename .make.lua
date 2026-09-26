@@ -7,7 +7,7 @@
 --   make dist       the binary for this machine's own libraries, not the store's
 --   make bundle     a configuration and morf as one binary: target/dist/<name>
 --   make install    the binary to ~/.local/bin, the library to ~/.local/share/morf/library
---   make apply --example NAME   examples/NAME as your shell: ~/.config/morf/NAME/shell, the default
+--   make apply --example NAME   examples/shells/NAME as your shell, ~/.config/morf/NAME, the default
 --
 -- At an oslo prompt in this directory `make` is enough; everywhere else it is `oslo make`.
 -- CI has no oslo, so it calls the language's own tool -- nothing here is on the release path.
@@ -162,7 +162,7 @@ make.recipe{
 
 ---------------------------------------------------------------------------- rust
 
-local EXAMPLE = os.getenv("EXAMPLE") or "examples/quickshell/init.lua"
+local EXAMPLE = os.getenv("EXAMPLE") or "examples/shells/caelestia/shell/init.lua"
 
 make.recipe{ name = "build", desc = "the workspace",
              run = function()
@@ -218,7 +218,7 @@ make.recipe{
     sh.cargo("build", "--release", "--package", "morf-cli", "--example", "frame_bench")
     local wrapper = oslo.run{ "sh", "-c", "command -v nixVulkan", capture = true }
     local prefix = wrapper.ok and (wrapper.out or ""):match("[^\n]+") or nil
-    local listed = oslo.run{ "sh", "-c", "ls examples/*.lua", capture = true }
+    local listed = oslo.run{ "sh", "-c", "ls examples/demos/*/*.lua", capture = true }
     assert(listed.ok, "no examples to check")
     local checked = 0
     for path in (listed.out or ""):gmatch("[^\n]+") do
@@ -432,7 +432,7 @@ make.recipe{
   end,
 }
 
--- One file that is morf and a configuration: `make bundle --example examples/greeter.lua --name logre`
+-- One file that is morf and a configuration: `make bundle --example examples/demos/desktop/greeter.lua --name logre`
 -- writes `target/dist/logre`, built from the dist binary so it runs on the machine's own libraries,
 -- carrying every font the configuration names, and needing neither morf nor the configuration nor
 -- the fonts on disk. Its arguments are the configuration's: `logre -- lock`.
@@ -477,6 +477,8 @@ make.recipe{
     assert(oslo.run{ "mkdir", "-p", data }.ok, "could not make " .. data)
     -- -L: the repo's symlinks become files, so the installed copy stands alone.
     assert(oslo.run{ "cp", "-rL", "library/.", data }.ok, "could not copy the library")
+    -- The library's own specs stay in the repository.
+    oslo.run{ "rm", "-rf", data .. "/tests" }
     -- The types from the binary just installed, so the editor knows exactly that engine.
     assert(oslo.run{ "env", "-u", "LD_LIBRARY_PATH", "-u", "XDG_DATA_DIRS", bin, "types", data .. "/types" }.ok,
            "could not write the types")
@@ -494,41 +496,45 @@ make.alias("i", "install")
 -- kept beside the new one, never overwritten.
 make.recipe{
   name = "apply",
-  desc = "examples/NAME as ~/.config/morf/NAME/shell, and the default shell",
-  params = { { "--example", desc = "the example's name, e.g. caelestia" } },
+  desc = "examples/shells/NAME as ~/.config/morf/NAME, and the default shell",
+  params = { { "--example", desc = "the shell's name, e.g. caelestia (a folder under examples/shells/)" } },
   run = function(a)
     local name = a.example
     assert(type(name) == "string" and name ~= "" and not name:find("/", 1, true),
-           "which example? make apply --example NAME (a folder under examples/)")
-    local source = "examples/" .. name
-    assert(oslo.fs.stat(source .. "/init.lua"), source .. "/init.lua is not there")
+           "which shell? make apply --example NAME (a folder under examples/shells/)")
+    local source = "examples/shells/" .. name
+    assert(oslo.fs.stat(source .. "/shell/init.lua"), source .. "/shell/init.lua is not there")
     local home = os.getenv("HOME")
     local root = (os.getenv("XDG_CONFIG_HOME") or (home .. "/.config")) .. "/morf"
     local folder = root .. "/" .. name
-    local shell = folder .. "/shell"
-    if oslo.fs.stat(shell) then
-      local kept = shell .. ".bak-" .. os.date("%Y%m%d-%H%M%S")
-      assert(oslo.run{ "mv", shell, kept }.ok, "could not move " .. shell .. " aside")
-      line("kept", kept)
-    end
-    assert(oslo.run{ "mkdir", "-p", shell }.ok, "could not make " .. shell)
-    -- -L: the example's links become files, so the copy stands alone -- all but its link to the
-    -- library, which `make install` keeps current: a copy would hide every later install.
-    assert(oslo.run{ "cp", "-rL", source .. "/.", shell }.ok, "could not copy " .. source)
-    if oslo.run{ "test", "-L", source .. "/lib" }.ok then
-      assert(oslo.run{ "rm", "-rf", shell .. "/lib" }.ok, "could not leave out the library")
-    end
-    -- The editor's view of the engine and the library, beside the shell.
     local data = (os.getenv("XDG_DATA_HOME") or (home .. "/.local/share")) .. "/morf/library"
-    if oslo.fs.stat(data .. "/luarc.template.json") then
-      oslo.run{ "cp", data .. "/luarc.template.json", shell .. "/.luarc.json" }
+    local stamp = os.date("%Y%m%d-%H%M%S")
+    assert(oslo.run{ "mkdir", "-p", folder }.ok, "could not make " .. folder)
+    for _, part in ipairs { "shell", "lock", "greet" } do
+      if oslo.fs.stat(source .. "/" .. part .. "/init.lua") then
+        local target = folder .. "/" .. part
+        if oslo.fs.stat(target) then
+          local kept = target .. ".bak-" .. stamp
+          assert(oslo.run{ "mv", target, kept }.ok, "could not move " .. target .. " aside")
+          line("kept", kept)
+        end
+        -- -L: any link in the example becomes a file, so the copy stands alone.
+        assert(oslo.run{ "cp", "-rL", source .. "/" .. part, target }.ok, "could not copy " .. part)
+        -- The editor's view of the engine and the library, beside each part.
+        if oslo.fs.stat(data .. "/luarc.template.json") then
+          oslo.run{ "cp", data .. "/luarc.template.json", target .. "/.luarc.json" }
+        end
+        line(part, target .. "/init.lua")
+      end
+    end
+    for _, doc in ipairs { "README.md", "NEEDS.md" } do
+      if oslo.fs.stat(source .. "/" .. doc) then oslo.run{ "cp", source .. "/" .. doc, folder .. "/" .. doc } end
     end
     -- The default: a link, so switching is one `make apply` away and nothing is copied twice.
     local default = root .. "/default"
     local stat = oslo.run{ "test", "-e", default, "-a", "!", "-L", default }
     assert(not stat.ok, default .. " is a folder of its own, not a link; move it aside first")
     assert(oslo.run{ "ln", "-sfn", name, default }.ok, "could not point " .. default .. " at " .. name)
-    line("shell", shell .. "/init.lua")
     line("default", default .. " -> " .. name)
     if oslo.fs.stat(root .. "/shell.lua") then
       print(oslo.ui.style("note", { fg = "yellow" }) ..

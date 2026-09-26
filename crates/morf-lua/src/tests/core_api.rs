@@ -394,36 +394,12 @@ fn desktop_entries_scan_and_lookup_native_data() {
 }
 
 #[test]
-fn board_example_uses_only_general_native_modules() {
-    let mut runtime = Runtime::for_screen(
-        Limits::default(),
-        Screen {
-            name: "test-output".into(),
-            width: Some(1920),
-            height: Some(1080),
-            scale: 1,
-            ..Screen::default()
-        },
-    );
-    runtime
-        .execute(
-            "examples/board/init.lua",
-            include_bytes!("../../../../examples/board/init.lua"),
-        )
-        .unwrap();
-    assert_eq!(runtime.scene().roots().len(), 1);
-    let surface = runtime.layer_surface_config();
-    assert_eq!(surface.namespace, "morf-board");
-    assert_eq!(surface.width, 1106);
-    assert_eq!(surface.height, 588);
-    assert_eq!(surface.exclusive_zone, 0);
-}
-
-#[test]
 fn transform_example_uses_the_native_watcher() {
-    let source = include_bytes!("../../../../examples/transform.lua");
+    let source = include_bytes!("../../../../examples/demos/motion/transform.lua");
     let mut runtime = Runtime::default();
-    runtime.execute("examples/transform.lua", source).unwrap();
+    runtime
+        .execute("examples/demos/motion/transform.lua", source)
+        .unwrap();
 
     assert_eq!(runtime.scene().roots().len(), 2);
     assert_eq!(runtime.reactive.borrow().transform_watchers.len(), 1);

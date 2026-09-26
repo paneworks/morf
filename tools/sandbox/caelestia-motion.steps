@@ -1,5 +1,5 @@
 # Drawer motion and the dashboard's hover edge, for caelestia on Quickshell
-# and for the morf port alike (MORF_CONFIG=examples/caelestia/init.lua):
+# and for the morf port alike (MORF_CONFIG=examples/shells/caelestia/shell/init.lua):
 # films of each drawer opening and closing, cropped to it, and where along
 # the top edge the pointer opens the dashboard.
 point 960 800; wait 1

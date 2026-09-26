@@ -1,6 +1,6 @@
 -- The on-screen keyboard, as a board rather than as a program.
 --
--- This is the keyboard. `examples/keyboard.lua` is this board given its own
+-- This is the keyboard. `examples/demos/text/keyboard.lua` is this board given its own
 -- surface so it can type into other programs; a greeter draws the same board
 -- inside its own surface because a kiosk compositor shows one window and a
 -- second surface is simply never seen. Two hosts, one keyboard — the layout,

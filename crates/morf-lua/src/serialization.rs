@@ -15,10 +15,25 @@ pub(crate) fn default_module_roots() -> Vec<PathBuf> {
         .collect()
 }
 
+/// The nearest `library/` holding a `lib/`, beside the folder `file` is in
+/// or one above it: a project's own library.
+pub fn project_library(file: &std::path::Path) -> Option<PathBuf> {
+    let folder = file.parent()?;
+    let absolute = std::fs::canonicalize(folder).unwrap_or_else(|_| folder.to_path_buf());
+    absolute
+        .ancestors()
+        .map(|dir| dir.join("library"))
+        .find(|library| library.join("lib").is_dir())
+}
+
 /// Where `require` looks for a configuration at `config`: its own folder,
-/// then, when `external`, every `MORF_RUNTIME_PATH` entry, the user's
-/// `$XDG_DATA_HOME/morf/site` (or `~/.local/share/morf/site`) and the
-/// installed library `$XDG_DATA_HOME/morf/library`, without duplicates.
+/// then, when `external`, the nearest `library/` beside a folder it is in
+/// (one holding a `lib/`: a project's own library, found the way a
+/// project's own modules are elsewhere, so a shell in a repository runs
+/// against the repository's library and not an older installed copy), every
+/// `MORF_RUNTIME_PATH` entry, the user's `$XDG_DATA_HOME/morf/site` (or
+/// `~/.local/share/morf/site`) and the installed library
+/// `$XDG_DATA_HOME/morf/library`, without duplicates.
 ///
 /// Public so every host that runs a configuration -- the shell, the frame
 /// bench -- resolves modules the same way; a bench that looked only beside
@@ -30,6 +45,7 @@ pub fn runtimepath_roots(config: &std::path::Path, external: bool) -> Vec<PathBu
         .into_iter()
         .collect::<Vec<_>>();
     if external {
+        roots.extend(project_library(config));
         roots.extend(default_module_roots());
         let data = std::env::var_os("XDG_DATA_HOME")
             .map(PathBuf::from)
