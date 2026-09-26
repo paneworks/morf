@@ -161,6 +161,11 @@ local function sample_memory()
     used = total - available,
     free = (kb.MemFree or 0) * 1024,
     cached = ((kb.Cached or 0) + (kb.Buffers or 0) + (kb.SReclaimable or 0)) * 1024,
+    committed = (kb.Committed_AS or 0) * 1024,
+    commit_limit = (kb.CommitLimit or 0) * 1024,
+    buffers = (kb.Buffers or 0) * 1024,
+    shared = (kb.Shmem or 0) * 1024,
+    dirty = (kb.Dirty or 0) * 1024,
     percent = total > 0 and 100 * (total - available) / total or 0,
     swap = {
       total = swap_total,
@@ -324,27 +329,95 @@ local function sample_temperatures()
 end
 
 -- ---------------------------------------------------------------------------
--- GPU: busy percentage where the driver says (amdgpu). Intel's needs fdinfo
--- bookkeeping per client, which is a monitor of its own; it reads as nil.
+-- GPUs, every card: busy where the driver says it (amdgpu's
+-- gpu_busy_percent; i915/xe from how long the GPU spent in RC6, asleep),
+-- clocks, video memory, and for a card that is powered down (a laptop's
+-- discrete GPU, most of the time) only that: reading it would wake it.
 
-local function sample_gpu()
-  local out = { cards = {} }
-  local cards = fs.list(path("/sys/class/drm"), { follow = true }) or {}
-  for _, card in ipairs(cards) do
-    if card.name:match("^card%d+$") then
-      local base = "/sys/class/drm/" .. card.name .. "/device"
-      local busy = number_at(base .. "/gpu_busy_percent")
-      if busy then
-        out.cards[#out.cards + 1] = {
-          name = card.name,
-          busy = busy,
-          vram_used = number_at(base .. "/mem_info_vram_used"),
-          vram_total = number_at(base .. "/mem_info_vram_total"),
-        }
+local last_rc6 = {}
+local gpu_names = {}
+local pci_ids -- /usr/share/hwdata/pci.ids, read once: false when absent
+
+-- The card's name from the PCI id database -- a file, never the device:
+-- asking the device (lspci does) wakes a GPU that is powered down.
+local function gpu_name(card, vendor, device)
+  local known = gpu_names[card]
+  if known then return known end
+  local v = tostring(vendor or ""):gsub("^0x", ""):lower()
+  local d = tostring(device or ""):gsub("^0x", ""):lower()
+  if pci_ids == nil then
+    pci_ids = read("/usr/share/hwdata/pci.ids", 8 * 1024 * 1024)
+      or read("/usr/share/misc/pci.ids", 8 * 1024 * 1024) or false
+  end
+  local name
+  if pci_ids and v ~= "" and d ~= "" then
+    local at = pci_ids:find("\n" .. v .. "  ", 1, true)
+    if at then
+      local next_vendor = pci_ids:find("\n%x%x%x%x  ", at + 1) or #pci_ids
+      local line = pci_ids:find("\n\t" .. d .. "  ", at, true)
+      if line and line < next_vendor then
+        name = pci_ids:match("^([^\n]+)", line + 8)
       end
     end
   end
-  out.busy = out.cards[1] and out.cards[1].busy or nil
+  if name then
+    -- "TigerLake-H GT1 [UHD Graphics]" -> "UHD Graphics"; "GA107M [GeForce
+    -- RTX 3050 Ti Mobile]" -> "GeForce RTX 3050 Ti Mobile".
+    name = name:match("%[(.-)%]") or name
+  end
+  gpu_names[card] = name or ("%s:%s"):format(v, d)
+  return gpu_names[card]
+end
+
+local VENDORS = { ["0x8086"] = "Intel", ["0x10de"] = "NVIDIA", ["0x1002"] = "AMD" }
+
+local function sample_gpu()
+  local out = { cards = {} }
+  local now = morf.time.now()
+  local cards = fs.list(path("/sys/class/drm"), { follow = true }) or {}
+  table.sort(cards, function(a, b) return a.name < b.name end)
+  for _, card in ipairs(cards) do
+    if card.name:match("^card%d+$") then
+      local base = "/sys/class/drm/" .. card.name .. "/device"
+      local vendor_id = text_at(base .. "/vendor")
+      local uevent = read(base .. "/uevent", 4096) or ""
+      local slot = uevent:match("PCI_SLOT_NAME=(%S+)")
+      local runtime = text_at(base .. "/power/runtime_status")
+      local entry = {
+        name = card.name,
+        vendor = VENDORS[vendor_id or ""] or vendor_id or "",
+        model = gpu_name(card.name, vendor_id, text_at(base .. "/device")),
+        driver = uevent:match("DRIVER=(%S+)") or "",
+        slot = slot or "",
+        suspended = runtime == "suspended",
+        key = "gpu:" .. card.name,
+      }
+      if not entry.suspended then
+        entry.busy = number_at(base .. "/gpu_busy_percent")
+        entry.vram_used = number_at(base .. "/mem_info_vram_used")
+        entry.vram_total = number_at(base .. "/mem_info_vram_total")
+        -- i915 and xe: the time asleep, as a share of the time since last.
+        local gt = "/sys/class/drm/" .. card.name .. "/gt/gt0"
+        local rc6 = number_at(gt .. "/rc6_residency_ms")
+        if rc6 then
+          local before = last_rc6[card.name]
+          if before and now > before.at then
+            local asleep = (rc6 - before.ms) / 1000 / (now - before.at)
+            entry.busy = math.max(0, math.min(100, 100 * (1 - asleep)))
+          end
+          last_rc6[card.name] = { ms = rc6, at = now }
+          entry.clock_mhz = number_at(gt .. "/rps_act_freq_mhz")
+          entry.max_mhz = number_at(gt .. "/rps_max_freq_mhz") or number_at(gt .. "/rps_RP0_freq_mhz")
+        end
+        entry.clock_mhz = entry.clock_mhz or number_at(base .. "/pp_dpm_sclk_mhz")
+      end
+      out.cards[#out.cards + 1] = entry
+      ring(entry.key).push(entry.busy or 0)
+    end
+  end
+  for _, entry in ipairs(out.cards) do
+    if entry.busy then out.busy = entry.busy break end
+  end
   if out.busy then ring("gpu").push(out.busy) end
   return out
 end
@@ -384,7 +457,18 @@ local function sample_network()
       entry.tx_rate = (tx - before.tx) / dt
     end
     seen[name] = { rx = rx, tx = tx }
-    if name ~= "lo" then out.interfaces[#out.interfaces + 1] = entry end
+    if name ~= "lo" then
+      local base = "/sys/class/net/" .. name
+      entry.wireless = fs.exists(path(base .. "/wireless")) or false
+      entry.virtual = not fs.exists(path(base .. "/device"))
+      entry.address = text_at(base .. "/address") or ""
+      entry.state = text_at(base .. "/operstate") or ""
+      local speed = number_at(base .. "/speed")
+      entry.speed = speed and speed > 0 and speed or nil
+      ring("rx:" .. name).push(entry.rx_rate)
+      ring("tx:" .. name).push(entry.tx_rate)
+      out.interfaces[#out.interfaces + 1] = entry
+    end
     if name == out.default then out.primary = entry end
   end
   last_net, last_net_at = seen, now
@@ -635,6 +719,246 @@ local function sample_processes(done)
   end, function(value, err) done(value, err) end)
 end
 
+
+-- ---------------------------------------------------------------------------
+-- Drives: each physical disk's activity from /proc/diskstats deltas, and its
+-- logical units -- partitions, and the device-mapper volumes (LVM, LUKS) on
+-- them -- each with its own rates, its mounts and their space.
+
+local SECTOR = 512
+local last_io, last_io_at = {}, nil
+-- What a drive is does not change while the machine runs: found once.
+local drive_facts = {}
+
+-- Whole disks worth listing: not loop, RAM, zram, optical or mapper devices.
+local function is_drive(name)
+  return not (name:match("^loop") or name:match("^ram") or name:match("^zram")
+    or name:match("^sr%d") or name:match("^dm%-"))
+end
+
+local function block_size(base)
+  return (number_at(base .. "/size") or 0) * SECTOR
+end
+
+local function facts(name)
+  local known = drive_facts[name]
+  if known then return known end
+  local base = "/sys/block/" .. name
+  local rotational = number_at(base .. "/queue/rotational") == 1
+  local kind = name:match("^nvme") and "NVMe" or name:match("^mmcblk") and "SD/MMC"
+    or rotational and "HDD" or "SSD"
+  known = {
+    model = text_at(base .. "/device/model") or text_at(base .. "/device/name") or "",
+    vendor = text_at(base .. "/device/vendor") or "",
+    capacity = block_size(base),
+    removable = number_at(base .. "/removable") == 1,
+    kind = kind,
+  }
+  drive_facts[name] = known
+  return known
+end
+
+-- The mapper name of a dm-N device ("sys-arch"), or nil.
+local function dm_name(name)
+  return text_at("/sys/block/" .. name .. "/dm/name")
+end
+
+-- Every device node a mount may name for `name`: /dev/X, and for a mapper
+-- volume /dev/mapper/NAME and /dev/VG/LV.
+local function aliases(name)
+  local list = { "/dev/" .. name }
+  local mapped = dm_name(name)
+  if mapped then
+    list[#list + 1] = "/dev/mapper/" .. mapped
+    local vg, lv = mapped:match("^(.-[^-])%-([^-].*)$")
+    if vg then list[#list + 1] = "/dev/" .. vg:gsub("%-%-", "-") .. "/" .. lv:gsub("%-%-", "-") end
+  end
+  return list
+end
+
+local function read_mounts()
+  local by = {}
+  for _, line in ipairs(fs.lines(path("/proc/mounts")) or {}) do
+    local device, mount = line:match("^(%S+)%s+(%S+)")
+    if device then
+      by[device] = by[device] or {}
+      local list = by[device]
+      list[#list + 1] = (mount:gsub("\\(%d%d%d)", function(o) return string.char(tonumber(o, 8)) end))
+    end
+  end
+  local swaps = {}
+  for index, line in ipairs(fs.lines(path("/proc/swaps")) or {}) do
+    local device = index > 1 and line:match("^(%S+)")
+    if device then swaps[device] = true end
+  end
+  return by, swaps
+end
+
+local function sample_drives()
+  local text, err = read("/proc/diskstats", 1024 * 1024)
+  if not text then return nil, err end
+  local now = morf.time.now()
+  local dt = last_io_at and now - last_io_at or nil
+  local io = {}
+  for name, rd, wr, ticks in text:gmatch(
+    "\n?%s*%d+%s+%d+%s+(%S+)%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+(%d+)") do
+    local now_io = { read = tonumber(rd) * SECTOR, write = tonumber(wr) * SECTOR, ticks = tonumber(ticks) }
+    local before = last_io[name]
+    local rates = { read_total = now_io.read, write_total = now_io.write, read_rate = 0, write_rate = 0, busy = 0 }
+    if before and dt and dt > 0 and now_io.read >= before.read and now_io.write >= before.write then
+      rates.read_rate = (now_io.read - before.read) / dt
+      rates.write_rate = (now_io.write - before.write) / dt
+      rates.busy = math.min(100, 100 * (now_io.ticks - before.ticks) / 1000 / dt)
+    end
+    io[name] = rates
+    last_io[name] = now_io
+  end
+  last_io_at = now
+  local mounts, swaps = read_mounts()
+  local function unit(name, base, depth)
+    local rates = io[name] or {}
+    local out = {
+      name = name, label = dm_name(name) or name, depth = depth,
+      size = block_size(base), mounts = {}, swap = false,
+      read_rate = rates.read_rate or 0, write_rate = rates.write_rate or 0,
+    }
+    for _, alias in ipairs(aliases(name)) do
+      for _, mount in ipairs(mounts[alias] or {}) do out.mounts[#out.mounts + 1] = mount end
+      if swaps[alias] then out.swap = true end
+    end
+    return out
+  end
+  local drives = {}
+  local root_disk
+  for _, entry in ipairs(fs.list(path("/sys/block"), { follow = true }) or {}) do
+    local name = entry.name
+    if is_drive(name) and io[name] then
+      local base = "/sys/block/" .. name
+      local drive = { name = name, units = {} }
+      for key, value in pairs(facts(name)) do drive[key] = value end
+      for key, value in pairs(io[name]) do drive[key] = value end
+      -- Partitions, each followed by what is built on it, depth first.
+      local children = {}
+      for _, child in ipairs(fs.list(path(base), { follow = true }) or {}) do
+        if child.name:find(name, 1, true) == 1 and child.name ~= name then children[#children + 1] = child.name end
+      end
+      table.sort(children)
+      local function holders(of, of_base, depth, seen)
+        for _, holder in ipairs(fs.list(path(of_base .. "/holders"), { follow = true }) or {}) do
+          if not seen[holder.name] then
+            seen[holder.name] = true
+            local u = unit(holder.name, "/sys/block/" .. holder.name, depth)
+            drive.units[#drive.units + 1] = u
+            holders(holder.name, "/sys/block/" .. holder.name, depth + 1, seen)
+          end
+        end
+      end
+      local seen = {}
+      local whole = unit(name, base, 0)
+      if #whole.mounts > 0 or whole.swap then drive.units[#drive.units + 1] = whole end
+      holders(name, base, 1, seen)
+      for _, child in ipairs(children) do
+        drive.units[#drive.units + 1] = unit(child, base .. "/" .. child, 1)
+        holders(child, base .. "/" .. child, 2, seen)
+      end
+      for _, u in ipairs(drive.units) do
+        for _, mount in ipairs(u.mounts) do if mount == "/" then root_disk = name end end
+      end
+      ring("disk:" .. name .. ":busy").push(drive.busy)
+      ring("disk:" .. name .. ":read").push(drive.read_rate)
+      ring("disk:" .. name .. ":write").push(drive.write_rate)
+      drives[#drives + 1] = drive
+    end
+  end
+  table.sort(drives, function(a, b) return a.name < b.name end)
+  for _, drive in ipairs(drives) do drive.system = drive.name == root_disk end
+  return { drives = drives }
+end
+
+-- ---------------------------------------------------------------------------
+-- Fans: hwmon fan inputs in RPM, labelled.
+
+local fan_files
+
+local function sample_fans()
+  if not fan_files then
+    fan_files = {}
+    for _, chip in ipairs(fs.list(path("/sys/class/hwmon"), { follow = true }) or {}) do
+      local base = "/sys/class/hwmon/" .. chip.name
+      local chip_name = text_at(base .. "/name") or chip.name
+      for _, file in ipairs(fs.list(path(base), { follow = true }) or {}) do
+        local index = file.name:match("^fan(%d+)_input$")
+        if index then
+          fan_files[#fan_files + 1] = {
+            chip = chip_name,
+            label = text_at(base .. "/fan" .. index .. "_label") or ("Fan " .. index),
+            input = base .. "/" .. file.name,
+            max = number_at(base .. "/fan" .. index .. "_max"),
+          }
+        end
+      end
+    end
+  end
+  local out, seen, per_chip = { fans = {} }, {}, {}
+  for _, file in ipairs(fan_files) do
+    local rpm = number_at(file.input)
+    -- Two drivers often report the same fans (dell_smm and dell_ddv, each
+    -- labelled its own way): the nth fan of a second chip reading exactly
+    -- what the nth of an earlier one reads is that fan again.
+    per_chip[file.chip] = (per_chip[file.chip] or 0) + 1
+    local nth = per_chip[file.chip]
+    -- Sampled a moment apart, the same fan reads a few RPM differently.
+    local again = rpm and seen[nth] and seen[nth].chip ~= file.chip
+      and math.abs(seen[nth].rpm - rpm) <= math.max(50, 0.05 * rpm)
+    if rpm and not again then
+      if not seen[nth] then seen[nth] = { chip = file.chip, rpm = rpm } end
+      local index = #out.fans
+      out.fans[index + 1] = { chip = file.chip, label = file.label, rpm = rpm, max = file.max, key = "fan" .. index }
+      ring("fan" .. index).push(rpm)
+    end
+  end
+  return out
+end
+
+-- ---------------------------------------------------------------------------
+-- The CPU's facts that do not change: caches, clocks, governor, features.
+
+local cpu_facts
+function sysinfo.cpu_info()
+  if cpu_facts then return cpu_facts end
+  local info = read("/proc/cpuinfo", 1024 * 1024) or ""
+  local flags = info:match("flags%s*:%s*([^\n]+)") or ""
+  local sockets = {}
+  for id in info:gmatch("physical id%s*:%s*(%d+)") do sockets[id] = true end
+  local socket_count = 0
+  for _ in pairs(sockets) do socket_count = socket_count + 1 end
+  local caches = {}
+  for _, entry in ipairs(fs.list(path("/sys/devices/system/cpu/cpu0/cache"), { follow = true }) or {}) do
+    local base = "/sys/devices/system/cpu/cpu0/cache/" .. entry.name
+    local level, kind = number_at(base .. "/level"), text_at(base .. "/type")
+    local size = text_at(base .. "/size")
+    if level and size then
+      local bytes = tonumber(size:match("%d+")) * (size:match("K") and 1024 or size:match("M") and 1024 * 1024 or 1)
+      local key = "L" .. level .. (kind == "Data" and "d" or kind == "Instruction" and "i" or "")
+      caches[key] = bytes
+    end
+  end
+  local cpufreq = "/sys/devices/system/cpu/cpu0/cpufreq"
+  cpu_facts = {
+    model = read_model(),
+    sockets = math.max(1, socket_count),
+    logical = select(2, info:gsub("\nprocessor%s*:", "")) + (info:match("^processor%s*:") and 1 or 0),
+    base_mhz = (number_at(cpufreq .. "/base_frequency") or number_at(cpufreq .. "/cpuinfo_max_freq") or 0) / 1000,
+    max_mhz = (number_at(cpufreq .. "/cpuinfo_max_freq") or 0) / 1000,
+    driver = text_at(cpufreq .. "/scaling_driver") or "",
+    governor = text_at(cpufreq .. "/scaling_governor") or "",
+    preference = text_at(cpufreq .. "/energy_performance_preference") or "",
+    virtualization = flags:match("%f[%w]vmx%f[%W]") and "Intel VT-x" or flags:match("%f[%w]svm%f[%W]") and "AMD-V" or "",
+    caches = caches,
+  }
+  return cpu_facts
+end
+
 -- ---------------------------------------------------------------------------
 -- Sources
 
@@ -643,6 +967,8 @@ local EMPTY = {
   memory = { total = 0, available = 0, used = 0, free = 0, cached = 0, percent = 0,
     swap = { total = 0, free = 0, used = 0, percent = 0 } },
   disks = {},
+  drives = { drives = {} },
+  fans = { fans = {} },
   temperatures = { sensors = {} },
   gpu = { cards = {} },
   network = { interfaces = {}, rx_rate = 0, tx_rate = 0 },
@@ -656,6 +982,8 @@ local SAMPLERS = {
   cpu = { sample_cpu, 2000 },
   memory = { sample_memory, 3000 },
   disks = { sample_disks, 30000 },
+  drives = { sample_drives, 2000 },
+  fans = { sample_fans, 2000 },
   temperatures = { sample_temperatures, 5000 },
   gpu = { sample_gpu, 2000 },
   network = { sample_network, 2000 },
@@ -724,6 +1052,14 @@ end
 function sysinfo.memory() return sources.memory:get() end
 --- Real filesystems: `{ {device, mount, type, total, used, free, available, percent} }`.
 function sysinfo.disks() return sources.disks:get() end
+--- Physical drives: `{ drives = { {name, model, vendor, kind, capacity,
+--- removable, system, busy (percent), read_rate, write_rate (bytes/s),
+--- read_total, write_total, units = { {name, label, depth, size, mounts,
+--- swap, read_rate, write_rate} } } } }` -- units are the partitions and the
+--- volumes on them, depth first.
+function sysinfo.drives() return sources.drives:get() end
+--- `{ fans = { {chip, label, rpm, max, key} } }`; `key` names its history.
+function sysinfo.fans() return sources.fans:get() end
 --- `{ cpu (°C or nil), cpu_sensor, sensors = { {chip, label, celsius, critical} } }`.
 function sysinfo.temperatures() return sources.temperatures:get() end
 --- `{ busy (percent or nil), cards = { {name, busy, vram_used, vram_total} } }`.
@@ -751,8 +1087,16 @@ function sysinfo.processes() return sources.processes:get() end
 --- Reading it follows (and wakes) the section that feeds it.
 local FEEDS = { cpu = "cpu", load = "cpu", memory = "memory", swap = "memory",
   temperature = "temperatures", gpu = "gpu", rx = "network", tx = "network" }
+--- Per device too: `gpu:card1`, `disk:nvme0n1:busy` (`:read`, `:write`),
+--- `rx:wlan0`, `tx:wlan0`, `fan0`.
+local PREFIXED = { { "^core%d+$", "cpu" }, { "^gpu:", "gpu" }, { "^disk:", "drives" },
+  { "^rx:", "network" }, { "^tx:", "network" }, { "^fan%d+$", "fans" } }
 function sysinfo.history(name)
-  local feed = FEEDS[name] or (name:match("^core%d+$") and "cpu")
+  local feed = FEEDS[name]
+  for _, rule in ipairs(PREFIXED) do
+    if feed then break end
+    if name:match(rule[1]) then feed = rule[2] end
+  end
   if not feed then error("sysinfo.history: no series " .. tostring(name), 2) end
   sources[feed]:get()
   return ring(name).list()

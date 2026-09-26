@@ -205,7 +205,7 @@ test.describe("caelestia", function()
     test.eq(d.height, 538)
     local sizes = {
       { "media", 1032, 418, "media-nothing" },
-      { "performance", 987, 483, "performance-cpu" },
+      { "performance", 1132, 659, "performance-main" },
       { "weather", 870, 660, "weather-now" },
       { "dashboard", 872, 538, "dashboard-calendar" },
     }
@@ -252,9 +252,17 @@ test.describe("caelestia", function()
     test.snapshot("caelestia-dashboard-media.png", { surface = "screen" })
     test.click { id = "dashboard-tab-performance" }
     test.settle(1500)
-    test.matches(test.get({ id = "performance-memory-space" }).text, "^[%d.]+ / [%d.]+ %a+$")
-    test.matches(test.get({ id = "performance-usage" }).text, "^%d+%%$")
-    test.truthy(test.find { id = "performance-disk-name", visible = true })
+    -- Mission Center's layout: the devices down the left, the CPU picked,
+    -- a graph per thread; a click picks another.
+    test.truthy(test.find { id = "performance-device-cpu", visible = true })
+    test.truthy(test.find { id = "performance-device-memory", visible = true })
+    test.truthy(test.find { id = "performance-core-0", visible = true })
+    test.click { id = "performance-device-memory" }
+    test.settle(500)
+    test.truthy(test.find { id = "performance-memory-graph", visible = true })
+    test.falsy(test.find { id = "performance-core-0", visible = true })
+    test.click { id = "performance-device-cpu" }
+    test.settle(500)
     test.snapshot("caelestia-dashboard-performance.png", { surface = "screen" })
     test.click { id = "dashboard-tab-weather" }
     test.settle(1500)
