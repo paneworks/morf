@@ -88,7 +88,8 @@ end
 
 local function answer_row(question, value_text, material)
   return row {
-    id = "answer", name = value_text, description = question .. "  ·  Return copies", material = material or "calculate",
+    id = "answer", name = value_text, question = question,
+    description = question .. "  ·  Return copies", material = material or "calculate",
     run = function() return copy(value_text:gsub(",", "")) end,
     actions = {
       { name = "Copy the answer", material = "content_copy", run = function() return copy(value_text:gsub(",", "")) end },
@@ -184,7 +185,7 @@ function M.inline(q)
   -- number or a word.
   if q:match("[%+%-%*/%^%%%(]") or q:match("%a+%s*%(") then
     local ok, value, shown, result = pcall(calc.evaluate, q)
-    if ok and value then return answer_row(shown or q, result or units.format(value)) end
+    if ok and value then return answer_row(q, result or units.format(value)) end
   end
   if web.is_address(q) then
     return row { id = "address", name = q, description = "Open in the browser", material = "open_in_new",
@@ -470,7 +471,22 @@ M.PREFIXES = {
 
 --- Rows for a query with a prefix, and the mode to draw them in; nil for a
 --- query that has none (the launcher's own search goes on).
+local SECTIONS = {
+  calculator = "Calculator", run = "Run", files = "Files", web = "Web", windows = "Windows",
+  system = "System", emoji = "Emoji", clipboard = "Clipboard", colour = "Colour",
+}
+
+local search_prefixed -- below
+
 function M.search(query)
+  local rows, mode = search_prefixed(query)
+  if not rows then return nil end
+  local what = M.PREFIXES[query:sub(1, 1)]
+  for _, r in ipairs(rows) do r.section = r.section or SECTIONS[what] end
+  return rows, mode
+end
+
+search_prefixed = function(query)
   M.revision:get()
   local first = query:sub(1, 1)
   local what = M.PREFIXES[first]
