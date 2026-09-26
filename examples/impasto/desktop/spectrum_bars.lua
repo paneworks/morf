@@ -78,7 +78,7 @@ local SOURCE = [[
       local tip = cfg[12]
       local color = vec4(cfg[13], cfg[14], cfg[15], cfg[16])
       local color2 = vec4(cfg[17], cfg[18], cfg[19], cfg[20])
-      local opacity = cfg[21] + cfg[23] * SLOT_TAG
+      local opacity = cfg[21]
 
       local across = side < 0.5
       local pixel = uv * area
@@ -181,46 +181,16 @@ local SOURCE = [[
     end
   ]]
 
--- morf keeps one uniform and data buffer per registered shader, written for
--- each node that uses it before the frame is submitted, so every node
--- sharing a shader draws with the last node's numbers. Each spectrum gets a
--- shader of its own, then: slots, reused once the node that held one is
--- gone (a write to a node that no longer exists fails).
-local slots = {} -- { name, node, cfg }
-
-local function slot_free(slot)
-  if not slot.node then return true end
-  return not pcall(morf.shader_data, slot.node, "cfg", slot.cfg or { 0 })
-end
-
+-- One program for every spectrum: each node that wears it has its own
+-- data blocks, so a square and an edge draw with their own numbers.
 -- Registered while the configuration loads: a shader registered later is
--- never handed to the renderer, and its nodes draw nothing. Enough for the
--- desk at rest, the arranging board, the card and an inspector's looks.
-M.SLOTS = 32
-for index = 1, M.SLOTS do
-  local slot = { name = "impasto_spectrum_" .. index }
-  morf.shader(slot.name, {
-    kind = "surface",
-    data = { cfg = CFG, bands = M.BANDS, peaks = M.BANDS },
-    -- Programs are keyed by their compiled text, so identical sources would
-    -- share one again: each slot's differs by a term that changes nothing.
-    fragment = (SOURCE:gsub("SLOT_TAG", tostring(index) .. ".0")),
-  })
-  slots[index] = slot
-end
-
--- A free slot, or, with every one taken, the last (drawn with whatever
--- numbers its other holder pushed last: wrong, but never missing).
-local function take_slot()
-  for _, slot in ipairs(slots) do
-    if slot_free(slot) then
-      slot.node, slot.cfg = nil, nil
-      return slot
-    end
-  end
-  morf.log("warn", "impasto: every spectrum shader slot is taken; sharing one")
-  return slots[#slots]
-end
+-- never handed to the renderer, and its nodes draw nothing.
+local SHADER = "impasto_spectrum"
+morf.shader(SHADER, {
+  kind = "surface",
+  data = { cfg = CFG, bands = M.BANDS, peaks = M.BANDS },
+  fragment = SOURCE,
+})
 
 -- ---------------------------------------------------------------- bands --
 
@@ -400,22 +370,18 @@ function M.build(values)
   local looks = values.looks
   local listening = values.listening or function() return true end
   local sample = values.sample
-  local slot = take_slot()
   local node = ui.Rect {
     x = 0, y = 0, width = values.width, height = values.height,
     color = morf.color("transparent"),
-    shader = slot.name,
+    shader = SHADER,
   }
-  slot.node = node
   if not sample then live[node] = true end
   -- The look travels as data: a binding on a child that pushes it whenever
   -- the row or the palette changes, and dies with the node.
   local pusher = ui.Item {
     width = 0, height = 0, visible = false,
     implicit_width = function()
-      local cfg = cfg_of(values, looks())
-      if slot.node == node then slot.cfg = cfg end
-      pcall(morf.shader_data, node, "cfg", cfg)
+      pcall(morf.shader_data, node, "cfg", cfg_of(values, looks()))
       if sample then
         pcall(morf.shader_data, node, "bands", still)
         pcall(morf.shader_data, node, "peaks", still_peaks)
