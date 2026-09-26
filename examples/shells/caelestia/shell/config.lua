@@ -97,6 +97,9 @@ return settings.open {
     airplane = { on = false, was = { wifi = false, bluetooth = false, mobile = false } },
     -- sound, vibrate or silent (lib/ringer.lua; vibrate where feedbackd is).
     ringer = { mode = "sound" },
+    -- The shell as the session's polkit agent (polkit.lua): "on", or "off"
+    -- to leave the job to another (hyprpolkitagent, polkit-gnome).
+    polkit = { agent = "on" },
     keyboard = {
       -- Up by itself when a program asks for text and no real keyboard
       -- is attached (a tablet, a detached keyboard); by hand either way.

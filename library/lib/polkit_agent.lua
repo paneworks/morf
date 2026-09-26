@@ -64,6 +64,11 @@ end
 --- answers with `request.answer(password)` or gives up with
 --- `request.cancel()`. `on_done(request, ok, why)` says how it ended.
 ---
+--- `options.retries` (0 by default) is how many wrong answers a request
+--- survives: each one runs the helper again for the same cookie, as the
+--- stock agents do, and calls `options.on_failure(request)` -- a wrong
+--- password is a second try, not the program's request refused.
+---
 --- `options.subject` chooses what the agent answers for: `"session"` (the
 --- default) is this login session, `"process"` is this process only, which is
 --- what a test wants when another agent already serves the session.
@@ -71,6 +76,8 @@ function polkit_agent.serve(options)
   options = options or {}
   local on_request = options.on_request or function() end
   local on_done = options.on_done or function() end
+  local on_failure = options.on_failure or function() end
+  local retries = options.retries or 0
   local path = options.path or "/org/morf/PolkitAgent"
 
   local service, outcome = morf.dbus.serve("system", "", path, false)
@@ -80,9 +87,10 @@ function polkit_agent.serve(options)
 
   local agent = { pending = {}, names = usernames() }
 
-  local function finish(request, ok, error_name, message)
-    if not agent.pending[request.cookie] then return end
-    agent.pending[request.cookie] = nil
+  -- Lets go of the helper a request is talking to. The generation moves
+  -- on with it, so the poll that read the old one stops of its own accord.
+  local function drop_helper(request)
+    request.generation = (request.generation or 0) + 1
     if request.helper then
       pcall(function() request.helper:kill() end)
       request.helper = nil
@@ -91,6 +99,14 @@ function polkit_agent.serve(options)
       pcall(function() request.socket:close() end)
       request.socket = nil
     end
+  end
+
+  local run_helper
+
+  local function finish(request, ok, error_name, message)
+    if not agent.pending[request.cookie] then return end
+    agent.pending[request.cookie] = nil
+    drop_helper(request)
     if ok then
       service:reply(request.call_id, nil)
     else
@@ -114,7 +130,15 @@ function polkit_agent.serve(options)
     elseif text == "SUCCESS" then
       finish(request, true)
     elseif text == "FAILURE" then
-      finish(request, false, FAILED, "authentication failed")
+      if (request.failures or 0) < retries and agent.pending[request.cookie] then
+        request.failures = (request.failures or 0) + 1
+        request.prompt, request.info = nil, nil
+        drop_helper(request)
+        on_failure(request)
+        run_helper(request, request.user)
+      else
+        finish(request, false, FAILED, "authentication failed")
+      end
     end
   end
 
@@ -127,7 +151,8 @@ function polkit_agent.serve(options)
   --- socket; older systems have it as a setuid program that takes the user
   --- on its command line and the cookie on stdin. The lines it speaks are
   --- the same either way.
-  local function run_helper(request, user)
+  function run_helper(request, user)
+    local generation = request.generation or 0
     local buffer = ""
     local function feed(data)
       buffer = buffer .. data
@@ -136,6 +161,8 @@ function polkit_agent.serve(options)
         if not newline then break end
         helper_line(request, buffer:sub(1, newline - 1))
         buffer = buffer:sub(newline + 1)
+        -- What an old helper said after its verdict is nobody's business.
+        if request.generation ~= generation then return end
       end
     end
     local ok, socket = pcall(morf.socket, HELPER_SOCKET)
@@ -151,53 +178,43 @@ function polkit_agent.serve(options)
       helper:write(request.cookie .. "\n")
     end
     -- Polled rather than awaited, twenty milliseconds at a time, and stopped
-    -- the moment the helper is gone: a handle is what makes that possible.
+    -- the moment this helper is let go of -- by a verdict, a cancel, or a
+    -- retry that started another.
+    local socket_, helper = request.socket, request.helper
     local tick
-    tick = morf.timer(20, function()
-      if not request.socket and not request.helper then
-        if tick then tick:cancel() end
-        return
+    local function current() return request.generation == generation end
+    local function lost(why)
+      if current() then
+        drop_helper(request)
+        if agent.pending[request.cookie] then finish(request, false, FAILED, why) end
       end
-      if request.socket then
+      tick:cancel()
+    end
+    tick = morf.timer(20, function()
+      if not current() then tick:cancel() return end
+      if socket_ then
         for _ = 1, 32 do
-          local data = request.socket:receive(4096, 1)
+          local data = socket_:receive(4096, 1)
           if data == nil then break end
-          if data == "" then
-            -- The far end closed: a helper that leaves without a verdict
-            -- failed, whatever it said.
-            request.socket:close()
-            request.socket = nil
-            if agent.pending[request.cookie] then
-              finish(request, false, FAILED, "the helper went away")
-            end
-            tick:cancel()
-            return
-          end
+          -- The far end closed: a helper that leaves without a verdict
+          -- failed, whatever it said.
+          if data == "" then lost("the helper went away") return end
           feed(data)
-          -- A verdict in that data closed the socket; there is nothing more
-          -- to read from a handle that is gone.
-          if not request.socket then
-            tick:cancel()
-            return
-          end
+          if not current() then tick:cancel() return end
         end
         return
       end
-      local helper = request.helper
       for _ = 1, 32 do
         local event = helper:next()
         if not event then break end
         if event.kind == "stdout" then
           feed(event.data)
+          if not current() then tick:cancel() return end
         elseif event.kind == "stderr" then
           request.info = event.data
           on_request(request)
         elseif event.kind == "exit" then
-          request.helper = nil
-          if agent.pending[request.cookie] then
-            finish(request, false, FAILED, "the helper exited")
-          end
-          tick:cancel()
+          lost("the helper exited")
           return
         end
       end

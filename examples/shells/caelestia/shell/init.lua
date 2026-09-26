@@ -69,6 +69,7 @@ end)
 local launcher = require("launcher")
 local dashboard = require("dashboard")
 local session = require("session")
+local polkit = require("polkit")
 local osd = require("osd")
 local notifs = require("notifs")
 local sidebar = require("sidebar")
@@ -234,6 +235,20 @@ morf.ipc.launcher = function(how)
 end
 morf.ipc.dashboard = verb(dashboard.drawer)
 morf.ipc.session = verb(session.drawer)
+-- `polkit` says whether this screen is the agent and what it is asking;
+-- `polkit demo` opens the dialog on a made-up request (any password but
+-- "wrong" is taken, and it goes nowhere), `polkit cancel` gives up.
+morf.ipc.polkit = function(how)
+  if how == "demo" then
+    if not here() then return nil end
+    polkit.demo()
+    return true
+  end
+  if how == "cancel" then polkit.cancel() return true end
+  local r = polkit.request:get()
+  return { agent = polkit.registered:get(), open = polkit.drawer.open:get(),
+    phase = polkit.phase:get(), action = r and r.action or "" }
+end
 -- `sidebar [how [TAB]]`: TAB is settings or notifications. `utilities`
 -- is the sidebar on its settings; `settings PAGE` opens one of their pages
 -- (network, bluetooth, sound).
