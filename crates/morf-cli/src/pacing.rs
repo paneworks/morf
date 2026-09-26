@@ -18,34 +18,42 @@ use crate::{surface_layers::*, surfaces::*};
 /// frames it was going to lose anyway, and gets an even rhythm in exchange.
 #[derive(Debug)]
 pub(crate) struct FramePacer {
-    /// Smoothed cost of producing one frame.
+    /// Typical cost of producing one frame: the median of `recent`.
     pub(crate) cost: Option<Duration>,
+    /// The last few paints' costs, oldest first.
+    recent: std::collections::VecDeque<Duration>,
     /// Callbacks seen since the last paint, or `None` when the surface is at
     /// rest and the next callback should paint whatever the cadence was.
     pub(crate) waited: Option<u32>,
 }
 
-/// Weight given to the newest measurement, out of one.
+/// How many recent paints the cost is the median of.
 ///
-/// Low enough that one slow frame — a first paint, a resize, a shader compiled
-/// on demand — does not halve the cadence on its own, high enough to follow a
-/// real change within a few frames.
-pub(crate) const COST_SMOOTHING: f64 = 0.25;
+/// A median, not an average: one slow frame -- a layout of the whole tree, a
+/// shader compiled on demand, a present that waited on a busy GPU -- moved an
+/// average far enough to drop a desk of 60 Hz screens to fifteen frames a
+/// second for the rest of the motion. Half of these must be slow before the
+/// cadence changes, which a real change reaches within a few frames.
+pub(crate) const COST_WINDOW: usize = 7;
 
 impl FramePacer {
     pub(crate) fn new() -> Self {
         Self {
             cost: None,
+            recent: std::collections::VecDeque::with_capacity(COST_WINDOW),
             waited: None,
         }
     }
 
     /// Records what the last paint cost.
     pub(crate) fn observed(&mut self, cost: Duration) {
-        self.cost = Some(match self.cost {
-            None => cost,
-            Some(previous) => previous.mul_f64(1.0 - COST_SMOOTHING) + cost.mul_f64(COST_SMOOTHING),
-        });
+        if self.recent.len() == COST_WINDOW {
+            self.recent.pop_front();
+        }
+        self.recent.push_back(cost);
+        let mut sorted: Vec<Duration> = self.recent.iter().copied().collect();
+        sorted.sort_unstable();
+        self.cost = Some(sorted[sorted.len() / 2]);
     }
 
     /// Callbacks this surface lets pass between paints.

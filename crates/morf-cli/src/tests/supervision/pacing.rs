@@ -128,3 +128,14 @@ fn motion_that_lands_on_a_skipped_callback_is_still_painted() {
         "motion that ended on a painted frame owes nothing"
     );
 }
+
+#[test]
+fn one_slow_frame_does_not_drop_the_rate() {
+    // A layout of the whole tree now and then (25 ms, 100 ms) among cheap
+    // frames: the cadence stays at every callback.
+    let mut pacer = FramePacer::new();
+    for cost in [4_000, 5_000, 100_000, 4_000, 6_000, 25_000, 5_000, 4_000] {
+        pacer.observed(Duration::from_micros(cost));
+        assert_eq!(pacer.interval(REFRESH), 1, "after a {cost} µs frame");
+    }
+}
