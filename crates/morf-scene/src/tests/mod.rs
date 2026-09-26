@@ -266,6 +266,7 @@ mod gradient;
 mod groups;
 mod physics;
 mod playback;
+mod shown;
 mod spline;
 mod stretch;
 

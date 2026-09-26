@@ -27,6 +27,7 @@ mod scene_access;
 mod scene_behavior;
 mod scene_default;
 mod scene_revision;
+mod scene_shown;
 mod schema;
 mod spline;
 mod stretch;

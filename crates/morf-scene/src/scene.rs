@@ -458,12 +458,14 @@ impl Scene {
     /// running rather than paused, or an ending not yet reported. What a loop
     /// asks before it keeps a clock ticking for motion.
     pub fn has_motion(&self) -> bool {
+        // An animation on a node nothing shows is not motion (see
+        // `scene_shown`): it catches up when the loop next turns.
+        let mut shown = std::collections::HashMap::new();
         !self.events.is_empty()
             || !self.group_events.is_empty()
-            || self
-                .animations
-                .values()
-                .any(|animation| !animation.is_paused())
+            || self.animations.iter().any(|(key, animation)| {
+                !animation.is_paused() && self.change_shows(key.node, key.property, &mut shown)
+            })
             || self.groups.values().any(|group| !group.paused)
             || self.stretch_moving()
     }
@@ -501,6 +503,11 @@ impl Scene {
         };
         let keys: Vec<_> = self.animations.keys().copied().collect();
         let mut finished = Vec::new();
+        // What is seen to move: an animation on a node nothing shows still
+        // advances here, but it is not motion the loop draws for (see
+        // `scene_shown`).
+        let mut shown = std::collections::HashMap::new();
+        let mut seen_moving = false;
         for key in keys {
             let animation = self
                 .animations
@@ -535,7 +542,13 @@ impl Scene {
                     self.bump_layout(key.node);
                 }
                 self.properties.write(slot.current, value)?;
-                frame.changed += 1;
+                if self.change_shows(key.node, key.property, &mut shown) {
+                    frame.changed += 1;
+                    seen_moving |= !complete;
+                }
+            } else if !complete && self.change_shows(key.node, key.property, &mut shown) {
+                // Paused or waiting out a delay, and on show: it will move.
+                seen_moving = true;
             }
             if complete {
                 finished.push(key);
@@ -580,7 +593,12 @@ impl Scene {
                 };
                 let settled = advance_physics_color(channels, &mut current, delta);
                 self.properties.write(slot.current, Value::Color(current))?;
-                frame.changed += 1;
+                let colour_node = key.node;
+                let colour_property = key.property;
+                if self.change_shows(colour_node, colour_property, &mut shown) {
+                    frame.changed += 1;
+                    seen_moving |= !settled;
+                }
                 if settled {
                     physics_finished.push(key);
                 }
@@ -600,7 +618,10 @@ impl Scene {
             }
             self.properties
                 .write(slot.current, Value::Number(current))?;
-            frame.changed += 1;
+            if self.change_shows(key.node, key.property, &mut shown) {
+                frame.changed += 1;
+                seen_moving |= !settled;
+            }
             if settled {
                 physics_finished.push(key);
             }
@@ -623,10 +644,9 @@ impl Scene {
             )));
         }
         frame.exited = self.finished_exits();
-        frame.active = !self.animations.is_empty()
-            || !self.physics.is_empty()
-            || !self.groups.is_empty()
-            || self.stretch_moving();
+        // Only what is seen to move asks for the next frame; groups are
+        // timelines that start their steps themselves, and stay motion.
+        frame.active = seen_moving || !self.groups.is_empty() || self.stretch_moving();
         Ok(frame)
     }
 }
