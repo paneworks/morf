@@ -97,7 +97,7 @@ M.size = {
 -- ------------------------------------------------------------------ sizes --
 
 M.BORDER = 10        -- the frame round the screen
-M.BAR = 60           -- the bar, frame included
+M.LEFT = M.BORDER     -- the left edge, the workspace rail in it (the bar was 60)
 M.ROUNDING = 25      -- the frame's inner corners, drawers, cards
 M.SEAM = 25          -- the fillet where a drawer meets the frame
 M.PAD = 16           -- inside a drawer

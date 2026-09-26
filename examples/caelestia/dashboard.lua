@@ -770,7 +770,7 @@ end
 --- over the dashboard.
 function M.edge_trigger()
   return ui.Item {
-    anchors = { fill = true, left_margin = theme.BAR, right_margin = theme.BORDER },
+    anchors = { fill = true, left_margin = theme.LEFT, right_margin = theme.BORDER },
     trigger,
   }
 end

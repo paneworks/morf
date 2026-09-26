@@ -50,6 +50,12 @@ return settings.open {
       max_shown = 7,
       action_prefix = ">",
     },
+    rail = {
+      -- The workspaces down the left edge.
+      enabled = true,
+      -- How long the numbered bud stays out after a switch, in ms.
+      hold = 800,
+    },
     services = {
       weather_location = "",
       imperial = true,

@@ -36,7 +36,7 @@ local function shown(name)
 end
 
 test.describe("caelestia", function()
-  test.it("loads the frame, the bar and a wallpaper layer", function()
+  test.it("loads the frame, the rail and a wallpaper layer", function()
     load()
     local surfaces = test.surfaces()
     test.eq(surfaces[1].kind, "primary")
@@ -50,13 +50,8 @@ test.describe("caelestia", function()
     test.eq(wallpaper.width, W)
     test.eq(wallpaper.height, H)
     test.truthy(test.find { id = "frame" }, "no frame")
-    local bar = test.get { id = "bar" }
-    test.eq(bar.width, 60)
-    test.get { id = "workspaces" }
-    test.get { id = "clock" }
-    test.get { id = "status" }
-    test.get { id = "power" }
-    test.eq(test.get({ id = "window-title" }).text, "Desktop")
+    test.falsy(test.find { id = "bar" }, "the bar is back")
+    test.get { id = "rail" }
     test.falsy(shown("launcher"))
     test.falsy(shown("dashboard"))
     test.eq(#test.logs("error"), 0)
@@ -71,7 +66,7 @@ test.describe("caelestia", function()
     local d = drawer("launcher")
     -- It sits on the frame's bottom edge, centred in the opening.
     test.near(d.y + d.height, H - 10, 1)
-    test.near(d.x + d.width / 2, 60 + (W - 70) / 2, 1)
+    test.near(d.x + d.width / 2, W / 2, 1)
     test.truthy(test.find { id = "launcher-search" })
     test.snapshot("caelestia-launcher.png", { surface = "screen" })
     test.eq(test.ipc("launcher", "close"), false)
@@ -191,7 +186,7 @@ test.describe("caelestia", function()
       d = drawer("dashboard")
       test.eq(d.width, want[2], want[1] .. " width")
       test.eq(d.height, want[3], want[1] .. " height")
-      test.near(d.x + d.width / 2, 60 + (W - 70) / 2, 1)
+      test.near(d.x + d.width / 2, W / 2, 1)
       test.truthy(test.find { id = want[4], visible = true }, want[1] .. " page not shown")
     end
   end)
@@ -330,11 +325,11 @@ test.describe("caelestia", function()
     test.settle(1500)
     test.falsy(shown("launcher"))
   end)
-  test.it("opens the session menu from the power button, and runs nothing until asked", function()
+  test.it("opens the session menu, and runs nothing until asked", function()
     load()
-    test.click { id = "power" }
+    test.ipc("session", "open")
     test.settle(1500)
-    test.truthy(shown("session"), "the power button did not open it")
+    test.truthy(shown("session"))
     local d = drawer("session")
     test.near(d.x + d.width, W - 10, 1)
     test.near(d.y + d.height / 2, H / 2, 1)
@@ -383,44 +378,6 @@ test.describe("caelestia", function()
     test.settle(800)
     test.eq(test.get({ id = "launcher-search" }).text, "> scheme ")
     test.truthy(test.find { text = "Dynamic" })
-  end)
-  test.it("grows the bar's popouts on hover, turning one into the next", function()
-    load()
-    local net = test.get { id = "status-network" }
-    test.move(net.x + 20, net.y + 15)
-    test.settle(1500)
-    test.truthy(shown("popout"), "hovering the network icon opened nothing")
-    local d = drawer("popout")
-    test.near(d.x, 60, 1)
-    test.eq(d.width, 352)
-    test.truthy(test.find { id = "popout-network", visible = true })
-    test.truthy(test.find { text = "Rescan networks" })
-    test.snapshot("caelestia-popout-network.png", { surface = "screen" })
-    local bt = test.get { id = "status-bluetooth" }
-    test.move(bt.x + 20, bt.y + 15)
-    test.advance(48)
-    d = drawer("popout")
-    test.truthy(d.width > 332 and d.width < 352, "it jumped to the next popout's width")
-    test.settle(1500)
-    d = drawer("popout")
-    test.eq(d.width, 332)
-    test.truthy(test.find { id = "popout-bluetooth", visible = true })
-    test.falsy(test.find { id = "popout-network", visible = true })
-    test.snapshot("caelestia-popout-bluetooth.png", { surface = "screen" })
-    local power = test.get { id = "status-power" }
-    test.move(power.x + 20, power.y + 15)
-    test.settle(1500)
-    test.truthy(test.find { text = "No battery detected" })
-    test.snapshot("caelestia-popout-power.png", { surface = "screen" })
-    -- Onto the panel: it stays.
-    d = drawer("popout")
-    test.move(d.x + d.width / 2, d.y + d.height / 2)
-    test.advance(600)
-    test.truthy(shown("popout"), "moving onto the panel shut it")
-    -- Off both: it shuts.
-    test.move(900, 500)
-    test.advance(1500)
-    test.falsy(shown("popout"), "leaving did not shut it")
   end)
   test.it("drops a notification in at the top right, and lets it go after its time", function()
     load()
@@ -620,5 +577,76 @@ test.describe("caelestia", function()
     -- The Material scheme is built from that accent: a blue primary.
     local h = morf.color(primary):hct()
     test.truthy(h > 230 and h < 300, "primary " .. primary .. " is not the accent's blue")
+  end)
+
+  test.it("lines the workspaces down the left edge, the active one lit", function()
+    load()
+    local track = math.floor(H * 0.5)
+    for i = 1, 10 do
+      local pill = test.get { id = "rail-pill-" .. i }
+      test.near(pill.x + pill.width / 2, 5, 0.5)
+      test.eq(pill.width, 6)
+    end
+    local first, last = test.get { id = "rail-pill-1" }, test.get { id = "rail-pill-10" }
+    test.near(first.y, (H - track) / 2, 1)
+    test.near(last.y + last.height, (H + track) / 2, 1)
+    test.near(test.get({ id = "rail-pill-5" }).opacity, 0.6, 0.01)
+    test.move(5, test.get({ id = "rail-pill-5" }).y + 10)
+    test.settle(400)
+    test.near(test.get({ id = "rail-pill-5" }).opacity, 0.9, 0.01, "hover did not lift it")
+    test.eq(#test.logs("error"), 0)
+  end)
+
+  test.it("carries the old workspace's pill out in a swell of the frame, down to the new one's", function()
+    load()
+    local p1 = test.get { id = "rail-pill-1" }
+    test.near(p1.opacity, 1, 0.01, "the first workspace's pill is not lit")
+    test.ipc("workspace", 4)
+    -- The old pill itself, its whole size, opens out into the disc.
+    test.advance(120)
+    local bud = test.get { id = "rail-bud" }
+    test.near(bud.y, p1.y, 1, "the drop did not leave the old pill")
+    test.near(bud.height, p1.height, 1, "the drop is not the pill's size")
+    test.truthy(bud.width > 6, "it did not open out")
+    local swell = test.get { id = "rail-swell" }
+    test.truthy(swell.x + swell.width >= bud.x + bud.width, "the disc is outside the frame's swell")
+    test.advance(800)
+    local pill = test.get { id = "rail-pill-4" }
+    bud = test.get { id = "rail-bud" }
+    test.near(bud.y, pill.y, 1, "the drop did not travel to the fourth pill")
+    test.near(bud.width, pill.height, 1, "the drop is not a disc")
+    test.truthy(bud.x > 10, "the drop stayed in the frame")
+    swell = test.get { id = "rail-swell" }
+    test.near(swell.x, 0, 0.5, "the frame did not swell out")
+    local number = test.get { id = "rail-number" }
+    test.eq(number.text, "4", "not a whole number")
+    test.near(number.opacity, 1, 0.01)
+    test.truthy(test.get({ id = "rail-pill-1" }).opacity < 1, "the old pill stayed lit")
+    test.snapshot("caelestia-rail-bud.png", { surface = "screen" })
+    -- Switched again while out: it slides there, the number rolls over.
+    test.ipc("workspace", 7)
+    test.advance(700)
+    bud, pill = test.get { id = "rail-bud" }, test.get { id = "rail-pill-7" }
+    test.near(bud.y, pill.y, 1)
+    test.near(bud.height, pill.height, 1)
+    test.eq(test.get({ id = "rail-number" }).text, "7")
+    -- Then it merges into that pill, which lights.
+    test.advance(2500)
+    bud = test.get { id = "rail-bud" }
+    test.near(bud.width, 6, 0.5, "the drop never drained back")
+    test.near(bud.y, pill.y, 1)
+    test.near(test.get({ id = "rail-field" }).opacity, 0, 0.01)
+    swell = test.get { id = "rail-swell" }
+    test.truthy(swell.x + swell.width < 0, "the swell did not sink back into the frame")
+    test.near(test.get({ id = "rail-pill-7" }).opacity, 1, 0.01, "the new pill did not light")
+    test.eq(#test.logs("error"), 0)
+  end)
+
+  test.it("switches workspace from a pill", function()
+    load()
+    test.click { id = "rail-slot-7" }
+    test.settle(300)
+    test.eq(test.get({ id = "rail-number" }).text, "7")
+    test.eq(test.ipc("workspace", 7), 7)
   end)
 end)

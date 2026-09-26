@@ -78,7 +78,7 @@ function M.edge(opts)
 
   -- The strip sits on the frame's border, inside the screen.
   return ui.Item {
-    anchors = { fill = true, left_margin = theme.BAR },
+    anchors = { fill = true, left_margin = theme.LEFT },
     strip,
   }
 end
