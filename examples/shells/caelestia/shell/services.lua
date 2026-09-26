@@ -106,6 +106,34 @@ local power = quiet_connect("upower")
 -- The services themselves, for the popouts (nil when absent).
 M.net, M.bt, M.upower = net, bt, power
 
+-- A phone's modem (lib/modem.lua), nil off a phone; and the ring mode
+-- (lib/ringer.lua): feedbackd's profile on a phone, the shell's own
+-- setting elsewhere.
+do
+  local ok, modem = pcall(require, "lib.modem")
+  local mobile = ok and select(2, pcall(modem.connect)) or nil
+  if type(mobile) == "table" and mobile.state and mobile.state.available then M.modem = mobile end
+  -- CAELESTIA_FAKE_MODEM=1: a stand-in, to see a phone's parts on a laptop.
+  local fake = morf.env and morf.env("CAELESTIA_FAKE_MODEM")
+  if fake and fake ~= "" and fake ~= "0" and not M.modem then
+    local state = morf.state { available = true, signal = 72, technology = "5G", operator = "Vodafone NL",
+      registered = true, connected = true, enabled = true, locked = false, data = true, path = "/fake" }
+    M.modem = { state = state, set_data = function(on) state.data = on == true end }
+  end
+end
+do
+  local config = require("config")
+  local ok, ringer = pcall(require, "lib.ringer")
+  local ring = ok and select(2, pcall(ringer.connect, { mode = config.get("ringer.mode") })) or nil
+  if type(ring) == "table" and ring.state then
+    M.ringer = ring
+    morf.effect("caelestia.ringer.remember", function()
+      local mode = ring.state.mode
+      if config.get("ringer.mode") ~= mode then config.set("ringer.mode", mode) end
+    end)
+  end
+end
+
 M.network = {}
 
 --- A Material Symbols name for the connection.

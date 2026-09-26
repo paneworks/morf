@@ -82,7 +82,8 @@ return settings.open {
       -- How long the numbered bud stays out after a switch, in ms.
       hold = 800,
     },
-    bar = {
+    -- The bar along an edge (bar.lua) -- not `bar`, the reference's settings.
+    edgebar = {
       -- "on", "off", or "auto": up on a narrow screen (a phone), down on a
       -- desk. The quick settings' Bar tile sets it.
       enabled = "auto",
@@ -92,6 +93,8 @@ return settings.open {
       -- bottom bar.
       titles = "on",
     },
+    -- sound, vibrate or silent (lib/ringer.lua; vibrate where feedbackd is).
+    ringer = { mode = "sound" },
     keyboard = {
       -- Up by itself when a program asks for text and no real keyboard
       -- is attached (a tablet, a detached keyboard); by hand either way.

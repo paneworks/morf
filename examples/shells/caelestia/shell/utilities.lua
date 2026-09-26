@@ -301,6 +301,35 @@ M.TOGGLES = {
     end,
   },
   {
+    -- How it calls for attention: sound, vibrate (on a phone) or silent.
+    id = "ringer", name = "Ring mode",
+    icon = function()
+      local r = services.ringer
+      return require("lib.ringer").icon(r and r.state.mode or "sound")
+    end,
+    on = function() local r = services.ringer return r ~= nil and r.state.mode ~= "sound" end,
+    set = function() local r = services.ringer if r then r.next() end end,
+    status = function()
+      local r = services.ringer
+      local mode = r and r.state.mode or "sound"
+      return mode:sub(1, 1):upper() .. mode:sub(2)
+    end,
+  },
+  {
+    -- A phone's mobile data: only where there is a modem.
+    id = "mobile", name = "Mobile data", icon = "signal_cellular_alt",
+    present = function() return services.modem ~= nil end,
+    on = function() return services.modem ~= nil and services.modem.state.data end,
+    set = function(now) if services.modem then pcall(services.modem.set_data, now) end end,
+    status = function()
+      local m = services.modem
+      if not m then return nil end
+      local s = m.state
+      if not s.data then return "Off" end
+      return (s.technology ~= "" and (s.technology .. " · ") or "") .. (s.operator ~= "" and s.operator or "On")
+    end,
+  },
+  {
     -- The bar: up or down, and a ">" to where it goes.
     id = "bar", icon = "toolbar", name = "Bar", detail = "bar",
     on = function() return require("bar").on() end,
@@ -339,6 +368,14 @@ M.detail = morf.signal("caelestia.settings.detail", "")
 
 local TILE_H, TILE_GAP = 60, 8
 local TILE_W = (CARD_W - 24 - TILE_GAP) / 2
+-- Tiles for what this machine has: mobile data only with a modem.
+do
+  local kept = {}
+  for _, t in ipairs(M.TOGGLES) do
+    if not t.present or t.present() then kept[#kept + 1] = t end
+  end
+  M.TOGGLES = kept
+end
 local TILE_ROWS = math.ceil(#M.TOGGLES / 2)
 local TILES_H = 24 + TILE_ROWS * TILE_H + (TILE_ROWS - 1) * TILE_GAP
 

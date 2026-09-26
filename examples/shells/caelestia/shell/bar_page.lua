@@ -52,10 +52,10 @@ function M.page(w, h)
   local sw = (w - 36 - 16) / 3
   for _, s in ipairs(shows) do
     show_buttons[#show_buttons + 1] = choice("bar-show-" .. s[1], s[2], s[3], function()
-      local v = config.get("bar.enabled")
+      local v = config.get("edgebar.enabled")
       if s[1] == "auto" then return v ~= "on" and v ~= "off" end
       return v == s[1]
-    end, function() config.set("bar.enabled", s[1]) end, sw)
+    end, function() config.set("edgebar.enabled", s[1]) end, sw)
   end
 
   local sides = {
@@ -89,10 +89,10 @@ function M.page(w, h)
         id = "bar-titles",
         label("Window titles"),
         ui.Row { x = 18, y = 42, gap = 8,
-          choice("bar-titles-on", "title", "Shown", function() return config.get("bar.titles") ~= "off" end,
-            function() config.set("bar.titles", "on") end, (w - 36 - 8) / 2),
-          choice("bar-titles-off", "apps", "Icons only", function() return config.get("bar.titles") == "off" end,
-            function() config.set("bar.titles", "off") end, (w - 36 - 8) / 2),
+          choice("bar-titles-on", "title", "Shown", function() return config.get("edgebar.titles") ~= "off" end,
+            function() config.set("edgebar.titles", "on") end, (w - 36 - 8) / 2),
+          choice("bar-titles-off", "apps", "Icons only", function() return config.get("edgebar.titles") == "off" end,
+            function() config.set("edgebar.titles", "off") end, (w - 36 - 8) / 2),
         },
       }),
       kit.text {

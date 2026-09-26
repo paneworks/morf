@@ -9,8 +9,8 @@
 -- the level pills -- lives in the desk that is left (`M.desk()`), so it stays
 -- on the opening's edge wherever the bar is.
 --
--- `bar.enabled`: "on", "off", or "auto" (on for a narrow screen -- a phone
--- -- and off for a desk). `bar.side`: top, bottom, left or right. The
+-- `edgebar.enabled`: "on", "off", or "auto" (on for a narrow screen -- a phone
+-- -- and off for a desk). `edgebar.side`: top, bottom, left or right. The
 -- quick settings' Bar tile toggles it; its ">" chooses the side.
 
 local morf = require("morf")
@@ -35,7 +35,7 @@ end
 
 --- Whether the bar is up.
 function M.on()
-  local wanted = config.get("bar.enabled")
+  local wanted = config.get("edgebar.enabled")
   if wanted == "on" or wanted == true then return true end
   if wanted == "off" or wanted == false then return false end
   local w = screen()
@@ -44,7 +44,7 @@ end
 
 --- Which edge it is on.
 function M.side()
-  local side = config.get("bar.side")
+  local side = config.get("edgebar.side")
   for _, s in ipairs(M.SIDES) do if s == side then return side end end
   return "top"
 end
@@ -67,8 +67,8 @@ function M.desk()
 end
 
 --- Sets it up or down.
-function M.set_on(on) config.set("bar.enabled", on and "on" or "off") end
-function M.set_side(side) config.set("bar.side", side) end
+function M.set_on(on) config.set("edgebar.enabled", on and "on" or "off") end
+function M.set_side(side) config.set("edgebar.side", side) end
 
 -- ------------------------------------------------------------------ parts --
 
@@ -108,6 +108,20 @@ local function network_icon()
     return n.state.wifi_enabled and "wifi_find" or "wifi_off"
   end
   return "wifi"
+end
+-- A phone's mobile network: bars by its signal, or off.
+local function mobile_icon()
+  local m = services.modem
+  if not m then return "signal_cellular_off" end
+  local s = m.state
+  if s.locked then return "signal_cellular_connected_no_internet_0_bar" end
+  if not s.registered then return "signal_cellular_off" end
+  local q = s.signal or 0
+  if q > 80 then return "signal_cellular_4_bar" end
+  if q > 55 then return "signal_cellular_3_bar" end
+  if q > 30 then return "signal_cellular_2_bar" end
+  if q > 10 then return "signal_cellular_1_bar" end
+  return "signal_cellular_0_bar"
 end
 local function volume_icon()
   local ok, sink = pcall(function() return morf.audio.available() and morf.audio.default_sink() end)
@@ -162,7 +176,7 @@ function M.build()
   -- along), a pill behind the focused one, a light behind the one under
   -- the pointer, and a mark on the bar's inner edge -- wide for the focused
   -- window, a dot for the rest. A click focuses it.
-  local function titles() return config.get("bar.titles") ~= "off" and not M.vertical() end
+  local function titles() return config.get("edgebar.titles") ~= "off" and not M.vertical() end
   local function icon_of(client)
     local hit = apps.icon((client.class or ""):lower()) or apps.icon(client.class or "")
       or apps.icon((client.initial_class or ""):lower())
@@ -234,16 +248,39 @@ function M.build()
     end
   end
   local function status(id, icon_fn, detail)
-    return button(id, ITEM, open_settings(detail), kit.icon(icon_fn, 20, function() return C.onSurface end,
+    local act = detail ~= "" and open_settings(detail) or function()
+      -- The ring mode's icon: a click moves it round.
+      local r = services.ringer
+      if r and id:find("ringer", 1, true) then r.next() else open_settings("")() end
+    end
+    return button(id, ITEM, act, kit.icon(icon_fn, 20, function() return C.onSurface end,
       { anchors = { center_in = true }, fill = true }))
   end
   local function tail(vertical)
     local v = vertical and "-v" or ""
-    local nodes = { gap = 2, align = "center",
+    local nodes = { gap = 2, align = "center" }
+    -- The ring mode, while it is not sound.
+    local ring = status("bar-ringer" .. v, function()
+      local r = services.ringer
+      return require("lib.ringer").icon(r and r.state.mode or "sound")
+    end, "")
+    ring.visible = function() local r = services.ringer return r ~= nil and r.state.mode ~= "sound" end
+    nodes[#nodes + 1] = ring
+    -- A phone's mobile network, with its generation.
+    if services.modem then
+      nodes[#nodes + 1] = status("bar-mobile" .. v, mobile_icon, "")
+      if not vertical then
+        nodes[#nodes + 1] = kit.text {
+          font_size = theme.size.small - 2, font_weight = 700,
+          text = function() local m = services.modem return m and m.state.technology or "" end,
+        }
+      end
+    end
+    for _, n in ipairs {
       status("bar-network" .. v, network_icon, "network"),
       status("bar-sound" .. v, volume_icon, "sound"),
       status("bar-battery" .. v, battery_icon, "power"),
-    }
+    } do nodes[#nodes + 1] = n end
     if not vertical then
       nodes[#nodes + 1] = kit.text {
         font_size = theme.size.small, font_weight = 600,
@@ -308,7 +345,8 @@ function M.build()
     if side == "left" then return 0, 0, i.left + theme.LEFT, h end
     return w - i.right - theme.BORDER, 0, i.right + theme.BORDER, h
   end
-  local PAD = 16
+  -- Well in from the frame's corners.
+  local PAD = 34
   local head_h = ui.Row { gap = 10, align = "center", logo(""), windows("row") }
   local tail_h = tail(false)
   local head_v = ui.Column { gap = 8, align = "center", logo("-v"), windows("column") }
