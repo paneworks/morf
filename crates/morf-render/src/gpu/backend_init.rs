@@ -253,7 +253,11 @@ fn warn_if_not_vulkan(info: &wgpu::AdapterInfo) {
             info.name,
             info.driver,
             if software { ", a CPU renderer" } else { "" },
-            if software { " and burns the processor" } else { "" },
+            if software {
+                " and burns the processor"
+            } else {
+                ""
+            },
         );
     });
 }

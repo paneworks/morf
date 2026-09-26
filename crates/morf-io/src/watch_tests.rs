@@ -312,8 +312,12 @@ fn a_sysfs_attribute_is_watched_by_poll_and_quiet_until_it_changes() {
     if !path.exists() {
         return;
     }
-    let watch = Watch::new(path, WatchOptions::default()).expect("a sysfs attribute can be watched");
-    assert!(watch.next_timeout(Duration::from_millis(150)).is_none(), "a change nobody made");
+    let watch =
+        Watch::new(path, WatchOptions::default()).expect("a sysfs attribute can be watched");
+    assert!(
+        watch.next_timeout(Duration::from_millis(150)).is_none(),
+        "a change nobody made"
+    );
     // A second one beside it, and the first dropped: the thread keeps polling
     // the one left, and stops with the last.
     let other = Watch::new(path, WatchOptions::default()).unwrap();
