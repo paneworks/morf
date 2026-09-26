@@ -218,3 +218,30 @@ fn a_theme_with_a_transition_eases_its_colours() {
         )
         .unwrap();
 }
+
+// A colour written to a theme with a transition asks for the frame that
+// starts the fade, from a handler as from anywhere: before, nothing on
+// screen had changed yet, so the fade waited for some other frame.
+#[test]
+fn a_theme_fade_asks_for_its_first_frame() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "fade.lua",
+            br##"
+                local morf = require("morf")
+                local ui = require("morf.ui")
+                theme = morf.theme({ accent = "#000000" }, { transition = { duration = 200 } })
+                ui.Rect { color = function() return theme.accent end }
+                morf.ipc.set = function() theme.accent = "#ff0000" end
+            "##,
+        )
+        .unwrap();
+    runtime.poll_services();
+    assert!(!runtime.has_pending_work());
+    runtime.call_ipc("set", &[]).unwrap();
+    assert!(
+        runtime.has_pending_work(),
+        "the fade waits for someone else's frame"
+    );
+}

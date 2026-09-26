@@ -192,6 +192,11 @@ pub(crate) fn install_state_api<'gc>(
                                 duration,
                                 easing,
                             });
+                            // Nothing on screen changed yet, so nothing else
+                            // asks for the frame that starts the fade: a
+                            // colour set from a tool's terminal or file would
+                            // wait for the clock to tick before it began.
+                            state.scene_revision = state.scene_revision.wrapping_add(1);
                         }
                         return Ok(CallbackReturn::Return);
                     }
