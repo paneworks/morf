@@ -6,12 +6,10 @@
 --   local kb = osk.new {
 --     width = 900,                    -- laid out across this
 --     mode = "full",                  -- see MODES
---     numbers = true,                 -- "full": the number row shown
---     switch = { "full", "dev" },     -- the modes its toolbar may switch between
+--     numbers = true,                 -- "full": the number row shown (kb.numbers)
 --     look = { ... },                 -- colours and face; see `look` below
 --     send = osk.sender(),            -- where keys go (the default)
 --     on_pattern = function(dots) end,-- "pattern": { 1, 5, 9, ... }
---     on_hide = function() end,       -- its hide key
 --   }
 --   place(kb.node); height = kb.height   -- a function: it changes with the mode
 --   kb.mode:set("numbers")
@@ -19,9 +17,10 @@
 -- MODES
 --   full      letters, the number row (hideable), two pages of symbols;
 --             hold a key for its alternates (accents, the digit above it)
---   dev       full, and a row of Esc, Tab, Ctrl, Alt, Super and the arrows --
---             the modifiers stick for one key, twice to lock -- and a row of
---             the symbols code wants
+--   dev       laid out for code: Esc and the symbols a shell wants on top,
+--             the number row, Tab before the a-row, and Ctrl, Alt, space,
+--             the arrows and Enter along the bottom -- the modifiers stick
+--             for one key, twice to lock
 --   letters   letters only
 --   numbers   a number pad
 --   phone     a dial pad: digits, * # +
@@ -184,7 +183,24 @@ PAGES.symbols2 = {
     a("?123", "page:symbols", 1.5, { dim = true })),
   { a("ABC", "page:letters", 1.5, { dim = true }), ch("<"), SPACE(5), ch(">"), ENTER },
 }
--- dev: the keys a terminal wants, over the letters.
+-- dev: laid out as a keyboard for code is -- the symbols a shell wants on
+-- top, Tab before the a-row, and the modifiers and arrows along the bottom
+-- where the thumbs are.
+PAGES.dev = {
+  { k("esc", "escape", 1, { dim = true }), ch("`"), ch("~"), ch("|"), ch("-"), ch("/"), ch("\\"),
+    ch("{"), ch("}"), k("del", "delete", 1, { rep = true, dim = true }) },
+  row("1234567890"),
+  row("qwertyuiop"),
+  front(row("asdfghjkl"), k("tab", "tab", 1, { dim = true, icon = "keyboard_tab" })),
+  front(with(row("zxcvbnm"), BACKSPACE), a("⇧", "shift", 1.5, { dim = true, icon = "shift" })),
+  { a("ctrl", "mod:ctrl", 1.2, { dim = true }), a("alt", "mod:alt", 1.2, { dim = true }),
+    a("?123", "page:symbols", 1.2, { dim = true }), SPACE(2.4),
+    k("←", "left", 0.75, { rep = true, dim = true, icon = "arrow_back" }),
+    k("↓", "down", 0.75, { rep = true, dim = true, icon = "arrow_downward" }),
+    k("↑", "up", 0.75, { rep = true, dim = true, icon = "arrow_upward" }),
+    k("→", "right", 0.75, { rep = true, dim = true, icon = "arrow_forward" }),
+    k("⏎", "enter", 1.2, { accent = true, icon = "keyboard_return" }) },
+}
 PAGES.dev_keys = {
   k("esc", "escape", 1, { dim = true }), k("tab", "tab", 1, { dim = true, icon = "keyboard_tab" }),
   a("ctrl", "mod:ctrl", 1, { dim = true }), a("alt", "mod:alt", 1, { dim = true }), a("super", "mod:super", 1, { dim = true }),
@@ -237,12 +253,10 @@ function osk.new(options)
   local ICONS = look.icons
   local send = options.send or osk.sender()
   local on_pattern = options.on_pattern or function() end
-  local on_hide = options.on_hide
 
   local GAP = math.max(4, math.floor(W / 150))
   local UNIT = (W - 11 * GAP) / 10
   local KH = math.floor(math.max(40, math.min(64, UNIT * 1.12)))
-  local BAR = math.floor(KH * 0.72)
   local RADIUS = look.radius or math.floor(KH * 0.28)
   local LABEL = math.floor(KH * 0.42)
   local SMALL = math.floor(KH * 0.26)
@@ -253,15 +267,14 @@ function osk.new(options)
   local shift = morf.signal(named("shift"), "off") -- off, once, lock
   local mods = { ctrl = morf.signal(named("ctrl"), "off"), alt = morf.signal(named("alt"), "off"),
     super = morf.signal(named("super"), "off") }
-  local switch = options.switch or {}
 
   local function rows_for(m, p)
     if m == "numbers" then return PAGES.numbers end
     if m == "phone" then return PAGES.phone end
     if m == "letters" then return PAGES.letters_only end
+    if m == "dev" and p == "letters" then return PAGES.dev end
     local base = PAGES[p] or PAGES.letters
     local out = {}
-    if m == "dev" then out[#out + 1] = PAGES.dev_keys; out[#out + 1] = PAGES.dev_symbols end
     if p == "letters" and numbers:get() and m ~= "letters" then out[#out + 1] = PAGES.numrow end
     for _, r in ipairs(base) do out[#out + 1] = r end
     return out
@@ -273,7 +286,7 @@ function osk.new(options)
     return n * KH + (n - 1) * GAP
   end
   local function height()
-    return BAR + GAP + body_height(mode:get(), page:get()) + 2 * GAP
+    return body_height(mode:get(), page:get()) + 2 * GAP
   end
 
   -- -------------------------------------------------------- striking --
@@ -336,7 +349,7 @@ function osk.new(options)
     pick = morf.signal(named("alts.pick"), 1) }
   local CELL = math.floor(KH * 0.9)
 
-  local body_top = BAR + GAP
+  local body_top = GAP
 
   --- One key at (x, y) of w, as a pointer target with its face and label.
   local function key_node(spec, x, y, w, mode_name, page_name)
@@ -464,10 +477,14 @@ function osk.new(options)
     local nodes = {}
     local y = 0
     for _, r in ipairs(rows) do
+      -- A key of w units is w key widths and the w - 1 gaps inside it, so
+      -- a row of n units is n * u + (n - 1) gaps across, whatever its keys.
+      -- One u for every row keeps the keys the same size; a row that would
+      -- not fit (more than ten units) shrinks to.
       local units = 0
       for _, spec in ipairs(r) do units = units + spec.w end
-      local u = (W - (#r + 1) * GAP) / math.max(units, 10) -- keep key width across rows
-      local row_w = units * u + (#r - 1) * GAP
+      local u = math.min(UNIT, (W - 2 * GAP - (units - 1) * GAP) / units)
+      local row_w = units * u + (units - 1) * GAP
       local x = math.floor((W - row_w) / 2)
       for _, spec in ipairs(r) do
         local w = math.floor(spec.w * u + (spec.w - 1) * GAP)
@@ -485,10 +502,11 @@ function osk.new(options)
     local rows
     if mode_name == "numbers" or mode_name == "phone" or mode_name == "letters" then
       rows = rows_for(mode_name, page_name)
+    elseif mode_name == "dev" and page_name == "letters" then
+      rows = PAGES.dev
     else
       local base = PAGES[page_name]
       rows = {}
-      if mode_name == "dev" then rows[#rows + 1] = PAGES.dev_keys; rows[#rows + 1] = PAGES.dev_symbols end
       if page_name == "letters" and with_numbers then rows[#rows + 1] = PAGES.numrow end
       for _, r in ipairs(base) do rows[#rows + 1] = r end
     end
@@ -497,15 +515,16 @@ function osk.new(options)
       if mode:get() ~= mode_name then return false end
       if mode_name == "numbers" or mode_name == "phone" or mode_name == "letters" then return true end
       if page:get() ~= page_name then return false end
-      if page_name == "letters" then return numbers:get() == with_numbers end
+      if page_name == "letters" and mode_name ~= "dev" then return numbers:get() == with_numbers end
       return true
     end
     nodes.width, nodes.height = W, 1
     layers[#layers + 1] = ui.Item(nodes)
   end
+  layer("full", "letters", true)
+  layer("full", "letters", false)
+  layer("dev", "letters")
   for _, m in ipairs { "full", "dev" } do
-    layer(m, "letters", true)
-    layer(m, "letters", false)
     layer(m, "symbols")
     layer(m, "symbols2")
   end
@@ -591,40 +610,6 @@ function osk.new(options)
   }
   layers[#layers + 1] = ui.Item(pattern_nodes)
 
-  -- --------------------------------------------------------- the toolbar --
-  local function tool(id, icon_text, on, lit, props, is_icon)
-    local area
-    area = ui.MouseArea {
-      id = named("tool." .. id), width = BAR * 1.4, height = BAR - 4, cursor = "pointer",
-      on_clicked = on,
-      ui.Rect {
-        anchors = { fill = true }, radius = (BAR - 4) / 2,
-        color = function()
-          if lit and lit() then return ACCENT() end
-          return (area and area.hovered) and KEY() or KEY():alpha(0)
-        end,
-      },
-      ui.Text {
-        anchors = { center_in = true }, text = icon_text,
-        font_family = (is_icon and ICONS) or FONT, font_size = is_icon and ICONS and (SMALL + 8) or (SMALL + 2),
-        color = function() return (lit and lit()) and ON_ACCENT() or DIM() end,
-      },
-    }
-    for n, v in pairs(props or {}) do area[n] = v end
-    return area
-  end
-  local tools = { gap = GAP }
-  if on_hide then tools[#tools + 1] = tool("hide", ICONS and "keyboard_hide" or "⌄", on_hide, nil, nil, true) end
-  tools[#tools + 1] = tool("numbers", "123", function() numbers:set(not numbers:get()) end,
-    function() return numbers:get() end,
-    { visible = function() return mode:get() == "full" or mode:get() == "dev" end })
-  for _, m in ipairs(switch) do
-    tools[#tools + 1] = tool("mode." .. m, m, function() mode:set(m) page:set("letters") end,
-      function() return mode:get() == m end)
-  end
-  local toolbar = ui.Row(tools)
-  toolbar.x, toolbar.y = GAP, 2
-
   -- ------------------------------------------------------ the overlays --
   local bubble = ui.Item {
     visible = function() return preview.on:get() end,
@@ -662,7 +647,6 @@ function osk.new(options)
     id = named("board"),
     width = W, height = height,
     ui.Rect { anchors = { fill = true }, color = function() return PANEL() end },
-    toolbar,
     ui.Item(with({ width = W, height = 1 }, table.unpack(layers))),
     bubble,
     alt_strip,

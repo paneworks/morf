@@ -39,7 +39,6 @@ local kb = osk.new {
   width = M.WIDTH - 2 * PAD,
   mode = "full",
   numbers = true,
-  switch = { "full", "dev" },
   send = function(e)
     if dry_run() then
       morf.log("warn", "caelestia: keyboard (dry run): " .. tostring(e.text or e.key) .. ((e.mods and e.mods.shift) and " +shift" or ""))
@@ -47,7 +46,6 @@ local kb = osk.new {
     end
     send(e)
   end,
-  on_hide = function() if d then d.set(false) end end,
   look = {
     panel = function() return C.surfaceContainer:alpha(0) end,
     key = function() return C.surfaceContainerHighest end,
