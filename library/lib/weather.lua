@@ -288,6 +288,23 @@ function Weather:_wttr(done, why)
       self:_stale(done, why or response.error or ("wttr.in answered " .. response.status))
       return
     end
+    -- Asked for no place, wttr.in placed the asker by address, and says
+    -- where: those coordinates get Open-Meteo's seven days, not wttr.in's
+    -- three. Once per instance; after that the forecast is asked directly.
+    local area = type(data.nearest_area) == "table" and data.nearest_area[1]
+    local lat = area and tonumber(area.latitude)
+    local lon = area and tonumber(area.longitude)
+    if not why and not self.latitude and lat and lon then
+      self.latitude, self.longitude = lat, lon
+      local function value(list)
+        return type(list) == "table" and type(list[1]) == "table" and list[1].value or nil
+      end
+      local name, country = value(area.areaName), value(area.country)
+      self.place_name = name and (country and (name .. ", " .. country) or name) or nil
+      self.region_name = country
+      self:_forecast(done)
+      return
+    end
     self:_finish(done, weather.parse_wttr(data, self.units))
   end)
 end

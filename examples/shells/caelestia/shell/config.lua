@@ -84,7 +84,7 @@ return settings.open {
     },
     services = {
       weather_location = "",
-      imperial = true,
+      imperial = false,
     },
     utilities = {
       commands = {
