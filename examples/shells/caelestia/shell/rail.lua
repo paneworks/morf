@@ -97,13 +97,13 @@ function M.build()
   local label = ui.Item {
     id = "rail-number",
     anchors = { center_in = true },
-    width = 3 * math.floor(math.floor(g0.item * 0.5) * 0.62 + 0.5),
-    height = math.floor(g0.item * 0.5),
+    width = 3 * math.floor(math.floor(g0.item * 0.32) * 0.62 + 0.5),
+    height = math.floor(g0.item * 0.32),
     opacity = 0,
     kit.morph_number {
       id = "rail-digits",
       value = function() return number:get() end,
-      size = math.floor(g0.item * 0.5),
+      size = math.floor(g0.item * 0.32),
       color = function() return C.onPrimary end,
       duration = 300,
     },
