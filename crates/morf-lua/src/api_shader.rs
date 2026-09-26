@@ -100,10 +100,11 @@ fn set_data<'gc>(
     }
     numbers.sort_by_key(|(slot, _)| *slot);
     let values: Vec<f32> = numbers.into_iter().map(|(_, value)| value).collect();
-    state
-        .borrow_mut()
-        .scene
-        .set_shader_data(node, index, &values);
+    let mut state = state.borrow_mut();
+    state.scene.set_shader_data(node, index, &values);
+    // New numbers are a new picture: the frame that draws them is asked for
+    // here, as any property write asks for one.
+    state.scene_revision = state.scene_revision.wrapping_add(1);
     Ok(())
 }
 

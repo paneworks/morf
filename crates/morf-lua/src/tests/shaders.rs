@@ -146,6 +146,8 @@ fn a_configuration_fills_a_data_block() {
             })
             local node = ui.Rect { width = 40, height = 10, shader = "bars" }
             morf.shader_data(node, "levels", { 0.25, 0.5, 0.75, 1.0 })
+            morf.ipc.push = function() morf.shader_data(node, "levels", { 1, 1, 1, 1 }) end
+            morf.ipc.nothing = function() end
             ui.Item { node }
             "#
             .as_bytes(),

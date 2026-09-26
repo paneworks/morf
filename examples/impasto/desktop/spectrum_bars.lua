@@ -219,16 +219,11 @@ end
 -- (its widget removed) makes `shader_data` fail and is dropped then.
 local live = {}
 
--- A shader data write does not ask for a frame by itself (the engine marks
--- nothing dirty for it), so each push also nudges the node's opacity by a
--- hair, which does.
-local nudge = false
+-- A shader data write asks for the frame that draws it.
 local function push_bands()
-  nudge = not nudge
   for node in pairs(live) do
     local ok = pcall(morf.shader_data, node, "bands", levels)
     if ok then ok = pcall(morf.shader_data, node, "peaks", peaks) end
-    if ok then ok = pcall(function() node.opacity = nudge and 1 or 0.999 end) end
     if not ok then live[node] = nil end
   end
   if signals_read then
@@ -392,13 +387,11 @@ function M.build(values)
       return 0
     end,
   }
-  -- Pushed once more on the next tick, when the node is sure to be drawn,
-  -- with the nudge that asks for the frame.
+  -- Pushed once more on the next tick, when the node is sure to be drawn.
   morf.timer(1, function()
     pcall(morf.shader_data, node, "cfg", cfg_of(values, looks()))
     pcall(morf.shader_data, node, "bands", sample and still or levels)
     pcall(morf.shader_data, node, "peaks", sample and still_peaks or peaks)
-    pcall(function() node.opacity = 0.999 end)
   end, false)
   return ui.Item {
     x = values.x, y = values.y, width = values.width, height = values.height,
