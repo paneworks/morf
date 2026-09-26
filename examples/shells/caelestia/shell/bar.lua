@@ -124,12 +124,6 @@ local function mobile_icon()
   if q > 10 then return "signal_cellular_1_bar" end
   return "signal_cellular_0_bar"
 end
-local function volume_icon()
-  local ok, sink = pcall(function() return morf.audio.available() and morf.audio.default_sink() end)
-  if not (ok and sink) then return "volume_up" end
-  if sink.muted or sink.volume <= 0 then return "volume_off" end
-  return sink.volume < 0.5 and "volume_down" or "volume_up"
-end
 local function battery()
   local u = services.upower
   local d = u and u.state.available and u.state.display or {}
@@ -241,20 +235,15 @@ function M.build()
   end
 
   -- ----------------------------------------------------------- status --
-  local function open_settings(detail)
-    return function()
-      local ok, s = pcall(require, "sidebar")
-      if ok then s.drawer.set(true) end
-      require("utilities").detail:set(detail)
-    end
+  -- The status icons say, and do nothing on their own: any of them opens
+  -- the quick settings, at their top.
+  local function open_settings()
+    local ok, s = pcall(require, "sidebar")
+    if ok then s.drawer.set(true) end
+    require("utilities").detail:set("")
   end
-  local function status(id, icon_fn, detail)
-    local act = detail ~= "" and open_settings(detail) or function()
-      -- The ring mode's icon: a click moves it round.
-      local r = services.ringer
-      if r and id:find("ringer", 1, true) then r.next() else open_settings("")() end
-    end
-    return button(id, ITEM, act, kit.icon(icon_fn, 20, function() return C.onSurface end,
+  local function status(id, icon_fn)
+    return button(id, ITEM, open_settings, kit.icon(icon_fn, 20, function() return C.onSurface end,
       { anchors = { center_in = true }, fill = true }))
   end
   local function tail(vertical)
@@ -264,11 +253,11 @@ function M.build()
     local ring = status("bar-ringer" .. v, function()
       local r = services.ringer
       return require("lib.ringer").icon(r and r.state.mode or "sound")
-    end, "")
+    end)
     ring.visible = function() local r = services.ringer return r ~= nil and r.state.mode ~= "sound" end
     nodes[#nodes + 1] = ring
     -- A phone's mobile network, with its generation; crossed out without one.
-    nodes[#nodes + 1] = status("bar-mobile" .. v, mobile_icon, "")
+    nodes[#nodes + 1] = status("bar-mobile" .. v, mobile_icon)
     if services.modem then
       if not vertical then
         nodes[#nodes + 1] = kit.text {
@@ -278,9 +267,8 @@ function M.build()
       end
     end
     for _, n in ipairs {
-      status("bar-network" .. v, network_icon, "network"),
-      status("bar-sound" .. v, volume_icon, "sound"),
-      status("bar-battery" .. v, battery_icon, "power"),
+      status("bar-network" .. v, network_icon),
+      status("bar-battery" .. v, battery_icon),
     } do nodes[#nodes + 1] = n end
     if not vertical then
       nodes[#nodes + 1] = kit.text {
