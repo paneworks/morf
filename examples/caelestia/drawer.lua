@@ -42,6 +42,7 @@ function M.new(spec)
     bottom = { bottom = true, horizontal_center = true },
     left = { left = true, vertical_center = true },
     right = { right = true, vertical_center = true },
+    center = { center_in = true },
   }
   props.anchors = props.anchors or ANCHORS[spec.edge]
   props.visible = false
@@ -62,10 +63,34 @@ function M.new(spec)
     else size = panel.height_target or panel.height or 0 end
     return sign * (size + theme.SEAM + theme.BORDER + 2)
   end
-  panel[axis] = tucked()
+  local floating = spec.edge == "center"
+  if not floating then panel[axis] = tucked() end
 
   local running
+  -- A floating panel (edge "center") joins no edge: it grows in evenly
+  -- about its centre as it and its background fade in, and shrinks a
+  -- touch as they fade out.
+  local function pop(opening)
+    if running then running:stop() end
+    if opening then panel.visible = true end
+    running = morf.animation.play {
+      {
+        parallel = {
+          { node = panel, property = "scale", from = opening and 0.92 or nil, to = opening and 1 or 0.96,
+            duration = opening and 420 or 160, easing = opening and theme.ease.spatial or theme.ease.emphasized_accel },
+          { node = panel, property = "opacity", from = opening and 0 or nil, to = opening and 1 or 0,
+            duration = opening and 180 or 140 },
+          { node = d.shape, property = "opacity", from = opening and 0 or nil, to = opening and 1 or 0,
+            duration = opening and 180 or 140 },
+        },
+      },
+      on_finished = function(reason)
+        if reason == "completed" and not d.open:get() then panel.visible = false end
+      end,
+    }
+  end
   local function move(opening)
+    if floating then return pop(opening) end
     if running then running:stop() end
     if opening then panel.visible = true end
     local slide = {
@@ -112,6 +137,7 @@ function M.new(spec)
   local near, far = 0, theme.ROUNDING
   local e = spec.edge
   local function r(a, b) return (e == a or e == b) and near or far end
+  -- A floating one is rounded all round, and apart from the frame's seams.
   d.shape = ui.SdfShape {
     id = "drawer-" .. spec.name .. "-background",
     shape = "box",
@@ -123,6 +149,9 @@ function M.new(spec)
     bottom_left_radius = r("bottom", "left"),
     bottom_right_radius = r("bottom", "right"),
   }
+
+  -- Shut, a floating panel's background is not drawn at all.
+  if floating then d.shape.opacity = 0 end
 
   function d.set(on) d.open:set(on and true or false) end
   function d.toggle() d.open:set(not d.open:get()) end

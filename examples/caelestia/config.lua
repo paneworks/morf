@@ -48,9 +48,11 @@ return settings.open {
       -- Opens when the pointer reaches the left edge above the rail.
       hover = true,
     },
-    launcher = {
+    capture = {
       -- Opens when the pointer reaches the bottom edge under it.
       hover = true,
+    },
+    launcher = {
       max_shown = 7,
       action_prefix = ">",
     },
@@ -75,6 +77,14 @@ return settings.open {
         record_region = { "sh", "-c", "gpu-screen-recorder -w region -region \"$(slurp -f '%wx%h+%x+%y')\" -f 60 -o \"$0\"",
           "~/Videos/Recordings/recording_$DATE.mp4" },
         record_stop = { "pkill", "-INT", "-f", "gpu-screen-recorder" },
+        -- Screenshots: saved to ~/Pictures/Screenshots and copied.
+        screenshot_region = { "sh", "-c", "mkdir -p \"$(dirname \"$0\")\" && grim -g \"$(slurp)\" \"$0\" && wl-copy < \"$0\"",
+          "~/Pictures/Screenshots/screenshot_$DATE.png" },
+        screenshot_window = { "sh", "-c", "mkdir -p \"$(dirname \"$0\")\" && grim -g \"$(hyprctl -j activewindow | jq -r '\"\\(.at[0]),\\(.at[1]) \\(.size[0])x\\(.size[1])\"')\" \"$0\" && wl-copy < \"$0\"",
+          "~/Pictures/Screenshots/screenshot_$DATE.png" },
+        screenshot_screen = { "sh", "-c", "mkdir -p \"$(dirname \"$0\")\" && grim -o \"$(hyprctl -j monitors | jq -r '.[] | select(.focused) | .name')\" \"$0\" && wl-copy < \"$0\"",
+          "~/Pictures/Screenshots/screenshot_$DATE.png" },
+        screenshots_folder = { "xdg-open", "~/Pictures/Screenshots" },
         mic_on = { "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "0" },
         mic_off = { "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "1" },
         settings = {},

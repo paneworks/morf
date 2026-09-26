@@ -1,8 +1,8 @@
 -- The utilities: the right panel's Settings page -- volume and brightness
 -- sliders, a row of quick toggles (Wi-Fi, Bluetooth, the microphone,
 -- settings, game mode, do not disturb), the battery and the power profile,
--- keep awake (an idle inhibitor), and the screen recorder with its
--- recordings.
+-- and keep awake (an idle inhibitor). The screen recorder's card lives
+-- here too, shown in the capture drawer at the bottom (capture.lua).
 --
 -- Every action that reaches outside the shell is a command from the
 -- settings (`utilities.*`), run with `morf.run`; CAELESTIA_DRY_RUN=1 logs
@@ -723,15 +723,23 @@ end
 
 -- -------------------------------------------------------------------- page --
 
-local cards = { sliders(), toggles(), power(), keep_awake(), recorder() }
+local cards = { sliders(), toggles(), power(), keep_awake() }
 
 --- The page's height: the cards and their gaps.
 function M.height()
-  local h = 4 * GAP + SLIDERS_H + TILES_H + POWER_H
+  local h = 3 * GAP + SLIDERS_H + TILES_H + POWER_H
   h = h + (M.awake:get() and 128 or 86)
-  h = h + recorder_height()
   return h
 end
+
+--- The screen recorder's card, for the capture drawer at the bottom:
+--- `node`, its `height()`, and `shown(open)` to call as it comes into view
+--- (the recordings are listed afresh) or leaves.
+M.recorder = {
+  node = recorder(),
+  height = recorder_height,
+  shown = function(open) if open then scan() else menu_open:set(false) end end,
+}
 
 --- The Settings page of the right panel: the cards, top down, and the
 --- detail pages (Network, Bluetooth, Sound) beside them, which slide in
@@ -799,7 +807,7 @@ end
 local running = {}
 function M.shown(open)
   for _, h in ipairs(running) do h:stop() end
-  if open then scan() else menu_open:set(false) M.detail:set("") end
+  if not open then M.detail:set("") end
   running = kit.bud(cards, open)
 end
 

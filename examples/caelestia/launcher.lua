@@ -1,5 +1,6 @@
--- The launcher: a drawer at the bottom of the frame with a search field and
--- the best matches above it. Typing the action prefix (">") lists the
+-- The launcher: a panel floating in the middle of the screen, opened by a
+-- key (`morf ipc call launcher`), with a search field and the best matches
+-- above it. Typing the action prefix (">") lists the
 -- shell's own actions instead, and some of them open pickers: "> scheme "
 -- and "> variant " (the colours, rebuilt through lib/material.lua and put
 -- in place live), "> wallpaper " (a carousel of pictures, the drawer
@@ -425,7 +426,7 @@ local content = ui.Item {
 
 M.drawer = drawer.new {
   name = "launcher",
-  edge = "bottom",
+  edge = "center",
   width = width,
   height = height,
   content = content,

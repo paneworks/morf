@@ -72,6 +72,7 @@ local osd = require("osd")
 local notifs = require("notifs")
 local sidebar = require("sidebar")
 local leftbar = require("leftbar")
+local capture = require("capture")
 
 -- ------------------------------------------------------------------- frame --
 
@@ -117,8 +118,14 @@ local panels = {
   clip = true,
   -- The desk dims under the session menu.
   session.dim(),
-  -- A click on the desk shuts the sidebar.
+  -- A click on the desk shuts the sidebar, and the launcher.
   require("sidebar").catcher(),
+  ui.MouseArea {
+    id = "launcher-catcher",
+    anchors = { fill = true },
+    visible = function() return launcher.drawer.open:get() end,
+    on_clicked = function() launcher.drawer.set(false) end,
+  },
 }
 for _, d in ipairs(drawer.all) do panels[#panels + 1] = d.panel end
 
@@ -131,10 +138,10 @@ ui.Item {
   levels_node,
   ui.Item(panels),
   dashboard.edge_trigger(),
-  -- The bottom edge under the launcher opens it.
+  -- The bottom edge under the capture drawer opens it.
   require("hover").edge {
-    name = "launcher", drawer = launcher.drawer, edge = "bottom",
-    length = launcher.width, setting = "launcher.hover",
+    name = "capture", drawer = capture.drawer, edge = "bottom",
+    length = function() return capture.WIDTH end, setting = "capture.hover",
   },
   -- Near the right edge, anywhere down it, the sidebar opens; near the
   -- left edge (the rail's pills with it), the left panel.
@@ -213,6 +220,17 @@ morf.ipc.settings = function(page)
   return page or ""
 end
 morf.ipc.leftbar = verb(leftbar.drawer)
+-- `capture [how]` opens the capture drawer. `screenshot WHAT`
+-- takes one at once: region, window or screen.
+morf.ipc.capture = verb(capture.drawer)
+morf.ipc.screenshot = function(what)
+  if not here() then return nil end
+  what = what or "region"
+  if what ~= "region" and what ~= "window" and what ~= "screen" then
+    error("`" .. tostring(what) .. "`: region, window or screen")
+  end
+  return capture.shoot(what)
+end
 morf.ipc.workspace = function(n)
   if not here() then return nil end
   require("services").workspace.go(n)

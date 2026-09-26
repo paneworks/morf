@@ -64,8 +64,8 @@ test.describe("caelestia", function()
     test.settle(1500)
     test.truthy(shown("launcher"))
     local d = drawer("launcher")
-    -- It sits on the frame's bottom edge, centred in the opening.
-    test.near(d.y + d.height, H - 10, 1)
+    -- It floats in the middle of the screen.
+    test.near(d.y + d.height / 2, H / 2, 1)
     test.near(d.x + d.width / 2, W / 2, 1)
     test.truthy(test.find { id = "launcher-search" })
     test.snapshot("caelestia-launcher.png", { surface = "screen" })
@@ -129,19 +129,46 @@ test.describe("caelestia", function()
     test.falsy(shown("dashboard"), "leaving the panel did not shut it")
   end)
 
-  test.it("opens the launcher from the bottom edge, and shuts it on leaving", function()
+  test.it("opens the capture drawer from the bottom edge; a shot waits for it to shut", function()
     load()
     test.move(W / 2 + 25, H - 4)
     test.settle(1500)
-    test.truthy(shown("launcher"), "the bottom edge did not open it")
-    -- Up onto the panel: still open.
-    local l = drawer("launcher")
-    test.move(l.x + l.width / 2, l.y + l.height / 2)
-    test.advance(500)
-    test.truthy(shown("launcher"), "moving onto the panel shut it")
-    test.move(W / 2, 200)
-    test.advance(1500)
-    test.falsy(shown("launcher"), "leaving the panel did not shut it")
+    test.truthy(shown("capture"), "the bottom edge did not open it")
+    test.falsy(shown("launcher"), "the bottom edge opened the launcher")
+    local d = drawer("capture")
+    test.near(d.y + d.height, H - 10, 1)
+    for _, id in ipairs { "capture-region", "capture-window", "capture-screen" } do
+      test.truthy(test.find { id = id, visible = true }, id .. " not shown")
+    end
+    test.snapshot("caelestia-capture.png", { surface = "screen" })
+    test.clear_logs()
+    test.click { id = "capture-delay-3" }
+    test.click { id = "capture-screen" }
+    test.settle(1000)
+    test.falsy(shown("capture"), "it stayed in the picture")
+    local said = function()
+      for _, l in ipairs(test.logs("info")) do
+        if l.message:find("screenshot_screen (dry run)", 1, true) then return true end
+      end
+      return false
+    end
+    test.falsy(said(), "it did not wait the delay")
+    test.advance(3000)
+    test.truthy(said(), "the screenshot was not taken")
+    -- The recorder, on its tab.
+    test.ipc("capture", "open")
+    test.settle(1500)
+    test.click { id = "utilities-record" }
+    test.settle(500)
+    test.truthy(test.find { text = "Stop", visible = true }, "not recording")
+    test.click { id = "utilities-record" }
+    test.eq(#test.runs(), 0)
+    -- The launcher is a key's, and floats in the middle; a click away shuts it.
+    test.ipc("launcher", "open")
+    test.settle(1500)
+    test.click(100, 100)
+    test.settle(1000)
+    test.falsy(shown("launcher"))
   end)
 
   test.it("opens the sidebar near the right edge, and shuts it on leaving", function()
@@ -420,11 +447,10 @@ test.describe("caelestia", function()
     test.near(d.height, H - 20, 1)
     test.eq(d.width, 450)
     for _, id in ipairs { "utilities-sliders", "utilities-volume", "utilities-brightness", "utilities-toggles",
-      "utilities-power", "utilities-awake", "utilities-recorder" } do
+      "utilities-power", "utilities-awake" } do
       test.truthy(test.find { id = id, visible = true }, id .. " not shown")
     end
     test.truthy(test.find { id = "utilities-more-wifi", visible = true }, "the Wi-Fi tile has no page")
-    test.truthy(test.find { text = "No recordings found", visible = true })
     -- (The OSD may be up too: headless runs can hear the machine's own
     -- volume and brightness change.)
     test.truthy(test.ipc("drawers"):find("sidebar", 1, true))
@@ -470,10 +496,14 @@ test.describe("caelestia", function()
     test.settle(1000)
     test.near(test.get({ id = "utilities-awake" }).height, 128, 1)
     test.truthy(test.find { id = "utilities-awake-chip", visible = true })
+    test.ipc("capture", "open")
+    test.settle(1500)
     test.click { id = "utilities-record" }
     test.settle(500)
     test.truthy(test.find { text = "Stop", visible = true }, "not recording")
     test.click { id = "utilities-record" }
+    test.ipc("utilities", "open")
+    test.settle(1500)
     test.click { id = "utilities-toggle-mic" }
     test.click { id = "utilities-toggle-gamemode" }
     test.click { id = "utilities-toggle-settings" }
