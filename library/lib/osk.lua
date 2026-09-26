@@ -17,10 +17,10 @@
 -- MODES
 --   full      letters, the number row (hideable), two pages of symbols;
 --             hold a key for its alternates (accents, the digit above it)
---   dev       laid out for code: Esc and the symbols a shell wants on top,
---             the number row, Tab before the a-row, and Ctrl, Alt, space,
---             the arrows and Enter along the bottom -- the modifiers stick
---             for one key, twice to lock
+--   dev       laid out for code: Esc before the q-row, Tab and Del about
+--             the a-row, and Ctrl, Alt, space, the arrows and Enter along
+--             the bottom (digits and symbols on a long press) -- the
+--             modifiers stick for one key, twice to lock
 --   letters   letters only
 --   numbers   a number pad
 --   phone     a dial pad: digits, * # +
@@ -187,14 +187,13 @@ PAGES.symbols2 = {
 -- top, Tab before the a-row, and the modifiers and arrows along the bottom
 -- where the thumbs are.
 PAGES.dev = {
-  { k("esc", "escape", 1, { dim = true }), ch("`"), ch("~"), ch("|"), ch("-"), ch("/"), ch("\\"),
-    ch("{"), ch("}"), k("del", "delete", 1, { rep = true, dim = true }) },
-  row("1234567890"),
-  row("qwertyuiop"),
-  front(row("asdfghjkl"), k("tab", "tab", 1, { dim = true, icon = "keyboard_tab" })),
-  front(with(row("zxcvbnm"), BACKSPACE), a("⇧", "shift", 1.5, { dim = true, icon = "shift" })),
+  front(row("qwertyuiop"), k("esc", "escape", 1, { dim = true })),
+  with(front(row("asdfghjkl"), k("tab", "tab", 1, { dim = true, icon = "keyboard_tab" })),
+    k("del", "delete", 1, { rep = true, dim = true })),
+  front(with(row("zxcvbnm"), k("⌫", "backspace", 2, { rep = true, dim = true, icon = "backspace" })),
+    a("⇧", "shift", 2, { dim = true, icon = "shift" })),
   { a("ctrl", "mod:ctrl", 1.2, { dim = true }), a("alt", "mod:alt", 1.2, { dim = true }),
-    a("?123", "page:symbols", 1.2, { dim = true }), SPACE(2.4),
+    a("?123", "page:symbols", 1.2, { dim = true }), SPACE(3.2),
     k("←", "left", 0.75, { rep = true, dim = true, icon = "arrow_back" }),
     k("↓", "down", 0.75, { rep = true, dim = true, icon = "arrow_downward" }),
     k("↑", "up", 0.75, { rep = true, dim = true, icon = "arrow_upward" }),
