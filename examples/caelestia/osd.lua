@@ -28,24 +28,24 @@ local HOLD = 2000
 local audio = morf.audio
 local sysinfo = require("lib.sysinfo")
 
-local function volume()
+function M.volume()
   local ok, sink = pcall(function() return audio and audio.available() and audio.default_sink() end)
   if not ok or not sink then return 0, true, false end
   return sink.volume or 0, sink.muted, true
 end
 
-local function brightness()
+function M.brightness()
   local ok, b = pcall(sysinfo.backlight)
   if not ok or not b or not b.percent then return 0, false end
   return b.percent / 100, true
 end
 
-local function set_volume(v)
+function M.set_volume(v)
   local ok, sink = pcall(function() return audio.default_sink() end)
   if ok and sink then pcall(audio.set_volume, sink.id, math.max(0, math.min(1, v))) end
 end
 
-local function set_brightness(v)
+function M.set_brightness(v)
   pcall(sysinfo.set_brightness, math.max(1, math.min(100, v * 100)))
 end
 
@@ -88,18 +88,25 @@ local function slider(id, value, set, icon)
   }
 end
 
-local volume_slider = slider("osd-volume", function() return (volume()) end, set_volume, function()
+local volume, brightness = M.volume, M.brightness
+local set_volume, set_brightness = M.set_volume, M.set_brightness
+
+--- The icon for a volume, and for a brightness.
+function M.volume_icon()
   local v, muted = volume()
   if muted or v <= 0 then return "volume_mute" end
   if v < 0.5 then return "volume_down" end
   return "volume_up"
-end)
-local brightness_slider = slider("osd-brightness", brightness, set_brightness, function()
+end
+function M.brightness_icon()
   local b = brightness()
   if b < 0.34 then return "brightness_low" end
   if b < 0.67 then return "brightness_medium" end
   return "brightness_high"
-end)
+end
+
+local volume_slider = slider("osd-volume", function() return (volume()) end, set_volume, M.volume_icon)
+local brightness_slider = slider("osd-brightness", brightness, set_brightness, M.brightness_icon)
 
 local content = ui.Item {
   anchors = { fill = true },
@@ -148,8 +155,11 @@ morf.effect("caelestia.osd.follow", function()
     if seen_brightness and now ~= seen_brightness then changed = true end
     seen_brightness = now
   end
-  -- On the focused screen only: every screen hears the change.
-  if changed and require("services").here() then M.flash() end
+  -- On the focused screen only: every screen hears the change. Not while
+  -- the utilities, whose own sliders show it, are open.
+  local utilities = package.loaded["utilities"]
+  local shown_there = type(utilities) == "table" and utilities.drawer and utilities.drawer.open:get()
+  if changed and not shown_there and require("services").here() then M.flash() end
 end)
 
 morf.effect("caelestia.osd.hover", function()

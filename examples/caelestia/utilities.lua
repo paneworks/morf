@@ -1,5 +1,6 @@
 -- The utilities: a drawer out of the frame's bottom edge at the right --
--- keep awake (an idle inhibitor), the screen recorder with its recordings,
+-- volume and brightness sliders, keep awake (an idle inhibitor), the
+-- screen recorder with its recordings,
 -- and a row of quick toggles (Wi-Fi, Bluetooth, the microphone, settings,
 -- game mode, do not disturb). The sidebar opens it too, under the
 -- notifications.
@@ -521,13 +522,104 @@ local function toggles()
   }
 end
 
+-- ----------------------------------------------------------------- sliders --
+
+-- The output's volume and the screen's brightness, as Material 3
+-- expressive sliders: a tall rounded track, the active part in the primary
+-- colour up to a slim handle with a gap either side, the icon inside the
+-- track's start and the value at its end. The level rides a spring; the
+-- handle narrows while held. They read and set what the OSD does.
+local SLIDER_H, HANDLE_GAP = 44, 6
+local SLIDERS_H = 16 + SLIDER_H + 12 + SLIDER_H + 16
+
+local function slider(id, value, set, icon)
+  local W = CARD_W - 32
+  local held = morf.signal("caelestia.utilities." .. id .. ".held", false)
+  local motion = kit.spring(190, 9)
+  local function at(x) return math.max(0, math.min(1, (x - SLIDER_H / 2) / (W - SLIDER_H))) end
+  -- The handle's centre: its travel keeps the track's rounded ends clear.
+  local function hx() return SLIDER_H / 2 + (W - SLIDER_H) * value() end
+  local function grip() return held:get() and 2 or 4 end
+  return ui.MouseArea {
+    id = id, width = W, height = SLIDER_H + 8, cursor = "pointer",
+    on_pressed = function(_, _, x) held:set(true) set(at(x)) end,
+    on_released = function() held:set(false) end,
+    on_dragged = function(_, _, _, _, x) if held:get() then set(at(x)) end end,
+    on_wheel = function(_, _, _, _, _, step_y)
+      if step_y ~= 0 then set(value() + (step_y > 0 and -0.05 or 0.05)) end
+    end,
+    -- The rest of the track, from past the handle to the end.
+    ui.Rect {
+      y = 4, height = SLIDER_H,
+      x = function() return hx() + grip() / 2 + HANDLE_GAP end,
+      width = function() return math.max(0, W - (hx() + grip() / 2 + HANDLE_GAP)) end,
+      top_left_radius = 6, bottom_left_radius = 6,
+      top_right_radius = SLIDER_H / 2, bottom_right_radius = SLIDER_H / 2,
+      color = function() return C.surfaceContainerHighest end,
+      behavior = { x = motion, width = motion },
+    },
+    -- The active part, from the start to short of the handle.
+    ui.Rect {
+      id = id .. "-level",
+      x = 0, y = 4, height = SLIDER_H,
+      width = function() return math.max(0, hx() - grip() / 2 - HANDLE_GAP) end,
+      top_left_radius = SLIDER_H / 2, bottom_left_radius = SLIDER_H / 2,
+      top_right_radius = 6, bottom_right_radius = 6,
+      color = function() return C.primary end,
+      behavior = { width = motion },
+    },
+    -- The handle: a slim bar standing past the track.
+    ui.Rect {
+      id = id .. "-handle",
+      y = 0, height = SLIDER_H + 8, radius = 2,
+      x = function() return hx() - grip() / 2 end,
+      width = grip,
+      color = function() return C.primary end,
+      behavior = { x = motion, width = { duration = 150 } },
+    },
+    kit.icon(icon, 22, function()
+      return hx() - HANDLE_GAP > 40 and C.onPrimary or C.onSurfaceVariant
+    end, { x = 12, y = 4 + (SLIDER_H - 22) / 2 }),
+    -- The value at the track's end, or, when the handle gets there, just
+    -- inside the active part.
+    kit.text {
+      id = id .. "-value",
+      width = 40, horizontal_alignment = "right",
+      anchors = { vertical_center = true },
+      x = function()
+        if hx() > W - 64 then return hx() - HANDLE_GAP - 10 - 40 end
+        return W - 14 - 40
+      end,
+      text = function() return ("%d"):format(math.floor(value() * 100 + 0.5)) end,
+      font_size = theme.size.normal,
+      color = function()
+        return hx() > W - 64 and C.onPrimary or C.onSurfaceVariant
+      end,
+      behavior = { x = motion },
+    },
+  }
+end
+
+local function sliders()
+  local osd = require("osd")
+  return kit.card {
+    id = "utilities-sliders",
+    width = CARD_W, height = SLIDERS_H, radius = M.RADIUS,
+    ui.Column {
+      x = 16, y = 12, gap = 4,
+      slider("utilities-volume", function() return (osd.volume()) end, osd.set_volume, osd.volume_icon),
+      slider("utilities-brightness", function() return (osd.brightness()) end, osd.set_brightness, osd.brightness_icon),
+    },
+  }
+end
+
 -- ------------------------------------------------------------------ drawer --
 
-local cards = { keep_awake(), recorder(), toggles() }
+local cards = { sliders(), keep_awake(), recorder(), toggles() }
 
 --- The drawer's height: the cards, their gaps and its padding.
 function M.height()
-  local h = TOP + BOTTOM + 2 * GAP + 111
+  local h = TOP + BOTTOM + 3 * GAP + 111 + SLIDERS_H
   h = h + (M.awake:get() and 128 or 86)
   h = h + recorder_height()
   return h
