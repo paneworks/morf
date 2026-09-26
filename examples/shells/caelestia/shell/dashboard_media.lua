@@ -20,7 +20,7 @@ local spectrum = require("lib.spectrum")
 local C = theme.color
 local M = {}
 
-M.WIDTH, M.HEIGHT = 1000, 319
+M.WIDTH, M.HEIGHT = 1000, 350
 
 local CX, CY = 167, 160
 local COVER = 184
@@ -124,20 +124,30 @@ function M.build(ctx)
   -- ------------------------------------------------------- the cover --
   -- A web address (Spotify's covers are) is fetched once to the cache.
   local art = function() return require("lib.remote").file(active().art_url) end
+  -- The visualiser: a bar per band standing out from the cover's edge,
+  -- rounded, growing with the music -- low notes at the top, round the
+  -- ring clockwise and back up the other side, so the ring is symmetric.
+  local INNER, REACH = COVER / 2 + 10, 34
+  RING = INNER + REACH + 6
   local dots = {}
   for i = 1, DOTS do
     local a = (i - 1) / DOTS * 2 * math.pi
-    -- At rest the dots trace a gently scalloped ring, twelve lobes round.
-    local rest = RING + 3.5 * math.cos(12 * a)
-    local function r()
-      local b = bars:get()[i] or 0
-      return rest + 10 * b
-    end
-    dots[#dots + 1] = ui.Rect {
-      width = 4, height = 4, radius = 2,
-      x = function() return RING + 6 + r() * math.sin(a) - 2 end,
-      y = function() return RING + 6 - r() * math.cos(a) - 2 end,
-      color = function() return C.primary end,
+    -- Mirrored: band k shows on both sides of the vertical.
+    local half = DOTS // 2
+    local band = i <= half and i or (DOTS - i + 1)
+    local function level() return (bars:get()[band * 2 - 1] or 0) end
+    local function length() return 3 + REACH * level() end
+    dots[#dots + 1] = ui.Item {
+      -- A pivot at the centre, turned to the bar's angle; the bar stands
+      -- on the inner radius and grows outwards.
+      x = RING + 6, y = RING + 6, width = 0, height = 0,
+      rotation = math.deg(a),
+      ui.Rect {
+        x = -2, width = 4, radius = 2,
+        y = function() return -(INNER + length()) end,
+        height = length,
+        color = function() return C.primary:alpha(0.45 + 0.55 * math.min(1, level() * 1.4)) end,
+      },
     }
   end
   local ring = ui.Item {
@@ -291,12 +301,15 @@ function M.build(ctx)
     },
   }
 
-  local function button(id, icon, w, radius, action, strong, on)
+  local function button(id, icon, w, radius, action, strong, on, ignored)
     local area = ctx.area {
       id = id, width = w, height = 54, cursor = "pointer",
       on_clicked = action,
       kit.icon(icon, 24, function()
         if strong then return C.onPrimary end
+        -- A player that takes this write and ignores it (Spotify, for
+        -- shuffle and repeat): the button stays, dimmed, and says so.
+        if ignored and ignored() then return C.onSecondaryContainer:alpha(0.3) end
         return (on and on()) and C.primary or C.onSecondaryContainer
       end, { anchors = { center_in = true }, fill = true }),
     }
@@ -310,14 +323,29 @@ function M.build(ctx)
     id = "media-controls",
     x = 343, y = 221, gap = 4,
     button("media-shuffle", "shuffle", 40, 20, function() control("set_shuffle", not active().shuffle) end,
-      false, function() return active().shuffle end),
+      false, function() return active().shuffle end, function() return active().ignores_shuffle end),
     button("media-tab-previous", "skip_previous", 52, 26, function() control("previous") end),
     button("media-tab-play", function() return playing() and "pause" or "play_arrow" end, 108, 14,
       function() control("play_pause") end, true),
     button("media-tab-next", "skip_next", 52, 26, function() control("next") end),
     button("media-repeat", function() return active().loop == "track" and "repeat_one" or "repeat" end, 40, 20,
       function() control("set_loop", LOOPS[active().loop or "none"] or "none") end,
-      false, function() return (active().loop or "none") ~= "none" end),
+      false, function() return (active().loop or "none") ~= "none" end, function() return active().ignores_loop end),
+  }
+
+  -- The player's own volume (MPRIS), under the controls.
+  local volume = ui.Row {
+    id = "media-volume",
+    x = 343, y = 288, gap = 10, align = "center",
+    kit.icon(function()
+      local v = active().volume or 0
+      return v <= 0 and "volume_off" or v < 0.5 and "volume_down" or "volume_up"
+    end, 22, function() return C.onSurfaceVariant end),
+    kit.slider {
+      id = "media-volume-slider", width = 250, height = 22,
+      value = function() return math.max(0, math.min(1, active().volume or 0)) end,
+      set = function(v) control("set_volume", v) end,
+    },
   }
 
   local track = ui.Item {
@@ -355,6 +383,7 @@ function M.build(ctx)
       font_size = theme.size.normal,
     },
     controls,
+    volume,
   }
 
   -- --------------------------------------------------------- lyrics --

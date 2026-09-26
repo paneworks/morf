@@ -82,6 +82,9 @@ local function empty_active()
     track_id = "", length = 0, position = 0, rate = 1, volume = 0, shuffle = false,
     loop = "none", can_play = false, can_pause = false, can_go_next = false,
     can_go_previous = false, can_seek = false, can_control = false, can_raise = false,
+    -- Writes the player took and then ignored (Spotify's client does this
+    -- with Shuffle and LoopStatus): a control for them does nothing there.
+    ignores_shuffle = false, ignores_loop = false,
   }
 end
 
@@ -115,6 +118,7 @@ function mpris.connect(options)
 
   local media = { state = state }
   local players = {} -- bus name -> reading
+  local ignored = {} -- "busname|Property" -> true: a write it took and ignored
   local subscribed = {} -- bus name -> its subscription handles
   local pinned
   local sequence = 0 -- orders "most recently changed" without trusting clocks
@@ -228,6 +232,8 @@ function mpris.connect(options)
     local fields = {}
     for key in pairs(empty_active()) do fields[key] = active[key] end
     fields.position = position_of(active) / 1e6
+    fields.ignores_shuffle = ignored[active.name .. "|Shuffle"] == true
+    fields.ignores_loop = ignored[active.name .. "|LoopStatus"] == true
     assign(state.active, fields)
   end
 
@@ -289,12 +295,26 @@ function mpris.connect(options)
       function() schedule(player_name) end)
   end
 
-  local function set(name, property, value)
+  -- A write the player answered and then did not act on, by
+  -- "busname|Property". Checked a moment after each write of these.
+  local CHECKED = { Shuffle = "shuffle", LoopStatus = "loop" }
+  local function set(name, property, value, wanted)
     local player = target(name)
     if not player then return nil, "no player" end
     local player_name = player.name
-    return client.set_async(player_name, PATH, PLAYER, property, value, timeout,
-      function() schedule(player_name) end)
+    return client.set_async(player_name, PATH, PLAYER, property, value, timeout, function()
+      schedule(player_name)
+      local field = CHECKED[property]
+      if field == nil or wanted == nil then return end
+      morf.timer(900, function()
+        local now = players[player_name]
+        if not now then return end
+        local key = player_name .. "|" .. property
+        local was = ignored[key]
+        ignored[key] = now[field] ~= wanted or nil
+        if was ~= ignored[key] then publish() end
+      end, false)
+    end)
   end
 
   --- Whether any player is on the bus.
@@ -346,12 +366,12 @@ function mpris.connect(options)
 
   --- Sets the volume, 0 to 1.
   function media.set_volume(volume, name) return set(name, "Volume", typed("d", volume)) end
-  function media.set_shuffle(on, name) return set(name, "Shuffle", on == true) end
+  function media.set_shuffle(on, name) return set(name, "Shuffle", on == true, on == true) end
 
   --- "none", "track" or "playlist".
   function media.set_loop(loop, name)
     local word = ({ none = "None", track = "Track", playlist = "Playlist" })[loop] or loop
-    return set(name, "LoopStatus", word)
+    return set(name, "LoopStatus", word, string.lower(word))
   end
 
   --- Brings the player's window forward, if it has one.
