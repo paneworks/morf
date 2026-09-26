@@ -1418,7 +1418,7 @@ dependencies = [
 
 [[package]]
 name = "morf-audio"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "libc",
  "libloading",
@@ -1427,7 +1427,7 @@ dependencies = [
 
 [[package]]
 name = "morf-cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "flate2",
  "image",
@@ -1447,11 +1447,11 @@ dependencies = [
 
 [[package]]
 name = "morf-desktop"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "morf-image"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "base64 0.23.1",
  "image",
@@ -1462,7 +1462,7 @@ dependencies = [
 
 [[package]]
 name = "morf-io"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "flate2",
  "libc",
@@ -1477,7 +1477,7 @@ dependencies = [
 
 [[package]]
 name = "morf-layout"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "morf-scene",
  "taffy",
@@ -1486,11 +1486,11 @@ dependencies = [
 
 [[package]]
 name = "morf-lifecycle"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "morf-lua"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "image",
  "jiff",
@@ -1516,26 +1516,26 @@ dependencies = [
 
 [[package]]
 name = "morf-menu"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "morf-outline"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "morf-reactive"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "slotmap",
 ]
 
 [[package]]
 name = "morf-region"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "morf-render"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "ash",
  "bytemuck",
@@ -1559,7 +1559,7 @@ dependencies = [
 
 [[package]]
 name = "morf-scene"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "animato",
  "kurbo",
@@ -1570,7 +1570,7 @@ dependencies = [
 
 [[package]]
 name = "morf-services"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "libc",
  "libloading",
@@ -1581,14 +1581,14 @@ dependencies = [
 
 [[package]]
 name = "morf-shader"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "luna",
 ]
 
 [[package]]
 name = "morf-svg"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "morf-image",
  "morf-outline",
@@ -1597,7 +1597,7 @@ dependencies = [
 
 [[package]]
 name = "morf-terminal"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "alacritty_terminal",
  "libc",
@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "morf-text"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "cosmic-text",
  "morf-layout",
@@ -1621,7 +1621,7 @@ dependencies = [
 
 [[package]]
 name = "morf-wayland"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "morf-layout",
  "morf-region",
