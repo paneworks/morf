@@ -60,6 +60,13 @@ impl Scene {
         Ok(self.nodes[self.live(node)?].stamps)
     }
 
+    /// The root of the tree `node` is in (the node itself when it has no
+    /// parent), or `None` for a node no longer in the scene.
+    pub fn root_of(&self, node: NodeHandle) -> Option<NodeHandle> {
+        let id = self.live(node).ok()?;
+        Some(NodeHandle(self.root_id(id)))
+    }
+
     /// The layout revision at which the tree `root` is in last lost a node,
     /// removed or moved elsewhere; 0 if it never has.
     ///

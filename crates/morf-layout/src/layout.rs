@@ -703,6 +703,63 @@ impl Layout {
     /// this layout last placed it, relative to its parent: before a pass
     /// overwrites either. A node this layout never placed is left for one
     /// that did, or for [`Layout::place_exiting`] to fix where it is now.
+    /// Forgets every node that is no longer in the tree `root` heads --
+    /// removed, or moved to another tree -- here and in the first pass's
+    /// layout. What is left is a layout of nodes that are all still there,
+    /// which an incremental pass can bring up to date: the parents they
+    /// left were stamped as changed when they left.
+    pub(crate) fn prune(&mut self, scene: &Scene, root: NodeHandle) {
+        // Kept: a node still in this tree whose every ancestor up to the
+        // root has geometry too -- as in a whole pass, where a hidden flex
+        // child and all under it have none. A node moved under one keeps
+        // no geometry from where it was.
+        let mut kept: FastMap<NodeHandle, bool> = FastMap::default();
+        let nodes: Vec<NodeHandle> = self.geometry.keys().copied().collect();
+        for node in nodes {
+            self.kept(scene, root, node, &mut kept);
+        }
+        let placed = |node: &NodeHandle| kept.get(node).copied().unwrap_or(false);
+        self.geometry.retain(|node, _| placed(node));
+        self.local.retain(|node, _| placed(node));
+        // Measured is not placed: a size is kept for any node still here.
+        let mut here: FastMap<NodeHandle, bool> = FastMap::default();
+        let mut in_tree = |node: &NodeHandle| {
+            *here
+                .entry(*node)
+                .or_insert_with(|| scene.root_of(*node) == Some(root))
+        };
+        self.implicit.retain(|node, _| in_tree(node));
+        self.requested.retain(|node, _| in_tree(node));
+        self.text_widths.retain(|node, _| in_tree(node));
+        if let Some(first) = self.first.as_mut() {
+            first.prune(scene, root);
+        }
+    }
+
+    fn kept(
+        &self,
+        scene: &Scene,
+        root: NodeHandle,
+        node: NodeHandle,
+        memo: &mut FastMap<NodeHandle, bool>,
+    ) -> bool {
+        if let Some(known) = memo.get(&node) {
+            return *known;
+        }
+        let answer = if !scene.contains(node) || !self.geometry.contains_key(&node) {
+            false
+        } else if node == root {
+            true
+        } else {
+            match scene.parent(node).ok().flatten() {
+                Some(parent) => self.kept(scene, root, parent, memo),
+                None => false,
+            }
+        };
+        memo.insert(node, answer);
+        answer
+    }
+
     pub(crate) fn capture_exit_frames(&self, scene: &Scene) {
         for node in scene.exiting_nodes() {
             if scene.exit_frame(node).is_some() {

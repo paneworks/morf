@@ -304,15 +304,20 @@ impl Layout {
         // Before anything is thrown away or overwritten: where each node that
         // has started to leave was, so it stays there.
         self.capture_exit_frames(scene);
-        let basis = self.basis.filter(|basis| {
-            basis.root == root
-                && scene.contains(root)
-                && scene.layout_detached_revision(root) <= basis.revision
-        });
+        let basis = self
+            .basis
+            .filter(|basis| basis.root == root && scene.contains(root));
         let Some(basis) = basis else {
             *self = Self::compute_with(scene, root, available, text, host)?;
             return Ok(());
         };
+        // The tree lost nodes since: their entries go, and the rest is
+        // brought up to date as usual. Laying the whole tree out again
+        // instead cost a desk of large screens twenty milliseconds whenever
+        // a list anywhere -- in a closed panel, even -- rebuilt a row.
+        if scene.layout_detached_revision(root) > basis.revision {
+            self.prune(scene, root);
+        }
         if basis.revision == revision && basis.available == available {
             return Ok(());
         }
