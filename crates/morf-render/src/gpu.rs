@@ -89,6 +89,8 @@ mod readback;
 #[cfg(test)]
 mod shader_host_tests;
 #[cfg(test)]
+mod shader_instance_tests;
+#[cfg(test)]
 mod shader_language_tests;
 #[cfg(test)]
 mod shader_mode_tests;

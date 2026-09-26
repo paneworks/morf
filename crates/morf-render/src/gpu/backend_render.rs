@@ -237,7 +237,7 @@ impl RenderBackend for WgpuBackend {
                 );
             }
         }
-        self.write_shader_uniforms(&field_shaders, &list.layers, scale_120);
+        self.write_shader_uniforms(list, scale_120);
         if let Some(batch) = &glyph_batch {
             self.queue.write_buffer(
                 &self.glyph_buffer,
@@ -333,13 +333,17 @@ impl RenderBackend for WgpuBackend {
                         // inside it: WGSL cannot swap a function at run time,
                         // and a uniform branch would make every node without a
                         // shader pay for the ones that have one.
-                        let program = field_shaders[instances.start as usize]
-                            .as_ref()
-                            .and_then(|binding| self.shaders.get(&binding.program));
+                        // The pipeline is the program's; the block and the
+                        // data it reads are this node's own.
+                        let program = self.shader_instance(
+                            list.commands[command_index].node(),
+                            field_shaders[instances.start as usize].as_ref(),
+                            false,
+                        );
                         match program {
-                            Some(program) => {
+                            Some((program, instance)) => {
                                 $pass.set_pipeline(&program.pipeline);
-                                $pass.set_bind_group(1, &program.bind_group, &[]);
+                                $pass.set_bind_group(1, &instance.bind_group, &[]);
                                 // Groups two and three exist only when the
                                 // shader declared textures or data blocks, and
                                 // the pipeline layout matches — so binding them
@@ -348,7 +352,7 @@ impl RenderBackend for WgpuBackend {
                                 if let Some(textures) = &program.textures {
                                     $pass.set_bind_group(2, textures, &[]);
                                 }
-                                if let Some((_, data)) = &program.data {
+                                if let Some((_, data)) = &instance.data {
                                     $pass.set_bind_group(3, data, &[]);
                                 }
                             }
@@ -418,14 +422,15 @@ impl RenderBackend for WgpuBackend {
                     // An effect shader composites the layer instead of the
                     // plain texture pass: by now the subtree is a texture, so
                     // there is finally something for it to sample.
-                    let effect = list.layers[layer_index]
-                        .shader
-                        .as_ref()
-                        .and_then(|binding| self.effect_shaders.get(&binding.program));
+                    let effect = self.shader_instance(
+                        list.layers[layer_index].node,
+                        list.layers[layer_index].shader.as_ref(),
+                        true,
+                    );
                     match effect {
-                        Some(program) => {
+                        Some((program, instance)) => {
                             $pass.set_pipeline(&program.pipeline);
-                            $pass.set_bind_group(1, &program.bind_group, &[]);
+                            $pass.set_bind_group(1, &instance.bind_group, &[]);
                             // As in the field pass: groups two and three exist
                             // only when the shader declared textures or data
                             // blocks, and the layout was built from the same
@@ -433,7 +438,7 @@ impl RenderBackend for WgpuBackend {
                             if let Some(textures) = &program.textures {
                                 $pass.set_bind_group(2, textures, &[]);
                             }
-                            if let Some((_, data)) = &program.data {
+                            if let Some((_, data)) = &instance.data {
                                 $pass.set_bind_group(3, data, &[]);
                             }
                         }

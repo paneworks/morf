@@ -67,19 +67,43 @@ pub struct ShaderRegistration<'a> {
     pub data: &'a [(String, u32)],
 }
 
-/// One registered shader: its pipeline, and the buffer its parameters go in.
+/// One registered shader: its pipeline, and how to lay out what a node gives it.
+///
+/// Only what every node wearing it shares. The buffers its parameters and data
+/// go in are a node's own (`ShaderInstance`): every write to one lands before
+/// the frame's commands run, so a buffer shared between nodes would draw all of
+/// them with whichever node was written last.
 pub(crate) struct ShaderProgram {
     pub(crate) pipeline: wgpu::RenderPipeline,
-    pub(crate) uniforms: wgpu::Buffer,
-    pub(crate) bind_group: wgpu::BindGroup,
     /// Byte offsets of each parameter, from the compiler, so the host and the
     /// shader cannot disagree about the layout.
     pub(crate) offsets: Vec<u32>,
     pub(crate) size: u32,
-    /// The shader's own textures, if it declared any.
+    /// The shader's own textures, if it declared any. Shared: they are the
+    /// shader's, not any node's, and never written during a frame.
     pub(crate) textures: Option<wgpu::BindGroup>,
+    /// Its data blocks, if it declared any: the group layout each node's
+    /// buffers are bound through, and each block's name and element count.
+    pub(crate) data: Option<(wgpu::BindGroupLayout, Vec<(String, u32)>)>,
+}
+
+/// One node's use of a shader: its own uniform block and data buffers.
+pub(crate) struct ShaderInstance {
+    pub(crate) uniforms: wgpu::Buffer,
+    pub(crate) bind_group: wgpu::BindGroup,
     /// Its data blocks: the buffers to write and the group to bind.
     pub(crate) data: Option<(Vec<wgpu::Buffer>, wgpu::BindGroup)>,
+    /// The last frame that drew it, so one whose node went away is dropped.
+    pub(crate) frame: u64,
+}
+
+/// Which node wears which program, and as what: a node can carry a material
+/// shader on its own drawing and an effect shader on its layer at once.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct ShaderInstanceKey {
+    pub(crate) node: morf_scene::NodeHandle,
+    pub(crate) program: u64,
+    pub(crate) effect: bool,
 }
 
 pub struct WgpuBackend {
@@ -150,6 +174,11 @@ pub struct WgpuBackend {
     /// Effect shaders, which splice into the composite pass rather than the
     /// field pass and so need a pipeline built from a different shader.
     pub(crate) effect_shaders: HashMap<u64, ShaderProgram>,
+    /// Each drawn node's own buffers for the shader it wears, kept between
+    /// frames and dropped the first frame its node no longer wears it.
+    pub(crate) shader_instances: HashMap<ShaderInstanceKey, ShaderInstance>,
+    /// Counts frames, to tell which instances the last one drew.
+    pub(crate) shader_frame: u64,
     /// Seconds since the shell started, as shaders read it.
     ///
     /// Held here rather than passed through `render`, because the render

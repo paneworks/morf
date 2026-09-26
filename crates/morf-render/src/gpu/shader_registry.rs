@@ -22,7 +22,7 @@ impl WgpuBackend {
         // per frame: an image is decoded and uploaded when the configuration
         // says so, not while a frame is being drawn.
         let textures = self.build_shader_textures(shader.textures)?;
-        let data = self.build_shader_data(shader.data);
+        let data = self.build_shader_data_layout(shader.data);
         let pipeline = if shader.effect {
             build_glyph_pipeline(
                 &self.device,
@@ -30,7 +30,7 @@ impl WgpuBackend {
                 Some(&self.field_shader_layout),
                 shader.wgsl,
                 textures.as_ref().map(|(_, layout)| layout),
-                data.as_ref().map(|(_, _, layout)| layout),
+                data.as_ref(),
                 self.blend,
             )
             .ok_or_else(|| {
@@ -46,7 +46,7 @@ impl WgpuBackend {
                     owns_coverage: shader.owns_coverage,
                     vertex: shader.vertex,
                     textures: textures.as_ref().map(|(_, layout)| layout),
-                    data: data.as_ref().map(|(_, _, layout)| layout),
+                    data: data.as_ref(),
                     blend: self.blend,
                 },
             )
@@ -54,9 +54,6 @@ impl WgpuBackend {
                 GpuError("the field shader has no hook to splice a shader into".to_owned())
             })?
         };
-        let uniforms = create_shader_uniform_buffer(&self.device, shader.uniform_size);
-        let bind_group =
-            create_shader_bind_group(&self.device, &self.field_shader_layout, &uniforms);
         let registry = if shader.effect {
             &mut self.effect_shaders
         } else {
@@ -66,12 +63,10 @@ impl WgpuBackend {
             shader.program,
             ShaderProgram {
                 pipeline,
-                uniforms,
-                bind_group,
                 offsets: shader.offsets.to_vec(),
                 size: shader.uniform_size,
                 textures: textures.map(|(group, _)| group),
-                data: data.map(|(buffers, group, _)| (buffers, group)),
+                data: data.map(|layout| (layout, shader.data.to_vec())),
             },
         );
         Ok(())
@@ -140,11 +135,11 @@ impl WgpuBackend {
         Ok(Some((group, layout)))
     }
 
-    /// Creates the storage buffers a shader's data blocks are read from.
-    fn build_shader_data(
-        &self,
-        blocks: &[(String, u32)],
-    ) -> Option<(Vec<wgpu::Buffer>, wgpu::BindGroup, wgpu::BindGroupLayout)> {
+    /// The group layout a shader's data blocks are bound through.
+    ///
+    /// `None` when it declared none. The buffers themselves are each node's
+    /// own, made when a node first draws with it (`create_shader_instance`).
+    fn build_shader_data_layout(&self, blocks: &[(String, u32)]) -> Option<wgpu::BindGroupLayout> {
         if blocks.is_empty() {
             return None;
         }
@@ -162,16 +157,35 @@ impl WgpuBackend {
                 count: None,
             })
             .collect();
-        let layout = self
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("morf shader data"),
-                entries: &entries,
-            });
+        Some(
+            self.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("morf shader data"),
+                    entries: &entries,
+                }),
+        )
+    }
+}
+
+/// One node's buffers for a program: its uniform block, and a storage buffer
+/// per data block, with the groups that bind them.
+///
+/// Made the first frame a node draws with the program and kept while it does,
+/// so a node wearing a shader costs what the program alone used to: one block,
+/// one group, and its data buffers.
+pub(crate) fn create_shader_instance(
+    device: &wgpu::Device,
+    shader_layout: &wgpu::BindGroupLayout,
+    program: &ShaderProgram,
+    frame: u64,
+) -> ShaderInstance {
+    let uniforms = create_shader_uniform_buffer(device, program.size);
+    let bind_group = create_shader_bind_group(device, shader_layout, &uniforms);
+    let data = program.data.as_ref().map(|(layout, blocks)| {
         let buffers: Vec<_> = blocks
             .iter()
             .map(|(name, length)| {
-                self.device.create_buffer(&wgpu::BufferDescriptor {
+                device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some(name),
                     size: u64::from(*length).max(1) * 4,
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
@@ -179,7 +193,7 @@ impl WgpuBackend {
                 })
             })
             .collect();
-        let bindings: Vec<_> = buffers
+        let entries: Vec<_> = buffers
             .iter()
             .enumerate()
             .map(|(slot, buffer)| wgpu::BindGroupEntry {
@@ -187,11 +201,17 @@ impl WgpuBackend {
                 resource: buffer.as_entire_binding(),
             })
             .collect();
-        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("morf shader data"),
-            layout: &layout,
-            entries: &bindings,
+            layout,
+            entries: &entries,
         });
-        Some((buffers, group, layout))
+        (buffers, group)
+    });
+    ShaderInstance {
+        uniforms,
+        bind_group,
+        data,
+        frame,
     }
 }
