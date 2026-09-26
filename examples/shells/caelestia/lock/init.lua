@@ -274,7 +274,7 @@ local field = ui.Item {
 }
 
 -- The weather, where it can be had.
-local weather_card = ui.Item {}
+local weather_card
 do
   local ok, lib = pcall(require, "lib.weather")
   if ok then
@@ -306,7 +306,7 @@ do
 end
 
 -- What is playing, and its controls: the lock does not stop the music.
-local media_card = ui.Item {}
+local media_card
 do
   local ok, media = pcall(function() return require("lib.mpris").connect() end)
   if ok and media then
@@ -390,6 +390,12 @@ local centre = ui.Column(with({
   },
 }, shown(240)))
 
+-- A placeholder only where the card could not be made: one built up front
+-- and replaced is left with no parent, and a lock surface holds exactly one
+-- root -- the lock would not start.
+weather_card = weather_card or ui.Item {}
+media_card = media_card or ui.Item {}
+
 local sides = ui.Item {
   anchors = { fill = true },
   ui.Item(with({ x = PX + s(36), y = PY + s(56), width = s(300), height = s(400), weather_card }, {})),
@@ -398,8 +404,11 @@ local sides = ui.Item {
 
 -- ------------------------------------------------------------ the screen --
 
-ui.Item {
+-- Opaque from the first frame: a lock that let the desk show through for
+-- a moment would not be a lock, and morf will not hold one that could.
+ui.Rect {
   anchors = { fill = true },
+  color = C.surface:alpha(1),
   backdrop,
   frame,
   sides,
