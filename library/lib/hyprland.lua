@@ -1207,13 +1207,79 @@ local function command(payload, callback)
   end)
 end
 
+-- A Lua-configured Hyprland (0.56+) refuses the plain dispatcher path:
+-- `/dispatch workspace 2` answers "expected a dispatcher". There the same
+-- request is `hl.dispatch(hl.dsp....)`, evaluated. Which kind of Hyprland
+-- this is, is asked once per connection: a Lua one answers `ok` to a chunk
+-- that does nothing.
+local lua_config = nil       -- nil: not asked yet
+local asking_flavour = nil   -- callbacks waiting on the answer
+
+local function with_flavour(fn)
+  if lua_config ~= nil then return fn(lua_config) end
+  if asking_flavour then
+    asking_flavour[#asking_flavour + 1] = fn
+    return
+  end
+  asking_flavour = { fn }
+  hyprland.request("/eval return", function(reply)
+    lua_config = type(reply) == "string" and reply:match("^%s*ok%s*$") ~= nil
+    local waiting = asking_flavour
+    asking_flavour = nil
+    for _, each in ipairs(waiting) do each(lua_config) end
+  end)
+end
+
+hyprland.on("connected", function() lua_config = nil end)
+
+-- The window a legacy argument names ("address:0x…", a class regex, …),
+-- and a workspace, as the Lua dispatchers take them: strings.
+local function quoted(value) return string.format("%q", text(value)) end
+
+local function lua_dispatch(dispatcher, argument)
+  local arg = text(argument)
+  if dispatcher == "workspace" then
+    return "hl.dsp.focus({ workspace = " .. quoted(arg) .. " })"
+  elseif dispatcher == "focuswindow" then
+    return "hl.dsp.focus({ window = " .. quoted(arg) .. " })"
+  elseif dispatcher == "focusmonitor" then
+    return "hl.dsp.focus({ monitor = " .. quoted(arg) .. " })"
+  elseif dispatcher == "movetoworkspace" or dispatcher == "movetoworkspacesilent" then
+    local workspace, window = arg:match("^([^,]*),(.*)$")
+    local fields = { "workspace = " .. quoted(workspace or arg) }
+    if window and window ~= "" then fields[#fields + 1] = "window = " .. quoted(window) end
+    if dispatcher == "movetoworkspacesilent" then fields[#fields + 1] = "follow = false" end
+    return "hl.dsp.window.move({ " .. table.concat(fields, ", ") .. " })"
+  elseif dispatcher == "closewindow" then
+    return "hl.dsp.window.close({ window = " .. quoted(arg) .. " })"
+  elseif dispatcher == "killactive" then
+    return "hl.dsp.window.close({})"
+  elseif dispatcher == "togglefloating" then
+    return "hl.dsp.window.float({ action = \"toggle\" })"
+  elseif dispatcher == "togglespecialworkspace" then
+    return "hl.dsp.workspace.toggle_special(" .. (arg ~= "" and quoted(arg) or "") .. ")"
+  elseif dispatcher == "exec" then
+    return "hl.dsp.exec_cmd(" .. quoted(arg) .. ")"
+  end
+  return nil
+end
+
 --- Runs a dispatcher: `dispatch("workspace", "2")`. On a Lua-configured
---- Hyprland (0.56+) `eval("hl.dispatch(...)")` is the native spelling; the
---- plain dispatcher path is kept for the rest. `callback(ok, reply)`.
+--- Hyprland the common ones are sent as `hl.dispatch(hl.dsp....)`, which is
+--- all it accepts; anything else goes the plain way. `callback(ok, reply)`.
 function hyprland.dispatch(dispatcher, argument, callback)
-  local payload = "/dispatch " .. text(dispatcher)
+  dispatcher = text(dispatcher)
+  local payload = "/dispatch " .. dispatcher
   if argument ~= nil and text(argument) ~= "" then payload = payload .. " " .. text(argument) end
-  return command(payload, callback)
+  with_flavour(function(lua)
+    local native = lua and lua_dispatch(dispatcher, argument)
+    if native then
+      command("/eval hl.dispatch(" .. native .. ")", callback)
+    else
+      command(payload, callback)
+    end
+  end)
+  return true
 end
 
 --- Sets a config keyword at run time: `keyword("general:gaps_out", 8)`.
