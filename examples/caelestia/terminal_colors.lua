@@ -77,7 +77,12 @@ if morf.terminal and morf.terminal.listen then
     heard.mode = heard.mode or was.mode
     M.current:set(heard)
   end)
-  if ok then M.tty = tty end
+  if ok then
+    M.tty = tty
+    morf.log("info", "caelestia: listening for the colour tool on " .. tostring(tty.path))
+  else
+    morf.log("warn", "caelestia: no terminal to hear the colour tool on: " .. tostring(tty))
+  end
 end
 
 return M

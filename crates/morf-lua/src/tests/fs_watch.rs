@@ -250,3 +250,22 @@ fn twenty_idle_watches_cost_no_thread_each() {
     assert_eq!(runtime.reactive.borrow().watches.len(), 20);
     assert!(morf_io::watcher_threads() <= 2);
 }
+
+// Every screen runs the configuration in a runtime of its own, and each may
+// watch the same file (a colour tool's scheme): each hears every change.
+#[test]
+fn several_runtimes_watching_one_file_each_hear_it() {
+    let scratch = Scratch::new("shared");
+    let file = scratch.path("colors.json");
+    fs::write(&file, "one").unwrap();
+    let source = format!(
+        r#"count = 0
+           handle = morf.fs.watch({file:?}, function() count = count + 1 end)"#
+    );
+    let mut runtimes: Vec<Runtime> = (0..3).map(|_| start(&source)).collect();
+    thread::sleep(Duration::from_millis(50));
+    fs::write(&file, "two").unwrap();
+    for runtime in &mut runtimes {
+        wait_for(runtime, "assert(count >= 1)");
+    }
+}

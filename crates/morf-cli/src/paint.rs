@@ -300,6 +300,7 @@ pub(crate) fn paint_layer(
         }
         input
     };
+    split.mark("input region");
     let mut backdrop = Vec::new();
     // Where the compositor should blur what is behind this surface. Nothing is
     // read back: the blur happens on the far side of this call, underneath a
@@ -358,7 +359,7 @@ pub(crate) fn paint_layer(
         backdrop = shapes;
     }
 
-    split.mark("input and backdrop regions");
+    split.mark("backdrop region");
     client.request_layer_frame(layer);
     let surface = client
         .layer_surface(layer)
