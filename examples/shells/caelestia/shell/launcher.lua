@@ -38,6 +38,9 @@ M.selected = morf.signal("caelestia.launcher.selected", 1)
 M.results = morf.list_model({})
 M.count = morf.signal("caelestia.launcher.count", 0)
 M.mode = morf.signal("caelestia.launcher.mode", "apps")
+-- The row whose actions are listed instead of the results (Tab, Ctrl+K),
+-- by key; "" for none.
+M.acting = morf.signal("caelestia.launcher.acting", "")
 -- The carousel's pictures: `{ path, name }` each, and how many.
 M.walls = {}
 M.wall_count = morf.signal("caelestia.launcher.walls", 0)
@@ -54,7 +57,18 @@ morf.effect("caelestia.launcher.search", function()
   local q = M.query:get()
   local menus = require("menus")
   local found, mode
-  if menus.source:get() ~= "" then
+  local acting = M.acting:get()
+  local owner = acting ~= "" and by_key[acting] or nil
+  if owner and owner.actions then
+    -- The action panel: the chosen row's actions, filtered by the field.
+    found, mode = {}, "apps"
+    for i, a in ipairs(owner.actions) do
+      if q == "" or a.name:lower():find(q:lower(), 1, true) then
+        found[#found + 1] = { kind = "menu", id = acting .. ":action:" .. i, name = a.name,
+          description = owner.name, material = a.material, run = a.run }
+      end
+    end
+  elseif menus.source:get() ~= "" then
     found, mode = menus.search(q, max_shown())
   else
     found, mode = apps.search(q, max_shown())
@@ -85,6 +99,7 @@ morf.effect("caelestia.launcher.search", function()
       key = key .. (row.kind == "calc" and (":" .. row.name) or ""),
       kind = row.kind, id = row.id, name = row.name,
       description = row.description, icon = row.icon, material = row.material,
+      swatch = row.swatch, glyph = row.glyph,
     }
     by_key[out[i].key] = row
   end
@@ -113,6 +128,16 @@ end
 -- ------------------------------------------------------------------- rows --
 
 local function row_icon(row)
+  if row.glyph then
+    return kit.centred(32, 32, kit.text { text = row.glyph, font_size = 26 })
+  end
+  if row.swatch then
+    local ok, color = pcall(morf.color, row.swatch)
+    return kit.centred(32, 32, ui.Rect {
+      width = 28, height = 28, radius = 14, color = ok and color or row.swatch,
+      border_width = 2, border_color = function() return C.outlineVariant end,
+    })
+  end
   if row.kind == "action" or row.kind == "variant" or row.material then
     return kit.centred(32, 32, kit.icon(row.material or row.icon, 34, function() return C.onSurfaceVariant end))
   end
@@ -309,6 +334,7 @@ end
 local field
 
 function M.activate(row)
+  M.acting:set("")
   local next_step = apps.activate(row)
   if next_step == "close" then
     M.drawer.set(false)
@@ -332,12 +358,13 @@ end
 
 field = ui.TextInput {
   id = "launcher-search",
+  tab_navigation = false,
   height = SEARCH,
   anchors = { left = true, right = true, left_margin = 48, right_margin = 44 },
   vertical_alignment = "center",
   font_family = theme.font, font_size = theme.size.normal,
   color = function() return C.onSurface end,
-  placeholder = 'Type ">" for commands',
+  placeholder = require("providers").HINT,
   placeholder_color = function() return C.onSurfaceVariant end,
   caret_color = function() return C.onSurface end,
   selection_color = function() return C.primary:alpha(0.4) end,
@@ -345,16 +372,33 @@ field = ui.TextInput {
   on_accepted = function() M.activate(chosen()) end,
   -- A menu's page steps back to the menu first.
   on_escape = function()
-    if require("menus").back() then
+    if M.acting:get() ~= "" then
+      M.acting:set("")
+    elseif require("menus").back() then
       field.text = ""
       M.query:set("")
     else
       M.drawer.set(false)
     end
   end,
-  on_key_pressed = function(_, _, _, _, key)
+  on_key_pressed = function(_, _, modifiers, _, key)
     if key == "Up" then move(-1) return true end
-    if key == "Down" or key == "Tab" then move(1) return true end
+    if key == "Down" then move(1) return true end
+    -- Tab or Ctrl+K: the chosen row's actions, and back.
+    if key == "Tab" or (key == "k" and tostring(modifiers):find("ctrl")) then
+      if M.acting:get() ~= "" then
+        M.acting:set("")
+      else
+        local entry = M.results:get(M.selected:get())
+        local r = entry and by_key[entry.key]
+        if r and r.actions and #r.actions > 0 then
+          M.acting:set(entry.key)
+          field.text = ""
+          M.query:set("")
+        end
+      end
+      return true
+    end
     if wide() and key == "Left" then move(-1) return true end
     if wide() and key == "Right" then move(1) return true end
   end,
@@ -466,6 +510,7 @@ morf.effect("caelestia.launcher.open", function()
     morf.surface.keyboard_focus = "none"
     -- Shut, it is its own list again next time.
     require("menus").open("")
+    M.acting:set("")
   end
 end)
 

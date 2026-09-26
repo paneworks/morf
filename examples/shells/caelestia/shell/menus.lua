@@ -153,27 +153,10 @@ copy=$(mktemp) && cp -f "$db" "$copy" && sqlite3 -separator "$(printf '\t')" "$c
 end
 
 -- What surfraw's list gave; surfraw is not on this machine, so the engines
--- are here.
-local ENGINES = {
-  { id = "duckduckgo", name = "DuckDuckGo", url = "https://duckduckgo.com/?q=%s" },
-  { id = "google", name = "Google", url = "https://www.google.com/search?q=%s" },
-  { id = "github", name = "GitHub", url = "https://github.com/search?q=%s" },
-  { id = "youtube", name = "YouTube", url = "https://www.youtube.com/results?search_query=%s" },
-  { id = "wikipedia", name = "Wikipedia", url = "https://en.wikipedia.org/w/index.php?search=%s" },
-  { id = "archwiki", name = "ArchWiki", url = "https://wiki.archlinux.org/index.php?search=%s" },
-  { id = "aur", name = "AUR", url = "https://aur.archlinux.org/packages?K=%s" },
-  { id = "archpkg", name = "Arch packages", url = "https://archlinux.org/packages/?q=%s" },
-  { id = "crates", name = "crates.io", url = "https://crates.io/search?q=%s" },
-  { id = "docsrs", name = "docs.rs", url = "https://docs.rs/releases/search?query=%s" },
-  { id = "nixpkgs", name = "Nix packages", url = "https://search.nixos.org/packages?query=%s" },
-  { id = "flathub", name = "Flathub", url = "https://flathub.org/apps/search?q=%s" },
-  { id = "stackoverflow", name = "Stack Overflow", url = "https://stackoverflow.com/search?q=%s" },
-  { id = "reddit", name = "Reddit", url = "https://www.reddit.com/search/?q=%s" },
-}
-
-local function search_url(template, query)
-  return (template:gsub("%%s", function() return morf.http.url_encode(query) end))
-end
+-- are web.lua's.
+local web = require("web")
+local ENGINES = web.ENGINES
+local search_url = web.search_url
 
 --- What typed text does on the menu itself: an address opens, anything
 --- else is searched on DuckDuckGo.
@@ -184,7 +167,7 @@ local function typed_row(query)
     description = address and "Open" or "Search DuckDuckGo", material = address and "open_in_new" or "search",
     run = function()
       if address then return open(query:match("^https?://") and query or ("https://" .. query)) end
-      return open(search_url(ENGINES[1].url, query))
+      return open(search_url(ENGINES[1], query))
     end,
   }
 end
@@ -266,7 +249,7 @@ local function browsy(query)
             material = "travel_explore", run = function() return "keep" end } }
         end
         return { { kind = "menu", id = "engine", name = query, description = "Search " .. e.name, material = "travel_explore",
-          run = function() return open(search_url(e.url, query)) end } }
+          run = function() return open(search_url(e, query)) end } }
       end
     end
   end

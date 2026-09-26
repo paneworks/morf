@@ -159,6 +159,10 @@ end
 --- launcher draws them in: "apps", "actions", "schemes", "variants",
 --- "wallpapers" or "calc".
 function M.search(query, limit)
+  -- A prefix of providers.lua's: its rows alone.
+  local providers = require("providers")
+  local routed, routed_mode = providers.search(query)
+  if routed then return routed, routed_mode end
   local prefix = config.get("launcher.action_prefix")
   if query:sub(1, #prefix) == prefix then
     local rest = query:sub(#prefix + 1):gsub("^%s+", "")
@@ -226,11 +230,21 @@ function M.search(query, limit)
     key = { "name", { "keywords", 0.4 }, { "description", 0.2 } },
     id = "id",
   })
+  -- An answer first (a sum, a conversion, an address), the apps, then
+  -- what else to do with the words: search the web or the files.
+  providers.revision:get()
+  local answer = providers.inline(query)
+  local fallbacks = providers.fallbacks(query)
+  local room = limit and math.max(1, limit - #fallbacks - (answer and 1 or 0)) or nil
   local out = {}
+  if answer then out[1] = answer end
+  local apps_found = 0
   for _, hit in ipairs(M.strict(query, hits)) do
     out[#out + 1] = hit.item
-    if limit and #out >= limit then break end
+    apps_found = apps_found + 1
+    if room and apps_found >= room then break end
   end
+  for _, f in ipairs(fallbacks) do out[#out + 1] = f end
   return out, "apps"
 end
 
