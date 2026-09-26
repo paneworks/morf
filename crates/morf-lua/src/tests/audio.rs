@@ -85,6 +85,11 @@ fn bindings_follow_the_default_sink_and_lists_fill() {
             morf.ipc.volume = function(value)
                 return tostring(audio.set_volume(audio.default_sink().id, tonumber(value)))
             end
+            morf.ipc.balance = function()
+                return tostring(audio.set_channel_volumes(40, { 0.25, 1 }))
+                    .. " " .. tostring(audio.set_channel_volumes(40, {}))
+                    .. " " .. tostring(audio.set_channel_volumes(99, { 1 }))
+            end
             morf.ipc.mute = function()
                 return tostring(audio.set_mute(40, true))
             end
@@ -129,6 +134,25 @@ fn bindings_follow_the_default_sink_and_lists_fill() {
     assert!((morf_audio::volume::average(&volumes) - 0.8).abs() < 1e-4);
     runtime.poll_services();
     assert_eq!(root_text(&runtime, 0), "speakers description 80");
+
+    // Each channel on its own: left quiet, right full.
+    assert_eq!(
+        runtime.call_ipc("balance", &[]).unwrap(),
+        vec![IpcValue::String("true false false".into())]
+    );
+    let Some(Command::SetVolumes { id: 40, volumes }) = server.commands().pop() else {
+        panic!("a channel volume command reached the server");
+    };
+    assert_eq!(volumes.len(), 2);
+    assert!((morf_audio::volume::from_linear(volumes[0]) - 0.25).abs() < 1e-4);
+    assert!((morf_audio::volume::from_linear(volumes[1]) - 1.0).abs() < 1e-4);
+    runtime.poll_services();
+    assert_eq!(root_text(&runtime, 0), "speakers description 63");
+    // The overall level back at 80, the balance kept.
+    runtime
+        .call_ipc("volume", &[IpcValue::String("0.8".into())])
+        .unwrap();
+    runtime.poll_services();
 
     runtime.call_ipc("mute", &[]).unwrap();
     runtime.poll_services();
@@ -307,6 +331,8 @@ fn malformed_calls_raise() {
             assert(not pcall(audio.set_volume, "speakers", 0.5))
             assert(not pcall(audio.set_volume, 1, 0 / 0))
             assert(not pcall(audio.set_volume, -1, 0.5))
+            assert(not pcall(audio.set_channel_volumes, 1, { "loud" }))
+            assert(not pcall(audio.set_channel_volumes, 1, { 0 / 0 }))
             assert(not pcall(audio.monitor, {}))
             assert(not pcall(audio.monitor, { on_level = print, bands = 1000 }))
             assert(not pcall(audio.monitor, { on_level = print, on_beat = print }))

@@ -389,6 +389,38 @@ pub(crate) fn install_audio_api<'gc>(
     );
 
     function(
+        "set_channel_volumes",
+        Callback::from_fn(&ctx, {
+            let state = Rc::clone(&state);
+            move |ctx, _, mut stack| {
+                let (id, volumes): (LuaValue, Table) = stack.consume(ctx)?;
+                let id = object_id(id, "set_channel_volumes target")?;
+                let mut list = Vec::new();
+                for index in 1..=volumes.length(&ctx) {
+                    let volume = match volumes.get_value(ctx, index) {
+                        LuaValue::Number(value) => value,
+                        LuaValue::Integer(value) => value as f64,
+                        _ => {
+                            return Err(HostError(
+                                "set_channel_volumes takes a list of numbers".into(),
+                            )
+                            .into());
+                        }
+                    };
+                    if !volume.is_finite() {
+                        return Err(HostError("volume must be a finite number".into()).into());
+                    }
+                    list.push(volume as f32);
+                }
+                let mut state = state.borrow_mut();
+                let sent = host(&mut state).started().set_channel_volumes(id, &list);
+                stack.replace(ctx, sent);
+                Ok(CallbackReturn::Return)
+            }
+        }),
+    );
+
+    function(
         "set_mute",
         Callback::from_fn(&ctx, {
             let state = Rc::clone(&state);

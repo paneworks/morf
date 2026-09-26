@@ -304,6 +304,29 @@ refusal is logged. The compositor restores an output the moment the shell
 lets go of it — on `reset`, on a reload (a new configuration starts from
 the outputs' own ramps), and when the shell exits for any reason.
 
+## Devices and streams: `morf.audio`
+
+`morf.audio.sinks`, `.sources` and `.streams` are list models (for a
+`Repeater`, or `:len()` and `:get(i)`); `default_sink()`,
+`default_source()`, `device(id)` and `stream(id)` answer one row. A device
+row has `id`, `name`, `description`, `kind`, `volume` (as a mixer shows it,
+0 to 1.5), `volumes` (the same per channel, in the device's order),
+`channels`, `muted`, `default` and `icon_name`; a stream row has `id`,
+`app_name`, `app_id`, `binary`, `icon_name`, `media_name`, `direction`,
+`device` (where it plays or records), `volume`, `muted`, `channels` and
+`pid`. Bindings that read them follow the server.
+
+- `set_volume(id, v)` sets a device's or stream's volume, keeping its
+  balance.
+- `set_channel_volumes(id, { v1, v2, ... })` sets each channel's own, in
+  channel order: the balance, or one channel alone. Fewer values than
+  channels leave the rest as they are.
+- `set_mute(id, muted)`, `set_default(id)` (a device), and
+  `move_stream(stream, device)` (playback to a sink, recording to a
+  source).
+
+Each answers false for an unknown id, and sends nothing then.
+
 ## Levels, bands and beats: `morf.audio.monitor`
 
 A monitor listens to a device — the default sink when `device` is `nil`,

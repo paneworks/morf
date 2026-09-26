@@ -228,6 +228,31 @@ impl Audio {
         true
     }
 
+    /// Sets each channel's volume, as a person sees it (0 to
+    /// [`volume::MAX_VOLUME`]), in the device's or stream's channel order:
+    /// the balance, or one channel alone. A list shorter than the channels
+    /// leaves the rest as they are, and one longer is cut to them. False
+    /// for an unknown id or an empty list.
+    pub fn set_channel_volumes(&self, id: ObjectId, volumes: &[f32]) -> bool {
+        let gains = match (self.state.device(id), self.state.stream(id)) {
+            (Some(device), _) => &device.channel_volumes,
+            (None, Some(stream)) => &stream.channel_volumes,
+            (None, None) => return false,
+        };
+        if volumes.is_empty() {
+            return false;
+        }
+        let count = gains.len().max(1);
+        let volumes = (0..count)
+            .map(|channel| match volumes.get(channel) {
+                Some(volume) => volume::to_linear(*volume),
+                None => gains.get(channel).copied().unwrap_or(0.0),
+            })
+            .collect();
+        self.control.send(Command::SetVolumes { id, volumes });
+        true
+    }
+
     pub fn set_mute(&self, id: ObjectId, muted: bool) -> bool {
         if self.state.device(id).is_none() && self.state.stream(id).is_none() {
             return false;
