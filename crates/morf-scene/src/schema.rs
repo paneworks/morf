@@ -407,6 +407,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 // which font either of them came out of.
                 string("font_family", "sans-serif"),
                 string("font_family_morph_to", ""),
+                // The weight the letter is cut at (100-900): the face's own
+                // bold, or a variable face's `wght` there, for both ends.
+                number("font_weight", 400.0),
                 // The layer's own fill. Fully transparent means "take the
                 // field's", which is what keeps a single-colour composition
                 // from having to repeat itself on every layer.

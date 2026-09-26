@@ -222,10 +222,20 @@ impl TextSystem {
         // One character on one line: the line height is nothing to it.
         let mut buffer =
             cosmic_text::Buffer::new(&mut self.fonts, cosmic_text::Metrics::new(size, size));
+        // A weight rides after a NUL in the family (see morf-render's
+        // `weighted`): the letter is cut from that weight of the face.
+        let (family, weight) = match family.split_once('\0') {
+            Some((name, weight)) => (name, weight.parse::<u16>().ok()),
+            None => (family, None),
+        };
         let family = crate::resolve_family(&self.fonts, family);
+        let mut attrs = cosmic_text::Attrs::new().family(family.family());
+        if let Some(weight) = weight {
+            attrs = attrs.weight(cosmic_text::Weight(weight));
+        }
         buffer.set_text(
             glyph.encode_utf8(&mut [0u8; 4]),
-            &cosmic_text::Attrs::new().family(family.family()),
+            &attrs,
             cosmic_text::Shaping::Advanced,
             None,
         );

@@ -296,7 +296,71 @@ const OUTLINE_SPAN: u32 = 6u;
 /// rather than a picture. A pixel walks the boxes and only opens the runs it
 /// could be answered by, but it is still a walk per pixel: this is for the
 /// letters a configuration composes with, not for a page of text.
+/// How many loops one outline is measured loop by loop; one with more is
+/// measured as a single boundary (`sd_polygon_merged`).
+const POLYGON_LOOPS: u32 = 8u;
+
 fn sd_polygon(point: vec2<f32>, first: u32, stride: u32, loops: u32) -> f32 {
+    if stride < 3u || loops == 0u {
+        return 1.0e9;
+    }
+    if loops > POLYGON_LOOPS {
+        return sd_polygon_merged(point, first, stride, loops);
+    }
+    // Loop by loop. A variable font draws a letter as overlapping contours
+    // (a `4`'s bar laid across its stem), and the nearest edge of all of
+    // them is sometimes an edge buried inside another: measured as one
+    // boundary, that seam came out as a hairline through the letter. Each
+    // loop is its own signed distance instead; the loops wound as the
+    // largest one is are the body and join as a union, which has no seam,
+    // and the loops wound against it are the counters and are cut out.
+    var dist: array<f32, 8>;
+    var area: array<f32, 8>;
+    var biggest = 0u;
+    var biggest_area = 0.0;
+    for (var contour = 0u; contour < loops; contour = contour + 1u) {
+        let loop_start = first + contour * stride;
+        var nearest = 1.0e9;
+        var winding = 0;
+        var twice_area = 0.0;
+        for (var index = 0u; index < stride; index = index + 1u) {
+            let a = outline[loop_start + index];
+            let b = outline[loop_start + (index + 1u) % stride];
+            twice_area = twice_area + (a.x * b.y - b.x * a.y);
+            let edge = b - a;
+            let to_point = point - a;
+            let along = clamp(dot(to_point, edge) / max(dot(edge, edge), 1e-9), 0.0, 1.0);
+            let offset = to_point - edge * along;
+            nearest = min(nearest, dot(offset, offset));
+            let crosses = (a.y <= point.y) != (b.y <= point.y);
+            if crosses {
+                let t = (point.y - a.y) / (b.y - a.y);
+                if a.x + t * edge.x > point.x {
+                    winding = winding + select(-1, 1, b.y > a.y);
+                }
+            }
+        }
+        dist[contour] = select(sqrt(nearest), -sqrt(nearest), winding != 0);
+        area[contour] = twice_area;
+        if abs(twice_area) > biggest_area {
+            biggest_area = abs(twice_area);
+            biggest = contour;
+        }
+    }
+    let body = sign(area[biggest]);
+    var solid = 1.0e9;
+    var hollow = 1.0e9;
+    for (var contour = 0u; contour < loops; contour = contour + 1u) {
+        if sign(area[contour]) == body {
+            solid = min(solid, dist[contour]);
+        } else {
+            hollow = min(hollow, dist[contour]);
+        }
+    }
+    return max(solid, -hollow);
+}
+
+fn sd_polygon_merged(point: vec2<f32>, first: u32, stride: u32, loops: u32) -> f32 {
     if stride < 3u || loops == 0u {
         return 1.0e9;
     }

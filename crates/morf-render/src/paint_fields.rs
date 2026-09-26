@@ -178,13 +178,16 @@ fn shape_layer(
         // glyph would allocate on every plain shape in every field, every
         // frame, to describe something that is never read.
         font_family: match glyph {
-            Some(_) => Some(scene.string_value(node, "font_family")?.into()),
+            Some(_) => Some(weighted(
+                scene.string_value(node, "font_family")?,
+                scene.number(node, "font_weight")?,
+            )),
             None => None,
         },
         font_family_morph_to: match glyph {
             Some(_) => match scene.string_value(node, "font_family_morph_to")? {
                 "" => None,
-                named => Some(named.into()),
+                named => Some(weighted(named, scene.number(node, "font_weight")?)),
             },
             None => None,
         },
@@ -421,4 +424,16 @@ fn rotation_matrix(degrees: f32) -> [f32; 4] {
     }
     let (sin, cos) = degrees.to_radians().sin_cos();
     [cos, sin, -sin, cos]
+}
+
+/// A face as the text system is asked for a letter's outline: the family,
+/// and a weight other than regular after a NUL (`morf_text` reads it back),
+/// so the outline cache keeps the weights of one family apart.
+fn weighted(family: &str, weight: f64) -> Box<str> {
+    let weight = weight.round().clamp(1.0, 1000.0) as u16;
+    if weight == 400 {
+        family.into()
+    } else {
+        format!("{family}\0{weight}").into()
+    }
 }
