@@ -196,7 +196,17 @@ local function verb(d)
   end
 end
 
-morf.ipc.launcher = verb(launcher.drawer)
+-- `launcher [how]`, or `launcher apps` / `launcher web`: the launcher on
+-- one of the author's own menus (menus.lua: appy's apps, browsy's web).
+morf.ipc.launcher = function(how)
+  if how == "apps" or how == "web" then
+    if not here() then return nil end
+    require("menus").open(how)
+    launcher.drawer.set(true)
+    return true
+  end
+  return verb(launcher.drawer)(how)
+end
 morf.ipc.dashboard = verb(dashboard.drawer)
 morf.ipc.session = verb(session.drawer)
 -- `sidebar [how [TAB]]`: TAB is settings or notifications. `utilities`

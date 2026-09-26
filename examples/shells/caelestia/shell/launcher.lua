@@ -52,7 +52,13 @@ local function row_of(entry) return entry and by_key[entry.key] end
 -- The results follow the query.
 morf.effect("caelestia.launcher.search", function()
   local q = M.query:get()
-  local found, mode = apps.search(q, max_shown())
+  local menus = require("menus")
+  local found, mode
+  if menus.source:get() ~= "" then
+    found, mode = menus.search(q, max_shown())
+  else
+    found, mode = apps.search(q, max_shown())
+  end
   if mode == "wallpapers" then
     M.walls = found
     local current = require("wallpaper").current:get()
@@ -78,7 +84,7 @@ morf.effect("caelestia.launcher.search", function()
     out[i] = {
       key = key .. (row.kind == "calc" and (":" .. row.name) or ""),
       kind = row.kind, id = row.id, name = row.name,
-      description = row.description, icon = row.icon,
+      description = row.description, icon = row.icon, material = row.material,
     }
     by_key[out[i].key] = row
   end
@@ -107,8 +113,8 @@ end
 -- ------------------------------------------------------------------- rows --
 
 local function row_icon(row)
-  if row.kind == "action" or row.kind == "variant" then
-    return kit.centred(32, 32, kit.icon(row.icon, 34, function() return C.onSurfaceVariant end))
+  if row.kind == "action" or row.kind == "variant" or row.material then
+    return kit.centred(32, 32, kit.icon(row.material or row.icon, 34, function() return C.onSurfaceVariant end))
   end
   if row.kind == "calc" then
     return kit.centred(32, 32, kit.icon("function", 36, function() return C.onSurface end))
@@ -337,7 +343,15 @@ field = ui.TextInput {
   selection_color = function() return C.primary:alpha(0.4) end,
   on_text_changed = function(text) M.query:set(text) end,
   on_accepted = function() M.activate(chosen()) end,
-  on_escape = function() M.drawer.set(false) end,
+  -- A menu's page steps back to the menu first.
+  on_escape = function()
+    if require("menus").back() then
+      field.text = ""
+      M.query:set("")
+    else
+      M.drawer.set(false)
+    end
+  end,
   on_key_pressed = function(_, _, _, _, key)
     if key == "Up" then move(-1) return true end
     if key == "Down" or key == "Tab" then move(1) return true end
@@ -450,6 +464,8 @@ morf.effect("caelestia.launcher.open", function()
   else
     field.focus = false
     morf.surface.keyboard_focus = "none"
+    -- Shut, it is its own list again next time.
+    require("menus").open("")
   end
 end)
 
