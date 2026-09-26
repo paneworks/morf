@@ -292,7 +292,7 @@ M.TOGGLES = {
     end,
   },
   {
-    id = "mic", icon = function() return "mic" end, name = "Microphone", detail = "sound",
+    id = "mic", icon = function() return "mic" end, name = "Microphone", detail = "microphone",
     on = function() return local_state.mic:get() end,
     set = function(now)
       M.run(now and "mic_on" or "mic_off")
@@ -541,7 +541,8 @@ local SWITCH = { duration = theme.duration.normal, easing = theme.ease.emphasize
 M.DETAILS = {
   { key = "network", name = "Network", build = function(w, h) return require("connectivity").network_page(w, h) end },
   { key = "bluetooth", name = "Bluetooth", build = function(w, h) return require("connectivity").bluetooth_page(w, h) end },
-  { key = "sound", name = "Sound", build = function(w, h) return require("sound_page").build(w, h) end },
+  { key = "sound", name = "Sound", build = function(w, h) return require("sound_page").output_page(w, h) end },
+  { key = "microphone", name = "Microphone", build = function(w, h) return require("sound_page").input_page(w, h) end },
 }
 function M.page(w, h)
   local main = ui.Item {

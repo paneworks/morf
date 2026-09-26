@@ -1,5 +1,5 @@
--- The Sound page of the right panel's settings: everything about sound in
--- one place.
+-- The right panel's two sound pages: Sound (the output) and Microphone
+-- (the input), each opened from its own tile.
 --
 --   Output   the default output's volume, mute, and each of its channels
 --            on its own slider (left and right, or channel 1, 2, ...)
@@ -344,10 +344,12 @@ end
 --- The page, `w` wide and `h()` tall: the output with its channels, the
 --- outputs, the input and its inputs at their own sizes, and the apps in
 --- what is left.
-function M.build(w, h)
+--- The output page, `w` wide and `h()` tall: the output with its
+--- channels, the outputs to choose from, and the apps in what is left.
+function M.output_page(w, h)
   COL_W, INNER = w, w - 2 * PAD
-  local OUT_H, DEV_H, IN_H = 250, 150, 200
-  local apps_h = function() return math.max(120, h() - OUT_H - DEV_H - IN_H - 3 * GAP) end
+  local OUT_H, DEV_H = 250, 150
+  local apps_h = function() return math.max(120, h() - OUT_H - DEV_H - 2 * GAP) end
   return ui.Item {
     id = "sound-page",
     width = w, height = h, clip = true,
@@ -355,9 +357,18 @@ function M.build(w, h)
       gap = GAP,
       output_card(OUT_H),
       devices_card(function() return DEV_H end),
-      input_card(IN_H),
       apps_card(apps_h),
     },
+  }
+end
+
+--- The input page: the microphone's level and mute, and every input.
+function M.input_page(w, h)
+  COL_W, INNER = w, w - 2 * PAD
+  return ui.Item {
+    id = "microphone-page",
+    width = w, height = h, clip = true,
+    input_card(h),
   }
 end
 

@@ -730,9 +730,13 @@ test.describe("caelestia", function()
     load()
     test.eq(test.ipc("settings", "sound"), "sound")
     test.settle(1500)
-    for _, id in ipairs { "sound-output", "sound-devices", "sound-apps", "sound-input" } do
+    for _, id in ipairs { "sound-output", "sound-devices", "sound-apps" } do
       test.truthy(test.find { id = id, visible = true }, id .. " not shown")
     end
+    -- The input has a page of its own, from the microphone's tile.
+    test.eq(test.ipc("settings", "microphone"), "microphone")
+    test.settle(1000)
+    test.truthy(test.find { id = "sound-input", visible = true }, "sound-input not shown")
     test.snapshot("caelestia-sound.png", { surface = "screen" })
     test.eq(#test.logs("error"), 0)
   end)
