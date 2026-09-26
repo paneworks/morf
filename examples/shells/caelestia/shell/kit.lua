@@ -330,7 +330,7 @@ function M.morph_number(spec)
       glyph = "", glyph_morph_to = "",
       font_family = family, font_family_morph_to = family,
       -- Bold: the outline grown (`thickness` on a letter).
-      thickness = spec.weight or math.max(0.6, size * 0.055),
+      thickness = spec.weight or 0,
       x = (i - 1) * dw, y = 0, width = dw, height = size,
       morph_progress = 0,
       behavior = { morph_progress = motion, x = motion },
