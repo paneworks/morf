@@ -149,6 +149,8 @@ impl Runtime {
             frame.active = true;
             frame.changed += fading;
         }
+        // Whatever follows a node that just moved moves with it, this tick.
+        frame.changed += crate::state::apply_follows(&mut self.reactive.borrow_mut());
         // Nodes whose exit has ended go now, with their `on_destroyed` hooks.
         for &node in &frame.exited {
             self.lua.enter(|ctx| {

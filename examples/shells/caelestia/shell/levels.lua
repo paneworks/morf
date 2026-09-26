@@ -106,9 +106,11 @@ function M.build()
       },
     },
   }
+  -- Nothing at rest (no size), so the sidebar carrying the pills out
+  -- carries nothing that could show; it takes its size while it is out.
   local swell = ui.Item {
     id = "levels-swell",
-    x = tucked_x(), width = SW, height = SH,
+    x = tucked_x(), width = 0, height = 0,
     y = function()
       local k = shown:get()
       return M.geometry().tops[k ~= "" and k or "volume"] - PAD
@@ -141,7 +143,11 @@ function M.build()
             easing = theme.ease.emphasized_accel, delay = 60 },
         },
       },
-      on_finished = function(reason) if reason == "completed" then shown:set("") end end,
+      on_finished = function(reason)
+        if reason ~= "completed" then return end
+        shown:set("")
+        swell.width, swell.height = 0, 0
+      end,
     }
   end
 
@@ -151,6 +157,7 @@ function M.build()
     if not value[kind] then return end
     local was = shown:get()
     shown:set(kind)
+    swell.width, swell.height = SW, SH
     if was == "" or (across and across:active() and swell.x > out_x() + 0.5) then
       stop(across)
       across = morf.animation.play {
@@ -181,8 +188,7 @@ function M.build()
   -- near side: between the desk and the panel.
   local sidebar = require("sidebar")
   kit.ride("levels", root, sidebar.drawer,
-    function() return -(theme.SIDE_W + theme.STRIP / 2 + theme.BORDER / 2) end,
-    function() return sidebar.drawer.panel.width + theme.SEAM + theme.BORDER + 2 end)
+    function() return -(theme.SIDE_W + theme.STRIP / 2 + theme.BORDER / 2) end)
   M.shown = shown
   return root
 end

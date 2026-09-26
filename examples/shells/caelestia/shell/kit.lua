@@ -114,34 +114,18 @@ end
 
 --- Makes `node` ride out with drawer `d` as it opens: `node` sits on the
 --- frame's edge, and the drawer's far edge sweeps past it and carries it
---- `distance` px out (negative: to the left), on the drawer's own curves,
---- so the two stay together; closing, it rides back in. The drawer moves
---- `travel` px between shut and open (its size, the seam and the frame).
-function M.ride(name, node, d, distance, travel)
-  local running
-  local was = d.open:get()
+--- `distance` px out (negative: to the left), exactly as the drawer moves,
+--- so the two stay together; closing, it rides back in.
+function M.ride(name, node, d, distance)
+  -- Tied to the panel itself (ui.follow), not a second animation made to
+  -- look like its slide: on every frame the node is where the panel's
+  -- far edge says, overshoot and all. Left: pushed once the edge reaches
+  -- it, `distance` at the end; right, the same the other way.
   morf.effect("caelestia.ride." .. name, function()
-    local open = d.open:get()
-    if open == was then return end
-    was = open
-    if running then running:stop() end
-    local dist, span = distance(), travel()
-    local sign = dist < 0 and -1 or 1
-    dist = math.abs(dist)
-    local easing = open and theme.ease.spatial or theme.ease.emphasized_accel
-    local keys = {}
-    for i = 0, 24 do
-      local t = i / 24
-      local e = morf.easing.value(easing, t)
-      local out = open and e or (1 - e)
-      -- Where the drawer's far edge is, less the stretch it covers before
-      -- it reaches the node.
-      keys[#keys + 1] = { at = t, value = sign * math.max(0, span * out - (span - dist)) }
-    end
-    running = morf.animation.play {
-      { node = node, property = "translate_x", keyframes = keys,
-        duration = open and theme.duration.drawer_open or theme.duration.drawer_close },
-    }
+    local dist = distance()
+    local spec = { node = d.panel, property = "translate_x", offset = dist }
+    if dist >= 0 then spec.min = 0 else spec.max = 0 end
+    ui.follow(node, "translate_x", spec)
   end)
 end
 

@@ -113,10 +113,13 @@ function M.build()
     x = g0.pill_x, y = g0.top, width = PILL_W, height = g0.item,
     label,
   }
+  -- At rest it is nothing at all: no size, so a panel sliding the rail
+  -- out carries nothing that could show. It takes its size only while it
+  -- is out (see `pop` and `tuck`).
   local swell = ui.Item {
     id = "rail-swell",
     x = tucked_x(g0), y = g0.top - PAD,
-    width = swell_w(g0), height = g0.item + 2 * PAD,
+    width = 0, height = 0,
   }
   M.shape = ui.SdfShape {
     id = "rail-swell-background",
@@ -261,6 +264,8 @@ function M.build()
         if reason ~= "completed" then return end
         lit:set(id)
         shown:set(false)
+        -- Sunk back: nothing again, until the next switch.
+        swell.width, swell.height = 0, 0
       end,
     }
   end
@@ -277,7 +282,8 @@ function M.build()
       -- edge to the new pill.
       local from = (last and base(last) == base(id)) and slot_y(g, last) or y
       stop(along)
-      swell.x, swell.y, swell.height = tucked_x(g), from - PAD, g.item + 2 * PAD
+      swell.x, swell.y = tucked_x(g), from - PAD
+      swell.width, swell.height = swell_w(g), g.item + 2 * PAD
       bud.x, bud.y, bud.width, bud.height = g.pill_x, from, PILL_W, g.item
       label.opacity = 0
       -- It comes out with the number of where it was, which morphs into
@@ -343,8 +349,7 @@ function M.build()
   -- its far side: between the panel and the desk.
   local leftbar = require("leftbar")
   kit.ride("rail", root, leftbar.drawer,
-    function() return theme.SIDE_W + theme.STRIP / 2 + theme.LEFT / 2 end,
-    function() return leftbar.drawer.panel.width + theme.SEAM + theme.BORDER + 2 end)
+    function() return theme.SIDE_W + theme.STRIP / 2 + theme.LEFT / 2 end)
   return root
 end
 

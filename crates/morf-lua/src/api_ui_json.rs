@@ -161,6 +161,49 @@ pub(crate) fn install_ui_json_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     ui.set_field(ctx, "destroy", destroy);
+    // `ui.follow(target, property, { node, property, scale, offset, min, max })`:
+    // the target's property is the source's, scaled, offset and clamped, on
+    // every tick -- the same frame the source moves. Following again
+    // replaces it; `ui.follow(target, property, nil)` lets go.
+    let follow_state = Rc::clone(&state);
+    let follow = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let (target, property, spec): (UserRef<NodeToken>, String, Option<Table>) = stack.consume(ctx)?;
+        let mut state = follow_state.borrow_mut();
+        state
+            .follows
+            .retain(|f| !(f.target == target.handle && f.property == property));
+        let Some(spec) = spec else {
+            return Ok(CallbackReturn::Return);
+        };
+        let source: UserRef<NodeToken> = match spec.get_value(ctx, "node") {
+            LuaValue::Nil => return Err(HostError("ui.follow needs a `node` to follow".into()).into()),
+            value => luna::FromValue::from_value(ctx, value)?,
+        };
+        let number = |key: &str, fallback: f64| -> f64 {
+            match spec.get_value(ctx, key) {
+                LuaValue::Integer(n) => n as f64,
+                LuaValue::Number(n) => n,
+                _ => fallback,
+            }
+        };
+        let source_property = match spec.get_value(ctx, "property") {
+            LuaValue::String(name) => name.to_str().unwrap_or(&property).to_owned(),
+            _ => property.clone(),
+        };
+        state.follows.push(crate::state::Follow {
+            target: target.handle,
+            property,
+            source: source.handle,
+            source_property,
+            scale: number("scale", 1.0),
+            offset: number("offset", 0.0),
+            min: number("min", f64::NEG_INFINITY),
+            max: number("max", f64::INFINITY),
+        });
+        crate::state::apply_follows(&mut state);
+        Ok(CallbackReturn::Return)
+    });
+    ui.set_field(ctx, "follow", follow);
     for kind in ["spring", "smoothed"] {
         ui.set_field(
             ctx,

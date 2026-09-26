@@ -746,6 +746,8 @@ impl Runtime {
             let _span = crate::profile::span(|| "engine: image jobs".to_owned());
             self.poll_image_jobs();
         }
+        // A source set outright, not animated, is followed at once too.
+        crate::state::apply_follows(&mut self.reactive.borrow_mut());
         // Changes to nodes nothing shows are not painted: a hidden panel's
         // chart that follows a counter every second would otherwise draw
         // every output every second for a picture nobody sees.
