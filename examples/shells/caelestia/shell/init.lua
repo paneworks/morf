@@ -236,8 +236,21 @@ morf.ipc.leftbar = verb(leftbar.drawer)
 -- `record [WHAT]` (again: stop) take one at once, of
 -- region, window or screen (the chosen one by default).
 morf.ipc.capture = verb(capture.drawer)
--- `keyboard [how]`: the on-screen keyboard, for a key to bind.
-morf.ipc.keyboard = verb(keyboard.drawer)
+-- `keyboard [how]`: the on-screen keyboard, for a key to bind. `how` is
+-- open, close, toggle or state, or a mode to open it in: full, dev,
+-- letters, numbers, phone or pattern.
+do
+  local open_close = verb(keyboard.drawer)
+  local MODES = { full = true, dev = true, letters = true, numbers = true, phone = true, pattern = true }
+  morf.ipc.keyboard = function(how)
+    if MODES[how] then
+      if not here() then return nil end
+      keyboard.show(how)
+      return true
+    end
+    return open_close(how)
+  end
+end
 morf.ipc.screenshot = function(what)
   if not here() then return nil end
   return capture.shoot(what)

@@ -14,64 +14,72 @@ local morf = require("morf")
 local theme = require("theme")
 local config = require("config")
 local drawer = require("drawer")
-local board = require("lib.board")
+local osk = require("lib.osk")
 local keyboards = require("lib.keyboards")
 
 local C = theme.color
 local M = {}
 
-M.WIDTH = 1020
-
-local SHIFT_MASK = 1
+M.WIDTH = 1060
+local PAD = 12
 
 local function dry_run()
   local v = morf.env and morf.env("CAELESTIA_DRY_RUN")
   return v ~= nil and v ~= "" and v ~= "0"
 end
 
---- One key struck: pressed and released on the virtual keyboard, with shift
---- held around it when the board was shifted.
-local function press(code, shift, label)
-  if dry_run() then
-    morf.log("info", "caelestia: keyboard (dry run): " .. tostring(label or code))
-    return
-  end
-  local vk = morf.virtual_keyboard
-  if not vk then return end
-  if shift then vk.modifiers(SHIFT_MASK, 0, 0, 0) end
-  vk.key(code, true)
-  vk.key(code, false)
-  if shift then vk.modifiers(0, 0, 0, 0) end
-end
+-- Whether a text field is asking (the input method is active): text is
+-- committed to it then, in any language, not pressed as keys.
+local field = false
+local send = osk.sender { ime = function() return field end }
 
-local PAD = 18
-local keys, board_h = board.build {
-  prefix = "caelestia.keyboard",
+local d
+local kb = osk.new {
+  prefix = "caelestia.osk",
   width = M.WIDTH - 2 * PAD,
-  x = PAD, y = PAD,
-  key = press,
-  -- The shell's own colours, so the board re-themes with the desk.
+  mode = "full",
+  numbers = true,
+  switch = { "full", "dev" },
+  send = function(e)
+    if dry_run() then
+      morf.log("warn", "caelestia: keyboard (dry run): " .. tostring(e.text or e.key) .. ((e.mods and e.mods.shift) and " +shift" or ""))
+      return
+    end
+    send(e)
+  end,
+  on_hide = function() if d then d.set(false) end end,
   look = {
     panel = function() return C.surfaceContainer:alpha(0) end,
-    keyface = function() return C.surfaceContainerHighest end,
-    live = function() return C.primary end,
-    label = function() return C.onSurface end,
+    key = function() return C.surfaceContainerHighest end,
+    key_dim = function() return C.surfaceContainerHigh end,
+    accent = function() return C.primary end,
+    on_accent = function() return C.onPrimary end,
+    text = function() return C.onSurface end,
     dim = function() return C.onSurfaceVariant end,
-    down = function() return C.primary end,
+    press = function() return C.secondaryContainer end,
     font = theme.font,
+    icons = theme.icon_font,
   },
 }
+M.keys = kb
 
-M.HEIGHT = board_h + 2 * PAD
-
-local d = drawer.new {
+local ui = require("morf.ui")
+d = drawer.new {
   name = "keyboard",
   edge = "bottom",
   width = M.WIDTH,
-  height = M.HEIGHT,
-  content = keys,
+  height = function() return kb.height() + 2 * PAD end,
+  content = ui.Item { x = PAD, y = PAD, width = M.WIDTH - 2 * PAD, height = kb.height, kb.node },
 }
 M.drawer = d
+
+--- Shows it as `mode` ("full", "dev", "letters", "numbers", "phone",
+--- "pattern").
+function M.show(mode)
+  if mode then kb.mode:set(mode) end
+  kb.reset()
+  d.set(true)
+end
 
 -- ------------------------------------------------------------ by itself --
 
@@ -79,10 +87,12 @@ M.drawer = d
 local asked = false
 if morf.input_method and morf.input_method.subscribe then
   pcall(morf.input_method.subscribe, function(active)
+    field = active == true
     if config.get("keyboard.auto") == false then return end
     if active then
       if not d.open:get() and not keyboards.attached() then
         asked = true
+        kb.reset()
         d.set(true)
       end
     elseif asked then
