@@ -1,6 +1,6 @@
 -- A polkit dialog, drawn by the shell.
 --
--- The agent is `examples/lib/polkit_agent.lua`; this is the dialog a shell
+-- The agent is `library/lib/polkit_agent.lua`; this is the dialog a shell
 -- puts over it. Nothing is on screen until polkit asks; then a card drops
 -- from the top of the output with what is being asked, whatever PAM has to
 -- say about it, and a field for the password. Return sends it, Escape gives
@@ -15,7 +15,7 @@
 -- cannot look at the screen. The password is typed into the card and
 -- nowhere else.
 --
--- The card is a component (`examples/lib/component.lua`): one model with
+-- The card is a component (`library/lib/component.lua`): one model with
 -- the fields the card shows, one `update` where every change to it lives,
 -- and a view that is functions of the model. What Escape does is one
 -- branch of one function, not four handlers.

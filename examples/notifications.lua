@@ -1,6 +1,6 @@
 -- Notifications, drawn by the shell that receives them.
 --
--- The server is `examples/lib/notifications.lua`; this is what a shell does
+-- The server is `library/lib/notifications.lua`; this is what a shell does
 -- with what it hands over. Run it, then `notify-send "hello" "there"` -- or
 -- anything else on the desktop that notifies -- and it appears here. Clicking
 -- an entry dismisses it, which tells the sender so.

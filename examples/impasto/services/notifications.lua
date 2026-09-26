@@ -1,6 +1,6 @@
 -- The shell is the notification daemon.
 --
--- Port of NotificationService.qml over examples/lib/notifications.lua. One
+-- Port of NotificationService.qml over library/lib/notifications.lua. One
 -- notification at a time is `current` -- the island shows it -- and the last
 -- fifty are kept as history for the notifications module. A critical one
 -- never times out and is not replaced by an ordinary one; with Do not

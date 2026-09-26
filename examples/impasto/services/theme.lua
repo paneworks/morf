@@ -1,6 +1,6 @@
 -- The active palette: the wallpaper's own, or one of the fixed schemes.
 --
--- Port of ThemeService.qml over examples/lib/palette.lua (which does what
+-- Port of ThemeService.qml over library/lib/palette.lua (which does what
 -- theme_manager.py did). "adaptive" derives the palette from whatever
 -- picture is up and derives it again when the picture changes; any other
 -- id is one of the nine fixed schemes. A change blends from the old

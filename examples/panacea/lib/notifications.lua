@@ -1,4 +1,4 @@
--- A copy of examples/lib/notifications.lua, so this example runs and bundles
+-- A copy of library/lib/notifications.lua, so this example runs and bundles
 -- on its own. Keep the two the same.
 
 -- A notification server, in the configuration.

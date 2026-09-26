@@ -10,7 +10,7 @@
 -- (`morf.fs.read_async`): a hwmon read asks the firmware, and a laptop's
 -- dozen of them can take over 100 ms -- long enough to stall every
 -- animation on screen once per sample. When
--- examples/lib/sysinfo.lua is present and offers `temperature()`, that is
+-- library/lib/sysinfo.lua is present and offers `temperature()`, that is
 -- used instead of this file's own reader.
 --
 -- The sampler starts the first time something reads a figure (the bar's

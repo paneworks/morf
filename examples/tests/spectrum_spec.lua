@@ -1,4 +1,4 @@
--- `examples/lib/spectrum.lua`: audio bands shaped into visualiser bars.
+-- `library/lib/spectrum.lua`: audio bands shaped into visualiser bars.
 --
 --     morf test examples/tests/spectrum_spec.lua
 

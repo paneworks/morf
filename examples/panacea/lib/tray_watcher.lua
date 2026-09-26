@@ -1,4 +1,4 @@
--- A copy of examples/lib/tray_watcher.lua, so this example runs and bundles on its own.
+-- A copy of library/lib/tray_watcher.lua, so this example runs and bundles on its own.
 
 -- The tray watcher, in the configuration.
 --

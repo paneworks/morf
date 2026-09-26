@@ -8,7 +8,7 @@
 --
 --     morf examples/keyboard.lua
 --
--- The board itself is `examples/lib/board.lua`, because it is also wanted inside
+-- The board itself is `library/lib/board.lua`, because it is also wanted inside
 -- the greeter — a kiosk compositor shows one window, so a login screen cannot
 -- put its keyboard in a second surface and see it. This file is the half that
 -- is about having a surface of one's own; that file is the keyboard.

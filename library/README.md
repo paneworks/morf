@@ -1,4 +1,36 @@
-# examples/lib
+# library
+
+The Lua library that ships with morf: modules any shell can `require`,
+and the engine's API as definitions for the Lua language server.
+
+```
+library/
+  lib/                 the modules: require("lib.material"), require("lib.hyprland"), ...
+  types/               the engine's API for LuaLS, written by `morf types` (do not edit)
+    morf.lua           require("morf") and the global `morf`
+    morf/ui.lua        require("morf.ui"): every element and its properties
+  luarc.template.json  a .luarc.json for a shell's own folder
+  .luarc.json          for working on the library itself
+```
+
+## Installed
+
+`make install` puts the binary in `~/.local/bin` and this folder in
+`~/.local/share/morf/library` (`$XDG_DATA_HOME/morf/library`). morf always
+looks there, after the configuration's own folder and
+`~/.local/share/morf/site` (your own modules, found first), so any shell
+can `require("lib.material")` without carrying a copy.
+
+## Editor
+
+Copy `luarc.template.json` into your shell's folder as `.luarc.json` (or
+merge it into yours): the Lua language server then completes `morf.`,
+`ui.Rect { ... }` and `require("lib....")`, and knows each library
+function's documentation. The types are generated from the installed
+binary on every `make install`, so they match the engine you run.
+
+---
+
 
 Pure-Lua libraries a configuration can `require("lib.<name>")`. morf's core
 stays compositor- and service-agnostic; anything that speaks one program's

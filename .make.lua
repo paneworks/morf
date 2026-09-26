@@ -6,6 +6,7 @@
 --   make verify     the whole local gate
 --   make dist       the binary for this machine's own libraries, not the store's
 --   make bundle     a configuration and morf as one binary: target/dist/<name>
+--   make install    the binary to ~/.local/bin, the library to ~/.local/share/morf/library
 --
 -- At an oslo prompt in this directory `make` is enough; everywhere else it is `oslo make`.
 -- CI has no oslo, so it calls the language's own tool -- nothing here is on the release path.
@@ -453,6 +454,37 @@ make.recipe{
     print("  env -u LD_LIBRARY_PATH -u XDG_DATA_DIRS " .. output .. " [-- args...]")
   end,
 }
+
+-- `make install`: the binary on the PATH and the library where every shell finds it.
+--
+--   $PREFIX/bin/morf                          the dist binary (the machine's own libraries), PREFIX ~/.local
+--   $XDG_DATA_HOME/morf/library/lib/*.lua     require("lib.material") from any configuration
+--   $XDG_DATA_HOME/morf/library/types/        this binary's API for the Lua language server
+--
+-- The library folder is replaced whole, so a module taken out of the repo goes from the machine too;
+-- your own modules belong in ~/.local/share/morf/site, which is looked in first and never touched.
+make.recipe{
+  name = "install",
+  desc = "the binary to ~/.local/bin, the library to ~/.local/share/morf/library",
+  deps = { "dist" },
+  run = function()
+    local home = os.getenv("HOME")
+    local bin = PREFIX .. "/bin/" .. NAME
+    local data = (os.getenv("XDG_DATA_HOME") or (home .. "/.local/share")) .. "/morf/library"
+    assert(oslo.run{ "install", "-Dm755", "target/dist/release/morf", bin }.ok, "could not install " .. bin)
+    assert(oslo.run{ "rm", "-rf", data }.ok, "could not clear " .. data)
+    assert(oslo.run{ "mkdir", "-p", data }.ok, "could not make " .. data)
+    -- -L: the repo's symlinks become files, so the installed copy stands alone.
+    assert(oslo.run{ "cp", "-rL", "library/.", data }.ok, "could not copy the library")
+    -- The types from the binary just installed, so the editor knows exactly that engine.
+    assert(oslo.run{ "env", "-u", "LD_LIBRARY_PATH", "-u", "XDG_DATA_DIRS", bin, "types", data .. "/types" }.ok,
+           "could not write the types")
+    line("binary", bin)
+    line("library", data)
+    print(dim("editor: copy " .. data .. "/luarc.template.json into a shell's folder as .luarc.json"))
+  end,
+}
+make.alias("i", "install")
 
 -- The link the ordinary build makes, held to: only the machine's libraries may be dynamic.
 -- Anything else appearing in NEEDED -- a crate growing a native dependency -- fails the gate here

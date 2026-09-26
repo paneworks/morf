@@ -1,4 +1,4 @@
--- A copy of examples/lib/dbusmenu.lua, so this example runs and bundles on its own.
+-- A copy of library/lib/dbusmenu.lua, so this example runs and bundles on its own.
 
 -- A tray item's menu, read off the bus and handed to `morf.menu`.
 --

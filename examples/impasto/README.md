@@ -5,7 +5,7 @@ shell written for Quickshell in QML — to morf, in Lua only. No shell scripts,
 no Python: what the original did with `hyprctl`, `nmcli`, `wpctl`, `grim` or
 a helper script is done here with morf's own APIs (`morf.fs`, `morf.time`,
 `morf.http`, `morf.image`, `morf.audio`, `morf.clipboard`, `morf.dbus`,
-`morf.screencopy`…) and the pure-Lua libraries in `examples/lib`
+`morf.screencopy`…) and the pure-Lua libraries in `library/lib`
 (`hyprland`, `networkmanager`, `bluez`, `upower`, `mpris`, `logind`,
 `sysinfo`, `weather`, `github`, `packages`, `palette`…). A program is still
 run where nothing else can do its job (`pacman`, `hyprsunset`, `ddcutil`),

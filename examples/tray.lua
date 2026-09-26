@@ -1,6 +1,6 @@
 -- A tray that brings its own watcher.
 --
--- The watcher is `examples/lib/tray_watcher.lua`, served from this process;
+-- The watcher is `library/lib/tray_watcher.lua`, served from this process;
 -- the host is the engine's own `morf.status_notifier`, which then finds the
 -- watcher beside it. Two halves that used to need two programs -- on a bare
 -- session the host had nothing to register with and the tray stayed empty.

@@ -1,4 +1,4 @@
--- `examples/lib/frecency.lua`: launches remembered, decaying, and ranked.
+-- `library/lib/frecency.lua`: launches remembered, decaying, and ranked.
 --
 --     morf test examples/tests/frecency_spec.lua
 

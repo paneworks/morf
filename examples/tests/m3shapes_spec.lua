@@ -1,4 +1,4 @@
--- `examples/lib/m3shapes.lua` and `examples/m3shapes.lua`: Material 3's
+-- `library/lib/m3shapes.lua` and `examples/m3shapes.lua`: Material 3's
 -- shapes as path outlines that morph into one another.
 --
 --     morf test examples/tests/m3shapes_spec.lua
