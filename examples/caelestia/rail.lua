@@ -55,8 +55,8 @@ local function slot_y(g, id) return g.top + ((id - 1) % M.COUNT) * (g.item + g.g
 function M.build()
   local enabled = function() return config.get("rail.enabled") ~= false end
 
-  -- The pill lit as the active one: dark while the drop is on its way,
-  -- the new one's once the drop has merged into it.
+  -- The pill lit as the active one: none while the accent is out as the
+  -- bud, the new one's once the bud has closed into it.
   lit = morf.signal("caelestia.rail.lit", services.workspace.active())
   local pills = {}
   for i = 1, M.COUNT do
@@ -70,7 +70,9 @@ function M.build()
         if lit:get() == id() then return C.primary end
         return services.workspace.occupied(id()) and C.onSurfaceVariant or C.outlineVariant
       end,
-      behavior = { color = { duration = 200 }, opacity = { duration = 200 } },
+      -- No easing: the accent does not fade from pill to pill, it moves
+      -- (the bud below), and hands over in a frame where the two are the
+      -- same shape.
     }
     local area = ui.MouseArea {
       id = "rail-slot-" .. i,
@@ -217,7 +219,7 @@ function M.build()
     }
   end
 
-  local across, along, words, hide, travel, lighting
+  local across, along, words, hide, travel
   local last -- the workspace the bud last showed
   local function whole(id) return ("%d"):format(math.floor(id + 0.5)) end
 
@@ -253,26 +255,26 @@ function M.build()
 
   local function tuck()
     -- The number sinks; the swell sinks back into the frame, the bud
-    -- closing into the pill it sits by, which lights as it closes.
+    -- closing into the pill it sits by, to exactly its shape -- and then
+    -- it is that pill's accent, in the same frame.
     number_out(true)
     stop(across)
     local steps = reach(false, 420, theme.ease.emphasized_accel, 80)
+    local id = last
     across = morf.animation.play {
       { parallel = steps },
       on_finished = function(reason)
-        if reason == "completed" then shown:set(false) end
+        if reason ~= "completed" then return end
+        lit:set(id)
+        shown:set(false)
       end,
     }
-    if lighting then lighting:cancel() end
-    local id = last
-    lighting = morf.timer(300, function() lighting = nil lit:set(id) end, false)
   end
 
   local function pop(id)
     local g = M.geometry()
     local y = slot_y(g, id)
     local down = not last or id > last
-    if lighting then lighting:cancel() lighting = nil end
     if travel then travel:cancel() travel = nil end
     if not shown:get() then
       -- From the pill it was on (or the new one's, from another group of

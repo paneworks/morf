@@ -602,6 +602,10 @@ test.describe("caelestia", function()
     local p1 = test.get { id = "rail-pill-1" }
     test.near(p1.opacity, 1, 0.01, "the first workspace's pill is not lit")
     test.ipc("workspace", 4)
+    -- The accent leaves the old pill as the bud, in one frame, not fading.
+    test.advance(16)
+    test.near(test.get({ id = "rail-pill-1" }).opacity, 0.6, 0.01, "the old pill's accent fades")
+    test.near(test.get({ id = "rail-field" }).opacity, 1, 0.01)
     -- The old pill itself, its whole size, opens out into the disc.
     test.advance(120)
     local bud = test.get { id = "rail-bud" }
