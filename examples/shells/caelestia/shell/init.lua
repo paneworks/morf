@@ -15,7 +15,8 @@
 -- The frame, the rail and the drawers are one fullscreen layer surface; only
 -- what can be clicked takes the pointer (the engine derives the input
 -- region from the MouseAreas), so the desk under the opening stays usable.
--- The wallpaper is a background layer of its own.
+-- The wallpaper, when the shell paints it (`wallpaper.draw`), is a
+-- background layer of its own.
 
 local morf = require("morf")
 local ui = require("morf.ui")
@@ -165,7 +166,7 @@ ui.Item {
   },
 }
 
-wallpaper.open_layer()
+if config.get("wallpaper.draw") then wallpaper.open_layer() end
 
 -- -------------------------------------------------------------------- ipc --
 

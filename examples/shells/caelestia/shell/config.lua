@@ -29,6 +29,11 @@ return settings.open {
       -- A picture to paint under everything; "" reads the path the
       -- caelestia tools keep in ~/.local/state/caelestia/wallpaper/path.txt.
       path = "",
+      -- Whether the shell paints it at all. Off: the compositor's own
+      -- wallpaper tool (hyprpaper, which lule drives) shows through, and
+      -- the compositor has one full-screen layer fewer to blend on every
+      -- redraw. The scheme follows the picture either way.
+      draw = false,
     },
     bar = {
       workspaces = { shown = 5 },
