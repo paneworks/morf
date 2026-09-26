@@ -369,6 +369,39 @@ local function gpu_name(card, vendor, device)
   return gpu_names[card]
 end
 
+-- NVIDIA's own driver publishes no load in sysfs; its tool does. Asked
+-- off the loop, for cards that are awake, and read on the next sample.
+local nvidia = { by_slot = {}, asking = false }
+local NVIDIA_FIELDS = "pci.bus_id,utilization.gpu,utilization.encoder,utilization.decoder,memory.used,memory.total,"
+  .. "temperature.gpu,power.draw,power.limit,clocks.gr,clocks.max.gr,clocks.mem,clocks.max.mem,driver_version"
+
+local function ask_nvidia()
+  if nvidia.asking or not morf.run then return end
+  nvidia.asking = true
+  local ok = pcall(morf.run, { "nvidia-smi", "--query-gpu=" .. NVIDIA_FIELDS, "--format=csv,noheader,nounits" }, {},
+    function(result)
+      nvidia.asking = false
+      if not (result and result.ok) then return end
+      for line in tostring(result.stdout or ""):gmatch("[^\n]+") do
+        local f = {}
+        for field in (line .. ","):gmatch("%s*([^,]*),") do f[#f + 1] = field end
+        local function num(i) return tonumber(f[i]) end
+        -- "00000000:01:00.0" -> "0000:01:00.0", as sysfs names it.
+        local slot = tostring(f[1] or ""):lower():match("(%x%x%x%x:%x%x:%x%x%.%x)$")
+        if slot then
+          nvidia.by_slot[slot] = {
+            busy = num(2), encoder = num(3), decoder = num(4),
+            vram_used = num(5) and num(5) * 1024 * 1024, vram_total = num(6) and num(6) * 1024 * 1024,
+            temperature = num(7), power = num(8), power_limit = num(9),
+            clock_mhz = num(10), max_mhz = num(11), memory_clock_mhz = num(12), memory_max_mhz = num(13),
+            driver_version = f[14],
+          }
+        end
+      end
+    end)
+  if not ok then nvidia.asking = false end
+end
+
 local VENDORS = { ["0x8086"] = "Intel", ["0x10de"] = "NVIDIA", ["0x1002"] = "AMD" }
 
 local function sample_gpu()
@@ -410,9 +443,17 @@ local function sample_gpu()
           entry.max_mhz = number_at(gt .. "/rps_max_freq_mhz") or number_at(gt .. "/rps_RP0_freq_mhz")
         end
         entry.clock_mhz = entry.clock_mhz or number_at(base .. "/pp_dpm_sclk_mhz")
+        if entry.driver == "nvidia" then
+          ask_nvidia()
+          for key, value in pairs(nvidia.by_slot[slot or ""] or {}) do entry[key] = value end
+        end
       end
       out.cards[#out.cards + 1] = entry
       ring(entry.key).push(entry.busy or 0)
+      ring("gpumem:" .. card.name).push(entry.vram_total and entry.vram_total > 0
+        and 100 * (entry.vram_used or 0) / entry.vram_total or 0)
+      ring("gpuenc:" .. card.name).push(entry.encoder or 0)
+      ring("gpudec:" .. card.name).push(entry.decoder or 0)
     end
   end
   for _, entry in ipairs(out.cards) do
@@ -1089,7 +1130,8 @@ local FEEDS = { cpu = "cpu", load = "cpu", memory = "memory", swap = "memory",
   temperature = "temperatures", gpu = "gpu", rx = "network", tx = "network" }
 --- Per device too: `gpu:card1`, `disk:nvme0n1:busy` (`:read`, `:write`),
 --- `rx:wlan0`, `tx:wlan0`, `fan0`.
-local PREFIXED = { { "^core%d+$", "cpu" }, { "^gpu:", "gpu" }, { "^disk:", "drives" },
+local PREFIXED = { { "^core%d+$", "cpu" }, { "^gpu:", "gpu" }, { "^gpumem:", "gpu" },
+  { "^gpuenc:", "gpu" }, { "^gpudec:", "gpu" }, { "^disk:", "drives" },
   { "^rx:", "network" }, { "^tx:", "network" }, { "^fan%d+$", "fans" } }
 function sysinfo.history(name)
   local feed = FEEDS[name]

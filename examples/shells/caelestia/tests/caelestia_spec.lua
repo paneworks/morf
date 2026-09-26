@@ -205,7 +205,7 @@ test.describe("caelestia", function()
     test.eq(d.height, 538)
     local sizes = {
       { "media", 1032, 418, "media-nothing" },
-      { "performance", 1132, 659, "performance-main" },
+      { "performance", 1432, 859, "performance-main" },
       { "weather", 870, 660, "weather-now" },
       { "dashboard", 872, 538, "dashboard-calendar" },
     }

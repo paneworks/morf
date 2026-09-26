@@ -18,15 +18,15 @@ local sysinfo = require("lib.sysinfo")
 local C = theme.color
 local M = {}
 
-M.WIDTH, M.HEIGHT = 1100, 560
+M.WIDTH, M.HEIGHT = 1400, 760
 local GAP = 12
-local SIDE_W = 262                        -- the devices
+local SIDE_W = 300                        -- the devices
 local MAIN_W = M.WIDTH - SIDE_W - GAP     -- the device picked
-local PAD = 20
-local STATS_W = 250
+local PAD = 28
+local STATS_W = 300
 local GRAPH_W = MAIN_W - 3 * PAD - STATS_W
-local TOP = 66                            -- under the title
-local ROW_H, SPARK_W, SPARK_H = 60, 74, 44
+local TOP = 84                            -- under the title
+local ROW_H, SPARK_W, SPARK_H = 72, 86, 52
 
 -- Each kind of device its hue, from the desk's own terminal colours, as
 -- Mission Center gives each its own.
@@ -296,19 +296,19 @@ function M.build(ctx)
     }
   end
   local function stats(items)
-    return ui.Grid { columns = 2, column_gap = 8, row_gap = 12, table.unpack(items) }
+    return ui.Grid { columns = 2, column_gap = 12, row_gap = 18, table.unpack(items) }
   end
   --- What the device is: label, value lines.
   local function facts(rows)
-    local column = { gap = 5 }
+    local column = { gap = 9 }
     for _, row in ipairs(rows) do
       column[#column + 1] = ui.Row {
         gap = 8,
         kit.text {
-          text = row[1], width = 118, font_size = theme.size.small,
+          text = row[1], width = 136, font_size = theme.size.small,
           color = function() return C.onSurfaceVariant end,
         },
-        kit.text { text = row[2], width = STATS_W - 126, elide = "right", font_size = theme.size.small },
+        kit.text { text = row[2], width = STATS_W - 144, elide = "right", font_size = theme.size.small },
       }
     end
     return ui.Column(column)
@@ -316,7 +316,7 @@ function M.build(ctx)
 
   local function title(text_fn, model_fn)
     return ui.Item {
-      x = PAD, y = 14, width = MAIN_W - 2 * PAD, height = 40,
+      x = PAD, y = 22, width = MAIN_W - 2 * PAD, height = 44,
       kit.text {
         anchors = { vertical_center = true },
         text = text_fn, font_size = theme.size.extra - 2, font_weight = 700,
@@ -342,7 +342,7 @@ function M.build(ctx)
   local threads = math.max(1, info.logical or 1)
   local cols = threads <= 4 and threads or threads <= 16 and 4 or threads <= 36 and 6 or 8
   local rows_n = math.ceil(threads / cols)
-  local cell_gap = 6
+  local cell_gap = 10
   local cell_w = (GRAPH_W - (cols - 1) * cell_gap) / cols
   local cell_h = (area_h - 22 - (rows_n - 1) * cell_gap) / rows_n
   local cells = { columns = cols, column_gap = cell_gap, row_gap = cell_gap }
@@ -365,7 +365,7 @@ function M.build(ctx)
       ui.Grid(cells),
     },
     ui.Column {
-      x = stats_x, y = TOP, gap = 18,
+      x = stats_x, y = TOP, gap = 28,
       stats {
         stat("Utilization", function() return ("%d%%"):format(math.floor((cpu().usage or 0) + 0.5)) end),
         stat("Speed", function() return ghz(cpu().frequency) end),
@@ -438,7 +438,7 @@ function M.build(ctx)
       },
     },
     ui.Column {
-      x = stats_x, y = TOP, gap = 18,
+      x = stats_x, y = TOP, gap = 28,
       stats {
         stat("In use", function() return size_text(memory().used) end, "solid", "memory"),
         stat("Available", function() return size_text(memory().available) end),
@@ -470,7 +470,7 @@ function M.build(ctx)
     units.rows:replace(rows, "name")
   end)
   local function unit(name) return find(the_drive().units, "name", name) or { mounts = {} } end
-  local drive_graph_h = 150
+  local drive_graph_h = 200
   local units_y = TOP + 2 * (drive_graph_h + 22 + 10)
   local drive_page = page("drive", {
     title(function()
@@ -496,12 +496,12 @@ function M.build(ctx)
       ui.Flickable {
         y = 22, width = GRAPH_W, height = M.HEIGHT - units_y - PAD - 22, clip = true,
         ui.Repeater {
-            as = "column", gap = 2, width = GRAPH_W,
+            as = "column", gap = 4, width = GRAPH_W,
             model = units.rows,
             delegate = function(row)
               local function u() return unit(row.name) end
               return ui.Rect {
-                width = GRAPH_W, height = 30, radius = 6,
+                width = GRAPH_W, height = 36, radius = 8,
                 color = function() return C.surfaceContainerHigh end,
                 kit.text {
                   anchors = { vertical_center = true },
@@ -532,7 +532,7 @@ function M.build(ctx)
       },
     },
     ui.Column {
-      x = stats_x, y = TOP, gap = 18,
+      x = stats_x, y = TOP, gap = 28,
       stats {
         stat("Read speed", function() return rate_text(the_drive().read_rate) end, "solid", "drive"),
         stat("Write speed", function() return rate_text(the_drive().write_rate) end, "dashed", "drive"),
@@ -598,7 +598,7 @@ function M.build(ctx)
       }),
     },
     ui.Column {
-      x = stats_x, y = TOP, gap = 18,
+      x = stats_x, y = TOP, gap = 28,
       stats {
         stat("Receive", function() return rate_text(the_iface().rx_rate) end, "solid", "net"),
         stat("Send", function() return rate_text(the_iface().tx_rate) end, "dashed", "net"),
@@ -627,12 +627,32 @@ function M.build(ctx)
   end
   local gpu_page = page("gpu", {
     title(function() return "GPU " .. gpu_index() end, function() return the_card().model or "" end),
+    -- One graph for a GPU sharing the system's memory; Mission Center's
+    -- three -- utilisation, video engines, its own memory -- for one with
+    -- memory of its own.
     ui.Column {
       x = PAD, y = TOP,
-      visible = function() return not the_card().suspended end,
+      visible = function() local g = the_card() return not g.suspended and not g.vram_total end,
       captioned("Utilization " .. minutes, percent_scale, {
         id = "performance-gpu-graph", kind = "gpu", width = GRAPH_W, height = area_h - 22, top = 100,
         first = function() return history("gpu:" .. gpu_ref()) end,
+      }),
+    },
+    ui.Column {
+      x = PAD, y = TOP, gap = 14,
+      visible = function() local g = the_card() return not g.suspended and g.vram_total ~= nil end,
+      captioned("Utilization " .. minutes, percent_scale, {
+        id = "performance-gpu-busy", kind = "gpu", width = GRAPH_W, height = area_h - 3 * 22 - 28 - 2 * 150, top = 100,
+        first = function() return history("gpu:" .. gpu_ref()) end,
+      }),
+      captioned("Video encode/decode " .. minutes, percent_scale, {
+        id = "performance-gpu-video", kind = "gpu", width = GRAPH_W, height = 150, top = 100,
+        first = function() return history("gpuenc:" .. gpu_ref()) end,
+        second = function() return history("gpudec:" .. gpu_ref()) end,
+      }),
+      captioned("Memory usage " .. minutes, function() return size_text(the_card().vram_total) end, {
+        id = "performance-gpu-memory", kind = "gpu", width = GRAPH_W, height = 150, top = 100,
+        first = function() return history("gpumem:" .. gpu_ref()) end,
       }),
     },
     ui.Rect {
@@ -651,7 +671,7 @@ function M.build(ctx)
       },
     },
     ui.Column {
-      x = stats_x, y = TOP, gap = 18,
+      x = stats_x, y = TOP, gap = 28,
       stats {
         stat("Utilization", function()
           local g = the_card()
@@ -666,13 +686,32 @@ function M.build(ctx)
         stat("Memory usage", function()
           local g = the_card()
           if not g.vram_total then return "Shared" end
-          return ("%s / %s"):format(size_text(g.vram_used), size_text(g.vram_total))
+          return size_text(g.vram_used)
+        end),
+        stat("Temperature", function()
+          local g = the_card()
+          return g.temperature and ("%d °C"):format(g.temperature) or "--"
+        end),
+        stat("Video encode", function() local g = the_card() return g.encoder and ("%d%%"):format(g.encoder) or "--" end,
+          "solid", "gpu"),
+        stat("Video decode", function() local g = the_card() return g.decoder and ("%d%%"):format(g.decoder) or "--" end,
+          "dashed", "gpu"),
+        stat("Power draw", function()
+          local g = the_card()
+          if not g.power then return "--" end
+          return g.power_limit and ("%d / %d W"):format(math.floor(g.power + 0.5), math.floor(g.power_limit + 0.5))
+            or ("%d W"):format(math.floor(g.power + 0.5))
         end),
         stat("State", function() return the_card().suspended and "Suspended" or "Active" end),
       },
       facts {
         { "Vendor:", function() return the_card().vendor or "" end },
         { "Max clock:", function() return ghz(the_card().max_mhz) end },
+        { "Memory speed:", function()
+          local g = the_card()
+          return g.memory_clock_mhz and ("%s / %s"):format(ghz(g.memory_clock_mhz), ghz(g.memory_max_mhz)) or "--"
+        end },
+        { "Driver version:", function() return the_card().driver_version or "--" end },
         { "Driver:", function() return the_card().driver or "" end },
         { "PCI bus address:", function() return the_card().slot or "" end },
         { "Card:", gpu_ref },
@@ -700,7 +739,7 @@ function M.build(ctx)
       }),
     },
     ui.Column {
-      x = stats_x, y = TOP, gap = 18,
+      x = stats_x, y = TOP, gap = 28,
       stats {
         stat("Speed", function() return ("%d RPM"):format(the_fan().rpm or 0) end, "solid", "fan"),
         stat("Temperature", function()
@@ -777,7 +816,7 @@ function M.build(ctx)
     local area
     area = ui.MouseArea {
       id = "performance-device-" .. row.key,
-      width = SIDE_W - 16, height = ROW_H, cursor = "pointer",
+      width = SIDE_W - 20, height = ROW_H, cursor = "pointer",
       on_clicked = function() selected:set(row.key) end,
       ui.Rect {
         anchors = { fill = true }, radius = 10,
@@ -787,13 +826,13 @@ function M.build(ctx)
         end,
         behavior = { color = { duration = theme.duration.small } },
       },
-      ui.Item { x = 8, y = (ROW_H - SPARK_H) / 2, width = SPARK_W, height = SPARK_H, spark },
+      ui.Item { x = 10, y = (ROW_H - SPARK_H) / 2, width = SPARK_W, height = SPARK_H, spark },
       ui.Column {
-        x = SPARK_W + 18, anchors = { vertical_center = true }, gap = 0,
-        kit.text { text = function() return row_title(row) end, font_weight = 500, width = SIDE_W - SPARK_W - 42, elide = "right" },
+        x = SPARK_W + 24, anchors = { vertical_center = true }, gap = 1,
+        kit.text { text = function() return row_title(row) end, font_weight = 500, width = SIDE_W - SPARK_W - 50, elide = "right" },
         kit.text {
           text = function() return row_sub(row) end, font_size = theme.size.small - 2,
-          width = SIDE_W - SPARK_W - 42, elide = "right", color = function() return C.onSurfaceVariant end,
+          width = SIDE_W - SPARK_W - 50, elide = "right", color = function() return C.onSurfaceVariant end,
         },
         kit.text {
           text = function() return row_value(row) end, font_size = theme.size.small - 2,
@@ -808,12 +847,12 @@ function M.build(ctx)
     id = "performance-devices",
     width = SIDE_W, height = M.HEIGHT,
     kit.text {
-      x = 0, y = 16, width = SIDE_W, horizontal_alignment = "center",
+      x = 0, y = 22, width = SIDE_W, horizontal_alignment = "center",
       text = "Devices", font_size = theme.size.larger, font_weight = 600,
     },
     ui.Flickable {
-      x = 8, y = 50, width = SIDE_W - 16, height = M.HEIGHT - 58, clip = true,
-      ui.Repeater { as = "column", gap = 4, width = SIDE_W - 16, model = list.devices, delegate = device_row },
+      x = 10, y = 62, width = SIDE_W - 20, height = M.HEIGHT - 72, clip = true,
+      ui.Repeater { as = "column", gap = 6, width = SIDE_W - 20, model = list.devices, delegate = device_row },
     },
   }
 
