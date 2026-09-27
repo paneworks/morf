@@ -14,6 +14,7 @@ local W, H = 1920, 1080
 
 local function load(extra)
   for _, program in ipairs { "systemctl", "loginctl" } do test.stub_run(program, { code = 0 }) end
+  test.stub_run("task", { code = 0, stdout = "[]" })
   test.load("../shell/init.lua", {
     size = { W, H },
     -- CAELESTIA_DRY_RUN: the session menu logs its commands instead of
@@ -111,7 +112,7 @@ test.describe("caelestia", function()
   test.it("opens the dashboard when the pointer reaches the top edge, and shuts it on leaving", function()
     load()
     test.move(W / 2 + 25, 4)
-    test.settle(1500)
+    test.advance(1500)
     test.truthy(shown("dashboard"), "the top edge did not open it")
     test.move(W / 2 + 25, 300)
     test.settle(1500)
@@ -127,16 +128,19 @@ test.describe("caelestia", function()
     test.falsy(shown("dashboard"), "leaving the panel did not shut it")
   end)
 
-  test.it("opens the capture drawer from the bottom edge; a shot waits for it to shut", function()
+  test.it("opens the assistant from the bottom edge and captures from its separate popup", function()
     load()
     test.move(W / 2 + 25, H - 4)
-    test.settle(1500)
-    test.truthy(shown("capture"), "the bottom edge did not open it")
+    test.advance(1500)
+    test.truthy(shown("bottom"), "the bottom edge did not open the assistant")
+    test.falsy(shown("capture"), "capture must only open explicitly")
+    test.ipc("capture", "open") test.settle(1000)
+    test.falsy(shown("bottom"), "the assistant overlapped capture")
     test.falsy(shown("launcher"), "the bottom edge opened the launcher")
     local d = drawer("capture")
     test.near(d.y + d.height, H - 10, 1)
     for _, id in ipairs { "capture-target-region", "capture-target-window", "capture-target-screen",
-      "capture-screenshot", "capture-record", "capture-folder" } do
+      "capture-screenshot", "capture-record" } do
       test.truthy(test.find { id = id, visible = true }, id .. " not shown")
     end
     test.snapshot("caelestia-capture.png", { surface = "screen" })
@@ -153,7 +157,9 @@ test.describe("caelestia", function()
       return false
     end
     test.falsy(said(), "it did not wait the delay")
-    test.advance(3000)
+    -- settle stops as soon as the drawer's animation rests; include the
+    -- capture's close margin as well as the selected three-second delay.
+    test.advance(3500)
     test.truthy(said(), "the screenshot was not taken")
     -- Recording the same target, from the same place: Record, then Stop.
     test.ipc("capture", "open")
@@ -166,7 +172,11 @@ test.describe("caelestia", function()
     test.click { id = "capture-record" }
     test.settle(300)
     test.truthy(test.find { text = "Record", visible = true }, "not stopped")
-    test.eq(#test.runs(), 0)
+    -- Background performance sampling can invoke nvidia-smi in dry mode.
+    for _, run in ipairs(test.runs()) do
+      test.falsy(run[1] == "sh" or run[1] == "grim" or run[1] == "gpu-screen-recorder",
+        "dry capture launched a real command: " .. table.concat(run, " "))
+    end
     -- The launcher is a key's, and floats in the middle; a click away shuts it.
     test.ipc("launcher", "open")
     test.settle(1500)
@@ -182,7 +192,7 @@ test.describe("caelestia", function()
     test.falsy(shown("sidebar"), "the desk opened it")
     -- Near the edge, anywhere down it, the level pills among it.
     test.move(W - 14, 200)
-    test.settle(1500)
+    test.advance(1500)
     test.truthy(shown("sidebar"), "near the right edge did not open it")
     -- Onto the panel: still open.
     local d = drawer("sidebar")
@@ -553,7 +563,8 @@ test.describe("caelestia", function()
     local d = drawer("leftbar")
     test.near(d.x, 10, 1)
     test.near(d.height, H - 20, 1)
-    test.truthy(test.find { id = "leftbar-tab-assistant", visible = true })
+    test.truthy(test.find { id = "leftbar-tab-tasks", visible = true })
+    test.truthy(test.find { id = "leftbar-tab-calendar", visible = true })
     -- The pills now stand in the panel's far strip, between it and the desk.
     pill = test.get { id = "rail-pill-5" }
     test.near(pill.x + pill.width / 2, d.x + d.width - 10, 1, "the pills did not ride out")

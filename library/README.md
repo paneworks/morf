@@ -36,6 +36,26 @@ Pure-Lua libraries a configuration can `require("lib.<name>")`. morf's core
 stays compositor- and service-agnostic; anything that speaks one program's
 protocol lives here, built only on the engine's generic APIs.
 
+## taskwarrior.lua
+
+`taskwarrior.new()` connects to the installed `task` CLI using its normal
+configuration and data location. `tasks`, `busy`, `error`, `loaded` and
+`revision` are signals. `refresh()` exports pending and waiting tasks;
+`watch(true)` refreshes every ten seconds, and `watch(false)` stops it.
+
+`save(uuid_or_nil, fields, callback)` adds or edits a task. Fields include
+description, project, priority, scheduled, due, wait, tags (comma-separated),
+recur, until and depends. Omitted fields are preserved; an empty string clears
+a field. `action(uuid, "start"|"stop"|"done"|"delete", callback)` acts on one
+task. Callbacks receive success as a boolean; successful writes refresh the
+list. Mutations require a complete UUID, and recurrence changes apply only
+to the selected occurrence. Callers handle confirmation before deletion.
+
+Commands use argv, asynchronous `morf.run`, and a timeout. Errors remain in
+the `error` signal; no optimistic database edits are made. Optional `command`
+and `env` arguments to `new` allow testing against an isolated installation.
+`timestamp`, `date`, and `day` convert exported timestamps to local dates.
+
 ## hyprland.lua
 
 Hyprland over its own two sockets in

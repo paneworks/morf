@@ -613,11 +613,19 @@ end
 
 -- -------------------------------------------------------------------- page --
 
-local cards = { sliders(), toggles() }
+local capture_button = kit.pill {
+  id = "utilities-capture", width = CARD_W, height = 40,
+  icon = "screenshot_monitor", label = "Screenshot / Record",
+  on_clicked = function()
+    require("sidebar").drawer.set(false)
+    require("capture").drawer.set(true)
+  end,
+}
+local cards = { sliders(), capture_button, toggles() }
 
 --- The page's height: the cards and their gaps.
 function M.height()
-  return GAP + SLIDERS_H + TILES_H
+  return 2 * GAP + SLIDERS_H + 40 + TILES_H
 end
 
 

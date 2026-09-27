@@ -108,7 +108,7 @@ function M.build(ctx)
   -- ----------------------------------------------------------- graphs --
   local GW = math.floor((RIGHT_W - 2 * PAD - 16) / 2)
   local GH = 118
-  local minutes = ("%d min"):format(math.floor(graphs.SAMPLES * 3 / 60 + 0.5))
+  local minutes = ("%d min"):format(math.floor(graphs.SAMPLES * sysinfo.sources.battery.interval / 60000 + 0.5))
   local function small(caption, scale, spec)
     spec.width, spec.height = GW, GH
     return graphs.captioned(caption, scale, spec)

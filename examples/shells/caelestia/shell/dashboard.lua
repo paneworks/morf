@@ -761,27 +761,7 @@ end)
 
 -- ------------------------------------------------------------- hover open --
 
-local by_hover = false
-
--- The strip along the frame's top edge over the dashboard: reaching it
--- opens the dashboard.
-local trigger = ui.MouseArea {
-  id = "dashboard-trigger",
-  anchors = { top = true, horizontal_center = true },
-  width = width, height = theme.BORDER,
-}
-
--- Anywhere on the panel, whatever is under the pointer there: a tab, a
--- calendar arrow, a media button.
-local function panel_hovered()
-  return M.drawer.panel.contains_pointer
-end
-
---- The trigger, in a box as wide as the frame's opening so it centres
---- over the dashboard.
---- A click on the desk shuts the dashboard, as it does the sidebar: one
---- opened by a click (the bar's clock, the battery page) has no pointer
---- leaving it to shut it otherwise.
+-- Outside clicks also close a dashboard opened by a command.
 function M.catcher()
   return ui.MouseArea {
     id = "dashboard-catcher",
@@ -792,39 +772,10 @@ function M.catcher()
 end
 
 function M.edge_trigger()
-  return ui.Item {
-    anchors = { fill = true, left_margin = theme.LEFT, right_margin = theme.BORDER },
-    trigger,
+  return require("hover").edge {
+    name = "dashboard", drawer = M.drawer, edge = "top", length = width,
+    setting = "dashboard.hover", grace_ms = 50,
   }
 end
-
-local closing
-morf.effect("caelestia.dashboard.hover", function()
-  if not config.get("dashboard.hover") then return end
-  local over = trigger.hovered or panel_hovered()
-  if over then
-    if closing then closing:cancel() closing = nil end
-    if not M.drawer.open:get() then
-      by_hover = true
-      M.drawer.set(true)
-    end
-  elseif by_hover and M.drawer.open:get() then
-    -- A moment's grace (the reference shuts at once), so the pointer
-    -- crossing from the edge onto the panel does not shut it.
-    if closing then closing:cancel() end
-    closing = morf.timer(50, function()
-      closing = nil
-      if not (trigger.hovered or panel_hovered()) then
-        by_hover = false
-        M.drawer.set(false)
-      end
-    end, false)
-  end
-end)
-
-morf.effect("caelestia.dashboard.opened-otherwise", function()
-  -- Opened over IPC: stays until asked to close.
-  if not M.drawer.open:get() then by_hover = false end
-end)
 
 return M

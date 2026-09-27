@@ -1,19 +1,14 @@
--- The left panel: the sidebar's twin down the frame's left edge, the same
--- tabbed shell (tabbed.lua), the frame's full height. It holds one page
--- for now, a place for what comes (an assistant, say); a tab is one more
--- entry in `TABS`.
+-- Tasks and a daily agenda down the frame's left edge. Both pages share
+-- planner.lua's Taskwarrior connection; the assistant lives at the bottom.
 --
 -- It opens over IPC (`leftbar`), and when the pointer reaches the left
 -- edge above the workspace rail.
 
 local morf = require("morf")
-local ui = require("morf.ui")
 local theme = require("theme")
-local kit = require("kit")
 local drawer = require("drawer")
 local tabbed = require("tabbed")
 
-local C = theme.color
 local M = {}
 
 -- The pages, and the strip on the far side the workspace rail rides out to.
@@ -27,26 +22,9 @@ end
 
 function M.height() return screen_height() - 2 * theme.BORDER end
 
---- A page with nothing on it yet: a quiet mark and a line saying so.
-local function placeholder(icon, text)
-  return function(w, h)
-    return kit.card {
-      width = w, height = h,
-      color = function() return C.surfaceContainerLow end,
-      ui.Column {
-        anchors = { center_in = true }, gap = 16, align = "center",
-        kit.icon(icon, 72, function() return C.outlineVariant end),
-        kit.text {
-          text = text, font_size = theme.size.large,
-          color = function() return C.outlineVariant end,
-        },
-      },
-    }
-  end
-end
-
 M.TABS = {
-  { key = "assistant", name = "Assistant", icon = "forum", build = placeholder("forum", "Nothing here yet") },
+  { key = "tasks", name = "Tasks", icon = "checklist", build = require("tasks_page").build },
+  { key = "calendar", name = "Calendar", icon = "calendar_month", build = require("calendar_page").build },
 }
 
 local panel = tabbed.new { id = "leftbar", width = theme.SIDE_W, height = M.height, tabs = M.TABS }
@@ -62,7 +40,10 @@ M.drawer = drawer.new {
 }
 
 morf.effect("caelestia.leftbar.bud", function()
-  panel.shown(M.drawer.open:get())
+  local open = M.drawer.open:get()
+  panel.shown(open)
+  -- Create polling outside the effect's lifetime, as the VPN pages do.
+  morf.timer(1, function() require("planner").client.watch(open) end, false)
 end)
 
 return M

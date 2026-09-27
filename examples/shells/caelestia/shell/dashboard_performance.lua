@@ -270,7 +270,9 @@ function M.build(ctx)
   end
   local function percent_scale() return "100%" end
   local function rate_scale(top) return rate_text(top) end
-  local minutes = ("over %d minutes"):format(math.floor(sysinfo.history_size * 2 / 60 + 0.5))
+  local function minutes(section)
+    return ("over %d minutes"):format(math.floor(sysinfo.history_size * sysinfo.sources[section].interval / 60000 + 0.5))
+  end
 
   -- -------------------------------------------------------------- stats --
   -- The readings: a small label over a large value, two to a row; a
@@ -359,7 +361,7 @@ function M.build(ctx)
       x = PAD, y = TOP, gap = 4,
       ui.Item {
         width = GRAPH_W, height = 18,
-        kit.text { text = "Utilization " .. minutes, font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
+        kit.text { text = "Utilization " .. minutes("cpu"), font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
         kit.text { anchors = { right = true }, text = "100%", font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
       },
       ui.Grid(cells),
@@ -407,11 +409,11 @@ function M.build(ctx)
     title(function() return "Memory" end, function() return size_text(memory().total) end),
     ui.Column {
       x = PAD, y = TOP, gap = 10,
-      captioned("Memory usage " .. minutes, function() return size_text(memory().total) end, {
+      captioned("Memory usage " .. minutes("memory"), function() return size_text(memory().total) end, {
         id = "performance-memory-graph", kind = "memory", width = GRAPH_W, height = mem_h, top = 100,
         first = function() return history("memory") end,
       }),
-      captioned("Swap usage " .. minutes, function() return size_text(memory().swap.total) end, {
+      captioned("Swap usage " .. minutes("memory"), function() return size_text(memory().swap.total) end, {
         id = "performance-swap-graph", kind = "memory", width = GRAPH_W, height = swap_h, top = 100,
         first = function() return history("swap") end,
       }),
@@ -479,11 +481,11 @@ function M.build(ctx)
     end, function() return the_drive().model or "" end),
     ui.Column {
       x = PAD, y = TOP, gap = 10,
-      captioned("Active time " .. minutes, percent_scale, {
+      captioned("Active time " .. minutes("drives"), percent_scale, {
         id = "performance-drive-active", kind = "drive", width = GRAPH_W, height = drive_graph_h, top = 100,
         first = function() return history("disk:" .. drive_ref() .. ":busy") end,
       }),
-      captioned("Throughput " .. minutes, rate_scale, {
+      captioned("Throughput " .. minutes("drives"), rate_scale, {
         id = "performance-drive-throughput", kind = "drive", width = GRAPH_W, height = drive_graph_h,
         first = function() return history("disk:" .. drive_ref() .. ":read") end,
         second = function() return history("disk:" .. drive_ref() .. ":write") end,
@@ -591,7 +593,7 @@ function M.build(ctx)
       function() return net_ref() end),
     ui.Column {
       x = PAD, y = TOP,
-      captioned("Throughput " .. minutes, rate_scale, {
+      captioned("Throughput " .. minutes("network"), rate_scale, {
         id = "performance-net-throughput", kind = "net", width = GRAPH_W, height = area_h - 22,
         first = function() return history("rx:" .. net_ref()) end,
         second = function() return history("tx:" .. net_ref()) end,
@@ -633,7 +635,7 @@ function M.build(ctx)
     ui.Column {
       x = PAD, y = TOP,
       visible = function() local g = the_card() return not g.suspended and not g.vram_total end,
-      captioned("Utilization " .. minutes, percent_scale, {
+      captioned("Utilization " .. minutes("gpu"), percent_scale, {
         id = "performance-gpu-graph", kind = "gpu", width = GRAPH_W, height = area_h - 22, top = 100,
         first = function() return history("gpu:" .. gpu_ref()) end,
       }),
@@ -641,16 +643,16 @@ function M.build(ctx)
     ui.Column {
       x = PAD, y = TOP, gap = 14,
       visible = function() local g = the_card() return not g.suspended and g.vram_total ~= nil end,
-      captioned("Utilization " .. minutes, percent_scale, {
+      captioned("Utilization " .. minutes("gpu"), percent_scale, {
         id = "performance-gpu-busy", kind = "gpu", width = GRAPH_W, height = area_h - 3 * 22 - 28 - 2 * 150, top = 100,
         first = function() return history("gpu:" .. gpu_ref()) end,
       }),
-      captioned("Video encode/decode " .. minutes, percent_scale, {
+      captioned("Video encode/decode " .. minutes("gpu"), percent_scale, {
         id = "performance-gpu-video", kind = "gpu", width = GRAPH_W, height = 150, top = 100,
         first = function() return history("gpuenc:" .. gpu_ref()) end,
         second = function() return history("gpudec:" .. gpu_ref()) end,
       }),
-      captioned("Memory usage " .. minutes, function() return size_text(the_card().vram_total) end, {
+      captioned("Memory usage " .. minutes("gpu"), function() return size_text(the_card().vram_total) end, {
         id = "performance-gpu-memory", kind = "gpu", width = GRAPH_W, height = 150, top = 100,
         first = function() return history("gpumem:" .. gpu_ref()) end,
       }),
@@ -726,7 +728,7 @@ function M.build(ctx)
     title(function() return "Fan " .. (fan_ref():gsub("^fan", "")) end, function() return the_fan().label or "" end),
     ui.Column {
       x = PAD, y = TOP,
-      captioned("Speed " .. minutes, function(top) return ("%d RPM"):format(math.floor(top)) end, {
+      captioned("Speed " .. minutes("fans"), function(top) return ("%d RPM"):format(math.floor(top)) end, {
         id = "performance-fan-graph", kind = "fan", width = GRAPH_W, height = area_h - 22,
         top = function()
           local f = the_fan()

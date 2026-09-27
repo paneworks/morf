@@ -681,10 +681,8 @@ morf.effect("caelestia.launcher.open", function()
     field.text = ""
     M.query:set("")
     field.focus = true
-    morf.surface.keyboard_focus = "exclusive"
   else
     field.focus = false
-    morf.surface.keyboard_focus = "none"
     -- Shut, it is its own list again next time.
     require("menus").open("")
     M.acting:set("")

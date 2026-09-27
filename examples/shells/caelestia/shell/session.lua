@@ -225,13 +225,8 @@ morf.effect("caelestia.session.open", function()
     bud()
     M.focus:set(1)
     keys.focus = true
-    morf.surface.keyboard_focus = "exclusive"
   else
     keys.focus = false
-    -- The launcher takes the keyboard back when it is the one open.
-    if not require("drawer").launcher or not require("drawer").launcher.open:get() then
-      morf.surface.keyboard_focus = "none"
-    end
   end
 end)
 

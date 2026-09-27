@@ -311,11 +311,8 @@ morf.effect("caelestia.polkit.open", function()
   local open = M.drawer.open:get()
   if open then
     keys.focus = true
-    morf.surface.keyboard_focus = "exclusive"
   else
     keys.focus = false
-    local launcher = require("drawer").launcher
-    if not (launcher and launcher.open:get()) then morf.surface.keyboard_focus = "none" end
   end
 end)
 

@@ -53,9 +53,11 @@ return settings.open {
       -- Opens when the pointer reaches the left edge above the rail.
       hover = true,
     },
-    capture = {
-      -- Opens when the pointer reaches the bottom edge under it.
+    bottom = {
+      -- Opens the assistant workspace from the bottom edge.
       hover = true,
+    },
+    capture = {
       -- Where screenshots and recordings go, both.
       folder = "~/Pictures/Captures",
       -- What each capture runs: `$FILE` is the file to write (in the
@@ -65,10 +67,9 @@ return settings.open {
         screenshot_region = { "sh", "-c", "grim -g \"$(slurp)\" \"$0\" && wl-copy < \"$0\"", "$FILE.png" },
         screenshot_window = { "sh", "-c", "grim -g \"$(hyprctl -j activewindow | jq -r '\"\\(.at[0]),\\(.at[1]) \\(.size[0])x\\(.size[1])\"')\" \"$0\" && wl-copy < \"$0\"", "$FILE.png" },
         screenshot_screen = { "sh", "-c", "grim -o \"$(hyprctl -j monitors | jq -r '.[] | select(.focused) | .name')\" \"$0\" && wl-copy < \"$0\"", "$FILE.png" },
-        record_region = { "sh", "-c", "gpu-screen-recorder -w region -region \"$(slurp -f '%wx%h+%x+%y')\" -f 60 -o \"$0\"", "$FILE.mp4" },
+        record_region = { "sh", "-c", "region=$(slurp -f '%wx%h+%x+%y') || exit; exec gpu-screen-recorder -w region -region \"$region\" -f 60 -o \"$0\"", "$FILE.mp4" },
         record_window = { "gpu-screen-recorder", "-w", "focused", "-f", "60", "-o", "$FILE.mp4" },
         record_screen = { "gpu-screen-recorder", "-w", "screen", "-f", "60", "-o", "$FILE.mp4" },
-        record_stop = { "pkill", "-INT", "-f", "gpu-screen-recorder" },
         open = { "xdg-open" },
       },
     },

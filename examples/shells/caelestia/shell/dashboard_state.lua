@@ -6,11 +6,33 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
+local sysinfo = require("lib.sysinfo")
+
+-- Keep one graph's worth of recent activity even before its tab is opened.
+-- sysinfo's fixed-size rings overwrite the oldest sample; nothing is written
+-- to disk. Only graph sources stay awake, not process scans or other services.
+-- The pages still stop reading these sources while hidden, so collecting
+-- history does not keep their UI bindings updating.
+for _, name in ipairs { "cpu", "memory", "drives", "network", "gpu", "fans", "battery" } do
+  sysinfo.sources[name]:pin(true)
+end
 
 local M = {}
 
 M.tab = morf.signal("caelestia.dashboard.tab", 1)
 M.opened = morf.signal("caelestia.dashboard.shown", false)
+
+-- Inspect collection without reading a source (which would wake an idle
+-- sampler and hide a background-sampling failure).
+function M.history_status()
+  local status = { opened = M.opened:get(), limit = sysinfo.history_size, sources = {} }
+  for _, name in ipairs { "cpu", "memory", "drives", "network", "gpu", "fans", "battery" } do
+    local source = sysinfo.sources[name]
+    status.sources[name] = { samples = source.samples, running = source:running(),
+      updated = source.updated, error = source.error }
+  end
+  return status
+end
 
 M.areas = {}
 
@@ -22,7 +44,8 @@ function M.area(props)
 end
 
 --- What page `i` is given: whether it is on screen (the drawer open and its
---- tab chosen -- the pages read their services only then), whether its tab
+--- tab chosen -- the pages read their services only then; graph history
+--- continues collecting above), whether its tab
 --- is chosen, and `area`.
 function M.context(i)
   return {

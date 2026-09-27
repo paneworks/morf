@@ -343,6 +343,7 @@ local function drawer(name, tab)
   return function()
     local d = require("drawer")[name]
     if tab and name == "sidebar" then require("sidebar").select(tab) end
+    if tab and (name == "leftbar" or name == "bottom") then require(name).panel.select(tab) end
     if d then d.set(true) end
     return "close"
   end
@@ -360,6 +361,9 @@ local function system(term)
     { id = "settings", name = "Settings", material = "tune", run = drawer("sidebar", "settings") },
     { id = "notifications", name = "Notifications", material = "notifications", run = drawer("sidebar", "notifications") },
     { id = "capture", name = "Screenshot or record", material = "screenshot_monitor", run = drawer("capture") },
+    { id = "assistant", name = "Assistant", material = "auto_awesome", run = drawer("bottom", "assistant") },
+    { id = "tasks", name = "Tasks", material = "checklist", run = drawer("leftbar", "tasks") },
+    { id = "calendar", name = "Calendar", material = "calendar_month", run = drawer("leftbar", "calendar") },
     { id = "screenshot", name = "Screenshot a region", material = "screenshot_region",
       run = function() require("capture").shoot("region") return "close" end },
     { id = "dnd", name = "Do not disturb", material = "notifications_off",

@@ -18,7 +18,7 @@ local C = theme.color
 local M = {}
 
 --- The samples a graph spans: the history's length.
-M.SAMPLES = 60
+M.SAMPLES = require("lib.sysinfo").history_size
 
 local function series_path(values, w, h, bottom, top, closed)
   local n = M.SAMPLES

@@ -76,8 +76,26 @@ local notifs = require("notifs")
 local sidebar = require("sidebar")
 local leftbar = require("leftbar")
 local capture = require("capture")
+local bottom = require("bottom")
+-- These two drawers occupy the same edge; only one can be open.
+for _, pair in ipairs { { capture.drawer, bottom.drawer }, { bottom.drawer, capture.drawer } } do
+  local own, other = pair[1], pair[2]
+  function own.set(on)
+    if on then other.open:set(false) end
+    own.open:set(on and true or false)
+  end
+  function own.toggle() own.set(not own.open:get()) end
+end
 local keyboard = require("keyboard")
 local bar = require("bar")
+
+-- One policy for the shared surface. Closing a launcher or auth dialog
+-- must not disable typing in the task editor that is still open.
+morf.effect("caelestia.keyboard.focus", function()
+  local exclusive = launcher.drawer.open:get() or session.drawer.open:get() or polkit.drawer.open:get()
+  local planner_open = leftbar.drawer.open:get()
+  morf.surface.keyboard_focus = exclusive and "exclusive" or planner_open and "on_demand" or "none"
+end)
 
 -- ------------------------------------------------------------------- frame --
 
@@ -128,6 +146,20 @@ local panels = {
   -- And the dashboard, however it was opened.
   dashboard.catcher(),
   ui.MouseArea {
+    id = "bottom-catcher", anchors = { fill = true },
+    visible = function() return bottom.drawer.open:get() end,
+    on_clicked = function()
+      -- Empty space inside a tab is still part of the panel. Only clicks
+      -- on the surrounding desktop dismiss this workspace.
+      if not bottom.drawer.panel.contains_pointer then bottom.drawer.set(false) end
+    end,
+  },
+  ui.MouseArea {
+    id = "capture-catcher", anchors = { fill = true },
+    visible = function() return capture.drawer.open:get() end,
+    on_clicked = function() capture.drawer.set(false) end,
+  },
+  ui.MouseArea {
     id = "launcher-catcher",
     anchors = { fill = true },
     visible = function() return launcher.drawer.open:get() end,
@@ -155,10 +187,14 @@ ui.Item {
   levels_node,
   ui.Item(panels),
   dashboard.edge_trigger(),
-  -- The bottom edge under the capture drawer opens it.
+  -- The bottom edge opens the tabbed assistant workspace.
   require("hover").edge {
-    name = "capture", drawer = capture.drawer, edge = "bottom",
-    length = function() return capture.WIDTH end, setting = "capture.hover",
+    name = "bottom", drawer = bottom.drawer, edge = "bottom",
+    length = function() return bottom.WIDTH end, setting = "bottom.hover",
+    enabled = function()
+      local phase = capture.phase:get()
+      return not capture.drawer.open:get() and (phase == "ready" or phase == "error")
+    end,
   },
   -- Near the right edge, anywhere down it, the sidebar opens; near the
   -- left edge (the rail's pills with it), the left panel.
@@ -235,6 +271,13 @@ morf.ipc.launcher = function(how)
   return verb(launcher.drawer)(how)
 end
 morf.ipc.dashboard = verb(dashboard.drawer)
+morf.ipc["dashboard-history"] = function(output)
+  local name = (morf.screens[1] or {}).name
+  if output and output ~= name then return end
+  local status = require("dashboard_state").history_status()
+  status.output = name
+  return status
+end
 morf.ipc.session = verb(session.drawer)
 -- `polkit` says whether this screen is the agent and what it is asking;
 -- `polkit demo` opens the dialog on a made-up request (any password but
@@ -280,11 +323,28 @@ morf.ipc.settings = function(page)
   sidebar.drawer.set(true)
   return page or ""
 end
-morf.ipc.leftbar = verb(leftbar.drawer)
+morf.ipc.leftbar = function(how, tab)
+  if tab and here() and not leftbar.panel.select(tab) then error("No such left panel tab: " .. tostring(tab)) end
+  return verb(leftbar.drawer)(how)
+end
+for _, tab in ipairs { "tasks", "calendar" } do
+  morf.ipc[tab] = function(how)
+    if here() and how ~= "close" then leftbar.panel.select(tab) end
+    return verb(leftbar.drawer)(how or "open")
+  end
+end
 -- `capture [how]` opens the capture drawer. `screenshot [WHAT]` and
 -- `record [WHAT]` (again: stop) take one at once, of
 -- region, window or screen (the chosen one by default).
 morf.ipc.capture = verb(capture.drawer)
+morf.ipc.bottom = function(how, tab)
+  if tab and here() and not bottom.panel.select(tab) then error("No such bottom panel tab: " .. tostring(tab)) end
+  return verb(bottom.drawer)(how)
+end
+morf.ipc.assistant = function(how)
+  if here() and how ~= "close" then bottom.panel.select("assistant") end
+  return verb(bottom.drawer)(how or "open")
+end
 -- `keyboard [how]`: the on-screen keyboard, for a key to bind. `how` is
 -- open, close, toggle or state, or a mode to open it in: full, dev,
 -- letters, numbers, phone or pattern.
