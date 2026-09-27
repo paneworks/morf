@@ -6,6 +6,9 @@
 # It runs as root inside sudo; the shell answers only its own user, so the
 # call is made as PAM_USER, in the background, and this returns at once: a
 # marker never holds up or fails what it marks.
+# pam_exec hands over PAM's environment and little else: no PATH.
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+export PATH
 step=${1:-}
 user=${PAM_USER:-}
 [ -n "$step" ] && [ -n "$user" ] || exit 0
