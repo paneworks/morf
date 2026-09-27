@@ -27,7 +27,7 @@ local ORDER = { face = 1, finger = 2, password = 3, ok = 4 }
 local QUIET = { face = 20000, finger = 35000, password = 60000, ok = 1400, failed = 2200 }
 
 function authsteps.new()
-  local state = morf.state { step = "idle", service = "", failures = 0, since = 0 }
+  local state = morf.state { step = "idle", service = "", failures = 0, since = 0, pid = "" }
   local steps = { state = state }
   local quiet
 
@@ -51,14 +51,20 @@ function authsteps.new()
     end, false)
   end
 
-  --- A marker: `step` is face, finger, password or ok; `service` the stack's.
-  function steps.mark(step, service)
+  --- A marker: `step` is face, finger, password or ok; `service` the stack's;
+  --- `pid` the process asking, when the marker says.
+  function steps.mark(step, service, pid)
     -- Asked with no step: how it stands, and where it listens.
     if step == nil then
       return { step = state.step, service = state.service, watching = steps.dir or "" }
     end
     if not ORDER[step] then return nil end
     local was = state.step
+    pid = tostring(pid or "")
+    local running = not (was == "idle" or was == "ok" or was == "failed")
+    -- One run at a time: while one is on screen, another process's steps
+    -- (a prompt checking sudo elsewhere) are not this one's.
+    if running and pid ~= "" and state.pid ~= "" and pid ~= state.pid then return nil end
     -- Through without a step shown first: sudo with a login it still
     -- remembers, a rule that needs no password, a prompt checking whether
     -- sudo would ask (`sudo -n true`, every few seconds) -- nothing was
@@ -72,6 +78,7 @@ function authsteps.new()
       state.failures = state.failures + 1
     end
     state.service = tostring(service or "")
+    if not running then state.pid = pid end
     go(step)
     return nil
   end
@@ -86,8 +93,8 @@ function authsteps.new()
       if event.name ~= "authstep" or event.kind == "deleted" then return end
       local okr, text = pcall(morf.fs.read, dir .. "/authstep")
       if not okr or type(text) ~= "string" then return end
-      local step, service = text:match("^(%a+)%s*(%S*)")
-      if step then steps.mark(step, service) end
+      local step, service, pid = text:match("^(%a+)%s*(%S*)%s*(%S*)")
+      if step then steps.mark(step, service, pid) end
     end)
     steps.watcher = ok and handle or nil
     steps.dir = steps.watcher and dir or nil

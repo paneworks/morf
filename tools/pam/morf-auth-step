@@ -19,7 +19,10 @@ dir=/run/user/$uid/morf
 # (lib.authsteps). Written aside and moved into place, so it is never read
 # half written; nothing of theirs is run from here, and nothing waits.
 f=$dir/authstep
-printf '%s %s\n' "$step" "${PAM_SERVICE:-}" > "$f.new" || exit 0
+# The last word is the process doing the asking (pam_exec's parent: sudo
+# itself), so two at once -- a prompt checking sudo in another terminal
+# while this one waits at the reader -- are told apart.
+printf '%s %s %s\n' "$step" "${PAM_SERVICE:-}" "$PPID" > "$f.new" || exit 0
 chown "$uid" "$f.new" 2>/dev/null
 mv -f "$f.new" "$f"
 exit 0
