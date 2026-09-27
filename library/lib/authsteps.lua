@@ -59,6 +59,11 @@ function authsteps.new()
     end
     if not ORDER[step] then return nil end
     local was = state.step
+    -- Through without a step shown first: sudo with a login it still
+    -- remembers, a rule that needs no password, a prompt checking whether
+    -- sudo would ask (`sudo -n true`, every few seconds) -- nothing was
+    -- asked of anybody, and there is nothing to show.
+    if step == "ok" and (was == "idle" or was == "ok" or was == "failed") then return nil end
     if was == "idle" or was == "ok" or was == "failed" then
       state.failures = 0
     elseif ORDER[step] < (ORDER[was] or 0) then
