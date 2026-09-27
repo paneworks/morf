@@ -54,6 +54,18 @@ end
 ---     auth  sufficient  pam_fprintd.so      (or pam_gaze.so, pam_howdy.so)
 ---     auth  required    pam_deny.so
 ---     account include   system-auth
+--- The readers a lock can listen to, those this machine has a stack for,
+--- in order: `morf-lock-finger` (pam_fprintd), `morf-lock-face` (pam_gaze,
+--- pam_howdy) and `morf-lock-reader` (anything else). Each is the module
+--- and `pam_deny` after it, as above, so a miss is never a failed login.
+function auth.lock_readers()
+  local out = {}
+  for _, service in ipairs { "morf-lock-finger", "morf-lock-face", "morf-lock-reader" } do
+    if morf.fs.exists("/etc/pam.d/" .. service) then out[#out + 1] = service end
+  end
+  return out
+end
+
 function auth.lock_services()
   local password = "login"
   for _, service in ipairs { "morf-lock", "system-auth" } do
@@ -76,11 +88,13 @@ Lock.__index = Lock
 --- `door:stop()` say when (a lock listens while its way in is open, and a
 --- camera is not kept on while the clock is looked at).
 function auth.lock(options)
-  local password_service, reader_service = auth.lock_services()
+  local password_service = auth.lock_services()
+  local readers = options.reader == false and {} or (options.readers or auth.lock_readers())
   local door = setmetatable({
     user = options.user,
     password_service = options.service or password_service,
-    reader_service = options.reader == false and nil or (options.reader or reader_service),
+    readers = readers,
+    listening = {}, wanted = {},
     on = handlers(options),
     working = false,
     done = false,
@@ -105,28 +119,48 @@ function Lock:submit(password)
   end)
 end
 
--- The reader's stack, heard for as long as the door is shut. Its yes opens
--- the door; a no starts it listening again, since a reader that gave up is
--- not a reader that refused.
-function Lock:listen()
-  self.wanted = true
-  if not self.reader_service or self.listening or self.done or not self.user then return end
-  local ok, session = pcall(morf.pam.session, self.reader_service, self.user)
+-- The readers' stacks, each heard for as long as it is wanted and the door
+-- is shut, all at once: a finger and a face race, and the first yes opens
+-- the door. A no starts that reader listening again, since a reader that
+-- gave up is not a reader that refused -- after a moment, or after a while
+-- when it gave up at once (a reader it cannot reach, a camera in use).
+--
+-- `door:listen(service)` and `door:stop(service)`; without one, all of them.
+local function wants(self, service, fn)
+  for _, name in ipairs(self.readers) do
+    if service == nil or service == name then fn(name) end
+  end
+end
+
+function Lock:listen(service)
+  wants(self, service, function(name)
+    self.wanted[name] = true
+    self:hear(name)
+  end)
+end
+
+function Lock:hear(name)
+  if self.listening[name] or self.done or not self.user or not self.wanted[name] then return end
+  local ok, session = pcall(morf.pam.session, name, self.user)
   if not ok or not session then return end
-  self.listening = session
+  local started = morf.time.now_ms()
+  self.listening[name] = session
   session:on_message(function(m)
-    if self.listening ~= session then return end
+    if self.listening[name] ~= session then return end
     if m.kind == "info" or m.kind == "error" then
       self.on.info(m.text, m.kind == "error")
     elseif m.kind == "prompt" then
       -- It fell through to asking for a password: that has its own stack.
       session:cancel()
     elseif m.kind == "finished" then
-      self.listening = nil
+      self.listening[name] = nil
       if m.ok then
         self:finish()
-      elseif not self.done and self.wanted then
-        morf.timer(1500, function() if self.wanted then self:listen() end end, false)
+      elseif not self.done and self.wanted[name] then
+        local quick = (morf.time.now_ms() - started) < 1000
+        morf.timer(quick and 10000 or 1500, function()
+          if self.wanted[name] then self:hear(name) end
+        end, false)
       end
     end
   end)
@@ -139,11 +173,13 @@ function Lock:finish()
   self.on.open()
 end
 
-function Lock:stop()
-  self.wanted = false
-  local listening = self.listening
-  self.listening = nil
-  if listening then pcall(function() listening:cancel() end) end
+function Lock:stop(service)
+  wants(self, service, function(name)
+    self.wanted[name] = false
+    local listening = self.listening[name]
+    self.listening[name] = nil
+    if listening then pcall(function() listening:cancel() end) end
+  end)
 end
 
 -- --------------------------------------------------------------- greeter --

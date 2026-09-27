@@ -29,6 +29,8 @@ local auth = require("lib.auth")
 local osk = require("lib.osk")
 
 local HELD = morf.operands[1] ~= "window"
+-- A fingerprint stack to listen on (tools/pam/readers.sh), said in the hint.
+local FINGER = morf.fs.exists("/etc/pam.d/morf-lock-finger")
 -- `-- window preview`: never asks PAM -- any password but "wrong" opens it.
 -- For pictures and tests: a lock that asked PAM and was killed mid-way
 -- would count as a failed login.
@@ -570,7 +572,9 @@ local function build(W, H, NAME)
       loop = { translate_y = { from = 0, to = -s(6), duration = 900, alternate = true, easing = "in_out_sine" } },
     }),
     text {
-      text = ONSCREEN and "Swipe up to unlock" or "Type or click to unlock",
+      text = (FINGER and "Touch the sensor, or " or "")
+        .. (ONSCREEN and (FINGER and "swipe up" or "Swipe up") or (FINGER and "type" or "Type or click"))
+        .. " to unlock",
       font_size = s(14), color = function() return C.onSurfaceVariant end,
     },
   }
@@ -772,9 +776,21 @@ else
   build(W, H, screen and screen.name or "")
 end
 
--- The reader (a finger, a face) is listened to while the way in is open.
+-- The readers (tools/pam): a finger from the start, even at rest -- touch
+-- the sensor while the clock shows and the lock goes -- and a face only
+-- while the sheet is up, so the camera is not kept on for a glance at the
+-- time. With the sheet up they race, and the first yes opens the door.
 morf.effect("lock.listen", function()
-  if stage:get() == "sheet" then door:listen() else door:stop() end
+  local st = stage:get()
+  if st == "sheet" then
+    door:listen()
+  elseif st == "rest" then
+    door:stop("morf-lock-face")
+    door:stop("morf-lock-reader")
+    door:listen("morf-lock-finger")
+  else
+    door:stop()
+  end
 end)
 
 -- In a window, `morf ipc call stage sheet` puts it where a test wants it;
