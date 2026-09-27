@@ -1,9 +1,14 @@
--- caelestia's greeter: the login screen, in the lock's language -- the
--- frame round the screen, a panel risen out of its bottom edge, the time,
--- the account in a cookie and a pill for the password -- and what a login
--- needs besides: which account (the arrows, or a click on the name), which
--- session (the chip under the field, or F2), and the power buttons in the
--- top corner.
+-- caelestia's greeter, in two stages like the lock -- a phone's, and a
+-- desk's too.
+--
+-- At rest: the time, the date, and the accounts as a row of cookies -- the
+-- chosen one scalloped and turning -- over caelestia's shapes drifting on
+-- a deep surface, the machine's name and the power buttons in the corners,
+-- and a bud on the frame's bottom edge. The arrows or a click choose the
+-- account; Return, a key, a click on the chosen one or a swipe up swells the
+-- bud into the sheet: the account, the password pill, the session to start
+-- (a chip; F2), what greetd says, and on a phone the on-screen keyboard.
+-- Escape on an empty field sinks it back to choose someone else.
 --
 -- greetd runs it inside cage, as the user `greeter`:
 --
@@ -15,7 +20,7 @@
 -- is no greetd to ask:   cage -- morf -c caelestia/greet
 --
 -- Its own file. What it shares with the lock is in the library: lib.auth
--- (greetd's conversation), lib.accounts, lib.sessions, lib.material.
+-- (greetd's conversation), lib.accounts, lib.sessions, lib.material, lib.osk.
 
 local morf = require("morf")
 local ui = require("morf.ui")
@@ -24,6 +29,7 @@ local shapes = require("lib.m3shapes")
 local accounts = require("lib.accounts")
 local sessions = require("lib.sessions")
 local auth = require("lib.auth")
+local osk = require("lib.osk")
 
 local screen = morf.screens[1]
 local W = (screen and screen.width) or 1920
@@ -89,7 +95,10 @@ local busy = morf.signal("greet.busy", false)
 local message = morf.signal("greet.message", "")
 local bad = morf.signal("greet.bad", false)
 local shake = morf.signal("greet.shake", 0)
-local phase = morf.signal("greet.phase", "closed")
+-- "closed" (coming in), "rest" (choosing), "sheet" (the way in is open),
+-- "leaving" (the session is starting).
+local stage = morf.signal("greet.stage", "closed")
+local pull = morf.signal("greet.pull", 0)
 
 local function person() return people[who:get()] or people[1] end
 local function session() return list[which:get()] end
@@ -111,20 +120,25 @@ local door = auth.greeter {
   on_failed = function(why)
     say(why ~= "" and why or "Wrong password", true)
     clear()
-    shake:set(shake:get() + 1)
+    shake:set(1)
+    morf.timer(70, function() shake:set(0) end, false)
   end,
   -- The session is starting: everything sinks away while greetd replaces
   -- this process with it.
-  on_open = function() phase:set("leaving") end,
+  on_open = function() stage:set("leaving") end,
 }
-if not door.available then say("Not started by greetd: nothing to log in to", false) end
+local NOT_GREETD = "Not started by greetd: nothing to log in to"
 
-local function step_person(by)
-  if #people < 2 then return end
-  who:set(((who:get() - 1 + by) % #people) + 1)
+local function choose(index)
+  if index == who:get() or not people[index] then return end
+  who:set(index)
   clear()
   say("")
   door:switch(person().name)
+end
+local function step_person(by)
+  if #people < 2 then return end
+  choose(((who:get() - 1 + by) % #people) + 1)
 end
 local function step_session(by)
   if #list < 2 then return end
@@ -132,8 +146,27 @@ local function step_session(by)
   door.session = session()
 end
 
+local idle
+local function poke()
+  if idle then idle:cancel() end
+  idle = morf.timer(30000, function()
+    idle = nil
+    if stage:get() == "sheet" and typed:get() == 0 and not busy:get() then
+      stage:set("rest")
+      say("")
+    end
+  end, false)
+end
+local function open_sheet()
+  if stage:get() ~= "rest" then return end
+  stage:set("sheet")
+  pull:set(0)
+  if not door.available then say(NOT_GREETD, false) end
+  poke()
+end
+
 local function submit()
-  if busy:get() or phase:get() ~= "in" then return end
+  if busy:get() or stage:get() ~= "sheet" then return end
   if not session() then
     say("No session installed to start", true)
     return
@@ -141,6 +174,24 @@ local function submit()
   door.session = session()
   say("")
   door:submit(password)
+end
+
+local MAX_DOTS = 20
+local function type_text(t)
+  if #password >= 256 then return end
+  password = password .. t
+  typed:set(math.min(#password, MAX_DOTS))
+  if bad:get() then say("") end
+  poke()
+end
+local function backspace()
+  password = password:sub(1, -2)
+  typed:set(math.min(#password, MAX_DOTS))
+  poke()
+end
+local function escape()
+  if #password > 0 then clear() say("") return end
+  if stage:get() == "sheet" then stage:set("rest") say("") end
 end
 
 local function power(method, words)
@@ -158,14 +209,66 @@ morf.timer(1000, function()
   day:set(now("%A, %-d %B"))
 end, true)
 
--- ------------------------------------------------------------- the frame --
+-- -------------------------------------------------------------- geometry --
 
 local BORDER = s(10)
 local ROUND = s(25)
-local PW, PH = s(760), s(640)
-local PX, PY = math.floor((W - PW) / 2), math.floor((H - PH) / 2)
-local GROW = { duration = 620, easing = "out_back" }
-local function panel_open() return phase:get() == "in" end
+local PORTRAIT = H > W
+-- The on-screen keyboard: on a phone, or wherever no keyboard is attached.
+local ONSCREEN = PORTRAIT or not select(2, pcall(function() return require("lib.keyboards").attached() end))
+
+local SW = math.min(s(600), W - 2 * s(20))
+local AV = s(96)
+local FIELD_W, FIELD_H = math.min(s(380), SW - s(48)), s(58)
+local kb
+if ONSCREEN then
+  kb = osk.new {
+    prefix = "greet.osk", width = SW - s(24), mode = "full", numbers = true,
+    look = {
+      panel = function() return C.surfaceContainer end,
+      key = function() return C.surfaceContainerHighest end,
+      key_dim = function() return C.surfaceContainerHigh end,
+      accent = function() return C.primary end,
+      on_accent = function() return C.onPrimary end,
+      text = function() return C.onSurface end,
+      dim = function() return C.onSurfaceVariant end,
+      press = function() return C.secondaryContainer end,
+      font = FONT, icons = ICONS,
+    },
+    send = function(event)
+      if event.text then type_text(event.text)
+      elseif event.key == "backspace" then backspace()
+      elseif event.key == "enter" then submit()
+      elseif event.key == "escape" then escape() end
+    end,
+  }
+end
+local function kb_h() return kb and (kb.height() + s(16)) or 0 end
+local SHEET_TOP = s(28) + AV + s(12) + s(30) + s(20) + FIELD_H + s(14) + s(40) + s(10) + s(24) + s(24)
+local function sheet_h() return SHEET_TOP + kb_h() end
+
+local BUD_W, BUD_H = s(132), s(16)
+local function up()
+  local st = stage:get()
+  if st == "sheet" then return 1 end
+  if st == "rest" then return pull:get() end
+  return 0
+end
+local function swell_h()
+  local st = stage:get()
+  if st == "closed" or st == "leaving" then return BORDER end
+  return BORDER + BUD_H + (sheet_h() - BUD_H) * up()
+end
+local function swell_w()
+  local st = stage:get()
+  if st == "closed" or st == "leaving" then return BUD_W end
+  return BUD_W + (SW - BUD_W) * up()
+end
+local GROW = { duration = 560, easing = "out_back" }
+local SETTLE = { duration = 420, easing = "out_cubic" }
+local function showing() return stage:get() == "rest" or stage:get() == "sheet" end
+
+-- ------------------------------------------------------------- the frame --
 
 local frame = ui.Sdf {
   anchors = { fill = true },
@@ -175,16 +278,23 @@ local frame = ui.Sdf {
   },
   ui.SdfShape {
     shape = "box", operation = "subtract", radius = ROUND,
-    x = BORDER, y = BORDER, width = W - 2 * BORDER, height = H - 2 * BORDER,
+    x = function() return stage:get() == "closed" and 0 or BORDER end,
+    y = function() return stage:get() == "closed" and 0 or BORDER end,
+    width = function() return stage:get() == "closed" and W or W - 2 * BORDER end,
+    height = function() return stage:get() == "closed" and H or H - 2 * BORDER end,
+    behavior = { x = SETTLE, y = SETTLE, width = SETTLE, height = SETTLE },
   },
   ui.SdfShape {
-    shape = "box", operation = "smooth_union", blend = s(28), radius = s(36),
-    fill_color = function() return C.surfaceContainer end,
-    x = function() return panel_open() and PX or math.floor(W / 2 - s(90)) end,
-    y = function() return panel_open() and PY or H - BORDER end,
-    width = function() return panel_open() and PW or s(180) end,
-    height = function() return panel_open() and PH or BORDER end,
-    behavior = { x = GROW, y = GROW, width = GROW, height = GROW },
+    id = "greet-swell",
+    shape = "box", operation = "smooth_union", blend = s(26),
+    radius = function() return up() > 0.5 and s(38) or s(12) end,
+    fill_color = function() return up() > 0.5 and C.surfaceContainer or C.surface end,
+    x = function() return math.floor((W - swell_w()) / 2) end,
+    y = function() return H - swell_h() end,
+    width = swell_w,
+    height = function() return swell_h() + s(40) end,
+    behavior = { x = GROW, y = GROW, width = GROW, height = GROW, radius = SETTLE,
+      fill_color = { duration = 300 } },
   },
 }
 
@@ -202,7 +312,7 @@ for i, d in ipairs(DRIFT) do
     x = math.floor(W * d[2] - size / 2), y = math.floor(H * d[3] - size / 2),
     width = size, height = size, view_box = { 0, 0, 100, 100 },
     d = shapes.path(d[1], { segments = false }), rotation = d[5],
-    fill_color = function() return C.primary:alpha(0.035) end,
+    fill_color = function() return C.primary:alpha(0.05) end,
     loop = { rotation = { from = d[5], to = d[5] + (i % 2 == 0 and 360 or -360), duration = 90000 + i * 9000 } },
   }
 end
@@ -212,70 +322,173 @@ local backdrop = ui.Item {
   ui.Item(drift),
 }
 
--- --------------------------------------------------------------- content --
+-- ---------------------------------------------------------------- pieces --
 
-local function shown(delay)
-  return {
-    opacity = function() return panel_open() and 1 or 0 end,
-    behavior = { opacity = { duration = 320, delay = delay or 260 } },
-  }
-end
-local function with(base, extra)
-  for k, v in pairs(extra) do base[k] = v end
-  return base
-end
-
-local function round_button(id, name, on_clicked, size, props)
+local function round_button(id, name, on_clicked, size)
   size = size or s(44)
-  local area = ui.MouseArea {
+  local area
+  area = ui.MouseArea {
     id = id, width = size, height = size, cursor = "pointer",
     on_clicked = on_clicked,
+    scale = function() return (area and area.pressed) and 0.9 or 1 end,
+    behavior = { scale = ui.spring { stiffness = 700, damping = 18 } },
     ui.Rect {
       anchors = { fill = true }, radius = size / 2,
-      color = function() return C.surfaceContainerHighest end,
+      color = function()
+        return (area and area.hovered) and C.surfaceContainerHighest or C.surfaceContainerHigh
+      end,
+      behavior = { color = { duration = 160 } },
     },
     icon(name, math.floor(size * 0.5), C.onSurface, { anchors = { center_in = true } }),
   }
-  for k, v in pairs(props or {}) do area[k] = v end
   return area
 end
 
-local AV = s(132)
-local cookie = shapes.path("cookie9", { segments = false })
-local avatar = ui.Item {
-  width = AV, height = AV,
-  -- Only the cookie turns: a face or an initial stays upright on it.
-  ui.Path {
-    anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = cookie,
-    fill_color = function() return C.primaryContainer end,
-    loop = { rotation = { to = 360, duration = 80000 } },
-  },
-  ui.Image {
-    anchors = { fill = true }, fill_mode = "preserve_aspect_crop",
-    source = function() return person().face or "" end,
-    visible = function() return person().face ~= nil end,
-    mask = ui.Path { anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = cookie, fill_color = "#ffffff" },
-  },
+--- An account's face in a cookie (or its initial on one), `size` across.
+local function face(p, size, shape, fill, ink)
+  local path = shapes.path(shape, { segments = false })
+  return ui.Item {
+    width = size, height = size,
+    ui.Path {
+      anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = path,
+      fill_color = fill,
+    },
+    p.face and ui.Image {
+      anchors = { fill = true }, fill_mode = "preserve_aspect_crop", source = p.face,
+      mask = ui.Path { anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = path, fill_color = "#ffffff" },
+    } or text {
+      anchors = { center_in = true }, font_size = math.floor(size * 0.42), font_weight = 600,
+      color = ink, text = p.initial or "?",
+    },
+  }
+end
+
+-- ------------------------------------------------------------ at rest --
+
+-- The accounts, a row of cookies: the chosen one larger, scalloped and
+-- turning, its name bold under it.
+local PEOPLE_AV = s(84)
+local row = { gap = s(28), align = "start" }
+for index, p in ipairs(people) do
+  local chosen = function() return who:get() == index end
+  local area
+  area = ui.MouseArea {
+    id = "greet-person-" .. index, width = PEOPLE_AV + s(40), height = PEOPLE_AV + s(44), cursor = "pointer",
+    on_clicked = function()
+      if chosen() then open_sheet() else choose(index) end
+    end,
+    ui.Item {
+      anchors = { horizontal_center = true }, width = PEOPLE_AV, height = PEOPLE_AV,
+      scale = function()
+        if chosen() then return 1.12 end
+        return (area and area.hovered) and 1.04 or 0.9
+      end,
+      behavior = { scale = ui.spring { stiffness = 420, damping = 16 } },
+      ui.Item {
+        anchors = { fill = true },
+        loop = function()
+          if not chosen() then return nil end
+          return { rotation = { to = 360, duration = 40000, hold = true } }
+        end,
+        shapes.Shape {
+          anchors = { fill = true },
+          shape = function() return chosen() and "cookie12" or "circle" end,
+          color = function() return chosen() and C.primaryContainer or C.surfaceContainerHigh end,
+          duration = 450, easing = "out_back",
+        },
+      },
+      p.face and ui.Image {
+        anchors = { fill = true }, fill_mode = "preserve_aspect_crop", source = p.face,
+        mask = ui.Path { anchors = { fill = true }, view_box = { 0, 0, 100, 100 },
+          d = shapes.path("circle", { segments = false }), fill_color = "#ffffff" },
+      } or text {
+        anchors = { center_in = true }, font_size = s(34), font_weight = 600,
+        color = function() return chosen() and C.onPrimaryContainer or C.onSurfaceVariant end,
+        text = p.initial or "?",
+      },
+    },
+    text {
+      anchors = { horizontal_center = true, bottom = true }, width = PEOPLE_AV + s(40),
+      horizontal_alignment = "center", elide = "right", font_size = s(15),
+      font_weight = function() return chosen() and 600 or 400 end,
+      color = function() return chosen() and C.onSurface or C.onSurfaceVariant end,
+      text = p.label ~= "" and p.label or p.name,
+    },
+  }
+  row[#row + 1] = area
+end
+
+local CLOCK_Y = PORTRAIT and math.floor(H * 0.12) or math.floor(H * 0.18)
+local glance = ui.Column {
+  id = "greet-glance",
+  anchors = { horizontal_center = true }, gap = s(6), align = "center",
+  y = function()
+    if stage:get() == "sheet" then
+      return math.max(s(40), math.floor((H - BORDER - sheet_h()) / 2 - s(110)))
+    end
+    return CLOCK_Y
+  end,
+  scale = function() return stage:get() == "sheet" and 0.72 or 1 end,
+  opacity = function() return showing() and 1 or 0 end,
+  behavior = { y = GROW, scale = GROW, opacity = { duration = 320 } },
+  text { id = "greet-clock", text = function() return clock:get() end,
+    font_size = PORTRAIT and s(132) or s(160), font_weight = 600, color = C.primary },
+  text { text = function() return day:get() end, font_size = s(22), color = C.onSurfaceVariant },
+}
+-- The accounts go when the sheet comes: it carries the chosen one.
+local chooser = ui.Row(row)
+local choosing = ui.Item {
+  id = "greet-people",
+  anchors = { horizontal_center = true },
+  width = function() return chooser.layout_width or 0 end,
+  height = PEOPLE_AV + s(44),
+  y = CLOCK_Y + (PORTRAIT and s(210) or s(250)),
+  opacity = function() return stage:get() == "rest" and 1 or 0 end,
+  translate_y = function() return stage:get() == "rest" and 0 or s(40) end,
+  behavior = { opacity = { duration = 260 }, translate_y = GROW },
+  chooser,
+}
+
+local hint = ui.Column {
+  anchors = { horizontal_center = true },
+  y = H - BORDER - BUD_H - s(74), gap = s(2), align = "center",
+  opacity = function() return (stage:get() == "rest" and pull:get() < 0.1) and 1 or 0 end,
+  behavior = { opacity = { duration = 260 } },
+  icon("keyboard_arrow_up", s(30), function() return C.onSurfaceVariant end, {
+    loop = { translate_y = { from = 0, to = -s(6), duration = 900, alternate = true, easing = "in_out_sine" } },
+  }),
   text {
-    anchors = { center_in = true }, font_size = s(56), font_weight = 600, color = C.onPrimaryContainer,
-    text = function() return person().initial or "?" end,
-    visible = function() return person().face == nil end,
+    text = ONSCREEN and "Swipe up to log in" or "Press Enter to log in",
+    font_size = s(14), color = function() return C.onSurfaceVariant end,
   },
 }
 
--- The account, with arrows either side when there is more than one.
-local chooser = ui.Row {
-  gap = s(18), align = "center",
-  round_button("greet-person-previous", "chevron_left", function() step_person(-1) end, s(40),
-    { visible = #people > 1 }),
-  avatar,
-  round_button("greet-person-next", "chevron_right", function() step_person(1) end, s(40),
-    { visible = #people > 1 }),
+-- Power, in the top-right corner of the frame; the machine's name, top-left.
+local power_row = ui.Row {
+  anchors = { right = true, right_margin = BORDER + s(24), top = true, top_margin = BORDER + s(22) },
+  gap = s(10),
+  opacity = function() return showing() and 1 or 0 end,
+  behavior = { opacity = { duration = 320, delay = 200 } },
+  round_button("greet-suspend", "bedtime", function() power("Suspend", "suspend") end),
+  round_button("greet-reboot", "restart_alt", function() power("Reboot", "reboot") end),
+  round_button("greet-poweroff", "power_settings_new", function() power("PowerOff", "power off") end),
+}
+local host = ""
+do
+  local ok, name = pcall(morf.fs.read, "/proc/sys/kernel/hostname")
+  if ok and type(name) == "string" then host = name:match("^%s*(.-)%s*$") end
+end
+local host_label = ui.Row {
+  x = BORDER + s(28), y = BORDER + s(30), gap = s(10), align = "center",
+  opacity = function() return showing() and 1 or 0 end,
+  behavior = { opacity = { duration = 320, delay = 200 } },
+  icon("computer", s(22), C.onSurfaceVariant),
+  text { font_size = s(18), font_weight = 600, color = C.onSurfaceVariant, text = host },
 }
 
-local FIELD_W, FIELD_H = s(380), s(58)
+-- -------------------------------------------------------------- the sheet --
+
 local DOT = s(12)
-local MAX_DOTS = 20
 local dots = {}
 for i = 1, MAX_DOTS do
   dots[i] = ui.Rect {
@@ -289,7 +502,7 @@ end
 local field = ui.Item {
   id = "greet-field",
   width = FIELD_W, height = FIELD_H,
-  translate_x = function() return (shake:get() % 2 == 1) and s(10) or 0 end,
+  translate_x = function() return shake:get() == 1 and s(12) or 0 end,
   behavior = { translate_x = ui.spring { stiffness = 900, damping = 9 } },
   ui.Rect {
     anchors = { fill = true }, radius = FIELD_H / 2,
@@ -340,45 +553,45 @@ local session_chip = ui.MouseArea {
   },
 }
 
-local centre = ui.Column(with({
-  anchors = { horizontal_center = true }, y = PY + s(44), gap = s(4), align = "center",
-  text { id = "greet-clock", text = function() return clock:get() end, font_size = s(96), font_weight = 600, color = C.primary },
-  text { text = function() return day:get() end, font_size = s(20), color = C.onSurfaceVariant },
-  ui.Item { width = 1, height = s(24) },
-  chooser,
-  ui.Item { width = 1, height = s(10) },
-  text { id = "greet-name", font_size = s(24), font_weight = 600, text = function() return person().label end },
+-- The chosen account, on the sheet: one face per account, the chosen shown.
+local sheet_faces = { width = AV, height = AV }
+for index, p in ipairs(people) do
+  local f = face(p, AV, "cookie9", function() return C.primaryContainer end, C.onPrimaryContainer)
+  f.visible = function() return who:get() == index end
+  sheet_faces[#sheet_faces + 1] = f
+end
+local sheet_avatar = ui.Item(sheet_faces)
+
+local sheet_nodes = {
+  x = s(12), y = s(28), width = SW - s(24), gap = 0, align = "center",
+  sheet_avatar,
+  ui.Item { width = 1, height = s(12) },
+  text { id = "greet-name", font_size = s(20), font_weight = 600, height = s(30),
+    text = function() local p = person() return p.label ~= "" and p.label or p.name end },
   ui.Item { width = 1, height = s(20) },
   field,
   ui.Item { width = 1, height = s(14) },
   session_chip,
   ui.Item { width = 1, height = s(10) },
   text {
-    id = "greet-message", height = s(22), font_size = s(15),
-    text = function() return message:get() end,
+    id = "greet-message", height = s(24), width = SW - s(48), horizontal_alignment = "center", elide = "right",
+    text = function() return message:get() end, font_size = s(15),
     color = function() return bad:get() and C.error or C.onSurfaceVariant end,
   },
-}, shown(240)))
-
--- Power, in the top-right corner of the frame.
-local power_row = ui.Row(with({
-  anchors = { right = true, right_margin = BORDER + s(24), top = true, top_margin = BORDER + s(22) },
-  gap = s(10),
-  round_button("greet-suspend", "bedtime", function() power("Suspend", "suspend") end),
-  round_button("greet-reboot", "restart_alt", function() power("Reboot", "reboot") end),
-  round_button("greet-poweroff", "power_settings_new", function() power("PowerOff", "power off") end),
-}, shown(420)))
-
--- The machine's name, top-left.
-local host = ""
-do
-  local ok, name = pcall(morf.fs.read, "/proc/sys/kernel/hostname")
-  if ok and type(name) == "string" then host = name:match("^%s*(.-)%s*$") end
-end
-local host_label = text(with({
-  x = BORDER + s(28), y = BORDER + s(30), font_size = s(18), font_weight = 600,
-  color = C.onSurfaceVariant, text = host,
-}, shown(420)))
+  ui.Item { width = 1, height = s(24) },
+}
+if kb then sheet_nodes[#sheet_nodes + 1] = kb.node end
+local sheet = ui.Item {
+  id = "greet-sheet",
+  x = math.floor((W - SW) / 2), width = SW,
+  y = function() return H - BORDER - sheet_h() end,
+  height = sheet_h,
+  opacity = function() return stage:get() == "sheet" and 1 or 0 end,
+  translate_y = function() return stage:get() == "sheet" and 0 or s(60) end,
+  behavior = { opacity = { duration = 260, delay = 120 }, translate_y = GROW },
+  visible = function() return stage:get() == "sheet" or stage:get() == "leaving" end,
+  ui.Column(sheet_nodes),
+}
 
 -- ------------------------------------------------------------ the screen --
 
@@ -386,36 +599,53 @@ ui.Item {
   anchors = { fill = true },
   backdrop,
   frame,
-  centre,
+  glance,
+  choosing,
+  hint,
+  sheet,
   power_row,
   host_label,
   ui.MouseArea {
+    id = "greet-open",
     anchors = { fill = true }, z = -1,
+    on_clicked = function() open_sheet() end,
+    on_dragged = function(_, _, _, dy)
+      if stage:get() ~= "rest" then return end
+      pull:set(math.max(0, math.min(1, -dy / s(360))))
+    end,
+    on_drag_finished = function()
+      if stage:get() ~= "rest" then return end
+      if pull:get() > 0.3 then open_sheet() else pull:set(0) end
+    end,
     on_key_pressed = function(keysym, typed_text)
       local RETURN, KP_ENTER, BACKSPACE, ESCAPE = 0xff0d, 0xff8d, 0xff08, 0xff1b
       local LEFT, RIGHT, F2 = 0xff51, 0xff53, 0xffbf
-      if phase:get() ~= "in" or busy:get() then return end
+      local st = stage:get()
+      if st ~= "rest" and st ~= "sheet" then return end
+      if busy:get() then return end
+      if keysym == ESCAPE then escape() return end
+      if keysym == F2 then step_session(1) return end
+      if st == "rest" then
+        if keysym == LEFT then step_person(-1) return end
+        if keysym == RIGHT then step_person(1) return end
+        open_sheet()
+        if keysym == RETURN or keysym == KP_ENTER then return end
+      end
       if keysym == RETURN or keysym == KP_ENTER then
         submit()
       elseif keysym == BACKSPACE then
-        password = password:sub(1, -2)
-        typed:set(math.min(#password, MAX_DOTS))
-      elseif keysym == ESCAPE then
-        clear()
-        say("")
-      elseif keysym == LEFT and #password == 0 then
-        step_person(-1)
-      elseif keysym == RIGHT and #password == 0 then
-        step_person(1)
-      elseif keysym == F2 then
-        step_session(1)
+        backspace()
       elseif typed_text and typed_text ~= "" and typed_text:byte(1) >= 32 then
-        password = password .. typed_text
-        typed:set(math.min(#password, MAX_DOTS))
-        if bad:get() then say("") end
+        type_text(typed_text)
       end
     end,
   },
 }
 
-morf.timer(30, function() phase:set("in") end, false)
+-- For a test or a picture: `morf ipc call stage sheet`.
+morf.ipc.stage = function(to)
+  if to == "sheet" then stage:set("rest") open_sheet() elseif to == "rest" then stage:set("rest") end
+  return stage:get()
+end
+
+morf.timer(30, function() stage:set("rest") end, false)
