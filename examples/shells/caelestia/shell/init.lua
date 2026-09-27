@@ -70,6 +70,7 @@ local launcher = require("launcher")
 local dashboard = require("dashboard")
 local session = require("session")
 local polkit = require("polkit")
+local authsteps = require("authsteps")
 local osd = require("osd")
 local notifs = require("notifs")
 local sidebar = require("sidebar")
@@ -254,6 +255,10 @@ morf.ipc.polkit = function(how, ...)
   local r = polkit.request:get()
   return { agent = true, open = polkit.drawer.open:get(), phase = polkit.phase:get(), action = r and r.action or "" }
 end
+
+-- `auth-step STEP [SERVICE]`: the markers in a PAM stack (tools/pam)
+-- saying where sudo has got to: face, finger, password, ok.
+morf.ipc["auth-step"] = function(step, service) return authsteps.steps.mark(step, service) end
 
 -- `sidebar [how [TAB]]`: TAB is settings or notifications. `utilities`
 -- is the sidebar on its settings; `settings PAGE` opens one of their pages

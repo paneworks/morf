@@ -1,0 +1,25 @@
+#!/bin/sh
+# morf-auth-step STEP -- a marker in a PAM stack (pam_exec, `optional`):
+# tells the person's morf shell which step an authentication has reached --
+# face, finger, password, ok -- so it can show it (lib.authsteps).
+#
+# It runs as root inside sudo; the shell answers only its own user, so the
+# call is made as PAM_USER, in the background, and this returns at once: a
+# marker never holds up or fails what it marks.
+step=${1:-}
+user=${PAM_USER:-}
+[ -n "$step" ] && [ -n "$user" ] || exit 0
+uid=$(id -u "$user" 2>/dev/null) || exit 0
+dir=/run/user/$uid/morf
+[ -d "$dir" ] || exit 0
+MORF=@MORF@
+[ -x "$MORF" ] || exit 0
+for sock in "$dir"/*.sock; do
+  [ -S "$sock" ] || continue
+  name=$(basename "$sock" .sock)
+  case $name in *-lock) continue ;; esac
+  setsid -f runuser -u "$user" -- env XDG_RUNTIME_DIR="/run/user/$uid" \
+    timeout 2 "$MORF" -i "$name" ipc call auth-step "$step" "${PAM_SERVICE:-}" \
+    >/dev/null 2>&1 </dev/null
+done
+exit 0
