@@ -17,14 +17,9 @@ if [ "${1:-}" = remove ]; then
   rm -f /usr/local/bin/morf-auth-step
   exit 0
 fi
-who=${SUDO_USER:-$(logname 2>/dev/null || true)}
-home=$(getent passwd "$who" | cut -d: -f6)
-MORF=${MORF:-$home/.local/bin/morf}
-[ -x "$MORF" ] || { echo "no morf at $MORF"; exit 1; }
 here=$(cd "$(dirname "$0")" && pwd)
-sed "s|@MORF@|$MORF|" "$here/morf-auth-step" > /usr/local/bin/morf-auth-step
-chmod 755 /usr/local/bin/morf-auth-step
-echo "installed /usr/local/bin/morf-auth-step (morf: $MORF)"
+install -m 755 "$here/morf-auth-step" /usr/local/bin/morf-auth-step
+echo "installed /usr/local/bin/morf-auth-step"
 
 if grep -q morf-auth-step $STACK; then echo "$STACK has the markers already"; exit 0; fi
 cp $STACK $STACK.bak-steps

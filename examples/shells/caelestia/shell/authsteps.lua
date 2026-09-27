@@ -16,6 +16,7 @@ local C = theme.color
 local M = {}
 
 M.steps = require("lib.authsteps").new()
+M.steps.watch()
 local state = M.steps.state
 
 local W, H, BADGE = 320, 76, 52

@@ -3,9 +3,9 @@
 # tells the person's morf shell which step an authentication has reached --
 # face, finger, password, ok -- so it can show it (lib.authsteps).
 #
-# It runs as root inside sudo; the shell answers only its own user, so the
-# call is made as PAM_USER, in the background, and this returns at once: a
-# marker never holds up or fails what it marks.
+# It runs as root inside sudo and must not hold it up: it writes one line
+# where the shell is watching and returns. A marker never fails what it
+# marks (the lines are `optional`).
 # pam_exec hands over PAM's environment and little else: no PATH.
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH
@@ -15,14 +15,11 @@ user=${PAM_USER:-}
 uid=$(id -u "$user" 2>/dev/null) || exit 0
 dir=/run/user/$uid/morf
 [ -d "$dir" ] || exit 0
-MORF=@MORF@
-[ -x "$MORF" ] || exit 0
-for sock in "$dir"/*.sock; do
-  [ -S "$sock" ] || continue
-  name=$(basename "$sock" .sock)
-  case $name in *-lock) continue ;; esac
-  setsid -f runuser -u "$user" -- env XDG_RUNTIME_DIR="/run/user/$uid" \
-    timeout 2 "$MORF" -i "$name" ipc call auth-step "$step" "${PAM_SERVICE:-}" \
-    >/dev/null 2>&1 </dev/null
-done
+# One line in the person's runtime directory, which their shell watches
+# (lib.authsteps). Written aside and moved into place, so it is never read
+# half written; nothing of theirs is run from here, and nothing waits.
+f=$dir/authstep
+printf '%s %s\n' "$step" "${PAM_SERVICE:-}" > "$f.new" || exit 0
+chown "$uid" "$f.new" 2>/dev/null
+mv -f "$f.new" "$f"
 exit 0
