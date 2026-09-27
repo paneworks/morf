@@ -10,6 +10,9 @@
 #   F10   the greeter         (morf -c NAME/greet; no greetd here, so it
 #                              draws and says there is nothing to log in to)
 #
+# SCREENS=2 (or more) opens that many windows, one output each, to see a
+# lock over several screens: the whole of it on one, the rest quiet.
+#
 # The nested Hyprland reads a config of its own, never ~/.config/hypr.
 
 set -eu
@@ -27,7 +30,9 @@ hl.config({
   misc = { force_default_wallpaper = 0, disable_hyprland_logo = true, disable_splash_rendering = true },
   ecosystem = { no_update_news = true, no_donation_nag = true },
 })
-hl.on("hyprland.start", function() hl.exec_cmd("$RUN_MORF/lock") end)
+hl.on("hyprland.start", function()
+  hl.exec_cmd("for i in \$(seq 2 ${SCREENS:-1}); do hyprctl output create wayland; done; sleep 1; $RUN_MORF/lock")
+end)
 hl.bind("F9", function() hl.exec_cmd("$RUN_MORF/lock") end)
 hl.bind("F10", function() hl.exec_cmd("$RUN_MORF/greet") end)
 HYPR
