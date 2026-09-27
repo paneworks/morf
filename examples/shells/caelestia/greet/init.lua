@@ -312,8 +312,8 @@ local function swell_w()
   if st == "closed" or st == "leaving" then return BUD_W end
   return BUD_W + (SW - BUD_W) * up()
 end
-local GROW = { duration = 560, easing = "out_back" }
-local SETTLE = { duration = 420, easing = "out_cubic" }
+local GROW = { duration = 420, easing = "out_back" }
+local SETTLE = { duration = 340, easing = "out_cubic" }
 local function showing() return stage:get() == "rest" or stage:get() == "sheet" end
 
 -- ------------------------------------------------------------- the frame --
@@ -332,17 +332,37 @@ local frame = ui.Sdf {
     height = function() return stage:get() == "closed" and H or H - 2 * BORDER end,
     behavior = { x = SETTLE, y = SETTLE, width = SETTLE, height = SETTLE },
   },
-  ui.SdfShape {
-    id = "greet-swell",
-    shape = "box", operation = "smooth_union", blend = s(26),
-    radius = function() return up() > 0.5 and s(38) or s(12) end,
-    fill_color = function() return up() > 0.5 and C.surfaceContainer or C.surface end,
-    x = function() return math.floor((W - swell_w()) / 2) end,
-    y = function() return H - swell_h() end,
-    width = swell_w,
-    height = function() return swell_h() + s(40) end,
-    behavior = { x = GROW, y = GROW, width = GROW, height = GROW, radius = SETTLE,
-      fill_color = { duration = 300 } },
+}
+
+-- The swell has a field of its own, in a band along the bottom edge: the
+-- frame above stays still, and a swell growing redraws the band alone,
+-- not the whole screen every frame (a 4K screen of field was the lag).
+local function band_h() return sheet_h() + s(90) end
+local band = ui.Item {
+  x = 0, width = W,
+  y = function() return H - band_h() end,
+  height = band_h,
+  ui.Sdf {
+    anchors = { fill = true },
+    -- The frame's bottom edge, for the swell to melt into.
+    ui.SdfShape {
+      shape = "box", x = 0, width = W,
+      y = function() return band_h() - BORDER end,
+      height = BORDER + s(40),
+      fill_color = function() return C.surface end,
+    },
+    ui.SdfShape {
+      id = "greet-swell",
+      shape = "box", operation = "smooth_union", blend = s(26),
+      radius = function() return up() > 0.5 and s(38) or s(12) end,
+      fill_color = function() return up() > 0.5 and C.surfaceContainer or C.surface end,
+      x = function() return math.floor((W - swell_w()) / 2) end,
+      y = function() return band_h() - swell_h() end,
+      width = swell_w,
+      height = function() return swell_h() + s(40) end,
+      behavior = { x = GROW, y = GROW, width = GROW, height = GROW, radius = SETTLE,
+        fill_color = { duration = 240 } },
+    },
   },
 }
 
@@ -686,6 +706,7 @@ ui.Item {
   anchors = { fill = true },
   backdrop,
   frame,
+  band,
   glance,
   choosing,
   hint,
@@ -716,7 +737,9 @@ ui.Item {
         if keysym == LEFT then step_person(-1) return end
         if keysym == RIGHT then step_person(1) return end
         open_sheet()
-        if keysym == RETURN or keysym == KP_ENTER then return end
+        -- A character is the password's first; space, Return and the rest
+        -- only open the sheet.
+        if not (typed_text and typed_text ~= "" and typed_text:byte(1) > 32) then return end
       end
       if keysym == RETURN or keysym == KP_ENTER then
         submit()

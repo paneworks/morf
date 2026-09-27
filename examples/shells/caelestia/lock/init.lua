@@ -361,8 +361,8 @@ local function build(W, H, NAME)
     if st == "closed" or st == "opening" then return BUD_W end
     return BUD_W + (SW - BUD_W) * up()
   end
-  local GROW = { duration = 560, easing = "out_back" }
-  local SETTLE = { duration = 420, easing = "out_cubic" }
+  local GROW = { duration = 420, easing = "out_back" }
+  local SETTLE = { duration = 340, easing = "out_cubic" }
   -- Follows a finger at once, and eases the rest of the way.
   local function swell_motion() return pull:get() > 0 and stage:get() == "rest" and { duration = 60 } or GROW end
 
@@ -385,17 +385,37 @@ local function build(W, H, NAME)
       height = function() return stage:get() == "closed" and H or H - 2 * BORDER end,
       behavior = { x = SETTLE, y = SETTLE, width = SETTLE, height = SETTLE },
     },
-    ui.SdfShape {
-      id = "lock-swell",
-      shape = "box", operation = "smooth_union", blend = s(26),
-      radius = function() return up() > 0.5 and s(38) or s(12) end,
-      fill_color = function() return up() > 0.5 and C.surfaceContainer or C.surface end,
-      x = function() return math.floor((W - swell_w()) / 2) end,
-      y = function() return H - swell_h() end,
-      width = swell_w,
-      height = function() return swell_h() + s(40) end,
-      behavior = { x = GROW, y = GROW, width = GROW, height = GROW, radius = SETTLE,
-        fill_color = { duration = 300 } },
+  }
+
+  -- The swell has a field of its own, in a band along the bottom edge: the
+  -- frame above stays still, and a swell growing redraws the band alone,
+  -- not the whole screen every frame (a 4K screen of field was the lag).
+  local function band_h() return sheet_h() + s(90) end
+  local band = ui.Item {
+    x = 0, width = W,
+    y = function() return H - band_h() end,
+    height = band_h,
+    ui.Sdf {
+      anchors = { fill = true },
+      -- The frame's bottom edge, for the swell to melt into.
+      ui.SdfShape {
+        shape = "box", x = 0, width = W,
+        y = function() return band_h() - BORDER end,
+        height = BORDER + s(40),
+        fill_color = function() return C.surface end,
+      },
+      ui.SdfShape {
+        id = "lock-swell",
+        shape = "box", operation = "smooth_union", blend = s(26),
+        radius = function() return up() > 0.5 and s(38) or s(12) end,
+        fill_color = function() return up() > 0.5 and C.surfaceContainer or C.surface end,
+        x = function() return math.floor((W - swell_w()) / 2) end,
+        y = function() return band_h() - swell_h() end,
+        width = swell_w,
+        height = function() return swell_h() + s(40) end,
+        behavior = { x = GROW, y = GROW, width = GROW, height = GROW, radius = SETTLE,
+          fill_color = { duration = 240 } },
+      },
     },
   }
 
@@ -410,8 +430,9 @@ local function build(W, H, NAME)
     } or ui.Item {},
     ui.Rect {
       anchors = { fill = true }, backdrop_blur = s(28),
-      color = function() return stage:get() == "sheet" and C.surface:alpha(0.55) or C.surface:alpha(0.3) end,
-      behavior = { color = { duration = 420 } },
+      -- One tint, whatever the stage: a tint that changed with the sheet
+      -- repainted every screen, blur and all.
+      color = function() return C.surface:alpha(0.4) end,
     },
   }
 
@@ -699,6 +720,7 @@ local function build(W, H, NAME)
     color = C.surface:alpha(1),
     backdrop,
     frame,
+    band,
     glance,
     hint,
     sheet,
@@ -722,9 +744,12 @@ local function build(W, H, NAME)
         if st ~= "rest" and st ~= "sheet" then return end
         if busy:get() then return end
         if keysym == ESCAPE then escape() return end
-        -- Any other key at rest opens the way in, and a character is the
-        -- password's first.
-        if st == "rest" then open_sheet() end
+        -- Any other key at rest opens the way in. A character is the
+        -- password's first; space, Return and the rest only wake it.
+        if st == "rest" then
+          open_sheet()
+          if not (typed_text and typed_text ~= "" and typed_text:byte(1) > 32) then return end
+        end
         if keysym == RETURN or keysym == KP_ENTER then
           submit()
         elseif keysym == BACKSPACE then
