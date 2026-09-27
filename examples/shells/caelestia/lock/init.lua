@@ -95,6 +95,9 @@ local busy = morf.signal("lock.busy", false)
 local message = morf.signal("lock.message", "")
 local bad = morf.signal("lock.bad", false)
 local shake = morf.signal("lock.shake", 0)
+-- "pattern" or "password": what the sheet takes (a pattern where one is set).
+local method = morf.signal("lock.method", "password")
+local has_pattern -- below, with the pattern pad
 -- "closed" (coming in), "rest", "sheet" (the way in is open), "opening"
 -- (unlocked: all of it going away).
 local stage = morf.signal("lock.stage", "closed")
@@ -163,6 +166,7 @@ local function open_sheet()
   if stage:get() ~= "rest" then return end
   stage:set("sheet")
   pull:set(0)
+  method:set(has_pattern() and "pattern" or "password")
   poke()
 end
 
@@ -179,6 +183,7 @@ end
 local MAX_DOTS = 18
 local function type_text(t)
   if #password >= 256 then return end
+  if method:get() == "pattern" then method:set("password") clear() end
   password = password .. t
   typed:set(math.min(#password, MAX_DOTS))
   if bad:get() then say("") end
@@ -223,6 +228,45 @@ local ONSCREEN = PORTRAIT or not select(2, pcall(function() return require("lib.
 local SW = math.min(s(600), W - 2 * s(20))
 local AV = s(96)
 local FIELD_W, FIELD_H = math.min(s(380), SW - s(48)), s(58)
+
+-- The pattern (tools/pattern): offered where the stack takes one and one
+-- is set for this account. Anywhere else a drawn pattern would only be a
+-- wrong password, and a failed login counted.
+local PATTERN_STACK = (function()
+  local ok, t = pcall(morf.fs.read, "/etc/pam.d/morf-lock")
+  return ok and type(t) == "string" and t:find("morf-pattern-check", 1, true) ~= nil
+end)()
+function has_pattern()
+  if PREVIEW then return true end
+  local name = me.name
+  return PATTERN_STACK and name ~= nil and name ~= "" and morf.fs.exists("/etc/morf/pattern/" .. name)
+end
+local function look()
+  return {
+    panel = function() return C.surfaceContainer end,
+    key = function() return C.surfaceContainerHighest end,
+    key_dim = function() return C.surfaceContainerHigh end,
+    accent = function() return C.primary end,
+    on_accent = function() return C.onPrimary end,
+    text = function() return C.onSurface end,
+    dim = function() return C.onSurfaceVariant end,
+    press = function() return C.secondaryContainer end,
+    font = FONT, icons = ICONS,
+  }
+end
+local PAD_W = math.min(s(300), SW - s(48))
+local pad = osk.new {
+  prefix = "lock.pattern", width = PAD_W, mode = "pattern", look = look(),
+  on_pattern = function(dots)
+    if busy:get() then return end
+    -- A tap or two is not an attempt: nothing is spent on it.
+    if #dots < 4 then say("Connect at least four dots", false) return end
+    password = table.concat(dots)
+    submit()
+  end,
+}
+local function entry_h() return method:get() == "pattern" and pad.height() or FIELD_H end
+local function chip_h() return has_pattern() and s(44) or 0 end
 local kb
 if ONSCREEN then
   kb = osk.new {
@@ -246,11 +290,12 @@ if ONSCREEN then
     end,
   }
 end
-local function kb_h() return kb and (kb.height() + s(16)) or 0 end
+local function kb_h() return (kb and method:get() == "password") and (kb.height() + s(16)) or 0 end
 -- The sheet: the account, the pill, a line for what PAM says; the keyboard
 -- under them on a phone.
-local SHEET_TOP = s(28) + AV + s(12) + s(30) + s(20) + FIELD_H + s(10) + s(24) + s(24)
-local function sheet_h() return SHEET_TOP + kb_h() end
+local function sheet_h()
+  return s(28) + AV + s(12) + s(30) + s(20) + entry_h() + s(10) + s(24) + chip_h() + s(24) + kb_h()
+end
 
 -- The swell's height as it stands: a bud at rest, the sheet up, a swipe
 -- in between.
@@ -537,16 +582,55 @@ local sheet_nodes = {
   ui.Item { width = 1, height = s(12) },
   text { text = me.label ~= "" and me.label or me.name, font_size = s(20), font_weight = 600, height = s(30) },
   ui.Item { width = 1, height = s(20) },
-  field,
+  ui.Item {
+    width = SW - s(24), height = entry_h,
+    ui.Item { anchors = { horizontal_center = true }, width = FIELD_W, height = FIELD_H,
+      visible = function() return method:get() == "password" end, field },
+    ui.Item { anchors = { horizontal_center = true }, width = PAD_W, height = pad.height,
+      visible = function() return method:get() == "pattern" end, pad.node },
+  },
   ui.Item { width = 1, height = s(10) },
   text {
     id = "lock-message", height = s(24), width = SW - s(48), horizontal_alignment = "center", elide = "right",
     text = function() return message:get() end, font_size = s(15),
     color = function() return bad:get() and C.error or C.onSurfaceVariant end,
   },
+  ui.Item {
+    width = SW - s(24), height = chip_h, visible = has_pattern,
+    (function()
+      local area
+      area = ui.MouseArea {
+        id = "lock-method", anchors = { horizontal_center = true, bottom = true },
+        width = s(180), height = s(36), cursor = "pointer",
+        on_clicked = function()
+          method:set(method:get() == "pattern" and "password" or "pattern")
+          clear()
+          say("")
+        end,
+        ui.Rect {
+          anchors = { fill = true }, radius = s(18),
+          color = function() return (area and area.hovered) and C.surfaceContainerHighest or C.surfaceContainerHigh end,
+        },
+        ui.Row {
+          anchors = { center_in = true }, gap = s(6), align = "center",
+          icon(function() return method:get() == "pattern" and "password" or "pattern" end, s(18), C.onSurfaceVariant),
+          text { font_size = s(14), color = C.onSurfaceVariant,
+            text = function() return method:get() == "pattern" and "Use password" or "Use pattern" end },
+        },
+      }
+      return area
+    end)(),
+  },
   ui.Item { width = 1, height = s(24) },
 }
-if kb then sheet_nodes[#sheet_nodes + 1] = kb.node end
+if kb then
+  sheet_nodes[#sheet_nodes + 1] = ui.Item {
+    width = SW - s(24),
+    height = function() return method:get() == "password" and kb.height() or 0 end,
+    visible = function() return method:get() == "password" end,
+    kb.node,
+  }
+end
 local sheet = ui.Item {
   id = "lock-sheet",
   x = math.floor((W - SW) / 2), width = SW,

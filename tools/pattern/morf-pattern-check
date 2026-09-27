@@ -1,0 +1,24 @@
+#!/usr/bin/perl
+# morf-pattern-check -- run by pam_exec (expose_authtok): is what was typed
+# (a pattern, as its dots: "1596") the pattern stored for $PAM_USER?
+#
+# The secret comes on stdin, never on a command line. Exit 0 is yes; any
+# other is no, and the stack goes on to the password with the same input.
+# The stored hash is /etc/morf/pattern/USER: one yescrypt line, readable by
+# root and by that user alone (a lock checks as the person it locks).
+use strict;
+my $user = $ENV{PAM_USER} // '';
+exit 1 unless $user =~ /\A[a-z_][a-z0-9_.-]*\z/i;
+my $file = "/etc/morf/pattern/$user";
+open(my $fh, '<', $file) or exit 1;
+my $stored = <$fh> // '';
+close($fh);
+$stored =~ s/\s+\z//;
+exit 1 unless $stored =~ /\A\$/;
+local $/;
+my $given = <STDIN> // '';
+$given =~ s/[\0\n].*//s;
+# A pattern is dots 1..9, each once, four at least: anything else is a
+# password, and not ours to judge.
+exit 1 unless $given =~ /\A[1-9]{4,9}\z/;
+exit(crypt($given, $stored) eq $stored ? 0 : 1);

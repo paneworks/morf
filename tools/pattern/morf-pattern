@@ -1,0 +1,40 @@
+#!/bin/sh
+# morf-pattern set [USER] | clear [USER] | status [USER]
+#
+# The pattern the lock and the greeter take instead of a password, as its
+# dots in the order drawn, numbered like a phone's keypad:
+#
+#     1 2 3
+#     4 5 6        an L down the left and along the bottom: 14789
+#     7 8 9
+#
+# Four dots at least, each once. Stored as a yescrypt hash in
+# /etc/morf/pattern/USER, owned by root and readable by USER's group only.
+# Needs root (sudo).
+set -eu
+cmd=${1:-status}
+user=${2:-${SUDO_USER:-$(id -un)}}
+dir=/etc/morf/pattern
+file=$dir/$user
+case $cmd in
+  status)
+    [ -e "$file" ] && echo "$user has a pattern" || echo "$user has no pattern" ;;
+  clear)
+    rm -f "$file" && echo "cleared $user's pattern" ;;
+  set)
+    [ "$(id -u)" = 0 ] || { echo "run it with sudo"; exit 1; }
+    id "$user" >/dev/null 2>&1 || { echo "no user $user"; exit 1; }
+    printf 'pattern for %s (dots, e.g. 14789): ' "$user"; stty -echo; read -r a; stty echo; echo
+    printf 'again: '; stty -echo; read -r b; stty echo; echo
+    [ "$a" = "$b" ] || { echo "they differ"; exit 1; }
+    echo "$a" | grep -Eq '^[1-9]{4,9}$' || { echo "four to nine dots, 1-9"; exit 1; }
+    [ "$(echo "$a" | fold -w1 | sort | uniq -d)" = "" ] || { echo "each dot once"; exit 1; }
+    install -d -m 0755 "$dir"
+    umask 077
+    printf %s "$a" | mkpasswd -m yescrypt -s > "$file.new"
+    chown "root:$(id -gn "$user")" "$file.new"
+    chmod 0640 "$file.new"
+    mv "$file.new" "$file"
+    echo "set $user's pattern" ;;
+  *) echo "morf-pattern set|clear|status [USER]"; exit 1 ;;
+esac
