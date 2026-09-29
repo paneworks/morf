@@ -167,7 +167,8 @@ pub(crate) fn install_ui_json_api<'gc>(
     // replaces it; `ui.follow(target, property, nil)` lets go.
     let follow_state = Rc::clone(&state);
     let follow = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (target, property, spec): (UserRef<NodeToken>, String, Option<Table>) = stack.consume(ctx)?;
+        let (target, property, spec): (UserRef<NodeToken>, String, Option<Table>) =
+            stack.consume(ctx)?;
         let mut state = follow_state.borrow_mut();
         state
             .follows
@@ -176,7 +177,9 @@ pub(crate) fn install_ui_json_api<'gc>(
             return Ok(CallbackReturn::Return);
         };
         let source: UserRef<NodeToken> = match spec.get_value(ctx, "node") {
-            LuaValue::Nil => return Err(HostError("ui.follow needs a `node` to follow".into()).into()),
+            LuaValue::Nil => {
+                return Err(HostError("ui.follow needs a `node` to follow".into()).into());
+            }
             value => luna::FromValue::from_value(ctx, value)?,
         };
         let number = |key: &str, fallback: f64| -> f64 {

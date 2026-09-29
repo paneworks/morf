@@ -69,7 +69,10 @@ impl Runtime {
                         .filter(|id| !id.is_empty())
                         .map(|id| format!(" #{id}"))
                         .unwrap_or_default();
-                    lines.push(format!("{}{id}", crate::runtime_config::lint_path(scene, node)));
+                    lines.push(format!(
+                        "{}{id}",
+                        crate::runtime_config::lint_path(scene, node)
+                    ));
                 }
             }
             if let Ok(children) = scene.children(node) {

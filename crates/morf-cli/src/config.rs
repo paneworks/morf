@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::{commands::*, supervisor::*};
 
 pub(crate) fn usage() -> &'static str {
-    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf [--no-plugin | --clean] -c <name>[/shell|/lock|/greet] [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf check <shell.lua> [--size WxH] [--screens N] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--strict] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf render <shell.lua> -o <out.png> [--size WxH] [--scale S] [--surface NAME|INDEX|screen] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf test <spec.lua>... [--filter PATTERN] [--size WxH] [--scale S] [--snapshots DIR] [--no-dbus | --private-bus] [--no-isolate]\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments: `logre -- lock`.\n\ncheck, render and test run a configuration with no compositor: nothing\nconnects to Wayland and time is virtual. See docs/TESTING.md."
+    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf <shell|lock|greet> [-c NAME] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf [--no-plugin | --clean] -c <name>[/shell|/lock|/greet] [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf check <shell.lua> [--size WxH] [--screens N] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--strict] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf render <shell.lua> -o <out.png> [--size WxH] [--scale S] [--surface NAME|INDEX|screen] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf test <spec.lua>... [--filter PATTERN] [--size WxH] [--scale S] [--snapshots DIR] [--no-dbus | --private-bus] [--no-isolate]\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments after `--`.\n\ncheck, render and test run a configuration with no compositor: nothing\nconnects to Wayland and time is virtual. See docs/TESTING.md."
 }
 
 pub(crate) fn run() -> Result<(), String> {
@@ -194,6 +194,30 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
     match strings {
         ["-h" | "--help"] => Ok(Command::Help),
         ["-V" | "--version"] => Ok(Command::Version),
+        [part @ ("shell" | "lock" | "greet"), "-c", name, rest @ ..] => {
+            if name.contains('/') {
+                return Err("use a shell name with a role, e.g. morf lock -c caelestia".to_owned());
+            }
+            Ok(Command::Run(
+                named_config_path(&format!("{name}/{part}"))?,
+                policy,
+                own(rest)?,
+                daemonize,
+            ))
+        }
+        [part @ ("shell" | "lock" | "greet"), rest @ ..] => Ok(Command::Run(
+            if *part == "shell" {
+                env::var_os("MORF_CONFIG")
+                    .map(PathBuf::from)
+                    .map(Ok)
+                    .unwrap_or_else(default_config_path)?
+            } else {
+                named_config_path(&format!("default/{part}"))?
+            },
+            policy,
+            own(rest)?,
+            daemonize,
+        )),
         ["-c", name, rest @ ..] => Ok(Command::Run(
             named_config_path(name)?,
             policy,
@@ -332,6 +356,22 @@ pub(crate) fn config_root() -> Result<PathBuf, String> {
         .ok_or_else(|| "HOME and XDG_CONFIG_HOME are unset".to_owned())
 }
 
+/// User configuration first, then the system XDG configuration directories.
+/// This lets the greeter account run the same installed shell without access
+/// to another user's home or an embedded copy of the runtime.
+fn config_roots() -> Result<Vec<PathBuf>, String> {
+    let mut roots = vec![config_root()?];
+    let dirs = env::var_os("XDG_CONFIG_DIRS")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "/etc/xdg".into());
+    roots.extend(
+        env::split_paths(&dirs)
+            .filter(|path| path.is_absolute())
+            .map(|path| path.join("morf")),
+    );
+    Ok(roots)
+}
+
 /// The parts one named shell may have, each a folder with its own
 /// `init.lua`: the shell, its lock screen and its greeter.
 pub(crate) const PARTS: [&str; 3] = ["shell", "lock", "greet"];
@@ -353,13 +393,19 @@ pub(crate) fn named_config_path(name: &str) -> Result<PathBuf, String> {
             PARTS.join(", ")
         ));
     }
-    let folder = config_root()?.join(name);
-    let path = folder.join(part).join("init.lua");
-    let old = folder.join("shell.lua");
-    if part == "shell" && !path.exists() && old.exists() {
-        return Ok(old);
+    let roots = config_roots()?;
+    for root in &roots {
+        let folder = root.join(name);
+        let path = folder.join(part).join("init.lua");
+        if path.is_file() {
+            return Ok(path);
+        }
+        let old = folder.join("shell.lua");
+        if part == "shell" && old.is_file() {
+            return Ok(old);
+        }
     }
-    Ok(path)
+    Ok(roots[0].join(name).join(part).join("init.lua"))
 }
 
 /// What a bare `morf` runs: `~/.config/morf/shell.lua` if there is one (the
@@ -371,7 +417,7 @@ pub(crate) fn default_config_path() -> Result<PathBuf, String> {
     if old.exists() {
         return Ok(old);
     }
-    Ok(root.join("default").join("shell").join("init.lua"))
+    named_config_path("default/shell")
 }
 
 /// The instance `-i` named, if any.

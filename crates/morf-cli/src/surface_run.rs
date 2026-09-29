@@ -362,6 +362,21 @@ fn drive_surface(
                 client.set_idle_timeouts(&runtime.idle_timeouts());
             }
             if update.reloaded {
+                // Node handles and layout revisions belong to a single runtime.
+                // A new configuration may reuse an old handle for an unrelated
+                // node, or build an entirely different tree (a theme switch).
+                state.primary_root = primary_surface_root(runtime)?;
+                state.layout.invalidate_scene();
+                state.animating_shaders = runtime.shaders_animate();
+                register_shaders(runtime, &mut renderer)?;
+                for surface in state
+                    .popup_surfaces
+                    .values_mut()
+                    .chain(state.floating_surfaces.values_mut())
+                    .chain(state.layer_surfaces.values_mut())
+                {
+                    surface.layout = None;
+                }
                 let _ = client.reset_gamma(None);
                 // What to do once every output is gone may have changed.
                 tx.send(SupervisorMessage::Worker(WorkerMessage::Outputless {
@@ -486,10 +501,7 @@ fn drive_surface(
         // only a paint asks for one -- without this it waits, frozen, for
         // whatever paints next: a pill that stays lit, a swell that shows
         // seconds late.
-        if !repaint
-            && client.layer_frame_wait(PRIMARY_LAYER).is_none()
-            && runtime.has_motion()
-        {
+        if !repaint && client.layer_frame_wait(PRIMARY_LAYER).is_none() && runtime.has_motion() {
             repaint = true;
         }
         // A paint owed for longer than a stall is made without the callback.

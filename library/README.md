@@ -263,6 +263,14 @@ kept current as lule rewrites it. For the colours themselves as the tool
 sets them on terminals, whatever the tool, see `morf.terminal.listen`
 (docs/IO.md); the caelestia port uses both, the file as the backup.
 
+`lule.generate({ image = "/path/to/wallpaper.png", theme = "dark",
+palette = "pigment" }, callback)` runs generation asynchronously, with a
+60-second timeout and bounded output. It uses Lule's own configuration and
+post-generation hooks. `directory` can replace `image` for random selection;
+`configs`, `cache`, `env` and `command` can isolate a run. The returned process
+handle can be cancelled, and the callback receives the normal `morf.run`
+result. Invalid options return `nil, reason` before starting a process.
+
 ## material
 
 `lib/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:

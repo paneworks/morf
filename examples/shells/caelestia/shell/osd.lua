@@ -8,7 +8,6 @@
 -- the level rests at zero.
 
 local morf = require("morf")
-local theme = require("theme")
 
 local M = {}
 
@@ -37,7 +36,6 @@ function M.set_brightness(v)
 end
 
 local volume, brightness = M.volume, M.brightness
-local set_volume, set_brightness = M.set_volume, M.set_brightness
 
 --- The icon for a volume, and for a brightness.
 function M.volume_icon()

@@ -24,7 +24,7 @@ local authsteps = {}
 local ORDER = { face = 1, finger = 2, password = 3, ok = 4 }
 -- How long each step is shown with nothing after it: a face and a finger
 -- time out by themselves, a password is typed at the terminal's pace.
-local QUIET = { face = 20000, finger = 35000, password = 60000, ok = 1400, failed = 2200 }
+local QUIET = { face = 20000, finger = 35000, password = 60000, ok = 2500, failed = 2200 }
 
 function authsteps.new()
   local state = morf.state { step = "idle", service = "", failures = 0, since = 0, pid = "" }

@@ -151,7 +151,7 @@ function M.record(what)
   end)
   return what
 end
-function M.height() return 232 end
+function M.height() return 264 end
 M.drawer = drawer.new {
   name = "capture", edge = "bottom", width = M.WIDTH, height = M.height,
   content = require("capture_view").build(M, M.WIDTH, M.height),

@@ -767,7 +767,10 @@ pub(crate) fn apply_follows(state: &mut ReactiveState) -> usize {
             continue;
         };
         let wanted = (source * follow.scale + follow.offset).clamp(follow.min, follow.max);
-        let now = state.scene.number(follow.target, &follow.property).unwrap_or(f64::NAN);
+        let now = state
+            .scene
+            .number(follow.target, &follow.property)
+            .unwrap_or(f64::NAN);
         if (wanted - now).abs() > 1e-3 || now.is_nan() {
             if crate::scene_bindings::assign_scene_property(
                 state,

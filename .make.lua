@@ -6,8 +6,8 @@
 --   make verify     the whole local gate
 --   make dist       the binary for this machine's own libraries, not the store's
 --   make bundle     a configuration and morf as one binary: target/dist/<name>
---   make install    the binary to ~/.local/bin, the library to ~/.local/share/morf/library
---   make apply --example NAME   examples/shells/NAME as your shell, ~/.config/morf/NAME, the default
+--   make install    /usr/bin/morf and /usr/share/morf/library (sudo)
+--   make apply [--example NAME]   personal + system configuration and greetd (sudo)
 --
 -- At an oslo prompt in this directory `make` is enough; everywhere else it is `oslo make`.
 -- CI has no oslo, so it calls the language's own tool -- nothing here is on the release path.
@@ -25,7 +25,6 @@ local function project()
 end
 
 local NAME, VERSION = project()
-local PREFIX = os.getenv("PREFIX") or (os.getenv("HOME") .. "/.local")
 
 ------------------------------------------------------------------ what was built
 
@@ -432,10 +431,8 @@ make.recipe{
   end,
 }
 
--- One file that is morf and a configuration: `make bundle --example examples/demos/desktop/greeter.lua --name logre`
--- writes `target/dist/logre`, built from the dist binary so it runs on the machine's own libraries,
--- carrying every font the configuration names, and needing neither morf nor the configuration nor
--- the fonts on disk. Its arguments are the configuration's: `logre -- lock`.
+-- Optional standalone bundles for distributing an individual widget.
+-- Shell, lock and greeter normally use the same morf executable and installed Lua.
 make.recipe{
   name = "bundle",
   desc = "a configuration and morf as one binary: target/dist/<name>",
@@ -456,91 +453,30 @@ make.recipe{
   end,
 }
 
--- `make install`: the binary on the PATH and the library where every shell finds it.
---
---   $PREFIX/bin/morf                          the dist binary (the machine's own libraries), PREFIX ~/.local
---   $XDG_DATA_HOME/morf/library/lib/*.lua     require("lib.material") from any configuration
---   $XDG_DATA_HOME/morf/library/types/        this binary's API for the Lua language server
---
--- The library folder is replaced whole, so a module taken out of the repo goes from the machine too;
--- your own modules belong in ~/.local/share/morf/site, which is looked in first and never touched.
+-- One runtime for shell, lock and greet. Prepare as the user; only the
+-- system-file commit runs through sudo. User migration follows a successful install.
 make.recipe{
   name = "install",
-  desc = "the binary to ~/.local/bin, the library to ~/.local/share/morf/library",
+  desc = "install /usr/bin/morf and /usr/share/morf/library (sudo); retire ~/.local/bin/morf",
   deps = { "dist" },
   run = function()
-    local home = os.getenv("HOME")
-    local bin = PREFIX .. "/bin/" .. NAME
-    local data = (os.getenv("XDG_DATA_HOME") or (home .. "/.local/share")) .. "/morf/library"
-    assert(oslo.run{ "install", "-Dm755", "target/dist/release/morf", bin }.ok, "could not install " .. bin)
-    assert(oslo.run{ "rm", "-rf", data }.ok, "could not clear " .. data)
-    assert(oslo.run{ "mkdir", "-p", data }.ok, "could not make " .. data)
-    -- -L: the repo's symlinks become files, so the installed copy stands alone.
-    assert(oslo.run{ "cp", "-rL", "library/.", data }.ok, "could not copy the library")
-    -- The library's own specs stay in the repository.
-    oslo.run{ "rm", "-rf", data .. "/tests" }
-    -- The types from the binary just installed, so the editor knows exactly that engine.
-    assert(oslo.run{ "env", "-u", "LD_LIBRARY_PATH", "-u", "XDG_DATA_DIRS", bin, "types", data .. "/types" }.ok,
-           "could not write the types")
-    line("binary", bin)
-    line("library", data)
-    print(dim("editor: copy " .. data .. "/luarc.template.json into a shell's folder as .luarc.json"))
+    assert(oslo.run{ "python3", "tools/install-system.py", "stage-runtime", "target/install-runtime" }.ok, "staging failed")
+    assert(oslo.run{ "sudo", "/usr/bin/python3", "tools/install-system.py", "commit", "target/install-runtime" }.ok, "system install failed")
+    assert(oslo.run{ "python3", "tools/install-system.py", "finish-runtime" }.ok, "user migration failed")
   end,
 }
 make.alias("i", "install")
 
--- An example as the person's own shell. `make install` is morf and its library; which shell to run
--- is theirs, so it is a recipe of its own. A named shell is a folder of parts, each with its own
--- init.lua -- ~/.config/morf/NAME/{shell,lock,greet}/init.lua -- run by `morf -c NAME[/PART]`;
--- ~/.config/morf/default is a link to the one a bare `morf` runs. A shell folder already there is
--- kept beside the new one, never overwritten.
 make.recipe{
   name = "apply",
-  desc = "examples/shells/NAME as ~/.config/morf/NAME, and the default shell",
-  params = { { "--example", desc = "the shell's name, e.g. caelestia (a folder under examples/shells/)" } },
+  desc = "apply the shell to your config and /etc/xdg/morf; configure greetd (sudo)",
+  params = { { "--example", desc = "shell name; defaults to your currently selected shell" } },
   run = function(a)
-    local name = a.example
-    assert(type(name) == "string" and name ~= "" and not name:find("/", 1, true),
-           "which shell? make apply --example NAME (a folder under examples/shells/)")
-    local source = "examples/shells/" .. name
-    assert(oslo.fs.stat(source .. "/shell/init.lua"), source .. "/shell/init.lua is not there")
-    local home = os.getenv("HOME")
-    local root = (os.getenv("XDG_CONFIG_HOME") or (home .. "/.config")) .. "/morf"
-    local folder = root .. "/" .. name
-    local data = (os.getenv("XDG_DATA_HOME") or (home .. "/.local/share")) .. "/morf/library"
-    local stamp = os.date("%Y%m%d-%H%M%S")
-    assert(oslo.run{ "mkdir", "-p", folder }.ok, "could not make " .. folder)
-    for _, part in ipairs { "shell", "lock", "greet" } do
-      if oslo.fs.stat(source .. "/" .. part .. "/init.lua") then
-        local target = folder .. "/" .. part
-        if oslo.fs.stat(target) then
-          local kept = target .. ".bak-" .. stamp
-          assert(oslo.run{ "mv", target, kept }.ok, "could not move " .. target .. " aside")
-          line("kept", kept)
-        end
-        -- -L: any link in the example becomes a file, so the copy stands alone.
-        assert(oslo.run{ "cp", "-rL", source .. "/" .. part, target }.ok, "could not copy " .. part)
-        -- The editor's view of the engine and the library, beside each part.
-        if oslo.fs.stat(data .. "/luarc.template.json") then
-          oslo.run{ "cp", data .. "/luarc.template.json", target .. "/.luarc.json" }
-        end
-        line(part, target .. "/init.lua")
-      end
-    end
-    for _, doc in ipairs { "README.md", "NEEDS.md" } do
-      if oslo.fs.stat(source .. "/" .. doc) then oslo.run{ "cp", source .. "/" .. doc, folder .. "/" .. doc } end
-    end
-    -- The default: a link, so switching is one `make apply` away and nothing is copied twice.
-    local default = root .. "/default"
-    local stat = oslo.run{ "test", "-e", default, "-a", "!", "-L", default }
-    assert(not stat.ok, default .. " is a folder of its own, not a link; move it aside first")
-    assert(oslo.run{ "ln", "-sfn", name, default }.ok, "could not point " .. default .. " at " .. name)
-    line("default", default .. " -> " .. name)
-    if oslo.fs.stat(root .. "/shell.lua") then
-      print(oslo.ui.style("note", { fg = "yellow" }) ..
-            dim("   " .. root .. "/shell.lua is there and a bare `morf` runs it first"))
-    end
-    print(dim("run: morf   (or morf -c " .. name .. ")"))
+    local args = { "python3", "tools/install-system.py", "stage-config", "target/apply-config" }
+    if a.example and a.example ~= "" then args[#args+1]="--example" args[#args+1]=a.example end
+    assert(oslo.run(args).ok, "config staging failed")
+    assert(oslo.run{ "sudo", "/usr/bin/python3", "tools/install-system.py", "commit", "target/apply-config" }.ok, "system apply failed")
+    assert(oslo.run{ "python3", "tools/install-system.py", "apply-user", "target/apply-config" }.ok, "user apply failed")
   end,
 }
 

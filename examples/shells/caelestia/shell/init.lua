@@ -39,7 +39,6 @@ morf.surface.keyboard_focus = "none"
 -- below among them).
 morf.surface.exclusive_zone = -1
 -- Windows keep inside the frame.
-morf.surface.reserve = { left = theme.LEFT, top = theme.BORDER, right = theme.BORDER, bottom = theme.BORDER }
 
 -- ------------------------------------------------------------------ colour --
 
@@ -70,6 +69,7 @@ local launcher = require("launcher")
 local dashboard = require("dashboard")
 local session = require("session")
 local polkit = require("polkit")
+local keyring = require("keyring")
 local authsteps = require("authsteps")
 local osd = require("osd")
 local notifs = require("notifs")
@@ -92,57 +92,23 @@ local bar = require("bar")
 -- One policy for the shared surface. Closing a launcher or auth dialog
 -- must not disable typing in the task editor that is still open.
 morf.effect("caelestia.keyboard.focus", function()
-  local exclusive = launcher.drawer.open:get() or session.drawer.open:get() or polkit.drawer.open:get()
-  local planner_open = leftbar.drawer.open:get()
-  morf.surface.keyboard_focus = exclusive and "exclusive" or planner_open and "on_demand" or "none"
+  local exclusive = launcher.drawer.open:get() or session.drawer.open:get() or polkit.drawer.open:get() or keyring.drawer.open:get()
+  local editor_open = leftbar.drawer.open:get() or (dashboard.drawer.open:get() and dashboard.tab:get() == dashboard.LULE_TAB)
+  morf.surface.keyboard_focus = exclusive and "exclusive" or editor_open and "on_demand" or "none"
 end)
 
 -- ------------------------------------------------------------------- frame --
 
--- The frame: the whole screen as one box, less the rounded opening inside
--- it, and every drawer's background joined to it by a circular seam.
-local field = {
-  id = "frame",
-  anchors = { fill = true },
-  fill_color = function() return theme.color.surface end,
-  blend = theme.SEAM,
-  blend_profile = "circular",
-  -- A soft shadow the frame throws into the opening, as the reference's.
-  shadow_color = "#000000a0",
-  shadow_blur = 6,
-  ui.SdfShape { shape = "box", anchors = { fill = true } },
-  -- The opening, drawn back on the bar's side when it is up.
-  ui.SdfShape {
-    shape = "box",
-    x = function() local x = bar.desk() return x + theme.LEFT end,
-    y = function() local _, y = bar.desk() return y + theme.BORDER end,
-    width = function() local _, _, w = bar.desk() return w - theme.LEFT - theme.BORDER end,
-    height = function() local _, _, _, h = bar.desk() return h - 2 * theme.BORDER end,
-    radius = theme.ROUNDING,
-    operation = "subtract",
-  },
-}
-for _, d in ipairs(drawer.all) do field[#field + 1] = d.shape end
--- The rail's swell is the frame's too.
-local rail_node = rail.build()
-field[#field + 1] = rail.shape
--- And the levels' swell, down the right edge.
-local levels = require("levels")
-local levels_node = levels.build()
-field[#field + 1] = levels.shape
-
-local panels = {
-  id = "opening",
-  anchors = {
-    fill = true,
-    left_margin = theme.LEFT, top_margin = theme.BORDER,
-    right_margin = theme.BORDER, bottom_margin = theme.BORDER,
-  },
-  clip = true,
+-- Frame geometry and composition belong to the selected visual theme.
+local rail_node=rail.build()
+local levels=require("levels")
+local levels_node=levels.build()
+local overlays={
   -- The desk dims under the session menu.
   session.dim(),
   -- A click on the desk shuts the sidebar, and the launcher.
   require("sidebar").catcher(),
+  leftbar.catcher(),
   -- And the dashboard, however it was opened.
   dashboard.catcher(),
   ui.MouseArea {
@@ -166,31 +132,12 @@ local panels = {
     on_clicked = function() launcher.drawer.set(false) end,
   },
 }
-for _, d in ipairs(drawer.all) do panels[#panels + 1] = d.panel end
-
-ui.Item {
-  anchors = { fill = true },
-  ui.Sdf(field),
-  -- The bar, in the frame's edge, when it is up.
-  bar.build(),
-  -- The desk: the screen less the bar. Everything that hangs off the
-  -- frame's edges lives in it, so it stays on the opening's edge.
-  ui.Item {
-  id = "desk",
-  x = function() local x = bar.desk() return x end,
-  y = function() local _, y = bar.desk() return y end,
-  width = function() local _, _, w = bar.desk() return w end,
-  height = function() local _, _, _, h = bar.desk() return h end,
-  -- The workspaces down the left edge: a pill each, the active one popping
-  -- out into a numbered bud when it changes.
-  rail_node,
-  levels_node,
-  ui.Item(panels),
+local triggers={
   dashboard.edge_trigger(),
   -- The bottom edge opens the tabbed assistant workspace.
   require("hover").edge {
     name = "bottom", drawer = bottom.drawer, edge = "bottom",
-    length = function() return bottom.WIDTH end, setting = "bottom.hover",
+    length = bottom.width, setting = "bottom.hover",
     enabled = function()
       local phase = capture.phase:get()
       return not capture.drawer.open:get() and (phase == "ready" or phase == "error")
@@ -216,16 +163,15 @@ ui.Item {
     end,
     setting = "leftbar.hover",
   },
-  },
 }
+local frame_view=require("themes").view("frame")
+frame_view.build {desk=bar.desk,bar=bar.build(),drawers=drawer.all,
+  rail={node=rail_node,shape=rail.shape},levels={node=levels_node,shape=levels.shape},
+  overlays=overlays,triggers=triggers}
 
 -- Windows keep inside the opening: the frame, and the bar when it is up.
 morf.effect("caelestia.bar.reserve", function()
-  local i = bar.insets()
-  morf.surface.reserve = {
-    left = theme.LEFT + i.left, top = theme.BORDER + i.top,
-    right = theme.BORDER + i.right, bottom = theme.BORDER + i.bottom,
-  }
+  morf.surface.reserve = frame_view.insets(bar.insets())
 end)
 
 if config.get("wallpaper.draw") then wallpaper.open_layer() end
@@ -318,8 +264,8 @@ morf.ipc.utilities = function(how)
 end
 morf.ipc.settings = function(page)
   if not here() then return nil end
+  if not require("utilities").request(page or "") then error("No such Settings page: " .. tostring(page)) end
   sidebar.select("settings")
-  require("utilities").detail:set(page or "")
   sidebar.drawer.set(true)
   return page or ""
 end
@@ -349,7 +295,7 @@ end
 -- open, close, toggle or state, or a mode to open it in: full, dev,
 -- letters, numbers, phone or pattern.
 do
-  local open_close = verb(keyboard.drawer)
+  local open_close = verb {set=keyboard.set,toggle=keyboard.toggle,is_open=keyboard.drawer.is_open}
   local MODES = { full = true, dev = true, letters = true, numbers = true, phone = true, pattern = true }
   morf.ipc.keyboard = function(how)
     if MODES[how] then
@@ -373,14 +319,19 @@ morf.ipc.workspace = function(n)
   require("services").workspace.go(n)
   return require("services").workspace.active()
 end
--- `lule`: the terminal the colour tool writes to, and the accents in use.
-morf.ipc.lule = function()
+-- `lule open|close|toggle`: the studio. With no argument, keep the
+-- existing terminal/accent diagnostics used by colour-tool integrations.
+morf.ipc.lule = function(how)
+  if how then
+    if here() and how ~= "close" then dashboard.tab:set(dashboard.LULE_TAB) end
+    return verb(dashboard.drawer)(how)
+  end
   local tty = require("terminal_colors").tty
   return tty and tty.path or "", theme.lule.accent:hex(), theme.color.primary:hex()
 end
-morf.ipc.osd = function()
+morf.ipc.osd = function(kind)
   if not here() then return nil end
-  osd.flash()
+  osd.flash(kind)
   return true
 end
 -- `notify SUMMARY [BODY [critical|normal [APP]]]` raises a notification of
@@ -406,3 +357,27 @@ morf.ipc.drawers = function(how, name)
   end
   return table.concat(open, " ")
 end
+
+-- Metadata only: never expose keyring answers through IPC.
+morf.ipc.keyring = function(how,mode)
+  if here() then
+    if how=="demo" then
+      if mode and mode~="unlock" and mode~="new" and mode~="confirm" then
+        error("Use `keyring demo [unlock|new|confirm]`.")
+      end
+      return keyring.demo(mode=="confirm" and "confirm" or "password",mode=="new")
+    elseif how then error("Use `keyring` or `keyring demo [unlock|new|confirm]`.") end
+    return {agent=keyring.registered:get(),open=keyring.drawer.open:get()}
+  end
+end
+
+
+require("themes.switcher").start(function()
+  if polkit.request:get() or keyring.request:get() or authsteps.steps.state.step ~= "idle" then
+    return "Finish the authentication request before changing theme."
+  end
+  local phase = capture.phase:get()
+  if phase ~= "ready" and phase ~= "error" then return "Finish the capture before changing theme." end
+  if require("lule_studio").busy:get() then return "Wait for Lule to finish applying." end
+  if require("planner").client.busy:get() then return "Wait for the task update to finish." end
+end)

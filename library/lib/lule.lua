@@ -62,4 +62,28 @@ function lule.watch(name)
   return signal
 end
 
+--- Generate and apply through lule's own configuration and hooks. No shell
+--- interpolation: image paths (including spaces) stay one argument.
+--- `image` or `directory`, `theme`, `palette`; optional `configs`, `cache`,
+--- `env`, `command`. Completion receives morf.run's result.
+function lule.generate(opts, done)
+  opts = opts or {}
+  if not opts.image or opts.image == "" then
+    if not opts.directory or opts.directory == "" then return nil, "Choose an image or wallpaper folder first." end
+  end
+  if opts.theme and opts.theme ~= "dark" and opts.theme ~= "light" then return nil, "Unknown theme." end
+  local palettes = { pigment = true, median = true, histogram = true, tonal = true }
+  if opts.palette and not palettes[opts.palette] then return nil, "Unknown palette method." end
+  local argv = { opts.command or "lule" }
+  if opts.configs then argv[#argv + 1] = "--configs=" .. opts.configs end
+  if opts.cache then argv[#argv + 1] = "--cache=" .. opts.cache end
+  argv[#argv + 1] = "create"
+  argv[#argv + 1] = opts.image and opts.image ~= "" and ("--image=" .. opts.image)
+    or ("--wallpath=" .. opts.directory)
+  if opts.theme then argv[#argv + 1] = "--theme=" .. opts.theme end
+  if opts.palette then argv[#argv + 1] = "--palette=" .. opts.palette end
+  argv[#argv + 1], argv[#argv + 2] = "--", "set"
+  return morf.run(argv, { env = opts.env, timeout_ms = 60000, max_output = 65536 }, done)
+end
+
 return lule

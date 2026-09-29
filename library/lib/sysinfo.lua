@@ -1187,6 +1187,24 @@ function sysinfo.history(name)
   return ring(name).list()
 end
 
+--- In-memory handoff for a soft UI reload; each series remains bounded.
+function sysinfo.snapshot_history()
+  local history = {}
+  for name, values in pairs(rings) do history[name] = values.list() end
+  return {history=history,stat=last_stat,rc6=last_rc6,net=last_net,net_at=last_net_at,
+    proc=last_proc,proc_total=last_proc_total,io=last_io,io_at=last_io_at}
+end
+function sysinfo.restore_history(saved)
+  if not saved then return end
+  rings = {}
+  for name, values in pairs(saved.history or {}) do
+    for _, value in ipairs(values) do ring(name).push(value) end
+  end
+  last_stat,last_rc6,last_net,last_net_at=saved.stat or {},saved.rc6 or {},saved.net or {},saved.net_at
+  last_proc,last_proc_total=saved.proc or {},saved.proc_total
+  last_io,last_io_at=saved.io or {},saved.io_at
+end
+
 --- Sets the backlight to `percent` (0-100) of its range. Only there when the
 --- first backlight's file is writable; call `sysinfo.backlight()` first (a
 --- binding does), since that is what finds out. Returns true or nil, message.

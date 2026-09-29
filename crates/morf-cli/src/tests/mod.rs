@@ -154,13 +154,13 @@ fn command_parser_exposes_ipc_and_legacy_config_path() {
     assert!(!policy.plugins);
     assert!(!policy.external_roots);
 
-    // There is no `lock` subcommand: a lock screen is a file that asks for
-    // a session lock, and `lock` here is a path like any other.
-    let args = ["lock"].map(std::ffi::OsString::from);
+    // A file named lock remains accessible explicitly; the bare word now
+    // selects the lock part of the default configuration.
+    let args = ["./lock"].map(std::ffi::OsString::from);
     let Command::Run(path, _, _, _) = parse_command(&args).unwrap() else {
         panic!("expected config path");
     };
-    assert_eq!(path, PathBuf::from("lock"));
+    assert_eq!(path, PathBuf::from("./lock"));
 
     // Everything after `--` is the configuration's, and nothing before it is.
     let args = ["shell.lua", "--", "-d", "lock"].map(std::ffi::OsString::from);
@@ -409,6 +409,23 @@ fn a_named_shell_has_parts() {
     assert!(named("caelestia/bar").is_err());
     assert!(named("a/b/c").is_err());
     assert!(named("..").is_err());
+    for part in ["shell", "lock", "greet"] {
+        let args =
+            [part, "-c", "caelestia", "--", "window", "preview"].map(std::ffi::OsString::from);
+        let Command::Run(path, _, operands, _) = parse_command(&args).unwrap() else {
+            panic!("expected role run")
+        };
+        assert_eq!(path, morf.join(format!("caelestia/{part}/init.lua")));
+        assert_eq!(operands, ["window", "preview"]);
+    }
+    assert!(
+        parse_command(&["lock", "-c", "caelestia/greet"].map(std::ffi::OsString::from)).is_err()
+    );
+    assert!(parse_command(&["greet", "unexpected"].map(std::ffi::OsString::from)).is_err());
+    let Command::Run(path, _, _, _) = parse_command(&["lock".into()]).unwrap() else {
+        panic!("expected lock")
+    };
+    assert_eq!(path, morf.join("default/lock/init.lua"));
     // The old layout, NAME/shell.lua, is still found.
     fs::create_dir_all(morf.join("old")).unwrap();
     fs::write(morf.join("old/shell.lua"), "").unwrap();
@@ -423,6 +440,29 @@ fn a_named_shell_has_parts() {
         crate::config::default_config_path().unwrap(),
         morf.join("shell.lua")
     );
+    // A greeter with an empty home uses system configuration; user parts
+    // still override it. Relative XDG search entries are never loaded.
+    let previous_dirs = std::env::var_os("XDG_CONFIG_DIRS");
+    let system = root.join("system");
+    fs::create_dir_all(system.join("morf/caelestia/greet")).unwrap();
+    fs::write(system.join("morf/caelestia/greet/init.lua"), "").unwrap();
+    unsafe { std::env::set_var("XDG_CONFIG_DIRS", format!("relative:{}", system.display())) };
+    assert_eq!(
+        named("caelestia/greet").unwrap(),
+        system.join("morf/caelestia/greet/init.lua")
+    );
+    fs::create_dir_all(morf.join("caelestia/greet")).unwrap();
+    fs::write(morf.join("caelestia/greet/init.lua"), "").unwrap();
+    assert_eq!(
+        named("caelestia/greet").unwrap(),
+        morf.join("caelestia/greet/init.lua")
+    );
+    unsafe {
+        match previous_dirs {
+            Some(value) => std::env::set_var("XDG_CONFIG_DIRS", value),
+            None => std::env::remove_var("XDG_CONFIG_DIRS"),
+        }
+    }
     unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
     let _ = fs::remove_dir_all(&root);
 }

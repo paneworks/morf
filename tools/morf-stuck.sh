@@ -23,7 +23,7 @@ done
   if [ -n "${SUDO_USER:-}" ]; then
     uid=$(id -u "$SUDO_USER")
     sudo -u "$SUDO_USER" XDG_RUNTIME_DIR=/run/user/$uid WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-1} \
-      timeout 3 "$home/.local/bin/morf" ipc call drawers 2>&1
+      timeout 3 /usr/bin/morf ipc call drawers 2>&1
   else
     timeout 3 morf ipc call drawers 2>&1
   fi

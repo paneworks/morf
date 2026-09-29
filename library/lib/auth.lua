@@ -195,15 +195,14 @@ function auth.greeter(options)
     user = options.user,
     session = options.session,
     on = handlers(options),
-    available = (morf.env("GREETD_SOCK") or "") ~= "",
+    available = options.enabled ~= false and (morf.env("GREETD_SOCK") or "") ~= "",
     working = false,
   }, Greeter)
-  door:begin()
   return door
 end
 
--- The conversation is opened as soon as there is an account, so whatever
--- its stack wants first (a finger) is asked for before a password is typed.
+-- Start only for an explicit submission. Opening a greeter, selecting an
+-- account or receiving an error must never consume another PAM attempt.
 function Greeter:begin()
   if self.login or not self.user or not self.available then return end
   local ok, login = pcall(morf.greetd.converse, self.user)
@@ -239,24 +238,19 @@ function Greeter:begin()
       end
       self.started = true
       login:start(session.command, session.environment)
-    elseif m.kind == "error" then
-      self:fail(m.text ~= "" and m.text or "Wrong password")
+    elseif m.kind == "error" or m.kind == "failed" then
+      self:fail(m.text ~= "" and m.text or "Authentication connection failed")
     end
   end)
 end
 
 function Greeter:fail(why)
-  if self.login then pcall(function() self.login:cancel() end) end
-  self.login = nil
-  self.working = false
-  self.on.busy(false)
+  self:stop()
   self.on.failed(why)
-  -- The next try, and the reader, start listening again.
-  self:begin()
 end
 
 function Greeter:submit(password)
-  if self.working or not self.user then return end
+  if self.working or not self.user or not password or password == "" then return end
   if not self.available then
     self.on.failed("No greetd to ask (not started by greetd)")
     return
@@ -273,18 +267,20 @@ function Greeter:submit(password)
   end
 end
 
---- Another account: the conversation starts over for it.
+--- Another account: cancel the old conversation; wait for a submission.
 function Greeter:switch(user)
   if user == self.user then return end
   self:stop()
   self.user = user
-  self.working = false
-  self:begin()
 end
 
 function Greeter:stop()
-  if self.login then pcall(function() self.login:cancel() end) end
-  self.login, self.wanting, self.held = nil, false, nil
+  local login = self.login
+  -- Detach first: late callbacks from cancellation cannot start a session.
+  self.login, self.wanting, self.held, self.started = nil, false, nil, false
+  self.working = false
+  if login then pcall(function() login:cancel() end) end
+  self.on.busy(false)
 end
 
 -- ------------------------------------------------------------------ power --

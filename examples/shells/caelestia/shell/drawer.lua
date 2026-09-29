@@ -28,7 +28,9 @@ local groups = 0
 function M.new(spec)
   groups = groups + 1
   local d = { name = spec.name, edge = spec.edge }
-  d.open = morf.signal("caelestia.drawer." .. spec.name, false)
+  local authentication = spec.name == "polkit" or spec.name == "keyring" or spec.name == "authsteps"
+  local keep = authentication and morf.signal or require("themes.session").keep
+  d.open = keep("caelestia.drawer." .. spec.name, false)
   local sign = (spec.edge == "top" or spec.edge == "left") and -1 or 1
   local across = spec.edge == "left" or spec.edge == "right"
   local axis = across and "translate_x" or "translate_y"
@@ -45,7 +47,7 @@ function M.new(spec)
     center = { center_in = true },
   }
   props.anchors = props.anchors or ANCHORS[spec.edge]
-  props.visible = false
+  props.visible = d.open:get()
   props.behavior = props.behavior or {}
   -- The results of a search change the launcher's height: it follows at
   -- the reference's pace.
@@ -64,69 +66,17 @@ function M.new(spec)
     return sign * (size + theme.SEAM + theme.BORDER + 2)
   end
   local floating = spec.edge == "center"
-  if not floating then panel[axis] = tucked() end
+  if not floating then panel[axis] = d.open:get() and 0 or tucked() end
 
-  local running
-  -- A floating panel (edge "center") joins no edge: it grows in evenly
-  -- about its centre as it and its background fade in, and shrinks a
-  -- touch as they fade out.
-  local function pop(opening)
-    if running then running:stop() end
-    if opening then panel.visible = true end
-    running = morf.animation.play {
-      {
-        parallel = {
-          { node = panel, property = "scale", from = opening and 0.92 or nil, to = opening and 1 or 0.96,
-            duration = opening and 420 or 160, easing = opening and theme.ease.spatial or theme.ease.emphasized_accel },
-          { node = panel, property = "opacity", from = opening and 0 or nil, to = opening and 1 or 0,
-            duration = opening and 180 or 140 },
-          { node = d.shape, property = "opacity", from = opening and 0 or nil, to = opening and 1 or 0,
-            duration = opening and 180 or 140 },
-        },
-      },
-      on_finished = function(reason)
-        if reason == "completed" and not d.open:get() then panel.visible = false end
-      end,
-    }
-  end
-  local function move(opening)
-    if floating then return pop(opening) end
-    if running then running:stop() end
-    if opening then panel.visible = true end
-    local slide = {
-      node = panel, property = axis, to = opening and 0 or tucked(),
-      duration = opening and theme.duration.drawer_open or theme.duration.drawer_close,
-      easing = opening and theme.ease.spatial or theme.ease.emphasized_accel,
-    }
-    -- The reference's contents fade in over the first hundred-odd
-    -- milliseconds of the slide, and its background with them: the
-    -- background is a layer of the frame's field, whose own opacity fades
-    -- it -- fillet and all -- and leaves the frame as it is. Closing only
-    -- slides.
-    if opening then
-      spec.content.opacity = 0
-      d.shape.opacity = 0
-    end
-    local fade = { duration = opening and 150 or 1, easing = theme.ease.standard_decel }
-    running = morf.animation.play {
-      {
-        parallel = {
-          slide,
-          { node = spec.content, property = "opacity", to = 1,
-            duration = fade.duration, easing = fade.easing },
-          { node = d.shape, property = "opacity", to = 1,
-            duration = fade.duration, easing = fade.easing },
-        },
-      },
-      on_finished = function(reason)
-        if reason == "completed" and not d.open:get() then panel.visible = false end
-      end,
-    }
-  end
+  local move = theme.motion.drawer {
+    panel = panel, spec = spec, drawer = d,
+    axis = axis, floating = floating, tucked = tucked,
+  }
 
-  local was = false
+  local was = d.open:get()
   morf.effect("caelestia.drawer." .. spec.name, function()
     local now = d.open:get()
+    require("presentation").set(spec.name, now)
     if now == was then return end
     was = now
     move(now)
@@ -149,12 +99,27 @@ function M.new(spec)
     bottom_left_radius = r("bottom", "left"),
     bottom_right_radius = r("bottom", "right"),
   }
+  local transition = require("themes.session").transition
+  if transition and transition.rounding then
+    local switcher = require("themes.switcher")
+    for _, corner in ipairs {
+      {"top_left_radius","top","left"}, {"top_right_radius","top","right"},
+      {"bottom_left_radius","bottom","left"}, {"bottom_right_radius","bottom","right"},
+    } do
+      local previous = (e==corner[2] or e==corner[3]) and 0 or transition.rounding
+      switcher.morph(d.shape,corner[1],r(corner[2],corner[3]),previous)
+    end
+  end
 
   -- Shut, a floating panel's background is not drawn at all.
-  if floating then d.shape.opacity = 0 end
+  if floating then d.shape.opacity = d.open:get() and 1 or 0 end
 
-  function d.set(on) d.open:set(on and true or false) end
-  function d.toggle() d.open:set(not d.open:get()) end
+  function d.set(on)
+    local switcher = package.loaded["themes.switcher"]
+    if not authentication and switcher and switcher.busy:get() then return end
+    d.open:set(on and true or false)
+  end
+  function d.toggle() d.set(not d.open:get()) end
   function d.is_open() return d.open:get() end
 
   M.all[#M.all + 1] = d

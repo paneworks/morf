@@ -158,7 +158,10 @@ pub(crate) fn primary_frame(
             std::thread::current().name().unwrap_or("?"),
             delta.as_secs_f64() * 1000.0,
             if repaint { "paint" } else { "skip" },
-            state.pacer.cost.map_or(0.0, |cost| cost.as_secs_f64() * 1000.0),
+            state
+                .pacer
+                .cost
+                .map_or(0.0, |cost| cost.as_secs_f64() * 1000.0),
             state.pacer.interval(state.refresh),
         );
     }

@@ -535,7 +535,9 @@ pub(crate) fn install_audio_api<'gc>(
                     LuaValue::Nil => morf_audio::MonitorDelay::None,
                     LuaValue::Integer(ms) => morf_audio::MonitorDelay::Fixed(ms as f32),
                     LuaValue::Number(ms) => morf_audio::MonitorDelay::Fixed(ms as f32),
-                    LuaValue::String(word) if word.as_bytes() == b"device" => morf_audio::MonitorDelay::Device,
+                    LuaValue::String(word) if word.as_bytes() == b"device" => {
+                        morf_audio::MonitorDelay::Device
+                    }
                     _ => {
                         return Err(HostError(
                             "monitor delay must be milliseconds or \"device\"".into(),

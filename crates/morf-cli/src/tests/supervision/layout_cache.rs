@@ -33,3 +33,13 @@ fn a_layout_is_reused_only_while_everything_it_was_built_from_holds() {
     // The compositor presents it at a new scale, so every length is different.
     assert!(!cached.still_valid(7, (800, 600), 180));
 }
+
+#[test]
+fn replacing_the_scene_invalidates_even_matching_revision_and_dimensions() {
+    let mut cached = cached_at(7, (800, 600), 120);
+    cached.keyboard_focus = "exclusive".into();
+    cached.invalidate_scene();
+    assert!(!cached.still_valid(7, (800, 600), 120));
+    assert_eq!(cached.scale_120, 0);
+    assert!(cached.keyboard_focus.is_empty());
+}

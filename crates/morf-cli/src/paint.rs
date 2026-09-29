@@ -80,6 +80,15 @@ pub(crate) struct CachedLayout {
 }
 
 impl CachedLayout {
+    /// A soft reload replaces the scene, while its Wayland surface survives.
+    /// Neither handles nor revision numbers can identify the new layout.
+    pub(crate) fn invalidate_scene(&mut self) {
+        self.layout = Layout::default();
+        self.revision = u64::MAX;
+        self.scale_120 = 0; // Force a full layout, never an incremental update.
+        self.keyboard_focus.clear();
+    }
+
     /// Whether this layout still describes the scene.
     ///
     /// Everything `Layout::compute` reads is either a property layout depends

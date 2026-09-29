@@ -14,6 +14,15 @@
 --   place(kb.node); height = kb.height   -- a function: it changes with the mode
 --   kb.mode:set("numbers")
 --
+-- Optional theme hooks: `action(props)` constructs the pointer target and
+-- `key_face(key)` draws its face (id, width, height, kind, label(), icon(),
+-- hint, down(), lit(), accent, dim, mirror). Faces do not handle input.
+-- `metrics` can override gap, key_height and alternate_cell; `look` also
+-- styles previews and pattern input. Defaults retain the original rendering.
+-- `active()` gates interaction and cancels held keys when the host hides or
+-- disables the board. Layout changes, kb.cancel() and kb.reset() cancel
+-- pending repeats, previews and alternates as well.
+--
 -- MODES
 --   full      letters, the number row (hideable), two pages of symbols;
 --             hold a key for its alternates (accents, the digit above it)
@@ -228,6 +237,8 @@ PAGES.phone = {
 -- ------------------------------------------------------------------ build --
 
 function osk.new(options)
+  -- A shell may supply its themed key target; input semantics stay here.
+  local action = options.action or ui.MouseArea
   local NAME = options.prefix or "osk"
   local function named(s) return NAME .. "." .. s end
   local W = options.width
@@ -253,9 +264,10 @@ function osk.new(options)
   local send = options.send or osk.sender()
   local on_pattern = options.on_pattern or function() end
 
-  local GAP = math.max(4, math.floor(W / 150))
+  local metrics = options.metrics or {}
+  local GAP = metrics.gap or math.max(4, math.floor(W / 150))
   local UNIT = (W - 11 * GAP) / 10
-  local KH = math.floor(math.max(40, math.min(64, UNIT * 1.12)))
+  local KH = metrics.key_height or math.floor(math.max(40, math.min(64, UNIT * 1.12)))
   local RADIUS = look.radius or math.floor(KH * 0.28)
   local LABEL = math.floor(KH * 0.42)
   local SMALL = math.floor(KH * 0.26)
@@ -348,16 +360,18 @@ function osk.new(options)
     y = morf.signal(named("preview.y"), 0), w = morf.signal(named("preview.w"), 0), text = morf.signal(named("preview.text"), "") }
   local alts = { list = morf.signal(named("alts"), {}), x = morf.signal(named("alts.x"), 0), y = morf.signal(named("alts.y"), 0),
     pick = morf.signal(named("alts.pick"), 1) }
-  local CELL = math.floor(KH * 0.9)
+  local CELL = metrics.alternate_cell or math.floor(KH * 0.9)
 
   local body_top = GAP
+  local cancellations = {}
+  local function enabled() return not options.active or options.active() end
 
   --- One key at (x, y) of w, as a pointer target with its face and label.
   local function key_node(spec, x, y, w, mode_name, page_name)
     local what = spec.kind == "char" and spec.label or spec.key or spec.action or tostring(x)
     local id = named("key." .. mode_name .. "." .. page_name .. "." .. what)
     local down = morf.signal(id .. ".down", false)
-    local long_timer, repeat_timer, long = nil, nil, false
+    local long_timer, repeat_timer, long, held = nil, nil, false, false
     local function label()
       if spec.kind == "char" then return shifted(spec.label) end
       if spec.action == "shift" then return shift:get() == "lock" and "⇪" or "⇧" end
@@ -372,6 +386,11 @@ function osk.new(options)
       if long_timer then long_timer:cancel() long_timer = nil end
       if repeat_timer then repeat_timer:cancel() repeat_timer = nil end
     end
+    cancellations[#cancellations + 1] = function()
+      cancel_timers()
+      long, held = false, false
+      down:set(false)
+    end
     local function show_preview()
       if spec.kind ~= "char" then return end
       preview.x:set(x) preview.y:set(y) preview.w:set(w)
@@ -379,15 +398,18 @@ function osk.new(options)
       preview.on:set(true)
     end
     local function commit()
+      if not enabled() then return end
       if spec.kind == "char" then strike_text(shifted(spec.text))
       elseif spec.kind == "key" then
         if spec.text then strike_text(spec.text) else strike_key(spec.key) end
       end
     end
     local area
-    area = ui.MouseArea {
+    area = action {
       id = id, x = x, y = body_top + y, width = w, height = KH, cursor = "pointer",
       on_pressed = function()
+        if not enabled() then return end
+        held = true
         down:set(true)
         long = false
         if spec.kind == "action" then act(spec.action) return end
@@ -418,6 +440,8 @@ function osk.new(options)
         alts.pick:set(math.max(1, math.min(#list, at)))
       end,
       on_released = function()
+        if not held then return end
+        held = false
         down:set(false)
         preview.on:set(false)
         local was_repeat = repeat_timer ~= nil or spec.rep
@@ -433,34 +457,44 @@ function osk.new(options)
         end
         if not was_repeat then commit() end
       end,
-      ui.Rect {
-        anchors = { fill = true }, radius = RADIUS,
-        color = function()
-          if down:get() then return PRESS() end
-          if spec.accent or lit() then return ACCENT() end
-          if spec.dim then return KEY_DIM() end
-          return KEY()
-        end,
-        behavior = { color = { duration = 90 } },
-      },
-      (ICONS and spec.icon) and ui.Text {
-        anchors = { center_in = true }, font_family = ICONS, font_size = math.floor(LABEL * 1.15),
-        axes = { FILL = 1 },
-        scale_x = spec.mirror and -1 or 1,
-        text = function()
+      options.key_face and options.key_face {
+        id = id, width = w, height = KH, kind = spec.kind, label = label,
+        hint = spec.alts and spec.alts[1], down = function() return down:get() end,
+        lit = lit, accent = spec.accent, dim = spec.dim, mirror = spec.mirror,
+        icon = spec.icon and function()
           if spec.action == "shift" then return shift:get() == "lock" and "keyboard_capslock" or "shift" end
           return spec.icon
         end,
-        color = function() return (spec.accent or lit()) and ON_ACCENT() or TEXT() end,
-      } or ui.Text {
-        anchors = { center_in = true }, text = label, font_family = FONT,
-        font_size = (spec.kind == "char" or #spec.label <= 2) and LABEL or math.floor(LABEL * 0.72),
-        color = function() return (spec.accent or lit()) and ON_ACCENT() or TEXT() end,
+      } or ui.Item { anchors = { fill = true },
+        ui.Rect {
+          anchors = { fill = true }, radius = RADIUS,
+          color = function()
+            if down:get() then return PRESS() end
+            if spec.accent or lit() then return ACCENT() end
+            if spec.dim then return KEY_DIM() end
+            return KEY()
+          end,
+          behavior = { color = { duration = 90 } },
+        },
+        (ICONS and spec.icon) and ui.Text {
+          anchors = { center_in = true }, font_family = ICONS, font_size = math.floor(LABEL * 1.15),
+          axes = { FILL = 1 },
+          scale_x = spec.mirror and -1 or 1,
+          text = function()
+            if spec.action == "shift" then return shift:get() == "lock" and "keyboard_capslock" or "shift" end
+            return spec.icon
+          end,
+          color = function() return (spec.accent or lit()) and ON_ACCENT() or TEXT() end,
+        } or ui.Text {
+          anchors = { center_in = true }, text = label, font_family = FONT,
+          font_size = (spec.kind == "char" or #spec.label <= 2) and LABEL or math.floor(LABEL * 0.72),
+          color = function() return (spec.accent or lit()) and ON_ACCENT() or TEXT() end,
+        },
       },
     }
     -- The long press's first offer, small in the corner.
     local hint = spec.alts and spec.alts[1]
-    if hint then
+    if hint and not options.key_face then
       return ui.Item {
         x = 0, y = 0, width = W, height = 0,
         area,
@@ -536,6 +570,11 @@ function osk.new(options)
   -- ------------------------------------------------------------ pattern --
   local dots = morf.signal(named("pattern.dots"), {})
   local finger = morf.signal(named("pattern.finger"), { -1, -1 })
+  local pattern_timer, pattern_held
+  cancellations[#cancellations + 1] = function()
+    if pattern_timer then pattern_timer:cancel() pattern_timer = nil end
+    pattern_held = false
+  end
   local PS = math.floor(math.min(W, KH * 7))
   local PX = math.floor((W - PS) / 2)
   local function dot_at(i)
@@ -600,19 +639,27 @@ function osk.new(options)
   end
   pattern_nodes[#pattern_nodes + 1] = ui.MouseArea {
     id = named("pattern"), x = PX, y = body_top, width = PS, height = PS,
-    on_pressed = function(_, _, lx, ly) dots:set({}) touch(lx or 0, ly or 0) end,
-    on_dragged = function(_, _, _, _, lx, ly) touch(lx or 0, ly or 0) end,
+    on_pressed = function(_, _, lx, ly)
+      if not enabled() then return end
+      if pattern_timer then pattern_timer:cancel() pattern_timer = nil end
+      pattern_held = true
+      dots:set({}) touch(lx or 0, ly or 0)
+    end,
+    on_dragged = function(_, _, _, _, lx, ly) if pattern_held then touch(lx or 0, ly or 0) end end,
     on_released = function()
+      if not pattern_held or not enabled() then return end
+      pattern_held = false
       local list = dots:get()
       finger:set({ -1, -1 })
       if #list > 0 then on_pattern(list) end
-      morf.timer(350, function() dots:set({}) end, false)
+      pattern_timer = morf.timer(350, function() pattern_timer = nil dots:set({}) end, false)
     end,
   }
   layers[#layers + 1] = ui.Item(pattern_nodes)
 
   -- ------------------------------------------------------ the overlays --
   local bubble = ui.Item {
+    id = named("preview-bubble"),
     visible = function() return preview.on:get() end,
     x = function() return preview.x:get() + preview.w:get() / 2 - KH * 0.55 end,
     y = function() return body_top + preview.y:get() - KH * 1.25 end,
@@ -636,6 +683,7 @@ function osk.new(options)
     }
   end
   local alt_strip = ui.Item {
+    id = named("alternates"),
     visible = function() return #alts.list:get() > 0 end,
     x = function() return alts.x:get() - 4 end,
     y = function() return body_top + alts.y:get() - CELL - 12 end,
@@ -643,6 +691,14 @@ function osk.new(options)
     ui.Rect { anchors = { fill = true }, radius = RADIUS * 1.3, color = function() return PRESS() end },
     ui.Row { x = 4, y = 4, gap = 0, table.unpack(strip) },
   }
+
+  local function cancel()
+    for _, stop in ipairs(cancellations) do stop() end
+    preview.on:set(false)
+    alts.list:set({})
+    dots:set({})
+    finger:set({ -1, -1 })
+  end
 
   local root = ui.Item {
     id = named("board"),
@@ -653,6 +709,13 @@ function osk.new(options)
     alt_strip,
   }
 
+  -- Hiding or changing layouts cancels outstanding long presses and repeats.
+  -- Releasing an old pointer grab afterward must not type into a newer page.
+  morf.effect(named("lifecycle"), function()
+    enabled() mode:get() page:get() numbers:get()
+    cancel()
+  end, { owner = root })
+
   return {
     node = root,
     height = height,
@@ -660,7 +723,8 @@ function osk.new(options)
     numbers = numbers,
     page = page,
     shift = shift,
-    reset = function() page:set("letters") shift:set("off") for _, s in pairs(mods) do s:set("off") end end,
+    cancel = cancel,
+    reset = function() cancel() page:set("letters") shift:set("off") for _, s in pairs(mods) do s:set("off") end end,
   }
 end
 

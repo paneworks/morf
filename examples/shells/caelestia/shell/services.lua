@@ -30,6 +30,17 @@ local local_workspace = morf.signal("caelestia.workspace", 1)
 local function screen_name()
   return (morf.screens and morf.screens[1] and morf.screens[1].name) or ""
 end
+M.output = screen_name
+
+-- Capture a destination once per authentication request. Later PAM updates
+-- must not open a second dialog just because monitor focus has changed.
+function M.active_output()
+  if hyprland.available() then
+    local focused=hyprland.state.focused_monitor
+    if focused and focused~="" then return focused end
+  end
+  return screen_name()
+end
 
 -- This screen's row in the compositor's monitors, if it has one.
 local function this_monitor()

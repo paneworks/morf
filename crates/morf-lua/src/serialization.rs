@@ -59,6 +59,14 @@ pub fn runtimepath_roots(config: &std::path::Path, external: bool) -> Vec<PathBu
             roots.push(data.join("morf/site"));
             roots.push(data.join("morf/library"));
         }
+        let dirs = std::env::var_os("XDG_DATA_DIRS")
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+        roots.extend(
+            std::env::split_paths(&dirs)
+                .filter(|path| path.is_absolute())
+                .map(|path| path.join("morf/library")),
+        );
     }
     let mut unique = Vec::new();
     for root in roots {

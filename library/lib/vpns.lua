@@ -11,6 +11,7 @@
 --   local vpns = require("lib.vpns")
 --   vpns.watch("mesh")                   -- read now and every so often ...
 --   vpns.rows.mesh:get()                 -- ... into this signal
+--   vpns.loaded.mesh:get()               -- true after the first completed scan
 --   vpns.release("mesh")
 --   vpns.set("netbird", true, function(ok, why) end)
 --   vpns.links("tunnel")                 -- up by their links: cheap, no command
@@ -176,10 +177,18 @@ vpns.rows = {
   mesh = morf.signal("lib.vpns.mesh", {}),
   tunnel = morf.signal("lib.vpns.tunnel", {}),
 }
+-- Distinguish an empty completed scan from a scan that has not returned yet.
+vpns.loaded = {
+  mesh = morf.signal("lib.vpns.mesh.loaded", false),
+  tunnel = morf.signal("lib.vpns.tunnel.loaded", false),
+}
 local timers, readers = {}, { mesh = 0, tunnel = 0 }
 
 local function refresh(kind)
-  vpns.read(kind, function(rows) vpns.rows[kind]:set(rows) end)
+  vpns.read(kind, function(rows)
+    vpns.rows[kind]:set(rows)
+    vpns.loaded[kind]:set(true)
+  end)
 end
 
 --- Reads `kind` now and every `interval_ms` (10 s) while anything holds

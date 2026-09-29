@@ -1,11 +1,11 @@
 //! A bundle: morf and a configuration in one file.
 //!
-//! `morf bundle greeter.lua -o logre` writes `logre`, a copy of the running
+//! `morf bundle widget.lua -o widget` writes `widget`, a copy of the running
 //! `morf` with the configuration appended to it — the file itself, the
 //! `lib`, `assets`, `plugin` and `fonts` directories beside it, and every
 //! font family the configuration names, found by running it once and reading
 //! what its nodes ask for — compressed, with a trailer at the end saying how
-//! much was appended. `logre` then needs neither `morf` on the path nor the
+//! much was appended. `widget` then needs neither `morf` on the path nor the
 //! configuration nor its fonts on disk: it looks at its own tail on start,
 //! unpacks what it finds into the runtime directory, and runs that.
 //!

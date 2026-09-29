@@ -351,7 +351,7 @@ end
 
 local function system(term)
   local SYSTEM = {
-    { id = "lock", name = "Lock the screen", material = "lock", run = function() start { "logre", "--", "lock" } return "close" end },
+    { id = "lock", name = "Lock the screen", material = "lock", run = function() start { "morf", "lock" } return "close" end },
     { id = "suspend", name = "Suspend", material = "bedtime", run = function() start { "systemctl", "suspend" } return "close" end },
     { id = "hibernate", name = "Hibernate", material = "downloading", run = confirmed("hibernate", session("hibernate")) },
     { id = "logout", name = "Log out", material = "logout", run = confirmed("logout", session("logout")) },

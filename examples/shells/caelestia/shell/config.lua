@@ -57,6 +57,10 @@ return settings.open {
       -- Opens the assistant workspace from the bottom edge.
       hover = true,
     },
+    lule = {
+      -- Empty follows LULE_W, then the current wallpaper's directory.
+      folder = "",
+    },
     capture = {
       -- Where screenshots and recordings go, both.
       folder = "~/Pictures/Captures",
