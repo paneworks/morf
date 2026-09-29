@@ -41,6 +41,9 @@ return function(theme, host, id)
     text("TS / "..unit[3], { x = 22, anchors = { bottom = true, bottom_margin = 20 }, font_size = 11 }),
     text("SYSTEM\nREGISTER", { anchors = { right = true, right_margin = 20, top = true, top_margin = 20 }, font_size = 11 }),
   }
+  local edge = ui.Rect { id=id.."-curtain-flash",width=4,
+    anchors={right=true,top=true,bottom=true},color=ink,opacity=0 }
+  ui.reparent(edge,cover)
   for _, anchors in ipairs {
     { left = true, top = true }, { right = true, top = true },
     { left = true, bottom = true }, { right = true, bottom = true },
@@ -52,5 +55,5 @@ return function(theme, host, id)
     ui.reparent(corner, cover)
   end
   ui.reparent(cover, host)
-  return cover
+  return cover,edge
 end

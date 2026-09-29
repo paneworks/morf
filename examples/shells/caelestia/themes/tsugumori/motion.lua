@@ -9,10 +9,14 @@ return function(theme)
   local ENTER, COVER, WITHDRAW, OVERLAP = 280, 270, 330, 170
   local ENTRY_DELAY, ENTRY_MOVE, ENTRY_LEAVE, STAGGER = 180, 240, 120, 50
   function M.page_wipe(host, width, id)
+    local edge = ui.Rect { id=id.."-page-flash",width=4,
+      anchors={right=true,top=true,bottom=true},
+      color=function() return theme.color.onPrimary end,opacity=0 }
     local cover = ui.Rect { id = id .. "-page-curtain", z = 90,
-      anchors = { top = true, bottom = true }, x = 0, width = 0, visible = false,
+      anchors = { top = true, bottom = true }, x = 0, width = 0, visible = false,clip=true,
       color = function() return theme.color.primary end,
       ui.MouseArea { anchors = { fill = true } },
+      edge,
     }
     ui.reparent(cover, host)
     local running, generation = nil, 0
@@ -20,17 +24,19 @@ return function(theme)
       generation = generation + 1
       local own = generation
       if running then running:stop() end
-      if immediate then cover.visible = false cover.width = 0 swap() return end
+      if immediate then cover.visible = false cover.width = 0 edge.opacity=0 swap() return end
       cover.visible = true
       running = morf.animation.play { { parallel = {
         { node = cover, property = "x", to = 0, duration = PAGE_COVER, easing = "in_out_quint" },
         { node = cover, property = "width", to = width(), duration = PAGE_COVER, easing = "in_out_quint" },
+        { node = edge, property = "opacity", from = 0, to = .85, duration = PAGE_COVER, easing = "out_cubic" },
       } }, on_finished = function(reason)
         if reason ~= "completed" or own ~= generation then return end
         swap()
         running = morf.animation.play { { parallel = {
           { node = cover, property = "x", to = width(), duration = REVEAL, easing = "out_expo" },
           { node = cover, property = "width", to = 0, duration = REVEAL, easing = "out_expo" },
+          { node = edge, property = "opacity", to = 0, duration = REVEAL, easing = "out_cubic" },
         } }, on_finished = function(why)
           if why == "completed" and own == generation then cover.visible = false end
         end }
@@ -73,7 +79,7 @@ return function(theme)
   -- pose when interrupted; an old completion cannot hide a reopened panel.
   function M.drawer(ctx)
     local panel, content, d = ctx.panel, ctx.spec.content, ctx.drawer
-    local curtain = require("themes.tsugumori.curtain")(theme, panel, "drawer-" .. (d.name or "auth"))
+    local curtain, edge = require("themes.tsugumori.curtain")(theme, panel, "drawer-" .. (d.name or "auth"))
     local axis = ctx.floating and "translate_x" or ctx.axis
     local function tucked()
       return ctx.floating and (panel.width + 2) or ctx.tucked()
@@ -103,6 +109,9 @@ return function(theme)
           delay = opening and enter_ms or 0,
           duration = math.max(1, opening and REVEAL * cover or COVER * (1 - cover)),
           easing = opening and "out_expo" or easing },
+        { node = edge, property = "opacity", delay = opening and enter_ms or 0,
+          duration = opening and math.max(1,REVEAL*cover) or COVER,
+          keyframes = {{at=0,value=0},{at=.18,value=.82},{at=.48,value=.58},{at=1,value=0}} },
       }
       steps[#steps + 1] = { node = curtain, property = "x", to = opening and width or 0,
         delay = opening and enter_ms or 0,
