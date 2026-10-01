@@ -1,13 +1,20 @@
 //! Raster, SVG, and XDG icon-theme loading with size-aware caches.
 
 pub mod animation;
+pub mod annotation;
+mod annotation_geometry;
+pub mod canvas;
 mod distance_field;
 mod icons;
 mod image_cache;
 mod inline;
 pub mod ops;
+mod ops_memory;
+mod ops_queries;
+pub mod preview;
 pub mod published;
 mod quantize;
+mod svg_fonts;
 
 pub use animation::Animation;
 pub use icons::IconResolver;
@@ -18,3 +25,6 @@ pub use quantize::{ImageData, ImageRect, PaletteEntry, palette_of, quantize_colo
 mod tests;
 #[cfg(test)]
 mod tests_ops;
+
+#[cfg(test)]
+mod tests_annotation;

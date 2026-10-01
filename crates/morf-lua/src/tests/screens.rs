@@ -92,6 +92,51 @@ fn a_runtime_with_no_compositor_keeps_the_screens_it_was_built_with() {
 }
 
 #[test]
+fn a_runtime_owning_the_desktop_drops_disconnected_outputs_and_moves_controls() {
+    let mut runtime = Runtime::for_screen(Limits::default(), output("DP-2", 1920, 2560, 1440));
+    runtime.replace_screens(&[
+        output("eDP-1", 0, 1920, 1080),
+        output("DP-2", 1920, 2560, 1440),
+    ]);
+    runtime.execute("desktop.lua",br#"
+        local selected=morf.signal("lock.output","DP-2")
+        morf.effect("lock.outputs",function()
+            morf.screens_revision()
+            for _,output in ipairs(morf.screens) do if output.name==selected:get() then return end end
+            selected:set((morf.screens[1] or {}).name or "")
+        end)
+        morf.ipc.selected=function() return selected:get(),#morf.screens end
+    "#).unwrap();
+    runtime.replace_screens(&[output("eDP-1", 0, 1920, 1080)]);
+    assert_eq!(
+        runtime.call_ipc("selected", &[]).unwrap(),
+        vec![IpcValue::String("eDP-1".into()), IpcValue::Integer(1)]
+    );
+    runtime.replace_screens(&[]);
+    assert_eq!(
+        runtime.call_ipc("selected", &[]).unwrap(),
+        vec![IpcValue::String("".into()), IpcValue::Integer(0)]
+    );
+    let mut portrait = output("DP-3", -1080, 1080, 1920);
+    portrait.scale = 2;
+    portrait.transform = "90".into();
+    runtime.replace_screens(&[portrait]);
+    assert_eq!(
+        runtime.call_ipc("selected", &[]).unwrap(),
+        vec![IpcValue::String("DP-3".into()), IpcValue::Integer(1)]
+    );
+    runtime
+        .execute(
+            "reconnected.lua",
+            br#"
+        assert(morf.screens[1].width==1080 and morf.screens[1].height==1920)
+        assert(morf.screens[1].scale==2 and morf.screens[1].transform=="90")
+    "#,
+        )
+        .unwrap();
+}
+
+#[test]
 fn outputs_the_compositor_left_unnamed_stay_separate_entries() {
     let mut runtime = Runtime::for_screen(Limits::default(), output("", 0, 1920, 1080));
 

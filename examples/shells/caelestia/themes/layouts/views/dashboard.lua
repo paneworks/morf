@@ -647,7 +647,9 @@ morf.effect("caelestia.dashboard.liquid", function()
     if page_wipe then page_wipe(function() model.present(tab) end, true) end
     bud(tab, open)
   elseif open and tab ~= was_tab then
-    if page_wipe then page_wipe(function() model.present(tab) bud(tab, true) end)
+    if page_wipe then page_wipe(function() model.present(tab) bud(tab, true) end,false,{
+      index=tab,name=TABS[tab].name,key=TABS[tab].key,
+    })
     else bud(was_tab, false) bud(tab, true) end
   end
   was_tab = tab

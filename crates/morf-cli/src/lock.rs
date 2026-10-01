@@ -153,6 +153,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
     // As on an output: one more turn at once after a turn that handled
     // events, for what their handlers left behind.
     let mut follow_up = false;
+    let mut repaint_next = false;
     let mut pending_streak = 0;
     loop {
         let sleep = Sleep::plan_with(
@@ -167,7 +168,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
             .map_err(|error| error.to_string())?;
         wake.drain();
         log_wake("lock", woke, &sleep, slept);
-        let mut repaint = runtime.poll_services();
+        let mut repaint = std::mem::take(&mut repaint_next) | runtime.poll_services();
         repaint |= ipc.serve(&mut runtime);
         apply_service_requests(&mut runtime, &mut client);
         apply_idle_timeouts(&mut runtime, &mut client);
@@ -221,7 +222,13 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                     locked = true;
                     repaint |= runtime.set_session_lock_state(SessionLockState::Locked);
                 }
-                LayerEvent::Screens(_) => {}
+                LayerEvent::Screens(screens) => {
+                    // Locks have one runtime, outside the normal output-worker
+                    // supervisor. Keep its tracked screen list current too, so
+                    // Lua can move controls off an unplugged monitor.
+                    runtime.replace_screens(&crate::supervisor::lua_screens(&screens));
+                    repaint = true;
+                }
                 LayerEvent::SessionLockConfigure {
                     index,
                     width: logical_width,
@@ -441,6 +448,10 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                     output.layout = Some(paint_lock(&mut runtime, renderer, &client, index, root)?);
                     client.release_lock_primer(index);
                 }
+            }
+            if answer_new_containment(&mut runtime, &input, &LockLayouts(&outputs)) {
+                repaint_next = true;
+                follow_up = true;
             }
         }
     }

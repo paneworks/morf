@@ -17,6 +17,10 @@ use crate::{config::*, lock::*, outputless::*, services::*, workers::*};
 /// loses, often before it says the output is gone.
 pub(crate) const SURFACE_CLOSED: &str = "layer surface was closed";
 
+/// Cage presents one fullscreen view across its output layout. A greeter
+/// there needs one controller/canvas, rather than overlapping output workers.
+pub(crate) const DESKTOP_CANVAS: &str = "@desktop-canvas";
+
 /// Closed surfaces taken in a minute before the shell stops: one closed on
 /// every output the shell is given would otherwise be asked for forever.
 const CLOSURES_PER_MINUTE: usize = 5;
@@ -84,6 +88,11 @@ fn daemon_log(message: String) -> String {
 
 pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> Result<(), String> {
     let probe = LayerClient::probe().map_err(|error| error.to_string())?;
+    let desktop_canvas = !probe.supports_layer_shell()
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == "greet");
     let mut named = named_screens(probe.screens())?;
     // Seeded before the first worker exists, so the very first configuration
     // load already sees every output and not only the one it draws to.
@@ -150,7 +159,17 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
             }
             reconcile_workers(
                 &mut workers,
-                &desired_workers(named.clone(), outputless),
+                &if desktop_canvas {
+                    BTreeMap::from([(
+                        DESKTOP_CANVAS.to_owned(),
+                        ScreenInfo {
+                            name: Some(DESKTOP_CANVAS.to_owned()),
+                            ..ScreenInfo::default()
+                        },
+                    )])
+                } else {
+                    desired_workers(named.clone(), outputless)
+                },
                 &mut primary,
                 &WorkerContext {
                     path: &path,
@@ -512,7 +531,15 @@ pub(crate) fn execute_config_on(
     // Applied before any Lua runs, so a configuration can measure itself
     // against the whole monitor layout while it loads. Index 1 of
     // `morf.screens` stays this runtime's own output.
-    runtime.set_screens(screens);
+    if runtime
+        .capabilities()
+        .iter()
+        .any(|value| value == "desktop_canvas=true")
+    {
+        runtime.replace_screens(screens);
+    } else {
+        runtime.set_screens(screens);
+    }
     runtime.set_module_roots(roots.clone());
     runtime.set_shell_root(
         path.parent()

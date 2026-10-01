@@ -7,6 +7,7 @@
 ---@field archive Morf.Archive
 ---@field args Morf.Args
 ---@field audio Morf.Audio
+---@field broadcast fun(...): any
 ---@field cache_dir fun(...): any
 ---@field cache_path fun(...): any
 ---@field capabilities Morf.Capabilities
@@ -36,6 +37,7 @@
 ---@field font_families fun(...): any
 ---@field fs Morf.Fs
 ---@field gamma Morf.Gamma
+---@field geometry Morf.Geometry
 ---@field greetd Morf.Greetd
 ---@field has_icon fun(...): any
 ---@field has_version fun(...): any
@@ -162,9 +164,12 @@
 ---@field monitor fun(...): any
 ---@field move_stream fun(...): any
 ---@field on_changed fun(...): any
+---@field set_channel_volumes fun(...): any
 ---@field set_default fun(...): any
 ---@field set_mute fun(...): any
 ---@field set_volume fun(...): any
+---@field spectrum_filter fun(...): any
+---@field spectrum_resample fun(...): any
 ---@field stream fun(...): any
 
 ---@class Morf.Capabilities
@@ -215,6 +220,7 @@
 ---@field exec_detached fun(...): any
 ---@field executable string
 ---@field font_families fun(...): any
+---@field geometry Morf.Core.Geometry
 ---@field has_icon fun(...): any
 ---@field has_version fun(...): any
 ---@field icon_path fun(...): any
@@ -257,6 +263,20 @@
 ---@field working_directory fun(...): any
 
 ---@class Morf.Core.Args
+
+---@class Morf.Core.Geometry
+---@field graph_grid fun(...): any
+---@field graph_series fun(...): any
+---@field lobes fun(...): any
+---@field polygon fun(...): any
+---@field regular fun(...): any
+---@field shape_curves fun(...): any
+---@field shape_names Morf.Core.Geometry.Shape_names
+---@field shape_path fun(...): any
+---@field shape_segments integer
+---@field star fun(...): any
+
+---@class Morf.Core.Geometry.Shape_names
 
 ---@class Morf.Core.Operands
 
@@ -337,6 +357,20 @@
 ---@field set fun(...): any
 ---@field supported fun(...): any
 
+---@class Morf.Geometry
+---@field graph_grid fun(...): any
+---@field graph_series fun(...): any
+---@field lobes fun(...): any
+---@field polygon fun(...): any
+---@field regular fun(...): any
+---@field shape_curves fun(...): any
+---@field shape_names Morf.Geometry.Shape_names
+---@field shape_path fun(...): any
+---@field shape_segments integer
+---@field star fun(...): any
+
+---@class Morf.Geometry.Shape_names
+
 ---@class Morf.Greetd
 ---@field connect fun(...): any
 ---@field converse fun(...): any
@@ -355,6 +389,11 @@
 ---@field subscribe fun(...): any
 
 ---@class Morf.Image
+---@field annotation_bounds fun(...): any
+---@field annotation_hit fun(...): any
+---@field annotation_path fun(...): any
+---@field annotation_pick fun(...): any
+---@field compose fun(...): any
 ---@field encode_png fun(...): any
 ---@field from_dbus fun(...): any
 ---@field from_rgba fun(...): any
@@ -362,6 +401,7 @@
 ---@field limits Morf.Image.Limits
 ---@field palette fun(...): any
 ---@field pixel fun(...): any
+---@field preview fun(...): any
 ---@field process fun(...): any
 ---@field release fun(...): any
 
@@ -604,6 +644,7 @@
 ---@field Timer fun(...): any
 ---@field destroy fun(...): any
 ---@field each fun(...): any
+---@field follow fun(...): any
 ---@field reparent fun(...): any
 ---@field smoothed fun(...): any
 ---@field spring fun(...): any

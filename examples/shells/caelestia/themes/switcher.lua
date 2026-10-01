@@ -35,13 +35,25 @@ local function play(node, property, to, duration, delay, easing)
   animations[#animations + 1] = morf.animation.play {{node=node,property=property,to=to,
     duration=duration,delay=delay or 0,easing=easing or "out_cubic"}}
 end
+local function transfer(entry,duration,covering)
+  local ribbon=entry.ribbon
+  ribbon.opacity=0
+  if mode~="wipe" then return end
+  local width=entry.drawer.panel.layout_width
+  ribbon.translate_x=covering and -FEATHER or 0
+  play(ribbon,"translate_x",width+FEATHER,duration,0,"in_out_cubic")
+  animations[#animations+1]=morf.animation.play {{node=ribbon,property="opacity",duration=duration,
+    keyframes={{at=0,value=0},{at=.18,value=.5},{at=.62,value=.35},{at=1,value=0}}}}
+end
 local function reveal(cancelled)
   stop()
   local duration=cancelled and 180 or REVEAL
   for _, node in ipairs(chrome) do play(node,"opacity",1,duration) end
   for _, entry in ipairs(geometry) do play(entry.node,entry.property,entry.target,duration) end
   for _, entry in ipairs(covers) do
+    entry.ribbon.opacity=0
     if entry.drawer.open:get() then
+      if not cancelled then transfer(entry,duration,false) end
       if mode=="dissolve" then play(entry.paint,"opacity",0,duration)
       else play(entry.paint,"translate_x",(cancelled and -1 or 1)*(entry.drawer.panel.layout_width+FEATHER),duration) end
     end
@@ -62,7 +74,8 @@ local function abort(reason)
   reveal(true)
 end
 function M.attach(drawer)
-  local color=require("theme").color.surfaceContainer
+  local palette=require("theme").color
+  local color=palette.surfaceContainer
   local paint=ui.Item {id="theme-cover-"..drawer.name,anchors={fill=true},
     ui.Rect {anchors={fill=true},color=color},
     ui.Rect {x=-FEATHER,anchors={top=true,bottom=true},width=FEATHER,
@@ -70,10 +83,14 @@ function M.attach(drawer)
     ui.Rect {x=function() return drawer.panel.layout_width or drawer.panel.width or 0 end,anchors={top=true,bottom=true},width=FEATHER,
       gradient={angle=90,stops={color,color:alpha(0)}}}}
   paint.translate_x=session.restoring and 0 or -10000
+  local ribbon=ui.Rect {id="theme-transfer-"..drawer.name,z=1,x=-24,width=48,
+    anchors={top=true,bottom=true},opacity=0,
+    gradient={angle=90,stops={palette.primary:alpha(0),palette.primary,
+      palette.secondary,palette.secondary:alpha(0)}}}
   local mask=ui.ClipRect {anchors={fill=true},z=10000,color="transparent",
     top_left_radius=drawer.shape.top_left_radius,top_right_radius=drawer.shape.top_right_radius,
     bottom_left_radius=drawer.shape.bottom_left_radius,bottom_right_radius=drawer.shape.bottom_right_radius,
-    visible=function() return M.busy:get() end,paint}
+    visible=function() return M.busy:get() end,paint,ribbon}
   for _,corner in ipairs {
     {"top_left_radius","top","left"},{"top_right_radius","top","right"},
     {"bottom_left_radius","bottom","left"},{"bottom_right_radius","bottom","right"},
@@ -82,7 +99,7 @@ function M.attach(drawer)
     M.morph(mask,corner[1],target,drawer.shape[corner[1]])
   end
   ui.reparent(mask,drawer.panel)
-  covers[#covers+1]={drawer=drawer,paint=paint}
+  covers[#covers+1]={drawer=drawer,paint=paint,ribbon=ribbon}
 end
 -- Carry the existing frame/drawer silhouette through the reload, then morph
 -- its corners and seams as the new controls become visible.
@@ -133,6 +150,7 @@ function M.receive(phase,id,value)
     stop()
     for _,entry in ipairs(covers) do
       if entry.drawer.open:get() then
+        transfer(entry,COVER,true)
         entry.paint.opacity=mode=="dissolve" and 0 or 1
         entry.paint.translate_x=mode=="dissolve" and 0 or -entry.drawer.panel.layout_width-FEATHER
         play(entry.paint,mode=="dissolve" and "opacity" or "translate_x",mode=="dissolve" and 1 or 0,COVER,0,"in_out_cubic")

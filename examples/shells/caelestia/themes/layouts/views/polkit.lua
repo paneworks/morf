@@ -235,6 +235,10 @@ function V.build(M)
     column,
   }
 
+  if theme.motion.auth_result then
+    theme.motion.auth_result(content,"polkit",{active=function() return M.opened:get() end,
+      read=function() return M.phase:get() end})
+  end
   return {content=content,width=W,edge="top",
     height=function() return (column.layout_height or 330)+2*PAD end,
     shake=function()

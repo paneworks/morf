@@ -34,6 +34,7 @@ pub mod dsp;
 pub mod fake;
 mod model;
 mod pipewire;
+pub mod spectrum;
 pub mod volume;
 
 use std::collections::BTreeMap;

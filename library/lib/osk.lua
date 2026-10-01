@@ -22,6 +22,8 @@
 -- `active()` gates interaction and cancels held keys when the host hides or
 -- disables the board. Layout changes, kb.cancel() and kb.reset() cancel
 -- pending repeats, previews and alternates as well.
+-- Destroying the board also cancels them, including when a resized output
+-- replaces its tree while a key is still held.
 --
 -- MODES
 --   full      letters, the number row (hideable), two pages of symbols;
@@ -702,6 +704,7 @@ function osk.new(options)
 
   local root = ui.Item {
     id = named("board"),
+    on_destroyed = cancel,
     width = W, height = height,
     ui.Rect { anchors = { fill = true }, color = function() return PANEL() end },
     ui.Item(with({ width = W, height = 1 }, table.unpack(layers))),

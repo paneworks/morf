@@ -429,10 +429,24 @@ impl ImageCache {
     /// they are the expensive half to rebuild, being a theme-index walk rather
     /// than a decode.
     pub fn shrink(&mut self) {
-        if self.images.len() > MAX_DECODED_IMAGES {
+        if self.images.len() > MAX_DECODED_IMAGES
+            || self
+                .images
+                .values()
+                .map(|image| image.rgba.len())
+                .sum::<usize>()
+                > MAX_CACHED_BYTES
+        {
             self.images.clear();
         }
-        if self.distance_fields.len() > MAX_DECODED_IMAGES {
+        if self.distance_fields.len() > MAX_DECODED_IMAGES
+            || self
+                .distance_fields
+                .values()
+                .map(|image| image.rgba.len())
+                .sum::<usize>()
+                > MAX_CACHED_BYTES
+        {
             self.distance_fields.clear();
         }
     }
@@ -458,6 +472,7 @@ fn physical_size(logical: u32, scale_120: u32) -> Result<u32, ImageError> {
 
 /// How many decoded images to hold before dropping them.
 const MAX_DECODED_IMAGES: usize = 128;
+const MAX_CACHED_BYTES: usize = 64 * 1024 * 1024;
 /// How many moving pictures to keep decoded.
 pub const MAX_ANIMATIONS: usize = 16;
 /// How many bytes of decoded frames to keep, across every moving picture.
@@ -548,8 +563,13 @@ pub(crate) fn source_dimensions(source: &Path) -> Result<(u32, u32), ImageError>
 }
 
 pub(crate) fn svg_tree(bytes: &[u8]) -> Result<usvg::Tree, ImageError> {
-    usvg::Tree::from_data(bytes, &usvg::Options::default())
-        .map_err(|error| ImageError::Svg(error.to_string()))
+    let mut options = usvg::Options::default();
+    // Icons need no font discovery. Text-bearing SVGs share a lazily loaded,
+    // memory-mapped database instead of rescanning fonts on every preview.
+    if bytes.windows(5).any(|part| part == b"<text") {
+        options.fontdb = crate::svg_fonts::database();
+    }
+    usvg::Tree::from_data(bytes, &options).map_err(|error| ImageError::Svg(error.to_string()))
 }
 
 pub(crate) fn decode_path(path: &Path, width: u32, height: u32) -> Result<ImageData, ImageError> {

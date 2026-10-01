@@ -2,6 +2,7 @@
 
 mod api_animation;
 mod api_audio;
+mod api_audio_spectrum;
 mod api_broadcast;
 mod api_clipboard;
 mod api_color;
@@ -17,11 +18,16 @@ mod api_finish;
 mod api_fling;
 mod api_fs;
 mod api_gamma;
+mod api_geometry;
 mod api_group;
 mod api_host;
 mod api_http;
 mod api_image;
+mod api_image_annotation;
+mod api_image_canvas;
+mod api_image_geometry;
 mod api_image_ops;
+mod api_image_preview;
 mod api_image_raw;
 mod api_io;
 mod api_log;

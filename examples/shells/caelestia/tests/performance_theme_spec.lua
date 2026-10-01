@@ -68,6 +68,7 @@ local HOST=[[
     if mode=="remove-drive" then data.drives.drives={}
     elseif mode=="remove-net" then data.network.interfaces={}
     elseif mode=="wake-gpu" then data.gpu.cards[2].suspended=false
+    elseif mode=="memory" then data.memory.percent=90 data.memory.used=data.memory.total*.9
     else data.cpu.usage=75 end
     revision:set(revision:get()+1)
   end
@@ -85,6 +86,20 @@ local function shot(name)
   if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(name..".png") end
 end
 local function select(key) test.ipc("select",key) test.advance(2500) end
+test.it("Tsugumori CPU and memory threshold changes flash and hiding cancels the cues",function()
+  load("tsugumori")
+  test.ipc("shown","yes") test.advance(1000)
+  test.ipc("update","cpu") test.advance(90)
+  test.truthy(test.get("performance-cpu-change-flash").opacity>0)
+  shot("tsugumori-cpu-change")
+  select("memory")
+  test.ipc("update","memory") test.advance(90)
+  test.truthy(test.get("performance-memory-change-flash").opacity>0)
+  test.ipc("shown","no") test.advance(1)
+  test.near(test.get("performance-cpu-change-flash").opacity,0,.001)
+  test.near(test.get("performance-memory-change-flash").opacity,0,.001)
+  test.eq(#test.logs("error"),0)
+end)
 for _,style in ipairs {"material","tsugumori"} do
   test.it(style.." Performance preserves every device kind, readings and logical units",function()
     load(style)

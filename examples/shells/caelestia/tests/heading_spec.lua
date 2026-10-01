@@ -6,15 +6,24 @@ local function load()
     morf.surface.height = 240
     local shown = morf.signal("heading.shown", false)
     local title = morf.signal("heading.title", "Signal register")
+    -- Reproducible, distinct random draws keep cadence checks deterministic.
+    local draws=0
+    math.random=function(low,high)
+      draws=draws+1 return low+(draws*997)%(high-low+1)
+    end
     ui.Item {width=600,height=240,
       kit.heading {id="heading",x=20,y=20,width=400,text=function() return title:get() end,
+        active=function() return shown:get() end,reveal_delay=80},
+      kit.heading {id="heading-peer",x=20,y=70,width=400,text="Independent signal",
+        active=function() return shown:get() end,reveal_delay=80},
+      kit.heading {id="heading-centered",x=20,y=120,width=400,text="Devices",horizontal_alignment="center",
         active=function() return shown:get() end,reveal_delay=80},
     }
     morf.ipc.show=function(on) shown:set(on=="yes") end
     morf.ipc.title=function(value) title:set(value) end
   ]]})
 end
-test.it("headings decode on appearance and settle without moving the label",function()
+test.it("headings center their light and flash occasionally while the decoded label stays still",function()
   load()
   test.eq(test.get("heading-text").text,"SIGNAL REGISTER")
   local x=test.get("heading-text").x
@@ -27,7 +36,37 @@ test.it("headings decode on appearance and settle without moving the label",func
   test.eq(test.get("heading-text").text,"SIGNAL REGISTER")
   if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot("mara-heading-settled.png") end
   test.near(test.get("heading-ghost-a").opacity,0,0.001)
-  test.near(test.get("heading-light").opacity,0.3,0.001)
+  local centered=test.get("heading-centered-text")
+  local centered_dot=test.get("heading-centered-light")
+  local word=test.get("heading-centered-measure")
+  local word_start=centered.x+(centered.width-word.width)/2
+  test.near(word_start-(centered_dot.x+centered_dot.width),11,.01,
+    "centered title light is separated from the word")
+  if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot("heading-centered-light.png") end
+  local text,dot=test.get("heading-text"),test.get("heading-light")
+  local lift=text.y+text.height/2-(dot.y+dot.height/2)
+  test.truthy(lift>=1 and lift<=3,"the dot needs an optical lift to align with uppercase letter ink")
+  local low,high=1,0
+  local independent,peer_flashed=false,false
+  for _=1,40 do
+    test.advance(40)
+    test.near(test.get("heading-light").opacity,.18,.001,"light flashed during its quiet pause")
+  end
+  for _=1,300 do
+    test.advance(40)
+    local opacity=test.get("heading-light").opacity
+    local peer=test.get("heading-peer-light").opacity
+    peer_flashed=peer_flashed or peer>.7
+    independent=independent or (opacity>.7 and peer<.2)
+    low,high=math.min(low,opacity),math.max(high,opacity)
+    test.eq(test.get("heading-text").text,"SIGNAL REGISTER")
+    test.near(test.get("heading-text").x,x,.01)
+    test.near(test.get("heading-ghost-a").opacity,0,.001)
+  end
+  test.truthy(high>.7 and low<.2,"the title light never flashed after its quiet pause")
+  test.truthy(independent and peer_flashed,"title lights flashed in unison")
+  test.ipc("show","no") test.advance(16)
+  test.near(test.get("heading-light").opacity,.18,.001)
   test.truthy(test.settle(500)<100)
   test.eq(#test.logs("warn"),0)
 end)
@@ -53,6 +92,8 @@ test.it("scrolling titles decode only when they enter the viewport and stop when
   test.ipc("scroll","0") test.advance(100)
   test.eq(test.get("scroll-heading-text").text,"UPCOMING PLANS")
   test.near(test.get("scroll-heading-ghost-a").opacity,0,.001)
+  test.near(test.get("scroll-heading-light").opacity,.18,.001)
+  test.truthy(test.settle(500)<100,"offscreen title kept animating")
   test.ipc("scroll","220") test.advance(200)
   test.truthy(test.get("scroll-heading-text").text~="UPCOMING PLANS")
   test.advance(2200)
@@ -62,6 +103,8 @@ test.it("scrolling titles decode only when they enter the viewport and stop when
   test.ipc("show","yes") test.advance(200)
   test.truthy(test.get("scroll-heading-text").text~="UPCOMING PLANS")
   test.advance(2200)
+  test.ipc("show","no") test.advance(16)
+  test.near(test.get("scroll-heading-light").opacity,.18,.001)
   test.truthy(test.settle(500)<100)
   test.eq(#test.logs("error"),0)
   test.eq(#test.logs("warn"),0)
@@ -109,6 +152,6 @@ test.it("nested viewports defer titles until every surrounding pane reveals them
   test.eq(test.get("nested-title-text").text,"NESTED REGISTER")
   test.ipc("scroll","280") test.advance(2400)
   test.eq(test.get("nested-title-text").text,"NESTED REGISTER")
-  test.truthy(test.settle(500)<100)
+  test.near(test.get("nested-title-ghost-a").opacity,0,.001)
   test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)
 end)

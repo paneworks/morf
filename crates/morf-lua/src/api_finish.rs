@@ -112,6 +112,7 @@ pub(crate) fn install_reactive_api(
     lua.enter(|ctx| {
         let morf = Table::new(&ctx);
         crate::api_color::install_color_api(ctx, morf);
+        crate::api_geometry::install(ctx, morf);
         install_signal_api(ctx, Rc::clone(&state), morf, limits);
         crate::api_state::install_state_api(ctx, Rc::clone(&state), morf, limits);
         crate::api_theme::install_theme_api(ctx, Rc::clone(&state), morf, limits);

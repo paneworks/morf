@@ -235,3 +235,42 @@ fn a_lock_surface_is_hit_tested_against_its_own_layout() {
     .unwrap();
     assert_eq!(handed_back, Err(key));
 }
+
+#[test]
+fn pointer_entry_before_the_first_lock_frame_selects_that_surface_after_layout() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "=initial-lock-pointer",
+            br##"
+                local ui = require("morf.ui")
+                local root = ui.Rect { width = 300, height = 200, color = "#000000" }
+                local inside = false
+                morf.effect("pointer", function() inside = root.contains_pointer end, { owner = root })
+                morf.ipc.inside = function() return inside end
+            "##,
+        )
+        .unwrap();
+    let mut outputs = vec![LockOutput::default()];
+    let mut input = PointerInput::default();
+    let mut shapes = Shapes::default();
+    send(
+        &mut runtime,
+        &mut input,
+        &outputs,
+        &mut shapes,
+        LayerEvent::PointerMotion {
+            surface: SurfaceRole::Lock(0),
+            x: 20.0,
+            y: 20.0,
+        },
+    );
+    assert_eq!(count(&mut runtime, "inside"), IpcValue::Boolean(false));
+    outputs[0].layout = Some(laid_out(&runtime));
+    assert!(crate::surface_pointer::answer_new_containment(
+        &mut runtime,
+        &input,
+        &LockLayouts(&outputs),
+    ));
+    assert_eq!(count(&mut runtime, "inside"), IpcValue::Boolean(true));
+}

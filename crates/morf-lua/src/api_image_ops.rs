@@ -15,7 +15,7 @@
 //! written inline as SVG text or a `data:` URI.
 
 use luna::{Callback, CallbackReturn, Closure, Context, Function, Table, Value as LuaValue};
-use morf_image::ops::{self, ImageOp, OutputFormat, ProcessRequest, ResizeMode};
+use morf_image::ops::{self, ImageOp, OutputFormat, ProcessRequest, RegionEffect, ResizeMode};
 use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
@@ -33,7 +33,7 @@ use crate::{scene_bindings::HostError, state::ReactiveState};
 /// be asked for with a callback, which moves the decode to a worker.
 pub(crate) const SYNC_PIXEL_LIMIT: u64 = 4 * 1024 * 1024;
 /// The most operations one `process` call may chain.
-const MAX_OPS: usize = 32;
+const MAX_OPS: usize = 256;
 /// The most colours `palette` names.
 const MAX_PALETTE: i64 = 64;
 
@@ -200,17 +200,66 @@ fn parse_op<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<ImageOp, Hos
             ImageOp::Blur(sigma as f32)
         }
         "grayscale" | "greyscale" => ImageOp::Grayscale,
+        "annotations" => ImageOp::Annotations(crate::api_image_annotation::parse(
+            ctx,
+            arg(2),
+            arg(3),
+            arg(4),
+        )?),
+        "overlay" => ImageOp::Overlay {
+            source: source_of(arg(2), "overlay source")?,
+            x: if matches!(arg(3), LuaValue::Nil) {
+                0
+            } else {
+                uint(arg(3), "overlay x")?
+            },
+            y: if matches!(arg(4), LuaValue::Nil) {
+                0
+            } else {
+                uint(arg(4), "overlay y")?
+            },
+        },
+        "blur_region" | "pixelate" | "zoom_region" => {
+            let strength = match arg(6) {
+                LuaValue::Integer(n) => n as f64,
+                LuaValue::Number(n) => n,
+                _ => return Err(HostError("region effect needs a strength".into())),
+            };
+            let effect = match name.as_str() {
+                "blur_region" if strength > 0.0 && strength <= 100.0 => {
+                    RegionEffect::Blur(strength as f32)
+                }
+                "pixelate" if strength.fract() == 0.0 && (1.0..=256.0).contains(&strength) => {
+                    RegionEffect::Pixelate(strength as u32)
+                }
+                "zoom_region" if (1.0..=10.0).contains(&strength) => {
+                    RegionEffect::Zoom(strength as f32)
+                }
+                _ => return Err(HostError("invalid region effect strength".into())),
+            };
+            ImageOp::Region {
+                x: uint(arg(2), "effect x")?,
+                y: uint(arg(3), "effect y")?,
+                width: uint(arg(4), "effect width")?,
+                height: uint(arg(5), "effect height")?,
+                effect,
+            }
+        }
         other => return Err(HostError(format!("unknown image op `{other}`"))),
     })
 }
 
-fn parse_ops<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<Vec<ImageOp>, HostError> {
+pub(crate) fn parse_ops<'gc>(
+    ctx: Context<'gc>,
+    value: LuaValue<'gc>,
+) -> Result<Vec<ImageOp>, HostError> {
     let table = match value {
         LuaValue::Nil => return Ok(Vec::new()),
         LuaValue::Table(table) => table,
         _ => return Err(HostError("ops must be a list of operations".into())),
     };
     let mut ops = Vec::new();
+    let mut annotations = 0;
     for index in 1..=(MAX_OPS as i64 + 1) {
         let value = table.get_value(ctx, index);
         if matches!(value, LuaValue::Nil) {
@@ -219,13 +268,20 @@ fn parse_ops<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<Vec<ImageOp
         if ops.len() == MAX_OPS {
             break;
         }
-        ops.push(parse_op(ctx, value)?);
+        let op = parse_op(ctx, value)?;
+        if let ImageOp::Annotations(marks) = &op {
+            annotations += marks.len();
+            if annotations > 129 {
+                return Err(HostError("at most 129 annotations per request".into()));
+            }
+        }
+        ops.push(op);
     }
     Err(HostError(format!("at most {MAX_OPS} image ops per call")))
 }
 
 /// Queues a job, answering the call with `true` or `nil, message`.
-fn queue<'gc>(
+pub(crate) fn queue<'gc>(
     ctx: Context<'gc>,
     state: &Rc<RefCell<ReactiveState>>,
     job: ImageJob,
@@ -363,6 +419,10 @@ pub(crate) fn install_image_ops_api<'gc>(
     );
     image.set_field(ctx, "limits", limits);
     crate::api_image_raw::install_raw_image_api(ctx, image);
+    crate::api_image_annotation::install(ctx, image);
+    crate::api_image_geometry::install(ctx, image);
+    crate::api_image_preview::install(ctx, image, &state);
+    crate::api_image_canvas::install(ctx, image, &state);
 
     morf.set_field(ctx, "image", image);
 }

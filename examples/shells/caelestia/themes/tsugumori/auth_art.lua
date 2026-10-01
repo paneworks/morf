@@ -53,7 +53,7 @@ return function(ctx)
     return node
   end
 
-  function skin.backdrop(W,H,s)
+  function skin.backdrop(W,H,s,role)
     -- A still architectural grid, with large clear areas behind the controls.
     -- No full-screen rotation, grain shader or perpetual redraw while idle.
     local path={}
@@ -64,7 +64,7 @@ return function(ctx)
     end
     line(s(38),H*.69,W*.18,H*.69-s(76))
     line(W*.82,H*.36+s(76),W-s(38),H*.36)
-    return ui.Item {anchors={fill=true},
+    return ui.Item {id=(role or "auth").."-auth-backdrop",anchors={fill=true},
       ui.Rect {anchors={fill=true},color=function() return C.surfaceContainerLowest end},
       ui.Path {width=W,height=H,view_box={0,0,W,H},d=table.concat(path," "),
         fill_color="#00000000",stroke_width=1,stroke_color=function() return C.primary:alpha(.045) end},
@@ -91,7 +91,7 @@ return function(ctx)
         ui.reparent(field,node) refresh[#refresh+1]=update
       end
       local running,was=nil,false
-      morf.effect(role..".phase-entry",function()
+      morf.effect(role..".phase-entry."..(ctx.output_name or ""),function()
         local on=shown()
         if on==was then return end
         was=on
@@ -117,11 +117,11 @@ return function(ctx)
     end
     ui.reparent(label {x=s(38),anchors={bottom=true,bottom_margin=s(30)},text=lock and "01 / SESSION LOCK" or "02 / SIGN IN",
       font_size=s(10),letter_spacing=s(1),color=function() return C.primary:alpha(.46) end,
-      visible=function() return W>=s(1000) or ctx.stage:get()=="rest" end},node)
+      visible=function() return (lock or H>=s(500)) and (W>=s(1000) or ctx.stage:get()=="rest") end},node)
     ui.reparent(label {anchors={right=true,right_margin=s(38),bottom=true,bottom_margin=s(30)},
       text=lock and "シュゴ / SHUGO" or "アカツキ / AKATSUKI",font_family=JAPANESE,font_size=s(11),
       color=function() return C.primary:alpha(.46) end,
-      visible=function() return W>=s(1000) or ctx.stage:get()=="rest" end},node)
+      visible=function() return (lock or H>=s(500)) and (W>=s(1000) or ctx.stage:get()=="rest") end},node)
     return node
   end
 
@@ -129,6 +129,14 @@ return function(ctx)
     local s,role,W=opts.scale,opts.role,opts.width
     local lock=role=="lock"
     local id=role.."-auth"
+    require("themes.tsugumori.auth_result")({color=C})(host,id,{
+      scope=ctx.output_name,
+      active=function() local stage=ctx.stage:get() return stage=="sheet" or stage=="opening" or stage=="leaving" end,
+      read=function()
+        local stage=ctx.stage:get()
+        return (stage=="opening" or stage=="leaving") and "opening" or ctx.bad:get() and "failed" or "waiting"
+      end,
+    })
     local trim=ui.Item {id=id.."-trim",anchors={fill=true},z=2}
     ui.reparent(trim,host)
     corners(trim,s(22),function() return stroke(C,"corner") end)
@@ -152,7 +160,7 @@ return function(ctx)
     corners(cover,s(20),function() return C.onPrimary:alpha(.45) end)
     ui.reparent(cover,host)
     local running,was,generation=nil,false,0
-    morf.effect(id..".reveal",function()
+    morf.effect(id..".reveal."..(ctx.output_name or ""),function()
       local on=opts.active()
       if on==was then return end
       was=on generation=generation+1

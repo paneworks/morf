@@ -25,6 +25,17 @@ impl Runtime {
         if screens.is_empty() {
             return;
         }
+        self.update_screens(screens, true);
+    }
+
+    /// The live desktop for a runtime owning several outputs, such as a
+    /// session lock. It has no single output to retain or put first: removal
+    /// (including an empty desktop) must actually remove the old entries.
+    pub fn replace_screens(&mut self, screens: &[Screen]) {
+        self.update_screens(screens, false);
+    }
+
+    fn update_screens(&mut self, screens: &[Screen], own_first: bool) {
         let mut own_scale = None;
         self.lua.enter(|ctx| {
             let Ok(morf) = ctx.get_global::<Table>("morf") else {
@@ -33,8 +44,8 @@ impl Runtime {
             let LuaValue::Table(table) = morf.get_value(ctx, "screens") else {
                 return;
             };
-            let own = match table.get_value(ctx, 1) {
-                LuaValue::Table(entry) => Some(entry),
+            let own = match (own_first, table.get_value(ctx, 1)) {
+                (true, LuaValue::Table(entry)) => Some(entry),
                 _ => None,
             };
             let own_name = own.and_then(|entry| match entry.get_value(ctx, "name") {

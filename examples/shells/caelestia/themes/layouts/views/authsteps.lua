@@ -159,6 +159,10 @@ function V.build(model)
     },
   }
 
+  if theme.motion.auth_result then
+    theme.motion.auth_result(content,"authsteps",{active=function() return model.opened:get() end,
+      read=function() return state.step,state.failures end})
+  end
   return {content=content,width=W,height=H,edge="top"}
 end
 return V

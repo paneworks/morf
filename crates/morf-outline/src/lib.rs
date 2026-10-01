@@ -13,6 +13,10 @@
 mod contours;
 mod corners;
 mod flatten;
+pub mod geometry;
+pub mod geometry_named;
+mod geometry_resample;
+pub mod graph;
 mod morph;
 mod step;
 

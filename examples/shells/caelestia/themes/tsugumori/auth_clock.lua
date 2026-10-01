@@ -23,7 +23,7 @@ return function(ctx)
       ui.reparent(cell,row)
       glyphs[i]={old,new} slots[i]=strip
     end
-    morf.effect(id..".roll",function()
+    morf.effect(id..".roll."..(ctx.output_name or ""),function()
       local time=value()
       local showing=ctx.stage:get()=="rest" or ctx.stage:get()=="sheet"
       if not showing then previous=nil return end

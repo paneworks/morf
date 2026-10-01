@@ -35,6 +35,7 @@ M.phase = morf.signal("caelestia.polkit.phase", "waiting")
 M.info = morf.signal("caelestia.polkit.info", "")
 local typed = morf.signal("caelestia.polkit.typed", 0)
 M.opened = morf.signal("caelestia.polkit.opened", false)
+M.pending = morf.signal("caelestia.polkit.pending", false)
 M.registered = morf.signal("caelestia.polkit.registered", false)
 
 -- The request this screen is showing, by id, and the password: plain
@@ -44,6 +45,15 @@ local password = ""
 local seen_failures = 0
 local dismiss
 local SUCCESS_HOLD = 2500
+-- Broadcasts already queued before Cancel may arrive afterwards. Keep a
+-- bounded set of completed IDs so they cannot reopen an abandoned dialog.
+local retired, retirement_order = {}, {}
+local function retire(id)
+  if not id or retired[id] then return end
+  retired[id] = true
+  retirement_order[#retirement_order + 1] = id
+  if #retirement_order > 128 then retired[table.remove(retirement_order, 1)] = nil end
+end
 
 function M.can_answer()
   local phase = M.phase:get()
@@ -65,6 +75,18 @@ end
 -- To every screen, or to this one alone where there is no shell socket to
 -- broadcast through (a headless test).
 local send
+local function close_view(id)
+  retire(id)
+  if id and viewing ~= id then return end
+  viewing = nil
+  if dismiss then dismiss:cancel() dismiss = nil end
+  M.pending:set(false)
+  keys.focus = false
+  clear()
+  M.drawer.set(false)
+  M.request:set(false)
+  M.info:set("")
+end
 
 function M.submit()
   if not viewing or not M.can_answer() then return end
@@ -77,15 +99,15 @@ function M.submit()
 end
 
 function M.cancel()
-  if viewing then send("cancel", viewing) end
+  local id = viewing
+  -- Releasing input must never depend on a helper or another output replying.
+  close_view(id)
+  if id then send("cancel", id) end
 end
 
 function M.dismiss()
   if M.phase:get() ~= "done" and M.phase:get() ~= "refused" then return end
-  if dismiss then dismiss:cancel() dismiss=nil end
-  M.drawer.set(false)
-  M.request:set(false)
-  M.info:set("")
+  close_view()
 end
 
 keys = ui.TextInput {
@@ -119,9 +141,11 @@ M.drawer = drawer.new {name="polkit",edge=visual.edge,width=visual.width,height=
 morf.effect("caelestia.polkit.open",function()
   local open=M.drawer.open:get()
   M.opened:set(open)
-  keys.focus=open
+  keys.focus=open and M.pending:get()
   if not open then clear() end
 end)
+-- Closing animation is decorative: its children stop taking clicks at once.
+visual.content.visible = function() return M.opened:get() end
 
 -- --------------------------------------------------------------- the view --
 
@@ -131,6 +155,7 @@ local here = services.here
 --- How a request stands, from the screen that holds it. The screen in use
 --- opens the dialog on a request it has not seen; the rest leave it be.
 local function view(id, message, action, user, prompt, phase, info, failures, output)
+  if retired[id] then return end
   failures = tonumber(failures) or 0
   local final = phase == "done" or phase == "refused"
   if viewing ~= id then
@@ -152,12 +177,14 @@ local function view(id, message, action, user, prompt, phase, info, failures, ou
     action = action or "", user = user or "", prompt = prompt or "",
   })
   M.phase:set(phase or "waiting")
+  M.pending:set(not final)
   M.info:set(info or "")
   if failures > seen_failures then
     seen_failures = failures
     M.shake()
   end
   if final then
+    retire(id)
     viewing = nil
     clear()
     if dismiss then dismiss:cancel() end
@@ -190,6 +217,7 @@ end
 
 --- Takes a request in and says how it stands; `request.id` is its id here.
 local function hold(request)
+  if request._morf_closed then return end
   local id = request.id
   if not id then
     count = count + 1
@@ -223,8 +251,15 @@ local function wrong(request)
 end
 
 local function finished(request, ok, why)
+  request._morf_closed = true
   local entry = held[request.id]
   if not entry then return end
+  if not ok and why and tostring(why):find("cancel", 1, true) then
+    held[request.id] = nil
+    close_view(request.id)
+    send("closed", request.id)
+    return
+  end
   entry.phase = ok and "done" or "refused"
   if ok then entry.info=entry.method=="face" and "Face verified · Access granted" or "Identity verified · Access granted"
   else entry.info=(why and not tostring(why):find("cancel")) and tostring(why) or "" end
@@ -241,15 +276,22 @@ local function answer(id, pw)
 end
 
 local function cancel(id)
+  close_view(id)
   local entry = held[id]
-  if entry then entry.request.cancel() end
+  if not entry then return end
+  held[id] = nil
+  entry.request._morf_closed = true
+  send("closed", id)
+  local ok = pcall(entry.request.cancel)
+  if not ok then morf.log("warn", "caelestia: polkit cancellation transport failed") end
 end
 
 --- Every screen's `polkit` verb, for what the screens say to each other.
 function M.message(kind, ...)
   if kind == "view" then view(...)
   elseif kind == "answer" then answer(...)
-  elseif kind == "cancel" then cancel(...) end
+  elseif kind == "cancel" then cancel(...)
+  elseif kind == "closed" then close_view(...) end
 end
 
 function send(kind, ...)

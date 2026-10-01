@@ -29,7 +29,14 @@ pub(crate) fn evict_image_textures(
     textures: &mut HashMap<TextureKey, TextureImage>,
     used: &HashSet<TextureKey>,
 ) {
-    if textures.len() <= MAX_IMAGE_TEXTURES {
+    let bytes: u64 = textures
+        .values()
+        .map(|image| {
+            let size = image._texture.size();
+            u64::from(size.width) * u64::from(size.height) * 4
+        })
+        .sum();
+    if textures.len() <= MAX_IMAGE_TEXTURES && bytes <= 64 * 1024 * 1024 {
         return;
     }
     // Anything drawn this frame stays, whatever the bound says: evicting it

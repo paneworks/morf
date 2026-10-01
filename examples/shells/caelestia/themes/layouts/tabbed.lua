@@ -185,7 +185,9 @@ function M.new(spec)
       present(now)
       running = kit.bud({ pages[now] }, true, { from = 0.97, delay = 60 })
     end
-    if wipe then wipe(enter, not presented:get()) else enter() end
+    if wipe then wipe(enter, not presented:get(), {
+      index=now,name=tabs[now].name,key=tabs[now].key,
+    }) else enter() end
     if spec.on_tab then spec.on_tab(tabs[now].key) end
   end)
 

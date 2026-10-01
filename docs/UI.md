@@ -1305,6 +1305,19 @@ drawn again for each frame they move in, on the CPU, at its on-screen size —
 cheap for an icon or a gauge, worth knowing for a path the size of the
 screen. `examples/demos/sdf/path.lua` has one of each.
 
+`morf.geometry` builds reusable path data in Rust. `shape_path(name,
+{size=100, segments=72})` supplies the named expressive shapes;
+`shape_curves(shape, segments)` returns normalized cubic coordinates.
+`polygon(vertices, opts)`, `regular(sides, opts)`, `star(points, inner, opts)`
+and `lobes(count, inner, opts)` build custom outlines. `lib.m3shapes` wraps these
+operations with the existing `Shape` node and morph animation controls.
+
+`graph_series(values, {width, height, samples, bottom=0, top, closed=false})`
+draws a bounded history with its newest sample at the right edge; `closed=true`
+adds the fill under it. `graph_grid(width, height, columns, rows)` builds the
+grid. Sampling intervals, history ownership, colors and UI structure remain
+configuration choices; only numeric path generation moves into the engine.
+
 ### Fields
 
 A `ui.Sdf` is one surface composed from the shapes beneath it — every

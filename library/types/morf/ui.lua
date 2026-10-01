@@ -844,6 +844,7 @@
 ---@field source_morph_to (string|fun(): string)? default String("")
 ---@field font_family (string|fun(): string)? default String("sans-serif")
 ---@field font_family_morph_to (string|fun(): string)? default String("")
+---@field font_weight (number|fun(): number)? default Number(400.0)
 ---@field fill_color (string|morf.Color|fun(): string|morf.Color)? default Color(Color { red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0 })
 ---@field morph_to (string|fun(): string)? default String("")
 ---@field morph_progress (number|fun(): number)? default Number(-1.0)

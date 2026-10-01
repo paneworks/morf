@@ -48,20 +48,54 @@ use crate::{helpers::*, state_types::*, surface_types::*, types::*};
 
 /// One output, in the shape the rest of morf describes outputs in.
 pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> ScreenInfo {
+    let mode = info
+        .modes
+        .iter()
+        .find(|mode| mode.current)
+        .map(|mode| mode.dimensions);
+    let size = output_logical_size(info.logical_size, mode, info.transform, info.scale_factor);
     ScreenInfo {
         id: info.id,
         name: info.name,
         make: info.make,
         model: info.model,
         description: info.description,
-        position: info.logical_position,
-        size: info.logical_size,
+        position: Some(info.logical_position.unwrap_or(info.location)),
+        size,
         physical_size: (info.physical_size.0 > 0 && info.physical_size.1 > 0)
             .then_some(info.physical_size),
         scale: info.scale_factor,
         transform: output_transform_name(info.transform),
         subpixel: output_subpixel_name(info.subpixel),
     }
+}
+
+/// xdg-output reports dimensions already transformed and scaled. Only use
+/// mode pixels as a fallback, and rotate/divide those exactly once.
+pub(crate) fn output_logical_size(
+    logical: Option<(i32, i32)>,
+    mode: Option<(i32, i32)>,
+    transform: wl_output::Transform,
+    scale: i32,
+) -> Option<(i32, i32)> {
+    if let Some(size) = logical.filter(|(w, h)| *w > 0 && *h > 0) {
+        return Some(size);
+    }
+    let (mut width, mut height) = mode.filter(|(w, h)| *w > 0 && *h > 0)?;
+    if matches!(
+        transform,
+        wl_output::Transform::_90
+            | wl_output::Transform::_270
+            | wl_output::Transform::Flipped90
+            | wl_output::Transform::Flipped270
+    ) {
+        std::mem::swap(&mut width, &mut height);
+    }
+    let scale = i64::from(scale.max(1));
+    Some((
+        ((i64::from(width) + scale - 1) / scale) as i32,
+        ((i64::from(height) + scale - 1) / scale) as i32,
+    ))
 }
 
 impl LayerState {

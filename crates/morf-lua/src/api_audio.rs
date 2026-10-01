@@ -646,6 +646,7 @@ pub(crate) fn install_audio_api<'gc>(
     let metatable = Table::new(&ctx);
     metatable.set_field(ctx, "__index", index);
     audio.set_metatable(ctx, Some(metatable));
+    crate::api_audio_spectrum::install(ctx, audio);
     morf.set_field(ctx, "audio", audio);
 }
 

@@ -168,7 +168,10 @@ impl LayerClient {
                         .create_window(surface, WindowDecorations::None, &qh);
                 window.set_title(config.namespace.clone());
                 window.set_app_id(config.namespace.clone());
-                window.set_fullscreen(None);
+                // Match the output selected for this worker. Without this,
+                // every greeter window can land on the compositor's default
+                // monitor, leaving the other monitor without its controls.
+                window.set_fullscreen(output.as_ref());
                 ShellSurface::Window(Box::new(window))
             }
         };

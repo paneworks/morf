@@ -104,7 +104,7 @@ test.describe("caelestia panels", function()
     test.ipc("capture", "open") test.settle(1000)
     test.eq(state().assistant, false)
     test.truthy(test.get("drawer-capture").width <= 480)
-    test.truthy(test.get("drawer-capture").height <= 240)
+    test.truthy(test.get("drawer-capture").height <= 264)
     test.get("capture-target-region")
     local resting_width = test.get("capture-selection").width
     test.click("capture-target-screen") test.advance(160)

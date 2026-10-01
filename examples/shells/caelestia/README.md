@@ -62,23 +62,64 @@ Previews resize on an image worker only while the Lule page is visible.
 They overwrite one small scratch JPEG per output and clear on closing;
 opening the shell does not decode an entire wallpaper collection.
 
-Capture is a separate, compact bottom popup. Open it with PrintScreen,
-the **Screenshot / Record** button in quick settings, or `capture toggle`
-over IPC. It never opens from hovering the bottom edge. Choose region,
-focused window or screen, an optional delay, then Screenshot or Record.
-There is no capture history or gallery. Click outside to close it. Reopen
-it to stop a recording or cancel a pending countdown. Stop signals only the recorder it started.
+PrintScreen, the **Screenshot / Record** button in quick settings, or
+`morf ipc call capture open` opens the compact bottom capture panel. Choose
+region, window or screen, an optional delay, then Screenshot or Record.
+The panel closes before capture. Recording uses its existing commands.
+Screenshots freeze the desktop at its normal size: drag a region, click a
+window, or press `S` (or Enter) for the current monitor. The screen target
+already selects that monitor.
 
-Bind PrintScreen in the compositor (Hyprland Lua config):
+After selection, a compact floating editing menu appears beside the capture,
+with Copy, Save, undo/redo, Draw and More. Draw expands the tool palette;
+More includes Select again, Upload, Settings and Cancel. The toolbar can be
+dragged. Handles appear after selection for resizing. Window snapping uses
+Hyprland or Sway geometry, or the floating window geometry available from Niri.
+
+The editor supplies select, rectangle, ellipse, line, arrow, pen, highlight,
+text, numbered steps, blur, pixelate and zoom. Select moves annotations;
+Delete removes the selected one. `F` switches rectangle/ellipse fill, the
+wheel changes stroke/text size while drawing, and each tool remembers its
+colour, width and fill across launches. `Ctrl+Z`/`Ctrl+Shift+Z` undo/redo;
+`Ctrl+C`, `Ctrl+S` and `Ctrl+U` copy, save and request upload. Escape or
+Cancel dismisses immediately; clicking outside the selected region also
+closes the editor. The tool palette wraps on small screens. Both themes use their own controls and title animations.
+
+Settings expose blur strength, pixel size, zoom factor, a custom hex colour,
+save folder, an internal save/folder chooser, copy-on-save, save-on-copy,
+pointer inclusion and key rebinding. Preferences live in `shell.json`;
+defaults belong to `shell/config.lua`. Hyprland shortcut changes apply
+immediately and are restored after reload. Set `capture.keybind_file` to a
+dedicated include file if you want to write the generated binding there too.
+The default compositor binding remains:
 
 ```lua
 bind_exec("Print", "/usr/bin/morf ipc call capture open")
 ```
 
-Custom recording commands must stay in the foreground (use `exec` in a
-shell wrapper) so the shell can track and stop them. The default tools are
-`grim`, `slurp`, `wl-copy`, `hyprctl`, `jq`, and `gpu-screen-recorder`;
-commands and the destination folder are set in `shell/config.lua`.
+Upload requires a separate confirmation. It sends only the rendered image,
+with metadata removed by re-encoding, to `capture.upload_endpoint` (default
+Litterbox); the default link is public and expires after 72 hours. The URL
+is copied to the clipboard. Nothing is uploaded automatically.
+
+Acquisition uses Morf's native Wayland screencopy; KDE uses Spectacle.
+Image composition/effects run on workers without ImageMagick. `wl-copy`
+keeps the image clipboard alive after the shell exits; uploads use `curl`.
+Live drawing uses native Path geometry; committed previews keep a decoded
+monitor image and publish pixels directly, without a PNG round trip for each
+edit. Lua owns tool selection, undo history and themed controls; Rust builds
+and rasterizes the annotation geometry. Save/Copy still encode an export.
+Temporary captures/previews are cleaned when editing ends, with bounded
+undo and preview caches. There is no screenshot history or gallery.
+`morf ipc call capture-editor cancel` closes editing across outputs;
+`morf ipc call screenshot screen quick` retains the old command-based
+capture. Set `capture.editor = false` to use that path by default.
+
+Recording still uses the configured commands; custom recorders must stay in
+the foreground (use `exec` in a wrapper) so Morf can track and stop them.
+Quick capture/recording commands may use `grim`, `slurp`, `hyprctl`, `jq`
+and `gpu-screen-recorder`. Reopen the popup to stop the recorder it started
+or cancel a pending countdown.
 
 `oslo make install` invokes sudo to install `/usr/bin/morf` and the shared
 library in `/usr/share/morf/library`, then retires the old local executable.
@@ -206,3 +247,30 @@ when changing themes, and uses the same smooth, state-preserving transition.
 Icons retain their symbol font. Installed families are scanned with `fc-list`
 when opening the picker, then cached until the next shell reload. IPC accepts
 `morf ipc call appearance 'font:Goku'`; `font:` resets the font choice.
+
+Lock controls follow the pointer's output. Each output uses its own logical
+dimensions, including space for pattern input and the on-screen keyboard;
+other outputs show the clock and background. The lock has one private password
+draft across all outputs. The greeter stays on Cage's main display with one
+private draft and one authentication conversation.
+Both views rebuild their presentation after a resize or rotation while retaining
+controller state. Small outputs keep readable controls and scroll the sheet;
+pattern input fits the visible area. Replacing a keyboard cancels held keys and
+pending repeats. Short greeter outputs reserve a footer for power controls.
+The lock's live monitor list drops disconnected displays, so its controls move
+to a remaining output and recover when a display reconnects.
+
+Connecting headphones shows a centered status badge for 3.2 seconds on the active
+output. Earbuds get a separate icon when the name or form-factor metadata identifies
+them; generic analog jacks use headphones because they cannot distinguish the
+physical accessory. One `pactl subscribe` watcher reads audio-route changes,
+including wired jack availability, without idle polling. Native audio metadata is
+the fallback when PulseAudio compatibility is unavailable. Devices present at
+startup, volume changes and brief Bluetooth profile handoffs stay quiet.
+Preview with `morf ipc call headphones-demo` or
+`morf ipc call headphones-demo earbuds`.
+
+The Cage greeter uses one login window on Cage's main display. `make apply`
+sets `cage -m last`, so secondary outputs are disabled during login. The view
+uses its configured fullscreen window size and never follows the pointer or
+rebuilds in response to monitor metadata. Locking remains independent.

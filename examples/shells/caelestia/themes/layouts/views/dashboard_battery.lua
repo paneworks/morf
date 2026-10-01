@@ -80,6 +80,20 @@ function M.build(model)
       reading("thermostat", "Temperature", function() return num(battery().temperature, "%.1f °C") end, HEAT),
     },
   }
+  if theme.motion.value_flash then
+    theme.motion.value_flash(left,"battery-charge",{
+      x=LEFT_W-12,y=28,height=32,active=opened,
+      read=function()
+        local b=battery()
+        return {capacity=b.capacity,status=b.status}
+      end,
+      changed=function(before,now)
+        return before.status~=now.status or
+          (before.capacity and now.capacity and math.abs(now.capacity-before.capacity)>=5)
+      end,
+      cooldown=3000,
+    })
+  end
 
   -- ----------------------------------------------------------- graphs --
   local GW = math.floor((RIGHT_W - 2 * PAD - 16) / 2)

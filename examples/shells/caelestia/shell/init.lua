@@ -71,6 +71,7 @@ local session = require("session")
 local polkit = require("polkit")
 local keyring = require("keyring")
 local authsteps = require("authsteps")
+local headphones = require("headphones")
 local osd = require("osd")
 local notifs = require("notifs")
 local sidebar = require("sidebar")
@@ -92,7 +93,8 @@ local bar = require("bar")
 -- One policy for the shared surface. Closing a launcher or auth dialog
 -- must not disable typing in the task editor that is still open.
 morf.effect("caelestia.keyboard.focus", function()
-  local exclusive = launcher.drawer.open:get() or session.drawer.open:get() or polkit.drawer.open:get() or keyring.drawer.open:get()
+  local exclusive = launcher.drawer.open:get() or session.drawer.open:get()
+    or (polkit.drawer.open:get() and polkit.pending:get()) or keyring.drawer.open:get() or capture.editor.active:get()
   local editor_open = leftbar.drawer.open:get() or (dashboard.drawer.open:get() and dashboard.tab:get() == dashboard.LULE_TAB)
   morf.surface.keyboard_focus = exclusive and "exclusive" or editor_open and "on_demand" or "none"
 end)
@@ -165,9 +167,18 @@ local triggers={
   },
 }
 local frame_view=require("themes").view("frame")
-frame_view.build {desk=bar.desk,bar=bar.build(),drawers=drawer.all,
+local frame_root=frame_view.build {desk=bar.desk,bar=bar.build(),drawers=drawer.all,
   rail={node=rail_node,shape=rail.shape},levels={node=levels_node,shape=levels.shape},
   overlays=overlays,triggers=triggers}
+ui.reparent(capture.editor.node,frame_root)
+capture.editor.on_export=function(action,result)
+  notifs.push {summary=action=="copy" and "Capture copied" or action=="save" and "Capture saved" or "Capture uploaded",
+    body=action=="upload" and tostring(result or "Link copied to clipboard") or action=="save" and tostring(result or "") or "",app="Morf"}
+end
+-- Authentication can interrupt editing without ending up behind its overlay.
+morf.effect("caelestia.capture.authentication",function()
+  if (polkit.pending:get() or keyring.request:get()) and capture.editor.running() then capture.cancel() end
+end)
 
 -- Windows keep inside the opening: the frame, and the bar when it is up.
 morf.effect("caelestia.bar.reserve", function()
@@ -189,7 +200,7 @@ local function verb(d)
     if how == "close" then
       d.set(false)
       if here() then return d.is_open() end
-      return nil
+      return
     end
     if how ~= "open" and how ~= "toggle" and how ~= "state" then
       error("`" .. tostring(how) .. "`: open, close, toggle or state")
@@ -197,7 +208,7 @@ local function verb(d)
     if not here() then
       -- Opened elsewhere now: shut here, so one screen has it at a time.
       if how ~= "state" then d.set(false) end
-      return nil
+      return
     end
     if how == "open" then d.set(true)
     elseif how == "toggle" then d.toggle() end
@@ -235,7 +246,8 @@ morf.ipc.polkit = function(how, ...)
     polkit.demo()
     return true
   end
-  if how == "view" or how == "answer" or how == "cancel" then
+  if how == "cancel" and select("#", ...) == 0 then polkit.cancel() return true end
+  if how == "view" or how == "answer" or how == "cancel" or how == "closed" then
     polkit.message(how, ...)
     return nil
   end
@@ -279,10 +291,15 @@ for _, tab in ipairs { "tasks", "calendar" } do
     return verb(leftbar.drawer)(how or "open")
   end
 end
--- `capture [how]` opens the capture drawer. `screenshot [WHAT]` and
--- `record [WHAT]` (again: stop) take one at once, of
--- region, window or screen (the chosen one by default).
-morf.ipc.capture = verb(capture.drawer)
+-- PrintScreen opens the original bottom capture panel. Screenshot/Record
+-- choose the action and target there; only screenshots enter the editor.
+local capture_popup=verb(capture.drawer)
+morf.ipc.capture = function(how)
+  how=how or "toggle"
+  if how=="menu" then how="open" end
+  if how=="close" or ((how=="open" or how=="toggle") and capture.editor.running()) then capture.cancel() end
+  return capture_popup(how)
+end
 morf.ipc.bottom = function(how, tab)
   if tab and here() and not bottom.panel.select(tab) then error("No such bottom panel tab: " .. tostring(tab)) end
   return verb(bottom.drawer)(how)
@@ -306,9 +323,20 @@ do
     return open_close(how)
   end
 end
-morf.ipc.screenshot = function(what)
+morf.ipc["capture-claim"]=function(name)
+  local own=(morf.screens or {})[1]
+  if own and own.name~=name then capture.cancel() capture.drawer.set(false) end
+end
+morf.ipc["capture-editor"] = function(action,...)
+  if action=="cancel" then capture.cancel() return true end
+  if not here() then return end
+  if action=="tool" then capture.editor.choose(...) return true end
+  if action=="copy" or action=="save" or action=="upload" then capture.editor.export(action) return true end
+  return {open=capture.editor.active:get(),pending=capture.editor.pending:get(),busy=capture.editor.busy:get(),phase=capture.editor.phase:get()}
+end
+morf.ipc.screenshot = function(what,how)
   if not here() then return nil end
-  return capture.shoot(what)
+  return capture.shoot(what,how=="quick")
 end
 morf.ipc.record = function(what)
   if not here() then return nil end
@@ -340,6 +368,7 @@ morf.ipc.notify = function(summary, body, urgency, app)
   return notifs.push { summary = summary, body = body, urgency = urgency == "critical" and 2 or 1, app = app }
 end
 morf.ipc.close = function()
+  capture.cancel()
   drawer.close_all()
   return true
 end

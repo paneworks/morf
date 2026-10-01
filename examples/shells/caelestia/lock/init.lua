@@ -264,7 +264,7 @@ local desktop = require("models.lock_desktop").new {
   active = function() return stage:get() == "rest" or stage:get() == "sheet" end,
   primary = function(output) return not HELD or main_output:get() == output end,
 }
-local build = require(visual.lock) {
+local context = {
   desktop = desktop,
   message = message, bad = bad, clear = clear,
   HELD = HELD,
@@ -302,13 +302,44 @@ local build = require(visual.lock) {
   key = key,
 }
 
+local function build(width, height, name)
+  local ctx = setmetatable({output_name=name}, {__index=context})
+  ctx.s = require("themes.auth_metrics")(width, height, context.keyboard_attached())
+  ctx.text, ctx.icon = require("themes.typography")(visual.tokens, C, ctx.s)
+  return require(visual.lock)(ctx)(width, height, name)
+end
+
+-- Output removal must never leave the only password controls on a dead screen.
+morf.effect("lock.outputs", function()
+  if morf.screens_revision then morf.screens_revision() end
+  local selected = main_output:get()
+  for _, output in ipairs(morf.screens or {}) do
+    if output.name == selected then return end
+  end
+  main_output:set((morf.screens[1] or {}).name or "")
+end)
+
 if HELD and morf.lock_surface then
   -- Called for each output, and again for one plugged in while locked.
   morf.lock_surface(function(output)
     return build(tonumber(output.width) or W, tonumber(output.height) or H, tostring(output.name or ""))
   end)
 else
-  build(W, H, screen and screen.name or "")
+  -- Window/preview surfaces resize too. Keep the controller and its private
+  -- draft, replacing only the output's presentation when logical size changes.
+  local ui=require("morf.ui")
+  local root=ui.Rect {id="lock-output",anchors={fill=true},color=function() return C.surface:alpha(1) end}
+  local child,built_w,built_h
+  morf.effect("lock.geometry",function()
+    local width,height=root.layout_width or W,root.layout_height or H
+    if width<=0 or height<=0 then width,height=W,H end
+    width,height=math.floor(width+.5),math.floor(height+.5)
+    if child and width==built_w and height==built_h then return end
+    if child then ui.destroy(child,true) end
+    built_w,built_h=width,height
+    child=build(width,height,screen and screen.name or "")
+    ui.reparent(child,root)
+  end,{owner=root})
 end
 
 -- The readers (tools/pam): a finger from the start, even at rest -- touch

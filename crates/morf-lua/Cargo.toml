@@ -17,6 +17,7 @@ morf-io.workspace = true
 morf-lifecycle.workspace = true
 morf-layout.workspace = true
 morf-menu.workspace = true
+morf-outline.workspace = true
 morf-reactive.workspace = true
 morf-region.workspace = true
 morf-scene.workspace = true

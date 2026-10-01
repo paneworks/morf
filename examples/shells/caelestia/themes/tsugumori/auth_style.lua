@@ -15,6 +15,7 @@ return function(context)
   ctx.heading = function(props)
     props.color=props.color or function() return C.primary end
     props.reveal_delay,props.decode_lead,props.decode_stagger=300,260,45
+    props.effect_scope=ctx.output_name
     return require("themes.tsugumori.heading")({color=C},{text=context.text},props)
   end
   ctx.ui = setmetatable({

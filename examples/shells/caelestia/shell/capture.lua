@@ -6,6 +6,7 @@ local theme = require("theme")
 local config = require("config")
 local drawer = require("drawer")
 local M = {}
+M.editor=require("capture_editor")
 local screen = morf.screens and morf.screens[1] or { width = 1920, height = 1080 }
 M.WIDTH = math.min(480, screen.width - theme.LEFT - theme.BORDER - 20)
 M.target = morf.signal("caelestia.capture.target", "region")
@@ -64,6 +65,7 @@ local function stop_ticker()
   if ticker then ticker:cancel() ticker = nil end
 end
 function M.cancel()
+  if M.editor.running() then M.editor.cancel() return true end
   if not pending then return false end
   generation = generation + 1
   pending:cancel() pending = nil
@@ -96,11 +98,20 @@ local function busy()
   local phase = M.phase:get()
   return phase ~= "ready" and phase ~= "error"
 end
-function M.shoot(what)
+function M.shoot(what,quick)
   what = checked(what)
   if busy() then return "busy" end
   M.message:set("")
+  if morf.broadcast then morf.broadcast("capture-claim",screen.name) end
   after_shutting(function()
+    if config.get("capture.editor") and not quick and not dry_run() then
+      M.phase:set("editing")
+      M.editor.start(what,function(ok,message)
+        if ok then M.phase:set("ready") M.message:set(message or "Capture closed.")
+        else fail(message or "Capture failed.") end
+      end)
+      return
+    end
     M.phase:set("saving")
     run("screenshot_" .. what, nil, function(result)
       if result.ok then M.phase:set("ready") M.message:set("Screenshot saved.")

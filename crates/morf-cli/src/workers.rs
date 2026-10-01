@@ -433,8 +433,16 @@ pub(crate) fn handle_worker_command(
             }
         }
         WorkerCommand::Screens(screens) => {
-            runtime.set_screens(&lua_screens(&screens));
-            WorkerUpdate::default()
+            let canvas = screen.is_some_and(|screen| screen.name == DESKTOP_CANVAS);
+            if canvas {
+                runtime.replace_screens(&lua_screens(&screens));
+            } else {
+                runtime.set_screens(&lua_screens(&screens));
+            }
+            WorkerUpdate {
+                repaint: canvas,
+                ..WorkerUpdate::default()
+            }
         }
         WorkerCommand::Verbs(reply) => {
             let _ = reply.send(runtime.ipc_verbs());

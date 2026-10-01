@@ -25,7 +25,7 @@ libloading = "0.8"
 luna = { git = "https://github.com/onix-os/luna", rev = "e8b7e98ec977c8973ce1a182d935d0ca1f06f465" }
 pollster = "1.0"
 raw-window-handle = "0.6"
-resvg = { version = "=0.48.1", default-features = false, features = ["raster-images", "text"] }
+resvg = { version = "=0.48.1", default-features = false, features = ["raster-images", "text", "system-fonts", "memmap-fonts"] }
 rustix = { version = "1.1", features = ["event", "fs", "net", "pipe", "process", "pty", "rand", "termios"] }
 slotmap = "1.0"
 signed-distance-field = "=0.6.3"

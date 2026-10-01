@@ -28,8 +28,19 @@ function M.focus(index)
   for i=1,2 do keys[i].focus=M.opened:get() and i==index end
 end
 function M.cancel()
-  if not active or responding then return end
-  responding=true M.busy:set(true) clear() active.cancel()
+  if not active then return end
+  local request = active
+  active = nil
+  responding = false
+  M.busy:set(false)
+  clear()
+  for i=1,2 do keys[i].focus=false end
+  M.request:set(false)
+  M.drawer.set(false)
+  -- The bridge may be gone, or already processing a submitted answer.
+  -- Neither case should keep the dialog or its input grab alive.
+  local ok = pcall(request.cancel)
+  if not ok then morf.log("warn", "caelestia: keyring cancellation transport failed") end
 end
 function M.submit()
   if not active or responding then return end
@@ -57,6 +68,7 @@ end
 local visual=require("keyring_view").build(M)
 for i=1,2 do ui.reparent(keys[i],visual.content) end
 M.drawer=require("drawer").new {name="keyring",edge="top",width=visual.width,height=visual.height,content=visual.content}
+visual.content.visible=function() return M.opened:get() end
 local function close(request)
   if active~=request then return end
   active=nil responding=false M.busy:set(false) clear()
@@ -88,7 +100,7 @@ function M.message(kind, payload)
     local request={id=data.id,endpoint=data.endpoint,kind=data.kind,properties=data.properties or {}}
     local answered=false
     local function reply(action,password,choice)
-      if active~=request or answered then return false end
+      if answered then return false end
       answered=true
       local sent=pcall(morf.request_socket,request.endpoint,
         morf.json.encode({id=request.id,action=action,password=password,choice=choice==true}).."\n",

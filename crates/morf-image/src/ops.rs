@@ -19,25 +19,18 @@ use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::codecs::webp::WebPEncoder;
 use image::imageops::FilterType;
-use image::{DynamicImage, GenericImageView, ImageFormat, ImageReader, Limits, RgbaImage};
+use image::{DynamicImage, ImageFormat, ImageReader, Limits, RgbaImage};
 
 use crate::image_cache::{
     ImageError, decode_svg, is_svg_path, normalize_source, read_source, source_dimensions, svg_tree,
 };
 use crate::inline::is_inline_source;
-use crate::quantize::{ImageData, PaletteEntry, palette_of};
+use crate::quantize::ImageData;
 
 /// The widest or tallest picture accepted, in pixels.
 pub const MAX_DIMENSION: u32 = 16_384;
 /// The most memory one decoded picture may take, in bytes of RGBA.
 pub const MAX_DECODED_BYTES: u64 = 256 * 1024 * 1024;
-/// The longest side a picture is shrunk to before its palette is taken.
-///
-/// A palette is a statistic, and 160 pixels a side is some 25000 samples —
-/// plenty to rank colours by — for a fraction of the work of every pixel of
-/// a photograph.
-const PALETTE_SIDE: u32 = 160;
-
 /// What a picture is, from its header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImageInfo {
@@ -59,7 +52,7 @@ pub enum ResizeMode {
 }
 
 /// One step of an edit.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ImageOp {
     /// Keep a rectangle; the part outside the picture is dropped.
     Crop {
@@ -84,6 +77,25 @@ pub enum ImageOp {
     Blur(f32),
     /// Drop the colour, keeping the alpha.
     Grayscale,
+    /// Composite a raster or SVG, preserving alpha.
+    Overlay { source: PathBuf, x: u32, y: u32 },
+    /// Typed drawing commands, rasterised without building or parsing SVG.
+    Annotations(Vec<crate::annotation::Annotation>),
+    /// Apply an effect only inside a rectangle.
+    Region {
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        effect: RegionEffect,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RegionEffect {
+    Blur(f32),
+    Pixelate(u32),
+    Zoom(f32),
 }
 
 /// What an edit is written as.
@@ -153,6 +165,13 @@ pub fn check_size(width: u32, height: u32) -> Result<(), ImageError> {
 
 /// A picture's size and format, reading only its header.
 pub fn image_info(source: impl AsRef<Path>) -> Result<ImageInfo, ImageError> {
+    if let Some(image) = crate::ops_memory::source(source.as_ref())? {
+        return Ok(ImageInfo {
+            width: image.width,
+            height: image.height,
+            format: "rgba".into(),
+        });
+    }
     let source = normalize_source(source.as_ref())?;
     let inline = source.to_str().is_some_and(is_inline_source);
     if !inline && !is_svg_path(&source) {
@@ -196,6 +215,10 @@ fn format_name(format: Option<ImageFormat>) -> String {
 ///
 /// An SVG is drawn at the size its document gives.
 pub fn decode_bounded(source: impl AsRef<Path>) -> Result<DynamicImage, ImageError> {
+    if let Some(image) = crate::ops_memory::source(source.as_ref())? {
+        check_size(image.width, image.height)?;
+        return Ok(DynamicImage::ImageRgba8(rgba_image((*image).clone())?));
+    }
     let source = normalize_source(source.as_ref())?;
     let (width, height) = source_dimensions(&source)?;
     check_size(width, height)?;
@@ -218,16 +241,14 @@ pub fn decode_bounded(source: impl AsRef<Path>) -> Result<DynamicImage, ImageErr
 fn rgba_image(data: ImageData) -> Result<RgbaImage, ImageError> {
     RgbaImage::from_raw(data.width, data.height, data.rgba).ok_or(ImageError::InvalidSize)
 }
-
 /// Runs an edit's operations in order.
 pub fn apply_ops(mut image: DynamicImage, ops: &[ImageOp]) -> Result<DynamicImage, ImageError> {
     for op in ops {
-        image = apply_op(image, *op)?;
+        image = apply_op(image, op.clone())?;
         check_size(image.width(), image.height())?;
     }
     Ok(image)
 }
-
 fn apply_op(image: DynamicImage, op: ImageOp) -> Result<DynamicImage, ImageError> {
     let (width, height) = (image.width(), image.height());
     Ok(match op {
@@ -279,6 +300,48 @@ fn apply_op(image: DynamicImage, op: ImageOp) -> Result<DynamicImage, ImageError
         ImageOp::Flip { horizontal: false } => image.flipv(),
         ImageOp::Blur(sigma) => image.fast_blur(sigma),
         ImageOp::Grayscale => image.grayscale(),
+        ImageOp::Overlay { source, x, y } => {
+            let overlay = decode_bounded(source)?.to_rgba8();
+            let mut base = image.into_rgba8();
+            image::imageops::overlay(&mut base, &overlay, i64::from(x), i64::from(y));
+            DynamicImage::ImageRgba8(base)
+        }
+        ImageOp::Annotations(marks) => crate::annotation::draw(image, &marks)?,
+        ImageOp::Region {
+            x,
+            y,
+            width: rw,
+            height: rh,
+            effect,
+        } => {
+            let rw = rw.min(width.saturating_sub(x));
+            let rh = rh.min(height.saturating_sub(y));
+            if rw == 0 || rh == 0 {
+                return Err(ImageError::Refused("effect region misses the image".into()));
+            }
+            let region = image.crop_imm(x, y, rw, rh);
+            let edited = match effect {
+                RegionEffect::Blur(sigma) if sigma.is_finite() && sigma > 0.0 && sigma <= 100.0 => {
+                    region.fast_blur(sigma)
+                }
+                RegionEffect::Pixelate(block) if (1..=256).contains(&block) => region
+                    .resize_exact(rw.div_ceil(block), rh.div_ceil(block), FilterType::Triangle)
+                    .resize_exact(rw, rh, FilterType::Nearest),
+                RegionEffect::Zoom(factor)
+                    if factor.is_finite() && (1.0..=10.0).contains(&factor) =>
+                {
+                    let sw = (rw as f32 / factor).round().max(1.0) as u32;
+                    let sh = (rh as f32 / factor).round().max(1.0) as u32;
+                    region
+                        .crop_imm((rw - sw) / 2, (rh - sh) / 2, sw, sh)
+                        .resize_exact(rw, rh, FilterType::Lanczos3)
+                }
+                _ => return Err(ImageError::Refused("invalid region effect strength".into())),
+            };
+            let mut base = image.into_rgba8();
+            image::imageops::replace(&mut base, &edited.to_rgba8(), i64::from(x), i64::from(y));
+            DynamicImage::ImageRgba8(base)
+        }
     })
 }
 
@@ -344,10 +407,12 @@ fn write_encoded(
     quality: u8,
 ) -> Result<(), ImageError> {
     let mut writer = BufWriter::new(fs::File::create(path)?);
+    let rgba = || match image {
+        DynamicImage::ImageRgba8(rgba) => std::borrow::Cow::Borrowed(rgba),
+        _ => std::borrow::Cow::Owned(image.to_rgba8()),
+    };
     match format {
-        OutputFormat::Png => image
-            .to_rgba8()
-            .write_with_encoder(PngEncoder::new(&mut writer))?,
+        OutputFormat::Png => rgba().write_with_encoder(PngEncoder::new(&mut writer))?,
         // JPEG has no alpha; the channel is dropped rather than composited,
         // since there is no one right colour to put behind it.
         OutputFormat::Jpeg => image
@@ -356,9 +421,7 @@ fn write_encoded(
                 &mut writer,
                 quality.clamp(1, 100),
             ))?,
-        OutputFormat::Webp => image
-            .to_rgba8()
-            .write_with_encoder(WebPEncoder::new_lossless(&mut writer))?,
+        OutputFormat::Webp => rgba().write_with_encoder(WebPEncoder::new_lossless(&mut writer))?,
     }
     writer.flush()?;
     Ok(())
@@ -395,49 +458,4 @@ pub fn save_rgba(
     })
 }
 
-/// One pixel's straight RGBA, refusing pictures of more than `max_pixels`.
-///
-/// The bound is the caller's because the right one depends on where this
-/// runs: a worker can afford the full limit, the thread drawing the shell
-/// cannot.
-pub fn pixel_at(
-    source: impl AsRef<Path>,
-    x: u32,
-    y: u32,
-    max_pixels: u64,
-) -> Result<[u8; 4], ImageError> {
-    let source = normalize_source(source.as_ref())?;
-    let (width, height) = source_dimensions(&source)?;
-    if u64::from(width) * u64::from(height) > max_pixels {
-        return Err(ImageError::Refused(format!(
-            "image is {width}x{height}, over the {max_pixels} pixels this call reads"
-        )));
-    }
-    if x >= width || y >= height {
-        return Err(ImageError::Refused(format!(
-            "pixel {x},{y} is outside a {width}x{height} image"
-        )));
-    }
-    let image = decode_bounded(&source)?;
-    if x >= image.width() || y >= image.height() {
-        return Err(ImageError::InvalidSize);
-    }
-    Ok(image.get_pixel(x, y).0)
-}
-
-/// The `count` dominant colours of a picture, most common first.
-pub fn palette(source: impl AsRef<Path>, count: usize) -> Result<Vec<PaletteEntry>, ImageError> {
-    let image = decode_bounded(source)?;
-    let image = if image.width().max(image.height()) > PALETTE_SIDE {
-        image.thumbnail(PALETTE_SIDE, PALETTE_SIDE)
-    } else {
-        image
-    };
-    let rgba = image.to_rgba8();
-    let data = ImageData {
-        width: rgba.width(),
-        height: rgba.height(),
-        rgba: rgba.into_raw(),
-    };
-    Ok(palette_of(&data, count))
-}
+pub use crate::ops_queries::{palette, pixel_at};

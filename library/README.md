@@ -15,11 +15,10 @@ library/
 
 ## Installed
 
-`make install` puts the binary in `~/.local/bin` and this folder in
-`~/.local/share/morf/library` (`$XDG_DATA_HOME/morf/library`). morf always
-looks there, after the configuration's own folder and
-`~/.local/share/morf/site` (your own modules, found first), so any shell
-can `require("lib.material")` without carrying a copy.
+`make install` installs `/usr/bin/morf` and this folder in
+`/usr/share/morf/library`. The configuration's own modules and the user's
+site modules take precedence, so shells can extend the shared library.
+The installer retires the old `~/.local/bin/morf`.
 
 ## Editor
 
@@ -35,6 +34,47 @@ binary on every `make install`, so they match the engine you run.
 Pure-Lua libraries a configuration can `require("lib.<name>")`. morf's core
 stays compositor- and service-agnostic; anything that speaks one program's
 protocol lives here, built only on the engine's generic APIs.
+
+## annotation.lua and capture.lua
+
+`lib.annotation` owns a document in image-pixel coordinates, independent
+of themes, files or compositors. `new(width, height, options)` returns a document
+with `choose`, `style`, `begin`, `update`, `finish`, `abort`, `set_crop`,
+`resize`, `remove`, `undo` and `redo`. It holds vector annotations and regional
+blur/pixelation/zoom, sharing immutable annotations through a bounded undo
+history. `tools` lists shortcuts/icons;
+`ops(document, crop, include_draft)` creates ordered `morf.image.process` ops.
+Bounds, hit testing, picking and rasterization run in Rust through `morf.image`.
+Live drafts use native `ui.Path` geometry; Lua does not generate SVG artwork.
+Cropping happens last; effects apply to preceding artwork.
+`viewport_ops(document, {x,y,w,h}, include_draft, omit_moving)` builds
+operations for an already cropped monitor preview, preserving the original
+document and its export coordinates. Native operations share the original
+point arrays and apply their viewport offset in Rust.
+
+`lib.capture.session(options)` owns temporary snapshots and render outputs.
+`snapshot(output, callback)` captures a monitor, `desktop(screens, callback)`
+stitches scaled outputs (including negative origins), and
+`render(source, ops, callback)` runs image operations on workers.
+`compose(width, height, ops, callback)` starts with a native black RGBA canvas,
+used for desktop stitching without a placeholder SVG. Snapshot
+callbacks receive `(ok, {source, width, height, output|desktop})`; render
+callbacks receive `(ok, path|error)`. `preview(source, ops, callback)` retains
+one decoded immutable source in a native session and returns an in-memory
+image, replacing its previous frame without generating temporary PNGs.
+Older engines fall back to file rendering. Call `remove(path)` for obsolete previews
+and `close()` when done; late callbacks cannot resurrect a closed session.
+Each output owns a private scratch namespace; abandoned scratch data is cleaned
+on the next capture. `windows(callback)`/`window_at` provide compositor geometry.
+KDE acquisition falls back to Spectacle; other supported compositors use native
+screencopy. `directory(path)` supplies the filesystem model for a shell-owned
+picker without requiring an external GUI.
+
+`copy`, `save` and `upload` take asynchronous `(ok, result|error)` callbacks.
+Copy uses wl-copy; upload uses HTTPS curl form upload and copies the returned
+URL. Callers own upload confirmation, notifications, picker UI and preferences.
+`binding_plan` and `rebind` support Hyprland Lua/conf and an optional dedicated
+include file; they do not rewrite the main compositor configuration.
 
 ## taskwarrior.lua
 
@@ -173,11 +213,13 @@ shapes.Shape { width = 96, height = 96, shape = function() return which:get() en
 | `shapes.polygon(vertices, { rounding })`, `shapes.star(points, inner, opts)`, `shapes.regular(sides, opts)`, `shapes.lobes(count, inner, opts)` | outlines of your own, for `path` and `curves` |
 | `shapes.curves(shape, segments)` | the normalised cubics themselves |
 
-Outlines are made once per name and kept. The named shapes at the defaults
-(a 100 square, 72 cubics) are also shipped ready-made in
-`lib/m3shapes_paths.lua`, written by `lib/m3shapes_gen.lua` (`cd examples &&
-lua5.4 lib/m3shapes_gen.lua > lib/m3shapes_paths.lua`): resampling one outline
-costs about a fifth of a module's instruction budget, reading one nothing.
+Rounding, cubic resampling, normalization and path formatting run in
+`morf.geometry`, implemented by `morf-outline`. Default named paths (a 100
+square, 72 cubics) preserve the existing outlines exactly and are shared across
+runtimes. Custom named paths use a bounded native cache. `m3shapes_paths.lua`
+remains a compatibility lookup; the Lua wrapper owns node construction and
+animation controls. Native recipes can be exported with
+`cargo run -p morf-outline --example generate_shapes`.
 `segments = false` keeps an outline as it was made, for a shape that is only
 drawn.
 `examples/demos/sdf/m3shapes.lua` shows every one.
@@ -199,7 +241,10 @@ vis:stop()
 `spectrum.filter(opts)` is the same shaping, pure: `f.step(bands, dt)`
 gives bars. Options (`spectrum.DEFAULTS`): `bars`, `rate_hz`, `noise`,
 `smoothing`, `gravity`, `spread`, `attack`, `release`, `auto`,
-`sensitivity`.
+`sensitivity`. Options are captured when the filter is constructed.
+The numeric filter lives in `morf.audio.spectrum_filter`, with reusable native
+scratch buffers. Neighbour spread uses two linear passes instead of comparing
+every pair of bars. Lua retains monitor subscriptions, signals and lifecycle.
 
 ## lyrics
 

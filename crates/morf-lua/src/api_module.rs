@@ -46,6 +46,7 @@ pub(crate) fn install_module_api<'gc>(
         "system_clock",
         "easing_curve",
         "color_quantizer",
+        "geometry",
         "icon_path",
         "has_icon",
         "exec_detached",

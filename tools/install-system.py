@@ -35,7 +35,7 @@ def clean_env():
 def migrate_config(text, example):
     parsed = tomllib.loads(text)
     assert isinstance(parsed.get('default_session', {}).get('user'), str), 'greetd has no greeter user'
-    command = f'cage -s -- /usr/bin/morf greet -c {example}'
+    command = f'cage -m last -s -- /usr/bin/morf greet -c {example}'
     lines = text.splitlines(keepends=True)
     section, replaced = None, 0
     for i, line in enumerate(lines):

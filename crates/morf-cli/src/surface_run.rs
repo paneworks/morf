@@ -29,6 +29,7 @@ fn capabilities_of(
         ("scale_120".to_owned(), client.scale_120().to_string()),
     ];
     for (name, supported) in [
+        ("desktop_canvas", false),
         ("layer_shell", client.supports_layer_shell()),
         ("layer_surfaces", client.supports_layer_surfaces()),
         ("clipboard", client.supports_clipboard()),
@@ -112,6 +113,10 @@ fn drive_surface(
         &start.commands,
     );
     let name = name.to_owned();
+    let desktop_canvas = name == DESKTOP_CANVAS;
+    if desktop_canvas {
+        runtime.set_capabilities(&[("desktop_canvas".to_owned(), "true".to_owned())]);
+    }
     let loading = Instant::now();
     execute_config(runtime, path, source, policy)?;
     slow(&name, "loading the configuration", loading);
@@ -130,8 +135,11 @@ fn drive_surface(
     primary_surface_root(runtime)?;
 
     let layer_config = runtime.layer_surface_config();
-    let mut client = LayerClient::connect(runtime_bar_config(&layer_config, &name)?)
-        .map_err(|error| error.to_string())?;
+    let mut bar_config = runtime_bar_config(&layer_config, &name)?;
+    if desktop_canvas {
+        bar_config.output = None;
+    }
+    let mut client = LayerClient::connect(bar_config).map_err(|error| error.to_string())?;
     // A clipboard or drop read finishing on its thread rings every loop, so
     // this one wakes for its answer rather than sleeping past it. Set before
     // the first configure, since a read can start before it.
@@ -151,6 +159,7 @@ fn drive_surface(
     }))
     .map_err(|_| "output supervisor stopped".to_owned())?;
     let configuring = Instant::now();
+    let mut early_pointer = None;
     'configured: loop {
         client.dispatch().map_err(|error| error.to_string())?;
         while let Some(event) = client.next_event() {
@@ -183,6 +192,14 @@ fn drive_surface(
                         },
                     );
                 }
+                LayerEvent::PointerMotion { surface, x, y } => {
+                    early_pointer = Some((surface, x, y));
+                }
+                LayerEvent::PointerLeave { surface } => {
+                    if early_pointer.is_some_and(|(role, _, _)| role == surface) {
+                        early_pointer = None;
+                    }
+                }
                 LayerEvent::Configure { .. }
                 | LayerEvent::Closed { .. }
                 | LayerEvent::Scale { .. }
@@ -203,8 +220,6 @@ fn drive_surface(
                 | LayerEvent::InputMethod(_)
                 | LayerEvent::TextInput(_)
                 | LayerEvent::Frame { .. }
-                | LayerEvent::PointerMotion { .. }
-                | LayerEvent::PointerLeave { .. }
                 | LayerEvent::PointerButton { .. }
                 | LayerEvent::PointerAxis { .. }
                 | LayerEvent::TouchDown { .. }
@@ -243,7 +258,15 @@ fn drive_surface(
     let mut renderer = RenderEngine::new(backend);
     // Known only now: the protocols came with the connection, the GPU with
     // the renderer. Everything a configuration or `morf info` might ask.
-    runtime.set_capabilities(&capabilities_of(&client, &mut renderer));
+    let mut capabilities = capabilities_of(&client, &mut renderer);
+    if desktop_canvas {
+        for (key, value) in &mut capabilities {
+            if key == "desktop_canvas" {
+                *value = "true".to_owned();
+            }
+        }
+    }
+    runtime.set_capabilities(&capabilities);
     slow(&name, "starting the GPU", gpu);
     let shaders = Instant::now();
     register_shaders(runtime, &mut renderer)?;
@@ -288,7 +311,10 @@ fn drive_surface(
         pacer: FramePacer::new(),
         // Until a callback says otherwise, assume the commonest refresh.
         refresh: Duration::from_micros(16_667),
-        input: PointerInput::default(),
+        input: PointerInput {
+            pointer: early_pointer,
+            ..PointerInput::default()
+        },
         drag: None,
         primary_deferred: false,
         fallback_tick: None,
@@ -300,7 +326,7 @@ fn drive_surface(
     // Whether the last turn handled anything -- an event, a command -- whose
     // handlers may have left work that only the checks at the top of a turn
     // pick up (a popup to open, a reload asked for). One more turn, at once.
-    let mut follow_up = false;
+    let mut follow_up = true;
     let mut pending_streak = 0;
     // A node first asked for its `contains_pointer` last turn, whose answer
     // changed what bindings drew: this turn paints it.
@@ -605,6 +631,15 @@ fn drive_surface(
             // What this frame actually cost, which is what the next one is
             // paced against.
             state.pacer.observed(painted.elapsed());
+        }
+        // Layout observation can rebuild a responsive authentication tree
+        // during paint. Draw that new tree before answering its pointer
+        // watchers, otherwise the first pointer position is consumed against
+        // removed nodes and monitor ownership stays wrong until the next move.
+        if runtime.scene().layout_revision_of(state.primary_root) != state.layout.revision {
+            containment_repaint = true;
+            follow_up = true;
+            continue;
         }
         // After the paints, so a node built this turn is laid out by now.
         let layouts = LayerLayouts {

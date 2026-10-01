@@ -36,12 +36,32 @@ function V.card(model, index, width, active, tall)
       add(kit.text { id=({"dashboard-cpu-value","dashboard-memory-value","dashboard-storage-value"})[i],
         x=128,y=54+(i-1)*24,width=76,horizontal_alignment="right",font_size=14,
         text=function() return percent(entry[2]()) end,color=function() return C.primary end })
+      local threshold=({70,85,90})[i]
+      local delta=({20,15,10})[i]
+      theme.motion.value_flash(node,"dashboard-"..entry[1]:lower(),{
+        x=210,y=54+(i-1)*24,height=18,active=active,read=entry[2],
+        changed=function(before,now)
+          return (before<threshold and now>=threshold) or math.abs(now-before)>=delta
+        end,
+      })
     end
   elseif index==4 then
     add(kit.text { id="dashboard-battery-value",x=16,y=52,font_size=30,
       text=function() local b=model.battery() return b.capacity and percent(b.capacity) or "—" end,
       color=function() return C.primary end })
     add(kit.subtitle { x=16,y=104,text=function() return model.battery().status or "No battery" end })
+    theme.motion.value_flash(node,"dashboard-battery",{
+      x=8,y=54,height=34,active=active,
+      read=function()
+        local b=model.battery()
+        return {capacity=b.capacity,status=b.status}
+      end,
+      changed=function(before,now)
+        return before.status~=now.status or
+          (before.capacity and now.capacity and math.abs(now.capacity-before.capacity)>=5)
+      end,
+      cooldown=3000,
+    })
   elseif index==5 then
     add(kit.text { id="dashboard-temperature",x=16,y=52,font_size=30,
       text=function()

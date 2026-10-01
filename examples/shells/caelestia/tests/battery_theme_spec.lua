@@ -33,6 +33,7 @@ local HOST=[[
     sources[name]={interval=3000,pinned=false,pin=function(self,on) self.pinned=on end}
   end
   package.loaded["lib.sysinfo"]={history_size=60,sources=sources,
+    restore_history=function() end,snapshot_history=function() return {} end,
     battery=function()
       reads=reads+1 tick:get() revision:get()
       if reading==false then error("device removed") end
@@ -82,6 +83,21 @@ end
 local function shot(name)
   if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(name..".png") end
 end
+test.it("Tsugumori battery status changes flash without adding hidden data reads",function()
+  load("tsugumori")
+  test.ipc("shown","yes") test.advance(1000)
+  test.ipc("update","charging") test.advance(90)
+  test.truthy(test.get("battery-charge-change-flash").opacity>0)
+  shot("tsugumori-battery-change")
+  test.ipc("shown","no") test.advance(1)
+  local before=test.ipc("status")
+  test.ipc("update","discharging") test.advance(100)
+  test.eq(test.ipc("status").reads,before.reads)
+  test.near(test.get("battery-charge-change-flash").opacity,0,.001)
+  test.ipc("shown","yes") test.advance(100)
+  test.near(test.get("battery-charge-change-flash").opacity,0,.001)
+  test.eq(#test.logs("error"),0)
+end)
 for _,style in ipairs {"material","tsugumori"} do
   test.it(style.." battery keeps readings and charge status while history uses the device name",function()
     load(style)

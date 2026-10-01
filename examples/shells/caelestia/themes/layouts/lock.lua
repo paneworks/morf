@@ -41,8 +41,7 @@ return function(W, H, NAME)
   local desktop = ctx.desktop.for_output(NAME)
   -- In a window there is one screen, and it is the one.
   local function main() return not HELD or main_output:get() == NAME end
-  local S = math.max(0.75, math.min(2.4, math.min(W / 1920, H / 1080)))
-  local function s(n) return math.floor(n * S + 0.5) end
+  local s = ctx.s or require("themes.auth_metrics")(W, H, ctx.keyboard_attached())
   local base_text = text
   local function text(props)
     props.font_size = props.font_size or s(15)
@@ -51,17 +50,19 @@ return function(W, H, NAME)
 
   -- -------------------------------------------------------------- geometry --
 
-  local BORDER = s(10)
-  local ROUND = s(25)
+  local geometry=require("themes.auth_layout")(W,H,s)
+  local BORDER = geometry.border
+  local ROUND = geometry.round
   local PORTRAIT = H > W
+  local SHORT = geometry.short
   -- The on-screen keyboard: on a phone, or wherever no keyboard is attached.
   local ONSCREEN = PORTRAIT or not ctx.keyboard_attached()
 
-  local SW = math.min(s(600), W - 2 * s(20))
-  local AV = s(96)
-  local FIELD_W, FIELD_H = math.min(s(380), SW - s(48)), s(58)
+  local SW = geometry.sheet_width
+  local AV = geometry.avatar
+  local FIELD_W, FIELD_H = geometry.field_width, geometry.field_height
 
-  local PAD_W = math.min(s(300), SW - s(48))
+  local PAD_W = math.min(s(300), SW - s(48),math.max(s(96),H-2*BORDER-s(80)))
   local pad = osk.new {
     prefix = "lock.pattern." .. NAME, width = PAD_W, mode = "pattern", look = skin.keyboard_look and skin.keyboard_look(look()) or look(),
     active = function() return main() and stage:get() == "sheet" and method:get() == "pattern" and not busy:get() end,
@@ -76,6 +77,7 @@ return function(W, H, NAME)
     kb = osk.new {
       action = skin.action,
       prefix = "lock.osk." .. NAME, width = SW - s(24), mode = "full", numbers = true,
+      metrics = {gap=s(5), key_height=s(54), alternate_cell=s(48)},
       active = function() return main() and stage:get() == "sheet" and method:get() == "password" and not busy:get() end,
       look = (skin.keyboard_look or function(v) return v end) {
         panel = function() return C.surfaceContainer end,
@@ -99,9 +101,10 @@ return function(W, H, NAME)
   local function kb_h() return (kb and method:get() == "password") and (kb.height() + s(16)) or 0 end
   -- The sheet: the account, the pill, a line for what PAM says; the keyboard
   -- under them on a phone.
-  local function sheet_h()
+  local function content_h()
     return s(28) + AV + s(12) + s(30) + s(20) + entry_h() + s(10) + s(24) + chip_h() + s(24) + kb_h()
   end
+  local function sheet_h() return math.min(content_h(), math.max(1,H-2*BORDER-s(16))) end
 
   -- The swell's height as it stands: a bud at rest, the sheet up, a swipe
   -- in between.
@@ -152,7 +155,7 @@ return function(W, H, NAME)
   -- The swell has a field of its own, in a band along the bottom edge: the
   -- frame above stays still, and a swell growing redraws the band alone,
   -- not the whole screen every frame (a 4K screen of field was the lag).
-  local function band_h() return sheet_h() + s(90) end
+  local function band_h() return math.min(H, sheet_h() + s(90)) end
   local band = ui.Item {
     x = 0, width = W,
     y = function() return H - band_h() end,
@@ -182,7 +185,7 @@ return function(W, H, NAME)
   }
 
   -- The desk under it: the wallpaper, blurred and dimmed.
-  local backdrop = ui.Item {
+  local backdrop = skin.backdrop and skin.backdrop(W,H,s,"lock") or ui.Item {
     anchors = { fill = true },
     opacity = function() return (stage:get() == "rest" or stage:get() == "sheet") and 1 or 0 end,
     behavior = { opacity = { duration = 420, easing = "out_cubic" } },
@@ -253,7 +256,7 @@ return function(W, H, NAME)
       media_row = ui.Rect {
         id = "lock-media", width = RW, height = RH, radius = RH / 2,
         color = function() return C.surfaceContainer:alpha(0.82) end,
-        visible = function() return main() and (active().title or "") ~= "" end,
+        visible = function() return not SHORT and main() and (active().title or "") ~= "" end,
         ui.Item {
           x = s(12), anchors = { vertical_center = true }, width = s(60), height = s(60),
           ui.Path {
@@ -290,26 +293,29 @@ return function(W, H, NAME)
 
   -- The time at rest sits a third of the way down; with the sheet up it
   -- steps aside above it, smaller.
-  local CLOCK_Y = PORTRAIT and math.floor(H * 0.12) or math.floor(H * 0.2)
+  local CLOCK_Y = geometry.clock_y
   local glance = ui.Column {
     id = "lock-glance",
+    width = math.max(1,W-s(64)),
     anchors = { horizontal_center = true }, gap = s(6), align = "center",
     y = function()
       if stage:get() == "sheet" and main() then
-        return math.max(s(40), math.floor((H - BORDER - sheet_h()) / 2 - s(150)))
+        return math.max(s(40), math.floor((H - BORDER - sheet_h()) / 2 - geometry.clock_sheet_offset))
       end
       return CLOCK_Y
     end,
     scale = function() return (stage:get() == "sheet" and main()) and 0.72 or 1 end,
-    opacity = function() return resting() and 1 or 0 end,
+    opacity = function()
+      return resting() and (not main() or stage:get() ~= "sheet" or H - sheet_h() > s(220)) and 1 or 0
+    end,
     behavior = { y = GROW, scale = GROW, opacity = { duration = 320 } },
     (skin.clock or text) {
       id = "lock-clock", text = function() return clock:get() end,
-      font_size = PORTRAIT and s(132) or s(168), font_weight = skin.clock_weight or 600, color = C.primary,
+      font_size = geometry.clock_size, font_weight = skin.clock_weight or 600, color = C.primary,
     },
     ui.Row((function()
       local row = { gap = s(10), align = "center",
-        text { text = function() return day:get() end, font_size = s(22), color = C.onSurfaceVariant } }
+        text { text = function() return day:get() end, width=math.max(1,W-s(160)),elide="right",horizontal_alignment="center",font_size = s(22), color = C.onSurfaceVariant } }
       for _, node in ipairs(weather) do row[#row + 1] = node end
       return row
     end)()),
@@ -321,7 +327,7 @@ return function(W, H, NAME)
   local hint = ui.Column {
     anchors = { horizontal_center = true },
     y = H - BORDER - BUD_H - s(74), gap = s(2), align = "center",
-    opacity = function() return (main() and stage:get() == "rest" and pull:get() < 0.1) and 1 or 0 end,
+    opacity = function() return (not SHORT and main() and stage:get() == "rest" and pull:get() < 0.1) and 1 or 0 end,
     behavior = { opacity = { duration = 260 } },
     icon("keyboard_arrow_up", s(30), function() return C.onSurfaceVariant end, {
       loop = { translate_y = { from = 0, to = -s(6), duration = 900, alternate = true, easing = "in_out_sine" } },
@@ -357,7 +363,7 @@ return function(W, H, NAME)
   }
 
   -- The password: a pill, a dot for each character, each popping in.
-  local DOT = s(12)
+  local DOT = math.min(s(12), math.max(1, math.floor((FIELD_W-s(120))/MAX_DOTS*.65)))
   local dots = {}
   for i = 1, MAX_DOTS do
     dots[i] = ui.Rect {
@@ -386,7 +392,7 @@ return function(W, H, NAME)
       text = "Password", color = C.onSurfaceVariant, font_size = s(16),
       visible = function() return typed:get() == 0 end,
     },
-    ui.Row { x = s(56), anchors = { vertical_center = true }, gap = s(7), table.unpack(dots) },
+    ui.Row { x = s(56), anchors = { vertical_center = true }, gap = DOT*.45, table.unpack(dots) },
     ui.MouseArea {
       id = "lock-submit",
       anchors = { right = true, right_margin = s(7), vertical_center = true },
@@ -406,7 +412,7 @@ return function(W, H, NAME)
     x = s(12), y = s(28), width = SW - s(24), gap = 0, align = "center",
     avatar,
     ui.Item { width = 1, height = s(12) },
-    (ctx.heading or text) { id="lock-name", active=function() return main() and stage:get()=="sheet" end, text = me.label ~= "" and me.label or me.name, font_size = s(20), font_weight = 600, height = s(30) },
+    (ctx.heading or text) { id="lock-name", width=SW-s(48),elide="right",horizontal_alignment="center",active=function() return main() and stage:get()=="sheet" end, text = me.label ~= "" and me.label or me.name, font_size = s(20), font_weight = 600, height = s(30) },
     ui.Item { width = 1, height = s(20) },
     ui.Item {
       width = SW - s(24), height = entry_h,
@@ -457,6 +463,15 @@ return function(W, H, NAME)
       kb.node,
     }
   end
+  local viewport=ui.Flickable {id="lock-sheet-scroll",width=SW,height=sheet_h,clip=true,
+    ui.Column(sheet_nodes)}
+  morf.effect("lock.sheet-scroll."..NAME,function()
+    local st=stage:get()
+    if st~="sheet" then viewport.content_y=0 return end
+    local entry_bottom=s(28)+AV+s(12)+s(30)+s(20)+entry_h()+s(10)+s(24)
+    local entry_top=s(28)+AV+s(12)+s(30)+s(20)
+    viewport.content_y=math.min(entry_top,math.max(0,entry_bottom-sheet_h()+s(12)))
+  end,{owner=viewport})
   local sheet = ui.Item {
     id = "lock-sheet",
     x = math.floor((W - SW) / 2), width = SW,
@@ -467,7 +482,7 @@ return function(W, H, NAME)
     behavior = skin.sheet_motion or { opacity = { duration = 260, delay = 120 },
       translate_y = GROW },
     visible = function() return main() and (stage:get() == "sheet" or stage:get() == "opening") end,
-    ui.Column(sheet_nodes),
+    viewport,
   }
 
   if skin.sheet then skin.sheet(sheet, {role="lock", width=SW, scale=s,
@@ -477,8 +492,9 @@ return function(W, H, NAME)
 
   -- Opaque from the first frame: a lock that let the desk show through for
   -- a moment would not be a lock, and morf will not hold one that could.
-  return ui.Rect {
+  local root = ui.Rect {
     anchors = { fill = true },
+    clip=true,
     color = C.surface:alpha(1),
     backdrop,
     skin.chrome and skin.chrome(W, H, s, "lock") or ui.Item {},
@@ -492,8 +508,9 @@ return function(W, H, NAME)
     ui.MouseArea {
       id = "lock-open",
       anchors = { fill = true }, z = -1,
-      on_clicked = function() open_sheet() end,
+      on_clicked = function() main_output:set(NAME) open_sheet() end,
       on_dragged = function(_, _, _, dy)
+        main_output:set(NAME)
         if stage:get() ~= "rest" then return end
         pull:set(math.max(0, math.min(1, -dy / s(360))))
       end,
@@ -504,6 +521,13 @@ return function(W, H, NAME)
       on_key_pressed = key,
     },
   }
+
+  -- contains_pointer includes the password field, keyboard and other children;
+  -- hovering a child must not be mistaken for leaving this monitor.
+  morf.effect("lock.pointer." .. NAME, function()
+    if root.contains_pointer then main_output:set(NAME) end
+  end, {owner=root})
+  return root
 
 end
 

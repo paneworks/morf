@@ -28,7 +28,7 @@ local groups = 0
 function M.new(spec)
   groups = groups + 1
   local d = { name = spec.name, edge = spec.edge }
-  local authentication = spec.name == "polkit" or spec.name == "keyring" or spec.name == "authsteps"
+  local authentication = spec.transient or spec.name == "polkit" or spec.name == "keyring" or spec.name == "authsteps"
   local keep = authentication and morf.signal or require("themes.session").keep
   d.open = keep("caelestia.drawer." .. spec.name, false)
   local sign = (spec.edge == "top" or spec.edge == "left") and -1 or 1

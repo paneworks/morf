@@ -68,6 +68,11 @@ pub(crate) struct CaptureSave {
 
 pub(crate) enum ImageJob {
     Process(ProcessRequest),
+    Compose(morf_image::canvas::Request),
+    Preview {
+        preview: Arc<morf_image::preview::Preview>,
+        ops: Vec<ops::ImageOp>,
+    },
     Pixel {
         source: PathBuf,
         x: u32,
@@ -94,6 +99,7 @@ pub(crate) enum ImageJob {
 /// What a finished job hands its callback.
 pub(crate) enum ImageOutcome {
     Info(ImageInfo, PathBuf),
+    Preview(morf_image::ImageData, Arc<morf_image::preview::Preview>),
     Pixel([u8; 4]),
     Palette(Vec<PaletteEntry>),
     /// Each file's bytes, or `None` where it could not be read.
@@ -214,6 +220,13 @@ fn work(jobs: &Mutex<Receiver<(u64, ImageJob)>>, results: &Sender<Finished>) {
 
 fn run(job: ImageJob) -> Result<ImageOutcome, String> {
     match job {
+        ImageJob::Compose(request) => morf_image::canvas::compose(&request)
+            .map(|info| ImageOutcome::Info(info, request.output))
+            .map_err(|error| error.to_string()),
+        ImageJob::Preview { preview, ops } => preview
+            .render(&ops)
+            .map(|image| ImageOutcome::Preview(image, preview))
+            .map_err(|error| error.to_string()),
         ImageJob::Process(request) => ops::process(&request)
             .map(|info| ImageOutcome::Info(info, request.output))
             .map_err(|error| error.to_string()),

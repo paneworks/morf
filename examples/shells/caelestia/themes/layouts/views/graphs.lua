@@ -10,6 +10,7 @@
 --   graphs.stat(label, value_fn, mark ("solid" | "dashed" | nil), color_fn, width)
 --   graphs.stats({ stat, ... }, width)   graphs.facts({ { label, value }, ... }, width)
 
+local morf = require("morf")
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
@@ -20,28 +21,10 @@ function V.new(samples)
   local M = {SAMPLES=samples}
 
 
-  local function series_path(values, w, h, bottom, top, closed)
-    local n = M.SAMPLES
-    local step = w / math.max(1, n - 1)
-    local offset = n - #values
-    if #values < 2 then return "M0 0" end
-    local span = math.max(1e-9, top - bottom)
-    local parts = {}
-    for i, v in ipairs(values) do
-      local x = (offset + i - 1) * step
-      local y = h - 1 - math.max(0, math.min(1, ((v or 0) - bottom) / span)) * (h - 2)
-      parts[#parts + 1] = ("%s%.1f %.1f"):format(i == 1 and "M" or "L", x, y)
-    end
-    if closed then parts[#parts + 1] = ("L%.1f %.1f L%.1f %.1f Z"):format(w, h, offset * step, h) end
-    return table.concat(parts, " ")
+  local function series_path(values,w,h,bottom,top,closed)
+    return morf.geometry.graph_series(values,{width=w,height=h,samples=M.SAMPLES,bottom=bottom,top=top,closed=closed})
   end
-
-  local function grid_path(w, h, columns, rows)
-    local parts = {}
-    for i = 1, columns - 1 do parts[#parts + 1] = ("M%.1f 0 V%.1f"):format(w * i / columns, h) end
-    for i = 1, rows - 1 do parts[#parts + 1] = ("M0 %.1f H%.1f"):format(h * i / rows, w) end
-    return table.concat(parts, " ")
-  end
+  local grid_path=morf.geometry.graph_grid
 
   --- A graph; returns the node and its `top` function (the value at the top).
   function M.graph(spec)

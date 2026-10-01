@@ -53,11 +53,18 @@ normal 560 ms reveal delay, the first letter locks at 650 ms; an 80 ms stagger
 caps decoding at another 1370 ms (1930 ms including the delay). The brief
 workspace indicator uses the same component with a 160 ms lead and 20 ms
 stagger, so it finishes before its short hold expires.
-Two small light pulses and a 280 ms split-color flash accompany the reveal.
+The light is slightly raised from the line-box center to align with the
+visible uppercase letters beside each title, and gives two short pulses
+occasionally while visible. Each title starts after a random 4–9 seconds and
+chooses a fresh random 7–11 second pause between bursts, so titles do not blink
+in unison. Hiding the panel or scrolling the title out of view stops its timer
+and animation. A finite split-color flash accompanies the reveal.
 Ghost colors use the wallpaper's secondary and tertiary roles, not fixed
 red/cyan. UTF-8 characters stay intact. Hiding cancels the timer and motion;
 reopening starts a fresh decode. The only text timer runs at 25 Hz during the
-finite reveal; there is no periodic idle glitch or continuous glow loop.
+finite reveal. The occasional title light uses finite native animation, with
+a slow timer between bursts and no redraw animation during the quiet pause;
+the text and color ghosts remain still after decoding.
 
 Mara's button motion catalogue is deliberately excluded: retain the existing
 Tsugumori corner feedback and rolling button labels. The inspected "beeping"
@@ -68,3 +75,11 @@ register are independent morf layouts using these shared motion and text
 components. Material retains its own rounded frame, morphing workspace discs
 and grouped history cards. The history controller owns actions and identity;
 neither visual package owns notification expiry or server calls.
+
+The moving light blade on drawer and page reveals uses the registration-edge
+motif from [Tsugumori](https://github.com/Aleph1-9012/Tsugumori) and the brief
+HUD accent flashes in [cyberpunk-ui](https://github.com/rintran720/cyberpunk-ui)
+as visual references. It is drawn as a sibling above the clipped cover because
+the renderer can hide children of an animated cover beneath its fill. A narrow
+on-surface stroke leads a low-opacity wallpaper-secondary trail. Both are
+finite native tracks and disappear when the reveal finishes or reverses.

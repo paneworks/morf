@@ -45,29 +45,10 @@ function M.build(model)
   -- Mission Center's graph: a bordered box on a faint grid, the first
   -- series filled under its line, the second a dashed line; the newest
   -- sample at the right edge.
-  local function series_path(values, w, h, top, closed)
-    local n = model.samples
-    local step = w / math.max(1, n - 1)
-    local offset = n - #values
-    if #values < 2 then return "M0 0" end
-    local parts = {}
-    for i, v in ipairs(values) do
-      local x = (offset + i - 1) * step
-      local y = h - 1 - math.max(0, math.min(1, (v or 0) / top)) * (h - 2)
-      parts[#parts + 1] = ("%s%.1f %.1f"):format(i == 1 and "M" or "L", x, y)
-    end
-    if closed then
-      parts[#parts + 1] = ("L%.1f %.1f L%.1f %.1f Z"):format(w, h, offset * step, h)
-    end
-    return table.concat(parts, " ")
+  local function series_path(values,w,h,top,closed)
+    return morf.geometry.graph_series(values,{width=w,height=h,samples=model.samples,bottom=0,top=top,closed=closed})
   end
-
-  local function grid_path(w, h, columns, rows)
-    local parts = {}
-    for i = 1, columns - 1 do parts[#parts + 1] = ("M%.1f 0 V%.1f"):format(w * i / columns, h) end
-    for i = 1, rows - 1 do parts[#parts + 1] = ("M0 %.1f H%.1f"):format(h * i / rows, w) end
-    return table.concat(parts, " ")
-  end
+  local grid_path=morf.geometry.graph_grid
 
   --- `spec`: width, height, kind, first (fn -> list), second (fn -> list,
   --- dashed), top (number or fn -> the value at the top; the peak when
@@ -250,6 +231,16 @@ function M.build(model)
       facts(model.readouts.cpu.facts),
     },
   })
+  if theme.motion.value_flash then
+    theme.motion.value_flash(cpu_page,"performance-cpu",{
+      x=MAIN_W-12,y=TOP,height=32,
+      active=function() return opened() and on("cpu")() end,
+      read=function() return cpu().usage end,
+      changed=function(before,now)
+        return (before<70 and now>=70) or math.abs(now-before)>=20
+      end,
+    })
+  end
 
   -- ------------------------------------------------------------- memory --
   local mem_h = math.floor((area_h - 3 * 22 - 40 - 2 * 10) * 0.64)
@@ -302,6 +293,17 @@ function M.build(model)
       facts(model.readouts.memory.facts),
     },
   })
+
+  if theme.motion.value_flash then
+    theme.motion.value_flash(memory_page,"performance-memory",{
+      x=MAIN_W-12,y=TOP,height=32,
+      active=function() return opened() and on("memory")() end,
+      read=function() return memory().percent end,
+      changed=function(before,now)
+        return (before<85 and now>=85) or math.abs(now-before)>=15
+      end,
+    })
+  end
 
   -- -------------------------------------------------------------- drive --
   local drive_ref,the_drive,units,unit=model.drive_ref,model.the_drive,model.units,model.unit

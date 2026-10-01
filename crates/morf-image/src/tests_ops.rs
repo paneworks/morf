@@ -10,6 +10,111 @@ use crate::*;
 
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
+#[test]
+fn native_canvas_preserves_alpha_orders_overlays_and_refuses_oversize_before_writing() {
+    let root = temp_dir("canvas");
+    let mut request = crate::canvas::Request {
+        width: 40,
+        height: 20,
+        background: [12, 34, 56, 128],
+        ops: vec![],
+        output: root.join("canvas.png"),
+        format: OutputFormat::Png,
+        quality: 90,
+    };
+    crate::canvas::compose(&request).unwrap();
+    assert_eq!(
+        pixel_at(&request.output, 0, 0, 800).unwrap(),
+        request.background
+    );
+    let source = root.join("source.png");
+    two_tone(&source);
+    request.ops = vec![
+        ImageOp::Overlay { source, x: 0, y: 0 },
+        ImageOp::Crop {
+            x: 20,
+            y: 0,
+            width: 20,
+            height: 10,
+        },
+    ];
+    let info = crate::canvas::compose(&request).unwrap();
+    assert_eq!((info.width, info.height), (20, 10));
+    assert_eq!(
+        pixel_at(&request.output, 10, 5, 200).unwrap(),
+        [0, 255, 0, 255]
+    );
+    request.width = MAX_DIMENSION + 1;
+    request.output = root.join("refused.png");
+    assert!(crate::canvas::compose(&request).is_err());
+    assert!(!request.output.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn annotation_compositing_and_region_effects_preserve_outside_pixels() {
+    let base = image::DynamicImage::ImageRgba8(RgbaImage::from_fn(40, 20, |x, y| {
+        if (x + y) % 2 == 0 {
+            Rgba([255, 0, 0, 255])
+        } else {
+            Rgba([0, 0, 255, 255])
+        }
+    }));
+    for effect in [
+        RegionEffect::Blur(4.0),
+        RegionEffect::Pixelate(4),
+        RegionEffect::Zoom(2.0),
+    ] {
+        let edited = apply_ops(
+            base.clone(),
+            &[ImageOp::Region {
+                x: 10,
+                y: 5,
+                width: 20,
+                height: 10,
+                effect,
+            }],
+        )
+        .unwrap()
+        .to_rgba8();
+        assert_eq!(edited.get_pixel(0, 0), base.to_rgba8().get_pixel(0, 0));
+        assert_eq!(edited.get_pixel(39, 19), base.to_rgba8().get_pixel(39, 19));
+        assert_ne!(edited.get_pixel(15, 8), base.to_rgba8().get_pixel(15, 8));
+    }
+    let edited=apply_ops(base,&[
+        ImageOp::Overlay {source:PathBuf::from(r##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect x="10" y="5" width="20" height="10" fill="#00ff00"/></svg>"##),x:0,y:0},
+        ImageOp::Crop {x:10,y:5,width:20,height:10},
+    ]).unwrap().to_rgba8();
+    assert_eq!(edited.dimensions(), (20, 10));
+    assert_eq!(*edited.get_pixel(5, 5), Rgba([0, 255, 0, 255]));
+}
+
+#[test]
+fn svg_annotation_text_is_drawn_and_invalid_effects_are_refused() {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40"><text x="2" y="30" font-size="24" font-family="sans-serif" fill="red">Test</text></svg>"##;
+    let decoded = decode_bounded(svg).unwrap().to_rgba8();
+    assert!(decoded.pixels().any(|p| p[3] > 0 && p[0] > 200));
+    for effect in [
+        RegionEffect::Blur(f32::NAN),
+        RegionEffect::Pixelate(0),
+        RegionEffect::Zoom(100.0),
+    ] {
+        assert!(
+            apply_ops(
+                image::DynamicImage::ImageRgba8(decoded.clone()),
+                &[ImageOp::Region {
+                    x: 0,
+                    y: 0,
+                    width: 20,
+                    height: 20,
+                    effect
+                }]
+            )
+            .is_err()
+        );
+    }
+}
+
 fn temp_dir(name: &str) -> PathBuf {
     let id = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
     let path = env::temp_dir().join(format!("morf-image-ops-{name}-{}-{id}", std::process::id()));
@@ -245,4 +350,17 @@ fn inline_svg_and_data_uris_are_sources() {
     assert!(!is_inline_source("/tmp/a.svg") && !is_inline_source("memory:capture/1"));
     assert!(cache.load("data:text/plain,hello", 4, 4, 120).is_err());
     assert!(cache.load("data:image/png;base64,@@@", 4, 4, 120).is_err());
+}
+
+#[test]
+fn large_preview_cache_is_bounded_by_bytes_before_the_count_limit() {
+    let source = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>"##;
+    let mut cache = ImageCache::default();
+    let first = cache.load(source, 2048, 2048, 120).unwrap();
+    for size in 2049..2053 {
+        cache.load(source, size, 2048, 120).unwrap();
+    }
+    cache.shrink();
+    let next = cache.load(source, 2048, 2048, 120).unwrap();
+    assert!(!std::sync::Arc::ptr_eq(&first, &next));
 }

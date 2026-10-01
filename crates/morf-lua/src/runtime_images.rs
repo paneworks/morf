@@ -119,9 +119,25 @@ fn execute_image_handler(
     result: Result<ImageOutcome, String>,
     limits: Limits,
 ) -> Result<(), String> {
+    // Publication happens here: a runtime dropped before delivery cannot leak pixels.
+    let result = result.and_then(|outcome| match outcome {
+        ImageOutcome::Preview(image, preview) => {
+            let info = morf_image::ops::ImageInfo {
+                width: image.width,
+                height: image.height,
+                format: "rgba".into(),
+            };
+            preview
+                .publish(image)
+                .map(|source| ImageOutcome::Info(info, source.into()))
+                .map_err(|error| error.to_string())
+        }
+        other => Ok(other),
+    });
     let args = match result {
         Ok(outcome) => {
             let value = match outcome {
+                ImageOutcome::Preview(..) => unreachable!("published above"),
                 ImageOutcome::Info(info, path) => {
                     let table = Table::new(&ctx);
                     table.set_field(ctx, "width", i64::from(info.width));

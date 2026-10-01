@@ -72,7 +72,16 @@ function M.build(model)
         color=function() return C.primary end,ink=function() return C.onPrimary end,on_clicked=model.submit},
     },
   }
-  return {width=W,height=function() return (column.layout_height or 280)+2*PAD end,
-    content=ui.Item {anchors={fill=true},ui.MouseArea {anchors={fill=true}},column}}
+  local content=ui.Item {anchors={fill=true},ui.MouseArea {anchors={fill=true}},column}
+  if theme.motion and theme.motion.auth_result then
+    -- Closing a GCR prompt confirms a reply, not successful authentication.
+    -- Only actual validation errors and server warnings produce a result cue.
+    theme.motion.auth_result(content,"keyring",{active=function() return model.opened:get() end,
+      read=function()
+        local warning=model.error:get()~="" and model.error:get() or prop("warning","")
+        return warning~="" and "failed" or "waiting",warning
+      end})
+  end
+  return {width=W,height=function() return (column.layout_height or 280)+2*PAD end,content=content}
 end
 return M

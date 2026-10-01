@@ -1,5 +1,5 @@
 -- GAME-inspired title decode and registration lights. See REFERENCE.md.
--- One finite decode on appearance/text change; no idle glitch polling.
+-- Titles decode once; their leading light occasionally pulses while in view.
 local morf = require("morf")
 local ui = require("morf.ui")
 local symbols = { "!", "<", ">", "-", "_", "/", "[", "]", "{", "}", "=", "+", "*", "^", "?", "#" }
@@ -19,28 +19,64 @@ return function(theme, kit, props)
   end
   local height = props.height or math.ceil(size * 1.5)
   local width = props.width or function() return utf8.len(caption()) * size * 0.65 + 18 end
+  local function available()
+    return math.max(0,(type(width)=="function" and width() or width)-16)
+  end
+  local alignment=props.horizontal_alignment
+  -- A centered/right-aligned label's box can be much wider than its word.
+  -- Measure the actual font so the light follows the word, not the box edge.
+  local measure
+  if alignment=="center" or alignment=="right" then
+    measure=kit.text {id=id.."-measure",height=height,opacity=0,
+      font_size=size,font_weight=props.font_weight or 500,text=caption}
+  end
   local function label(suffix, color)
-    return kit.text { id = id .. suffix, x = 16, width = function()
-      return math.max(0, (type(width) == "function" and width() or width) - 16)
-    end, height = height, font_size = size, font_weight = props.font_weight or 500,
-      horizontal_alignment = props.horizontal_alignment, vertical_alignment = props.vertical_alignment,
+    return kit.text { id = id .. suffix, x = 16, width = available,
+      height = height, font_size = size, font_weight = props.font_weight or 500,
+      horizontal_alignment = props.horizontal_alignment, vertical_alignment = props.vertical_alignment or "center",
       elide = props.elide or "right", text = caption(), color = color }
   end
   local a = label("-ghost-a", function() return C.secondary end)
   local b = label("-ghost-b", function() return C.tertiary end)
   local title = label("-text", props.color or function() return C.primary end)
-  local pip = ui.Rect { id = id .. "-light", x = 0, y = math.floor((height - 5) / 2),
-    width = 5, height = 5, opacity = 0.3, color = props.color or function() return C.primary end }
+  -- Uppercase letter ink sits above the line box's midpoint because that
+  -- box also reserves space for descenders. Raise the pip optically.
+  local pip = ui.Rect { id = id .. "-light", x = function()
+      if not measure then return 0 end
+      local spare=math.max(0,available()-(measure.layout_width or available()))
+      return alignment=="center" and spare/2 or spare
+    end,
+    anchors={vertical_center=true,vertical_center_offset=-math.max(1,size*.075)},
+    width = 5, height = 5, opacity = 0.18, color = props.color or function() return C.primary end }
   a.opacity, b.opacity = 0, 0
   local node = ui.Item { id = id, x = props.x, y = props.y, anchors = props.anchors,
     width = width, height = height, visible = props.visible, a, b, title, pip }
-  local timer, flash
+  if measure then ui.reparent(measure,node) end
+  local timer, flash, light
+  -- Random pauses are timer-driven; only the short burst needs animation
+  -- frames. Every title chooses fresh timing independently on each burst.
+  local light_clock
+  local function pulse()
+    if light then light:stop() end
+    morf.animation.stop(pip,"opacity")
+    light=morf.animation.play {
+      {node=pip,property="opacity",duration=460,keyframes={
+        {at=0,value=.18},{at=.15,value=1},{at=.4,value=.18},
+        {at=.6,value=.18},{at=.75,value=1},{at=1,value=.18},
+      }},
+    }
+    light_clock.interval=math.random(7000,11000)
+  end
+  light_clock=ui.Timer {id=id.."-light-clock",interval=7000,
+    ["repeat"]=true,running=false,on_triggered=pulse}
+  ui.reparent(light_clock,node)
+  local light_on=false
   local elapsed, duration, letters, final = 0, 0, {}, ""
   local function finish()
     timer.running = false
     if flash then flash:finish() flash = nil end
     title.text, a.text, b.text = final, final, final
-    a.opacity, b.opacity, pip.opacity = 0, 0, 0.3
+    a.opacity, b.opacity = 0, 0
   end
   local function paint()
     local output, t = {}, elapsed - delay
@@ -81,10 +117,23 @@ return function(theme, kit, props)
     end
     return true
   end
-  morf.effect(id .. ".appearance", function()
+  morf.effect(id .. ".appearance."..(props.effect_scope or ""), function()
     local visible = props.visible
     if type(visible) == "function" then visible = visible() end
     local on, value = active() and visible ~= false and in_view(), caption()
+    local blink=on and value~=""
+    if blink~=light_on then
+      light_on=blink
+      if blink then
+        light_clock.interval=math.random(4000,9000)
+        light_clock.running=true
+      else
+        light_clock.running=false
+        if light then light:stop() light=nil end
+        morf.animation.stop(pip,"opacity")
+        pip.opacity=.18
+      end
+    end
     if on == was and value == previous then return end
     was, previous, final = on, value, value
     finish()
@@ -94,8 +143,7 @@ return function(theme, kit, props)
     elapsed, duration = 0, delay + lead + math.min(#letters - 1, 9) * stagger
     paint()
     timer.running = true
-    -- Small split-color flash and two registration pulses; native channels
-    -- keep this out of the Lua timer and stop automatically at rest.
+    -- The split-color title flash remains finite.
     local tracks = {}
     for i, ghost in ipairs { a, b } do
       tracks[#tracks + 1] = { node = ghost, property = "translate_x", from = i == 1 and -3 or 3,
@@ -103,9 +151,6 @@ return function(theme, kit, props)
       tracks[#tracks + 1] = { node = ghost, property = "opacity", delay = delay, duration = 280 * pace,
         keyframes = { {at=0,value=0}, {at=0.25,value=0.65}, {at=1,value=0} } }
     end
-    tracks[#tracks + 1] = { node = pip, property = "opacity", delay = delay, duration = 600 * pace,
-      keyframes = { {at=0,value=0.3}, {at=0.1,value=1}, {at=0.3,value=0.3},
-        {at=0.6,value=0.3}, {at=0.7,value=1}, {at=1,value=0.3} } }
     flash = morf.animation.play { { parallel = tracks } }
   end, { owner = node })
   return node

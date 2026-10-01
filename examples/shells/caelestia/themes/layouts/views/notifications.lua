@@ -184,6 +184,9 @@ function V.build(M)
     ui.Column { x = LEFT, y = TOP, gap = GAP, table.unpack(cards) },
   }
 
+  if theme.motion.notification_acquire then
+    theme.motion.notification_acquire(content,cards,M,shown)
+  end
   return {content=content,width=WIDTH,height=height,edge="top",dismiss=dismiss,
     props={anchors={top=true,right=true}}}
 end

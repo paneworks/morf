@@ -94,6 +94,7 @@ function polkit_agent.serve(options)
   -- on with it, so the poll that read the old one stops of its own accord.
   local function drop_helper(request)
     request.generation = (request.generation or 0) + 1
+    if request.helper_tick then request.helper_tick:cancel() request.helper_tick = nil end
     if request.helper then
       pcall(function() request.helper:kill() end)
       request.helper = nil
@@ -107,19 +108,21 @@ function polkit_agent.serve(options)
   local run_helper
 
   local function finish(request, ok, error_name, message)
-    if not agent.pending[request.cookie] then return end
+    if agent.pending[request.cookie] ~= request then return end
     agent.pending[request.cookie] = nil
+    request.prompt = nil
     drop_helper(request)
-    if ok then
-      service:reply(request.call_id, nil)
-    else
-      service:reply_error(request.call_id, error_name or FAILED, message or "authentication failed")
-    end
+    -- A caller disappearing must not prevent the UI from releasing its grab.
+    pcall(function()
+      if ok then service:reply(request.call_id, nil)
+      else service:reply_error(request.call_id, error_name or FAILED, message or "authentication failed") end
+    end)
     on_done(request, ok, message)
   end
 
   --- Feeds the helper's lines to the request: prompts out, verdict back.
   local function helper_line(request, text)
+    if agent.pending[request.cookie] ~= request then return end
     -- A character class rather than `%u`: the underscore in `PAM_TEXT_INFO`
     -- is not a letter, and `%u+` stopped at it and matched nothing useful.
     local style, rest = text:match("^(PAM_[A-Z_]+)%s?(.*)$")
@@ -155,6 +158,7 @@ function polkit_agent.serve(options)
   --- on its command line and the cookie on stdin. The lines it speaks are
   --- the same either way.
   function run_helper(request, user)
+    if agent.pending[request.cookie] ~= request then return end
     request.generation = request.generation or 0
     local generation = request.generation
     local buffer = ""
@@ -187,7 +191,7 @@ function polkit_agent.serve(options)
     -- retry that started another.
     local socket_, helper = request.socket, request.helper
     local tick
-    local function current() return request.generation == generation end
+    local function current() return agent.pending[request.cookie] == request and request.generation == generation end
     local function lost(why)
       if current() then
         drop_helper(request)
@@ -226,6 +230,7 @@ function polkit_agent.serve(options)
         end
       end
     end, true)
+    request.helper_tick = tick
   end
 
   service:on_call(function(call)
@@ -248,6 +253,7 @@ function polkit_agent.serve(options)
       end
       request.user = user.name
       function request.answer(password)
+        if agent.pending[request.cookie] ~= request then return end
         if request.socket then
           request.socket:send(tostring(password) .. "\n")
           request.socket:flush()
@@ -300,6 +306,9 @@ function polkit_agent.serve(options)
   end
 
   function agent.close()
+    local pending = {}
+    for _, request in pairs(agent.pending) do pending[#pending + 1] = request end
+    for _, request in ipairs(pending) do finish(request, false, CANCELLED, "agent closed") end
     pcall(function()
       service:call(AUTHORITY, AUTHORITY_PATH, AUTHORITY_INTERFACE, "UnregisterAuthenticationAgent", {
         { signature = "(sa{sv})", value = subject },

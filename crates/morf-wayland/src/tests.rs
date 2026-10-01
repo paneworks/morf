@@ -10,6 +10,32 @@ use wayland_client::protocol::wl_output;
 use super::*;
 
 #[test]
+fn monitor_sizes_use_logical_pixels_and_only_transform_mode_fallbacks() {
+    use crate::protocol_handlers::output_logical_size as size;
+    use wl_output::Transform::*;
+    // Fractional scaling is reflected in xdg-output's logical size, which
+    // must not be divided by the integer buffer scale a second time.
+    assert_eq!(
+        size(Some((2560, 1440)), Some((3840, 2160)), Normal, 2),
+        Some((2560, 1440))
+    );
+    assert_eq!(
+        size(Some((1080, 1920)), Some((3840, 2160)), _90, 2),
+        Some((1080, 1920))
+    );
+    assert_eq!(
+        size(None, Some((3840, 2160)), Normal, 2),
+        Some((1920, 1080))
+    );
+    assert_eq!(size(None, Some((3840, 2160)), _90, 2), Some((1080, 1920)));
+    assert_eq!(
+        size(Some((0, 0)), Some((1920, 1080)), Flipped270, 1),
+        Some((1080, 1920))
+    );
+    assert_eq!(size(None, None, Normal, 1), None);
+}
+
+#[test]
 fn physical_size_rounds_fractional_scale_upward() {
     assert_eq!(physical_size((101, 31), 150), (127, 39));
 }

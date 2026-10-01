@@ -23,6 +23,9 @@ pub(crate) fn handle_pointer_event(
     let mut repaint = false;
     match event {
         LayerEvent::PointerMotion { surface, x, y } => {
+            // Enter can arrive before the surface's first frame. Keep the
+            // position so containment can be answered once its layout exists.
+            input.pointer = Some((surface, x, y));
             if surface == SurfaceRole::Layer(BACKDROP_LAYER) {
                 client.set_cursor_shape("default");
             }
@@ -32,7 +35,6 @@ pub(crate) fn handle_pointer_event(
             let hit = hit_layout
                 .hit_test(&runtime.scene(), x, y)
                 .map_err(|error| error.to_string())?;
-            input.pointer = Some((surface, x, y));
             // Before `hovered` moves, and flushed with it: a binding reading
             // both sees them change together.
             repaint |= update_containment(runtime, input, layouts, None);

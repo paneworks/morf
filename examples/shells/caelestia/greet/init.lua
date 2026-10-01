@@ -13,7 +13,7 @@
 -- greetd runs it inside cage, as the user `greeter`:
 --
 --     [default_session]
---     command = "cage -s -- morf -c caelestia/greet"      (or a bundle of it)
+--     command = "cage -m last -s -- /usr/bin/morf greet -c caelestia"      (or a bundle of it)
 --     user = "greeter"
 --
 -- Nested, in a session already logged into, it draws the same and says there
@@ -33,8 +33,11 @@ local PREVIEW = morf.operands[1] == "preview"
 local screen = morf.screens[1]
 local W = (screen and screen.width) or 1920
 local H = (screen and screen.height) or 1080
-local S = math.max(0.75, math.min(2.4, math.min(W / 1920, H / 1080)))
-local function s(n) return math.floor(n * S + 0.5) end
+local function keyboard_attached()
+  local ok, value = pcall(function() return require("lib.keyboards").attached() end)
+  return not ok or value
+end
+local s = require("themes.auth_metrics")(W, H, keyboard_attached())
 
 morf.surface.width = W
 morf.surface.height = H
@@ -75,6 +78,7 @@ local has_pattern -- below, with the pattern pad
 -- "leaving" (the session is starting).
 local stage = morf.signal("greet.stage", "closed")
 local pull = morf.signal("greet.pull", 0)
+local outputs
 
 local function person() return people[who:get()] or people[1] end
 local function session() return list[which:get()] end
@@ -92,13 +96,14 @@ local door = auth.greeter {
   enabled = not PREVIEW and morf.env("CAELESTIA_DRY_RUN") ~= "1",
   user = person().name,
   session = session(),
-  on_busy = function(b) busy:set(b) end,
+  on_busy = function(b) if b then busy:set(true) end end,
   on_info = function(words, wrong) say(words, wrong) end,
   on_failed = function(why)
     say(why ~= "" and why or "Wrong password", true)
     clear()
     shake:set(1)
     morf.timer(70, function() shake:set(0) end, false)
+    if outputs then outputs.release() end
   end,
   -- The session is starting: everything sinks away while greetd replaces
   -- this process with it.
@@ -107,6 +112,7 @@ local door = auth.greeter {
 local NOT_GREETD = "Not started by greetd: nothing to log in to"
 
 local function choose(index)
+  if busy:get() then return end
   if index == who:get() or not people[index] then return end
   who:set(index)
   clear()
@@ -118,6 +124,7 @@ local function step_person(by)
   choose(((who:get() - 1 + by) % #people) + 1)
 end
 local function step_session(by)
+  if busy:get() then return end
   if #list < 2 then return end
   which:set(((which:get() - 1 + by) % #list) + 1)
   door.session = session()
@@ -143,15 +150,22 @@ local function open_sheet()
   poke()
 end
 
-local function submit()
-  if busy:get() or stage:get() ~= "sheet" then return end
+local function submit_owned()
+  -- A pointer handoff or Escape can clear a draft while the public grant
+  -- travels between output runtimes. Release it without contacting greetd.
+  if stage:get()~="sheet" or password=="" then outputs.release() return end
   if not session() then
     say("No session installed to start", true)
+    outputs.release()
     return
   end
   door.session = session()
   say("")
   door:submit(password)
+end
+local function submit()
+  if busy:get() or stage:get() ~= "sheet" or password=="" then return end
+  outputs.submit()
 end
 
 local MAX_DOTS = 20
@@ -207,6 +221,9 @@ local function key(keysym, typed_text)
       local RETURN, KP_ENTER, BACKSPACE, ESCAPE = 0xff0d, 0xff8d, 0xff08, 0xff1b
       local LEFT, RIGHT, F2 = 0xff51, 0xff53, 0xffbf
       local st = stage:get()
+      -- A real compositor key event proves this surface has the keyboard.
+      -- Cage may focus a different output before delivering pointer entry.
+      if outputs and not outputs.main() then outputs.claim() end
       if st ~= "rest" and st ~= "sheet" then return end
       if busy:get() then return end
       if keysym == ESCAPE then escape() return end
@@ -232,7 +249,15 @@ do
   local ok, name = pcall(morf.fs.read, "/proc/sys/kernel/hostname")
   if ok and type(name) == "string" then hostname = name:match("^%s*(.-)%s*$") end
 end
-require(visual.greet) {
+-- Cage owns one fullscreen login window on its main output. Authentication
+-- and keyboard focus stay here; pointer movement never transfers ownership.
+outputs = require("models.greet_canvas_outputs") {
+  busy=function(value) busy:set(value) end,
+  submit=submit_owned,
+}
+local context = {
+  main=outputs.main,
+  claim=outputs.claim,
   hostname = hostname,
   message = message, bad = bad,
   W = W,
@@ -261,10 +286,7 @@ require(visual.greet) {
   list = list,
   who = who,
   which = which,
-  keyboard_attached = function()
-    local ok, value = pcall(function() return require("lib.keyboards").attached() end)
-    return not ok or value
-  end,
+  keyboard_attached = keyboard_attached,
   typed = typed,
   shake = shake,
   MAX_DOTS = MAX_DOTS,
@@ -277,6 +299,29 @@ require(visual.greet) {
   pattern = pattern,
   key = key,
 }
+local ui=require("morf.ui")
+local root=ui.Item {id="greet-output",anchors={fill=true}}
+local child,built
+morf.effect("greet.geometry",function()
+  -- xdg_toplevel.configure is the authority for this window's logical size.
+  -- Do not reconstruct a desktop from output metadata: it may arrive before
+  -- Cage finishes disabling secondary monitors and disagree with this view.
+  local width,height=root.layout_width or W,root.layout_height or H
+  if width<=0 or height<=0 then return end
+  width,height=math.floor(width+.5),math.floor(height+.5)
+  local signature=tostring(width)..":"..tostring(height)
+  if signature==built then return end
+  built=signature
+  if child then ui.destroy(child,true) end
+  local ctx=setmetatable({W=width,H=height,output_name="main"}, {__index=context})
+  ctx.s=require("themes.auth_metrics")(width,height,keyboard_attached())
+  ctx.text,ctx.icon=require("themes.typography")(visual.tokens,C,ctx.s)
+  child=require(visual.greet)(ctx)
+  child.id="greet-view.main"
+  child.anchors={fill=false}
+  child.x,child.y,child.width,child.height=0,0,width,height
+  ui.reparent(child,root)
+end,{owner=root})
 -- For a test or a picture: `morf ipc call stage sheet`.
 morf.ipc.stage = function(to)
   if to == "sheet" then stage:set("rest") open_sheet() elseif to == "rest" then stage:set("rest") end
