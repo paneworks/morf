@@ -1,9 +1,10 @@
--- Shared composition in both themes. Theme components supply motion,
--- typography and shapes; no separate layout for Material and Tsugumori.
+-- One composition for every theme: the kit supplies the cards, controls,
+-- the response chart and the input wells; nothing here picks a shape.
 local morf=require("morf")
 local ui=require("morf.ui")
 local theme=require("theme")
 local kit=require("kit")
+local rows=require("themes.layouts.rows")
 local C=theme.color
 local M={}
 local SCOPE="settings.sound/equalizer"
@@ -11,7 +12,7 @@ local function title(text,width,scope)
   return kit.heading {text=text,width=width,elide="right",scope=scope or SCOPE,level="section"}
 end
 local function note(text,width)
-  return kit.subtitle {text=text,width=width,wrap=true,font_size=12}
+  return kit.subtitle {text=text,width=width,wrap=true,font_size=theme.size.small}
 end
 local function box(id,w,height,children)
   local column=ui.Column {x=16,y=14,width=w-32,gap=8,table.unpack(children)}
@@ -25,8 +26,8 @@ end
 local function number_slider(id,label,w,get,set,low,high,units)
   return ui.Column {width=w,gap=0,
     ui.Item {width=w,height=18,
-      kit.subtitle {text=label,width=w-90,font_size=12},
-      kit.text {text=function() return ("%.1f%s"):format(get(),units or "") end,font_size=12,
+      kit.subtitle {text=label,width=w-90,font_size=theme.size.small},
+      kit.text {text=function() return ("%.1f%s"):format(get(),units or "") end,font_size=theme.size.small,
         width=90,horizontal_alignment="right",anchors={right=true}}},
     kit.slider {id=id,width=w,height=22,label=false,value=function() return (get()-low)/(high-low) end,
       set=function(v) set(math.floor((low+v*(high-low))*10+.5)/10) end}}
@@ -36,24 +37,19 @@ function M.build(model,w,h)
   local mode_buttons={width=inner,gap=6}
   for _,entry in ipairs {{"auto","Auto"},{"headphones","Headphones"},{"speakers","Speakers"}} do
     local key,label=entry[1],entry[2]
-    mode_buttons[#mode_buttons+1]=kit.pill {id="equalizer-mode-"..key,width=(inner-12)/3,height=32,label=label,
-      color=function() return model.get("mode")==key and C.primary or C.surfaceContainerHighest end,
-      ink=function() return model.get("mode")==key and C.onPrimary or C.onSurfaceVariant end,
-      on_clicked=function() model.set("mode",key) end}
+    local function on() return model.get("mode")==key end
+    mode_buttons[#mode_buttons+1]=rows.choice {id="equalizer-mode-"..key,width=(inner-12)/3,height=32,on=on,
+      tone="primary",tile=true,on_clicked=function() model.set("mode",key) end,
+      kit.menu_label {anchors={center_in=true},text=label,font_size=theme.size.small,font_weight=600,
+        width=(inner-12)/3-12,elide="right",horizontal_alignment="center",
+        color=rows.ink(on,true,C.onSurfaceVariant)}}
   end
   local curve=function() return model.curve:get() end
-  local function line(ear)
-    local c=curve()
-    return c and morf.geometry.graph_series(c[ear],{width=inner,height=114,samples=160,bottom=-36,top=12}) or ""
-  end
-  local graph=ui.Item {id="equalizer-response",width=inner,height=114,
-    ui.Path {width=inner,height=114,view_box={0,0,inner,114},
-      d=morf.geometry.graph_grid(inner,114,8,4),stroke_width=1,
-      stroke_color=function() return C.primary:alpha(.10) end,fill_color=function() return C.primary:alpha(0) end},
-    ui.Path {width=inner,height=114,view_box={0,0,inner,114},d=function() return line("response_left") end,
-      stroke_width=2,stroke_color=function() return C.primary end,fill_color=function() return C.primary:alpha(0) end},
-    ui.Path {width=inner,height=114,view_box={0,0,inner,114},d=function() return line("response_right") end,
-      stroke_width=2,dash={5,4},stroke_color=function() return C.tertiary end,fill_color=function() return C.primary:alpha(0) end}}
+  local function series(ear) return function() local c=curve() return c and c[ear] or {} end end
+  -- The response on the theme's chart: left filled, right as its second line.
+  local chart=kit.chart {width=inner,height=114,first=series("response_left"),second=series("response_right"),
+    samples=160,bottom=-36,top=12,columns=8}
+  local graph=ui.Item {id="equalizer-response",width=inner,height=114,chart}
   local band_rows={title("Bands",inner),note("Tone adjustments · −12 to +12 dB",inner)}
   for i,hz in ipairs(model.frequencies) do
     band_rows[#band_rows+1]=number_slider("equalizer-band-"..i,hz<1000 and hz.." Hz" or hz/1000 .." kHz",inner,
@@ -75,7 +71,7 @@ function M.build(model,w,h)
         note("Auto follows the active output. Each mode keeps its own settings.",inner),
       }),
       box("equalizer-curve",w,198,{title("Response",inner),graph,
-        note(function() local c=curve() return ("L solid / R dashed · 20 Hz–20 kHz · headroom %.1f dB"):format(c and c.preamp or 0) end,inner)}),
+        note(function() local c=curve() return ("L filled / R line · 20 Hz–20 kHz · headroom %.1f dB"):format(c and c.preamp or 0) end,inner)}),
       box("equalizer-compensation",w,270,{
         title("Audiogram compensation",inner),
         flag("equalizer-compensation-enabled","Use audiogram",inner,function() return model.get("compensation") end,
@@ -102,19 +98,19 @@ function M.audiogram(model,w,h)
   local function input(id,ear,index,width)
     local node=ui.TextInput {id=id,width=width-16,height=30,x=8,
       text=function() local draft=model.draft:get() return tostring(ear=="label" and draft.label or draft[ear][index]) end,
-      font_family=theme.font,font_size=13,color=function() return C.onSurface end,
+      font_family=theme.font,font_size=theme.size.normal,color=function() return C.onSurface end,
       caret_color=function() return C.primary end,selection_color=function() return C.primary:alpha(.25) end,
       on_text_changed=function(value) model.edit(ear,index,value) end}
-    return kit.surface {width=width,height=34,radius=8,color=function() return C.surfaceContainerHighest end,node}
+    return rows.well {width=width,height=34,node}
   end
   local rows={width=inner,gap=10}
   rows[#rows+1]=ui.Row {width=inner,gap=8,
-    kit.subtitle {width=64,text="Hz",font_size=12},
-    kit.subtitle {width=(inner-80)/2,text="Left · dB HL",font_size=12},
-    kit.subtitle {width=(inner-80)/2,text="Right · dB HL",font_size=12}}
+    kit.subtitle {width=64,text="Hz",font_size=theme.size.small},
+    kit.subtitle {width=(inner-80)/2,text="Left · dB HL",font_size=theme.size.small},
+    kit.subtitle {width=(inner-80)/2,text="Right · dB HL",font_size=theme.size.small}}
   for i,hz in ipairs(model.frequencies) do
     rows[#rows+1]=ui.Row {width=inner,gap=8,align="center",
-      kit.text {width=64,text=tostring(hz),font_size=13},
+      kit.text {width=64,text=tostring(hz),font_size=theme.size.normal},
       input("audiogram-left-"..i,"left",i,(inner-80)/2),
       input("audiogram-right-"..i,"right",i,(inner-80)/2)}
   end

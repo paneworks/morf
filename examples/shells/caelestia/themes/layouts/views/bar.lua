@@ -9,16 +9,11 @@ local function button(id, size, on_clicked, child, hint)
   area = kit.action {
     id = id, width = size, height = size, cursor = "pointer",
     on_clicked = on_clicked,
-    kit.surface {
-      anchors = { fill = true }, radius = size / 2,
-      color = function()
-        return (area and area.hovered) and C.onSurface:alpha(0.08) or C.onSurface:alpha(0)
-      end,
-      behavior = { color = { duration = theme.duration.small } },
-    },
     child,
   }
-  return area
+  return kit.hover(area, function(hovered)
+    return hovered and C.onSurface:alpha(0.08) or C.onSurface:alpha(0)
+  end, size / 2)
 end
 
 function V.build(model)
@@ -33,7 +28,7 @@ function V.build(model)
       ui.Path {
         x = 24 * mark.offset_x / 100, y = 0, width = 24 * mark.scale_x, height = 24,
         view_box = mark.view_box, d = mark.d,
-        fill_color = function() return C.primary end,
+        fill_color = kit.ink("accent"),
       },
     })
   end
@@ -68,15 +63,6 @@ function V.build(model)
       height = function() return here() and ITEM or 0 end,
       visible = here,
       on_clicked = function() model.focus(client.address) end,
-      kit.surface {
-        anchors = { fill = true }, radius = 10,
-        color = function()
-          if focused() then return C.primary:alpha(0.16) end
-          if area and area.hovered then return C.onSurface:alpha(0.07) end
-          return C.onSurface:alpha(0)
-        end,
-        behavior = { color = { duration = theme.duration.small } },
-      },
       ui.Row {
         x = 7, anchors = { vertical_center = true }, gap = 8, align = "center",
         icon_of(client),
@@ -97,7 +83,10 @@ function V.build(model)
         behavior = { width = { duration = theme.duration.small }, x = { duration = theme.duration.small } },
       },
     }
-    return area
+    return kit.hover(area, function(hovered)
+      if focused() then return C.primary:alpha(0.16) end
+      return hovered and C.onSurface:alpha(0.07) or C.onSurface:alpha(0)
+    end, 10)
   end
   local function windows(as)
     return ui.Repeater { as = as, gap = 6, model = model.rows, delegate = window_delegate }
@@ -154,19 +143,15 @@ function V.build(model)
       width = function() return vertical and ITEM or (row.layout_width or 160) + 16 end,
       height = function() return vertical and (row.layout_height or 160) + 16 or ITEM end,
       on_clicked = model.open_settings,
-      kit.surface {
-        anchors = { fill = true }, radius = 10,
-        color = function()
-          if model.settings_open() then return C.primary:alpha(0.16) end
-          return (area and area.hovered) and C.onSurface:alpha(0.07) or C.onSurface:alpha(0)
-        end,
-        behavior = { color = { duration = theme.duration.small } },
-      },
       ui.Item { anchors = { center_in = true },
         width = function() return row.layout_width or 0 end,
         height = function() return row.layout_height or 0 end,
         row },
     }
+    kit.hover(area, function(hovered)
+      if model.settings_open() then return C.primary:alpha(0.16) end
+      return hovered and C.onSurface:alpha(0.07) or C.onSurface:alpha(0)
+    end, 10)
     return area, row
   end
 
@@ -180,28 +165,23 @@ function V.build(model)
       id = "bar-clock" .. (vertical and "-v" or ""), cursor = "pointer",
       width = vertical and ITEM + 4 or 190, height = vertical and 64 or ITEM,
       on_clicked = model.toggle_dashboard,
-      kit.surface {
-        anchors = { fill = true }, radius = 10,
-        color = function()
-          if model.dashboard_open() then return C.primary:alpha(0.16) end
-          return (area and area.hovered) and C.onSurface:alpha(0.07) or C.onSurface:alpha(0)
-        end,
-        behavior = { color = { duration = theme.duration.small } },
-      },
       vertical and ui.Column {
         anchors = { center_in = true }, gap = 0, align = "center",
         kit.text { text = function() return (stamp:get()[1]:sub(1, 2)) end, font_weight = 700 },
         kit.text { text = function() return (stamp:get()[1]:sub(4, 5)) end, font_weight = 700 },
         kit.text { text = function() return stamp:get()[3] end,
-          font_size = theme.size.small - 3, color = function() return C.onSurfaceVariant end },
+          font_size = theme.size.small - 3, color = kit.ink("lo") },
       } or ui.Row {
         anchors = { center_in = true }, gap = 10, align = "center",
         kit.text { text = function() return stamp:get()[2] end, font_size = theme.size.small,
-          color = function() return C.onSurfaceVariant end },
+          color = kit.ink("lo") },
         kit.text { text = function() return stamp:get()[1] end, font_weight = 700 },
       },
     }
-    return area
+    return kit.hover(area, function(hovered)
+      if model.dashboard_open() then return C.primary:alpha(0.16) end
+      return hovered and C.onSurface:alpha(0.07) or C.onSurface:alpha(0)
+    end, 10)
   end
 
   -- ---------------------------------------------------------- layout --

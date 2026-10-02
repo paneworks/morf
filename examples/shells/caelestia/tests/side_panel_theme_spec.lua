@@ -84,7 +84,8 @@ for _,style in ipairs {"material","tsugumori"} do
     test.ipc("open","right","yes") test.advance(2400)
     test.falsy(state().covered)
     test.eq(test.get("drawer-sidebar").x,820)
-    test.eq(test.get("sidebar-pages").width,style=="material" and 408 or 414)
+    -- One geometry in every theme (KIT.md, rule 4).
+    test.eq(test.get("sidebar-pages").width,408)
     shot(style.."-side-settings")
     test.click("sidebar-tab-notifications") test.advance(2400)
     test.truthy(state().covered)
@@ -110,7 +111,7 @@ for _,style in ipairs {"material","tsugumori"} do
     test.eq(state().left.tab,2) test.eq(state().left.displayed,2)
     test.ipc("resize","550") test.advance(700)
     test.eq(test.get("drawer-leftbar").height,530)
-    test.eq(test.get("leftbar-pages").height,style=="material" and 444 or 454)
+    test.eq(test.get("leftbar-pages").height,444)
     shot(style.."-side-compact")
     test.ipc("open","left","no") test.advance(1200)
     test.falsy(test.get("drawer-leftbar").visible)

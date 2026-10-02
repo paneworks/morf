@@ -1,398 +1,468 @@
--- The dashboard's Media tab: the cover cut into a cookie inside a ring of
--- dots that the music pushes outwards (the visualiser), turning slowly
--- while it plays; the track, a wavy progress bar and the controls; the
--- lyrics and a player picker on the right. With nothing playing, a
--- "Nothing playing" note instead. Faint shapes drift behind it all.
+-- The dashboard's Media tab: the player as a console.
 --
--- Measured off the reference at 1920x1080: the page 1000 x 318; the cover
--- 184 across, its centre at (167, 160); the ring of dots 224 across; the
--- track from x = 343; the progress bar 223 long from x = 387 at y = 186;
--- the controls 54 tall from y = 221; the lyrics from x = 695.
+--   left    the cover inside the theme's ring, whose arc is the track's
+--           position, with the theme's brackets round it flashing on every
+--           beat; the position and length under it and the player selector
+--   middle  the title, artist and album over the spectrum (56 bands, one
+--           path); the level monitor (a mirrored level history swept left
+--           to right with a cursor); the position band with its seek; the
+--           transport (previous, the position large, next, play, shuffle
+--           and repeat, the length)
+--   right   the lyrics as a list (the current line the lit row), the
+--           frequency band readouts and the player's volume as a ring over
+--           a slider
+--
+-- With nothing playing the middle and right give way to one framed empty
+-- state: the status centred over a still silhouette of the spectrum.
+--
+-- Everything is drawn by the kit; the theme decides how each piece looks.
+-- Cost: the spectrum is the only node that changes at 60 Hz. The level
+-- history and the band readouts sample the bars at 8 Hz on a timer that
+-- runs only while the tab is on screen and something plays. At rest and
+-- paused nothing moves; the cover's shape change is a morph that settles.
 
 local morf = require("morf")
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
-local shapes = require("lib.m3shapes")
+local P = require("themes.layouts.parts")
+local common = require("themes.kit_common")
+local L_term = P.term
 
 local C = theme.color
 local M = {}
 
 M.WIDTH, M.HEIGHT = 1000, 350
 
-local CX, CY = 167, 160
-local COVER = 184
-local RING = 112
-local DOTS = 56
-local BAR_X, BAR_W, BAR_Y = 387, 223, 186
-
 local media = require("media_state")
-local bars, beats, pulse = media.bars, media.beats, media.pulse
+local bars, pulse = media.bars, media.pulse
 local lyrics = media.lyrics
+local clamp01 = common.clamp01
+
+-- Columns.
+local AX, AW = 10, 244          -- cover
+local BX, BW = 272, 396         -- signal console
+local CX, CW = 686, 304         -- lyrics, bands, volume
+local TOP = 30                  -- under the header strip
+
+local HIST = 132                -- level-history samples (8 Hz: ~16 s)
+
+local LABEL = P.role_size("label")
+local LABEL_H = P.lh(LABEL)
+local CAPTION_H = 16
 
 function M.build(ctx)
   local active, something, playing = media.active, media.something, media.playing
   local on_screen = media.watch(ctx)
   local control = media.control
-
-  -- ------------------------------------------------------- the shapes --
-  local SHAPES = {
-    { "cookie9", 20, 80, 92, 10 }, { "clover4", 200, 0, 70, 30 }, { "pentagon", 390, 10, 112, 8 },
-    { "cookie12", 845, 16, 112, 0 }, { "circle", 350, 121, 60, 0 }, { "oval", 340, 151, 110, 20 },
-    { "gem", 670, 131, 100, -12 }, { "circle", 800, 126, 36, 0 }, { "cookie6", 240, 170, 80, 5 },
-    { "sunny", 925, 150, 60, 0 }, { "pill", 450, 262, 80, 25 }, { "flower", 600, 250, 70, 0 },
-  }
-  local backdrop = { id = "media-backdrop", width = M.WIDTH, height = M.HEIGHT }
-  for i, s in ipairs(SHAPES) do
-    local name, x, y, size, rot = s[1], s[2], s[3], s[4], s[5]
-    backdrop[#backdrop + 1] = ui.Path {
-      x = x, y = y, width = size, height = size, rotation = rot,
-      view_box = { 0, 0, 100, 100 }, d = kit.shape_path(name, { segments = false }),
-      fill_color = function() return C.surfaceContainerHigh:alpha(0.55) end,
-      loop = function()
-        if not (on_screen() and playing()) then return nil end
-        local turn = (i % 2 == 0) and 360 or -360
-        return { rotation = { from = rot, to = rot + turn, duration = 60000 + i * 7000, hold = true } }
-      end,
-    }
-  end
-
-  -- ------------------------------------------------------- the cover --
-  -- A web address (Spotify's covers are) is fetched once to the cache.
-  local art = function() return require("lib.remote").file(active().art_url) end
-  -- The visualiser: a bar per band standing out from the cover's edge,
-  -- rounded, growing with the music -- low notes at the top, round the
-  -- ring clockwise and back up the other side, so the ring is symmetric.
-  local INNER, REACH = COVER / 2 + 10, 34
-  RING = INNER + REACH + 6
-  local dots = {}
-  for i = 1, DOTS do
-    local a = (i - 1) / DOTS * 2 * math.pi
-    -- Mirrored: band k shows on both sides of the vertical.
-    local half = DOTS // 2
-    local band = i <= half and i or (DOTS - i + 1)
-    local function level() return (bars:get()[band * 2 - 1] or 0) end
-    local function length() return 3 + REACH * level() end
-    dots[#dots + 1] = ui.Item {
-      -- A pivot at the centre, turned to the bar's angle; the bar stands
-      -- on the inner radius and grows outwards.
-      x = RING + 6, y = RING + 6, width = 0, height = 0,
-      rotation = math.deg(a),
-      kit.surface {
-        x = -2, width = 4, radius = 2,
-        y = function() return -(INNER + length()) end,
-        height = length,
-        color = function() return C.primary:alpha(0.45 + 0.55 * math.min(1, level() * 1.4)) end,
-      },
-    }
-  end
-  local ring = ui.Item {
-    id = "media-visualiser",
-    x = CX - RING - 6, y = CY - RING - 6, width = 2 * RING + 12, height = 2 * RING + 12,
-    loop = function()
-      if not (on_screen() and playing()) then return nil end
-      return { rotation = { to = 360, duration = 90000, hold = true } }
-    end,
-    table.unpack(dots),
-  }
-  -- The cover's cookie: it turns while the music plays, swells a little
-  -- on every beat the monitor hears, and every fourth beat morphs between
-  -- a nine- and a twelve-point cookie; paused, it settles back to nine.
-  local function cookie()
-    if not playing() then return "cookie9" end
-    return (beats:get() // 4) % 2 == 0 and "cookie9" or "cookie12"
-  end
-  local cover = ui.Item {
-    id = "media-cover-cookie",
-    x = CX - COVER / 2, y = CY - COVER / 2, width = COVER, height = COVER,
-    scale = function() return 1 + 0.05 * pulse:get() end,
-    behavior = { scale = kit.spring(500, 18) },
-    loop = function()
-      if not (on_screen() and playing()) then return nil end
-      return { rotation = { to = 360, duration = 60000, hold = true } }
-    end,
-    kit.shape {
-      id = "media-cover-shape",
-      anchors = { fill = true }, shape = cookie, duration = 600,
-      color = function() return C.surfaceContainerHigh end,
-    },
-    ui.Image {
-      id = "media-tab-cover",
-      anchors = { fill = true }, fill_mode = "preserve_aspect_crop",
-      source = art,
-      visible = function() return art() ~= "" end,
-      mask = kit.shape { shape = cookie, duration = 600, color = "#ffffff" },
-    },
-  }
-  local cover_icon = kit.icon("art_track", 96, function() return C.onSurfaceVariant end, {
-    x = CX - 48, y = CY - 48, width = 96, height = 96,
-    visible = function() return art() == "" end,
-  })
-
-  -- ------------------------------------------------ nothing playing --
-  local hexagon = kit.shape_path(shapes.regular(6, { rounding = 0.22 }), { segments = false })
-  local nothing = ui.Item {
-    id = "media-nothing",
-    x = 330, width = 554, height = M.HEIGHT,
-    visible = function() return not something() end,
-    ui.Column {
-      anchors = { horizontal_center = true }, y = 64, gap = 0, align = "center",
-      ui.Item {
-        width = 132, height = 92,
-        ui.Path {
-          anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = hexagon,
-          fill_mode = "stretch",
-          fill_color = function() return C.primaryContainer end,
-        },
-        kit.icon("queue_music", 52, function() return C.onPrimaryContainer end, { anchors = { center_in = true } }),
-      },
-      ui.Item { width = 1, height = 16 },
-      kit.text {
-        text = "Nothing playing", font_size = 37, font_weight = 500,
-      },
-      ui.Item { width = 1, height = 10 },
-      kit.text {
-        text = "Play something for it to show up here!", font_size = theme.size.large,
-        color = function() return C.onSurfaceVariant end,
-      },
-    },
-  }
-
-  -- --------------------------------------------------- the track --
   local field = media.field
   local fraction = media.fraction(on_screen)
-  local progress = ui.Item {
-    id = "media-progress",
-    x = BAR_X, y = BAR_Y - 17, width = BAR_W, height = 34,
-    kit.media_progress { width = BAR_W, value = fraction, active = on_screen, playing = playing },
-    ctx.area {
-      id = "media-seek",
-      anchors = { fill = true }, cursor = "pointer",
-      on_pressed = function(_, _, x)
-        local a = active()
-        if a.length and a.length > 0 then control("set_position", math.max(0, math.min(1, x / BAR_W)) * a.length) end
-      end,
-    },
-  }
+  local accent = kit.signal("accent")
 
-  local function button(id, icon, w, radius, action, strong, on, ignored)
-    local area = ctx.area {
-      id = id, width = w, height = 54, cursor = "pointer",
-      on_clicked = action,
-      kit.icon(icon, 24, function()
-        if strong then return C.onPrimary end
-        -- A player that takes this write and ignores it (Spotify, for
-        -- shuffle and repeat): the button stays, dimmed, and says so.
-        if ignored and ignored() then return C.onSecondaryContainer:alpha(0.3) end
-        return (on and on()) and C.primary or C.onSecondaryContainer
-      end, { anchors = { center_in = true }, fill = true }),
-    }
-    return kit.hover(area, function(hovered)
-      local base = strong and C.primary or C.secondaryContainer
-      return hovered and base:mix(strong and C.onPrimary or C.onSecondaryContainer, 0.08) or base
-    end, radius)
+  -- ------------------------------------------------------------ sampler --
+  -- The level history and the band readouts: 8 Hz off the 60 Hz bars,
+  -- only while the tab is up and the music plays.
+  local history = morf.signal("caelestia.media.history", { at = 0, values = {} })
+  local bands = morf.signal("caelestia.media.bands", { low = 0, high = 0, dlow = 0, dhigh = 0 })
+  local ring_buf, cursor = {}, 0
+  for i = 1, HIST do ring_buf[i] = 0 end
+  local sampler
+  local function sample()
+    local b = bars:get()
+    local n = #b
+    local low, high, all = 0, 0, 0
+    if n > 0 then
+      local cut = math.max(1, n // 4)
+      for i = 1, n do
+        local v = b[i] or 0
+        all = all + v
+        if i <= cut then low = low + v elseif i > n // 2 then high = high + v end
+      end
+      low, high, all = low / cut, high / (n - n // 2), all / n
+    end
+    cursor = cursor % HIST + 1
+    ring_buf[cursor] = clamp01(all * 1.6)
+    local values = {}
+    for i = 1, HIST do values[i] = ring_buf[i] end
+    history:set({ at = cursor, values = values })
+    local prev = bands:get()
+    bands:set({ low = low * 100, high = high * 100, dlow = low * 100 - prev.low, dhigh = high * 100 - prev.high })
   end
-  local LOOPS = { none = "playlist", playlist = "track", track = "none" }
-  local controls = ui.Row {
-    id = "media-controls",
-    x = 343, y = 221, gap = 4,
-    button("media-shuffle", "shuffle", 40, 20, function() control("set_shuffle", not active().shuffle) end,
-      false, function() return active().shuffle end, function() return active().ignores_shuffle end),
-    button("media-tab-previous", "skip_previous", 52, 26, function() control("previous") end),
-    button("media-tab-play", function() return playing() and "pause" or "play_arrow" end, 108, 14,
-      function() control("play_pause") end, true),
-    button("media-tab-next", "skip_next", 52, 26, function() control("next") end),
-    button("media-repeat", function() return active().loop == "track" and "repeat_one" or "repeat" end, 40, 20,
-      function() control("set_loop", LOOPS[active().loop or "none"] or "none") end,
-      false, function() return (active().loop or "none") ~= "none" end, function() return active().ignores_loop end),
+  morf.effect("caelestia.media.sample", function()
+    local run = on_screen() and playing()
+    if run and not sampler then sampler = morf.timer(125, sample, true)
+    elseif not run and sampler then sampler:cancel() sampler = nil end
+  end)
+
+  -- --------------------------------------------------------- header --
+  local function state_key() return playing() and "playing" or something() and "paused" or "idle" end
+  local STATE_WORD = { playing = "Playing", paused = "Paused", idle = "Idle" }
+  local header = kit.header {
+    x = 10, y = 2, width = M.WIDTH - 20, key = "media.signal", title = "Playback",
+    status = L_term(function() return "media." .. state_key() end, function() return STATE_WORD[state_key()] end),
+    color = function() return (playing() and kit.signal("ok") or kit.signal("info"))() end,
   }
 
-  -- The player's own volume (MPRIS), under the controls.
-  local volume = ui.Row {
-    id = "media-volume",
-    x = 343, y = 288, gap = 10, align = "center",
-    kit.icon(function()
-      local v = active().volume or 0
-      return v <= 0 and "volume_off" or v < 0.5 and "volume_down" or "volume_up"
-    end, 22, function() return C.onSurfaceVariant end),
-    kit.slider {
-      id = "media-volume-slider", width = 250, height = 22,
-      value = function() return math.max(0, math.min(1, active().volume or 0)) end,
-      set = function(v) control("set_volume", v) end,
+  -- ------------------------------------------------------ A: the cover --
+  local RS = 212                       -- the ring's box
+  local RX, RY = AX + math.floor((AW - RS) / 2), TOP + CAPTION_H + 6
+  local COVER = 132
+  local c = RS / 2
+  local art = function() return require("lib.remote").file(active().art_url) end
+  local beat = function() return math.min(1, pulse:get() * 1.4) end
+  local snap = { duration = theme.duration.small, easing = theme.ease.standard }
+  -- The cover's outline morphs between the theme's resting and playing
+  -- shapes; the picture is cut to it.
+  local function outline() return playing() and "cookie9" or "square" end
+  local ring = ui.Item {
+    id = "media-reticle", x = RX - AX, y = RY, width = RS, height = RS,
+    kit.ring { id = "media-ring-position", size = RS, value = function() return something() and fraction() or 0 end,
+      sweep = 360 },
+    ui.Item { x = c - COVER / 2, y = c - COVER / 2, width = COVER, height = COVER,
+      kit.shape { anchors = { fill = true }, shape = outline, color = function() return C.surfaceContainerHigh end },
+      ui.Image { id = "media-tab-cover", anchors = { fill = true }, fill_mode = "preserve_aspect_crop",
+        source = art, visible = function() return art() ~= "" end,
+        mask = kit.shape { width = COVER, height = COVER, shape = outline, color = "#ffffff" } },
+      kit.icon("art_track", 64, kit.ink("lo"), {
+        anchors = { center_in = true }, visible = function() return art() == "" end }),
+    },
+    -- The theme's brackets round the cover spring out a little on a beat.
+    ui.Item { x = c - COVER / 2 - 8, y = c - COVER / 2 - 8, width = COVER + 16, height = COVER + 16,
+      scale = function() return 1 + .05 * beat() end, behavior = { scale = snap },
+      P.decor_box("brackets", { width = COVER + 16, height = COVER + 16, length = 12, weight = 2,
+        color = function() return accent():alpha(.55 + .45 * beat()) end }),
+    },
+  }
+  local FACTS_Y = RY + RS + 6
+  local cover_col = ui.Item {
+    id = "media-cover-column", x = AX, y = 0, width = AW, height = M.HEIGHT,
+    kit.caption { y = TOP, width = AW, text = "Player", note = kit.code("media.cover", "###/##-##") },
+    P.decor_box("brackets", { x = RX - AX - 6, y = RY - 4, width = RS + 12, height = RS + 8, length = 8,
+      color = kit.stroke("idle") }),
+    ring,
+    ui.Item { y = FACTS_Y, width = AW, height = 2 * 17,
+      kit.facts({
+        { "Position", function() return media.duration(active().position) end },
+        { "Length", function() return media.duration(active().length) end },
+      }, AW, 17),
     },
   }
 
-  local track = ui.Item {
-    id = "media-track",
-    width = M.WIDTH, height = M.HEIGHT,
-    visible = something,
-    ui.Column {
-      x = 343, y = 44, gap = 2,
-      kit.text {
-        id = "media-tab-title", width = 330, elide = "right",
-        text = field("title"), font_size = 28, font_weight = 500,
-      },
-      kit.text {
-        id = "media-tab-artist", width = 330, elide = "right",
-        text = field("artist"), font_size = theme.size.large,
-        color = function() return C.secondary end,
-      },
-      kit.text {
-        id = "media-tab-album", width = 330, elide = "right",
-        text = field("album"), font_size = theme.size.large,
-        color = function() return C.secondary end,
-      },
-    },
-    kit.text {
-      id = "media-position",
-      x = 343, y = BAR_Y - 10, width = 40,
-      text = function() return media.duration(active().position) end,
-      font_size = theme.size.normal,
-    },
-    progress,
-    kit.text {
-      id = "media-length",
-      x = BAR_X + BAR_W + 8, y = BAR_Y - 10,
-      text = function() return media.duration(active().length) end,
-      font_size = theme.size.normal,
-    },
-    controls,
-    volume,
-  }
-
-  -- --------------------------------------------------------- lyrics --
-  local LX, LW = 680, 290
-  local function lyric_line(offset)
-    return kit.text {
-      width = LW, horizontal_alignment = "center", elide = "right",
-      text = function()
-        local f = lyrics()
-        if not f then return "" end
-        local lines = f.lines:get()
-        local line = lines[f.index:get() + offset]
-        return line and line.text or ""
-      end,
-      font_size = offset == 0 and theme.size.large or theme.size.normal,
-      font_weight = offset == 0 and 500 or 400,
-      color = function() return offset == 0 and C.primary or C.onSurfaceVariant end,
-      opacity = offset == 0 and 1 or (math.abs(offset) == 1 and 0.75 or 0.45),
-    }
-  end
-  local function lyrics_status()
-    local f = lyrics()
-    return f and f.status:get() or "none"
-  end
+  -- --------------------------------------------------- player selector --
   local players_open = morf.signal("caelestia.media.players_open", false)
   local players = media.players
+  local function player_name(p)
+    if not p then return "" end
+    return (p.identity and p.identity ~= "") and p.identity or (p.name or "")
+  end
+  local ROW_H = math.max(22, P.lh(theme.size.small))
   local player_rows = {}
   for i = 1, 5 do
     local function row() return players()[i] end
-    player_rows[#player_rows + 1] = kit.hover(ctx.area {
-      id = "media-player-" .. i, width = 245, height = 36, cursor = "pointer",
+    local function current() local r = row() return r ~= nil and r.name == active().name end
+    local area = ctx.area {
+      id = "media-player-" .. i, width = AW - 8, height = ROW_H, cursor = "pointer",
       visible = function() return row() ~= nil end,
       on_clicked = function()
         local r = row()
         if r then control("set_active", r.name) end
         players_open:set(false)
       end,
-      kit.text {
-        x = 16, anchors = { vertical_center = true },
-        text = function() local r = row() return r and (r.identity ~= "" and r.identity or r.name) or "" end,
-      },
-    }, function(hovered) return hovered and C.onSurface:alpha(0.08) or C.onSurface:alpha(0) end, 10)
+      kit.text { x = 10, anchors = { vertical_center = true }, width = AW - 8 - 10 - 70, elide = "right",
+        text = function() return player_name(row()) end, font_size = theme.size.small,
+        color = function() return current() and accent() or kit.ink("hi")() end },
+      kit.label { anchors = { right = true, right_margin = 8 }, y = math.floor((ROW_H - LABEL_H) / 2), width = 60,
+        horizontal_alignment = "right", elide = "right",
+        text = function() local r = row() return r and kit.code("player." .. r.name, "STM ##.[##]") or "" end },
+    }
+    player_rows[#player_rows + 1] = kit.hover(area, function(hovered)
+      if current() then return accent():alpha(.18) end
+      return accent():alpha(hovered and .12 or 0)
+    end, P.control_round(ROW_H))
   end
+  local SY, SH = 312, 26
+  local select_area = ctx.area {
+    id = "media-player", x = AX, y = SY, width = AW - SH - 4, height = SH, cursor = "pointer",
+    on_clicked = function() players_open:set(not players_open:get()) end,
+    kit.icon("video_library", 16, accent, { x = 8, anchors = { vertical_center = true }, fill = true }),
+    kit.text { id = "media-player-name", x = 32, anchors = { vertical_center = true }, width = AW - SH - 4 - 40,
+      elide = "right", text = function() return player_name(active()) end, font_size = theme.size.small },
+  }
+  kit.hover(select_area, function(hovered) return accent():alpha(hovered and .18 or .08) end, P.control_round(SH))
+  local more_area = P.icon_button {
+    area = ctx.area, id = "media-player-more", x = AX + AW - SH, y = SY, width = SH, height = SH, size = 18,
+    icon = function() return players_open:get() and "expand_less" or "expand_more" end,
+    on_clicked = function() players_open:set(not players_open:get()) end,
+  }
+  local MENU_HEAD = CAPTION_H + 6
+  local player_menu = kit.surface {
+    id = "media-player-menu", x = AX, z = 10, width = AW, radius = P.control_round(24),
+    height = function() return #players() * ROW_H + MENU_HEAD + 6 end,
+    y = function() return SY - 4 - (#players() * ROW_H + MENU_HEAD + 6) end,
+    color = function() return C.surfaceContainerHighest end,
+    border_width = 1, border_color = kit.stroke("idle"),
+    visible = function() return players_open:get() end,
+    kit.caption { x = 6, y = 4, width = AW - 12, text = "Players", note = kit.code("media.players", "BRIDGE - A") },
+    ui.Column { x = 4, y = MENU_HEAD, gap = 0, table.unpack(player_rows) },
+  }
+
+  -- ----------------------------------------------- nothing playing --
+  -- One framed region over the middle and right columns: the status
+  -- centred, over a still silhouette of the spectrum (a fixed curve, one
+  -- path; nothing moves) on the theme's grid.
+  local EMB = 52
+  local NW, NH = M.WIDTH - BX - 10, M.HEIGHT - TOP - 4
+  local SIL_H = 86
+  local SIL_W = NW - 64
+  local silhouette = {}
+  for i = 1, 56 do
+    local t = (i - 1) / 55
+    silhouette[i] = .1 + .5 * math.exp(-((t - .22) / .16) ^ 2) + .32 * math.exp(-((t - .62) / .2) ^ 2)
+      + .05 * math.sin(i * 1.7) ^ 2
+  end
+  local TEXT_W = NW - 80
+  local STACK_H = EMB + 12 + P.heading_h(theme.size.extra) + 4 + LABEL_H
+  local STACK_Y = math.max(16, math.floor((NH - SIL_H - 24 - STACK_H) / 2))
+  local nothing = ui.Item {
+    id = "media-nothing",
+    x = BX, y = TOP, width = NW, height = NH,
+    visible = function() return not something() end,
+    kit.panel { width = NW, height = NH },
+    kit.emblem { kind = "info", x = math.floor((NW - EMB) / 2), y = STACK_Y, size = EMB },
+    kit.heading { id = "media-empty-title", x = 40, y = STACK_Y + EMB + 12, width = TEXT_W,
+      height = P.heading_h(theme.size.extra), level = "title", horizontal_alignment = "center",
+      font_size = theme.size.extra, text = "Nothing playing", active = on_screen,
+      visible = function() return not something() end },
+    kit.label { x = 40, y = STACK_Y + EMB + 12 + P.heading_h(theme.size.extra) + 4, width = TEXT_W,
+      horizontal_alignment = "center", elide = "right",
+      text = "Play something and it shows up here" },
+    ui.Item { x = 32, y = NH - SIL_H - 20, width = SIL_W, height = SIL_H,
+      P.decor_box("grid", { width = SIL_W, height = SIL_H, columns = 14, rows = 3, color = kit.stroke("faint") }),
+      kit.spectrum { width = SIL_W, height = SIL_H, values = silhouette, gap = 3,
+        color = function() return accent():alpha(.22) end },
+    },
+    P.decor_box("ticks", { x = 32, y = NH - 16, length = SIL_W, count = 28, major = 4, size = 5, flip = true }),
+  }
+
+  -- ----------------------------------------------- B: signal console --
+  local TITLE_SIZE = theme.size.large
+  local TITLE_Y = TOP + CAPTION_H + 2
+  local TITLE_H = P.lh(TITLE_SIZE)
+  local META_Y = TITLE_Y + TITLE_H
+  local META_H = P.lh(theme.size.small)
+
+  -- The spectrum: one path of bars over the theme's grid, its scale at
+  -- the right and a ruler under it.
+  local SPY = META_Y + META_H + 6
+  local SPW, SPH = BW - 34, 56
+  local spectrum = ui.Item {
+    id = "media-visualiser", x = BX, y = SPY, width = BW, height = SPH + 8,
+    P.decor_box("grid", { width = SPW, height = SPH, columns = 8, rows = 4, color = kit.stroke("faint") }),
+    kit.spectrum { id = "media-spectrum", width = SPW, height = SPH, values = function() return bars:get() end,
+      color = accent, gap = 2 },
+    P.decor_box("scale", { x = SPW + 4, y = 0, height = SPH, count = 12, major = 6, size = 6, flip = true,
+      color = kit.stroke("idle") }),
+    P.decor_box("ticks", { y = SPH + 2, length = SPW, count = 28, major = 4, size = 5, flip = true }),
+  }
+
+  -- The level monitor: a mirrored strip of the level history, swept from
+  -- left to right; the cursor marks the newest sample.
+  local LMY = SPY + SPH + 10
+  local LMW, LMH = BW, 24
+  local level = ui.Item {
+    id = "media-level-monitor", x = BX, y = LMY, width = LMW, height = CAPTION_H + 2 + LMH,
+    kit.caption { width = LMW, text = "Level", note = kit.code("media.lm", "BUF ##/##") },
+    ui.Item { y = CAPTION_H + 2, width = LMW, height = LMH,
+      kit.spectrum { id = "media-level-history", width = LMW, height = LMH, mirror = true, gap = 1,
+        values = function() return history:get().values end, color = kit.signal("ok") },
+      kit.surface { id = "media-level-cursor", y = -2, width = 1, height = LMH + 4, color = kit.ink("hi"),
+        x = function() return history:get().at / HIST * LMW end,
+        visible = function() return history:get().at > 0 end },
+    },
+  }
+
+  -- The position: the theme's progress band with its seek over it.
+  local PCY = LMY + CAPTION_H + 2 + LMH + 6
+  local PCW, PCH = BW, 34
+  local position_chart = ui.Item {
+    x = BX, y = PCY, width = PCW, height = CAPTION_H + PCH,
+    kit.caption { width = PCW, text = "Position",
+      note = function()
+        local a = active()
+        if not a.length or a.length <= 0 then return "" end
+        return "−" .. media.duration(math.max(0, a.length - (a.position or 0)))
+      end },
+    ui.Item { id = "media-progress", y = CAPTION_H, width = PCW, height = PCH,
+      kit.media_progress { width = PCW, value = fraction, active = on_screen, playing = playing },
+      ctx.area {
+        id = "media-seek", anchors = { fill = true }, cursor = "pointer",
+        on_pressed = function(_, _, x) media.seek(x / PCW) end,
+        on_dragged = function(_, _, _, _, x) media.seek(x / PCW) end,
+      },
+    },
+  }
+
+  -- Transport: previous, the position large, next, play, shuffle, repeat
+  -- and the length.
+  local TY = PCY + CAPTION_H + PCH + 8
+  local TH = 40
+  local LOOPS = { none = "playlist", playlist = "track", track = "none" }
+  local POS_SIZE = theme.size.extra
+  local transport = ui.Row {
+    id = "media-controls", x = BX, y = TY, height = TH, gap = 4, align = "center",
+    P.icon_button { area = ctx.area, id = "media-tab-previous", width = 36, height = 36, icon = "skip_previous",
+      on_clicked = function() control("previous") end },
+    kit.text { id = "media-position", width = 92, horizontal_alignment = "center", height = P.lh(POS_SIZE),
+      vertical_alignment = "center",
+      text = function() return media.duration(active().position) end,
+      font_size = POS_SIZE, font_weight = 300, color = accent },
+    P.icon_button { area = ctx.area, id = "media-tab-next", width = 36, height = 36, icon = "skip_next",
+      on_clicked = function() control("next") end },
+    ui.Item { width = 4, height = 1 },
+    P.icon_button { area = ctx.area, id = "media-tab-play", width = 64, height = 36, strong = true, size = 24,
+      icon = function() return playing() and "pause" or "play_arrow" end,
+      on_clicked = function() control("play_pause") end },
+    ui.Item { width = 4, height = 1 },
+    P.icon_button { area = ctx.area, id = "media-shuffle", width = 36, height = 36, icon = "shuffle", size = 20,
+      on_clicked = function() control("set_shuffle", not active().shuffle) end,
+      on = function() return active().shuffle end, ignored = function() return active().ignores_shuffle end },
+    P.icon_button { area = ctx.area, id = "media-repeat", width = 36, height = 36, size = 20,
+      icon = function() return active().loop == "track" and "repeat_one" or "repeat" end,
+      on_clicked = function() control("set_loop", LOOPS[active().loop or "none"] or "none") end,
+      on = function() return (active().loop or "none") ~= "none" end,
+      ignored = function() return active().ignores_loop end },
+    ui.Item { width = 4, height = 1 },
+    kit.text { id = "media-length", width = 52, horizontal_alignment = "right", elide = "left",
+      text = function() return media.duration(active().length) end, font_size = theme.size.small,
+      color = kit.ink("lo") },
+  }
+
+  local track = ui.Item {
+    id = "media-track",
+    width = M.WIDTH, height = M.HEIGHT,
+    visible = something,
+    kit.caption { x = BX, y = TOP, width = BW, text = "Now playing",
+      note = kit.code("media.track", "EXT. ##-###") },
+    kit.heading { id = "media-tab-title", x = BX, y = TITLE_Y, width = BW, height = TITLE_H, elide = "right",
+      level = "title", text = field("title"), font_size = TITLE_SIZE, active = on_screen },
+    ui.Row { x = BX, y = META_Y, height = META_H, gap = 8, align = "center",
+      kit.text { id = "media-tab-artist", width = math.floor(BW * .55) - 8, elide = "right", text = field("artist"),
+        font_size = theme.size.small, color = accent },
+      kit.text { id = "media-tab-album", width = math.floor(BW * .45), elide = "right", text = field("album"),
+        font_size = theme.size.small, color = kit.ink("lo") },
+    },
+    spectrum,
+    level,
+    position_chart,
+    transport,
+  }
+
+  -- ------------------------------------------------- C: lyrics + bands --
+  local function lyrics_status()
+    local f = lyrics()
+    return f and f.status:get() or "none"
+  end
+  local LROW = math.max(20, P.lh(theme.size.small))
+  local LY = TOP + CAPTION_H + 6
+  local function lyric_row(offset)
+    local now = offset == 0
+    return ui.Item {
+      width = CW, height = LROW,
+      kit.surface { anchors = { fill = true }, radius = P.control_round(LROW),
+        color = function() return now and accent():alpha(.18) or accent():alpha(0) end },
+      kit.text { x = 8, anchors = { vertical_center = true }, width = CW - 8 - 56, elide = "right",
+        text = function()
+          local f = lyrics()
+          if not f then return "" end
+          local line = f.lines:get()[f.index:get() + offset]
+          return line and line.text or ""
+        end,
+        font_size = theme.size.small, font_weight = now and 500 or 400,
+        color = function() return now and kit.ink("hi")() or kit.ink("lo")() end,
+        opacity = now and 1 or (math.abs(offset) == 1 and .8 or .5) },
+      kit.label { anchors = { right = true, right_margin = 6 }, y = math.floor((LROW - LABEL_H) / 2), width = 44,
+        horizontal_alignment = "right", text = kit.code("lyric" .. offset, "L##.#") },
+    }
+  end
+  local LIST_H = 5 * LROW + 4
+  local function searching() return lyrics_status() == "searching" end
+  local band = function(key) return function() return bands:get()[key] end end
+  local READ = math.floor(P.role_size("hero") * .72)
+  local function band_readout(label, y, key, dkey)
+    return ui.Item { y = y, width = 150, height = 44,
+      kit.label { text = label, color = kit.ink("hi") },
+      ui.Row { y = LABEL_H - 2, gap = 6, align = "center",
+        kit.readout { value = function() return ("%.0f"):format(band(key)()) end, size = READ,
+          color = kit.signal("info") },
+        kit.icon(function() return band(dkey)() >= 0 and "arrow_drop_up" or "arrow_drop_down" end, 20,
+          kit.signal("info")),
+      },
+    }
+  end
+  local vol = function() return clamp01(active().volume or 0) end
+  local BANDS_Y = LY + LIST_H + 6
+  local RING = 100
+  local VOL_Y = BANDS_Y + CAPTION_H + 4 + RING + 6
   local side = ui.Item {
     id = "media-lyrics",
-    x = LX, width = M.WIDTH - LX, height = M.HEIGHT,
+    x = CX, width = CW, height = M.HEIGHT,
     visible = something,
-    ui.Row {
-      x = 12, y = 20, gap = 10, align = "center",
-      kit.icon("lyrics", 22, function() return C.onSurface end),
-      kit.heading { id="media-lyrics-title", text = "Lyrics", active=on_screen, level="section", font_size = theme.size.large, font_weight = 500 },
-    },
-    kit.hover(ctx.area {
-      id = "media-lyrics-menu",
-      x = 268, y = 13, width = 40, height = 40, cursor = "pointer",
-      kit.icon("more_vert", 22, function() return C.onSurface end, { anchors = { center_in = true } }),
-    }, function(hovered) return hovered and C.surfaceContainerHighest or C.surfaceContainerHigh end, 12),
+    kit.heading { id = "media-lyrics-title", x = 0, y = TOP - 2, width = CW - 40, level = "caption",
+      active = on_screen, text = function()
+        local s = lyrics_status()
+        return s == "synced" and "Lyrics · synced" or s == "plain" and "Lyrics · plain" or "Lyrics"
+      end },
+    P.icon_button { area = ctx.area, id = "media-lyrics-menu", x = CW - 30, y = TOP - 4, width = 30, height = 22,
+      size = 18, icon = "more_vert" },
+    P.rule { y = LY - 4, width = CW },
     ui.Column {
-      x = 0, y = 70, gap = 6, align = "center",
+      x = 0, y = LY, gap = 1,
       visible = function() local s = lyrics_status() return s == "synced" or s == "plain" end,
-      lyric_line(-2), lyric_line(-1), lyric_line(0), lyric_line(1), lyric_line(2),
+      lyric_row(-2), lyric_row(-1), lyric_row(0), lyric_row(1), lyric_row(2),
     },
-    ui.Column {
-      id = "media-no-lyrics",
-      x = 0, y = 78, width = LW, gap = 10, align = "center",
+    ui.Item {
+      id = "media-no-lyrics", x = 0, y = LY, width = CW, height = LIST_H,
       visible = function() local s = lyrics_status() return s ~= "synced" and s ~= "plain" end,
-      ui.Item {
-        width = LW, height = 64,
-        kit.icon("sentiment_dissatisfied", 64, function() return C.onSurfaceVariant end, {
-          anchors = { center_in = true },
-          visible = function() return lyrics_status() ~= "searching" end,
-        }),
-        kit.loading(52, function() return C.primary end, {
-          id = "media-lyrics-loading",
-          anchors = { center_in = true },
-          active = function() return ctx.opened() and lyrics_status() == "searching" end,
-          visible = function() return lyrics_status() == "searching" end,
-        }),
-      },
-      kit.text {
-        width = LW, horizontal_alignment = "center",
-        text = function() return lyrics_status() == "searching" and "Looking for lyrics" or "No lyrics found" end,
-        font_size = theme.size.large, color = function() return C.onSurfaceVariant end,
-      },
+      kit.panel { width = CW, height = LIST_H },
+      kit.status { x = 12, y = math.floor((LIST_H - 40) / 2), width = CW - 72, size = 40,
+        kind = function() return searching() and "info" or "warn" end,
+        title = function() return searching() and "Searching" or "No lyrics" end,
+        subtitle = function() return searching() and "Looking for lyrics" or "No match found" end },
+      kit.loading(36, accent, {
+        id = "media-lyrics-loading", x = CW - 50, y = math.floor((LIST_H - 36) / 2),
+        active = function() return ctx.opened() and searching() end,
+        visible = searching,
+      }),
     },
-    kit.hover(ctx.area {
-      id = "media-player",
-      x = 30, y = 264, width = 245, height = 40, cursor = "pointer",
-      on_clicked = function() players_open:set(not players_open:get()) end,
-      ui.Row {
-        anchors = { center_in = true }, gap = 8, align = "center",
-        kit.icon("video_library", 18, function() return C.onSecondaryContainer end, { fill = true }),
-        kit.text {
-          id = "media-player-name",
-          text = function()
-            local a = active()
-            return (a.identity and a.identity ~= "") and a.identity or (a.name or "")
-          end,
-          color = function() return C.onSecondaryContainer end,
-        },
+    kit.caption { y = BANDS_Y, width = CW, text = "Frequency bands", note = kit.code("media.band", "EXT. S - ##") },
+    band_readout("Low", BANDS_Y + CAPTION_H + 6, "low", "dlow"),
+    band_readout("High", BANDS_Y + CAPTION_H + 6 + 50, "high", "dhigh"),
+    P.rule { x = 156, y = BANDS_Y + CAPTION_H + 6, height = RING, strength = "faint" , width = 1},
+    kit.ring { x = CW - RING - 16, y = BANDS_Y + CAPTION_H + 4, size = RING, value = vol,
+      text = function() return ("%d"):format(math.floor(vol() * 100 + .5)) end, label = "Volume" },
+    ui.Row { id = "media-volume", x = 0, y = VOL_Y, gap = 8, align = "center",
+      kit.icon(function()
+        local v = vol()
+        return v <= 0 and "volume_off" or v < 0.5 and "volume_down" or "volume_up"
+      end, 18, kit.ink("lo")),
+      kit.slider {
+        id = "media-volume-slider", width = CW - 26, height = 22, value = vol,
+        set = function(v) control("set_volume", clamp01(v)) end,
       },
-    }, function(hovered)
-      return hovered and C.secondaryContainer:mix(C.onSecondaryContainer, 0.08) or C.secondaryContainer
-    end, 20),
-    kit.hover(ctx.area {
-      id = "media-player-more",
-      x = 278, y = 264, width = 40, height = 40, cursor = "pointer",
-      on_clicked = function() players_open:set(not players_open:get()) end,
-      kit.icon(function() return players_open:get() and "expand_less" or "expand_more" end, 20,
-        function() return C.onSecondaryContainer end, { anchors = { center_in = true } }),
-    }, function(hovered)
-      return hovered and C.secondaryContainer:mix(C.onSecondaryContainer, 0.08) or C.secondaryContainer
-    end, 12),
-    kit.surface {
-      id = "media-player-menu",
-      x = 30, z = 10, width = 245, radius = 12,
-      height = function() return #players() * 36 + 8 end,
-      y = function() return 258 - (#players() * 36 + 8) end,
-      color = function() return C.surfaceContainerHighest end,
-      visible = function() return players_open:get() end,
-      ui.Column { y = 4, gap = 0, table.unpack(player_rows) },
     },
   }
 
   return ui.Item {
     id = "dashboard-media-tab",
     width = M.WIDTH, height = M.HEIGHT,
-    ui.Item(backdrop),
-    kit.heading {id="media-playback-heading",text="Playback",active=on_screen,level="caption",x=343,y=12,width=300},
-    ring,
-    cover,
-    cover_icon,
+    header,
+    cover_col,
     nothing,
     track,
     side,
+    select_area,
+    more_area,
+    player_menu,
   }
 end
 

@@ -13,11 +13,19 @@ local function load()
   ]]})
   test.advance(2000)
 end
+-- The heading scrambles some time in its first 900 ms on screen (a short
+-- word settles sooner than a long one), then reads its word.
 local function decoded(id,expected)
-  test.advance(900)
+  -- (A few looks only: every find walks the whole scene.)
+  local scrambled=false
+  for _,ms in ipairs {150,250,250,250} do
+    test.advance(ms)
+    local label=test.find {id=id.."-text"}
+    if label and label.visible and label.text~=expected then scrambled=true end
+  end
   local label=test.get(id.."-text")
   test.truthy(label.visible,"heading is hidden: "..id)
-  test.truthy(label.text~=expected,"heading never scrambled: "..id)
+  test.truthy(scrambled,"heading never scrambled: "..id)
   test.advance(1700)
   test.eq(test.get(id.."-text").text,expected)
   test.near(test.get(id.."-ghost-a").opacity,0,0.001)
@@ -30,9 +38,9 @@ test.it("every main panel uses the shared title and replays it on entry",functio
     {"tasks","open",nil,"tasks-title","MAKE ROOM FOR TODAY."},
     {"calendar","open",nil,"planner-title","A DAY AT A TIME."},
     {"sidebar","open","notifications","sidebar-title","NOTIFICATIONS"},
-    {"capture","open",nil,"capture-title","CAPTURE / 01"},
+    {"capture","open",nil,"capture-title","CAPTURE"},
     {"page","3",nil,"performance-devices-title","DEVICES"},
-    {"page","2",nil,"media-playback-heading","02 / PLAYBACK"},
+    {"page","2",nil,"media-empty-title","NOTHING PLAYING"},
     {"page","4",nil,"battery-title","BATTERY"},
     {"page","5",nil,"weather-place","WEATHER"},
     {"lule","open",nil,"lule-wallpaper-heading","WALLPAPER"},
@@ -65,8 +73,8 @@ test.it("settings detail titles and editor titles begin when their own page appe
     {"bar","bar-heading-show-the-bar","SHOW THE BAR"},
     {"wired","settings-detail-heading","WIRED"},
     {"mesh","settings-detail-heading","MESH"},
+    -- (Tor is a part of the Tunnel page now: `settings tor` opens Tunnel.)
     {"tunnel","settings-detail-heading","TUNNEL"},
-    {"tor","settings-detail-heading","TOR"},
   } do
     test.ipc("settings",case[1])
     decoded(case[2],case[3])

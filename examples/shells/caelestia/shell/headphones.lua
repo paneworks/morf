@@ -90,8 +90,14 @@ local function start()
   pulse:set(subscription~=nil)
   refresh()
 end
+-- A dry run reaches no audio server (no `pactl` at all): the native
+-- device list below stands in.
+local function dry()
+  local value=morf.env("CAELESTIA_DRY_RUN")
+  return value~=nil and value~="" and value~="0"
+end
 morf.effect("caelestia.headphones.watch",function()
-  local primary=not morf.primary or morf.primary()
+  local primary=(not morf.primary or morf.primary()) and not dry()
   if primary and not watching then start() elseif not primary and watching then stop() end
 end)
 morf.effect("caelestia.headphones.native",function()

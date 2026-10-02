@@ -115,6 +115,7 @@ function V.build(model)
       end,
     },
     eyes, finger, password, verdict,
+    kit.decor("corners", { length = 6, color = kit.stroke("mark") }) or ui.Item {},
   }
 
   -- --------------------------------------------------------------- the pill --
@@ -146,7 +147,7 @@ function V.build(model)
         },
         kit.subtitle {
           font_size = theme.size.small, width = W - BADGE - 50, elide = "right",
-          color = function() return step() == "failed" and C.error or C.onSurfaceVariant end,
+          color = function() return step() == "failed" and kit.signal("alert")() or kit.ink("lo")() end,
           text = function()
             local s = step()
             if state.failures > 0 and (s == "face" or s == "finger" or s == "password") then

@@ -73,7 +73,7 @@ test.it("dashboard, settings and workspaces keep the same sections and geometry 
         end
       end
       if style=="tsugumori" and index==1 then
-        for _,key in ipairs {"overview","media","performance","battery","weather","lule"} do
+        for _,key in ipairs {"dashboard","media","performance","battery","weather","lule"} do
           local button=test.get("dashboard-tab-"..key)
           local icon=test.get("dashboard-tab-"..key.."-icon")
           test.truthy(icon.visible,"missing tab icon: "..key)

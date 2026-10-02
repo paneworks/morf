@@ -211,7 +211,8 @@ else
       width = size, height = size, view_box = { 0, 0, 100, 100 },
       d = shapes.path(d[1], { segments = false }), rotation = d[5],
       fill_color = function() return C.primary:alpha(0.05) end,
-      loop = { rotation = { from = d[5], to = d[5] + (i % 2 == 0 and 360 or -360), duration = 90000 + i * 9000 } },
+      loop = { rotation = { from = d[5], to = d[5] + (i % 2 == 0 and 360 or -360), duration = 90000 + i * 9000,
+        loops = 1, hold = true } },
     }
   end
   backdrop = ui.Item {
@@ -293,7 +294,7 @@ for index, p in ipairs(people) do
             anchors = { fill = true },
             loop = function()
               if not chosen() then return nil end
-              return { rotation = { to = 360, duration = 40000, hold = true } }
+              return { rotation = { to = 360, duration = 40000, loops = 1, hold = true } }
             end,
             shapes.Shape {
               anchors = { fill = true },
@@ -377,7 +378,10 @@ local hint = ui.Column {
   opacity = function() return (not SHORT and stage:get() == "rest" and pull:get() < 0.1) and 1 or 0 end,
   behavior = { opacity = { duration = 260 } },
   icon("keyboard_arrow_up", s(30), function() return C.onSurfaceVariant end, {
-    loop = { translate_y = { from = 0, to = -s(6), duration = 900, alternate = true, easing = "in_out_sine" } },
+    loop = function()
+      if SHORT or stage:get() ~= "rest" then return nil end
+      return { translate_y = { from = 0, to = -s(6), duration = 900, alternate = true, loops = 6, easing = "in_out_sine" } }
+    end,
   }),
   text {
     text = ONSCREEN and "Swipe up to log in" or "Press Enter to log in",

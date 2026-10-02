@@ -6,6 +6,7 @@
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
+local rows = require("themes.layouts.rows")
 
 local C = theme.color
 local M = {}
@@ -38,31 +39,26 @@ function M.build(model, w, h)
       if pct > 50 then return "battery_5_bar" end
       if pct > 20 then return "battery_3_bar" end
       return "battery_alert"
-    end, 40, function() return C.primary end, { x = 18, y = 20, fill = true }),
+    end, 40, kit.ink("accent"), { x = 18, y = 20, fill = true }),
     kit.text {
       id = "power-percent", x = 70, y = 14, font_size = theme.size.extra, font_weight = 700,
       text = function() return ("%d%%"):format(math.floor((first().capacity or 0) + 0.5)) end,
     },
     kit.subtitle {
       x = 70, y = 56, width = w - 90, elide = "right",
-      color = function() return C.onSurfaceVariant end,
+      color = kit.ink("lo"),
       text = model.summary,
     },
-    -- The charge, as a bar, the charge limit marked on it.
-    kit.surface {
-      x = 18, y = 96, width = w - 36, height = 12, radius = 6,
-      color = function() return C.surfaceContainerHighest end,
-      kit.surface {
-        height = 12, radius = 6,
-        width = function() return (w - 36) * math.max(0, math.min(1, (first().capacity or 0) / 100)) end,
-        color = function() return C.primary end,
-        behavior = { width = { duration = 500 } },
-      },
+    -- The charge, as the theme's fill bar, the charge limit marked on it.
+    ui.Item {
+      x = 18, y = 96, width = w - 36, height = 12,
+      kit.fill { width = w - 36, height = 12, color = kit.signal("accent"),
+        value = function() return math.max(0, math.min(1, (first().capacity or 0) / 100)) end },
       kit.surface {
         width = 2, height = 12,
         x = function() return (w - 36) * (first().charge_limit or 100) / 100 - 1 end,
         visible = function() local l = first().charge_limit return l ~= nil and l < 100 end,
-        color = function() return C.onSurface end,
+        color = kit.ink("hi"),
       },
     },
   })
@@ -72,30 +68,25 @@ function M.build(model, w, h)
   local bw = (w - 36 - 16) / 3
   for _, p in ipairs(model.PROFILES) do
     local function on() return active() == p.id end
+    local ink = rows.ink(on, true, C.onSurface)
     local area
     area = kit.action {
       id = "power-profile-" .. p.id,
       width = bw, height = 78, cursor = "pointer",
       on_clicked = function() model.select(p.id) end,
-      kit.surface {
-        anchors = { fill = true },
-        radius = function() return on() and 14 or 22 end,
-        color = function()
-          local base = on() and C.primary or C.surfaceContainerHighest
-          if area and area.hovered then return base:mix(on() and C.onPrimary or C.onSurface, 0.08) end
-          return base
-        end,
-        behavior = { color = { duration = theme.duration.small }, radius = kit.spring(260, 16) },
-      },
       ui.Column {
         anchors = { center_in = true }, gap = 2, align = "center",
-        kit.icon(p.icon, 24, function() return on() and C.onPrimary or C.onSurfaceVariant end),
+        kit.icon(p.icon, 24, rows.ink(on, true, C.onSurfaceVariant)),
         kit.menu_label { text = p.name, font_size = theme.size.small, font_weight = 600,
-          color = function() return on() and C.onPrimary or C.onSurface end },
+          width = bw - 10, elide = "right", horizontal_alignment = "center",
+          color = ink },
         kit.subtitle { text = p.hint, font_size = theme.size.small - 3,
-          color = function() return on() and C.onPrimary:alpha(0.8) or C.onSurfaceVariant end },
+          width = bw - 10, elide = "right", horizontal_alignment = "center",
+          color = function() return on() and ink():alpha(0.8) or C.onSurfaceVariant end },
       },
     }
+    ui.reparent(kit.state_surface { id = "power-profile-" .. p.id .. "-shape", area = area, on = on,
+      height = 78, tone = "primary", z = -1 }, area)
     buttons[#buttons + 1] = area
   end
   local profile = card(136, {
@@ -106,45 +97,23 @@ function M.build(model, w, h)
 
   -- The battery's health, and how it is charged -- set by the firmware
   -- (and root), shown here.
-  local function fact(name, value)
-    return ui.Item {
-      width = w - 36, height = 26,
-      kit.section_label { text = name, color = function() return C.onSurfaceVariant end },
-      kit.text { anchors = { right = true }, text = value, font_weight = 500 },
-    }
-  end
+  local rows = {}
+  for _, entry in ipairs(model.FACTS) do rows[#rows + 1] = { entry.name, entry.value } end
+  local facts = kit.facts(rows, w - 36, 30)
+  facts.x, facts.y = 18, 40
   local health = card(236, {
     id = "power-health",
     label("Battery", 14),
-    ui.Column {
-      x = 18, y = 40, gap = 4,
-      table.unpack((function()
-        local facts = {}
-        for _, entry in ipairs(model.FACTS) do facts[#facts + 1] = fact(entry.name, entry.value) end
-        return facts
-      end)()),
-    },
+    facts,
   })
 
   -- The graphs are the dashboard's.
-  local more_area
-  more_area = kit.action {
-    id = "power-open-battery",
-    width = w, height = 52, cursor = "pointer",
+  local more_area = kit.pill {
+    id = "power-open-battery", width = w, height = 52,
+    icon = "monitoring", label = "Battery graphs and details",
     on_clicked = model.open_battery,
-    kit.surface {
-      anchors = { fill = true }, radius = 26,
-      color = function()
-        local base = C.secondaryContainer
-        return (more_area and more_area.hovered) and base:mix(C.onSecondaryContainer, 0.08) or base
-      end,
-    },
-    ui.Row {
-      anchors = { center_in = true }, gap = 8, align = "center",
-      kit.icon("monitoring", 20, function() return C.onSecondaryContainer end),
-      kit.menu_label { text = "Battery graphs and details", font_weight = 500,
-        color = function() return C.onSecondaryContainer end },
-    },
+    color = function() return C.secondaryContainer end,
+    ink = function() return C.onSecondaryContainer end,
   }
 
   viewport = ui.Flickable {

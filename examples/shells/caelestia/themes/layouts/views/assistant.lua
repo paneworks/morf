@@ -8,7 +8,7 @@ function M.build(model, w, h)
   local wide = w >= 680
   local x = wide and 232 or 16
   return kit.card { id = "assistant-page", width = w, height = h,
-    kit.surface { x = 16, y = 16, width = 200, height = function() return h() - 32 end, radius = 22, visible = wide,
+    kit.card { x = 16, y = 16, width = 200, height = function() return h() - 32 end, visible = wide,
       color = function() return C.surfaceContainerHigh end,
       kit.icon("forum", 28, function() return C.primary end, { x = 20, y = 22 }),
       kit.heading { id = "assistant-title", active = model.active, width = 164, x = 20, y = 66, text = model.title, font_size = 22, font_weight = 700 },

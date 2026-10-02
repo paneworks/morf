@@ -9,6 +9,7 @@
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
+local rows_kit = require("themes.layouts.rows")
 
 local C = theme.color
 local M = {}
@@ -40,24 +41,12 @@ local function rows(prefix, w, h, top, bottom, count, row)
   return ui.Column { x = PAD, y = top, gap = 0, table.unpack(list) }
 end
 
---- A row's look: a rounded wash on hover, stronger when it is the one in
+--- A row's look: the theme's hover surface, filled when it is the one in
 --- use.
 local function row_area(props, on)
-  local area
-  local children = props
-  props.cursor = "pointer"
-  props.anchors = { fill = true }
-  area = kit.action(props)
-  ui.reparent(kit.surface {
-    anchors = { fill = true, top_margin = 2, bottom_margin = 2 }, z = -1,
-    radius = function() return on() and 12 or 20 end,
-    color = function()
-      if on() then return C.secondaryContainer end
-      return area.hovered and C.onSurface:alpha(0.06) or C.onSurface:alpha(0)
-    end,
-    behavior = { color = { duration = theme.duration.small }, radius = kit.spring(260, 16) },
-  }, area)
-  return area, children
+  props.anchors = { fill = true, top_margin = 2, bottom_margin = 2 }
+  props.on = on
+  return rows_kit.choice(props)
 end
 
 -- ----------------------------------------------------------------- network --

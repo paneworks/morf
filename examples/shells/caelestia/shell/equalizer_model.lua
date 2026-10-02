@@ -93,11 +93,14 @@ end
 morf.ipc["equalizer-status-request"]=function() if primary() then publish() end end
 local service=backend.new {name="caelestia.equalizer.backend"}
 local mode_query,mode_timer,mode_token=nil,nil,0
+-- Never in a dry run (the shell reaches no audio stack then) and never
+-- without a default sink to classify.
 local function classify()
-  if mode_timer then mode_timer:cancel() end
+  if mode_timer then mode_timer:cancel() mode_timer=nil end
+  if dry() or not morf.audio.default_sink() then return end
   mode_timer=morf.timer(400,function()
     mode_timer=nil
-    if not primary() or not cfg.get("enabled") then return end
+    if dry() or not primary() or not cfg.get("enabled") then return end
     mode_token=mode_token+1 local token=mode_token
     if mode_query then mode_query:kill() end
     local sink=morf.audio.default_sink() if not sink then return end

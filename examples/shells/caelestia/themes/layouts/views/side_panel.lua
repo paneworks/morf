@@ -1,4 +1,4 @@
--- The original Material side-panel geometry and sliding tab composition.
+-- The side panels: shared geometry; the tab row and pages come from the kit.
 local morf = require("morf")
 local ui = require("morf.ui")
 local theme = require("theme")
@@ -13,7 +13,7 @@ function V.build(model)
     tabs[i] = { key = tab.key, name = tab.name, icon = tab.icon,
       build = function(w, h) return model.page(tab.key, w, h) end }
   end
-  local panel = require("themes.layouts.tabbed").new {
+  local panel = require("kit").tabbed {
     id = model.id, width = theme.SIDE_W, height = height, tabs = tabs,
     tab = model.tab, publish = false, on_present = model.present,
   }

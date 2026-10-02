@@ -1,6 +1,7 @@
 -- Small form controls shared by the Tasks and Calendar pages.
 local ui = require("morf.ui")
 local kit = require("kit")
+local rows = require("themes.layouts.rows")
 local theme = require("theme")
 local C = theme.color
 local M = {}
@@ -40,8 +41,7 @@ function M.field(id, label, placeholder, width, changed, accepted, escaped)
   }
   local node = ui.Column { width = width, gap = 5,
     M.label(label),
-    kit.surface { width = width, height = 40, radius = 12,
-      color = function() return C.surfaceContainerHighest end, input },
+    rows.well { width = width, height = 40, input },
   }
   return node, input
 end

@@ -62,7 +62,7 @@ test.it("the real dashboard and all three tabbed drawers animate their first swi
   ]]})
   test.advance(300)
   for _,case in ipairs {
-    {"dashboard","overview","media"}, {"bottom","assistant","drop"},
+    {"dashboard","dashboard","media"}, {"bottom","assistant","drop"},
     {"leftbar","tasks","calendar"}, {"sidebar","settings","notifications"},
   } do
     local panel,first,second=table.unpack(case)

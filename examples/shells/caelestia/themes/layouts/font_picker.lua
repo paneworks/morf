@@ -17,13 +17,15 @@ return function(state)
     area=kit.action {id="lule-font-option-"..i,width=W-24,height=42,cursor="pointer",
       visible=function() return family()~=nil end,
       on_clicked=function() if not state.busy:get() and not state.appearance.busy:get() then fonts.choose(family()) end end,
-      kit.surface {anchors={fill=true},radius=6,
-        color=function() return family()==require("themes").font and C.primaryContainer or C.surfaceContainerHigh end},
       kit.text {x=10,y=3,width=W-66,height=18,font_size=12,elide="right",text=function() return family() or "" end},
       kit.text {id="lule-font-preview-"..i,x=10,y=21,width=W-66,height=18,font_size=13,elide="right",
         font_family=function() return family() or theme.font end,font_source="",
-        text="The quick brown fox · 0123456789",color=function() return C.primary end},
+        text="The quick brown fox · 0123456789",color=kit.ink("accent")},
     }
+    kit.hover(area,function(hovered)
+      local base=family()==require("themes").font and C.primaryContainer or C.surfaceContainerHigh
+      return hovered and base:mix(C.onSurface,0.08) or base
+    end,6)
     rows[#rows+1]=area
   end
   local function button(id,label,width,action)
@@ -31,7 +33,8 @@ return function(state)
   end
   local popup=kit.card {id="lule-font-popup",x=510,y=130,width=W,height=330,radius=16,
     ui.MouseArea {anchors={fill=true},on_clicked=function() end},
-    kit.surface {x=12,y=10,width=W-24,height=40,radius=8,color=function() return C.surfaceContainerHighest end,search},
+    kit.surface {x=12,y=10,width=W-24,height=40,radius=8,color=function() return C.surfaceContainerHighest end,search,
+      kit.decor("corners",{length=5,color=kit.stroke("mark")})},
     ui.Column(rows),
     kit.subtitle {x=22,y=65,width=W-44,height=40,wrap=true,font_size=12,
       visible=function() return #fonts.rows:get()==0 end,
@@ -47,7 +50,7 @@ return function(state)
   local root=ui.Item {id="lule-font-picker",anchors={fill=true},z=100,
     visible=function() return fonts.opened:get() end,
     ui.MouseArea {anchors={fill=true},on_clicked=fonts.close,
-      ui.Rect {anchors={fill=true},color=function() return C.surface:alpha(.5) end}},popup,
+      kit.surface {anchors={fill=true},color=function() return C.surface:alpha(.5) end}},popup,
   }
   morf.effect("lule.font-picker.close",function()
     if not state.active:get() or state.appearance.busy:get() then fonts.close() end

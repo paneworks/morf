@@ -166,7 +166,7 @@ function M.receive(phase,id,value)
       if why then send("reject",id,why) return end
       local tokens=themes.current.tokens or {}
       session.capture(style,font,{mode=mode,rounding=tokens.ROUNDING,seam=tokens.SEAM,
-        frame_rounding=themes.current.id=="tsugumori" and 0 or tokens.ROUNDING})
+        frame_rounding=themes.current.id~="material" and 0 or tokens.ROUNDING})
       send("ready",id,own)
     end,false)
   elseif phase=="ready" then

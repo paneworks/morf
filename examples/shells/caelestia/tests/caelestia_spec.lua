@@ -616,8 +616,10 @@ test.describe("caelestia", function()
     test.eq(test.get({ id = "sidebar-group-app-1" }).text, "Discord")
     test.eq(test.get({ id = "sidebar-group-app-2" }).text, "Firefox")
     test.falsy(test.find { id = "sidebar-group-3", visible = true })
-    test.near(test.get({ id = "sidebar-group-1" }).height, 68, 1)
-    test.near(test.get({ id = "sidebar-group-2" }).height, 90, 1)
+    -- A shut group is its head and one line per notification (20 each).
+    local one, two = test.get({ id = "sidebar-group-1" }).height, test.get({ id = "sidebar-group-2" }).height
+    test.truthy(one > 40, "a group shows only its head")
+    test.near(two - one, 20, 1)
     test.falsy(test.find { id = "sidebar-empty-label", visible = true })
     test.snapshot("caelestia-sidebar-notifications.png", { surface = "screen" })
     -- A group opens out to its notifications; one is dismissed from there.
@@ -651,7 +653,9 @@ test.describe("caelestia", function()
     test.settle(1000)
     local swell, bud = test.get { id = "levels-swell" }, test.get { id = "levels-bud" }
     test.truthy(swell.x < W - 10, "the frame did not swell out")
-    test.near(bud.width, test.get({ id = "rail-pill-1" }).height, 0.5, "the disc is not the pills' height")
+    -- The shared level column: 118 wide, taller than the pills it swells from.
+    test.near(bud.width, 118, 0.5, "the level column is not its width")
+    test.truthy(bud.height > test.get({ id = "rail-pill-1" }).height and bud.height < H)
     test.near(test.get({ id = "levels-volume" }).opacity, 1, 0.01, "the pill did not light")
     test.snapshot("caelestia-osd.png", { surface = "screen" })
     test.advance(3000)

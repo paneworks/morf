@@ -270,7 +270,7 @@ return function(W, H, NAME)
           },
           loop = function()
             if skin.static_art or not active().playing then return nil end
-            return { rotation = { to = 360, duration = 30000, hold = true } }
+            return { rotation = { to = 360, duration = 30000, loops = 1, hold = true } }
           end,
         },
         ui.Column {
@@ -330,7 +330,11 @@ return function(W, H, NAME)
     opacity = function() return (not SHORT and main() and stage:get() == "rest" and pull:get() < 0.1) and 1 or 0 end,
     behavior = { opacity = { duration = 260 } },
     icon("keyboard_arrow_up", s(30), function() return C.onSurfaceVariant end, {
-      loop = { translate_y = { from = 0, to = -s(6), duration = 900, alternate = true, easing = "in_out_sine" } },
+      -- A few bobs when the screen comes to rest, then still.
+      loop = function()
+        if SHORT or not main() or stage:get() ~= "rest" then return nil end
+        return { translate_y = { from = 0, to = -s(6), duration = 900, alternate = true, loops = 6, easing = "in_out_sine" } }
+      end,
     }),
     text {
       text = (FINGER and "Touch the sensor, or " or "")
@@ -349,8 +353,10 @@ return function(W, H, NAME)
     ui.Path {
       anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = cookie,
       fill_color = function() return C.primaryContainer end,
+      -- It turns while authenticating; at rest it is still.
       loop = function()
-        return { rotation = { to = 360, duration = busy:get() and 2400 or 60000, hold = true } }
+        if not busy:get() then return nil end
+        return { rotation = { to = 360, duration = 2400, hold = true } }
       end,
     },
     me.face and ui.Image {

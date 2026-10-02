@@ -4,6 +4,7 @@ local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
 local widgets = require("planner_widgets")
+local R = require("themes.layouts.rows")
 local C = theme.color
 local M = {}
 function M.build(model, w, h)
@@ -20,12 +21,14 @@ function M.build(model, w, h)
   local task_list = ui.Repeater {
     as = "column", gap = 8, width = inner, model = rows,
     delegate = function(row)
-      return kit.surface { id = "task-row-" .. row.uuid, width = inner, height = 100, radius = 18,
-        color = function() return C.surfaceContainerHigh end,
-        kit.action { id = "task-done-" .. row.uuid, x = 8, y = 12, width = 38, height = 38, cursor = "pointer",
+      local done = kit.action { id = "task-done-" .. row.uuid, x = 8, y = 12, width = 38, height = 38, cursor = "pointer",
           on_clicked = function() model.complete(row.uuid) end,
           kit.icon("radio_button_unchecked", 23, function() return row.overdue and C.error or C.primary end,
-            { anchors = { center_in = true } }) },
+            { anchors = { center_in = true } }) }
+      kit.hover(done, function(hovered) return hovered and C.onSurface:alpha(0.08) or C.onSurface:alpha(0) end, R.round(38))
+      return kit.card { id = "task-row-" .. row.uuid, width = inner, height = 100,
+        color = function() return C.surfaceContainerHigh end,
+        done,
         kit.action { id = "task-edit-" .. row.uuid, x = 52, y = 12, width = inner - 64, height = 78, cursor = "pointer",
           on_clicked = function() model.edit(row.uuid) end,
           kit.menu_label { text = row.description, width = inner - 64, height = 25, elide = "right", font_weight = 600 },

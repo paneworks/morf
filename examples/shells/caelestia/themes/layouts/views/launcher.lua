@@ -57,7 +57,7 @@ function V.build(M)
       local ok, color = pcall(morf.color, row.swatch)
       return kit.centred(32, 32, kit.surface {
         width = 28, height = 28, radius = 14, color = ok and color or row.swatch,
-        border_width = 2, border_color = function() return C.outlineVariant end,
+        border_width = 2, border_color = kit.stroke("idle"),
       })
     end
     if row.kind == "action" or row.kind == "variant" or row.material then
@@ -73,7 +73,7 @@ function V.build(M)
       local ok, color = pcall(morf.color, row.color)
       return kit.centred(32, 32, kit.surface {
         width = 28, height = 28, radius = 14, color = ok and color or row.color,
-        border_width = 2, border_color = function() return C.outlineVariant end,
+        border_width = 2, border_color = kit.stroke("idle"),
       })
     end
     local hit = M.icon(row.icon)
@@ -95,11 +95,15 @@ function V.build(M)
       id = "launcher-header-" .. entry.key,
       width = WIDTH - 2 * PAD, height = HEADER,
       enter = { opacity = 0, duration = theme.duration.small },
-      kit.text {
-        x = 14, anchors = { bottom = true, bottom_margin = 6 },
+      kit.heading {
+        id = "launcher-section-" .. entry.key, scope = "launcher", level = "section",
+        x = 14, anchors = { bottom = true, bottom_margin = 6 }, width = WIDTH - 2 * PAD - 120, elide = "right",
         text = entry.name, font_size = theme.size.small, font_weight = 600,
-        color = function() return C.onSurfaceVariant end,
+        color = kit.ink("lo"), ink = kit.ink("accent"),
       },
+      -- The theme's decorative code for the section ("" where it prints none).
+      kit.label { anchors = { right = true, right_margin = 14, bottom = true, bottom_margin = 7 },
+        text = kit.code(entry.name, "##.##"), font_size = theme.size.small - 4, color = kit.ink("lo") },
     }
   end
 
@@ -109,7 +113,7 @@ function V.build(M)
     local row = row_of(entry) or entry
     local box_w = (WIDTH - 2 * PAD - 56) / 2
     local function box(x, big, label, id)
-      return kit.surface {
+      return kit.card {
         x = x, y = 6, width = box_w, height = HERO - 12, radius = 16,
         color = function() return C.surfaceContainerHigh end,
         ui.Column {
@@ -270,15 +274,10 @@ function V.build(M)
           },
         },
       }
-      local wash = kit.surface {
-        anchors = { fill = true, top_margin = 3 }, radius = 12, z = -1,
-        color = function()
-          if on() then return C.onSurface:alpha(0.07) end
-          return slot.hovered and C.onSurface:alpha(0.04) or C.onSurface:alpha(0)
-        end,
-        behavior = { color = { duration = theme.duration.small } },
-      }
-      ui.reparent(wash, slot)
+      kit.hover(slot, function(hovered)
+        if on() then return C.onSurface:alpha(0.07) end
+        return hovered and C.onSurface:alpha(0.04) or C.onSurface:alpha(0)
+      end, 12)
       slots[i] = slot
     end
     local row = ui.Row {
@@ -346,38 +345,27 @@ function V.build(M)
     },
   }
 
-  -- The selection: one rounded box in a distance field under the rows,
-  -- tracking an item that springs from row to row -- sliding, squashing and
-  -- stretching on the way -- rather than a highlight that jumps.
+  -- The selection: the theme's highlight under the rows, riding an item
+  -- that springs from row to row rather than a highlight that jumps.
   local highlight = ui.Item {
     id = "launcher-highlight",
     x = 0, width = WIDTH - 2 * PAD,
     y = function() return (entry_span(math.max(1, M.selected:get()))) end,
     height = function() local _, h = entry_span(math.max(1, M.selected:get())) return h end,
     behavior = { y = kit.spring(380, 26), height = kit.spring(380, 26) },
-    stretch = { stiffness = 300, damping = 15, scale = 0.1, max = 0.22 },
     visible = function() return M.count:get() > 0 end,
   }
-  local selection = ui.Sdf {
-    id = "launcher-selection",
-    anchors = { fill = true }, z = -1,
-    ui.SdfShape {
-      shape = "box", radius = 12, track = highlight,
-      fill_color = function() return C.onSurface:alpha(0.15) end,
-    },
+  local selection = kit.selection {
+    id = "launcher-selection", track = highlight, radius = kit.round(12),
+    color = function() return C.onSurface:alpha(0.15) end,
   }
 
   -- The bar at the foot: what is being searched, and what Return and Tab do.
   local function key_hint(key, label)
     return ui.Row {
       gap = 6, align = "center",
-      kit.text { text = label, font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
-      kit.surface {
-        height = 22, width = math.max(26, #key * 9 + 12), radius = 6,
-        color = function() return C.surfaceContainerHighest end,
-        kit.text { anchors = { center_in = true }, text = key, font_size = theme.size.small, font_weight = 600,
-          color = function() return C.onSurface end },
-      },
+      kit.text { text = label, font_size = theme.size.small, color = kit.ink("lo") },
+      kit.keycap { text = key, height = 22 },
     }
   end
   -- Tab's hint, there only while the chosen row has other actions.
@@ -386,29 +374,57 @@ function V.build(M)
     local sel = row_of(M.results:get(M.selected:get()))
     return sel ~= nil and sel.actions ~= nil and M.acting:get() == ""
   end
+  -- The keys at the right; the prefixes at the left take what room they
+  -- leave (every theme's face is a different width).
+  local keys = ui.Row {
+    anchors = { right = true, right_margin = 12, vertical_center = true }, gap = 14, align = "center",
+    key_hint("↵", "Open"),
+    tab_hint,
+    key_hint("esc", function() return M.acting:get() ~= "" and "Back" or "Close" end),
+  }
+  local mode = kit.label { text = function() return (mode_name()) end, font_size = theme.size.small,
+    font_weight = 600, color = kit.ink("hi") }
+  -- The search prefixes, most useful first. Each run of them is measured
+  -- in the theme's face once; the footer shows the longest run that fits
+  -- and drops the later prefixes whole rather than cutting one short.
+  local PREFIXES = { "= calc", "/ files", "? web", "@ windows", "! system", ": emoji" }
+  local runs, measures = {}, {}
+  for i = 1, #PREFIXES do
+    runs[i] = table.concat(PREFIXES, "   ", 1, i)
+    measures[i] = kit.text { text = runs[i], font_size = theme.size.small, opacity = 0 }
+  end
+  local function prefix_room()
+    return math.max(0, width() - 16 - 26 - (mode.layout_width or 60) - 8 - (keys.layout_width or 220) - 12 - 12)
+  end
+  local function prefix_run()
+    local room, best = prefix_room(), 1
+    for i = 1, #runs do
+      if (measures[i].layout_width or math.huge) <= room then best = i end
+    end
+    return best
+  end
   local footer = ui.Item {
     id = "launcher-footer",
     anchors = { left = true, right = true, bottom = true }, height = FOOTER,
-    kit.surface { anchors = { left = true, right = true, top = true }, height = 1, color = function() return C.outlineVariant:alpha(0.5) end },
+    kit.surface { anchors = { left = true, right = true, top = true }, height = 1, color = kit.stroke("quiet") },
     ui.Row {
       x = 16, anchors = { vertical_center = true }, gap = 8, align = "center",
-      kit.icon(function() return select(2, mode_name()) end, 18, function() return C.primary end),
-      kit.text { text = function() return (mode_name()) end, font_size = theme.size.small, font_weight = 600,
-        color = function() return C.onSurface end },
+      kit.icon(function() return select(2, mode_name()) end, 18, kit.ink("accent")),
+      mode,
       kit.text {
+        id = "launcher-prefixes", elide = "right",
+        width = function()
+          return math.min(prefix_room(), (measures[prefix_run()].layout_width or 0) + 2)
+        end,
         text = function()
           if M.query:get() ~= "" or M.acting:get() ~= "" then return "" end
-          return "   = calc   / files   ? web   @ windows   ! system   : emoji"
+          return runs[prefix_run()]
         end,
-        font_size = theme.size.small, color = function() return C.onSurfaceVariant end,
+        font_size = theme.size.small, color = kit.ink("lo"),
       },
     },
-    ui.Row {
-      anchors = { right = true, right_margin = 12, vertical_center = true }, gap = 14, align = "center",
-      key_hint("↵", "Open"),
-      tab_hint,
-      key_hint("esc", function() return M.acting:get() ~= "" and "Back" or "Close" end),
-    },
+    keys,
+    ui.Item { width = 0, height = 0, clip = true, table.unpack(measures) },
   }
 
   local content = ui.Item {
@@ -421,7 +437,7 @@ function V.build(M)
       field,
       clear,
     },
-    kit.surface { anchors = { left = true, right = true }, y = SEARCH, height = 1, color = function() return C.outlineVariant:alpha(0.5) end },
+    kit.surface { anchors = { left = true, right = true }, y = SEARCH, height = 1, color = kit.stroke("quiet") },
     -- The results, down from the search.
     ui.Item {
       y = SEARCH + PAD, width = WIDTH - 2 * PAD,
@@ -440,6 +456,7 @@ function V.build(M)
     },
     carousel(),
     footer,
+    kit.decor("corners", { length = 12, color = kit.stroke("mark") }) or ui.Item {},
   }
 
 

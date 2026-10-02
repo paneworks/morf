@@ -4,39 +4,28 @@
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
+local rows = require("themes.layouts.rows")
 
 local C = theme.color
 local M = {}
 
 local function choice(id, icon, name, on, pick, width)
-  local area
-  area = kit.action {
-    id = id, width = width, height = 70, cursor = "pointer",
-    on_clicked = pick,
-    kit.surface {
-      anchors = { fill = true },
-      radius = function() return on() and 14 or 22 end,
-      color = function()
-        local base = on() and C.primary or C.surfaceContainerHighest
-        if area and area.hovered then return base:mix(on() and C.onPrimary or C.onSurface, 0.08) end
-        return base
-      end,
-      behavior = { color = { duration = theme.duration.small }, radius = kit.spring(260, 16) },
-    },
+  return rows.choice {
+    id = id, width = width, height = 70, on = on, tone = "primary", tile = true, on_clicked = pick,
     ui.Column {
       anchors = { center_in = true }, gap = 4, align = "center",
-      kit.icon(icon, 22, function() return on() and C.onPrimary or C.onSurfaceVariant end),
+      kit.icon(icon, 22, rows.ink(on, true, C.onSurfaceVariant)),
       kit.menu_label { text = name, font_size = theme.size.small, font_weight = 600,
-        color = function() return on() and C.onPrimary or C.onSurface end },
+        width = width - 8, elide = "right", horizontal_alignment = "center",
+        color = rows.ink(on, true) },
     },
   }
-  return area
 end
 
 function M.build(model, w, h)
   local viewport
   local function card(height, children)
-    children.width, children.height, children.radius = w, height, 22
+    children.width, children.height = w, height
     return kit.card(children)
   end
   local function label(text) return kit.heading { viewport = function() return viewport end, id = "bar-heading-" .. text:lower():gsub("%s+", "-"), scope = "settings.bar", level = "section", x = 18, y = 14, text = text, font_size = theme.size.small,

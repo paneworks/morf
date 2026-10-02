@@ -1,5 +1,6 @@
 -- GAME-inspired title decode and registration lights. See REFERENCE.md.
--- Titles decode once; their leading light occasionally pulses while in view.
+-- Titles decode once; their leading light pulses a couple of times while in
+-- view and then rests (finite: nothing animates at rest).
 local morf = require("morf")
 local ui = require("morf.ui")
 local symbols = { "!", "<", ">", "-", "_", "/", "[", "]", "{", "}", "=", "+", "*", "^", "?", "#" }
@@ -7,7 +8,7 @@ return function(theme, kit, props)
   local C, source = theme.color, props.text
   local active = props.active or function() return true end
   local pace = 0.5
-  local tick = 40 * pace
+  local tick = 40
   local delay = (props.reveal_delay or 560) * pace
   local lead, stagger = (props.decode_lead or 650) * pace, (props.decode_stagger or 80) * pace
   local size = props.font_size or 14
@@ -36,8 +37,9 @@ return function(theme, kit, props)
       horizontal_alignment = props.horizontal_alignment, vertical_alignment = props.vertical_alignment or "center",
       elide = props.elide or "right", text = caption(), color = color }
   end
-  local a = label("-ghost-a", function() return C.secondary end)
-  local b = label("-ghost-b", function() return C.tertiary end)
+  -- The split-colour ghosts exist from a title's first decode on, not
+  -- before: most titles of a shell sit in pages never opened.
+  local a, b
   local title = label("-text", props.color or function() return C.primary end)
   -- Uppercase letter ink sits above the line box's midpoint because that
   -- box also reserves space for descenders. Raise the pip optically.
@@ -48,15 +50,30 @@ return function(theme, kit, props)
     end,
     anchors={vertical_center=true,vertical_center_offset=-math.max(1,size*.075)},
     width = 5, height = 5, opacity = 0.18, color = props.color or function() return C.primary end }
-  a.opacity, b.opacity = 0, 0
   local node = ui.Item { id = id, x = props.x, y = props.y, anchors = props.anchors,
-    width = width, height = height, visible = props.visible, a, b, title, pip }
+    width = width, height = height, visible = props.visible, title, pip }
+  local function ghosts()
+    if a then return end
+    a = label("-ghost-a", function() return C.secondary end)
+    b = label("-ghost-b", function() return C.tertiary end)
+    a.opacity, b.opacity, a.z, b.z = 0, 0, -1, -1
+    ui.reparent(a, node) ui.reparent(b, node)
+  end
   if measure then ui.reparent(measure,node) end
   local timer, flash, light
   -- Random pauses are timer-driven; only the short burst needs animation
   -- frames. Every title chooses fresh timing independently on each burst.
   local light_clock
-  local function pulse()
+  local light_on=false
+  local PULSES, pulses = 2, 0
+  local pulse
+  local function schedule(low, high)
+    if light_clock then light_clock:cancel() end
+    light_clock = morf.timer(math.random(low, high), pulse, false)
+  end
+  function pulse()
+    light_clock=nil
+    if not light_on then return end
     if light then light:stop() end
     morf.animation.stop(pip,"opacity")
     light=morf.animation.play {
@@ -65,18 +82,17 @@ return function(theme, kit, props)
         {at=.6,value=.18},{at=.75,value=1},{at=1,value=.18},
       }},
     }
-    light_clock.interval=math.random(7000,11000)
+    pulses=pulses+1
+    light_clock=nil
+    if pulses<PULSES then schedule(7000,11000) end
   end
-  light_clock=ui.Timer {id=id.."-light-clock",interval=7000,
-    ["repeat"]=true,running=false,on_triggered=pulse}
-  ui.reparent(light_clock,node)
-  local light_on=false
-  local elapsed, duration, letters, final = 0, 0, {}, ""
+  local elapsed, duration, letters, final, shown = 0, 0, {}, "", nil
   local function finish()
     timer.running = false
     if flash then flash:finish() flash = nil end
-    title.text, a.text, b.text = final, final, final
-    a.opacity, b.opacity = 0, 0
+    title.text = final
+    shown = final
+    if a then a.text, b.text, a.opacity, b.opacity = final, final, 0, 0 end
   end
   local function paint()
     local output, t = {}, elapsed - delay
@@ -87,8 +103,11 @@ return function(theme, kit, props)
         output[i] = symbols[(i * 7 + math.floor(math.max(0, t) / tick) * 11) % #symbols + 1]
       end
     end
+    -- Only the title scrambles; the split-colour ghosts carry the final
+    -- word (they flash once, offset), so a tick re-shapes one run, and only
+    -- when the scramble actually moved.
     local value = table.concat(output)
-    title.text, a.text, b.text = value, value, value
+    if value ~= shown then shown = value title.text = value end
   end
   timer = ui.Timer { id = id .. "-decode", interval = tick, ["repeat"] = true, running = false,
     on_triggered = function()
@@ -125,10 +144,10 @@ return function(theme, kit, props)
     if blink~=light_on then
       light_on=blink
       if blink then
-        light_clock.interval=math.random(4000,9000)
-        light_clock.running=true
+        pulses=0
+        schedule(4000,9000)
       else
-        light_clock.running=false
+        if light_clock then light_clock:cancel() light_clock=nil end
         if light then light:stop() light=nil end
         morf.animation.stop(pip,"opacity")
         pip.opacity=.18
@@ -143,6 +162,8 @@ return function(theme, kit, props)
     elapsed, duration = 0, delay + lead + math.min(#letters - 1, 9) * stagger
     paint()
     timer.running = true
+    ghosts()
+    a.text, b.text = value, value
     -- The split-color title flash remains finite.
     local tracks = {}
     for i, ghost in ipairs { a, b } do

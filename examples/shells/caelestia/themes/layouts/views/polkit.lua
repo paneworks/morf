@@ -34,14 +34,13 @@ function V.build(M)
     anchors = { right = true, right_margin = 7, vertical_center = true },
     width = FIELD_H - 14, height = FIELD_H - 14, cursor = "pointer",
     on_clicked = function() M.submit() end,
-    kit.surface {
-      anchors = { fill = true }, radius = (FIELD_H - 14) / 2,
-      color = function() return typed:get() > 0 and C.primary or C.surfaceContainerHigh end,
-      behavior = { color = { duration = theme.duration.small } },
-    },
     kit.icon("arrow_forward", 22, function() return typed:get() > 0 and C.onPrimary or C.onSurfaceVariant end,
       { anchors = { center_in = true } }),
   }
+  kit.hover(submit_area, function(hovered)
+    local base = typed:get() > 0 and C.primary or C.surfaceContainerHigh
+    return hovered and base:mix(typed:get() > 0 and C.onPrimary or C.onSurface, 0.08) or base
+  end, (FIELD_H - 14) / 2)
 
   local field = ui.MouseArea {
     id = "polkit-field",
@@ -54,10 +53,13 @@ function V.build(M)
       anchors = { fill = true }, radius = FIELD_H / 2,
       color = function() return C.surfaceContainerHighest end,
       border_width = function() return M.phase:get() == "wrong" and 2 or 0 end,
-      border_color = function() return C.error end,
+      border_color = kit.signal("alert"),
     },
+    kit.decor("corners", { length = 6, color = function()
+      return M.phase:get() == "wrong" and kit.signal("alert")() or kit.stroke("mark")()
+    end }) or ui.Item {},
     kit.icon(function() return M.phase:get() == "checking" and "hourglass" or "key" end, 22,
-      function() return C.onSurfaceVariant end, { x = 20, anchors = { vertical_center = true } }),
+      kit.ink("lo"), { x = 20, anchors = { vertical_center = true } }),
     kit.text {
       anchors = { vertical_center = true }, x = 56, width = INNER - 120, elide = "right",
       text = function()
@@ -66,7 +68,7 @@ function V.build(M)
         p = p:gsub(":%s*$", "")
         return p ~= "" and p or "Password"
       end,
-      color = function() return C.onSurfaceVariant end,
+      color = kit.ink("lo"),
       visible = function() return typed:get() == 0 end,
     },
     ui.Row { x = 56, anchors = { vertical_center = true }, gap = 5, table.unpack(dots) },
@@ -78,8 +80,11 @@ function V.build(M)
   local LOADING = { "soft_burst", "cookie9", "pentagon", "pill", "sunny", "cookie4", "oval", "flower" }
   local step = morf.signal("caelestia.polkit.step", 1)
   local stepper
+  -- The badge works only while something is being checked (a password,
+  -- a face); waiting for the person to type, it rests.
+  local function busy() return M.phase:get() == "checking" or face() end
   morf.effect("caelestia.polkit.stepper", function()
-    local checking = M.opened:get() and pending()
+    local checking = M.opened:get() and busy()
     morf.timer(1, function()
       if checking and not stepper then
         stepper = morf.timer(650, function() step:set(step:get() % #LOADING + 1) end, true)
@@ -109,16 +114,15 @@ function V.build(M)
       id = "polkit-badge", anchors = { fill = true },
       shape = function()
         local p = M.phase:get()
-        if pending() then return LOADING[step:get()] end
+        if busy() then return LOADING[step:get()] end
         if p == "wrong" or p == "refused" then return "sunny" end
         if p == "done" then return "circle" end
         return "cookie9"
       end,
       color = badge_colour,
       loop = function()
-        local p = M.phase:get()
-        if not M.opened:get() or p == "done" then return nil end
-        return { rotation = { to = 360, duration = pending() and 2600 or 14000, hold = true } }
+        if not M.opened:get() or not busy() then return nil end
+        return { rotation = { to = 360, duration = 2600, hold = true } }
       end,
     },
     kit.icon(function()
@@ -134,27 +138,13 @@ function V.build(M)
   -- ------------------------------------------------------------- the panel --
 
   local function button(id, label, filled, on_clicked)
-    local area
-    area = kit.action {
-      id = id, height = 40, width = filled and 148 or 104, cursor = "pointer",
-      visible = filled and M.can_answer or nil,
+    local area = kit.pill {
+      id = id, height = 40, width = filled and 148 or 104, label = label,
       on_clicked = on_clicked,
-      scale = function() return (area and area.pressed) and 0.95 or 1 end,
-      behavior = { scale = kit.spring(700, 20) },
-      kit.surface {
-        anchors = { fill = true }, radius = 20,
-        color = function()
-          local base = filled and C.primary or C.onSurface:alpha(0)
-          if area and area.hovered then return filled and base:mix(C.onPrimary, 0.08) or C.onSurface:alpha(0.08) end
-          return base
-        end,
-        behavior = { color = { duration = theme.duration.small } },
-      },
-      kit.text {
-        anchors = { center_in = true }, text = label, font_weight = 600,
-        color = function() return filled and C.onPrimary or C.primary end,
-      },
+      color = function() return filled and C.primary or C.onSurface:alpha(0) end,
+      ink = function() return filled and C.onPrimary or C.primary end,
     }
+    if filled then area.visible = M.can_answer end
     return area
   end
 
@@ -174,7 +164,7 @@ function V.build(M)
           width = INNER - 76, elide = "right" },
         kit.text {
           width = INNER - 76, elide = "right", font_size = theme.size.small,
-          color = function() return C.onSurfaceVariant end,
+          color = kit.ink("lo"),
           text = function()
             local r = M.request:get()
             return r and ("as " .. tostring(r.user)) or ""
@@ -186,13 +176,13 @@ function V.build(M)
       id = "polkit-message", width = INNER, wrap = true, max_lines = 4, line_height = 1.35,
       text = function() local r = M.request:get() return r and r.message or "" end,
     },
-    kit.text {
+    kit.label {
       width = INNER, elide = "middle", font_size = theme.size.small - 2,
-      color = function() return C.outline end,
+      color = kit.stroke("mark"),
       text = function() local r = M.request:get() return r and r.action or "" end,
     },
     ui.Item {width=INNER,height=FIELD_H,field,
-      kit.surface {id="polkit-status",anchors={fill=true},radius=16,
+      kit.card {id="polkit-status",anchors={fill=true},radius=16,
         visible=function() return not M.can_answer() end,
         color=function() return C.primaryContainer end,
         kit.icon(function()
@@ -214,7 +204,7 @@ function V.build(M)
       visible = function() return M.info:get() ~= "" end,
       color = function()
         local p = M.phase:get()
-        return (p == "wrong" or p == "refused") and C.error or C.onSurfaceVariant
+        return (p == "wrong" or p == "refused") and kit.signal("alert")() or kit.ink("lo")()
       end,
       text = function() return M.info:get() end,
     },

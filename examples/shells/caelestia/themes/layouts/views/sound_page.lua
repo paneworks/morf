@@ -15,6 +15,7 @@
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
+local rows = require("themes.layouts.rows")
 
 local C = theme.color
 local M = {}
@@ -39,28 +40,17 @@ local function title(text, button)
   return row
 end
 
---- A round icon button for mute: a wash when on.
+--- An icon button for mute: the theme's alert tone when on.
 local function mute_button(id, target, icon_on, icon_off)
   local function muted() local t = target() return t and t.muted end
-  local area
-  area = kit.action {
-    id = id, width = 36, height = 30, cursor = "pointer",
+  return rows.toggle { id = id, width = 36, height = 30,
     anchors = { right = true, vertical_center = true },
+    on = function() return muted() == true end, icon_on = icon_on, icon_off = icon_off,
     on_clicked = function()
       local t = target()
       if t then model.toggle_device(t) end
     end,
-    kit.surface {
-      anchors = { fill = true },
-      radius = function() return muted() and 10 or 15 end,
-      color = function() return muted() and C.errorContainer or C.surfaceContainerHighest end,
-      behavior = { color = { duration = theme.duration.small }, radius = kit.spring(260, 16) },
-    },
-    kit.icon(function() return muted() and icon_on or icon_off end, 20, function()
-      return muted() and C.onErrorContainer or C.onSurfaceVariant
-    end, { anchors = { center_in = true } }),
   }
-  return area
 end
 
 local function nothing(text)
@@ -74,33 +64,23 @@ end
 
 --- A row to choose a device by: its name, a check when it is the default.
 local function device_row(id_prefix, row)
-  local area
   local function live() return model.device(row) end
-  local function chosen() local d = live() return d and d.default end
-  area = kit.action {
+  local function chosen() local d = live() return d ~= nil and d.default == true end
+  return rows.choice {
     id = id_prefix .. "-" .. math.floor(row.id),
-    width = INNER, height = 40, cursor = "pointer",
+    width = INNER, height = 40, on = chosen,
     on_clicked = function() model.select_device(row) end,
-    kit.surface {
-      anchors = { fill = true }, radius = function() return chosen() and 12 or 20 end,
-      color = function()
-        if chosen() then return C.secondaryContainer end
-        return area and area.hovered and C.onSurface:alpha(0.06) or C.onSurface:alpha(0)
-      end,
-      behavior = { color = { duration = theme.duration.small }, radius = kit.spring(260, 16) },
-    },
     kit.icon(function() return chosen() and "radio_button_checked" or "radio_button_unchecked" end, 20,
-      function() return chosen() and C.onSecondaryContainer or C.onSurfaceVariant end,
+      rows.ink(chosen, false, C.onSurfaceVariant),
       { x = 12, anchors = { vertical_center = true } }),
     kit.menu_label {
       x = 44, width = INNER - 56, elide = "right",
       anchors = { vertical_center = true },
       text = function() local d = live() return d and (d.description or d.name) or "?" end,
       font_size = theme.size.normal,
-      color = function() return chosen() and C.onSecondaryContainer or C.onSurface end,
+      color = rows.ink(chosen),
     },
   }
-  return area
 end
 
 -- ------------------------------------------------------------------ output --
@@ -194,42 +174,26 @@ local function app_row(row)
       as = "row", gap = 6,
       model = model.devices,
       delegate = function(device)
-        local area
-        local function on() local s = live() return s and s.device == device.id end
-        area = kit.action {
+        local function on() local s = live() return s ~= nil and s.device == device.id end
+        return rows.choice {
           id = "sound-app-" .. math.floor(id) .. "-to-" .. math.floor(device.id),
-          width = 104, height = 26, cursor = "pointer",
+          width = 104, height = 26, on = on, tone = "primary", tile = true,
           on_clicked = function() model.route(row, device) end,
-          kit.surface {
-            anchors = { fill = true },
-            radius = function() return on() and 8 or 13 end,
-            color = function()
-              if on() then return C.primary end
-              return area and area.hovered and C.surfaceContainerHighest:mix(C.onSurface, 0.08)
-                or C.surfaceContainerHighest
-            end,
-            behavior = { color = { duration = theme.duration.small }, radius = kit.spring(260, 16) },
-          },
           kit.menu_label {
             x = 10, width = 84, elide = "right", anchors = { vertical_center = true },
             text = function() local d = model.device(device) return d and (d.description or d.name) or "?" end,
             font_size = theme.size.small,
-            color = function() return on() and C.onPrimary or C.onSurfaceVariant end,
+            color = rows.ink(on, true, C.onSurfaceVariant),
           },
         }
-        return area
       end,
   }
   local function muted() local s = live() return s and s.muted end
-  local mute
-  mute = kit.action {
+  local mute = rows.toggle {
     id = "sound-app-" .. math.floor(id) .. "-mute",
-    width = 30, height = 30, cursor = "pointer",
-    anchors = { right = true },
+    width = 30, height = 30, anchors = { right = true },
+    on = function() return muted() == true end, icon_on = "volume_off", icon_off = "volume_up",
     on_clicked = function() local s = live() if s then model.toggle_stream(row) end end,
-    kit.icon(function() return muted() and "volume_off" or "volume_up" end, 20, function()
-      return muted() and C.error or C.onSurfaceVariant
-    end, { anchors = { center_in = true } }),
   }
   return ui.Column {
     gap = 4,

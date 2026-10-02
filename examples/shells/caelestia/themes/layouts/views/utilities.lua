@@ -3,6 +3,7 @@ local morf=require("morf")
 local ui=require("morf.ui")
 local theme=require("theme")
 local kit=require("kit")
+local rows=require("themes.layouts.rows")
 local C=theme.color
 local V={WIDTH=430,RADIUS=15}
 function V.focus_page(model,w,h)
@@ -11,7 +12,7 @@ function V.focus_page(model,w,h)
     local function on() return control.on()==true end
     local card={id="settings-focus-"..control.id,width=w,height=88,
       kit.card {anchors={fill=true},radius=20,color=function() return C.surfaceContainer end},
-      kit.icon(control.icon,24,function() return on() and C.primary or C.onSurfaceVariant end,
+      kit.icon(control.icon,24,function() return on() and kit.ink("accent")() or kit.ink("lo")() end,
         {x=16,anchors={vertical_center=true}}),
       ui.Column {x=56,anchors={vertical_center=true},gap=4,
         kit.heading {id="settings-focus-title-"..control.id,scope="settings.focus",level="section",
@@ -46,29 +47,12 @@ local TILES_H=24+TILE_ROWS*TILE_H+(TILE_ROWS-1)*TILE_GAP
 local function tile(t)
   local area, more
   local function on() return t.on() == true end
-  local fg = function() return on() and C.onPrimary or C.onSurface end
-  local sub = function() return on() and C.onPrimary:alpha(0.8) or C.onSurfaceVariant end
+  local fg = rows.ink(on, true, C.onSurface)
+  local function sub() return on() and fg():alpha(0.8) or C.onSurfaceVariant end
   area = kit.action {
     id = "utilities-toggle-" .. t.id,
     width = TILE_W, height = TILE_H, cursor = "pointer",
     on_clicked = function() t.set(not on()) end,
-    kit.surface {
-      id = "utilities-toggle-" .. t.id .. "-shape",
-      anchors = { fill = true },
-      radius = function()
-        if (area and area.pressed) or (more and more.pressed) then return 10 end
-        return on() and 18 or TILE_H / 2
-      end,
-      color = function()
-        local base = on() and C.primary or C.surfaceContainerHighest
-        if area and area.hovered then return base:mix(on() and C.onPrimary or C.onSurface, 0.08) end
-        return base
-      end,
-      behavior = {
-        radius = ui.spring { stiffness = 420, damping = 26 },
-        color = { duration = theme.duration.small },
-      },
-    },
     kit.icon(t.icon, 22, fg, { x = 16, anchors = { vertical_center = true }, fill = t.fill or on }),
     ui.Column {
       x = 48, anchors = { vertical_center = true }, gap = 0,
@@ -88,20 +72,20 @@ local function tile(t)
       },
     },
   }
+  -- The theme's stateful ground: its hover, its press (the chevron's too)
+  -- and its mark of a tile that is on.
+  ui.reparent(kit.state_surface { id = "utilities-toggle-" .. t.id .. "-shape", area = area, on = on,
+    height = TILE_H, tone = "primary", z = -1,
+    pressed = function() return more ~= nil and more.pressed end }, area)
   if t.detail then
-    local wash = kit.surface {
-      anchors = { fill = true, top_margin = 10, bottom_margin = 10, right_margin = 6 }, radius = 10,
-      behavior = { color = { duration = theme.duration.small } },
-    }
     more = kit.action {
       id = "utilities-more-" .. t.id,
-      anchors = { right = true, top = true, bottom = true }, width = 36, cursor = "pointer",
+      anchors = { right = true, top = true, bottom = true, top_margin = 10, bottom_margin = 10, right_margin = 6 },
+      width = 30, cursor = "pointer",
       on_clicked = function() M.detail:set(t.detail) end,
-      wash,
-      kit.icon("chevron_right", 22, fg, { anchors = { center_in = true, horizontal_center_offset = -3 } }),
+      kit.icon("chevron_right", 22, fg, { anchors = { center_in = true } }),
     }
-    -- Bound once `more` exists: it reads its hover.
-    wash.color = function() return more.hovered and fg():alpha(0.12) or fg():alpha(0) end
+    kit.hover(more, function(hovered) return hovered and fg():alpha(0.12) or fg():alpha(0) end, 10)
     ui.reparent(more, area)
   end
   return area
@@ -196,18 +180,13 @@ function M.page(w, h)
       model.page_content(d.key, w, dh),
     }
   end
-  local back_wash = kit.surface {
-    anchors = { fill = true }, radius = 20,
-    behavior = { color = { duration = theme.duration.small } },
-  }
   local back = kit.action {
     id = "settings-back",
     width = 40, height = 40, y = 2, cursor = "pointer",
     on_clicked = model.back,
-    back_wash,
-    kit.icon("arrow_back", 22, function() return C.onSurface end, { anchors = { center_in = true } }),
+    kit.icon("arrow_back", 22, kit.ink("hi"), { anchors = { center_in = true } }),
   }
-  back_wash.color = function() return back.hovered and C.onSurface:alpha(0.08) or C.onSurface:alpha(0) end
+  kit.hover(back, function(hovered) return hovered and C.onSurface:alpha(0.08) or C.onSurface:alpha(0) end, 20)
   local detail = ui.Item {
     id = "settings-detail", width = w, height = h,
     back,

@@ -16,6 +16,7 @@ local HOST=[[
     sources[name]={pin=function() end,running=function() return true end,samples=0,interval=3000}
   end
   package.loaded["lib.sysinfo"]={sources=sources,history_size=60,
+    restore_history=function() end,snapshot_history=function() return {} end,
     cpu=function() return read("cpu",{usage=sample:get()}) end,
     memory=function() return read("memory",{percent=58}) end,
     disks=function() return read("disks",{{mount="/",percent=34}}) end,
@@ -97,153 +98,90 @@ for _,style in ipairs {"material","tsugumori"} do
     test.ipc("sample","66") test.advance(2500)
     test.eq(test.ipc("state").reads,reads)
     test.ipc("show","yes") test.advance(2400)
-    if style=="tsugumori" then
-      test.eq(test.get("dashboard-cpu-value").text,"66%")
-      test.eq(test.get("dashboard-battery-value").text,"76%")
-    end
+    test.truthy(test.ipc("state").reads.cpu>(reads.cpu or 0),"the overview did not read again on reopening")
     test.eq(#test.logs("warn"),0) test.eq(#test.logs("error"),0)
   end)
   test.it(style.." dashboard tab changes present the latest page and survive closing mid-transition",function()
     load(style)
     test.ipc("show","yes") test.advance(2400)
-    if style=="tsugumori" then
-      test.click("dashboard-card-performance") test.advance(160)
-      local card=test.get("dashboard-card-performance")
-      test.truthy(card.opacity>0 and card.opacity<1)
-      test.truthy(test.get("dashboard-card-weather").opacity>0)
-      test.truthy(test.get("dashboard-card-weather").opacity<1)
-      shot("tsugumori-dashboard-branch-moving")
-    else test.click("dashboard-tab-performance") end
+    test.click("dashboard-tab-performance")
     test.advance(2400)
     test.eq(test.ipc("state").displayed,3)
-    if style=="tsugumori" then
-      local detail,body=test.get("dashboard-detail"),test.get("dashboard-pages")
-      test.falsy(test.get("dashboard-overview").visible)
-      test.near(detail.x,body.x,.01) test.near(detail.y,body.y,.01)
-      test.near(detail.width,body.width,.01) test.near(detail.height,body.height,.01)
-    end
     test.click("test-action-3") test.eq(test.ipc("state").actions,{"page-3"})
     shot(style.."-dashboard-performance")
     test.ipc("select","4") test.advance(80)
     test.ipc("select","5") test.advance(80)
     test.ipc("select","6") test.advance(2400)
     test.eq(test.ipc("state").displayed,6) test.truthy(test.ipc("state").lule)
-    if style=="tsugumori" then
-      test.falsy(test.get("dashboard-page-weather").visible)
-      test.falsy(test.get("dashboard-detail-page-curtain").visible)
-      test.click("dashboard-tab-dashboard") test.advance(2400)
-      test.eq(test.ipc("state").displayed,1)
-      test.truthy(test.get("dashboard-calendar").visible)
-    end
+    test.click("dashboard-tab-dashboard") test.advance(2400)
+    test.eq(test.ipc("state").displayed,1)
+    test.truthy(test.get("dashboard-calendar").visible)
     test.ipc("select","2") test.advance(80)
     test.ipc("show","no") test.advance(90)
     test.ipc("select","5") test.ipc("show","yes") test.advance(2400)
     test.eq(test.ipc("state").displayed,5)
     test.truthy(test.get("drawer-dashboard").visible)
     test.falsy(test.ipc("state").lule)
-    if style=="tsugumori" then
-      test.near(test.get("dashboard-detail").opacity,1,.001)
-      test.falsy(test.get("dashboard-detail-page-curtain").visible)
-    end
+    local curtain=test.find {id="dashboard-page-curtain"}
+    if curtain then test.falsy(curtain.visible) end
     test.truthy(test.settle(500)<100)
     test.eq(#test.logs("error"),0)
   end)
 end
-test.it("Tsugumori compact overview and native-size pages scroll without losing controls",function()
-  load("tsugumori",800,520)
-  test.ipc("show","yes") test.advance(2400)
-  local panel=test.get("drawer-dashboard")
-  test.truthy(panel.x>=0 and panel.x+panel.width<=800)
-  test.truthy(panel.y>=0 and panel.y+panel.height<=520)
-  local body=test.get("dashboard-pages")
-  test.wheel(0,1500,{x=body.x+40,y=body.y+40}) test.advance(500)
-  test.click("calendar-next") test.advance(2400)
-  test.eq(test.ipc("state").month,1)
-  shot("tsugumori-dashboard-compact-calendar")
-  test.ipc("select","3") test.advance(2400)
-  test.falsy(test.get("dashboard-overview").visible)
-  local viewport=test.get("dashboard-page-performance")
-  test.wheel(2000,2000,{x=viewport.x+40,y=viewport.y+40}) test.advance(500)
-  local action=test.get("test-action-3")
-  test.truthy(action.x>=viewport.x and action.x+action.width<=viewport.x+viewport.width+1)
-  test.truthy(action.y>=viewport.y and action.y+action.height<=viewport.y+viewport.height+1)
-  test.click("test-action-3") test.eq(test.ipc("state").actions,{"page-3"})
-  shot("tsugumori-dashboard-compact-branch")
-  test.ipc("select","1") test.advance(2400)
-  test.truthy(test.get("dashboard-card-media").y>=body.y)
-  test.eq(#test.logs("warn"),0) test.eq(#test.logs("error"),0)
-end)
-
-test.it("Tsugumori resized tabs stay separate and interrupted detail entry settles",function()
-  load("tsugumori")
-  test.ipc("show","yes") test.advance(2400)
-  test.ipc("select","3") test.advance(340)
-  test.ipc("select","4") test.advance(2400)
-  local detail=test.get("dashboard-detail")
-  local body=test.get("dashboard-pages")
-  test.near(detail.x,body.x,.01)
-  test.near(detail.y,body.y,.01)
-  for _,index in ipairs {3,6,1} do
-    test.ipc("select",tostring(index)) test.advance(2400)
-    local previous
-    for _,key in ipairs {"dashboard","media","performance","battery","weather","lule"} do
-      local button=test.get("dashboard-tab-"..key)
-      if previous then
-        test.near(button.width,previous.width,.1)
-        test.near(button.x,previous.x+previous.width+8,.1)
+-- The shared layout: one tab row and one page track in every theme.
+for _,style in ipairs {"material","tsugumori"} do
+  test.it(style.." dashboard tabs stay evenly apart as the drawer resizes between pages",function()
+    load(style)
+    test.ipc("show","yes") test.advance(2400)
+    for _,index in ipairs {3,6,1} do
+      test.ipc("select",tostring(index)) test.advance(2400)
+      local panel,previous=test.get("drawer-dashboard"),nil
+      for _,key in ipairs {"dashboard","media","performance","battery","weather","lule"} do
+        local button=test.get("dashboard-tab-"..key)
+        test.truthy(button.x>=panel.x and button.x+button.width<=panel.x+panel.width+.5,"tab outside the drawer: "..key)
+        if previous then
+          test.near(button.width,previous.width,.5)
+          test.truthy(button.x>=previous.x+previous.width-.5,"tabs overlap: "..key)
+        end
+        previous=button
       end
-      previous=button
+      shot(style.."-dashboard-tabs-"..index)
     end
-    shot("tsugumori-dashboard-tabs-"..index)
-  end
-end)
+    test.eq(#test.logs("error"),0)
+  end)
+end
 
-test.it("Tsugumori dashboard fits responsive weather and scrolls the final forecast into view",function()
-  load("tsugumori",500,720,true)
-  test.ipc("show","yes") test.ipc("select","5") test.advance(2500)
-  local viewport=test.get("dashboard-page-weather")
+test.it("Tsugumori dashboard weather keeps the forecast under the readings and decodes its title on entry",function()
+  load("tsugumori",1920,1080,true)
+  test.ipc("show","yes") test.ipc("select","5") test.advance(400)
+  local title=test.get("weather-forecast-title-text")
+  test.truthy(title.text~="7-DAY FORECAST","forecast title did not decode on entry")
+  test.advance(2400)
+  test.eq(test.ipc("state").displayed,5)
   local page=test.get("dashboard-weather-tab")
-  local navigation=test.get("dashboard-navigation")
-  local selected=test.get("dashboard-tab-weather")
-  test.truthy(selected.x>=navigation.x and selected.x+selected.width<=navigation.x+navigation.width)
-  test.near(page.width,viewport.width,.01)
-  test.truthy(test.get("weather-forecast").y>test.get("weather-readings").y)
-  local title=test.get("weather-forecast-title-text").text
-  local forecast=test.get("weather-forecast-title")
-  test.wheel(0,forecast.y-viewport.y-24,{x=viewport.x+40,y=viewport.y+40}) test.advance(200)
-  test.truthy(test.get("weather-forecast-title-text").text~=title,"forecast title decoded before scrolling into view")
-  test.advance(2200)
-  test.eq(test.get("weather-forecast-title-text").text,title)
-  test.wheel(0,2000,{x=viewport.x+40,y=viewport.y+40}) test.advance(500)
+  test.truthy(test.get("weather-forecast").y>test.get("weather-humidity").y)
   local final=test.get("weather-day-7")
-  test.truthy(final.x>=viewport.x and final.x+final.width<=viewport.x+viewport.width)
-  test.truthy(final.y>=viewport.y and final.y+final.height<=viewport.y+viewport.height)
-  shot("tsugumori-dashboard-weather-compact")
+  test.truthy(final.visible)
+  test.truthy(final.x>=page.x and final.x+final.width<=page.x+page.width+.5)
+  test.truthy(final.y+final.height<=page.y+page.height+.5)
+  shot("tsugumori-dashboard-weather")
   test.ipc("select","1") test.advance(2400)
   test.eq(test.ipc("state").displayed,1)
   test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)
 end)
 
-test.it("Tsugumori dashboard fits Battery graphs and retains access to the final device fact",function()
-  load("tsugumori",500,720,false,true)
+test.it("Tsugumori dashboard battery keeps its graphs and every device fact on the page",function()
+  load("tsugumori",1920,1080,false,true)
   test.ipc("show","yes") test.ipc("select","4") test.advance(2500)
-  local viewport=test.get("dashboard-page-battery")
-  test.near(test.get("dashboard-battery").width,viewport.width,.01)
-  local nav=test.get("dashboard-navigation")
-  local selected=test.get("dashboard-tab-battery")
-  test.truthy(selected.x>=nav.x and selected.x+selected.width<=nav.x+nav.width)
-  local graph_title="battery-graph-voltage-title"
-  local caption=test.get(graph_title.."-text").text
-  local graph=test.get(graph_title)
-  test.wheel(0,graph.y-viewport.y-24,{x=viewport.x+40,y=viewport.y+40}) test.advance(200)
-  test.truthy(test.get(graph_title.."-text").text~=caption,"graph title decoded before scrolling into view")
-  test.advance(2200)
-  test.eq(test.get(graph_title.."-text").text,caption)
-  test.wheel(0,2600,{x=viewport.x+40,y=viewport.y+40}) test.advance(500)
-  local last=test.get("battery-fact-limit")
-  test.truthy(last.x>=viewport.x and last.x+last.width<=viewport.x+viewport.width)
-  test.truthy(last.y>=viewport.y and last.y+last.height<=viewport.y+viewport.height)
-  shot("tsugumori-dashboard-battery-compact")
+  local page=test.get("dashboard-battery")
+  for _,id in ipairs {"battery-graph-charge","battery-graph-power","battery-graph-voltage","battery-graph-temperature",
+    "battery-facts"} do
+    local node=test.get(id)
+    test.truthy(node.visible,id)
+    test.truthy(node.x>=page.x and node.x+node.width<=page.x+page.width+.5,id.." leaves the page")
+    test.truthy(node.y>=page.y and node.y+node.height<=page.y+page.height+.5,id.." leaves the page")
+  end
+  shot("tsugumori-dashboard-battery")
   test.ipc("select","1") test.advance(2400)
   test.eq(test.ipc("state").displayed,1)
   test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)

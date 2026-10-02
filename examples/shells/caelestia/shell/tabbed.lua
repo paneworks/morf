@@ -5,6 +5,6 @@ local M = { TABS_H = 64, PAD = 11 }
 function M.new(spec)
   local kit = require("kit")
   if kit.tabbed then return kit.tabbed(spec) end
-  return require("themes.material.tabbed").new(spec)
+  return require("themes.layouts.tabbed").new(spec)
 end
 return M

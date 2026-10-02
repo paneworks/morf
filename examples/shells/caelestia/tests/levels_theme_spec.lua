@@ -41,7 +41,7 @@ local function snapshot(name)
   if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(name..".png") end
 end
 for _,style in ipairs {"material","tsugumori"} do
-  local hold=style=="material" and 1500 or 2200
+  local hold=2200
   test.it(style.." OSD follows readings and ignores initial, settings and other-output changes",function()
     load(style)
     test.eq(test.ipc("state").shown,"")

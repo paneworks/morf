@@ -1,250 +1,284 @@
--- The dashboard's Performance tab, laid out as Mission Center lays out its
--- own: the machine's devices down the left -- the processor, memory, every
--- drive, network interface, GPU and fan, each a small graph of its last
--- minutes and its reading -- and the one picked on the right: its name,
--- large graphs of its recent history, its readings and what it is.
+-- The dashboard's Performance tab: the machine's devices down the left --
+-- the processor, memory, every drive, network interface, GPU and fan, each a
+-- channel row with its reading and level -- over a resource-mix radar; and
+-- the one picked on the right as an instrument bay. Its left column a ring
+-- gauge with two satellite gauges, a NOW / AVG / PEAK triplet, its channel
+-- meters and a status strip; its charts in the middle (for the processor a
+-- per-core number grid and a core-clock spectrum as well); its readouts over
+-- what it is on the right.
 --
--- A drive's page lists its logical units as well: the partitions, and the
--- volumes (LVM, LUKS) built on them, each with its mounts, size and traffic.
--- A GPU that is powered down is shown as that and not read: reading it would
+-- A drive's page lists its logical units: the partitions and the volumes
+-- (LVM, LUKS) built on them, each with its mounts, size and traffic. A GPU
+-- that is powered down is shown as that and not read: reading it would
 -- wake it.
+--
+-- Values ease when they change and the picked page's gauges sweep in from
+-- zero as it is shown; nothing moves at rest. The page shrinks to a screen
+-- smaller than it (the columns and charts take the room that is left).
 
 local morf = require("morf")
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
+local L = require("themes.layouts.parts")
 
-local C = theme.color
+local S = L.SIZE
 local M = {}
 
-M.WIDTH, M.HEIGHT = 1400, 760
+-- The page: at most 1400 x 760, less on a screen without the room (the
+-- drawer's frame, padding, tabs and seams around it).
+do
+  local sw, sh = L.screen()
+  M.WIDTH = math.max(960, math.min(1400, sw - 2 * theme.BORDER - 2 * 16 - 2 * 40))
+  M.HEIGHT = math.max(560, math.min(760, sh - 2 * theme.BORDER - 68 - 2 * 16 - 40))
+end
 local GAP = 12
-local SIDE_W = 300                        -- the devices
-local MAIN_W = M.WIDTH - SIDE_W - GAP     -- the device picked
-local PAD = 28
-local STATS_W = 300
-local GRAPH_W = MAIN_W - 3 * PAD - STATS_W
-local TOP = 84                            -- under the title
-local ROW_H, SPARK_W, SPARK_H = 72, 86, 52
+local SIDE_W = M.WIDTH >= 1300 and 300 or 264
+local MAIN_W = M.WIDTH - SIDE_W - GAP
+local TITLE_Y = 12
+local TOP = TITLE_Y + L.title_h() + 8            -- under the title row
+local INNER = MAIN_W - 40
+local LW = INNER >= 1000 and 250 or 220          -- the gauges
+local RW = INNER >= 1000 and 258 or 220          -- the readouts
+local LX = 20
+local MX = LX + LW + 22
+local MW = INNER - LW - RW - 40                   -- the charts
+local RX = MX + MW + 18
+local BOTTOM = M.HEIGHT - 20
+local COL_H = BOTTOM - TOP
+local ROW_H = 48
+local RADAR_H = M.HEIGHT >= 700 and 214 or 184
 
--- Each kind of device its hue, from the desk's own terminal colours, as
--- Mission Center gives each its own.
-local HUE = { cpu = "color4", memory = "color6", drive = "color2", net = "color5", gpu = "color1", fan = "color3" }
+local function pct(v) return ("%d%%"):format(math.floor((tonumber(v) or 0) + .5)) end
 
 function M.build(model)
-  morf.effect("material.performance.present",function() model.present(model.selected:get()) end)
-  local opened, shown = model.active, model.active
-  local cpu, memory, drives, network = model.cpu, model.memory, model.drives, model.network
-  local gpus, fans, temps, system = model.gpus, model.fans, model.temps, model.system
-  local history, list, selected, picked, on = model.history, model.list, model.selected, model.picked, model.on
-  local drive, iface, card, fan = model.drive, model.iface, model.card, model.fan
-  local rate_text, size_text, ghz, duration_text = model.rate, model.size, model.ghz, model.duration
-  local function hue(kind) return function() return theme.lule[HUE[kind]] end end
-
-  -- -------------------------------------------------------------- graph --
-  -- Mission Center's graph: a bordered box on a faint grid, the first
-  -- series filled under its line, the second a dashed line; the newest
-  -- sample at the right edge.
-  local function series_path(values,w,h,top,closed)
-    return morf.geometry.graph_series(values,{width=w,height=h,samples=model.samples,bottom=0,top=top,closed=closed})
-  end
-  local grid_path=morf.geometry.graph_grid
-
-  --- `spec`: width, height, kind, first (fn -> list), second (fn -> list,
-  --- dashed), top (number or fn -> the value at the top; the peak when
-  --- nil), grid (false for none), id.
-  local function graph(spec)
-    local w, h = spec.width, spec.height
-    local color = hue(spec.kind)
-    local function top()
-      if type(spec.top) == "function" then return math.max(1e-9, spec.top()) end
-      if spec.top then return spec.top end
-      local peak = 0
-      for _, v in ipairs(spec.first()) do if v > peak then peak = v end end
-      if spec.second then for _, v in ipairs(spec.second()) do if v > peak then peak = v end end end
-      return math.max(peak * 1.15, 1024)
-    end
-    local children = {
-      id = spec.id,
-      width = w, height = h, radius = 3,
-      clip = true,
-      color = function() return color():alpha(0.06) end,
-      border_width = 1,
-      border_color = function() return color():alpha(0.85) end,
-    }
-    if spec.grid ~= false then
-      children[#children + 1] = ui.Path {
-        width = w, height = h, view_box = { 0, 0, w, h },
-        d = grid_path(w, h, spec.columns or 12, spec.rows or 6),
-        stroke_color = function() return color():alpha(0.14) end, fill_color = function() return color():alpha(0) end, stroke_width = 1,
-      }
-    end
-    children[#children + 1] = ui.Path {
-      width = w, height = h, view_box = { 0, 0, w, h },
-      d = function() return series_path(spec.first(), w, h, top(), true) end,
-      fill_color = function() return color():alpha(0.28) end,
-    }
-    children[#children + 1] = ui.Path {
-      width = w, height = h, view_box = { 0, 0, w, h },
-      d = function() return series_path(spec.first(), w, h, top(), false) end,
-      stroke_color = color, fill_color = function() return color():alpha(0) end, stroke_width = 1.5, stroke_join = "round",
-    }
-    if spec.second then
-      children[#children + 1] = ui.Path {
-        width = w, height = h, view_box = { 0, 0, w, h },
-        d = function() return series_path(spec.second(), w, h, top(), false) end,
-        stroke_color = color, fill_color = function() return color():alpha(0) end, stroke_width = 1.5, stroke_join = "round", dash = { 5, 4 },
-      }
-    end
-    return kit.surface(children), top
-  end
-
-  --- A graph with its caption over it, left, and its scale, right.
-  local building_kind = "cpu"
-  local function captioned(caption, scale, spec)
-    local kind = building_kind
-    local box, top = graph(spec)
-    return ui.Column {
-      gap = 4,
-      ui.Item {
-        width = spec.width, height = 18,
-        kit.heading { text = caption, active = function() return opened() and on(kind)() end, level = "caption", width = spec.width - 72, font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
-        kit.text {
-          anchors = { right = true }, font_size = theme.size.small,
-          text = function() return scale(top()) end,
-          color = function() return C.onSurfaceVariant end,
-        },
-      },
-      box,
-    }
-  end
-  local function percent_scale() return "100%" end
-  local function rate_scale(top) return rate_text(top) end
-  local function minutes(section)
-    return ("over %d minutes"):format(math.floor(model.samples * model.intervals[section] / 60000 + 0.5))
-  end
-
-  -- -------------------------------------------------------------- stats --
-  -- The readings: a small label over a large value, two to a row; a
-  -- coloured bar beside those a graph draws (solid, or dotted for the
-  -- dashed series).
-  local function stat(label, value, mark, kind)
-    local column = ui.Column {
-      gap = 0, width = STATS_W / 2 - 6,
-      kit.section_label { text = label, font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
-      kit.text {
-        text = value, font_size = theme.size.large, font_weight = 600,
-        width = STATS_W / 2 - 14, elide = "right",
-      },
-    }
-    if not mark then return column end
-    return ui.Row {
-      gap = 6,
-      kit.surface {
-        width = 2, height = 40, radius = 1,
-        color = function() return hue(kind)():alpha(mark == "dashed" and 0.5 or 1) end,
-      },
-      column,
-    }
-  end
-  local function stats(kind)
-    local items={}
-    for _,row in ipairs(model.readouts[kind].stats) do items[#items+1]=stat(row.label,row.value,row.mark,row.kind) end
-    return ui.Grid { columns = 2, column_gap = 12, row_gap = 18, table.unpack(items) }
-  end
-  --- What the device is: label, value lines.
-  local function facts(rows)
-    local column = { gap = 9 }
-    for _, row in ipairs(rows) do
-      column[#column + 1] = ui.Row {
-        gap = 8,
-        kit.section_label {
-          text = row[1], width = 136, font_size = theme.size.small,
-          color = function() return C.onSurfaceVariant end,
-        },
-        kit.text { text = row[2], width = STATS_W - 144, elide = "right", font_size = theme.size.small },
-      }
-    end
-    return ui.Column(column)
-  end
-
-  local title_index = 0
-  local title_kinds = { "cpu", "memory", "drive", "net", "gpu", "fan" }
-  local function title(text_fn, model_fn)
-    title_index = title_index + 1
-    local kind = title_kinds[title_index]
-    building_kind = kind
-    return ui.Item {
-      x = PAD, y = 22, width = MAIN_W - 2 * PAD, height = 44,
-      kit.heading { id = "performance-title-" .. kind, active = function() return opened() and on(kind)() end,
-        anchors = { vertical_center = true },
-        text = text_fn, font_size = theme.size.extra - 2, font_weight = 700,
-      },
-      kit.subtitle {
-        anchors = { right = true, vertical_center = true }, x = 0,
-        width = MAIN_W - 2 * PAD - 260, horizontal_alignment = "right", elide = "right",
-        text = model_fn, font_size = theme.size.large, font_weight = 600,
-      },
-    }
-  end
-
-  local function page(kind, contents)
-    contents.visible = on(kind)
-    contents.width, contents.height = MAIN_W, M.HEIGHT
-    return ui.Item(contents)
-  end
-  local stats_x = PAD + GRAPH_W + PAD
-  local area_h = M.HEIGHT - TOP - PAD
-
-  -- ---------------------------------------------------------------- cpu --
+  morf.effect("material.performance.present", function() model.present(model.selected:get()) end)
+  local opened = model.active
+  local cpu, memory, temps = model.cpu, model.memory, model.temps
+  local history, list, selected, on = model.history, model.list, model.selected, model.on
+  local rate_text, size_text, ghz = model.rate, model.size, model.ghz
   local info = model.info
   local threads = math.max(1, info.logical or 1)
+
+  --- Shown: the page of `kind` is up and the drawer open. A gauge reads
+  --- zero while its page is hidden, so it sweeps in when picked.
+  local function live(kind) return function() return opened() and on(kind)() end end
+
+  local function peak_of(values, floor)
+    local peak = floor or 0
+    for _, v in ipairs(values or {}) do if v > peak then peak = v end end
+    return peak
+  end
+
+  -- -------------------------------------------------------------- pages --
+
+  --- The left column every page wears: `ring` { value (0..1), text, label,
+  --- caption, color, text_size }, `minis` (two { value, text, label }),
+  --- `triplet` { series, top, format, title }, `status` { kind, title,
+  --- subtitle }, `channels` ({ label, value }) and their title.
+  local STATUS_H = 40
+  local TRIPLET_H = 74
+  local FLEX = COL_H - (L.CAPTION_H + 6) - 12 - 10 - 14 - 12 - TRIPLET_H - 12 - STATUS_H - 8
+  -- The channel meters keep a useful height (CHAN_MIN: their caption and
+  -- labels and a 40 px column); the ring gives way to them on a short page.
+  local CHAN_MIN = 8 + 2 * (L.lh(S.micro) + 6) + 40
+  local MINI = math.min(104, math.floor((LW - 30) / 2), math.floor(FLEX * 0.24))
+  local RING = math.max(120, math.min(236, LW - 10, math.floor(FLEX * 0.56), FLEX - MINI - CHAN_MIN))
+  local CHAN_H = FLEX - RING - MINI
+  local function left_column(kind, spec)
+    local up = live(kind)
+    local nodes = { x = LX, y = TOP, width = LW, height = COL_H }
+    local y = 0
+    nodes[#nodes + 1] = L.caption { width = LW, text = spec.ring.caption or "Primary load",
+      note = kit.code(kind, "SET #.##") }
+    y = L.CAPTION_H + 6
+    nodes[#nodes + 1] = kit.ring {
+      id = "performance-ring-" .. kind, x = math.floor((LW - RING) / 2), y = y, size = RING,
+      value = function() return up() and spec.ring.value() or 0 end,
+      text = spec.ring.text, text_size = spec.ring.text_size or math.floor(RING * (spec.ring.text and .13 or .18)),
+      label = spec.ring.label,
+      color = spec.ring.color or kit.level(function() return spec.ring.value() * 100 end),
+    }
+    y = y + RING + 12
+    nodes[#nodes + 1] = L.rule { y = y, width = LW, strength = "faint" }
+    y = y + 10
+    for i, mini in ipairs(spec.minis) do
+      nodes[#nodes + 1] = kit.mini_ring { x = i == 1 and 6 or LW - 6 - MINI, y = y, size = MINI,
+        value = function() return up() and mini.value() or 0 end, text = mini.text, label = mini.label,
+        text_size = mini.text_size and math.min(mini.text_size, math.floor(MINI * .13)) or math.floor(MINI * .2),
+        color = mini.color or kit.signal("info") }
+    end
+    nodes[#nodes + 1] = kit.decor("ticks", { x = LW / 2 - 1, y = y + 6, length = MINI - 12, count = 12, major = 4,
+      size = 8, vertical = true, color = kit.stroke("idle") })
+    y = y + MINI + 14 + 12
+    nodes[#nodes + 1] = kit.triplet { y = y, width = LW, series = spec.triplet.series, top = spec.triplet.top,
+      format = spec.triplet.format, title = spec.triplet.title, font_size = spec.triplet.font_size }
+    y = y + TRIPLET_H + 12
+    local chans = spec.channels
+    if chans and CHAN_H >= 56 then
+      local n = #chans
+      local slot = math.min(34, math.floor((LW - 8) / math.max(1, n)))
+      local mw = math.max(4, math.min(12, slot - 6))
+      local x0 = math.floor((LW - slot * n) / 2)
+      local lh = L.lh(S.micro)
+      local box = { y = y, width = LW, height = CHAN_H - 8,
+        kit.panel { width = LW, height = CHAN_H - 8 },
+        L.label { x = 6, y = 3, width = LW - 60, elide = "right", text = spec.channels_title or "Channels",
+          font_size = S.micro, color = kit.ink("hi") },
+        L.code("chan" .. kind, "## CH", { anchors = { right = true, right_margin = 6 }, y = 3, width = 50,
+          horizontal_alignment = "right" }),
+      }
+      local mh = CHAN_H - 8 - (lh + 6) - (lh + 6)
+      for i, c in ipairs(chans) do
+        local x = x0 + (i - 1) * slot + (slot - mw) / 2
+        box[#box + 1] = kit.vmeter { x = x, y = lh + 6, width = mw, height = mh,
+          value = function() return up() and c.value() or 0 end,
+          color = kit.level(function() return c.value() * 100 end) }
+        if slot >= 18 or i % 2 == 1 then
+          box[#box + 1] = L.label { x = x0 + (i - 1) * slot - 8, y = CHAN_H - 8 - lh - 3, width = slot + 16,
+            horizontal_alignment = "center", text = c.label, font_size = S.micro }
+        end
+      end
+      nodes[#nodes + 1] = ui.Item(box)
+    end
+    nodes[#nodes + 1] = L.status { y = COL_H - STATUS_H, width = LW, height = STATUS_H,
+      kind = spec.status.kind, title = spec.status.title, subtitle = spec.status.subtitle }
+    return L.item(nodes)
+  end
+
+  local STAT_H, STAT_GAP = 56, 10
+  local function right_column(kind)
+    local stats = model.readouts[kind].stats
+    local cw = math.floor((RW - 10) / 2)
+    local cells = { y = L.CAPTION_H + 6, width = RW, height = math.ceil(#stats / 2) * (STAT_H + STAT_GAP) }
+    for i, row in ipairs(stats) do
+      cells[#cells + 1] = kit.stat { x = ((i - 1) % 2) * (cw + 10), y = math.floor((i - 1) / 2) * (STAT_H + STAT_GAP),
+        width = cw, height = STAT_H, label = row.label, value = row.value, mark = row.mark,
+        color = row.mark == "dashed" and kit.signal("info") or nil }
+    end
+    local fy = cells.y + cells.height + 8
+    local facts = model.readouts[kind].facts
+    local row_h = math.max(16, math.min(20, math.floor((COL_H - fy - L.CAPTION_H - 6) / math.max(1, #facts))))
+    return ui.Item {
+      x = RX, y = TOP, width = RW, height = COL_H, clip = true,
+      L.caption { width = RW, text = "Readings", note = kit.code("ro" .. kind, "##-BIT USAW") },
+      ui.Item(cells),
+      L.caption { y = fy, width = RW, text = "Details", note = kit.code("dr" .. kind, "CP-##/CP-##") },
+      ui.Item { y = fy + L.CAPTION_H + 6, kit.facts(facts, RW, row_h, math.floor(RW * .52)) },
+    }
+  end
+
+  local function page(kind, title, subtitle, contents)
+    table.insert(contents, 1, L.title_row { x = 20, y = TITLE_Y, width = INNER, id = "performance-title-" .. kind,
+      active = live(kind), title = title, subtitle = subtitle, key = "perf" .. kind })
+    contents.visible = on(kind)
+    contents.width, contents.height = MAIN_W, M.HEIGHT
+    return L.item(contents)
+  end
+
+  -- A load's state in plain words; the theme may say it its own way.
+  local LOAD_TITLE = { alert = "Heavy load", warn = "Busy", ok = "Normal", asleep = "Asleep" }
+  local LOAD_NOTE = { alert = "Close to its limit", warn = "Working hard", ok = "Running smoothly",
+    asleep = "Powered down  ·  not read" }
+  local function load_status(state)
+    return {
+      kind = function() local k = state() return k == "asleep" and "info" or k end,
+      title = L.term(function() return "load." .. state() end, function() return LOAD_TITLE[state()] end),
+      subtitle = L.term(function() return "load.note." .. state() end, function() return LOAD_NOTE[state()] end),
+    }
+  end
+  local function stress(value_fn, warn, alert)
+    warn, alert = warn or 70, alert or 90
+    return load_status(function() local v = value_fn() return v >= alert and "alert" or v >= warn and "warn" or "ok" end)
+  end
+
+  local function minutes(section)
+    return ("%d min"):format(math.floor(model.samples * model.intervals[section] / 60000 + 0.5))
+  end
+  local function chart(spec)
+    spec.samples = model.samples
+    return (L.chart(spec))
+  end
+  local CH = L.CAPTION_H + L.CAPTION_GAP          -- a chart's caption
+
+  -- ---------------------------------------------------------------- cpu --
   local cols = threads <= 4 and threads or threads <= 16 and 4 or threads <= 36 and 6 or 8
   local rows_n = math.ceil(threads / cols)
-  local cell_gap = 10
-  local cell_w = (GRAPH_W - (cols - 1) * cell_gap) / cols
-  local cell_h = (area_h - 22 - (rows_n - 1) * cell_gap) / rows_n
-  local cells = { columns = cols, column_gap = cell_gap, row_gap = cell_gap }
+  local GRID_H = math.min(214, math.floor(COL_H * .34))
+  local cell_gap = 8
+  local cell_w = math.floor((MW - (cols - 1) * cell_gap) / cols)
+  local cell_h = math.min(52, math.floor((GRID_H - (rows_n - 1) * cell_gap) / rows_n))
+  local cells = { y = L.CAPTION_H + 6, width = MW, height = rows_n * (cell_h + cell_gap) }
+  local up_cpu = live("cpu")
+  local function core(i) return function()
+    if not up_cpu() then return 0 end
+    local c = cpu().cores[i + 1]
+    if type(c) == "table" then return c.usage or 0 end
+    return tonumber(c) or 0
+  end end
   for i = 0, threads - 1 do
-    cells[#cells + 1] = (graph {
-      id = "performance-core-" .. i, kind = "cpu",
-      width = cell_w, height = cell_h, top = 100, columns = 6, rows = 4,
-      first = function() return history("core" .. i) end,
-    })
+    cells[#cells + 1] = kit.cell {
+      id = "performance-core-" .. i, x = (i % cols) * (cell_w + cell_gap), y = math.floor(i / cols) * (cell_h + cell_gap),
+      width = cell_w, height = cell_h, value = core(i), label = tostring(i),
+    }
   end
-  local cpu_page = page("cpu", {
-    title(function() return "CPU" end, function() return model.cpu_name(info.model) end),
-    ui.Column {
-      x = PAD, y = TOP, gap = 4,
-      ui.Item {
-        width = GRAPH_W, height = 18,
-        kit.heading { id = "performance-utilization-title", active = function() return opened() and on("cpu")() end,
-          text = "Utilization " .. minutes("cpu"), level = "caption", width = GRAPH_W - 60,
-          font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
-        kit.text { anchors = { right = true }, text = "100%", font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
+  local grid_bottom = cells.y + cells.height
+  local function clocks()
+    if not up_cpu() then return {} end
+    local out, top = {}, math.max(1, info.max_mhz or 1)
+    for _, c in ipairs(cpu().cores) do out[#out + 1] = (type(c) == "table" and c.frequency or 0) / top end
+    return out
+  end
+  local CHART_Y = grid_bottom + 10
+  local SPEC_H = COL_H >= 600 and 70 or 52
+  local cpu_chart_h = COL_H - CHART_Y - CH - 18 - (CH + SPEC_H)
+  local cpu_page = page("cpu", "CPU", function() return model.cpu_name(info.model) end, {
+    left_column("cpu", {
+      ring = { caption = "Processor load", value = function() return (cpu().usage or 0) / 100 end, label = "Load" },
+      minis = {
+        { label = "Temp", value = function() return (temps().cpu or 0) / 100 end,
+          text = function() local t = temps().cpu return t and ("%d°"):format(math.floor(t + .5)) or "--" end,
+          color = kit.level(function() return temps().cpu or 0 end, 75, 90) },
+        { label = "Clock", value = function() return (cpu().frequency or 0) / math.max(1, info.max_mhz or 1) end,
+          text = function() return ("%.1f"):format((cpu().frequency or 0) / 1000) end },
       },
-      ui.Grid(cells),
+      triplet = { title = "Utilization " .. minutes("cpu"), series = function() return history("cpu") end,
+        top = function() return 100 end, format = pct },
+      status = stress(function() return cpu().usage or 0 end),
+      channels_title = "Per core", channels = (function()
+        local out = {}
+        for i = 0, threads - 1 do out[#out + 1] = { label = tostring(i), value = function() return core(i)() / 100 end } end
+        return out
+      end)(),
+    }),
+    ui.Item {
+      x = MX, y = TOP, width = MW, height = COL_H,
+      L.caption { id = "performance-utilization-title", width = MW, text = ("Cores  ·  %d threads"):format(threads),
+        note = function() return pct(cpu().usage) .. " avg" end },
+      ui.Item(cells),
+      chart { y = CHART_Y, id = "performance-cpu-graph", caption = "Utilization  ·  " .. minutes("cpu"),
+        scale = function() return "100%" end, width = MW - 10, height = cpu_chart_h, top = 100, hatch = true,
+        first = function() return history("cpu") end, columns = 10 },
+      L.section { y = COL_H - CH - SPEC_H, width = MW, height = CH + SPEC_H, text = "Core clock",
+        note = function() return ghz(cpu().frequency) end,
+        kit.spectrum { width = MW, height = SPEC_H - 8, values = clocks, gap = 10,
+          color = function() return kit.signal("info")():alpha(.45) end },
+        kit.decor("ticks", { y = SPEC_H - 6, length = MW, count = threads * 2, major = 2, size = 6,
+          color = kit.stroke("idle") }),
+      },
     },
-    ui.Column {
-      x = stats_x, y = TOP, gap = 28,
-      stats("cpu"),
-      facts(model.readouts.cpu.facts),
-    },
+    right_column("cpu"),
   })
   if theme.motion.value_flash then
-    theme.motion.value_flash(cpu_page,"performance-cpu",{
-      x=MAIN_W-12,y=TOP,height=32,
-      active=function() return opened() and on("cpu")() end,
-      read=function() return cpu().usage end,
-      changed=function(before,now)
-        return (before<70 and now>=70) or math.abs(now-before)>=20
-      end,
+    theme.motion.value_flash(cpu_page, "performance-cpu", {
+      x = MAIN_W - 12, y = TOP, height = 32,
+      active = live("cpu"),
+      read = function() return cpu().usage end,
+      changed = function(before, now) return (before < 70 and now >= 70) or math.abs(now - before) >= 20 end,
     })
   end
 
   -- ------------------------------------------------------------- memory --
-  local mem_h = math.floor((area_h - 3 * 22 - 40 - 2 * 10) * 0.64)
-  local swap_h = area_h - 3 * 22 - 40 - 2 * 10 - mem_h
   local function composition()
     local m = memory()
     local total = math.max(1, m.total or 1)
@@ -252,293 +286,446 @@ function M.build(model)
     local cached = math.min(1 - used, (m.cached or 0) / total)
     return used, cached
   end
-  local memory_page = page("memory", {
-    title(function() return "Memory" end, function() return size_text(memory().total) end),
-    ui.Column {
-      x = PAD, y = TOP, gap = 10,
-      captioned("Memory usage " .. minutes("memory"), function() return size_text(memory().total) end, {
-        id = "performance-memory-graph", kind = "memory", width = GRAPH_W, height = mem_h, top = 100,
-        first = function() return history("memory") end,
-      }),
-      captioned("Swap usage " .. minutes("memory"), function() return size_text(memory().swap.total) end, {
-        id = "performance-swap-graph", kind = "memory", width = GRAPH_W, height = swap_h, top = 100,
-        first = function() return history("swap") end,
-      }),
-      ui.Column {
-        gap = 4,
-        kit.heading { id = "performance-memory-composition-title", level = "caption",
-          active = function() return opened() and on("memory")() end, text = "Memory composition", font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
-        kit.surface {
-          id = "performance-memory-composition",
-          width = GRAPH_W, height = 40, radius = 3, clip = true,
-          color = function() return hue("memory")():alpha(0.04) end,
-          border_width = 1, border_color = function() return hue("memory")():alpha(0.85) end,
-          kit.surface {
-            height = 40,
-            width = function() return GRAPH_W * (composition()) end,
-            color = function() return hue("memory")():alpha(0.35) end,
-          },
-          kit.surface {
-            height = 40,
-            x = function() return GRAPH_W * (composition()) end,
-            width = function() local _, c = composition() return GRAPH_W * c end,
-            color = function() return hue("memory")():alpha(0.14) end,
-          },
+  local up_mem = live("memory")
+  local COMP_H = CH + 14 + 6 + 6 + 8 + L.lh(S.label)
+  local mem_charts = COL_H - COMP_H - 2 * CH - 16 - 18
+  local mem_chart_h = math.floor(mem_charts * .64)
+  local swap_chart_h = mem_charts - mem_chart_h
+  local function legend(label, color)
+    return ui.Row { gap = 6, align = "center",
+      ui.Rect { width = 10, height = 8, color = color },
+      L.label { text = label },
+    }
+  end
+  local memory_page = page("memory", "Memory", function() return size_text(memory().total) end, {
+    left_column("memory", {
+      ring = { caption = "Memory in use", value = function() return (memory().percent or 0) / 100 end, label = "Used" },
+      minis = {
+        { label = "Swap", value = function()
+            local s = memory().swap return (s.used or 0) / math.max(1, s.total or 1) end,
+          text = function() local s = memory().swap return pct(100 * (s.used or 0) / math.max(1, s.total or 1)) end },
+        { label = "Cache", value = function() local _, c = composition() return c end,
+          text = function() local _, c = composition() return pct(c * 100) end },
+      },
+      triplet = { title = "Memory " .. minutes("memory"), series = function() return history("memory") end,
+        top = function() return 100 end, format = pct },
+      status = stress(function() return memory().percent or 0 end, 80, 92),
+      channels = {
+        { label = "Used", value = function() return (composition()) end },
+        { label = "Cache", value = function() local _, c = composition() return c end },
+        { label = "Avail", value = function() local m = memory() return (m.available or 0) / math.max(1, m.total or 1) end },
+        { label = "Commit", value = function() local m = memory() return (m.committed or 0) / math.max(1, m.commit_limit or m.total or 1) end },
+        { label = "Swap", value = function() local x = memory().swap return (x.used or 0) / math.max(1, x.total or 1) end },
+      },
+    }),
+    ui.Item {
+      x = MX, y = TOP, width = MW, height = COL_H,
+      chart { id = "performance-memory-graph", caption = "Memory usage  ·  " .. minutes("memory"),
+        scale = function() return size_text(memory().total) end, width = MW - 10, height = mem_chart_h, top = 100,
+        hatch = true, first = function() return history("memory") end },
+      chart { y = CH + mem_chart_h + 16, id = "performance-swap-graph", caption = "Swap usage  ·  " .. minutes("memory"),
+        scale = function() return size_text(memory().swap.total) end, width = MW - 10, height = swap_chart_h, top = 100,
+        first = function() return history("swap") end, color = kit.signal("info") },
+      L.section { y = COL_H - COMP_H, width = MW, height = COMP_H, caption_id = "performance-memory-composition-title",
+        text = "Memory composition",
+        note = function() return size_text(memory().used) .. " / " .. size_text(memory().total) end,
+        ui.Item { id = "performance-memory-composition", width = MW, height = 26,
+          kit.fill { width = MW, height = 14, value = function() return up_mem() and (composition()) or 0 end },
+          kit.meter { y = 20, width = MW, height = 6, count = math.floor(MW / 8), color = kit.signal("info"),
+            value = function() local _, c = composition() return up_mem() and c or 0 end },
+        },
+        ui.Row { y = 34, gap = 18,
+          legend(function() local u = composition() return "In use " .. pct(u * 100) end, kit.signal("accent")),
+          legend(function() local _, c = composition() return "Cached " .. pct(c * 100) end, kit.signal("info")),
+          legend(function() return "Free " .. size_text(memory().available) end, kit.stroke("mark")),
         },
       },
     },
-    ui.Column {
-      x = stats_x, y = TOP, gap = 28,
-      stats("memory"),
-      facts(model.readouts.memory.facts),
-    },
+    right_column("memory"),
   })
-
   if theme.motion.value_flash then
-    theme.motion.value_flash(memory_page,"performance-memory",{
-      x=MAIN_W-12,y=TOP,height=32,
-      active=function() return opened() and on("memory")() end,
-      read=function() return memory().percent end,
-      changed=function(before,now)
-        return (before<85 and now>=85) or math.abs(now-before)>=15
-      end,
+    theme.motion.value_flash(memory_page, "performance-memory", {
+      x = MAIN_W - 12, y = TOP, height = 32,
+      active = live("memory"),
+      read = function() return memory().percent end,
+      changed = function(before, now) return (before < 85 and now >= 85) or math.abs(now - before) >= 15 end,
     })
   end
 
   -- -------------------------------------------------------------- drive --
-  local drive_ref,the_drive,units,unit=model.drive_ref,model.the_drive,model.units,model.unit
-  local drive_graph_h = 200
-  local units_y = TOP + 2 * (drive_graph_h + 22 + 10)
-  local drive_page = page("drive", {
-    title(function()
-      local d = the_drive()
-      return ("%s (%s)"):format(d.kind or "Drive", d.name or "")
-    end, function() return the_drive().model or "" end),
-    ui.Column {
-      x = PAD, y = TOP, gap = 10,
-      captioned("Active time " .. minutes("drives"), percent_scale, {
-        id = "performance-drive-active", kind = "drive", width = GRAPH_W, height = drive_graph_h, top = 100,
-        first = function() return history("disk:" .. drive_ref() .. ":busy") end,
-      }),
-      captioned("Throughput " .. minutes("drives"), rate_scale, {
-        id = "performance-drive-throughput", kind = "drive", width = GRAPH_W, height = drive_graph_h,
-        first = function() return history("disk:" .. drive_ref() .. ":read") end,
-        second = function() return history("disk:" .. drive_ref() .. ":write") end,
-      }),
-    },
-    -- Its logical units: the partitions and what is built on them.
+  local drive_ref, the_drive, units, unit = model.drive_ref, model.the_drive, model.units, model.unit
+  local function drive_peak()
+    local r = drive_ref()
+    local d = the_drive()
+    return math.max(peak_of(history("disk:" .. r .. ":read"), 1), peak_of(history("disk:" .. r .. ":write"), 1),
+      d.read_rate or 0, d.write_rate or 0) * 1.15
+  end
+  local drive_chart_h = math.min(150, math.floor((COL_H - 2 * CH - 32 - 120) / 2))
+  local units_y = 2 * (CH + drive_chart_h + 16)
+  local UNIT_H = 30
+  local drive_page = page("drive", function()
+    local d = the_drive()
+    return ("%s (%s)"):format(d.kind or "Drive", d.name or "")
+  end, function() return the_drive().model or "" end, {
+    left_column("drive", {
+      ring = { caption = "Active time", value = function() return (the_drive().busy or 0) / 100 end, label = "Busy" },
+      minis = {
+        { label = "Read", value = function() return (the_drive().read_rate or 0) / math.max(1024, drive_peak()) end,
+          text = function() return rate_text(the_drive().read_rate) end, text_size = 12 },
+        { label = "Write", value = function() return (the_drive().write_rate or 0) / math.max(1024, drive_peak()) end,
+          text = function() return rate_text(the_drive().write_rate) end, text_size = 12 },
+      },
+      triplet = { title = "Active " .. minutes("drives"), series = function() return history("disk:" .. drive_ref() .. ":busy") end,
+        top = function() return 100 end, format = pct },
+      status = stress(function() return the_drive().busy or 0 end),
+      channels = {
+        { label = "Busy", value = function() return (the_drive().busy or 0) / 100 end },
+        { label = "Read", value = function() return (the_drive().read_rate or 0) / math.max(1024, drive_peak()) end },
+        { label = "Write", value = function() return (the_drive().write_rate or 0) / math.max(1024, drive_peak()) end },
+      },
+    }),
     ui.Item {
-      x = PAD, y = units_y, width = GRAPH_W, height = M.HEIGHT - units_y - PAD,
-      kit.heading { id = "performance-logical-units-title", level = "caption",
-        active = function() return opened() and on("drive")() end, text = "Logical units", font_size = theme.size.small, color = function() return C.onSurfaceVariant end },
-      ui.Flickable {
-        y = 22, width = GRAPH_W, height = M.HEIGHT - units_y - PAD - 22, clip = true,
-        ui.Repeater {
-            as = "column", gap = 4, width = GRAPH_W,
-            model = units.rows,
+      x = MX, y = TOP, width = MW, height = COL_H,
+      chart { id = "performance-drive-active", caption = "Active time  ·  " .. minutes("drives"),
+        scale = function() return "100%" end, width = MW - 10, height = drive_chart_h, top = 100, hatch = true,
+        first = function() return history("disk:" .. drive_ref() .. ":busy") end },
+      chart { y = CH + drive_chart_h + 16, id = "performance-drive-throughput", caption = "Read / write  ·  " .. minutes("drives"),
+        scale = rate_text, width = MW - 10, height = drive_chart_h, floor = 1024,
+        first = function() return history("disk:" .. drive_ref() .. ":read") end,
+        second = function() return history("disk:" .. drive_ref() .. ":write") end },
+      L.section { y = units_y, width = MW, height = COL_H - units_y, caption_id = "performance-logical-units-title",
+        text = "Partitions and volumes", note = function() local n = #(the_drive().units or {})
+          return ("%d unit%s"):format(n, n == 1 and "" or "s") end,
+        ui.Flickable {
+          width = MW, height = COL_H - units_y - CH, clip = true,
+          ui.Repeater {
+            as = "column", gap = 4, width = MW, model = units.rows,
             delegate = function(row)
               local function u() return unit(row.name) end
-              return kit.surface {
-                width = GRAPH_W, height = 36, radius = 8,
-                color = function() return C.surfaceContainerHigh end,
-                kit.text {
-                  anchors = { vertical_center = true },
-                  x = function() return 10 + 16 * math.max(0, (u().depth or 1) - 1) end,
-                  width = 140, elide = "right", font_weight = 500, font_size = theme.size.small,
-                  text = function() return u().label or row.name end,
-                },
-                kit.text {
-                  anchors = { vertical_center = true }, x = 170, width = GRAPH_W - 170 - 250, elide = "right",
-                  font_size = theme.size.small, color = function() return C.onSurfaceVariant end,
-                  text = function()
+              local name_w = math.floor(MW * .26)
+              local io_w = math.floor(MW * .4)
+              return L.item { id = "performance-unit-" .. row.name, width = MW, height = UNIT_H,
+                kit.text { x = function() return 10 + 14 * math.max(0, (u().depth or 1) - 1) end,
+                  y = math.floor((UNIT_H - L.lh(S.body)) / 2), width = name_w - 10, height = L.lh(S.body),
+                  elide = "right", font_size = S.body, color = kit.ink("hi"),
+                  text = function() return u().label or row.name end },
+                kit.text { x = name_w + 10, y = math.floor((UNIT_H - L.lh(S.label)) / 2), width = MW - name_w - io_w - 30,
+                  height = L.lh(S.label), font_size = S.label, color = kit.ink("lo"), elide = "right", text = function()
                     local x = u()
                     if x.swap then return "swap" end
                     return #x.mounts > 0 and table.concat(x.mounts, "  ") or "not mounted"
-                  end,
-                },
-                kit.text {
-                  anchors = { vertical_center = true, right = true, right_margin = 10 },
-                  font_size = theme.size.small, horizontal_alignment = "right", width = 236,
-                  text = function()
+                  end },
+                L.label { x = MW - io_w - 8, y = math.floor((UNIT_H - L.lh(S.label)) / 2), width = io_w,
+                  horizontal_alignment = "right", elide = "left", color = kit.ink("hi"), text = function()
                     local x = u()
-                    return ("%s   ↓%s ↑%s"):format(size_text(x.size), rate_text(x.read_rate), rate_text(x.write_rate))
-                  end,
-                },
+                    return ("%s  ↓%s ↑%s"):format(size_text(x.size), rate_text(x.read_rate), rate_text(x.write_rate))
+                  end },
+                L.rule { y = UNIT_H - 1, width = MW, strength = "faint" },
               }
             end,
+          },
         },
       },
     },
-    ui.Column {
-      x = stats_x, y = TOP, gap = 28,
-      stats("drive"),
-      facts(model.readouts.drive.facts),
-    },
+    right_column("drive"),
   })
 
   -- ------------------------------------------------------------ network --
-  local net_ref,the_iface,addresses,totals=model.net_ref,model.the_iface,model.addresses,model.totals
-  local net_page = page("net", {
-    title(function() return the_iface().wireless and "Wi-Fi" or "Ethernet" end,
-      function() return net_ref() end),
-    ui.Column {
-      x = PAD, y = TOP,
-      captioned("Throughput " .. minutes("network"), rate_scale, {
-        id = "performance-net-throughput", kind = "net", width = GRAPH_W, height = area_h - 22,
+  local net_ref, the_iface = model.net_ref, model.the_iface
+  local function net_peak()
+    local r = net_ref()
+    local i = the_iface()
+    return math.max(peak_of(history("rx:" .. r), 1024), peak_of(history("tx:" .. r), 1024),
+      i.rx_rate or 0, i.tx_rate or 0) * 1.15
+  end
+  local TRAFFIC_H = COL_H >= 600 and 70 or 54
+  local net_chart_h = COL_H - CH - 18 - 2 * (CH + TRAFFIC_H) - 12
+  local function traffic(key)
+    return function()
+      local out, top = {}, net_peak()
+      for _, v in ipairs(history(key .. net_ref())) do out[#out + 1] = v / top end
+      return out
+    end
+  end
+  local net_page = page("net", function() return the_iface().wireless and "Wi-Fi" or "Ethernet" end,
+    function() return net_ref() end, {
+    left_column("net", {
+      ring = { caption = "Link throughput",
+        value = function() local i = the_iface() return ((i.rx_rate or 0) + (i.tx_rate or 0)) / (2 * net_peak()) end,
+        text = function() local i = the_iface() return rate_text((i.rx_rate or 0) + (i.tx_rate or 0)) end,
+        label = "Rx + Tx", color = kit.signal("accent") },
+      minis = {
+        { label = "Receive", value = function() return (the_iface().rx_rate or 0) / net_peak() end,
+          text = function() return rate_text(the_iface().rx_rate) end, text_size = 12 },
+        { label = "Send", value = function() return (the_iface().tx_rate or 0) / net_peak() end,
+          text = function() return rate_text(the_iface().tx_rate) end, text_size = 12 },
+      },
+      triplet = { title = "Receive " .. minutes("network"), series = function() return history("rx:" .. net_ref()) end,
+        top = net_peak, format = rate_text, font_size = 12 },
+      status = {
+        kind = function() return the_iface().state == "up" and "ok" or "warn" end,
+        title = function() return the_iface().state == "up" and "Linked" or "No link" end,
+        subtitle = function() return "State " .. tostring(the_iface().state or "--") .. "  ·  " .. net_ref() end,
+      },
+      channels = {
+        { label = "Rx", value = function() return (the_iface().rx_rate or 0) / net_peak() end },
+        { label = "Tx", value = function() return (the_iface().tx_rate or 0) / net_peak() end },
+      },
+    }),
+    ui.Item {
+      x = MX, y = TOP, width = MW, height = COL_H,
+      chart { id = "performance-net-throughput", caption = "Receive / send  ·  " .. minutes("network"),
+        scale = rate_text, width = MW - 10, height = net_chart_h, floor = 1024, hatch = true,
         first = function() return history("rx:" .. net_ref()) end,
-        second = function() return history("tx:" .. net_ref()) end,
-      }),
+        second = function() return history("tx:" .. net_ref()) end },
+      L.section { y = COL_H - 2 * (CH + TRAFFIC_H) - 12, width = MW, height = CH + TRAFFIC_H, text = "Traffic  ·  send",
+        note = function() return rate_text(the_iface().tx_rate) end,
+        kit.spectrum { width = MW, height = TRAFFIC_H - 4, gap = 2, color = kit.signal("info"), values = traffic("tx:") },
+      },
+      L.section { y = COL_H - (CH + TRAFFIC_H), width = MW, height = CH + TRAFFIC_H, text = "Traffic  ·  receive",
+        note = function() return rate_text(the_iface().rx_rate) end,
+        kit.spectrum { width = MW, height = TRAFFIC_H - 4, gap = 2, values = traffic("rx:") },
+      },
     },
-    ui.Column {
-      x = stats_x, y = TOP, gap = 28,
-      stats("net"),
-      facts(model.readouts.net.facts),
-    },
+    right_column("net"),
   })
 
   -- ---------------------------------------------------------------- gpu --
-  local gpu_ref,the_card,gpu_index=model.gpu_ref,model.the_card,model.gpu_index
-  local gpu_page = page("gpu", {
-    title(function() return "GPU " .. gpu_index() end, function() return the_card().model or "" end),
-    -- One graph for a GPU sharing the system's memory; Mission Center's
-    -- three -- utilisation, video engines, its own memory -- for one with
-    -- memory of its own.
-    ui.Column {
-      x = PAD, y = TOP,
-      visible = function() local g = the_card() return not g.suspended and not g.vram_total end,
-      captioned("Utilization " .. minutes("gpu"), percent_scale, {
-        id = "performance-gpu-graph", kind = "gpu", width = GRAPH_W, height = area_h - 22, top = 100,
-        first = function() return history("gpu:" .. gpu_ref()) end,
-      }),
+  local gpu_ref, the_card, gpu_index = model.gpu_ref, model.the_card, model.gpu_index
+  local function asleep() return the_card().suspended == true end
+  local gpu_busy_h = math.floor((COL_H - 3 * CH - 32) * .46)
+  local gpu_small_h = math.floor((COL_H - 3 * CH - 32 - gpu_busy_h) / 2)
+  local DIAL = math.min(180, math.floor(COL_H * .32))
+  local gpu_page = page("gpu", function() return "GPU " .. gpu_index() end, function() return the_card().model or "" end, {
+    left_column("gpu", {
+      ring = { caption = "Engine load", value = function() return asleep() and 0 or (the_card().busy or 0) / 100 end,
+        text = function() return asleep() and "Off" or pct(the_card().busy) end, label = "Busy" },
+      minis = {
+        { label = "VRAM", value = function() local g = the_card() return (g.vram_used or 0) / math.max(1, g.vram_total or 1) end,
+          text = function() local g = the_card()
+            return g.vram_total and pct(100 * (g.vram_used or 0) / math.max(1, g.vram_total)) or "--" end },
+        { label = "Video", value = function() local g = the_card() return math.max(g.encoder or 0, g.decoder or 0) / 100 end,
+          text = function() local g = the_card()
+            return (g.encoder or g.decoder) and pct(math.max(g.encoder or 0, g.decoder or 0)) or "--" end },
+      },
+      triplet = { title = "Engine " .. minutes("gpu"), series = function() return history("gpu:" .. gpu_ref()) end,
+        top = function() return 100 end, format = pct },
+      status = load_status(function()
+        if asleep() then return "asleep" end
+        local b = the_card().busy or 0
+        return b >= 90 and "alert" or b >= 70 and "warn" or "ok"
+      end),
+      channels = {
+        { label = "Busy", value = function() return asleep() and 0 or (the_card().busy or 0) / 100 end },
+        { label = "Enc", value = function() return (the_card().encoder or 0) / 100 end },
+        { label = "Dec", value = function() return (the_card().decoder or 0) / 100 end },
+        { label = "VRAM", value = function() local g = the_card() return (g.vram_used or 0) / math.max(1, g.vram_total or 1) end },
+      },
+    }),
+    ui.Item {
+      x = MX, y = TOP, width = MW, height = COL_H,
+      visible = function() return not asleep() and not the_card().vram_total end,
+      chart { id = "performance-gpu-graph", caption = "Utilization  ·  " .. minutes("gpu"), scale = function() return "100%" end,
+        width = MW - 10, height = COL_H - CH - 18, top = 100, hatch = true,
+        first = function() return history("gpu:" .. gpu_ref()) end },
     },
-    ui.Column {
-      x = PAD, y = TOP, gap = 14,
-      visible = function() local g = the_card() return not g.suspended and g.vram_total ~= nil end,
-      captioned("Utilization " .. minutes("gpu"), percent_scale, {
-        id = "performance-gpu-busy", kind = "gpu", width = GRAPH_W, height = area_h - 3 * 22 - 28 - 2 * 150, top = 100,
-        first = function() return history("gpu:" .. gpu_ref()) end,
-      }),
-      captioned("Video encode/decode " .. minutes("gpu"), percent_scale, {
-        id = "performance-gpu-video", kind = "gpu", width = GRAPH_W, height = 150, top = 100,
+    ui.Item {
+      x = MX, y = TOP, width = MW, height = COL_H,
+      visible = function() return not asleep() and the_card().vram_total ~= nil end,
+      chart { id = "performance-gpu-busy", caption = "Utilization  ·  " .. minutes("gpu"), scale = function() return "100%" end,
+        width = MW - 10, height = gpu_busy_h, top = 100, hatch = true,
+        first = function() return history("gpu:" .. gpu_ref()) end },
+      chart { y = CH + gpu_busy_h + 16, id = "performance-gpu-video", caption = "Video encode / decode  ·  " .. minutes("gpu"),
+        scale = function() return "100%" end, width = MW - 10, height = gpu_small_h, top = 100,
         first = function() return history("gpuenc:" .. gpu_ref()) end,
-        second = function() return history("gpudec:" .. gpu_ref()) end,
-      }),
-      captioned("Memory usage " .. minutes("gpu"), function() return size_text(the_card().vram_total) end, {
-        id = "performance-gpu-memory", kind = "gpu", width = GRAPH_W, height = 150, top = 100,
-        first = function() return history("gpumem:" .. gpu_ref()) end,
-      }),
+        second = function() return history("gpudec:" .. gpu_ref()) end },
+      chart { y = 2 * CH + gpu_busy_h + gpu_small_h + 32, id = "performance-gpu-memory",
+        caption = "Memory usage  ·  " .. minutes("gpu"),
+        scale = function() return size_text(the_card().vram_total) end, width = MW - 10, height = gpu_small_h, top = 100,
+        first = function() return history("gpumem:" .. gpu_ref()) end, color = kit.signal("info") },
     },
-    kit.surface {
-      x = PAD, y = TOP + 22, width = GRAPH_W, height = area_h - 22, radius = 3,
-      visible = function() return the_card().suspended == true end,
-      color = function() return hue("gpu")():alpha(0.04) end,
-      border_width = 1, border_color = function() return hue("gpu")():alpha(0.5) end,
-      ui.Column {
-        anchors = { center_in = true }, gap = 6, align = "center",
-        kit.icon("power_settings_new", 40, function() return C.onSurfaceVariant end),
-        kit.heading { id = "performance-gpu-sleep-title", text = "Powered down", level = "section",
-          active = function() return shown() and (picked()) == "gpu" and the_card().suspended == true end,
-          font_size = theme.size.large, font_weight = 600 },
-        kit.subtitle {
-          text = "Not read while it sleeps: reading it would wake it.",
-          font_size = theme.size.small, color = function() return C.onSurfaceVariant end,
-        },
+    L.item {
+      x = MX, y = TOP, width = MW, height = COL_H, visible = asleep,
+      kit.panel { width = MW, height = COL_H },
+      kit.decor("hatch", { x = 1, y = 1, width = MW - 2, height = COL_H - 2, spacing = 14, weight = 1,
+        color = kit.stroke("faint") }),
+      kit.decor("brackets", { width = MW, height = COL_H, length = 10 }),
+      kit.dial { x = math.floor((MW - DIAL) / 2), y = math.floor(COL_H * .16), size = DIAL, value = 0,
+        color = kit.signal("info") },
+      ui.Column { x = 0, y = math.floor(COL_H * .16) + DIAL + 24, width = MW, gap = 8, align = "center",
+        L.heading { id = "performance-gpu-sleep-title", text = "Powered down", level = "section",
+          font_size = theme.size.large,
+          active = function() return opened() and on("gpu")() and asleep() end },
+        L.label { width = MW - 40, horizontal_alignment = "center", font_size = S.body,
+          text = "Not read while it sleeps: reading it would wake it." },
+        kit.chip { text = L.term("gpu.asleep", "Asleep"), width = 64, color = kit.signal("info") },
       },
     },
-    ui.Column {
-      x = stats_x, y = TOP, gap = 28,
-      stats("gpu"),
-      facts(model.readouts.gpu.facts),
-    },
+    right_column("gpu"),
   })
 
   -- ---------------------------------------------------------------- fan --
-  local fan_ref,the_fan=model.fan_ref,model.the_fan
-  local fan_page = page("fan", {
-    title(function() return "Fan " .. (fan_ref():gsub("^fan", "")) end, function() return the_fan().label or "" end),
-    ui.Column {
-      x = PAD, y = TOP,
-      captioned("Speed " .. minutes("fans"), function(top) return ("%d RPM"):format(math.floor(top)) end, {
-        id = "performance-fan-graph", kind = "fan", width = GRAPH_W, height = area_h - 22,
-        top = function()
-          local f = the_fan()
-          if f.max and f.max > 0 then return f.max end
-          local peak = 1000
-          for _, v in ipairs(history(fan_ref())) do if v > peak then peak = v end end
-          return peak * 1.15
-        end,
-        first = function() return history(fan_ref()) end,
-      }),
+  local fan_ref, the_fan = model.fan_ref, model.the_fan
+  local function fan_top()
+    local f = the_fan()
+    if f.max and f.max > 0 then return f.max end
+    return peak_of(history(fan_ref()), 1000) * 1.15
+  end
+  local fan_page = page("fan", function() return "Fan " .. (fan_ref():gsub("^fan", "")) end,
+    function() return the_fan().label or "" end, {
+    left_column("fan", {
+      ring = { caption = "Rotor speed", value = function() return (the_fan().rpm or 0) / math.max(1, fan_top()) end,
+        text = function() return tostring(math.floor(the_fan().rpm or 0)) end, label = "RPM", color = kit.signal("accent") },
+      minis = {
+        { label = "CPU temp", value = function() return (temps().cpu or 0) / 100 end,
+          text = function() local t = temps().cpu return t and ("%d°"):format(math.floor(t + .5)) or "--" end },
+        { label = "CPU load", value = function() return (cpu().usage or 0) / 100 end, text = function() return pct(cpu().usage) end },
+      },
+      triplet = { title = "Speed " .. minutes("fans"), series = function() return history(fan_ref()) end, top = fan_top,
+        format = function(v) return ("%d"):format(math.floor(v)) end },
+      status = stress(function() return 100 * (the_fan().rpm or 0) / math.max(1, fan_top()) end, 75, 95),
+      channels = {
+        { label = "RPM", value = function() return (the_fan().rpm or 0) / math.max(1, fan_top()) end },
+        { label = "Temp", value = function() return (temps().cpu or 0) / 100 end },
+        { label = "Load", value = function() return (cpu().usage or 0) / 100 end },
+      },
+    }),
+    ui.Item {
+      x = MX, y = TOP, width = MW, height = COL_H,
+      chart { id = "performance-fan-graph", caption = "Speed  ·  " .. minutes("fans"),
+        scale = function(top) return ("%d RPM"):format(math.floor(top)) end, width = MW - 10, height = COL_H - CH - 18,
+        top = fan_top, hatch = true, first = function() return history(fan_ref()) end },
     },
-    ui.Column {
-      x = stats_x, y = TOP, gap = 28,
-      stats("fan"),
-      facts(model.readouts.fan.facts),
-    },
+    right_column("fan"),
   })
 
   -- ------------------------------------------------------------ the list --
-  local row_title,row_sub,row_value,row_series=model.row_title,model.row_sub,model.row_value,model.row_series
+  local row_title, row_sub, row_value = model.row_title, model.row_sub, model.row_value
+  --- A row's level, 0..100: its own load, or for a link its traffic on a
+  --- log scale up to a gigabit.
+  local function row_level(row)
+    if row.kind == "cpu" then return cpu().usage or 0 end
+    if row.kind == "memory" then return memory().percent or 0 end
+    if row.kind == "drive" then return model.drive(row.ref).busy or 0 end
+    if row.kind == "gpu" then local g = model.card(row.ref) return g.suspended and 0 or (g.busy or 0) end
+    if row.kind == "net" then
+      local i = model.iface(row.ref)
+      local r = (i.rx_rate or 0) + (i.tx_rate or 0)
+      return 100 * math.min(1, math.log(1 + r, 10) / 8.1)
+    end
+    local f = model.fan(row.ref)
+    return 100 * (f.rpm or 0) / math.max(1, (f.max and f.max > 0) and f.max or 8000)
+  end
+  local ICON = { cpu = "memory", memory = "memory_alt", drive = "hard_drive", gpu = "developer_board",
+    fan = "mode_fan" }
+  local function icon_of(row)
+    if row.kind == "net" then return model.iface(row.ref).wireless and "wifi" or "lan" end
+    return ICON[row.kind] or "developer_board"
+  end
+  local settle = { duration = theme.duration.large, easing = theme.ease.emphasized_decel }
+  local RW_ = SIDE_W - 24
   local function device_row(row)
-    local first, second, top = row_series(row)
-    local spark = graph {
-      kind = row.kind, width = SPARK_W, height = SPARK_H, grid = false, top = top,
-      first = first, second = second,
-    }
-    local area
-    area = kit.action {
+    local W = RW_
+    local function picked() return selected:get() == row.key end
+    local function level() return opened() and row_level(row) or 0 end
+    local color = kit.level(level)
+    local TX, VW = 52, 66
+    local accent = kit.signal("accent")
+    local area = kit.action {
       id = "performance-device-" .. row.key,
-      width = SIDE_W - 20, height = ROW_H, cursor = "pointer",
+      width = W, height = ROW_H, cursor = "pointer",
       on_clicked = function() selected:set(row.key) end,
-      kit.surface {
-        anchors = { fill = true }, radius = 10,
-        color = function()
-          if selected:get() == row.key then return C.surfaceContainerHighest end
-          return (area and area.hovered) and C.onSurface:alpha(0.05) or C.onSurface:alpha(0)
-        end,
-        behavior = { color = { duration = theme.duration.small } },
-      },
-      ui.Item { x = 10, y = (ROW_H - SPARK_H) / 2, width = SPARK_W, height = SPARK_H, spark },
-      ui.Column {
-        x = SPARK_W + 24, anchors = { vertical_center = true }, gap = 1,
-        kit.text { text = function() return row_title(row) end, font_weight = 500, width = SIDE_W - SPARK_W - 50, elide = "right" },
-        kit.text {
-          text = function() return row_sub(row) end, font_size = theme.size.small - 2,
-          width = SIDE_W - SPARK_W - 50, elide = "right", color = function() return C.onSurfaceVariant end,
-        },
-        kit.text {
-          text = function() return row_value(row) end, font_size = theme.size.small - 2,
-          color = function() return C.onSurfaceVariant end,
-        },
-      },
+      -- The picked row: its bar swells out of the left edge and the
+      -- theme's corner marks close in on it.
+      ui.Rect { height = ROW_H, color = accent,
+        width = function() return picked() and 4 or 0 end, behavior = { width = settle } },
+      L.item { width = W, height = ROW_H, opacity = function() return picked() and 1 or 0 end,
+        scale = function() return picked() and 1 or 1.06 end,
+        behavior = { opacity = { duration = theme.duration.normal }, scale = settle },
+        kit.decor("brackets", { width = W, height = ROW_H, length = 7, color = kit.stroke("hot") }) },
+      -- What it is, as an icon (the picked one lit), and the theme's code.
+      kit.icon(function() return icon_of(row) end, 22, function() return picked() and accent() or kit.ink("lo")() end,
+        { x = 16, y = 5, fill = picked }),
+      L.code("dev" .. row.key, "##", { x = 4, y = 29, width = TX - 8, horizontal_alignment = "center" }),
+      kit.text { x = TX, y = 5, width = W - TX - VW - 6, height = L.lh(S.body), elide = "right",
+        text = function() return row_title(row) end, font_size = S.body, color = kit.ink("hi") },
+      L.label { x = TX, y = 5 + L.lh(S.body), width = W - TX - VW - 6, elide = "right", font_size = S.micro,
+        text = function() return row_sub(row) end },
+      kit.text { anchors = { right = true, right_margin = 6 }, y = 5, width = VW, height = L.lh(S.body),
+        horizontal_alignment = "right", elide = "right", font_size = S.body, color = color,
+        text = function() return (row_value(row):gsub(" %(.*%)", "")) end },
+      kit.meter { x = W - VW - 6, y = ROW_H - 14, width = VW, height = 5, count = 10, color = color,
+        value = function() return level() / 100 end },
+      L.rule { x = TX, y = ROW_H - 1, width = W - TX, strength = "faint" },
     }
-    return area
+    -- The picked row on the theme's hover plate, a shade deeper.
+    return kit.hover(area, function(hovered)
+      return accent():alpha(picked() and .12 or hovered and .05 or 0)
+    end, math.floor(ROW_H / 4))
   end
 
-  local side = kit.card {
-    id = "performance-devices",
+  -- The resource mix: every kind's load on one hexagon.
+  local function mix()
+    if not opened() then return { 0, 0, 0, 0, 0, 0 } end
+    local m = memory()
+    local s = m.swap or {}
+    local gpu, disk, net = 0, 0, 0
+    for _, g in ipairs(model.gpus().cards or {}) do if not g.suspended then gpu = math.max(gpu, g.busy or 0) end end
+    for _, d in ipairs(model.drives().drives or {}) do disk = math.max(disk, d.busy or 0) end
+    for _, i in ipairs(model.network().interfaces or {}) do
+      if not i.virtual then
+        net = math.max(net, 100 * math.min(1, math.log(1 + (i.rx_rate or 0) + (i.tx_rate or 0), 10) / 8.1))
+      end
+    end
+    local function f(v) return .06 + .94 * math.max(0, math.min(1, v / 100)) end
+    return { f(cpu().usage or 0), f(m.percent or 0), f(100 * (s.used or 0) / math.max(1, s.total or 1)), f(gpu), f(disk), f(net) }
+  end
+  local lh = L.lh(S.micro)
+  local RS = RADAR_H - (L.CAPTION_H + 6) - 2 * (lh + 4) - lh - 8
+  local axes = { "CPU", "Mem", "Swap", "GPU", "Disk", "Net" }
+  local ry = L.CAPTION_H + 6 + lh + 4
+  local radar = { x = 12, y = M.HEIGHT - RADAR_H - 12, width = RW_, height = RADAR_H,
+    L.caption { width = RW_, text = "Resource mix", note = function() return pct(cpu().usage) .. " CPU" end },
+    kit.radar { x = math.floor((RW_ - RS) / 2), y = ry, size = RS, values = mix },
+  }
+  for k, name in ipairs(axes) do
+    local a = math.rad(360 * (k - 1) / 6)
+    local cx = RW_ / 2 + (RS / 2 + 22) * math.sin(a)
+    local cy = ry + RS / 2 - (RS / 2 + lh / 2 + 3) * math.cos(a)
+    radar[#radar + 1] = L.label { x = cx - 22, y = cy - lh / 2, width = 44, horizontal_alignment = "center", text = name,
+      font_size = S.micro, color = kit.ink("hi") }
+  end
+  radar[#radar + 1] = L.code("mix", "CMS DIAG CONTROL  ·  ##.##", { x = 0, y = RADAR_H - lh, width = RW_ })
+
+  local LIST_Y = TITLE_Y + L.heading_h(S.title) + 8
+  local side = L.card {
+    id = "performance-devices", key = "perf-devices", header = false,
     width = SIDE_W, height = M.HEIGHT,
-    kit.heading { id = "performance-devices-title", active = opened,
-      x = 0, y = 22, width = SIDE_W, horizontal_alignment = "center",
-      text = "Devices", font_size = theme.size.larger, font_weight = 600,
-    },
+    L.heading { id = "performance-devices-title", active = opened, x = 12, y = TITLE_Y, width = RW_ - 130, text = "Devices" },
+    L.label { anchors = { right = true, right_margin = 12 }, y = TITLE_Y + math.floor((L.heading_h(S.title) - L.lh(S.label)) / 2),
+      width = 120, horizontal_alignment = "right",
+      text = function() local n = list.devices:len() return ("%d device%s"):format(n, n == 1 and "" or "s") end },
+    L.rule { x = 12, y = LIST_Y - 4, width = RW_ },
+    -- Whole rows only: the list is a number of rows tall and scrolls.
     ui.Flickable {
-      x = 10, y = 62, width = SIDE_W - 20, height = M.HEIGHT - 72, clip = true,
-      ui.Repeater { as = "column", gap = 6, width = SIDE_W - 20, model = list.devices, delegate = device_row },
+      x = 12, y = LIST_Y, width = RW_, clip = true,
+      height = math.floor((M.HEIGHT - LIST_Y - RADAR_H - 28 + 3) / (ROW_H + 3)) * (ROW_H + 3) - 3,
+      ui.Repeater { as = "column", gap = 3, width = RW_, model = list.devices, delegate = device_row },
     },
+    ui.Item(radar),
   }
 
-  local main = kit.card {
-    id = "performance-main",
+  local main = L.card {
+    id = "performance-main", key = "perf-main", header = false,
     width = MAIN_W, height = M.HEIGHT,
     cpu_page, memory_page, drive_page, net_page, gpu_page, fan_page,
   }
 
-  return {page=ui.Row {
+  return { page = ui.Row {
     id = "dashboard-performance",
     width = M.WIDTH, height = M.HEIGHT, gap = GAP,
     side, main,
-  }}
+  } }
 end
 
 return M

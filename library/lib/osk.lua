@@ -15,7 +15,7 @@
 --   kb.mode:set("numbers")
 --
 -- Optional theme hooks: `action(props)` constructs the pointer target and
--- `key_face(key)` draws its face (id, width, height, kind, label(), icon(),
+-- `key_face(key)` (an option, or `look.key_face`) draws its face (id, width, height, kind, label(), icon(),
 -- hint, down(), lit(), accent, dim, mirror). Faces do not handle input.
 -- `metrics` can override gap, key_height and alternate_cell; `look` also
 -- styles previews and pattern input. Defaults retain the original rendering.
@@ -263,6 +263,9 @@ function osk.new(options)
   -- are symbols: backspace, return, shift, the arrows. Without one they
   -- are drawn as their characters.
   local ICONS = look.icons
+  -- A theme's key face: the option, or the look's own (a kit's
+  -- keyboard_look may carry one).
+  local KEY_FACE = options.key_face or look.key_face
   local send = options.send or osk.sender()
   local on_pattern = options.on_pattern or function() end
 
@@ -459,7 +462,7 @@ function osk.new(options)
         end
         if not was_repeat then commit() end
       end,
-      options.key_face and options.key_face {
+      KEY_FACE and KEY_FACE {
         id = id, width = w, height = KH, kind = spec.kind, label = label,
         hint = spec.alts and spec.alts[1], down = function() return down:get() end,
         lit = lit, accent = spec.accent, dim = spec.dim, mirror = spec.mirror,
@@ -496,7 +499,7 @@ function osk.new(options)
     }
     -- The long press's first offer, small in the corner.
     local hint = spec.alts and spec.alts[1]
-    if hint and not options.key_face then
+    if hint and not KEY_FACE then
       return ui.Item {
         x = 0, y = 0, width = W, height = 0,
         area,

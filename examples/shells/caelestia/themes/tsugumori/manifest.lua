@@ -1,6 +1,5 @@
 return {
   api = 1, id = "tsugumori", name = "Tsugumori",
-  inherits = "material",
   views = {
     keyboard = "themes.layouts.views.keyboard",
     lule_page = "themes.layouts.views.lule_page",
@@ -27,7 +26,7 @@ return {
     notification_history = "themes.layouts.views.notification_history",
     rail = "themes.tsugumori.views.rail",
     frame = "themes.tsugumori.views.frame",
-    levels = "themes.tsugumori.views.levels",
+    levels = "themes.layouts.views.levels",
     notifications = "themes.layouts.views.notifications",
     polkit = "themes.layouts.views.polkit",
     authsteps = "themes.layouts.views.authsteps",

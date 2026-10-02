@@ -15,7 +15,7 @@ return {
     notification_history = "themes.layouts.views.notification_history",
     rail = "themes.material.views.rail",
     frame = "themes.material.views.frame",
-    levels = "themes.material.views.levels",
+    levels = "themes.layouts.views.levels",
     notifications = "themes.layouts.views.notifications",
     polkit = "themes.layouts.views.polkit",
     authsteps = "themes.layouts.views.authsteps",

@@ -1,4 +1,4 @@
--- Preserve the Material workspace's dimensions and sliding tab composition.
+-- The bottom workspace: shared dimensions; the tabbed body comes from the kit.
 local morf = require("morf")
 local theme = require("theme")
 local V = {}
@@ -11,7 +11,7 @@ function V.build(model)
     tabs[i] = { key = tab.key, name = tab.name, icon = tab.icon,
       build = function(width, height) return model.page(tab.key, width, height) end }
   end
-  local panel = require("tabbed").new { id = "bottom", width = w, height = function() return h end,
+  local panel = require("kit").tabbed { id = "bottom", width = w, height = function() return h end,
     tabs = tabs, tab = model.tab, on_present = model.present }
   morf.effect("material.bottom.shown", function() panel.shown(model.opened:get()) end)
   return { width = w, height = function() return h end, content = panel.content }

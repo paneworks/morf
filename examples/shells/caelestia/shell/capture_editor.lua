@@ -19,6 +19,9 @@ local generation,rendering=0,false
 local picker_done
 function M.running() return M.active:get() or M.pending:get() end
 M.tools=annotation.tools
+-- The marker inks a mark may take: document content, not theme chrome, so
+-- they are the same in every theme (the first is the configured default).
+M.COLOURS={"#ef5350","#ff9800","#ffeb3b","#66bb6a","#26c6da","#5c6bc0","#ffffff","#202020"}
 function M.doc() M.revision:get() return M.document end
 function M.tool_info()
   local d=M.doc() local id=d and d.tool or "select"
@@ -27,7 +30,7 @@ function M.tool_info()
   return M.tools[1]
 end
 function M.current_style()
-  local d=M.doc() if not d then return {width=4,color="#ef5350",filled=false} end
+  local d=M.doc() if not d then return {width=4,color=M.COLOURS[1],filled=false} end
   return d.tool=="select" and d.items[d.selected] or d.styles[d.tool]
 end
 function M.dismiss_tools()

@@ -35,8 +35,7 @@ function M.build(state)
   local function swatch(id, caption, value, width, height)
     local area
     local function ink()
-      local _, _, tone = morf.color(value()):hct()
-      return tone > 55 and "#151515" or "#ffffff"
+      return morf.color(value()):text_color()
     end
     area = kit.action { id = id, width = width, height = height, cursor = "pointer",
       on_clicked = function() state.copy(value()) end,
@@ -46,6 +45,11 @@ function M.build(state)
         text(caption, { x = 8, y = 5, font_size = 10, font_weight = 600, color = ink }),
         text(value, { x = 8, y = 22, font_size = 11, color = ink }),
       },
+      (function()
+        local mark = kit.decor("corners", { length = 5, color = function() return ink():alpha(0.8) end })
+        if mark then mark.visible = function() return area and area.hovered or false end return mark end
+        return ui.Item {}
+      end)(),
     }
     return area
   end
@@ -84,15 +88,14 @@ function M.build(state)
     area = kit.action { id = "lule-file-" .. i, width = left - 2 * PAD - 16, height = 26, cursor = "pointer",
       visible = function() return file() ~= nil end,
       on_clicked = function() local item = file() if item then state.select(item.path) end end,
-      kit.surface { anchors = { fill = true }, radius = 8,
-        color = function() return area and area.hovered and C.primaryContainer or C.surfaceContainerHigh end },
-      kit.icon("image", 16, function() return C.primary end, { x = 8, y = 5 }),
+      kit.icon("image", 16, kit.ink("accent"), { x = 8, y = 5 }),
       kit.menu_label { text = function() local item = file() return item and item.name or "" end,
         x = 30, y = 5, width = left - 2 * PAD - 55, elide = "right", font_size = 12 },
     }
+    kit.hover(area, function(hovered) return hovered and C.primaryContainer or C.surfaceContainerHigh end, 8)
     browser_rows[#browser_rows + 1] = area
   end
-  local library = kit.surface { id = "lule-browser", x = PAD, y = 44, width = left - 2 * PAD, height = 227,
+  local library = kit.card { id = "lule-browser", x = PAD, y = 44, width = left - 2 * PAD, height = 227,
     radius = 18, color = function() return C.surfaceContainer end, visible = function() return state.browsing:get() end,
     ui.Column { x = 8, y = 8, width = left - 2 * PAD - 16, gap = 5,
       label(function() return #state.files:get() == 0 and "No images in this folder"
@@ -111,27 +114,30 @@ function M.build(state)
   local left_card = kit.card { id = "lule-wallpaper-card", width = left, height = TOP, radius = 24,
     kit.heading { id = "lule-wallpaper-heading", text = "Wallpaper", x = PAD, y = 11, width = 190,
       font_size = 18, font_weight = 600, active = function() return state.active:get() end },
-    label(function()
-      local scheme = state.scheme:get() or {}
-      return state.selected:get() == scheme.wallpaper and "CURRENT" or "PREVIEW"
-    end, { anchors = { right = true, right_margin = PAD }, y = 16, font_size = 10 }),
+    kit.chip { anchors = { right = true, right_margin = PAD }, y = 17, width = 64,
+      text = function()
+        local scheme = state.scheme:get() or {}
+        return state.selected:get() == scheme.wallpaper and "CURRENT" or "PREVIEW"
+      end },
     kit.surface { x = PAD, y = 44, width = left - 2 * PAD, height = 199, radius = 18, clip = true,
       color = function() return C.surfaceContainerLowest end,
       ui.Image { id = "lule-preview", anchors = { fill = true }, fill_mode = "preserve_aspect_crop",
         source = function() return state.preview:get() end },
+      kit.decor("corners", { length = 10, color = kit.stroke("mark") }) or ui.Item {},
       ui.Column { anchors = { center_in = true }, align = "center", gap = 8,
         visible = function() return state.preview:get() == "" end,
-        kit.icon("wallpaper", 32, function() return C.primary end),
+        kit.icon("wallpaper", 32, kit.ink("accent")),
         label(function() return state.preview_error:get() ~= "" and "Preview unavailable"
           or state.selected:get() == "" and "Choose a wallpaper" or "Preparing preview…" end),
       },
     },
     kit.menu_label { text = function() return basename(state.selected:get()) ~= "" and basename(state.selected:get()) or "Your wallpaper collection" end,
       x = PAD, y = 252, width = left - 2 * PAD, elide = "middle", font_size = 13, font_weight = 600 },
-    kit.section_label { text = "Wallpaper folder", x = PAD, y = 283, font_size = 11,
-      color = function() return C.onSurfaceVariant end },
+    kit.label { text = "Folder", x = PAD, y = 281, width = 104, height = 18, elide = "right",
+      font_size = 11, vertical_alignment = "center", color = kit.ink("lo") },
     kit.surface { x = PAD + 110, y = 275, width = folder_w, height = 30, radius = 10,
-      color = function() return C.surfaceContainerHighest end, field },
+      color = function() return C.surfaceContainerHighest end, field,
+      kit.decor("corners", { length = 5, color = kit.stroke("mark") }) },
     use_folder,
     ui.Row { x = PAD, y = 313, gap = 6,
       button("lule-browse", "Images", "folder_open", 100, state.browse),
@@ -164,9 +170,11 @@ function M.build(state)
   local apply = button("lule-apply", function() return state.busy:get() and "Applying…" or "Apply wallpaper & colors" end,
     nil, apply_w, state.apply, function() return true end)
   apply.x, apply.y = w - PAD - apply_w, 35
+  -- Three themes between the row's title and the font picker at 510.
   local styles={x=PAD+160+12,y=118,gap=8}
+  local style_w=math.floor((510-12-styles.x-2*styles.gap)/3)
   for _,style in ipairs {{"material","Material"},{"tsugumori","Tsugumori"}} do
-    styles[#styles+1]=button("lule-theme-"..style[1],style[2],nil,142,
+    styles[#styles+1]=button("lule-theme-"..style[1],style[2],nil,style_w,
       function() appearance.request(style[1]) end,
       function() return require("themes").current.id==style[1] end,34)
   end

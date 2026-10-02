@@ -6,6 +6,8 @@ local theme=require("theme")
 local config=require("config")
 local C=theme.color
 local V={}
+-- The dimming over what is outside the crop, and behind the picker.
+local function scrim(a) return function() return C.scrim:alpha(a) end end
 function V.build(M)
   local function g() return M.geometry() end
   local function crop() local b=M.crop() local a=g() return {x=b.x*a.scale,y=b.y*a.scale,w=b.w*a.scale,h=b.h*a.scale} end
@@ -22,16 +24,15 @@ function V.build(M)
       opacity=function() return ready() and 1 or .35 end,
       on_entered=function() M.hint:set(label) end,
       on_exited=function() M.hint:set("") end,
-      kit.surface {anchors={fill=true},radius=function() return area and area.pressed and 7 or area and area.hovered and 14 or 10 end,
-        color=function() return on() and C.primary or C.primary:alpha(area and area.pressed and .20 or area and area.hovered and .12 or .025) end,
-        behavior={color={duration=120},radius=kit.spring()}},
       ui.Item {anchors={fill=true},translate_y=function() return area and area.pressed and 1 or area and area.hovered and -1 or 0 end,
         behavior={translate_y=kit.spring()},
       icon and kit.icon(icon,19,function() return on() and C.onPrimary or C.onSurface end,{anchors={center_in=true}})
-        or kit.text {text=label,anchors={center_in=true},font_size=12,color=function() return on() and C.onPrimary or C.onSurface end},
+        or kit.menu_label {text=label,anchors={center_in=true},font_size=12,color=function() return on() and C.onPrimary or C.onSurface end},
       },
     }
-    return area
+    return kit.hover(area,function(hovered)
+      return on() and C.primary or C.primary:alpha(area.pressed and .20 or hovered and .12 or .025)
+    end,10)
   end
   local handles={}
   local roles={{"nw",0,0},{"n",.5,0},{"ne",1,0},{"w",0,.5},{"e",1,.5},{"sw",0,1},{"s",.5,1},{"se",1,1}}
@@ -78,26 +79,27 @@ function V.build(M)
         stroke_width=function() local d=doc() return d and d.draft and d.draft.width or 0 end,stroke_cap="round",stroke_join="round",
         visible=function() local d=doc() return d~=nil and d.draft~=nil and not text_draft() and d.draft.type~="blur" and d.draft.type~="pixelate" end},
     },
-    ui.Rect {width=function() return g().iw end,height=function() return crop().y end,color="#00000055"},
-    ui.Rect {y=function() local b=crop() return b.y+b.h end,width=function() return g().iw end,
-      height=function() local b=crop() return math.max(0,g().ih-b.y-b.h) end,color="#00000055"},
-    ui.Rect {y=function() return crop().y end,width=function() return crop().x end,height=function() return crop().h end,color="#00000055"},
-    ui.Rect {x=function() local b=crop() return b.x+b.w end,y=function() return crop().y end,
-      width=function() local b=crop() return math.max(0,g().iw-b.x-b.w) end,height=function() return crop().h end,color="#00000055"},
-    ui.Rect {id="capture-editor-selection",x=function() return crop().x end,y=function() return crop().y end,
+    kit.surface {width=function() return g().iw end,height=function() return crop().y end,color=scrim(.33)},
+    kit.surface {y=function() local b=crop() return b.y+b.h end,width=function() return g().iw end,
+      height=function() local b=crop() return math.max(0,g().ih-b.y-b.h) end,color=scrim(.33)},
+    kit.surface {y=function() return crop().y end,width=function() return crop().x end,height=function() return crop().h end,color=scrim(.33)},
+    kit.surface {x=function() local b=crop() return b.x+b.w end,y=function() return crop().y end,
+      width=function() local b=crop() return math.max(0,g().iw-b.x-b.w) end,height=function() return crop().h end,color=scrim(.33)},
+    kit.surface {id="capture-editor-selection",x=function() return crop().x end,y=function() return crop().y end,
       width=function() return crop().w end,height=function() return crop().h end,
       visible=function() return crop().w>0 and crop().h>0 end,
-      color="#00000000",border_width=1.5,border_color=function() return C.primary end},
-    ui.Rect {id="capture-editor-selected-mark",visible=function() return M.mark_geometry().w>0 end,
+      color="transparent",border_width=1.5,border_color=kit.stroke("hot"),
+      kit.decor("corners",{length=12,weight=2,color=kit.stroke("hot")})},
+    kit.surface {id="capture-editor-selected-mark",visible=function() return M.mark_geometry().w>0 end,
       x=function() return M.mark_geometry().x*g().scale end,y=function() return M.mark_geometry().y*g().scale end,
       width=function() return M.mark_geometry().w*g().scale end,height=function() return M.mark_geometry().h*g().scale end,
-      color="transparent",border_width=1,border_color=function() return C.primary:alpha(.6) end},
+      color="transparent",border_width=1,border_color=kit.stroke("mark",C.primary)},
     ui.TextInput {id="capture-editor-text",visible=text_draft,focus=function() return M.active:get() and text_draft() or false end,
       x=function() local d=doc() return text_draft() and d.draft.points[1].x*g().scale or 0 end,
       y=function() local d=doc() return text_draft() and d.draft.points[1].y*g().scale or 0 end,
       width=function() return math.min(420,g().iw) end,height=48,font_family=theme.font,
       font_size=function() local d=doc() return text_draft() and d.draft.width*g().scale or 24 end,
-      color=function() local d=doc() return d and d.styles.text.color or "#ef5350" end,placeholder="Type · Enter to place",max_length=4096,
+      color=function() local d=doc() return d and d.styles.text.color or M.COLOURS[1] end,placeholder="Type · Enter to place",max_length=4096,
       text=function() return M.text_value:get() end,on_text_changed=function(value) M.text_value:set(value) end,
       on_accepted=function(value) M.text(value) end,
       on_escape=function() local d=doc() if d then d.abort() M.redraw(true) end end,
@@ -115,8 +117,7 @@ function V.build(M)
     return math.max(12,math.min(g().h-height-12,y))
   end
   local function shell_surface(radius)
-    return kit.surface {anchors={fill=true},radius=radius or 18,color=function() return C.surfaceContainerHigh end,
-      border_width=1,border_color=function() return C.primary:alpha(.13) end}
+    return kit.card {anchors={fill=true},radius=radius or 18,color=function() return C.surfaceContainerHigh end}
   end
   local palette_items={}
   for i,t in ipairs(M.tools) do
@@ -130,25 +131,22 @@ function V.build(M)
       on_clicked=function() M.choose(t[1]) end,
       on_entered=function() M.hint:set(t[2].." · "..t[3]:upper()) end,
       on_exited=function() M.hint:set("") end,
-      kit.surface {anchors={fill=true},radius=12,
-        color=function() return on() and C.primaryContainer or C.primary:alpha(area and area.hovered and .10 or .025) end,
-        behavior={color={duration=120}}},
       kit.icon(t[4],22,ink,{anchors={horizontal_center=true},y=7,fill=on}),
       kit.text {text=t[2],font_size=12,font_weight=500,color=ink,anchors={horizontal_center=true},y=34},
-      kit.text {text=t[3]:upper(),font_size=9,color=function() return C.onSurfaceVariant:alpha(.6) end,
+      kit.label {text=t[3]:upper(),font_size=9,color=function() return C.onSurfaceVariant:alpha(.6) end,
         anchors={right=true,right_margin=7},y=5},
     }
+    kit.hover(area,function(hovered) return on() and C.primaryContainer or C.primary:alpha(hovered and .10 or .025) end,12)
     palette_items[#palette_items+1]=area
   end
   local styles_items={}
-  local colours={"#ef5350","#ff9800","#ffeb3b","#66bb6a","#26c6da","#5c6bc0","#ffffff","#202020"}
-  for i,color in ipairs(colours) do
+  for i,color in ipairs(M.COLOURS) do
     styles_items[#styles_items+1]=kit.action {id="capture-colour-"..i,x=12+(i-1)*28,y=0,width=26,height=30,
       cursor="pointer",on_clicked=function() M.style("color",color) end,
-      ui.Rect {anchors={center_in=true},width=20,height=20,radius=10,color=color,
+      kit.surface {anchors={center_in=true},width=20,height=20,radius=10,color=color,
         border_width=function() return M.current_style().color==color and 2 or .5 end,
-        border_color=function() return M.current_style().color==color and C.onSurface or C.outline:alpha(.25) end},
-      kit.icon("check",14,function() return (i==3 or i==7) and "#202020" or "#ffffff" end,
+        border_color=function() return M.current_style().color==color and kit.ink("hi")() or kit.stroke("faint")() end},
+      kit.icon("check",14,function() return morf.color(color):text_color() end,
         {anchors={center_in=true},visible=function() return M.current_style().color==color end}),
     }
   end
@@ -165,12 +163,12 @@ function V.build(M)
 
     shell_surface(),ui.MouseArea {anchors={fill=true}},
     kit.heading {x=16,y=10,text="Markup",level="section",scope="capture.editor.tools",active=function() return M.tools_open:get() end,font_size=14},
-    kit.text {anchors={right=true,right_margin=16},y=14,text="Choose a tool",font_size=11,color=function() return C.onSurfaceVariant end},
+    kit.label {anchors={right=true,right_margin=16},y=14,text="Choose a tool",font_size=11,color=kit.ink("lo")},
     ui.Flickable {x=12,y=42,width=function() return palette_width()-24 end,
       height=function() return palette_height()-132 end,clip=true,
       ui.Item {width=function() return palette_width()-24 end,height=function() return rows()*62 end,table.unpack(palette_items)},},
-    ui.Rect {x=16,y=function() return palette_height()-86 end,width=function() return palette_width()-32 end,height=1,
-      color=function() return C.primary:alpha(.10) end},
+    kit.surface {x=16,y=function() return palette_height()-86 end,width=function() return palette_width()-32 end,height=1,
+      color=kit.stroke("faint")},
     ui.Item {x=0,y=function() return palette_height()-82 end,width=palette_width,height=80,table.unpack(styles_items)},
   }
   local toolbar_drag
@@ -187,7 +185,7 @@ function V.build(M)
       kit.heading {id="capture-editor-title",x=28,y=8,width=function() return menu().w-148 end,height=24,
         text=function() local d=doc() return d and d.tool=="select" and not d.selected and "Capture" or M.tool_info()[2] end,
         scope="capture.editor",level="caption",font_size=12,active=editing},
-      kit.text {anchors={right=true},y=13,width=90,height=16,font_size=11,horizontal_alignment="right",
+      kit.label {anchors={right=true},y=13,width=90,height=16,font_size=11,horizontal_alignment="right",
         text=function() local d=doc() return M.busy:get() and "Working…" or d and (math.floor(d.crop.w).." × "..math.floor(d.crop.h)) or "" end,
         color=function() return C.onSurfaceVariant end},
     },
@@ -210,10 +208,10 @@ function V.build(M)
     local function enabled() return a[1]=="cancel" or not M.busy:get() and (a[1]~="delete" or doc() and doc().selected~=nil) end
     area=kit.action {id="capture-editor-"..a[1],x=8,y=8+(i-1)*42,width=184,height=40,cursor="pointer",
       on_clicked=function() if enabled() then a[4]() end end,opacity=function() return enabled() and 1 or .35 end,
-      kit.surface {anchors={fill=true},radius=10,color=function() return C.primary:alpha(area and area.hovered and .10 or 0) end,behavior={color={duration=120}}},
-      kit.icon(a[3],18,function() return C.onSurfaceVariant end,{x=10,y=11}),
-      kit.text {x=38,y=12,text=a[2],font_size=12},
+      kit.icon(a[3],18,kit.ink("lo"),{x=10,y=11}),
+      kit.menu_label {x=38,y=12,width=140,elide="right",text=a[2],font_size=12},
     }
+    kit.hover(area,function(hovered) return C.primary:alpha(hovered and .10 or 0) end,10)
     more_items[#more_items+1]=area
   end
   local more_popup=ui.Item {id="capture-more-menu",visible=function() return editing() and M.more_open:get() end,z=6,width=200,height=226,
@@ -257,7 +255,7 @@ function V.build(M)
   end
   local settings=ui.Item {id="capture-editor-preferences",z=8,visible=function() return M.settings:get() end,
     x=function() return math.max(12,g().w-336) end,y=42,width=320,height=function() return math.min(490,g().h-54) end,
-    kit.surface {anchors={fill=true},radius=20,color=function() return C.surfaceContainerHigh end},
+    kit.card {anchors={fill=true},radius=20,color=function() return C.surfaceContainerHigh end},
     ui.MouseArea {anchors={fill=true}},
     ui.Flickable {width=320,height=function() return math.min(490,g().h-54) end,clip=true,
     ui.Item {width=320,height=490,
@@ -280,11 +278,11 @@ function V.build(M)
     }},
   }
   local picker=ui.Item {id="capture-file-picker",anchors={fill=true},z=10,visible=function() return M.picker:get()~=false end,
-    ui.Rect {anchors={fill=true},color="#00000090"},
+    kit.surface {anchors={fill=true},color=scrim(.56)},
     ui.MouseArea {anchors={fill=true},focus=function() return M.picker:get()~=false end,on_key_pressed=M.key},
     ui.Item {anchors={center_in=true},width=function() return math.min(500,g().w-24) end,
       height=function() return math.min(430,g().h-24) end,
-      kit.surface {anchors={fill=true},radius=20,color=function() return C.surfaceContainerHigh end},
+      kit.card {anchors={fill=true},radius=20,color=function() return C.surfaceContainerHigh end},
       kit.heading {x=16,y=14,scope="capture.file",font_size=16,
         text=function() local p=M.picker:get() return p and p.kind=="save" and "Save capture" or "Capture folder" end},
       ui.TextInput {id="capture-picker-path",x=16,y=50,width=function() return math.min(500,g().w-24)-32 end,height=34,
@@ -294,9 +292,10 @@ function V.build(M)
         height=function() return math.min(430,g().h-24)-196 end,clip=true,
         ui.Repeater {as="column",gap=4,model=M.entries,width=function() return math.min(500,g().w-24)-32 end,
           delegate=function(entry)
-            return kit.action {width=function() return math.min(500,g().w-24)-32 end,height=34,on_clicked=function() M.pick_navigate(entry.path) end,
-              kit.icon("folder",18,function() return C.primary end,{x=8,y=8}),
-              kit.text {x=36,y=9,text=entry.name,font_size=13},}
+            return kit.hover(kit.action {width=function() return math.min(500,g().w-24)-32 end,height=34,on_clicked=function() M.pick_navigate(entry.path) end,
+              kit.icon("folder",18,kit.ink("accent"),{x=8,y=8}),
+              kit.text {x=36,y=9,width=function() return math.min(500,g().w-24)-76 end,elide="middle",text=entry.name,font_size=13},},
+              function(hovered) return C.primary:alpha(hovered and .10 or 0) end,10)
           end},
       },
       ui.TextInput {id="capture-picker-name",x=16,y=function() return math.min(430,g().h-24)-92 end,
@@ -311,20 +310,20 @@ function V.build(M)
     },
   }
   return ui.Item {id="capture-editor",anchors={fill=true},visible=function() return M.active:get() end,z=100,
-    ui.Rect {anchors={fill=true},color="#000000"},
+    kit.surface {anchors={fill=true},color=scrim(1)},
     ui.MouseArea {anchors={fill=true},on_key_pressed=M.key},
     canvas,
     ui.Item {id="capture-selection-hint",visible=function() return M.phase:get()=="selecting" end,
       width=function() return math.min(400,g().w-24) end,height=38,x=function() return (g().w-math.min(400,g().w-24))/2 end,
       y=function() return g().h-58 end,
-      kit.surface {anchors={fill=true},radius=16,color=function() return C.surfaceContainer:alpha(.94) end},
+      kit.card {anchors={fill=true},radius=16,color=function() return C.surfaceContainer:alpha(.94) end},
       kit.text {anchors={center_in=true},text="Drag area · click window · S screen · Esc",font_size=12},
     },
     toolbar,tools_popup,more_popup,
     ui.Item {id="capture-editor-feedback",visible=editing,
       x=function() return (g().w-math.min(440,g().w-24))/2 end,y=function() return g().h-34 end,
       width=function() return math.min(440,g().w-24) end,height=26,
-      kit.surface {anchors={fill=true},radius=10,color=function() return C.surfaceContainer:alpha(.96) end},
+      kit.card {anchors={fill=true},radius=10,color=function() return C.surfaceContainer:alpha(.96) end},
       kit.text {id="capture-editor-feedback-text",anchors={fill=true,left_margin=12,right_margin=12},font_size=11,
         horizontal_alignment="center",vertical_alignment="center",elide="right",
         text=function()
@@ -341,7 +340,7 @@ function V.build(M)
       on_key_pressed=M.key,on_clicked=function() M.settings:set(false) M.upload_confirm:set(false) end},
     settings,picker,
     ui.Item {id="capture-upload-confirm",z=8,visible=function() return M.upload_confirm:get() end,anchors={center_in=true},width=320,height=144,
-      kit.surface {anchors={fill=true},radius=20,color=function() return C.surfaceContainerHigh end},
+      kit.card {anchors={fill=true},radius=20,color=function() return C.surfaceContainerHigh end},
       ui.MouseArea {anchors={fill=true}},
       kit.text {x=18,y=18,width=284,wrap=true,text="Upload this image? The link will be public. The default host deletes it after 72 hours.",font_size=14},
       button("capture-upload-back","Back",nil,function() M.upload_confirm:set(false) end,18,94,76),

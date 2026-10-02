@@ -1,56 +1,38 @@
--- Material network settings geometry, supplied with shared models.
+-- Wired, mesh, tunnel and Tor settings: one composition in the kit's look.
 local ui=require("morf.ui")
 local theme=require("theme")
 local kit=require("kit")
+local rows=require("themes.layouts.rows")
 local C=theme.color
 local M={}
 
---- A row card: an icon badge, a name and what it says, and a switch.
+--- A row card: an icon badge, a name and what it says, and a button.
+local BUTTON_W = 96
 local function row_card(w, spec)
-  local area
-  area = ui.Item {
+  local text_w = w - 70 - (spec.toggle and BUTTON_W + 22 or 14)
+  local area = ui.Item {
     id = spec.id, width = w, height = 76,
-    kit.card {
-      anchors = { fill = true }, radius = 20,
-      color = function() return C.surfaceContainer end,
-    },
-    kit.surface {
-      x = 14, anchors = { vertical_center = true }, width = 44, height = 44, radius = 22,
-      color = function() return spec.on() and C.primary or C.surfaceContainerHighest end,
-      behavior = { color = { duration = theme.duration.small } },
-      kit.icon(spec.icon, 22, function() return spec.on() and C.onPrimary or C.onSurfaceVariant end,
-        { anchors = { center_in = true }, fill = true }),
-    },
+    kit.card { anchors = { fill = true }, color = function() return C.surfaceContainer end },
+    rows.badge { x = 14, anchors = { vertical_center = true }, size = 44, icon = spec.icon, on = spec.on },
     ui.Column {
       x = 70, anchors = { vertical_center = true }, gap = 2,
-      kit.menu_label { text = spec.name, font_weight = 600, width = w - 170, elide = "right" },
-      kit.subtitle { text = spec.detail, font_size = theme.size.small, width = w - 170, elide = "right",
+      kit.menu_label { text = spec.name, font_weight = 600, width = text_w, elide = "right" },
+      kit.subtitle { text = spec.detail, font_size = theme.size.small, width = text_w, elide = "right",
         color = function() return C.onSurfaceVariant end },
     },
   }
   if spec.toggle then
-    local sw
-    sw = kit.action {
+    local sw = kit.pill {
       id = spec.id .. "-switch",
       anchors = { right = true, right_margin = 14, vertical_center = true },
-      width = 84, height = 36, cursor = "pointer",
-      visible = function() return spec.can == nil or spec.can() end,
+      width = BUTTON_W, height = 36,
+      label = function() return spec.on() and (spec.off_word or "Disconnect") or (spec.on_word or "Connect") end,
+      color = function() return spec.on() and C.secondaryContainer or C.primary end,
+      ink = function() return spec.on() and C.onSecondaryContainer or C.onPrimary end,
       on_clicked = function() spec.toggle(not spec.on()) end,
-      kit.surface {
-        anchors = { fill = true }, radius = 18,
-        color = function()
-          local base = spec.on() and C.secondaryContainer or C.primary
-          return (sw and sw.hovered) and base:mix(C.onSurface, 0.06) or base
-        end,
-      },
-      kit.menu_label {
-        anchors = { center_in = true }, font_size = theme.size.small, font_weight = 600,
-        text = function() return spec.on() and (spec.off_word or "Disconnect") or (spec.on_word or "Connect") end,
-        color = function() return spec.on() and C.onSecondaryContainer or C.onPrimary end,
-      },
     }
-    local wrapper = { width = w, height = 76, area, sw }
-    return ui.Item(wrapper)
+    sw.visible = function() return spec.can == nil or spec.can() end
+    return ui.Item { width = w, height = 76, area, sw }
   end
   return area
 end

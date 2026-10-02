@@ -30,6 +30,8 @@ local session = require("themes.session")
 M.font = session.font
 if M.font == nil then M.font = preferences.get("font") end
 local requested = session.target or morf.env("CAELESTIA_STYLE") or preferences.get("theme")
+-- Futuristic was folded into Tsugumori: a saved choice of it lands there.
+if requested == "futuristic" then requested = "tsugumori" end
 local ok, package = pcall(M.load, requested)
 if not ok then
   morf.log("warn", "caelestia: " .. tostring(package) .. "; using Material")

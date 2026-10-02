@@ -31,15 +31,21 @@ for _,style in ipairs {"material","tsugumori"} do
     load(style) open()
     test.eq(#test.runs(),0)
     test.eq(test.ipc("state").focus,1)
-    if style=="material" then
-      local panel=test.get("drawer-session")
-      test.eq(panel.width,102) test.eq(panel.height,495)
-      for _,id in ipairs {"logout","shutdown","picture","hibernate","reboot"} do
-        test.eq(test.get("session-"..id).width,80)
-      end
-    else
-      test.eq(test.get("session-title-text").text,"SESSION")
+    -- The shared console: a 300-wide panel, a full-width row per action
+    -- under the operator block.
+    local panel=test.get("drawer-session")
+    test.eq(panel.width,300)
+    test.truthy(test.get("session-picture").visible)
+    local last
+    for _,id in ipairs {"logout","shutdown","hibernate","reboot"} do
+      local row=test.get("session-"..id)
+      test.eq(row.width,276)
+      if last then test.truthy(row.y>=last.y+last.height,"rows overlap: "..id) end
+      last=row
     end
+    test.truthy(last.y+last.height<=panel.y+panel.height,"rows leave the panel")
+    if style=="material" then test.eq(test.get("session-title").text,"Session")
+    else test.eq(test.get("session-title-text").text,"SESSION") end
     if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(style.."-session.png") end
     test.key("Up") test.eq(test.ipc("state").focus,4)
     test.key("Tab") test.eq(test.ipc("state").focus,1)

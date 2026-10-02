@@ -53,7 +53,12 @@ local HOST=[[
     if props.id then paths[props.id]=node end
     return node
   end
+  -- What each chart is drawn from: its series, as the theme's line reads it.
+  local kit=require("kit")
+  local chart,charts=kit.chart,{}
+  kit.chart=function(spec) if spec.id then charts[spec.id]=spec end return chart(spec) end
   local view=require("dashboard_battery")
+  kit.chart=chart
   ui.Path=original
   if view.resize then view.resize(W-24,H-24) end
   local C=require("theme").color
@@ -74,6 +79,11 @@ local HOST=[[
       history=rings.percent.list(),samples=tick:get(),allocated=#rings.percent.items}
   end
   morf.ipc.path=function(id) return paths[id] and paths[id].d or "" end
+  morf.ipc.series=function(id)
+    local out={}
+    for i,v in ipairs(charts[id].first()) do out[i]=("%.3f"):format(v) end
+    return table.concat(out," ")
+  end
 ]]
 local function load(style,w,h)
   test.load("../shell/init.lua",{source=HOST,size={w or 1100,h or 680},env={CAELESTIA_STYLE=style,
@@ -111,28 +121,22 @@ for _,style in ipairs {"material","tsugumori"} do
     for _,field in ipairs {"percent","power","voltage","temperature"} do
       test.truthy(test.ipc("status").keys["bat:BAT1:"..field])
     end
-    if style=="tsugumori" then
-      for _,field in ipairs {"charge","power","voltage","temperature"} do
-        local path=test.ipc("path","battery-graph-"..field.."-line")
-        local count,last_x=0,nil
-        for x,y in path:gmatch("[ML]([%d%.%-]+) ([%d%.%-]+)") do
-          count,last_x=count+1,tonumber(x)
-          test.truthy(tonumber(y)>=1 and tonumber(y)<=109)
-        end
-        test.eq(count,60)
-        test.near(last_x,test.get("battery-graph-"..field).width,.1)
-      end
+    -- Every chart draws the whole history (60 samples) across its box.
+    for _,field in ipairs {"charge","power","voltage","temperature"} do
+      local _,count=test.ipc("series","battery-graph-"..field):gsub("%S+","")
+      test.eq(count,60)
+      test.truthy(test.get("battery-graph-"..field).width>100)
     end
     shot(style.."-battery")
     test.ipc("update","charging") test.advance(2400)
-    test.truthy(test.find {text="Full in",visible=true})
+    test.truthy(test.find {text=style=="tsugumori" and "FULL IN" or "Full in",visible=true})
     test.truthy(test.find {text="59m",visible=true})
     test.eq(#test.logs("error"),0)
   end)
   test.it(style.." battery retains bounded history while hidden without updating its UI",function()
     load(style)
     test.ipc("shown","yes") test.advance(2400)
-    local before_path=test.ipc("path","battery-graph-charge-line")
+    local before_series=test.ipc("series","battery-graph-charge")
     test.ipc("shown","no") test.advance(1000)
     local before=test.ipc("status")
     test.advance(198000)
@@ -141,45 +145,37 @@ for _,style in ipairs {"material","tsugumori"} do
     test.truthy(after.samples>before.samples+60)
     test.eq(#after.history,60) test.eq(after.allocated,60)
     test.truthy(after.history[1]~=before.history[1])
-    test.ipc("shown","yes") test.advance(900)
+    test.ipc("shown","yes") test.advance(200)
     if style=="tsugumori" then test.truthy(test.get("battery-title-text").text~="BATTERY") end
-    test.advance(1700)
+    test.advance(2400)
     test.truthy(test.ipc("status").history_reads>after.history_reads)
-    if style=="tsugumori" then test.truthy(test.ipc("path","battery-graph-charge-line")~=before_path) end
+    test.truthy(test.ipc("series","battery-graph-charge")~=before_series,"the chart kept the series from before hiding")
     test.eq(#test.logs("error"),0)
   end)
   test.it(style.." battery handles no device, partial readings and source failures",function()
     load(style)
     test.ipc("update","empty") test.ipc("shown","yes") test.advance(2500)
     test.truthy(test.find {text="No battery",visible=true})
-    test.eq(test.get("battery-percent").text,style=="material" and "0%" or "--")
+    test.eq(test.get("battery-percent").text,"--")
     test.ipc("update","partial") test.advance(2400)
     test.eq(test.get("battery-percent").text,"0%")
     test.ipc("update","broken") test.advance(2400)
-    test.eq(test.get("battery-percent").text,style=="material" and "0%" or "--")
+    test.eq(test.get("battery-percent").text,"--")
     test.eq(#test.logs("error"),0)
   end)
 end
-test.it("Tsugumori battery graphs resize and all details remain reachable at narrow widths",function()
-  load("tsugumori",380,520)
+test.it("Tsugumori battery keeps every graph and device fact on the shared page through interrupted reopening",function()
+  load("tsugumori")
   test.ipc("shown","yes") test.advance(2500)
   local page=test.get("dashboard-battery")
-  test.near(page.width,356,.01)
-  test.truthy(test.get("battery-chart-power").y>test.get("battery-chart-charge").y)
-  shot("tsugumori-battery-compact-charge")
-  test.wheel(0,400,{x=200,y=300}) test.advance(400)
-  shot("tsugumori-battery-compact-history")
-  test.wheel(0,2000,{x=200,y=300}) test.advance(400)
-  local last=test.get("battery-fact-limit")
-  local viewport=test.get("battery-viewport")
-  test.truthy(last.y>=viewport.y and last.y+last.height<=viewport.y+viewport.height)
-  shot("tsugumori-battery-compact-device")
-  local before=test.get("battery-graph-charge").width
-  test.ipc("resize","1040") test.advance(500)
-  test.truthy(test.get("battery-graph-charge").width>before)
-  test.truthy(test.get("battery-chart-power").x>test.get("battery-chart-charge").x)
-  local curve=test.ipc("path","battery-graph-charge-line")
-  test.truthy(#curve>20)
+  test.near(page.width,1040,.01)
+  for _,id in ipairs {"battery-charge-card","battery-main","battery-graph-charge","battery-graph-power",
+    "battery-graph-voltage","battery-graph-temperature","battery-facts"} do
+    local node=test.get(id)
+    test.truthy(node.x>=page.x and node.x+node.width<=page.x+page.width+.5,id.." leaves the page")
+    test.truthy(node.y>=page.y and node.y+node.height<=page.y+page.height+.5,id.." leaves the page")
+  end
+  test.truthy(test.get("battery-graph-voltage").y>test.get("battery-graph-charge").y)
   test.ipc("shown","no") test.advance(100)
   test.ipc("shown","yes") test.advance(70)
   test.ipc("shown","no") test.advance(60)

@@ -21,8 +21,10 @@ local source=[[
   morf.ipc.state=function() return {open=popup.drawer.open:get(),name=popup.device.name,kind=popup.device.kind,
     queries=queries,focus=morf.surface.keyboard_focus} end
 ]]
+-- Not a dry run: the shell watches the audio server here, through the
+-- stubbed morf.spawn / morf.run above (a dry run reaches no server).
 local function load(style)
-  test.load("../shell/init.lua",{size={800,650},source=source,env={CAELESTIA_STYLE=style or "tsugumori",CAELESTIA_DRY_RUN="1"}})
+  test.load("../shell/init.lua",{size={800,650},source=source,env={CAELESTIA_STYLE=style or "tsugumori",CAELESTIA_DRY_RUN="0"}})
   test.advance(300)
 end
 local function sink(name,form,address)

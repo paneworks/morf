@@ -264,9 +264,17 @@ function M.slider(spec)
   }
   local size = math.floor(H / 2)
   if spec.icon then
+    -- Inside the active part once there is room for it; until then just
+    -- past the handle, on the track, so a low level never hides it.
+    local function inside() return hx() - GAP > size + 18 end
     ui.reparent(M.icon(spec.icon, size, function()
-      return hx() - GAP > size + 18 and C.onPrimary or C.onSurfaceVariant
-    end, { x = math.floor(H / 2 - size / 2), y = 4 + (H - size) / 2 }), area)
+      return inside() and C.onPrimary or C.onSurfaceVariant
+    end, { y = 4 + (H - size) / 2,
+      x = function()
+        if inside() then return math.floor(H / 2 - size / 2) end
+        return math.floor(hx() + grip() / 2 + GAP + 6)
+      end,
+      behavior = { x = motion } }), area)
   end
   if spec.label ~= false then
     ui.reparent(M.text {
@@ -668,21 +676,1034 @@ function M.bar(spec)
   }
 end
 
---- Bytes as the reference writes them: binary units, one decimal under
---- ten, none above -- "1.1", "MiB". `unit` forces one.
-function M.bytes(n, unit)
-  n = tonumber(n) or 0
-  local units = { "B", "KiB", "MiB", "GiB", "TiB", "PiB" }
-  local i = 1
-  if unit then
-    for k, u in ipairs(units) do if u == unit then i = k end end
-    n = n / 1024 ^ (i - 1)
-  else
-    while n >= 1024 and i < #units do n = n / 1024 i = i + 1 end
-  end
-  local text = (n < 10 and i > 1) and ("%.1f"):format(n) or ("%d"):format(math.floor(n + 0.5))
-  return text, units[i]
+-- ============================================================ the kit ==
+-- Material's reading of the shared kit (themes/KIT.md): rounded tonal
+-- containers in the surfaceContainer roles, pill-shaped progress with
+-- round caps and a stop dot, M3 expressive shapes that morph when a kind
+-- or a value changes, springy overshoot where something travels. No codes,
+-- no tick marks, no hairline frames. Nothing here moves at rest.
+
+local common = require("themes.kit_common")
+local get = common.get
+
+--- Bytes in binary units (themes/kit_common.lua).
+M.bytes = common.bytes
+
+local function settle() return { duration = theme.duration.large, easing = theme.ease.emphasized_decel } end
+local function spatial(ms) return { duration = ms or 500, easing = theme.ease.spatial } end
+local function sentence(s)
+  s = tostring(s or "")
+  return s:sub(1, 1):upper() .. s:sub(2):lower()
 end
+
+-- ------------------------------------------------------- colour and ink --
+
+-- Status colours: the error role for alerts, tertiary for the extra one;
+-- the desk's terminal greens, yellows and cyans for the rest, harmonized
+-- toward the primary as M3 harmonizes custom colours.
+local LULE = { ok = "color2", warn = "color3", info = "color6" }
+function M.signal(kind)
+  return function()
+    local c = theme.color
+    if kind == "alert" then return c.error end
+    if kind == "extra" then return c.tertiary end
+    local slot, lule = LULE[kind], theme.lule
+    if slot and lule and lule[slot] then return lule[slot]:mix(c.primary, 0.18) end
+    return c.primary
+  end
+end
+
+function M.ink(kind)
+  if kind == "lo" then return function() return theme.color.onSurfaceVariant end end
+  if kind == "accent" then return function() return theme.color.primary end end
+  return function() return theme.color.onSurface end
+end
+
+-- Lines are rare in Material; where one is asked for it is an outline role.
+local STROKE = { faint = 0.35, quiet = 0.7, idle = 1, mark = 1, hot = 1 }
+function M.stroke(strength, color)
+  local a = assert(STROKE[strength or "idle"], "unknown stroke strength")
+  return function()
+    local c = theme.color
+    if color then return get(color):alpha(a * (strength == "hot" and 1 or 0.6)) end
+    if strength == "hot" then return c.primary end
+    if strength == "mark" then return c.outline end
+    return c.outlineVariant:alpha(a)
+  end
+end
+
+local level_alert, level_warn = M.signal("alert"), M.signal("warn")
+function M.level(value, warn, alert)
+  warn, alert = warn or 70, alert or 90
+  return function()
+    local v = tonumber(get(value)) or 0
+    if v >= alert then return level_alert() end
+    if v >= warn then return level_warn() end
+    return theme.color.primary
+  end
+end
+
+-- ------------------------------------------------------------------ text --
+
+--- A small label (units, captions): sentence case, medium weight, the
+--- variant ink. Text props + `size`.
+function M.label(props)
+  props.font_size = props.font_size or props.size or (theme.size.small - 2)
+  props.size = nil
+  props.font_weight = props.font_weight or 500
+  props.color = props.color or M.ink("lo")
+  props.height = props.height or math.ceil(props.font_size * 1.4)
+  return M.text(props)
+end
+
+--- A big reading: `value` (fn -> string), `size`, `unit`, `color`.
+function M.readout(spec)
+  local size = spec.size or theme.size.extra
+  local row = { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, gap = 4, align = "end",
+    M.text { text = spec.value, font_size = size, font_weight = 400, color = spec.color or M.ink("hi"),
+      height = math.ceil(size * 1.15) },
+  }
+  if spec.unit then
+    row[#row + 1] = M.label { text = spec.unit, size = math.max(10, math.floor(size * 0.4)),
+      color = spec.unit_color or M.ink("lo") }
+  end
+  return ui.Row(row)
+end
+
+--- Material prints no decorative codes.
+function M.code() return "" end
+
+--- No decorations either: the call is accepted and the box it asked for
+--- is kept, empty.
+function M.decor(_, spec)
+  if type(spec) ~= "table" then return nil end
+  local w = spec.width or spec.length
+  local h = spec.height or (spec.vertical and spec.length) or spec.size
+  if w == nil and h == nil and spec.anchors == nil then return nil end
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h }
+end
+
+--- A caption row: a primary dot, the caption, a note at the right.
+--- `width`, `text`, `note`, `color`. 14 high.
+function M.caption(spec)
+  local w = spec.width
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, width = w, height = 14,
+    ui.Rect { y = 3, width = 8, height = 8, radius = 4, color = spec.color or M.signal("accent") },
+    M.label { x = 14, y = -2, height = 18, text = spec.text, size = theme.size.small - 1,
+      color = M.ink("hi"), width = w - 140, elide = "right" },
+    spec.note and M.label { anchors = { right = true }, y = -2, height = 18, text = spec.note,
+      width = 124, horizontal_alignment = "right" } or nil,
+  }
+end
+
+--- Label / value lines on alternating tonal pills. `rows` ({ label,
+--- value }), `width`, `row_h` (17), `label_w` (half).
+function M.facts(rows, width, row_h, label_w)
+  row_h = row_h or 17
+  label_w = label_w or math.floor(width * 0.5)
+  local fs = math.min(theme.size.small - 1, math.floor(row_h * 0.72))
+  local ty = math.floor((row_h - fs * 1.3) / 2)
+  local node = { width = width, height = #rows * row_h }
+  for k, r in ipairs(rows) do
+    local y = (k - 1) * row_h
+    if k % 2 == 1 then
+      node[#node + 1] = ui.Rect { y = y, width = width, height = row_h, radius = row_h / 2,
+        color = function() return theme.color.surfaceContainerHighest:alpha(0.55) end }
+    end
+    node[#node + 1] = M.text { x = 8, y = y + ty, text = (tostring(get(r[1]) or ""):gsub(":$", "")),
+      font_size = fs, color = M.ink("lo"), width = label_w - 8, elide = "right" }
+    node[#node + 1] = M.text { x = label_w, y = y + ty, text = r[2], font_size = fs, font_weight = 500,
+      color = M.ink("hi"), width = width - label_w - 8, elide = "left", horizontal_alignment = "right" }
+  end
+  return ui.Item(node)
+end
+
+-- ------------------------------------------------------------ containers --
+
+--- The strip a panel wears, read as Material: the card's title in title
+--- medium, and -- only when a status is given -- a small dot in the
+--- status colour with the word beside it in the variant ink, flush right.
+--- No pill, no strip. `width`, `title`, `status`, `color`. 22 high.
+function M.header(spec)
+  local w = spec.width
+  local color = spec.color or M.signal("accent")
+  local has_status = spec.status ~= nil and spec.status ~= false
+  local node = { id = spec.id, x = spec.x, y = spec.y, width = w, height = 22,
+    M.text { x = 2, y = 0, height = 22, vertical_alignment = "center", text = spec.title or "",
+      font_size = theme.size.normal, font_weight = 500, color = M.ink("hi"),
+      width = has_status and w - 92 or w - 4, elide = "right" },
+  }
+  if has_status then
+    local fs = theme.size.small - 2
+    node[#node + 1] = ui.Row { anchors = { right = true, vertical_center = true, right_margin = 2 },
+      gap = 6, align = "center",
+      ui.Rect { width = 6, height = 6, radius = 3, color = color,
+        behavior = { color = { duration = theme.duration.small } } },
+      M.text { text = function() return sentence(get(spec.status)) end, font_size = fs, font_weight = 500,
+        color = M.ink("lo") },
+    }
+  end
+  return ui.Item(node)
+end
+
+--- A region: a rounded surfaceContainer box, with the header strip or a
+--- title. `width`, `height`, `title`, `header`, `status`, `color`,
+--- `radius` (20), children.
+function M.panel(spec)
+  local w, h = spec.width, spec.height
+  local node = { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
+    clip = spec.clip, visible = spec.visible,
+    ui.Rect { anchors = { fill = true }, radius = spec.radius or 20,
+      color = function() return theme.color.surfaceContainer end },
+  }
+  local wn = get(w)
+  if spec.header and type(wn) == "number" then
+    node[#node + 1] = M.header { x = 14, y = 10, width = wn - 28, title = spec.title, status = spec.status,
+      color = spec.color }
+  elseif spec.title then
+    node[#node + 1] = M.text { x = 16, y = 12, text = spec.title, font_size = theme.size.normal,
+      font_weight = 500, color = spec.color or M.ink("hi") }
+  end
+  for _, child in ipairs(spec) do node[#node + 1] = child end
+  return ui.Item(node)
+end
+
+--- A small tag: an M3 assist chip, rounded, tonal or `filled`. `text`,
+--- `color`, `width` (fits the text). 13 high.
+function M.chip(spec)
+  local color = spec.color or M.signal("accent")
+  local function word() return sentence(get(spec.text)) end
+  local w = spec.width
+  if w == nil then
+    if type(spec.text) == "function" then w = function() return 12 + math.ceil(#word() * 5.2) end
+    else w = 12 + math.ceil(#word() * 5.2) end
+  end
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = 13,
+    ui.Rect { anchors = { fill = true }, radius = 6.5,
+      color = function() return spec.filled and get(color) or get(color):alpha(0.18) end },
+    M.text { anchors = { center_in = true }, text = word, font_size = 9, font_weight = 600,
+      color = spec.filled and function() return theme.color.surface end or color },
+  }
+end
+
+-- -------------------------------------------------------------- controls --
+
+--- No scroll-tracked effects to scope: the build runs as is.
+function M.with_viewport(_, build) return build() end
+
+--- The side panels' tabbed body (themes/layouts/tabbed.lua).
+function M.tabbed(spec) return require("themes.layouts.tabbed").new(spec) end
+
+--- Material tabs: an icon over each label, the chosen one in the primary
+--- colour over an indicator that stretches from tab to tab (M.elastic) and
+--- melts into the hairline under the row while it travels; a rounded wash
+--- under a hovered tab. `id`, `tabs` ({ key, name, icon | icon_build }),
+--- `tab` (a signal), `width` (a number or a binding), `height`, `pad`, and
+--- the two explicit options of themes/KIT.md:
+---
+--- * `ids`: `"name"` names each tab `<id>-tab-<name:lower()>`; `"key"`
+---   (the default) `<id>-tab-<key>`.
+--- * `growing`: `true` lays the tabs in a row that follows a drawer easing
+---   between sizes (they share it evenly, with the larger labels); `false`
+---   (the default) places them in fixed slots across `width`.
+function M.tabs(spec)
+  local C = theme.color
+  local tabs, tab = spec.tabs, spec.tab
+  local PAD, H = spec.pad or 11, spec.height or 64
+  local growing = spec.growing == true
+  local by_name = spec.ids == "name"
+  local function width() return get(spec.width) end
+  local function slot() return (width() - 2 * PAD) / #tabs end
+  local labels, buttons = {}, {}
+  for i, t in ipairs(tabs) do
+    local function on() return tab:get() == i end
+    local name = spec.id .. "-tab-" .. (by_name and t.name:lower() or t.key)
+    labels[i] = M.text {
+      text = t.name, font_size = growing and theme.size.normal + 1 or theme.size.small,
+      color = function() return on() and C.primary or C.onSurface end,
+      behavior = { color = { duration = theme.duration.small } },
+    }
+    local button
+    local props = {
+      id = name, cursor = "pointer",
+      on_clicked = function() tab:set(i) end,
+      ui.Column {
+        anchors = { horizontal_center = true }, y = growing and 8 or 6, gap = growing and 4 or 3, align = "center",
+        -- Every icon in the same box, so the labels share one baseline
+        -- whatever an icon_build draws.
+        M.centred(26, 28, t.icon_build and t.icon_build(on, name .. "-icon")
+          or M.icon(t.icon, 22, function() return on() and C.primary or C.onSurface end,
+            { id = name .. "-icon", fill = on })),
+        labels[i],
+      },
+    }
+    if growing then
+      props.width, props.height, props.layout = 10, H - 4, { grow = 1 }
+    else
+      props.y, props.height = 4, H - 8
+      props.x = function() return PAD + (i - 1) * slot() end
+      props.width = slot
+    end
+    button = ui.MouseArea(props)
+    ui.reparent(ui.Rect {
+      anchors = { fill = true, top_margin = growing and 6 or 2, bottom_margin = growing and 1 or 2 },
+      radius = 10, z = -1,
+      color = function() return button.hovered and C.onSurface:alpha(0.06) or C.onSurface:alpha(0) end,
+      behavior = { color = { duration = theme.duration.small } },
+    }, button)
+    buttons[i] = button
+  end
+  local function span(i)
+    local l = labels[i]
+    local w = (l and l.layout_width or (growing and 80 or 60)) + 4
+    local s = slot()
+    local x = (i - 1) * s + (s - w) / 2
+    if not growing then x = x + PAD end
+    return x, x + w
+  end
+  local indicator = ui.Item { id = spec.id .. "-tab-indicator", y = H - 4, height = 3, x = 0, width = 0 }
+  local moving = morf.signal("caelestia." .. spec.id .. ".indicator.moving", false)
+  local still
+  local shown, moved = tab:get(), false
+  morf.effect("caelestia." .. spec.id .. ".indicator", function()
+    local now = tab:get()
+    local l1, r1 = span(now)
+    if now == shown then
+      if not moved then indicator.x, indicator.width = l1, r1 - l1 end
+      return
+    end
+    local l0, r0 = span(shown)
+    shown, moved = now, true
+    M.elastic(indicator, "x", l0, r0, l1, r1, { duration = 520 })
+    moving:set(true)
+    if still then still:cancel() end
+    still = morf.timer(560, function() still = nil moving:set(false) end, false)
+  end)
+  local line = { shape = "box", operation = "union", y = 7, height = 1,
+    fill_color = function() return C.outlineVariant end }
+  local field = { id = spec.id .. "-tab-field", y = H - 8, height = 8,
+    blend = function() return theme.motion.liquid_cards ~= false and moving:get() and 4 or 0 end,
+    behavior = { blend = { duration = 200 } } }
+  if growing then
+    field.anchors = { left = true, right = true }
+    line.anchors = { left = true, right = true }
+  else
+    field.x, field.width = 0, width
+    line.x, line.width = PAD, function() return width() - 2 * PAD end
+  end
+  field[1] = ui.SdfShape(line)
+  field[2] = ui.SdfShape { id = spec.id .. "-tab-indicator-shape", shape = "box", operation = "smooth_union",
+    top_left_radius = 1.5, top_right_radius = 1.5, track = indicator, fill_color = function() return C.primary end }
+  if growing then
+    return ui.Item {
+      anchors = { left = true, right = true, left_margin = PAD, right_margin = PAD }, height = H,
+      ui.Flex { anchors = { fill = true, bottom_margin = 4 }, direction = "row", padding = 0, table.unpack(buttons) },
+      ui.Sdf(field), indicator,
+    }
+  end
+  return ui.Item { anchors = { fill = true },
+    ui.Item { anchors = { fill = true }, table.unpack(buttons) }, indicator, ui.Sdf(field) }
+end
+
+-- -------------------------------------------------------------- readings --
+
+--- A path whose outline morphs to the next one whenever `build()` gives
+--- another (the same commands, other numbers): the two ends take turns, as
+--- lib/m3shapes' Shape does, on the expressive spatial curve.
+local function morphing(props, build, ms)
+  local current = build()
+  props.d, props.morph_to, props.morph_progress = current, current, 0
+  props.behavior = props.behavior or {}
+  props.behavior.morph_progress = spatial(ms or 520)
+  local node = ui.Path(props)
+  local at_end = false
+  morf.effect("caelestia.material.morph", function()
+    local d = build()
+    if d == current then return end
+    current = d
+    if at_end then node.d, node.morph_progress = d, 0
+    else node.morph_to, node.morph_progress = d, 1 end
+    at_end = not at_end
+  end, { owner = node })
+  return node
+end
+
+--- An arc whose radius swings in `waves` even waves of `amp`: M3
+--- expressive's wavy progress. The waves are uniform, so a trim of it
+--- lands where a trim of the plain arc would.
+local function wavy_arc(cx, cy, r, from, sweep, amp, waves)
+  local n = math.max(48, math.ceil(sweep / 1.5))
+  local d = {}
+  for i = 0, n do
+    local a = math.rad(from + sweep * i / n)
+    local rr = r + amp * math.sin(2 * math.pi * waves * i / n)
+    d[#d + 1] = ("%s%.2f %.2f"):format(i == 0 and "M" or "L", cx + rr * math.sin(a), cy - rr * math.cos(a))
+  end
+  return table.concat(d, " ")
+end
+
+--- A large gauge: a thick round-capped arc (wavy unless `wavy = false`),
+--- a gap, the tonal track and its stop dot, round a tonal disc with the
+--- reading. `size`, `value` (0..1), `color`, `text` (the percentage when
+--- nil), `label`, `sweep` (300), `thickness`, `track`, `disc` (false for
+--- none), `text_size`.
+function M.ring(spec)
+  local s = spec.size
+  local sweep = spec.sweep or 300
+  local from = sweep >= 360 and 0 or -sweep / 2
+  local wavy = spec.wavy ~= false and s >= 64
+  local thick = spec.thickness or (wavy and math.max(6, math.floor(s / 17)) or math.max(6, math.floor(s / 11)))
+  local amp = wavy and thick * 0.42 or 0
+  local r = s / 2 - thick / 2 - amp - 1
+  local color = spec.color or M.signal("accent")
+  local track = spec.track or function() return get(color):alpha(0.22) end
+  local function v() return common.clamp01(get(spec.value)) end
+  local length = 2 * math.pi * r * sweep / 360
+  local gap = (thick + 5) / length
+  local flat = M.arc_path(s / 2, s / 2, r, from, sweep)
+  local active = flat
+  if wavy then active = wavy_arc(s / 2, s / 2, r, from, sweep, amp, math.max(6, math.floor(length / (thick * 3.4)))) end
+  local node = { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = s, height = s }
+  if spec.disc ~= false then
+    local ri = r - thick / 2 - math.max(5, s * 0.06)
+    node[#node + 1] = ui.Rect { x = s / 2 - ri, y = s / 2 - ri, width = 2 * ri, height = 2 * ri, radius = ri,
+      color = function() return theme.color.surfaceContainerHigh end }
+  end
+  node[#node + 1] = ui.Path { anchors = { fill = true }, view_box = { 0, 0, s, s }, d = flat,
+    fill_color = "transparent", stroke_width = thick, stroke_cap = "round", stroke_color = track,
+    trim_start = function() local x = v() return x <= 0 and 0 or math.min(1, x + gap) end,
+    trim_end = function() return (sweep >= 360 and v() > 0) and math.max(0, 1 - gap) or 1 end,
+    behavior = { trim_start = settle(), trim_end = settle() } }
+  node[#node + 1] = ui.Path { anchors = { fill = true }, view_box = { 0, 0, s, s }, d = active,
+    fill_color = "transparent", stroke_width = thick, stroke_cap = "round", stroke_join = "round",
+    stroke_color = color, opacity = function() return v() > 0.002 and 1 or 0 end,
+    trim_end = function() return math.max(0.001, v()) end, behavior = { trim_end = settle() } }
+  if sweep < 360 then
+    local a = math.rad(from + sweep)
+    local dot = math.max(3, thick * 0.45)
+    node[#node + 1] = ui.Rect { x = s / 2 + r * math.sin(a) - dot / 2, y = s / 2 - r * math.cos(a) - dot / 2,
+      width = dot, height = dot, radius = dot / 2, color = color }
+  end
+  local text = spec.text or function() return ("%d%%"):format(math.floor(v() * 100 + 0.5)) end
+  node[#node + 1] = ui.Column { anchors = { center_in = true }, gap = 0, align = "center",
+    M.text { text = text, font_size = spec.text_size or math.floor(s * 0.2), font_weight = 500,
+      color = M.ink("hi"), horizontal_alignment = "center" },
+    spec.label and M.label { text = spec.label, horizontal_alignment = "center" } or nil,
+  }
+  for _, child in ipairs(spec) do node[#node + 1] = child end
+  return ui.Item(node)
+end
+
+--- A small circular gauge with its caption under it. `size`, `value`,
+--- `text`, `label`, `color`. `size` wide, `size` + 14 high.
+function M.mini_ring(spec)
+  local s = spec.size
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = s, height = s + 14,
+    M.ring { size = s, value = spec.value, color = spec.color, text = spec.text, sweep = 360, wavy = false,
+      disc = false, thickness = math.max(4, math.floor(s / 12)), text_size = spec.text_size or math.floor(s * 0.22) },
+    M.label { anchors = { horizontal_center = true }, y = s, height = 14, text = spec.label,
+      horizontal_alignment = "center" },
+  }
+end
+
+--- A level: a rounded pill track, the value in `color`, a gap, the tonal
+--- rest and its stop dot. `width`, `height` (8), `value`, `color`,
+--- `track`. (`count` is accepted; Material does not segment.)
+function M.meter(spec)
+  local color = spec.color or M.signal("accent")
+  return M.bar { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = spec.width,
+    stroke = spec.height or 8, color = color,
+    value = function() return get(spec.value) end,
+    track = spec.track or function() return get(color):alpha(0.22) end }
+end
+
+--- An emphasised fill: a tonal pill as tall as the box, filled with a
+--- rounded bar. `width`, `height` (14), `value`, `color`.
+function M.fill(spec)
+  local w, h = spec.width, spec.height or 14
+  local color = spec.color or M.signal("accent")
+  local function v() return common.clamp01(get(spec.value)) end
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
+    ui.Rect { anchors = { fill = true }, radius = h / 2, color = function() return get(color):alpha(0.18) end },
+    ui.Rect { height = h, radius = h / 2, color = color,
+      width = function() return v() <= 0 and 0 or math.max(h, v() * w) end, behavior = { width = settle() } },
+  }
+end
+
+--- A vertical channel: a rounded column filled from the foot, a gap, the
+--- tonal rest above. `width` (10), `height`, `value`, `color`.
+function M.vmeter(spec)
+  local w, h = spec.width or 10, spec.height
+  local color = spec.color or M.signal("accent")
+  local GAP = 3
+  local function lit()
+    local v = common.clamp01(get(spec.value))
+    return v <= 0 and 0 or math.max(w, v * h)
+  end
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
+    ui.Rect { width = w, radius = w / 2, color = function() return get(color):alpha(0.22) end,
+      height = function() local l = lit() return math.max(0, h - l - (l > 0 and GAP or 0)) end,
+      behavior = { height = settle() } },
+    ui.Rect { width = w, radius = w / 2, color = color,
+      y = function() return h - lit() end, height = lit, behavior = { y = settle(), height = settle() } },
+  }
+end
+
+-- A smooth curve through `pts` (Catmull-Rom as cubic Béziers), its
+-- controls kept inside [lo, hi] vertically so it never swings past the box.
+local function smooth(pts, lo, hi, closed)
+  local n = #pts
+  if n == 0 then return "" end
+  local function at(i)
+    if closed then return pts[(i - 1) % n + 1] end
+    return pts[math.max(1, math.min(n, i))]
+  end
+  local function cy(y) return math.max(lo, math.min(hi, y)) end
+  local d = { ("M%.2f %.2f"):format(pts[1][1], pts[1][2]) }
+  local last = closed and n or n - 1
+  for i = 1, last do
+    local p0, p1, p2, p3 = at(i - 1), at(i), at(i + 1), at(i + 2)
+    d[#d + 1] = ("C%.2f %.2f %.2f %.2f %.2f %.2f"):format(
+      p1[1] + (p2[1] - p0[1]) / 6, cy(p1[2] + (p2[2] - p0[2]) / 6),
+      p2[1] - (p3[1] - p1[1]) / 6, cy(p2[2] - (p3[2] - p1[2]) / 6), p2[1], p2[2])
+  end
+  if closed then d[#d + 1] = "Z" end
+  return table.concat(d, " ")
+end
+
+--- A history chart: a soft-cornered tonal plot, the first series as a
+--- smooth line over a fill that fades to nothing, the second a thinner
+--- tertiary line, and a dot riding the newest value. `width`, `height`,
+--- `samples`, `first` (fn -> list), `second`, `top` (n | fn; the peak when
+--- nil), `bottom`, `floor`, `color`, `emphasis`/`hatch` (a stronger fill),
+--- `caption`, `scale` (fn(top) -> string), `id`. Returns the node and
+--- `top`. (`columns` is accepted; Material draws no grid columns.)
+function M.chart(spec)
+  local w, h = spec.width, spec.height
+  local color = spec.color or M.signal("accent")
+  local PAD = 4
+  local function bottom() return get(spec.bottom) or 0 end
+  local function top()
+    if type(spec.top) == "function" then return math.max(bottom() + 1e-9, spec.top()) end
+    if spec.top then return spec.top end
+    local peak = bottom()
+    for _, v in ipairs(spec.first()) do if v > peak then peak = v end end
+    if spec.second then for _, v in ipairs(spec.second()) do if v > peak then peak = v end end end
+    return math.max(peak * 1.15, bottom() + (spec.floor or 1))
+  end
+  local function ys(v, b, t) return h - PAD - (h - 2 * PAD) * common.clamp01((v - b) / math.max(1e-9, t - b)) end
+  local function points(values)
+    local b, t = bottom(), top()
+    local n = #values
+    local count = math.max(2, spec.samples or n)
+    local step = w / (count - 1)
+    local pts = {}
+    for i = math.max(1, n - count + 1), n do
+      pts[#pts + 1] = { w - (n - i) * step, ys(values[i], b, t) }
+    end
+    return pts
+  end
+  local function line(values)
+    local pts = points(values)
+    if #pts < 2 then return ("M0 %g H%g"):format(h - PAD, w) end
+    return smooth(pts, PAD, h - PAD)
+  end
+  local function area(values)
+    local pts = points(values)
+    if #pts < 2 then return ("M0 %g H%g V%g H0 Z"):format(h - PAD, w, h) end
+    return smooth(pts, PAD, h - PAD) .. (" L%.2f %g L%.2f %g Z"):format(pts[#pts][1], h, pts[1][1], h)
+  end
+  local strong = spec.emphasis or spec.hatch
+  local grid = {}
+  for k = 1, 3 do grid[#grid + 1] = ("M0 %g H%g "):format(math.floor(h * k / 4) + 0.5, w) end
+  local box = { id = spec.id, width = w, height = h,
+    ui.Rect { anchors = { fill = true }, radius = 14, color = function() return theme.color.surfaceContainerHigh end },
+    ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h }, d = table.concat(grid),
+      fill_color = "transparent", stroke_color = function() return theme.color.outlineVariant:alpha(0.35) end,
+      stroke_width = 1 },
+    ui.Rect { anchors = { fill = true },
+      gradient = function()
+        local c = get(color)
+        return { angle = 180, stops = { { c:alpha(strong and 0.5 or 0.34), 0 }, { c:alpha(0), 1 } } }
+      end,
+      mask = ui.Path { width = w, height = h, view_box = { 0, 0, w, h },
+        d = function() return area(spec.first()) end, fill_color = "#ffffff" } },
+  }
+  if spec.second then
+    box[#box + 1] = ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h },
+      d = function() return line(spec.second()) end, fill_color = "transparent",
+      stroke_color = M.signal("extra"), stroke_width = 2, stroke_cap = "round", stroke_join = "round" }
+  end
+  box[#box + 1] = ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h },
+    d = function() return line(spec.first()) end, fill_color = "transparent",
+    stroke_color = color, stroke_width = 2.5, stroke_cap = "round", stroke_join = "round" }
+  -- The newest value: a dot on a halo of the plot's tone, springing to it.
+  local function head()
+    local values = spec.first()
+    return ys(values[#values] or bottom(), bottom(), top())
+  end
+  box[#box + 1] = ui.Rect { x = w - 11, width = 10, height = 10, radius = 5, color = color,
+    border_width = 2, border_color = function() return theme.color.surfaceContainerHigh end,
+    y = function() return head() - 5 end, behavior = { y = M.spring(300, 30) } }
+  if not spec.caption then
+    box.x, box.y, box.anchors = spec.x, spec.y, spec.anchors
+    return ui.Item(box), top
+  end
+  local node = ui.Item(box)
+  return ui.Column { x = spec.x, y = spec.y, anchors = spec.anchors, gap = 6,
+    M.caption { width = w, text = spec.caption, color = color,
+      note = spec.scale and function() return spec.scale(top()) end or nil },
+    node,
+  }, top
+end
+
+--- Bars, one per value, with rounded tops (capsules when `mirror`), all in
+--- one path. `width`, `height`, `values` (fn -> list of 0..1), `color`,
+--- `gap` (2).
+function M.spectrum(spec)
+  local w, h = spec.width, spec.height
+  local gap = spec.gap or 2
+  local function bars()
+    local values = get(spec.values) or {}
+    local n = #values
+    if n == 0 then return "M0 0" end
+    local bw = math.max(1, (w - gap * (n - 1)) / n)
+    local out = {}
+    for k, v in ipairs(values) do
+      local x = (k - 1) * (bw + gap)
+      local bh = math.max(math.min(bw, 4), common.clamp01(v) * h)
+      local r = math.min(bw / 2, bh / 2, 8)
+      if spec.mirror then
+        local y = (h - bh) / 2
+        out[#out + 1] = ("M%.1f %.1f A%.1f %.1f 0 0 1 %.1f %.1f H%.1f A%.1f %.1f 0 0 1 %.1f %.1f V%.1f A%.1f %.1f 0 0 1 %.1f %.1f H%.1f A%.1f %.1f 0 0 1 %.1f %.1f Z ")
+          :format(x, y + r, r, r, x + r, y, x + bw - r, r, r, x + bw, y + r, y + bh - r, r, r, x + bw - r, y + bh,
+            x + r, r, r, x, y + bh - r)
+      else
+        local y = h - bh
+        out[#out + 1] = ("M%.1f %.1f V%.1f A%.1f %.1f 0 0 1 %.1f %.1f H%.1f A%.1f %.1f 0 0 1 %.1f %.1f V%.1f Z ")
+          :format(x, h, y + r, r, r, x + r, y, x + bw - r, r, r, x + bw, y + r, h)
+      end
+    end
+    return table.concat(out)
+  end
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
+    ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h }, d = bars,
+      fill_color = spec.color or M.signal("accent") },
+  }
+end
+
+--- A soft blob over a round tonal web: the values as a smooth closed
+--- curve that morphs to the next values. `size`, `values` (fn -> list of
+--- 0..1), `axes` (6), `color`.
+function M.radar(spec)
+  local s = spec.size
+  local c = s / 2
+  local axes = spec.axes or 6
+  local color = spec.color or M.signal("accent")
+  local R = c - 4
+  local function point(k, r)
+    local a = math.rad(360 * k / axes)
+    return { c + r * math.sin(a), c - r * math.cos(a) }
+  end
+  local function blob()
+    local values = get(spec.values) or {}
+    local pts = {}
+    for k = 0, axes - 1 do pts[#pts + 1] = point(k, R * math.max(0.08, common.clamp01(values[k + 1] or 0))) end
+    return smooth(pts, 0, s, true)
+  end
+  local function ring(r) return M.arc_path(c, c, r, 0, 360) end
+  local node = { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = s, height = s,
+    ui.Rect { x = c - R, y = c - R, width = 2 * R, height = 2 * R, radius = R,
+      color = function() return theme.color.surfaceContainerHigh end },
+    ui.Path { anchors = { fill = true }, view_box = { 0, 0, s, s }, d = ring(R * 2 / 3) .. " " .. ring(R / 3),
+      fill_color = "transparent", stroke_color = function() return theme.color.outlineVariant:alpha(0.6) end,
+      stroke_width = 1 },
+  }
+  for k = 0, axes - 1 do
+    local p = point(k, R)
+    node[#node + 1] = ui.Rect { x = p[1] - 2, y = p[2] - 2, width = 4, height = 4, radius = 2,
+      color = function() return theme.color.outline end }
+  end
+  node[#node + 1] = morphing({ anchors = { fill = true }, view_box = { 0, 0, s, s },
+    fill_color = function() return get(color):alpha(0.32) end, stroke_color = color, stroke_width = 2,
+    stroke_join = "round" }, blob)
+  return ui.Item(node)
+end
+
+--- Concentric rounded rings: an outline ring, the value as a thick round
+--- arc on its tonal track with a dot springing round to its head, a tonal
+--- disc and a small cookie at the centre. `size`, `value` (0..1), `color`.
+function M.dial(spec)
+  local s = spec.size
+  local c = s / 2
+  local color = spec.color or M.signal("accent")
+  local thick = math.max(4, math.floor(s / 16))
+  local r1 = c - thick / 2 - 6
+  local r2 = r1 - thick / 2 - 6
+  local function v() return common.clamp01(get(spec.value)) end
+  local full = M.arc_path(c, c, r1, 0, 360)
+  local dot = thick * 1.9
+  local core = math.floor(s * 0.24)
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = s, height = s,
+    ui.Rect { x = 1, y = 1, width = s - 2, height = s - 2, radius = c - 1, color = "transparent",
+      border_width = 1.5, border_color = function() return theme.color.outlineVariant end },
+    ui.Path { anchors = { fill = true }, view_box = { 0, 0, s, s }, d = full, fill_color = "transparent",
+      stroke_width = thick, stroke_color = function() return get(color):alpha(0.2) end },
+    ui.Path { anchors = { fill = true }, view_box = { 0, 0, s, s }, d = full, fill_color = "transparent",
+      stroke_width = thick, stroke_cap = "round", stroke_color = color,
+      opacity = function() return v() > 0.002 and 1 or 0 end,
+      trim_end = function() return math.max(0.001, v()) end, behavior = { trim_end = settle() } },
+    ui.Rect { x = c - r2, y = c - r2, width = 2 * r2, height = 2 * r2, radius = r2,
+      color = function() return theme.color.surfaceContainerHigh end },
+    M.shape { x = c - core / 2, y = c - core / 2, width = core, height = core, shape = "cookie9",
+      color = function() return get(color):alpha(0.45) end },
+    ui.Item { anchors = { fill = true }, rotation = function() return 360 * v() end,
+      behavior = { rotation = M.spring(200, 15) },
+      ui.Rect { x = c - dot / 2, y = c - r1 - dot / 2, width = dot, height = dot, radius = dot / 2, color = color,
+        border_width = 2, border_color = function() return theme.color.surfaceContainer end },
+    },
+  }
+end
+
+--- A rounded tonal tile with its number, tinted toward its level, and a
+--- pill level along its foot. `width`, `height`, `value` (0..100), `text`
+--- (fn; the value when nil), `label`.
+function M.cell(spec)
+  local w, h = spec.width, spec.height
+  local function v() return tonumber(get(spec.value)) or 0 end
+  local color = M.level(v)
+  local text = spec.text or function() return ("%d"):format(math.floor(v() + 0.5)) end
+  local fs = math.floor(math.min(h * 0.4, w * 0.3))
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, width = w, height = h,
+    ui.Rect { anchors = { fill = true }, radius = math.min(14, h / 3),
+      color = function() return theme.color.surfaceContainerHigh:mix(get(color), 0.1) end,
+      behavior = { color = { duration = theme.duration.normal } } },
+    spec.label and M.label { x = 8, y = 4, text = spec.label, size = 9 } or nil,
+    M.text { anchors = { horizontal_center = true }, y = math.floor((h - 8) / 2 - fs * 0.62), text = text,
+      font_size = fs, font_weight = 500, color = M.ink("hi") },
+    M.meter { x = 8, y = h - 9, width = w - 16, height = 4, color = color,
+      value = function() return v() / 100 end },
+  }
+end
+
+--- A readout card: a rounded tonal tile with a label, the value large and
+--- a pill level at its foot. `width`, `height` (58), `label`, `value` (fn
+--- -> string), `level` (fn -> 0..1; none when nil), `color`, `mark` ("solid"
+--- | "dashed": a dot in the colour the chart draws it in).
+function M.stat(spec)
+  local w, h = spec.width, spec.height or 58
+  local color = spec.color or M.signal("accent")
+  local node = { id = spec.id, x = spec.x, y = spec.y, width = w, height = h,
+    ui.Rect { anchors = { fill = true }, radius = 16, color = function() return theme.color.surfaceContainerHigh end },
+    M.label { x = 12, y = 7, text = spec.label, width = w - 40, elide = "right" },
+    M.text { x = 12, y = 22, text = spec.value, font_size = theme.size.large - 2, font_weight = 500,
+      color = M.ink("hi"), width = w - 24, elide = "right" },
+  }
+  if spec.mark then
+    node[#node + 1] = ui.Rect { x = w - 20, y = 11, width = 8, height = 8, radius = 4,
+      color = spec.mark == "dashed" and M.signal("extra") or color }
+  end
+  if spec.level then
+    node[#node + 1] = M.meter { x = 12, y = h - 11, width = w - 24, height = 4, value = spec.level, color = color }
+  end
+  return ui.Item(node)
+end
+
+--- Now / Avg / Peak of a series as three tonal tiles. `width`, `series`
+--- (fn -> list), `top` (fn -> the full-scale value), `format` (fn(value)
+--- -> string), `color`, `font_size`. 74 high.
+function M.triplet(spec)
+  local w = spec.width
+  local cw = math.floor((w - 16) / 3)
+  local function pick(i) return function() return (select(i, common.summary(get(spec.series)))) end end
+  local items = { { "Now", pick(1) }, { "Average", pick(2) }, { "Peak", pick(3) } }
+  local node = { id = spec.id, x = spec.x, y = spec.y, width = w, height = 74 }
+  for i, item in ipairs(items) do
+    local value = item[2]
+    local function frac() return common.clamp01(value() / math.max(1e-9, get(spec.top) or 1)) end
+    node[#node + 1] = ui.Item { x = (i - 1) * (cw + 8), width = cw, height = 74,
+      ui.Rect { anchors = { fill = true }, radius = 16, color = function() return theme.color.surfaceContainerHigh end },
+      M.label { x = 12, y = 8, text = item[1] },
+      M.text { x = 12, y = 24, text = function() return spec.format(value()) end,
+        font_size = spec.font_size or 19, font_weight = 500, color = M.ink("hi"), width = cw - 24, elide = "right" },
+      M.meter { x = 12, y = 60, width = cw - 24, height = 4, value = frac,
+        color = spec.color or M.level(function() return frac() * 100 end) },
+    }
+  end
+  return ui.Item(node)
+end
+
+-- ---------------------------------------------------------------- status --
+
+-- Each kind an M3 expressive shape and a glyph; a change morphs the shape
+-- into the next one while it turns once on the spatial curve.
+local EMBLEM = {
+  ok = { shape = "cookie9", icon = "check" },
+  warn = { shape = "triangle", icon = "priority_high", lift = 0.07 },
+  alert = { shape = "soft_burst", icon = "priority_high" },
+  info = { shape = "cookie4", icon = "info_i" },
+}
+
+--- A status mark: `kind` (alert, warn, ok, info; may be a binding),
+--- `size` (48), `color` (the kind's signal).
+function M.emblem(spec)
+  local s = spec.size or 48
+  local function kind() local k = get(spec.kind) return EMBLEM[k] and k or "info" end
+  local color = spec.color or function() return M.signal(kind())() end
+  local turns, last = 0, kind()
+  local function turn()
+    local k = kind()
+    if k ~= last then last, turns = k, turns + 1 end
+    return turns * 360
+  end
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = s, height = s,
+    ui.Item { anchors = { fill = true }, rotation = turn, behavior = { rotation = spatial(650) },
+      M.shape { anchors = { fill = true }, shape = function() return EMBLEM[kind()].shape end, color = color,
+        behavior = { morph_progress = spatial(450), fill_color = { duration = theme.duration.small } } },
+    },
+    M.icon(function() return EMBLEM[kind()].icon end, math.floor(s * 0.5), function() return theme.color.surface end,
+      { anchors = { horizontal_center = true, vertical_center = true },
+        y = function() return s * (EMBLEM[kind()].lift or 0) end, fill = true }),
+  }
+end
+
+-- The status banner both status_line and status draw: a tonal pill the
+-- kind's colour, the emblem at its start, the word and its subtitle, and a
+-- solid pill of the colour trailing at its end.
+local function banner(spec, default)
+  local w, s = spec.width, spec.size or default
+  local function kind() return get(spec.kind) or "info" end
+  local color = spec.color or function() return M.signal(kind())() end
+  local trail = math.min(64, math.floor(w * 0.14))
+  local tw = w - s - trail - 28
+  local fs = math.floor(s * 0.38)
+  local block = fs * 1.3 + (spec.subtitle and 14 or 0)
+  local ty = math.floor((s - block) / 2)
+  local ph = math.max(6, math.floor(s * 0.26))
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, width = w, height = s,
+    ui.Rect { anchors = { fill = true }, radius = s / 2,
+      color = function() return get(color):alpha(0.14) end, behavior = { color = { duration = theme.duration.normal } } },
+    M.emblem { x = 4, y = 4, size = s - 8, kind = kind, color = color },
+    M.text { x = s + 6, y = ty, text = spec.title, font_size = fs, font_weight = 500, color = M.ink("hi"),
+      width = tw, elide = "right" },
+    spec.subtitle and M.label { x = s + 6, y = ty + fs * 1.3 - 1, height = 14, text = spec.subtitle,
+      color = color, width = tw, elide = "right" } or nil,
+    ui.Rect { x = w - trail - s * 0.3, y = (s - ph) / 2, width = trail, height = ph, radius = ph / 2, color = color },
+  }
+end
+
+--- Mark + word + trailing emphasis: `kind`, `title`, `subtitle`, `width`,
+--- `size` (46).
+function M.status_line(spec) return banner(spec, 46) end
+
+--- The live status strip: `width`, `kind` (fn), `title` (fn), `subtitle`
+--- (fn), `size` (40).
+function M.status(spec) return banner(spec, 40) end
+
+-- ------------------------------------------------- requested additions --
+-- (themes/KIT.md, "Requested additions")
+
+--- A radius in Material's own measure: Material is the measure.
+function M.round(r) return r end
+
+--- The highlight under a list's chosen row: one rounded box in a distance
+--- field, riding `track` (an item the layout springs from row to row), so
+--- it stretches towards the next row and settles round there. `track`,
+--- `color` (a tonal wash of the ink), `radius` (12), `stretch` (false to
+--- leave the track's own motion alone), `id`, `anchors`, `z`.
+local SELECT_STRETCH = { stiffness = 300, damping = 15, scale = 0.1, max = 0.22 }
+function M.selection(spec)
+  local track = spec.track
+  if track and spec.stretch ~= false then
+    local ok, current = pcall(function() return track.stretch end)
+    if ok and not current then track.stretch = spec.stretch or SELECT_STRETCH end
+  end
+  return ui.Sdf { id = spec.id, x = spec.x, y = spec.y, width = spec.width, height = spec.height,
+    anchors = spec.anchors or (spec.width == nil and { fill = true } or nil), z = spec.z or -1,
+    ui.SdfShape { shape = "box", radius = spec.radius or 12, track = track,
+      fill_color = spec.color or function() return theme.color.onSurface:alpha(0.12) end },
+  }
+end
+
+-- The container and its ink for a state surface's tone.
+local TONES = {
+  primary = { "primary", "onPrimary" },
+  secondary = { "secondaryContainer", "onSecondaryContainer" },
+  tertiary = { "tertiaryContainer", "onTertiaryContainer" },
+  error = { "errorContainer", "onErrorContainer" },
+}
+
+--- The background of a stateful control, M3 expressive: a pill while off,
+--- a rounded square once on, tighter still while pressed -- the shape
+--- springs between them with a touch of overshoot -- and the tone's
+--- container while on, the highest surface while off, each with its state
+--- layer (hover 8 %, press 12 %). `area` (the MouseArea it backs: given as
+--- a node it is put behind its children; or a function returning it),
+--- `on` (fn), `height` (for the radii; the area's), `tone` ("primary",
+--- "secondary", "tertiary", "error"), `pressed` (fn, more presses that
+--- count, e.g. a nested button), `radius_on` (h * 0.28), `id`.
+function M.state_surface(spec)
+  local on = spec.on or function() return false end
+  local tone = TONES[spec.tone or "primary"] or TONES.primary
+  local function area() return get(spec.area) end
+  local is_node = spec.area ~= nil and type(spec.area) ~= "function"
+  local h = spec.height or (is_node and tonumber(spec.area.height)) or 56
+  local r_off, r_on = h / 2, spec.radius_on or math.max(8, math.floor(h * 0.28))
+  local r_press = math.max(6, math.floor(r_on * 0.55))
+  local function pressed()
+    local a = area()
+    return (a and a.pressed) or (spec.pressed and spec.pressed()) or false
+  end
+  local node = ui.Rect {
+    id = spec.id, z = -1, anchors = spec.anchors or { fill = true },
+    radius = function()
+      if pressed() then return r_press end
+      return on() and r_on or r_off
+    end,
+    color = function()
+      local c = theme.color
+      local base, ink = c.surfaceContainerHighest, c.onSurface
+      if on() then base, ink = c[tone[1]], c[tone[2]] end
+      local a = area()
+      if pressed() then return base:mix(ink, 0.12) end
+      if a and a.hovered then return base:mix(ink, 0.08) end
+      return base
+    end,
+    behavior = {
+      radius = ui.spring { stiffness = 420, damping = 17 },
+      color = { duration = theme.duration.small, easing = theme.ease.standard },
+    },
+  }
+  if is_node then ui.reparent(node, spec.area) end
+  return node
+end
+
+local function glyphs(s)
+  local ok, n = pcall(utf8.len, s)
+  return ok and n or #s
+end
+
+--- A key hint cap: a tonal rounded key with its legend. `text`, `height`
+--- (22), `width` (fits the legend), `id`, `x`, `y`, `anchors`.
+function M.keycap(spec)
+  local h = spec.height or 22
+  local function legend() return tostring(get(spec.text) or "") end
+  local function fit() return math.max(h + 4, glyphs(legend()) * 8 + 14) end
+  local w = spec.width or (type(spec.text) == "function" and fit or fit())
+  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
+    ui.Rect { anchors = { fill = true }, radius = math.floor(h * 0.36),
+      color = function() return theme.color.surfaceContainerHighest end },
+    M.text { anchors = { center_in = true }, text = legend, font_size = theme.size.small - 1, font_weight = 600,
+      color = M.ink("lo") },
+  }
+end
+
+--- The well a text input sits in: an M3 filled text field -- a tonal fill
+--- with rounded top corners and an active indicator along the foot, which
+--- thickens from the middle out and takes the primary colour on focus, or
+--- the error colour while `error()`. `width`, `height` (48), `focused` (fn),
+--- `error` (fn), `id`, `x`, `y`, `anchors`, `visible`, children (laid over
+--- the fill, under the indicator).
+function M.field(spec)
+  local w, h = spec.width, spec.height or 48
+  local focused = spec.focused or function() return false end
+  local err = spec.error or function() return false end
+  local r = math.min(12, math.floor(h / 4))
+  local grow = M.spring(460, 30)
+  local node = { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
+    visible = spec.visible,
+    ui.Rect { anchors = { fill = true }, top_left_radius = r, top_right_radius = r,
+      color = function()
+        local c = theme.color
+        if err() then return c.surfaceContainerHighest:mix(c.error, 0.06) end
+        return c.surfaceContainerHighest
+      end,
+      behavior = { color = { duration = theme.duration.small } } },
+  }
+  for _, child in ipairs(spec) do node[#node + 1] = child end
+  node[#node + 1] = ui.Rect { anchors = { left = true, right = true, bottom = true }, height = 1,
+    color = function()
+      local c = theme.color
+      return err() and c.error or c.onSurfaceVariant:alpha(0.75)
+    end,
+    behavior = { color = { duration = theme.duration.small } } }
+  node[#node + 1] = ui.Rect { anchors = { bottom = true }, height = 2,
+    x = function() return focused() and 0 or get(w) / 2 end,
+    width = function() return focused() and get(w) or 0 end,
+    color = function() return err() and theme.color.error or theme.color.primary end,
+    behavior = { x = grow, width = grow, color = { duration = theme.duration.small } } }
+  return ui.Item(node)
+end
+
+--- A small M3 icon toggle (a mute): a tonal round button that, while
+--- `on()`, takes the error container and squares up -- the shape springs
+--- between round and rounded square, tighter while pressed -- its icon
+--- filling in. `id`, `width` (36), `height` (30), `icon_on`, `icon_off`,
+--- `on` (fn), `on_clicked`, `size` (20), `x`, `y`, `anchors`.
+function M.icon_button(spec)
+  local on = spec.on or function() return false end
+  local W, H = spec.width or 36, spec.height or 30
+  local function ink()
+    local c = theme.color
+    return on() and c.onErrorContainer or c.onSurfaceVariant
+  end
+  local area = ui.MouseArea { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, visible = spec.visible,
+    width = W, height = H, cursor = "pointer", on_clicked = spec.on_clicked,
+    M.icon(function() return on() and spec.icon_on or spec.icon_off end, spec.size or 20, ink,
+      { anchors = { center_in = true }, fill = on }),
+  }
+  local h = math.min(W, H)
+  ui.reparent(ui.Rect { anchors = { fill = true }, z = -1,
+    radius = function()
+      if area.pressed then return h * 0.2 end
+      return on() and h * 0.3 or h / 2
+    end,
+    color = function()
+      local c = theme.color
+      local base = on() and c.errorContainer or c.surfaceContainerHighest
+      if area.pressed then return base:mix(ink(), 0.12) end
+      if area.hovered then return base:mix(ink(), 0.08) end
+      return base
+    end,
+    behavior = { radius = ui.spring { stiffness = 480, damping = 18 }, color = { duration = theme.duration.small } },
+  }, area)
+  return area
+end
+
+--- The shell's on-screen keyboard in Material's colours: keys on the
+--- highest surface, the function keys (shift, backspace, ?123) in the
+--- secondary container, the accent key primary, a press in the primary
+--- container; the keys keep lib.osk's rounding (about a quarter of their
+--- height) unless the look names one.
+function M.keyboard_look(look)
+  look = look or {}
+  look.panel = function() return theme.color.surfaceContainer:alpha(0) end
+  look.key = function() return theme.color.surfaceContainerHighest end
+  look.key_dim = function() return theme.color.secondaryContainer end
+  look.accent = function() return theme.color.primary end
+  look.on_accent = function() return theme.color.onPrimary end
+  look.text = function() return theme.color.onSurface end
+  look.dim = function() return theme.color.onSurfaceVariant end
+  look.press = function() return theme.color.primaryContainer end
+  if look.radius == 0 then look.radius = nil end
+  return look
+end
+
+
+--- The ink on a `state_surface` ground: Material fills the tone, so the
+--- tone's on-colour while on.
+function M.state_ink(spec)
+  return function()
+    local C = theme.color
+    if spec.on and spec.on() == true then
+      return spec.tone == "secondary" and C.onSecondaryContainer or C.onPrimary
+    end
+    return spec.idle or C.onSurface
+  end
+end
+
+--- A state word in the theme's voice: Material says it plainly.
+function M.term(_, plain) return plain end
 
 return M
 end
