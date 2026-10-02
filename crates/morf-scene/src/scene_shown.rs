@@ -18,7 +18,27 @@ impl Scene {
     /// node and its ancestors shown (for its own opacity or visibility,
     /// its ancestors).
     pub fn change_is_shown(&self, node: NodeHandle, property: &str) -> bool {
-        self.change_shows(node.0, property, &mut HashMap::new())
+        let mut current = if property == "opacity" || property == "visible" {
+            match self.parent(node) {
+                Ok(Some(parent)) => parent,
+                _ => return true,
+            }
+        } else {
+            node
+        };
+        // A single property write needs no cache: each ancestor is visited
+        // once. The shared cache below is useful only across an entire tick.
+        loop {
+            let own = self.bool_value(current, "visible").unwrap_or(true)
+                && self.number(current, "opacity").unwrap_or(1.0) > 0.0;
+            if !own {
+                return false;
+            }
+            match self.parent(current) {
+                Ok(Some(parent)) => current = parent,
+                _ => return true,
+            }
+        }
     }
 
     /// Whether a change to `property` of `node` shows. A node's own opacity

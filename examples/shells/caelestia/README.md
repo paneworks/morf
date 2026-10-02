@@ -62,6 +62,12 @@ Previews resize on an image worker only while the Lule page is visible.
 They overwrite one small scratch JPEG per output and clear on closing;
 opening the shell does not decode an entire wallpaper collection.
 
+Quick settings groups Keep Awake, Ring Mode and Do Not Disturb under **Focus**.
+Opening Focus leaves all three settings independent. **Tunnel** includes Tor's
+Start/Stop control, bootstrap progress and SOCKS proxy address alongside VPNs;
+its overview status includes Tor when running. The old `settings tor` IPC
+shortcut opens Tunnel.
+
 PrintScreen, the **Screenshot / Record** button in quick settings, or
 `morf ipc call capture open` opens the compact bottom capture panel. Choose
 region, window or screen, an optional delay, then Screenshot or Record.
@@ -274,3 +280,28 @@ The Cage greeter uses one login window on Cage's main display. `make apply`
 sets `cage -m last`, so secondary outputs are disabled during login. The view
 uses its configured fullscreen window size and never follows the pointer or
 rebuilds in response to monitor metadata. Locking remains independent.
+
+## Sound and nested settings
+
+Sound opens **Equalizer**, which opens a deeper **Audiogram** editor. Back
+returns to the parent page. Other settings can use the same hierarchy:
+add a descriptor with `key`, `name`, and `parent` to `settings_model.DETAILS`
+and a builder in `utilities.lua`. Breadcrumbs and presentation scopes follow
+the registry. `morf ipc call settings sound/equalizer` opens the EQ directly.
+
+The EQ provides eight tone bands, Auto/Headphones/Speakers modes, separate
+per-mode strength, channel separation and output trim. Audiogram compensation
+starts disabled with zero thresholds; enter existing measured dB HL values in
+the editor and save them to use it. The prescription is inspired by
+[omarchy-audiogram-eq](https://github.com/Fail-Safe/omarchy-audiogram-eq).
+Native Rust computes gains, filter responses and estimated headroom, including
+overlapping bands. Automatic attenuation is not a limiter.
+
+PipeWire and WirePlumber 0.5+ are required for processing. One primary runtime
+owns a standalone filter-chain client, managed by WirePlumber's smart-filter
+policy. It follows the default output without changing that default or restarting
+audio services. Controls update in one debounced batch. Disabling removes the
+filter; hidden panels keep processing while enabled and do not poll. Internal
+filter nodes are excluded from Sound's device and app controls. Configuration
+is kept in two bounded files under Morf's state directory:
+`caelestia-equalizer.json` and `equalizer-runtime.conf`, both overwritten.

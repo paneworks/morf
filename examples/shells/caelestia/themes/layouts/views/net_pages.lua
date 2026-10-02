@@ -108,6 +108,16 @@ function M.build(model,w,h)
       nodes[#nodes+1]=card
     end
     nodes[#nodes+1]=note(w,model.note)
+    if kind=="tunnel" then
+      nodes[#nodes+1]=kit.heading {id="vpn-tunnel-tor-title",scope="settings.tunnel",level="section",
+        text="Tor",font_size=theme.size.small,viewport=function() return viewport end,
+        visible=function() return model.tor:len()>0 end}
+      nodes[#nodes+1]=ui.Repeater {as="column",gap=10,width=w,model=model.tor,
+        delegate=function(row) return entry(model,w,row) end}
+      local tor_note=note(w,"Tor runs a SOCKS proxy for apps configured to use it. Starting it does not route all system traffic through Tor.")
+      tor_note.visible=function() return model.tor:len()>0 end
+      nodes[#nodes+1]=tor_note
+    end
   end
   viewport=ui.Flickable {id=(kind=="mesh" or kind=="tunnel") and "vpn-"..kind.."-scroll" or kind.."-scroll",
     width=w,height=h,clip=true,ui.Column(nodes)}

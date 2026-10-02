@@ -53,11 +53,19 @@ end
 -- History
 
 local rings = {}
+-- The pushes a sample makes while it is recorded, for the screens that read
+-- the sample rather than take it (a shared source's `mirrored`).
+local recording
+
 local function ring(name)
   local found = rings[name]
   if not found then
     found = poll.ring(sysinfo.history_size)
     rings[name] = found
+  end
+  if recording then
+    local log = recording
+    return { push = function(value) log[#log + 1] = { name, value } found.push(value) end }
   end
   return found
 end
@@ -1079,13 +1087,30 @@ local SAMPLERS = {
 local sources = {}
 local watch_backlights -- below: the backlights' own change notices
 
+-- Sampled once for every screen, with the history each sample adds replayed
+-- on the others: the machine is the same machine whichever screen asks.
+-- Not the backlight: its value carries a setter, which cannot cross.
+local SHARED = { cpu = true, memory = true, drives = true, fans = true, gpu = true, network = true,
+  battery = true, temperatures = true, system = true, disks = true }
+
 for name, entry in pairs(SAMPLERS) do
   local sample = entry[1]
   sources[name] = poll.source {
     name = "sysinfo." .. name,
     interval = entry[2],
     initial = EMPTY[name],
-    sample = function(done) done(sample()) end,
+    shared = SHARED[name],
+    sample = function(done)
+      recording = {}
+      local ok, value = pcall(sample)
+      local pushes = recording
+      recording = nil
+      if not ok then error(value, 0) end
+      done(value, nil, pushes)
+    end,
+    mirrored = function(_, pushes)
+      for _, push in ipairs(pushes or {}) do ring(push[1]).push(push[2]) end
+    end,
   }
 end
 sources.processes = poll.source {

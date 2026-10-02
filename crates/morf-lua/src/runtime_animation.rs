@@ -139,6 +139,17 @@ impl Runtime {
 
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
         let fading = self.advance_theme_fades(delta);
+        {
+            let mut state = self.reactive.borrow_mut();
+            if state
+                .scene
+                .has_running_animation(morf_scene::Element::Timer, "interval")
+            {
+                // Check before the tick removes a completed animation: the
+                // final interval also has to reach the native timer.
+                state.service_definitions_revision = state.scene_revision.wrapping_sub(1);
+            }
+        }
         let mut frame = self
             .reactive
             .borrow_mut()

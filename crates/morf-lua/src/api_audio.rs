@@ -647,6 +647,7 @@ pub(crate) fn install_audio_api<'gc>(
     metatable.set_field(ctx, "__index", index);
     audio.set_metatable(ctx, Some(metatable));
     crate::api_audio_spectrum::install(ctx, audio);
+    crate::api_audio_equalizer::install(ctx, audio);
     morf.set_field(ctx, "audio", audio);
 }
 

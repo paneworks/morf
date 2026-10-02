@@ -333,16 +333,18 @@ end
 --- channels, the outputs to choose from, and the apps in what is left.
 local function output_page()
   local OUT_H, DEV_H = 250, 150
-  local apps_h = function() return math.max(120, h() - OUT_H - DEV_H - 2 * GAP) end
+  local apps_h = function() return math.max(160, h() - OUT_H - DEV_H - 60 - 3 * GAP) end
   return ui.Item {
     id = "sound-page",
     width = w, height = h, clip = true,
-    ui.Column {
+    ui.Flickable {id="sound-scroll",width=w,height=h,clip=true,ui.Column {
       gap = GAP,
       output_card(OUT_H),
+      kit.pill {id="sound-equalizer",width=w,height=60,label="Equalizer  ›",
+        on_clicked=model.open_equalizer},
       devices_card(function() return DEV_H end),
       apps_card(apps_h),
-    },
+    }},
   }
 end
 

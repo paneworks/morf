@@ -2,6 +2,7 @@
 
 mod api_animation;
 mod api_audio;
+mod api_audio_equalizer;
 mod api_audio_spectrum;
 mod api_broadcast;
 mod api_clipboard;
@@ -97,6 +98,7 @@ mod runtime_toplevels;
 mod runtime_views;
 mod runtime_wake;
 mod scene_bindings;
+mod shared;
 mod serialization;
 mod state;
 mod state_pending;

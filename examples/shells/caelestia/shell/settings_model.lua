@@ -241,10 +241,11 @@ M.TOGGLES = {
   {
     -- Tunnel VPNs: out to the internet through elsewhere (Mullvad, Proton).
     id = "tunnel", icon = "vpn_lock", name = "Tunnel", detail = "tunnel",
-    on = function() return #M.vpn_names("tunnel") > 0 end,
+    on = function() return #M.vpn_names("tunnel") > 0 or services.tor ~= nil and services.tor.on() end,
     set = function() M.detail:set("tunnel") end,
     status = function()
       local names = M.vpn_names("tunnel")
+      if services.tor and services.tor.on() then names[#names+1]="Tor" end
       return #names == 0 and "Off" or table.concat(names, ", ")
     end,
   },
@@ -385,12 +386,34 @@ M.TOGGLES = {
 --- The detail page on show over the settings ("" for none): a tile's
 --- ">" opens one, the back arrow shuts it.
 M.detail = require("themes.session").keep("caelestia.settings.detail", "")
+if M.detail:get()=="tor" then M.detail:set("tunnel") end
 
--- Tiles for what this machine has: mobile data only with a modem.
+-- Focus is one entry point; each setting remains independent inside it.
+-- Retain the raw controls for the detail page, before overview read caching.
+M.CONTROLS={}
 do
   local kept = {}
   for _, t in ipairs(M.TOGGLES) do
-    if not t.present or t.present() then kept[#kept + 1] = t end
+    M.CONTROLS[t.id]=t
+    if t.id=="awake" then
+      kept[#kept+1]={id="focus",name="Focus",detail="focus",
+        icon=function()
+          if notifs.dnd:get() then return "notifications_off" end
+          if M.awake:get() then return "coffee" end
+          return "tune"
+        end,
+        on=function() return M.awake:get() or notifs.dnd:get() or M.CONTROLS.ringer.on() end,
+        set=function() M.detail:set("focus") end,
+        status=function()
+          local names={}
+          if M.awake:get() then names[#names+1]="Awake" end
+          if M.CONTROLS.ringer.on() then names[#names+1]=M.CONTROLS.ringer.status() end
+          if notifs.dnd:get() then names[#names+1]="DND" end
+          return #names>0 and table.concat(names," · ") or "Sound · Normal sleep"
+        end}
+    elseif t.id~="ringer" and t.id~="dnd" and t.id~="tor" and (not t.present or t.present()) then
+      kept[#kept + 1] = t
+    end
   end
   M.TOGGLES = kept
 end
@@ -401,26 +424,27 @@ M.DETAILS = {
   {key="network",name="Network"}, {key="bluetooth",name="Bluetooth"},
   {key="sound",name="Sound"}, {key="microphone",name="Microphone"},
   {key="power",name="Power"}, {key="bar",name="Bar"}, {key="wired",name="Wired"},
-  {key="mesh",name="Mesh"}, {key="tunnel",name="Tunnel"}, {key="tor",name="Tor"},
+  {key="mesh",name="Mesh"}, {key="tunnel",name="Tunnel"}, {key="focus",name="Focus"},
+  {key="sound/equalizer",name="Equalizer",parent="sound"},
+  {key="sound/equalizer/audiogram",name="Audiogram",parent="sound/equalizer"},
 }
+M.navigation=require("lib.settings_pages").new(M.DETAILS,M.detail,{tor="tunnel"})
+M.back=M.navigation.back
+M.breadcrumb=M.navigation.breadcrumb
 function M.overview() return M.opened:get() and M.displayed:get()=="" end
 function M.present(key) if key==M.detail:get() then M.displayed:set(key) end end
 function M.request(key)
-  if key=="" then M.detail:set(key) return true end
-  for _, detail in ipairs(M.DETAILS) do
-    if detail.key==key then M.detail:set(key) return true end
-  end
-  return false
+  return M.navigation.request(key)
 end
 function M.capture()
   require("sidebar").drawer.set(false)
   require("capture").drawer.set(true)
 end
 -- Retain the last displayed values while hidden, without refreshing sources.
-local function reading(fn, initial)
+local function reading(fn, initial, active)
   local cached=initial
   return function()
-    if M.overview() then cached=fn() end
+    if (active or M.overview)() then cached=fn() end
     return cached
   end
 end
@@ -428,6 +452,15 @@ for _, toggle in ipairs(M.TOGGLES) do
   toggle.on=reading(toggle.on,false)
   if toggle.status then toggle.status=reading(toggle.status,nil) end
   if type(toggle.icon)=="function" then toggle.icon=reading(toggle.icon,"") end
+end
+M.focus={}
+local function focus_active() return M.opened:get() and M.displayed:get()=="focus" end
+for _,id in ipairs {"awake","ringer","dnd"} do
+  local control=M.CONTROLS[id]
+  M.focus[#M.focus+1]={id=id,name=control.name,set=control.set,
+    icon=type(control.icon)=="function" and reading(control.icon,"",focus_active) or control.icon,
+    on=reading(control.on,false,focus_active),
+    status=control.status and reading(control.status,id=="ringer" and "Sound" or "Off",focus_active) or nil}
 end
 M.levels={}
 for _, kind in ipairs {"volume","brightness"} do

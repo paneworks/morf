@@ -161,6 +161,7 @@ pub(crate) fn evaluate_effect(
                 )
                 .map_err(|error| error.to_string())?;
             state.values.insert(signal, value);
+            state.shared.note_write(signal);
             state.flush_writes.push(signal);
         }
     }

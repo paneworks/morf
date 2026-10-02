@@ -99,6 +99,14 @@ local next_source = 0
 ---   linger         -- samples nobody read before the timer stops (default 2)
 ---   initial        -- the value before the first sample
 ---   name           -- for the revision signal, which a log may name
+---   shared         -- sample once for every screen (needs `name`): the
+---                     primary copy of the shell samples and the others
+---                     read its samples (`morf.shared`); a read on any
+---                     screen keeps the primary sampling
+---   mirrored(value, extra) -- on the other screens, with each sample that
+---                     comes in; `extra` is what the sampler passed as the
+---                     third argument of `done` (work it did on the side,
+---                     such as history to replay)
 function poll.source(spec)
   next_source = next_source + 1
   local self = setmetatable({
@@ -118,14 +126,81 @@ function poll.source(spec)
     _busy = false,
     _pinned = false,
   }, Source)
+  if spec.shared and morf.shared then self:_share(spec) end
   return self
+end
+
+-- Whether this copy is the one that samples a shared source.
+local function sampling(self)
+  return not self._shared or morf.primary()
+end
+
+function Source:_share(spec)
+  assert(spec.name, "a shared poll source needs a name")
+  local key = "poll." .. spec.name
+  self._shared = morf.shared(key, { n = 0 })
+  self._wanted = morf.shared(key .. ".wanted", 0)
+  self._mirrored = spec.mirrored
+  local applied = self._shared:get().n
+  local wanted = self._wanted:get()
+  -- Samples another copy took.
+  morf.effect(key .. ".mirror", function()
+    if not self._shared then return end
+    local sample = self._shared:get()
+    if morf.primary() or sample.n == applied then return end
+    applied = sample.n
+    self.value, self.error, self.updated = sample.value, sample.error, sample.updated
+    self.samples = self.samples + 1
+    self._count = self._count + 1
+    if self._mirrored and sample.error == nil then pcall(self._mirrored, sample.value, sample.extra) end
+    self._revision:set(self._count)
+  end)
+  -- Another screen reads it: keep sampling as if read here.
+  morf.effect(key .. ".wanted", function()
+    local at = self._wanted:get()
+    if at == wanted then return end
+    wanted = at
+    if morf.primary() then
+      self._idle = 0
+      self._reads = self._reads + 1
+      if not self._running then morf.timer(1, function() self:_start() end, false) end
+    end
+  end)
+  morf.on_primary(function(primary)
+    if primary and self._pinned then self:_start()
+    elseif not primary then self:_halt() end
+  end)
+end
+
+-- Hands a sample to the other screens. A value that cannot cross (a
+-- function inside it) stops the sharing, not the sampling: each screen then
+-- samples for itself again.
+function Source:_tell(sample)
+  local ok, message = pcall(function() self._shared:set(sample) end)
+  if not ok then
+    morf.log.warn("poll source cannot be shared: " .. tostring(message))
+    self._shared = nil
+  end
+end
+
+-- On a screen that does not sample: says so to the one that does, at most
+-- once an interval, from a timer (a read inside a binding must not write).
+function Source:_want()
+  local now = morf.time.now_ms()
+  if self._asked and now - self._asked < self.interval then return end
+  self._asked = now
+  morf.timer(1, function() self._wanted:set(now) end, false)
 end
 
 --- The value, read so that a binding follows it. Starts polling.
 function Source:get()
   self._revision:get()
   self._reads = self._reads + 1
-  if not self._running then self:_start() end
+  if not sampling(self) then
+    self:_want()
+  elseif not self._running then
+    self:_start()
+  end
   return self.value
 end
 
@@ -137,7 +212,7 @@ end
 
 --- Replaces the value from outside the timer: a setter that knows the new
 --- state (a brightness it just wrote) need not wait for the next sample.
-function Source:publish(value)
+function Source:publish(value, extra)
   self.value = value
   self.error = nil
   self.updated = morf.time.now()
@@ -146,6 +221,9 @@ function Source:publish(value)
   self._published = true
   self._reads = 0
   self._revision:set(self._count)
+  if self._shared then
+    self:_tell { n = self._count, value = value, updated = self.updated, extra = extra }
+  end
 end
 
 function Source:_fail(message)
@@ -154,20 +232,23 @@ function Source:_fail(message)
   self._published = true
   self._reads = 0
   self._revision:set(self._count)
+  if self._shared then
+    self:_tell { n = self._count, value = self.value, updated = self.updated, error = message }
+  end
 end
 
 function Source:_take()
   if self._busy then return end
   self._busy = true
   local settled = false
-  local ok, message = pcall(self._sample, function(value, err)
+  local ok, message = pcall(self._sample, function(value, err, extra)
     if settled then return end
     settled = true
     self._busy = false
     if value == nil and err ~= nil then
       self:_fail(err)
     else
-      self:publish(value)
+      self:publish(value, extra)
     end
   end)
   if not ok then
@@ -188,7 +269,7 @@ function Source:_tick()
 end
 
 function Source:_start()
-  if self._running then return end
+  if self._running or not sampling(self) then return end
   self._running = true
   self._idle = 0
   self._published = false

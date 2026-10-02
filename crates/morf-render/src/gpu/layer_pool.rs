@@ -37,6 +37,35 @@ use super::targets::{intersect_damage, union_damage as union};
 /// Unused pooled textures are dropped after this many frames without a use.
 const IDLE_FRAMES: u32 = 120;
 
+// Animated blur/shadow targets need exact sizes, so every frame can leave a
+// different large texture behind. Age alone allowed hundreds of MiB per
+// output to accumulate, and an idle shell might never draw 120 more frames.
+// Bound spare storage independently of the live frame's required targets.
+const SPARE_PIXELS: u64 = 8 * 1024 * 1024; // 32 MiB of RGBA8 per renderer.
+
+/// Oldest unused targets to release to bring spare storage under its budget.
+pub(crate) fn spare_evictions(mut unused: Vec<(usize, u64, u32)>, budget: u64) -> Vec<usize> {
+    let mut pixels: u64 = unused.iter().map(|(_, pixels, _)| *pixels).sum();
+    if pixels <= budget {
+        return Vec::new();
+    }
+    // Reuse the freshest targets first; among equally old targets, releasing
+    // the largest gets under budget with the fewest cache misses.
+    unused.sort_unstable_by_key(|(index, pixels, idle)| {
+        (std::cmp::Reverse(*idle), std::cmp::Reverse(*pixels), *index)
+    });
+    let mut evicted = Vec::new();
+    for (index, size, _) in unused {
+        if pixels <= budget {
+            break;
+        }
+        pixels -= size;
+        evicted.push(index);
+    }
+    evicted.sort_unstable();
+    evicted
+}
+
 /// Pooled textures are allocated in steps of this many pixels, so a layer that
 /// grows by a pixel a frame does not allocate a texture a frame.
 const SIZE_STEP: u32 = 64;
@@ -372,6 +401,24 @@ impl LayerPool {
             }
         }
         self.entries.retain(|entry| entry.idle <= IDLE_FRAMES);
+        let unused = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| {
+                (!entry.taken).then(|| {
+                    (
+                        index,
+                        u64::from(entry.texture.width()) * u64::from(entry.texture.height()),
+                        entry.idle,
+                    )
+                })
+            })
+            .collect();
+        let evicted = spare_evictions(unused, SPARE_PIXELS);
+        for index in evicted.into_iter().rev() {
+            self.entries.swap_remove(index);
+        }
     }
 
     pub(crate) fn clear(&mut self) {

@@ -14,6 +14,7 @@ return {
     bar_page = "themes.layouts.views.bar_page",
     connectivity = "themes.layouts.views.connectivity",
     sound_page = "themes.layouts.views.sound_page",
+    equalizer_page = "themes.layouts.views.equalizer_page",
     utilities = "themes.layouts.views.utilities",
     bottom = "themes.layouts.views.bottom",
     assistant = "themes.layouts.views.assistant",

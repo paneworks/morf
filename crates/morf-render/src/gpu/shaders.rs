@@ -97,6 +97,7 @@ impl WgpuBackend {
     pub fn forget_nodes(&mut self, nodes: &[NodeHandle]) {
         for node in nodes {
             self.text.remove(*node);
+            self.warmed_text.remove(node);
         }
     }
 }

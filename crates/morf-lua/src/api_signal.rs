@@ -56,6 +56,7 @@ pub(crate) fn install_signal_api<'gc>(
                     .write(signal.id, value.clone())
                     .map_err(|error| HostError(error.to_string()))?;
                 state.values.insert(signal.id, value);
+                state.shared.note_write(signal.id);
                 // Inside a handler the write is enough: the graph is flushed
                 // once, when the handler returns, however many writes it made.
                 if state.handler_depth > 0 {
@@ -263,6 +264,21 @@ pub(crate) fn install_signal_api<'gc>(
     });
     morf.set_field(ctx, "signal", signal);
     morf.set_field(ctx, "reloadable", reloadable);
+    let shared = Callback::from_fn(&ctx, {
+        let state = Rc::clone(&state);
+        let signal_metatable = signal_metatable.clone();
+        move |ctx, _, mut stack| {
+            let (name, initial): (String, LuaValue) = stack.consume(ctx)?;
+            let initial = IpcValue::from_lua_deep(ctx, initial).map_err(HostError)?;
+            let id = crate::shared::register(&mut state.borrow_mut(), name, initial)
+                .map_err(HostError)?;
+            let userdata = UserData::new_static(&ctx, SignalToken { id });
+            userdata.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
+            stack.replace(ctx, userdata);
+            Ok(CallbackReturn::Return)
+        }
+    });
+    morf.set_field(ctx, "shared", shared);
     morf.set_field(ctx, "persistent", persistent);
     morf.set_field(ctx, "scope", scope);
     let clock = UserData::new_static(

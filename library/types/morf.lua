@@ -161,6 +161,7 @@
 ---@field default_sink fun(...): any
 ---@field default_source fun(...): any
 ---@field device fun(...): any
+---@field equalizer_curve fun(...): any
 ---@field monitor fun(...): any
 ---@field move_stream fun(...): any
 ---@field on_changed fun(...): any
@@ -243,6 +244,7 @@
 ---@field retainable fun(...): any
 ---@field scope fun(...): any
 ---@field screens Morf.Core.Screens
+---@field shared fun(name: string, initial: any): any
 ---@field session_paths fun(...): any
 ---@field shell_dir fun(...): any
 ---@field shell_id fun(...): any

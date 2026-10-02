@@ -21,15 +21,17 @@ local HOST=[[
     revision:get() reads=reads+1
     return ({available=true,powered=data.bluetooth,devices=list({})})[key]
   end})
+  local tor_phase=morf.signal("settings.test.tor","off")
   package.loaded.services={
     net={state=netstate,set_wifi=function(on) record("wifi",on) data.wifi=on update() end,
       set_wwan=function(on) record("wwan",on) end,
       connect_device=function(port) record("connect",port) end,disconnect=function(port) record("disconnect",port) end},
     bt={state=btstate,set_powered=function(on) record("bluetooth",on) data.bluetooth=on update() end},
     upower={state={available=true,display={present=true,charging=false,percentage=73}}},
-    tor={on=function() return false end,phase=morf.signal("settings.test.tor","off"),socks=9050,
-      set=function(on) record("tor",on) end},
-    ringer={state=setmetatable({},{__index=function() return read("ring") end}),next=function() record("ringer",true) end},
+    tor={on=function() return tor_phase:get()=="on" end,phase=tor_phase,progress=morf.signal("settings.test.tor.progress",""),socks=9050,
+      set=function(on) record("tor",on) tor_phase:set(on and "on" or "off") end},
+    ringer={state=setmetatable({},{__index=function() return read("ring") end}),next=function()
+      record("ringer",true) data.ring=data.ring=="sound" and "silent" or "sound" update() end},
   }
   package.loaded["lib.vpns"]={links=function() revision:get() reads=reads+1 return {} end,is_mesh_link=function() return false end}
   package.loaded["lib.ringer"]={icon=function() return "volume_up" end}
@@ -47,7 +49,9 @@ local HOST=[[
   config.set("utilities.commands.mic_off",{"preview-command","~/microphone","$HOME","$DATE"})
   local model=require("utilities")
   local kit=require("kit")
+  local page_content=model.page_content
   model.page_content=function(key,w,h)
+    if key=="focus" then return page_content(key,w,h) end
     return ui.Item {id="fixture-detail-"..key,width=w,height=h,
       kit.heading {id="fixture-title-"..key,text=key,width=w,scope="settings."..key},
       kit.pill {id="fixture-detail-action-"..key,width=120,label="Test action",
@@ -79,6 +83,8 @@ local HOST=[[
   end
   morf.ipc.clear_calls=function() calls={} end
   morf.ipc.action=function(key,on)
+    local control=model.CONTROLS and model.CONTROLS[key]
+    if control then control.set(on) return end
     for _,t in ipairs(model.TOGGLES) do if t.id==key then t.set(on) return end end
   end
   morf.ipc.color=function(accent) require("theme").follow(accent) end
@@ -108,11 +114,13 @@ for _,style in ipairs {"material","tsugumori"} do
     test.truthy(test.find{text="Preview university",visible=true})
     test.click("utilities-toggle-bluetooth") test.advance(100)
     test.eq(called("bluetooth"),true)
+    test.click("utilities-toggle-focus") test.advance(2500)
     test.click("utilities-toggle-awake") test.advance(100)
     test.eq(called("inhibit"),true)
     test.truthy(test.ipc("state").awake)
     test.click("utilities-toggle-dnd") test.advance(100)
     test.truthy(test.ipc("state").dnd)
+    test.click("settings-back") test.advance(2500)
     local slider=test.get("utilities-volume")
     test.click(slider.x+slider.width*.75,slider.y+slider.height/2) test.advance(100)
     test.near(test.ipc("state").volume,.75,.06)
@@ -174,6 +182,41 @@ for _,style in ipairs {"material","tsugumori"} do
     test.truthy(test.ipc("state").awake)
     test.eq(#test.logs("error"),0)
   end)
+  test.it(style.." Focus groups independent controls and redirects the old Tor shortcut",function()
+    load(style) open() test.ipc("clear_calls")
+    test.truthy(test.find{id="utilities-toggle-focus",visible=true})
+    for _,id in ipairs {"awake","ringer","dnd","tor"} do
+      test.falsy(test.find{id="utilities-toggle-"..id,visible=true})
+    end
+    test.click("utilities-toggle-focus") test.advance(2500)
+    test.eq(test.ipc("state").requested,"focus")
+    test.eq(test.ipc("state").calls,{})
+    test.click("utilities-toggle-ringer") test.advance(100)
+    test.eq(called("ringer"),true)
+    test.falsy(test.ipc("state").awake) test.falsy(test.ipc("state").dnd)
+    test.click("utilities-toggle-awake") test.click("utilities-toggle-dnd") test.advance(100)
+    test.truthy(test.ipc("state").awake) test.truthy(test.ipc("state").dnd)
+    test.click("settings-back") test.advance(2500)
+    test.truthy(test.find{text="Awake · Silent · DND",visible=true})
+    test.truthy(test.ipc("select","tor")) test.advance(2500)
+    test.eq(test.ipc("state").displayed,"tunnel")
+    test.ipc("open","no") test.advance(200)
+    local reads=test.ipc("state").reads
+    test.ipc("update") test.advance(100)
+    test.eq(test.ipc("state").reads,reads)
+    test.truthy(test.ipc("state").awake)
+    test.eq(#test.logs("error"),0)
+  end)
+  test.it(style.." Tunnel overview includes Tor without a separate tile",function()
+    load(style) open() test.ipc("clear_calls")
+    test.falsy(test.find{id="utilities-toggle-tor",visible=true})
+    test.ipc("action","tor",true) test.advance(100)
+    test.eq(called("tor"),true)
+    test.truthy(test.find{text="Tor",visible=true})
+    test.ipc("action","tor",false) test.advance(100)
+    test.falsy(test.find{text="Tor",visible=true})
+    test.eq(#test.logs("error"),0)
+  end)
 end
 test.it("Tsugumori Settings presents details under the cover and cancels interrupted transitions",function()
   load("tsugumori") open()
@@ -230,13 +273,14 @@ test.it("Tsugumori compact Settings reveals scrolled titles and reaches the last
   shot("settings-compact-top")
   local viewport=test.get("settings-overview-scroll")
   test.wheel(0,3000,{x=viewport.x+viewport.width-2,y=viewport.y+100}) test.advance(800)
-  local last=test.get("utilities-toggle-dnd")
+  local last=test.get("utilities-toggle-focus")
   test.truthy(last.y>=viewport.y and last.y+last.height<=viewport.y+viewport.height)
-  test.truthy(test.get("settings-tile-title-dnd-text").text~="DO NOT DISTURB")
   test.advance(1600)
-  test.eq(test.get("settings-tile-title-dnd-text").text,"DO NOT DISTURB")
+  test.eq(test.get("settings-tile-title-focus-text").text,"FOCUS")
+  test.click("utilities-toggle-focus") test.advance(2500)
   test.click("utilities-toggle-dnd") test.advance(100)
   test.truthy(test.ipc("state").dnd)
+  test.click("settings-back") test.advance(2500)
   shot("settings-compact-attention")
   test.ipc("color","#45aa86") test.advance(100)
   shot("settings-compact-palette")

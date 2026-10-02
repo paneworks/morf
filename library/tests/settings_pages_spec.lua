@@ -1,0 +1,17 @@
+local test=morf.test
+local pages=require("lib.settings_pages")
+test.it("Settings tree returns one level and derives its breadcrumb",function()
+  local selected=morf.signal("test.settings.path","")
+  local tree=pages.new({{key="sound",name="Sound"},{key="eq",name="Equalizer",parent="sound"},
+    {key="editor",name="Audiogram",parent="eq"}},selected,{old="sound"})
+  test.truthy(tree.request("editor")) test.eq(tree.breadcrumb(),"Settings / Sound / Equalizer")
+  tree.back() test.eq(selected:get(),"eq") tree.back() test.eq(selected:get(),"sound")
+  tree.back() test.eq(selected:get(),"") test.truthy(tree.request("old")) test.eq(selected:get(),"sound")
+  test.falsy(tree.request("missing")) test.eq(selected:get(),"sound")
+end)
+test.it("Settings tree rejects missing parents, duplicate keys and cycles",function()
+  local s=morf.signal("test.settings.validation","")
+  test.raises(function() pages.new({{key="a",parent="missing"}},s) end,"parent")
+  test.raises(function() pages.new({{key="a"},{key="a"}},s) end,"Duplicate")
+  test.raises(function() pages.new({{key="a",parent="b"},{key="b",parent="a"}},s) end,"cycle")
+end)

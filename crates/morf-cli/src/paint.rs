@@ -455,7 +455,7 @@ pub(crate) fn paint_layer(
     drop(scene);
     // After the render: what the images became is known once they were drawn.
     runtime.sync_images(&layout, renderer.backend_mut().image_cache());
-    runtime.observe_layout(&layout);
+    runtime.observe_layout_with(&layout, fresh);
     split.mark("observe layout");
     split.finish();
     Ok(CachedLayout {
@@ -642,7 +642,7 @@ pub(crate) fn paint_auxiliary_surface(
     // 1x screen but shown on a 2x one was drawn at 1x and stretched -- and on a
     // mixed-DPI desk that is most popups.
     let scale_120 = client.surface_scale_120(kind.role(surface.id));
-    let (layout, _) = layout_for(
+    let (layout, fresh) = layout_for(
         runtime,
         surface.layout.as_mut(),
         surface.root,
@@ -674,7 +674,7 @@ pub(crate) fn paint_auxiliary_surface(
     drop(scene);
     // After the render: what the images became is known once they were drawn.
     runtime.sync_images(&layout, renderer.backend_mut().image_cache());
-    runtime.observe_layout(&layout);
+    runtime.observe_layout_with(&layout, fresh);
     // A binding on the layout moved this tree as the frame was observed (see
     // `paint_layer_surface`): the frame callback repaints it, asked for here
     // when the render did not.

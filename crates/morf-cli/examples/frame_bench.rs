@@ -55,6 +55,11 @@ impl TextMeasurer for RuledText {
 
 /// The fastest of `batches` runs of `body`, per iteration.
 fn best(batches: u32, runs: u32, mut body: impl FnMut()) -> Duration {
+    let runs = std::env::var("FRAME_BENCH_RUNS")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .filter(|runs| *runs > 0)
+        .map_or(runs, |limit| runs.min(limit));
     let mut best = Duration::MAX;
     for _ in 0..batches {
         let start = Instant::now();
@@ -156,6 +161,45 @@ fn main() {
         runtime
             .tick_animations(Duration::from_millis(16))
             .expect("animations tick");
+    }
+
+    // Reproduce idle service/timer work without changing a running shell.
+    // Run on the wall clock: repeating timers are not driven by animation time.
+    if args.get(2).map(String::as_str) == Some("idle") {
+        let seconds = args.get(3).and_then(|v| v.parse::<u64>().ok()).unwrap_or(5);
+        morf_lua::profile::clear();
+        let started = Instant::now();
+        let mut polls = 0;
+        let mut repaints = 0;
+        let mut busy = Duration::ZERO;
+        while started.elapsed() < Duration::from_secs(seconds) {
+            let turn = Instant::now();
+            repaints += usize::from(runtime.poll_services());
+            runtime
+                .tick_animations(Duration::from_millis(16))
+                .expect("tick");
+            busy += turn.elapsed();
+            polls += 1;
+            std::thread::sleep(Duration::from_millis(16).saturating_sub(turn.elapsed()));
+        }
+        println!(
+            "{polls} polls, {repaints} repaint requests, {:.2} ms work, motion={} shaders={}",
+            busy.as_secs_f64() * 1000.0,
+            runtime.has_motion(),
+            runtime.shaders_animate()
+        );
+        println!(
+            "  {} nodes, {} property slots",
+            runtime.scene().node_count(),
+            runtime.scene().property_signal_count()
+        );
+        for line in runtime.motion_report(15) {
+            println!("  moving: {line}");
+        }
+        for line in morf_lua::profile::report(25) {
+            println!("  {line}");
+        }
+        return;
     }
 
     // `trace` follows the moving parts instead of timing them, so a
@@ -595,6 +639,7 @@ fn main() {
     println!("{config}");
     let nodes = all.len();
     println!("  scene nodes        {nodes}");
+    println!("  property slots     {}", scene.property_signal_count());
     if backdrops > 0 {
         println!(
             "  backdrop regions   {backdrops}  ({backdrop_rects} rectangles, {backdrop_cost:?} to rasterise)"

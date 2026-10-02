@@ -577,6 +577,15 @@ fn drive_surface(
             let removed = runtime.take_removed_nodes();
             if !removed.is_empty() {
                 renderer.backend_mut().forget_nodes(&removed);
+                for renderer in state
+                    .popup_surfaces
+                    .values_mut()
+                    .chain(state.floating_surfaces.values_mut())
+                    .chain(state.layer_surfaces.values_mut())
+                    .filter_map(|surface| surface.renderer.as_mut())
+                {
+                    renderer.backend_mut().forget_nodes(&removed);
+                }
             }
             apply_parent_transitions(runtime, &mut renderer, &client)?;
             let painting = Instant::now();
@@ -636,9 +645,20 @@ fn drive_surface(
         // during paint. Draw that new tree before answering its pointer
         // watchers, otherwise the first pointer position is consumed against
         // removed nodes and monitor ownership stays wrong until the next move.
+        //
+        // A paint held back for the frame callback cannot happen this turn,
+        // so the tree stays newer than the layout until the callback comes:
+        // turning again at once spun the loop for the whole wait (10-40 ms
+        // a frame on a busy GPU), thousands of turns a second while anything
+        // ticked. The paint is owed instead; the callback, or the stall
+        // deadline when none comes, makes it.
         if runtime.scene().layout_revision_of(state.primary_root) != state.layout.revision {
             containment_repaint = true;
-            follow_up = true;
+            if client.layer_frame_wait(PRIMARY_LAYER).is_some() {
+                state.primary_deferred = true;
+            } else {
+                follow_up = true;
+            }
             continue;
         }
         // After the paints, so a node built this turn is laid out by now.

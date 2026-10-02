@@ -21,6 +21,7 @@ mod motion;
 mod motion_values;
 mod path_style;
 mod playback;
+mod property_store;
 mod rich_text;
 mod scene;
 mod scene_access;

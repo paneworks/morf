@@ -88,6 +88,7 @@ mod text_fuzzy;
 mod text_input;
 mod text_style;
 mod themes;
+mod shared_values;
 mod timers;
 mod toplevels;
 mod views_states;

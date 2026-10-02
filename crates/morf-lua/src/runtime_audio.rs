@@ -23,8 +23,13 @@ impl Runtime {
 
     /// Takes in what the sound server reported: rows into the list models,
     /// the reactive signals moved, then `on_changed` handlers and meters run.
-    /// True when anything did.
+    /// True when visible scene content changed. Signals and callbacks still
+    /// advance when hidden, without making an idle output render again.
     pub(crate) fn poll_audio(&mut self) -> bool {
+        let (revision_before, hidden_before) = {
+            let state = self.reactive.borrow();
+            (state.scene_revision, state.hidden_revisions)
+        };
         let mut handlers: Vec<(luna::StashedClosure, Vec<SceneValue>)> = Vec::new();
         let mut moved = false;
         {
@@ -169,7 +174,6 @@ impl Runtime {
                 .borrow_mut()
                 .log(LogLevel::Warn, format!("audio: {message}"));
         }
-        let ran = !handlers.is_empty();
         for (callback, args) in handlers {
             if let Err(message) =
                 self.run_handler(|ctx, limits| execute_audio_handler(ctx, &callback, &args, limits))
@@ -179,6 +183,8 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("audio handler: {message}"));
             }
         }
-        moved || ran
+        let state = self.reactive.borrow();
+        state.scene_revision.wrapping_sub(revision_before)
+            > state.hidden_revisions.wrapping_sub(hidden_before)
     }
 }

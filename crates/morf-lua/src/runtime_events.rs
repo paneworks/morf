@@ -15,7 +15,11 @@ impl Runtime {
 
     /// Mutably borrows the scene for frame-pipeline structural operations.
     pub fn scene_mut(&mut self) -> RefMut<'_, Scene> {
-        RefMut::map(self.reactive.borrow_mut(), |state| &mut state.scene)
+        let mut state = self.reactive.borrow_mut();
+        // Native writes must invalidate the same service definitions as Lua
+        // writes (for example, a Timer started through the Scene API).
+        state.scene_revision = state.scene_revision.wrapping_add(1);
+        RefMut::map(state, |state| &mut state.scene)
     }
 
     /// Drains parent transitions queued by Lua handlers.

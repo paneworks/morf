@@ -28,6 +28,7 @@ impl Runtime {
         let terminals_changed = self.poll_terminals();
         let images_changed = self.poll_images();
         let palettes_changed = self.poll_palette_listeners();
+        let shared_changed = self.poll_shared();
         drop(devices);
         let mut ready = Vec::new();
         let mut timers = Vec::new();
@@ -62,11 +63,21 @@ impl Runtime {
                     index += 1;
                 }
             }
-            let timer_definitions = state
-                .timer_callbacks
-                .iter()
-                .map(|(node, callback)| (*node, callback.clone()))
-                .collect::<Vec<_>>();
+            // Scene-backed service definitions only need reconciling after
+            // a scene write. Native timers still fire and buses still drain
+            // below on every poll. Animated Timer intervals invalidate this
+            // checkpoint in tick_animations, including their final tick.
+            let definitions_changed = state.scene_revision != state.service_definitions_revision;
+            state.service_definitions_revision = state.scene_revision;
+            let timer_definitions = if definitions_changed {
+                state
+                    .timer_callbacks
+                    .iter()
+                    .map(|(node, callback)| (*node, callback.clone()))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
             let mut stale_timers = Vec::new();
             for (node, callback) in timer_definitions {
                 let Ok(running) = state.scene.bool_value(node, "running") else {
@@ -125,17 +136,21 @@ impl Runtime {
                 state.timers.retain(|timer| timer.node != Some(node));
                 state.timer_origins.remove(&node);
             }
-            let loader_definitions = state
-                .loader_factories
-                .iter()
-                .map(|(node, factory)| (*node, factory.clone()))
-                .collect::<Vec<_>>();
+            let loader_definitions = if definitions_changed || !state.preload_pending.is_empty() {
+                state
+                    .loader_factories
+                    .iter()
+                    .map(|(node, factory)| (*node, factory.clone()))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
             let mut stale_loaders = Vec::new();
             // Preloading is for when nothing is moving: one item built per
             // turn, and none while anything animates -- the frame a build
             // costs is exactly the frame a motion cannot spare. Something
             // that never stops (a spinner) holds a preload back only so long.
-            let still = !state.scene.has_motion();
+            let still = !loader_definitions.is_empty() && !state.scene.has_motion();
             let now = std::time::Instant::now();
             for (node, factory) in loader_definitions {
                 let Ok(active) = state.scene.bool_value(node, "active") else {
@@ -561,6 +576,7 @@ impl Runtime {
             || terminals_changed
             || images_changed
             || palettes_changed
+            || shared_changed
             || blinked
             || !transform_callbacks.is_empty();
         for (callback, unlock_on_success, result) in ready {

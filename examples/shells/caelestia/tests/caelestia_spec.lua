@@ -479,7 +479,7 @@ test.describe("caelestia", function()
     test.near(d.height, H - 20, 1)
     test.eq(d.width, 450)
     for _, id in ipairs { "utilities-sliders", "utilities-volume", "utilities-brightness", "utilities-toggles",
-      "utilities-toggle-battery", "utilities-toggle-awake" } do
+      "utilities-toggle-battery", "utilities-toggle-focus" } do
       test.truthy(test.find { id = id, visible = true }, id .. " not shown")
     end
     test.truthy(test.find { id = "utilities-more-wifi", visible = true }, "the Wi-Fi tile has no page")
@@ -523,10 +523,12 @@ test.describe("caelestia", function()
     test.ipc("utilities", "open")
     test.settle(1500)
     test.clear_logs()
-    -- Keep awake: a tile like the others, saying since when once on.
+    test.click {id="utilities-toggle-focus"} test.settle(1000)
+    -- Independent controls inside the Focus group.
     test.click { id = "utilities-toggle-awake" }
     test.settle(1000)
     test.truthy(test.find { text = "^Since ", visible = true } or test.find { id = "utilities-toggle-awake", visible = true })
+    test.click {id="settings-back"} test.settle(1000)
     test.click { id = "utilities-toggle-mic" }
     test.click { id = "utilities-toggle-airplane" }
     test.settle(500)
@@ -538,6 +540,7 @@ test.describe("caelestia", function()
     test.truthy(said:find("airplane mode on (dry run)", 1, true), "airplane mode did not log")
     no_action_commands()
     -- Do not disturb: a notification reaches the history, not a popup.
+    test.click {id="utilities-toggle-focus"} test.settle(1000)
     test.click { id = "utilities-toggle-dnd" }
     test.ipc("notify", "Quiet", "no popup for this")
     test.settle(1000)

@@ -1,4 +1,4 @@
-use morf_reactive::{Graph, SignalId};
+use morf_reactive::SignalId;
 use slotmap::{SlotMap, new_key_type};
 use std::collections::{BTreeMap, HashMap};
 
@@ -208,7 +208,7 @@ pub struct Scene {
     /// What each `Terminal` node's screen shows, by node: a side table for
     /// the same reason `shaders` is one. See [`crate::TerminalScreen`].
     pub(crate) terminal_screens: FastMap<NodeId, std::sync::Arc<crate::TerminalScreen>>,
-    pub(crate) properties: Graph<Value>,
+    pub(crate) properties: crate::property_store::PropertyStore,
     pub(crate) behaviors: FastMap<PropertyKey, Behavior>,
     pub(crate) animations: FastMap<PropertyKey, Animation>,
     pub(crate) physics: FastMap<PropertyKey, PhysicsAnimation>,

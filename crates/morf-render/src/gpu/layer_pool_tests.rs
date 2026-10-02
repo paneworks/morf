@@ -8,6 +8,70 @@ use super::backdrops::Offscreen;
 use super::layer_pool::{LayerRegion, Stage, layer_regions, pack, schedule};
 use crate::*;
 
+#[test]
+fn animated_target_sizes_do_not_accumulate_unbounded_spare_memory() {
+    // A large panel grows over 120 frames. All but the current size become
+    // spare; formerly all 120 survived the frame-count expiry policy.
+    let unused: Vec<_> = (0..120)
+        .map(|index| (index, (1200 + index as u64) * 800, (120 - index) as u32))
+        .collect();
+    let budget = 8 * 1024 * 1024;
+    let evicted = super::layer_pool::spare_evictions(unused.clone(), budget);
+    let retained: u64 = unused
+        .iter()
+        .filter(|(index, _, _)| !evicted.contains(index))
+        .map(|(_, pixels, _)| pixels)
+        .sum();
+    assert!(retained <= budget);
+    assert!(
+        !evicted.contains(&119),
+        "the most recently used size stays reusable"
+    );
+    assert!(
+        super::layer_pool::spare_evictions(vec![(0, budget + 1, 1)], budget).contains(&0),
+        "a single oversized spare must also leave"
+    );
+    assert!(super::layer_pool::spare_evictions(vec![(0, budget, 1)], budget).is_empty());
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn the_texture_pool_bounds_spares_and_preserves_the_current_frame() {
+    let mut backend = pollster::block_on(WgpuBackend::new(64, 64)).unwrap();
+    let budget = 8 * 1024 * 1024;
+    for width in (1024..1184).step_by(4) {
+        backend.layer_pool.begin_frame();
+        let (texture, _) = backend.layer_pool.take(
+            &backend.device,
+            wgpu::TextureFormat::Rgba8Unorm,
+            (width, 1024),
+            true,
+            (4096, 4096),
+        );
+        backend.layer_pool.end_frame();
+        let (_, pixels) = backend.layer_pool.footprint();
+        assert_eq!(texture.width(), width);
+        assert!(
+            pixels <= budget + u64::from(width) * 1024,
+            "{pixels} cached pixels"
+        );
+    }
+    backend.layer_pool.begin_frame();
+    let (texture, _) = backend.layer_pool.take(
+        &backend.device,
+        wgpu::TextureFormat::Rgba8Unorm,
+        (4096, 4096),
+        true,
+        (4096, 4096),
+    );
+    backend.layer_pool.end_frame();
+    assert_eq!(texture.width(), 4096);
+    assert!(
+        backend.layer_pool.footprint().1 >= 4096 * 4096,
+        "the frame's required target survives even above the spare budget"
+    );
+}
+
 fn node(index: u32) -> NodeHandle {
     let mut scene = morf_scene::Scene::new();
     let mut last = scene.create(morf_scene::Element::Item);

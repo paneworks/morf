@@ -31,6 +31,7 @@
 
 pub mod beat;
 pub mod dsp;
+pub mod equalizer;
 pub mod fake;
 mod model;
 mod pipewire;

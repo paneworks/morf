@@ -178,9 +178,14 @@ pub(crate) struct ReactiveState {
     /// that moved on since may hold a timer to start or a loader to fill,
     /// which is work for the next turn rather than for the next wake.
     pub(crate) polled_revision: u64,
+    /// Revision seen before Timer/Loader reconciliation, which can itself
+    /// unload a tree that must preload again on the next turn.
+    pub(crate) service_definitions_revision: u64,
     /// How many of the scene's revisions were a property of a node nothing
     /// shows: work for the loop, not a reason to paint.
     pub(crate) hidden_revisions: u64,
+    /// `morf.shared` values: this copy's signals for them, and what to publish.
+    pub(crate) shared: crate::shared::SharedValues,
     pub(crate) reload_seed: HashMap<String, IpcValue>,
     pub(crate) reloadable: HashMap<String, SignalId>,
     pub(crate) reload_request: Option<bool>,
@@ -584,7 +589,9 @@ impl ReactiveState {
             model_revisions: HashMap::new(),
             scene_revision: 0,
             polled_revision: 0,
+            service_definitions_revision: u64::MAX,
             hidden_revisions: 0,
+            shared: crate::shared::SharedValues::default(),
             reload_seed: HashMap::new(),
             reloadable: HashMap::new(),
             reload_request: None,

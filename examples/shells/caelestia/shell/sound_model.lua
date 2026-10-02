@@ -29,12 +29,22 @@ function M.new(kind,active)
     if not active() then return end
     local ok,value=pcall(function()
       if not audio or not audio.available() then return {available=false,devices={},streams={}} end
+      local equalizer_id
+      local default=kind=="output" and audio.default_sink() or kind=="input" and audio.default_source() or nil
       local devices=read_list(kind=="output" and audio.sinks or audio.sources,function(row)
+        if row.name=="morf.equalizer.input" then equalizer_id=row.id return false end
         return kind=="output" or not tostring(row.name or ""):match("%.monitor$")
       end)
-      local streams=kind=="output" and read_list(audio.streams,function(row) return row.direction=="playback" end) or {}
-      return {available=true,devices=devices,streams=streams,
-        default=kind=="output" and audio.default_sink() or kind=="input" and audio.default_source() or nil}
+      local streams=kind=="output" and read_list(audio.streams,function(row)
+        return row.direction=="playback" and row.app_id~="morf.equalizer"
+          and not (row.binary=="pipewire" and row.media_name=="Morf Equalizer")
+      end) or {}
+      -- Smart filters attach apps to an internal sink. Show the physical
+      -- default behind that filter as their destination in routing chips.
+      for _,stream in ipairs(streams) do
+        if equalizer_id and stream.device==equalizer_id and default then stream.device=default.id end
+      end
+      return {available=true,devices=devices,streams=streams,default=default}
     end)
     if not ok then value={available=false,devices={},streams={}} end
     -- A replacement with a reused native ID must also get fresh UI callbacks.

@@ -72,7 +72,8 @@ function M.new(kind,active)
           detail=(r.detail or "")..(r.address and r.address~="" and (" · "..r.address) or ""),
           on_word=kind=="mesh" and "Up" or "Connect",off_word=kind=="mesh" and "Down" or "Disconnect"}
       end end end
-    elseif kind=="tor" then
+    end
+    if kind=="tor" or kind=="tunnel" then
       local t=services.tor
       if t then
         value.available=true

@@ -124,7 +124,10 @@ impl Runtime {
     /// whether the scene actually changed: a repaint of a shell that shows
     /// no time is pure cost.
     pub fn update_clock(&mut self, value: impl Into<String>) -> Result<bool, Error> {
-        let revision_before = self.reactive.borrow().scene_revision;
+        let (revision_before, hidden_before) = {
+            let state = self.reactive.borrow();
+            (state.scene_revision, state.hidden_revisions)
+        };
         let value: String = value.into();
         // "HH:MM:SS" carries the coarser grains in its prefix; a value in
         // any other shape is written as it is and nothing is derived.
@@ -160,7 +163,9 @@ impl Runtime {
                 .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
                 .map_err(Error::Runtime)?;
         }
-        Ok(self.reactive.borrow().scene_revision != revision_before)
+        let state = self.reactive.borrow();
+        Ok(state.scene_revision.wrapping_sub(revision_before)
+            > state.hidden_revisions.wrapping_sub(hidden_before))
     }
 
     /// The finest clock anything currently reads, or nothing when no binding
@@ -239,6 +244,7 @@ impl Runtime {
     pub fn has_pending_work(&self) -> bool {
         let state = self.reactive.borrow();
         state.scene_revision != state.polled_revision
+            || state.scene_revision != state.service_definitions_revision
             || !state.retained_destroy_queue.is_empty()
             || state
                 .transform_watchers

@@ -79,7 +79,14 @@ impl Runtime {
     /// against the geometry it had, and the changed ones are flushed here,
     /// since nothing else would until the next event.
     pub fn observe_layout(&mut self, layout: &Layout) -> bool {
-        let moved = {
+        self.observe_layout_with(layout, true)
+    }
+
+    /// Observes a rendered layout, reusing its geometry when the host reused
+    /// the layout unchanged. Transform watchers still observe the scene on
+    /// every frame: translation, rotation and stretch do not require layout.
+    pub fn observe_layout_with(&mut self, layout: &Layout, geometry_changed: bool) -> bool {
+        let moved = if geometry_changed {
             let state = self.reactive.borrow();
             state
                 .property_signals
@@ -102,9 +109,13 @@ impl Runtime {
                     changed.then_some((*node, if size { LAYOUT_SIZE } else { LAYOUT_POSITION }))
                 })
                 .collect::<Vec<_>>()
+        } else {
+            Vec::new()
         };
         let mut state = self.reactive.borrow_mut();
-        state.transform_tracker.update(layout);
+        if geometry_changed {
+            state.transform_tracker.update(layout);
+        }
         for (node, which) in &moved {
             let _ = bump_property_signal(&mut state, *node, which, false);
         }

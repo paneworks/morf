@@ -366,6 +366,28 @@ Which one, and when it moves:
   names back before the new file runs, so it finds them free too (a file
   that fails to load leaves the shell without them until the next reload).
 
+Work the primary does for every screen hands its answer over with
+`morf.shared(name, initial)`: a signal like `morf.signal`'s (`get`, `set`,
+read by bindings), whose writes reach the signal of the same name in every
+other runtime of the process on their next turn, waking them for it. A
+runtime that asks for the name after a write -- a screen plugged in later,
+the copy after a reload -- starts from that write rather than `initial`.
+Values are what a signal holds: nil, booleans, numbers, strings, colours
+and tables of them; a function cannot cross. Three screens then cost one
+sample, not three:
+
+```lua
+local load = morf.shared("cpu.load", 0)
+if morf.primary() then
+  morf.timer(2000, function() load:set(read_load()) end, true)
+end
+ui.Text { text = function() return ("%d%%"):format(load:get()) end }
+```
+
+`lib.poll` sources take `shared = true` for this (`lib.sysinfo` uses it):
+the primary samples, the others read its samples, and a read on any screen
+keeps the primary sampling.
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).

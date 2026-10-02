@@ -5,9 +5,40 @@ local theme=require("theme")
 local kit=require("kit")
 local C=theme.color
 local V={WIDTH=430,RADIUS=15}
+function V.focus_page(model,w,h)
+  local rows={width=w,gap=12}
+  for _,control in ipairs(model.focus) do
+    local function on() return control.on()==true end
+    local card={id="settings-focus-"..control.id,width=w,height=88,
+      kit.card {anchors={fill=true},radius=20,color=function() return C.surfaceContainer end},
+      kit.icon(control.icon,24,function() return on() and C.primary or C.onSurfaceVariant end,
+        {x=16,anchors={vertical_center=true}}),
+      ui.Column {x=56,anchors={vertical_center=true},gap=4,
+        kit.heading {id="settings-focus-title-"..control.id,scope="settings.focus",level="section",
+          text=control.name,width=w-166,font_size=14,elide="right"},
+        kit.subtitle {width=w-166,font_size=12,wrap=true,
+          text=function()
+            if control.id=="awake" then return on() and control.status() or "Allow the screen to sleep" end
+            if control.id=="ringer" then return "Notification sounds and vibration" end
+            return on() and "Notifications stay in history" or "Show notification popups"
+          end},
+      },
+    }
+    if control.id=="ringer" then
+      card[#card+1]=kit.pill {id="utilities-toggle-ringer",anchors={right=true,right_margin=12,vertical_center=true},
+        width=96,height=36,label=control.status,on_clicked=function() control.set() end}
+    else
+      card[#card+1]=kit.switch {id="utilities-toggle-"..control.id,
+        anchors={right=true,right_margin=16,vertical_center=true},on=on,on_toggled=control.set}
+    end
+    rows[#rows+1]=ui.Item(card)
+  end
+  return ui.Flickable {id="settings-focus-scroll",width=w,height=h,clip=true,ui.Column(rows)}
+end
 function V.build(model,w,h)
 local M={TOGGLES=model.TOGGLES,DETAILS=model.DETAILS,detail=model.detail,RADIUS=V.RADIUS}
-local CARD_W,GAP=408,12
+local CARD_W,GAP=math.min(408,w),12
+local overview_viewport
 local TILE_H,TILE_GAP=60,8
 local TILE_W=(CARD_W-24-TILE_GAP)/2
 local TILE_ROWS=math.ceil(#M.TOGGLES/2)
@@ -42,6 +73,7 @@ local function tile(t)
     ui.Column {
       x = 48, anchors = { vertical_center = true }, gap = 0,
       kit.heading { id = "settings-tile-title-" .. t.id, scope = "settings.overview", level = "caption",
+        viewport=function() return overview_viewport end,
         width = TILE_W - 48 - (t.detail and 36 or 12), elide = "right",
         text = t.name or t.id, font_size = theme.size.normal, font_weight = 500, color = fg, ink = fg,
       },
@@ -143,9 +175,11 @@ end
 local DETAIL_HEAD = 52
 local SWITCH = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel }
 function M.page(w, h)
+  overview_viewport=ui.Flickable {id="settings-overview-scroll",width=w,height=h,clip=true,
+    ui.Column {gap=GAP,table.unpack(cards)}}
   local main = ui.Item {
     id = "utilities", width = w, height = h, clip = true,
-    ui.Column { gap = GAP, table.unpack(cards) },
+    overview_viewport,
   }
   local dh = function() return h() - DETAIL_HEAD end
   local stack = {}
@@ -156,6 +190,9 @@ function M.page(w, h)
       id = "settings-detail-" .. d.key,
       y = DETAIL_HEAD, width = w, height = dh,
       visible = function() return M.detail:get() == d.key end,
+      opacity=function() return M.detail:get()==d.key and 1 or 0 end,
+      translate_x=function() return M.detail:get()==d.key and 0 or 20 end,
+      behavior={opacity={duration=theme.duration.small},translate_x=SWITCH},
       model.page_content(d.key, w, dh),
     }
   end
@@ -166,7 +203,7 @@ function M.page(w, h)
   local back = kit.action {
     id = "settings-back",
     width = 40, height = 40, y = 2, cursor = "pointer",
-    on_clicked = function() M.detail:set("") end,
+    on_clicked = model.back,
     back_wash,
     kit.icon("arrow_back", 22, function() return C.onSurface end, { anchors = { center_in = true } }),
   }
@@ -175,10 +212,11 @@ function M.page(w, h)
     id = "settings-detail", width = w, height = h,
     back,
     kit.heading { id = "settings-detail-heading", scope = "settings.detail",
-      x = 50, y = 10,
+      x = 50, y = 20, width=w-54,elide="right",
       text = function() return names[M.detail:get()] or "" end,
       font_size = theme.size.large, font_weight = 500,
     },
+    kit.subtitle {id="settings-breadcrumb",x=50,y=2,width=w-54,font_size=10,elide="right",text=model.breadcrumb},
     table.unpack(stack),
   }
   -- The last detail shown stays drawn while it slides away.

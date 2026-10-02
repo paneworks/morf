@@ -12,12 +12,14 @@ local HOST=[[
   local devices={
     {id=10,name="speakers",description="Desk speakers",kind="sink",default=true,volume=.6,volumes={.5,.7},channels=2,muted=false},
     {id=11,name="headphones",description="Studio headphones",kind="sink",default=false,volume=.4,volumes={.4,.4},channels=2,muted=false},
+    {id=12,name="morf.equalizer.input",description="Morf Equalizer",kind="sink",default=false,volume=1,volumes={1,1},channels=2,muted=false},
     {id=20,name="microphone",description="USB microphone",kind="source",default=true,volume=.7,volumes={.7},channels=1,muted=false},
     {id=21,name="speakers.monitor",description="Monitor of speakers",kind="source",default=false,volume=.6,volumes={.6,.6},channels=2,muted=false},
   }
   local streams={
     {id=30,app_name="Music",app_id="music",binary="player",pid=100,media_name="Preview track",direction="playback",device=10,volume=.5,muted=false},
     {id=31,app_name="Recorder",app_id="recorder",binary="recorder",pid=101,direction="record",device=20,volume=.3,muted=false},
+    {id=32,app_name="Morf Equalizer",app_id="morf.equalizer",binary="pipewire",pid=102,direction="playback",device=10,volume=1,muted=false},
   }
   local lists=morf.state {sinks={},sources={},streams={}}
   local function update()
@@ -60,10 +62,12 @@ local HOST=[[
   end
   morf.ipc.show=show
   morf.ipc.state=function() return {calls=calls,reads=reads,devices=devices,streams=streams} end
+  morf.ipc.destination=function() local stream=model.stream(30) return stream and stream.device end
   morf.ipc.change=function(what)
     if what=="rename" then devices[1].description="Renamed speakers" streams[1].app_name="Renamed player"
     elseif what=="missing" then devices={} streams={}
     elseif what=="offline" then available=false
+    elseif what=="equalized" then streams[1].device=12
     elseif what=="broken" then broken=true
     elseif what=="many" then
       for i=3,12 do devices[#devices+1]={id=100+i,name="sink"..i,description="Output "..i,kind="sink",volume=.3,volumes={.3},channels=1,default=false,muted=false} end
@@ -126,6 +130,9 @@ for _,style in ipairs {"material","tsugumori"} do
     slider("sound-app-30-volume",.6) test.eq(last().id,30) test.near(last().value,.6,.06)
     test.click("sound-app-30-to-11") test.advance(100) test.eq(last().name,"route") test.eq(last().value,11)
     test.falsy(test.find{id="sound-app-31-volume"})
+    test.falsy(test.find{id="sound-sink-12"}) test.falsy(test.find{id="sound-app-32-volume"})
+    test.ipc("change","equalized") test.advance(100)
+    test.eq(test.ipc("destination"),11)
     test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)
   end)
   test.it(style.." Microphone filters monitors and uses the input device",function()

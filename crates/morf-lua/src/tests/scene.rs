@@ -162,6 +162,45 @@ fn transform_watcher_dispatches_after_rendered_geometry_changes() {
 }
 
 #[test]
+fn cached_layout_still_observes_transforms_without_relaying_out() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "cached-transform.lua",
+            br#"
+        local ui = require("morf.ui")
+        local core = require("morf.core")
+        local child = ui.Item { width=20, height=10 }
+        local root = ui.Item { child }
+        core.transform_watcher { a=root, b=child, common_parent=root,
+            on_changed=function() end }
+    "#,
+        )
+        .unwrap();
+    let root = runtime.scene().roots()[0];
+    let child = runtime.scene().children(root).unwrap()[0];
+    let layout = Layout::compute(
+        &runtime.scene(),
+        root,
+        morf_layout::Size {
+            width: 100.0,
+            height: 50.0,
+        },
+        &mut NoText,
+    )
+    .unwrap();
+    assert!(!runtime.observe_layout(&layout));
+    let revision = runtime.scene().layout_revision_of(root);
+    runtime
+        .scene_mut()
+        .assign(child, "translate_x", 12.0)
+        .unwrap();
+    assert_eq!(runtime.scene().layout_revision_of(root), revision);
+    assert!(runtime.observe_layout_with(&layout, false));
+    assert!(!runtime.observe_layout_with(&layout, false));
+}
+
+#[test]
 fn lua_constructs_image_icon_and_field_elements() {
     let mut runtime = Runtime::default();
     runtime

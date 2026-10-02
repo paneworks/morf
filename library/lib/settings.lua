@@ -86,7 +86,8 @@ end
 --- (required, nested), `name` (the signals' prefix, "settings"),
 --- `debounce_ms` (150), `watch` (true), `legacy` (a function given the
 --- decoded file, for a file in an older shape, returning it in the
---- current one).
+--- current one), `write_when` (optional predicate for a single writer
+--- across runtimes; other runtimes can still update their local signals).
 function settings.open(opts)
   assert(type(opts) == "table" and opts.path and opts.defaults, "settings.open needs path and defaults")
   local name = opts.name or "settings"
@@ -152,6 +153,7 @@ function settings.open(opts)
 
   local function save()
     pending = nil
+    if opts.write_when and not opts.write_when() then return end
     local out = {}
     for key, value in pairs(unknown) do place(out, key, value) end
     for key, default in pairs(defaults) do

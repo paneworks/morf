@@ -1,5 +1,5 @@
+use crate::property_store::PropertyStore;
 use animato::Update;
-use morf_reactive::Graph;
 use slotmap::SlotMap;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -11,7 +11,7 @@ impl Scene {
     pub fn new() -> Self {
         Self {
             nodes: SlotMap::with_key(),
-            properties: Graph::default(),
+            properties: PropertyStore::default(),
             behaviors: FastMap::default(),
             animations: FastMap::default(),
             physics: FastMap::default(),
@@ -481,6 +481,25 @@ impl Scene {
             .collect()
     }
 
+    /// Whether an unpaused animation of this element kind advances a property.
+    /// Unlike the diagnostic listing, this needs no per-frame allocation.
+    pub fn has_running_animation(&self, element: Element, property: &str) -> bool {
+        let matches = |key: &PropertyKey| {
+            key.property == property
+                && self
+                    .nodes
+                    .get(key.node)
+                    .is_some_and(|node| node.element == element)
+        };
+        self.animations
+            .iter()
+            .any(|(key, animation)| !animation.is_paused() && matches(key))
+            || self
+                .physics
+                .keys()
+                .any(|key| !self.paused_physics.contains(key) && matches(key))
+    }
+
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, SceneError> {
         let snap = self.motion_scale == 0.0;
         // A scale of zero is a tick long enough to finish anything timed. A
@@ -538,16 +557,26 @@ impl Scene {
             let idle = paused || (delayed && animation.is_delayed());
             if !idle {
                 let slot = node.properties[key.property];
-                if affects_layout(key.property) {
-                    self.bump_layout(key.node);
+                // A tick that moved nothing (a zero delta: the frame after one
+                // nothing on show moved) changes nothing to lay out or draw.
+                // Bumping anyway made every callback a fresh layout, and that
+                // paint asked for the next callback: hidden motion kept the
+                // surface repainting forever.
+                let unchanged =
+                    !complete && self.properties.read(slot.current).is_ok_and(|now| *now == value);
+                if !unchanged {
+                    if affects_layout(key.property) {
+                        self.bump_layout(key.node);
+                    }
+                    self.properties.write(slot.current, value)?;
                 }
-                self.properties.write(slot.current, value)?;
                 if self.change_shows(key.node, key.property, &mut shown) {
-                    frame.changed += 1;
+                    frame.changed += usize::from(!unchanged);
                     seen_moving |= !complete;
                 }
-            } else if !complete && self.change_shows(key.node, key.property, &mut shown) {
-                // Paused or waiting out a delay, and on show: it will move.
+            } else if !paused && !complete && self.change_shows(key.node, key.property, &mut shown)
+            {
+                // Waiting out a delay, and on show: it will move.
                 seen_moving = true;
             }
             if complete {
@@ -608,18 +637,23 @@ impl Scene {
                 physics_finished.push(key);
                 continue;
             };
+            let before = current;
             let settled = advance_physics(motion, &mut current, delta);
             // Physics moves a property without any assignment, so this is the
             // one write that has to say so itself. Without it a paint reuses
             // the layout it already had and the scene animates behind a still
-            // picture — every other path reaches here through `assign`.
-            if affects_layout(key.property) {
-                self.bump_layout(key.node);
+            // picture — every other path reaches here through `assign`. A
+            // spring that did not move (a zero delta, as above) says nothing.
+            let moved = current != before;
+            if moved {
+                if affects_layout(key.property) {
+                    self.bump_layout(key.node);
+                }
+                self.properties
+                    .write(slot.current, Value::Number(current))?;
             }
-            self.properties
-                .write(slot.current, Value::Number(current))?;
             if self.change_shows(key.node, key.property, &mut shown) {
-                frame.changed += 1;
+                frame.changed += usize::from(moved);
                 seen_moving |= !settled;
             }
             if settled {
@@ -636,17 +670,11 @@ impl Scene {
                 end: AnimationEnd::Completed,
             });
         }
-        let report = self.properties.flush()?;
-        if let Some(error) = report.errors.first() {
-            return Err(SceneError::Reactive(format!(
-                "{}: {}",
-                error.effect, error.message
-            )));
-        }
         frame.exited = self.finished_exits();
         // Only what is seen to move asks for the next frame; groups are
         // timelines that start their steps themselves, and stay motion.
-        frame.active = seen_moving || !self.groups.is_empty() || self.stretch_moving();
+        frame.active =
+            seen_moving || self.groups.values().any(|group| !group.paused) || self.stretch_moving();
         Ok(frame)
     }
 }

@@ -35,6 +35,32 @@ Pure-Lua libraries a configuration can `require("lib.<name>")`. morf's core
 stays compositor- and service-agnostic; anything that speaks one program's
 protocol lives here, built only on the engine's generic APIs.
 
+## equalizer.lua and settings_pages.lua
+
+`lib.equalizer` owns a standalone PipeWire stereo smart filter, with explicit
+left/right channel chains. `new {name, path?}` returns `start(curve)`,
+`update(curve)`, `stop()`, and `status`/`error` signals. Only the shell's primary
+runtime should start it. It requires WirePlumber 0.5+, never restarts services,
+and never changes the default output. Runtime controls are coalesced into a
+single Props update; discovery retries are bounded and there is no idle poll.
+`graph(curve, owner)`, `controls(curve)` and `classify(sink)` are reusable helpers.
+
+`morf.audio.equalizer_curve {left?, right?, bands?, strength?, per_ear?,
+compensation?, enabled?, trim?}` computes the eight-band response in Rust.
+Threshold lists contain eight dB HL values (−10..120), bands eight dB gains
+(−12..12), strength is 0..100, trim −24..0 dB. Returns gains, frequencies,
+preamp attenuation and 160 log-spaced response samples per ear (20 Hz–20 kHz).
+Headroom is estimated from the combined 48 kHz filter response with a 0.5 dB
+margin; it is not a limiter. Compensation uses the MIT-licensed
+[omarchy-audiogram-eq](https://github.com/Fail-Safe/omarchy-audiogram-eq)
+mapping: half the threshold excess over 20 dB HL, capped at 12 dB, then
+scaled by strength. Audio DSP runs in PipeWire's builtin filters.
+
+`lib.settings_pages.new(pages, selected_signal, aliases?)` validates a tree
+of `{key, name, parent?}` descriptors. `request(key)` validates routes,
+`back()` returns to the parent, `path(key)` returns its ancestors and
+`breadcrumb()` labels the selected page's ancestry. Root's key is `""`.
+
 ## annotation.lua and capture.lua
 
 `lib.annotation` owns a document in image-pixel coordinates, independent

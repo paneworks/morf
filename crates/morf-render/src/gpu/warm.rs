@@ -78,16 +78,25 @@ impl WgpuBackend {
         const BUDGET: std::time::Duration = std::time::Duration::from_millis(3);
         let started = std::time::Instant::now();
         let scale = scale_120.max(1) as f32 / 120.0;
-        let mut hidden_text = Vec::new();
+        let mut added = 0;
         let mut pending = vec![(root, false)];
         while let Some((node, hidden)) = pending.pop() {
+            // Discovery and style lookups are part of the budget too. First
+            // collecting every hidden label could exhaust it before warming
+            // any glyph, and still scan the whole tree on each quiet frame.
+            if started.elapsed() > BUDGET {
+                break;
+            }
             let hidden = hidden || !scene.bool_value(node, "visible").unwrap_or(true);
             if hidden && scene.element(node) == Ok(Element::Text) && layout.geometry(node).is_some()
             {
                 // Warmed already, looking as it does now: nothing to do.
                 let look = text_look(scene, node, scale_120);
                 if self.warmed_text.get(&node) != Some(&look) {
-                    hidden_text.push((node, look));
+                    let glyphs = self.text.rasterize(node, (0.0, 0.0), scale, true);
+                    added += self.glyph_mask_atlas.warm(&self.queue, &glyphs)
+                        + self.glyph_color_atlas.warm(&self.queue, &glyphs);
+                    self.warmed_text.insert(node, look);
                 }
             }
             if let Ok(children) = scene.children(node) {
@@ -98,16 +107,6 @@ impl WgpuBackend {
         if self.warmed_text.len() > 4096 {
             self.warmed_text
                 .retain(|node, _| scene.element(*node).is_ok());
-        }
-        let mut added = 0;
-        for (node, look) in hidden_text {
-            if started.elapsed() > BUDGET {
-                break;
-            }
-            let glyphs = self.text.rasterize(node, (0.0, 0.0), scale, true);
-            added += self.glyph_mask_atlas.warm(&self.queue, &glyphs)
-                + self.glyph_color_atlas.warm(&self.queue, &glyphs);
-            self.warmed_text.insert(node, look);
         }
         added
     }
