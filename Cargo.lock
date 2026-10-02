@@ -1337,8 +1337,8 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "luna"
-version = "0.5.0"
-source = "git+https://github.com/onix-os/luna?rev=e8b7e98ec977c8973ce1a182d935d0ca1f06f465#3d8ac2d73a6bf4c078db3c9ad74bd34dcde5a556"
+version = "0.5.1"
+source = "git+https://github.com/onix-os/luna?branch=feat%2Fnative-jit#4863789d512945b4f85ecf79a4967f89351be073"
 dependencies = [
  "ahash",
  "allocator-api2",

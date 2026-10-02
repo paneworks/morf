@@ -22,7 +22,7 @@ kurbo = "=0.13.1"
 image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 libc = "0.2"
 libloading = "0.8"
-luna = { git = "https://github.com/onix-os/luna", rev = "e8b7e98ec977c8973ce1a182d935d0ca1f06f465" }
+luna = { git = "https://github.com/onix-os/luna", branch = "feat/native-jit" }
 pollster = "1.0"
 raw-window-handle = "0.6"
 resvg = { version = "=0.48.1", default-features = false, features = ["raster-images", "text", "system-fonts", "memmap-fonts"] }
