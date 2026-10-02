@@ -19,6 +19,26 @@ pub(crate) fn number(value: LuaValue<'_>, label: &str) -> Result<f64, HostError>
     }
     Ok(n)
 }
+/// A reading rather than a coordinate: any finite number. A graph's samples
+/// and its `bottom`/`top` are data mapped into the box (a byte rate is
+/// millions), so only the box's own size is held to coordinate bounds.
+fn reading(value: LuaValue<'_>, label: &str) -> Result<f64, HostError> {
+    let n = match value {
+        LuaValue::Integer(n) => n as f64,
+        LuaValue::Number(n) => n,
+        _ => return Err(HostError(format!("{label} must be a number"))),
+    };
+    if !n.is_finite() {
+        return Err(HostError(format!("{label} must be finite")));
+    }
+    Ok(n)
+}
+fn reading_field<'gc>(ctx: Context<'gc>, o: Table<'gc>, key: &str, default: f64) -> Result<f64, HostError> {
+    match o.get_value(ctx, key) {
+        LuaValue::Nil => Ok(default),
+        value => reading(value, key),
+    }
+}
 fn field<'gc>(
     ctx: Context<'gc>,
     o: Option<Table<'gc>>,
@@ -233,7 +253,7 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                     if matches!(v, LuaValue::Nil) {
                         Ok(0.0)
                     } else {
-                        number(v, "sample")
+                        reading(v, "sample")
                     }
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -242,8 +262,8 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                 graph::Series {
                     width: read("width", 100.0)?,
                     height: read("height", 100.0)?,
-                    bottom: read("bottom", 0.0)?,
-                    top: read("top", 1.0)?,
+                    bottom: reading_field(ctx, o, "bottom", 0.0)?,
+                    top: reading_field(ctx, o, "top", 1.0)?,
                     samples,
                     closed: matches!(o.get_value(ctx, "closed"), LuaValue::Boolean(true)),
                 },

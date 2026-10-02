@@ -23,6 +23,8 @@ fn native_geometry_and_spectrum_match_previous_numeric_results() {
         end
         assert(g.graph_series({{0,50,100}},{{samples=5,width=100,height=40,top=100,bottom=0,closed=false}})=='M50.0 39.0 L75.0 20.0 L100.0 1.0')
         assert(g.graph_series({{10,15,20}},{{samples=3,width=100,height=40,top=20,bottom=10,closed=true}})=='M0.0 39.0 L50.0 20.0 L100.0 1.0 L100.0 40.0 L0.0 40.0 Z')
+        -- Byte rates: readings in the millions map into the box like any others.
+        assert(g.graph_series({{0,5e7,1e8}},{{samples=3,width=100,height=40,top=1e8,bottom=0,closed=false}})=='M0.0 39.0 L50.0 20.0 L100.0 1.0')
         assert(g.graph_grid(100,40,2,2)=='M50.0 0 V40.0 M0 20.0 H100.0')
         local original={{{{0,0,0,0,1,1,1,1}}}}
         g.shape_curves(original,false) assert(original[1][1]==0,'input was mutated')
