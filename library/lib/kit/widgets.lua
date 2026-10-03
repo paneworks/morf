@@ -160,15 +160,15 @@ end
 -- A canvas or a dock returns its control and a handle (`fit`, `zoom_by`,
 -- `select` ...; `activate`, `close`, `float` ...).
 local CANVAS = {
-  zoomable_canvas = { wheel_zooms = true },
+  zoomable_canvas = { wheel_zooms = true, resizable = true },
   node_graph = { grid = 16, snap = true },
-  whiteboard = { tool = "freehand" },
-  diagram = { grid = 10, snap = true },
+  whiteboard = { tool = "freehand", resizable = true },
+  diagram = { grid = 10, snap = true, resizable = true },
   map_view = { wheel_zooms = true, min_zoom = 0.001, max_zoom = 1e6, movable = false },
   image_viewer = { wheel_zooms = true, movable = false, multi_select = false },
   chart_inspector = { axes = "x", tool = "brush", movable = false, wheel_zooms = true },
   timeline_track = { axes = "x" },
-  drawing_board = { tool = "rect", grid = 8, snap = true },
+  drawing_board = { tool = "rect", grid = 8, snap = true, resizable = true },
 }
 for _, widget in ipairs(contract.archetypes.Canvas.widgets) do
   M[widget] = function(spec) return require("lib.kit.canvas").make(widget, with_defaults(widget, spec, CANVAS)) end

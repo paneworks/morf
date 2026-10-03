@@ -168,6 +168,16 @@ return function(S, theme, M)
           return (s.wire().color and get(s.wire().color)) or P().ink_dim
         end)
       end,
+      -- A handle of the one chosen box that resizes: a white knob with
+      -- the accent's ring, swelling under the pointer.
+      grip = function(s)
+        return ui.Rect { x = -5, y = -5, width = 10, height = 10, radius = 5,
+          color = function() return P().knob end, border_width = 2,
+          border_color = function() return P().accent end,
+          shadow_color = "#00000033", shadow_blur = 3, shadow_offset_y = 1,
+          scale = function() return (s.hovered() or s.held()) and 1.35 or 1 end,
+          behavior = { scale = M.spring(520, 24) } }
+      end,
       -- The outline round what is chosen springs in from a touch wider.
       selection = function(s)
         local shape = s.item().shape or "rect"

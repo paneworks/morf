@@ -127,6 +127,22 @@ local function draw(tool, points)
   strokes:set(list)
   note(("Drew a %s"):format(tool == "freehand" and "stroke" or tool))
 end
+-- A note or a box dragged by a handle takes its new box.
+local function resize_stroke(id, x, y, w, h)
+  local list = {}
+  for _, it in ipairs(strokes:get()) do
+    if it.id == id then
+      local copy = {}
+      for k, v in pairs(it) do copy[k] = v end
+      copy.x, copy.y, copy.w, copy.h = x, y, w, h
+      list[#list + 1] = copy
+    else
+      list[#list + 1] = it
+    end
+  end
+  strokes:set(list)
+end
+
 local function move_strokes(ids, dx, dy)
   local moved = {}
   for _, id in ipairs(ids) do moved[id] = true end
@@ -228,7 +244,8 @@ app.application {
       board = { title = "ideas.board", icon = "draw", closable = false, content = fill(function()
         local node, view = widgets.whiteboard { id = "editor-board", anchors = { fill = true },
           items = function() return strokes:get() end, tool = function() return tool_for("board") end,
-          on_drawn = draw, on_moved = move_strokes }
+          on_drawn = draw, on_moved = move_strokes,
+          on_resized = function(id, x, y, w, h) resize_stroke(id, x, y, w, h) note(("Resized %s"):format(id)) end }
         views.board = view
         return node
       end) },

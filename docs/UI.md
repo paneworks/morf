@@ -2762,6 +2762,7 @@ local node, view = canvas.make("node_graph", {
   tool = "select", grid = 16, snap = true,
   on_moved = function(ids, dx, dy) end, on_connected = function(from, to) end,
   on_drawn = function(tool, points) end, on_deleted = function(ids) end,
+  resizable = true, on_resized = function(id, x, y, w, h) end,  -- the one selected box, by its handles
 })
 view.fit()  view.zoom_by(2)  view.center_on(x, y)  view.select { "a" }
 view.to_screen(x, y)  view.to_world(x, y)
@@ -2968,7 +2969,8 @@ passing over disabled members.
 A menu bar's members are menus: `{ label = "File", items = { ... } }`,
 items as a popup menu's (lib.kit.popup). Down, Return and Space open the
 current one's menu; while one is open Left and Right open the next;
-Escape closes it and focus goes back to its title. F10 focuses the bar.
+Escape closes it and focus goes back to its title. F10, or Alt tapped
+alone, focuses the bar; Alt tapped again goes back to what had focus.
 
 Other fields: `orientation` ("horizontal", "vertical", "grid"),
 `columns`, `wrap`, `current`, `gap`, `padding`, `item_height`, `x`,

@@ -21,7 +21,10 @@
 //! the last is topmost), `ports` (`{ id, item, x, y, kind }`: where wires
 //! start and end; `kind` `"in"` or `"out"` joins only the other),
 //! `port_radius` (px, 8), `selection` (ids), `multi_select` (true),
-//! `movable` (true), `wheel_zooms` (false: the wheel pans and Ctrl with it
+//! `movable` (true), `resizable` (false: the one selected box -- a rect
+//! or an ellipse -- has eight handles a press drags to resize it, on the
+//! grid with `snap`, Shift keeping its shape), `min_item` (world units, 8),
+//! `wheel_zooms` (false: the wheel pans and Ctrl with it
 //! zooms; true: it zooms, as a map does), `fit_padding` (px, 24) and
 //! `hit_tolerance` (px, 6).
 //!
@@ -34,7 +37,9 @@
 //! `move_dy` (a move under way, snapped), `band` (`{ x0, y0, x1, y1 }`, the
 //! rubber band or brush or zoom box), `draft` (a shape being drawn: its
 //! points, flat), `connect_from`, `connect_to`, `connect_x`, `connect_y` (a
-//! wire being pulled and where it reaches).
+//! wire being pulled and where it reaches), `resize` (`{ x, y, w, h }`: the
+//! box a resize under way has reached), `resize_id`, `hovered_handle` (a
+//! handle under the pointer: `"n"`, `"ne"`, ... or "").
 //!
 //! Events: the base's; `"resize"` (width, height); `"pressed"` (x, y,
 //! width, height, button, modifiers); `"dragged"` (x, y, width, height,
@@ -57,7 +62,7 @@
 //! `hovered` (id), `moving` (dx, dy), `moved` (ids, dx, dy), `drawn` (tool,
 //! points), `connected` (from, to), `connect_dropped` (from, x, y),
 //! `activated` (id or "", x, y), `context` (id or "", x, y), `brushed` (x0,
-//! y0, x1, y1), `deleted` (ids).
+//! y0, x1, y1), `deleted` (ids), `resized` (id, x, y, w, h).
 
 use std::sync::Arc;
 
@@ -168,6 +173,9 @@ enum Gesture {
     Freehand,
     Connect { from: String },
     Brush { from: [f64; 2], to: [f64; 2] },
+    /// An item's box dragged by a handle: which, from where, the box then
+    /// and the box it has reached.
+    Resize { id: String, handle: &'static str, from: [f64; 2], start: [f64; 4], now: [f64; 4] },
     Zoom { from: [f64; 2], to: [f64; 2], out: bool },
 }
 
@@ -204,6 +212,9 @@ pub(crate) struct Canvas {
     connect_at: [f64; 2],
     /// The zoom a pinch began at.
     pinch_from: Option<[f64; 2]>,
+    resizable: bool,
+    min_item: f64,
+    hovered_handle: &'static str,
 }
 
 /// Every field a skin reads, by name, for diffing.
@@ -341,6 +352,9 @@ impl Canvas {
             connect_to: String::new(),
             connect_at: [0.0, 0.0],
             pinch_from: None,
+            resizable: false,
+            min_item: 8.0,
+            hovered_handle: "",
         }
     }
 
@@ -356,6 +370,7 @@ impl Canvas {
             Gesture::Connect { .. } => "connect",
             Gesture::Brush { .. } => "brush",
             Gesture::Zoom { .. } => "zoom",
+            Gesture::Resize { .. } => "resize",
         }
     }
 
@@ -419,6 +434,21 @@ impl Canvas {
             ("connect_x".into(), self.connect_at[0].into()),
             ("connect_y".into(), self.connect_at[1].into()),
             ("grid".into(), self.grid.into()),
+            (
+                "resize".into(),
+                match &self.gesture {
+                    Gesture::Resize { now, .. } => list(now.iter().map(|v| (*v).into()).collect()),
+                    _ => IpcValue::Nil,
+                },
+            ),
+            (
+                "resize_id".into(),
+                match &self.gesture {
+                    Gesture::Resize { id, .. } => id.as_str().into(),
+                    _ => "".into(),
+                },
+            ),
+            ("hovered_handle".into(), self.hovered_handle.into()),
         ]
     }
 
@@ -613,7 +643,68 @@ impl Canvas {
         }
     }
 
+    /// The one selected box a handle may resize: its id and `{x, y, w, h}`.
+    fn resizable_box(&self) -> Option<(String, [f64; 4])> {
+        if !self.resizable || self.selection.len() != 1 {
+            return None;
+        }
+        let item = self.items.iter().find(|i| i.id == self.selection[0])?;
+        match &item.shape {
+            Shape::Rect(r) | Shape::Ellipse(r) => Some((item.id.clone(), *r)),
+            _ => None,
+        }
+    }
+
+    /// The handle of the selected box under a screen point, if any.
+    fn handle_at(&self, screen: [f64; 2]) -> Option<&'static str> {
+        let (_, r) = self.resizable_box()?;
+        let (x0, y0) = (r[0], r[1]);
+        let (x1, y1) = (r[0] + r[2], r[1] + r[3]);
+        let (xm, ym) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+        let points = [
+            ("nw", [x0, y0]), ("n", [xm, y0]), ("ne", [x1, y0]), ("e", [x1, ym]),
+            ("se", [x1, y1]), ("s", [xm, y1]), ("sw", [x0, y1]), ("w", [x0, ym]),
+        ];
+        let reach = self.port_radius.max(6.0);
+        points.iter().find(|(_, p)| {
+            let s = self.screen(*p);
+            (s[0] - screen[0]).abs() <= reach && (s[1] - screen[1]).abs() <= reach
+        }).map(|(name, _)| *name)
+    }
+
+    /// A box dragged by `handle` by `d` (world), kept to the minimum, on
+    /// the grid when snapping, Shift keeping its shape.
+    fn resized(&self, handle: &str, start: [f64; 4], d: [f64; 2], keep: bool) -> [f64; 4] {
+        let (mut x0, mut y0) = (start[0], start[1]);
+        let (mut x1, mut y1) = (start[0] + start[2], start[1] + start[3]);
+        if handle.contains('w') { x0 = self.snapped(x0 + d[0]); }
+        if handle.contains('e') { x1 = self.snapped(x1 + d[0]); }
+        if handle.starts_with('n') { y0 = self.snapped(y0 + d[1]); }
+        if handle.starts_with('s') { y1 = self.snapped(y1 + d[1]); }
+        let m = self.min_item;
+        if x1 - x0 < m {
+            if handle.contains('w') { x0 = x1 - m } else { x1 = x0 + m }
+        }
+        if y1 - y0 < m {
+            if handle.starts_with('n') { y0 = y1 - m } else { y1 = y0 + m }
+        }
+        if keep && start[2] > 0.0 && start[3] > 0.0 {
+            let aspect = start[2] / start[3];
+            let (w, h) = (x1 - x0, y1 - y0);
+            let corner = (handle.contains('w') || handle.contains('e')) && handle.len() == 2;
+            let (w, h) = if corner || handle == "e" || handle == "w" {
+                if corner && h * aspect > w { (h * aspect, h) } else { (w, w / aspect) }
+            } else {
+                (h * aspect, h)
+            };
+            if handle.contains('w') { x0 = x1 - w } else { x1 = x0 + w }
+            if handle.starts_with('n') { y0 = y1 - h } else { y1 = y0 + h }
+        }
+        [x0, y0, x1 - x0, y1 - y0]
+    }
+
     fn hover(&mut self, screen: [f64; 2]) {
+        self.hovered_handle = self.handle_at(screen).unwrap_or("");
         let p = self.world(screen);
         self.pointer = Some(p);
         self.hovered_port = self.port_at(screen).map(|port| port.id.clone()).unwrap_or_default();
@@ -674,6 +765,13 @@ impl Canvas {
         let at = self.snapped_point(p);
         match self.tool {
             Tool::Select | Tool::Connect => {
+                if self.tool == Tool::Select
+                    && let Some(handle) = self.handle_at(screen)
+                    && let Some((id, start)) = self.resizable_box()
+                {
+                    self.gesture = Gesture::Resize { id, handle, from: p, start, now: start };
+                    return;
+                }
                 if let Some(port) = self.port_at(screen) {
                     let from = port.id.clone();
                     self.connect_at = port.at;
@@ -787,6 +885,10 @@ impl Canvas {
             }
             Gesture::Brush { from, .. } => self.gesture = Gesture::Brush { from, to: p },
             Gesture::Zoom { from, out, .. } => self.gesture = Gesture::Zoom { from, to: p, out },
+            Gesture::Resize { id, handle, from, start, .. } => {
+                let now = self.resized(handle, start, [p[0] - from[0], p[1] - from[1]], modifiers.contains("shift"));
+                self.gesture = Gesture::Resize { id, handle, from, start, now };
+            }
         }
     }
 
@@ -852,6 +954,14 @@ impl Canvas {
             Gesture::Brush { from, to } => {
                 let b = self.brushed(from, to);
                 effects.raise("brushed", b.iter().map(|v| (*v).into()).collect());
+            }
+            Gesture::Resize { id, start, now, .. } => {
+                if now != start {
+                    effects.raise(
+                        "resized",
+                        vec![id.into(), now[0].into(), now[1].into(), now[2].into(), now[3].into()],
+                    );
+                }
             }
             Gesture::Zoom { from, to, out } => {
                 let (a, b) = (self.screen(from), self.screen(to));
@@ -1241,6 +1351,14 @@ impl Archetype for Canvas {
                 self.fit_padding = n()?.max(0.0);
                 Effects::default()
             }
+            "resizable" => {
+                self.resizable = on()?;
+                Effects::default()
+            }
+            "min_item" => {
+                self.min_item = n()?.max(0.0);
+                Effects::default()
+            }
             "hit_tolerance" => {
                 self.tolerance = n()?.max(0.0);
                 Effects::default()
@@ -1280,6 +1398,32 @@ mod tests {
 
     fn drag(c: &mut Canvas, x: f64, y: f64) -> Effects {
         c.handle("dragged", &[x.into(), y.into(), 400.0.into(), 300.0.into(), "".into()]).unwrap()
+    }
+
+    #[test]
+    fn the_selected_box_resizes_by_a_handle_on_the_grid() {
+        let mut c = canvas();
+        c.configure("resizable", &true.into()).unwrap();
+        c.configure("grid", &10.0.into()).unwrap();
+        c.configure("snap", &true.into()).unwrap();
+        press(&mut c, 30.0, 30.0, "left", "");
+        c.handle("released", &[]).unwrap();
+        // The south-east corner of a (10, 10, 50, 30): at (60, 40).
+        press(&mut c, 60.0, 40.0, "left", "");
+        assert_eq!(c.gesture_name(), "resize");
+        drag(&mut c, 87.0, 66.0);
+        let e = c.handle("released", &[]).unwrap();
+        let resized = signal(&e, "resized").unwrap();
+        assert_eq!(resized[0], "a".into());
+        assert_eq!((resized[3].clone(), resized[4].clone()), (80.0.into(), 60.0.into()));
+        // Too small: held at the minimum.
+        press(&mut c, 30.0, 30.0, "left", "");
+        c.handle("released", &[]).unwrap();
+        press(&mut c, 10.0, 10.0, "left", "");
+        drag(&mut c, 200.0, 200.0);
+        let e = c.handle("released", &[]).unwrap();
+        let resized = signal(&e, "resized").unwrap();
+        assert_eq!(resized[3], 8.0.into());
     }
 
     #[test]

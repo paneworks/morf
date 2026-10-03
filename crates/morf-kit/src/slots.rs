@@ -94,6 +94,9 @@ pub fn slots_of(archetype: &str) -> Option<&'static [&'static str]> {
             "band",
             "crosshair",
             "overlay",
+            // A builder: one handle of the selected box (`s.name`: n, ne,
+            // e, se, s, sw, w, nw; `s.hovered()`, `s.held()`).
+            "grip",
         ],
         // `item`, `place` and `container` are builders, not nodes: an
         // entry's look, its area's properties, and what the entries go in.

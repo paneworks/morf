@@ -109,6 +109,14 @@ return function(S, theme, M)
   local function restyle(name, change) require("lib.kit.canvas").restyle(S, name, change) end
 
   restyle("Canvas", function(slots, t)
+    -- An M3 handle: a primary dot ringed in the surface, growing while held.
+    slots.grip = function(s)
+      return ui.Rect { x = -6, y = -6, width = 12, height = 12, radius = 6,
+        color = function() return C().primary end, border_width = 2,
+        border_color = function() return C().surface end,
+        scale = function() return s.held() and 1.5 or (s.hovered() and 1.3 or 1) end,
+        behavior = { scale = M.spring(520, 22) } }
+    end
     slots.selection = chosen(12)
     -- The band: a rounded tonal plate.
     if slots.band then

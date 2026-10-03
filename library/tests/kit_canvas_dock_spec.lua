@@ -36,7 +36,16 @@ local HOST = [[
     end,
     on_connected = function(from, to) note("wire:" .. from .. ">" .. to) end,
     on_drawn = function(tool, points) note(("drawn:%s:%d"):format(tool, #points // 2)) end,
-    on_deleted = function(ids) note("deleted:" .. table.concat(ids, "+")) end }
+    on_deleted = function(ids) note("deleted:" .. table.concat(ids, "+")) end,
+    resizable = true,
+    on_resized = function(id, x, y, w, h)
+      local next = {}
+      for _, it in ipairs(items:get()) do
+        next[#next + 1] = it.id == id and { id = id, x = x, y = y, w = w, h = h } or it
+      end
+      items:set(next)
+      note(("resized:%s:%g:%g:%g:%g"):format(id, x, y, w, h))
+    end }
   local dock_node, dock = w.dock_area { id = "dock", x = 420, y = 0, width = 400, height = 300,
     panels = { files = { title = "Files", content = ui.Rect { id = "files-body", width = 10, height = 10 } },
       search = { title = "Search", content = ui.Rect { id = "search-body", width = 10, height = 10 } },
@@ -49,6 +58,7 @@ local HOST = [[
   morf.ipc.view = function() return ("%.3f,%.3f,%.3f"):format(view.t.view_x, view.t.view_y, view.t.zoom) end
   morf.ipc.selection = function() return table.concat(view.selection(), "+") end
   morf.ipc.tool = function(name) view.set_tool(name) end
+  morf.ipc.size = function(id) for _, it in ipairs(items:get()) do if it.id == id then return ("%gx%g"):format(it.w, it.h) end end end
   morf.ipc.item = function(id) for _, it in ipairs(items:get()) do if it.id == id then return ("%g,%g"):format(it.x, it.y) end end end
   morf.ipc.layout = function()
     local tree = dock.layout()
@@ -75,6 +85,17 @@ test.it("a press picks an item, a drag moves it on the grid, Shift adds", functi
   test.eq(test.ipc("selection"), "a+b")
   test.key("Delete") test.settle(30)
   test.eq(test.ipc("log"), "deleted:a+b")
+end)
+
+test.it("a selected box resizes by its corner handle, on the grid", function()
+  load()
+  test.click(40, 30) test.settle(30)
+  test.eq(test.ipc("selection"), "a")
+  -- The south-east corner of (20, 20, 60, 40), at (80, 60): its edges land
+  -- on the grid of 16, at 112 and 96.
+  test.drag({ 80, 60 }, { 117, 91 }, { steps = 6 }) test.settle(50)
+  test.eq(test.ipc("log"), "resized:a:20:20:92:76")
+  test.eq(test.ipc("size", "a"), "92x76")
 end)
 
 test.it("a band on nothing selects what it crosses", function()

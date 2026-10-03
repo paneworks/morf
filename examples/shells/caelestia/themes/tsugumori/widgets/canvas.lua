@@ -111,6 +111,12 @@ return function(S, theme, M, hud)
   local function restyle(name, change) require("lib.kit.canvas").restyle(S, name, change) end
 
   restyle("Canvas", function(slots, t, spec)
+    -- A square grip block in the primary, filled while held.
+    slots.grip = function(s)
+      return ui.Rect { x = -4, y = -4, width = 8, height = 8, radius = 0,
+        color = function() return (s.held() or s.hovered()) and C.primary or C.surface end,
+        border_width = 1, border_color = function() return C.primary end }
+    end
     slots.selection = chosen()
     -- Fine lines and a registration cross at every fourth crossing.
     if slots.grid and spec.widget ~= "chart_inspector" and spec.widget ~= "timeline_track"

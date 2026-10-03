@@ -43,7 +43,7 @@ local SETTINGS = {
   Shell = { "breakpoints", "layouts", "collapse_below", "inspector_below", "regions", "width", "sidebar" },
   -- (`items` and `ports` are lib.kit.canvas's to send: it keeps them by id.)
   Canvas = { "zoom", "view_x", "view_y", "min_zoom", "max_zoom", "zoom_step", "axes", "bounds", "grid", "snap",
-    "tool", "port_radius", "selection", "multi_select", "movable", "wheel_zooms", "fit_padding", "hit_tolerance" },
+    "tool", "port_radius", "selection", "multi_select", "movable", "wheel_zooms", "fit_padding", "hit_tolerance", "resizable", "min_item" },
   -- (`layout` and `floating` are lib.kit.dock's to send and keep.)
   Dock = { "fixed", "edge", "min_ratio" },
   Transform = { "min_width", "min_height", "max_width", "max_height", "aspect", "bounds", "snap", "movable",
@@ -84,7 +84,8 @@ local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_valu
   on_changed = true, on_committed = true, on_minimized = true, on_edit_started = true, on_edit_canceled = true,
   on_cleared = true, on_copy = true, on_cut = true, on_paste = true, on_open = true, on_close = true,
   on_submitted = true, on_invalid = true, on_reset = true, on_validity_changed = true, on_dirty_changed = true,
-  on_show_error = true, on_hide_error = true, on_hold_canceled = true, on_confirmed = true, on_captured = true }
+  on_show_error = true, on_hide_error = true, on_hold_canceled = true, on_confirmed = true, on_captured = true,
+  on_resized = true }
 -- Every live control's way to take effects another control's event caused
 -- (an exclusive group), by id.
 local appliers = {}

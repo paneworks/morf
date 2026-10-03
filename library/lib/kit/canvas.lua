@@ -14,6 +14,7 @@
 --       tool = "select", grid = 16, snap = true,
 --       on_moved = function(ids, dx, dy) end, on_connected = function(from, to) end,
 --       on_drawn = function(tool, points) end, on_deleted = function(ids) end,
+--       resizable = true, on_resized = function(id, x, y, w, h) end,  -- the one selected box, by its handles
 --     })
 --     view.fit()  view.zoom_by(2)  view.center_on(x, y)  view.select { "a" }
 --     view.to_screen(x, y)  view.to_world(x, y)
@@ -329,8 +330,14 @@ function M.make(widget, spec)
   full.content, full.overlay = nil, nil
   local rebuilt
   root, t, ctl = control.make("Canvas", widget, full, {
-    props = { clip = true, accepted_buttons = { "left", "middle", "right" }, cursor = spec.cursor },
-    builders = { item = true, selection = true, wires = true },
+    props = { clip = true, accepted_buttons = { "left", "middle", "right" },
+      -- Over a handle, the way it resizes.
+      cursor = function()
+        local h = t and t.hovered_handle or ""
+        if h ~= "" then return h .. "_resize" end
+        return get(spec.cursor) or "default"
+      end },
+    builders = { item = true, selection = true, wires = true, grip = true },
     -- (The band is nil while there is none; known from the start, a skin
     -- may read it.)
     state = { band = "" },
@@ -381,14 +388,28 @@ function M.make(widget, spec)
       id = e.key,
     }
   end
+  -- The box a resize under way has reached for this item, or nil.
+  local function resizing(e)
+    if t.gesture ~= "resize" or t.resize_id ~= e.key then return nil end
+    local r = M.numbers(t.resize)
+    if #r < 4 then return nil end
+    return r
+  end
   local function place(e)
     local shape = e.item.shape or "rect"
     local spread = shape == "rect" or shape == "ellipse" or shape == "circle"
+    local function at(i, field)
+      e.version:get()
+      if not spread then return 0 end
+      local r = resizing(e)
+      if r then return r[i] end
+      return e.item[field] or 0
+    end
     e.holder = ui.Item {
-      x = function() e.version:get() return spread and (e.item.x or 0) or 0 end,
-      y = function() e.version:get() return spread and (e.item.y or 0) or 0 end,
-      width = function() e.version:get() return spread and (e.item.w or 0) or 0 end,
-      height = function() e.version:get() return spread and (e.item.h or 0) or 0 end,
+      x = function() return at(1, "x") end,
+      y = function() return at(2, "y") end,
+      width = function() return at(3, "w") end,
+      height = function() return at(4, "h") end,
       translate_x = function() return moving(e) and t.move_dx or 0 end,
       translate_y = function() return moving(e) and t.move_dy or 0 end,
     }
@@ -492,6 +513,8 @@ function M.make(widget, spec)
         local function screen_box()
           e.version:get()
           local x, y, w, h = box(e.item)
+          local r = resizing(e)
+          if r then x, y, w, h = r[1], r[2], r[3], r[4] end
           if moving(e) then x, y = x + t.move_dx, y + t.move_dy end
           return (x - t.view_x) * t.zoom_x, (y - t.view_y) * t.zoom_y, w * t.zoom_x, h * t.zoom_y
         end
@@ -504,6 +527,27 @@ function M.make(widget, spec)
         }
         local node = build(item_state(e))
         if node then ui.reparent(node, e.mark) end
+        -- The handles of a box that resizes, while it is the only one
+        -- selected: the skin's grips at its corners and edges.
+        local grip = (ctl.builders() or {}).grip
+        local shape = e.item.shape or "rect"
+        if grip and get(spec.resizable) and (shape == "rect" or shape == "ellipse" or shape == "circle") then
+          local function sole() return t.selected_count == 1 end
+          for _, name in ipairs { "nw", "n", "ne", "e", "se", "s", "sw", "w" } do
+            local fx = name:find("w") and 0 or (name:find("e") and 1 or 0.5)
+            local fy = name:sub(1, 1) == "n" and 0 or (name:sub(1, 1) == "s" and 1 or 0.5)
+            local g = grip({ name = name,
+              hovered = function() return t.hovered_handle == name end,
+              held = function() return t.gesture == "resize" and t.resize_id == e.key end })
+            if g then
+              local holder = ui.Item { width = 0, height = 0, visible = sole,
+                x = function() return (e.mark.layout_width or 0) * fx end,
+                y = function() return (e.mark.layout_height or 0) * fy end }
+              ui.reparent(g, holder)
+              ui.reparent(holder, e.mark)
+            end
+          end
+        end
         ui.reparent(e.mark, marks)
       elseif not selected[key] and e.mark then
         ui.destroy(e.mark)
