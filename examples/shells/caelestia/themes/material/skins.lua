@@ -167,6 +167,76 @@ return function(theme, M)
     return pill(t, spec)
   end
 
+  --- Disclosures: a layout's own header (`area`) gets only the keyboard's
+  --- ring; an expander draws its header -- the title, a hover tint and a
+  --- chevron that turns over on a spring as it opens.
+  function S.Disclosure(t, spec)
+    if spec.widget == "area" then
+      return { indicator = ring(t, function() return math.min(16, t.height / 2) end) }
+    end
+    local H = spec.header_height or 40
+    return {
+      background = ui.Rect { width = function() return t.width end, height = H, radius = 12,
+        color = function()
+          if t.down then return C().onSurface:alpha(0.1) end
+          return t.hovered and C().onSurface:alpha(0.06) or C().onSurface:alpha(0)
+        end,
+        behavior = { color = { duration = theme.duration.small } } },
+      header = M.text { x = 14, y = (H - theme.size.normal * 1.4) / 2, text = spec.title or "",
+        font_size = theme.size.normal, color = function() return t.expanded and C().primary or C().onSurface end,
+        behavior = { color = { duration = theme.duration.small } } },
+      indicator = ui.Item { x = function() return t.width - 34 end, y = (H - 22) / 2, width = 22, height = 22,
+        rotation = function() return t.expanded and 180 or 0 end,
+        behavior = { rotation = M.spring(420, 24) },
+        M.icon("expand_more", 22, function() return C().onSurfaceVariant end) },
+    }
+  end
+
+  --- Drags: a divider's grip -- a slim pill that swells on a spring while
+  --- hovered and fills with the primary while held -- and the keyboard's
+  --- ring. A swipe is headless: the layout's own node moves.
+  function S.Drag(t, spec)
+    local across = (spec.axis or "x") == "x"
+    local function long() return t.active and 56 or (t.hovered and 44 or 32) end
+    local function thick() return (t.active or t.hovered) and 6 or 4 end
+    return {
+      background = ring(t, 3),
+      handle = ui.Rect {
+        x = function() return ((t.width or 0) - (across and thick() or long())) / 2 end,
+        y = function() return ((t.height or 0) - (across and long() or thick())) / 2 end,
+        width = function() return across and thick() or long() end,
+        height = function() return across and long() or thick() end,
+        radius = 3,
+        color = function() return t.active and C().primary or C().outline end,
+        behavior = { width = M.spring(520, 24), height = M.spring(520, 24), x = M.spring(520, 24),
+          y = M.spring(520, 24), color = { duration = theme.duration.small } } },
+    }
+  end
+
+  --- Navigations: M3's shared axis -- the new page drifts in from its side
+  --- as it fades up, the old one drifts the other way as it fades out.
+  function S.Navigation(t, spec)
+    -- The page last brought in: a page left behind is hidden only if a
+    -- newer change has not brought it back meanwhile.
+    local latest
+    return {
+      transition = function(from, to, direction)
+        latest = to
+        local shift = 36 * (direction or 1)
+        to.translate_x, to.opacity = shift, 0
+        local steps = { { node = to, property = "translate_x", to = 0, duration = 300, easing = "out_cubic" },
+          { node = to, property = "opacity", to = 1, duration = 210, easing = "linear" } }
+        if from then
+          steps[#steps + 1] = { node = from, property = "translate_x", to = -shift, duration = 300, easing = "out_cubic" }
+          steps[#steps + 1] = { node = from, property = "opacity", to = 0, duration = 90, easing = "linear" }
+        end
+        morf.animation.play { { parallel = steps }, on_finished = function()
+          if from and from ~= latest then from.visible, from.translate_x, from.opacity = false, 0, 1 end
+        end }
+      end,
+    }
+  end
+
   -- ------------------------------------------------------------ ranges --
 
   --- The M3 expressive slider: the active part, a gap, a slim upright
@@ -363,7 +433,7 @@ return function(theme, M)
   local function tabs(t, spec)
     -- The row's own name and width: the caller's, not the control's.
     local id, row_width = spec.tab_id or spec.id, spec.width_of or spec.width
-    local list = spec.items
+    local list = type(spec.items) == "function" and spec.items() or spec.items
     local PAD, H = spec.pad or 11, spec.height or 64
     local growing = spec.growing == true
     local function width() return get(row_width) or 0 end

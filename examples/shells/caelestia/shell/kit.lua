@@ -27,7 +27,7 @@ kit.widgets = widgets
 --- it, and the theme's skin marks hover, press and focus; its properties
 --- and children are the layout's, kept across a theme switch. `settings`
 --- are the Press's own (`checked`, `group`, `on_toggled`, ...).
-function kit.press_area(widget, props, settings)
+function kit.press_area(widget, props, settings, archetype)
   local spec, node, children = { widget = widget }, {}, {}
   for key, value in pairs(props or {}) do
     if type(key) == "number" then children[key] = value
@@ -38,7 +38,18 @@ function kit.press_area(widget, props, settings)
   -- A disabled area takes no press, as a MouseArea's `enabled` says, and
   -- its archetype knows.
   if node.enabled ~= nil then spec.enabled = node.enabled end
-  return (require("lib.kit.control").make("Press", widget, spec, { props = node, children = children }))
+  return (require("lib.kit.control").make(archetype or "Press", widget, spec, { props = node, children = children }))
+end
+
+--- A header that opens and shuts a region the layout draws, as a kit
+--- Disclosure `area`: Space and Return toggle, Left shuts, Right opens.
+--- `open` (fn) is the truth it follows; `on_toggled(open)` runs only when
+--- a press or a key asks for the other state.
+function kit.disclose_area(props, open, on_toggled)
+  return kit.press_area("area", props, {
+    expanded = open,
+    on_toggled = function(now) if now ~= (open() == true) then on_toggled(now) end end,
+  }, "Disclosure")
 end
 
 --- A pressable area (`kit.press_area`'s `area`).
@@ -108,9 +119,33 @@ end
 --- follows an easing drawer). A kit Selection: click, arrows, Home and End.
 function kit.tabs(spec)
   local s = copy(spec)
-  s.items, s.tabs, s.tab = spec.tabs, nil, nil
-  s.current = function() return spec.tab:get() end
-  s.on_current_changed = function(i) spec.tab:set(i) end
+  -- The tabs in the order shown: `reorderable` lets a drag or Alt with the
+  -- arrows move one, while each keeps its index for what it opens.
+  local order = morf.signal("caelestia." .. spec.id .. ".tab-order", {})
+  local function shown()
+    local o = order:get()
+    if #o ~= #spec.tabs then o = {} for i = 1, #spec.tabs do o[i] = i end end
+    return o
+  end
+  local function position(index)
+    for p, i in ipairs(shown()) do if i == index then return p end end
+    return index
+  end
+  s.items = function()
+    local out = {}
+    for p, i in ipairs(shown()) do out[p] = spec.tabs[i] end
+    return out
+  end
+  s.tabs, s.tab = nil, nil
+  s.current = function() return position(spec.tab:get()) end
+  s.on_current_changed = function(p) spec.tab:set(shown()[p] or p) end
+  s.on_reorder = function(p, step)
+    local o = shown()
+    local q = p + step
+    if not o[q] then return end
+    o[p], o[q] = o[q], o[p]
+    order:set(o)
+  end
   local by_name = spec.ids == "name"
   s.item_id = function(_, entry)
     return spec.id .. "-tab-" .. (by_name and entry.name:lower() or (entry.key or entry.name:lower()))

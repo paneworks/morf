@@ -52,7 +52,7 @@ local TABS = model.tabs
 -- `dashboard-tab-<name>`.
 local function tabs()
   return kit.tabs { id = "dashboard", tabs = TABS, tab = M.tab,
-    width = width, height = TABS_H, pad = PAD, ids = "name", growing = true }
+    width = width, height = TABS_H, pad = PAD, ids = "name", growing = true, reorderable = true }
 end
 
 -- ---------------------------------------------------------------- cards --

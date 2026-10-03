@@ -144,16 +144,12 @@ function V.build(state, width, height)
     end
     local shut = ui.Item { anchors = { fill = true }, visible = function() local x = g() return x ~= nil and not state.is_open(x.app) end, table.unpack(lines) }
     local open = ui.Item { anchors = { fill = true }, visible = function() local x = g() return x ~= nil and state.is_open(x.app) end, table.unpack(items) }
-    local expand = kit.action {
+    -- The group's disclosure: it follows the history's open set, and a
+    -- press or a key asks that set to change.
+    local function is_open() local x = g() return x ~= nil and state.is_open(x.app) end
+    local expand = kit.disclose_area({
       id = "sidebar-group-expand-" .. i,
       anchors = { right = true, right_margin = 10 }, y = 8, width = 48, height = 22, cursor = "pointer",
-      on_clicked = function()
-        local x = g()
-        if not x then return end
-        state.toggle(x.app)
-        -- Opening, its entries come in evenly, one after the other.
-        if state.is_open(x.app) then kit.bud(items, true, { delay = 30, stagger = 40 }) end
-      end,
       ui.Row {
         anchors = { center_in = true }, gap = 2, align = "center",
         kit.text { text = function() local x = g() return x and tostring(#x.items) or "" end,
@@ -161,7 +157,13 @@ function V.build(state, width, height)
         kit.icon(function() local x = g() return (x and state.is_open(x.app)) and "expand_less" or "expand_more" end, 14,
           signal),
       },
-    }
+    }, is_open, function()
+      local x = g()
+      if not x then return end
+      state.toggle(x.app)
+      -- Opening, its entries come in evenly, one after the other.
+      if state.is_open(x.app) then kit.bud(items, true, { delay = 30, stagger = 40 }) end
+    end)
     kit.hover(expand, function(hovered) return signal():alpha(hovered and .2 or .07) end, L.control_round(22))
     return ui.Item {
       id = "sidebar-group-" .. i,

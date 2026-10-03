@@ -29,21 +29,28 @@ local SETTINGS = {
     "wrap", "range", "first", "second", "handle_size" },
   Plane = { "x_from", "x_to", "y_from", "y_to", "x", "y", "step_x", "step_y", "constraint", "y_up" },
   Selection = { "count", "labels", "current", "selected", "mode", "wrap", "orientation", "columns", "page",
-    "disabled", "follow_focus" },
+    "disabled", "follow_focus", "reorderable" },
   Popup = { "modal", "dim", "close_policy", "placement", "focus_on_open", "restore_focus" },
   TextField = { "text", "placeholder", "echo", "read_only", "max_length", "validator", "minimum", "maximum",
     "required", "revert_on_escape" },
   Scroll = { "scroll_policy_x", "scroll_policy_y", "snap", "item_size", "step" },
   Collection = { "count", "labels", "current", "selected", "mode", "wrap", "orientation", "columns", "page",
     "disabled", "follow_focus", "layout", "columns_spec", "tree_rows", "end_margin" },
+  Disclosure = { "expanded", "group", "animated" },
+  Drag = { "mode", "axis", "threshold", "minimum", "maximum", "value", "extent", "swipe_distance", "swipe_speed" },
+  Navigation = { "mode", "pages", "current", "wrap" },
 }
 -- How each archetype takes focus by default: a press by Tab only, so a click
 -- leaves a search field typing; a range by click too, so the arrows move
 -- what was just dragged.
 local POLICY = { Control = "none", Press = "tab", Range = "strong", Plane = "strong", Selection = "strong",
-  TextField = "none", Scroll = "none", Collection = "strong" }
+  TextField = "none", Scroll = "none", Collection = "strong", Disclosure = "tab", Drag = "tab", Navigation = "none" }
 -- Which take keys and the wheel.
-local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scroll = true, Collection = true }
+local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scroll = true, Collection = true,
+  Disclosure = true, Drag = true, Navigation = true }
+-- Which take the pointer in surface coordinates: a handle that moves under
+-- the pointer would see its own local ones drift.
+local SURFACE_POINTER = { Drag = true }
 local WHEEL = { Range = true, Plane = true }
 -- The clock typeahead measures pauses on.
 local clock = morf.elapsed_timer()
@@ -54,7 +61,8 @@ local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_valu
   on_activated = true, on_opened = true, on_closed = true, on_about_to_close = true, on_edited = true,
   on_invalid = true, on_scrolled = true, on_reached_start = true, on_reached_end = true, on_set_text = true,
   on_scroll_to = true, on_sort_changed = true, on_column_resized = true, on_expanded_changed = true,
-  on_end_reached = true }
+  on_end_reached = true, on_expanded = true, on_collapsed = true, on_drag_started = true, on_dropped = true,
+  on_reorder = true, on_pushed = true, on_popped = true }
 -- Every live control's way to take effects another control's event caused
 -- (an exclusive group), by id.
 local appliers = {}
@@ -164,13 +172,13 @@ function M.make(archetype, widget, spec, extra)
     on_entered = function(...) send("entered") also("on_entered", ...) end,
     on_exited = function(...) send("exited") also("on_exited", ...) end,
     on_pressed = function(sx, sy, x, y, ...)
-      local a, b, w, h = travel(x, y)
-      send("pressed", a, b, w, h)
+      if SURFACE_POINTER[archetype] then send("pressed", sx, sy)
+      else local a, b, w, h = travel(x, y) send("pressed", a, b, w, h) end
       also("on_pressed", sx, sy, x, y, ...)
     end,
     on_dragged = function(sx, sy, dx, dy, x, y, ...)
-      local a, b, w, h = travel(x, y)
-      send("dragged", a, b, w, h)
+      if SURFACE_POINTER[archetype] then send("dragged", sx, sy)
+      else local a, b, w, h = travel(x, y) send("dragged", a, b, w, h) end
       also("on_dragged", sx, sy, dx, dy, x, y, ...)
     end,
     on_released = function(...) send("released") also("on_released", ...) end,
@@ -182,6 +190,8 @@ function M.make(archetype, widget, spec, extra)
     -- listened for only when the configuration wants it (and the double
     -- click likewise).
     on_long_pressed = spec.on_long_pressed and function() send("long_pressed") end or nil,
+    -- A drag's fling, as the engine measured it at the release.
+    on_swiped = archetype == "Drag" and function(_, vx, vy) send("fling", vx, vy) end or nil,
     on_double_clicked = spec.on_double_clicked and function() send("double_clicked") end or nil,
     on_focus_changed = function(on) send("focus", on, root and root.visual_focus or false) end,
     on_destroyed = function()
@@ -250,6 +260,9 @@ function M.make(archetype, widget, spec, extra)
   morf.effect("kit.control.size." .. id, function()
     t.width, t.height = root.layout_width or 0, root.layout_height or 0
   end, { owner = root })
+  -- The state it was made with first, so a setting given as a binding,
+  -- applied next, is not undone by it.
+  apply(made)
   -- Settings given as bindings follow them.
   for _, field in ipairs(fields) do
     if type(spec[field]) == "function" then
@@ -281,7 +294,6 @@ function M.make(archetype, widget, spec, extra)
   end
   build()
   skin.track(root, build)
-  apply(made)
   return root, t, { id = id, send = send, configure = function(field, v) apply(native.configure(id, field, value(v))) end,
     slots = function() return slots end, builders = function() return builders end }
 end
@@ -312,6 +324,7 @@ function M.headless(archetype, spec)
       if handler then handler(table.unpack(signal, 2)) end
     end
   end
+  apply(made)
   for _, field in ipairs(fields) do
     if type(spec[field]) == "function" then
       morf.effect("kit.headless." .. field .. "." .. id, function()
@@ -319,7 +332,6 @@ function M.headless(archetype, spec)
       end, spec.owner and { owner = spec.owner } or nil)
     end
   end
-  apply(made)
   local handle = { t = t }
   function handle.send(event, ...) local effects = native.send(id, event, ...) apply(effects) return effects end
   function handle.key(name, modifiers, text)

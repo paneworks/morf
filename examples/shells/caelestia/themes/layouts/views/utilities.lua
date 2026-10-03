@@ -198,9 +198,11 @@ function M.page(w, h)
     kit.subtitle {id="settings-breadcrumb",x=50,y=2,width=w-54,font_size=10,elide="right",text=model.breadcrumb},
     table.unpack(stack),
   }
-  -- The last detail shown stays drawn while it slides away.
+  -- The last detail shown stays drawn while it slides away. The pages are
+  -- a Navigation stack: with focus inside, Alt+Left and the back button pop.
   return ui.Item {
     width = w, height = h, clip = true,
+    shortcuts = model.navigation.shortcuts(),
     ui.Row {
       gap = 22,
       translate_x = function() return M.detail:get() ~= "" and -(w + 22) or 0 end,

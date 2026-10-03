@@ -178,18 +178,25 @@ function V.build(M)
     }
     kit.hover(expand_area, function(hovered) return signal():alpha(hovered and .2 or .06) end, L.control_round(EXPAND))
 
+    -- Swiped sideways a card follows the finger and goes past its distance
+    -- or speed, and springs back short of them (a kit Drag).
+    local swiped = false
+    local swipe = require("lib.kit.control").headless("Drag", { mode = "swipe", axis = "x",
+      on_swiped = function() swiped = true M.dismiss_at(i) end })
     card = kit.action {
       id = "notification-" .. i,
       width = CARD_W, cursor = "pointer",
       height = function() return card_height(n()) end,
       visible = function() return n() ~= nil end,
-      behavior = { height = motion },
+      translate_x = function() return swipe.t.delta_x end,
+      behavior = { height = motion, translate_x = { duration = 160, easing = "out_cubic" } },
       clip = true,
-      on_clicked = function() M.dismiss_at(i) end,
-      -- Flung sideways, a card goes as a click sends it.
-      on_swiped = function(direction)
-        if direction == "left" or direction == "right" then M.dismiss_at(i) end
-      end,
+      on_pressed = function(sx, sy) swiped = false swipe.send("pressed", sx, sy) end,
+      on_dragged = function(sx, sy) swipe.send("dragged", sx, sy) end,
+      on_released = function() swipe.send("released", 0, 0) end,
+      on_swiped = function(_, vx, vy) swipe.send("fling", vx, vy) end,
+      -- A click dismisses too -- unless it ended a swipe that already did.
+      on_clicked = function() if swiped then swiped = false return end M.dismiss_at(i) end,
       L.decor_box("corners", { length = 9, color = function()
         return card and card.hovered and signal() or kit.stroke("mark")()
       end }),

@@ -13,8 +13,11 @@
 
 mod collection;
 mod control;
+mod disclosure;
+mod drag;
 mod group;
 mod module;
+mod navigation;
 mod plane;
 mod popup;
 mod press;

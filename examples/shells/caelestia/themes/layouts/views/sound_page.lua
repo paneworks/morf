@@ -3,6 +3,7 @@
 --
 --   Output   the default output's volume, mute, and each of its channels
 --            on its own slider (left and right, or channel 1, 2, ...)
+--            under a Channels expander that remembers being shut
 --   Devices  every output, the default one chosen; a click makes another
 --            the default
 --   Apps     what is playing: each app's volume and mute, and chips for
@@ -16,6 +17,7 @@ local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
 local rows = require("themes.layouts.rows")
+local disclosure = require("lib.kit.disclosure")
 
 local C = theme.color
 local M = {}
@@ -85,6 +87,7 @@ end
 
 -- ------------------------------------------------------------------ output --
 
+local channels_open = require("themes.session").keep("caelestia.sound.channels_open", true)
 local function output_card(height)
   local function vol() local s = sink() return s and s.volume or 0 end
   local channels = {}
@@ -137,7 +140,13 @@ local function output_card(height)
           return s.volume < 0.5 and "volume_down" or "volume_up"
         end,
       },
-      ui.Column { gap = 0, table.unpack(channels) },
+      (disclosure.make("expander", {
+        id = "sound-channels", title = "Channels", width = INNER, header_height = 34,
+        visible = function() local s = sink() return s ~= nil and (s.channels or 0) > 1 end,
+        expanded = function() return channels_open:get() end,
+        on_toggled = function(open) if open ~= channels_open:get() then channels_open:set(open) end end,
+        content = ui.Column { gap = 0, table.unpack(channels) },
+      })),
     },
     nothing("No sound server"),
   }

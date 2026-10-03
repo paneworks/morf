@@ -14,7 +14,7 @@
 local M = {}
 
 --- The plan stage the kits have reached.
-M.stage = 10
+M.stage = 11
 
 -- ------------------------------------------------------------- functions --
 --

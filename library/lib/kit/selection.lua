@@ -78,12 +78,24 @@ function M.make(widget, spec)
         hovered = function() return area and area.hovered or false end,
         down = function() return area and area.pressed or false end,
       }
+      -- A reorderable entry drags along the row (a headless Drag): past a
+      -- neighbour, it asks to swap with it.
+      local dragging
+      if spec.reorderable then
+        dragging = control.headless("Drag", { mode = "reorder",
+          axis = (spec.orientation == "vertical") and "y" or "x",
+          extent = (spec.orientation == "vertical") and (spec.item_height or 36) or (spec.item_width or 80),
+          on_reorder = function(step) if spec.on_reorder then spec.on_reorder(index, step) end end })
+      end
       local props = { width = spec.item_width, height = spec.item_height, cursor = "pointer",
         id = spec.item_id and spec.item_id(index, value) or nil,
-        on_pressed = function()
+        on_pressed = function(sx, sy)
           deliver("item_pressed", index, "")
           if spec.press_activates then deliver("item_activated", index) end
+          if dragging then dragging.send("pressed", sx, sy) end
         end,
+        on_dragged = dragging and function(sx, sy) dragging.send("dragged", sx, sy) end or nil,
+        on_released = dragging and function() dragging.send("released", 0, 0) end or nil,
         on_double_clicked = function() deliver("item_activated", index) end,
       }
       for k, v in pairs(builders.place and builders.place(index, value) or {}) do props[k] = v end

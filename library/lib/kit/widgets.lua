@@ -101,6 +101,15 @@ end
 for _, widget in ipairs(contract.archetypes.Collection.widgets) do
   M[widget] = function(spec) return require("lib.kit.collection").make(widget, spec) end
 end
+for _, widget in ipairs(contract.archetypes.Disclosure.widgets) do
+  M[widget] = function(spec) return require("lib.kit.disclosure").make(widget, spec) end
+end
+for _, widget in ipairs(contract.archetypes.Drag.widgets) do
+  M[widget] = function(spec) return require("lib.kit.drag").make(widget, spec) end
+end
+for _, widget in ipairs(contract.archetypes.Navigation.widgets) do
+  M[widget] = function(spec) return require("lib.kit.navigation").make(widget, spec) end
+end
 for _, widget in ipairs(contract.archetypes.Range.widgets) do
   M[widget] = function(spec) return (control.make("Range", widget, with_defaults(widget, spec, RANGE))) end
 end

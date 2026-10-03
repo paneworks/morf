@@ -227,6 +227,68 @@ return function(theme, M, hud)
     return pill(t, spec)
   end
 
+  --- Disclosures: a layout's own header (`area`) gets the press feedback;
+  --- an expander draws a framed header -- the title, a hatched wash while
+  --- open, and a square plus whose upright folds flat into a minus.
+  function S.Disclosure(t, spec)
+    if spec.widget == "area" then return { indicator = feedback(t, spec.id) } end
+    local H = spec.header_height or 40
+    return {
+      background = ui.Item { width = function() return t.width end, height = H,
+        ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainer end,
+          border_width = 1, border_color = function() return t.expanded and C.primary or C.outlineVariant end },
+        ui.Rect { anchors = { fill = true, margins = 1 }, color = function() return C.primary end,
+          opacity = function() return t.down and 0.18 or t.hovered and 0.06 or 0 end,
+          behavior = { opacity = quick } } },
+      header = M.text { x = 12, y = (H - theme.size.normal * 1.4) / 2, text = spec.title or "",
+        font_size = theme.size.normal, color = function() return t.expanded and C.primary or C.onSurface end },
+      indicator = ui.Item { x = function() return t.width - 28 end, y = (H - 14) / 2, width = 14, height = 14,
+        ui.Rect { x = 0, y = 6, width = 14, height = 2, color = function() return C.primary end },
+        ui.Rect { x = 6, width = 2, color = function() return C.primary end,
+          y = function() return t.expanded and 6 or 0 end, height = function() return t.expanded and 2 or 14 end,
+          behavior = { y = quick, height = quick } } },
+    }
+  end
+
+  --- Drags: a divider's grip -- three square studs that part along the
+  --- axis while hovered and turn primary while held -- with the press
+  --- feedback. A swipe is headless: the layout's own node moves.
+  function S.Drag(t, spec)
+    local across = (spec.axis or "x") == "x"
+    local studs = ui.Item { anchors = { fill = true } }
+    for i = -1, 1 do
+      local function at() return i * ((t.active or t.hovered) and 9 or 6) end
+      ui.reparent(ui.Rect { width = 4, height = 4,
+        x = function() return (t.width or 0) / 2 - 2 + (across and 0 or at()) end,
+        y = function() return (t.height or 0) / 2 - 2 + (across and at() or 0) end,
+        color = function() return t.active and C.primary or C.outline end,
+        behavior = { x = quick, y = quick } }, studs)
+    end
+    return { background = feedback(t, spec.id), handle = studs }
+  end
+
+  --- Navigations: a hard wipe -- the new page cuts in from its side over a
+  --- hatched band while the old one drops away at once.
+  function S.Navigation(t, spec)
+    -- The page last brought in: a page left behind is hidden only if a
+    -- newer change has not brought it back meanwhile.
+    local latest
+    return {
+      transition = function(from, to, direction)
+        latest = to
+        local width = math.max(1, to.layout_width or t.width or 400)
+        to.translate_x = (direction or 1) * width * 0.6
+        local steps = { { node = to, property = "translate_x", to = 0, duration = 220, easing = "out_expo" } }
+        if from then
+          steps[#steps + 1] = { node = from, property = "opacity", to = 0, duration = 80, easing = "linear" }
+        end
+        morf.animation.play { { parallel = steps }, on_finished = function()
+          if from and from ~= latest then from.visible, from.opacity = false, 1 end
+        end }
+      end,
+    }
+  end
+
   -- ------------------------------------------------------------ ranges --
 
   --- The slider: a faint band, the hatched run up to the value, a tick
@@ -391,7 +453,7 @@ return function(theme, M, hud)
   local function tabs(t, spec)
     -- The row's own name and width: the caller's, not the control's.
     local id, row_width = spec.tab_id or spec.id, spec.width_of or spec.width
-    local list = spec.items
+    local list = type(spec.items) == "function" and spec.items() or spec.items
     local growing = spec.growing == true
     local pad, height, gap = spec.pad or 11, spec.height or 64, 8
     local MENU = theme.typography.menu

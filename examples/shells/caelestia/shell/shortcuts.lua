@@ -13,6 +13,13 @@ function M.table(ipc)
     local args = { ... }
     return function() ipc[name](table.unpack(args)) end
   end
+  local close = call("close")
+  local function back()
+    local settings = package.loaded["settings_model"]
+    local pages = settings and settings.navigation
+    if pages and settings.opened:get() and pages.can_go_back() then pages.back() return end
+    close()
+  end
   return {
     scope = "surface",
     ["ctrl+space"] = call("launcher", "toggle"),
@@ -25,9 +32,10 @@ function M.table(ipc)
     ["ctrl+q"] = call("session", "toggle"),
     ["ctrl+shift+s"] = call("capture", "toggle"),
     ["ctrl+w"] = call("close"),
-    -- A mouse's back button, or Alt+Left: shut what is open.
-    ["back"] = call("close"),
-    ["alt+Left"] = call("close"),
+    -- A mouse's back button, or Alt+Left: one settings page back while a
+    -- page is open on the Settings stack, else shut what is open.
+    ["back"] = back,
+    ["alt+Left"] = back,
   }
 end
 

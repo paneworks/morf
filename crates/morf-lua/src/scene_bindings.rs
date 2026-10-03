@@ -362,6 +362,23 @@ pub(crate) fn node_metatable<'gc>(
     });
     let new_index = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (node, property, value): (UserRef<NodeToken>, String, LuaValue) = stack.consume(ctx)?;
+        // A handler set or taken away after the node was made: `node.on_pressed
+        // = fn` hears presses from now on, `= nil` stops.
+        if let Some(event) = crate::configure::handler_event(&property) {
+            let mut state = state.try_borrow_mut().map_err(|_| {
+                HostError("nodes cannot be written to from inside a layout function".to_owned())
+            })?;
+            match value {
+                LuaValue::Function(luna::Function::Closure(closure)) => {
+                    state.handlers.insert((node.handle, event), ctx.stash(closure));
+                }
+                LuaValue::Nil => {
+                    state.handlers.remove(&(node.handle, event));
+                }
+                _ => return Err(HostError(format!("{property} must be a function or nil")).into()),
+            }
+            return Ok(CallbackReturn::Return);
+        }
         if matches!(
             property.as_str(),
             "stretch" | "track" | "mask" | "shortcuts"

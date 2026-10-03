@@ -59,6 +59,8 @@ pub(crate) struct Selection {
     follow_focus: bool,
     typed: String,
     typed_at: f64,
+    /// Alt with the arrows asks to move the current entry (`reorder`).
+    reorderable: bool,
 }
 
 fn indices(set: &BTreeSet<i64>) -> IpcValue {
@@ -85,6 +87,7 @@ impl Selection {
             follow_focus: true,
             typed: String::new(),
             typed_at: f64::NEG_INFINITY,
+            reorderable: false,
         }
     }
 
@@ -309,6 +312,23 @@ impl Archetype for Selection {
                 let now = number(arguments.get(3)).unwrap_or(0.0);
                 let extend = modifiers.contains("shift");
                 let ctrl = modifiers.contains("ctrl");
+                // Alt with an arrow: move the current entry, not the choice.
+                if self.reorderable && modifiers.contains("alt") && self.current > 0 {
+                    let forward = if self.base.mirrored { -1 } else { 1 };
+                    let step = match (self.orientation, name) {
+                        (Orientation::Vertical, "Up") | (Orientation::Horizontal | Orientation::Grid, "Left") => Some(-forward),
+                        (Orientation::Vertical, "Down") | (Orientation::Horizontal | Orientation::Grid, "Right") => Some(forward),
+                        _ => None,
+                    };
+                    if let Some(step) = step {
+                        let to = self.current + step;
+                        if to >= 1 && to <= self.count {
+                            effects.raise("reorder", vec![self.current.into(), step.into()]);
+                            effects.handled = true;
+                        }
+                        return Ok(effects);
+                    }
+                }
                 let forward = if self.base.mirrored { -1 } else { 1 };
                 let columns = self.columns.max(1);
                 let step = match (self.orientation, name) {
@@ -494,6 +514,7 @@ impl Archetype for Selection {
             }
             "wrap" => self.wrap = expect_boolean(Some(value), field)?,
             "follow_focus" => self.follow_focus = expect_boolean(Some(value), field)?,
+            "reorderable" => self.reorderable = expect_boolean(Some(value), field)?,
             "columns" => self.columns = expect_number(Some(value), field)?.max(1.0) as i64,
             "page" => self.page = expect_number(Some(value), field)?.max(1.0) as i64,
             "disabled" => {
