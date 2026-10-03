@@ -528,6 +528,56 @@ return function(theme, M, hud)
     return entries(t, spec)
   end
 
+  -- -------------------------------------------------------- collections --
+
+  --- A list, table or tree row: a hairline under it, the accent plate on
+  --- the current row with a block at its edge, mono labels indented by
+  --- depth, a square marker for a tree node; a table's header in caps.
+  S.Collection = {
+    row = function(t)
+      return function(row, s)
+        local function now() return s.row() or row end
+        local node = ui.Item { anchors = { fill = true },
+          ui.Rect { anchors = { fill = true }, color = function()
+            return C.primary:alpha(s.current() and .14 or s.hovered() and .06 or 0) end },
+          ui.Rect { width = 3, anchors = { top = true, bottom = true }, color = function() return C.primary end,
+            visible = function() return s.current() end },
+          ui.Rect { anchors = { left = true, right = true, bottom = true }, height = 1,
+            color = function() return stroke(C, "quiet") end },
+          ui.Rect { width = 7, height = 7, anchors = { vertical_center = true },
+            x = function() return 10 + s.depth() * 16 end,
+            color = function() return s.expanded() and C.primary or "transparent" end, border_width = 1,
+            border_color = function() return C.primary end, visible = function() return s.expandable() end },
+          M.menu_label { anchors = { vertical_center = true },
+            x = function() return 12 + s.depth() * 16 + (s.expandable() and 14 or 0) end,
+            text = function() local r = now() return tostring(r.label or r.name or r.title or r.key or ""):upper() end,
+            color = function() return s.current() and C.primary or C.onSurface end },
+          hud().corners { length = 5, weight = 2, color = function() return C.primary end,
+            visible = function() return t.visual_focus and s.current() end } }
+        return node, function() end
+      end
+    end,
+    cell = function()
+      return function(row, column, s)
+        return M.menu_label { x = 8, anchors = { vertical_center = true },
+          text = function() local r = s.row() or row return tostring(r[column.key] or "") end,
+          color = function() return s.current() and C.primary or C.onSurface end }, function() end
+      end
+    end,
+    header = function(t)
+      return function(column)
+        return ui.Item { anchors = { fill = true },
+          ui.Rect { anchors = { left = true, right = true, bottom = true }, height = 1,
+            color = function() return C.primary:alpha(.5) end },
+          M.menu_label { x = 8, anchors = { vertical_center = true },
+            text = tostring(column.title or column.key):upper(), color = function() return C.onSurfaceVariant end },
+          M.menu_label { anchors = { right = true, right_margin = 6, vertical_center = true },
+            text = function() return t.sort_ascending and "▲" or "▼" end, color = function() return C.primary end,
+            visible = function() return t.sort_column == column.key end } }
+      end
+    end,
+  }
+
   -- ------------------------------------------------------------ popups --
 
   --- A popup's ground: a square framed panel with corner brackets.

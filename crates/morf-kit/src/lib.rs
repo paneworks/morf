@@ -11,6 +11,7 @@
 //! state that changed and the signals to raise. The Lua side applies the
 //! state to the table a skin reads and calls the configuration's handlers.
 
+mod collection;
 mod control;
 mod group;
 mod module;

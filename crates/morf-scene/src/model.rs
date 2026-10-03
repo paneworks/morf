@@ -222,6 +222,10 @@ pub struct VirtualList {
     pub(crate) initialized: bool,
     /// Every item is visible, whatever the viewport: a `Repeater`.
     pub(crate) unbounded: bool,
+    /// Where each item starts when items differ in extent (a list whose rows
+    /// say how tall they are): `starts[i]` is item `i`'s start, the last
+    /// entry the content's end. `None` when every item is `item_extent`.
+    pub(crate) starts: Option<Vec<f64>>,
 }
 
 impl VirtualList {
@@ -240,6 +244,7 @@ impl VirtualList {
                 active: HashMap::new(),
                 initialized: false,
                 unbounded: false,
+                starts: None,
             })
     }
 
@@ -257,6 +262,7 @@ impl VirtualList {
             active: HashMap::new(),
             initialized: false,
             unbounded: true,
+            starts: None,
         }
     }
 
@@ -297,10 +303,62 @@ impl VirtualList {
         self.columns
     }
 
+    /// Sets how long the viewport is: a view whose box changes size.
+    pub fn set_viewport(&mut self, extent: f64) {
+        if extent.is_finite() && extent >= 0.0 {
+            self.viewport_extent = extent;
+        }
+    }
+
+    /// Gives each item its own extent, in model order (a one-column list
+    /// only); an empty list goes back to `item_extent` for all.
+    pub fn set_extents(&mut self, extents: &[f64]) {
+        if extents.is_empty() || self.columns != 1 {
+            self.starts = None;
+            return;
+        }
+        let mut starts = Vec::with_capacity(extents.len() + 1);
+        let mut at = 0.0;
+        starts.push(at);
+        for extent in extents {
+            at += if extent.is_finite() && *extent > 0.0 { *extent } else { self.item_extent };
+            starts.push(at);
+        }
+        self.starts = Some(starts);
+    }
+
+    /// Where item `index` starts along the view.
+    pub fn item_start(&self, index: usize) -> f64 {
+        match &self.starts {
+            Some(starts) => starts.get(index).copied().unwrap_or_else(|| starts.last().copied().unwrap_or(0.0)),
+            None => (index / self.columns) as f64 * self.item_extent,
+        }
+    }
+
+    /// How long the whole content is, for `item_count` items.
+    pub fn content_extent(&self, item_count: usize) -> f64 {
+        match &self.starts {
+            Some(starts) => starts.last().copied().unwrap_or(0.0),
+            None => item_count.div_ceil(self.columns) as f64 * self.item_extent,
+        }
+    }
+
     /// Returns indexes requiring live delegates.
     pub fn visible_range(&self, item_count: usize) -> Range<usize> {
         if self.unbounded {
             return 0..item_count;
+        }
+        if let Some(starts) = &self.starts {
+            let count = item_count.min(starts.len().saturating_sub(1));
+            let total = starts.get(count).copied().unwrap_or(0.0);
+            let offset = self.offset.min((total - self.viewport_extent).max(0.0));
+            // The first item whose end is past the offset, the first whose
+            // start is past the viewport's end.
+            let first = starts[1..=count].partition_point(|end| *end <= offset);
+            let last = starts[..count].partition_point(|start| *start < offset + self.viewport_extent);
+            let start = first.saturating_sub(self.overscan);
+            let end = (last + self.overscan).min(count);
+            return start..end.max(start);
         }
         let rows = item_count.div_ceil(self.columns);
         let maximum = (rows as f64 * self.item_extent - self.viewport_extent).max(0.0);
@@ -355,7 +413,7 @@ impl VirtualList {
                 transitions.push(ViewTransition::Remove(ViewItem {
                     id: *id,
                     index: *from,
-                    destination: (*from / self.columns) as f64 * self.item_extent,
+                    destination: self.item_start(*from),
                 }));
             }
         }
@@ -363,7 +421,7 @@ impl VirtualList {
             let item = ViewItem {
                 id: *id,
                 index: *index,
-                destination: (*index / self.columns) as f64 * self.item_extent,
+                destination: self.item_start(*index),
             };
             match self.active.get(id) {
                 None if !self.initialized => transitions.push(ViewTransition::Populate(item)),
@@ -392,3 +450,21 @@ impl VirtualList {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod extents_tests {
+    use super::*;
+
+    #[test]
+    fn rows_of_their_own_extent_fill_the_viewport() {
+        let mut view = VirtualList::new(52.0, 1.0, 3).unwrap();
+        view.set_extents(&[32.0, 52.0, 32.0, 52.0, 32.0, 52.0]);
+        view.set_viewport(250.0);
+        assert_eq!(view.visible_range(6), 0..6);
+        view.set_viewport(100.0);
+        assert_eq!(view.visible_range(6), 0..6, "the overscan reaches the rest");
+        view.set_offset(116.0);
+        assert_eq!(view.item_start(3), 116.0);
+        assert_eq!(view.content_extent(6), 252.0);
+    }
+}

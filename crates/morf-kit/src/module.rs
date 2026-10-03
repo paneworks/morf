@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use morf_lua::{HostFunction, IpcTable, IpcValue, Runtime};
 
+use crate::collection::Collection;
 use crate::control::{Control, implicit_size};
 use crate::group::arrow_step;
 use crate::plane::Plane;
@@ -164,6 +165,7 @@ fn make(archetype: &str) -> Result<Box<dyn Archetype>, String> {
         "Popup" => Ok(Box::new(Popup::new())),
         "TextField" => Ok(Box::new(TextField::new())),
         "Scroll" => Ok(Box::new(Scroll::new())),
+        "Collection" => Ok(Box::new(Collection::new())),
         "Selection" => Ok(Box::new(Selection::new())),
         other if ARCHETYPES.contains(&other) => {
             Err(format!("archetype {other} has not arrived yet"))
@@ -208,8 +210,8 @@ pub fn install(runtime: &mut Runtime) {
                 let rank = |field: &str| match field {
                     "from" | "to" | "range" | "orientation" | "logarithmic" | "wrap" | "step"
                     | "tristate" | "checkable" | "group" | "exclusive" | "allow_none" => 0,
-                    "count" | "labels" | "columns" | "x_from" | "x_to" | "y_from" | "y_to"
-                    | "mode" | "disabled" => 0,
+                    "layout" | "columns_spec" | "tree_rows" | "count" | "labels" | "columns"
+                    | "x_from" | "x_to" | "y_from" | "y_to" | "mode" | "disabled" => 0,
                     "value" | "first" | "second" | "checked" | "partial" | "current"
                     | "selected" | "x" | "y" => 2,
                     _ => 1,

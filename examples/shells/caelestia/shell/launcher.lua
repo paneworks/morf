@@ -9,6 +9,9 @@ local view
 M.query = morf.signal("caelestia.launcher.query", "")
 M.selected = morf.signal("caelestia.launcher.selected", 1)
 M.results = morf.list_model({})
+-- How tall each kind of row is, with the gap under it: the results view
+-- lists them virtualised by these, and its build sets its own.
+M.row_heights = { header = 32, hero = 118, row = 52 }
 M.count = morf.signal("caelestia.launcher.count", 0)
 M.mode = morf.signal("caelestia.launcher.mode", "apps")
 -- The row whose actions are listed instead of the results (Tab, Ctrl+K),
@@ -82,7 +85,8 @@ morf.effect("caelestia.launcher.search", function()
     if not hero and shown >= max_shown() then break end
     local section = not hero and section_of(row, q) or nil
     if section and section ~= last_section then
-      out[#out + 1] = { key = "header:" .. section .. ":" .. #out, kind = "header", name = section }
+      out[#out + 1] = { key = "header:" .. section .. ":" .. #out, kind = "header", name = section,
+        height = M.row_heights.header }
     end
     last_section = section or last_section
     local key = row.kind .. ":" .. row.id
@@ -94,6 +98,7 @@ morf.effect("caelestia.launcher.search", function()
       kind = hero and "hero" or row.kind, id = row.id, name = row.name,
       description = row.description, icon = row.icon, material = row.material,
       swatch = row.swatch, glyph = row.glyph, question = row.question,
+      height = hero and M.row_heights.hero or M.row_heights.row,
     }
     out[#out + 1] = entry
     by_key[entry.key] = row
@@ -126,7 +131,7 @@ function M.activate(row)
   end
 end
 
--- The list's selection is a kit Selection (crates/morf-kit): it skips the
+-- The list's choosing is a kit Collection (crates/morf-kit): it skips the
 -- section headings, walks the wallpapers sideways, and answers the Page
 -- keys; the view draws the rows.
 local headers = function()
@@ -136,7 +141,8 @@ local headers = function()
   end
   return out
 end
-local choice = require("lib.kit.control").headless("Selection", {
+local choice = require("lib.kit.control").headless("Collection", {
+  layout = "list",
   orientation = function() return wide() and "horizontal" or "vertical" end,
   count = function() return wide() and M.wall_count:get() or M.count:get() end,
   disabled = function() return wide() and {} or headers() end,

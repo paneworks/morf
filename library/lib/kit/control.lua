@@ -34,14 +34,16 @@ local SETTINGS = {
   TextField = { "text", "placeholder", "echo", "read_only", "max_length", "validator", "minimum", "maximum",
     "required", "revert_on_escape" },
   Scroll = { "scroll_policy_x", "scroll_policy_y", "snap", "item_size", "step" },
+  Collection = { "count", "labels", "current", "selected", "mode", "wrap", "orientation", "columns", "page",
+    "disabled", "follow_focus", "layout", "columns_spec", "tree_rows", "end_margin" },
 }
 -- How each archetype takes focus by default: a press by Tab only, so a click
 -- leaves a search field typing; a range by click too, so the arrows move
 -- what was just dragged.
 local POLICY = { Control = "none", Press = "tab", Range = "strong", Plane = "strong", Selection = "strong",
-  TextField = "none", Scroll = "none" }
+  TextField = "none", Scroll = "none", Collection = "strong" }
 -- Which take keys and the wheel.
-local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scroll = true }
+local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scroll = true, Collection = true }
 local WHEEL = { Range = true, Plane = true }
 -- The clock typeahead measures pauses on.
 local clock = morf.elapsed_timer()
@@ -51,7 +53,8 @@ local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_valu
   on_long_pressed = true, on_double_clicked = true, on_current_changed = true, on_selection_changed = true,
   on_activated = true, on_opened = true, on_closed = true, on_about_to_close = true, on_edited = true,
   on_invalid = true, on_scrolled = true, on_reached_start = true, on_reached_end = true, on_set_text = true,
-  on_scroll_to = true }
+  on_scroll_to = true, on_sort_changed = true, on_column_resized = true, on_expanded_changed = true,
+  on_end_reached = true }
 -- Every live control's way to take effects another control's event caused
 -- (an exclusive group), by id.
 local appliers = {}
@@ -217,7 +220,13 @@ function M.make(archetype, widget, spec, extra)
   -- the configuration's, not the skin's, so a theme switch keeps them.
   for name, v in pairs(extra.props or {}) do props[name] = v end
   for i, child in ipairs(extra.children or {}) do props[i] = child end
-  for field in pairs(NODE) do if spec[field] ~= nil then props[field] = spec[field] end end
+  -- (A field that is one of the archetype's settings -- a collection's
+  -- `layout` -- is the archetype's, not the node's.)
+  local is_setting = {}
+  for _, field in ipairs(fields) do is_setting[field] = true end
+  for field in pairs(NODE) do
+    if spec[field] ~= nil and not is_setting[field] then props[field] = spec[field] end
+  end
   local padding, insets = sides(spec.padding), sides(spec.insets)
   -- Bumped once the slots are built, so the size binding reads the new ones.
   local generation = morf.signal("kit.control.slots." .. id, 0)

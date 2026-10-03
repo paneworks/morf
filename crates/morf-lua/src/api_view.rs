@@ -354,6 +354,43 @@ pub(crate) fn install_view_api<'gc>(
     });
     morf.set_field(ctx, "sync_view", sync_view);
 
+    // How long a view's content is, all its rows: what a scroll bar over it
+    // measures against.
+    let extent_state = Rc::clone(&state);
+    let view_extent = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let node: UserRef<NodeToken> = stack.consume(ctx)?;
+        let extent = {
+            let state = extent_state.borrow();
+            let view = state
+                .views
+                .get(&node.handle)
+                .ok_or_else(|| HostError("node is not a ListView".to_owned()))?;
+            let count = view.model.borrow().len();
+            view.view.content_extent(count)
+        };
+        stack.replace(ctx, extent);
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "view_extent", view_extent);
+
+    // Where row `index` (from 1) of a view starts along it: what keeping a
+    // row in sight scrolls to.
+    let start_state = Rc::clone(&state);
+    let view_item_start = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let (node, index): (UserRef<NodeToken>, i64) = stack.consume(ctx)?;
+        let start = {
+            let state = start_state.borrow();
+            let view = state
+                .views
+                .get(&node.handle)
+                .ok_or_else(|| HostError("node is not a ListView".to_owned()))?;
+            view.view.item_start((index - 1).max(0) as usize)
+        };
+        stack.replace(ctx, start);
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "view_item_start", view_item_start);
+
     let transition_state = Rc::clone(&state);
     let transition_parent = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (node, parent, options): (UserRef<NodeToken>, UserRef<NodeToken>, Table) =

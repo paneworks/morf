@@ -482,6 +482,58 @@ return function(theme, M)
     return entries(t, spec)
   end
 
+  -- -------------------------------------------------------- collections --
+
+  --- A list, table or tree row: a hover wash, the secondary container on
+  --- the current row, the label indented by depth with a chevron for a
+  --- tree node; a table's cells in its type, its header in the label tone.
+  S.Collection = {
+    row = function(t)
+      return function(row, s)
+        local function now() return s.row() or row end
+        local label = M.text { anchors = { vertical_center = true },
+          x = function() return 14 + s.depth() * 18 + (s.expandable() and 20 or 0) end,
+          text = function() local r = now() return tostring(r.label or r.name or r.title or r.key or "") end,
+          font_size = theme.size.normal, color = function() return s.current() and C().onSecondaryContainer or C().onSurface end }
+        local node = ui.Item { anchors = { fill = true },
+          ui.Rect { anchors = { fill = true, margins = 2 }, radius = 10,
+            color = function()
+              if s.current() then return C().secondaryContainer end
+              return s.hovered() and C().onSurface:alpha(0.06) or C().onSurface:alpha(0)
+            end,
+            border_width = function() return t.visual_focus and s.current() and 2 or 0 end,
+            border_color = function() return C().secondary end },
+          M.icon(function() return s.expanded() and "expand_more" or "chevron_right" end, 18,
+            function() return C().onSurfaceVariant end,
+            { anchors = { vertical_center = true }, x = function() return 10 + s.depth() * 18 end,
+              visible = function() return s.expandable() end }),
+          label }
+        return node, function() end
+      end
+    end,
+    cell = function()
+      return function(row, column, s)
+        local text = M.text { x = 10, anchors = { vertical_center = true }, font_size = theme.size.small,
+          text = function() local r = s.row() or row return tostring(r[column.key] or "") end,
+          color = function() return s.current() and C().onSecondaryContainer or C().onSurface end }
+        return ui.Item { anchors = { fill = true },
+          ui.Rect { anchors = { fill = true }, color = function() return s.current() and C().secondaryContainer or "transparent" end },
+          text }, function() end
+      end
+    end,
+    header = function(t)
+      return function(column)
+        return ui.Item { anchors = { fill = true },
+          M.text { x = 10, anchors = { vertical_center = true }, text = column.title or column.key,
+            font_size = theme.size.small, font_weight = 600, color = function() return C().onSurfaceVariant end },
+          M.icon(function() return t.sort_ascending and "arrow_upward" or "arrow_downward" end, 14,
+            function() return C().primary end,
+            { anchors = { right = true, right_margin = 8, vertical_center = true },
+              visible = function() return t.sort_column == column.key end }) }
+      end
+    end,
+  }
+
   -- ------------------------------------------------------------ popups --
 
   --- A popup's ground: the highest tonal surface, rounded, with a hairline.

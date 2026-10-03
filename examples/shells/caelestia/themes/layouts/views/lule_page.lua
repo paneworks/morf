@@ -122,28 +122,42 @@ function M.build(state)
   local use_folder = button("lule-use-folder", "Use folder", nil, 96,
     function() state.set_folder(field.text) end, nil, 30)
   use_folder.x, use_folder.y = left - PAD - 96, 275
-  local browser_rows = { gap = 3 }
   local PAGE_SIZE = 4
-  for i = 1, PAGE_SIZE do
-    local function file() return state.files:get()[(state.page:get() - 1) * PAGE_SIZE + i] end
-    local area
-    area = kit.action { id = "lule-file-" .. i, width = left - 2 * PAD - 16, height = 26, cursor = "pointer",
-      visible = function() return file() ~= nil end,
-      on_clicked = function() local item = file() if item then state.select(item.path) end end,
-      kit.icon("image", 16, kit.ink("accent"), { x = 8, y = 5 }),
-      kit.menu_label { text = function() local item = file() return item and item.name or "" end,
-        x = 30, y = 5, width = left - 2 * PAD - 55, elide = "right", font_size = 12 },
-    }
-    kit.hover(area, function(hovered) return hovered and C.primaryContainer or C.surfaceContainerHigh end, 8)
-    browser_rows[#browser_rows + 1] = area
-  end
+  -- The folder's images, a page at a time, as a kit Collection (a file
+  -- list): its rows are rebound as the page turns, not built again.
+  local page_rows = morf.list_model({})
+  morf.effect("caelestia.lule.page-rows", function()
+    local files, page, out = state.files:get(), state.page:get(), {}
+    for i = 1, PAGE_SIZE do
+      local item = files[(page - 1) * PAGE_SIZE + i]
+      if item then out[#out + 1] = { key = tostring(i), path = item.path, name = item.name, slot = i } end
+    end
+    page_rows:replace(out, "key")
+  end)
+  local browser_node = kit.widgets.file_list { id = "lule-files", width = left - 2 * PAD - 16, height = 116,
+    rows = page_rows, row_height = 29, focus_policy = "tab",
+    on_activated = function(i) local r = page_rows:get(i) if r then state.select(r.path) end end,
+    delegate = function(row, s)
+      local area
+      local function now() return s.row() or row end
+      area = kit.action { id = ("lule-file-%d"):format(row.slot), width = left - 2 * PAD - 16, height = 26, cursor = "pointer",
+        on_clicked = function() state.select(now().path) end,
+        kit.icon("image", 16, kit.ink("accent"), { x = 8, y = 5 }),
+        kit.menu_label { text = function() return now().name or "" end,
+          x = 30, y = 5, width = left - 2 * PAD - 55, elide = "right", font_size = 12 },
+      }
+      kit.hover(area, function(hovered)
+        return (hovered or s.current()) and C.primaryContainer or C.surfaceContainerHigh
+      end, 8)
+      return area, function(next_row) area.id = ("lule-file-%d"):format(next_row.slot) end
+    end }
   local library = kit.card { id = "lule-browser", x = PAD, y = 44, width = left - 2 * PAD, height = 227,
     radius = 18, color = function() return C.surfaceContainer end, visible = function() return state.browsing:get() end,
     ui.Column { x = 8, y = 8, width = left - 2 * PAD - 16, gap = 5,
       label(function() return #state.files:get() == 0 and "No images in this folder"
         or #state.files:get() .. " wallpapers · Choose a preview" end,
         { width = left - 2 * PAD - 16, height = 15, elide = "middle", font_size = 11 }),
-      ui.Item { width = left - 2 * PAD - 16, height = 113, ui.Column(browser_rows) },
+      ui.Item { width = left - 2 * PAD - 16, height = 116, browser_node },
       ui.Row { gap = 8,
         button("lule-files-prev", "Back", "chevron_left", 80,
           function() state.page_by(-1,PAGE_SIZE) end, nil, 26),

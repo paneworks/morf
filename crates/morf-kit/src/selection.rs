@@ -219,6 +219,28 @@ impl Selection {
     }
 }
 
+impl Selection {
+    /// The number of entries.
+    pub(crate) fn count(&self) -> i64 {
+        self.count
+    }
+
+    /// The current entry, from 1 (0: none).
+    pub(crate) fn current(&self) -> i64 {
+        self.current
+    }
+
+    /// Makes `index` current, as an arrow would. Returns whether it could.
+    pub(crate) fn go_to(&mut self, index: i64, effects: &mut Effects) -> bool {
+        if !self.usable(index) {
+            return false;
+        }
+        self.go(index, effects);
+        self.anchor = index;
+        true
+    }
+}
+
 impl Archetype for Selection {
     fn name(&self) -> &'static str {
         "Selection"

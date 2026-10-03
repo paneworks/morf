@@ -33,7 +33,9 @@ function M.kit(kit)
   for name, archetype in pairs(contract.archetypes) do
     if due(archetype) then
       local skins = kit.skins
-      if type(skins) ~= "table" or type(skins[name]) ~= "function" then
+      local skin = type(skins) == "table" and skins[name] or nil
+      -- A skin is a function of the state, or a table of one per slot.
+      if type(skin) ~= "function" and type(skin) ~= "table" then
         problems[#problems + 1] = ("archetype %s: kit.skins.%s is missing"):format(name, name)
       end
     end

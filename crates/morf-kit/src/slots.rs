@@ -75,11 +75,14 @@ pub fn slots_of(archetype: &str) -> Option<&'static [&'static str]> {
             "scroll_bar_x",
             "scroll_bar_y",
         ],
+        // `row`, `cell` and `header` are builders: a row's look, a table
+        // cell's, a column header's.
         "Collection" => &[
             "background",
             "header",
             "section_header",
             "row",
+            "cell",
             "placeholder_row",
             "footer",
             "empty",

@@ -38,6 +38,11 @@ pub(crate) struct LuaVirtualView {
     /// leaves that to its own node's kind (a `Repeater`, which may be a
     /// `Row`, a `Column` or a `Grid`).
     pub(crate) positioned: bool,
+    /// The row field that says how tall a row is, when rows differ.
+    pub(crate) size_field: Option<String>,
+    /// The row field that says which kind of delegate a row takes: a
+    /// delegate is only ever reused for a row of its own kind.
+    pub(crate) kind_field: Option<String>,
 }
 
 /// A `morf.state` table: each named field its own signal, each nested

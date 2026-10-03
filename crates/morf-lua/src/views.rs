@@ -97,17 +97,50 @@ pub(crate) fn position_view_child(
     scene: &mut Scene,
     node: NodeHandle,
     index: usize,
-    row_extent: f64,
+    view: &morf_scene::VirtualList,
     offset: f64,
-    columns: usize,
     column_extent: f64,
 ) -> Result<(), String> {
     scene
-        .assign(node, "x", (index % columns) as f64 * column_extent)
+        .assign(node, "x", (index % view.columns()) as f64 * column_extent)
         .map_err(|error| error.to_string())?;
     scene
-        .assign(node, "y", (index / columns) as f64 * row_extent - offset)
+        .assign(node, "y", view.item_start(index) - offset)
         .map_err(|error| error.to_string())
+}
+
+/// A row field read as a number (a row's extent), if the row has it.
+pub(crate) fn row_number(item: &SceneValue, field: &str) -> Option<f64> {
+    match item {
+        SceneValue::Map(map) => match map.get(field)? {
+            SceneValue::Number(n) => Some(*n),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// A row field read as text (a row's kind), if the row has it.
+pub(crate) fn row_kind<'a>(item: &'a SceneValue, field: Option<&str>) -> Option<&'a str> {
+    match (item, field) {
+        (SceneValue::Map(map), Some(field)) => match map.get(field)? {
+            SceneValue::String(kind) => Some(kind),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Each row's extent, by its size field, for a list whose rows differ.
+pub(crate) fn row_extents(model: &morf_scene::ListModel, field: &str, fallback: f64) -> Vec<f64> {
+    (0..model.len())
+        .map(|index| {
+            model
+                .get(index)
+                .and_then(|(_, item)| row_number(item, field))
+                .unwrap_or(fallback)
+        })
+        .collect()
 }
 
 pub(crate) fn reconcile_lua_view(
@@ -173,6 +206,18 @@ pub(crate) fn reconcile_lua_view(
     }
     view.reuse_order.retain(|id| !invalidated.contains(id));
     let model = view.model.borrow();
+    // The viewport is the node's height as it is now: a view in a panel
+    // that grows shows more rows.
+    if view.positioned
+        && let Ok(height) = state.borrow().scene.number(parent, "height")
+        && height > 0.0
+    {
+        view.view.set_viewport(height);
+    }
+    if let Some(field) = view.size_field.clone() {
+        let extents = row_extents(&model, &field, view.view.item_extent());
+        view.view.set_extents(&extents);
+    }
     let transitions = view.view.sync(&model, &changes);
     let visible = view
         .view
@@ -185,6 +230,63 @@ pub(crate) fn reconcile_lua_view(
         .collect::<Vec<_>>();
     drop(model);
     let visible_ids = visible.iter().map(|(id, _, _)| *id).collect::<HashSet<_>>();
+    // Rows gone out of sight go to the pool first, so the rows coming into
+    // sight in the same turn are rebound from it rather than built.
+    let removed = view
+        .active
+        .iter()
+        .filter(|(id, _)| {
+            !visible_ids.contains(id) || (updated.contains(id) && !patched.contains(id))
+        })
+        .map(|(id, _)| *id)
+        .collect::<Vec<_>>();
+    for id in removed {
+        let instance = view.active.remove(&id).expect("removed delegate is active");
+        if removed_rows.contains(&id) && begin_node_exit(&mut state.borrow_mut(), instance.node) {
+            // Stays where it is, drawn, until its exit ends.
+            view.exiting.push(instance);
+            continue;
+        }
+        // A row the model changed, whose delegate cannot patch itself, is
+        // built again: its old delegate is no use to any row.
+        if invalidated.contains(&id) || (updated.contains(&id) && !patched.contains(&id)) {
+            remove_scene_subtree(&mut state.borrow_mut(), instance.node);
+            continue;
+        }
+        let pool_root = match view.pool_root {
+            Some(node) => node,
+            None => {
+                let pool = create_node(state, Element::Item);
+                state
+                    .borrow_mut()
+                    .scene
+                    .assign(pool, "visible", false)
+                    .map_err(|error| error.to_string())?;
+                state
+                    .borrow_mut()
+                    .scene
+                    .reparent(pool, Some(parent))
+                    .map_err(|error| error.to_string())?;
+                view.pool_root = Some(pool);
+                pool
+            }
+        };
+        state
+            .borrow_mut()
+            .scene
+            .reparent(instance.node, Some(pool_root))
+            .map_err(|error| error.to_string())?;
+        view.reusable.insert(id, instance);
+        view.reuse_order.push_back(id);
+    }
+    while view.reusable.len() > view.reuse_limit {
+        let Some(id) = view.reuse_order.pop_front() else {
+            break;
+        };
+        if let Some(instance) = view.reusable.remove(&id) {
+            remove_scene_subtree(&mut state.borrow_mut(), instance.node);
+        }
+    }
     let mut prepared: Vec<(ModelId, usize, DelegateInstance)> = Vec::new();
     for (id, index, item) in &visible {
         if patched.contains(id) {
@@ -226,10 +328,14 @@ pub(crate) fn reconcile_lua_view(
                     continue;
                 }
             }
+            // Rebinding a pooled delegate to this row, rather than building
+            // one: only a delegate of the row's own kind.
+            let kind = row_kind(item, view.kind_field.as_deref());
             let reusable_id = view.reuse_order.iter().copied().find(|candidate| {
-                view.reusable
-                    .get(candidate)
-                    .is_some_and(|instance| instance.updater.is_some())
+                view.reusable.get(candidate).is_some_and(|instance| {
+                    instance.updater.is_some()
+                        && row_kind(&instance.item, view.kind_field.as_deref()) == kind
+                })
             });
             if let Some(reusable_id) = reusable_id {
                 view.reuse_order
@@ -269,68 +375,14 @@ pub(crate) fn reconcile_lua_view(
             }
         }
     }
-    let removed = view
-        .active
-        .iter()
-        .filter(|(id, _)| {
-            !visible_ids.contains(id) || (updated.contains(id) && !patched.contains(id))
-        })
-        .map(|(id, _)| *id)
-        .collect::<Vec<_>>();
-    for id in removed {
-        let instance = view.active.remove(&id).expect("removed delegate is active");
-        if removed_rows.contains(&id) && begin_node_exit(&mut state.borrow_mut(), instance.node) {
-            // Stays where it is, drawn, until its exit ends.
-            view.exiting.push(instance);
-            continue;
-        }
-        if invalidated.contains(&id) {
-            remove_scene_subtree(&mut state.borrow_mut(), instance.node);
-            continue;
-        }
-        let pool_root = match view.pool_root {
-            Some(node) => node,
-            None => {
-                let pool = create_node(state, Element::Item);
-                state
-                    .borrow_mut()
-                    .scene
-                    .assign(pool, "visible", false)
-                    .map_err(|error| error.to_string())?;
-                state
-                    .borrow_mut()
-                    .scene
-                    .reparent(pool, Some(parent))
-                    .map_err(|error| error.to_string())?;
-                view.pool_root = Some(pool);
-                pool
-            }
-        };
-        state
-            .borrow_mut()
-            .scene
-            .reparent(instance.node, Some(pool_root))
-            .map_err(|error| error.to_string())?;
-        view.reusable.insert(id, instance);
-        view.reuse_order.push_back(id);
-    }
-    while view.reusable.len() > view.reuse_limit {
-        let Some(id) = view.reuse_order.pop_front() else {
-            break;
-        };
-        if let Some(instance) = view.reusable.remove(&id) {
-            remove_scene_subtree(&mut state.borrow_mut(), instance.node);
-        }
-    }
     for (id, index, instance) in prepared {
         if view.positioned {
             position_view_child(
                 &mut state.borrow_mut().scene,
                 instance.node,
                 index,
-                view.view.item_extent(),
+                &view.view,
                 offset,
-                view.view.columns(),
                 view.column_extent,
             )?;
         }
@@ -348,9 +400,8 @@ pub(crate) fn reconcile_lua_view(
                     &mut state.borrow_mut().scene,
                     instance.node,
                     *index,
-                    view.view.item_extent(),
+                    &view.view,
                     offset,
-                    view.view.columns(),
                     view.column_extent,
                 )?;
             }

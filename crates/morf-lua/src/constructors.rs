@@ -375,6 +375,8 @@ pub(crate) fn construct_view<'gc>(
                             | "content_y"
                             | "cell_width"
                             | "cell_height"
+                            | "size_field"
+                            | "kind_field"
                     ) || (name.display_lossy().to_string() == "columns" && !repeater_keeps_columns)
             );
             if !special {
@@ -391,7 +393,7 @@ pub(crate) fn construct_view<'gc>(
         let model_handle = Rc::clone(&model.model);
         let model = model_handle.borrow();
         let configured_view;
-        let (range, item_extent, offset, columns, column_extent) = match kind {
+        let (range, _item_extent, offset, _columns, column_extent) = match kind {
             ViewKind::Repeater => {
                 configured_view = Some(VirtualList::new_unbounded());
                 (0..model.len(), 0.0, 0.0, 1, 0.0)
@@ -408,6 +410,10 @@ pub(crate) fn construct_view<'gc>(
                 let mut view = VirtualList::new(item_extent, height, overscan as usize)
                     .ok_or_else(|| HostError("invalid ListView dimensions".to_owned()))?;
                 view.set_offset(offset);
+                if let LuaValue::String(field) = properties.get_value(ctx, "size_field") {
+                    let field = field.display_lossy().to_string();
+                    view.set_extents(&crate::views::row_extents(&model, &field, item_extent));
+                }
                 let range = view.visible_range(model.len());
                 configured_view = Some(view);
                 (range, item_extent, offset, 1, 0.0)
@@ -453,13 +459,13 @@ pub(crate) fn construct_view<'gc>(
                 .expect("view range contains live model indexes");
             let child = execute_delegate(ctx, &delegate, item, index, limits).map_err(HostError)?;
             if virtualized {
+                let placing = configured_view.as_ref().expect("a virtual view has its list");
                 position_view_child(
                     &mut state.borrow_mut().scene,
                     child.node,
                     index,
-                    item_extent,
+                    placing,
                     offset,
-                    columns,
                     column_extent,
                 )
                 .map_err(HostError)?;
@@ -488,6 +494,8 @@ pub(crate) fn construct_view<'gc>(
                     exiting: Vec::new(),
                     column_extent,
                     positioned: virtualized,
+                    size_field: text_field(properties.get_value(ctx, "size_field")),
+                    kind_field: text_field(properties.get_value(ctx, "kind_field")),
                 },
             );
         }
@@ -496,5 +504,13 @@ pub(crate) fn construct_view<'gc>(
             Rc::clone(state),
             node,
         )))
+    }
+}
+
+/// A string property read as owned text, if it is one.
+fn text_field(value: LuaValue<'_>) -> Option<String> {
+    match value {
+        LuaValue::String(text) => Some(text.display_lossy().to_string()),
+        _ => None,
     }
 }

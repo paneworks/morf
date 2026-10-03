@@ -97,6 +97,10 @@ end
 for _, widget in ipairs(contract.archetypes.Scroll.widgets) do
   M[widget] = function(spec) return require("lib.kit.scroll").make(widget, spec) end
 end
+-- A collection returns its control and a handle (`scroll_to`, `model`, ...).
+for _, widget in ipairs(contract.archetypes.Collection.widgets) do
+  M[widget] = function(spec) return require("lib.kit.collection").make(widget, spec) end
+end
 for _, widget in ipairs(contract.archetypes.Range.widgets) do
   M[widget] = function(spec) return (control.make("Range", widget, with_defaults(widget, spec, RANGE))) end
 end

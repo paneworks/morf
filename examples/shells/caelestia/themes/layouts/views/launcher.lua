@@ -158,6 +158,55 @@ function V.build(M)
     }
   end
 
+  -- An ordinary row, rebindable: scrolled out of sight, the list view
+  -- hands it the row scrolling in rather than building another.
+  local serial = 0
+  local function plain_row(entry)
+    serial = serial + 1
+    local bound = { entry = entry, row = row_of(entry) or entry }
+    local revision = morf.signal("caelestia.launcher.row." .. serial, 0)
+    local function now() revision:get() return bound.row end
+    local icon = row_icon(bound.row)
+    local icon_box = ui.Item { width = 32, height = 32, icon }
+    local area = kit.action {
+      id = "launcher-row-" .. entry.key,
+      enter = { opacity = 0, scale = 0.96, duration = theme.duration.small, easing = theme.ease.standard_decel },
+      width = WIDTH - 2 * PAD, height = ROW, cursor = "pointer",
+      on_entered = function()
+        for i = 1, M.results:len() do
+          if M.results:get(i).key == bound.entry.key then M.selected:set(i) end
+        end
+      end,
+      on_clicked = function() M.activate(bound.row) end,
+      ui.Row {
+        x = 12, y = (ROW - 32) / 2, gap = 13, align = "center",
+        icon_box,
+        ui.Column {
+          gap = 3,
+          kit.text { id = "launcher-name", text = function() return tostring(now().name or "") end, font_size = theme.size.larger,
+            color = function() return C.onSurface end },
+          kit.text {
+            text = function() return tostring(now().description or "") end, font_size = theme.size.smaller,
+            color = function() return C.onSurfaceVariant end,
+            width = function() return WIDTH - 2 * PAD - 80 - (now().current and 30 or 0) end, elide = "right",
+          },
+        },
+      },
+      kit.icon("check", 22, function() return C.primary end, {
+        anchors = { right = true, right_margin = 16, vertical_center = true },
+        visible = function() return now().current and true or false end,
+      }),
+    }
+    return area, function(next_entry)
+      bound.entry, bound.row = next_entry, row_of(next_entry) or next_entry
+      area.id = "launcher-row-" .. next_entry.key
+      ui.destroy(icon, true)
+      icon = row_icon(bound.row)
+      ui.reparent(icon, icon_box)
+      revision:set(revision:get() + 1)
+    end
+  end
+
   local function delegate(entry)
     if entry.kind == "header" then return header(entry) end
     if entry.kind == "hero" then return hero(entry) end
@@ -188,25 +237,7 @@ function V.build(M)
         end, 12),
       }
     else
-      body = {
-        ui.Row {
-          x = 12, y = (ROW - 32) / 2, gap = (row.kind == "app") and 13 or 17,
-          align = "center",
-          row_icon(row),
-          ui.Column {
-            gap = 3,
-            kit.text { id = "launcher-name", text = row.name, font_size = theme.size.larger, color = function() return C.onSurface end },
-            kit.text {
-              text = row.description, font_size = theme.size.smaller,
-              color = function() return C.onSurfaceVariant end,
-              width = WIDTH - 2 * PAD - 80 - (row.current and 30 or 0), elide = "right",
-            },
-          },
-        },
-        row.current and kit.icon("check", 22, function() return C.primary end, {
-          anchors = { right = true, right_margin = 16, vertical_center = true },
-        }) or nil,
-      }
+      return plain_row(entry)
     end
     local area = kit.action {
       id = "launcher-row-" .. entry.key,
@@ -386,10 +417,25 @@ function V.build(M)
     if next_scroll ~= now then scroll:set(next_scroll) end
   end)
 
+  -- The rows: the engine's list view, virtualised by each row's height and
+  -- recycling within a kind (the rows are the model's; the choosing is the
+  -- launcher's kit Collection), scrolled by the effect above.
+  M.row_heights = { header = HEADER + ROW_GAP, hero = HERO + ROW_GAP, row = ROW + ROW_GAP }
+  local list = ui.ListView {
+    id = "launcher-list", model = M.results, delegate = delegate, width = WIDTH - 2 * PAD, height = 1,
+    item_extent = ROW + ROW_GAP, size_field = "height", kind_field = "kind", overscan = 3,
+  }
+  morf.effect("caelestia.launcher.list", function()
+    local y = scroll:get()
+    -- Its height first: the rows it builds are the ones that fit.
+    list.height = view_height()
+    morf.sync_view(list, y)
+  end, { owner = list })
+
   local highlight = ui.Item {
     id = "launcher-highlight",
     x = 0, width = WIDTH - 2 * PAD,
-    y = function() return (entry_span(math.max(1, M.selected:get()))) end,
+    y = function() return (entry_span(math.max(1, M.selected:get()))) - scroll:get() end,
     height = function() local _, h = entry_span(math.max(1, M.selected:get())) return h end,
     behavior = { y = kit.spring(380, 26), height = kit.spring(380, 26) },
     visible = function() return M.count:get() > 0 end,
@@ -406,17 +452,9 @@ function V.build(M)
     height = view_height,
     visible = function() return not wide() end,
     clip = true,
-    ui.Item { width = WIDTH - 2 * PAD, height = list_height,
-      y = function() return -scroll:get() end,
-      behavior = { y = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel } },
-      selection,
-      highlight,
-      ui.Repeater {
-        as = "column", gap = ROW_GAP,
-        model = M.results,
-        delegate = delegate,
-      },
-    },
+    selection,
+    highlight,
+    list,
     empty,
   }
 
