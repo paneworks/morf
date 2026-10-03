@@ -1,11 +1,11 @@
 use luna::{Context, Table, Value as LuaValue};
-use morf_desktop::DesktopEntry;
+use morf_system::desktop_entries::DesktopEntry;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
 use morf_scene::Easing;
-use morf_services::{AuthMessageType, GreetdResponse};
+use morf_system::{AuthMessageType, GreetdResponse};
 
 use crate::reactive_bindings::lua_to_scene;
 use crate::state::*;

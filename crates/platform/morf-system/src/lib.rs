@@ -1,5 +1,9 @@
 //! Native system services for morf.
 
+/// XDG desktop entries: parsing, discovery, lookup, launching.
+pub mod desktop_entries;
+/// Hierarchical menu models (a tray's, an application's).
+pub mod menu;
 mod greetd;
 mod greetd_conversation;
 mod pam;

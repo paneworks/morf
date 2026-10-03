@@ -6,7 +6,7 @@
 //! of things the engine lets a configuration keep a reference to.
 
 use luna::{StashedClosure, UserRef};
-use morf_desktop::DesktopEntries;
+use morf_system::desktop_entries::DesktopEntries;
 use morf_image::ImageRect as QuantizeRect;
 
 use crate::state::ReactiveState;
@@ -14,10 +14,10 @@ use morf_io::{
     DbusProxy, DbusService, FileDocument, FileView, FileWatcher, Process, ProcessConfig, Socket,
     SocketServer, SplitParser, StreamCollector,
 };
-use morf_menu::Menu;
+use morf_system::menu::Menu;
 use morf_scene::reactive::SignalId;
 use morf_scene::{Easing, GroupId, ListModel, NodeHandle, VirtualList};
-use morf_services::{GreetdClient, GreetdConversation, PamSession};
+use morf_system::{GreetdClient, GreetdConversation, PamSession};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;

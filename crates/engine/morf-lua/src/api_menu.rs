@@ -1,10 +1,10 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
-use morf_desktop::{DesktopEntries, desktop_paths, session_paths};
+use morf_system::desktop_entries::{DesktopEntries, desktop_paths, session_paths};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use morf_menu::Menu;
+use morf_system::menu::Menu;
 
 use crate::{
     lua_values::*, reactive_execute::*, scene_bindings::*, state::*, table_menu::*, types::*,

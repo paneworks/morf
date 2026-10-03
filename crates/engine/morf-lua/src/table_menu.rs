@@ -1,7 +1,7 @@
 use luna::{Context, Function, StashedClosure, Table, Value as LuaValue};
 use std::collections::{BTreeMap, HashMap};
 
-use morf_menu::{ButtonType, CheckState, MenuEntry};
+use morf_system::menu::{ButtonType, CheckState, MenuEntry};
 
 pub(crate) fn table_number<'gc>(
     ctx: Context<'gc>,

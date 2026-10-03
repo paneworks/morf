@@ -10,7 +10,7 @@
 //! and dropped "touch the sensor" on the floor.
 
 use luna::{Callback, CallbackReturn, Closure, Context, Table, UserData, UserRef};
-use morf_services::{PamAuthenticator, PamSession};
+use morf_system::{PamAuthenticator, PamSession};
 use std::cell::RefCell;
 use std::rc::Rc;
 

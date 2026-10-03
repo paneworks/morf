@@ -1,4 +1,4 @@
-use morf_services::{GreetdEvent, PamEvent};
+use morf_system::{GreetdEvent, PamEvent};
 use std::time::Duration;
 
 use morf_scene::{NodeHandle, Value as SceneValue};

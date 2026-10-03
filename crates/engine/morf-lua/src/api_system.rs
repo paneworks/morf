@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use morf_services::{GreetdClient, GreetdConversation, StatusNotifierHost, UdevMonitor, XkbKeymap};
+use morf_system::{GreetdClient, GreetdConversation, StatusNotifierHost, UdevMonitor, XkbKeymap};
 
 use crate::{lua_values::*, scene_bindings::*, serialization::*, state::*, table_menu::*};
 

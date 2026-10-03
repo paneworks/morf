@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use morf_services::{
+use morf_system::{
     AuthMessageType, GreetdEvent, GreetdResponse, PamEvent, PamPrompt, StatusNotifierAddress,
     UdevEvent,
 };

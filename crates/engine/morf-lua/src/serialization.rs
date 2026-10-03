@@ -1,7 +1,7 @@
 use luna::{Closure, Context, Executor, Table, UserData, Value as LuaValue};
 use morf_io::DbusValue;
 use morf_scene::{Value as SceneValue, ViewTransition};
-use morf_services::XkbKeymap;
+use morf_system::XkbKeymap;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;

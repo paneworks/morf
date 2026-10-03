@@ -1768,13 +1768,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "morf-desktop"
-version = "0.1.5"
-dependencies = [
- "morf-image",
-]
-
-[[package]]
 name = "morf-image"
 version = "0.1.5"
 dependencies = [
@@ -1817,10 +1810,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "morf-lifecycle"
-version = "0.1.5"
-
-[[package]]
 name = "morf-lua"
 version = "0.1.5"
 dependencies = [
@@ -1829,15 +1818,12 @@ dependencies = [
  "libc",
  "luna",
  "morf-audio",
- "morf-desktop",
  "morf-image",
  "morf-io",
  "morf-layout",
- "morf-lifecycle",
- "morf-menu",
  "morf-scene",
- "morf-services",
  "morf-shader",
+ "morf-system",
  "morf-terminal",
  "morf-text",
  "morf-value",
@@ -1845,10 +1831,6 @@ dependencies = [
  "pastel",
  "serde_json",
 ]
-
-[[package]]
-name = "morf-menu"
-version = "0.1.5"
 
 [[package]]
 name = "morf-render"
@@ -1886,22 +1868,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "morf-services"
-version = "0.1.5"
-dependencies = [
- "libc",
- "libloading",
- "morf-io",
- "serde_json",
- "xkbcommon",
-]
-
-[[package]]
 name = "morf-shader"
 version = "0.1.5"
 dependencies = [
  "luna",
  "morf-value",
+]
+
+[[package]]
+name = "morf-system"
+version = "0.1.5"
+dependencies = [
+ "libc",
+ "libloading",
+ "morf-image",
+ "morf-io",
+ "serde_json",
+ "xkbcommon",
 ]
 
 [[package]]

@@ -23,6 +23,8 @@ mod hashing;
 pub use morf_value::hct;
 /// The reactive signal graph the scene's properties live in.
 pub mod reactive;
+/// Retention: locks that keep something alive until they are let go.
+pub mod retain;
 mod keyframes;
 mod mask;
 mod motion;

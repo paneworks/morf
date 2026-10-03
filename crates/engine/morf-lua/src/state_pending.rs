@@ -9,7 +9,7 @@ use luna::StashedClosure;
 use morf_io::{DbusService, DbusSignal, FileWatcher, PendingReply};
 use morf_scene::reactive::SignalId;
 use morf_scene::NodeHandle;
-use morf_services::{GreetdConversation, PamSession, PamTask, StatusNotifierHost, UdevMonitor};
+use morf_system::{GreetdConversation, PamSession, PamTask, StatusNotifierHost, UdevMonitor};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;

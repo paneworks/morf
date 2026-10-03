@@ -1,4 +1,4 @@
-use morf_services::PamAuthenticator;
+use morf_system::PamAuthenticator;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     match PamAuthenticator::authenticate(

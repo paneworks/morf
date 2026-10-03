@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use morf_services::UdevMonitor;
+use morf_system::UdevMonitor;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut monitor = UdevMonitor::new(None)?;
