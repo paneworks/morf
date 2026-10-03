@@ -156,7 +156,7 @@ return function(theme, M, hud)
     local widget = spec.widget
     -- A layout's own area draws itself: the wash, the marks and the
     -- keyboard's brackets here.
-    if widget == "area" then return { badge = feedback(t) } end
+    if widget == "area" or widget == "segment" then return { badge = feedback(t) } end
     if widget == "switch" then return switch(t)
     elseif widget == "icon" then return icon(t, spec)
     elseif widget == "checkbox" or widget == "check_menu_item" then return checkbox(t)
@@ -253,6 +253,185 @@ return function(theme, M, hud)
   function S.Range(t, spec)
     if spec.widget == "seek_bar" then return seek_bar(t, spec) end
     return slider(t, spec)
+  end
+
+  -- -------------------------------------------------------- selections --
+
+  --- Numbered instrument tabs: each a framed slot whose chosen state fills
+  --- with the accent from the left, a rolling caption, registration marks
+  --- on the chosen one's diagonal, and a square rail under the row whose
+  --- accent segment slides to it. `spec`: `items`, `width`, `height` (64),
+  --- `pad` (11), `growing`.
+  local function tabs(t, spec)
+    -- The row's own name and width: the caller's, not the control's.
+    local id, row_width = spec.tab_id or spec.id, spec.width_of or spec.width
+    local list = spec.items
+    local growing = spec.growing == true
+    local pad, height, gap = spec.pad or 11, spec.height or 64, 8
+    local MENU = theme.typography.menu
+    local grown = growing and morf.signal("caelestia." .. tostring(id) .. ".tabs.span", 0) or nil
+    local function span()
+      if growing then return grown:get() end
+      return math.max(0, (get(row_width) or 0) - 2 * pad)
+    end
+    local function slot() return math.max(1, (span() - gap * (#list - 1)) / #list) end
+    local function left(i) return (i - 1) * (slot() + gap) end
+    local rail = ui.Rect { id = id and id .. "-tab-rail", y = height - 7, height = 1,
+      color = function() return stroke(C, "quiet") end }
+    local indicator = ui.Rect { id = id and id .. "-tab-indicator", y = height - 8, height = 2,
+      color = function() return C.primary end, width = slot,
+      x = function() return (growing and 0 or pad) + left(math.max(1, t.current)) end,
+      behavior = { x = { duration = 260, easing = "out_cubic" } } }
+    if growing then rail.anchors = { left = true, right = true } else rail.x, rail.width = pad, span end
+    return {
+      background = rail,
+      indicator = indicator,
+      container = function()
+        if not growing then return ui.Item { anchors = { fill = true } } end
+        local row = ui.Flex { anchors = { left = true, right = true }, y = 8, height = 40, direction = "row",
+          gap = gap, padding = 0 }
+        -- A growing row reads its own laid-out width as the drawer eases it.
+        morf.effect("caelestia." .. tostring(id) .. ".tabs.span", function()
+          local w = row.layout_width or 0
+          if math.abs(w - grown:get()) > .25 then grown:set(w) end
+        end, { owner = row })
+        return row
+      end,
+      place = function(i)
+        if growing then return { width = 10, height = 40, layout = { grow = 1 } } end
+        return { x = function() return pad + left(i) end, y = 8, width = slot, height = 40 }
+      end,
+      item = function(i, entry, s)
+        local name = spec.item_id and spec.item_id(i, entry) or ("tab-" .. i)
+        local selected = s.current
+        local function ink() return selected() and C.onPrimary or C.onSurface end
+        local caption = entry.name:upper()
+        local has_icon = (entry.icon_build or entry.icon) and true or false
+        local function width() return slot() end
+        local measure = M.menu_label { text = caption, font_size = MENU, height = 18, opacity = 0 }
+        local function natural() return math.max(1, measure.layout_width or utf8.len(caption) * MENU * .62) end
+        local function room() return math.max(0, width() - (has_icon and 66 or 42)) end
+        local function size() return math.max(9, math.min(MENU, math.floor(MENU * (room() - 4) / natural() * 2) / 2)) end
+        local function text_w() return math.min(room(), natural() * size() / MENU + 2) end
+        local strip = ui.Column { gap = 0, y = -36,
+          M.menu_label { text = "/ / / / / /", height = 18, color = ink },
+          M.menu_label { text = "+ | + | + |", height = 18, color = ink },
+          M.menu_label { text = caption, font_size = size, height = 18, width = text_w, elide = "right",
+            vertical_alignment = "center", color = ink },
+        }
+        local look = ui.Item { anchors = { fill = true },
+          measure,
+          ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainer end, border_width = 1,
+            border_color = function()
+              return selected() and stroke(C, "focus") or s.hovered() and stroke(C, "hover") or stroke(C, "quiet")
+            end,
+            behavior = { border_color = { duration = 180 } } },
+          ui.Item { anchors = { fill = true, margins = 1 }, clip = true,
+            ui.Rect { x = 0, y = 0, height = 38,
+              width = function() return selected() and math.max(0, width() - 2) or 0 end,
+              color = function() return C.primary end,
+              behavior = { width = { duration = 220, easing = { x1 = 0.76, y1 = 0, x2 = 0.24, y2 = 1 } } } } },
+          M.section_label { text = ("%02d"):format(i), x = 9, y = 14, color = ink },
+          ui.Rect { x = 27, y = 10, width = 1, height = 20, color = function() return ink():alpha(0.35) end },
+          ui.Item { id = name .. "-label", x = 34, y = 12, height = 18, clip = true,
+            width = text_w, visible = function() return text_w() > 0 end, strip },
+          hud().corners { length = 6, weight = 2, color = function() return C.primary end,
+            visible = function() return t.visual_focus and selected() end },
+        }
+        -- Registration marks on the chosen tab's diagonal.
+        for k, corner in ipairs { { left = true, top = true }, { right = true, bottom = true } } do
+          local d = k == 1 and -3 or 3
+          ui.reparent(ui.Path { anchors = corner, width = 7, height = 7, z = 2,
+            view_box = { 0, 0, 7, 7 }, d = MARK, rotation = k == 1 and 0 or 180,
+            fill_color = function() return C.primary end,
+            translate_x = function() return selected() and d or 0 end,
+            translate_y = function() return selected() and d or 0 end,
+            opacity = function() return selected() and 1 or 0 end,
+            behavior = { translate_x = { duration = 340, easing = "out_cubic" },
+              translate_y = { duration = 340, easing = "out_cubic" }, opacity = { duration = 220 } } }, look)
+        end
+        if has_icon then
+          local icon_id = name .. "-icon"
+          local icon = entry.icon_build and entry.icon_build(selected, icon_id, ink)
+            or M.icon(entry.icon, 18, ink, { id = icon_id, fill = selected })
+          icon.anchors = { right = true, right_margin = 9, vertical_center = true }
+          ui.reparent(icon, look)
+        end
+        local was, running = false, nil
+        morf.effect(tostring(id) .. ".tab-roll." .. i, function()
+          local now = s.hovered()
+          if now == was then return end
+          was = now
+          if running then running:stop() running = nil end
+          if now then
+            running = morf.animation.play { { node = strip, property = "y", from = 0, to = -36,
+              duration = 300, easing = "out_cubic" } }
+          else strip.y = -36 end
+        end, { owner = look })
+        return look
+      end,
+    }
+  end
+
+  --- Any other selection: a square accent plate that slides to the
+  --- current entry, mono labels, brackets on it for the keyboard.
+  local function entries(t, spec)
+    local slide = { duration = 220, easing = "out_cubic" }
+    return {
+      indicator = ui.Rect { color = function() return C.primary:alpha(.16) end, border_width = 1,
+        border_color = function() return C.primary end,
+        x = function() return t.current_x end, y = function() return t.current_y end,
+        width = function() return t.current_width end, height = function() return t.current_height end,
+        visible = function() return t.current > 0 end,
+        behavior = { x = slide, y = slide, width = slide, height = slide } },
+      item = function(_, value, s)
+        local label = type(value) == "table" and (value.label or value.name) or tostring(value)
+        return ui.Item { anchors = { fill = true },
+          ui.Rect { anchors = { fill = true }, color = "transparent", border_width = 1,
+            border_color = function() return s.hovered() and stroke(C, "hover") or stroke(C, "quiet") end },
+          M.menu_label { anchors = { center_in = true }, text = tostring(label):upper(),
+            color = function() return s.current() and C.primary or C.onSurface end },
+          hud().corners { length = 5, weight = 2, color = function() return C.primary end,
+            visible = function() return t.visual_focus and s.current() end } }
+      end,
+    }
+  end
+
+  function S.Selection(t, spec)
+    if spec.widget == "tabs" then return tabs(t, spec) end
+    return entries(t, spec)
+  end
+
+  -- ------------------------------------------------------------ planes --
+
+  --- A colour plane: saturation across, value down, of `spec.hue()`,
+  --- square, with a crosshair through a square handle. Any other plane: a
+  --- hairline grid with the same crosshair.
+  function S.Plane(t, spec)
+    local W, H = spec.width or 160, spec.height or 160
+    local field
+    if spec.widget == "colour_plane" then
+      local function hue() return morf.color(("hsl(%d, 100%%, 50%%)"):format(math.floor(get(spec.hue) or 0))) end
+      field = ui.Item { width = W, height = H,
+        ui.Rect { anchors = { fill = true }, gradient = function() return { angle = 90, stops = { "#ffffff", hue() } } end },
+        ui.Rect { anchors = { fill = true }, gradient = { angle = 180, stops = { "#00000000", "#000000" } } },
+        ui.Rect { anchors = { fill = true }, color = "transparent", border_width = 1,
+          border_color = function() return C.primary:alpha(.4) end } }
+    else
+      field = M.decor("grid", { width = W, height = H, columns = 8, rows = 8 })
+    end
+    local function hx() return t.visual_x * W end
+    local function hy() return t.visual_y * H end
+    return {
+      track = ui.Item { width = W, height = H },
+      field = field,
+      crosshair = ui.Item { width = W, height = H,
+        ui.Rect { width = W, height = 1, y = hy, color = function() return C.primary:alpha(.6) end },
+        ui.Rect { width = 1, height = H, x = hx, color = function() return C.primary:alpha(.6) end } },
+      handle = ui.Rect { width = 12, height = 12, color = "transparent", border_width = 2,
+        border_color = function() return t.visual_focus and C.primary or C.onSurface end,
+        x = function() return hx() - 6 end, y = function() return hy() - 6 end },
+    }
   end
 
   return S

@@ -50,7 +50,11 @@ return function(theme, kit, props)
     end,
     anchors={vertical_center=true,vertical_center_offset=-math.max(1,size*.075)},
     width = 5, height = 5, opacity = 0.18, color = props.color or function() return C.primary end }
+  -- The blink's next pulse, cancelled with the title: it would reach for a
+  -- pip that is gone.
+  local light_clock
   local node = ui.Item { id = id, x = props.x, y = props.y, anchors = props.anchors,
+    on_destroyed = function() if light_clock then light_clock:cancel() light_clock = nil end end,
     width = width, height = height, visible = props.visible, title, pip }
   local function ghosts()
     if a then return end
@@ -63,7 +67,6 @@ return function(theme, kit, props)
   local timer, flash, light
   -- Random pauses are timer-driven; only the short burst needs animation
   -- frames. Every title chooses fresh timing independently on each burst.
-  local light_clock
   local light_on=false
   local PULSES, pulses = 2, 0
   local pulse

@@ -67,7 +67,7 @@ local function device_row(id_prefix, row)
   local function live() return model.device(row) end
   local function chosen() local d = live() return d ~= nil and d.default == true end
   return rows.choice {
-    id = id_prefix .. "-" .. math.floor(row.id),
+    id = id_prefix .. "-" .. math.floor(row.id), group = id_prefix,
     width = INNER, height = 40, on = chosen,
     on_clicked = function() model.select_device(row) end,
     kit.icon(function() return chosen() and "radio_button_checked" or "radio_button_unchecked" end, 20,
@@ -177,6 +177,7 @@ local function app_row(row)
         local function on() local s = live() return s ~= nil and s.device == device.id end
         return rows.choice {
           id = "sound-app-" .. math.floor(id) .. "-to-" .. math.floor(device.id),
+          group = "sound-app-" .. math.floor(id),
           width = 104, height = 26, on = on, tone = "primary", tile = true,
           on_clicked = function() model.route(row, device) end,
           kit.menu_label {

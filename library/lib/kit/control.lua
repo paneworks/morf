@@ -27,18 +27,24 @@ local SETTINGS = {
     "repeat_delay", "repeat_interval" },
   Range = { "from", "to", "value", "step", "page_step", "snap", "live", "orientation", "inverted", "logarithmic",
     "wrap", "range", "first", "second", "handle_size" },
+  Plane = { "x_from", "x_to", "y_from", "y_to", "x", "y", "step_x", "step_y", "constraint", "y_up" },
+  Selection = { "count", "labels", "current", "selected", "mode", "wrap", "orientation", "columns", "page",
+    "disabled", "follow_focus" },
 }
 -- How each archetype takes focus by default: a press by Tab only, so a click
 -- leaves a search field typing; a range by click too, so the arrows move
 -- what was just dragged.
-local POLICY = { Control = "none", Press = "tab", Range = "strong" }
+local POLICY = { Control = "none", Press = "tab", Range = "strong", Plane = "strong", Selection = "strong" }
 -- Which take keys and the wheel.
-local KEYS = { Press = true, Range = true }
-local WHEEL = { Range = true }
+local KEYS = { Press = true, Range = true, Plane = true, Selection = true }
+local WHEEL = { Range = true, Plane = true }
+-- The clock typeahead measures pauses on.
+local clock = morf.elapsed_timer()
 -- Handlers that are an archetype's signals, raised through `apply`, not
 -- given to the node.
 local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_value_changed = true,
-  on_long_pressed = true, on_double_clicked = true }
+  on_long_pressed = true, on_double_clicked = true, on_current_changed = true, on_selection_changed = true,
+  on_activated = true }
 -- Every live control's way to take effects another control's event caused
 -- (an exclusive group), by id.
 local appliers = {}
@@ -48,6 +54,18 @@ local NODE = { id = true, x = true, y = true, z = true, anchors = true, visible 
   behavior = true, translate_x = true, translate_y = true }
 
 local function value(v) if type(v) == "function" then return v() end return v end
+
+-- A list in the live state (a selection's indices) is kept as text,
+-- ",2,5,", so a binding compares it as one value: `control.has(t.selected, i)`.
+local function encode(v)
+  if type(v) ~= "table" then return v end
+  local parts = {}
+  for i, item in ipairs(v) do parts[i] = tostring(item) end
+  return "," .. table.concat(parts, ",") .. ","
+end
+
+--- Whether a list kept in the live state holds `item`.
+function M.has(list, item) return type(list) == "string" and list:find("," .. tostring(item) .. ",", 1, true) ~= nil end
 
 local function sides(v)
   if type(v) == "table" then return { v[1] or 0, v[2] or 0, v[3] or 0, v[4] or 0 } end
@@ -68,14 +86,16 @@ function M.make(archetype, widget, spec, extra)
     if v ~= nil and type(v) ~= "function" then settings[field] = v end
   end
   local id, state, made = native.new(archetype, settings)
+  for field, v in pairs(state) do state[field] = encode(v) end
   state.width, state.height = 0, 0
+  for field, v in pairs(extra.state or {}) do state[field] = v end
   local t = morf.state(state)
-  local root, slots, waiting
+  local root, slots, waiting, builders
   local repeat_timer
   -- What the click being delivered said, for the configuration's handler.
   local click_args = {}
   local function apply(effects)
-    for field, v in pairs(effects.state) do t[field] = v end
+    for field, v in pairs(effects.state) do t[field] = encode(v) end
     -- Slots a skin left to be built when first wanted.
     if waiting and (t.hovered or t.down or t.visual_focus) then
       local now = waiting
@@ -161,7 +181,7 @@ function M.make(archetype, widget, spec, extra)
   if KEYS[archetype] then
     -- A key the archetype does not use goes on to what is around it.
     props.on_key_pressed = function(keysym, text, modifiers, repeat_, name)
-      local effects = native.send(id, "key", name or "", modifiers or "")
+      local effects = native.send(id, "key", name or "", modifiers or "", text or "", clock:elapsed_ms())
       apply(effects)
       if effects.handled then return true end
       if spec.on_key_pressed then return spec.on_key_pressed(keysym, text, modifiers, repeat_, name) end
@@ -216,11 +236,15 @@ function M.make(archetype, widget, spec, extra)
   end
   local function build()
     if slots then for _, node in pairs(slots) do ui.destroy(node, true) end end
-    slots, waiting = {}, nil
+    slots, waiting, builders = {}, nil, {}
     local built = skin.build(widget, archetype, slot_names, t, spec, nil, root)
     for _, name in ipairs(slot_names) do
       local node = built[name]
-      if type(node) == "function" then
+      if (extra.builders or {})[name] then
+        -- Not a node: what the control builds its parts with (a
+        -- selection's item delegates).
+        builders[name] = node
+      elseif type(node) == "function" then
         waiting = waiting or {}
         waiting[#waiting + 1] = { name, node }
       elseif node then
@@ -229,12 +253,56 @@ function M.make(archetype, widget, spec, extra)
       end
     end
     generation:set(generation:get() + 1)
+    if extra.on_rebuild then extra.on_rebuild(builders, t, send) end
   end
   build()
   skin.track(root, build)
   apply(made)
   return root, t, { id = id, send = send, configure = function(field, v) apply(native.configure(id, field, value(v))) end,
-    slots = function() return slots end }
+    slots = function() return slots end, builders = function() return builders end }
+end
+
+--- An archetype with no node: its state and keys for a view that draws its
+--- own items -- a launcher's list, until a Collection draws it. `spec`
+--- holds settings (values or bindings) and signal handlers, as for `make`;
+--- `spec.owner`, a node, ends its bindings with it. Returns `{ t, key,
+--- send, drop }`: `key(name, modifiers, text)` answers whether the key was
+--- used.
+function M.headless(archetype, spec)
+  spec = spec or {}
+  local fields = {}
+  for _, field in ipairs(BASE) do fields[#fields + 1] = field end
+  for _, field in ipairs(SETTINGS[archetype] or {}) do fields[#fields + 1] = field end
+  local settings = {}
+  for _, field in ipairs(fields) do
+    local v = spec[field]
+    if v ~= nil and type(v) ~= "function" then settings[field] = v end
+  end
+  local id, state, made = native.new(archetype, settings)
+  for field, v in pairs(state) do state[field] = encode(v) end
+  local t = morf.state(state)
+  local function apply(effects)
+    for field, v in pairs(effects.state) do t[field] = encode(v) end
+    for _, signal in ipairs(effects.signals) do
+      local handler = spec["on_" .. signal[1]]
+      if handler then handler(table.unpack(signal, 2)) end
+    end
+  end
+  for _, field in ipairs(fields) do
+    if type(spec[field]) == "function" then
+      morf.effect("kit.headless." .. field .. "." .. id, function()
+        apply(native.configure(id, field, spec[field]()))
+      end, spec.owner and { owner = spec.owner } or nil)
+    end
+  end
+  apply(made)
+  local handle = { t = t }
+  function handle.send(event, ...) local effects = native.send(id, event, ...) apply(effects) return effects end
+  function handle.key(name, modifiers, text)
+    return handle.send("key", name or "", modifiers or "", text or "", clock:elapsed_ms()).handled
+  end
+  function handle.drop() native.drop(id) end
+  return handle
 end
 
 return M

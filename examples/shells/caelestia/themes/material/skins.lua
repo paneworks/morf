@@ -132,7 +132,7 @@ return function(theme, M)
   function S.Press(t, spec)
     local widget = spec.widget
     -- A layout's own area draws itself: only the keyboard's ring here.
-    if widget == "area" then
+    if widget == "area" or widget == "segment" then
       return { indicator = ring(t, function() return math.min(16, t.height / 2) end) }
     end
     if widget == "switch" then return switch(t)
@@ -251,6 +251,163 @@ return function(theme, M)
   function S.Range(t, spec)
     if spec.widget == "seek_bar" then return seek_bar(t, spec) end
     return slider(t, spec)
+  end
+
+  -- -------------------------------------------------------- selections --
+
+  --- Material tabs: icon over label in each slot, a hover wash, and the
+  --- primary indicator riding an SDF hairline under the row, springing
+  --- from tab to tab. `spec`: `items` (`{ name, icon | icon_build }`),
+  --- `width`, `height` (64), `pad` (11), `growing` (the row follows an
+  --- easing drawer and its tabs share it).
+  local function tabs(t, spec)
+    -- The row's own name and width: the caller's, not the control's.
+    local id, row_width = spec.tab_id or spec.id, spec.width_of or spec.width
+    local list = spec.items
+    local PAD, H = spec.pad or 11, spec.height or 64
+    local growing = spec.growing == true
+    local function width() return get(row_width) or 0 end
+    local function slot() return (width() - 2 * PAD) / math.max(1, #list) end
+    local labels = {}
+    local function span(i)
+      local l = labels[i]
+      local w = (l and l.layout_width or (growing and 80 or 60)) + 4
+      local x = (i - 1) * slot() + (slot() - w) / 2
+      if not growing then x = x + PAD end
+      return x, x + w
+    end
+    local indicator = ui.Item { id = id and id .. "-tab-indicator", y = H - 4, height = 3, x = 0, width = 0 }
+    local moving = morf.signal("caelestia." .. tostring(id) .. ".indicator.moving", false)
+    -- Set going once every label is there to be measured.
+    local function follow()
+      local still
+      local shown, moved = t.current, false
+      morf.effect("caelestia." .. tostring(id) .. ".indicator", function()
+        local now = t.current
+        if now < 1 then return end
+        local l1, r1 = span(now)
+        if now == shown then
+          if not moved then indicator.x, indicator.width = l1, r1 - l1 end
+          return
+        end
+        local l0, r0 = span(shown)
+        shown, moved = now, true
+        M.elastic(indicator, "x", l0, r0, l1, r1, { duration = 520 })
+        moving:set(true)
+        if still then still:cancel() end
+        still = morf.timer(560, function() still = nil moving:set(false) end, false)
+      end, { owner = indicator })
+    end
+    local line = { shape = "box", operation = "union", y = 7, height = 1,
+      fill_color = function() return C().outlineVariant end }
+    local field = { id = id and id .. "-tab-field", y = H - 8, height = 8,
+      blend = function() return theme.motion.liquid_cards ~= false and moving:get() and 4 or 0 end,
+      behavior = { blend = { duration = 200 } } }
+    if growing then
+      field.anchors = { left = true, right = true }
+      line.anchors = { left = true, right = true }
+    else
+      field.x, field.width = 0, width
+      line.x, line.width = PAD, function() return width() - 2 * PAD end
+    end
+    field[1] = ui.SdfShape(line)
+    field[2] = ui.SdfShape { id = id and id .. "-tab-indicator-shape", shape = "box",
+      operation = "smooth_union", top_left_radius = 1.5, top_right_radius = 1.5, track = indicator,
+      fill_color = function() return C().primary end }
+    return {
+      indicator = indicator,
+      background = ui.Sdf(field),
+      container = function()
+        if growing then
+          return ui.Flex { anchors = { fill = true, bottom_margin = 4 }, direction = "row", padding = 0 }
+        end
+        return ui.Item { anchors = { fill = true } }
+      end,
+      place = function(i)
+        if growing then return { width = 10, height = H - 4, layout = { grow = 1 } } end
+        return { y = 4, height = H - 8, width = slot, x = function() return PAD + (i - 1) * slot() end }
+      end,
+      item = function(i, entry, s)
+        local name = spec.item_id and spec.item_id(i, entry) or ("tab-" .. i)
+        labels[i] = M.text { text = entry.name, font_size = growing and theme.size.normal + 1 or theme.size.small,
+          color = function() return s.current() and C().primary or C().onSurface end,
+          behavior = { color = { duration = theme.duration.small } } }
+        if i == #list then follow() end
+        return ui.Item { anchors = { fill = true },
+          ui.Rect { anchors = { fill = true, top_margin = growing and 6 or 2, bottom_margin = growing and 1 or 2 },
+            radius = 10,
+            color = function() return s.hovered() and C().onSurface:alpha(0.06) or C().onSurface:alpha(0) end,
+            border_width = function() return t.visual_focus and s.current() and 2 or 0 end,
+            border_color = function() return C().secondary end,
+            behavior = { color = { duration = theme.duration.small } } },
+          ui.Column { anchors = { horizontal_center = true }, y = growing and 8 or 6, gap = growing and 4 or 3,
+            align = "center",
+            -- Every icon in the same box, so the labels share one baseline
+            -- whatever an icon_build draws.
+            M.centred(26, 28, entry.icon_build and entry.icon_build(s.current, name .. "-icon")
+              or M.icon(entry.icon, 22, function() return s.current() and C().primary or C().onSurface end,
+                { id = name .. "-icon", fill = s.current })),
+            labels[i] },
+        }
+      end,
+    }
+  end
+
+  --- Any other selection: a rounded secondary-container plate that
+  --- springs to the current entry, each entry its label, and the ring on
+  --- the current one for the keyboard.
+  local function entries(t, spec)
+    local spring = M.spring(380, 26)
+    return {
+      indicator = ui.Rect { radius = 12, color = function() return C().secondaryContainer end,
+        x = function() return t.current_x end, y = function() return t.current_y end,
+        width = function() return t.current_width end, height = function() return t.current_height end,
+        visible = function() return t.current > 0 end,
+        behavior = { x = spring, y = spring, width = spring, height = spring } },
+      item = function(_, value, s)
+        local label = type(value) == "table" and (value.label or value.name) or tostring(value)
+        return ui.Item { anchors = { fill = true },
+          ui.Rect { anchors = { fill = true }, radius = 12,
+            color = function() return s.hovered() and C().onSurface:alpha(0.06) or C().onSurface:alpha(0) end,
+            border_width = function() return t.visual_focus and s.current() and 2 or 0 end,
+            border_color = function() return C().secondary end },
+          M.text { anchors = { center_in = true }, text = label, font_size = theme.size.small,
+            color = function() return s.current() and C().onSecondaryContainer or C().onSurface end } }
+      end,
+    }
+  end
+
+  function S.Selection(t, spec)
+    if spec.widget == "tabs" then return tabs(t, spec) end
+    return entries(t, spec)
+  end
+
+  -- ------------------------------------------------------------ planes --
+
+  --- A colour plane: saturation across, value down, of `spec.hue()`
+  --- (degrees), rounded, with a white ring for the handle. Any other plane:
+  --- a tonal field with the ring.
+  function S.Plane(t, spec)
+    local W, H = spec.width or 160, spec.height or 160
+    local field
+    if spec.widget == "colour_plane" then
+      local function hue() return morf.color(("hsl(%d, 100%%, 50%%)"):format(math.floor(get(spec.hue) or 0))) end
+      field = ui.Item { width = W, height = H, clip = true,
+        ui.Rect { anchors = { fill = true }, radius = 12,
+          gradient = function() return { angle = 90, stops = { "#ffffff", hue() } } end },
+        ui.Rect { anchors = { fill = true }, radius = 12,
+          gradient = { angle = 180, stops = { "#00000000", "#000000" } } } }
+    else
+      field = ui.Rect { width = W, height = H, radius = 12, color = function() return C().surfaceContainerHighest end }
+    end
+    return {
+      track = ui.Item { width = W, height = H },
+      field = field,
+      handle = ui.Rect { width = 18, height = 18, radius = 9, color = "transparent", border_width = 3,
+        border_color = "#ffffff",
+        x = function() return t.visual_x * W - 9 end, y = function() return t.visual_y * H - 9 end },
+      crosshair = ring(t, 12),
+    }
   end
 
   return S

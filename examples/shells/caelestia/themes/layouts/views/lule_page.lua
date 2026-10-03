@@ -19,8 +19,11 @@ local function basename(path) return path:match("([^/]+)$") or path end
 function M.build(state)
   local appearance=state.appearance
   local w,h=M.WIDTH,function() return M.HEIGHT end
-  local function button(id, title, icon, width, action, selected, height)
+  -- A button; with a `group`, one of a segmented choice (a kit Press in an
+  -- exclusive group: one chosen, the arrows walk them).
+  local function button(id, title, icon, width, action, selected, height, group)
     local node = kit.pill { id = id, label = title, icon = icon, width = width, height = height or 32,
+      checkable = group ~= nil or nil, group = group, checked = group and selected or nil,
       on_clicked = function() if not state.busy:get() and not appearance.busy:get() then action() end end,
       color = function() return selected and selected() and C.primary or C.surfaceContainerHighest end,
       ink = function() return selected and selected() and C.onPrimary or C.onSurface end }
@@ -32,14 +35,12 @@ function M.build(state)
   local right = w - left - GAP
   local inner = right - 2 * PAD
   local color = state.color
-  local function swatch(id, caption, value, width, height)
-    local area
-    local function ink()
-      return morf.color(value()):text_color()
-    end
-    area = kit.action { id = id, width = width, height = height, cursor = "pointer",
-      on_clicked = function() state.copy(value()) end,
-      kit.surface { anchors = { fill = true }, radius = function() return area and area.hovered and 9 or 14 end,
+  -- A swatch's face, the entry of a swatch grid (a kit Selection: the
+  -- arrows walk the colours, a press or Return copies one).
+  local function face(caption, value, s)
+    local function ink() return morf.color(value()):text_color() end
+    return ui.Item { anchors = { fill = true },
+      kit.surface { anchors = { fill = true }, radius = function() return s.hovered() and 9 or 14 end,
         color = function() return morf.color(value()) end,
         behavior = { radius = kit.spring(420, 24), color = { duration = 220 } },
         text(caption, { x = 8, y = 5, font_size = 10, font_weight = 600, color = ink }),
@@ -47,27 +48,68 @@ function M.build(state)
       },
       (function()
         local mark = kit.decor("corners", { length = 5, color = function() return ink():alpha(0.8) end })
-        if mark then mark.visible = function() return area and area.hovered or false end return mark end
+        if mark then mark.visible = function() return s.hovered() or s.current() end return mark end
         return ui.Item {}
       end)(),
     }
-    return area
   end
-  local colors = { x = PAD, y = 47, gap = 8, width = inner }
-  for row = 0, 3 do
-    local line = { gap = 6 }
-    for col = 0, 3 do
-      local n = row * 4 + col
-      line[#line + 1] = swatch("lule-color-" .. n, string.format("%02d", n), function() return color(n) end,
-        (inner - 18) / 4, 50)
-    end
-    colors[#colors + 1] = ui.Row(line)
+  -- The colour last chosen in either grid, for the picker to start from.
+  local picked = morf.signal("caelestia.lule.picked", "")
+  local function grid(id, entries, columns, width, height, gap)
+    return kit.widgets.swatch_grid { id = id, items = entries, columns = columns, gap = gap,
+      item_width = width, item_height = height, press_activates = true, current = 0,
+      item_id = function(_, entry) return entry.id end,
+      delegate = function(_, entry, s) return face(entry.caption, entry.value, s) end,
+      on_current_changed = function(i) picked:set(entries[i].value()) end,
+      on_activated = function(i) state.copy(entries[i].value()) end }
   end
-  local special = { x = PAD, y = 285, gap = 6 }
+  local numbered = {}
+  for n = 0, 15 do
+    numbered[#numbered + 1] = { id = "lule-color-" .. n, caption = string.format("%02d", n),
+      value = function() return color(n) end }
+  end
+  local named = {}
   for _, entry in ipairs { { "background", "Background" }, { "foreground", "Text" }, { "cursor", "Cursor" } } do
-    local key, name = entry[1], entry[2]
-    special[#special + 1] = swatch("lule-" .. key, name, function() return color(key) end, (inner - 12) / 3, 49)
+    named[#named + 1] = { id = "lule-" .. entry[1], caption = entry[2], value = function() return color(entry[1]) end }
   end
+  local swatches = ui.Item { x = PAD, y = 47, width = inner, height = 287,
+    grid("lule-colors", numbered, 4, (inner - 18) / 4, 50, 6),
+    ui.Item { y = 238, grid("lule-named", named, 3, (inner - 12) / 3, 49, 6) },
+  }
+
+  -- The picker: any colour, a Plane of saturation and value under a hue
+  -- slider, starting from the swatch last chosen.
+  local hue = morf.signal("caelestia.lule.hue", 0)
+  local sat = morf.signal("caelestia.lule.sat", 1)
+  local val = morf.signal("caelestia.lule.val", 1)
+  local function picked_color() return morf.color.hsv(hue:get(), sat:get(), val:get()) end
+  morf.effect("caelestia.lule.picker-seed", function()
+    local value = picked:get()
+    if value == "" then return end
+    local ok, c = pcall(morf.color, value)
+    if not ok then return end
+    local r, g, b = c.r / 255, c.g / 255, c.b / 255
+    local high, low = math.max(r, g, b), math.min(r, g, b)
+    hue:set(c.h or 0) sat:set(high > 0 and (high - low) / high or 0) val:set(high)
+  end)
+  local picking = morf.signal("caelestia.lule.picking", false)
+  local picker = ui.Item { x = PAD, y = 47, width = inner, height = 287,
+    visible = function() return picking:get() end,
+    kit.widgets.colour_plane { id = "lule-plane", width = inner, height = 170,
+      hue = function() return hue:get() end, y_from = 1, y_to = 0,
+      x = function() return sat:get() end, y = function() return val:get() end,
+      on_moved = function(x, y) sat:set(x) val:set(y) end },
+    ui.Item { y = 182, width = inner, height = 30,
+      kit.slider { id = "lule-hue", width = inner, height = 22, label = false,
+        value = function() return hue:get() / 360 end, set = function(v) hue:set(v * 360) end } },
+    ui.Item { y = 226, width = inner, height = 40,
+      kit.surface { width = 40, height = 40, radius = 12, color = picked_color },
+      text(function() return picked_color():hex() end, { x = 52, y = 10, font_size = 15, font_weight = 600 }),
+      ui.Item { anchors = { right = true }, width = 100, height = 32, y = 4,
+        button("lule-picker-copy", "Copy", "content_copy", 100, function() state.copy(picked_color():hex()) end) },
+    },
+  }
+  swatches.visible = function() return not picking:get() end
   local folder_w = left - 2 * PAD - 212
   local field = ui.TextInput { id = "lule-folder", width = folder_w - 20, height = 30, x = 10,
     font_family = theme.font, font_size = 12, placeholder = "~/Pictures/Wallpapers",
@@ -151,8 +193,12 @@ function M.build(state)
   local palette_card = kit.card { id = "lule-colors-card", x = left + GAP, width = right, height = TOP, radius = 24,
     kit.heading { id = "lule-colors-heading", text = "Colors", x = PAD, y = 11, width = 110,
       font_size = 18, font_weight = 600, active = function() return state.active:get() end },
-    label("Click a swatch to copy", { anchors = { right = true, right_margin = PAD }, y = 16, font_size = 11 }),
-    ui.Column(colors), ui.Row(special),
+    ui.Row { anchors = { right = true, right_margin = PAD }, y = 10, gap = 6,
+      button("lule-view-swatches", "Swatches", nil, 84, function() picking:set(false) end,
+        function() return not picking:get() end, 26, "lule-view"),
+      button("lule-view-picker", "Picker", nil, 84, function() picking:set(true) end,
+        function() return picking:get() end, 26, "lule-view") },
+    swatches, picker,
   }
   local mode_w, apply_w = 160, 200
   local methods_w = w - 2 * PAD - mode_w - apply_w - 24
@@ -160,12 +206,13 @@ function M.build(state)
   for _, mode in ipairs { "dark", "light" } do
     modes[#modes + 1] = button("lule-mode-" .. mode, mode == "dark" and "Dark" or "Light",
       mode == "dark" and "dark_mode" or "light_mode", (mode_w - 6) / 2,
-      function() state.set_mode(mode) end, function() return state.mode:get() == mode end)
+      function() state.set_mode(mode) end, function() return state.mode:get() == mode end, nil, "lule-mode")
   end
   local methods = { x = PAD + mode_w + 12, y = 35, gap = 6 }
   for _, method in ipairs { "pigment", "median", "histogram", "tonal" } do
     methods[#methods + 1] = button("lule-method-" .. method, method:gsub("^%l", string.upper), nil,
-      (methods_w - 18) / 4, function() state.set_method(method) end, function() return state.method:get() == method end)
+      (methods_w - 18) / 4, function() state.set_method(method) end, function() return state.method:get() == method end,
+      nil, "lule-method")
   end
   local apply = button("lule-apply", function() return state.busy:get() and "Applying…" or "Apply wallpaper & colors" end,
     nil, apply_w, state.apply, function() return true end)
@@ -176,7 +223,7 @@ function M.build(state)
   for _,style in ipairs {{"material","Material"},{"tsugumori","Tsugumori"}} do
     styles[#styles+1]=button("lule-theme-"..style[1],style[2],nil,style_w,
       function() appearance.request(style[1]) end,
-      function() return require("themes").current.id==style[1] end,34)
+      function() return require("themes").current.id==style[1] end,34,"lule-theme")
   end
   local controls = kit.card { id = "lule-controls", y = TOP + GAP, width = w, height = function() return h() - TOP - GAP end, radius = 24,
     kit.heading { id = "lule-appearance-title", text = "Appearance", level = "caption", active = function() return state.active:get() end, x = PAD, y = 12, font_size = 12, color = function() return C.onSurfaceVariant end },

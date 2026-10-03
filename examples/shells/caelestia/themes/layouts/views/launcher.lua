@@ -42,10 +42,22 @@ function V.build(M)
 
   local function wide() return M.mode:get() == "wallpapers" end
 
-  local function width() return wide() and WIDE or WIDTH end
+  -- Wide for the wallpapers, as far as the output allows.
+  local function wide_width()
+    local _, _, desk_w = require("bar").desk()
+    return math.max(WIDTH, math.min(WIDE, (desk_w or WIDE) - 40))
+  end
+  local function width() return wide() and wide_width() or WIDTH end
+
+  -- As much of the list as the output has room for; the rest scrolls.
+  local function view_height()
+    local _, _, _, desk_h = require("bar").desk()
+    local room = math.floor((desk_h or 1080) * 0.84) - 40 - SEARCH - 2 * PAD - FOOTER
+    return math.max(ROW, math.min(list_height(), room))
+  end
 
   local function height()
-    local body = wide() and CAROUSEL or list_height()
+    local body = wide() and CAROUSEL or view_height()
     return SEARCH + PAD + body + PAD + FOOTER
   end
 
@@ -90,6 +102,7 @@ function V.build(M)
     return sel and sel.key == key
   end
 
+  local results
   local function header(entry)
     return ui.Item {
       id = "launcher-header-" .. entry.key,
@@ -97,6 +110,7 @@ function V.build(M)
       enter = { opacity = 0, duration = theme.duration.small },
       kit.heading {
         id = "launcher-section-" .. entry.key, scope = "launcher", level = "section",
+        viewport = function() return results end,
         x = 14, anchors = { bottom = true, bottom_margin = 6 }, width = WIDTH - 2 * PAD - 120, elide = "right",
         text = entry.name, font_size = theme.size.small, font_weight = 600,
         color = kit.ink("lo"), ink = kit.ink("accent"),
@@ -224,13 +238,21 @@ function V.build(M)
 
   local MAX_SLOTS = 64
 
+  -- The slots are a window on the wallpapers that follows the chosen one,
+  -- so a folder of more than MAX_SLOTS still reaches its last picture.
+  local function offset()
+    local count = M.wall_count:get()
+    return math.max(0, math.min(M.selected:get() - MAX_SLOTS // 2, count - MAX_SLOTS))
+  end
+
   local function carousel()
     local slots = {}
     for i = 1, MAX_SLOTS do
-      local function wall() return i <= M.wall_count:get() and M.walls[i] or nil end
-      local function on() return M.selected:get() == i end
+      local function index() return offset() + i end
+      local function wall() return index() <= M.wall_count:get() and M.walls[index()] or nil end
+      local function on() return M.selected:get() == index() end
       -- Only pictures near the chosen one are loaded.
-      local function near() return math.abs(M.selected:get() - i) <= 4 end
+      local function near() return math.abs(M.selected:get() - index()) <= 4 end
       local motion = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel }
       local slot
       slot = kit.action {
@@ -244,7 +266,7 @@ function V.build(M)
             local w = wall()
             if w then M.activate(w) end
           else
-            M.selected:set(i)
+            M.selected:set(index())
           end
         end,
         ui.Column {
@@ -283,15 +305,15 @@ function V.build(M)
     local row = ui.Row {
       gap = 0,
       translate_x = function()
-        local sel = math.max(1, M.selected:get())
-        return (WIDE - 2 * PAD) / 2 - ((sel - 1) * SLOT + SLOT_ON / 2)
+        local sel = math.max(1, M.selected:get() - offset())
+        return (wide_width() - 2 * PAD) / 2 - ((sel - 1) * SLOT + SLOT_ON / 2)
       end,
       behavior = { translate_x = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel } },
       table.unpack(slots),
     }
     return ui.Item {
       id = "launcher-wallpapers",
-      x = PAD, y = SEARCH + PAD, width = WIDE - 2 * PAD, height = CAROUSEL, clip = true,
+      x = PAD, y = SEARCH + PAD, width = function() return wide_width() - 2 * PAD end, height = CAROUSEL, clip = true,
       visible = wide,
       row,
       kit.text {
@@ -347,6 +369,22 @@ function V.build(M)
 
   -- The selection: the theme's highlight under the rows, riding an item
   -- that springs from row to row rather than a highlight that jumps.
+  local scroll = morf.signal("caelestia.launcher.scroll", 0)
+  morf.effect("caelestia.launcher.scroll", function()
+    local count = M.results:len()
+    if wide() or count == 0 then if scroll:get() ~= 0 then scroll:set(0) end return end
+    local at = math.max(1, math.min(M.selected:get(), count))
+    local top, h = entry_span(at)
+    local before = at > 1 and M.results:get(at - 1) or nil
+    if before and before.kind == "header" then top = entry_span(at - 1) end
+    local view, now = view_height(), scroll:get()
+    local next_scroll = now
+    if top < now then next_scroll = top end
+    if select(1, entry_span(at)) + h > now + view then next_scroll = select(1, entry_span(at)) + h - view end
+    next_scroll = math.max(0, math.min(next_scroll, math.max(0, list_height() - view)))
+    if next_scroll ~= now then scroll:set(next_scroll) end
+  end)
+
   local highlight = ui.Item {
     id = "launcher-highlight",
     x = 0, width = WIDTH - 2 * PAD,
@@ -358,6 +396,27 @@ function V.build(M)
   local selection = kit.selection {
     id = "launcher-selection", track = highlight, radius = kit.round(12),
     color = function() return C.onSurface:alpha(0.15) end,
+  }
+
+  results = ui.Item {
+    id = "launcher-results",
+    y = SEARCH + PAD, width = WIDTH - 2 * PAD,
+    anchors = { horizontal_center = true },
+    height = view_height,
+    visible = function() return not wide() end,
+    clip = true,
+    ui.Item { width = WIDTH - 2 * PAD, height = list_height,
+      y = function() return -scroll:get() end,
+      behavior = { y = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel } },
+      selection,
+      highlight,
+      ui.Repeater {
+        as = "column", gap = ROW_GAP,
+        model = M.results,
+        delegate = delegate,
+      },
+    },
+    empty,
   }
 
   -- The bar at the foot: what is being searched, and what Return and Tab do.
@@ -438,22 +497,9 @@ function V.build(M)
       clear,
     },
     kit.surface { anchors = { left = true, right = true }, y = SEARCH, height = 1, color = kit.stroke("quiet") },
-    -- The results, down from the search.
-    ui.Item {
-      y = SEARCH + PAD, width = WIDTH - 2 * PAD,
-      anchors = { horizontal_center = true },
-      height = function() return list_height() end,
-      visible = function() return not wide() end,
-      clip = true,
-      selection,
-      highlight,
-      ui.Repeater {
-        as = "column", gap = ROW_GAP,
-        model = M.results,
-        delegate = delegate,
-      },
-      empty,
-    },
+    -- The results, down from the search, scrolled to keep the chosen row
+    -- -- and its section's heading -- in view.
+    results,
     carousel(),
     footer,
     kit.decor("corners", { length = 12, color = kit.stroke("mark") }) or ui.Item {},

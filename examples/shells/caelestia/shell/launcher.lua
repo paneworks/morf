@@ -126,20 +126,31 @@ function M.activate(row)
   end
 end
 
-local function move(delta)
-  local n = wide() and M.wall_count:get() or M.results:len()
-  if n == 0 then return end
-  local at = M.selected:get()
-  local step = delta > 0 and 1 or -1
-  for _ = 1, math.abs(delta) do
-    local next_at = at + step
-    while next_at >= 1 and next_at <= n and not wide() and M.results:get(next_at).kind == "header" do
-      next_at = next_at + step
-    end
-    if next_at < 1 or next_at > n then break end
-    at = next_at
+-- The list's selection is a kit Selection (crates/morf-kit): it skips the
+-- section headings, walks the wallpapers sideways, and answers the Page
+-- keys; the view draws the rows.
+local headers = function()
+  local out = {}
+  for i = 1, M.results:len() do
+    if M.results:get(i).kind == "header" then out[#out + 1] = i end
   end
-  M.selected:set(at)
+  return out
+end
+local choice = require("lib.kit.control").headless("Selection", {
+  orientation = function() return wide() and "horizontal" or "vertical" end,
+  count = function() return wide() and M.wall_count:get() or M.count:get() end,
+  disabled = function() return wide() and {} or headers() end,
+  current = function() return M.selected:get() end,
+  page = 5,
+  on_current_changed = function(i) M.selected:set(i) end,
+})
+M.choice = choice
+local function move(delta)
+  local back, forth = "Up", "Down"
+  if wide() then back, forth = "Left", "Right" end
+  for _ = 1, math.abs(delta) do
+    if not choice.key(delta > 0 and forth or back) then break end
+  end
 end
 M.move = move
 
@@ -163,6 +174,7 @@ function M.key(_, _, modifiers, _, key)
 
     if key == "Up" then move(-1) return true end
     if key == "Down" then move(1) return true end
+    if key == "Page_Up" or key == "Page_Down" then return choice.key(wide() and "" or key) end
     -- Tab or Ctrl+K: the chosen row's actions, and back.
     if key == "Tab" or (key == "k" and tostring(modifiers):find("ctrl")) then
       if M.acting:get() ~= "" then

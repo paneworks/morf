@@ -40,7 +40,9 @@ function M.build(capture, w, h)
   for i, t in ipairs(choices) do
     local area
     local function on() return capture.target:get() == t[1] end
-    area = kit.action { id = "capture-target-" .. t[1], x = (i - 1) * slot,
+    -- A segmented choice: one target, the arrows walk them (a kit Press
+    -- in an exclusive group).
+    area = kit.press_area("segment", { id = "capture-target-" .. t[1], x = (i - 1) * slot,
       width = slot, height = 72, cursor = "pointer",
       on_pressed = function() pressed:set(true) end,
       on_released = function() pressed:set(false) end,
@@ -53,7 +55,7 @@ function M.build(capture, w, h)
         kit.label { anchors = { horizontal_center = true }, y = 43, text = t[2], font_size = 13, font_weight = 600,
           color = function() return on() and C.onSecondaryContainer or C.onSurfaceVariant end },
       },
-    }
+    }, { checkable = true, group = "capture-target", checked = on })
     targets[#targets + 1] = area
   end
   local selector = ui.Item { x = 16, y = 14, width = inner, height = 72,

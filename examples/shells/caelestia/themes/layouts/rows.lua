@@ -19,13 +19,21 @@ end
 --- `spec`: `id`, `x`, `y`, `width`, `height`, `anchors`, `visible`,
 --- `on_clicked`, `on` (fn), `tone` ("primary" fills with the primary
 --- colour, else the secondary container), `tile` (a raised tile when not
---- chosen, else bare until hovered), and children.
+--- chosen, else bare until hovered), `group` (choices with one name are a
+--- segmented choice: one chosen, the arrows walk them -- a kit Press
+--- `segment` in an exclusive group), and children.
 function R.choice(spec)
   local on = spec.on or function() return false end
   local props = { id = spec.id, x = spec.x, y = spec.y, width = spec.width, height = spec.height,
     anchors = spec.anchors, visible = spec.visible, cursor = "pointer", on_clicked = spec.on_clicked }
   for _, child in ipairs(spec) do props[#props + 1] = child end
-  local area = kit.action(props)
+  local area
+  if spec.group then
+    area = kit.press_area("segment", props,
+      { checkable = true, group = spec.group, allow_none = true, checked = on })
+  else
+    area = kit.action(props)
+  end
   local ground = kit.state_surface { area = area, on = on, z = -1,
     height = type(spec.height) == "number" and spec.height or nil,
     tone = spec.tone == "primary" and "primary" or "secondary" }

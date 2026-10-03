@@ -1,4 +1,5 @@
--- Every widget the Press and Range archetypes make (contract.lua), as a
+-- Every widget the Press, Range, Plane and Selection archetypes make
+-- (contract.lua), as a
 -- constructor: `widgets.switch { checked = on, on_toggled = set }`,
 -- `widgets.slider { value = level, on_moved = set_level }`. A widget is its
 -- archetype with the settings that make it what it is -- a switch is a
@@ -43,6 +44,25 @@ local RANGE = {
   osd_level = { enabled = false },
 }
 
+local PLANE = {
+  hue_wheel = { constraint = "circle" },
+  joystick = { constraint = "circle", x_from = -1, x_to = 1, y_from = -1, y_to = 1, y_up = true },
+  xy_pad = { y_up = true },
+}
+local SELECTION = {
+  tabs = { orientation = "horizontal" },
+  segmented = { orientation = "horizontal" },
+  list_selection = { orientation = "vertical" },
+  sidebar_list = { orientation = "vertical" },
+  grid_selection = { orientation = "grid" },
+  swatch_grid = { orientation = "grid" },
+  emoji_grid = { orientation = "grid" },
+  icon_chooser = { orientation = "grid" },
+  day_grid = { orientation = "grid", columns = 7 },
+  toggle_group = { mode = "multi" },
+  transfer_side = { orientation = "vertical", mode = "range" },
+}
+
 local function with_defaults(widget, spec, defaults)
   local merged = {}
   for k, v in pairs(defaults[widget] or {}) do merged[k] = v end
@@ -55,6 +75,14 @@ end
 
 for _, widget in ipairs(contract.archetypes.Press.widgets) do
   M[widget] = function(spec) return (control.make("Press", widget, with_defaults(widget, spec, PRESS))) end
+end
+for _, widget in ipairs(contract.archetypes.Plane.widgets) do
+  M[widget] = function(spec) return (control.make("Plane", widget, with_defaults(widget, spec, PLANE))) end
+end
+for _, widget in ipairs(contract.archetypes.Selection.widgets) do
+  M[widget] = function(spec)
+    return (require("lib.kit.selection").make(widget, with_defaults(widget, spec, SELECTION)))
+  end
 end
 for _, widget in ipairs(contract.archetypes.Range.widgets) do
   M[widget] = function(spec) return (control.make("Range", widget, with_defaults(widget, spec, RANGE))) end

@@ -45,7 +45,17 @@ pub fn slots_of(archetype: &str) -> Option<&'static [&'static str]> {
             "content",
         ],
         "Plane" => &["background", "field", "crosshair", "handle", "content"],
-        "Selection" => &["background", "indicator", "item", "separator", "content"],
+        // `item`, `place` and `container` are builders, not nodes: an
+        // entry's look, its area's properties, and what the entries go in.
+        "Selection" => &[
+            "background",
+            "indicator",
+            "item",
+            "place",
+            "container",
+            "separator",
+            "content",
+        ],
         "Popup" => &["dim", "background", "content", "enter", "exit"],
         "TextField" => &[
             "background",

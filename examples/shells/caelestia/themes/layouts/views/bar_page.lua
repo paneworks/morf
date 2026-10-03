@@ -12,6 +12,8 @@ local M = {}
 local function choice(id, icon, name, on, pick, width)
   return rows.choice {
     id = id, width = width, height = 70, on = on, tone = "primary", tile = true, on_clicked = pick,
+    -- One of a card's choices: "bar-show-*", "bar-side-*", "bar-titles-*".
+    group = id:match("^(bar%-%a+)%-"),
     ui.Column {
       anchors = { center_in = true }, gap = 4, align = "center",
       kit.icon(icon, 22, rows.ink(on, true, C.onSurfaceVariant)),

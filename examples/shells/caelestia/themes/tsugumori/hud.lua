@@ -52,11 +52,14 @@ return function(theme, kit)
       strip,
       scan,
     } do ui.reparent(child, track) end
+    local settle_timer, running
     local plate = ui.Sdf { id = spec.id, anchors = { fill = true }, z = -1,
       ui.SdfShape { shape = "box", radius = 0, track = track, fill_color = color },
+      -- A pass still waiting when the list goes would reach for nodes that
+      -- are gone.
+      on_destroyed = function() if settle_timer then settle_timer:cancel() settle_timer = nil end end,
     }
     -- Once the track stops moving, one pass of the scanline down the row.
-    local settle_timer, running
     morf.effect("tsugumori.selection." .. tostring(spec.id or track.id or "list"), function()
       local _ = track.layout_y, track.layout_height
       if settle_timer then settle_timer:cancel() end

@@ -22,8 +22,10 @@ use morf_lua::{HostFunction, IpcTable, IpcValue, Runtime};
 
 use crate::control::{Control, implicit_size};
 use crate::group::arrow_step;
+use crate::plane::Plane;
 use crate::press::Press;
 use crate::range::Range;
+use crate::selection::Selection;
 use crate::slots::{ARCHETYPES, slots_of};
 use crate::tokens::merge_tokens;
 use crate::value::{expect_number, number, text};
@@ -155,6 +157,8 @@ fn make(archetype: &str) -> Result<Box<dyn Archetype>, String> {
         "Control" => Ok(Box::new(Control::default())),
         "Press" => Ok(Box::new(Press::new())),
         "Range" => Ok(Box::new(Range::new())),
+        "Plane" => Ok(Box::new(Plane::new())),
+        "Selection" => Ok(Box::new(Selection::new())),
         other if ARCHETYPES.contains(&other) => {
             Err(format!("archetype {other} has not arrived yet"))
         }
@@ -198,7 +202,10 @@ pub fn install(runtime: &mut Runtime) {
                 let rank = |field: &str| match field {
                     "from" | "to" | "range" | "orientation" | "logarithmic" | "wrap" | "step"
                     | "tristate" | "checkable" | "group" | "exclusive" | "allow_none" => 0,
-                    "value" | "first" | "second" | "checked" | "partial" => 2,
+                    "count" | "labels" | "columns" | "x_from" | "x_to" | "y_from" | "y_to"
+                    | "mode" | "disabled" => 0,
+                    "value" | "first" | "second" | "checked" | "partial" | "current"
+                    | "selected" | "x" | "y" => 2,
                     _ => 1,
                 };
                 let mut ordered: Vec<_> = settings.iter().collect();

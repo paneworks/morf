@@ -73,6 +73,20 @@ color, props)` keep their current meaning.
 `kit.with_viewport` keep their current meaning. Themes without a concept
 (e.g. `with_viewport`) implement it as a pass-through.
 
+Since the widget kit (`library/lib/kit/`, crates/morf-kit), the pressing,
+dragging, choosing and keys of `kit.action`, `kit.pill`, `kit.switch`,
+`kit.icon_button`, `kit.slider`, `kit.media_progress` and `kit.tabs` are
+the archetypes' (`Press`, `Range`, `Selection`), built in
+`shell/kit.lua`; a theme draws them with skins (`themes/<name>/skins.lua`):
+`skins.Press`, `skins.Range`, `skins.Selection` and `skins.Plane`, each a
+function of a control's live state `t` returning its slots, told which
+widget it is drawing through `spec.widget` (`pill`, `icon`, `switch`,
+`checkbox`, `radio`, `area`, `segment`; `slider`, `seek_bar`; `tabs` and
+the rest; `colour_plane`). `rows.choice` with a `group` is a segmented
+choice -- a `segment` press in an exclusive group. `kit.press_area(widget,
+props, settings)` makes any other pressable area. A theme's components
+keep no interaction code for these.
+
 `kit.focusable(area[, radius])` sets the area's `focus_policy = "tab"` and
 draws the theme's focus ring on it while `area.visual_focus` holds -- a
 keyboard put focus there, never a click. `kit.action` returns a focusable

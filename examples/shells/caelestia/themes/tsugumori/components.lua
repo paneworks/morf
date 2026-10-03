@@ -453,7 +453,6 @@ return function(theme)
     end
     return M.focusable(feedback(ui.MouseArea(props), props.id))
   end
-  function M.tabs(spec) return require("themes.tsugumori.tabs")(theme, M, spec) end
   function M.tabbed(spec) return require("themes.tsugumori.tabbed")(theme, M, spec) end
   -- Tsugumori outlines: straight-edged, eight vertices each (repeated
   -- where a shape has fewer), so any one morphs into any other point to

@@ -38,7 +38,7 @@ function M.build(model,w,h)
   for _,entry in ipairs {{"auto","Auto"},{"headphones","Headphones"},{"speakers","Speakers"}} do
     local key,label=entry[1],entry[2]
     local function on() return model.get("mode")==key end
-    mode_buttons[#mode_buttons+1]=rows.choice {id="equalizer-mode-"..key,width=(inner-12)/3,height=32,on=on,
+    mode_buttons[#mode_buttons+1]=rows.choice {id="equalizer-mode-"..key,group="equalizer-mode",width=(inner-12)/3,height=32,on=on,
       tone="primary",tile=true,on_clicked=function() model.set("mode",key) end,
       kit.menu_label {anchors={center_in=true},text=label,font_size=theme.size.small,font_weight=600,
         width=(inner-12)/3-12,elide="right",horizontal_alignment="center",

@@ -22,22 +22,27 @@ end
 -- shapes the layouts already call them with.
 kit.widgets = widgets
 
---- A pressable area: the MouseArea a layout builds a row, a tile or a card
---- action from, as a kit Press (`area`) -- Tab reaches it, Return and
---- Space click it, and the theme's skin marks hover, press and focus. Its
---- properties and children are the layout's, kept across a theme switch.
-function kit.action(props)
-  local spec, node, children = { widget = "area" }, {}, {}
+--- A pressable area as a kit Press `widget`: the MouseArea a layout builds
+--- a row, a tile or a choice from. Tab reaches it, Return and Space click
+--- it, and the theme's skin marks hover, press and focus; its properties
+--- and children are the layout's, kept across a theme switch. `settings`
+--- are the Press's own (`checked`, `group`, `on_toggled`, ...).
+function kit.press_area(widget, props, settings)
+  local spec, node, children = { widget = widget }, {}, {}
   for key, value in pairs(props or {}) do
     if type(key) == "number" then children[key] = value
     elseif type(key) == "string" and key:match("^on_") then spec[key] = value
     else node[key] = value end
   end
+  for key, value in pairs(settings or {}) do spec[key] = value end
   -- A disabled area takes no press, as a MouseArea's `enabled` says, and
   -- its archetype knows.
   if node.enabled ~= nil then spec.enabled = node.enabled end
-  return (require("lib.kit.control").make("Press", "area", spec, { props = node, children = children }))
+  return (require("lib.kit.control").make("Press", widget, spec, { props = node, children = children }))
 end
+
+--- A pressable area (`kit.press_area`'s `area`).
+function kit.action(props) return kit.press_area("area", props) end
 
 --- A filled button: `label`, `icon`, `on_clicked`, `width`, `height` (32),
 --- `color`/`ink`.
@@ -79,6 +84,31 @@ function kit.media_progress(spec)
   s.id = s.id or "media-seek"
   s.on_moved, s.seek = spec.seek, nil
   return widgets.seek_bar(s)
+end
+
+--- The tab row: `id`, `tabs` (`{ key, name, icon | icon_build }`), `tab`
+--- (a signal, from 1), `width`, `height`, `pad`, `ids` (`"name"`: each tab
+--- is `<id>-tab-<name:lower()>`; `"key"` by default), `growing` (the row
+--- follows an easing drawer). A kit Selection: click, arrows, Home and End.
+function kit.tabs(spec)
+  local s = copy(spec)
+  s.items, s.tabs, s.tab = spec.tabs, nil, nil
+  s.current = function() return spec.tab:get() end
+  s.on_current_changed = function(i) spec.tab:set(i) end
+  local by_name = spec.ids == "name"
+  s.item_id = function(_, entry)
+    return spec.id .. "-tab-" .. (by_name and entry.name:lower() or (entry.key or entry.name:lower()))
+  end
+  s.ids = nil
+  s.id, s.tab_id = spec.id .. "-tabs", spec.id
+  if spec.growing then
+    s.width = nil
+    s.anchors = { left = true, right = true, left_margin = spec.pad or 11, right_margin = spec.pad or 11 }
+  end
+  s.height = spec.height or 64
+  -- The skins read the row's own width; a growing row's is the drawer's.
+  s.width_of = spec.width
+  return widgets.tabs(s)
 end
 
 return kit
