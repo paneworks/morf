@@ -120,7 +120,8 @@ fn parse_ms(option: &str, text: &str) -> Result<Duration, String> {
 
 /// The default look's check configuration (library/lib/kit/skins/default/
 /// check.lua): in the project's library beside the working directory, a
-/// `MORF_RUNTIME_PATH` root, or the installed library.
+/// `MORF_RUNTIME_PATH` root, or an installed library -- the user's, then each
+/// of `XDG_DATA_DIRS` (where a package, a Nix profile among them, puts it).
 fn default_kit_config() -> Result<PathBuf, String> {
     let tail = std::path::Path::new("lib/kit/skins/default/check.lua");
     let here = std::env::current_dir().map_err(|e| e.to_string())?.join("x");
@@ -136,6 +137,14 @@ fn default_kit_config() -> Result<PathBuf, String> {
     if let Some(data) = data {
         roots.push(data.join("morf/library"));
     }
+    let dirs = std::env::var_os("XDG_DATA_DIRS")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    roots.extend(
+        std::env::split_paths(&dirs)
+            .filter(|path| path.is_absolute())
+            .map(|path| path.join("morf/library")),
+    );
     roots
         .into_iter()
         .map(|root| root.join(tail))
