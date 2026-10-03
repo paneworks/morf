@@ -1,0 +1,40 @@
+//! What the engine does: events, focus, keys, overlays, views, editing, animation, timers, wake.
+//! Bound for morf-runtime (PLAN.md phase 5).
+
+pub(crate) mod animation;
+pub(crate) mod audio;
+pub(crate) mod clipboard;
+pub(crate) mod dispatch;
+pub(crate) mod editing;
+pub(crate) mod events;
+pub(crate) mod focus_keys;
+pub(crate) mod gestures;
+pub(crate) mod helpers;
+pub(crate) mod host_types;
+pub(crate) mod image_host;
+pub(crate) mod image_jobs;
+pub(crate) mod images;
+pub(crate) mod input;
+pub(crate) mod ipc;
+pub mod keys;
+pub(crate) mod layout;
+pub(crate) mod layout_host;
+pub(crate) mod lock_surface;
+pub(crate) mod model_revisions;
+pub(crate) mod node_loops;
+pub(crate) mod pending;
+pub(crate) mod prefers;
+pub(crate) mod primary;
+pub(crate) mod screens;
+pub(crate) mod services;
+pub(crate) mod session_lock;
+pub(crate) mod shortcut;
+pub(crate) mod state;
+pub(crate) mod states;
+pub(crate) mod terminal_host;
+pub(crate) mod terminals;
+pub(crate) mod text_inputs;
+pub(crate) mod toplevels;
+pub(crate) mod view_host;
+pub(crate) mod views;
+pub(crate) mod wake;
