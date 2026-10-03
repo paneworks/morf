@@ -476,7 +476,7 @@ impl WgpuBackend {
         let field_shader_default = create_shader_bind_group(
             &device,
             &field_shader_layout,
-            &create_shader_uniform_buffer(&device, morf_shader::HEADER_BYTES),
+            &create_shader_uniform_buffer(&device, morf_value::shader_abi::HEADER_BYTES),
         );
         let field_capacity = 1;
         let field_buffer = create_instance_buffer_for::<SdfFieldInstance>(

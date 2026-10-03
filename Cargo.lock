@@ -1901,6 +1901,7 @@ name = "morf-shader"
 version = "0.1.5"
 dependencies = [
  "luna",
+ "morf-value",
 ]
 
 [[package]]

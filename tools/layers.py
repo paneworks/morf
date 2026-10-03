@@ -37,14 +37,16 @@ ALLOWED = {
     "morf-terminal": {"morf-io", "morf-scene", "morf-value"},
     "morf-system": {"morf-io", "morf-image", "morf-value"},
     "morf-runtime": {"morf-scene", "morf-layout", "morf-text", "morf-app", "morf-value"},
+    "morf-shader": {"morf-value"},
     "morf-kit": {"morf-value"},
     "morf-lua": {"morf-runtime", "morf-kit", "morf-scene", "morf-layout", "morf-text", "morf-vector",
-                 "morf-image", "morf-render", "morf-app", "morf-desktop", "morf-io", "morf-audio",
+                 "morf-image", "morf-render", "morf-shader", "morf-app", "morf-desktop", "morf-io", "morf-audio",
                  "morf-terminal", "morf-system", "morf-value"},
     "morf-host": None,  # everything above
     "morf-cli": {"morf-host", "morf-value"},
 }
-NO_LUA_BELOW = {"morf-lua", "morf-host", "morf-cli"}
+# morf-shader reads Lua-syntax shaders with luna's parser: the Lua layer.
+NO_LUA_BELOW = {"morf-shader", "morf-lua", "morf-host", "morf-cli"}
 WAYLAND_ALLOWED = {"morf-app", "morf-desktop", "morf-host", "morf-cli"}
 WAYLAND = re.compile(r"^(wayland-|smithay-client-toolkit)")
 

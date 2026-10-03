@@ -8,12 +8,8 @@
 use crate::ir::Binding;
 use crate::types::Type;
 
-/// How many bytes the built-in header occupies before the first parameter.
-///
-/// `resolution` then `time`, padded to sixteen. Fixed rather than packed with
-/// the rest so a host writing the clock does not have to know what a particular
-/// shader declared.
-pub const HEADER_BYTES: u32 = 16;
+// The header is the renderer's and the compiler's contract: morf-value's.
+pub use morf_value::shader_abi::HEADER_BYTES;
 
 /// Where one parameter sits in the uniform block.
 #[derive(Clone, Debug, Eq, PartialEq)]
