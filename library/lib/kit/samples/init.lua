@@ -31,6 +31,8 @@ M.SOURCE = [==[
   local samples = require("lib.kit.samples")
   local function env(name) local v = morf.env(name) if v == false or v == "" then return nil end return v end
   local wanted = env("KIT_WIDGETS")
+  -- (A picture is taken of the surface: as tall as the gallery, not a bar.)
+  if env("KIT_GALLERY_SNAPSHOTS") then morf.surface.width, morf.surface.height = 1920, 2160 end
   local CELL_W, CELL_H, COLUMNS = 320, 260, 6
   local order = { "Press", "Range", "Plane", "Selection", "Popup", "TextField", "Scroll", "Collection", "Disclosure",
     "Drag", "Navigation", "Shell", "Canvas", "Dock" }

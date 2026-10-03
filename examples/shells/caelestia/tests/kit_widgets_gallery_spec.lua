@@ -14,7 +14,8 @@ local SOURCE = require("lib.kit.samples").SOURCE
 local function env(name) local v = morf.env(name) if v == false or v == "" then return nil end return v end
 
 local function load(style, size)
-  test.load("../shell/init.lua", { size = size, env = { CAELESTIA_STYLE = style, KIT_WIDGETS = env("KIT_WIDGETS") or "" },
+  test.load("../shell/init.lua", { size = size, env = { CAELESTIA_STYLE = style, KIT_WIDGETS = env("KIT_WIDGETS") or "",
+    KIT_GALLERY_SNAPSHOTS = env("KIT_GALLERY_SNAPSHOTS") or "" },
     source = SOURCE })
   test.settle(2000)
 end
