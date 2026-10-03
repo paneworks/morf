@@ -1,6 +1,13 @@
 local test=morf.test
 local HOST=[[
   local ui=require("morf.ui")
+  local paths={}
+  local path=ui.Path
+  ui.Path=function(props)
+    local node=path(props)
+    if props.id then paths[props.id]=node end
+    return node
+  end
   local W,H=tonumber(morf.env("TEST_WIDTH")),tonumber(morf.env("TEST_HEIGHT"))
   morf.surface.height=H
   local active=morf.signal("test.workspace",1)
@@ -34,6 +41,7 @@ local HOST=[[
   morf.ipc.enabled=function(on) enabled:set(on=="yes") end
   morf.ipc.left=function(on) left.set(on=="yes") end
   morf.ipc.top=function(height) top:set(tonumber(height)) end
+  morf.ipc.ruler=function(edge,kind) return paths["tsugumori-frame-ruler-"..edge.."-"..kind].d end
   morf.ipc.state=function() return {workspace=active:get(),open=left.open:get(),clicks=clicks,triggers=triggers,
     geometry=rail.geometry(),insets=frame.insets {left=0,top=top:get(),right=0,bottom=0}} end
 ]]
@@ -68,6 +76,15 @@ for _,style in ipairs {"material","tsugumori"} do
   end)
   test.it(style.." workspace rail handles rapid changes, groups and disabling mid-animation",function()
     load(style)
+    test.truthy(test.find("rail-pill-9"))
+    test.falsy(test.find("rail-pill-10"))
+    for _,id in ipairs {1,11,21} do
+      test.ipc("workspace",tostring(id)) test.advance(1200)
+      local g=test.ipc("state").geometry
+      if style=="tsugumori" then test.near(test.get("rail-selector").y,g.top,.001) end
+      test.near(test.get("rail-pill-1").y,g.top,.001)
+      test.near(test.get("rail-pill-9").y,g.top+8*(g.item+g.gap),.001)
+    end
     test.ipc("workspace","4") test.advance(450)
     shot(style.."-rail-moving")
     test.ipc("workspace","7") test.advance(160)
@@ -94,9 +111,41 @@ for _,style in ipairs {"material","tsugumori"} do
     test.eq(#test.logs("error"),0)
   end)
 end
+test.it("Tsugumori rulers bracket three workspaces and stay continuous behind pills",function()
+  for _,size in ipairs {{800,480},{1280,801}} do
+    load("tsugumori",size[1],size[2])
+    local g=test.ipc("state").geometry
+    local origin=g.top-g.gap/2
+    local majors={}
+    for y in test.ipc("ruler","left","major"):gmatch("M[%d.]+ ([%d.]+) H") do
+      majors[#majors+1]=tonumber(y)
+    end
+    for group=0,3 do
+      local expected=origin+group*3*(g.item+g.gap)+.5
+      local found=false
+      for _,y in ipairs(majors) do if y==expected then found=true end end
+      test.truthy(found,"missing workspace group boundary at "..expected)
+    end
+    for _,edge in ipairs {"left","right"} do
+      local ticks={}
+      for _,kind in ipairs {"minor","major"} do
+        for y in test.ipc("ruler",edge,kind):gmatch("M[%d.]+ ([%d.]+) H") do
+          ticks[#ticks+1]=tonumber(y)
+        end
+      end
+      table.sort(ticks)
+      test.truthy(#ticks>0)
+      test.truthy(ticks[1]<=22.5)
+      test.truthy(ticks[#ticks]>=g.h-22.5)
+      for i=2,#ticks do test.eq(ticks[i]-ticks[i-1],8,"ruler has a missing tick") end
+    end
+    shot("tsugumori-clean-frame-"..size[2])
+    test.eq(#test.logs("error"),0)
+  end
+end)
 test.it("Tsugumori rail stays in a compact viewport and follows the left drawer",function()
   load("tsugumori",800,480)
-  test.ipc("workspace","10") test.advance(450)
+  test.ipc("workspace","9") test.advance(450)
   local card=test.get("rail-swell")
   test.truthy(card.x>=0 and card.x+card.width<=800)
   test.truthy(card.y>=0 and card.y+card.height<=480)

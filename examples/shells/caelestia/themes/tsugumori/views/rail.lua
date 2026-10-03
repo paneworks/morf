@@ -1,18 +1,11 @@
--- Workspace rail: a numbered tick ladder down the left band. Each
--- workspace is a slot (an outline when empty, half-lit when it holds
--- windows) with minor ticks between; the one on show is a solid accent
--- block carrying its number, set in a lip of the frame that swells out of
--- the band (an SDF box smooth-unioned into the frame field) and travels
--- with the block, stretching like an M3 indicator. A switch pops a HUD
--- readout card out of the band: header strip, the big number, an occupancy
--- meter. Geometry (item, gap) keeps the level marks on the right edge
--- lined up. (Brought over from the Futuristic theme.)
+-- Simple workspace markers matching the right-edge level pills.
+-- The active marker slides between slots; a switch reveals the HUD card.
+-- Geometry keeps the level pills on the right edge aligned.
 local morf = require("morf")
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
 local stripes = require("themes.tsugumori.stripes")
-local common = require("themes.kit_common")
 local C = theme.color
 -- The few drawing helpers the rail uses.
 local P = {}
@@ -23,7 +16,6 @@ function P.ink(kind)
   if kind == "lo" then return function() return C.onSurfaceVariant end end
   return function() return C.primary end
 end
-P.code = common.code
 function P.label(props)
   local text = props.text
   props.text = function() local t = type(text) == "function" and text() or text return tostring(t or ""):upper() end
@@ -44,15 +36,12 @@ function P.hatch(spec)
 end
 local V = {}
 
-local SEL_W, SEL_H = 14, 22       -- the active block
-local LIP_W, LIP_H = 19, 30       -- the frame's swell around it
-
 function V.geometry(model)
   local w, h = model.desk_size()
   local item, gap = 14, 10
   local track = model.count * item + (model.count - 1) * gap
   return { w = w, h = h, item = item, gap = gap, top = math.floor((h - track) / 2),
-    pill_x = theme.LEFT / 2 - 3, bud_x = LIP_W - 1 }
+    pill_x = theme.LEFT / 2 - 3, bud_x = theme.LEFT + 8 }
 end
 
 function V.build(model)
@@ -60,47 +49,11 @@ function V.build(model)
   local function geometry() return V.geometry(model) end
   local function center(id)
     local g = geometry()
-    return g.top + ((id - 1) % model.count) * (g.item + g.gap) + g.item / 2
-  end
-  local function track_span()
-    local g = geometry()
-    return g.top, g.top + model.count * g.item + (model.count - 1) * g.gap
+    return g.top + (id - model.base(id)) * (g.item + g.gap) + g.item / 2
   end
   local shown = morf.signal("tsugumori.rail.shown", false)
   local root = ui.Item { id = "rail", accessible_role = "navigation", accessible_name = "Workspaces",
     anchors = { fill = true }, visible = model.enabled }
-
-  -- ------------------------------------------------------------ ladder --
-  -- Minor ticks between slots and a long tick either end of the ladder.
-  local function ladder()
-    local g = geometry()
-    local t0, t1 = track_span()
-    local out = { ("M1 %g H9 M1 %g H9 "):format(t0 - 10.5, t1 + 10.5) }
-    for i = 1, model.count - 1 do
-      local y = g.top + i * (g.item + g.gap) - g.gap / 2
-      out[#out + 1] = ("M3 %g H7 "):format(math.floor(y) + .5)
-    end
-    for i = 0, model.count do
-      local y = g.top + i * (g.item + g.gap) - g.gap / 2
-      out[#out + 1] = ("M2 %g H4 M6 %g H8 "):format(math.floor(y - 6) + .5, math.floor(y + 6) + .5)
-    end
-    return table.concat(out)
-  end
-  ui.reparent(ui.Path { id = "rail-ladder", width = theme.LEFT,
-    height = function() return geometry().h end, d = ladder, fill_color = "transparent",
-    stroke_color = P.line("idle"), stroke_width = 1 }, root)
-
-  -- Rotated captions above and below the ladder.
-  local function caption(id, text, at)
-    return ui.Item { id = id, x = 0, width = theme.LEFT, height = 90,
-      y = function() return at() - 45 end,
-      P.label { text = text, x = -38, y = 39, width = 90, height = 12, font_size = 7,
-        horizontal_alignment = "center", rotation = -90, color = P.line("mark") },
-    }
-  end
-  ui.reparent(caption("rail-caption-top", "WS.LDR 01-10", function() local t0 = track_span() return t0 - 62 end), root)
-  ui.reparent(caption("rail-caption-bottom", P.code("tsugumori.rail", "CP-##.#"),
-    function() local _, t1 = track_span() return t1 + 52 end), root)
 
   -- Slots.
   for i = 1, model.count do
@@ -108,32 +61,17 @@ function V.build(model)
     ui.reparent(ui.Rect { id = "rail-pill-" .. i, x = function() return geometry().pill_x end, width = 6,
       height = function() return geometry().item end,
       y = function() return center(id()) - geometry().item / 2 end,
-      color = function() return model.occupied(id()) and C.primary:alpha(.5) or C.primary:alpha(0) end,
-      border_width = 1, border_color = P.line("mark"),
-      behavior = { color = { duration = 180 } } }, root)
+      color = function() return C.primary end,
+      opacity = function() return model.occupied(id()) and .65 or .28 end,
+      behavior = { opacity = { duration = 180 } } }, root)
   end
 
-  -- ---------------------------------------------------------- selector --
-  -- The lip is what the frame field tracks; the block rides inside it.
-  local function sel_y(id) return center(id) - LIP_H / 2 end
-  local lip = ui.Item { id = "rail-selector", x = 0, width = LIP_W, height = LIP_H,
-    y = sel_y(model.active()),
-    ui.Rect { id = "rail-selector-block", x = 1, width = SEL_W,
-      anchors = { top = true, bottom = true, top_margin = (LIP_H - SEL_H) / 2,
-        bottom_margin = (LIP_H - SEL_H) / 2 },
-      color = function() return C.primary end },
-    P.label { id = "rail-selector-value", x = 1, width = SEL_W, height = 12,
-      anchors = { vertical_center = true }, font_size = 8, horizontal_alignment = "center",
-      text = function() return ("%02d"):format(model.active()) end,
-      color = function() return C.surface end },
-    -- A pointer notch on the lip's open side.
-    ui.Rect { x = SEL_W + 2, width = 2, height = 6, anchors = { vertical_center = true },
-      color = function() return C.primary end },
-  }
-  ui.reparent(lip, root)
-  local swell = ui.SdfShape { id = "rail-selector-swell", shape = "box", radius = 2,
-    operation = "smooth_union", blend = 6, track = lip }
-  V.extra_shapes = { swell }
+  -- The active marker has the same shape as every workspace slot.
+  ui.reparent(ui.Rect { id = "rail-selector", x = function() return geometry().pill_x end, width = 6,
+    height = function() return geometry().item end,
+    y = function() return center(model.active()) - geometry().item / 2 end,
+    color = function() return C.primary end,
+    behavior = { y = { duration = 380, easing = "out_cubic" } } }, root)
 
   -- -------------------------------------------------------------- card --
   local digits = ui.Text { id = "rail-value", x = 12, y = 26, height = 36, font_size = 32,
@@ -217,20 +155,11 @@ function V.build(model)
     hide = morf.timer(model.hold(), function() hide = nil close(false) end, false)
   end
 
-  -- The lip travels to the new slot leading edge first; a geometry change
-  -- (screen resize) puts it there outright.
-  local last, last_y = model.active(), nil
+  local last = model.active()
   morf.effect("tsugumori.rail.follow", function()
     local id, on = model.active(), model.enabled()
-    local y = sel_y(id)
     local changed = id ~= last
     last = id
-    if last_y == nil or not changed or not on then
-      lip.y, lip.height = y, LIP_H
-    else
-      kit.elastic(lip, "y", last_y, last_y + LIP_H, y, y + LIP_H, { duration = 460 })
-    end
-    last_y = y
     if not on then close(true) elseif changed then pop() end
   end, { owner = root })
   return { node = root, shape = shape }

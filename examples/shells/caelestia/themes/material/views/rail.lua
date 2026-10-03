@@ -6,7 +6,7 @@ local kit=require("kit")
 local C=theme.color
 local V={}
 local PILL_W=6
-local function slot_y(g,id,count) return g.top+((id-1)%count)*(g.item+g.gap) end
+local function slot_y(g,id,base) return g.top+(id-base(id))*(g.item+g.gap) end
 function V.geometry(model)
   local w, h = model.desk_size()
   local scale = math.min(w, h) / 2160
@@ -248,7 +248,7 @@ function V.build(model)
   local function pop(id)
     shape.opacity = 1
     local g = V.geometry(model)
-    local y = slot_y(g, id, model.count)
+    local y = slot_y(g, id, base)
     local down = not last or id > last
     if travel then travel:cancel() travel = nil end
     if not shown:get() then
@@ -256,7 +256,7 @@ function V.build(model)
       -- ten): the frame swells out beside it and the pill rides out into
       -- the swell, opening into the disc; then the swell flows along the
       -- edge to the new pill.
-      local from = (last and base(last) == base(id)) and slot_y(g, last, model.count) or y
+      local from = (last and base(last) == base(id)) and slot_y(g, last, base) or y
       stop(along)
       swell.x, swell.y = tucked_x(g), from - PAD
       swell.width, swell.height = swell_w(g), g.item + 2 * PAD
@@ -315,7 +315,7 @@ function V.build(model)
       lit:set(id) last=id shown:set(false)
       shape.opacity,label.opacity=0,0
       swell.width,swell.height,swell.x=0,0,tucked_x(g)
-      bud.x,bud.y,bud.width,bud.height=g.pill_x,slot_y(g,id,model.count),PILL_W,g.item
+      bud.x,bud.y,bud.width,bud.height=g.pill_x,slot_y(g,id,base),PILL_W,g.item
       return
     end
     if id == last then return end

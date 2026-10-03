@@ -1,8 +1,7 @@
 -- The dashboard's Media tab: the player as a console.
 --
 --   left    the cover inside the theme's ring, whose arc is the track's
---           position, with the theme's brackets round it flashing on every
---           beat; the position and length under it and the player selector
+--           position; the position and length under it and the player selector
 --   middle  the title, artist and album over the spectrum (56 bands, one
 --           path); the level monitor (a mirrored level history swept left
 --           to right with a cursor); the position band with its seek; the
@@ -19,7 +18,7 @@
 -- Cost: the spectrum is the only node that changes at 60 Hz. The level
 -- history and the band readouts sample the bars at 8 Hz on a timer that
 -- runs only while the tab is on screen and something plays. At rest and
--- paused nothing moves; the cover's shape change is a morph that settles.
+-- paused nothing moves.
 
 local morf = require("morf")
 local ui = require("morf.ui")
@@ -35,7 +34,7 @@ local M = {}
 M.WIDTH, M.HEIGHT = 1000, 350
 
 local media = require("media_state")
-local bars, pulse = media.bars, media.pulse
+local bars = media.bars
 local lyrics = media.lyrics
 local clamp01 = common.clamp01
 
@@ -106,32 +105,23 @@ function M.build(ctx)
   -- ------------------------------------------------------ A: the cover --
   local RS = 212                       -- the ring's box
   local RX, RY = AX + math.floor((AW - RS) / 2), TOP + CAPTION_H + 6
-  local COVER = 132
+  local COVER = 152
   local c = RS / 2
   local art = function() return require("lib.remote").file(active().art_url) end
-  local beat = function() return math.min(1, pulse:get() * 1.4) end
-  local snap = { duration = theme.duration.small, easing = theme.ease.standard }
-  -- The cover's outline morphs between the theme's resting and playing
-  -- shapes; the picture is cut to it.
-  local function outline() return playing() and "cookie9" or "square" end
+  -- The artwork sits behind the instrument, cropped to its round centre.
   local ring = ui.Item {
     id = "media-reticle", x = RX - AX, y = RY, width = RS, height = RS,
-    kit.ring { id = "media-ring-position", size = RS, value = function() return something() and fraction() or 0 end,
-      sweep = 360 },
-    ui.Item { x = c - COVER / 2, y = c - COVER / 2, width = COVER, height = COVER,
-      kit.shape { anchors = { fill = true }, shape = outline, color = function() return C.surfaceContainerHigh end },
+    ui.Item { id = "media-cover-aperture", x = c - COVER / 2, y = c - COVER / 2, width = COVER, height = COVER,
+      mask = ui.Sdf { anchors = { fill = true },
+        ui.SdfShape { shape = "circle", anchors = { fill = true } } },
+      ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainerHigh end },
       ui.Image { id = "media-tab-cover", anchors = { fill = true }, fill_mode = "preserve_aspect_crop",
-        source = art, visible = function() return art() ~= "" end,
-        mask = kit.shape { width = COVER, height = COVER, shape = outline, color = "#ffffff" } },
+        source = art, visible = function() return art() ~= "" end },
       kit.icon("art_track", 64, kit.ink("lo"), {
         anchors = { center_in = true }, visible = function() return art() == "" end }),
     },
-    -- The theme's brackets round the cover spring out a little on a beat.
-    ui.Item { x = c - COVER / 2 - 8, y = c - COVER / 2 - 8, width = COVER + 16, height = COVER + 16,
-      scale = function() return 1 + .05 * beat() end, behavior = { scale = snap },
-      P.decor_box("brackets", { width = COVER + 16, height = COVER + 16, length = 12, weight = 2,
-        color = function() return accent():alpha(.55 + .45 * beat()) end }),
-    },
+    kit.ring { id = "media-ring-position", size = RS, value = function() return something() and fraction() or 0 end,
+      sweep = 360, text = function() return "" end },
   }
   local FACTS_Y = RY + RS + 6
   local cover_col = ui.Item {
