@@ -11,7 +11,8 @@
 -- A press on the bar's empty part moves the window (`start_system_move`),
 -- a double press maximises or restores it. The controls are kit icon
 -- presses with names a screen reader reads. `controls = false` leaves the
--- window controls out (a dialog, a phone).
+-- window controls out (a dialog, a phone). `flat = true` leaves out its
+-- ground and rule: a kit Shell's skin draws them under its header region.
 local ui = require("morf.ui")
 local widgets = require("lib.kit.widgets")
 
@@ -62,8 +63,9 @@ return function(spec)
     on_double_clicked = function() if win then win:maximized(not win:maximized()) end end }
   local node = ui.Item { id = id, x = spec.x, y = spec.y, width = W, height = H,
     accessible_role = "toolbar", accessible_name = spec.accessible_name or "Header bar",
-    ui.Rect { anchors = { fill = true }, color = spec.color or header_color() },
-    ui.Rect { anchors = { left = true, right = true, bottom = true }, height = 1, color = line_color() },
+    ui.Rect { anchors = { fill = true }, color = spec.color or header_color(), visible = not spec.flat },
+    ui.Rect { anchors = { left = true, right = true, bottom = true }, height = 1, color = line_color(),
+      visible = not spec.flat },
     drag, start_row, title, subtitle, end_row }
   return node, { node = node }
 end
