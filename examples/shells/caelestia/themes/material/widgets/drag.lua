@@ -204,7 +204,9 @@ return function(S, theme, M)
       if not t.active then return base / reveal end
       return clamp01((base - (t.delta_x or 0)) / reveal)
     end
-    local plates = ui.Item { x = function() return W(t) end, width = reveal, height = function() return H(t) end }
+    -- (Past the trailing edge: the left one right to left.)
+    local plates = ui.Item { x = function() return t.mirrored and -reveal or W(t) end, width = reveal,
+      height = function() return H(t) end }
     local each = reveal / math.max(1, #actions)
     for i, action in ipairs(actions) do
       local function tone()

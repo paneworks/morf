@@ -392,6 +392,22 @@ function M.loading(size, color, props)
   local active = props.active or function() return true end
   props.active = nil
   local timer
+  props.width, props.height = size, size
+  props.shape = function() return LOADING[step:get()] end
+  props.color = color
+  props.duration = 500
+  props.loop = function()
+    if not active() then return nil end
+    return { rotation = { to = 360, duration = 2600, hold = true } }
+  end
+  local given = props.on_destroyed
+  props.on_destroyed = function(...)
+    if timer then timer:cancel() timer = nil end
+    if given then return given(...) end
+  end
+  local node = M.shape(props)
+  -- Its clock runs while it is active and ends with it: a spinner let go
+  -- must not go on waking the shell.
   morf.effect("caelestia.loading.run." .. tostring(step), function()
     if active() then
       if not timer then
@@ -401,16 +417,8 @@ function M.loading(size, color, props)
       timer:cancel()
       timer = nil
     end
-  end)
-  props.width, props.height = size, size
-  props.shape = function() return LOADING[step:get()] end
-  props.color = color
-  props.duration = 500
-  props.loop = function()
-    if not active() then return nil end
-    return { rotation = { to = 360, duration = 2600, hold = true } }
-  end
-  return M.shape(props)
+  end, { owner = node })
+  return node
 end
 
 -- ---------------------------------------------------------------- controls --

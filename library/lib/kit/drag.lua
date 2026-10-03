@@ -106,12 +106,17 @@ function M.make(widget, spec)
       if refresh_given then refresh_given(...) end
     end
   end
+  -- Right to left the trailing edge is the left one: a row opens swiped
+  -- right and its actions are under its left edge.
+  local function trailing() return (root ~= nil and root.effective_direction == "rtl") and -1 or 1 end
   if swipe_out or reveal then
     local swiped_given = spec.on_swiped
     spec.on_swiped = function(direction)
+      local opening, shutting = "left", "right"
+      if trailing() < 0 then opening, shutting = "right", "left" end
       if swipe_out then t.gone = direction
-      elseif direction == "left" then t.open = true
-      elseif direction == "right" then t.open = false end
+      elseif direction == opening then t.open = true
+      elseif direction == shutting then t.open = false end
       if swiped_given then swiped_given(direction) end
     end
   end
@@ -154,9 +159,10 @@ function M.make(widget, spec)
       if axis == "x" then
         if swipe_out and t.gone ~= "" then return (t.gone == "left" and -1 or 1) * ((t.width or 0) + 48) end
         if reveal then
+          local k = trailing()
           local base = t.open and -reveal or 0
-          if not t.active then return base end
-          return math.max(-reveal - 24, math.min(24, base + t.delta_x))
+          if not t.active then return base * k end
+          return k * math.max(-reveal - 24, math.min(24, base + k * t.delta_x))
         end
         if not t.active then return 0 end
         return t.delta_x - ((tonumber(get(given.x)) or 0) - home_x)
