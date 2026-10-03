@@ -9,9 +9,32 @@ local M = {}
 function M.shape_path(...) return require("lib.m3shapes").path(...) end
 -- Non-interactive surfaces, kept distinct from semantic cards and controls.
 M.surface = ui.Rect
-M.action = ui.MouseArea
 
 local function C() return theme.color end
+
+-- The ring of each focusable area, so a hover that rounds the area's
+-- background can round the ring to match.
+local rings = setmetatable({}, { __mode = "k" })
+
+--- Lets Tab reach `area` and draws the Material focus ring on it while a
+--- keyboard put focus there: a 2 px secondary outline just inside its
+--- edge, `radius` (or a pill's) rounded. A click does not take focus, so a
+--- search field keeps typing. Returns `area`.
+function M.focusable(area, radius)
+  area.focus_policy = "tab"
+  local ring = ui.Rect {
+    anchors = { fill = true, margins = 1 }, z = 50, color = "transparent",
+    radius = radius or function() return math.min(16, (tonumber(area.height) or 0) / 2) end,
+    border_width = 2, border_color = function() return C().secondary end,
+    visible = function() return area.visual_focus end,
+  }
+  ui.reparent(ring, area)
+  rings[area] = ring
+  return area
+end
+
+--- A pointer area that Tab reaches too (`M.focusable`).
+function M.action(props) return M.focusable(ui.MouseArea(props)) end
 
 --- A Material Symbols Rounded icon by its ligature name (`"wifi_off"`).
 --- `name` and `color` may be bindings; `props.fill` (a boolean or a
@@ -115,6 +138,7 @@ function M.hover(area, color, radius)
     },
   }
   ui.reparent(bg, area)
+  if rings[area] then rings[area].radius = math.max(0, radius - 1) end
   return area
 end
 
@@ -491,7 +515,7 @@ function M.switch(spec)
       end, { anchors = { center_in = true }, visible = function() return thumb() >= 20 end }),
     },
   }
-  return area
+  return M.focusable(area, 15)
 end
 
 --- A pill-shaped filled button: `icon`, `label`, `on_clicked`, `width`,
@@ -510,7 +534,7 @@ function M.pill(spec)
       M.text { text = spec.label, font_size = theme.size.normal, color = ink },
     },
   }
-  return M.hover(area, function(hovered)
+  return M.hover(M.focusable(area), function(hovered)
     local c = color()
     return hovered and c:mix(ink(), 0.08) or c
   end, h / 2)
@@ -951,6 +975,7 @@ function M.tabs(spec)
       color = function() return button.hovered and C.onSurface:alpha(0.06) or C.onSurface:alpha(0) end,
       behavior = { color = { duration = theme.duration.small } },
     }, button)
+    M.focusable(button, 9)
     buttons[i] = button
   end
   local function span(i)
@@ -1667,7 +1692,7 @@ function M.icon_button(spec)
     end,
     behavior = { radius = ui.spring { stiffness = 480, damping = 18 }, color = { duration = theme.duration.small } },
   }, area)
-  return area
+  return M.focusable(area, h / 2 - 1)
 end
 
 --- The shell's on-screen keyboard in Material's colours: keys on the

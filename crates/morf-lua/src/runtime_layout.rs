@@ -129,6 +129,7 @@ impl Runtime {
                 .borrow_mut()
                 .log(LogLevel::Warn, format!("layout binding: {message}"));
         }
+        self.place_overlays(layout);
         let mut state = self.reactive.borrow_mut();
         let anchors = state
             .popup_node_anchors

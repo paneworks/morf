@@ -44,21 +44,12 @@ pub(crate) fn takes_keys(state: &ReactiveState, node: NodeHandle) -> bool {
         )
 }
 
+/// Every node under `root` that takes keys and can hold focus -- shown,
+/// enabled and staying, through its ancestors -- in tree order.
 pub(crate) fn key_targets_in(state: &ReactiveState, root: NodeHandle) -> Vec<NodeHandle> {
-    let mut targets = Vec::new();
-    let mut pending = vec![root];
-    while let Some(node) = pending.pop() {
-        if takes_keys(state, node)
-            && state.scene.bool_value(node, "enabled").unwrap_or(false)
-            && state.scene.bool_value(node, "visible").unwrap_or(false)
-        {
-            targets.push(node);
-        }
-        if let Ok(children) = state.scene.children(node) {
-            pending.extend(children.iter().copied().rev());
-        }
-    }
-    targets
+    state
+        .scene
+        .focus_nodes(root, |node| takes_keys(state, node))
 }
 
 pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) {
@@ -99,7 +90,20 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         state.images.remove(*node);
         state.linked_texts.remove(node);
         state.pointer_watch.remove(node);
+        state.shortcuts.remove(node);
     }
+    // A removed field cannot keep the keyboard. The node that had focus is
+    // handed on by `Runtime::check_focus`, which still needs to know it went.
+    if state
+        .focused_input
+        .is_some_and(|node| removed.contains(&node))
+    {
+        state.focused_input = None;
+    }
+    state
+        .focus
+        .memory
+        .retain(|scope, node| !removed.contains(scope) && !removed.contains(node));
     if !state.pointer_watch_fresh.is_empty() {
         state
             .pointer_watch_fresh

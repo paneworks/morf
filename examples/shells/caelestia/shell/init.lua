@@ -193,6 +193,9 @@ if config.get("wallpaper.draw") then wallpaper.open_layer() end
 -- the focused screen only (`services.here()`); a close shuts it wherever it
 -- is. A screen that does nothing answers nothing, so the reply is the one
 -- that acted.
+-- Every verb is kept here as well as given to `morf.ipc` (which only
+-- takes them), so the shell's keyboard shortcuts can call the same ones.
+local ipc = setmetatable({}, { __newindex = function(t, k, v) rawset(t, k, v) morf.ipc[k] = v end })
 local here = require("services").here
 local function verb(d)
   return function(how)
@@ -218,7 +221,7 @@ end
 
 -- `launcher [how]`, or `launcher apps` / `launcher web`: the launcher on
 -- one of the author's own menus (menus.lua: appy's apps, browsy's web).
-morf.ipc.launcher = function(how)
+ipc.launcher = function(how)
   if how == "apps" or how == "web" then
     if not here() then return nil end
     require("menus").open(how)
@@ -227,20 +230,20 @@ morf.ipc.launcher = function(how)
   end
   return verb(launcher.drawer)(how)
 end
-morf.ipc.dashboard = verb(dashboard.drawer)
-morf.ipc["dashboard-history"] = function(output)
+ipc.dashboard = verb(dashboard.drawer)
+ipc["dashboard-history"] = function(output)
   local name = (morf.screens[1] or {}).name
   if output and output ~= name then return end
   local status = require("dashboard_state").history_status()
   status.output = name
   return status
 end
-morf.ipc.session = verb(session.drawer)
+ipc.session = verb(session.drawer)
 -- `polkit` says whether this screen is the agent and what it is asking;
 -- `polkit demo` opens the dialog on a made-up request (any password but
 -- "wrong" is taken, and it goes nowhere). `view`, `answer` and `cancel`
 -- are the screens talking to each other (polkit.lua).
-morf.ipc.polkit = function(how, ...)
+ipc.polkit = function(how, ...)
   if how == "demo" then
     if not here() then return nil end
     polkit.demo()
@@ -259,34 +262,34 @@ end
 
 -- `auth-step STEP [SERVICE]`: the markers in a PAM stack (tools/pam)
 -- saying where sudo has got to: face, finger, password, ok.
-morf.ipc["auth-step"] = function(step, service) return authsteps.steps.mark(step, service) end
+ipc["auth-step"] = function(step, service) return authsteps.steps.mark(step, service) end
 
 -- `sidebar [how [TAB]]`: TAB is settings or notifications. `utilities`
 -- is the sidebar on its settings; `settings PAGE` opens one of their pages
 -- (network, bluetooth, sound).
-morf.ipc.sidebar = function(how, tab)
+ipc.sidebar = function(how, tab)
   if tab and here() then
     if not sidebar.select(tab) then error("`" .. tostring(tab) .. "`: no such tab") end
   end
   return verb(sidebar.drawer)(how)
 end
-morf.ipc.utilities = function(how)
+ipc.utilities = function(how)
   if here() and how ~= "close" then sidebar.select("settings") end
   return verb(sidebar.drawer)(how)
 end
-morf.ipc.settings = function(page)
+ipc.settings = function(page)
   if not here() then return nil end
   if not require("utilities").request(page or "") then error("No such Settings page: " .. tostring(page)) end
   sidebar.select("settings")
   sidebar.drawer.set(true)
   return page or ""
 end
-morf.ipc.leftbar = function(how, tab)
+ipc.leftbar = function(how, tab)
   if tab and here() and not leftbar.panel.select(tab) then error("No such left panel tab: " .. tostring(tab)) end
   return verb(leftbar.drawer)(how)
 end
 for _, tab in ipairs { "tasks", "calendar" } do
-  morf.ipc[tab] = function(how)
+  ipc[tab] = function(how)
     if here() and how ~= "close" then leftbar.panel.select(tab) end
     return verb(leftbar.drawer)(how or "open")
   end
@@ -294,17 +297,17 @@ end
 -- PrintScreen opens the original bottom capture panel. Screenshot/Record
 -- choose the action and target there; only screenshots enter the editor.
 local capture_popup=verb(capture.drawer)
-morf.ipc.capture = function(how)
+ipc.capture = function(how)
   how=how or "toggle"
   if how=="menu" then how="open" end
   if how=="close" or ((how=="open" or how=="toggle") and capture.editor.running()) then capture.cancel() end
   return capture_popup(how)
 end
-morf.ipc.bottom = function(how, tab)
+ipc.bottom = function(how, tab)
   if tab and here() and not bottom.panel.select(tab) then error("No such bottom panel tab: " .. tostring(tab)) end
   return verb(bottom.drawer)(how)
 end
-morf.ipc.assistant = function(how)
+ipc.assistant = function(how)
   if here() and how ~= "close" then bottom.panel.select("assistant") end
   return verb(bottom.drawer)(how or "open")
 end
@@ -314,7 +317,7 @@ end
 do
   local open_close = verb {set=keyboard.set,toggle=keyboard.toggle,is_open=keyboard.drawer.is_open}
   local MODES = { full = true, dev = true, letters = true, numbers = true, phone = true, pattern = true }
-  morf.ipc.keyboard = function(how)
+  ipc.keyboard = function(how)
     if MODES[how] then
       if not here() then return nil end
       keyboard.show(how)
@@ -323,33 +326,33 @@ do
     return open_close(how)
   end
 end
-morf.ipc["capture-claim"]=function(name)
+ipc["capture-claim"]=function(name)
   local own=(morf.screens or {})[1]
   if own and own.name~=name then capture.cancel() capture.drawer.set(false) end
 end
-morf.ipc["capture-editor"] = function(action,...)
+ipc["capture-editor"] = function(action,...)
   if action=="cancel" then capture.cancel() return true end
   if not here() then return end
   if action=="tool" then capture.editor.choose(...) return true end
   if action=="copy" or action=="save" or action=="upload" then capture.editor.export(action) return true end
   return {open=capture.editor.active:get(),pending=capture.editor.pending:get(),busy=capture.editor.busy:get(),phase=capture.editor.phase:get()}
 end
-morf.ipc.screenshot = function(what,how)
+ipc.screenshot = function(what,how)
   if not here() then return nil end
   return capture.shoot(what,how=="quick")
 end
-morf.ipc.record = function(what)
+ipc.record = function(what)
   if not here() then return nil end
   return capture.record(what)
 end
-morf.ipc.workspace = function(n)
+ipc.workspace = function(n)
   if not here() then return nil end
   require("services").workspace.go(n)
   return require("services").workspace.active()
 end
 -- `lule open|close|toggle`: the studio. With no argument, keep the
 -- existing terminal/accent diagnostics used by colour-tool integrations.
-morf.ipc.lule = function(how)
+ipc.lule = function(how)
   if how then
     if here() and how ~= "close" then dashboard.tab:set(dashboard.LULE_TAB) end
     return verb(dashboard.drawer)(how)
@@ -357,24 +360,24 @@ morf.ipc.lule = function(how)
   local tty = require("terminal_colors").tty
   return tty and tty.path or "", theme.lule.accent:hex(), theme.color.primary:hex()
 end
-morf.ipc.osd = function(kind)
+ipc.osd = function(kind)
   if not here() then return nil end
   osd.flash(kind)
   return true
 end
 -- `notify SUMMARY [BODY [critical|normal [APP]]]` raises a notification of
 -- the shell's own, as the reference's toaster does.
-morf.ipc.notify = function(summary, body, urgency, app)
+ipc.notify = function(summary, body, urgency, app)
   return notifs.push { summary = summary, body = body, urgency = urgency == "critical" and 2 or 1, app = app }
 end
-morf.ipc.close = function()
+ipc.close = function()
   capture.cancel()
   drawer.close_all()
   return true
 end
 -- `drawers` lists the open drawers; `drawers toggle NAME` (open, close)
 -- acts on one by name, as the reference's IPC does.
-morf.ipc.drawers = function(how, name)
+ipc.drawers = function(how, name)
   if how ~= nil and how ~= "list" then
     local d = drawer[name or ""]
     if not d then error("`" .. tostring(name) .. "`: no such drawer") end
@@ -388,7 +391,7 @@ morf.ipc.drawers = function(how, name)
 end
 
 -- Metadata only: never expose keyring answers through IPC.
-morf.ipc.keyring = function(how,mode)
+ipc.keyring = function(how,mode)
   if here() then
     if how=="demo" then
       if mode and mode~="unlock" and mode~="new" and mode~="confirm" then
@@ -410,3 +413,6 @@ require("themes.switcher").start(function()
   if require("lule_studio").busy:get() then return "Wait for Lule to finish applying." end
   if require("planner").client.busy:get() then return "Wait for the task update to finish." end
 end)
+
+-- The verbs above as keys, wherever the shell has the keyboard.
+frame_root.shortcuts = require("shortcuts").table(ipc)

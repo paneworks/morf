@@ -73,6 +73,13 @@ color, props)` keep their current meaning.
 `kit.with_viewport` keep their current meaning. Themes without a concept
 (e.g. `with_viewport`) implement it as a pass-through.
 
+`kit.focusable(area[, radius])` sets the area's `focus_policy = "tab"` and
+draws the theme's focus ring on it while `area.visual_focus` holds -- a
+keyboard put focus there, never a click. `kit.action` returns a focusable
+area, so every button a layout builds is reached by Tab and clicked by
+Return. Material draws a 2 px secondary outline inside the area's edge;
+Tsugumori its corner brackets.
+
 `kit.tabs(spec)`: `id`, `tabs` (`{ key, name, icon | icon_build }`), `tab`
 (a signal), `width` (a number or a binding), `height`, `pad`, and two
 explicit options a kit must honour instead of guessing the caller:

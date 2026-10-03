@@ -249,6 +249,15 @@ pub(crate) struct ReactiveState {
     pub(crate) last_text_input: u64,
     /// The text input that has the keyboard, if one does.
     pub(crate) focused_input: Option<NodeHandle>,
+    /// Which node of each surface has focus (`api_focus.rs`).
+    pub(crate) focus: crate::api_focus::FocusState,
+    /// Each node's `shortcuts` (`shortcut.rs`), and a sequence half typed.
+    pub(crate) shortcuts: HashMap<NodeHandle, crate::shortcut::NodeShortcuts>,
+    pub(crate) shortcut_pending: crate::shortcut::Pending,
+    /// Presses under way that may become gestures (`gestures.rs`).
+    pub(crate) gestures: crate::gestures::GestureState,
+    /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
+    pub(crate) overlays: crate::api_overlay::OverlayState,
     /// Callbacks text inputs owe, run once whatever made them is done.
     pub(crate) input_events: Vec<(NodeHandle, UiEvent, Vec<IpcValue>)>,
     /// Whether those callbacks are being run, so running one does not start
@@ -623,6 +632,11 @@ impl ReactiveState {
             text_input_order: HashMap::new(),
             last_text_input: 0,
             focused_input: None,
+            focus: Default::default(),
+            shortcuts: HashMap::new(),
+            shortcut_pending: Default::default(),
+            gestures: Default::default(),
+            overlays: Default::default(),
             input_events: Vec::new(),
             draining_input_events: false,
             clipboard_text: None,

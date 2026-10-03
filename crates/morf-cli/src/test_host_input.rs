@@ -209,6 +209,16 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
                         ),
                         ("exiting", IpcValue::Boolean(scene.is_exiting(node))),
                         (
+                            "focused",
+                            IpcValue::Boolean(scene.bool_value(node, "focused").unwrap_or(false)),
+                        ),
+                        (
+                            "visual_focus",
+                            IpcValue::Boolean(
+                                scene.bool_value(node, "visual_focus").unwrap_or(false),
+                            ),
+                        ),
+                        (
                             "contains_pointer",
                             IpcValue::Boolean(
                                 pointer.is_some_and(|(x, y)| {

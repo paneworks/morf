@@ -99,6 +99,8 @@ pub enum DeadlineCause {
     TrayRetry,
     /// A `Loader` with `preload` has an item to build ahead of time.
     Preload,
+    /// A press held still becomes a long press.
+    LongPress,
 }
 
 impl DeadlineCause {
@@ -111,6 +113,7 @@ impl DeadlineCause {
             Self::DbusTimeout => "dbus-timeout",
             Self::Terminal => "terminal",
             Self::TrayRetry => "tray-retry",
+            Self::LongPress => "long-press",
         }
     }
 }
@@ -229,10 +232,14 @@ impl Runtime {
                 }
             })
             .map(|at| (at, DeadlineCause::Preload));
-        [timers, caret, image, dbus, terminal, tray, preload]
-            .into_iter()
-            .flatten()
-            .min_by_key(|(at, _)| *at)
+        let long_press =
+            crate::gestures::long_press_due(&state).map(|at| (at, DeadlineCause::LongPress));
+        [
+            timers, caret, image, dbus, terminal, tray, preload, long_press,
+        ]
+        .into_iter()
+        .flatten()
+        .min_by_key(|(at, _)| *at)
     }
 
     /// Whether the last turn left work for [`Runtime::poll_services`] that

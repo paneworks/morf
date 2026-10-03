@@ -57,6 +57,16 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         // it. False hands Tab to its own `on_key_pressed`. A terminal keeps
         // it: Tab is how a shell completes.
         boolean("tab_navigation", element != Element::Terminal),
+        // How the node takes focus (`focus.rs`): "auto" -- by click and by
+        // Tab when it takes keys --, "none", "click", "tab" or "strong".
+        string("focus_policy", "auto"),
+        // A group that remembers which of its nodes last had focus: Tab
+        // into it lands there, and focus lost inside it stays inside it.
+        boolean("focus_scope", false),
+        // Whether the node has focus now, and whether a keyboard gave it --
+        // the ring a theme draws. The runtime writes both.
+        boolean("focused", false),
+        boolean("visual_focus", false),
         any("layout", Value::Map(BTreeMap::new())),
         // A name for the node that nothing in the engine reads: it is for
         // whoever has to find the node again from outside -- `morf test`'s

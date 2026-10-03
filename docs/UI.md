@@ -1085,8 +1085,8 @@ box. `modifiers` is a string such as `"ctrl+shift"`; every
 `on_key_pressed` receives it.
 
 A field has the keyboard when `focus` is true, and one field at a time
-does: a click, a Tab, or writing `focus = true` moves it, and
-`on_focus_changed(focused)` says so. A field -- or any node with
+does: a click, a Tab or Shift+Tab, or writing `focus = true` moves it, and
+`on_focus_changed(focused)` says so (see [Focus](#focus)). A field -- or any node with
 `on_key_pressed` -- that sets `tab_navigation = false` keeps Tab while it
 has the keyboard: Tab and Shift+Tab go to its `on_key_pressed` (for a
 completion, say) instead of moving focus. While it has it, the compositor's
@@ -1451,6 +1451,133 @@ ui.MouseArea {
 
 A text input types a repeat as it types a press, so a held Backspace
 keeps deleting.
+
+### Focus
+
+Each surface has at most one focused node. `focused` says which, and
+`visual_focus` says a keyboard put it there: a theme draws its focus ring
+from `visual_focus`, so the ring follows Tab and never a click. Both are
+the runtime's to write; a configuration moves focus with
+`morf.focus.set(node, keyboard)` (true draws the ring), `morf.focus.clear(node)`,
+`morf.focus.next()` and `morf.focus.previous()`, and asks with
+`morf.focus.get()`. Those settle at the next turn of the loop. Writing
+`focus = true` on a node asks for focus as well, and `false` gives it back,
+which is how a panel that opens says it wants the keys.
+
+`focus_policy` says how a node takes focus:
+
+| policy | Tab stops at it | a click focuses it |
+|---|---|---|
+| `"auto"` (default) | when it takes keys | when it takes keys |
+| `"tab"` | yes | no |
+| `"click"` | no | yes |
+| `"strong"` | yes | yes |
+| `"none"` | no | no |
+
+A node takes keys when it has `on_key_pressed` or `on_key_released`, or is
+a text input or a terminal. A button made focusable by a theme
+(`kit.focusable`) says `"tab"`: Tab reaches it, and a click on it leaves a
+search field typing. Tab walks the surface's tree in order and Shift+Tab
+walks back, skipping any subtree that is hidden, disabled or leaving; a
+click focuses the nearest node, itself or an ancestor, whose policy takes
+a click, and a click on nothing that does leaves focus where it was.
+
+A key goes to the focused node. When that node takes no keys of its own --
+a button -- Return, the keypad's Enter and Space click it, and any other
+key goes up to the nearest ancestor that takes keys, so a launcher's
+arrows reach the launcher while one of its rows has focus.
+
+`focus_scope = true` makes a group that remembers which of its nodes last
+had focus. Tab into the group lands there, and Tab out of it goes to what
+is beside the group rather than through the rest of it. When the focused
+node is removed, hidden or disabled, focus goes to what its nearest
+surviving scope remembers, or to that scope's first node, and to nothing
+when it was in no scope. When the keyboard leaves a surface its node stops
+showing focus (`focused` goes false) and shows it again when the keyboard
+comes back; `on_focus_changed(focused)` runs on a node as it gains and
+loses focus.
+
+### Shortcuts
+
+`shortcuts` on any node maps key sequences to functions:
+
+```lua
+ui.Item {
+  shortcuts = {
+    ["ctrl+b"] = toggle_bold,
+    ["ctrl+k ctrl+s"] = save_all,      -- a sequence: chords apart by spaces
+    ["back"] = go_back,                -- a mouse's back button, or XF86Back
+  },
+  ...
+}
+```
+
+A key goes to shortcuts before it goes to the node with focus: first those
+on the focused node and its ancestors, nearest first, then those of any
+shown node on the surface whose table says `scope = "surface"`. A
+shortcut's function is called with its sequence (`"ctrl+b"`); returning
+`false` passes the key on as though nothing had matched. A chord is
+modifiers and a key joined by `+`: `ctrl`, `shift`, `alt`, `super`, and any
+name `morf.keys` knows or a single character (`"ctrl+,"`). Shift folds
+letters, so `"ctrl+shift+k"` matches however the keyboard reports the
+capital. A key that begins a longer sequence is held for a second and a
+half for the next; a key that breaks the sequence then goes on alone.
+
+Typing comes first. While a text input has focus its plain keys (no Ctrl,
+Alt or Super) and its editing chords (Ctrl with A, C, X, V, Z, Y, or with a
+key that moves or deletes) never reach shortcuts; a terminal keeps every
+key but Super-chords. Function and media keys still do. A mouse's side
+buttons are the keys `back` and `forward` on the surface under the
+pointer, so Alt+Left and the back button can share a function.
+
+### Gestures
+
+Gestures are events like any other, on any node that takes the pointer:
+
+| handler | when |
+|---|---|
+| `on_double_clicked(x, y, local_x, local_y)` | a second click within 400 ms and 8 px of the first, after that click's `on_clicked` |
+| `on_long_pressed(x, y, local_x, local_y)` | a press held within 8 px for half a second; the click its release would make is not delivered |
+| `on_swiped(direction, velocity_x, velocity_y)` | a press moved over 24 px and let go faster than 400 px/s; `direction` is `left`, `right`, `up` or `down` |
+| `on_pinched(scale, phase, x, y)` | two fingers spreading or closing: `scale` against their first spread, `phase` `update` then `end`, `(x, y)` their midpoint |
+| `on_edge_swiped(edge)` | on a surface's root: a finger landing within 20 px of an edge and moving 48 px in |
+
+Two fingers moving together where nothing takes a pinch scroll what lies
+under them, as a touchpad does. A finger is the left button throughout: it
+presses, drags and clicks as the pointer does, so a swipe and a long press
+work under a finger and a mouse alike.
+
+### Overlays
+
+`morf.overlay.open(content, options)` shows `content` over everything else
+on its surface: in the surface's overlay layer, the root's last child.
+What opens there stacks, newest on top, and Escape and a press outside
+close the top one first.
+
+```lua
+local menu = build_menu()            -- any node
+morf.overlay.open(menu, {
+  anchor = button,                   -- beside this node
+  placement = "bottom-start",        -- top|bottom|left|right|center[-start|-end]
+  on_close = function(reason) end,   -- "escape", "outside", "closed", "gone"
+})
+morf.overlay.close(menu)
+morf.overlay.is_open(menu)
+```
+
+An anchored overlay sits `gap` px (4) from its anchor by `placement`,
+flips to the other side when its own has no room, and shifts along to stay
+`margin` px (8) inside the surface; with no anchor (give `root` then) it is
+centred. `dim = true` (or a colour) lays a scrim over the surface under it,
+and `modal` -- true when it dims -- keeps what is under it from taking
+input; Tab then walks only the overlay. `escape = false` and
+`outside = false` keep it open on those; a press on the anchor never counts
+as outside, so a button that toggles its menu works. Focus moves to the
+first node in it Tab would reach as it opens (`focus = false` leaves focus
+where it is), with the ring when the focus it took over had one, and goes
+back to the node that had it -- the control that opened it -- when it
+closes. Closing hides the content in the layer; opening it again shows it
+there, and destroying it closes it.
 
 ### Entering
 

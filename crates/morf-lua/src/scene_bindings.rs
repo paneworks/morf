@@ -113,6 +113,12 @@ pub(crate) fn assign_scene_property(
     }
     if current_changed {
         bump_property_signal(state, node, property, false)?;
+        // `focus = true` asks for focus; false gives it back. A text input's
+        // own claims are settled by the text inputs, which focus follows.
+        if property == "focus" && state.scene.element(node).ok() != Some(Element::TextInput) {
+            let on = state.scene.bool_value(node, "focus").unwrap_or(false);
+            crate::api_focus::request_by_property(state, node, on);
+        }
     }
     if target_changed {
         bump_property_signal(state, node, property, true)?;
@@ -356,7 +362,10 @@ pub(crate) fn node_metatable<'gc>(
     });
     let new_index = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (node, property, value): (UserRef<NodeToken>, String, LuaValue) = stack.consume(ctx)?;
-        if matches!(property.as_str(), "stretch" | "track" | "mask") {
+        if matches!(
+            property.as_str(),
+            "stretch" | "track" | "mask" | "shortcuts"
+        ) {
             let mut state = state.try_borrow_mut().map_err(|_| {
                 HostError("nodes cannot be written to from inside a layout function".to_owned())
             })?;
@@ -428,6 +437,11 @@ pub(crate) fn refuse_runtime_owned(
     node: NodeHandle,
     property: &str,
 ) -> Result<(), String> {
+    if matches!(property, "focused" | "visual_focus") {
+        return Err(format!(
+            "`{property}` is read-only: focus sets it (morf.focus.set moves focus)"
+        ));
+    }
     if property == CONTAINS_POINTER {
         return Err("`contains_pointer` is read-only: the pointer sets it".to_owned());
     }

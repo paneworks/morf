@@ -75,6 +75,8 @@ pub(crate) struct PointerInput {
     /// Each finger down: where it landed, where it was last, and how far
     /// it has travelled, which is what tells a tap from a swipe.
     pub(crate) touches: HashMap<i32, (SurfaceRole, Hit, f64, f64, f64)>,
+    /// Pinches and edge swipes the touches are making.
+    pub(crate) gestures: crate::surface_gesture::TouchGestures,
 }
 
 impl Default for PointerInput {
@@ -86,6 +88,7 @@ impl Default for PointerInput {
             pressed_button: 0x110,
             focused: HashMap::new(),
             touches: HashMap::new(),
+            gestures: Default::default(),
         }
     }
 }

@@ -155,6 +155,15 @@ pub(crate) fn coerce(
                 return Err(invalid(format!("`{name}` is not quadratic or circular")));
             }
         }
+        "focus_policy" => {
+            if let Value::String(name) = &value
+                && crate::FocusPolicy::parse(name).is_none()
+            {
+                return Err(invalid(format!(
+                    "`{name}` is not auto, none, click, tab or strong"
+                )));
+            }
+        }
         "cursor" => {
             if let Value::String(name) = &value
                 && !CURSOR_SHAPES.contains(&name.as_str())

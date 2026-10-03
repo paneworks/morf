@@ -1,4 +1,4 @@
-use morf_lua::{EventPoint, Runtime, UiEvent};
+use morf_lua::{EventPoint, FocusReason, Runtime, UiEvent};
 use morf_wayland::LayerEvent;
 
 use crate::surfaces::*;
@@ -30,14 +30,22 @@ pub(crate) fn handle_touch_event(
                     runtime.accepts_pointer_button(node, TOUCH_BUTTON)
                 })
                 .map_err(|error| error.to_string())?;
+            for root in runtime.overlay_roots() {
+                if hit_layout.geometry(root).is_some() {
+                    repaint |= runtime.overlay_press(root, hit.map(|hit| hit.node));
+                }
+            }
             if let Some(hit) = hit {
                 let point =
                     EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(TOUCH_BUTTON);
                 input.touches.insert(id, (surface, hit, x, y, 0.0));
-                if let Some(target) = runtime.key_target_for_node(hit.node) {
+                crate::surface_gesture::finger_down(runtime, input, layouts, id);
+                if let Some(target) = runtime.click_focus_target(hit.node) {
                     input.focused.insert(surface, target);
-                } else {
-                    input.focused.remove(&surface);
+                    let root = runtime.scene().root_of(target);
+                    if let Some(root) = root {
+                        repaint |= runtime.set_focus(root, Some(target), FocusReason::Click);
+                    }
                 }
                 repaint |= runtime.dispatch_pointer(hit.node, UiEvent::Pressed, point, (0.0, 0.0));
                 repaint |= runtime.dispatch_touch_event(hit.node, UiEvent::TouchPressed, id, point);
@@ -61,9 +69,11 @@ pub(crate) fn handle_touch_event(
                 // same handler, the same deltas, so a list scrolls under a
                 // finger as under a wheel.
                 repaint |= runtime.dispatch_pointer(node, UiEvent::Dragged, point, delta);
+                repaint |= crate::surface_gesture::finger_moved(runtime, input, layouts, id)?;
             }
         }
         LayerEvent::TouchUp { surface, id, x, y } => {
+            repaint |= crate::surface_gesture::finger_up(runtime, input, Some(id));
             if let Some((touch_surface, pressed_hit, _, _, travel)) = input.touches.remove(&id) {
                 let layout = layouts.layout_of(surface);
                 let local = layout
@@ -113,6 +123,7 @@ pub(crate) fn handle_touch_event(
             }
         }
         LayerEvent::TouchCancel => {
+            repaint |= crate::surface_gesture::finger_up(runtime, input, None);
             for (id, (_, hit, x, y, _)) in input.touches.drain() {
                 let point =
                     EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(TOUCH_BUTTON);

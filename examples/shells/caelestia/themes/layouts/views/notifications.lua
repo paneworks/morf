@@ -186,6 +186,10 @@ function V.build(M)
       behavior = { height = motion },
       clip = true,
       on_clicked = function() M.dismiss_at(i) end,
+      -- Flung sideways, a card goes as a click sends it.
+      on_swiped = function(direction)
+        if direction == "left" or direction == "right" then M.dismiss_at(i) end
+      end,
       L.decor_box("corners", { length = 9, color = function()
         return card and card.hovered and signal() or kit.stroke("mark")()
       end }),

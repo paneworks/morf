@@ -117,7 +117,7 @@ pub(crate) fn configure_element<'gc>(
                 .insert(node, ctx.stash(closure));
             continue;
         }
-        if matches!(property.as_str(), "stretch" | "track")
+        if matches!(property.as_str(), "stretch" | "track" | "shortcuts")
             || (property == "mask" && !matches!(value, LuaValue::Function(_)))
         {
             assign_engine_relation(&mut state.borrow_mut(), ctx, node, &property, value)?;
@@ -254,6 +254,14 @@ pub(crate) fn assign_engine_relation<'gc>(
     value: LuaValue<'gc>,
 ) -> Result<(), String> {
     match property {
+        "shortcuts" => match crate::shortcut::read_table(ctx, value)? {
+            Some(shortcuts) => {
+                state.shortcuts.insert(node, shortcuts);
+            }
+            None => {
+                state.shortcuts.remove(&node);
+            }
+        },
         "stretch" => {
             if matches!(value, LuaValue::Function(_)) {
                 return Err("stretch is a setting, not a binding: give it a table or true".into());

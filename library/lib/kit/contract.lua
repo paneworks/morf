@@ -14,7 +14,7 @@
 local M = {}
 
 --- The plan stage the kits have reached.
-M.stage = 1
+M.stage = 4
 
 -- ------------------------------------------------------------- functions --
 --
@@ -54,6 +54,8 @@ M.functions = {
   -- controls (until their archetypes replace them)
   { name = "action", group = "control", stage = 1 },
   { name = "hover", group = "control", stage = 1 },
+  -- focus: Tab reaches an area and the theme marks it (`visual_focus`)
+  { name = "focusable", group = "control", stage = 2 },
   { name = "pill", group = "control", stage = 1 },
   { name = "switch", group = "control", stage = 1 },
   { name = "slider", group = "control", stage = 1 },

@@ -1,6 +1,6 @@
 //! Where a key goes: into the focused node of a surface's subtree.
 
-use morf_lua::{KeyModifiers, Runtime};
+use morf_lua::{FocusReason, KeyModifiers, Runtime};
 use morf_scene::NodeHandle;
 use morf_wayland::SurfaceRole;
 
@@ -86,32 +86,60 @@ pub(crate) fn dispatch_key_in_subtree(
     modifiers: KeyModifiers,
 ) -> bool {
     const TAB: u32 = 0xff09;
+    const ISO_LEFT_TAB: u32 = 0xfe20;
     // A text input holding the keyboard keeps it until something takes it:
-    // a click elsewhere, a Tab, or the configuration writing `focus`.
+    // a click elsewhere, a Tab, or the configuration writing `focus`. Then
+    // the node with focus; then whatever this surface last sent keys to.
     let current = runtime
         .focused_text_input_in(root)
+        .or_else(|| runtime.focus_owner(root))
         .or(focused.filter(|node| runtime.node_in_subtree(root, *node)));
     let repeat = match action {
         KeyAction::Release => {
-            let Some(node) = current.or_else(|| runtime.first_key_target_in(root)) else {
+            let Some(node) = current
+                .or_else(|| runtime.first_key_target_in(root))
+                .and_then(|node| runtime.key_route(node))
+            else {
                 return false;
             };
             return runtime.dispatch_key_release(node, keysym, text, modifiers);
         }
         KeyAction::Press { repeat } => repeat,
     };
+    // Escape closes the surface's top overlay before anything else hears it.
+    const ESCAPE: u32 = 0xff1b;
+    if keysym == ESCAPE && runtime.overlay_escape(root) {
+        return true;
+    }
+    // Shortcuts before the node: those around focus, then the surface's.
+    let target = current.or_else(|| runtime.first_key_target_in(root));
+    if runtime.dispatch_shortcut(root, target, keysym, modifiers) {
+        return true;
+    }
     // A node that set `tab_navigation = false` keeps Tab (and Shift+Tab,
     // which arrives as ISO_Left_Tab) as a key of its own.
     let keeps_tab = current.is_some_and(|node| !runtime.tab_navigates(node));
-    if keysym == TAB && !keeps_tab {
-        *focused = runtime.next_key_target_in(root, current);
-        runtime.set_key_focus(*focused);
+    let plain = !modifiers.ctrl && !modifiers.alt && !modifiers.logo;
+    if (keysym == TAB || keysym == ISO_LEFT_TAB) && plain && !keeps_tab {
+        let backwards = keysym == ISO_LEFT_TAB || modifiers.shift;
+        // Inside a modal overlay, Tab stays inside it.
+        let next = runtime.next_focus_in(runtime.focus_root(root), current, backwards);
+        *focused = next;
+        runtime.set_focus(root, next, FocusReason::Keyboard);
         return true;
     }
     let Some(node) = current.or_else(|| runtime.first_key_target_in(root)) else {
         return false;
     };
     *focused = Some(node);
+    // A focused button has no keys of its own: Enter clicks it, and the rest
+    // go up to whatever around it takes keys.
+    if runtime.activate_by_key(node, keysym, modifiers) {
+        return true;
+    }
+    let Some(node) = runtime.key_route(node) else {
+        return false;
+    };
     if runtime.is_text_input(node) {
         runtime.set_key_focus(Some(node));
     }
@@ -192,5 +220,29 @@ mod tests {
             [IpcValue::Integer(1)]
         );
         assert_eq!(runtime.scene().string_value(first, "text").unwrap(), "");
+    }
+
+    #[test]
+    fn shift_tab_walks_back_and_tab_draws_the_ring() {
+        const ISO_LEFT_TAB: u32 = 0xfe20;
+        let (mut runtime, root, first) = tab_setup("");
+        let second = runtime.scene().children(root).unwrap()[1];
+        let mut focused = Some(first);
+        dispatch_key_in_subtree(
+            &mut runtime,
+            root,
+            &mut focused,
+            KeyAction::Press { repeat: false },
+            ISO_LEFT_TAB,
+            None,
+            KeyModifiers {
+                shift: true,
+                ..Default::default()
+            },
+        );
+        // From the first, back is around to the last.
+        assert_eq!(focused, Some(second));
+        assert!(runtime.scene().bool_value(second, "visual_focus").unwrap());
+        assert!(!runtime.scene().bool_value(first, "focused").unwrap());
     }
 }

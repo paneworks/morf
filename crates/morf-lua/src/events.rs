@@ -52,6 +52,16 @@ pub enum UiEvent {
     FocusChanged,
     /// A link in a text's runs was clicked.
     LinkActivated,
+    /// A press was held still on the target long enough.
+    LongPressed,
+    /// A second click landed on the target soon after the first.
+    DoubleClicked,
+    /// A press was flung across the target and let go while moving.
+    Swiped,
+    /// Two touches on the target moved apart or together.
+    Pinched,
+    /// A touch began at a surface's edge and moved in (on its root).
+    EdgeSwiped,
 }
 
 /// Every event a configuration can handle, and the property it writes.
@@ -84,6 +94,11 @@ pub(crate) const EVENT_PROPERTIES: &[(UiEvent, &str)] = &[
     (UiEvent::Escape, "on_escape"),
     (UiEvent::FocusChanged, "on_focus_changed"),
     (UiEvent::LinkActivated, "on_link"),
+    (UiEvent::LongPressed, "on_long_pressed"),
+    (UiEvent::DoubleClicked, "on_double_clicked"),
+    (UiEvent::Swiped, "on_swiped"),
+    (UiEvent::Pinched, "on_pinched"),
+    (UiEvent::EdgeSwiped, "on_edge_swiped"),
 ];
 
 impl UiEvent {

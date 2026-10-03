@@ -118,6 +118,8 @@ pub(crate) fn install_reactive_api(
         crate::api_theme::install_theme_api(ctx, Rc::clone(&state), morf, limits);
         crate::api_prefers::install_prefers_api(ctx, Rc::clone(&state), morf, screen);
         install_retention_api(ctx, Rc::clone(&state), morf, limits);
+        crate::api_focus::install_focus_api(ctx, Rc::clone(&state), morf);
+        crate::api_overlay::install_overlay_api(ctx, Rc::clone(&state), morf);
         install_shell_api(ctx, Rc::clone(&state), morf);
         install_time_api(ctx, Rc::clone(&state), morf);
         install_image_api(ctx, morf);

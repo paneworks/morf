@@ -128,6 +128,22 @@ impl Runtime {
         point: EventPoint,
         delta: (f64, f64),
     ) -> bool {
+        // A long press, a double click and a swipe are made of these
+        // (`gestures.rs`); a click a long press took goes nowhere.
+        if !self.watch_gesture(node, event, point) {
+            return false;
+        }
+        let handled = self.deliver_pointer(node, event, point, delta);
+        handled | self.finish_gesture(node, event, point)
+    }
+
+    fn deliver_pointer(
+        &mut self,
+        node: NodeHandle,
+        event: UiEvent,
+        point: EventPoint,
+        delta: (f64, f64),
+    ) -> bool {
         // A terminal answers the pointer itself: it takes the keyboard on a
         // press, and a program that asked for the pointer is sent it.
         if self.is_terminal(node) {

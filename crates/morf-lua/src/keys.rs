@@ -48,6 +48,9 @@ pub const NAMED: &[(&str, u32)] = &[
     ("XF86AudioPrev", 0x1008ff16),
     ("XF86MonBrightnessUp", 0x1008ff02),
     ("XF86MonBrightnessDown", 0x1008ff03),
+    // What a mouse's back and forward buttons press, as shortcuts see them.
+    ("XF86Back", 0x1008ff26),
+    ("XF86Forward", 0x1008ff27),
 ];
 
 /// Friendlier spellings a name may be given as.
@@ -73,6 +76,8 @@ const ALIASES: &[(&str, &str)] = &[
     ("pageup", "Page_Up"),
     ("PageDown", "Page_Down"),
     ("pagedown", "Page_Down"),
+    ("back", "XF86Back"),
+    ("forward", "XF86Forward"),
     ("Space", "space"),
 ];
 

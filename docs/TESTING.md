@@ -272,7 +272,8 @@ and its surface shown, and not fully transparent), `opacity` (its own),
 `exiting` (it is playing its `exit`: drawn, but out of the layout and
 taking no input), `contains_pointer` (the pointer, where the last
 `test.move` left it on this surface, is inside the node's box -- what the
-node's own `contains_pointer` says once something reads it), `depth`, `parent` (a
+node's own `contains_pointer` says once something reads it), `focused` and
+`visual_focus` (it has focus, and a keyboard gave it), `depth`, `parent` (a
 handle), `surface` (the label) and `surface_kind`. A node's `id` is an
 ordinary property every element has and nothing in the engine reads:
 `ui.Rect { id = "panel", ... }`.

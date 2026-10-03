@@ -418,13 +418,23 @@ return function(theme)
 
   -- ---------------------------------------------------------- controls --
 
+  --- Lets Tab reach `area` and marks it, while a keyboard put focus there,
+  --- with Tsugumori's four bright corner brackets. A click does not take
+  --- focus, so a search field keeps typing. Returns `area`.
+  function M.focusable(area)
+    area.focus_policy = "tab"
+    ui.reparent(hud().corners { length = 6, weight = 2, color = function() return C.primary end,
+      visible = function() return area.visual_focus end }, area)
+    return area
+  end
+
   function M.action(props)
     props.scale, props.stretch = nil, nil
     if props.behavior then props.behavior.scale = nil end
     for _,key in ipairs {"enter","exit"} do
       if type(props[key])=="table" then props[key].scale=nil end
     end
-    return feedback(ui.MouseArea(props), props.id)
+    return M.focusable(feedback(ui.MouseArea(props), props.id))
   end
   function M.tabs(spec) return require("themes.tsugumori.tabs")(theme, M, spec) end
   function M.tabbed(spec) return require("themes.tsugumori.tabbed")(theme, M, spec) end

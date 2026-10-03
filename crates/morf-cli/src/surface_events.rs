@@ -89,6 +89,17 @@ pub(crate) fn handle_surface_event(
         }
         LayerEvent::KeyboardFocus { active } => repaint |= runtime.dispatch_keyboard_focus(active),
         LayerEvent::SurfaceKeyboard { surface, focused } => {
+            // The node with focus shows it only while its surface has the
+            // keyboard, and shows it again when the keyboard comes back.
+            if let Some(root) = surface_root(
+                surface,
+                state.primary_root,
+                &state.popup_surfaces,
+                &state.floating_surfaces,
+                &state.layer_surfaces,
+            ) {
+                repaint |= runtime.set_focus_active(root, focused);
+            }
             if let Some(window) = surface_window(surface) {
                 repaint |= runtime.dispatch_surface_focus(window, focused);
             }

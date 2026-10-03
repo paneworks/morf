@@ -31,6 +31,7 @@ impl Runtime {
         let images_changed = self.poll_images();
         let palettes_changed = self.poll_palette_listeners();
         let shared_changed = self.poll_shared();
+        let focus_changed = self.poll_overlays() | self.check_focus() | self.poll_gestures();
         drop(devices);
         let mut ready = Vec::new();
         let mut timers = Vec::new();
@@ -579,6 +580,7 @@ impl Runtime {
             || images_changed
             || palettes_changed
             || shared_changed
+            || focus_changed
             || blinked
             || !transform_callbacks.is_empty();
         for (callback, unlock_on_success, result) in ready {
