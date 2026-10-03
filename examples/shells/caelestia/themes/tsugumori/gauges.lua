@@ -90,7 +90,7 @@ return function(theme, kit)
     -- The reading fits inside the inner hairline whatever size is asked for:
     -- about four characters across, with room for the label under it.
     local fit = math.max(8, math.floor(math.min(spec.text_size or s * .15, r3 * (spec.label and .5 or .6))))
-    node[#node + 1] = ui.Column { anchors = { center_in = true }, gap = 0, align = "center",
+    node[#node + 1] = ui.Column { anchors = { center_in = true }, width = math.floor(2 * r3), gap = 0, align = "center",
       ui.Text { text = text, font_family = theme.font, font_size = fit,
         font_weight = 300, color = color, horizontal_alignment = "center" },
       spec.label and kit.label { text = spec.label, horizontal_alignment = "center", color = kit.ink("lo") } or nil,

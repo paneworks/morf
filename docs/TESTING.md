@@ -61,7 +61,7 @@ below).
 
 ```sh
 morf check shell.lua [--size WxH] [--screens N] [--ipc 'VERB ARGS']...
-                     [--after MS] [--wait MS] [--strict]
+                     [--after MS] [--wait MS] [--strict] [--kit]
                      [--no-dbus | --private-bus] [--isolate] [-- args...]
 ```
 
@@ -81,6 +81,13 @@ followed by a settle), advances `--after` milliseconds of virtual time
   `lint: Rect > Column laid out to nothing and has 3 children that will
   never be seen` among it --, a layout whose bindings never settle, and
   bindings that read a property while it animates.
+
+`--kit` checks the configuration's `kit` module -- what `require("kit")`
+answers once it has loaded -- against the widget contract
+(`library/lib/kit/contract.lua`): every function, display widget and
+archetype skin due at the contract's stage, and an owner in the contract
+for every row of the element catalogue (`library/lib/kit/catalogue.lua`).
+It prints `kit stage N: D due, M missing` and each problem as an error.
 
 The exit status is 1 when there are errors, and with `--strict` when there
 are warnings too. `--wait MS` spreads that much real time over the run, for

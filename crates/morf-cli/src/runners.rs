@@ -129,6 +129,52 @@ fn call_ipc(headless: &mut Headless, args: &RunnerArgs) -> Result<(), String> {
     Ok(())
 }
 
+/// `--kit`: the configuration's `kit` module against the widget contract.
+/// Prints the contract's stage, how much is due and every problem;
+/// returns how many problems there were.
+fn check_kit(headless: &mut Headless) -> usize {
+    const CHECK: &[u8] = br#"
+        local morf = require("morf")
+        morf.ipc["morf-kit-check"] = function()
+          local check = require("lib.kit.check")
+          local ok, kit = pcall(require, "kit")
+          if not ok then return "no kit module: " .. tostring(kit) end
+          local summary = check.summary(kit)
+          local out = { ("stage %d: %d due, %d missing"):format(summary.stage, summary.due, summary.missing) }
+          for _, problem in ipairs(check.kit(kit)) do out[#out + 1] = problem end
+          for _, problem in ipairs(check.catalogue()) do out[#out + 1] = problem end
+          return table.unpack(out)
+        end
+    "#;
+    if let Err(error) = headless.runtime.execute("morf-kit-check", CHECK) {
+        println!("  error: kit: {error}");
+        return 1;
+    }
+    let lines = match headless.runtime.call_ipc("morf-kit-check", &[]) {
+        Ok(values) => values,
+        Err(error) => {
+            println!("  error: kit: {error}");
+            return 1;
+        }
+    };
+    let text = |value: &morf_lua::IpcValue| match value {
+        morf_lua::IpcValue::String(text) => text.clone(),
+        other => format!("{other:?}"),
+    };
+    let mut lines = lines.iter().map(text);
+    let head = lines.next().unwrap_or_default();
+    if !head.starts_with("stage ") {
+        println!("  error: kit: {head}");
+        return 1;
+    }
+    println!("  kit     {head}");
+    let problems = lines.collect::<Vec<_>>();
+    for problem in &problems {
+        println!("  error: kit: {problem}");
+    }
+    problems.len()
+}
+
 /// Counts the nodes under a root, itself included.
 fn node_count(headless: &Headless, root: morf_scene::NodeHandle) -> usize {
     let scene = headless.runtime.scene();
@@ -216,6 +262,9 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
         }
         errors += found.errors.len();
         warnings += found.warnings.len();
+        if args.kit {
+            errors += check_kit(&mut headless);
+        }
     }
     println!(
         "{errors} error{}, {warnings} warning{}",

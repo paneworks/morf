@@ -45,6 +45,9 @@ pub(crate) struct RunnerArgs {
     /// Whether the XDG directories point at a scratch folder.
     pub(crate) isolate: bool,
     pub(crate) strict: bool,
+    /// `--kit`: check the configuration's `kit` module against the widget
+    /// contract (`library/lib/kit/contract.lua`).
+    pub(crate) kit: bool,
     pub(crate) output: Option<PathBuf>,
     pub(crate) surface: Option<String>,
     pub(crate) filter: Option<String>,
@@ -79,6 +82,7 @@ impl RunnerArgs {
             // a check or a picture usually wants to read them.
             isolate: runner == Runner::Test,
             strict: false,
+            kit: false,
             output: None,
             surface: None,
             filter: None,
@@ -169,6 +173,7 @@ pub(crate) fn parse_runner(runner: Runner, rest: &[&str]) -> Result<RunnerArgs, 
             ("--isolate", _) => parsed.isolate = true,
             ("--no-isolate", _) => parsed.isolate = false,
             ("--strict", Runner::Check) => parsed.strict = true,
+            ("--kit", Runner::Check) => parsed.kit = true,
             ("-o" | "--output", Runner::Render) => {
                 parsed.output = Some(PathBuf::from(value(&mut rest, "-o")?));
             }

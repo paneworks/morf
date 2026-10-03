@@ -1,5 +1,9 @@
 # The kit contract
 
+The machine-readable contract is `library/lib/kit/contract.lua`; `morf check
+--kit` and `tests/kit_gallery_spec.lua` hold every theme to it. This page is
+the prose companion for caelestia.
+
 A visual theme is a **style**, never a layout. Every theme draws the same
 layouts (`themes/layouts/views/*`, `themes/layouts/lock.lua`,
 `themes/layouts/greet.lua`); what differs is how each element looks and moves.
