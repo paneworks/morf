@@ -699,7 +699,8 @@ return function(theme, M, hud)
   -- by slot, so a widget's look fills what it draws and the archetype's
   -- skin the rest.
   for _, name in ipairs { "press", "range", "plane", "selection", "popup", "text_field", "scroll", "collection",
-    "disclosure", "drag", "navigation", "shell", "canvas", "dock" } do
+    "disclosure", "drag", "navigation", "shell", "canvas", "dock", "transform", "sheet", "roving", "form",
+    "overflow" } do
     local ok, looks = pcall(require, "themes.tsugumori.widgets." .. name)
     if ok then
       if type(looks) == "function" then looks(S, theme, M, hud) end

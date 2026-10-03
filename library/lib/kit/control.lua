@@ -24,7 +24,7 @@ local BASE = { "enabled", "mirrored", "highlighted" }
 local SETTINGS = {
   Control = {},
   Press = { "checkable", "checked", "tristate", "partial", "group", "exclusive", "allow_none", "auto_repeat",
-    "repeat_delay", "repeat_interval" },
+    "repeat_delay", "repeat_interval", "hold" },
   Range = { "from", "to", "value", "step", "page_step", "snap", "live", "orientation", "inverted", "logarithmic",
     "wrap", "range", "first", "second", "handle_size", "drag_mode", "drag_travel", "angle_from", "angle_sweep" },
   Plane = { "x_from", "x_to", "y_from", "y_to", "x", "y", "step_x", "step_y", "constraint", "y_up", "spring", "polar",
@@ -33,7 +33,7 @@ local SETTINGS = {
     "disabled", "follow_focus", "reorderable" },
   Popup = { "modal", "dim", "close_policy", "placement", "focus_on_open", "restore_focus" },
   TextField = { "text", "placeholder", "echo", "read_only", "max_length", "validator", "minimum", "maximum",
-    "required", "revert_on_escape" },
+    "required", "revert_on_escape", "capture" },
   Scroll = { "scroll_policy_x", "scroll_policy_y", "snap", "item_size", "step" },
   Collection = { "count", "labels", "current", "selected", "mode", "wrap", "orientation", "columns", "page",
     "disabled", "follow_focus", "layout", "columns_spec", "tree_rows", "end_margin" },
@@ -46,16 +46,23 @@ local SETTINGS = {
     "tool", "port_radius", "selection", "multi_select", "movable", "wheel_zooms", "fit_padding", "hit_tolerance" },
   -- (`layout` and `floating` are lib.kit.dock's to send and keep.)
   Dock = { "fixed", "edge", "min_ratio" },
+  Transform = { "min_width", "min_height", "max_width", "max_height", "aspect", "bounds", "snap", "movable",
+    "resizable", "rotatable", "angle", "handles" },
+  Sheet = { "rows", "columns", "row", "column", "editable", "read_only", "page_rows", "wrap", "toggle" },
+  Roving = { "count", "current", "orientation", "columns", "wrap", "disabled", "menubar" },
+  Form = { "submit_on_enter", "show_errors" },
+  Overflow = { "widths", "priorities", "pinned", "available", "more_width", "gap", "mode" },
 }
 -- How each archetype takes focus by default: a press by Tab only, so a click
 -- leaves a search field typing; a range by click too, so the arrows move
 -- what was just dragged.
 local POLICY = { Control = "none", Press = "tab", Range = "strong", Plane = "strong", Selection = "strong",
   TextField = "none", Scroll = "none", Collection = "strong", Disclosure = "tab", Drag = "tab", Navigation = "none",
-  Shell = "none", Canvas = "strong", Dock = "none" }
+  Shell = "none", Canvas = "strong", Dock = "none", Transform = "strong", Sheet = "strong", Roving = "none",
+  Form = "none", Overflow = "none" }
 -- Which take keys and the wheel.
 local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scroll = true, Collection = true,
-  Disclosure = true, Drag = true, Navigation = true, Canvas = true, Dock = true }
+  Disclosure = true, Drag = true, Navigation = true, Canvas = true, Dock = true, Transform = true, Sheet = true }
 -- Which take the pointer in surface coordinates: a handle that moves under
 -- the pointer would see its own local ones drift.
 local SURFACE_POINTER = { Drag = true }
@@ -73,7 +80,11 @@ local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_valu
   on_reorder = true, on_pushed = true, on_popped = true, on_region = true, on_breakpoint = true, on_collapsed = true,
   on_sidebar_toggled = true, on_view_changed = true, on_hovered = true, on_moving = true, on_drawn = true,
   on_connected = true, on_connect_dropped = true, on_context = true, on_brushed = true, on_deleted = true,
-  on_layout_changed = true, on_maximized = true, on_focus_changed = true, on_transferred = true }
+  on_layout_changed = true, on_maximized = true, on_focus_changed = true, on_transferred = true,
+  on_changed = true, on_committed = true, on_minimized = true, on_edit_started = true, on_edit_canceled = true,
+  on_cleared = true, on_copy = true, on_cut = true, on_paste = true, on_open = true, on_close = true,
+  on_submitted = true, on_invalid = true, on_reset = true, on_validity_changed = true, on_dirty_changed = true,
+  on_show_error = true, on_hide_error = true, on_hold_canceled = true, on_confirmed = true, on_captured = true }
 -- Every live control's way to take effects another control's event caused
 -- (an exclusive group), by id.
 local appliers = {}
@@ -171,6 +182,13 @@ function M.make(archetype, widget, spec, extra)
         repeat_timer = morf.timer(signal[2], function()
           repeat_timer = nil
           appliers[id](native.send(id, "repeat"))
+        end, false)
+      elseif name == "schedule_hold" then
+        -- A press that must be held: told once the hold is done.
+        if repeat_timer then repeat_timer:cancel() end
+        repeat_timer = morf.timer(signal[2], function()
+          repeat_timer = nil
+          appliers[id](native.send(id, "held"))
         end, false)
       elseif name == "focus_request" then
         if root then morf.focus.set(root, true) end

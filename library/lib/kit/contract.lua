@@ -14,7 +14,7 @@
 local M = {}
 
 --- The plan stage the kits have reached.
-M.stage = 21
+M.stage = 22
 
 -- ------------------------------------------------------------- functions --
 --
@@ -131,7 +131,8 @@ M.archetypes = {
       "circular", "icon", "link", "close", "copy", "loading", "toggle", "toggle_group_member", "switch", "checkbox",
       "radio", "chip_assist", "chip_filter", "chip_input", "chip_suggestion", "tag", "tile", "card_action",
       "row_activation", "menu_item", "check_menu_item", "radio_menu_item", "keycap", "fab", "extended_fab",
-      "speed_dial_item", "segment", "rating_star", "help", "disclosure_button", "repeat_button", "back", "forward" } },
+      "speed_dial_item", "segment", "rating_star", "help", "disclosure_button", "repeat_button", "back", "forward",
+      "hold_button" } },
   Range = { stage = 6, role = { "slider", "spin_button", "scroll_bar", "progress" },
     state = { "from", "to", "value", "step", "page_step", "snap", "live", "orientation", "inverted", "logarithmic",
       "position", "visual_position", "wrap", "range", "first", "second" },
@@ -155,7 +156,8 @@ M.archetypes = {
     slots = { "item", "indicator", "separator" },
     widgets = { "tabs", "segmented", "view_switcher", "inline_view_switcher", "radio_group", "toggle_group",
       "list_selection", "grid_selection", "carousel_dots", "pagination", "stepper_header", "sidebar_list",
-      "breadcrumbs", "day_grid", "swatch_grid", "emoji_grid", "icon_chooser", "transfer_side", "rating_items" } },
+      "breadcrumbs", "day_grid", "swatch_grid", "emoji_grid", "icon_chooser", "transfer_side", "rating_items",
+      "radial_menu", "pie_menu", "tumbler" } },
   Popup = { stage = 8, role = { "dialog", "alert_dialog", "menu", "tooltip", "list_box_popup" },
     state = { "open", "modal", "dim", "close_policy", "placement", "anchor", "side", "align", "flip", "shift",
       "focus_on_open", "restore_focus" },
@@ -173,7 +175,7 @@ M.archetypes = {
     keys = { "editing", "return_accepts", "escape_reverts" },
     slots = { "field", "leading", "trailing", "placeholder", "counter", "error" },
     widgets = { "entry", "password", "search", "text_area", "url", "email", "numeric_entry", "otp", "tag_input",
-      "mentions", "inline_rename", "entry_row", "filter_field", "code_input" } },
+      "mentions", "inline_rename", "entry_row", "filter_field", "code_input", "shortcut_recorder" } },
   Scroll = { stage = 9, role = { "scroll_pane" },
     state = { "content_x", "content_y", "content_width", "content_height", "scroll_policy", "snap", "at_start",
       "at_end" },
@@ -203,7 +205,7 @@ M.archetypes = {
     slots = { "handle", "ghost", "drop_indicator" },
     widgets = { "split_pane", "resizable_panel", "resize_grip", "reorderable_rows", "reorderable_tabs",
       "sortable_grid", "swipe_dismiss", "swipe_actions", "pull_to_refresh", "sheet_handle", "window_move",
-      "drag_source", "drop_zone" } },
+      "drag_source", "drop_zone", "slide_to_confirm" } },
   Navigation = { stage = 11, role = { "tab_panel", "group" },
     state = { "pages", "current", "mode", "can_go_back", "history" },
     signals = { "on_pushed", "on_popped", "on_current_changed" },
@@ -241,6 +243,47 @@ M.archetypes = {
     keys = { "ctrl_page", "ctrl_w", "ctrl_shift_m", "f6", "escape" },
     slots = { "tab", "stack", "divider", "floating", "drop_indicator" },
     widgets = { "dock_area", "shelf_dock", "tabbed_container", "document_tabs", "tool_windows" } },
+  -- A box moved, resized from its handles and turned (Zag's floating
+  -- panel and image cropper; a scheduler's event, a design tool's item).
+  Transform = { stage = 22, role = { "group", "dialog" },
+    state = { "x", "y", "box_width", "box_height", "angle", "active", "handle", "maximized", "minimized" },
+    signals = { "on_changed", "on_committed", "on_maximized", "on_minimized" },
+    keys = { "arrows_move", "ctrl_arrows_resize", "alt_arrows_turn", "return_maximize", "escape" },
+    slots = { "frame", "handle", "rotate_handle", "guide" },
+    widgets = { "floating_panel", "image_cropper", "resize_box", "pip_window", "event_block" } },
+  -- A grid walked cell by cell (WAI-ARIA grid and treegrid; a
+  -- spreadsheet; a step sequencer).
+  Sheet = { stage = 22, role = { "grid" },
+    state = { "row", "column", "anchor_row", "anchor_column", "range", "editing" },
+    signals = { "on_current_changed", "on_selection_changed", "on_edit_started", "on_edited", "on_cleared",
+      "on_copy", "on_cut", "on_paste", "on_toggled", "on_activated" },
+    keys = { "arrows", "shift_arrows_range", "ctrl_arrows_edge", "home_end", "page", "tab", "return", "f2",
+      "type_to_edit", "escape", "delete", "ctrl_a", "ctrl_c_x_v" },
+    slots = { "cell", "header", "range", "cursor", "editor" },
+    widgets = { "spreadsheet", "data_grid", "step_sequencer", "seat_map", "cell_grid" } },
+  -- One Tab stop for a group of controls the arrows move between
+  -- (WAI-ARIA toolbar and menubar).
+  Roving = { stage = 22, role = { "toolbar", "menu_bar" },
+    state = { "current", "open" },
+    signals = { "on_current_changed", "on_open", "on_close" },
+    keys = { "arrows", "home_end", "menubar_down_opens", "escape" },
+    slots = { "indicator", "separator" },
+    widgets = { "toolbar_group", "menubar", "button_group", "chip_row", "icon_bar" } },
+  -- What a group of fields adds up to, and sending it (form validation).
+  Form = { stage = 22, role = { "form" },
+    state = { "valid", "dirty", "pending", "submitting", "error_count", "tried", "first_invalid" },
+    signals = { "on_submitted", "on_invalid", "on_reset", "on_validity_changed", "on_dirty_changed",
+      "on_show_error", "on_hide_error" },
+    keys = { "return_submits", "ctrl_return" },
+    slots = { "summary", "message" },
+    widgets = { "form", "settings_form", "login_form", "inline_form" } },
+  -- Items that keep what fits and put the rest behind more (priority+).
+  Overflow = { stage = 22, role = { "toolbar" },
+    state = { "shown", "hidden", "overflowing", "menu_open" },
+    signals = { "on_changed" },
+    keys = {},
+    slots = { "more", "menu" },
+    widgets = { "overflow_toolbar", "overflow_tabs", "overflow_breadcrumbs", "chip_overflow", "priority_nav" } },
 }
 
 -- --------------------------------------------------------------- display --

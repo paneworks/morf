@@ -34,9 +34,10 @@ local function list(t) return t and table.concat(t, ", ") or "" end
 
 local GLUE = { Control = "control", Press = "widgets", Range = "widgets", Plane = "widgets", Selection = "selection",
   Popup = "popup", TextField = "text_field", Scroll = "scroll", Collection = "collection", Disclosure = "disclosure",
-  Drag = "drag", Navigation = "navigation", Shell = "shell", Canvas = "canvas", Dock = "dock" }
+  Drag = "drag", Navigation = "navigation", Shell = "shell", Canvas = "canvas", Dock = "dock",
+  Transform = "transform", Sheet = "sheet", Roving = "roving", Form = "form", Overflow = "overflow" }
 local ORDER = { "Press", "Range", "Plane", "Selection", "Popup", "TextField", "Scroll", "Collection", "Disclosure",
-  "Drag", "Navigation", "Shell", "Canvas", "Dock" }
+  "Drag", "Navigation", "Shell", "Canvas", "Dock", "Transform", "Sheet", "Roving", "Form", "Overflow" }
 
 local out = {}
 local function p(s) out[#out + 1] = s or "" end

@@ -10,7 +10,8 @@ local M = {}
 
 M.FILES = { Press = "press", Range = "range", Plane = "plane", Selection = "selection", Popup = "popup",
   TextField = "text_field", Scroll = "scroll", Collection = "collection", Disclosure = "disclosure", Drag = "drag",
-  Navigation = "navigation", Shell = "shell", Canvas = "canvas", Dock = "dock" }
+  Navigation = "navigation", Shell = "shell", Canvas = "canvas", Dock = "dock", Transform = "transform", Sheet = "sheet",
+  Roving = "roving", Form = "form", Overflow = "overflow" }
 
 --- The samples of one archetype (an empty table while it has none).
 function M.of(archetype)
@@ -35,7 +36,7 @@ M.SOURCE = [==[
   if env("KIT_GALLERY_SNAPSHOTS") then morf.surface.width, morf.surface.height = 1920, 2160 end
   local CELL_W, CELL_H, COLUMNS = 320, 260, 6
   local order = { "Press", "Range", "Plane", "Selection", "Popup", "TextField", "Scroll", "Collection", "Disclosure",
-    "Drag", "Navigation", "Shell", "Canvas", "Dock" }
+    "Drag", "Navigation", "Shell", "Canvas", "Dock", "Transform", "Sheet", "Roving", "Form", "Overflow" }
   local entries, missing = {}, {}
   for _, archetype in ipairs(order) do
     local entry = contract.archetypes[archetype]

@@ -165,6 +165,13 @@ end
 for _, widget in ipairs(contract.archetypes.Dock.widgets) do
   M[widget] = function(spec) return require("lib.kit.dock").make(widget, spec) end
 end
+-- The fifth stage's archetypes: each returns its control and a handle.
+for archetype, module in pairs { Transform = "transform", Sheet = "sheet", Roving = "roving", Form = "form",
+  Overflow = "overflow" } do
+  for _, widget in ipairs(contract.archetypes[archetype].widgets) do
+    M[widget] = function(spec) return require("lib.kit." .. module).make(widget, spec) end
+  end
+end
 for _, widget in ipairs(contract.archetypes.Range.widgets) do
   M[widget] = function(spec) return (control.make("Range", widget, with_defaults(widget, spec, RANGE))) end
 end
