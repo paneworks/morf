@@ -129,7 +129,20 @@ pub(crate) fn dispatch_key_in_subtree(
         runtime.set_focus(root, next, FocusReason::Keyboard);
         return true;
     }
-    let Some(node) = current.or_else(|| runtime.first_key_target_in(root)) else {
+    // Nothing has focus: each node that takes keys is offered it in turn,
+    // so a group that only wants keys from inside it (a toolbar) does not
+    // swallow one a list after it would take.
+    if current.is_none() {
+        for node in runtime.key_targets_in_root(root) {
+            let Some(route) = runtime.key_route(node) else { continue };
+            if runtime.dispatch_key_press_bubbling(route, keysym, text, modifiers, repeat) {
+                *focused = Some(node);
+                return true;
+            }
+        }
+        return false;
+    }
+    let Some(node) = current else {
         return false;
     };
     *focused = Some(node);

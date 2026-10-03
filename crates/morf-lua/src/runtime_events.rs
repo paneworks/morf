@@ -338,6 +338,15 @@ impl Runtime {
             .or_else(|| targets.first().copied())
     }
 
+    /// Every node on a surface that takes keys, in the order they are
+    /// offered a key nothing has focus for (one with `focus` set first).
+    pub fn key_targets_in_root(&self, root: NodeHandle) -> Vec<NodeHandle> {
+        let state = self.reactive.borrow();
+        let mut targets = key_targets_in(&state, root);
+        targets.sort_by_key(|node| !state.scene.bool_value(*node, "focus").unwrap_or(false));
+        targets
+    }
+
     /// Returns the nearest key-handling ancestor of a hit-tested node.
     pub fn key_target_for_node(&self, node: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
