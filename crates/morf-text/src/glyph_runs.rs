@@ -103,8 +103,10 @@ impl TextSystem {
         let axes = cached.axes.clone();
         crate::style::physical_glyphs_at(cached, origin, scale)
             .into_iter()
-            .filter_map(|(glyph, offset)| {
-                Some((self.raster_glyph_in(&glyph, true, &axes)?, offset))
+            .filter_map(|(glyph, offset, tint)| {
+                let mut raster = self.raster_glyph_in(&glyph, true, &axes)?;
+                raster.tint = tint;
+                Some((raster, offset))
             })
             .collect()
     }

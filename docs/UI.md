@@ -1093,6 +1093,24 @@ completion, say) instead of moving focus. While it has it, the compositor's
 input method (text-input-v3) is enabled for it and what the input method
 commits is typed into the field.
 
+`highlights` colours runs of what is typed, as a code editor's syntax
+does: `{ start, stop, color, underline, strike }` tables over byte
+offsets (`text:find` gives them), in any order, overlaps cut back to the
+earlier. Only what leaves every glyph where it was may be set, so the
+caret, the selection and a click land where they would without it; a
+wavy error is `underline = true` in the error's colour. They show over
+typed text, never over the placeholder or a password.
+
+```lua
+editor.highlights = function()
+  local marks = {}
+  for start, word, stop in editor.text:gmatch("()(%a+)()") do
+    if KEYWORDS[word] then marks[#marks + 1] = { start = start - 1, stop = stop - 1, color = theme.keyword } end
+  end
+  return marks
+end
+```
+
 The caret and the selection are properties too, as byte offsets —
 the number of bytes before them, so `text:sub(1, cursor_position)` is
 what lies left of the caret: `cursor_position`, `selection_start` and

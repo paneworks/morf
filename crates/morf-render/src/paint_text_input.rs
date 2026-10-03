@@ -61,6 +61,16 @@ pub(crate) fn text_input_command(
         caret_width: scene.number(node, "caret_width")?.max(0.0),
         placeholder: shape.display.placeholder,
     };
+    // A code editor's colours, over what is typed (never over a placeholder
+    // or a password's dots).
+    let mut style = shape.options.style;
+    if !edit.placeholder && !scene.bool_value(node, "password")? {
+        if let Some(rich) = morf_scene::RichText::from_highlights(&shape.display.text, scene.current(node, "highlights")?)
+            .map_err(|message| RenderError::Scene(format!("TextInput highlights: {message}")))?
+        {
+            style.rich = Some(std::sync::Arc::new(rich));
+        }
+    }
     Ok(DrawCommand::Text {
         node,
         bounds,
@@ -90,7 +100,7 @@ pub(crate) fn text_input_command(
         field_style: DistanceFieldStyle::default(),
         morph_to: String::new(),
         morph_progress: 0.0,
-        style: shape.options.style,
+        style,
         decoration: None,
         edit: Some(Box::new(edit)),
     })

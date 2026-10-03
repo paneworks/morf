@@ -163,12 +163,14 @@ pub(crate) fn physical_glyphs_styled(
 
 /// Every glyph of a shaped buffer at its physical place, with the offset in
 /// the whole text its cluster starts at — which a selection needs to know
-/// which glyphs it covers.
+/// which glyphs it covers — and its run's colour, when it was set in runs
+/// (a code editor's highlights).
 pub(crate) fn physical_glyphs_at(
     cached: &CachedBuffer,
     origin: (f32, f32),
     scale: f32,
-) -> Vec<(PhysicalGlyph, usize)> {
+) -> Vec<(PhysicalGlyph, usize, Option<[u8; 4]>)> {
+    let styled = cached.rich.is_some();
     let mut bases = Vec::with_capacity(cached.buffer.lines.len());
     let mut base = 0;
     for line in &cached.buffer.lines {
@@ -189,6 +191,10 @@ pub(crate) fn physical_glyphs_at(
                     scale,
                 ),
                 base + glyph.start,
+                glyph
+                    .color_opt
+                    .filter(|_| styled)
+                    .map(|color| [color.r(), color.g(), color.b(), color.a()]),
             ));
         }
     }

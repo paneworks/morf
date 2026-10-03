@@ -96,6 +96,86 @@ impl RichText {
         Ok(Some(rich.seal()))
     }
 
+    /// A text input's `highlights` over `text`: `{ start, stop, color,
+    /// underline, strike }` tables, byte offsets, in any order. Only what
+    /// leaves every glyph where it was may be set -- a colour, a line under
+    /// or through -- so the caret, the selection and a click land where the
+    /// field's own layout put them. A range that overlaps an earlier one,
+    /// or splits a character, is cut back to fit. `None` when none apply.
+    pub fn from_highlights(text: &str, value: &Value) -> Result<Option<Self>, String> {
+        let items = match value {
+            Value::Nil => return Ok(None),
+            Value::List(items) if items.is_empty() => return Ok(None),
+            Value::Map(entries) if entries.is_empty() => return Ok(None),
+            Value::List(items) => items,
+            _ => return Err("highlights is a list of { start, stop, color } tables".to_owned()),
+        };
+        if items.len() > MAX_SPANS {
+            return Err(format!("at most {MAX_SPANS} highlights"));
+        }
+        let mut marks = Vec::with_capacity(items.len());
+        for item in items {
+            let Value::Map(fields) = item else {
+                return Err("a highlight is a { start, stop, color } table".to_owned());
+            };
+            let number = |name: &str| match fields.get(name) {
+                Some(Value::Number(n)) if n.is_finite() => Some(n.max(0.0) as usize),
+                _ => None,
+            };
+            let (Some(start), Some(stop)) = (number("start"), number("stop")) else {
+                return Err("a highlight needs start and stop byte offsets".to_owned());
+            };
+            let boundary = |mut at: usize| {
+                at = at.min(text.len());
+                while !text.is_char_boundary(at) {
+                    at -= 1;
+                }
+                at
+            };
+            let (start, stop) = (boundary(start), boundary(stop));
+            if start >= stop {
+                continue;
+            }
+            let color = match fields.get("color") {
+                Some(Value::Color(color)) => Some(*color),
+                Some(Value::String(name)) => {
+                    Some(Color::parse(name).ok_or_else(|| format!("highlight colour `{name}` is not a colour"))?)
+                }
+                _ => None,
+            };
+            let flag = |name: &str| matches!(fields.get(name), Some(Value::Bool(true)));
+            marks.push(RichSpan {
+                range: start..stop,
+                color,
+                underline: flag("underline"),
+                strike: flag("strike"),
+                ..RichSpan::default()
+            });
+        }
+        if marks.is_empty() {
+            return Ok(None);
+        }
+        marks.sort_by_key(|mark| mark.range.start);
+        // The runs cover all of it: the gaps between marks are plain.
+        let mut spans = Vec::with_capacity(marks.len() * 2 + 1);
+        let mut at = 0;
+        for mut mark in marks {
+            mark.range.start = mark.range.start.max(at);
+            if mark.range.start >= mark.range.end {
+                continue;
+            }
+            if mark.range.start > at {
+                spans.push(RichSpan { range: at..mark.range.start, ..RichSpan::default() });
+            }
+            at = mark.range.end;
+            spans.push(mark);
+        }
+        if at < text.len() {
+            spans.push(RichSpan { range: at..text.len(), ..RichSpan::default() });
+        }
+        Ok(Some(RichText { text: text.to_owned(), spans, key: 0 }.seal()))
+    }
+
     /// Reads notification-style markup. Never fails: what is not markup is
     /// text, and an unknown tag is dropped with its content kept.
     pub fn from_markup(markup: &str) -> Self {
@@ -436,5 +516,30 @@ mod tests {
                 .unwrap_err()
                 .contains("colour")
         );
+    }
+}
+
+#[cfg(test)]
+mod highlight_tests {
+    use super::*;
+
+    fn mark(start: f64, stop: f64, color: &str) -> Value {
+        Value::Map(BTreeMap::from([
+            ("start".to_owned(), Value::Number(start)),
+            ("stop".to_owned(), Value::Number(stop)),
+            ("color".to_owned(), Value::String(color.to_owned())),
+        ]))
+    }
+
+    #[test]
+    fn highlights_cover_the_text_in_order_and_cut_overlaps() {
+        let text = "local x = 1";
+        let rich = RichText::from_highlights(text, &Value::List(vec![mark(8.0, 9.0, "#ff0000"), mark(0.0, 5.0, "#0000ff"), mark(3.0, 7.0, "#00ff00")]))
+            .unwrap()
+            .unwrap();
+        let ranges: Vec<_> = rich.spans.iter().map(|s| s.range.clone()).collect();
+        assert_eq!(ranges, vec![0..5, 5..7, 7..8, 8..9, 9..11]);
+        assert!(rich.spans[1].color.is_some() && rich.spans[2].color.is_none());
+        assert_eq!(RichText::from_highlights(text, &Value::List(Vec::new())).unwrap(), None);
     }
 }

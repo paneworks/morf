@@ -239,12 +239,17 @@ pub(crate) fn create_glyph_batch(
         }
         // The lines under and through runs that ask for them, a link's
         // among them, each in its run's colour.
-        if style.rich.is_some() && edit.is_none() {
-            let origin = Geometry {
-                x: bounds.x,
-                y: bounds.y + vertical_offset,
-                width: bounds.width,
-                height: bounds.height,
+        // (A text input's runs -- its highlights -- scroll with its content.)
+        if style.rich.is_some() {
+            let origin = if edit.is_some() {
+                content
+            } else {
+                Geometry {
+                    x: bounds.x,
+                    y: bounds.y + vertical_offset,
+                    width: bounds.width,
+                    height: bounds.height,
+                }
             };
             for span in text_system.span_bands(*node) {
                 let run_color = span.tint.map(|[r, g, b, a]| {

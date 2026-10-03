@@ -274,6 +274,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("max_length", 0.0),
                 // Selectable and copyable, but not editable.
                 boolean("read_only", false),
+                // Coloured runs over the text, for a code editor's syntax:
+                // `{ start, stop, color, underline, strike }`, byte offsets.
+                any("highlights", Value::List(Vec::new())),
                 color("selection_color", Color::rgba8(53, 132, 228, 90)),
                 // Fully transparent keeps the text its own colour.
                 color("selected_text_color", Color::rgba8(0, 0, 0, 0)),
