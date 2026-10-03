@@ -281,7 +281,7 @@ M.archetypes = {
   Overflow = { stage = 22, role = { "toolbar" },
     state = { "shown", "hidden", "overflowing", "menu_open" },
     signals = { "on_changed" },
-    keys = {},
+    keys = { "more_return_opens", "menu_arrows" },
     slots = { "more", "menu" },
     widgets = { "overflow_toolbar", "overflow_tabs", "overflow_breadcrumbs", "chip_overflow", "priority_nav" } },
 }
