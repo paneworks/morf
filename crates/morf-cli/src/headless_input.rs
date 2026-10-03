@@ -79,6 +79,7 @@ impl Headless {
         surface: SurfaceRole,
         (x, y): (f64, f64),
         button: u32,
+        modifiers: morf_wayland::KeyModifiers,
     ) -> Result<(), String> {
         self.pointer(LayerEvent::PointerMotion { surface, x, y })?;
         self.pointer(LayerEvent::PointerButton {
@@ -87,6 +88,7 @@ impl Headless {
             pressed: true,
             x,
             y,
+            modifiers,
         })?;
         self.pointer(LayerEvent::PointerButton {
             surface,
@@ -94,6 +96,7 @@ impl Headless {
             pressed: false,
             x,
             y,
+            modifiers,
         })
     }
 
@@ -168,6 +171,23 @@ pub(crate) fn modifiers(names: &[String]) -> Result<morf_lua::KeyModifiers, Stri
         }
     }
     Ok(modifiers)
+}
+
+/// The modifiers a pointer event is sent with, as `"ctrl+shift"`.
+pub(crate) fn pointer_modifiers(names: Option<&str>) -> Result<morf_wayland::KeyModifiers, String> {
+    let names: Vec<String> = names
+        .unwrap_or("")
+        .split(['+', ',', ' '])
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let held = modifiers(&names)?;
+    Ok(morf_wayland::KeyModifiers {
+        ctrl: held.ctrl,
+        shift: held.shift,
+        alt: held.alt,
+        logo: held.logo,
+    })
 }
 
 /// A mouse button by name or Linux event code.

@@ -12,9 +12,11 @@
 //! state to the table a skin reads and calls the configuration's handlers.
 
 mod access;
+mod canvas;
 mod collection;
 mod control;
 mod disclosure;
+mod dock;
 mod drag;
 mod group;
 mod module;

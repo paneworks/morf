@@ -76,6 +76,11 @@ pub fn role_of(archetype: &str, widget: &str, checkable: bool) -> &'static str {
             _ => "group",
         },
         "Shell" => "application",
+        "Dock" => "group",
+        "Canvas" => match widget {
+            "image_viewer" => "image",
+            _ => "group",
+        },
         _ => "group",
     }
 }

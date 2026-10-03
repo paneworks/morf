@@ -174,6 +174,8 @@ fn make(archetype: &str) -> Result<Box<dyn Archetype>, String> {
         "Navigation" => Ok(Box::new(Navigation::new())),
         "Selection" => Ok(Box::new(Selection::new())),
         "Shell" => Ok(Box::new(crate::shell::Shell::new())),
+        "Canvas" => Ok(Box::new(crate::canvas::Canvas::new())),
+        "Dock" => Ok(Box::new(crate::dock::Dock::new())),
         other if ARCHETYPES.contains(&other) => {
             Err(format!("archetype {other} has not arrived yet"))
         }

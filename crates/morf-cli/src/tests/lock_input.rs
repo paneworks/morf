@@ -115,6 +115,7 @@ fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
             pressed: true,
             x: 20.0,
             y: 20.0,
+            modifiers: Default::default(),
         },
         LayerEvent::PointerButton {
             surface,
@@ -122,6 +123,7 @@ fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
             pressed: false,
             x: 20.0,
             y: 20.0,
+            modifiers: Default::default(),
         },
     ] {
         send(&mut runtime, &mut input, &outputs, &mut shapes, event);
@@ -143,6 +145,7 @@ fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
             vertical: 15.0,
             horizontal_steps: 0,
             vertical_steps: 1,
+            modifiers: Default::default(),
         },
     );
     assert_eq!(count(&mut runtime, "wheels"), IpcValue::Integer(1));
@@ -212,6 +215,7 @@ fn a_lock_surface_is_hit_tested_against_its_own_layout() {
                 pressed,
                 x: 20.0,
                 y: 20.0,
+                modifiers: Default::default(),
             },
         );
     }

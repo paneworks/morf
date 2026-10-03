@@ -40,16 +40,19 @@ local SETTINGS = {
   Drag = { "mode", "axis", "threshold", "minimum", "maximum", "value", "extent", "swipe_distance", "swipe_speed" },
   Navigation = { "mode", "pages", "current", "wrap" },
   Shell = { "breakpoints", "layouts", "collapse_below", "inspector_below", "regions", "width", "sidebar" },
+  -- (`items` and `ports` are lib.kit.canvas's to send: it keeps them by id.)
+  Canvas = { "zoom", "view_x", "view_y", "min_zoom", "max_zoom", "zoom_step", "axes", "bounds", "grid", "snap",
+    "tool", "port_radius", "selection", "multi_select", "movable", "wheel_zooms", "fit_padding", "hit_tolerance" },
 }
 -- How each archetype takes focus by default: a press by Tab only, so a click
 -- leaves a search field typing; a range by click too, so the arrows move
 -- what was just dragged.
 local POLICY = { Control = "none", Press = "tab", Range = "strong", Plane = "strong", Selection = "strong",
   TextField = "none", Scroll = "none", Collection = "strong", Disclosure = "tab", Drag = "tab", Navigation = "none",
-  Shell = "none" }
+  Shell = "none", Canvas = "strong" }
 -- Which take keys and the wheel.
 local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scroll = true, Collection = true,
-  Disclosure = true, Drag = true, Navigation = true }
+  Disclosure = true, Drag = true, Navigation = true, Canvas = true }
 -- Which take the pointer in surface coordinates: a handle that moves under
 -- the pointer would see its own local ones drift.
 local SURFACE_POINTER = { Drag = true }
@@ -65,7 +68,8 @@ local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_valu
   on_scroll_to = true, on_sort_changed = true, on_column_resized = true, on_expanded_changed = true,
   on_end_reached = true, on_expanded = true, on_collapsed = true, on_drag_started = true, on_dropped = true,
   on_reorder = true, on_pushed = true, on_popped = true, on_region = true, on_breakpoint = true, on_collapsed = true,
-  on_sidebar_toggled = true }
+  on_sidebar_toggled = true, on_view_changed = true, on_hovered = true, on_moving = true, on_drawn = true,
+  on_connected = true, on_connect_dropped = true, on_context = true, on_brushed = true, on_deleted = true }
 -- Every live control's way to take effects another control's event caused
 -- (an exclusive group), by id.
 local appliers = {}
@@ -204,15 +208,17 @@ function M.make(archetype, widget, spec, extra)
     focus_policy = POLICY[archetype] or "none",
     on_entered = function(...) send("entered") also("on_entered", ...) end,
     on_exited = function(...) send("exited") also("on_exited", ...) end,
-    on_pressed = function(sx, sy, x, y, ...)
+    -- (With the button and the modifiers held: a canvas pans with the
+    -- middle one, a Shift-click adds; Shift drags a slider finely.)
+    on_pressed = function(sx, sy, x, y, button, modifiers, ...)
       if SURFACE_POINTER[archetype] then send("pressed", sx, sy)
-      else local a, b, w, h = travel(x, y) send("pressed", a, b, w, h) end
-      also("on_pressed", sx, sy, x, y, ...)
+      else local a, b, w, h = travel(x, y) send("pressed", a, b, w, h, button or "left", modifiers or "") end
+      also("on_pressed", sx, sy, x, y, button, modifiers, ...)
     end,
-    on_dragged = function(sx, sy, dx, dy, x, y, ...)
+    on_dragged = function(sx, sy, dx, dy, x, y, modifiers, ...)
       if SURFACE_POINTER[archetype] then send("dragged", sx, sy)
-      else local a, b, w, h = travel(x, y) send("dragged", a, b, w, h) end
-      also("on_dragged", sx, sy, dx, dy, x, y, ...)
+      else local a, b, w, h = travel(x, y) send("dragged", a, b, w, h, modifiers or "") end
+      also("on_dragged", sx, sy, dx, dy, x, y, modifiers, ...)
     end,
     on_released = function(...) send("released") also("on_released", ...) end,
     on_clicked = function(...)

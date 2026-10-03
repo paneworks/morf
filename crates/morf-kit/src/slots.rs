@@ -18,6 +18,8 @@ pub const ARCHETYPES: &[&str] = &[
     "Drag",
     "Navigation",
     "Shell",
+    "Canvas",
+    "Dock",
 ];
 
 /// An archetype's slots, in the order they are stacked: the first lowest.
@@ -45,6 +47,35 @@ pub fn slots_of(archetype: &str) -> Option<&'static [&'static str]> {
             "content",
         ],
         "Plane" => &["background", "field", "crosshair", "handle", "content"],
+        // The world's layers, lowest first: a grid, the items (a builder:
+        // the configuration's, or a skin's for a kind of item), the wires,
+        // the selection's outline and handles, the draft, the band, a
+        // crosshair under the pointer, and overlaid controls (zoom buttons,
+        // a minimap, a scale).
+        // `tab`, `stack` and `floating` are builders: a tab's look, a
+        // stack's frame round its tabs and panel, a floating panel's frame.
+        // `divider` is a builder too: the handle between a split's parts.
+        "Dock" => &[
+            "background",
+            "tab",
+            "stack",
+            "divider",
+            "floating",
+            "drop_indicator",
+            "content",
+        ],
+        "Canvas" => &[
+            "background",
+            "grid",
+            "content",
+            "item",
+            "wires",
+            "selection",
+            "draft",
+            "band",
+            "crosshair",
+            "overlay",
+        ],
         // `item`, `place` and `container` are builders, not nodes: an
         // entry's look, its area's properties, and what the entries go in.
         "Selection" => &[

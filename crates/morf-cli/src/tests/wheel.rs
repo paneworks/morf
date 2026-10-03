@@ -68,6 +68,7 @@ fn wheel(runtime: &mut Runtime, x: f64, y: f64, vertical: f64) -> bool {
         vertical,
         horizontal_steps: 0,
         vertical_steps: vertical.signum() as i32,
+        modifiers: Default::default(),
     };
     let mut input = PointerInput::default();
     match handle_pointer_event(runtime, &mut Shapes, &mut input, &layouts, event) {

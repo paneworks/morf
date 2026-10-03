@@ -2,6 +2,17 @@ use morf_scene::{NodeHandle, Value as SceneValue};
 
 use crate::{events::*, surface_types::*, types::*};
 
+thread_local! {
+    /// The modifier keys the seat last said were held. A seat has one
+    /// keyboard, so this is one value for every runtime on the thread.
+    static HELD: std::cell::Cell<crate::KeyModifiers> = std::cell::Cell::new(crate::KeyModifiers::default());
+}
+
+/// The held modifiers as a pointer handler is told them: `"ctrl+shift"`.
+fn held() -> IpcValue {
+    IpcValue::String(HELD.with(|held| held.get()).name())
+}
+
 /// One pointer or touch position, in both spaces a Lua handler may want.
 ///
 /// `surface_x`/`surface_y` are the coordinates the compositor delivered, shared
@@ -21,7 +32,8 @@ pub struct EventPoint {
     /// Pointer y inside the handling node.
     pub local_y: f64,
     /// The Linux button code of a press, release or click, when there was
-    /// one; handlers get its name as a fifth argument.
+    /// one; handlers get its name as a fifth argument (nil without one) and
+    /// the held modifiers as a sixth.
     pub button: Option<u32>,
 }
 
@@ -62,14 +74,23 @@ impl EventPoint {
             IpcValue::Number(self.local_x),
             IpcValue::Number(self.local_y),
         ];
-        if let Some(button) = self.button {
-            args.push(IpcValue::String(Self::button_name(button)));
-        }
+        args.push(match self.button {
+            Some(button) => IpcValue::String(Self::button_name(button)),
+            None => IpcValue::Nil,
+        });
+        args.push(held());
         args
     }
 }
 
 impl Runtime {
+    /// Says which modifiers the seat holds, for the pointer handlers that
+    /// follow: a press, a drag or a wheel turn is told them as its last
+    /// argument (a Shift-click extends, Ctrl with the wheel zooms).
+    pub fn set_held_modifiers(&self, modifiers: crate::KeyModifiers) {
+        HELD.with(|held| held.set(modifiers));
+    }
+
     /// Runs one key with no modifiers held; see [`Runtime::dispatch_key`].
     pub fn dispatch_key_event(
         &mut self,
@@ -271,6 +292,7 @@ impl Runtime {
                 IpcValue::Number(delta.1),
                 IpcValue::Number(point.local_x),
                 IpcValue::Number(point.local_y),
+                held(),
             ],
         )
     }
@@ -300,6 +322,7 @@ impl Runtime {
                 IpcValue::Integer(i64::from(steps.1)),
                 IpcValue::Number(point.local_x),
                 IpcValue::Number(point.local_y),
+                held(),
             ],
         )
     }

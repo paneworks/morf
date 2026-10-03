@@ -170,6 +170,8 @@ pub enum LayerEvent {
         pressed: bool,
         x: f64,
         y: f64,
+        /// The modifiers held when it did: a Shift-click, a Ctrl-click.
+        modifiers: KeyModifiers,
     },
     /// A pointer wheel or touchpad axis changed.
     PointerAxis {
@@ -180,6 +182,8 @@ pub enum LayerEvent {
         vertical: f64,
         horizontal_steps: i32,
         vertical_steps: i32,
+        /// The modifiers held: Ctrl with the wheel zooms, as a rule.
+        modifiers: KeyModifiers,
     },
     /// A touch contact began on the surface.
     TouchDown {

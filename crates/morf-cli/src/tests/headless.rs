@@ -62,8 +62,8 @@ fn a_surface_is_sized_from_its_settings_on_the_screen() {
 fn a_click_reaches_the_area_under_it_and_nothing_beside_it() {
     let mut headless = load(COUNTER);
     let surface = SurfaceRole::Layer(PRIMARY_LAYER);
-    headless.click(surface, (20.0, 20.0), 0x110).unwrap();
-    headless.click(surface, (150.0, 80.0), 0x110).unwrap();
+    headless.click(surface, (20.0, 20.0), 0x110, Default::default()).unwrap();
+    headless.click(surface, (150.0, 80.0), 0x110, Default::default()).unwrap();
     assert_eq!(ask(&mut headless, "clicks"), IpcValue::Integer(1));
 }
 

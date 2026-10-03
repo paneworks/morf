@@ -278,7 +278,7 @@ end
 
 function test.click(x, y, options)
   local px, py, opts, surface = point(x, y, options)
-  host.click(px, py, opts.button or "left", opts.surface or surface)
+  host.click(px, py, opts.button or "left", opts.surface or surface, opts.modifiers)
 end
 
 function test.move(x, y, options)
@@ -292,12 +292,12 @@ end
 
 function test.press(x, y, options)
   local px, py, opts, surface = point(x, y, options)
-  host.button(px, py, opts.button or "left", true, opts.surface or surface)
+  host.button(px, py, opts.button or "left", true, opts.surface or surface, opts.modifiers)
 end
 
 function test.release(x, y, options)
   local px, py, opts, surface = point(x, y, options)
-  host.button(px, py, opts.button or "left", false, opts.surface or surface)
+  host.button(px, py, opts.button or "left", false, opts.surface or surface, opts.modifiers)
 end
 
 function test.drag(from, to, options)
@@ -305,17 +305,17 @@ function test.drag(from, to, options)
   local x1, y1 = from[1], from[2]
   local x2, y2 = to[1], to[2]
   host.move(x1, y1, options.surface)
-  host.button(x1, y1, options.button or "left", true, options.surface)
+  host.button(x1, y1, options.button or "left", true, options.surface, options.modifiers)
   local steps = options.steps or 8
   for step = 1, steps do
     host.move(x1 + (x2 - x1) * step / steps, y1 + (y2 - y1) * step / steps, options.surface)
   end
-  host.button(x2, y2, options.button or "left", false, options.surface)
+  host.button(x2, y2, options.button or "left", false, options.surface, options.modifiers)
 end
 
 function test.wheel(dx, dy, options)
   options = options or {}
-  host.wheel(dx or 0, dy or 0, options.x, options.y, options.surface)
+  host.wheel(dx or 0, dy or 0, options.x, options.y, options.surface, options.modifiers)
 end
 
 local function modifier_list(modifiers)

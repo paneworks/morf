@@ -22,6 +22,9 @@ pub(crate) fn handle_pointer_event(
     event: LayerEvent,
 ) -> Result<Result<bool, LayerEvent>, String> {
     let mut repaint = false;
+    if let LayerEvent::PointerButton { modifiers, .. } | LayerEvent::PointerAxis { modifiers, .. } = &event {
+        runtime.set_held_modifiers(crate::surface_keys::key_modifiers(*modifiers));
+    }
     match event {
         LayerEvent::PointerMotion { surface, x, y } => {
             // Enter can arrive before the surface's first frame. Keep the
@@ -121,6 +124,7 @@ pub(crate) fn handle_pointer_event(
             vertical,
             horizontal_steps,
             vertical_steps,
+            ..
         } => {
             let Some(hit_layout) = layouts.layout_of(surface) else {
                 return Ok(Ok(false));
@@ -146,6 +150,7 @@ pub(crate) fn handle_pointer_event(
             pressed: true,
             x,
             y,
+            ..
         } => {
             let Some(hit_layout) = layouts.layout_of(surface) else {
                 return Ok(Ok(false));

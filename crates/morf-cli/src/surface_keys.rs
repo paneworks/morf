@@ -46,6 +46,7 @@ pub(crate) fn surface_key(
     ) else {
         return false;
     };
+    runtime.set_held_modifiers(key_modifiers(modifiers));
     let mut focused = state.input.focused.get(&surface).copied();
     let repaint = dispatch_key_in_subtree(
         runtime,

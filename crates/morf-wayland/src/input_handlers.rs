@@ -139,6 +139,7 @@ impl PointerHandler for LayerState {
                         pressed: true,
                         x,
                         y,
+                        modifiers: self.modifiers,
                     });
                 }
                 PointerEventKind::Release { button, .. } => {
@@ -148,6 +149,7 @@ impl PointerHandler for LayerState {
                         pressed: false,
                         x,
                         y,
+                        modifiers: self.modifiers,
                     });
                 }
                 PointerEventKind::Axis {
@@ -175,6 +177,7 @@ impl PointerHandler for LayerState {
                             vertical: vertical.absolute,
                             horizontal_steps: steps(&horizontal),
                             vertical_steps: steps(&vertical),
+                            modifiers: self.modifiers,
                         });
                     }
                 }
