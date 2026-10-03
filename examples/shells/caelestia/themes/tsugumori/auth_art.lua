@@ -149,7 +149,7 @@ return function(ctx)
     -- after the sheet arrives. It never receives keys or sends auth requests.
     local cover=ui.Rect {id=id.."-cover",z=100,clip=true,x=0,width=0,
       anchors={top=true,bottom=true},color=accent,visible=false,
-      ui.MouseArea {anchors={fill=true}},
+      require("lib.kit.widgets").shield {anchors={fill=true}},
       ui.Column {anchors={center_in=true},align="center",gap=s(7),
         label {text=lock and "シュゴ" or "アカツキ",font_family=JAPANESE,font_size=s(30),
           letter_spacing=s(3),color=function() return C.onPrimary end},

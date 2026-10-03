@@ -55,7 +55,9 @@ function M.skins.Control(t)
 end
 
 --- A pointer area that Tab reaches too (`M.focusable`).
-function M.action(props) return M.focusable(ui.MouseArea(props)) end
+-- A pressable area: a kit Press (lib.kit.widgets.area), so the press, Tab
+-- and its keys are the archetype's; the theme only draws.
+function M.action(props) return require("lib.kit.widgets").area(props) end
 
 --- A Material Symbols Rounded icon by its ligature name (`"wifi_off"`).
 --- `name` and `color` may be bindings; `props.fill` (a boolean or a
@@ -520,7 +522,7 @@ function M.bar(spec)
 end
 
 -- ============================================================ the kit ==
--- Material's reading of the shared kit (themes/KIT.md): rounded tonal
+-- Material's reading of the shared kit (the kit contract, library/lib/kit/contract.lua): rounded tonal
 -- containers in the surfaceContainer roles, pill-shaped progress with
 -- round caps and a stop dot, M3 expressive shapes that morph when a kind
 -- or a value changes, springy overshoot where something travels. No codes,
@@ -1209,7 +1211,7 @@ function M.status_line(spec) return banner(spec, 46) end
 function M.status(spec) return banner(spec, 40) end
 
 -- ------------------------------------------------- requested additions --
--- (themes/KIT.md, "Requested additions")
+-- (the kit contract)
 
 --- A radius in Material's own measure: Material is the measure.
 function M.round(r) return r end

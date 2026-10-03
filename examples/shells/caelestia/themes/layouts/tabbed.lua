@@ -128,7 +128,7 @@ function M.new(spec)
     anchors = { fill = true },
     -- Behind everything, so the whole panel takes the pointer.
     ui.MouseArea { anchors = { fill = true }, z = -1 },
-    -- The tab row is the theme's (every kit has `tabs`, themes/KIT.md).
+    -- The tab row is the theme's (every kit has `tabs`, the kit contract).
     kit.tabs {id=spec.id,accessible_name=spec.title or ({sidebar="Sidebar",leftbar="Planner",bottom="Tools"})[spec.id] or spec.id,
       tabs=tabs,tab=tab,width=W,pad=PAD,height=TABS_H},
     strip,

@@ -1,5 +1,5 @@
 -- Non-visual helpers every theme's kit may share. Nothing here draws or
--- decides how anything looks (see KIT.md, rule 2). Append only.
+-- decides how anything looks (see THEMING.md, theme rule 2). Append only.
 local M = {}
 
 --- A spec value that may be a binding.

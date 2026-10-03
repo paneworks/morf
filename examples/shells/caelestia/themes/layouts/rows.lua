@@ -1,5 +1,5 @@
 -- Small compositions the settings, planner and side-panel layouts share,
--- built only from the kit and the theme's tokens (themes/KIT.md, rule 1):
+-- built only from the kit and the theme's tokens (THEMING.md, theme rule 1):
 -- each theme's look comes through `kit.state_surface`, `kit.icon_button`,
 -- `kit.field` and `kit.shape`, never from a shape or colour chosen here.
 local ui = require("morf.ui")

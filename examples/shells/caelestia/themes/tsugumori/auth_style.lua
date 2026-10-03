@@ -42,6 +42,9 @@ return function(context)
     end,
     SdfShape = function(props) return ui.SdfShape(straight(props)) end,
     MouseArea = function(props)
+      -- The shared layout's areas (lock.lua, greet.lua: their handlers are
+      -- the layout's) pass through, drawn with this theme's feedback; the
+      -- theme adds a look, not input of its own.
       if (props.id or ""):match("%-open$") then return ui.MouseArea(props) end
       props.scale=nil
       if props.behavior then props.behavior.scale=nil end

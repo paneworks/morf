@@ -15,7 +15,7 @@ return function(theme)
     local cover = ui.Rect { id = id .. "-page-curtain", z = 90,
       anchors = { top = true, bottom = true }, x = 0, width = 0, visible = false,clip=true,
       color=function() return theme.color.primary end,
-      ui.MouseArea { anchors = { fill = true } },
+      require("lib.kit.widgets").shield { anchors = { fill = true } },
     }
     -- This stroke is a sibling of the cover: children of a clipped, animated
     -- rectangle are not reliably composited above its fill by the renderer.

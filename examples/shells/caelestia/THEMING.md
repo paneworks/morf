@@ -803,6 +803,42 @@ cancel transient motion when disabled, including the separately painted frame
 shape. The short-lived Tsugumori indicator uses the shared heading with shorter
 decode lead/stagger; ordinary headings retain their original timing.
 
+## Theme rules
+
+What a caelestia theme may and may not do. The widget contract itself --
+which functions, skins, display widgets and composites every theme
+provides -- is `library/lib/kit/contract.lua`, checked by `morf check
+--kit` and the galleries in `tests/`, and documented in `docs/UI.md`,
+chapter 9. A theme is skins and display functions over `morf.kit`: it
+contains no interaction code (presses, keys and drags are the
+archetypes'; a theme's pressable area is `lib.kit.widgets.area`, a pointer
+shield `lib.kit.widgets.shield`, and a lock screen's input is
+`themes/layouts/auth_input.lua`).
+
+Rules:
+
+1. **Layouts draw only through the kit** (`require("kit")`) and the theme's
+   tokens (`require("theme")`): no `radius = 24`, no fixed colours, no
+   theme-specific shapes in a layout. A layout may compose kit calls into
+   bigger pieces (see `themes/layouts/parts.lua`), and may place, size and
+   group them freely: that arrangement is shared by every theme.
+2. **No theme uses another theme's style code.** A theme's `components.lua`,
+   `motion.lua`, tokens, auth style, frame and rail never `require` another
+   theme's modules. Non-visual helpers live in `themes/kit_common.lua`
+   (numbers, bytes, clamp, collect, signal plumbing) and may be shared.
+3. **Every function the contract requires exists in every theme** (`library/lib/kit/contract.lua`; `morf check --kit`). A theme may make a
+   decoration (`kit.decor`, `kit.code`) draw nothing, but must accept the
+   call and keep the reserved space, so the layout is identical.
+4. **Same geometry contract.** A function given `width`/`height` occupies
+   exactly that box in every theme. Text sizes come from theme tokens, so a
+   layout reserves the box, not the glyph run.
+5. **Nothing animates at rest**; values ease on change; decorative motion is
+   finite. Per-frame-changing paths (spectra) are one path, not N nodes.
+
+Per-theme views are limited to the screen chrome: `frame` and `rail` (the
+border around the screen and the workspace strip in it). Their geometry
+(`V.insets`, `V.geometry`, rail item/gap sizes) must match across themes.
+
 ## Reference
 
 [Tsugumori](https://github.com/Aleph1-9012/Tsugumori) is the design reference.

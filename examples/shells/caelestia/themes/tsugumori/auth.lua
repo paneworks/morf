@@ -19,7 +19,8 @@ return function(ctx, kind, W, H, main, output)
   local feedback = require("themes.tsugumori.interaction")({color=C})
   local function button(id, caption, width, action)
     local area
-    area = ui.MouseArea { id = id, width = width, height = s(36), cursor = "pointer",
+    -- A kit Press: the press, Tab and its keys are the archetype's.
+    area = require("lib.kit.widgets").area { id = id, width = width, height = s(36), cursor = "pointer",
       on_clicked = function() if not ctx.busy:get() then action() end end,
       ui.Rect { anchors = { fill = true }, border_width = 1,
         border_color = function() return stroke(C,"focus") end,
@@ -57,7 +58,8 @@ return function(ctx, kind, W, H, main, output)
   if keyboard then
     kb = osk.new { prefix = kind .. ".osk",
       active = function() return sheet() and ctx.method:get() == "password" and not ctx.busy:get() end,
-      action = function(props) return feedback(ui.MouseArea(props), props.id) end, width = INNER, mode = "full", numbers = true, look = look,
+      action = function(props) return feedback(require("lib.kit.widgets").area(props), props.id) end, width = INNER,
+      mode = "full", numbers = true, look = look,
       send = function(event)
         if event.text then ctx.type_text(event.text)
         elseif event.key == "backspace" then ctx.backspace()
@@ -217,10 +219,9 @@ return function(ctx, kind, W, H, main, output)
       x = s(38), y = s(34), font_size = s(12), color = function() return C.primary end }),
     glance,
     panel,
-    ui.MouseArea { id = kind .. "-open", anchors = { fill = true }, z = -1,
-      on_clicked = function() if main() then ctx.open_sheet() end end,
-      on_key_pressed = function(key, typed) if main() then ctx.key(key, typed) end end,
-      on_drag_finished = function(_, _, _, dy) if main() and dy and dy < -s(60) then ctx.open_sheet() end end },
+    -- The input under it all is the shared flow's (themes.layouts.auth_input).
+    require("themes.layouts.auth_input").sheet { id = kind .. "-open", active = main, open = ctx.open_sheet,
+      key = ctx.key, swipe = s(60) },
   }
   if kind == "lock" then
     root[#root + 1] = require("themes.tsugumori.lock_desktop")(ctx,W,H,main,output,s)

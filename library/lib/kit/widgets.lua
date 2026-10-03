@@ -114,4 +114,31 @@ for _, widget in ipairs(contract.archetypes.Range.widgets) do
   M[widget] = function(spec) return (control.make("Range", widget, with_defaults(widget, spec, RANGE))) end
 end
 
+--- A pressable area from a MouseArea-style table -- node properties,
+--- children, `on_*` handlers -- as a kit Press `area`: the press, Tab and
+--- the keys that click it are the archetype's, the theme's skin marks it,
+--- and whoever builds it only says what it looks like and what a press
+--- does. `settings` are the Press's own (`checked`, `group`, ...).
+function M.area(props, settings)
+  local spec, node, children = { widget = "area" }, {}, {}
+  for key, value in pairs(props or {}) do
+    if type(key) == "number" then children[key] = value
+    elseif type(key) == "string" and key:match("^on_") then spec[key] = value
+    else node[key] = value end
+  end
+  for key, value in pairs(settings or {}) do spec[key] = value end
+  if node.enabled ~= nil then spec.enabled = node.enabled end
+  return (control.make("Press", "area", spec, { props = node, children = children }))
+end
+
+--- A shield: a box that takes the pointer so nothing under it does (a
+--- curtain over controls while it moves), and nothing else -- no focus, no
+--- keys. `props` are its node's.
+function M.shield(props)
+  local node = {}
+  for key, value in pairs(props or {}) do node[key] = value end
+  node.focus_policy = "none"
+  return (control.make("Control", "shield", { widget = "shield" }, { props = node }))
+end
+
 return M

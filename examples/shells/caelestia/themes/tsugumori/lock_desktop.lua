@@ -24,7 +24,7 @@ return function(ctx,W,H,main,output,s)
   local feedback=require("themes.tsugumori.interaction")({color=C})
   local function button(id,icon,action,x)
     local area
-    area=ui.MouseArea {id=id,x=x,y=s(154),width=(width-2*s(16)-2*s(8))/3,height=s(34),cursor="pointer",
+    area=require("lib.kit.widgets").area {id=id,x=x,y=s(154),width=(width-2*s(16)-2*s(8))/3,height=s(34),cursor="pointer",
       on_clicked=function() if active() then desktop.control(action) end end,
       ui.Rect {anchors={fill=true},border_width=1,border_color=function() return stroke(C,"idle") end,
         color=function() return area and area.hovered and C.primaryContainer or C.surfaceContainerHigh end},

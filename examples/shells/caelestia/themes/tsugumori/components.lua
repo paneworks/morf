@@ -1,5 +1,5 @@
 local stroke = require("themes.tsugumori.strokes")
--- Tsugumori's complete style kit (see themes/KIT.md). Framed, mechanical
+-- Tsugumori's complete style kit (see the kit contract and THEMING.md). Framed, mechanical
 -- controls: square frames, chamfered outlines cut on the top-left and
 -- bottom-right, corner registration marks on the same diagonal, mono type,
 -- rolling labels and quiet instrument rails. All fills and ink come from the
@@ -443,7 +443,7 @@ return function(theme)
     for _,key in ipairs {"enter","exit"} do
       if type(props[key])=="table" then props[key].scale=nil end
     end
-    return M.focusable(feedback(ui.MouseArea(props), props.id))
+    return feedback(require("lib.kit.widgets").area(props), props.id)
   end
   function M.tabbed(spec) return require("themes.tsugumori.tabbed")(theme, M, spec) end
   -- Tsugumori outlines: straight-edged, eight vertices each (repeated

@@ -18,7 +18,7 @@ M.typography = { title = 16, section = 14, caption = 11, hero = 24, subtitle = 1
 
 -- ------------------------------------------------------------------ sizes --
 
--- The frame and side geometry are part of the layout contract (KIT.md):
+-- The frame and side geometry are part of the layout contract (the kit contract):
 -- only the corner treatment differs. Tsugumori's corners are square.
 M.BORDER, M.LEFT = 10, 10
 M.ROUNDING = 2

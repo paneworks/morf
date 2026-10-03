@@ -1,5 +1,5 @@
 -- Composition helpers the shared layouts use: each only places and combines
--- kit calls (KIT.md, rule 1). Nothing here picks a colour, a radius, a
+-- kit calls (THEMING.md, theme rule 1). Nothing here picks a colour, a radius, a
 -- shape or a decoration of its own; the theme's kit draws all of it.
 --
 -- Text boxes are reserved from the shared size tokens (`theme.size`, the
@@ -60,7 +60,7 @@ end
 --- person would use ("Playing", "Charging", or nil for none), `key` names
 --- the state ("media.paused", "session.power") so a theme may answer with
 --- its own term ("STANDBY", "ARMED"). kit.term is a requested addition
---- (KIT.md); until a kit has it the plain word stands. `plain` may be a
+--- (the kit contract); until a kit has it the plain word stands. `plain` may be a
 --- function; so is the result then.
 function L.term(key, plain)
   local term = kit.term

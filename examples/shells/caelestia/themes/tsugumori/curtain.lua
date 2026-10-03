@@ -32,7 +32,7 @@ return function(theme, host, id)
     visible = false,
     color = function() return C.primary end,
     -- Ignore presses on covered controls, including during interrupted exits.
-    ui.MouseArea { anchors = { fill = true } },
+    require("lib.kit.widgets").shield { anchors = { fill = true } },
     ui.Column { anchors = { center_in = true }, align = "center", gap = 8,
       text(unit[1], {id=id.."-unit-name",font_size=32,font_weight=500,letter_spacing=3,
         font_family="M+1 Nerd Font, Noto Sans CJK JP, Noto Sans JP, sans-serif"}),

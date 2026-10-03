@@ -83,7 +83,7 @@ for _,style in ipairs {"material","tsugumori"} do
     test.ipc("open","right","yes") test.advance(2400)
     test.falsy(state().covered)
     test.eq(test.get("drawer-sidebar").x,820)
-    -- One geometry in every theme (KIT.md, rule 4).
+    -- One geometry in every theme (THEMING.md, theme rule 4).
     test.eq(test.get("sidebar-pages").width,408)
     shot(style.."-side-settings")
     test.click("sidebar-tab-notifications") test.advance(2400)
