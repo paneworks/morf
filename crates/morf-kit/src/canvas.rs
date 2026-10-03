@@ -713,7 +713,8 @@ impl Canvas {
                     && let Some(first) = self.draft.first()
                 {
                     let s = self.screen(*first);
-                    if (s[0] - screen[0]).hypot(s[1] - screen[1]) <= self.port_radius {
+                    // (On the grid, landing on the same point closes it too.)
+                    if (s[0] - screen[0]).hypot(s[1] - screen[1]) <= self.port_radius || at == *first {
                         self.finish_draft(effects);
                         return;
                     }

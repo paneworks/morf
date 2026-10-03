@@ -32,12 +32,13 @@ local RANGE = {
   fader = { orientation = "vertical" },
   range_slider = { range = true },
   discrete_slider = { snap = "always", step = 1 },
-  stepped_knob = { snap = "always", step = 1 },
+  stepped_knob = { snap = "always", step = 1, drag_mode = "vertical" },
   rating = { snap = "always", step = 1, from = 0, to = 5 },
   log_slider = { logarithmic = true },
-  angle_slider = { wrap = true, from = 0, to = 360 },
-  knob = {},
-  bipolar_knob = { from = -1, to = 1 },
+  angle_slider = { wrap = true, from = 0, to = 360, drag_mode = "angular", angle_from = 0, angle_sweep = 360 },
+  knob = { drag_mode = "vertical" },
+  bipolar_knob = { from = -1, to = 1, value = 0, drag_mode = "vertical" },
+  zoom = { from = 0.25, to = 4, value = 1, logarithmic = true },
   spin_button = { step = 1, snap = "always" },
   seek_bar = { live = false },
   scroll_bar = { wheel = false },
@@ -45,8 +46,8 @@ local RANGE = {
 }
 
 local PLANE = {
-  hue_wheel = { constraint = "circle" },
-  joystick = { constraint = "circle", x_from = -1, x_to = 1, y_from = -1, y_to = 1, y_up = true },
+  hue_wheel = { polar = true },
+  joystick = { constraint = "circle", x_from = -1, x_to = 1, y_from = -1, y_to = 1, y_up = true, spring = true },
   xy_pad = { y_up = true },
 }
 local SELECTION = {
@@ -109,6 +110,25 @@ for _, widget in ipairs(contract.archetypes.Drag.widgets) do
 end
 for _, widget in ipairs(contract.archetypes.Navigation.widgets) do
   M[widget] = function(spec) return require("lib.kit.navigation").make(widget, spec) end
+end
+-- A canvas or a dock returns its control and a handle (`fit`, `zoom_by`,
+-- `select` ...; `activate`, `close`, `float` ...).
+local CANVAS = {
+  zoomable_canvas = { wheel_zooms = true },
+  node_graph = { grid = 16, snap = true },
+  whiteboard = { tool = "freehand" },
+  diagram = { grid = 10, snap = true },
+  map_view = { wheel_zooms = true, min_zoom = 0.001, max_zoom = 1e6, movable = false },
+  image_viewer = { wheel_zooms = true, movable = false, multi_select = false },
+  chart_inspector = { axes = "x", tool = "brush", movable = false, wheel_zooms = true },
+  timeline_track = { axes = "x" },
+  drawing_board = { tool = "rect", grid = 8, snap = true },
+}
+for _, widget in ipairs(contract.archetypes.Canvas.widgets) do
+  M[widget] = function(spec) return require("lib.kit.canvas").make(widget, with_defaults(widget, spec, CANVAS)) end
+end
+for _, widget in ipairs(contract.archetypes.Dock.widgets) do
+  M[widget] = function(spec) return require("lib.kit.dock").make(widget, spec) end
 end
 for _, widget in ipairs(contract.archetypes.Range.widgets) do
   M[widget] = function(spec) return (control.make("Range", widget, with_defaults(widget, spec, RANGE))) end

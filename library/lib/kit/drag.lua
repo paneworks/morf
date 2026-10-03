@@ -18,8 +18,53 @@ local control = require("lib.kit.control")
 
 local M = {}
 
+local function get(v) if type(v) == "function" then return v() end return v end
+
+--- A drag control. With `mode = "transfer"` (a `drag_source`'s default) a
+--- drag carries `payload` -- `{ text =, uris =, paths =, data = { [mime]
+--- = bytes } }`, or a function giving one -- out to wherever it is
+--- dropped, another application included; `on_transferred(dropped)`
+--- hears whether it landed. A `drop_zone` takes such drops: `keys` (what
+--- it accepts: mime types, `text`, `image`, `files`), `on_dropped(drop)`
+--- (drop.text, drop.uris, drop.paths, drop:read(mime, fn)); its skin
+--- shows `t.accepting` while a drag it would take is over it.
 function M.make(widget, spec)
-  return control.make("Drag", widget, spec)
+  spec = spec or {}
+  if widget == "drag_source" and spec.mode == nil then spec.mode = "transfer" end
+  if widget == "drop_zone" then return M.drop_zone(spec) end
+  local root, t, ctl = control.make("Drag", widget, spec)
+  if get(spec.mode) == "transfer" then
+    root.on_drag_started = function(...)
+      local payload = get(spec.payload)
+      if payload then
+        morf.drag.start(payload, function(dropped)
+          if spec.on_transferred then spec.on_transferred(dropped) end
+        end)
+      end
+      if spec.on_drag_started then spec.on_drag_started(...) end
+    end
+  end
+  return root, t, ctl
+end
+
+--- Where a drag from anywhere lands; see `make`.
+function M.drop_zone(spec)
+  spec = spec or {}
+  local own = {}
+  for k, v in pairs(spec) do own[k] = v end
+  own.mode, own.widget = "transfer", "drop_zone"
+  own.on_dropped = nil
+  local t
+  local area = ui.DropArea { anchors = { fill = true }, keys = spec.keys or {},
+    on_entered = function(info)
+      if t then t.accepting = info == nil or info.accepted ~= nil end
+      if spec.on_entered then spec.on_entered(info) end
+    end,
+    on_exited = function() if t then t.accepting = false end if spec.on_exited then spec.on_exited() end end,
+    on_dropped = function(drop) if spec.on_dropped then spec.on_dropped(drop) end end }
+  local root
+  root, t = control.make("Drag", "drop_zone", own, { state = { accepting = false }, children = { area } })
+  return root, t
 end
 
 --- Two panes and the divider between them, which drags the ratio.

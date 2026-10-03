@@ -654,5 +654,22 @@ return function(theme, M)
     }
   end
 
+  -- Each archetype's widgets may have looks of their own, in
+  -- widgets/<archetype>.lua: a function of (S, theme, M) that adds
+  -- S.<widget>. The kit asks a widget's skin before its archetype's, slot
+  -- by slot, so a widget's look fills what it draws and the archetype's
+  -- skin the rest.
+  for _, name in ipairs { "press", "range", "plane", "selection", "popup", "text_field", "scroll", "collection",
+    "disclosure", "drag", "navigation", "shell", "canvas", "dock" } do
+    local ok, looks = pcall(require, "themes.material.widgets." .. name)
+    if ok then
+      if type(looks) == "function" then looks(S, theme, M) end
+    -- (Only its own absence is quiet: an error inside it, or in what it
+    -- requires, is raised.)
+    elseif not tostring(looks):find("`themes.material.widgets." .. name .. "` is not available", 1, true) then
+      error(looks, 0)
+    end
+  end
+
   return S
 end

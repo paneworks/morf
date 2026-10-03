@@ -4,10 +4,15 @@
 //! Settings: `x_from` (0), `x_to` (1), `y_from` (0), `y_to` (1), `x`, `y`,
 //! `step_x`, `step_y` (0: continuous), `constraint` (`"free"`, `"circle"`
 //! -- inside the inscribed circle --, `"square"`), `y_up` (y grows upward,
-//! as on a chart; down, as on a screen, by default).
+//! as on a chart; down, as on a screen, by default), `spring` (a
+//! joystick: let go, it returns to `rest_x`, `rest_y` -- the middle by
+//! default), `polar` (a hue wheel: x is the angle round the centre, 0..1
+//! clockwise from twelve o'clock, y the distance out, 0 at the centre and
+//! 1 at the rim).
 //!
 //! State: `x`, `y`, `position_x`, `position_y` (0..1), `visual_x`,
-//! `visual_y` (where to draw it: right to left and `y_up` applied),
+//! `visual_y` (where to draw it, 0..1 across and down the box: right to
+//! left and `y_up` applied, a polar value placed on its circle),
 //! `dragging`.
 //!
 //! Events: the base's, `"pressed"` and `"dragged"` (local x, y, width,
@@ -37,6 +42,9 @@ pub(crate) struct Plane {
     constraint: Constraint,
     y_up: bool,
     dragging: bool,
+    spring: bool,
+    rest: Option<[f64; 2]>,
+    polar: bool,
 }
 
 impl Plane {
@@ -50,6 +58,9 @@ impl Plane {
             constraint: Constraint::Free,
             y_up: false,
             dragging: false,
+            spring: false,
+            rest: None,
+            polar: false,
         }
     }
 
@@ -63,6 +74,12 @@ impl Plane {
     }
 
     fn visual(&self, axis: usize) -> f64 {
+        if self.polar {
+            let angle = self.position(0) * std::f64::consts::TAU;
+            let r = self.position(1) * 0.5;
+            let angle = if self.base.mirrored { -angle } else { angle };
+            return if axis == 0 { 0.5 + r * angle.sin() } else { 0.5 - r * angle.cos() };
+        }
         let p = self.position(axis);
         let flip = if axis == 0 {
             self.base.mirrored
@@ -137,6 +154,16 @@ impl Plane {
             number(arguments.get(2))?.max(1.0),
             number(arguments.get(3))?.max(1.0),
         );
+        if self.polar {
+            let (dx, dy) = (x / w - 0.5, y / h - 0.5);
+            let dx = if self.base.mirrored { -dx } else { dx };
+            let angle = dx.atan2(-dy).rem_euclid(std::f64::consts::TAU) / std::f64::consts::TAU;
+            let r = (dx.hypot(dy) * 2.0).min(1.0);
+            return Some([
+                self.from[0] + (self.to[0] - self.from[0]) * angle,
+                self.from[1] + (self.to[1] - self.from[1]) * r,
+            ]);
+        }
         let mut p = [(x / w).clamp(0.0, 1.0), (y / h).clamp(0.0, 1.0)];
         // Undo the drawing's flips: `visual` is its own inverse.
         if self.base.mirrored {
@@ -194,6 +221,14 @@ impl Archetype for Plane {
                 if self.dragging {
                     self.dragging = false;
                     effects.set("dragging", false);
+                    // A spring takes it home.
+                    if self.spring {
+                        let rest = self.rest.unwrap_or([
+                            (self.from[0] + self.to[0]) / 2.0,
+                            (self.from[1] + self.to[1]) / 2.0,
+                        ]);
+                        effects.extend(self.set(rest, true));
+                    }
                 }
                 Ok(effects)
             }
@@ -263,6 +298,16 @@ impl Archetype for Plane {
             "x" => return Ok(self.set([n()?, self.value[1]], false)),
             "y" => return Ok(self.set([self.value[0], n()?], false)),
             "y_up" => self.y_up = expect_boolean(Some(value), field)?,
+            "spring" => self.spring = expect_boolean(Some(value), field)?,
+            "polar" => self.polar = expect_boolean(Some(value), field)?,
+            "rest_x" => {
+                let r = self.rest.unwrap_or([0.0, 0.0]);
+                self.rest = Some([n()?, r[1]]);
+            }
+            "rest_y" => {
+                let r = self.rest.unwrap_or([0.0, 0.0]);
+                self.rest = Some([r[0], n()?]);
+            }
             "constraint" => {
                 self.constraint = match text(Some(value)) {
                     Some("free") => Constraint::Free,
@@ -288,6 +333,20 @@ mod tests {
             plane.configure(field, value).unwrap();
         }
         plane
+    }
+
+    #[test]
+    fn a_joystick_springs_home_and_a_wheel_is_polar() {
+        let mut stick = plane(&[("x_from", (-1.0).into()), ("y_from", (-1.0).into()), ("spring", true.into())]);
+        stick.handle("pressed", &[90.0.into(), 50.0.into(), 100.0.into(), 100.0.into()]).unwrap();
+        assert!(stick.value[0] > 0.5);
+        stick.handle("released", &[]).unwrap();
+        assert_eq!(stick.value, [0.0, 0.0]);
+        let mut wheel = plane(&[("polar", true.into())]);
+        // Right of the centre at the rim: a quarter turn, all the way out.
+        wheel.handle("pressed", &[100.0.into(), 50.0.into(), 100.0.into(), 100.0.into()]).unwrap();
+        assert!((wheel.value[0] - 0.25).abs() < 1e-9 && (wheel.value[1] - 1.0).abs() < 1e-9);
+        assert!((wheel.visual(0) - 1.0).abs() < 1e-9 && (wheel.visual(1) - 0.5).abs() < 1e-9);
     }
 
     #[test]

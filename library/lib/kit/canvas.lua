@@ -165,12 +165,14 @@ function M.make(widget, spec)
       seen[key] = true
       local e = by_id[key]
       if not e then
-        e = { key = key, item = item, version = morf.signal("kit.canvas.item." .. ctl.id .. "." .. key, 0) }
+        e = { key = key, item = item, count = 0,
+          version = morf.signal("kit.canvas.item." .. ctl.id .. "." .. key, 0) }
         by_id[key] = e
         place(e)
       elseif e.item ~= item then
         e.item = item
-        e.version:set(e.version:get() + 1)
+        e.count = e.count + 1
+        e.version:set(e.count)
       end
     end
     for key, e in pairs(by_id) do

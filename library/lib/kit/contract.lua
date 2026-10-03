@@ -2,7 +2,7 @@
 --
 -- A layout draws only through the kit; a theme implements the kit in its
 -- own style. This file says what the kit is: the functions every kit
--- exports, the twelve archetypes (behaviours with no look; each theme
+-- exports, the archetypes (behaviours with no look; each theme
 -- skins them), the display widgets (no input, a kit function each), the
 -- composites (archetypes combined), and the other owners the catalogue
 -- (catalogue.lua) assigns elements to.
@@ -14,7 +14,7 @@
 local M = {}
 
 --- The plan stage the kits have reached.
-M.stage = 20
+M.stage = 21
 
 -- ------------------------------------------------------------- functions --
 --
@@ -180,7 +180,7 @@ M.archetypes = {
     signals = { "on_scrolled", "on_reached_start", "on_reached_end" },
     keys = { "arrows", "page_up", "page_down", "home", "end", "space" },
     slots = { "scroll_bar_x", "scroll_bar_y", "edge_fade", "overscroll" },
-    widgets = { "scroll_view", "scroll_area", "pager", "shelf", "infinite_scroll", "zoomable_canvas" } },
+    widgets = { "scroll_view", "scroll_area", "pager", "shelf", "infinite_scroll" } },
   Collection = { stage = 10, role = { "list", "grid", "table", "tree", "tree_grid" },
     state = { "model", "delegate", "layout", "columns", "expanded", "section", "item_size" },
     signals = { "on_row_activated", "on_sort_changed", "on_expanded_changed", "on_end_reached" },
@@ -203,7 +203,7 @@ M.archetypes = {
     slots = { "handle", "ghost", "drop_indicator" },
     widgets = { "split_pane", "resizable_panel", "resize_grip", "reorderable_rows", "reorderable_tabs",
       "sortable_grid", "swipe_dismiss", "swipe_actions", "pull_to_refresh", "sheet_handle", "window_move",
-      "dock_area", "drag_source" } },
+      "drag_source", "drop_zone" } },
   Navigation = { stage = 11, role = { "tab_panel", "group" },
     state = { "pages", "current", "mode", "can_go_back", "history" },
     signals = { "on_pushed", "on_popped", "on_current_changed" },
@@ -219,6 +219,28 @@ M.archetypes = {
       "toasts" },
     widgets = { "window_layout", "header_bar", "toolbar_view", "split_view", "overlay_split_view",
       "navigation_split_view", "multi_pane", "breakpoint_bin", "clamp", "bottom_bar" } },
+  -- A world a viewport looks into: panned, zoomed, its items picked,
+  -- selected, moved, connected and drawn (mara's graph, canvas, board,
+  -- map and image views; a zoomable chart; a timeline).
+  Canvas = { stage = 21, role = { "group", "image" },
+    state = { "view_x", "view_y", "zoom", "tool", "selection", "hovered", "pointer_x", "pointer_y", "gesture",
+      "band", "draft", "connect_from", "connect_to" },
+    tools = { "select", "pan", "point", "line", "rect", "ellipse", "polyline", "polygon", "freehand", "connect",
+      "brush", "zoom" },
+    signals = { "on_view_changed", "on_selection_changed", "on_moved", "on_drawn", "on_connected", "on_activated",
+      "on_context", "on_brushed", "on_deleted" },
+    keys = { "arrows_nudge", "plus_minus_zoom", "zero_reset", "home_fit", "ctrl_a", "delete", "escape", "tab_items" },
+    slots = { "grid", "item", "wires", "selection", "draft", "band", "crosshair", "overlay" },
+    widgets = { "zoomable_canvas", "node_graph", "whiteboard", "diagram", "map_view", "image_viewer",
+      "chart_inspector", "timeline_track", "drawing_board" } },
+  -- Panels in splits and tab stacks the user rearranges (mara's shelves,
+  -- panes and tabbed containers; an IDE's tool windows).
+  Dock = { stage = 21, role = { "group", "tab_list", "tab", "tab_panel", "splitter" },
+    state = { "focused", "focused_panel", "maximized", "dragging", "drop_target", "drop_zone", "panel_count" },
+    signals = { "on_layout_changed", "on_activated", "on_closed", "on_maximized", "on_focus_changed" },
+    keys = { "ctrl_page", "ctrl_w", "ctrl_shift_m", "f6", "escape" },
+    slots = { "tab", "stack", "divider", "floating", "drop_indicator" },
+    widgets = { "dock_area", "shelf_dock", "tabbed_container", "document_tabs", "tool_windows" } },
 }
 
 -- --------------------------------------------------------------- display --

@@ -8,11 +8,16 @@
 //! `"vertical"`), `inverted`, `logarithmic`, `wrap` (an angle: past one
 //! end is the other), `range` (two values, `first` and `second`), and
 //! `handle_size` (px: the travel a pointer maps onto is the length less
-//! the handle).
+//! the handle), `drag_mode` (`"linear"` along the track; `"vertical"`:
+//! a knob turned by dragging up and down `drag_travel` pixels (200) for
+//! the whole range, without jumping on the press; `"angular"`: by the
+//! angle round its centre), `angle_from` (-135: degrees clockwise from
+//! twelve o'clock where the range starts) and `angle_sweep` (270).
 //!
 //! State: `value`, `position` (0..1 along the range), `visual_position`
 //! (where to draw it: right to left and inverted taken into account),
-//! `first`, `second` and their positions for a pair, `dragging`.
+//! `first`, `second` and their positions for a pair, `dragging`, `angle`
+//! (where a knob's pointer stands, in degrees from twelve o'clock).
 //!
 //! Events: the base's, plus `"pressed"` and `"dragged"` (local x, y,
 //! width, height, modifiers -- Shift drags finely), `"released"`,
@@ -27,6 +32,13 @@ use morf_lua::IpcValue;
 use crate::control::ControlState;
 use crate::value::{expect_boolean, expect_number, number, text};
 use crate::{Archetype, Effects};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DragMode {
+    Linear,
+    Vertical,
+    Angular,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Snap {
@@ -55,6 +67,12 @@ pub(crate) struct Range {
     dragging: Option<(usize, f64)>,
     /// Where the last drag event was, along the axis, for a fine drag.
     last_along: f64,
+    drag_mode: DragMode,
+    drag_travel: f64,
+    angle_from: f64,
+    angle_sweep: f64,
+    /// A vertical drag's press: its y and the position then.
+    press: (f64, f64),
 }
 
 impl Range {
@@ -76,6 +94,11 @@ impl Range {
             handle_size: 0.0,
             dragging: None,
             last_along: 0.0,
+            drag_mode: DragMode::Linear,
+            drag_travel: 200.0,
+            angle_from: -135.0,
+            angle_sweep: 270.0,
+            press: (0.0, 0.0),
         }
     }
 
@@ -156,6 +179,27 @@ impl Range {
         if flipped { 1.0 - position } else { position }
     }
 
+    /// A position as a knob turns: inverted runs it backwards.
+    fn visual_angle(&self, position: f64) -> f64 {
+        if self.inverted { 1.0 - position } else { position }
+    }
+
+    /// The position a point at an angle round the centre stands for; past
+    /// the sweep, the nearer end.
+    fn angular_position(&self, x: f64, y: f64, w: f64, h: f64) -> f64 {
+        let angle = (x - w / 2.0).atan2(h / 2.0 - y).to_degrees();
+        let sweep = self.angle_sweep.abs().max(1.0);
+        let along = (angle - self.angle_from).rem_euclid(360.0);
+        let p = if along <= sweep {
+            along / sweep
+        } else if along - sweep < 360.0 - along {
+            1.0
+        } else {
+            0.0
+        };
+        self.visual_angle(p)
+    }
+
     fn fields_into(&self, effects: &mut Effects) {
         for (field, value) in self.value_fields() {
             effects.set(&field, value);
@@ -172,6 +216,7 @@ impl Range {
             ("position".into(), shown(0).into()),
             ("visual_position".into(), self.visual(shown(0)).into()),
             ("dragging".into(), self.dragging.is_some().into()),
+            ("angle".into(), (self.angle_from + self.visual_angle(shown(0)) * self.angle_sweep).into()),
         ];
         if self.pair {
             fields.extend([
@@ -294,10 +339,32 @@ impl Archetype for Range {
                 if !self.base.enabled {
                     return Ok(effects);
                 }
-                if let Some((position, along)) = self.position_from_point(arguments) {
-                    self.last_along = along;
-                    let index = self.nearest_handle(position);
-                    effects.extend(self.drag_to(index, position));
+                match self.drag_mode {
+                    // A knob turned by dragging stays where it was pressed.
+                    DragMode::Vertical => {
+                        let start = self.position_of(self.values[0]);
+                        self.press = (number(arguments.get(1)).unwrap_or(0.0), start);
+                        self.dragging = Some((0, start));
+                        self.fields_into(&mut effects);
+                    }
+                    DragMode::Angular => {
+                        if let (Some(x), Some(y), Some(w), Some(h)) = (
+                            number(arguments.first()),
+                            number(arguments.get(1)),
+                            number(arguments.get(2)),
+                            number(arguments.get(3)),
+                        ) {
+                            let p = self.angular_position(x, y, w, h);
+                            effects.extend(self.drag_to(0, p));
+                        }
+                    }
+                    DragMode::Linear => {
+                        if let Some((position, along)) = self.position_from_point(arguments) {
+                            self.last_along = along;
+                            let index = self.nearest_handle(position);
+                            effects.extend(self.drag_to(index, position));
+                        }
+                    }
                 }
                 Ok(effects)
             }
@@ -305,10 +372,32 @@ impl Archetype for Range {
                 let Some((index, reached)) = self.dragging else {
                     return Ok(Effects::default());
                 };
+                let fine = text(arguments.get(4)).is_some_and(|m| m.contains("shift"));
+                match self.drag_mode {
+                    DragMode::Vertical => {
+                        let y = number(arguments.get(1)).unwrap_or(self.press.0);
+                        let travel = self.drag_travel.max(1.0) * if fine { 10.0 } else { 1.0 };
+                        let moved = (self.press.0 - y) / travel;
+                        let moved = if self.inverted { -moved } else { moved };
+                        return Ok(self.drag_to(0, (self.press.1 + moved).clamp(0.0, 1.0)));
+                    }
+                    DragMode::Angular => {
+                        if let (Some(x), Some(y), Some(w), Some(h)) = (
+                            number(arguments.first()),
+                            number(arguments.get(1)),
+                            number(arguments.get(2)),
+                            number(arguments.get(3)),
+                        ) {
+                            let p = self.angular_position(x, y, w, h);
+                            return Ok(self.drag_to(0, p));
+                        }
+                        return Ok(Effects::default());
+                    }
+                    DragMode::Linear => {}
+                }
                 let Some((position, along)) = self.position_from_point(arguments) else {
                     return Ok(Effects::default());
                 };
-                let fine = text(arguments.get(4)).is_some_and(|m| m.contains("shift"));
                 let target = if fine {
                     // A tenth of the motion, from where the drag had got to.
                     let length = if self.vertical {
@@ -446,6 +535,23 @@ impl Archetype for Range {
             "step" => self.step = n()?.max(0.0),
             "page_step" => self.page_step = Some(n()?.abs()),
             "handle_size" => self.handle_size = n()?.max(0.0),
+            "drag_mode" => {
+                self.drag_mode = match text(Some(value)) {
+                    Some("linear") => DragMode::Linear,
+                    Some("vertical") => DragMode::Vertical,
+                    Some("angular") => DragMode::Angular,
+                    _ => return Err("drag_mode is linear, vertical or angular".into()),
+                }
+            }
+            "drag_travel" => self.drag_travel = n()?.max(1.0),
+            "angle_from" => {
+                self.angle_from = n()?;
+                self.fields_into(&mut effects);
+            }
+            "angle_sweep" => {
+                self.angle_sweep = n()?;
+                self.fields_into(&mut effects);
+            }
             "snap" => {
                 self.snap = match text(Some(value)) {
                     Some("none") => Snap::None,
@@ -500,6 +606,22 @@ mod tests {
             .iter()
             .find(|(n, _)| n == name)
             .map(|(_, a)| a)
+    }
+
+    #[test]
+    fn a_knob_turns_by_dragging_up_or_round() {
+        let mut knob = range(&[("drag_mode", "vertical".into()), ("value", 0.5.into())]);
+        // The press does not jump; a hundred pixels up is half the travel.
+        let effects = knob.handle("pressed", &[5.0.into(), 150.0.into(), 40.0.into(), 40.0.into()]).unwrap();
+        assert_eq!(signal(&effects, "moved"), None);
+        knob.handle("dragged", &[5.0.into(), 50.0.into(), 40.0.into(), 40.0.into()]).unwrap();
+        assert!((knob.values[0] - 1.0).abs() < 1e-9);
+        let mut dial = range(&[("drag_mode", "angular".into())]);
+        // Straight up is the middle of a 270-degree sweep from -135.
+        dial.handle("pressed", &[20.0.into(), 0.0.into(), 40.0.into(), 40.0.into()]).unwrap();
+        assert!((dial.values[0] - 0.5).abs() < 1e-9);
+        let angle = dial.state().into_iter().find(|(k, _)| k == "angle").map(|(_, v)| v);
+        assert_eq!(angle, Some(0.0.into()));
     }
 
     #[test]
