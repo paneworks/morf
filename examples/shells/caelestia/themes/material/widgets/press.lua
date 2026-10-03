@@ -551,4 +551,77 @@ return function(S, theme, M)
       ink = function() return C().onSecondaryContainer end, glyph = 22, gap = 10,
       pressed = function() return 14 end, level = 1, hover_level = 2 })
   end
+
+  -- ------------------------------------------------------------ holding --
+
+  --- A hold button (a press that counts only once held for `t.hold` ms):
+  --- a tonal pill whose corners tighten on the shape spring while it is
+  --- held, the error container (`tone = "accent"`: the primary's) sweeping
+  --- across it -- one drawing slid along -- and M3's circular indicator
+  --- round its icon, a distance-field wedge whose angle runs over the hold.
+  --- Let go early, both drain back; held to the end, the icon's disc
+  --- morphs into a cookie with a tick on it until it is let go.
+  function S.hold_button(t, spec)
+    local accent = spec.tone == "accent"
+    local function tone() local c = C() return accent and c.primary or c.error end
+    local function on_tone() local c = C() return accent and c.onPrimary or c.onError end
+    local function container() local c = C() return accent and c.primaryContainer or c.errorContainer end
+    local function on_container() local c = C() return accent and c.onPrimaryContainer or c.onErrorContainer end
+    local done = morf.signal("caelestia.material.hold." .. tostring({}), false)
+    local function radius() local h = H(t) return t.holding and h * 0.3 or h / 2 end
+    local sweep = ui.Rect { anchors = { fill = true }, radius = radius, color = container,
+      translate_x = function() return -W(t) end, behavior = { radius = bounce() } }
+    local fill = ui.SdfShape { shape = "pie", anchors = { fill = true }, operation = "intersect", angle = 0, rotation = 0 }
+    local D = 28
+    local dial = ui.Item { width = D, height = D,
+      ui.Sdf { anchors = { fill = true }, fill_color = function() return C().onSurfaceVariant:alpha(0.22) end,
+        ui.SdfShape { shape = "ring", anchors = { fill = true }, thickness = 3 } },
+      ui.Sdf { anchors = { fill = true }, fill_color = tone,
+        ui.SdfShape { shape = "ring", anchors = { fill = true }, thickness = 3 }, fill },
+      ui.Sdf { anchors = { fill = true, margins = 1 }, fill_color = tone,
+        opacity = function() return done:get() and 1 or 0 end, behavior = { opacity = fade() },
+        M.sdf_shape { anchors = { fill = true }, shape = function() return done:get() and "cookie9" or "circle" end,
+          duration = 420 } },
+      M.icon(function() return done:get() and "check" or (spec.icon or "delete") end, 18,
+        function() return done:get() and on_tone() or C().onSurfaceVariant end,
+        { anchors = { center_in = true } }) }
+    local running, was, counted, settle_timer = nil, false, false, nil
+    local function play(to, duration, easing)
+      if running then running:stop() end
+      running = morf.animation.play { { parallel = {
+        { node = fill, property = "angle", to = 360 * to, duration = duration, easing = easing },
+        { node = fill, property = "rotation", to = 180 * to, duration = duration, easing = easing },
+        { node = sweep, property = "translate_x", to = (to - 1) * W(t), duration = duration, easing = easing } } },
+        on_finished = function() running = nil end }
+    end
+    morf.effect("caelestia.material.hold.watch." .. tostring(dial), function()
+      local holding, down = t.holding, t.down
+      if holding and not was then
+        if settle_timer then settle_timer:cancel() settle_timer = nil end
+        done:set(false)
+        play(1, math.max(1, t.hold or 800), "linear")
+      elseif was and not holding then
+        if down then counted = true done:set(true) else play(0, 300, theme.ease.standard) end
+      elseif counted and not down then
+        counted = false
+        settle_timer = morf.timer(600, function()
+          settle_timer = nil
+          done:set(false)
+          play(0, 360, theme.ease.standard)
+        end, false)
+      end
+      was = holding
+    end, { owner = dial })
+    local function ink() return done:get() and on_container() or C().onSurface end
+    return full {
+      background = ui.Rect { anchors = { fill = true }, radius = radius, opacity = dim(t),
+        color = layer(t, function() return C().surfaceContainerHighest end, function() return C().onSurface end),
+        behavior = { radius = bounce(), color = fade() },
+        ui.ClipRect { anchors = { fill = true }, radius = radius, color = "transparent",
+          behavior = { radius = bounce() }, sweep } },
+      content = ui.Row { anchors = { center_in = true }, gap = 10, align = "center", dial,
+        spec.label and M.text { text = spec.label, font_size = theme.size.normal, font_weight = 500, color = ink } or nil },
+      indicator = ring(t, function() return radius() end),
+    }
+  end
 end

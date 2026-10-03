@@ -378,4 +378,48 @@ return function(S, theme, M)
           color = function() local p = P() return t.accepting and p.accent_ink or p.ink_dim end } },
     }
   end
+
+  -- ------------------------------------------------------ slide to confirm --
+
+  --- Slide to confirm: a grey pill with its prompt in the middle, fading as
+  --- the knob -- an accent disc, a distance field that squashes a touch as
+  --- it runs -- is slid across; the accent tint follows it in, one drawing
+  --- slid along. Let go short, the knob springs home; all the way, it
+  --- shows a tick for a moment.
+  function S.slide_to_confirm(t, spec)
+    local K = t.knob or 52
+    local function along() return (t.value or 0) * (t.extent or 0) end
+    local follow = M.spring(700, 53)
+    local function radius() return H(t) / 2 end
+    return {
+      background = ui.Rect { anchors = { fill = true }, radius = radius,
+        opacity = function() return t.enabled == false and 0.5 or 1 end,
+        color = function() local p = P() return p.ink:alpha(t.hovered and p.wash.raised_hover or p.wash.button) end,
+        border_width = function() return P().strong and 1 or 0 end, border_color = function() return P().border end,
+        behavior = { color = quick() },
+        ui.ClipRect { anchors = { fill = true }, radius = radius, color = "transparent",
+          ui.Rect { anchors = { fill = true }, radius = radius,
+            color = function() local p = P() return p.accent:alpha(p.strong and 0.4 or (p.dark and 0.3 or 0.18)) end,
+            translate_x = function() return along() + K - W(t) end, behavior = { translate_x = follow } } } },
+      content = M.text { anchors = { fill = true, left_margin = K, right_margin = 12 }, horizontal_alignment = "center",
+        vertical_alignment = "center", elide = "right", text = function()
+          if t.done then return spec.done_label or "Done" end
+          return spec.label or "Slide to confirm"
+        end,
+        font_weight = 700, color = function() return P().ink_dim end,
+        opacity = function() return t.done and 1 or math.max(0, 1 - (t.value or 0) * 1.8) end,
+        behavior = { opacity = quick() } },
+      handle = ui.Item { x = 0, y = 0, width = K, height = function() return H(t) end,
+        translate_x = along, behavior = { translate_x = follow }, stretch = M.STRETCH,
+        ui.Sdf { anchors = { fill = true, margins = 4 },
+          fill_color = function() local p = P() return t.down and p.accent:mix(p.shade, 0.15) or p.accent end,
+          shadow_color = function() local p = P() return p.shade:alpha(p.dark and 0.7 or 0.5) end,
+          shadow_blur = 4, shadow_offset_y = 1,
+          ui.SdfShape { shape = "circle", anchors = { fill = true } } },
+        M.icon(function() return t.done and "check" or (spec.icon or "chevron_right") end, 22,
+          function() return P().on_accent end, { anchors = { center_in = true }, font_weight = 700 }) },
+      -- (The keyboard's ring: Return confirms.)
+      drop_indicator = ring(t, radius),
+    }
+  end
 end

@@ -334,4 +334,81 @@ return function(S, theme, M)
   end
 
   for widget, look in pairs(LOOK) do S[widget] = look end
+
+  -- ------------------------------------------------------ shortcut recorder --
+
+  -- A chord's part as a key's legend: "ctrl" Ctrl, "k" K, "Return" Enter.
+  local LEGEND = { ctrl = "Ctrl", shift = "Shift", alt = "Alt", super = "Super", Return = "Enter", space = "Space",
+    Escape = "Esc", BackSpace = "Backspace", Delete = "Del", Page_Up = "PgUp", Page_Down = "PgDn",
+    Left = "←", Right = "→", Up = "↑", Down = "↓" }
+  local function legend(part)
+    if LEGEND[part] then return LEGEND[part] end
+    if #part == 1 then return part:upper() end
+    return (part:gsub("_", " "))
+  end
+  local function chord_parts(text)
+    local out = {}
+    text = tostring(text or "")
+    -- (The last part may itself be "+": "ctrl++".)
+    local body, plus = text:match("^(.-)%+(%+)$")
+    if plus then text = body end
+    for part in text:gmatch("[^+]+") do out[#out + 1] = part end
+    if plus then out[#out + 1] = "+" end
+    return out
+  end
+
+  --- A shortcut recorder: the grey well, the chord in it as keycaps --
+  --- light keys standing on their shade -- rebuilt only when it changes;
+  --- focused and empty, "Press keys…"; a chord another action has
+  --- (`conflicts`) edges the well in the warning tone and says so at the
+  --- end. The archetype captures; Escape gives the chord back, Backspace
+  --- clears it.
+  function S.shortcut_recorder(t, spec)
+    local function box() return math.max(0, (t.height or 0) - foot(spec)) end
+    local caps = ui.Row { x = 10, gap = 6, align = "center",
+      y = function() return math.floor((box() - 28) / 2) end, height = 28 }
+    local made, shown = {}, nil
+    morf.effect("kit.default.recorder." .. tostring(caps), function()
+      local text = t.text or ""
+      if text == shown then return end
+      shown = text
+      for _, node in ipairs(made) do ui.destroy(node, true) end
+      made = {}
+      for i, part in ipairs(chord_parts(text)) do
+        local label = M.text { text = legend(part), anchors = { center_in = true }, font_size = theme.size.small,
+          font_weight = 700, color = function() return P().ink end }
+        made[i] = ui.Rect { height = 26, radius = R.small,
+          width = function() return math.max(26, (label.layout_width or 0) + 16) end,
+          color = function() local p = P() return p.dark and p.ink:alpha(0.12) or p.view end,
+          border_width = 1, border_color = function() local p = P() return p.strong and p.border or p.border:alpha(0.9) end,
+          shadow_color = function() local p = P() return p.shade:alpha(p.dark and 1 or 0.9) end, shadow_offset_y = 2,
+          scale = 1, enter = { scale = 0.6, opacity = 0 },
+          behavior = { scale = M.spring(520, 22), opacity = quick() },
+          label }
+        ui.reparent(made[i], caps)
+      end
+    end, { owner = caps })
+    local function warned() return (t.conflict or "") ~= "" end
+    return {
+      background = ui.Item { anchors = { fill = true },
+        well(t, spec, { edge = function()
+          local p = P()
+          if warned() then return p.warning end
+          return p.strong and p.border or p.border:alpha(0)
+        end }),
+        caps },
+      placeholder = M.text { x = 12, height = 20, y = function() return math.floor((box() - 20) / 2) end,
+        text = function() return t.focused and "Press keys…" or (spec.placeholder or "None") end,
+        color = function() return P().ink_dim end,
+        opacity = function() return (t.text or "") == "" and 1 or 0 end, behavior = { opacity = quick() } },
+      trailing = ui.Row { anchors = { right = true, right_margin = 12 }, gap = 4, align = "center", height = 20,
+        y = function() return math.floor((box() - 20) / 2) end,
+        opacity = function() return warned() and 1 or 0 end, behavior = { opacity = quick() },
+        M.icon("warning", 18, function() return P().warning_ink end),
+        M.text { text = function() return t.conflict or "" end, font_size = theme.size.small, font_weight = 700,
+          color = function() return P().warning_ink end } },
+      error = ring(t, spec),
+      counter = ui.Item {},
+    }
+  end
 end

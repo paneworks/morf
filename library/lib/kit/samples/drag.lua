@@ -262,4 +262,12 @@ function M.drop_zone(_, widgets)
   return ui.Item { width = 280, height = 220, idle, hot }
 end
 
+function M.slide_to_confirm(kit, widgets)
+  return ui.Item { width = 280, height = 220,
+    widgets.slide_to_confirm { x = 0, y = 60, width = 280, height = 56, label = "Slide to power off",
+      icon = "power_settings_new", accessible_name = "Power off" },
+    kit.text { x = 0, y = 136, width = 280, horizontal_alignment = "center", text = "Return confirms",
+      opacity = 0.6 } }
+end
+
 return M

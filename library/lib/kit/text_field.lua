@@ -27,7 +27,7 @@ local CONTROL = { x = true, y = true, z = true, anchors = true, visible = true, 
 local SETTINGS = { text = false, placeholder = false, echo = true, read_only = false, max_length = false,
   validator = true, minimum = true, maximum = true, required = true, revert_on_escape = true, inset = true,
   clear = true, reveal = true, widget = true, on_accepted = true, on_escape = true, on_edited = true,
-  on_invalid = true, on_focus_changed = true,
+  on_invalid = true, on_focus_changed = true, capture = true, on_captured = true, conflicts = true,
   -- What the skin draws around the input: a well, a floating `label`, a
   -- `supporting` line under it, a leading `icon`, a `unit`, `tags` as chips.
   well = true, label = true, supporting = true, icon = true, unit = true, tags = true }
@@ -45,6 +45,8 @@ local DEFAULTS = {
   numeric_entry = { validator = "number" }, search = { clear = true },
   otp = { max_length = 6, validator = "integer" },
   text_area = { multiline = true, wrap = true, vertical_alignment = "top" },
+  -- Takes a key chord, not text: shown as keycaps.
+  shortcut_recorder = { capture = true },
 }
 
 function M.make(widget, spec)
@@ -89,8 +91,36 @@ function M.make(widget, spec)
   settings.on_invalid = spec.on_invalid
   settings.input = input
   control_props.focus_policy = "none"
-  root, t, ctl = control.make("TextField", widget, settings,
-    { children = { input }, props = control_props, voice = input })
+  local extra = { children = { input }, props = control_props, voice = input }
+  if spec.capture then
+    -- A recorder is not typed into: the input stays out of sight and out of
+    -- reach, and the control itself takes focus and hands every key to the
+    -- archetype, which makes the chord (`on_captured(chord)`). The skin
+    -- draws `t.text` as keycaps, and `t.conflict` -- what `conflicts(chord)`
+    -- said of it -- as a warning.
+    input.visible = false
+    input.focus_policy = "none"
+    control_props.focus_policy = "strong"
+    control_props.cursor = control_props.cursor or "pointer"
+    control_props.on_key_pressed = function(_, text, modifiers, _, name)
+      if not ctl then return false end
+      -- (Tab alone still leaves: the archetype lets it go, and so does this.)
+      if (name == "Tab" or name == "ISO_Left_Tab") and (modifiers or "") == "" then return false end
+      ctl.send("key", name or "", modifiers or "", text or "")
+      return true
+    end
+    settings.on_captured = spec.on_captured
+    extra.voice = nil
+    extra.state = { conflict = "" }
+  end
+  root, t, ctl = control.make("TextField", widget, settings, extra)
+  if spec.capture and spec.conflicts then
+    morf.effect("kit.text_field.conflict." .. ctl.id, function()
+      local chord = t.text or ""
+      local said = chord ~= "" and spec.conflicts(chord) or nil
+      t.conflict = said and (type(said) == "string" and said or "In use") or ""
+    end, { owner = root })
+  end
   -- A revealed password shows its text.
   morf.effect("kit.text_field.echo." .. ctl.id, function()
     if spec.echo == "password" then input.password = t.echo == "password" end

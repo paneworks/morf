@@ -586,4 +586,163 @@ return function(S, theme, M)
       end,
     })
   end
+
+  -- ------------------------------------------------------- on a circle --
+
+  --- The angle the current entry's sector points at, turning the shorter
+  --- way round from where it was: a binding for a highlight's rotation.
+  local function heading(t)
+    local at = 0
+    return function()
+      local n = math.max(1, t.count or 1)
+      if (t.current or 0) < 1 then return at end
+      local target = (t.current - 1) * 360 / n
+      at = at + ((target - at) + 180) % 360 - 180
+      return at
+    end
+  end
+  local function size_of(t) return 2 * (t.outer or 110) end
+  local function current_label(t, spec)
+    return function()
+      local items = spec.items
+      if type(items) == "function" then items = items() end
+      local v = (items or {})[t.current or 0]
+      return v and label_of(v) or ""
+    end
+  end
+
+  --- A radial menu: a card-toned disc on a hairline, an accent-tinted
+  --- sector (one distance-field wedge, drawn once) that turns on a spring to
+  --- the entry pointed at, its icons round the rim, and the entry's name in
+  --- the hub.
+  function S.radial_menu(t, spec)
+    local D = size_of(t)
+    return delegated(spec, {
+      background = ui.Item { anchors = { fill = true },
+        ui.Sdf { anchors = { fill = true },
+          fill_color = function() return P().card end,
+          shadow_color = function() local p = P() return p.shade:alpha(p.dark and 0.6 or 0.5) end,
+          shadow_blur = 6, shadow_offset_y = 1,
+          stroke_color = function() local p = P() return p.strong and p.border or p.border:alpha(0.9) end,
+          stroke_width = 1,
+          ui.SdfShape { shape = "circle", anchors = { fill = true, margins = 1 } } } },
+      indicator = ui.Item { anchors = { fill = true },
+        ui.Item { anchors = { fill = true }, rotation = heading(t), behavior = { rotation = M.spring(380, 30) },
+          opacity = function() return (t.current or 0) > 0 and 1 or 0 end,
+          ui.Sdf { anchors = { fill = true, margins = 4 },
+            fill_color = function() local p = P() return p.accent:alpha(p.strong and 0.35 or (p.dark and 0.3 or 0.16)) end,
+            ui.SdfShape { shape = "pie", anchors = { fill = true },
+              angle = function() return 360 / math.max(1, t.count or 1) end },
+            ui.SdfShape { shape = "circle", anchors = { center_in = true }, operation = "subtract",
+              width = function() return 2 * (t.inner or 36) + 4 end, height = function() return 2 * (t.inner or 36) + 4 end } } },
+        -- The hub: the view's tone, the keyboard's ring round it.
+        ui.Rect { anchors = { center_in = true }, width = 2 * (t.inner or 36) - 4, height = 2 * (t.inner or 36) - 4,
+          radius = (t.inner or 36) - 2,
+          color = function() local p = P() return p.dark and p.ink:alpha(0.08) or p.view end,
+          border_width = function() return t.visual_focus and 2 or 1 end,
+          border_color = function() local p = P() return t.visual_focus and focus_color() or (p.strong and p.border or p.border:alpha(0.8)) end,
+          M.text { anchors = { center_in = true }, width = 2 * (t.inner or 36) - 12, horizontal_alignment = "center",
+            elide = "right", text = current_label(t, spec), font_size = theme.size.small, font_weight = 700,
+            color = function() return P().ink end } } },
+      item = function(_, value, s)
+        local glyph = icon_of(value)
+        local function ink() local p = P() return s.current() and p.accent_ink or p.ink end
+        local look = ui.Item { anchors = { fill = true },
+          scale = function() return s.current() and 1.12 or 1 end, behavior = { scale = M.spring(520, 30) } }
+        if glyph then
+          ui.reparent(M.icon(glyph, 22, ink, { anchors = { center_in = true }, fill = s.current }), look)
+        else
+          ui.reparent(caption(label_of(value), s, { anchors = { center_in = true }, color = ink }), look)
+        end
+        return look
+      end,
+    })
+  end
+
+  --- A pie menu: a raised disc with hairlines between its sectors, the
+  --- entry pointed at filled with the accent (one wedge, turned to it), each
+  --- entry's icon over its name, and a hub to let go in. It grows in from
+  --- the pointer when it opens.
+  function S.pie_menu(t, spec)
+    local D = size_of(t)
+    local inner = t.inner or 40
+    local lines = ui.Item { anchors = { fill = true } }
+    local seen, made = nil, {}
+    morf.effect(key("pie.lines"), function()
+      local n = math.max(1, t.count or 1)
+      if n == seen then return end
+      seen = n
+      for _, child in ipairs(made) do ui.destroy(child, true) end
+      made = {}
+      for k = 1, n do
+        made[k] = ui.Item { anchors = { fill = true }, rotation = (k - 0.5) * 360 / n,
+          ui.Rect { x = D / 2 - 0.5, y = 6, width = 1, height = D / 2 - inner - 6,
+            color = function() local p = P() return p.strong and p.border or p.border:alpha(0.9) end } }
+        ui.reparent(made[k], lines)
+      end
+    end, { owner = lines })
+    local holder = ui.Item { anchors = { fill = true } }
+    local grow = ui.Item { anchors = { fill = true }, holder }
+    morf.effect(key("pie.open"), function()
+      if t.open then
+        morf.animation.play { { parallel = {
+          { node = grow, property = "scale", from = 0.6, to = 1, duration = theme.duration.normal or 250, easing = "out_cubic" },
+          { node = grow, property = "opacity", from = 0, to = 1, duration = theme.duration.small or 150 } } } }
+      end
+    end, { owner = grow })
+    ui.reparent(ui.Sdf { anchors = { fill = true },
+      fill_color = function() return P().raised end,
+      shadow_color = function() local p = P() return p.shade:alpha(p.dark and 0.8 or 0.6) end,
+      shadow_blur = 14, shadow_offset_y = 3,
+      stroke_color = function() local p = P() return p.strong and p.border or p.border:alpha(0.7) end, stroke_width = 1,
+      ui.SdfShape { shape = "circle", anchors = { fill = true, margins = 8 } } }, holder)
+    ui.reparent(ui.Item { anchors = { fill = true }, rotation = heading(t), behavior = { rotation = M.spring(420, 34) },
+      opacity = function() return (t.current or 0) > 0 and 1 or 0 end,
+      ui.Sdf { anchors = { fill = true, margins = 9 }, fill_color = function() return P().accent end,
+        ui.SdfShape { shape = "pie", anchors = { fill = true },
+          angle = function() return 360 / math.max(1, t.count or 1) end },
+        ui.SdfShape { shape = "circle", anchors = { center_in = true }, operation = "subtract",
+          width = 2 * inner, height = 2 * inner } } }, holder)
+    ui.reparent(lines, holder)
+    ui.reparent(ui.Rect { anchors = { center_in = true }, width = 2 * inner - 12, height = 2 * inner - 12,
+      radius = inner - 6,
+      color = function() local p = P() return p.ink:alpha(p.wash.button) end,
+      border_width = function() return t.visual_focus and 2 or 0 end, border_color = focus_color,
+      M.icon("close", 18, function() return P().ink_dim end, { anchors = { center_in = true } }) }, holder)
+    return delegated(spec, {
+      background = grow,
+      indicator = nothing(),
+      item = function(_, value, s)
+        local glyph = icon_of(value)
+        local function ink() local p = P() return s.current() and p.on_accent or p.ink end
+        return ui.Item { anchors = { fill = true },
+          ui.Column { anchors = { center_in = true }, gap = 2, align = "center",
+            glyph and M.icon(glyph, 20, ink) or nil,
+            caption(label_of(value), s, { color = ink }) } }
+      end,
+    })
+  end
+
+  -- ----------------------------------------------------------- tumbler --
+
+  --- A tumbler: the entries fold over a drum (the glue's), the centre row
+  --- under the selected wash between two hairlines; the entry there in
+  --- the ink and bold, the rest dim.
+  function S.tumbler(t, spec)
+    local row = t.row or 36
+    return delegated(spec, {
+      background = nothing(),
+      indicator = ui.Item { anchors = { left = true, right = true, vertical_center = true }, height = row,
+        ui.Rect { anchors = { fill = true }, radius = R.small,
+          color = function() local p = P() return p.ink:alpha(p.wash.selected) end,
+          border_width = function() return t.visual_focus and 2 or (P().strong and 1 or 0) end,
+          border_color = function() local p = P() return t.visual_focus and focus_color() or p.border end } },
+      item = function(_, value, s)
+        return M.text { anchors = { fill = true }, text = label_of(value), horizontal_alignment = "center",
+          vertical_alignment = "center", font_size = theme.size.larger,
+          font_weight = function() return s.current() and 700 or 400 end,
+          color = function() local p = P() return s.current() and p.ink or p.ink_dim end }
+      end,
+    })
+  end
 end

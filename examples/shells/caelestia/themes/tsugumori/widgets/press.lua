@@ -712,4 +712,85 @@ return function(S, theme, M, hud)
       badge = feedback(t, spec.id),
     }
   end
+
+  -- ------------------------------------------------------------ holding --
+
+  --- A hold button (a press that counts only once held for `t.hold` ms):
+  --- a square plate in a hairline, its caption in caps, a square register
+  --- round the icon that a clock wipe fills -- one distance-field frame cut
+  --- by a wedge whose angle runs over the hold -- and a hatched run in the
+  --- error tone (`tone = "accent"`: the primary) whose clip runs across
+  --- behind a scan line while the stripes stay put. Let go early, both run
+  --- back; held to the end, the register fills solid with a tick.
+  function S.hold_button(t, spec)
+    local bw, bh = box_of(spec, 160, 40)
+    local function tone() return spec.tone == "accent" and C.primary or C.error end
+    local function on_tone() return spec.tone == "accent" and C.onPrimary or C.onError end
+    local done = morf.signal("tsugumori.hold." .. tostring({}), false)
+    local stripes_node = stripes.box { width = bw, height = bh, gap = 7, weight = 2,
+      color = function() return tone():alpha(.3) end }
+    stripes_node.translate_x = bw
+    local mover = ui.Item { anchors = { fill = true }, translate_x = -bw,
+      ui.Item { anchors = { fill = true }, clip = true, stripes_node },
+      ui.Rect { anchors = { right = true, top = true, bottom = true }, width = 2, color = tone } }
+    local fill = ui.SdfShape { shape = "pie", anchors = { fill = true, margins = -6 }, operation = "intersect",
+      angle = 0, rotation = 0 }
+    local D = 24
+    local function frame_shapes(extra)
+      local list = { ui.SdfShape { shape = "box", anchors = { fill = true }, radius = 0 },
+        ui.SdfShape { shape = "box", anchors = { fill = true, margins = 3 }, radius = 0, operation = "subtract" } }
+      if extra then list[#list + 1] = extra end
+      return list
+    end
+    local track_props = { anchors = { fill = true }, fill_color = function() return stroke(C, "hover") end }
+    for i, shape in ipairs(frame_shapes()) do track_props[i] = shape end
+    local fill_props = { anchors = { fill = true }, fill_color = tone }
+    for i, shape in ipairs(frame_shapes(fill)) do fill_props[i] = shape end
+    local dial = ui.Item { width = D, height = D,
+      ui.Sdf(track_props), ui.Sdf(fill_props),
+      ui.Rect { anchors = { fill = true }, color = tone, opacity = function() return done:get() and 1 or 0 end,
+        behavior = { opacity = quick } },
+      M.icon(function() return done:get() and "check" or (spec.icon or "delete") end, 16,
+        function() return done:get() and on_tone() or C.onSurface end, { anchors = { center_in = true } }) }
+    local running, was, counted, settle_timer = nil, false, false, nil
+    local function play(to, duration, easing)
+      if running then running:stop() end
+      running = morf.animation.play { { parallel = {
+        { node = fill, property = "angle", to = 360 * to, duration = duration, easing = easing },
+        { node = fill, property = "rotation", to = 180 * to, duration = duration, easing = easing },
+        { node = mover, property = "translate_x", to = (to - 1) * bw, duration = duration, easing = easing },
+        { node = stripes_node, property = "translate_x", to = (1 - to) * bw, duration = duration, easing = easing } } },
+        on_finished = function() running = nil end }
+    end
+    morf.effect("tsugumori.hold.watch." .. tostring(dial), function()
+      local holding, down = t.holding, t.down
+      if holding and not was then
+        if settle_timer then settle_timer:cancel() settle_timer = nil end
+        done:set(false)
+        play(1, math.max(1, t.hold or 800), "linear")
+      elseif was and not holding then
+        if down then counted = true done:set(true) else play(0, 220, "out_expo") end
+      elseif counted and not down then
+        counted = false
+        settle_timer = morf.timer(500, function()
+          settle_timer = nil
+          done:set(false)
+          play(0, 260, "out_expo")
+        end, false)
+      end
+      was = holding
+    end, { owner = dial })
+    return full {
+      background = ui.Item { anchors = { fill = true }, opacity = dim(t),
+        ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainer end },
+        ui.Item { anchors = { fill = true }, clip = true, mover },
+        ui.Rect { anchors = { fill = true }, color = "transparent", border_width = 1,
+          border_color = function() return t.holding and tone() or stroke(C, t.hovered and "hover" or "idle") end,
+          behavior = { border_color = quick } } },
+      content = ui.Row { anchors = { center_in = true }, gap = 10, align = "center", dial,
+        spec.label and M.text { text = tostring(spec.label):upper(), font_size = theme.typography.menu, font_weight = 500,
+          color = function() return C.onSurface end } or nil },
+      badge = feedback(t, spec.id),
+    }
+  end
 end

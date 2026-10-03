@@ -373,4 +373,47 @@ return function(S, theme, M, hud)
           color = function() return t.accepting and C.primary or C.onSurfaceVariant end } },
     }
   end
+
+  -- ------------------------------------------------------ slide to confirm --
+
+  --- Slide to confirm: a square channel in a hairline, its prompt in caps
+  --- fading as the knob -- a primary block with a double chevron -- is
+  --- slid across; a hatched run follows it in (its clip moves, the stripes
+  --- stay put). Let go short, the knob shutters home; all the way, it
+  --- shows a tick for a moment.
+  function S.slide_to_confirm(t, spec)
+    local K = t.knob or 52
+    local bw, bh = num(spec.width, 280), num(spec.height, 52)
+    local function along() return (t.value or 0) * (t.extent or 0) end
+    local function offset() return along() + K - bw end
+    local run = ui.Item { anchors = { fill = true }, translate_x = function() return -offset() end,
+      behavior = { translate_x = snap },
+      stripes.box { width = bw, height = bh, gap = 7, weight = 2, color = function() return C.primary:alpha(.3) end } }
+    return {
+      background = ui.Item { anchors = { fill = true },
+        opacity = function() return t.enabled == false and 0.4 or 1 end,
+        ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainer end },
+        ui.Item { anchors = { fill = true }, clip = true,
+          ui.Item { anchors = { fill = true }, translate_x = offset, behavior = { translate_x = snap },
+            ui.Item { anchors = { fill = true }, clip = true, run } } },
+        ui.Rect { anchors = { fill = true }, color = "transparent", border_width = 1,
+          border_color = function() return stroke(C, (t.hovered or t.active) and "hover" or "idle") end,
+          behavior = { border_color = quick } } },
+      content = M.text { anchors = { fill = true, left_margin = K, right_margin = 12 }, horizontal_alignment = "center",
+        vertical_alignment = "center", elide = "right",
+        text = function()
+          return tostring(t.done and (spec.done_label or "Done") or (spec.label or "Slide to confirm")):upper()
+        end,
+        font_size = theme.typography.menu, font_weight = 500, color = function() return C.onSurfaceVariant end,
+        opacity = function() return t.done and 1 or math.max(0, 1 - (t.value or 0) * 1.8) end,
+        behavior = { opacity = quick } },
+      handle = ui.Item { x = 0, y = 0, width = K, height = bh, translate_x = along, behavior = { translate_x = snap },
+        ui.Rect { anchors = { fill = true, margins = 4 }, color = function() return C.primary end,
+          ui.Rect { anchors = { fill = true, margins = 3 }, color = "transparent", border_width = 1,
+            border_color = function() return C.onPrimary:alpha(.35) end } },
+        M.icon(function() return t.done and "check" or "keyboard_double_arrow_right" end, 22,
+          function() return C.onPrimary end, { anchors = { center_in = true } }) },
+      drop_indicator = brackets(t, 7),
+    }
+  end
 end

@@ -34,6 +34,7 @@ local DEFAULTS = {
   sheet_handle = { mode = "move", axis = "y", cursor = "row_resize" },
   window_move = { mode = "move", axis = "both", cursor = "move" },
   drag_source = { mode = "transfer", axis = "both", cursor = "grab" },
+  slide_to_confirm = { mode = "confirm", axis = "x" },
 }
 
 -- The spring a followed drag eases with: stiff and critically damped, so
@@ -78,11 +79,30 @@ function M.make(widget, spec)
   local swipe_out = widget == "swipe_dismiss"
   local reveal = widget == "swipe_actions" and (spec.reveal or 128) or nil
   local pulling = widget == "pull_to_refresh"
+  local t, ctl, root
+  -- Slide to confirm: a knob (`knob` px, the height) runs the track's
+  -- width less its own; `t.done` is up for a moment after a confirm.
+  local confirming = widget == "slide_to_confirm"
+  if confirming then
+    local w, h = tonumber(spec.width) or 280, tonumber(spec.height) or 52
+    spec.width, spec.height = w, h
+    state.knob = tonumber(spec.knob) or h
+    if spec.extent == nil then spec.extent = math.max(1, w - state.knob) end
+    state.extent = spec.extent
+    state.done = false
+    local confirmed_given = spec.on_confirmed
+    local done_timer
+    spec.on_confirmed = function(...)
+      t.done = true
+      if done_timer then done_timer:cancel() end
+      done_timer = morf.timer(1200, function() done_timer = nil pcall(function() t.done = false end) end, false)
+      if confirmed_given then confirmed_given(...) end
+    end
+  end
   if swipe_out or reveal then
     state.gone, state.open = "", false
     if spec.swipe_distance == nil then spec.swipe_distance = reveal and math.floor(reveal * 0.4) or 80 end
   end
-  local t, ctl, root
   local REST = spec.pull_distance or 64
   local content
   -- (Not the node's: a handler lib.kit.control does not know goes to it.)

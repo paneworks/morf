@@ -368,4 +368,47 @@ return function(S, theme, M)
           color = function() local c = C() return t.accepting and c.onPrimaryContainer or c.onSurfaceVariant end } },
     }
   end
+
+  -- ------------------------------------------------------ slide to confirm --
+
+  --- Slide to confirm: a surfaceContainerHighest pill with its prompt,
+  --- which fades as the knob is slid; the knob is a primary disc that
+  --- morphs (one distance-field outline) into a cookie while it is carried
+  --- and squashes as it runs, the primary container following it in. Let
+  --- go short, it springs home; all the way, it turns sunny with a tick.
+  function S.slide_to_confirm(t, spec)
+    local K = t.knob or 52
+    local function along() return (t.value or 0) * (t.extent or 0) end
+    local follow = M.spring(600, 40)
+    local function radius() return H(t) / 2 end
+    return {
+      background = ui.Rect { anchors = { fill = true }, radius = radius,
+        opacity = function() return t.enabled == false and 0.38 or 1 end,
+        color = function()
+          local c = C()
+          return t.hovered and c.surfaceContainerHighest:mix(c.onSurface, 0.08) or c.surfaceContainerHighest
+        end,
+        behavior = { color = quick() },
+        ui.ClipRect { anchors = { fill = true }, radius = radius, color = "transparent",
+          ui.Rect { anchors = { fill = true }, radius = radius, color = function() return C().primaryContainer end,
+            translate_x = function() return along() + K - W(t) end, behavior = { translate_x = follow } } } },
+      content = M.text { anchors = { fill = true, left_margin = K, right_margin = 16 }, horizontal_alignment = "center",
+        vertical_alignment = "center", elide = "right",
+        text = function() return t.done and (spec.done_label or "Done") or (spec.label or "Slide to confirm") end,
+        font_size = theme.size.normal, font_weight = 500, color = function() return C().onSurfaceVariant end,
+        opacity = function() return t.done and 1 or math.max(0, 1 - (t.value or 0) * 1.8) end,
+        behavior = { opacity = quick() } },
+      handle = ui.Item { x = 0, y = 0, width = K, height = function() return H(t) end,
+        translate_x = along, behavior = { translate_x = follow }, stretch = M.STRETCH,
+        ui.Sdf { anchors = { fill = true, margins = 4 }, fill_color = function() return C().primary end,
+          shadow_color = function() return C().shadow:alpha(t.active and 0.3 or 0.18) end,
+          shadow_blur = function() return t.active and 8 or 3 end, shadow_offset_y = 1,
+          behavior = { shadow_blur = quick() },
+          M.sdf_shape { anchors = { fill = true },
+            shape = function() return t.done and "sunny" or (t.active and "cookie9" or "circle") end, duration = 380 } },
+        M.icon(function() return t.done and "check" or (spec.icon or "arrow_forward") end, 22,
+          function() return C().onPrimary end, { anchors = { center_in = true } }) },
+      drop_indicator = ring(t, radius),
+    }
+  end
 end

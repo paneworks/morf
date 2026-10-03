@@ -350,4 +350,80 @@ return function(S, theme, M, hud)
   end
 
   for widget, look in pairs(LOOK) do S[widget] = look end
+
+  -- ------------------------------------------------------ shortcut recorder --
+
+  local LEGEND = { ctrl = "Ctrl", shift = "Shift", alt = "Alt", super = "Super", Return = "Enter", space = "Space",
+    Escape = "Esc", BackSpace = "Bksp", Delete = "Del", Page_Up = "PgUp", Page_Down = "PgDn",
+    Left = "←", Right = "→", Up = "↑", Down = "↓" }
+  local function legend(part)
+    if LEGEND[part] then return LEGEND[part]:upper() end
+    return (part:gsub("_", " ")):upper()
+  end
+  local function chord_parts(text)
+    local out = {}
+    text = tostring(text or "")
+    local body, plus = text:match("^(.-)%+(%+)$")
+    if plus then text = body end
+    for part in text:gmatch("[^+]+") do out[#out + 1] = part end
+    if plus then out[#out + 1] = "+" end
+    return out
+  end
+
+  --- A shortcut recorder: a square field in a hairline that brightens with
+  --- focus and brackets that close in on it, the chord as square keycaps
+  --- -- plates on their own offset blocks, legends in caps -- rebuilt only
+  --- when it changes; "PRESS KEYS…" while it listens and is empty; a chord
+  --- another action has turns the frame to the alert and says so.
+  function S.shortcut_recorder(t, spec)
+    local function h() return box(t, spec) end
+    local function warned() return (t.conflict or "") ~= "" end
+    local caps = ui.Row { x = 12, gap = 8, align = "center", height = 30,
+      y = function() return math.floor((h() - 30) / 2) end }
+    local made, shown = {}, nil
+    morf.effect("tsugumori.recorder." .. tostring(caps), function()
+      local text = t.text or ""
+      if text == shown then return end
+      shown = text
+      for _, node in ipairs(made) do ui.destroy(node, true) end
+      made = {}
+      for i, part in ipairs(chord_parts(text)) do
+        local label = M.text { text = legend(part), anchors = { center_in = true }, font_size = theme.typography.menu,
+          font_weight = 500, color = function() return C.onSurface end }
+        local function w() return math.max(26, (label.layout_width or 0) + 16) end
+        made[i] = ui.Item { width = function() return w() + 2 end, height = 28,
+          ui.Rect { x = 2, y = 2, width = w, height = 26, color = function() return C.primary:alpha(.32) end },
+          ui.Rect { width = w, height = 26, color = function() return C.surfaceContainerHigh end,
+            border_width = 1, border_color = function() return stroke(C, "hover") end, label },
+          enter = { opacity = 0, translate_y = -4 }, opacity = 1, translate_y = 0,
+          behavior = { opacity = quick, translate_y = quick } }
+        ui.reparent(made[i], caps)
+      end
+    end, { owner = caps })
+    local function edge()
+      if warned() then return alert() end
+      return t.focused and C.primary or stroke(C, t.hovered and "hover" or "idle")
+    end
+    return {
+      background = ui.Item { anchors = { fill = true },
+        ui.Rect { anchors = { left = true, right = true, top = true }, height = h,
+          color = function() return C.surfaceContainer end,
+          border_width = 1, border_color = edge, behavior = { border_color = quick } },
+        caps },
+      placeholder = M.text { x = 14, height = 20, y = function() return math.floor((h() - 20) / 2) end,
+        text = function() return t.focused and "PRESS KEYS…" or tostring(spec.placeholder or "None"):upper() end,
+        font_size = theme.typography.menu, font_weight = 500, color = function() return C.onSurfaceVariant end,
+        opacity = function() return (t.text or "") == "" and 1 or 0 end, behavior = { opacity = quick } },
+      trailing = ui.Row { anchors = { right = true, right_margin = 12 }, gap = 6, align = "center", height = 20,
+        y = function() return math.floor((h() - 20) / 2) end,
+        opacity = function() return warned() and 1 or 0 end, behavior = { opacity = quick },
+        ui.Rect { width = 8, height = 8, color = alert },
+        M.text { text = function() return tostring(t.conflict or ""):upper() end, font_size = theme.typography.menu,
+          font_weight = 500, color = alert } },
+      error = ui.Item { anchors = { left = true, right = true, top = true }, height = h,
+        hud().corners { length = 7, weight = 2, color = function() return warned() and alert() or C.primary end,
+          opacity = function() return (t.focused or warned()) and 1 or 0 end } },
+      counter = ui.Item {},
+    }
+  end
 end

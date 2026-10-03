@@ -585,4 +585,76 @@ return function(S, theme, M)
       indicator = ring(t, function() return H(t) / 2 end),
     }
   end
+
+  -- ------------------------------------------------------------ holding --
+
+  --- A hold button (a press that counts only once held for `t.hold` ms):
+  --- the grey button, a ring round its icon that fills clockwise while it
+  --- is held -- one distance-field wedge whose angle runs over the hold --
+  --- and the destructive tint (`tone = "accent"`: the accent's) sweeping
+  --- across the ground with it, one drawing slid along. Let go early, both
+  --- drain back; held to the end, the icon turns to a tick until it is let
+  --- go. From the keyboard it acts at once, as the archetype says.
+  function S.hold_button(t, spec)
+    local function tone() local p = P() return spec.tone == "accent" and p.accent or p.destructive end
+    local function tone_ink() local p = P() return spec.tone == "accent" and p.accent_ink or p.error_ink end
+    local done = morf.signal("kit.default.hold." .. tostring({}), false)
+    local sweep = ui.Rect { anchors = { fill = true }, radius = R.small,
+      translate_x = function() return -W(t) end,
+      color = function() local p = P() return tone():alpha(p.strong and 0.4 or (p.dark and 0.32 or 0.2)) end }
+    local fill = ui.SdfShape { shape = "pie", anchors = { fill = true }, operation = "intersect", angle = 0, rotation = 0 }
+    local D = 26
+    local dial = ui.Item { width = D, height = D,
+      ui.Sdf { anchors = { fill = true }, fill_color = function() local p = P() return p.ink:alpha(p.strong and 0.5 or 0.16) end,
+        ui.SdfShape { shape = "ring", anchors = { fill = true }, thickness = 3 } },
+      ui.Sdf { anchors = { fill = true }, fill_color = tone,
+        ui.SdfShape { shape = "ring", anchors = { fill = true }, thickness = 3 }, fill },
+      ui.Item { anchors = { center_in = true }, width = 18, height = 18,
+        scale = function() return done:get() and 1.15 or 1 end, behavior = { scale = M.spring(520, 18) },
+        M.icon(function() return done:get() and "check" or (spec.icon or "delete") end, 16,
+          function() return done:get() and tone_ink() or P().ink end, { anchors = { center_in = true }, font_weight = 700 }) } }
+    local running, was, counted, settle_timer = nil, false, false, nil
+    local function play(to, duration, easing)
+      if running then running:stop() end
+      running = morf.animation.play { { parallel = {
+        { node = fill, property = "angle", to = 360 * to, duration = duration, easing = easing },
+        { node = fill, property = "rotation", to = 180 * to, duration = duration, easing = easing },
+        { node = sweep, property = "translate_x", to = (to - 1) * W(t), duration = duration, easing = easing } } },
+        on_finished = function() running = nil end }
+    end
+    morf.effect("kit.default.hold.watch." .. tostring(dial), function()
+      local holding, down = t.holding, t.down
+      if holding and not was then
+        if settle_timer then settle_timer:cancel() settle_timer = nil end
+        done:set(false)
+        play(1, math.max(1, t.hold or 800), "linear")
+      elseif was and not holding then
+        if down then counted = true done:set(true) else play(0, 260, "out_cubic") end
+      elseif counted and not down then
+        counted = false
+        -- Let go after it counted: the tick stays a moment, then all drains.
+        settle_timer = morf.timer(500, function()
+          settle_timer = nil
+          done:set(false)
+          play(0, 320, "out_cubic")
+        end, false)
+      end
+      was = holding
+    end, { owner = dial })
+    local function ink() return P().ink end
+    return full {
+      background = ui.Rect { anchors = { fill = true }, radius = R.small, opacity = dim(t),
+        color = function()
+          local p = P()
+          if t.down then return p.ink:alpha(p.wash.checked) end
+          return p.ink:alpha(t.hovered and p.wash.raised_hover or p.wash.button)
+        end,
+        border_width = function() return P().strong and 1 or 0 end, border_color = function() return P().border end,
+        behavior = { color = quick() },
+        ui.ClipRect { anchors = { fill = true }, radius = R.small, color = "transparent", sweep } },
+      content = ui.Row { anchors = { center_in = true }, gap = 8, align = "center", dial,
+        spec.label and M.text { text = spec.label, font_weight = 700, color = ink } or nil },
+      indicator = ring(t, R.small),
+    }
+  end
 end

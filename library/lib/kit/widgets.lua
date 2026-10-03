@@ -36,6 +36,8 @@ local PRESS = {
   forward = { width = 40, height = 40 },
   fab = { width = 56, height = 56 },
   extended_fab = { height = 56 },
+  -- A press that must be held to count: a delete that asks to be meant.
+  hold_button = { hold = 800 },
 }
 local RANGE = {
   vertical_slider = { orientation = "vertical" },
@@ -93,6 +95,12 @@ local SELECTION = {
   day_grid = { orientation = "grid", columns = 7, item_width = 40, item_height = 36 },
   transfer_side = { orientation = "vertical", mode = "range", item_width = 220, item_height = 36 },
   rating_items = { orientation = "horizontal", item_width = 36, item_height = 36 },
+  -- On a circle, item 1 at twelve o'clock (lib.kit.selection's geometries).
+  radial_menu = { geometry = "radial", wrap = true, size = 220, item_width = 48, item_height = 48 },
+  pie_menu = { geometry = "radial", wrap = true, size = 240, item_width = 64, item_height = 48 },
+  -- A drum of entries, five rows showing; it goes round.
+  tumbler = { geometry = "tumbler", orientation = "vertical", wrap = true, item_width = 72, item_height = 36,
+    rows = 5 },
 }
 
 local function with_defaults(widget, spec, defaults)
@@ -116,6 +124,9 @@ for _, widget in ipairs(contract.archetypes.Selection.widgets) do
     return (require("lib.kit.selection").make(widget, with_defaults(widget, spec, SELECTION)))
   end
 end
+-- A pie menu opens over everything else: its node and its handle
+-- (`open_at`, `close`, `attach`; lib.kit.selection's `pie`).
+M.pie_menu = function(spec) return require("lib.kit.selection").pie("pie_menu", with_defaults("pie_menu", spec, SELECTION)) end
 -- A popup widget makes a popup: `widgets.menu(spec)` returns its handle
 -- (lib.kit.popup), not a node -- it lives in the overlay layer.
 for _, widget in ipairs(contract.archetypes.Popup.widgets) do

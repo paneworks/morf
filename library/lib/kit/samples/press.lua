@@ -94,6 +94,9 @@ function M.repeat_button(_, w)
 end
 function M.back(_, w) return w.back { accessible_name = "Back", width = 40, height = 40 } end
 function M.forward(_, w) return w.forward { accessible_name = "Forward", width = 40, height = 40 } end
+function M.hold_button(_, w)
+  return w.hold_button { label = "Hold to delete", icon = "delete", width = 200, height = 44, hold = 800 }
+end
 
 M.span = {}
 

@@ -530,4 +530,171 @@ return function(S, theme, M, hud)
       end,
     })
   end
+
+  -- ------------------------------------------------------- on a circle --
+
+  --- The angle the current entry's sector points at, turning the shorter
+  --- way round: a binding for a highlight's rotation.
+  local function heading(t)
+    local at = 0
+    return function()
+      local n = math.max(1, t.count or 1)
+      if (t.current or 0) < 1 then return at end
+      local target = (t.current - 1) * 360 / n
+      at = at + ((target - at) + 180) % 360 - 180
+      return at
+    end
+  end
+  local function current_label(t, spec)
+    return function()
+      local items = spec.items
+      if type(items) == "function" then items = items() end
+      local v = (items or {})[t.current or 0]
+      return v and label_of(v):upper() or ""
+    end
+  end
+  -- The shutter the highlight turns on.
+  local turn = { duration = 260, easing = "out_expo" }
+
+  --- Ticks on the boundaries between `n` sectors of a disc `D` across:
+  --- rotated hairlines, `from` px in from the rim, `len` long; rebuilt only
+  --- when the count changes.
+  local function ticks(t, D, from, len, color, weight)
+    local holder = ui.Item { anchors = { fill = true } }
+    local seen, made = nil, {}
+    morf.effect(key("ticks"), function()
+      local n = math.max(1, t.count or 1)
+      if n == seen then return end
+      seen = n
+      for _, node in ipairs(made) do ui.destroy(node, true) end
+      made = {}
+      for k = 1, n do
+        made[k] = ui.Item { anchors = { fill = true }, rotation = (k - 0.5) * 360 / n,
+          ui.Rect { x = D / 2 - (weight or 1) / 2, y = from, width = weight or 1, height = len, color = color } }
+        ui.reparent(made[k], holder)
+      end
+    end, { owner = holder })
+    return holder
+  end
+
+  --- A radial menu: an instrument dial -- a hairline rim with ticks on the
+  --- sector boundaries, a primary-outlined wedge (one distance field) that
+  --- shutters round to the entry pointed at, the icons round the rim, and a
+  --- plate in brackets at the hub naming the entry in caps.
+  function S.radial_menu(t, spec)
+    local D = 2 * (t.outer or 110)
+    local inner = t.inner or 36
+    -- The hub's plate: as wide as the hub's circle lets a caption be.
+    local hub_w, hub_h = 2 * inner - 6, 30
+    return delegated(spec, {
+      background = ui.Item { anchors = { fill = true },
+        ui.Sdf { anchors = { fill = true }, fill_color = function() return C.surfaceContainer end,
+          stroke_color = function() return stroke(C, "idle") end, stroke_width = 1,
+          ui.SdfShape { shape = "circle", anchors = { fill = true, margins = 1 } } },
+        ui.Sdf { anchors = { fill = true, margins = 6 }, fill_color = function() return stroke(C, "quiet") end,
+          ui.SdfShape { shape = "ring", anchors = { fill = true }, thickness = 1 } },
+        ticks(t, D, 1, 9, function() return stroke(C, "corner") end, 2) },
+      indicator = ui.Item { anchors = { fill = true },
+        ui.Item { anchors = { fill = true }, rotation = heading(t), behavior = { rotation = turn },
+          opacity = function() return (t.current or 0) > 0 and 1 or 0 end,
+          ui.Sdf { anchors = { fill = true, margins = 6 }, fill_color = function() return C.primary:alpha(.14) end,
+            stroke_color = function() return C.primary end, stroke_width = 1.5,
+            ui.SdfShape { shape = "pie", anchors = { fill = true },
+              angle = function() return 360 / math.max(1, t.count or 1) end },
+            ui.SdfShape { shape = "circle", anchors = { center_in = true }, operation = "subtract",
+              width = 2 * inner + 6, height = 2 * inner + 6 } } },
+        ui.Item { anchors = { center_in = true }, width = hub_w, height = hub_h,
+          ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainerHigh end,
+            border_width = 1, border_color = function() return stroke(C, "hover") end },
+          hud().corners { length = 6, weight = 2, color = function() return C.primary end },
+          M.text { anchors = { center_in = true }, width = hub_w - 6, horizontal_alignment = "center", elide = "right",
+            text = current_label(t, spec), font_size = theme.typography.menu, font_weight = 500,
+            color = function() return C.primary end } },
+        hud().corners { length = 10, weight = 2, color = function() return C.primary end,
+          visible = function() return t.visual_focus end } },
+      item = function(_, value, s)
+        local glyph = icon_of(value)
+        local function ink() return s.current() and C.primary or C.onSurface end
+        local look = ui.Item { anchors = { fill = true } }
+        if glyph then
+          ui.reparent(M.icon(glyph, 22, ink, { anchors = { center_in = true }, fill = s.current }), look)
+        else
+          ui.reparent(caps(label_of(value), { anchors = { center_in = true }, color = ink }), look)
+        end
+        return look
+      end,
+    })
+  end
+
+  --- A pie menu: a disc of the container tone in a hairline, ruled into
+  --- sectors, inside registration brackets; the sector pointed at a
+  --- primary block (one wedge, shuttered round to it) with its entry in
+  --- the primary's ink; a square hub to let go in. It opens on a shutter.
+  function S.pie_menu(t, spec)
+    local D = 2 * (t.outer or 120)
+    local inner = t.inner or 40
+    local hub = math.floor(inner * 1.2)
+    local grow = ui.Item { anchors = { fill = true },
+      ui.Sdf { anchors = { fill = true, margins = 6 }, fill_color = function() return C.surfaceContainer end,
+        stroke_color = function() return stroke(C, "hover") end, stroke_width = 1,
+        ui.SdfShape { shape = "circle", anchors = { fill = true } } },
+      ui.Item { anchors = { fill = true }, rotation = heading(t), behavior = { rotation = turn },
+        opacity = function() return (t.current or 0) > 0 and 1 or 0 end,
+        ui.Sdf { anchors = { fill = true, margins = 7 }, fill_color = function() return C.primary end,
+          ui.SdfShape { shape = "pie", anchors = { fill = true },
+            angle = function() return 360 / math.max(1, t.count or 1) end },
+          ui.SdfShape { shape = "circle", anchors = { center_in = true }, operation = "subtract",
+            width = 2 * inner, height = 2 * inner } } },
+      ticks(t, D, 7, D / 2 - inner - 7, function() return stroke(C, "idle") end, 1),
+      ui.Item { anchors = { center_in = true }, width = hub, height = hub,
+        ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainerHigh end,
+          border_width = 1, border_color = function() return stroke(C, "hover") end },
+        M.icon("close", 18, function() return C.onSurfaceVariant end, { anchors = { center_in = true } }) },
+      hud().corners { length = 12, weight = 2, color = function() return t.visual_focus and C.primary or stroke(C, "corner") end } }
+    morf.effect(key("pie.open"), function()
+      if t.open then
+        morf.animation.play { { parallel = {
+          { node = grow, property = "scale", from = 0.8, to = 1, duration = 220, easing = "out_expo" },
+          { node = grow, property = "opacity", from = 0, to = 1, duration = 120 } } } }
+      end
+    end, { owner = grow })
+    return delegated(spec, {
+      background = grow,
+      indicator = nothing(),
+      item = function(_, value, s)
+        local glyph = icon_of(value)
+        local function ink() return s.current() and C.onPrimary or C.onSurface end
+        local column = { anchors = { center_in = true }, gap = 3, align = "center" }
+        if glyph then column[#column + 1] = M.icon(glyph, 20, ink) end
+        column[#column + 1] = caps(label_of(value), { color = ink })
+        return ui.Item { anchors = { fill = true }, ui.Column(column) }
+      end,
+    })
+  end
+
+  -- ----------------------------------------------------------- tumbler --
+
+  --- A tumbler: the entries fold over a drum (the glue's); the centre row
+  --- ruled above and below, in brackets over a faint wash, the entry there
+  --- in the primary, the rest dim.
+  function S.tumbler(t, spec)
+    local row = t.row or 36
+    return delegated(spec, {
+      background = ui.Rect { anchors = { fill = true }, color = "transparent", border_width = 1,
+        border_color = function() return stroke(C, "quiet") end },
+      indicator = ui.Item { anchors = { left = true, right = true, vertical_center = true }, height = row,
+        ui.Rect { anchors = { fill = true }, color = function() return C.primary:alpha(.08) end },
+        ui.Rect { anchors = { left = true, right = true, top = true }, height = 1,
+          color = function() return stroke(C, "hover") end },
+        ui.Rect { anchors = { left = true, right = true, bottom = true }, height = 1,
+          color = function() return stroke(C, "hover") end },
+        hud().corners { length = 6, weight = 2, color = function() return C.primary end,
+          opacity = function() return t.visual_focus and 1 or 0.6 end } },
+      item = function(_, value, s)
+        return M.text { anchors = { fill = true }, text = label_of(value):upper(), horizontal_alignment = "center",
+          vertical_alignment = "center", font_size = theme.size.larger, font_weight = 500,
+          color = function() return s.current() and C.primary or C.onSurfaceVariant end }
+      end,
+    })
+  end
 end

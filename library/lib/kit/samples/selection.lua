@@ -165,4 +165,40 @@ function S.rating_items(_, widgets)
     current = current, on_current_changed = set }
 end
 
+function S.radial_menu(_, widgets)
+  local current, set = chosen("radial_menu", 2)
+  return widgets.radial_menu { id = "sample-radial-menu", accessible_name = "Edit", size = 210,
+    items = { { label = "Copy", icon = "content_copy" }, { label = "Paste", icon = "content_paste" },
+      { label = "Share", icon = "share" }, { label = "Delete", icon = "delete" }, { label = "Cut", icon = "content_cut" },
+      { label = "Rename", icon = "edit" } },
+    item_width = 44, item_height = 44, current = current, on_current_changed = set }
+end
+
+-- Shown where it would open: a configuration opens it round the pointer
+-- (`handle.open_at`, `handle.attach`).
+function S.pie_menu(_, widgets)
+  local current, set = chosen("pie_menu", 1)
+  local node = widgets.pie_menu { id = "sample-pie-menu", accessible_name = "Media", size = 220,
+    items = { { label = "Play", icon = "play_arrow" }, { label = "Next", icon = "skip_next" },
+      { label = "Queue", icon = "queue_music" }, { label = "Back", icon = "skip_previous" } },
+    item_width = 64, item_height = 48, current = current, on_current_changed = set }
+  return node
+end
+
+-- A time picker: hours and minutes on two drums.
+function S.tumbler(kit, widgets)
+  local ui = require("morf.ui")
+  local hours, minutes = {}, {}
+  for i = 0, 23 do hours[#hours + 1] = ("%02d"):format(i) end
+  for i = 0, 59, 5 do minutes[#minutes + 1] = ("%02d"):format(i) end
+  local hour, set_hour = chosen("tumbler_hour", 10)
+  local minute, set_minute = chosen("tumbler_minute", 7)
+  return ui.Row { gap = 8, align = "center",
+    widgets.tumbler { id = "sample-tumbler-hours", accessible_name = "Hours", items = hours, item_width = 72,
+      item_height = 36, current = hour, on_current_changed = set_hour },
+    kit.text and kit.text { text = ":", font_size = 22, font_weight = 700 } or ui.Text { text = ":", font_size = 22 },
+    widgets.tumbler { id = "sample-tumbler-minutes", accessible_name = "Minutes", items = minutes, item_width = 72,
+      item_height = 36, current = minute, on_current_changed = set_minute } }
+end
+
 return S

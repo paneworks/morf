@@ -102,4 +102,20 @@ M.code_input = field("code_input", function(kit)
     font_family = theme.mono, font_size = 14, inset = { 44, 12, 12, 10 }, after = highlight }
 end)
 
+-- Two shortcuts as a keyboard settings page keeps them: one recorded, one
+-- that another action already has.
+function M.shortcut_recorder(kit, widgets)
+  local taken = { ["ctrl+c"] = "Copy" }
+  local function recorder(y, text, name)
+    local node = widgets.shortcut_recorder { id = "sample-shortcut-" .. name, x = 10, y = y, width = 260, height = 44,
+      text = text, accessible_name = name, conflicts = function(chord) return taken[chord] and "Used by " .. taken[chord] end }
+    return node
+  end
+  return ui.Item { width = CELL_W, height = CELL_H - 20,
+    kit.text { x = 12, y = 6, text = "Open terminal" },
+    recorder(30, "super+Return", "Open terminal"),
+    kit.text { x = 12, y = 98, text = "Clear history" },
+    recorder(122, "ctrl+c", "Clear history") }
+end
+
 return M

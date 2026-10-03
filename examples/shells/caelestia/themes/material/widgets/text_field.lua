@@ -383,4 +383,82 @@ return function(S, theme, M)
   end
 
   for widget, look in pairs(LOOK) do S[widget] = look end
+
+  -- ------------------------------------------------------ shortcut recorder --
+
+  local LEGEND = { ctrl = "Ctrl", shift = "Shift", alt = "Alt", super = "Super", Return = "Enter", space = "Space",
+    Escape = "Esc", BackSpace = "Backspace", Delete = "Del", Page_Up = "PgUp", Page_Down = "PgDn",
+    Left = "←", Right = "→", Up = "↑", Down = "↓" }
+  local function legend(part)
+    if LEGEND[part] then return LEGEND[part] end
+    if #part == 1 then return part:upper() end
+    return (part:gsub("_", " "))
+  end
+  local function chord_parts(text)
+    local out = {}
+    text = tostring(text or "")
+    local body, plus = text:match("^(.-)%+(%+)$")
+    if plus then text = body end
+    for part in text:gmatch("[^+]+") do out[#out + 1] = part end
+    if plus then out[#out + 1] = "+" end
+    return out
+  end
+
+  --- A shortcut recorder: an outlined field (1 px of the outline, 2 px of
+  --- the primary while focused, the error role when another action has
+  --- the chord) with the chord as keycap chips -- 8 px tonal chips that
+  --- pop in on a spring, rebuilt only when it changes; "Press keys…"
+  --- while it listens and is empty.
+  function S.shortcut_recorder(t, spec)
+    local function h() return box(t, spec) end
+    local function warned() return (t.conflict or "") ~= "" end
+    local caps = ui.Row { x = 12, gap = 6, align = "center", height = 30,
+      y = function() return math.floor((h() - 30) / 2) end }
+    local made, shown = {}, nil
+    morf.effect("caelestia.material.recorder." .. tostring(caps), function()
+      local text = t.text or ""
+      if text == shown then return end
+      shown = text
+      for _, node in ipairs(made) do ui.destroy(node, true) end
+      made = {}
+      for i, part in ipairs(chord_parts(text)) do
+        local label = M.text { text = legend(part), anchors = { center_in = true }, font_size = theme.size.small,
+          font_weight = 500, color = function() return C().onSurfaceVariant end }
+        made[i] = ui.Rect { height = 28, radius = 8,
+          width = function() return math.max(28, (label.layout_width or 0) + 18) end,
+          color = function() return C().surfaceContainerHigh end,
+          border_width = 1, border_color = function() return C().outlineVariant end,
+          scale = 1, enter = { scale = 0.5, opacity = 0 },
+          behavior = { scale = M.spring(520, 20), opacity = quick() },
+          label }
+        ui.reparent(made[i], caps)
+      end
+    end, { owner = caps })
+    return {
+      background = ui.Item { anchors = { fill = true },
+        ui.Rect { anchors = { left = true, right = true, top = true }, height = h, radius = 4,
+          color = function() local c = C() return t.hovered and c.onSurface:alpha(0.04) or c.onSurface:alpha(0) end,
+          border_width = function() return (t.focused or warned()) and 2 or 1 end,
+          border_color = function()
+            local c = C()
+            if warned() then return c.error end
+            if t.focused then return c.primary end
+            return t.hovered and c.onSurface or c.outline
+          end,
+          behavior = { color = quick(), border_color = quick() } },
+        caps },
+      placeholder = M.text { x = 16, height = 20, y = function() return math.floor((h() - 20) / 2) end,
+        text = function() return t.focused and "Press keys…" or (spec.placeholder or "None") end,
+        color = function() return C().onSurfaceVariant end,
+        opacity = function() return (t.text or "") == "" and 1 or 0 end, behavior = { opacity = quick() } },
+      trailing = ui.Row { anchors = { right = true, right_margin = 12 }, gap = 4, align = "center", height = 20,
+        y = function() return math.floor((h() - 20) / 2) end,
+        opacity = function() return warned() and 1 or 0 end, behavior = { opacity = quick() },
+        M.icon("error", 18, function() return C().error end),
+        M.text { text = function() return t.conflict or "" end, font_size = theme.size.small, font_weight = 500,
+          color = function() return C().error end } },
+      error = ui.Item {},
+      counter = ui.Item {},
+    }
+  end
 end

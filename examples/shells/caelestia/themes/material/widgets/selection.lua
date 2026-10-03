@@ -599,4 +599,165 @@ return function(S, theme, M)
       end,
     })
   end
+
+  -- ------------------------------------------------------- on a circle --
+
+  --- The angle the current entry's sector points at, turning the shorter
+  --- way round: a binding for a highlight's rotation.
+  local function heading(t)
+    local at = 0
+    return function()
+      local n = math.max(1, t.count or 1)
+      if (t.current or 0) < 1 then return at end
+      local target = (t.current - 1) * 360 / n
+      at = at + ((target - at) + 180) % 360 - 180
+      return at
+    end
+  end
+  local function current_label(t, spec)
+    return function()
+      local items = spec.items
+      if type(items) == "function" then items = items() end
+      local v = (items or {})[t.current or 0]
+      return v and label_of(v) or ""
+    end
+  end
+  -- The hub's shapes, one per entry, so a new pick morphs it.
+  local HUB = { "cookie9", "sunny", "clover4", "pentagon", "flower", "soft_burst", "cookie6", "gem" }
+
+  --- The sectors of a pie of `n`, parted by `gap` degrees and cut round a
+  --- hub of `inner` (+ `gap` px): one wedge per sector, each turned to its
+  --- place about the disc's centre, unioned in one field.
+  local function sectors(n, inner, gap)
+    local out = {}
+    for k = 1, n do
+      out[#out + 1] = ui.SdfShape { shape = "pie", anchors = { fill = true }, angle = 360 / n - gap,
+        rotation = (k - 1) * 360 / n }
+    end
+    out[#out + 1] = ui.SdfShape { shape = "circle", anchors = { center_in = true }, operation = "subtract",
+      width = 2 * (inner + 3), height = 2 * (inner + 3) }
+    return out
+  end
+
+  --- A radial menu: a surfaceContainerLow disc on an outlineVariant
+  --- hairline, a secondaryContainer sector (one distance-field wedge) that
+  --- swings on the spatial spring to the entry pointed at, the icons round
+  --- the rim, and a primary hub whose M3 shape morphs with each pick and
+  --- names it.
+  function S.radial_menu(t, spec)
+    local inner = t.inner or 36
+    return {
+      background = ui.Sdf { anchors = { fill = true }, fill_color = function() return C().surfaceContainerLow end,
+        stroke_color = function() return C().outlineVariant end, stroke_width = 1,
+        shadow_color = function() return C().shadow:alpha(0.18) end, shadow_blur = 6, shadow_offset_y = 2,
+        ui.SdfShape { shape = "circle", anchors = { fill = true, margins = 1 } } },
+      indicator = ui.Item { anchors = { fill = true },
+        ui.Item { anchors = { fill = true }, rotation = heading(t), behavior = { rotation = M.spring(300, 20) },
+          opacity = function() return (t.current or 0) > 0 and 1 or 0 end,
+          ui.Sdf { anchors = { fill = true, margins = 5 }, fill_color = function() return C().secondaryContainer end,
+            ui.SdfShape { shape = "pie", anchors = { fill = true },
+              angle = function() return 360 / math.max(1, t.count or 1) - 4 end },
+            ui.SdfShape { shape = "circle", anchors = { center_in = true }, operation = "subtract",
+              width = 2 * inner + 8, height = 2 * inner + 8 } } },
+        ui.Item { anchors = { center_in = true }, width = 2 * inner - 4, height = 2 * inner - 4,
+          ui.Sdf { anchors = { fill = true }, fill_color = function() return C().primary end,
+            M.sdf_shape { anchors = { fill = true },
+              shape = function() return HUB[((t.current or 1) - 1) % #HUB + 1] end, duration = 450 } },
+          M.text { anchors = { center_in = true }, width = 2 * inner - 18, horizontal_alignment = "center",
+            elide = "right", text = current_label(t, spec), font_size = theme.size.small, font_weight = 500,
+            color = function() return C().onPrimary end } },
+        ui.Rect { anchors = { center_in = true }, width = 2 * inner + 4, height = 2 * inner + 4, radius = inner + 2,
+          color = "transparent", border_width = 2, border_color = function() return C().secondary end,
+          visible = function() return t.visual_focus end } },
+      item = function(_, value, s)
+        local glyph = icon_of(value)
+        local function ink() local c = C() return s.current() and c.onSecondaryContainer or c.onSurfaceVariant end
+        local look = ui.Item { anchors = { fill = true },
+          scale = function() return s.current() and 1.14 or 1 end, behavior = { scale = pop } }
+        if glyph then
+          ui.reparent(M.icon(glyph, 24, ink, { anchors = { center_in = true }, fill = s.current }), look)
+        else
+          ui.reparent(M.text { anchors = { center_in = true }, text = label_of(value), font_size = theme.size.small,
+            font_weight = 500, color = ink }, look)
+        end
+        return look
+      end,
+    }
+  end
+
+  --- A pie menu: surfaceContainerHigh sectors on a shadow, parted by
+  --- gaps (one field of wedges), the one pointed at in the
+  --- primary (one wedge, swung to it), each entry's icon over its label,
+  --- and a hub to let go in. It blooms out from the pointer as it opens.
+  function S.pie_menu(t, spec)
+    local D = 2 * (t.outer or 120)
+    local inner = t.inner or 40
+    local disc = ui.Item { anchors = { fill = true } }
+    local seen, made = nil, nil
+    morf.effect(key("pie.disc"), function()
+      local n = math.max(1, t.count or 1)
+      if n == seen then return end
+      seen = n
+      if made then ui.destroy(made, true) end
+      local props = { anchors = { fill = true, margins = 6 }, fill_color = function() return C().surfaceContainerHigh end,
+        shadow_color = function() return C().shadow:alpha(0.3) end, shadow_blur = 6, shadow_offset_y = 2 }
+      for _, shape in ipairs(sectors(n, inner, 3)) do props[#props + 1] = shape end
+      made = ui.Sdf(props)
+      ui.reparent(made, disc)
+    end, { owner = disc })
+    local grow = ui.Item { anchors = { fill = true }, disc,
+      ui.Item { anchors = { fill = true }, rotation = heading(t), behavior = { rotation = M.spring(300, 20) },
+        opacity = function() return (t.current or 0) > 0 and 1 or 0 end,
+        ui.Sdf { anchors = { fill = true, margins = 6 }, fill_color = function() return C().primary end,
+          ui.SdfShape { shape = "pie", anchors = { fill = true },
+            angle = function() return 360 / math.max(1, t.count or 1) - 1.5 end },
+          ui.SdfShape { shape = "circle", anchors = { center_in = true }, operation = "subtract",
+            width = 2 * inner + 6, height = 2 * inner + 6 } } },
+      ui.Item { anchors = { center_in = true }, width = 2 * inner - 6, height = 2 * inner - 6,
+        ui.Sdf { anchors = { fill = true }, fill_color = function() return C().secondaryContainer end,
+          M.sdf_shape { anchors = { fill = true }, shape = function() return t.visual_focus and "cookie9" or "circle" end } },
+        M.icon("close", 20, function() return C().onSecondaryContainer end, { anchors = { center_in = true } }) } }
+    morf.effect(key("pie.open"), function()
+      if t.open then
+        morf.animation.play { { parallel = {
+          { node = grow, property = "scale", from = 0.5, to = 1, duration = 380, easing = theme.ease.emphasized_decel },
+          { node = grow, property = "rotation", from = -30, to = 0, duration = 380, easing = theme.ease.emphasized_decel },
+          { node = grow, property = "opacity", from = 0, to = 1, duration = 160 } } } }
+      end
+    end, { owner = grow })
+    return {
+      background = grow,
+      indicator = nothing(),
+      item = function(_, value, s)
+        local glyph = icon_of(value)
+        local function ink() local c = C() return s.current() and c.onPrimary or c.onSurface end
+        local column = { anchors = { center_in = true }, gap = 2, align = "center" }
+        if glyph then column[#column + 1] = M.icon(glyph, 22, ink, { fill = s.current }) end
+        column[#column + 1] = M.text { text = label_of(value), font_size = theme.size.small, font_weight = 500, color = ink }
+        return ui.Item { anchors = { fill = true }, ui.Column(column) }
+      end,
+    }
+  end
+
+  -- ----------------------------------------------------------- tumbler --
+
+  --- A tumbler: the entries fold over a drum (the glue's), the centre row
+  --- on a secondaryContainer pill; the entry there in its ink and medium
+  --- weight, the rest onSurfaceVariant.
+  function S.tumbler(t, spec)
+    local row = t.row or 36
+    return {
+      background = nothing(),
+      indicator = ui.Rect { anchors = { left = true, right = true, vertical_center = true }, height = row,
+        radius = row / 2, color = function() return C().secondaryContainer end,
+        border_width = function() return t.visual_focus and 2 or 0 end,
+        border_color = function() return C().secondary end },
+      item = function(_, value, s)
+        return M.text { anchors = { fill = true }, text = label_of(value), horizontal_alignment = "center",
+          vertical_alignment = "center", font_size = theme.size.larger,
+          axes = function() return { opsz = theme.size.larger * 3 / 4, ROND = 25, wght = s.current() and 500 or 400 } end,
+          color = function() local c = C() return s.current() and c.onSecondaryContainer or c.onSurfaceVariant end }
+      end,
+    }
+  end
 end
