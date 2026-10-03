@@ -230,7 +230,7 @@ local function make(spec)
       query:set("")
       refilter("")
       menu.open(anchor)
-      morf.timer(1, function() if is_open() then morf.focus.set(input, true) end end)
+      morf.timer(1, function() if is_open() then morf.focus.set(input, true) end end, false)
     end
     handle.close = close
     handle.is_open = is_open

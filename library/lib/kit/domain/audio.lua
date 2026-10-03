@@ -493,7 +493,7 @@ function M.automation_lane(spec, style)
             touched:set(math.min(i, #pts))
             rebuild()
             changed()
-          end)
+          end, false)
         end })
       handles[i] = node
       ui.reparent(node, plot)
@@ -1070,7 +1070,7 @@ function M.piano_keyboard(spec, style)
       on_clicked = function()
         if pointer then pointer = false return end
         down(n)
-        morf.timer(180, function() up(n) end)
+        morf.timer(180, function() up(n) end, false)
       end }, { look })
     ui.reparent(node, root)
   end

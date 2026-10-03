@@ -265,7 +265,7 @@ return function(S, theme, M)
       if was and not down and t.hovered then
         copied:set(true)
         if timer then timer:cancel() end
-        timer = morf.timer(1400, function() timer = nil copied:set(false) end)
+        timer = morf.timer(1400, function() timer = nil copied:set(false) end, false)
       end
       was = down
     end, { owner = row })

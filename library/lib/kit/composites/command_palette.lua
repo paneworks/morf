@@ -297,7 +297,7 @@ local function make(spec)
       reset()
       menu.open(anchor or spec.anchor)
       -- Typing goes to the field at once.
-      morf.timer(1, function() if is_open() then morf.focus.set(input, true) end end)
+      morf.timer(1, function() if is_open() then morf.focus.set(input, true) end end, false)
     end
     handle.open = open
     handle.close = close

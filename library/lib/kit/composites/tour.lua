@@ -102,7 +102,7 @@ local function make(spec)
     if spec.inline then return end
     if card_popup.is_open() then
       close_all("moved")
-      morf.timer(16, function() if running:get() and step:get() == n then open_at(n) end end)
+      morf.timer(16, function() if running:get() and step:get() == n then open_at(n) end end, false)
     else
       open_at(n)
     end

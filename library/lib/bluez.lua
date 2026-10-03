@@ -204,7 +204,7 @@ function bluez.connect(options)
           return
         end
         bt.refresh()
-      end)
+      end, true)
     end
   end
 

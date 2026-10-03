@@ -285,7 +285,7 @@ local function make(spec)
     local timeout = note.timeout
     if timeout == nil then timeout = TIMEOUT end
     if timeout and timeout > 0 and note.urgency ~= "critical" then
-      morf.timer(timeout, function() dismiss(key, "timeout") end)
+      morf.timer(timeout, function() dismiss(key, "timeout") end, false)
     end
     return key
   end

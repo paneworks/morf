@@ -355,7 +355,7 @@ function M.piano_roll(spec, style)
       on_released = function() move.send("released", 0, 0) end,
       on_focus_changed = function(on) move.send("focus", on, body.visual_focus or false) end,
       on_double_clicked = function()
-        morf.timer(0, function() table.remove(list, i) rebuild() changed() end)
+        morf.timer(0, function() table.remove(list, i) rebuild() changed() end, false)
       end,
       on_key_pressed = function(_, _, modifiers, _, name)
         local shift = (modifiers or ""):find("shift") ~= nil

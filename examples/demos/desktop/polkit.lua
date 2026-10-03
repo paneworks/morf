@@ -85,7 +85,7 @@ local Card = component.define {
           model.open = false
           show(false)
         end
-      end)
+      end, false)
     elseif msg.type == "key" and current then
       local keysym, text = msg.keysym, msg.text
       if keysym == RETURN or keysym == KP_ENTER then

@@ -171,7 +171,7 @@ function M.make(archetype, widget, spec, extra)
         repeat_timer = morf.timer(signal[2], function()
           repeat_timer = nil
           appliers[id](native.send(id, "repeat"))
-        end)
+        end, false)
       elseif name == "focus_request" then
         if root then morf.focus.set(root, true) end
       elseif name == "set_text" or name == "scroll_to" then

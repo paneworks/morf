@@ -29,7 +29,7 @@ M.today = morf.signal("impasto.calendar.today", morf.time.format("%Y-%m-%d"))
 morf.timer(30000, function()
   local now = morf.time.format("%Y-%m-%d")
   if now ~= M.today:get() then M.today:set(now) end
-end)
+end, true)
 
 local function today()
   local y, m, d = M.today:get():match("^(%d+)-(%d+)-(%d+)$")

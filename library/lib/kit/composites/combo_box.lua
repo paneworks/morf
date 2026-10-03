@@ -256,7 +256,7 @@ local function make(spec)
       end,
       -- Typing replaces what the field shows.
       on_focus_changed = function(on)
-        if on and input then morf.timer(1, function() if input.focused and input.text == current_text() then input:select_all() end end) end
+        if on and input then morf.timer(1, function() if input.focused and input.text == current_text() then input:select_all() end end, false) end
       end,
       on_escape = function()
         if is_open() then close("escape") end
