@@ -45,6 +45,9 @@ use config::*;
 fn main() -> ExitCode {
     // First, so a fault anywhere after this line leaves something to read.
     crash::install();
+    // The widget archetypes, for every runtime this process makes.
+    #[cfg(feature = "kit")]
+    morf_kit::register();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

@@ -33,6 +33,26 @@ function M.focusable(area, radius)
   return area
 end
 
+-- Skins for the kit's archetypes (lib.kit.skin): functions of a control's
+-- live state returning its slots.
+M.skins = {}
+
+--- A bare Control: a rounded surface with Material's state layer.
+function M.skins.Control(t)
+  return {
+    background = ui.Rect { anchors = { fill = true }, radius = 12,
+      color = function()
+        local base = C().surfaceContainer
+        if t.down then return base:mix(C().onSurface, 0.12) end
+        if t.hovered then return base:mix(C().onSurface, 0.08) end
+        return base
+      end,
+      border_width = function() return t.visual_focus and 2 or 0 end,
+      border_color = function() return C().secondary end,
+      behavior = { color = { duration = theme.duration.small } } },
+  }
+end
+
 --- A pointer area that Tab reaches too (`M.focusable`).
 function M.action(props) return M.focusable(ui.MouseArea(props)) end
 

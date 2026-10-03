@@ -251,6 +251,36 @@ pub enum IpcValue {
     Table(std::sync::Arc<crate::ipc_table::IpcTable>),
 }
 
+impl From<bool> for IpcValue {
+    fn from(value: bool) -> Self {
+        Self::Boolean(value)
+    }
+}
+
+impl From<f64> for IpcValue {
+    fn from(value: f64) -> Self {
+        Self::Number(value)
+    }
+}
+
+impl From<i64> for IpcValue {
+    fn from(value: i64) -> Self {
+        Self::Integer(value)
+    }
+}
+
+impl From<&str> for IpcValue {
+    fn from(value: &str) -> Self {
+        Self::String(value.to_owned())
+    }
+}
+
+impl From<String> for IpcValue {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+
 /// Deferred virtual keyboard request produced by Lua.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VirtualKeyboardRequest {

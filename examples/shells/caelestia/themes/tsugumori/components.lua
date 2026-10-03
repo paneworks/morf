@@ -428,6 +428,23 @@ return function(theme)
     return area
   end
 
+  -- Skins for the kit's archetypes (lib.kit.skin).
+  M.skins = {}
+
+  --- A bare Control: a square plate, its corners lit under the pointer and
+  --- bright with keyboard focus.
+  function M.skins.Control(t)
+    local plate = ui.Item { anchors = { fill = true },
+      ui.Rect { anchors = { fill = true },
+        color = function() return C.primary:alpha(t.down and .16 or t.hovered and .1 or .05) end,
+        border_width = 1, border_color = function() return C.primary:alpha(.35) end },
+      hud().corners { length = 8, color = function() return C.primary:alpha(t.hovered and 1 or .5) end },
+      hud().corners { length = 10, weight = 2, color = function() return C.primary end,
+        visible = function() return t.visual_focus end },
+    }
+    return { background = plate }
+  end
+
   function M.action(props)
     props.scale, props.stretch = nil, nil
     if props.behavior then props.behavior.scale = nil end

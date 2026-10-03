@@ -52,6 +52,7 @@ morf-desktop = { path = "crates/morf-desktop" }
 morf-io = { path = "crates/morf-io" }
 morf-layout = { path = "crates/morf-layout" }
 morf-lifecycle = { path = "crates/morf-lifecycle" }
+morf-kit = { path = "crates/morf-kit" }
 morf-lua = { path = "crates/morf-lua" }
 morf-menu = { path = "crates/morf-menu" }
 morf-outline = { path = "crates/morf-outline" }

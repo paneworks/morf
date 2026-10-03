@@ -1655,6 +1655,7 @@ dependencies = [
  "jiff",
  "libc",
  "morf-io",
+ "morf-kit",
  "morf-layout",
  "morf-lua",
  "morf-region",
@@ -1694,6 +1695,13 @@ dependencies = [
  "serde_json",
  "ureq",
  "zbus",
+]
+
+[[package]]
+name = "morf-kit"
+version = "0.1.5"
+dependencies = [
+ "morf-lua",
 ]
 
 [[package]]

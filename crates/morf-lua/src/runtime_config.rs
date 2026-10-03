@@ -35,13 +35,15 @@ impl Runtime {
             limits,
             screen.as_ref(),
         );
-        Self {
+        let mut runtime = Self {
             lua,
             limits,
             reactive,
             module_roots,
             lint_queue: RefCell::new(Vec::new()),
-        }
+        };
+        crate::extensions::apply_extensions(&mut runtime);
+        runtime
     }
 
     /// Compiles and executes a Lua chunk.
