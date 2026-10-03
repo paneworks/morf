@@ -155,6 +155,13 @@ pub(crate) fn coerce(
                 return Err(invalid(format!("`{name}` is not quadratic or circular")));
             }
         }
+        "accessible_role" => {
+            if let Value::String(name) = &value
+                && !crate::accessible::ROLES.contains(&name.as_str())
+            {
+                return Err(invalid(format!("`{name}` is not an accessible role")));
+            }
+        }
         "focus_policy" => {
             if let Value::String(name) = &value
                 && crate::FocusPolicy::parse(name).is_none()

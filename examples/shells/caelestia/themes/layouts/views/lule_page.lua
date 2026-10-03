@@ -55,8 +55,8 @@ function M.build(state)
   end
   -- The colour last chosen in either grid, for the picker to start from.
   local picked = morf.signal("caelestia.lule.picked", "")
-  local function grid(id, entries, columns, width, height, gap)
-    return kit.widgets.swatch_grid { id = id, items = entries, columns = columns, gap = gap,
+  local function grid(id, entries, columns, width, height, gap, name)
+    return kit.widgets.swatch_grid { id = id, accessible_name = name, items = entries, columns = columns, gap = gap,
       item_width = width, item_height = height, press_activates = true, current = 0,
       item_id = function(_, entry) return entry.id end,
       delegate = function(_, entry, s) return face(entry.caption, entry.value, s) end,
@@ -73,8 +73,8 @@ function M.build(state)
     named[#named + 1] = { id = "lule-" .. entry[1], caption = entry[2], value = function() return color(entry[1]) end }
   end
   local swatches = ui.Item { x = PAD, y = 47, width = inner, height = 287,
-    grid("lule-colors", numbered, 4, (inner - 18) / 4, 50, 6),
-    ui.Item { y = 238, grid("lule-named", named, 3, (inner - 12) / 3, 49, 6) },
+    grid("lule-colors", numbered, 4, (inner - 18) / 4, 50, 6, "Terminal colours"),
+    ui.Item { y = 238, grid("lule-named", named, 3, (inner - 12) / 3, 49, 6, "Theme colours") },
   }
 
   -- The picker: any colour, a Plane of saturation and value under a hue
@@ -199,8 +199,8 @@ function M.build(state)
       button("lule-browse", "Images", "folder_open", 100, state.browse),
       button("lule-shuffle", "Shuffle", "shuffle", 100, state.shuffle),
       button("lule-random-apply", "Random & apply", "auto_awesome", left - 2 * PAD - 288, state.random_apply, function() return true end),
-      button("lule-prev", "", "chevron_left", 32, function() state.step(-1) end),
-      button("lule-next", "", "chevron_right", 32, function() state.step(1) end),
+      kit.named(button("lule-prev", "", "chevron_left", 32, function() state.step(-1) end), "Previous image"),
+      kit.named(button("lule-next", "", "chevron_right", 32, function() state.step(1) end), "Next image"),
     },
     library,
   }

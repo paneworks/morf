@@ -69,7 +69,13 @@ local appliers = {}
 -- Spec fields that go to the node as they are.
 local NODE = { id = true, x = true, y = true, z = true, anchors = true, visible = true, opacity = true,
   layout = true, focus_policy = true, cursor = true, scale = true, rotation = true, stretch = true,
-  behavior = true, translate_x = true, translate_y = true }
+  behavior = true, translate_x = true, translate_y = true, accessible_role = true, accessible_name = true,
+  accessible_description = true, accessible_hidden = true }
+-- Live state a screen reader is told of: a change to one of these refreshes
+-- the node's `accessible` table.
+local SPOKEN = { checked = true, partial = true, expanded = true, value = true, from = true, to = true,
+  enabled = true, text = true, read_only = true, x = true, y = true, modal = true, down = true,
+  orientation = true, placeholder = true, step = true }
 
 local function value(v) if type(v) == "function" then return v() end return v end
 
@@ -81,6 +87,10 @@ local function encode(v)
   for i, item in ipairs(v) do parts[i] = tostring(item) end
   return "," .. table.concat(parts, ",") .. ","
 end
+
+--- The role a control of `archetype` drawn as `widget` plays for a screen
+--- reader, and the role of each item it makes (nil when it makes none).
+function M.roles(archetype, widget, checkable) return native.role(archetype, widget, checkable == true) end
 
 --- Whether a list kept in the live state holds `item`.
 function M.has(list, item) return type(list) == "string" and list:find("," .. tostring(item) .. ",", 1, true) ~= nil end
@@ -112,8 +122,19 @@ function M.make(archetype, widget, spec, extra)
   local repeat_timer
   -- What the click being delivered said, for the configuration's handler.
   local click_args = {}
+  -- The node a screen reader knows the control by: the root, or the one
+  -- the glue names (a text field's input, which is what holds focus).
+  local role, voice
+  local function speak()
+    if voice and role then voice.accessible = native.accessible(id, role) end
+  end
   local function apply(effects)
-    for field, v in pairs(effects.state) do t[field] = encode(v) end
+    local spoken = false
+    for field, v in pairs(effects.state) do
+      t[field] = encode(v)
+      spoken = spoken or SPOKEN[field] == true
+    end
+    if spoken then speak() end
     -- Slots a skin left to be built when first wanted.
     if waiting and (t.hovered or t.down or t.visual_focus) then
       local now = waiting
@@ -256,6 +277,39 @@ function M.make(archetype, widget, spec, extra)
   if props.width == nil then props.width = spec.width or function() return implicit("width") end end
   if props.height == nil then props.height = spec.height or function() return implicit("height") end end
   root = ui.MouseArea(props)
+  -- What a screen reader is told: the role the archetype and widget give,
+  -- unless the configuration names one; a name from the label or title it
+  -- was given; and the live states (`speak`).
+  voice = extra.voice or root
+  role = voice.accessible_role
+  if role == nil or role == "" then
+    role = native.role(archetype, widget, spec.checkable == true)
+    voice.accessible_role = role
+  end
+  if (voice.accessible_name or "") == "" then
+    for _, key in ipairs { "accessible_name", "label", "title", "placeholder", "tooltip" } do
+      local v = spec[key]
+      if type(v) == "string" and v ~= "" then voice.accessible_name = v break end
+      if type(v) == "function" then voice.accessible_name = function() return tostring(v() or "") end break end
+    end
+  end
+  speak()
+  -- A screen reader's value, set as the user would set it.
+  if archetype == "Range" then
+    voice.on_accessible_action = function(action, v)
+      if action == "set_value" and type(v) == "number" then send("set", v) return true end
+      return false
+    end
+  elseif archetype == "TextField" then
+    voice.on_accessible_action = function(action, v)
+      if action == "set_value" and type(v) == "string" then
+        if spec.on_set_text then spec.on_set_text(v) end
+        send("edited", v)
+        return true
+      end
+      return false
+    end
+  end
   -- The live size, for skins that draw to it.
   morf.effect("kit.control.size." .. id, function()
     t.width, t.height = root.layout_width or 0, root.layout_height or 0

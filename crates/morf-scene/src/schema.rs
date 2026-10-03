@@ -72,6 +72,17 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         // whoever has to find the node again from outside -- `morf test`'s
         // `test.find { id = ... }`, a log line.
         string("id", ""),
+        // What a screen reader is told (`accessible.rs`): the role, name and
+        // description, and one table of the rest -- `value`, `minimum`,
+        // `maximum`, `step`, `checked`, `expanded`, `selected`, `disabled`,
+        // `pressed`, `read_only`, `modal`, `level`, `orientation`,
+        // `placeholder` -- so a node that says nothing pays for one slot.
+        // `accessible_hidden` takes the subtree out.
+        string("accessible_role", ""),
+        string("accessible_name", ""),
+        string("accessible_description", ""),
+        any("accessible", Value::Nil),
+        boolean("accessible_hidden", false),
     ];
     match element {
         // Nothing of its own to paint, but a colour for the text beneath it

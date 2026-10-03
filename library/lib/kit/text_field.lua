@@ -84,7 +84,8 @@ function M.make(widget, spec)
   settings.on_invalid = spec.on_invalid
   settings.input = input
   control_props.focus_policy = "none"
-  root, t, ctl = control.make("TextField", widget, settings, { children = { input }, props = control_props })
+  root, t, ctl = control.make("TextField", widget, settings,
+    { children = { input }, props = control_props, voice = input })
   -- A revealed password shows its text.
   morf.effect("kit.text_field.echo." .. ctl.id, function()
     if spec.echo == "password" then input.password = t.echo == "password" end

@@ -67,7 +67,8 @@ function V.build(model)
     return g.top, g.top + model.count * g.item + (model.count - 1) * g.gap
   end
   local shown = morf.signal("tsugumori.rail.shown", false)
-  local root = ui.Item { id = "rail", anchors = { fill = true }, visible = model.enabled }
+  local root = ui.Item { id = "rail", accessible_role = "navigation", accessible_name = "Workspaces",
+    anchors = { fill = true }, visible = model.enabled }
 
   -- ------------------------------------------------------------ ladder --
   -- Minor ticks between slots and a long tick either end of the ladder.

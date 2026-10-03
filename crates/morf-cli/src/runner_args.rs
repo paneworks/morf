@@ -48,6 +48,8 @@ pub(crate) struct RunnerArgs {
     /// `--kit`: check the configuration's `kit` module against the widget
     /// contract (`library/lib/kit/contract.lua`).
     pub(crate) kit: bool,
+    /// `--a11y`: every control a screen reader reaches has a name.
+    pub(crate) a11y: bool,
     pub(crate) output: Option<PathBuf>,
     pub(crate) surface: Option<String>,
     pub(crate) filter: Option<String>,
@@ -83,6 +85,7 @@ impl RunnerArgs {
             isolate: runner == Runner::Test,
             strict: false,
             kit: false,
+            a11y: false,
             output: None,
             surface: None,
             filter: None,
@@ -174,6 +177,7 @@ pub(crate) fn parse_runner(runner: Runner, rest: &[&str]) -> Result<RunnerArgs, 
             ("--no-isolate", _) => parsed.isolate = false,
             ("--strict", Runner::Check) => parsed.strict = true,
             ("--kit", Runner::Check) => parsed.kit = true,
+            ("--a11y", Runner::Check) => parsed.a11y = true,
             ("-o" | "--output", Runner::Render) => {
                 parsed.output = Some(PathBuf::from(value(&mut rest, "-o")?));
             }

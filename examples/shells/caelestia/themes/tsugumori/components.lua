@@ -147,6 +147,9 @@ return function(theme)
   function M.icon(name, size, color, props)
     props = props or {}
     props.text = name
+    -- A glyph's ligature ("arrow_back") is no word for a screen reader:
+    -- the control around it is named instead, unless the icon is named.
+    if props.accessible_name == nil and props.accessible_hidden == nil then props.accessible_hidden = true end
     props.font_family = theme.icon_font
     props.font_size = size or 18
     props.color = color or function() return C.onSurface end
@@ -187,7 +190,14 @@ return function(theme)
     if not props.active and props.scope then props.active = require("presentation").active(props.scope) end
     props.viewports = {table.unpack(heading_viewports)}
     if props.viewport then props.viewports[#props.viewports + 1] = props.viewport end
-    return require("themes.tsugumori.heading")(theme, M, props)
+    local node = require("themes.tsugumori.heading")(theme, M, props)
+    -- A heading to a screen reader, by its words as they settle, not the
+    -- letters that roll through on the way.
+    node.accessible_role = "heading"
+    node.accessible_name = type(props.text) == "function" and function() return tostring(props.text() or "") end
+      or tostring(props.text or "")
+    node.accessible = { level = props.level == "section" and 2 or 1 }
+    return node
   end
   function M.subtitle(props)
     props.font_size, props.font_weight = theme.typography.subtitle, 400

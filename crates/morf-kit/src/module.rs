@@ -298,6 +298,28 @@ pub fn install(runtime: &mut Runtime) {
         Rc::new(move |_| Ok(vec![IpcValue::Integer(r.borrow().controls.len() as i64)])),
     ));
     functions.push((
+        "role",
+        Rc::new(|arguments| {
+            let archetype = text(arguments.first()).ok_or("kit.role wants an archetype name")?;
+            let widget = text(arguments.get(1)).unwrap_or("");
+            let checkable = matches!(arguments.get(2), Some(IpcValue::Boolean(true)));
+            let item = crate::access::item_role(archetype, widget).map(IpcValue::from).unwrap_or(IpcValue::Nil);
+            Ok(vec![crate::access::role_of(archetype, widget, checkable).into(), item])
+        }),
+    ));
+    let r = Rc::clone(&registry);
+    functions.push((
+        "accessible",
+        Rc::new(move |arguments| {
+            // A control's accessible states, for the role it was given.
+            let id = id_of(&arguments)?;
+            let role = text(arguments.get(1)).unwrap_or("group").to_owned();
+            let registry = r.borrow();
+            let control = registry.controls.get(&id).ok_or("no such control")?;
+            Ok(vec![table(crate::access::states_of(control.name(), &role, &control.state()))])
+        }),
+    ));
+    functions.push((
         "slots",
         Rc::new(|arguments| {
             let name = text(arguments.first()).ok_or("kit.slots wants an archetype name")?;

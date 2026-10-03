@@ -297,3 +297,104 @@ pub(crate) fn text_of(
     }
     Ok(vec![string(parts.join(" "))])
 }
+
+/// Every visible surface's accessible tree, as a screen reader would be
+/// given it (`morf_scene::Scene::accessible_tree`): rows root first, each
+/// with its role, name, value and states, and its accessible parent.
+pub(crate) fn accessible(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
+    use morf_scene::{AccessibleValue, Checked};
+    let subject = host.subject()?;
+    let mut found = Vec::new();
+    {
+        let scene = subject.runtime.scene();
+        for surface in subject.surfaces.iter().filter(|s| s.visible) {
+            let Some(layout) = &surface.layout else { continue };
+            let nodes = scene.accessible_tree(surface.root, "window", &surface.label(), &|node| {
+                layout.surface_rect(&scene, node).map(|g| (g.x, g.y, g.width, g.height))
+            });
+            let mut parents = std::collections::HashMap::new();
+            for item in &nodes {
+                for child in &item.children {
+                    parents.insert(*child, item.node);
+                }
+            }
+            for item in nodes {
+                let (x, y, w, h) = item.bounds.unwrap_or_default();
+                let opt = |b: Option<bool>| b.map_or(IpcValue::Nil, IpcValue::Boolean);
+                let mut fields = vec![
+                    ("role", string(item.role.clone())),
+                    ("name", string(item.name.clone())),
+                    ("description", string(item.description.clone())),
+                    (
+                        "value",
+                        match &item.value {
+                            Some(AccessibleValue::Number(n)) => IpcValue::Number(*n),
+                            Some(AccessibleValue::Text(t)) => string(t.clone()),
+                            None => IpcValue::Nil,
+                        },
+                    ),
+                    ("minimum", item.minimum.map_or(IpcValue::Nil, IpcValue::Number)),
+                    ("maximum", item.maximum.map_or(IpcValue::Nil, IpcValue::Number)),
+                    (
+                        "checked",
+                        match item.checked {
+                            Some(Checked::True) => IpcValue::Boolean(true),
+                            Some(Checked::False) => IpcValue::Boolean(false),
+                            Some(Checked::Mixed) => string("mixed"),
+                            None => IpcValue::Nil,
+                        },
+                    ),
+                    ("expanded", opt(item.expanded)),
+                    ("selected", opt(item.selected)),
+                    ("disabled", IpcValue::Boolean(item.disabled)),
+                    ("focusable", IpcValue::Boolean(item.focusable)),
+                    ("focused", IpcValue::Boolean(item.focused)),
+                    ("x", IpcValue::Number(x)),
+                    ("y", IpcValue::Number(y)),
+                    ("width", IpcValue::Number(w)),
+                    ("height", IpcValue::Number(h)),
+                    ("children", IpcValue::Integer(item.children.len() as i64)),
+                    ("surface", string(surface.label())),
+                    (
+                        "id",
+                        string(scene.string_value(item.node, "id").unwrap_or("").to_owned()),
+                    ),
+                ];
+                fields.retain(|(_, v)| *v != IpcValue::Nil);
+                found.push((item.node, parents.get(&item.node).copied(), fields));
+            }
+        }
+    }
+    let rows = found
+        .into_iter()
+        .map(|(node, parent, mut fields)| {
+            fields.push(("handle", IpcValue::Integer(host.number(node))));
+            if let Some(parent) = parent {
+                fields.push(("parent", IpcValue::Integer(host.number(parent))));
+            }
+            map(fields)
+        })
+        .collect();
+    Ok(vec![IpcValue::Table(Arc::new(IpcTable::List(rows)))])
+}
+
+/// Does what a screen reader asks of a node: `(handle, action, value)`.
+pub(crate) fn accessible_action(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
+    let node = host.handle(number(arguments.first(), "node")? as i64)?;
+    let action = match arguments.get(1) {
+        Some(IpcValue::String(a)) => a.clone(),
+        _ => return Err("accessible_action wants an action".into()),
+    };
+    let value = arguments.get(2).cloned().filter(|v| *v != IpcValue::Nil);
+    let subject = host.subject()?;
+    let root = {
+        let scene = subject.runtime.scene();
+        let mut root = node;
+        while let Ok(Some(parent)) = scene.parent(root) {
+            root = parent;
+        }
+        root
+    };
+    let ran = subject.runtime.accessible_action(root, node, &action, value);
+    Ok(vec![IpcValue::Boolean(ran)])
+}

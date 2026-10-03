@@ -21,7 +21,7 @@ end
 local function flag(id,label,w,on,set)
   return ui.Item {width=w,height=32,
     kit.menu_label {width=w-72,text=label,anchors={vertical_center=true}},
-    kit.switch {id=id,on=on,on_toggled=set,anchors={right=true,vertical_center=true}}}
+    kit.switch {id=id,accessible_name=label,on=on,on_toggled=set,anchors={right=true,vertical_center=true}}}
 end
 local function number_slider(id,label,w,get,set,low,high,units)
   return ui.Column {width=w,gap=0,
@@ -29,7 +29,7 @@ local function number_slider(id,label,w,get,set,low,high,units)
       kit.subtitle {text=label,width=w-90,font_size=theme.size.small},
       kit.text {text=function() return ("%.1f%s"):format(get(),units or "") end,font_size=theme.size.small,
         width=90,horizontal_alignment="right",anchors={right=true}}},
-    kit.slider {id=id,width=w,height=22,label=false,value=function() return (get()-low)/(high-low) end,
+    kit.slider {id=id,accessible_name=label,width=w,height=22,label=false,value=function() return (get()-low)/(high-low) end,
       set=function(v) set(math.floor((low+v*(high-low))*10+.5)/10) end}}
 end
 function M.build(model,w,h)
@@ -96,7 +96,9 @@ end
 function M.audiogram(model,w,h)
   local inner=w-32
   local function input(id,ear,index,width)
-    local node_node, node = kit.text_field("numeric_entry", {id=id,width=width-16,height=30,x=8,
+    local name=ear=="label" and "Profile name"
+      or ("%s ear at %s Hz"):format(ear=="left" and "Left" or "Right",tostring(model.frequencies[index]))
+    local node_node, node = kit.text_field("numeric_entry", {id=id,accessible_name=name,width=width-16,height=30,x=8,
       text=function() local draft=model.draft:get() return tostring(ear=="label" and draft.label or draft[ear][index]) end,
       font_family=theme.font,font_size=theme.size.normal,color=function() return C.onSurface end,
       caret_color=function() return C.primary end,selection_color=function() return C.primary:alpha(.25) end,

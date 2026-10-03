@@ -62,6 +62,8 @@ pub enum UiEvent {
     Pinched,
     /// A touch began at a surface's edge and moved in (on its root).
     EdgeSwiped,
+    /// A screen reader asked something of the node (`api_accessible.rs`).
+    AccessibleAction,
 }
 
 /// Every event a configuration can handle, and the property it writes.
@@ -99,6 +101,7 @@ pub(crate) const EVENT_PROPERTIES: &[(UiEvent, &str)] = &[
     (UiEvent::Swiped, "on_swiped"),
     (UiEvent::Pinched, "on_pinched"),
     (UiEvent::EdgeSwiped, "on_edge_swiped"),
+    (UiEvent::AccessibleAction, "on_accessible_action"),
 ];
 
 impl UiEvent {

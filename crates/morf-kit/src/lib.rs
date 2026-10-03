@@ -11,6 +11,7 @@
 //! state that changed and the signals to raise. The Lua side applies the
 //! state to the table a skin reads and calls the configuration's handlers.
 
+mod access;
 mod collection;
 mod control;
 mod disclosure;
@@ -29,6 +30,7 @@ mod text_field;
 mod tokens;
 mod value;
 
+pub use access::{item_role, role_of, states_of};
 pub use control::{ControlState, implicit_size};
 pub use module::install;
 pub use slots::{ARCHETYPES, slots_of};

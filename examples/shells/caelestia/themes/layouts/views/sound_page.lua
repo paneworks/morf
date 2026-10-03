@@ -43,9 +43,9 @@ local function title(text, button)
 end
 
 --- An icon button for mute: the theme's alert tone when on.
-local function mute_button(id, target, icon_on, icon_off)
+local function mute_button(id, target, icon_on, icon_off, name)
   local function muted() local t = target() return t and t.muted end
-  return rows.toggle { id = id, width = 36, height = 30,
+  return rows.toggle { id = id, accessible_name = name, width = 36, height = 30,
     anchors = { right = true, vertical_center = true },
     on = function() return muted() == true end, icon_on = icon_on, icon_off = icon_off,
     on_clicked = function()
@@ -107,6 +107,7 @@ local function output_card(height)
       },
       kit.slider {
         id = "sound-channel-" .. i, width = INNER - 26, height = 26,
+        accessible_name = function() return "Channel " .. name() end,
         value = function()
           local s = sink()
           return s and s.volumes and s.volumes[i] or 0
@@ -120,7 +121,7 @@ local function output_card(height)
   return kit.card {
     id = "sound-output",
     width = COL_W, height = height,
-    title("Output", mute_button("sound-output-mute", sink, "volume_off", "volume_up")),
+    title("Output", mute_button("sound-output-mute", sink, "volume_off", "volume_up", "Mute output")),
     ui.Column {
       x = PAD, y = PAD + 38, gap = 4,
       visible = available,
@@ -131,7 +132,7 @@ local function output_card(height)
         color = function() return C.onSurfaceVariant end,
       },
       kit.slider {
-        id = "sound-output-volume", width = INNER,
+        id = "sound-output-volume", width = INNER, accessible_name = "Output volume",
         value = vol,
         set = function(v) local s = sink() if s then model.set_device_volume(s, v) end end,
         icon = function()
@@ -201,6 +202,7 @@ local function app_row(row)
   local function muted() local s = live() return s and s.muted end
   local mute = rows.toggle {
     id = "sound-app-" .. math.floor(id) .. "-mute",
+    accessible_name = function() local s = live() return "Mute " .. (s and (s.app_name or s.binary) or "app") end,
     width = 30, height = 30, anchors = { right = true },
     on = function() return muted() == true end, icon_on = "volume_off", icon_off = "volume_up",
     on_clicked = function() local s = live() if s then model.toggle_stream(row) end end,
@@ -226,6 +228,7 @@ local function app_row(row)
     },
     kit.slider {
       id = "sound-app-" .. math.floor(id) .. "-volume", width = INNER, height = 30,
+      accessible_name = function() local s = live() return (s and (s.app_name or s.binary) or "App") .. " volume" end,
       value = function() local s = live() return s and s.volume or 0 end,
       set = function(v) model.set_stream_volume(row, v) end,
     },
@@ -274,12 +277,12 @@ local function input_card(height)
     id = "sound-input",
     width = COL_W, height = height,
     clip = true,
-    title("Input", mute_button("sound-input-mute", source, "mic_off", "mic")),
+    title("Input", mute_button("sound-input-mute", source, "mic_off", "mic", "Mute input")),
     ui.Column {
       x = PAD, y = PAD + 38, gap = 4,
       visible = available,
       kit.slider {
-        id = "sound-input-volume", width = INNER, height = 36,
+        id = "sound-input-volume", width = INNER, height = 36, accessible_name = "Input volume",
         value = function() local s = source() return s and s.volume or 0 end,
         set = function(v) local s = source() if s then model.set_device_volume(s, v) end end,
         icon = function() local s = source() return (s and s.muted) and "mic_off" or "mic" end,

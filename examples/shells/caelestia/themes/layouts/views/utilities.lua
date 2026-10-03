@@ -29,7 +29,7 @@ function V.focus_page(model,w,h)
       card[#card+1]=kit.pill {id="utilities-toggle-ringer",anchors={right=true,right_margin=12,vertical_center=true},
         width=96,height=36,label=control.status,on_clicked=function() control.set() end}
     else
-      card[#card+1]=kit.switch {id="utilities-toggle-"..control.id,
+      card[#card+1]=kit.switch {id="utilities-toggle-"..control.id,accessible_name=control.name,
         anchors={right=true,right_margin=16,vertical_center=true},on=on,on_toggled=control.set}
     end
     rows[#rows+1]=ui.Item(card)
@@ -116,8 +116,8 @@ end
 local SLIDER_H = 44
 local SLIDERS_H = 16 + SLIDER_H + 12 + SLIDER_H + 16
 
-local function slider(id, value, set, icon)
-  return kit.slider { id = id, width = CARD_W - 32, value = value, set = set, icon = icon }
+local function slider(id, value, set, icon, name)
+  return kit.slider { id = id, accessible_name = name, width = CARD_W - 32, value = value, set = set, icon = icon }
 end
 
 local function sliders()
@@ -127,8 +127,8 @@ local function sliders()
     width = CARD_W, height = SLIDERS_H, radius = M.RADIUS,
     ui.Column {
       x = 16, y = 12, gap = 4,
-      slider("utilities-volume", function() return (osd.volume()) end, osd.set_volume, osd.volume_icon),
-      slider("utilities-brightness", function() return (osd.brightness()) end, osd.set_brightness, osd.brightness_icon),
+      slider("utilities-volume", function() return (osd.volume()) end, osd.set_volume, osd.volume_icon, "Volume"),
+      slider("utilities-brightness", function() return (osd.brightness()) end, osd.set_brightness, osd.brightness_icon, "Brightness"),
     },
   }
 end
@@ -181,7 +181,7 @@ function M.page(w, h)
     }
   end
   local back = kit.action {
-    id = "settings-back",
+    id = "settings-back", accessible_name = "Back",
     width = 40, height = 40, y = 2, cursor = "pointer",
     on_clicked = model.back,
     kit.icon("arrow_back", 22, kit.ink("hi"), { anchors = { center_in = true } }),

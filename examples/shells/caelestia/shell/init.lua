@@ -147,6 +147,8 @@ local frame_view=require("themes").view("frame")
 local frame_root=frame_view.build {desk=bar.desk,bar=bar.build(),drawers=drawer.all,
   rail={node=rail_node,shape=rail.shape},levels={node=levels_node,shape=levels.shape},
   overlays=overlays,triggers=triggers}
+-- The shell's window, to a screen reader.
+frame_root.accessible_name = "Caelestia"
 ui.reparent(capture.editor.node,frame_root)
 capture.editor.on_export=function(action,result)
   notifs.push {summary=action=="copy" and "Capture copied" or action=="save" and "Capture saved" or "Capture uploaded",

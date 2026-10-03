@@ -1579,6 +1579,51 @@ back to the node that had it -- the control that opened it -- when it
 closes. Closing hides the content in the layer; opening it again shows it
 there, and destroying it closes it.
 
+### Accessibility
+
+A screen reader is told a tree of the shown nodes that mean something:
+every node with an `accessible_role`, every `Text` with text (a
+`"label"`), every `TextInput` (a `"text_field"`), and every `MouseArea`
+Tab reaches (a `"button"` unless it says otherwise). The boxes between
+them are left out, and so is a subtree under `accessible_hidden = true`.
+
+```lua
+ui.MouseArea { accessible_role = "switch", accessible_name = "Wi-Fi",
+  accessible_description = "Off while flying",
+  accessible = { checked = function() return on:get() end },
+  on_accessible_action = function(action, value) ... end,
+  ... }
+```
+
+| property | |
+|----------|---|
+| `accessible_role` | what the node is: `button`, `toggle_button`, `check_box`, `radio_button`, `switch`, `link`, `menu_item`, `slider`, `spin_button`, `progress`, `tab_list`, `tab`, `tab_panel`, `list_box`, `list_box_option`, `list`, `list_item`, `grid`, `grid_cell`, `tree`, `tree_item`, `table`, `row`, `cell`, `text_field`, `password_text`, `search_field`, `dialog`, `alert_dialog`, `alert`, `status`, `tooltip`, `menu`, `group`, `label`, `heading`, `image`, and the landmarks `navigation`, `main`, `complementary`, `region`, `banner`, `search`, `log`, ... (`morf_scene::ACCESSIBLE_ROLES` lists them all) |
+| `accessible_name` | what it is called; a button, tab, label or list item with none is named by the text under it, a field by its `placeholder` |
+| `accessible_description` | a longer word on it |
+| `accessible` | a table of the rest: `value` (a number or text), `minimum`, `maximum`, `step`, `checked` (`true`, `false`, `"mixed"`), `expanded`, `selected`, `disabled`, `pressed`, `read_only`, `modal`, `orientation`, `placeholder`, `level` |
+| `accessible_hidden` | leaves the node and everything under it out |
+
+A control's children are presentational: a button, a slider or a field is
+read as one thing, and what is under it is not offered separately. A
+range's text is its reading, so a slider is never named by it: name it.
+
+What a screen reader asks -- `"click"`, `"focus"`, `"increment"`,
+`"decrement"`, `"expand"`, `"collapse"`, `"set_value"` (with the value) --
+goes to the node's `on_accessible_action(action, value)` first; returning
+anything but `false` ends it. Otherwise it is the key a keyboard user
+would press, with focus given to the node: Space, Up, Down, Right, Left.
+Every kit control (`lib.kit.control`) sets its role from its archetype and
+widget, its name from its `label`, `title` or `placeholder` (or the
+`accessible_name` given), its states from its live state, and takes a
+slider's or a field's value directly.
+
+On Linux the tree goes to AT-SPI through AccessKit, one window per surface
+(the `a11y` feature of `morf`, on by default). Nothing is built until a
+screen reader asks: an adapter waits on the accessibility bus, and only
+once it is wanted does each turn of the loop rebuild the tree -- when the
+scene has changed, or at most four times a second for layout alone -- and
+send the nodes that changed. `MORF_NO_A11Y=1` turns it off for a run.
+
 `except = { node, ... }` names more nodes a press on which is not outside
 -- the other controls that open it. `morf.overlay.track(node, options)`
 gives a node the layer's behaviour where it already stands -- a drawer, a

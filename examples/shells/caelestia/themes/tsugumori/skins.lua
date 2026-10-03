@@ -434,6 +434,7 @@ return function(theme, M, hud)
     local function room() return math.max(0, t.content_height - t.viewport_height) end
     return {
       scroll_bar_y = require("lib.kit.widgets").scroll_bar { width = 8, orientation = "vertical", inverted = true,
+        accessible_name = "Scroll position",
         anchors = { right = true, top = true, bottom = true, right_margin = 1, top_margin = 2, bottom_margin = 2 },
         visible = function() return t.bar_y end,
         value = function() return t.position_y end,

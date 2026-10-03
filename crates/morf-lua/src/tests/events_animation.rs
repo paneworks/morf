@@ -381,12 +381,13 @@ fn list_view_builds_only_visible_lua_delegates() {
                 morf.sync_view(view, 8000)
                 morf.sync_view(view, 4000)
                 morf.sync_view(view, 12000)
-                -- Item 100 is on screen when it changes, and its delegate
-                -- came with an updater: it is patched in place, not rebuilt.
-                -- That is one delegate fewer and one updater call more than
-                -- rebuilding it would have been.
-                assert(delegate_runs == 26, "delegate runs: " .. delegate_runs)
-                assert(updater_runs == 14, "updater runs: " .. updater_runs)
+                -- The window's rows are built once (ten on screen, an
+                -- overscan row each side, one more as it straddles) and
+                -- every jump after rebinds them through their updaters: a
+                -- recycled row is patched, never rebuilt. Item 100, on screen
+                -- when it changes, is patched in place too.
+                assert(delegate_runs == 13, "delegate runs: " .. delegate_runs)
+                assert(updater_runs == 40, "updater runs: " .. updater_runs)
             "#,
         )
         .unwrap();

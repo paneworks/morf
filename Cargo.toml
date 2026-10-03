@@ -12,6 +12,8 @@ license = "MIT"
 repository = "https://github.com/rendrworks/morf"
 
 [workspace.dependencies]
+accesskit = "=0.25.1"
+accesskit_unix = "=0.24.0"
 alacritty_terminal = { version = "=0.26.0", default-features = false }
 animato = { version = "=1.7.2", default-features = false, features = ["tween", "spring", "physics"] }
 base64 = "=0.23.1"

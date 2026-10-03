@@ -62,6 +62,9 @@ function M.action(props) return M.focusable(ui.MouseArea(props)) end
 function M.icon(name, size, color, props)
   props = props or {}
   props.text = name
+  -- A glyph's ligature ("arrow_back") is no word for a screen reader:
+  -- the control around it is named instead, unless the icon is named.
+  if props.accessible_name == nil and props.accessible_hidden == nil then props.accessible_hidden = true end
   props.font_family = theme.icon_font
   props.font_size = size or 18
   props.color = color or function() return theme.color.onSurface end
@@ -99,8 +102,11 @@ end
 
 --- A semantic section heading; visual themes may add presentation effects.
 function M.heading(props)
+  -- A heading to a screen reader too: a page's title or a section's.
+  local level = props.level == "section" and 2 or 1
   props.active, props.reveal_delay, props.scope, props.level, props.ink = nil, nil, nil, nil, nil
   props.decode_lead, props.decode_stagger, props.viewport = nil, nil, nil
+  props.accessible_role, props.accessible = "heading", { level = level }
   return M.text(props)
 end
 M.subtitle = M.text

@@ -52,6 +52,13 @@ function kit.disclose_area(props, open, on_toggled)
   }, "Disclosure")
 end
 
+--- Gives `node` the name a screen reader reads for it (one with only an
+--- icon, which says nothing), and returns it.
+function kit.named(node, name)
+  node.accessible_name = name
+  return node
+end
+
 --- A pressable area (`kit.press_area`'s `area`).
 function kit.action(props) return kit.press_area("area", props) end
 

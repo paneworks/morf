@@ -23,6 +23,7 @@ mod runners;
 mod services;
 mod socket_path;
 mod supervisor;
+mod surface_a11y;
 mod surface_actions;
 mod surface_drag;
 mod surface_events;

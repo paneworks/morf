@@ -232,6 +232,27 @@ function test.get(query)
   return node
 end
 
+-- The accessible tree a screen reader would be given: one row per node,
+-- with `role`, `name`, `value`, states and the accessible `parent` handle.
+-- A query filters the rows as `test.find_all` does nodes.
+function test.accessible(query)
+  local rows = host.accessible()
+  if query == nil then return rows end
+  local found = {}
+  for _, row in ipairs(rows) do
+    if matches_query(row, query) then found[#found + 1] = row end
+  end
+  return found
+end
+
+-- Does what a screen reader asks: `action` is "click", "focus",
+-- "increment", "decrement", "expand", "collapse" or "set_value" (with
+-- `value`), on a row of `test.accessible` or a node.
+function test.accessible_action(row, action, value)
+  if row == nil then fail("accessible_action wants a row") end
+  return host.accessible_action(row.handle, action, value)
+end
+
 function test.text_of(node)
   if node == nil then fail("text_of wants a node") end
   return host.text_of(node.handle)

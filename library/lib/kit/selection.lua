@@ -30,7 +30,7 @@ local control = require("lib.kit.control")
 local M = {}
 
 local function label_of(item)
-  if type(item) == "table" then return tostring(item.label or item.name or item.text or "") end
+  if type(item) == "table" then return tostring(item.label or item.name or item.text or item.caption or item.title or "") end
   return tostring(item)
 end
 
@@ -70,6 +70,8 @@ function M.make(widget, spec)
       if root then ui.reparent(container, root) end
     end
     local make_item = spec.delegate or builders.item
+    -- Each entry is a tab, an option, a cell to a screen reader.
+    local _, item_role = control.roles("Selection", widget)
     for index, value in ipairs(items()) do
       local area
       local s = {
@@ -97,6 +99,17 @@ function M.make(widget, spec)
         on_dragged = dragging and function(sx, sy) dragging.send("dragged", sx, sy) end or nil,
         on_released = dragging and function() dragging.send("released", 0, 0) end or nil,
         on_double_clicked = function() deliver("item_activated", index) end,
+        accessible_role = item_role or "list_box_option",
+        accessible_name = label_of(value),
+        accessible = function() return { selected = s.current() or s.selected() } end,
+        -- A screen reader's press is the pointer's.
+        on_accessible_action = function(action)
+          if action ~= "click" and action ~= "focus" then return false end
+          if root then morf.focus.set(root, true) end
+          deliver("item_pressed", index, "")
+          if action == "click" then deliver("item_activated", index) end
+          return true
+        end,
       }
       for k, v in pairs(builders.place and builders.place(index, value) or {}) do props[k] = v end
       area = ui.MouseArea(props)

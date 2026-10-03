@@ -1,5 +1,7 @@
 //! Wayland layer surfaces, fractional scale, and compositor frame callbacks.
 
+#[cfg(feature = "a11y")]
+pub mod accesskit;
 mod capture_dmabuf;
 mod capture_handlers;
 mod client_backdrop;

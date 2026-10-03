@@ -200,6 +200,7 @@ return function(model, ROW1, ROW2, GAP)
     local function arrow(icon, delta, id)
       return kit.hover(kit.action {
         id = id, width = 28, height = 26, cursor = "pointer",
+        accessible_name = delta < 0 and "Previous month" or "Next month",
         on_clicked = function() model.shift_month(delta) end,
         kit.icon(icon, 20, kit.ink("accent"), { anchors = { center_in = true } }),
       }, function(hovered) return hovered and kit.signal("accent")():alpha(.15) or kit.signal("accent")():alpha(0) end, 13)
@@ -272,6 +273,7 @@ return function(model, ROW1, ROW2, GAP)
     local function button(icon, action, id, wide)
       return kit.hover(kit.action {
         id = id, width = wide and 64 or 44, height = 34, cursor = "pointer",
+        accessible_name = ({ previous = "Previous track", next = "Next track", play_pause = "Play or pause" })[action],
         on_clicked = function() model.media_control(action) end,
         kit.icon(icon, 20, kit.ink("accent"), { anchors = { center_in = true } }),
       }, function(hovered) return hovered and kit.signal("accent")():alpha(.16) or kit.signal("accent")():alpha(.06) end, 17)

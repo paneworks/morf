@@ -51,7 +51,7 @@ local TABS = model.tabs
 -- growing row), and names its tabs after their labels:
 -- `dashboard-tab-<name>`.
 local function tabs()
-  return kit.tabs { id = "dashboard", tabs = TABS, tab = M.tab,
+  return kit.tabs { id = "dashboard", accessible_name = "Dashboard", tabs = TABS, tab = M.tab,
     width = width, height = TABS_H, pad = PAD, ids = "name", growing = true, reorderable = true }
 end
 

@@ -4,6 +4,7 @@ mod model;
 
 pub use model::{ListChange, ListModel, ModelId, ViewItem, ViewTransition, VirtualList};
 
+mod accessible;
 mod animation;
 mod coerce;
 mod color;
@@ -37,6 +38,7 @@ mod stretch;
 mod terminal;
 mod types;
 
+pub use accessible::{AccessibleNode, AccessibleValue, Checked, ROLES as ACCESSIBLE_ROLES};
 pub use animation::*;
 pub use coerce::{ANCHOR_KEYS, CURSOR_SHAPES};
 pub use color::{ColorSpace, HueDirection, mix as mix_colors};

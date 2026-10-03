@@ -99,6 +99,7 @@ pub(crate) fn handle_surface_event(
                 &state.layer_surfaces,
             ) {
                 repaint |= runtime.set_focus_active(root, focused);
+                state.keyboard_changes.push((root, focused));
             }
             if let Some(window) = surface_window(surface) {
                 repaint |= runtime.dispatch_surface_focus(window, focused);

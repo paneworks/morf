@@ -183,6 +183,7 @@ function M.build(ctx)
   local SY, SH = 312, 26
   local select_area = ctx.area {
     id = "media-player", x = AX, y = SY, width = AW - SH - 4, height = SH, cursor = "pointer",
+    accessible_name = function() return "Player: " .. player_name(active()) end,
     on_clicked = function() players_open:set(not players_open:get()) end,
     kit.icon("video_library", 16, accent, { x = 8, anchors = { vertical_center = true }, fill = true }),
     kit.text { id = "media-player-name", x = 32, anchors = { vertical_center = true }, width = AW - SH - 4 - 40,
@@ -191,6 +192,7 @@ function M.build(ctx)
   kit.hover(select_area, function(hovered) return accent():alpha(hovered and .18 or .08) end, P.control_round(SH))
   local more_area = P.icon_button {
     area = ctx.area, id = "media-player-more", x = AX + AW - SH, y = SY, width = SH, height = SH, size = 18,
+    name = "Choose a player",
     icon = function() return players_open:get() and "expand_less" or "expand_more" end,
     on_clicked = function() players_open:set(not players_open:get()) end,
   }

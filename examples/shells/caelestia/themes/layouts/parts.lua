@@ -265,8 +265,9 @@ end
 
 --- An icon button: the theme's hover ground and its icon. `area` (the
 --- page's area constructor; kit.action by default), `id`, `x`, `y`,
---- `width`, `height`, `icon` (name or fn), `size`, `on_clicked`; `on()`
---- lights it, `ignored()` dims it, `strong` fills it with the accent.
+--- `width`, `height`, `icon` (name or fn), `size`, `on_clicked`, `name`
+--- (what a screen reader calls it); `on()` lights it, `ignored()` dims
+--- it, `strong` fills it with the accent.
 function L.icon_button(spec)
   local make = spec.area or kit.action
   local on, ignored, strong = spec.on, spec.ignored, spec.strong
@@ -274,7 +275,7 @@ function L.icon_button(spec)
   local C = theme.color
   local area = make {
     id = spec.id, x = spec.x, y = spec.y, width = spec.width, height = spec.height, cursor = "pointer",
-    on_clicked = spec.on_clicked,
+    on_clicked = spec.on_clicked, accessible_name = spec.name or spec.accessible_name,
     kit.icon(spec.icon, spec.size or 22, function()
       if strong then return C.surface end
       if ignored and ignored() then return kit.ink("lo")():alpha(0.35) end

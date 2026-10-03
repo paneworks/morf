@@ -323,7 +323,7 @@ function V.build(model)
   end)
 
   local root = ui.Item {
-    id = "rail",
+    id = "rail", accessible_role = "navigation", accessible_name = "Workspaces",
     anchors = { fill = true },
     visible = enabled,
     ui.Item { anchors = { fill = true }, table.unpack(pills) },

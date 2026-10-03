@@ -501,5 +501,5 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "frame_count"
             | "links"
             | "link_color"
-    )
+    ) && !property.starts_with("accessible_")
 }

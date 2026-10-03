@@ -31,6 +31,16 @@ local groups = 0
 --- shut), `modal` (Tab stays inside it while open), `on_dismiss` (what
 --- shutting it that way does; `set(false)` by default). A drawer with no
 --- policy is not a popup at all.
+-- Each drawer as a screen reader's landmark: role and name.
+local LANDMARKS = {
+  launcher = { "dialog", "Launcher" }, session = { "dialog", "Session" }, capture = { "dialog", "Capture" },
+  dashboard = { "region", "Dashboard" }, sidebar = { "complementary", "Sidebar" },
+  leftbar = { "complementary", "Planner" }, bottom = { "complementary", "Tools" },
+  polkit = { "alert_dialog", "Authentication" }, keyring = { "alert_dialog", "Keyring" },
+  authsteps = { "alert_dialog", "Authentication" }, notifications = { "log", "Notifications" },
+  keyboard = { "region", "On-screen keyboard" },
+}
+
 function M.new(spec)
   groups = groups + 1
   local d = { name = spec.name, edge = spec.edge }
@@ -43,6 +53,11 @@ function M.new(spec)
 
   local props = spec.props or {}
   props.id = "drawer-" .. spec.name
+  -- A landmark a screen reader walks: what the drawer is, by name.
+  local landmark = LANDMARKS[spec.name] or { "region", spec.name:sub(1, 1):upper() .. spec.name:sub(2) }
+  props.accessible_role = props.accessible_role or spec.role or landmark[1]
+  props.accessible_name = props.accessible_name or spec.title or landmark[2]
+  if landmark[1] == "dialog" or landmark[1] == "alert_dialog" then props.accessible = { modal = true } end
   props.width = spec.width
   props.height = spec.height
   local ANCHORS = {

@@ -1,5 +1,6 @@
 //! Sandboxed execution of morf configuration code.
 
+mod api_accessible;
 mod api_animation;
 mod api_audio;
 mod api_audio_equalizer;

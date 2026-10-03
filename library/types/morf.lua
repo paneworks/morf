@@ -33,6 +33,7 @@
 ---@field executable string
 ---@field file fun(...): any
 ---@field file_view fun(...): any
+---@field focus Morf.Focus
 ---@field font_axes fun(...): any
 ---@field font_families fun(...): any
 ---@field fs Morf.Fs
@@ -69,6 +70,7 @@
 ---@field operands Morf.Operands
 ---@field options Morf.Options
 ---@field output_power Morf.Output_power
+---@field overlay Morf.Overlay
 ---@field pam Morf.Pam
 ---@field persistent fun(...): any
 ---@field prefers any
@@ -92,6 +94,7 @@
 ---@field session_paths fun(...): any
 ---@field shader fun(...): any
 ---@field shader_data fun(...): any
+---@field shared fun(...): any
 ---@field shell_dir fun(...): any
 ---@field shell_id fun(...): any
 ---@field shell_path fun(...): any
@@ -123,6 +126,8 @@
 ---@field ui Morf.Ui
 ---@field variants fun(...): any
 ---@field version string
+---@field view_extent fun(...): any
+---@field view_item_start fun(...): any
 ---@field virtual_keyboard Morf.Virtual_keyboard
 ---@field virtual_list fun(...): any
 ---@field watch_files fun(...): any
@@ -244,7 +249,6 @@
 ---@field retainable fun(...): any
 ---@field scope fun(...): any
 ---@field screens Morf.Core.Screens
----@field shared fun(name: string, initial: any): any
 ---@field session_paths fun(...): any
 ---@field shell_dir fun(...): any
 ---@field shell_id fun(...): any
@@ -320,6 +324,13 @@
 ---@field url_decode fun(...): any
 ---@field url_encode fun(...): any
 ---@field uuid fun(...): any
+
+---@class Morf.Focus
+---@field clear fun(...): any
+---@field get fun(...): any
+---@field next fun(...): any
+---@field previous fun(...): any
+---@field set fun(...): any
 
 ---@class Morf.Fs
 ---@field append fun(...): any
@@ -528,6 +539,8 @@
 ---@field XF86AudioPlay integer
 ---@field XF86AudioPrev integer
 ---@field XF86AudioRaiseVolume integer
+---@field XF86Back integer
+---@field XF86Forward integer
 ---@field XF86MonBrightnessDown integer
 ---@field XF86MonBrightnessUp integer
 ---@field space integer
@@ -544,6 +557,12 @@
 
 ---@class Morf.Output_power
 ---@field set fun(...): any
+
+---@class Morf.Overlay
+---@field close fun(...): any
+---@field is_open fun(...): any
+---@field open fun(...): any
+---@field track fun(...): any
 
 ---@class Morf.Pam
 ---@field authenticate fun(...): any

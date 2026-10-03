@@ -157,6 +157,9 @@ pub(crate) struct SurfaceEventState {
     /// because its last frame callback had not come back yet; the callback
     /// makes it.
     pub(crate) primary_deferred: bool,
+    /// Surfaces that gained or lost the keyboard since the loop last told
+    /// the screen reader (`surface_a11y.rs`).
+    pub(crate) keyboard_changes: Vec<(NodeHandle, bool)>,
     /// When the wall clock last advanced motion, while the shell's own
     /// surface gets no frame callbacks (hidden under another toplevel in a
     /// nested compositor). `None` while callbacks drive it as usual.

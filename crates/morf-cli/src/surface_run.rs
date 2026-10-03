@@ -317,10 +317,12 @@ fn drive_surface(
         },
         drag: None,
         primary_deferred: false,
+        keyboard_changes: Vec::new(),
         fallback_tick: None,
         forced_paint: None,
     };
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
+    let mut a11y = crate::surface_a11y::A11ySurfaces::default();
     let mut layout_complaint: Option<Instant> = None;
     let mut motion_reported: Option<Instant> = None;
     let mut jit_logged: Option<Instant> = None;
@@ -680,6 +682,13 @@ fn drive_surface(
         };
         if answer_new_containment(runtime, &state.input, &layouts) {
             containment_repaint = true;
+            follow_up = true;
+        }
+        // A screen reader's tree and requests, once the layouts are fresh.
+        for (root, focused) in state.keyboard_changes.drain(..) {
+            a11y.window_focus(root, focused);
+        }
+        if a11y.turn(runtime, &state, &name, repaint) {
             follow_up = true;
         }
     }

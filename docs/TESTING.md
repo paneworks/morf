@@ -61,7 +61,7 @@ below).
 
 ```sh
 morf check shell.lua [--size WxH] [--screens N] [--ipc 'VERB ARGS']...
-                     [--after MS] [--wait MS] [--strict] [--kit]
+                     [--after MS] [--wait MS] [--strict] [--kit] [--a11y]
                      [--no-dbus | --private-bus] [--isolate] [-- args...]
 ```
 
@@ -88,6 +88,11 @@ answers once it has loaded -- against the widget contract
 archetype skin due at the contract's stage, and an owner in the contract
 for every row of the element catalogue (`library/lib/kit/catalogue.lua`).
 It prints `kit stage N: D due, M missing` and each problem as an error.
+
+`--a11y` builds the tree a screen reader would be given for every shown
+surface and fails each control it could land on -- one that takes focus,
+or plays a role read by name (a button, switch, slider, tab, field, ...)
+-- that has no name. It prints `a11y N accessible nodes, M unnamed`.
 
 The exit status is 1 when there are errors, and with `--strict` when there
 are warnings too. `--wait MS` spreads that much real time over the run, for
@@ -285,6 +290,15 @@ ordinary property every element has and nothing in the engine reads:
 | `test.find_all(query)` | every match |
 | `test.nodes()` | every node on every surface |
 | `test.text_of(node)` | the node's text and its descendants', joined by spaces |
+
+`test.accessible(query)` returns the tree a screen reader would be given,
+one row per accessible node, root first: `role`, `name`, `description`,
+`value`, `minimum`, `maximum`, `checked`, `expanded`, `selected`,
+`disabled`, `focusable`, `focused`, the box, `children` (how many),
+`surface`, `id`, `handle` and the accessible `parent`; a query filters the
+rows. `test.accessible_action(row, action, value)` does what a screen
+reader asks of it (`"click"`, `"focus"`, `"increment"`, `"decrement"`,
+`"expand"`, `"collapse"`, `"set_value"`).
 
 A query is a table of fields that must all equal the node's (`{ id =
 "count" }`, `{ element = "Text", visible = true }`, `{ text = "add one" }`,

@@ -22,7 +22,8 @@ local function setting(id, label, y, w, on, toggled)
   return ui.Item {
     x = PAD, y = y, width = w - 2 * PAD, height = 36,
     kit.section_label { anchors = { vertical_center = true }, text = label, font_size = theme.size.normal },
-    kit.switch { id = id, anchors = { right = true, vertical_center = true }, on = on, on_toggled = toggled },
+    kit.switch { id = id, accessible_name = label, anchors = { right = true, vertical_center = true }, on = on,
+      on_toggled = toggled },
   }
 end
 

@@ -362,6 +362,12 @@ impl Archetype for Range {
                 };
                 Ok(self.by(-steps * notch).handled())
             }
+            // A value asked for outright (a screen reader's): moved there as
+            // the user would.
+            "set" => {
+                let v = crate::value::expect_number(arguments.first(), "value")?;
+                Ok(self.set_value(0, v, true))
+            }
             "increase" => Ok(self.by(self.unit())),
             "decrease" => Ok(self.by(-self.unit())),
             "key" => {

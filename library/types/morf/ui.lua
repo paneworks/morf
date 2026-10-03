@@ -48,8 +48,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field color (any|fun(): any)? default Nil
 ---@field on_entered (fun(...): any)?
 ---@field on_exited (fun(...): any)?
@@ -74,6 +83,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.InsetProps
 ---@field [integer] morf.Node children
@@ -119,8 +134,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field margin (number|fun(): number)? default Number(0.0)
 ---@field extra_margin (number|fun(): number)? default Number(0.0)
 ---@field top_margin (any|fun(): any)? default Nil
@@ -151,6 +175,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.RectProps
 ---@field [integer] morf.Node children
@@ -196,8 +226,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field color (string|morf.Color|fun(): string|morf.Color)? default Color(Color { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 })
 ---@field gradient (any|fun(): any)? default Map({})
 ---@field radius (number|fun(): number)? default Number(0.0)
@@ -238,6 +277,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.ClipRectProps
 ---@field [integer] morf.Node children
@@ -283,8 +328,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field color (string|morf.Color|fun(): string|morf.Color)? default Color(Color { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 })
 ---@field gradient (any|fun(): any)? default Map({})
 ---@field radius (number|fun(): number)? default Number(0.0)
@@ -329,6 +383,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.TextProps
 ---@field [integer] morf.Node children
@@ -374,8 +434,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field text (string|fun(): string)? default String("")
 ---@field spans (any|fun(): any)? default List([])
 ---@field markup (string|fun(): string)? default String("")
@@ -429,6 +498,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.TextInputProps
 ---@field [integer] morf.Node children
@@ -474,8 +549,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field text (string|fun(): string)? default String("")
 ---@field placeholder (string|fun(): string)? default String("")
 ---@field placeholder_color (string|morf.Color|fun(): string|morf.Color)? default Color(Color { red: 0.0, green: 0.0, blue: 0.0, alpha: 0.4 })
@@ -536,6 +620,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.ImageProps
 ---@field [integer] morf.Node children
@@ -581,8 +671,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field source (string|fun(): string)? default String("")
 ---@field fill_mode (string|fun(): string)? default String("stretch")
 ---@field smooth (boolean|fun(): boolean)? default Bool(true)
@@ -624,6 +723,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.IconProps
 ---@field [integer] morf.Node children
@@ -669,8 +774,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field name (string|fun(): string)? default String("")
 ---@field theme (string|fun(): string)? default String("hicolor")
 ---@field fill_mode (string|fun(): string)? default String("stretch")
@@ -705,6 +819,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.SdfProps
 ---@field [integer] morf.Node children
@@ -750,8 +870,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field fill_color (string|morf.Color|fun(): string|morf.Color)? default Color(Color { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 })
 ---@field stroke_color (string|morf.Color|fun(): string|morf.Color)? default Color(Color { red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0 })
 ---@field stroke_width (number|fun(): number)? default Number(0.0)
@@ -790,6 +919,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.SdfShapeProps
 ---@field [integer] morf.Node children
@@ -835,8 +970,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field shape (string|fun(): string)? default String("circle")
 ---@field glyph (string|fun(): string)? default String("")
 ---@field glyph_morph_to (string|fun(): string)? default String("")
@@ -884,6 +1028,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.PathProps
 ---@field [integer] morf.Node children
@@ -929,8 +1079,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field d (string|fun(): string)? default String("")
 ---@field morph_to (string|fun(): string)? default String("")
 ---@field morph_progress (number|fun(): number)? default Number(0.0)
@@ -970,6 +1129,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.MouseAreaProps
 ---@field [integer] morf.Node children
@@ -1015,8 +1180,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field accepted_buttons (any|fun(): any)? default List([String("left")])
 ---@field cursor (string|fun(): string)? default String("default")
 ---@field hovered (boolean|fun(): boolean)? default Bool(false)
@@ -1044,6 +1218,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.DropAreaProps
 ---@field [integer] morf.Node children
@@ -1089,8 +1269,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field keys (any|fun(): any)? default List([])
 ---@field on_entered (fun(...): any)?
 ---@field on_exited (fun(...): any)?
@@ -1115,6 +1304,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.RowProps
 ---@field [integer] morf.Node children
@@ -1160,8 +1355,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field gap (number|fun(): number)? default Number(0.0)
 ---@field align (string|fun(): string)? default String("start")
 ---@field justify (string|fun(): string)? default String("start")
@@ -1188,6 +1392,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.ColumnProps
 ---@field [integer] morf.Node children
@@ -1233,8 +1443,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field gap (number|fun(): number)? default Number(0.0)
 ---@field align (string|fun(): string)? default String("start")
 ---@field justify (string|fun(): string)? default String("start")
@@ -1261,6 +1480,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.GridProps
 ---@field [integer] morf.Node children
@@ -1306,8 +1531,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field columns (number|fun(): number)? default Number(1.0)
 ---@field gap (number|fun(): number)? default Number(0.0)
 ---@field row_gap (number|fun(): number)? default Number(0.0)
@@ -1339,6 +1573,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.FlickableProps
 ---@field [integer] morf.Node children
@@ -1384,8 +1624,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field content_x (number|fun(): number)? default Number(0.0)
 ---@field content_y (number|fun(): number)? default Number(0.0)
 ---@field on_entered (fun(...): any)?
@@ -1411,6 +1660,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.LoaderProps
 ---@field [integer] morf.Node children
@@ -1456,8 +1711,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field active (boolean|fun(): boolean)? default Bool(true)
 ---@field loading (boolean|fun(): boolean)? default Bool(false)
 ---@field active_async (boolean|fun(): boolean)? default Bool(false)
@@ -1486,6 +1750,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.TimerProps
 ---@field [integer] morf.Node children
@@ -1531,8 +1801,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field interval (number|fun(): number)? default Number(1000.0)
 ---@field running (boolean|fun(): boolean)? default Bool(false)
 ---@field on_entered (fun(...): any)?
@@ -1558,6 +1837,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.FlexProps
 ---@field [integer] morf.Node children
@@ -1603,8 +1888,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field direction (string|fun(): string)? default String("row")
 ---@field wrap (boolean|fun(): boolean)? default Bool(false)
 ---@field gap (number|fun(): number)? default Number(0.0)
@@ -1635,6 +1929,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.LayoutProps
 ---@field [integer] morf.Node children
@@ -1680,8 +1980,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field on_entered (fun(...): any)?
 ---@field on_exited (fun(...): any)?
 ---@field on_position_changed (fun(...): any)?
@@ -1705,6 +2014,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.TerminalProps
 ---@field [integer] morf.Node children
@@ -1750,8 +2065,17 @@
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(false)
+---@field focus_policy (string|fun(): string)? default String("auto")
+---@field focus_scope (boolean|fun(): boolean)? default Bool(false)
+---@field focused (boolean|fun(): boolean)? default Bool(false)
+---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field accessible_role (string|fun(): string)? default String("")
+---@field accessible_name (string|fun(): string)? default String("")
+---@field accessible_description (string|fun(): string)? default String("")
+---@field accessible (any|fun(): any)? default Nil
+---@field accessible_hidden (boolean|fun(): boolean)? default Bool(false)
 ---@field font_family (string|fun(): string)? default String("monospace")
 ---@field font_size (number|fun(): number)? default Number(13.0)
 ---@field colors (any|fun(): any)? default Map({})
@@ -1785,6 +2109,12 @@
 ---@field on_escape (fun(...): any)?
 ---@field on_focus_changed (fun(...): any)?
 ---@field on_link (fun(...): any)?
+---@field on_long_pressed (fun(...): any)?
+---@field on_double_clicked (fun(...): any)?
+---@field on_swiped (fun(...): any)?
+---@field on_pinched (fun(...): any)?
+---@field on_edge_swiped (fun(...): any)?
+---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui
 local ui = {}
