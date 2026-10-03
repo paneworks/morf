@@ -210,7 +210,7 @@ function M.make(archetype, widget, spec, extra)
     end
   end
   appliers[id] = apply
-  local function send(event, ...) apply(native.send(id, event, ...)) end
+  local function send(event, ...) local effects = native.send(id, event, ...) apply(effects) return effects end
   -- Where a press or a drag is along the skin's track: the archetype maps
   -- the pointer onto the travel the skin drew.
   local function travel(x, y)

@@ -19,8 +19,11 @@
 -- while on, and `on_toggled(on)` hears it. When the items are wider than
 -- the toolbar the last ones leave it, a "more" button takes their place
 -- and its menu lists them -- a press there runs the item (or toggles it)
--- as the button would. Tab reaches each button; Space and Return press
--- it. Other fields: `x`, `y`, `height` (40), `menu_width` (220),
+-- as the button would. The buttons are one Tab stop (the Roving archetype,
+-- headless): Tab enters at the one last used, Left/Right, Home and End
+-- walk the shown ones, passing over disabled ones; Space and Return press
+-- it. What fits is the Overflow archetype's (headless): higher `priority`
+-- stays longer. Other fields: `x`, `y`, `height` (40), `menu_width` (220),
 -- `accessible_name`. Ids: `<id>-item-<n>` (or the item's own `id`),
 -- `<id>-more`, `<id>-menu`, `<id>-menu-<n>`.
 local ui = require("morf.ui")
@@ -68,30 +71,62 @@ local function make(spec)
     if items[i].on_toggled then items[i].on_toggled(on) end
   end
 
-  -- How many items fit: all of them, or as many as leave room for the
-  -- "more" button -- a separator never ends the row.
-  local function fit()
-    local W = width()
-    local total = 0
-    for i = 1, #items do total = total + sizes[i] + (i > 1 and GAP or 0) end
-    if total <= W then return #items end
-    local room, used, n = W - H - GAP, 0, 0
-    for i = 1, #items do
-      local need = sizes[i] + (i > 1 and GAP or 0)
-      if used + need > room then break end
-      used, n = used + need, i
+  local function is_separator(i) return items[i].separator or items[i].kind == "separator" end
+  -- (The archetypes' bindings end with this node, made first.)
+  local owner = ui.Item {}
+  -- What fits: the Overflow archetype's, from each item's room, the
+  -- width, and a square "more" button.
+  local priorities = {}
+  for i, item in ipairs(items) do priorities[i] = tonumber(item.priority) or 0 end
+  local over = control.headless("Overflow", { widths = sizes, priorities = priorities, gap = GAP, more_width = H,
+    available = width, owner = owner })
+  local function overflowed() return over.t.overflowing == true end
+  -- Shown: what fits -- a separator never ends the row nor starts the menu.
+  local function shown_item(i)
+    if not control.has(over.t.shown, i) then return false end
+    if is_separator(i) then
+      local after = false
+      for j = i + 1, #items do
+        if control.has(over.t.shown, j) and not is_separator(j) then after = true break end
+      end
+      if not after then return false end
     end
-    while n > 0 and (items[n].separator or items[n].kind == "separator") do n = n - 1 end
+    return true
+  end
+  local function fit()
+    local n = 0
+    for i = 1, #items do if shown_item(i) then n = n + 1 end end
     return n
   end
-  local function overflowed() return fit() < #items end
+
+  -- The buttons as one Tab stop: the Roving archetype over the
+  -- non-separator items (members), hidden and disabled ones passed over.
+  local members, member_of = {}, {}
+  for i = 1, #items do
+    if not is_separator(i) then members[#members + 1] = i member_of[i] = #members end
+  end
+  local nodes = {}
+  local rove = control.headless("Roving", { count = #members, owner = owner,
+    disabled = function()
+      local out = {}
+      for m, i in ipairs(members) do
+        local enabled = items[i].enabled
+        if type(enabled) == "function" then enabled = enabled() end
+        if enabled == false or not shown_item(i) then out[#out + 1] = m end
+      end
+      return out
+    end,
+    on_current_changed = function(m) local node = nodes[members[m]] if node then morf.focus.set(node, true) end end })
+  local function roving_key(name, modifiers)
+    return rove.key(name or "", modifiers or "")
+  end
 
   local function item_id(i) return items[i].id or (id and (id .. "-item-" .. i)) or nil end
 
   local function button(i)
     local item = items[i]
     if item.separator or item.kind == "separator" then
-      return ui.Item { width = sizes[i], height = H, visible = function() return i <= fit() end,
+      return ui.Item { width = sizes[i], height = H, visible = function() return shown_item(i) end,
         kit.separator { vertical = true, length = H - 16, anchors = { center_in = true } } }
     end
     local checkable = item.checked ~= nil
@@ -101,11 +136,24 @@ local function make(spec)
     node, t = control.make("Press", "area", { widget = "area", id = item_id(i), width = sizes[i], height = H,
       checkable = checkable, checked = checkable and function() return is_on(i) end or nil,
       enabled = item.enabled, cursor = "pointer",
-      visible = function() return i <= fit() end,
+      visible = function() return shown_item(i) end,
       accessible_name = item.label or item.tooltip or item.icon,
+      on_key_pressed = function(_, _, modifiers, _, name) return roving_key(name, modifiers) end,
       on_clicked = item.on_clicked,
       on_toggled = checkable and function(on) toggle(i, on) end or nil },
       { children = { look } })
+    nodes[i] = node
+    local m = member_of[i]
+    -- Tab stops at the current member only; a member taking focus is current.
+    node.focus_policy = function()
+      local current = rove.t.current
+      -- (The current one gone into the menu: the first shown takes the stop.)
+      if not shown_item(members[current] or 0) then
+        for k, j in ipairs(members) do if shown_item(j) then current = k break end end
+      end
+      return current == m and "strong" or "click"
+    end
+    morf.effect(skey .. ".focus." .. i, function() if node.focused then rove.send("focus_in", m) end end, { owner = node })
     local function ink()
       if checkable and is_on(i) then return kit.signal("accent")() end
       return kit.ink("hi")()
@@ -138,7 +186,7 @@ local function make(spec)
     for i, item in ipairs(items) do
       if not (item.separator or item.kind == "separator") then
         local entry = { id = id and (id .. "-menu-" .. i) or nil, label = item.label or item.tooltip or item.icon,
-          icon = item.icon, width = MW - 8, height = 36, visible = function() return i > fit() end }
+          icon = item.icon, width = MW - 8, height = 36, visible = function() return not shown_item(i) end }
         if item.checked ~= nil then
           entry.checked = function() return is_on(i) end
           entry.on_toggled = function(on) toggle(i, on) end
@@ -169,7 +217,8 @@ local function make(spec)
 
   local row = { gap = GAP, align = "center" }
   for i = 1, #items do row[#row + 1] = button(i) end
-  local node = ui.Item { id = id, x = spec.x, y = spec.y, anchors = spec.anchors, width = width, height = H,
+  local node = ui.Item { id = id, x = spec.x, owner,
+    on_destroyed = function() over.drop() rove.drop() end, y = spec.y, anchors = spec.anchors, width = width, height = H,
     accessible_role = "group", accessible_name = spec.accessible_name or "Toolbar",
     ui.Row(row),
     ui.Item { anchors = { right = true, vertical_center = true }, width = H, height = H, more } }
