@@ -10,8 +10,9 @@ engine <- frontend), and on exactly the morf crates its row below names.
 Nothing below morf-lua names `luna`; nothing outside morf-app and
 morf-desktop names a Wayland crate.
 
-Crates not yet in the table (old names still being merged) are reported,
-not failed, unless --strict.
+Violations a later phase of the plan removes are listed in PENDING, each
+with its phase: --strict fails on anything else, and on a PENDING entry
+that no longer happens (so the list only ever shrinks).
 """
 import re
 import sys
@@ -46,6 +47,28 @@ ALLOWED = {
     "morf-cli": {"morf-host", "morf-value"},
 }
 # morf-shader reads Lua-syntax shaders with luna's parser: the Lua layer.
+# What still breaks the rules, and the phase of PLAN.md that ends it.
+PENDING = {
+    "morf-kit depends on morf-lua, not in its row": "phase 6: morf.kit.native moves to morf-lua",
+    "morf-cli depends on morf-io, not in its row": "phase 7: morf-host",
+    "morf-cli depends on morf-kit, not in its row": "phase 7: morf-host",
+    "morf-cli depends on morf-layout, not in its row": "phase 7: morf-host",
+    "morf-cli depends on morf-lua, not in its row": "phase 7: morf-host",
+    "morf-cli depends on morf-render, not in its row": "phase 7: morf-host",
+    "morf-cli depends on morf-scene, not in its row": "phase 7: morf-host",
+    "morf-cli depends on morf-text, not in its row": "phase 7: morf-host",
+    "morf-cli depends on morf-wayland, not in its row": "phase 3: morf-app",
+    "morf-render names wayland-backend; only morf-app and morf-desktop may": "phase 3: render takes a RenderTarget",
+    "morf-render names wayland-client; only morf-app and morf-desktop may": "phase 3: render takes a RenderTarget",
+    "morf-render names wayland-protocols; only morf-app and morf-desktop may": "phase 3: render takes a RenderTarget",
+    "morf-wayland: not in the plan's table (being merged or renamed)": "phases 3-4: morf-app, morf-desktop",
+    "morf-wayland names smithay-client-toolkit; only morf-app and morf-desktop may": "phase 3",
+    "morf-wayland names wayland-backend; only morf-app and morf-desktop may": "phase 3",
+    "morf-wayland names wayland-client; only morf-app and morf-desktop may": "phase 3",
+    "morf-wayland names wayland-protocols; only morf-app and morf-desktop may": "phase 3",
+    "morf-wayland names wayland-protocols-misc; only morf-app and morf-desktop may": "phase 3",
+    "morf-wayland names wayland-protocols-wlr; only morf-app and morf-desktop may": "phase 3",
+}
 NO_LUA_BELOW = {"morf-shader", "morf-lua", "morf-host", "morf-cli"}
 WAYLAND_ALLOWED = {"morf-app", "morf-desktop", "morf-host", "morf-cli"}
 WAYLAND = re.compile(r"^(wayland-|smithay-client-toolkit)")
@@ -93,12 +116,17 @@ def main():
         for dep in sorted(deps):
             if WAYLAND.match(dep) and name not in WAYLAND_ALLOWED:
                 (problems if name in ALLOWED else notes).append(f"{name} names {dep}; only morf-app and morf-desktop may")
-    for line in problems:
-        print("error:", line)
-    for line in notes:
-        print("note: ", line)
-    print(f"{len(found)} crates, {len(problems)} errors, {len(notes)} notes")
-    if strict and (problems or notes):
+    found_lines = problems + notes
+    new = [line for line in found_lines if line not in PENDING]
+    gone = [line for line in PENDING if line not in found_lines]
+    for line in found_lines:
+        tag = "pending" if line in PENDING else ("error" if line in problems else "note")
+        suffix = f"  ({PENDING[line]})" if line in PENDING else ""
+        print(f"{tag}: {line}{suffix}")
+    for line in gone:
+        print(f"fixed:   {line}  -- remove it from PENDING")
+    print(f"{len(found)} crates, {len(new)} new, {len(found_lines) - len(new)} pending, {len(gone)} fixed")
+    if strict and (new or gone):
         return 1
     return 0
 
