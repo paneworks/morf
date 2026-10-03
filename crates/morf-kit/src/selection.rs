@@ -11,7 +11,11 @@
 //! State: `current`, `selected` (indices), `count`.
 //!
 //! Events: the base's, `"item_pressed"` (index, modifiers: Ctrl toggles,
-//! Shift extends), `"item_activated"` (index: a double press), `"key"`
+//! Shift extends), `"item_activated"` (index: a double press), `"point"`
+//! (dx, dy, dead radius: a radial menu's pointer from its centre -- the
+//! item whose sector it is in becomes current, none inside the dead
+//! radius), `"point_release"` (the same, let go: that item is activated --
+//! a marking menu's flick), `"key"`
 //! (name, modifiers, text, now in ms -- for typeahead). Signals:
 //! `current_changed` (index), `selection_changed` (indices), `activated`
 //! (index).
@@ -295,6 +299,25 @@ impl Archetype for Selection {
                     }
                 }
             }
+            // A radial menu: item 1 at twelve o'clock, the rest clockwise,
+            // each a sector of the circle.
+            "point" | "point_release" => {
+                let (dx, dy) = (number(arguments.first()).unwrap_or(0.0), number(arguments.get(1)).unwrap_or(0.0));
+                let dead = number(arguments.get(2)).unwrap_or(16.0);
+                if !self.base.enabled || self.count == 0 || dx.hypot(dy) < dead {
+                    return Ok(effects);
+                }
+                let n = self.count as f64;
+                let dx = if self.base.mirrored { -dx } else { dx };
+                let angle = dx.atan2(-dy).to_degrees().rem_euclid(360.0);
+                let index = (((angle + 180.0 / n) / (360.0 / n)).floor() as i64).rem_euclid(self.count as i64) + 1;
+                if self.usable(index) {
+                    self.go(index, &mut effects);
+                    if event == "point_release" {
+                        effects.raise("activated", vec![index.into()]);
+                    }
+                }
+            }
             "item_activated" => {
                 let index = number(arguments.first()).unwrap_or(0.0) as i64;
                 if self.base.enabled && self.usable(index) {
@@ -533,6 +556,20 @@ impl Archetype for Selection {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_radial_menu_points_by_angle_and_a_flick_activates() {
+        let mut s = Selection::new();
+        s.configure("count", &4.0.into()).unwrap();
+        // Right of centre: the second of four (three o'clock).
+        s.handle("point", &[40.0.into(), 0.0.into(), 16.0.into()]).unwrap();
+        assert_eq!(s.current, 2);
+        let e = s.handle("point_release", &[0.0.into(), 50.0.into(), 16.0.into()]).unwrap();
+        assert_eq!(s.current, 3);
+        assert!(e.signals.iter().any(|(n, _)| n == "activated"));
+        s.handle("point", &[3.0.into(), 3.0.into(), 16.0.into()]).unwrap();
+        assert_eq!(s.current, 3);
+    }
 
     fn selection(settings: &[(&str, IpcValue)]) -> Selection {
         let mut s = Selection::new();

@@ -176,6 +176,11 @@ fn make(archetype: &str) -> Result<Box<dyn Archetype>, String> {
         "Shell" => Ok(Box::new(crate::shell::Shell::new())),
         "Canvas" => Ok(Box::new(crate::canvas::Canvas::new())),
         "Dock" => Ok(Box::new(crate::dock::Dock::new())),
+        "Transform" => Ok(Box::new(crate::transform::Transform::new())),
+        "Sheet" => Ok(Box::new(crate::sheet::Sheet::new())),
+        "Roving" => Ok(Box::new(crate::roving::Roving::new())),
+        "Form" => Ok(Box::new(crate::form::Form::new())),
+        "Overflow" => Ok(Box::new(crate::overflow::Overflow::new())),
         other if ARCHETYPES.contains(&other) => {
             Err(format!("archetype {other} has not arrived yet"))
         }

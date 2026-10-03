@@ -3,15 +3,19 @@
 //!
 //! Settings: `checkable`, `checked`, `tristate` and `partial` (a checkbox's
 //! third state), `group`, `exclusive` and `allow_none` (see `group.rs`),
-//! `auto_repeat` with `repeat_delay` and `repeat_interval` (ms), and the
-//! base's `enabled`, `mirrored`, `highlighted`.
+//! `auto_repeat` with `repeat_delay` and `repeat_interval` (ms), `hold`
+//! (ms: a press must be held that long to count -- a delete that asks to
+//! be meant; 0, off), and the base's `enabled`, `mirrored`, `highlighted`.
+//! State besides: `holding` (a hold under way) and `hold` (its length,
+//! for a skin's ring to fill over).
 //!
 //! Events: the base's pointer and focus events, `"clicked"`, `"key"` (name,
 //! modifiers), `"repeat"` (the Lua side's timer), `"long_pressed"`,
 //! `"double_clicked"`. Signals: `pressed`, `released`, `clicked`,
 //! `toggled` (checked), `long_pressed`, `double_clicked`, and two the Lua
-//! side acts on: `schedule_repeat` (ms) and `focus_request` (on a group
-//! member the arrows moved to).
+//! side acts on: `schedule_repeat` (ms), `schedule_hold` (ms: then send
+//! `"held"`) and `focus_request` (on a group member the arrows moved to);
+//! `hold_canceled` when a hold is let go short.
 
 use morf_lua::IpcValue;
 
@@ -34,6 +38,8 @@ pub(crate) struct Press {
     /// Repeats fired during the press under way: a release after one is not
     /// also a click.
     repeated: bool,
+    hold: f64,
+    holding: bool,
 }
 
 impl Press {
@@ -106,6 +112,8 @@ impl Archetype for Press {
             ("checkable".into(), self.checkable.into()),
             ("checked".into(), self.checked.into()),
             ("partial".into(), self.partial.into()),
+            ("holding".into(), self.holding.into()),
+            ("hold".into(), self.hold.into()),
         ]);
         fields
     }
@@ -113,14 +121,36 @@ impl Archetype for Press {
     fn handle(&mut self, event: &str, arguments: &[IpcValue]) -> Result<Effects, String> {
         match event {
             "clicked" => {
-                if std::mem::take(&mut self.repeated) {
+                // (A held press acted when the hold was done; a short one not.)
+                if std::mem::take(&mut self.repeated) || self.hold > 0.0 {
                     return Ok(Effects::default());
                 }
                 Ok(self.activate())
             }
+            "held" => {
+                let mut effects = Effects::default();
+                if self.holding && self.base.down && self.base.enabled {
+                    self.holding = false;
+                    effects.set("holding", false);
+                    effects.extend(self.activate());
+                }
+                Ok(effects)
+            }
+            "released" | "canceled" if self.holding => {
+                let mut effects = self.base.handle(event, arguments).unwrap_or_default();
+                self.holding = false;
+                effects.set("holding", false);
+                effects.raise("hold_canceled", Vec::new());
+                Ok(effects)
+            }
             "pressed" => {
                 let mut effects = self.base.handle(event, arguments).unwrap_or_default();
                 self.repeated = false;
+                if self.hold > 0.0 && self.base.enabled {
+                    self.holding = true;
+                    effects.set("holding", true);
+                    effects.raise("schedule_hold", vec![self.hold.into()]);
+                }
                 if self.auto_repeat && self.base.enabled {
                     effects.raise("schedule_repeat", vec![self.repeat_delay.into()]);
                 }
@@ -215,6 +245,10 @@ impl Archetype for Press {
             "auto_repeat" => self.auto_repeat = flag(field)?,
             "repeat_delay" => self.repeat_delay = expect_number(Some(value), field)?.max(0.0),
             "repeat_interval" => self.repeat_interval = expect_number(Some(value), field)?.max(1.0),
+            "hold" => {
+                self.hold = expect_number(Some(value), field)?.max(0.0);
+                effects.set("hold", self.hold);
+            }
             _ => return Err(format!("Press has no setting `{field}`")),
         }
         Ok(effects)
@@ -232,6 +266,20 @@ impl Archetype for Press {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hold_counts_only_when_held_long_enough() {
+        let mut p = Press::new();
+        p.configure("hold", &800.0.into()).unwrap();
+        let e = p.handle("pressed", &[1.0.into(), 1.0.into()]).unwrap();
+        assert!(e.signals.iter().any(|(n, _)| n == "schedule_hold"));
+        let e = p.handle("released", &[]).unwrap();
+        assert!(e.signals.iter().any(|(n, _)| n == "hold_canceled"));
+        assert!(p.handle("clicked", &[]).unwrap().signals.is_empty());
+        p.handle("pressed", &[1.0.into(), 1.0.into()]).unwrap();
+        let e = p.handle("held", &[]).unwrap();
+        assert!(e.signals.iter().any(|(n, _)| n == "clicked"));
+    }
 
     fn press(settings: &[(&str, IpcValue)]) -> Press {
         let mut press = Press::new();

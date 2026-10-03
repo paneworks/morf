@@ -77,6 +77,17 @@ pub fn role_of(archetype: &str, widget: &str, checkable: bool) -> &'static str {
         },
         "Shell" => "application",
         "Dock" => "group",
+        "Transform" => match widget {
+            "floating_panel" | "pip_window" => "dialog",
+            _ => "group",
+        },
+        "Sheet" => "grid",
+        "Roving" => match widget {
+            "menubar" => "menu_bar",
+            _ => "toolbar",
+        },
+        "Form" => "form",
+        "Overflow" => "toolbar",
         "Canvas" => match widget {
             "image_viewer" => "image",
             _ => "group",

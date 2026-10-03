@@ -14,6 +14,12 @@
 //! echo). Signals: `edited` and `text_changed` (text), `accepted` (text),
 //! `invalid` (text, on Return when not acceptable), and `set_text` (text:
 //! the Lua side writes it into the input -- a revert or a clear).
+//!
+//! With `capture` (a shortcut recorder) the field takes a key chord rather
+//! than text: `"key"` (name, modifiers) makes its text the chord
+//! (`"ctrl+shift+k"`) and raises `captured` (chord); Escape gives back the
+//! one it had, BackSpace or Delete alone clears it, and a modifier pressed
+//! alone waits for the key it goes with.
 
 use morf_lua::IpcValue;
 
@@ -36,6 +42,7 @@ pub(crate) struct TextField {
     maximum: Option<f64>,
     required: bool,
     revert_on_escape: bool,
+    capture: bool,
 }
 
 impl TextField {
@@ -54,6 +61,7 @@ impl TextField {
             maximum: None,
             required: false,
             revert_on_escape: false,
+            capture: false,
         }
     }
 
@@ -184,6 +192,39 @@ impl Archetype for TextField {
                 self.revealed = !self.revealed;
                 self.fields_into(&mut effects);
             }
+            "key" if self.capture && self.base.enabled => {
+                let name = text(arguments.first()).unwrap_or("").to_owned();
+                let modifiers = text(arguments.get(1)).unwrap_or("").to_owned();
+                const ALONE: &[&str] = &["Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R",
+                    "Super_L", "Super_R", "Meta_L", "Meta_R", "ISO_Level3_Shift", "Caps_Lock"];
+                effects.handled = true;
+                if name.is_empty() || ALONE.contains(&name.as_str()) {
+                    return Ok(effects);
+                }
+                let chord = match (name.as_str(), modifiers.is_empty()) {
+                    ("Escape", true) => {
+                        let back = self.accepted_text.clone();
+                        self.set_text(back.clone(), &mut effects);
+                        effects.raise("set_text", vec![back.into()]);
+                        return Ok(effects);
+                    }
+                    ("BackSpace" | "Delete", true) => String::new(),
+                    // Tab alone still leaves: a recorder must not trap focus.
+                    ("Tab" | "ISO_Left_Tab", true) => {
+                        effects.handled = false;
+                        return Ok(effects);
+                    }
+                    _ => {
+                        let key = if name.chars().count() == 1 { name.to_lowercase() } else { name.clone() };
+                        if modifiers.is_empty() { key } else { format!("{modifiers}+{key}") }
+                    }
+                };
+                self.set_text(chord.clone(), &mut effects);
+                self.accepted_text = chord.clone();
+                effects.raise("set_text", vec![chord.clone().into()]);
+                effects.raise("edited", vec![chord.clone().into()]);
+                effects.raise("captured", vec![chord.into()]);
+            }
             "clear" | "reveal" | "clicked" | "key" => {}
             _ => {
                 return self
@@ -242,6 +283,7 @@ impl Archetype for TextField {
                 self.fields_into(&mut effects);
             }
             "revert_on_escape" => self.revert_on_escape = expect_boolean(Some(value), field)?,
+            "capture" => self.capture = expect_boolean(Some(value), field)?,
             _ => return Err(format!("TextField has no setting `{field}`")),
         }
         Ok(effects)

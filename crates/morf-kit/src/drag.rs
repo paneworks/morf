@@ -2,7 +2,8 @@
 //! reorderable rows, swipe-to-dismiss cards, pull to refresh, window move.
 //!
 //! Settings: `mode` (`"move"`, `"resize"`, `"split"`, `"reorder"`,
-//! `"swipe"`, `"transfer"`), `axis` (`"x"`, `"y"`, `"both"`), `threshold`
+//! `"swipe"`, `"transfer"`, `"confirm"` -- slide to confirm: the value runs
+//! 0..1 along `extent` and only all the way across counts), `axis` (`"x"`, `"y"`, `"both"`), `threshold`
 //! (px before a press becomes a drag, 6), `minimum`, `maximum` (bounds on
 //! the value: px for move and resize, 0..1 for a split), `value` (where it
 //! is: an offset, a size, a ratio), `extent` (the length a split ratio is
@@ -148,6 +149,10 @@ impl Archetype for Drag {
                         self.set_value(ratio, &mut effects);
                     }
                     "move" | "resize" => self.set_value(self.start_value + moved, &mut effects),
+                    "confirm" => {
+                        let v = (moved / self.extent.max(1.0)).clamp(0.0, 1.0);
+                        self.set_value(v, &mut effects);
+                    }
                     "reorder" => {
                         let rows = (moved / self.extent.max(1.0)).trunc() as i64;
                         while self.reordered != rows {
@@ -180,6 +185,13 @@ impl Archetype for Drag {
                         }
                     }
                     effects.raise("dropped", vec![self.value.into()]);
+                    // Slid all the way: confirmed; short of it, back to the start.
+                    if self.mode == "confirm" {
+                        if event == "released" && self.value >= 0.95 {
+                            effects.raise("confirmed", Vec::new());
+                        }
+                        self.set_value(0.0, &mut effects);
+                    }
                 }
                 self.active = false;
                 self.origin = None;
@@ -207,6 +219,12 @@ impl Archetype for Drag {
             "key" if self.base.enabled => {
                 let name = text(arguments.first()).unwrap_or("");
                 let modifiers = text(arguments.get(1)).unwrap_or("");
+                // From the keyboard a slide is a held deliberate key: Return.
+                if self.mode == "confirm" && matches!(name, "Return" | "KP_Enter") {
+                    effects.raise("confirmed", Vec::new());
+                    effects.handled = true;
+                    return Ok(effects);
+                }
                 let back = matches!(name, "Left" | "Up");
                 let forth = matches!(name, "Right" | "Down");
                 if !(back || forth) {
@@ -244,8 +262,8 @@ impl Archetype for Drag {
         match field {
             "mode" => {
                 let mode = text(Some(value)).unwrap_or("move");
-                if !matches!(mode, "move" | "resize" | "split" | "reorder" | "swipe" | "transfer") {
-                    return Err("mode is move, resize, split, reorder, swipe or transfer".into());
+                if !matches!(mode, "move" | "resize" | "split" | "reorder" | "swipe" | "transfer" | "confirm") {
+                    return Err("mode is move, resize, split, reorder, swipe, transfer or confirm".into());
                 }
                 self.mode = mode.into();
             }
