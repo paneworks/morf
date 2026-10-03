@@ -20,7 +20,28 @@ local skin = require("lib.kit.skin")
 local M = {}
 
 -- Spec fields that are the archetype's settings, not the node's.
-local SETTINGS = { enabled = true, mirrored = true, highlighted = true }
+local BASE = { "enabled", "mirrored", "highlighted" }
+local SETTINGS = {
+  Control = {},
+  Press = { "checkable", "checked", "tristate", "partial", "group", "exclusive", "allow_none", "auto_repeat",
+    "repeat_delay", "repeat_interval" },
+  Range = { "from", "to", "value", "step", "page_step", "snap", "live", "orientation", "inverted", "logarithmic",
+    "wrap", "range", "first", "second", "handle_size" },
+}
+-- How each archetype takes focus by default: a press by Tab only, so a click
+-- leaves a search field typing; a range by click too, so the arrows move
+-- what was just dragged.
+local POLICY = { Control = "none", Press = "tab", Range = "strong" }
+-- Which take keys and the wheel.
+local KEYS = { Press = true, Range = true }
+local WHEEL = { Range = true }
+-- Handlers that are an archetype's signals, raised through `apply`, not
+-- given to the node.
+local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_value_changed = true,
+  on_long_pressed = true, on_double_clicked = true }
+-- Every live control's way to take effects another control's event caused
+-- (an exclusive group), by id.
+local appliers = {}
 -- Spec fields that go to the node as they are.
 local NODE = { id = true, x = true, y = true, z = true, anchors = true, visible = true, opacity = true,
   layout = true, focus_policy = true, cursor = true, scale = true, rotation = true, stretch = true,
@@ -34,39 +55,133 @@ local function sides(v)
 end
 
 --- Builds a control. See the head of this file.
-function M.make(archetype, widget, spec)
+function M.make(archetype, widget, spec, extra)
   spec = spec or {}
+  extra = extra or {}
   local slot_names = native.slots(archetype)
+  local fields = {}
+  for _, field in ipairs(BASE) do fields[#fields + 1] = field end
+  for _, field in ipairs(SETTINGS[archetype] or {}) do fields[#fields + 1] = field end
   local settings = {}
-  for field in pairs(SETTINGS) do
+  for _, field in ipairs(fields) do
     local v = spec[field]
     if v ~= nil and type(v) ~= "function" then settings[field] = v end
   end
-  local id, state = native.new(archetype, settings)
+  local id, state, made = native.new(archetype, settings)
   state.width, state.height = 0, 0
   local t = morf.state(state)
-  local root, slots
+  local root, slots, waiting
+  local repeat_timer
+  -- What the click being delivered said, for the configuration's handler.
+  local click_args = {}
   local function apply(effects)
     for field, v in pairs(effects.state) do t[field] = v end
+    -- Slots a skin left to be built when first wanted.
+    if waiting and (t.hovered or t.down or t.visual_focus) then
+      local now = waiting
+      waiting = nil
+      for _, entry in ipairs(now) do
+        local node = entry[2]()
+        if node then slots[entry[1]] = node ui.reparent(node, root) end
+      end
+    end
     for _, signal in ipairs(effects.signals) do
-      local handler = spec["on_" .. signal[1]]
-      if handler then handler(table.unpack(signal, 2)) end
+      local name = signal[1]
+      if name == "schedule_repeat" then
+        if repeat_timer then repeat_timer:cancel() end
+        repeat_timer = morf.timer(signal[2], function()
+          repeat_timer = nil
+          appliers[id](native.send(id, "repeat"))
+        end)
+      elseif name == "focus_request" then
+        if root then morf.focus.set(root, true) end
+      elseif name == "pressed" or name == "released" then
+        -- The configuration's own pointer handlers hear the event itself.
+      elseif name == "clicked" then
+        if spec.on_clicked then spec.on_clicked(table.unpack(click_args)) end
+      else
+        local handler = spec["on_" .. name]
+        if handler then handler(table.unpack(signal, 2)) end
+      end
+    end
+    for _, other in ipairs(effects.others or {}) do
+      local apply_other = appliers[other[1]]
+      if apply_other then apply_other(other[2]) end
     end
   end
+  appliers[id] = apply
   local function send(event, ...) apply(native.send(id, event, ...)) end
+  -- Where a press or a drag is along the skin's track: the archetype maps
+  -- the pointer onto the travel the skin drew.
+  local function travel(x, y)
+    local track = slots and slots.track
+    if track then
+      -- Both on the surface: the track's place in the control is the difference.
+      local tx = (track.layout_x or 0) - (root.layout_x or 0)
+      local ty = (track.layout_y or 0) - (root.layout_y or 0)
+      return x - tx, y - ty, track.layout_width or 0, track.layout_height or 0
+    end
+    return x, y, root.layout_width or 0, root.layout_height or 0
+  end
+  -- After the archetype has the event, the configuration's own handler
+  -- for it, with what the pointer said.
+  local function also(name, ...) local own = spec[name] if own then return own(...) end end
   local props = {
-    focus_policy = "none",
-    on_entered = function() send("entered") end,
-    on_exited = function() send("exited") end,
-    on_pressed = function(_, _, x, y, button) send("pressed", x, y, button) end,
-    on_released = function() send("released") end,
-    on_clicked = function() send("clicked") end,
+    focus_policy = POLICY[archetype] or "none",
+    on_entered = function(...) send("entered") also("on_entered", ...) end,
+    on_exited = function(...) send("exited") also("on_exited", ...) end,
+    on_pressed = function(sx, sy, x, y, ...)
+      local a, b, w, h = travel(x, y)
+      send("pressed", a, b, w, h)
+      also("on_pressed", sx, sy, x, y, ...)
+    end,
+    on_dragged = function(sx, sy, dx, dy, x, y, ...)
+      local a, b, w, h = travel(x, y)
+      send("dragged", a, b, w, h)
+      also("on_dragged", sx, sy, dx, dy, x, y, ...)
+    end,
+    on_released = function(...) send("released") also("on_released", ...) end,
+    on_clicked = function(...)
+      click_args = { ... }
+      send("clicked")
+    end,
+    -- A long press takes the click its release would make, so it is
+    -- listened for only when the configuration wants it (and the double
+    -- click likewise).
+    on_long_pressed = spec.on_long_pressed and function() send("long_pressed") end or nil,
+    on_double_clicked = spec.on_double_clicked and function() send("double_clicked") end or nil,
     on_focus_changed = function(on) send("focus", on, root and root.visual_focus or false) end,
     on_destroyed = function()
+      if repeat_timer then repeat_timer:cancel() end
+      appliers[id] = nil
       skin.untrack(root)
       native.drop(id)
     end,
   }
+  if KEYS[archetype] then
+    -- A key the archetype does not use goes on to what is around it.
+    props.on_key_pressed = function(keysym, text, modifiers, repeat_, name)
+      local effects = native.send(id, "key", name or "", modifiers or "")
+      apply(effects)
+      if effects.handled then return true end
+      if spec.on_key_pressed then return spec.on_key_pressed(keysym, text, modifiers, repeat_, name) end
+      return false
+    end
+  end
+  if WHEEL[archetype] then
+    props.on_wheel = function(_, _, _, _, step_x, step_y) send("wheel", step_x or 0, step_y or 0) end
+  end
+  -- The configuration's other handlers go to the node as they are.
+  for name, handler in pairs(spec) do
+    if type(name) == "string" and name:match("^on_") and props[name] == nil and type(handler) == "function"
+      and not SIGNALS[name] then
+      props[name] = handler
+    end
+  end
+  -- Properties of the node itself, and the children a layout put in it --
+  -- the configuration's, not the skin's, so a theme switch keeps them.
+  for name, v in pairs(extra.props or {}) do props[name] = v end
+  for i, child in ipairs(extra.children or {}) do props[i] = child end
   for field in pairs(NODE) do if spec[field] ~= nil then props[field] = spec[field] end end
   local padding, insets = sides(spec.padding), sides(spec.insets)
   -- Bumped once the slots are built, so the size binding reads the new ones.
@@ -84,15 +199,15 @@ function M.make(archetype, widget, spec)
       slot_size("content", "width"), slot_size("content", "height"), padding, insets)
     return axis == "width" and w or h
   end
-  props.width = spec.width or function() return implicit("width") end
-  props.height = spec.height or function() return implicit("height") end
+  if props.width == nil then props.width = spec.width or function() return implicit("width") end end
+  if props.height == nil then props.height = spec.height or function() return implicit("height") end end
   root = ui.MouseArea(props)
   -- The live size, for skins that draw to it.
   morf.effect("kit.control.size." .. id, function()
     t.width, t.height = root.layout_width or 0, root.layout_height or 0
   end, { owner = root })
   -- Settings given as bindings follow them.
-  for field in pairs(SETTINGS) do
+  for _, field in ipairs(fields) do
     if type(spec[field]) == "function" then
       morf.effect("kit.control." .. field .. "." .. id, function()
         apply(native.configure(id, field, spec[field]()))
@@ -101,15 +216,23 @@ function M.make(archetype, widget, spec)
   end
   local function build()
     if slots then for _, node in pairs(slots) do ui.destroy(node, true) end end
-    slots = skin.build(widget, archetype, slot_names, t, spec)
+    slots, waiting = {}, nil
+    local built = skin.build(widget, archetype, slot_names, t, spec, nil, root)
     for _, name in ipairs(slot_names) do
-      local node = slots[name]
-      if node then ui.reparent(node, root) end
+      local node = built[name]
+      if type(node) == "function" then
+        waiting = waiting or {}
+        waiting[#waiting + 1] = { name, node }
+      elseif node then
+        slots[name] = node
+        ui.reparent(node, root)
+      end
     end
     generation:set(generation:get() + 1)
   end
   build()
   skin.track(root, build)
+  apply(made)
   return root, t, { id = id, send = send, configure = function(field, v) apply(native.configure(id, field, value(v))) end,
     slots = function() return slots end }
 end

@@ -4,12 +4,15 @@
 //! the keypad's Enter and Space click it, as they click a button anywhere.
 //! Any other key goes up the tree to the nearest ancestor that takes keys --
 //! a launcher's arrows and Escape still reach the launcher while one of its
-//! rows has focus.
+//! rows has focus. A key handler that returns `false` passes the key on
+//! the same way: to the next ancestor that takes keys.
 
 use morf_scene::{Element, NodeHandle};
 
+use crate::reactive_execute::execute_ipc_handler;
 use crate::runtime_helpers::{handles_keys, takes_keys};
-use crate::{EventPoint, KeyModifiers, Runtime, UiEvent};
+use crate::types::LogLevel;
+use crate::{EventPoint, IpcValue, KeyModifiers, Runtime, UiEvent};
 
 const RETURN: u32 = 0xff0d;
 const KP_ENTER: u32 = 0xff8d;
@@ -54,5 +57,61 @@ impl Runtime {
         let point = EventPoint::new((0.0, 0.0), (0.0, 0.0)).with_button(LEFT_BUTTON);
         self.dispatch_pointer(node, UiEvent::Clicked, point, (0.0, 0.0));
         true
+    }
+
+    /// Runs a key press at `node` and, while a handler declines it by
+    /// returning `false`, at each ancestor that takes keys after it. A text
+    /// input or a terminal has the last word on its keys. Returns whether
+    /// anything ran.
+    pub fn dispatch_key_press_bubbling(
+        &mut self,
+        node: NodeHandle,
+        keysym: u32,
+        text: Option<&str>,
+        modifiers: KeyModifiers,
+        repeat: bool,
+    ) -> bool {
+        let mut current = Some(node);
+        let mut ran = false;
+        while let Some(node) = current {
+            let plain = {
+                let state = self.reactive.borrow();
+                handles_keys(&state, node)
+                    && !matches!(
+                        state.scene.element(node).ok(),
+                        Some(Element::TextInput | Element::Terminal)
+                    )
+            };
+            if !plain {
+                return ran | self.dispatch_key_press(node, keysym, text, modifiers, repeat);
+            }
+            let handler = self
+                .reactive
+                .borrow()
+                .handlers
+                .get(&(node, UiEvent::KeyPressed))
+                .cloned();
+            if let Some(handler) = handler {
+                ran = true;
+                let args =
+                    crate::runtime_text_inputs::key_args(keysym, text, modifiers, Some(repeat));
+                match self
+                    .run_handler(|ctx, limits| execute_ipc_handler(ctx, &handler, &args, limits))
+                {
+                    Ok(values) if values.first() == Some(&IpcValue::Boolean(false)) => {}
+                    Ok(_) => return true,
+                    Err(message) => {
+                        self.reactive.borrow_mut().log(
+                            LogLevel::Warn,
+                            format!("{node:?}.on_key_pressed: {message}"),
+                        );
+                        return true;
+                    }
+                }
+            }
+            let parent = self.reactive.borrow().scene.parent(node).ok().flatten();
+            current = parent.and_then(|parent| self.key_route(parent));
+        }
+        ran
     }
 }

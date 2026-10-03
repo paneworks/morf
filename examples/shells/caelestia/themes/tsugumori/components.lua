@@ -610,63 +610,8 @@ return function(theme)
     feedback(area)
     return area
   end
-  function M.pill(spec)
-    local ink = spec.ink or function() return C.onPrimaryContainer end
-    local fill = spec.color or function() return C.primaryContainer end
-    local function caption()
-      local label = type(spec.label)=="function" and spec.label() or spec.label
-      return tostring(label or ""):upper()
-    end
-    local function width() return type(spec.width)=="function" and spec.width() or spec.width end
-    -- Measure the selected face instead of assuming a monospace advance.
-    local measure = M.menu_label {text=caption,font_size=theme.typography.menu,height=18,opacity=0}
-    local function natural_width()
-      return math.max(1,measure.layout_width or utf8.len(caption())*theme.typography.menu*.62)
-    end
-    local function available() return math.max(0,width()-(spec.icon and 36 or 16)) end
-    local function label_size() return math.max(9,math.min(theme.typography.menu,theme.typography.menu*available()/natural_width())) end
-    local function text_width() return math.min(available(),natural_width()*label_size()/theme.typography.menu+2) end
-    local strip = ui.Column { y=-36,gap=0,
-      M.menu_label {text="/ / / / / /",height=18,color=ink},
-      M.menu_label {text="+ | + | + |",height=18,color=ink},
-      M.menu_label {text=caption,font_size=label_size,height=18,width=text_width,elide="right",color=ink},
-    }
-    local area = M.action {
-      id = spec.id, width = spec.width, height = spec.height or 32, cursor = "pointer",
-      x = spec.x, y = spec.y, anchors = spec.anchors, on_clicked = spec.on_clicked,
-      measure,
-      ui.Row { anchors = { center_in = true }, gap = 6, align="center",
-        spec.icon and M.icon(spec.icon,17,ink) or nil,
-        ui.Item {id=(spec.id or "pill").."-label",width=text_width,height=18,clip=true,visible=function() return text_width()>0 end,strip},
-      },
-    }
-    local was,running=false,nil
-    morf.effect("tsugumori.label."..(spec.id or tostring(area)),function()
-      local now=area.hovered
-      if was==now then return end
-      was=now
-      if running then running:stop() end
-      if now then running=morf.animation.play { {node=strip,property="y",from=0,to=-36,duration=340,easing="out_cubic"} }
-      else strip.y=-36 end
-    end,{owner=area})
-    return M.hover(area, function(hovered) return hovered and fill():mix(ink(), 0.12) or fill() end)
-  end
-  function M.switch(spec)
-    local function on() return spec.on() == true end
-    return M.action {
-      id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors,
-      width = 52, height = 32, cursor = "pointer",
-      on_clicked = function() if spec.on_toggled then spec.on_toggled(not on()) end end,
-      ui.Rect { anchors = { fill = true }, radius = 0, border_width = 1,
-        color = function() return C.surfaceContainerHighest end,
-        border_color = function() return on() and stroke(C,"focus") or stroke(C,"idle") end },
-      ui.Rect { y = 5, x = function() return on() and 28 or 5 end, width = 19, height = 22,
-        color = function() return on() and C.primary or C.outline end,
-        behavior = { x = { duration = 150, easing = "out_cubic" } } },
-    }
-  end
   local meters = require("themes.tsugumori.meters")(theme, M)
-  M.slider, M.bar, M.media_progress = meters.slider, meters.bar, meters.media_progress
+  M.bar = meters.bar
 
   -- ------------------------------------------------- stateful controls --
 
@@ -793,27 +738,6 @@ return function(theme)
 
   --- A small chamfered square toggle with an icon; the alert tone while
   --- `on` (a mute): a filled plate, the alert hairline and a slash mark.
-  function M.icon_button(spec)
-    local w, h = spec.width or 32, spec.height or 32
-    local function on() return spec.on and spec.on() == true end
-    local alert = M.signal("alert")
-    local c = math.max(3, math.floor(math.min(w, h) * .22))
-    return M.action { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors,
-      width = w, height = h, cursor = "pointer", on_clicked = spec.on_clicked,
-      ui.Path { width = w, height = h, view_box = { 0, 0, w, h }, d = frame_d(w, h, c, .5),
-        fill_color = function() return on() and alert():alpha(.16) or C.surfaceContainerHigh end,
-        stroke_color = function() return on() and alert():alpha(.75) or stroke(C, "idle") end,
-        stroke_width = 1, stroke_join = "miter",
-        behavior = { fill_color = { duration = 140 }, stroke_color = { duration = 140 } } },
-      M.icon(function() return on() and (spec.icon_on or spec.icon_off) or (spec.icon_off or spec.icon_on) end,
-        math.floor(math.min(w, h) * .56),
-        function() return on() and alert() or C.onSurfaceVariant end,
-        { anchors = { center_in = true }, fill = on }),
-      ui.Rect { x = w - c - 1, y = 2, width = c - 1, height = 2, color = alert,
-        opacity = function() return on() and 1 or 0 end, behavior = { opacity = { duration = 140 } } },
-    }
-  end
-
   --- The on-screen keyboard's keys in Tsugumori's look: tonal caps with
   --- their top-left and bottom-right corners chamfered (one path per key),
   --- a press that takes the accent container and mono legends. Returns
@@ -1416,5 +1340,6 @@ return function(theme)
   -- Lists and keys wear the instrument pieces (themes/tsugumori/hud.lua).
   M.selection, M.keycap = hud().selection, hud().keycap
 
+  for name, skin in pairs(require("themes.tsugumori.skins")(theme, M, hud)) do M.skins[name] = skin end
   return M
 end

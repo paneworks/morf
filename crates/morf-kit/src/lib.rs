@@ -12,7 +12,10 @@
 //! state to the table a skin reads and calls the configuration's handlers.
 
 mod control;
+mod group;
 mod module;
+mod press;
+mod range;
 mod slots;
 mod tokens;
 mod value;
@@ -31,6 +34,12 @@ pub struct Effects {
     pub changed: Vec<(String, IpcValue)>,
     /// Signals to raise, in order, each with its arguments.
     pub signals: Vec<(String, Vec<IpcValue>)>,
+    /// Whether a key sent was used; one that was not goes on to whatever
+    /// around the control takes keys.
+    pub handled: bool,
+    /// What the event did to other controls -- the rest of an exclusive
+    /// group -- by id.
+    pub others: Vec<(i64, Effects)>,
 }
 
 impl Effects {
@@ -54,6 +63,14 @@ impl Effects {
             self.set(&field, value);
         }
         self.signals.extend(other.signals);
+        self.handled |= other.handled;
+        self.others.extend(other.others);
+    }
+
+    /// Marks a key as used.
+    pub fn handled(mut self) -> Self {
+        self.handled = true;
+        self
     }
 }
 
@@ -67,6 +84,15 @@ pub trait Archetype {
     fn handle(&mut self, event: &str, arguments: &[IpcValue]) -> Result<Effects, String>;
     /// Takes a setting the configuration wrote (`checked`, `value`, ...).
     fn configure(&mut self, field: &str, value: &IpcValue) -> Result<Effects, String>;
+    /// The exclusive group it belongs to, if any: the registry keeps one
+    /// checked at a time across its members.
+    fn group(&self) -> Option<group::Membership> {
+        None
+    }
+    /// Lets the registry change it as a member of its group.
+    fn as_member(&mut self) -> Option<&mut dyn group::Member> {
+        None
+    }
 }
 
 /// Registers the kit with the engine: every runtime made afterwards can

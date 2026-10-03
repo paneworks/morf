@@ -106,10 +106,19 @@ pub(crate) fn wheel(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
         y,
         horizontal,
         vertical,
-        horizontal_steps: horizontal.signum() as i32,
-        vertical_steps: vertical.signum() as i32,
+        horizontal_steps: steps(horizontal),
+        vertical_steps: steps(vertical),
     })?;
     Ok(Vec::new())
+}
+
+/// The notches a turn of `amount` is: none for none (`signum` says 1 for 0).
+fn steps(amount: f64) -> i32 {
+    if amount == 0.0 {
+        0
+    } else {
+        amount.signum() as i32
+    }
 }
 
 pub(crate) fn key(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {

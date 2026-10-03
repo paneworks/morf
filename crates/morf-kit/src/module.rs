@@ -1,6 +1,7 @@
 //! `morf.kit.native`: the archetypes as a Lua module.
 //!
-//! - `new(archetype, settings) -> id, state`: a control's behaviour.
+//! - `new(archetype, settings) -> id, state, effects`: a control's
+//!   behaviour, and what making it did to others (its group).
 //! - `send(id, event, ...) -> effects`: an event (`"pressed"`, `"key"`, ...).
 //! - `configure(id, field, value) -> effects`: a setting written.
 //! - `state(id) -> state`, `drop(id)`.
@@ -8,7 +9,9 @@
 //! - `implicit_size(bw, bh, cw, ch, padding, insets) -> w, h`.
 //! - `merge_tokens(parent, overrides) -> tokens`.
 //!
-//! `effects` is `{ state = { field = value }, signals = { { name, ... } } }`.
+//! `effects` is `{ state = { field = value }, signals = { { name, ... } },
+//! handled = bool, others = { { id, effects } } }`: `handled` says whether
+//! a key was used, and `others` what the event did to other controls.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -18,6 +21,9 @@ use std::sync::Arc;
 use morf_lua::{HostFunction, IpcTable, IpcValue, Runtime};
 
 use crate::control::{Control, implicit_size};
+use crate::group::arrow_step;
+use crate::press::Press;
+use crate::range::Range;
 use crate::slots::{ARCHETYPES, slots_of};
 use crate::tokens::merge_tokens;
 use crate::value::{expect_number, number, text};
@@ -27,6 +33,87 @@ use crate::{Archetype, Effects};
 struct Registry {
     next: i64,
     controls: HashMap<i64, Box<dyn Archetype>>,
+}
+
+impl Registry {
+    /// The members of `id`'s exclusive group, in the order they were made.
+    fn members(&self, id: i64) -> Vec<i64> {
+        let Some(group) = self
+            .controls
+            .get(&id)
+            .and_then(|c| c.group())
+            .filter(|g| g.exclusive)
+        else {
+            return Vec::new();
+        };
+        let mut members: Vec<i64> = self
+            .controls
+            .iter()
+            .filter(|(_, c)| {
+                c.group()
+                    .is_some_and(|g| g.exclusive && g.name == group.name)
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        members.sort_unstable();
+        members
+    }
+
+    /// After `id` changed: if it became checked, the rest of its exclusive
+    /// group is unchecked.
+    fn settle_group(&mut self, id: i64, effects: &mut Effects) {
+        let checked_now = effects
+            .changed
+            .iter()
+            .any(|(f, v)| f == "checked" && *v == IpcValue::Boolean(true));
+        if !checked_now {
+            return;
+        }
+        for other in self.members(id).into_iter().filter(|other| *other != id) {
+            if let Some(member) = self.controls.get_mut(&other).and_then(|c| c.as_member())
+                && member.checked()
+            {
+                let change = member.set_checked_by_group(false);
+                effects.others.push((other, change));
+            }
+        }
+    }
+
+    /// An arrow on a member of an exclusive group: the next enabled member
+    /// along takes the check and the focus.
+    fn arrow_in_group(&mut self, id: i64, name: &str, effects: &mut Effects) {
+        let mirrored = self.controls.get(&id).is_some_and(|c| {
+            c.state()
+                .iter()
+                .any(|(f, v)| f == "mirrored" && *v == IpcValue::Boolean(true))
+        });
+        let Some(step) = arrow_step(name, mirrored) else {
+            return;
+        };
+        let members = self.members(id);
+        let Some(at) = members.iter().position(|m| *m == id) else {
+            return;
+        };
+        let count = members.len() as i64;
+        for offset in 1..count {
+            let next = members[(at as i64 + step * offset).rem_euclid(count) as usize];
+            let Some(member) = self.controls.get_mut(&next).and_then(|c| c.as_member()) else {
+                continue;
+            };
+            if !member.enabled() {
+                continue;
+            }
+            let mut change = member.set_checked_by_group(true);
+            change.raise("focus_request", Vec::new());
+            change.raise("clicked", Vec::new());
+            effects.others.push((next, change));
+            if let Some(this) = self.controls.get_mut(&id).and_then(|c| c.as_member()) {
+                effects.extend(this.set_checked_by_group(false));
+            }
+            effects.handled = true;
+            return;
+        }
+    }
 }
 
 fn table(entries: Vec<(String, IpcValue)>) -> IpcValue {
@@ -40,6 +127,12 @@ fn list(values: Vec<IpcValue>) -> IpcValue {
 }
 
 fn effects_value(effects: Effects) -> IpcValue {
+    let others = effects
+        .others
+        .into_iter()
+        .map(|(id, effects)| list(vec![IpcValue::Integer(id), effects_value(effects)]))
+        .collect();
+    let handled = effects.handled;
     let signals = effects
         .signals
         .into_iter()
@@ -51,6 +144,8 @@ fn effects_value(effects: Effects) -> IpcValue {
     table(vec![
         ("state".into(), table(effects.changed)),
         ("signals".into(), list(signals)),
+        ("handled".into(), handled.into()),
+        ("others".into(), list(others)),
     ])
 }
 
@@ -58,6 +153,8 @@ fn effects_value(effects: Effects) -> IpcValue {
 fn make(archetype: &str) -> Result<Box<dyn Archetype>, String> {
     match archetype {
         "Control" => Ok(Box::new(Control::default())),
+        "Press" => Ok(Box::new(Press::new())),
+        "Range" => Ok(Box::new(Range::new())),
         other if ARCHETYPES.contains(&other) => {
             Err(format!("archetype {other} has not arrived yet"))
         }
@@ -97,7 +194,16 @@ pub fn install(runtime: &mut Runtime) {
             if let Some(IpcValue::Table(settings)) = arguments.get(1)
                 && let IpcTable::Map(settings) = settings.as_ref()
             {
-                for (field, value) in settings {
+                // Bounds and modes before the values they bound.
+                let rank = |field: &str| match field {
+                    "from" | "to" | "range" | "orientation" | "logarithmic" | "wrap" | "step"
+                    | "tristate" | "checkable" | "group" | "exclusive" | "allow_none" => 0,
+                    "value" | "first" | "second" | "checked" | "partial" => 2,
+                    _ => 1,
+                };
+                let mut ordered: Vec<_> = settings.iter().collect();
+                ordered.sort_by_key(|(field, _)| rank(field));
+                for (field, value) in ordered {
                     effects.extend(control.configure(field, value)?);
                 }
             }
@@ -106,7 +212,9 @@ pub fn install(runtime: &mut Runtime) {
             registry.next += 1;
             let id = registry.next;
             registry.controls.insert(id, control);
-            Ok(vec![IpcValue::Integer(id), state])
+            // Made checked into an exclusive group: the rest let go.
+            registry.settle_group(id, &mut effects);
+            Ok(vec![IpcValue::Integer(id), state, effects_value(effects)])
         }),
     ));
     let r = Rc::clone(&registry);
@@ -119,9 +227,13 @@ pub fn install(runtime: &mut Runtime) {
                 .to_owned();
             let mut registry = r.borrow_mut();
             let control = registry.controls.get_mut(&id).ok_or("no such control")?;
-            Ok(vec![effects_value(
-                control.handle(&event, &arguments[2..])?,
-            )])
+            let mut effects = control.handle(&event, &arguments[2..])?;
+            if event == "key" && !effects.handled {
+                let name = text(arguments.get(2)).unwrap_or("").to_owned();
+                registry.arrow_in_group(id, &name, &mut effects);
+            }
+            registry.settle_group(id, &mut effects);
+            Ok(vec![effects_value(effects)])
         }),
     ));
     let r = Rc::clone(&registry);
@@ -135,7 +247,9 @@ pub fn install(runtime: &mut Runtime) {
             let value = arguments.get(2).cloned().unwrap_or(IpcValue::Nil);
             let mut registry = r.borrow_mut();
             let control = registry.controls.get_mut(&id).ok_or("no such control")?;
-            Ok(vec![effects_value(control.configure(&field, &value)?)])
+            let mut effects = control.configure(&field, &value)?;
+            registry.settle_group(id, &mut effects);
+            Ok(vec![effects_value(effects)])
         }),
     ));
     let r = Rc::clone(&registry);

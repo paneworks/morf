@@ -6,7 +6,7 @@
 --
 --     skin.define("material", {
 --       skins = {
---         Button = function(t, spec) return { background = ..., label = ... } end,
+--         Button = function(t, spec, node) return { background = ..., label = ... } end,
 --         Switch = { indicator = function(t, spec) ... end },
 --       },
 --       defaults = { Press = { background = function(t, spec) ... end } },
@@ -15,7 +15,9 @@
 -- A slot comes from the first theme along the `extends` chain that fills
 -- it for the widget, then from the first that fills it for the archetype,
 -- then from the chain's `defaults` for the archetype -- built only when no
--- skin filled it. `skin.use(name)` switches theme: every live control
+-- skin filled it. A skin may give a slot as a function instead of a node:
+-- it is built the first time the control is entered, pressed or focused --
+-- for decoration most controls never show (a hover wash, a focus ring). `skin.use(name)` switches theme: every live control
 -- rebuilds its slots in place.
 local M = {}
 
@@ -53,34 +55,35 @@ end
 
 --- Builds the slots of a control: `widget` (its name), `archetype`,
 --- `slots` (the archetype's slot names), `t` (its live state), `spec`
---- (what the configuration gave it). Returns `{ [slot] = node }`.
-function M.build(widget, archetype, slots, t, spec, theme)
+--- (what the configuration gave it), `node` (the control itself, for a
+--- skin that hangs feedback on it). Returns `{ [slot] = node }`.
+function M.build(widget, archetype, slots, t, spec, theme, node)
   local themes_chain = chain(theme or current:get())
   local built, made = {}, {}
   -- A whole-function skin is called once and gives several slots at once.
   local function from(skin, slot, key)
     if type(skin) == "table" then
       local fill = skin[slot]
-      return fill and fill(t, spec) or nil
+      return fill and fill(t, spec, node) or nil
     elseif type(skin) == "function" then
-      if made[key] == nil then made[key] = skin(t, spec) or false end
+      if made[key] == nil then made[key] = skin(t, spec, node) or false end
       return made[key] and made[key][slot] or nil
     end
   end
   for _, slot in ipairs(slots) do
-    local node
+    local filled
     for depth, theme_entry in ipairs(themes_chain) do
-      node = from(theme_entry.skins[widget], slot, "w" .. depth)
+      filled = from(theme_entry.skins[widget], slot, "w" .. depth)
         or (widget ~= archetype and from(theme_entry.skins[archetype], slot, "a" .. depth)) or nil
-      if node then break end
+      if filled then break end
     end
-    if not node then
+    if not filled then
       for _, theme_entry in ipairs(themes_chain) do
         local defaults = theme_entry.defaults[archetype]
-        if defaults and defaults[slot] then node = defaults[slot](t, spec) break end
+        if defaults and defaults[slot] then filled = defaults[slot](t, spec, node) break end
       end
     end
-    built[slot] = node
+    built[slot] = filled
   end
   -- Slots a whole-function skin built that a nearer theme filled instead.
   local kept = {}
@@ -88,7 +91,7 @@ function M.build(widget, archetype, slots, t, spec, theme)
   for _, result in pairs(made) do
     if result then
       for _, node in pairs(result) do
-        if not kept[node] then require("morf.ui").destroy(node, true) end
+        if not kept[node] and type(node) ~= "function" then require("morf.ui").destroy(node, true) end
       end
     end
   end

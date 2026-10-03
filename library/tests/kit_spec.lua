@@ -24,6 +24,10 @@ local HOST = [[
         if entry.stage <= contract.stage then kit[entry.fn] = function() end end
       end
     end
+    kit.skins = {}
+    for name, archetype in pairs(contract.archetypes) do
+      if archetype.stage <= contract.stage then kit.skins[name] = function() end end
+    end
     return join(check.kit(kit))
   end
   -- Every archetype says what it is; every composite is made of archetypes.

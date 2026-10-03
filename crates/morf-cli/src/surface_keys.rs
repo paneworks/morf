@@ -143,7 +143,7 @@ pub(crate) fn dispatch_key_in_subtree(
     if runtime.is_text_input(node) {
         runtime.set_key_focus(Some(node));
     }
-    runtime.dispatch_key_press(node, keysym, text, modifiers, repeat)
+    runtime.dispatch_key_press_bubbling(node, keysym, text, modifiers, repeat)
 }
 
 /// The compositor's modifier state, as the runtime reads it.

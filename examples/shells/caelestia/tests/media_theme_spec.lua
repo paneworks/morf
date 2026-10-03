@@ -98,7 +98,7 @@ test.it("Tsugumori progress rail retains seeking and compact player volume",func
   test.click(volume.x+volume.width-1,volume.y+volume.height/2)
   test.advance(250)
   test.near(test.ipc("state").player.volume,1,.01)
-  test.eq(test.get("media-volume-slider-value").text,"100%")
+  test.eq(test.get("media-volume-slider-value").text,"100")
   local grip,label=test.get("media-volume-slider-handle"),test.get("media-volume-slider-value")
   test.truthy(grip.x+grip.width<label.x)
   test.eq(#test.logs("error"),0)

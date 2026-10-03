@@ -329,7 +329,7 @@ impl Runtime {
 }
 
 /// The arguments a key handler is called with; `repeat` only for presses.
-fn key_args(
+pub(crate) fn key_args(
     keysym: u32,
     text: Option<&str>,
     modifiers: KeyModifiers,

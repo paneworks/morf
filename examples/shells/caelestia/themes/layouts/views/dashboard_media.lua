@@ -281,7 +281,7 @@ function M.build(ctx)
     },
   }
 
-  -- The position: the theme's progress band with its seek over it.
+  -- The position: the theme's skin of the kit's seek bar.
   local PCY = LMY + CAPTION_H + 2 + LMH + 6
   local PCW, PCH = BW, 34
   local position_chart = ui.Item {
@@ -293,12 +293,8 @@ function M.build(ctx)
         return "−" .. media.duration(math.max(0, a.length - (a.position or 0)))
       end },
     ui.Item { id = "media-progress", y = CAPTION_H, width = PCW, height = PCH,
-      kit.media_progress { width = PCW, value = fraction, active = on_screen, playing = playing },
-      ctx.area {
-        id = "media-seek", anchors = { fill = true }, cursor = "pointer",
-        on_pressed = function(_, _, x) media.seek(x / PCW) end,
-        on_dragged = function(_, _, _, _, x) media.seek(x / PCW) end,
-      },
+      kit.media_progress { id = "media-seek", width = PCW, value = fraction, seek = media.seek,
+        active = on_screen, playing = playing },
     },
   }
 
