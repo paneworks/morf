@@ -57,12 +57,15 @@ local SOURCE = [[
     header = function() return kit.header { width = 260, title = "Header", status = "Live" } end,
     surface = function() return kit.surface { width = 260, height = 120 } end,
   }
-  -- The shared display widgets bring their own samples.
-  for _, group in ipairs(require("lib.kit.display").GROUPS) do
-    for name, make in pairs(require("lib.kit.display.samples_" .. group)) do
+  -- The shared display widgets and domain instruments bring their own samples.
+  local display = require("lib.kit.display")
+  local function samples(module)
+    for name, make in pairs(require(module)) do
       if not SAMPLES[name] then SAMPLES[name] = function() return make(kit) end end
     end
   end
+  for _, group in ipairs(display.GROUPS) do samples("lib.kit.display.samples_" .. group) end
+  for _, group in ipairs(display.DOMAINS) do samples("lib.kit.domain.samples_" .. group) end
   -- One cell per display function due at the contract's stage.
   local names, seen = {}, {}
   for _, list in pairs(contract.display) do
@@ -70,6 +73,13 @@ local SOURCE = [[
       if entry.stage <= contract.stage and not seen[entry.fn] then
         seen[entry.fn] = true
         names[#names + 1] = entry.fn
+      end
+    end
+  end
+  for _, domain in pairs(contract.domain) do
+    if (domain.stage or 1) <= contract.stage then
+      for _, fn in ipairs(domain.widgets or {}) do
+        if not seen[fn] then seen[fn] = true names[#names + 1] = fn end
       end
     end
   end
@@ -118,9 +128,32 @@ local function spills()
       local cell = owner(node)
       if cell and node ~= cell then
         local slack = 3
-        if node.x < cell.x - slack or node.y < cell.y - slack
+        -- What shows of it: its box cut by every clipping ancestor; a
+        -- turned drawing (or one under a turn) by where its centre is,
+        -- since its box is the bounds of its turned square.
+        local x0, y0, x1, y1 = node.x, node.y, node.x + node.width, node.y + node.height
+        local turned = (node.rotation or 0) % 360 ~= 0
+        local up = node.parent and by_handle[node.parent]
+        while up and up ~= cell do
+          if (up.rotation or 0) % 360 ~= 0 then turned = true end
+          if up.clip then
+            x0, y0 = math.max(x0, up.x), math.max(y0, up.y)
+            x1, y1 = math.min(x1, up.x + up.width), math.min(y1, up.y + up.height)
+          end
+          up = up.parent and by_handle[up.parent]
+        end
+        if turned then
+          local cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+          x0, y0, x1, y1 = cx, cy, cx, cy
+        end
+        if x1 > x0 + 0.5 and y1 > y0 + 0.5 or turned then
+          node = { element = node.element, id = node.id, x = x0, y = y0, width = x1 - x0, height = y1 - y0 }
+        else
+          node = nil
+        end
+        if node and (node.x < cell.x - slack or node.y < cell.y - slack
           or node.x + node.width > cell.x + cell.width + slack
-          or node.y + node.height > cell.y + cell.height + slack then
+          or node.y + node.height > cell.y + cell.height + slack) then
           out[#out + 1] = ("%s: %s %s %.0fx%.0f at %.0f,%.0f"):format(cell.id:sub(14), node.element, node.id or "",
             node.width, node.height, node.x - cell.x, node.y - cell.y)
         end

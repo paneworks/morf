@@ -236,6 +236,11 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
                             ),
                         ),
                         ("depth", IpcValue::Integer(depth)),
+                        // Whether it clips what is under it, and turns: a
+                        // check of what spills reads the visible box through
+                        // both.
+                        ("clip", IpcValue::Boolean(scene.bool_value(node, "clip").unwrap_or(false))),
+                        ("rotation", IpcValue::Number(scene.number(node, "rotation").unwrap_or(0.0))),
                         ("surface", string(surface.label())),
                         ("surface_kind", string(surface.kind)),
                     ],
