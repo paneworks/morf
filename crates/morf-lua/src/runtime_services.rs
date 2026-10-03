@@ -16,6 +16,8 @@ pub(crate) const PRELOAD_PATIENCE: Duration = Duration::from_millis(1500);
 impl Runtime {
     /// Polls native service jobs and runs completed callbacks with bounded fuel.
     pub fn poll_services(&mut self) -> bool {
+        // Outside the arena, before this turn's Lua: compile what turned hot.
+        self.service_jit();
         let _bookkeeping = crate::profile::span(|| "engine: services bookkeeping".to_owned());
         self.flush_lint();
         // The loop wakes when the caret is due to turn over

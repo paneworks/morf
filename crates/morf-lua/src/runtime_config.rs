@@ -24,6 +24,7 @@ impl Runtime {
     pub(crate) fn with_screen(limits: Limits, screen: Option<Screen>) -> Self {
         let mut lua = Lua::core();
         lua.set_memory_limit(Some(limits.memory));
+        crate::runtime_jit::configure(&mut lua);
         let reactive = Rc::new(RefCell::new(ReactiveState::new()));
         reactive.borrow_mut().limits = limits;
         let module_roots = Rc::new(RefCell::new(default_module_roots()));
@@ -60,6 +61,7 @@ impl Runtime {
                 Ok(ctx.stash(Executor::start(ctx, closure.into(), ())))
             })
             .map_err(|error| Error::Load(format!("{name}: {error}")))?;
+        self.prepare_jit();
 
         let slice_fuel = self.limits.slice_fuel.max(1);
         let mut remaining = self.limits.fuel;
@@ -78,6 +80,8 @@ impl Runtime {
                 .lua
                 .enter(|ctx| ctx.fetch(&executor).step(ctx, &mut fuel))
                 .map_err(|error| Error::Runtime(error.to_string()))?;
+            // Between slices, outside the arena: compile what turned hot.
+            self.service_jit();
             let consumed = allowance.saturating_sub(fuel.remaining()).max(0) as u64;
             remaining = remaining.saturating_sub(consumed.max(1));
 

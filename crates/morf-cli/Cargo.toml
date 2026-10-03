@@ -10,6 +10,10 @@ repository.workspace = true
 name = "morf"
 path = "src/main.rs"
 
+[features]
+# luna's native Lua tier; see crates/morf-lua/src/runtime_jit.rs.
+jit = ["morf-lua/jit"]
+
 [dependencies]
 libc = "0.2"
 flate2.workspace = true

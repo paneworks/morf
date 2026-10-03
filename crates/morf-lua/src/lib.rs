@@ -85,6 +85,7 @@ mod runtime_helpers;
 mod runtime_images;
 mod runtime_input;
 mod runtime_ipc;
+mod runtime_jit;
 mod runtime_layout;
 mod runtime_lock_surface;
 mod runtime_prefers;

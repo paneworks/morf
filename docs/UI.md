@@ -1710,6 +1710,43 @@ answers something and must be quick. A handler that runs out stops with
 pieces (`morf.timer(1, ...)`) or off the loop. `MORF_LIMITS` takes
 comma-separated `key=N` (`MORF_LIMITS=module=40000000,handler=2000000`).
 
+### What things cost
+
+Measured on the machine this repository is built on (Intel Core
+i7-11800H), release build, with luna's native tier off and on (the `jit`
+Cargo feature; `MORF_JIT=off` switches a jit build back to the
+interpreter). The VM figures come from
+`cargo test --release -p morf-lua --lib [--features jit] bench_vm -- --ignored --nocapture`.
+
+| what | interpreter | native tier |
+|---|---|---|
+| a pure Lua loop, 10 000 iterations (numbers and a table) | 1241 µs | 833 µs |
+| a host-to-Lua call (an IPC verb that returns) | 0.68 µs | 0.78 µs |
+| one binding re-run by a signal change (1000 of them per change) | 6.3 µs | 6.8 µs |
+| a 64-row table written to a signal | 78 µs | 71 µs |
+| one node built with three bindings (200 per build) | 16.2 µs | 16.6 µs |
+
+The native tier compiles loops, arithmetic and table access; calls,
+metamethods and coroutines still run through the interpreter, so only the
+pure loop gains. A binding's cost is almost all the flush around it --
+dependency bookkeeping, entering the VM, converting values -- not its few
+instructions: a thousand bindings re-running is about a third of a 60 Hz
+frame.
+
+caelestia (Tsugumori) at 3840x2160 in the sealed sandbox, CPU time per
+painted frame under `MORF_FRAME_LOG`:
+
+| phase | interpreter, median / p90 | native tier, median / p90 |
+|---|---|---|
+| opening the dashboard | 19.2 / 26.9 ms | 18.9 / 25.7 ms |
+| the media tab, a player on | 21.6 / 28.5 ms | 20.4 / 26.6 ms |
+| the performance tab | 24.1 / 32.6 ms | 24.1 / 32.3 ms |
+
+About a tenth of the shell's Lua instructions ran native. A frame there
+is layout and painting, not Lua: the native tier changes it by a few per
+cent. `MORF_JIT_LOG=1` prints the native tier's counters every ten
+seconds.
+
 ### What wakes a shell
 
 An idle shell sleeps until something happens, with no poll of its own: the

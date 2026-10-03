@@ -89,6 +89,7 @@ mod text_input;
 mod text_style;
 mod themes;
 mod shared_values;
+mod bench_vm;
 mod timers;
 mod toplevels;
 mod views_states;

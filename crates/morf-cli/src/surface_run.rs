@@ -323,6 +323,7 @@ fn drive_surface(
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
     let mut layout_complaint: Option<Instant> = None;
     let mut motion_reported: Option<Instant> = None;
+    let mut jit_logged: Option<Instant> = None;
     // Whether the last turn handled anything -- an event, a command -- whose
     // handlers may have left work that only the checks at the top of a turn
     // pick up (a popup to open, a reload asked for). One more turn, at once.
@@ -369,6 +370,15 @@ fn drive_surface(
             repaint |= runtime
                 .update_clock(&clock)
                 .map_err(|error| error.to_string())?;
+        }
+        // `MORF_JIT_LOG`: what the native Lua tier has run, every ten seconds.
+        if jit_log_wanted()
+            && jit_logged.is_none_or(|at: Instant| at.elapsed() >= Duration::from_secs(10))
+        {
+            jit_logged = Some(Instant::now());
+            if let Some(report) = runtime.jit_report() {
+                eprintln!("morf: output {name}: jit: {report}");
+            }
         }
         let polling = Instant::now();
         repaint |= runtime.poll_services();
@@ -861,4 +871,12 @@ pub(crate) fn await_lock(
             Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(()),
         }
     }
+}
+
+/// Whether `MORF_JIT_LOG` asks for the native Lua tier's counters.
+fn jit_log_wanted() -> bool {
+    static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *WANTED.get_or_init(|| {
+        std::env::var_os("MORF_JIT_LOG").is_some_and(|value| !value.is_empty() && value != "0")
+    })
 }

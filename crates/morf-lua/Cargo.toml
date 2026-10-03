@@ -6,6 +6,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# luna's native tier (Cranelift; Linux x86-64 and aarch64). See runtime_jit.rs.
+jit = ["luna/jit"]
+
 [dependencies]
 jiff.workspace = true
 luna.workspace = true

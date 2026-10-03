@@ -149,11 +149,12 @@
 
         devShells.default = pkgs.mkShell {
           packages = [
-            pkgs.rustc
-            pkgs.cargo
-            pkgs.rustfmt
-            pkgs.clippy
-            pkgs.rust-analyzer
+            # rust-overlay's stable rather than nixpkgs' rustc: the native Lua
+            # tier (luna's `jit` feature, Cranelift) needs a newer compiler
+            # than the pinned nixpkgs carries.
+            (pkgs.rust-bin.stable.latest.default.override {
+              extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
+            })
             pkgs.git-cliff
             pkgs.clang
             pkgs.pkg-config
