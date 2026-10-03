@@ -21,6 +21,17 @@ pub enum Kind {
     StepsArea,
     HatchSteps,
     Bars,
+    Cells,
+    Scatter,
+    Candles,
+    Boxes,
+    Stack,
+    StackBars,
+    Histogram,
+    Radial,
+    States,
+    StateCells,
+    Wave,
 }
 
 impl Kind {
@@ -32,6 +43,17 @@ impl Kind {
             "steps_area" => Kind::StepsArea,
             "hatch_steps" => Kind::HatchSteps,
             "bars" => Kind::Bars,
+            "cells" => Kind::Cells,
+            "scatter" => Kind::Scatter,
+            "candles" => Kind::Candles,
+            "boxes" => Kind::Boxes,
+            "stack" => Kind::Stack,
+            "stack_bars" => Kind::StackBars,
+            "histogram" => Kind::Histogram,
+            "radial" => Kind::Radial,
+            "states" => Kind::States,
+            "state_cells" => Kind::StateCells,
+            "wave" => Kind::Wave,
             _ => return None,
         })
     }
@@ -62,6 +84,34 @@ pub struct Plot {
     pub mirror: bool,
     /// Hatching: a stripe every this many pixels.
     pub hatch: f64,
+    /// Cells: columns (0: as many as the numbers fill) and rows to a
+    /// column, and the band of places `[lo, hi)` this path draws.
+    pub columns: usize,
+    pub rows: usize,
+    pub lo: f64,
+    pub hi: f64,
+    /// Scatter and histograms: the range across (the data's when `None`),
+    /// and a dot's radius.
+    pub left: Option<f64>,
+    pub right: Option<f64>,
+    pub point: f64,
+    /// Candles: 1 rising only, -1 falling only, 0 both.
+    pub direction: i8,
+    /// Stacks: how many series are interleaved, and which this path draws.
+    pub layers: usize,
+    pub layer: usize,
+    /// Histograms: how many bins.
+    pub bins: usize,
+    /// Radial bars: the inner radius as a fraction, and the sweep and its
+    /// start in degrees.
+    pub inner: f64,
+    pub sweep: f64,
+    pub start: f64,
+    /// State runs and cells: the state this path draws.
+    pub state: f64,
+    /// Radial bars as open arcs through each band's middle (to stroke with
+    /// round caps) rather than closed sectors.
+    pub arcs: bool,
 }
 
 impl Default for Plot {
@@ -83,6 +133,77 @@ impl Default for Plot {
             min_bar: 1.0,
             mirror: false,
             hatch: 6.0,
+            columns: 0,
+            rows: 1,
+            lo: 0.0,
+            hi: 1.0,
+            left: None,
+            right: None,
+            point: 3.0,
+            direction: 0,
+            layers: 1,
+            layer: 0,
+            bins: 10,
+            inner: 0.3,
+            sweep: 270.0,
+            start: 0.0,
+            state: 0.0,
+            arcs: false,
+        }
+    }
+}
+
+impl Plot {
+    /// A plot from options read by name -- `number(key)`, `flag(key)`,
+    /// `word(key)` -- over the defaults. `top` takes `None` for "the
+    /// peak", as `top_unset` says when the key is not there at all.
+    pub fn from_fields(
+        number: impl Fn(&str) -> Option<f64>,
+        flag: impl Fn(&str) -> bool,
+        word: impl Fn(&str) -> Option<String>,
+        top: Option<Option<f64>>,
+        width_height: (f64, f64),
+        samples: usize,
+    ) -> Plot {
+        let base = Plot::default();
+        let count = |key: &str, default: usize| number(key).map_or(default, |n| n.max(0.0) as usize);
+        Plot {
+            kind: word("kind").and_then(|k| Kind::parse(&k)).unwrap_or(Kind::Line),
+            width: number("width").unwrap_or(width_height.0),
+            height: number("height").unwrap_or(width_height.1),
+            samples: count("samples", samples),
+            bottom: number("bottom").unwrap_or(base.bottom),
+            top: top.unwrap_or(base.top),
+            headroom: number("headroom").unwrap_or(base.headroom),
+            floor: number("floor").unwrap_or(base.floor),
+            pad_top: number("pad_top").unwrap_or(base.pad_top),
+            pad_bottom: number("pad_bottom").unwrap_or(base.pad_bottom),
+            smooth: flag("smooth"),
+            gap: number("gap").unwrap_or(base.gap),
+            radius: number("radius").unwrap_or(base.radius),
+            min_bar: number("min_bar").unwrap_or(base.min_bar),
+            mirror: flag("mirror"),
+            hatch: number("hatch").unwrap_or(base.hatch),
+            columns: count("columns", base.columns),
+            rows: count("rows", base.rows).max(1),
+            lo: number("lo").unwrap_or(base.lo),
+            hi: number("hi").unwrap_or(base.hi),
+            left: number("left"),
+            right: number("right"),
+            point: number("point").unwrap_or(base.point),
+            direction: match word("direction").as_deref() {
+                Some("up") => 1,
+                Some("down") => -1,
+                _ => 0,
+            },
+            layers: count("layers", base.layers).max(1),
+            layer: count("layer", base.layer),
+            bins: count("bins", base.bins).clamp(1, 1024),
+            inner: number("inner").unwrap_or(base.inner),
+            sweep: number("sweep").unwrap_or(base.sweep),
+            start: number("start").unwrap_or(base.start),
+            state: number("state").unwrap_or(base.state),
+            arcs: flag("arcs"),
         }
     }
 }
@@ -106,11 +227,36 @@ pub fn path(values: &[f32], others: &[f32], plot: &Plot) -> String {
     if !(w.is_finite() && h.is_finite()) || w <= 0.0 || h <= 0.0 || w > 1e6 || h > 1e6 {
         return "M0 0".into();
     }
+    use crate::series_kinds as more;
+    match plot.kind {
+        Kind::Stack => return more::stack(values, plot, false),
+        Kind::StackBars => return more::stack(values, plot, true),
+        Kind::States => return more::states(values, plot),
+        Kind::StateCells => return more::state_cells(values, plot),
+        Kind::Histogram => {
+            let counts = more::histogram_counts(values, plot);
+            let bars_plot = Plot { kind: Kind::Bars, bottom: 0.0, ..*plot };
+            let top = bars_plot.top_for(&counts, &[]);
+            let span = top.max(1e-9);
+            return bars(&counts, &bars_plot, &|v: f32| (v as f64 / span).clamp(0.0, 1.0));
+        }
+        Kind::Scatter => {
+            let ys: Vec<f32> = values.chunks_exact(2).map(|p| p[1]).collect();
+            return more::scatter(values, plot, plot.top_for(&ys, &[]));
+        }
+        Kind::Candles => return more::candles(values, plot, plot.top_for(values, others)),
+        _ => {}
+    }
     let top = plot.top_for(values, others);
     let span = (top - plot.bottom).max(1e-9);
     let norm = |v: f32| ((v as f64 - plot.bottom) / span).clamp(0.0, 1.0);
-    if plot.kind == Kind::Bars {
-        return bars(values, plot, &norm);
+    match plot.kind {
+        Kind::Bars => return bars(values, plot, &norm),
+        Kind::Cells => return more::cells(values, plot, top),
+        Kind::Boxes => return more::boxes(values, plot, top),
+        Kind::Radial => return more::radial(values, plot, top),
+        Kind::Wave => return more::wave(values, plot, top),
+        _ => {}
     }
     let y = |v: f32| h - plot.pad_bottom - norm(v) * (h - plot.pad_bottom - plot.pad_top);
     let count = if plot.samples == 0 { values.len().max(2) } else { plot.samples.max(2) };
@@ -163,7 +309,7 @@ pub fn path(values: &[f32], others: &[f32], plot: &Plot) -> String {
             let ys: Vec<f64> = points.iter().map(|p| p.1).collect();
             return marks::hatch_under(x0, dx, &ys, w, h, plot.hatch);
         }
-        Kind::Bars => unreachable!(),
+        _ => unreachable!("drawn above"),
     }
     d
 }

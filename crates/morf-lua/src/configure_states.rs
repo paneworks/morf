@@ -228,3 +228,47 @@ fn build_state_selector<'gc>(
         Err(error) => Err(error.to_string()),
     }
 }
+
+/// Properties whose table may hold bindings among its fields:
+/// `accessible = { value = function() ... end }`.
+pub(crate) fn binds_inside(property: &str) -> bool {
+    matches!(property, "accessible" | "plot" | "view_box")
+}
+
+/// A table with functions among its fields as one binding: a closure that
+/// answers the table with each function called. `None` when the table holds
+/// no function, so it is assigned as it is.
+pub(crate) fn table_binding<'gc>(
+    ctx: Context<'gc>,
+    table: Table<'gc>,
+    limits: crate::Limits,
+) -> Result<Option<Closure<'gc>>, String> {
+    let mut any = false;
+    for (_, value) in table.iter(ctx) {
+        if matches!(value, LuaValue::Function(_)) {
+            any = true;
+            break;
+        }
+    }
+    if !any {
+        return Ok(None);
+    }
+    let source = br#"
+        local fields = ...
+        return function()
+            local out = {}
+            for key, value in pairs(fields) do
+                if type(value) == "function" then out[key] = value() else out[key] = value end
+            end
+            return out
+        end
+    "#;
+    let factory = Closure::load(ctx, Some("table binding"), &source[..]).map_err(|error| error.to_string())?;
+    let executor = Executor::start(ctx, factory.into(), Variadic(vec![LuaValue::Table(table)]));
+    drive_executor(ctx, executor, limits, limits.effect_fuel, "table binding")?;
+    match executor.take_result::<Closure>(ctx) {
+        Ok(Ok(closure)) => Ok(Some(closure)),
+        Ok(Err(error)) => Err(error.to_string()),
+        Err(error) => Err(error.to_string()),
+    }
+}

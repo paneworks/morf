@@ -1346,6 +1346,7 @@ from twelve o'clock):
 | function | |
 |----------|---|
 | `arc(cx, cy, r, from, sweep)` | an arc in pieces of at most 90°, so a full turn too |
+| `sector(cx, cy, r0, r1, from, sweep)` | a ring's slice, closed; a pie's when `r0` is 0 |
 | `hatch(width, height, gap = 6)` | `/` stripes across a box, cut to it |
 | `hatch_under(x0, dx, ys, width, height, gap = 6)` | the stripes under a stepped series, step `i` at height `ys[i]` |
 | `ticks(cx, cy, r0, r1, { from, sweep, count \| angles, major, major_r0 })` | radial ticks; every `major`-th from `major_r0` |
@@ -1382,6 +1383,24 @@ through the samples); and for bars `gap`, `radius` (the most their ends
 round), `min_bar` (the least one stands, no more than its width) and
 `mirror` (grown from the middle). `with = other.id` puts another channel
 on the same automatic scale.
+
+More kinds read a channel's numbers in layouts of their own, and a chart
+with several tones draws one path per tone over the same channel:
+`"cells"` (column by column, `rows` to a column; the places in `[lo, hi)`
+-- one tone of a heatmap, a spectrogram, a calendar), `"scatter"` (`x, y`
+pairs across `left..right`, dots of radius `point`), `"candles"` (`open,
+high, low, close` fours; `direction = "up" | "down"`), `"boxes"` (`min,
+q1, median, q3, max` fives), `"stack"` and `"stack_bars"` (`layers`
+interleaved series, this path layer `layer`; `smooth` curves a stack),
+`"histogram"` (raw values into `bins`), `"radial"` (a band per value,
+from `inner` out, `sweep` degrees from `start`; `arcs = true` draws each
+band's middle as an open arc to stroke with round caps), `"states"` (the
+runs of samples in state `state`, a timeline's colour) and `"state_cells"`
+(status history squares), and `"wave"` (an amplitude envelope).
+
+A table property holding bindings among its fields -- `accessible`,
+`plot`, `view_box` -- is bound as a whole: `plot = { kind = "bars", top =
+function() return peak:get() end }`.
 
 `lib.channel.from(values)` gives a channel for a channel, a list or a
 function returning one -- copied in by an effect owned by the drawing

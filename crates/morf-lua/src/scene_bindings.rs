@@ -400,6 +400,23 @@ pub(crate) fn node_metatable<'gc>(
             .map_err(HostError)?;
             return Ok(CallbackReturn::Return);
         }
+        // A table holding bindings among its fields is bound as a whole.
+        let value = match value {
+            LuaValue::Table(table) if crate::configure_states::binds_inside(&property) => {
+                let limits = state.try_borrow().map(|s| s.limits).map_err(|_| {
+                    HostError("nodes cannot be written to from inside a layout function".to_owned())
+                })?;
+                match crate::configure_states::table_binding(ctx, table, limits).map_err(HostError)? {
+                    Some(closure) => LuaValue::Function(luna::Function::Closure(closure)),
+                    None => value,
+                }
+            }
+            // A name or description taken away is an empty one.
+            LuaValue::Nil if matches!(property.as_str(), "accessible_name" | "accessible_description" | "accessible_role") => {
+                LuaValue::String(ctx.intern(b""))
+            }
+            _ => value,
+        };
         // A function is a binding, as in a constructor: it replaces any the
         // property had and runs at once.
         if let LuaValue::Function(luna::Function::Closure(closure)) = value {

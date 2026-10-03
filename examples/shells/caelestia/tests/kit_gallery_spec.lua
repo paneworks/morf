@@ -57,6 +57,12 @@ local SOURCE = [[
     header = function() return kit.header { width = 260, title = "Header", status = "Live" } end,
     surface = function() return kit.surface { width = 260, height = 120 } end,
   }
+  -- The shared display widgets bring their own samples.
+  for _, group in ipairs(require("lib.kit.display").GROUPS) do
+    for name, make in pairs(require("lib.kit.display.samples_" .. group)) do
+      if not SAMPLES[name] then SAMPLES[name] = function() return make(kit) end end
+    end
+  end
   -- One cell per display function due at the contract's stage.
   local names, seen = {}, {}
   for _, list in pairs(contract.display) do

@@ -186,7 +186,17 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, state: Rc<RefCell<ReactiveState>>,
             let c = Arc::clone(&channel);
             handle.set_field(ctx, "push", Callback::from_fn(&ctx, move |ctx, _, mut stack| {
                 let (_, value): (LuaValue, LuaValue) = stack.consume(ctx)?;
-                c.push(number(value));
+                // A list pushes each of its numbers: a spectrogram's column.
+                if let LuaValue::Table(list) = value {
+                    for i in 1..=morf_scene::MAX_CHANNEL_LEN as i64 {
+                        match list.get_value(ctx, i) {
+                            LuaValue::Nil => break,
+                            v => c.push(number(v)),
+                        }
+                    }
+                } else {
+                    c.push(number(value));
+                }
                 Ok(CallbackReturn::Return)
             }));
         }

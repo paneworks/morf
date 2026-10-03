@@ -14,7 +14,7 @@
 local M = {}
 
 --- The plan stage the kits have reached.
-M.stage = 13
+M.stage = 14
 
 -- ------------------------------------------------------------- functions --
 --
@@ -235,6 +235,7 @@ M.display = {
     { name = "body", fn = "text", stage = 1 }, { name = "kbd", fn = "keycap", stage = 1 },
     { name = "markup", fn = "markup", stage = 14 }, { name = "code_block", fn = "code_block", stage = 14 },
     { name = "quote", fn = "quote", stage = 14 }, { name = "mono", fn = "mono", stage = 14 },
+    { name = "link_text", fn = "link_text", stage = 14 },
   },
   media = {
     { name = "icon", fn = "icon", stage = 1 }, { name = "image", fn = "image", stage = 14 },
@@ -249,6 +250,11 @@ M.display = {
     { name = "progress_ring", fn = "progress_ring", stage = 14 }, { name = "battery", fn = "battery", stage = 14 },
     { name = "signal_bars", fn = "signal_bars", stage = 14 }, { name = "empty_state", fn = "empty_state", stage = 14 },
     { name = "skeleton", fn = "skeleton", stage = 14 }, { name = "banner_content", fn = "banner", stage = 14 },
+    { name = "status_led", fn = "led", stage = 14 }, { name = "tag", fn = "tag", stage = 14 },
+    { name = "segmented_progress", fn = "segmented_progress", stage = 14 },
+    { name = "semicircle_progress", fn = "semicircle", stage = 14 },
+    { name = "status_card", fn = "status_card", stage = 14 }, { name = "result_page", fn = "result_page", stage = 14 },
+    { name = "toast_content", fn = "toast", stage = 14 },
   },
   readings = {
     { name = "gauge", fn = "gauge", stage = 1 }, { name = "ring", fn = "ring", stage = 1 },
@@ -261,6 +267,7 @@ M.display = {
     { name = "led_bar", fn = "led_bar", stage = 14 }, { name = "seven_segment", fn = "seven_segment", stage = 14 },
     { name = "vu_meter", fn = "vu_meter", stage = 14 }, { name = "peak_meter", fn = "peak_meter", stage = 14 },
     { name = "compass", fn = "compass", stage = 14 }, { name = "sparkline", fn = "sparkline", stage = 14 },
+    { name = "segmented_meter", fn = "segmented_meter", stage = 14 },
   },
   charts = {
     { name = "chart", fn = "chart", stage = 1 }, { name = "spectrum", fn = "spectrum", stage = 1 },
@@ -274,12 +281,15 @@ M.display = {
     { name = "treemap", fn = "treemap", stage = 14 }, { name = "sunburst", fn = "sunburst", stage = 14 },
     { name = "sankey", fn = "sankey", stage = 14 }, { name = "funnel", fn = "funnel", stage = 14 },
     { name = "flame_graph", fn = "flame_graph", stage = 14 },
+    { name = "stacked_area", fn = "stacked_area", stage = 14 }, { name = "radial_bar", fn = "radial_bar", stage = 14 },
+    { name = "status_history", fn = "status_history", stage = 14 },
   },
   structure = {
     { name = "card", fn = "card", stage = 1 }, { name = "panel", fn = "panel", stage = 1 },
     { name = "header", fn = "header", stage = 1 }, { name = "surface", fn = "surface", stage = 1 },
     { name = "separator", fn = "separator", stage = 14 }, { name = "spacer", fn = "spacer", stage = 14 },
     { name = "group_box", fn = "group_box", stage = 14 }, { name = "labelled_divider", fn = "labelled_divider", stage = 14 },
+    { name = "frame", fn = "frame", stage = 14 }, { name = "inset", fn = "inset", stage = 14 },
   },
 }
 

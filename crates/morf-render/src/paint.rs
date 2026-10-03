@@ -718,7 +718,7 @@ fn channel_id(value: &morf_scene::Value) -> Option<u64> {
 /// The outline of a `Path` that draws a data channel (`series`), made from
 /// the channel's numbers now as its `plot` says; `None` when it draws `d`.
 fn series_d(scene: &Scene, node: NodeHandle, view_box: Option<morf_scene::PathViewBox>) -> Option<String> {
-    use morf_outline::series::{Kind, Plot, path};
+    use morf_outline::series::{Plot, path};
     use morf_scene::Value;
     let id = channel_id(scene.current(node, "series").ok()?)?;
     let Some(channel) = morf_scene::channel_by_id(id) else { return Some("M0 0".into()) };
@@ -732,34 +732,20 @@ fn series_d(scene: &Scene, node: NodeHandle, view_box: Option<morf_scene::PathVi
         _ => None,
     };
     let flag = |key: &str| matches!(fields.get(key), Some(Value::Bool(true)));
-    let base = Plot::default();
-    let plot = Plot {
-        kind: match fields.get("kind") {
-            Some(Value::String(kind)) => Kind::parse(kind).unwrap_or(Kind::Line),
-            _ => Kind::Line,
-        },
-        width: number("width").or(view_box.map(|v| v.width)).unwrap_or(base.width),
-        height: number("height").or(view_box.map(|v| v.height)).unwrap_or(base.height),
-        samples: number("samples").map_or(if channel.is_ring() { channel.capacity() } else { 0 }, |n| n.max(0.0) as usize),
-        bottom: number("bottom").unwrap_or(base.bottom),
-        top: match fields.get("top") {
-            Some(Value::Number(n)) if n.is_finite() => Some(*n),
-            Some(_) => None,
-            // No top: a ring (a history) scales to its peak, a frame to 0..1.
-            None if channel.is_ring() => None,
-            None => base.top,
-        },
-        headroom: number("headroom").unwrap_or(base.headroom),
-        floor: number("floor").unwrap_or(base.floor),
-        pad_top: number("pad_top").unwrap_or(base.pad_top),
-        pad_bottom: number("pad_bottom").unwrap_or(base.pad_bottom),
-        smooth: flag("smooth"),
-        gap: number("gap").unwrap_or(base.gap),
-        radius: number("radius").unwrap_or(base.radius),
-        min_bar: number("min_bar").unwrap_or(base.min_bar),
-        mirror: flag("mirror"),
-        hatch: number("hatch").unwrap_or(base.hatch),
+    let word = |key: &str| match fields.get(key) {
+        Some(Value::String(s)) => Some(s.clone()),
+        _ => None,
     };
+    let top = match fields.get("top") {
+        Some(Value::Number(n)) if n.is_finite() => Some(Some(*n)),
+        Some(_) => Some(None),
+        // No top: a ring (a history) scales to its peak, a frame to 0..1.
+        None if channel.is_ring() => Some(None),
+        None => None,
+    };
+    let size = view_box.map_or((100.0, 100.0), |v| (v.width, v.height));
+    let samples = if channel.is_ring() { channel.capacity() } else { 0 };
+    let plot = Plot::from_fields(number, flag, word, top, size, samples);
     let (values, _) = channel.snapshot();
     let others = fields
         .get("with")

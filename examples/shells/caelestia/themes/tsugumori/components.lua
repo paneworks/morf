@@ -1303,5 +1303,8 @@ return function(theme)
   M.selection, M.keycap = hud().selection, hud().keycap
 
   for name, skin in pairs(require("themes.tsugumori.skins")(theme, M, hud)) do M.skins[name] = skin end
+  -- The display widgets this file does not draw itself, from the shared
+  -- composition in this theme's style.
+  require("lib.kit.display").install(M, require("themes.tsugumori.display_style")(theme, M, anchored_marks))
   return M
 end

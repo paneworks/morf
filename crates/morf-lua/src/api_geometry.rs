@@ -302,6 +302,17 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     );
     api.set_field(
         ctx,
+        "sector",
+        Callback::from_fn(&ctx, |ctx, _, mut stack| {
+            // (cx, cy, r0, r1, from, sweep): a ring's slice, a pie's when r0 is 0.
+            let (cx, cy, r0, r1, from, sweep): (LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue) = stack.consume(ctx)?;
+            let d = marks::sector(number(cx, "cx")?, number(cy, "cy")?, number(r0, "r0")?, number(r1, "r1")?, number(from, "from")?, number(sweep, "sweep")?);
+            stack.replace(ctx, d);
+            Ok(CallbackReturn::Return)
+        }),
+    );
+    api.set_field(
+        ctx,
         "hatch",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             let (w, h, gap): (LuaValue, LuaValue, LuaValue) = stack.consume(ctx)?;
@@ -403,35 +414,28 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                     v => list.push(reading(v, "value")? as f32),
                 }
             }
-            let base = series::Plot::default();
-            let kind = match o.map_or(LuaValue::Nil, |o| o.get_value(ctx, "kind")) {
-                LuaValue::String(k) => series::Kind::parse(k.to_str().unwrap_or("")).ok_or_else(|| HostError("unknown plot kind".into()))?,
-                _ => series::Kind::Line,
+            let get = |key: &str| o.map_or(LuaValue::Nil, |o| o.get_value(ctx, key));
+            let number = |key: &str| match get(key) {
+                LuaValue::Integer(n) => Some(n as f64),
+                LuaValue::Number(n) if n.is_finite() => Some(n),
+                _ => None,
             };
-            let flag = |key: &str| o.is_some_and(|o| matches!(o.get_value(ctx, key), LuaValue::Boolean(true)));
-            let top = match o.map_or(LuaValue::Nil, |o| o.get_value(ctx, "top")) {
-                LuaValue::Nil => base.top,
-                LuaValue::Boolean(false) => None,
-                v => Some(reading(v, "top")?),
+            let flag = |key: &str| matches!(get(key), LuaValue::Boolean(true));
+            let word = |key: &str| match get(key) {
+                LuaValue::String(s) => Some(s.display_lossy().to_string()),
+                _ => None,
             };
-            let plot = series::Plot {
-                kind,
-                width: field(ctx, o, "width", base.width)?,
-                height: field(ctx, o, "height", base.height)?,
-                samples: field(ctx, o, "samples", 0.0)?.max(0.0) as usize,
-                bottom: o.map_or(Ok(base.bottom), |o| reading_field(ctx, o, "bottom", base.bottom))?,
-                top,
-                headroom: field(ctx, o, "headroom", base.headroom)?,
-                floor: field(ctx, o, "floor", base.floor)?,
-                pad_top: field(ctx, o, "pad_top", base.pad_top)?,
-                pad_bottom: field(ctx, o, "pad_bottom", base.pad_bottom)?,
-                smooth: flag("smooth"),
-                gap: field(ctx, o, "gap", base.gap)?,
-                radius: field(ctx, o, "radius", base.radius)?,
-                min_bar: field(ctx, o, "min_bar", base.min_bar)?,
-                mirror: flag("mirror"),
-                hatch: field(ctx, o, "hatch", base.hatch)?,
+            let top = match get("top") {
+                LuaValue::Nil => None,
+                LuaValue::Boolean(false) => Some(None),
+                v => Some(Some(reading(v, "top")?)),
             };
+            if let Some(kind) = word("kind")
+                && series::Kind::parse(&kind).is_none()
+            {
+                return Err(HostError(format!("unknown plot kind `{kind}`")).into());
+            }
+            let plot = series::Plot::from_fields(number, flag, word, top, (100.0, 100.0), 0);
             stack.replace(ctx, series::path(&list, &[], &plot));
             Ok(CallbackReturn::Return)
         }),

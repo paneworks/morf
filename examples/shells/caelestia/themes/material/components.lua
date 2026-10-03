@@ -1381,5 +1381,9 @@ function M.term(_, plain) return plain end
 
 for name, skin in pairs(require("themes.material.skins")(theme, M)) do M.skins[name] = skin end
 
+-- The display widgets this file does not draw itself, from the shared
+-- composition in this theme's style.
+require("lib.kit.display").install(M, require("themes.material.display_style")(theme, M))
+
 return M
 end

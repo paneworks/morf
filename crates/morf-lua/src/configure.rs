@@ -134,6 +134,16 @@ pub(crate) fn configure_element<'gc>(
                 .insert((node, event), ctx.stash(closure));
             continue;
         }
+        // A table holding bindings among its fields is bound as a whole.
+        let value = match value {
+            LuaValue::Table(table) if crate::configure_states::binds_inside(&property) => {
+                match crate::configure_states::table_binding(ctx, table, limits)? {
+                    Some(closure) => LuaValue::Function(Function::Closure(closure)),
+                    None => value,
+                }
+            }
+            _ => value,
+        };
         if let LuaValue::Function(Function::Closure(closure)) = value {
             if !state
                 .borrow()

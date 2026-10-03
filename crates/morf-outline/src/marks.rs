@@ -21,6 +21,34 @@ pub fn arc(cx: f64, cy: f64, r: f64, from: f64, sweep: f64) -> String {
     d
 }
 
+/// An annular sector -- a pie slice when `r0` is 0 -- from `from` across
+/// `sweep` degrees, between radii `r0` and `r1`, closed.
+pub fn sector(cx: f64, cy: f64, r0: f64, r1: f64, from: f64, sweep: f64) -> String {
+    let at = |r: f64, deg: f64| {
+        let a = deg.to_radians();
+        (cx + r * a.sin(), cy - r * a.cos())
+    };
+    let pieces = (sweep.abs() / 90.0).ceil().max(1.0) as usize;
+    let (x, y) = at(r1, from);
+    let mut d = format!("M{x:.3} {y:.3}");
+    for i in 1..=pieces {
+        let (ex, ey) = at(r1, from + sweep * i as f64 / pieces as f64);
+        let _ = write!(d, " A{r1:.3} {r1:.3} 0 0 1 {ex:.3} {ey:.3}");
+    }
+    if r0 <= 0.01 {
+        let _ = write!(d, " L{cx:.3} {cy:.3} Z");
+        return d;
+    }
+    let (ix, iy) = at(r0, from + sweep);
+    let _ = write!(d, " L{ix:.3} {iy:.3}");
+    for i in (0..pieces).rev() {
+        let (ex, ey) = at(r0, from + sweep * i as f64 / pieces as f64);
+        let _ = write!(d, " A{r0:.3} {r0:.3} 0 0 0 {ex:.3} {ey:.3}");
+    }
+    d.push_str(" Z");
+    d
+}
+
 /// `/` stripes across a `w` by `h` box, one every `gap` along the bottom
 /// edge, each cut where it leaves the box.
 pub fn hatch(w: f64, h: f64, gap: f64) -> String {

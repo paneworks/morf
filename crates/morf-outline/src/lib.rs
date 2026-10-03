@@ -19,6 +19,7 @@ mod geometry_resample;
 pub mod graph;
 pub mod marks;
 pub mod series;
+mod series_kinds;
 mod morph;
 mod step;
 
