@@ -1610,6 +1610,12 @@ letters, so `"ctrl+shift+k"` matches however the keyboard reports the
 capital. A key that begins a longer sequence is held for a second and a
 half for the next; a key that breaks the sequence then goes on alone.
 
+A modifier alone -- `"alt"`, `"super"`, `"ctrl"`, `"shift"` -- names its
+tap: the key pressed and let go with nothing between, no other key and
+no click. It reaches the shortcut even from a text field, as a menu bar's
+Alt does everywhere; Alt held with a letter is still that letter's chord
+and no tap.
+
 Typing comes first. While a text input has focus its plain keys (no Ctrl,
 Alt or Super) and its editing chords (Ctrl with A, C, X, V, Z, Y, or with a
 key that moves or deletes) never reach shortcuts; a terminal keeps every

@@ -265,7 +265,7 @@ the primary before anything was.
 | `test.leave([{ surface }])` | the pointer leaving the surface it is on (or the one named), as a compositor says when it moves off the input region: `hovered` and every `contains_pointer` there go false |
 | `test.drag({ x1, y1 }, { x2, y2 }, { steps, button })` | press, move in steps, release |
 | `test.wheel(dx, dy [, { x, y, surface }])` | a wheel turn at the pointer (or `x, y`); positive `dy` scrolls down |
-| `test.key(name [, modifiers])` | one key pressed and released: an X keysym name (`Return`, `Escape`, `Tab`, `BackSpace`, `Left`, `Page_Down`, `F5`, …) or one character. `modifiers` is a list or a string: `"ctrl+shift"` |
+| `test.key(name [, modifiers])` | one key pressed and released: an X keysym name (`Return`, `Escape`, `Tab`, `BackSpace`, `Left`, `Page_Down`, `F5`, …) or one character. `modifiers` is a list or a string: `"ctrl+shift"`; `{ phase = "down" }` only presses it and `{ phase = "up" }` only lets it go -- Alt held across another key -- as the third argument |
 | `test.type(text)` | each character as a key; `\n` is Return |
 
 ### Finding nodes

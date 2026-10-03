@@ -137,7 +137,13 @@ pub(crate) fn key(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<Ipc
     let typed = typed.filter(|_| !held.ctrl && !held.alt && !held.logo);
     let subject = host.subject()?;
     let surface = key_role(subject, arguments.get(2))?;
-    subject.key(surface, code, typed.as_deref(), held)?;
+    // `phase`: "down" presses it, "up" lets it go; both by default.
+    let (press, release) = match optional_text(arguments.get(3)).as_deref() {
+        Some("down") => (true, false),
+        Some("up") => (false, true),
+        _ => (true, true),
+    };
+    subject.key_phase(surface, code, typed.as_deref(), held, press, release)?;
     Ok(Vec::new())
 }
 

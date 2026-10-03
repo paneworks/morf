@@ -27,7 +27,8 @@
 -- A menu bar's members are menus: `{ label = "File", items = { ... } }`,
 -- items as a popup menu's (lib.kit.popup). Down, Return and Space open the
 -- current one's menu; while one is open Left and Right open the next;
--- Escape closes it and focus goes back to its title. F10 focuses the bar.
+-- Escape closes it and focus goes back to its title. F10, or Alt tapped
+-- alone, focuses the bar; Alt tapped again goes back to what had focus.
 --
 -- Other fields: `orientation` ("horizontal", "vertical", "grid"),
 -- `columns`, `wrap`, `current`, `gap`, `padding`, `item_height`, `x`,
@@ -245,7 +246,21 @@ function M.make(widget, spec)
     accessible_role = spec.accessible_role or (menubar and "menu_bar" or "toolbar"),
   }
   if menubar then
-    props.shortcuts = { scope = "surface", F10 = function() focus_member(t.current, true) return true end }
+    -- (Alt tapped alone: an engine tap shortcut -- Alt held with a letter
+    -- is still that letter's chord.)
+    local before
+    local function reach()
+      if t.within then
+        -- Back to where focus was before the bar took it.
+        if before then pcall(morf.focus.set, before, true) else pcall(morf.focus.clear, members[t.current]) end
+        before = nil
+        return true
+      end
+      before = morf.focus.get and morf.focus.get() or nil
+      focus_member(t.current, true)
+      return true
+    end
+    props.shortcuts = { scope = "surface", F10 = reach, alt = reach }
   end
   root, t, ctl = control.make("Roving", widget, full, { children = { box }, props = props,
     builders = { separator = true },

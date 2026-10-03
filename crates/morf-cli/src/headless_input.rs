@@ -108,6 +108,19 @@ impl Headless {
         text: Option<&str>,
         modifiers: morf_lua::KeyModifiers,
     ) -> Result<(), String> {
+        self.key_phase(surface, keysym, text, modifiers, true, true)
+    }
+
+    /// A key pressed, let go, or both: a modifier held across other keys.
+    pub(crate) fn key_phase(
+        &mut self,
+        surface: SurfaceRole,
+        keysym: u32,
+        text: Option<&str>,
+        modifiers: morf_lua::KeyModifiers,
+        press: bool,
+        release: bool,
+    ) -> Result<(), String> {
         let root = self
             .surfaces
             .iter()
@@ -115,7 +128,11 @@ impl Headless {
             .map(|candidate| candidate.root)
             .ok_or_else(|| "no surface to type into".to_owned())?;
         let mut focused = self.input.focused.get(&surface).copied();
-        for action in [KeyAction::Press { repeat: false }, KeyAction::Release] {
+        let actions: Vec<KeyAction> = [(press, KeyAction::Press { repeat: false }), (release, KeyAction::Release)]
+            .into_iter()
+            .filter_map(|(on, action)| on.then_some(action))
+            .collect();
+        for action in actions {
             dispatch_key_in_subtree(
                 &mut self.runtime,
                 root,

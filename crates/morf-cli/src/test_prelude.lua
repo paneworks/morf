@@ -330,7 +330,7 @@ end
 
 function test.key(name, modifiers, options)
   options = options or {}
-  host.key(name, modifier_list(modifiers), options.surface)
+  host.key(name, modifier_list(modifiers), options.surface, options.phase)
 end
 
 function test.type(text, options)

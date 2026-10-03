@@ -25,6 +25,10 @@ pub(crate) fn handle_pointer_event(
     if let LayerEvent::PointerButton { modifiers, .. } | LayerEvent::PointerAxis { modifiers, .. } = &event {
         runtime.set_held_modifiers(crate::surface_keys::key_modifiers(*modifiers));
     }
+    // A click while a modifier is down makes that modifier no tap.
+    if let LayerEvent::PointerButton { pressed: true, .. } = &event {
+        runtime.break_modifier_tap();
+    }
     match event {
         LayerEvent::PointerMotion { surface, x, y } => {
             // Enter can arrive before the surface's first frame. Keep the

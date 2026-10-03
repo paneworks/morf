@@ -263,6 +263,9 @@ pub(crate) struct ReactiveState {
     /// Each node's `shortcuts` (`shortcut.rs`), and a sequence half typed.
     pub(crate) shortcuts: HashMap<NodeHandle, crate::shortcut::NodeShortcuts>,
     pub(crate) shortcut_pending: crate::shortcut::Pending,
+    /// A modifier pressed on its own, while nothing else has been: a tap of
+    /// it if it is let go next.
+    pub(crate) modifier_tap: Option<u32>,
     /// Presses under way that may become gestures (`gestures.rs`).
     pub(crate) gestures: crate::gestures::GestureState,
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
@@ -645,6 +648,7 @@ impl ReactiveState {
             focus: Default::default(),
             shortcuts: HashMap::new(),
             shortcut_pending: Default::default(),
+            modifier_tap: None,
             gestures: Default::default(),
             overlays: Default::default(),
             input_events: Vec::new(),

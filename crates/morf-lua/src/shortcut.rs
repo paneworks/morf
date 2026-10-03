@@ -16,6 +16,11 @@
 //! focus: they are typing. Nor do a field's editing chords (Ctrl+A, C, X,
 //! V, Z, Y, and Ctrl with a key that moves or deletes), nor anything but
 //! Super-chords while a terminal has focus: its program's keys are its own.
+//!
+//! A chord that is a modifier alone -- `"alt"`, `"super"`, `"ctrl"`,
+//! `"shift"` -- is a tap: the key pressed and let go with nothing else in
+//! between (no other key, no click). Alt tapped is how a menu bar is
+//! reached; Alt held with a letter is still an Alt chord.
 
 use std::time::{Duration, Instant};
 
@@ -90,6 +95,13 @@ impl Chord {
         let (key, modifiers) = parts
             .split_last()
             .ok_or_else(|| format!("`{text}` names no key"))?;
+        // A modifier alone is its tap.
+        if modifiers.is_empty()
+            && let Some(tap) = tap_key(&key.to_ascii_lowercase())
+        {
+            chord.key = tap;
+            return Ok(chord);
+        }
         for modifier in modifiers {
             match modifier.to_ascii_lowercase().as_str() {
                 "ctrl" | "control" => chord.ctrl = true,
@@ -187,6 +199,28 @@ pub(crate) fn read_table<'gc>(
 }
 
 /// Whether a keysym is only a modifier going down.
+/// The keysym a modifier's tap is known by: the left one of a pair.
+fn tap_key(name: &str) -> Option<u32> {
+    Some(match name {
+        "alt" => 0xffe9,
+        "super" | "logo" | "meta" => 0xffeb,
+        "ctrl" | "control" => 0xffe3,
+        "shift" => 0xffe1,
+        _ => return None,
+    })
+}
+
+/// A modifier's keysym folded to its left one: Alt_R taps as Alt.
+fn tap_of(keysym: u32) -> Option<u32> {
+    Some(match keysym {
+        0xffe9 | 0xffea | 0xfe03 => 0xffe9,
+        0xffeb | 0xffec | 0xffe7 | 0xffe8 => 0xffeb,
+        0xffe3 | 0xffe4 => 0xffe3,
+        0xffe1 | 0xffe2 => 0xffe1,
+        _ => return None,
+    })
+}
+
 fn modifier_only(keysym: u32) -> bool {
     (0xffe1..=0xffee).contains(&keysym) || keysym == 0xfe03
 }
@@ -215,6 +249,38 @@ impl crate::Runtime {
     /// Runs the shortcut a key press makes on the surface whose tree is
     /// `root`, with `target` the node keys go to there. Returns whether the
     /// key was taken -- by a shortcut, or as the start of a sequence.
+    /// Follows the keys for a modifier's tap: a modifier pressed on its own
+    /// starts one, any other key or a pointer press breaks it, and its own
+    /// release finishes it -- then a shortcut naming it (`"alt"`) runs.
+    /// Returns whether one did.
+    pub fn note_key_for_tap(
+        &mut self,
+        root: NodeHandle,
+        target: Option<NodeHandle>,
+        keysym: u32,
+        pressed: bool,
+    ) -> bool {
+        let tap = tap_of(keysym);
+        if pressed {
+            self.reactive.borrow_mut().modifier_tap = tap;
+            return false;
+        }
+        let started = self.reactive.borrow_mut().modifier_tap.take();
+        match (started, tap) {
+            (Some(a), Some(b)) if a == b => {
+                let chord = Chord { ctrl: false, shift: false, alt: false, logo: false, key: a };
+                self.run_sequence(root, target, &[chord])
+            }
+            _ => false,
+        }
+    }
+
+    /// A pointer press while a modifier is down is not a tap of it (Alt and
+    /// a drag moves a window).
+    pub fn break_modifier_tap(&mut self) {
+        self.reactive.borrow_mut().modifier_tap = None;
+    }
+
     pub fn dispatch_shortcut(
         &mut self,
         root: NodeHandle,

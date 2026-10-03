@@ -95,6 +95,14 @@ pub(crate) fn dispatch_key_in_subtree(
         .focused_text_input_in(root)
         .or_else(|| runtime.focus_owner(root))
         .or(focused.filter(|node| runtime.node_in_subtree(root, *node)));
+    // A modifier tapped alone (Alt, to reach a menu bar).
+    let tap_target = current.or_else(|| runtime.first_key_target_in(root));
+    let pressed = matches!(action, KeyAction::Press { repeat: false });
+    if !matches!(action, KeyAction::Press { repeat: true })
+        && runtime.note_key_for_tap(root, tap_target, keysym, pressed)
+    {
+        return true;
+    }
     let repeat = match action {
         KeyAction::Release => {
             let Some(node) = current

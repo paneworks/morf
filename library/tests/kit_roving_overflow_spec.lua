@@ -141,6 +141,28 @@ test.it("a menu bar opens with Down and follows Right", function()
   test.eq(#test.logs("error"), 0)
 end)
 
+test.it("Alt tapped alone reaches the menu bar and goes back; Alt with a key or a click is no tap", function()
+  load()
+  test.truthy(tab_to("before"), "Tab never reached the first button")
+  test.key("Alt_L") test.settle(60)
+  test.eq(focused(), "file", "Alt did not reach the menu bar")
+  test.key("Alt_L") test.settle(60)
+  test.eq(focused(), "before", "Alt again did not go back")
+  -- Alt held with another key is that key's chord, not a tap.
+  test.key("Alt_L", nil, { phase = "down" })
+  test.key("x", { "alt" }) test.settle(20)
+  test.key("Alt_L", nil, { phase = "up" }) test.settle(60)
+  test.eq(focused(), "before", "Alt held with a key counted as a tap")
+  -- Nor is Alt with a click.
+  test.key("Alt_L", nil, { phase = "down" })
+  test.click(600, 560) test.settle(20)
+  test.key("Alt_L", nil, { phase = "up" }) test.settle(60)
+  test.falsy(focused() == "file", "Alt with a click counted as a tap")
+  -- F10 too.
+  test.key("F10") test.settle(60)
+  test.eq(focused(), "file")
+end)
+
 test.it("an overflow toolbar narrowed hides its last items and more runs one", function()
   load()
   test.eq(test.ipc("hidden", "tools"), ",")
