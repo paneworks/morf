@@ -1,6 +1,6 @@
 use morf_layout::{Layout, Size};
 use morf_lua::{LayerSurfaceConfig, Runtime};
-use morf_region::{Rect as RegionRect, Region};
+use morf_value::region::{Rect as RegionRect, Region};
 use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
 use morf_wayland::{InputRect, LayerClient, PRIMARY_LAYER, SurfaceRole, physical_size};
@@ -351,10 +351,10 @@ pub(crate) fn paint_layer(
                     width: (geometry.width.ceil() as i32).max(0),
                     height: (geometry.height.ceil() as i32).max(0),
                 },
-                shape: morf_region::Shape::Box,
-                params: morf_region::ShapeParams {
+                shape: morf_value::region::Shape::Box,
+                params: morf_value::region::ShapeParams {
                     radii,
-                    ..morf_region::ShapeParams::default()
+                    ..morf_value::region::ShapeParams::default()
                 },
                 ..Region::default()
             })
@@ -377,7 +377,7 @@ pub(crate) fn paint_layer(
             .unwrap_or_default();
         if previous != shapes && !previous.is_empty() {
             let rectangles =
-                morf_region::build_scaled(width, height, &previous, morf_region::COVERED_EDGE_GRID)
+                morf_value::region::build_scaled(width, height, &previous, morf_value::region::COVERED_EDGE_GRID)
                     .map_err(|error| error.to_string())?;
             client
                 .set_layer_backdrop_region(layer, Some(&rectangles))

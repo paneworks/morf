@@ -1,4 +1,4 @@
-use morf_region::Region;
+use morf_value::region::Region;
 
 use smithay_client_toolkit::compositor::FrameCallbackData;
 use smithay_client_toolkit::globals::ProvidesBoundGlobal;
@@ -545,7 +545,7 @@ impl LayerClient {
         let (width, height) = self
             .layer_logical_size(id)
             .ok_or_else(|| WaylandError("layer surface is not open".into()))?;
-        let rectangles = morf_region::build(width, height, regions)
+        let rectangles = morf_value::region::build(width, height, regions)
             .map_err(|error| WaylandError(error.to_string()))?;
         self.set_layer_input_region(id, Some(&rectangles));
         Ok(())

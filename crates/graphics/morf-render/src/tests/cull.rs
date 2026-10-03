@@ -1,6 +1,6 @@
 //! A large field drawn as tiles: every pixel its surface reaches is in one.
 
-use morf_region::{BlendProfile, Operation, Shape};
+use morf_value::region::{BlendProfile, Operation, Shape};
 
 use super::*;
 

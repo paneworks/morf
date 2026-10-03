@@ -499,7 +499,7 @@ fn combine(accumulated: f32, layer_distance: f32, operation: u32, blend: f32, pr
     // boolean rather than a division by zero.
     let k = max(blend, 0.0001);
     // The circular profile: the same three smooth operators, with the seam an
-    // arc rather than a polynomial swell. `morf_region::combine_profiled` is
+    // arc rather than a polynomial swell. `morf_value::region::combine_profiled` is
     // its CPU twin.
     if profile == 1u && operation >= 3u && operation <= 5u {
         switch operation {

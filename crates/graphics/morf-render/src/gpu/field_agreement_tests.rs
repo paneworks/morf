@@ -2,7 +2,7 @@ use crate::*;
 
 // The two halves of the one shape vocabulary, held against each other.
 //
-// `morf_region::distance` decides where a click lands; `field.wgsl` decides
+// `morf_value::region::distance` decides where a click lands; `field.wgsl` decides
 // where a pixel is painted. They are ports of one another, and nothing but a
 // test keeps a port honest — a family whose discriminant, parameter slot or
 // arithmetic drifts on one side renders in one place and is clickable in
@@ -98,7 +98,7 @@ fn agrees(shape: Shape, pixels: &[u8], half: [f32; 2], centre: [f32; 2]) {
     for y in 0..SIZE {
         for x in 0..SIZE {
             let point = [x as f32 + 0.5 - centre[0], y as f32 + 0.5 - centre[1]];
-            let signed = morf_region::distance(shape, &params, half, point);
+            let signed = morf_value::region::distance(shape, &params, half, point);
             let alpha = alpha_at(pixels, SIZE, x, y);
             if signed < -MARGIN {
                 inside += 1;

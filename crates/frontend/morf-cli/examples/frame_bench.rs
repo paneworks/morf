@@ -572,28 +572,28 @@ fn main() {
     let backdrop_rects = if backdrop_shapes.is_empty() {
         0
     } else {
-        let shapes: Vec<morf_region::Region> = backdrop_shapes
+        let shapes: Vec<morf_value::region::Region> = backdrop_shapes
             .iter()
-            .map(|(geometry, radii)| morf_region::Region {
-                rect: morf_region::Rect {
+            .map(|(geometry, radii)| morf_value::region::Region {
+                rect: morf_value::region::Rect {
                     x: geometry.x.floor() as i32,
                     y: geometry.y.floor() as i32,
                     width: (geometry.width.ceil() as i32).max(0),
                     height: (geometry.height.ceil() as i32).max(0),
                 },
-                shape: morf_region::Shape::Box,
-                params: morf_region::ShapeParams {
+                shape: morf_value::region::Shape::Box,
+                params: morf_value::region::ShapeParams {
                     radii: *radii,
-                    ..morf_region::ShapeParams::default()
+                    ..morf_value::region::ShapeParams::default()
                 },
-                ..morf_region::Region::default()
+                ..morf_value::region::Region::default()
             })
             .collect();
-        morf_region::build_scaled(
+        morf_value::region::build_scaled(
             width as u32,
             height as u32,
             &shapes,
-            morf_region::COVERED_EDGE_GRID,
+            morf_value::region::COVERED_EDGE_GRID,
         )
         .map(|rects| rects.len())
         .unwrap_or(0)
@@ -605,30 +605,30 @@ fn main() {
     let backdrop_cost = if backdrop_shapes.is_empty() {
         Duration::ZERO
     } else {
-        let shapes: Vec<morf_region::Region> = backdrop_shapes
+        let shapes: Vec<morf_value::region::Region> = backdrop_shapes
             .iter()
-            .map(|(geometry, radii)| morf_region::Region {
-                rect: morf_region::Rect {
+            .map(|(geometry, radii)| morf_value::region::Region {
+                rect: morf_value::region::Rect {
                     x: geometry.x.floor() as i32,
                     y: geometry.y.floor() as i32,
                     width: (geometry.width.ceil() as i32).max(0),
                     height: (geometry.height.ceil() as i32).max(0),
                 },
-                shape: morf_region::Shape::Box,
-                params: morf_region::ShapeParams {
+                shape: morf_value::region::Shape::Box,
+                params: morf_value::region::ShapeParams {
                     radii: *radii,
-                    ..morf_region::ShapeParams::default()
+                    ..morf_value::region::ShapeParams::default()
                 },
-                ..morf_region::Region::default()
+                ..morf_value::region::Region::default()
             })
             .collect();
         best(5, 20, || {
             std::hint::black_box(
-                morf_region::build_scaled(
+                morf_value::region::build_scaled(
                     width as u32,
                     height as u32,
                     &shapes,
-                    morf_region::COVERED_EDGE_GRID,
+                    morf_value::region::COVERED_EDGE_GRID,
                 )
                 .ok(),
             );

@@ -1758,7 +1758,6 @@ dependencies = [
  "morf-kit",
  "morf-layout",
  "morf-lua",
- "morf-region",
  "morf-render",
  "morf-scene",
  "morf-text",
@@ -1835,7 +1834,6 @@ dependencies = [
  "morf-lifecycle",
  "morf-menu",
  "morf-outline",
- "morf-region",
  "morf-scene",
  "morf-services",
  "morf-shader",
@@ -1855,10 +1853,6 @@ name = "morf-outline"
 version = "0.1.5"
 
 [[package]]
-name = "morf-region"
-version = "0.1.5"
-
-[[package]]
 name = "morf-render"
 version = "0.1.5"
 dependencies = [
@@ -1869,11 +1863,11 @@ dependencies = [
  "morf-image",
  "morf-layout",
  "morf-outline",
- "morf-region",
  "morf-scene",
  "morf-shader",
  "morf-svg",
  "morf-text",
+ "morf-value",
  "pollster",
  "raw-window-handle",
  "resvg",
@@ -1960,9 +1954,9 @@ dependencies = [
  "accesskit",
  "accesskit_unix",
  "morf-layout",
- "morf-region",
  "morf-render",
  "morf-scene",
+ "morf-value",
  "pollster",
  "raw-window-handle",
  "rustix",

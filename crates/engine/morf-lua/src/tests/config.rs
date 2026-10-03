@@ -150,7 +150,7 @@ fn surface_masks_are_native_composable_regions() {
         )
         .unwrap();
     let regions = runtime.layer_surface_config().input_regions.unwrap();
-    let rectangles = morf_region::build(10, 10, &regions).unwrap();
+    let rectangles = morf_value::region::build(10, 10, &regions).unwrap();
     assert!(!rectangles.is_empty());
     assert_eq!(
         rectangles

@@ -1,4 +1,4 @@
-use morf_region::Region;
+use morf_value::region::Region;
 use morf_scene::{Behavior, NodeHandle, Value as SceneValue};
 
 /// Edges used to anchor a configured layer surface.

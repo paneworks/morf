@@ -2,7 +2,7 @@ use morf_layout::Geometry;
 // The one shape vocabulary, shared with the input-region rasteriser so a
 // star-shaped node is clickable as a star. Re-exported, so naming a shape does
 // not oblige a caller to depend on `morf-region` directly.
-pub use morf_region::{BlendProfile, Operation, Shape, ShapeParams};
+pub use morf_value::region::{BlendProfile, Operation, Shape, ShapeParams};
 use morf_scene::Color;
 
 /// One analytic distance field, and how it joins the composition.

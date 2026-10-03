@@ -1,6 +1,6 @@
 use luna::{Context, Table, Value as LuaValue};
 
-use morf_region::{
+use morf_value::region::{
     Operation as RegionOperation, Rect as RegionRect, Region, Shape as RegionShape, ShapeParams,
 };
 use morf_scene::NodeHandle;

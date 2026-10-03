@@ -5,7 +5,7 @@
 // outline, so it reaches the composition as points and the layer says where its
 // own run of them begins.
 
-use morf_region::Shape;
+use morf_value::region::Shape;
 
 use crate::commands::SdfLayer;
 

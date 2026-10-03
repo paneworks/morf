@@ -5,7 +5,7 @@
 //! within a cell in exchange for the square of the saving. Whether that is a
 //! good trade is the caller's to know, so the two are named apart.
 
-use crate::{Rect, Region, RegionError, ShapeParams, build};
+use crate::region::{Rect, Region, RegionError, ShapeParams, build};
 
 /// The divisor to use when the caller paints its own antialiased edge over the
 /// region's boundary — a backdrop blur, a shadow.

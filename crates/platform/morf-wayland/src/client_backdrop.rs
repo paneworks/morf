@@ -16,7 +16,7 @@
 //! blur filter — the tint, the grain, the lit edge — is painted here, over a
 //! backdrop this process never touches.
 
-use morf_region::Region;
+use morf_value::region::Region;
 
 use crate::WaylandError;
 use crate::state_types::PendingCapture;
@@ -45,7 +45,7 @@ impl LayerClient {
     pub fn set_layer_backdrop_region(
         &self,
         id: u64,
-        rectangles: Option<&[morf_region::Rect]>,
+        rectangles: Option<&[morf_value::region::Rect]>,
     ) -> Result<(), WaylandError> {
         if !self.supports_backdrop_blur() {
             return Ok(());
@@ -99,7 +99,7 @@ impl LayerClient {
         let (width, height) = self
             .layer_logical_size(id)
             .ok_or_else(|| WaylandError("layer surface is not open".into()))?;
-        let rectangles = morf_region::build(width, height, regions)
+        let rectangles = morf_value::region::build(width, height, regions)
             .map_err(|error| WaylandError(error.to_string()))?;
         self.set_layer_backdrop_region(id, Some(&rectangles))
     }

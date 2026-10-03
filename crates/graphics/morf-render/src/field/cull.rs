@@ -8,14 +8,14 @@
 //! the surface cannot reach is not drawn at all.
 //!
 //! The CPU composition here is the shader's, operator for operator, over the
-//! same distance functions `morf_region` keeps for the input region. It is
+//! same distance functions `morf_value::region` keeps for the input region. It is
 //! only asked one thing — could anything paint in this tile — so it answers
 //! conservatively: a composed field changes by at most `√2` per pixel moved
 //! (a circular seam's worst case; every other operator is 1), and the band a
 //! blend group switches operators in is added on top.
 
 use morf_layout::Geometry;
-use morf_region::{Operation, Shape, ShapeParams, combine_profiled, distance};
+use morf_value::region::{Operation, Shape, ShapeParams, combine_profiled, distance};
 
 use super::{MAX_FIELD_LAYERS, ShadowReach, layer_frame};
 use crate::commands::SdfLayer;

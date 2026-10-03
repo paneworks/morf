@@ -70,11 +70,11 @@ pub struct BarConfig {
 
 /// Integer surface-local rectangle used to construct an input region.
 ///
-/// The same four fields `morf_region` already defines, so it is that type
+/// The same four fields `morf_value::region` already defines, so it is that type
 /// rather than a copy of it. Two names for one shape meant a field-by-field
 /// rebuild of every rectangle on the way from the region rasteriser to the
 /// compositor, allocated fresh on each update.
-pub type InputRect = morf_region::Rect;
+pub type InputRect = morf_value::region::Rect;
 
 /// Capability-derived compositor output description.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

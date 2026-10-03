@@ -7,12 +7,12 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+morf-value.workspace = true
 bytemuck.workspace = true
 kurbo.workspace = true
 morf-image.workspace = true
 morf-layout.workspace = true
 morf-outline.workspace = true
-morf-region.workspace = true
 morf-scene.workspace = true
 morf-shader.workspace = true
 morf-svg.workspace = true

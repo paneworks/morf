@@ -7,6 +7,9 @@
 
 pub mod color;
 pub mod hct;
+/// Input regions: the shapes a surface takes the pointer in, composed into
+/// the rectangles a compositor is told.
+pub mod region;
 mod value;
 
 pub use color::{Color, ColorSpace, HueDirection, mix as mix_colors};
