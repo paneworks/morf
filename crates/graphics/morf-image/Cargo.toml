@@ -7,7 +7,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-morf-desktop.workspace = true
 base64.workspace = true
 image.workspace = true
 resvg.workspace = true

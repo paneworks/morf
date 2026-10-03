@@ -7,7 +7,7 @@
 
 use std::rc::Rc;
 
-use morf_outline::Segment;
+use morf_vector::Segment;
 
 use crate::glyph_fields::{FieldBox, FieldImage};
 

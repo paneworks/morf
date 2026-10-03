@@ -83,7 +83,7 @@ struct TextInput {
 /// them rather than all at once -- a word of new pairs measured up front
 /// was a stall of a tenth of a second on the first frame of its motion.
 pub(crate) struct MeasuredPair {
-    pub(crate) paired: Vec<morf_outline::Paired>,
+    pub(crate) paired: Vec<morf_vector::Paired>,
     pub(crate) area: glyph_fields::FieldBox,
     pub(crate) spread: f32,
     pub(crate) frames: Vec<Option<Rc<FieldImage>>>,
@@ -528,7 +528,7 @@ pub use families::{AxisRange, family_axes, family_files, file_axes, installed_fa
 pub use glyph_morph::CONTOUR_POINTS as GLYPH_CONTOUR_POINTS;
 /// A closed loop of an outline, for a caller pairing letters with shapes that
 /// are not letters.
-pub use morf_outline::Contour;
+pub use morf_vector::Contour;
 mod glyph_runs;
 mod measure;
 pub(crate) use elide::elided_text;

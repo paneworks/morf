@@ -527,7 +527,7 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 // "area" | "steps" | "steps_area" | "hatch_steps" | "bars",
                 // width, height, samples, bottom, top, headroom, floor,
                 // pad_top, pad_bottom, smooth, gap, radius, min_bar, mirror,
-                // hatch, with }` (`morf_outline::series`).
+                // hatch, with }` (`morf_vector::series`).
                 any("series", Value::Nil),
                 any("plot", Value::Nil),
             ]);

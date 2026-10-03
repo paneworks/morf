@@ -7,9 +7,9 @@
 
 use std::collections::HashMap;
 
-use morf_outline::{Contour, Paired, contour_points, contours, pair_up, walk};
+use crate::{Contour, Paired, contour_points, contours, pair_up, walk};
 
-use crate::{Outline, SvgError, outline_of_source};
+use crate::svg::{Outline, SvgError, outline_of_source};
 
 /// How many documents to keep before starting over.
 const MAX_DOCUMENTS: usize = 256;

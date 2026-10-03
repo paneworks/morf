@@ -716,7 +716,7 @@ fn channel_id(value: &morf_scene::Value) -> Option<u64> {
 /// The outline of a `Path` that draws a data channel (`series`), made from
 /// the channel's numbers now as its `plot` says; `None` when it draws `d`.
 fn series_d(scene: &Scene, node: NodeHandle, view_box: Option<morf_scene::PathViewBox>) -> Option<String> {
-    use morf_outline::series::{Plot, path};
+    use morf_vector::series::{Plot, path};
     use morf_scene::Value;
     let id = channel_id(scene.current(node, "series").ok()?)?;
     let Some(channel) = morf_scene::channel_by_id(id) else { return Some("M0 0".into()) };

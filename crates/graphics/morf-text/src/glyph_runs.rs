@@ -290,7 +290,7 @@ impl TextSystem {
             return;
         };
         let segments = flatten(&commands);
-        let corners = morf_outline::corners(&crate::glyph_steps::steps(&commands));
+        let corners = morf_vector::corners(&crate::glyph_steps::steps(&commands));
         println!("{} corners found", corners.len());
         for corner in corners.iter().take(3) {
             println!(
@@ -352,7 +352,7 @@ impl TextSystem {
         let spread = field_spread_for(reference);
         let field = glyph_field(&commands, spread)?;
         let segments = flatten(&commands);
-        let corners = morf_outline::corners(&crate::glyph_steps::steps(&commands));
+        let corners = morf_vector::corners(&crate::glyph_steps::steps(&commands));
 
         // How near a corner a texel has to be for its half-planes to speak, and
         // how far out their word fades back to the stored field.
@@ -464,7 +464,7 @@ impl TextSystem {
         }
         let walked: Vec<(f32, f32)> = contours
             .iter()
-            .flat_map(morf_outline::contour_of)
+            .flat_map(morf_vector::contour_of)
             .copied()
             .collect();
         let mut worst = 0.0_f32;

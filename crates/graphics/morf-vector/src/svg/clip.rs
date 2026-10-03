@@ -22,10 +22,10 @@
 //! that says it was not understood: the drawing would come out whole, which is
 //! the one answer that is certainly wrong.
 
-use morf_outline::{Step, contour_of, contours};
+use crate::{Step, contour_of, contours};
 use resvg::usvg;
 
-use crate::{steps_of, walk};
+use crate::svg::{steps_of, walk};
 
 /// A clip's own shape, as closed polygons in the document's coordinates.
 pub(crate) type Region = Vec<Vec<(f32, f32)>>;

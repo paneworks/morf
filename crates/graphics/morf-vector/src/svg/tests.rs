@@ -1,6 +1,6 @@
 //! What comes out of a document, and what can be done with it afterwards.
 
-use morf_outline::{CONTOUR_POINTS, contour_of, contours, pair_up, walk};
+use crate::{CONTOUR_POINTS, contour_of, contours, pair_up, walk};
 
 use super::*;
 
@@ -48,7 +48,7 @@ fn a_document_arrives_as_loops_of_points_and_not_as_pixels() {
 fn an_even_odd_hole_is_wound_against_what_encloses_it() {
     let outline = outline_from_bytes(RING.as_bytes()).unwrap();
     let loops = contours(&outline.steps);
-    let area = |contour: &morf_outline::Contour| {
+    let area = |contour: &crate::Contour| {
         let points = contour_of(contour);
         let mut total = 0.0;
         for index in 0..points.len() {

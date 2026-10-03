@@ -26,7 +26,7 @@ ALLOWED = {
     "morf-value": set(),
     "morf-scene": {"morf-value"},
     "morf-layout": {"morf-scene", "morf-value"},
-    "morf-vector": {"morf-value"},
+    "morf-vector": {"morf-image", "morf-value"},
     "morf-text": {"morf-scene", "morf-layout", "morf-vector", "morf-value"},
     "morf-image": {"morf-value"},
     "morf-render": {"morf-scene", "morf-layout", "morf-text", "morf-vector", "morf-image", "morf-value"},

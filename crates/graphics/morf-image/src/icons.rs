@@ -41,7 +41,7 @@ impl IconResolver {
 
     /// The Icon Theme spec's base directories, in its order: `~/.icons`,
     /// then `icons` under each data directory -- the ones desktop entries
-    /// come from (`morf_desktop::xdg_data_dirs`): the user's data home,
+    /// come from (`crate::xdg::data_dirs`): the user's data home,
     /// `XDG_DATA_DIRS`, then `/usr/local/share` and `/usr/share` whatever
     /// that list said, since a Nix shell's list names only the store. After
     /// the themes, `pixmaps` under each system data directory, which so
@@ -55,7 +55,7 @@ impl IconResolver {
             .as_ref()
             .is_some_and(|path| !path.as_os_str().is_empty())
             || home.is_some();
-        let data = morf_desktop::xdg_data_dirs_from(
+        let data = crate::xdg::data_dirs_from(
             data_home.map(PathBuf::into_os_string),
             home.clone().map(PathBuf::into_os_string),
             data_dirs,

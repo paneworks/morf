@@ -195,7 +195,7 @@ impl SdfFieldInstance {
         materials: &mut Vec<SdfFieldMaterial>,
         outlines: &mut Vec<[f32; 2]>,
         text: &mut morf_text::TextSystem,
-        drawings: &mut morf_svg::SvgOutlines,
+        drawings: &mut morf_vector::svg::SvgOutlines,
     ) -> Option<Self> {
         match command {
             DrawCommand::Field { .. } => Self::from_field(
@@ -216,7 +216,7 @@ impl SdfFieldInstance {
         materials: &mut Vec<SdfFieldMaterial>,
         outlines: &mut Vec<[f32; 2]>,
         text: &mut morf_text::TextSystem,
-        drawings: &mut morf_svg::SvgOutlines,
+        drawings: &mut morf_vector::svg::SvgOutlines,
     ) -> Option<Self> {
         let DrawCommand::Field {
             bounds,

@@ -582,7 +582,7 @@ impl WgpuBackend {
             layer_pool: Default::default(),
             backdrops: Default::default(),
             text: TextSystem::new(),
-            drawings: morf_svg::SvgOutlines::new(),
+            drawings: morf_vector::svg::SvgOutlines::new(),
             texture,
             view,
             surface,

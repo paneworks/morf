@@ -1770,6 +1770,9 @@ dependencies = [
 [[package]]
 name = "morf-desktop"
 version = "0.1.5"
+dependencies = [
+ "morf-image",
+]
 
 [[package]]
 name = "morf-image"
@@ -1777,7 +1780,6 @@ version = "0.1.5"
 dependencies = [
  "base64 0.23.1",
  "image",
- "morf-desktop",
  "resvg",
  "signed-distance-field",
 ]
@@ -1833,23 +1835,19 @@ dependencies = [
  "morf-layout",
  "morf-lifecycle",
  "morf-menu",
- "morf-outline",
  "morf-scene",
  "morf-services",
  "morf-shader",
  "morf-terminal",
  "morf-text",
  "morf-value",
+ "morf-vector",
  "pastel",
  "serde_json",
 ]
 
 [[package]]
 name = "morf-menu"
-version = "0.1.5"
-
-[[package]]
-name = "morf-outline"
 version = "0.1.5"
 
 [[package]]
@@ -1862,12 +1860,11 @@ dependencies = [
  "libc",
  "morf-image",
  "morf-layout",
- "morf-outline",
  "morf-scene",
  "morf-shader",
- "morf-svg",
  "morf-text",
  "morf-value",
+ "morf-vector",
  "pollster",
  "raw-window-handle",
  "resvg",
@@ -1907,15 +1904,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "morf-svg"
-version = "0.1.5"
-dependencies = [
- "morf-image",
- "morf-outline",
- "resvg",
-]
-
-[[package]]
 name = "morf-terminal"
 version = "0.1.5"
 dependencies = [
@@ -1932,8 +1920,8 @@ version = "0.1.5"
 dependencies = [
  "cosmic-text",
  "morf-layout",
- "morf-outline",
  "morf-scene",
+ "morf-vector",
  "signed-distance-field",
  "swash",
  "unicode-segmentation",
@@ -1945,6 +1933,14 @@ version = "0.1.5"
 dependencies = [
  "pastel",
  "serde_json",
+]
+
+[[package]]
+name = "morf-vector"
+version = "0.1.5"
+dependencies = [
+ "morf-image",
+ "resvg",
 ]
 
 [[package]]

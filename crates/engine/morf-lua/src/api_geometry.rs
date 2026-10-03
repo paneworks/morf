@@ -1,7 +1,7 @@
 //! Native, theme-independent geometry. Lua owns nodes and animation policy.
 use crate::scene_bindings::HostError;
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
-use morf_outline::{
+use morf_vector::{
     geometry::{self, Cubic, Options, SEGMENTS},
     geometry_named, graph, marks, series,
 };
@@ -289,7 +289,7 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             Ok(CallbackReturn::Return)
         }),
     );
-    // Marks a style draws with (`morf_outline::marks`): path data strings.
+    // Marks a style draws with (`morf_vector::marks`): path data strings.
     api.set_field(
         ctx,
         "arc",

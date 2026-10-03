@@ -10,6 +10,8 @@
 //! Whoever has the outline converts it into [`Step`]s once; from there a font
 //! and an SVG are indistinguishable, and so are the shapes they make.
 
+/// SVG documents read as outlines, not pictures.
+pub mod svg;
 mod contours;
 mod corners;
 mod flatten;

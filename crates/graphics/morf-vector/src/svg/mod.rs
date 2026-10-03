@@ -10,7 +10,7 @@
 //!
 //! So nothing here rasterises. The document is parsed, every filled path is
 //! taken as the curves it was written as, every stroked path is turned into the
-//! outline of its stroke, and the result is [`morf_outline::Step`]s — the same
+//! outline of its stroke, and the result is [`crate::Step`]s — the same
 //! thing a font hands over. From there an icon is a shape like any other: it
 //! composes with a circle, it is cut out of a rectangle, and it morphs into a
 //! letter, because by then nothing downstream can tell them apart.
@@ -18,7 +18,7 @@
 use std::fmt;
 use std::path::Path;
 
-use morf_outline::Step;
+use crate::Step;
 use resvg::tiny_skia::PathSegment;
 use resvg::usvg;
 

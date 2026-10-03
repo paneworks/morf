@@ -38,7 +38,7 @@ pub(crate) fn polygon_params(
     scale: f64,
     outlines: &mut Vec<[f32; 2]>,
     text: &mut morf_text::TextSystem,
-    drawings: &mut morf_svg::SvgOutlines,
+    drawings: &mut morf_vector::svg::SvgOutlines,
 ) -> ([f32; 4], f32) {
     let plain = [
         0.0,
@@ -59,7 +59,7 @@ pub(crate) fn polygon_params(
         // other way round.
         (Some(glyph), Some(source)) if layer.morph > 0.0 => {
             let family = layer.font_family.as_deref().unwrap_or("sans-serif");
-            morf_svg::SvgOutlines::walk_between(
+            morf_vector::svg::SvgOutlines::walk_between(
                 text.glyph_contours(glyph, family),
                 drawings.contours_of(source),
                 layer.morph,
@@ -77,7 +77,7 @@ pub(crate) fn polygon_params(
             // side can tell what the other one was written in.
             Some(letter) if layer.morph > 0.0 => {
                 let family = layer.font_family.as_deref().unwrap_or("sans-serif");
-                morf_svg::SvgOutlines::walk_between(
+                morf_vector::svg::SvgOutlines::walk_between(
                     drawings.contours_of(source),
                     text.glyph_contours(letter, family),
                     layer.morph,

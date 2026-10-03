@@ -201,7 +201,7 @@ pub struct WgpuBackend {
     pub(crate) text: TextSystem,
     /// Documents already read, so an icon is parsed and resampled once rather
     /// than once a frame.
-    pub(crate) drawings: morf_svg::SvgOutlines,
+    pub(crate) drawings: morf_vector::svg::SvgOutlines,
     /// What the device said it could do about dmabufs, when it could.
     pub(crate) dmabuf: Option<crate::gpu::dmabuf::DmabufSupport>,
     /// Textures this engine did not decode: captures the compositor drew

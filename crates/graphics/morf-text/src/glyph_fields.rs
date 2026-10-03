@@ -23,7 +23,7 @@
 use std::rc::Rc;
 
 use cosmic_text::Command;
-use morf_outline::Segment;
+use morf_vector::Segment;
 
 use crate::glyph_steps::steps;
 
@@ -90,7 +90,7 @@ pub const FIELD_SPREAD_PX: u32 = 24;
 /// The flattening itself is `morf-outline`'s — this is only the conversion from
 /// what a font hands back into what an outline is.
 pub(crate) fn flatten(commands: &[Command]) -> Vec<Segment> {
-    morf_outline::flatten(&steps(commands))
+    morf_vector::flatten(&steps(commands))
 }
 
 /// Measures a glyph's outline into a distance field.

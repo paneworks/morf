@@ -239,7 +239,7 @@ fn rectangles_emit_gradient_stops_in_the_material() {
         &mut materials,
         &mut Vec::new(),
         &mut morf_text::TextSystem::new(),
-        &mut morf_svg::SvgOutlines::new(),
+        &mut morf_vector::svg::SvgOutlines::new(),
     )
     .unwrap();
     assert_eq!(materials[0].gradient[0], 1.0, "linear");

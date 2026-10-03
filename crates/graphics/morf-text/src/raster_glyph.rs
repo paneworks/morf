@@ -156,7 +156,7 @@ impl TextSystem {
         type Job = (
             (u64, u64),
             usize,
-            Vec<morf_outline::Paired>,
+            Vec<morf_vector::Paired>,
             crate::glyph_fields::FieldBox,
             f32,
         );

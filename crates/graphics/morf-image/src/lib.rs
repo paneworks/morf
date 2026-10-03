@@ -1,5 +1,6 @@
 //! Raster, SVG, and XDG icon-theme loading with size-aware caches.
 
+pub mod xdg;
 pub mod animation;
 pub mod annotation;
 mod annotation_geometry;

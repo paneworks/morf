@@ -1,9 +1,9 @@
 //! Walking the document for everything that has an edge.
 
-use morf_outline::Step;
+use crate::Step;
 use resvg::usvg;
 
-use crate::{clip, rewind, steps_of};
+use crate::svg::{clip, rewind, steps_of};
 
 /// Why a document could not be turned into an outline.
 pub(crate) struct Refused(pub(crate) String);

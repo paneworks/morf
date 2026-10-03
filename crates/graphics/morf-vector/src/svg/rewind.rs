@@ -11,7 +11,7 @@
 //! that is what happens here: every loop is asked how deeply it is nested, and
 //! is wound to match.
 
-use morf_outline::{Step, contours};
+use crate::{Step, contours};
 
 /// Re-winds the loops of one path so a winding count reads it as even-odd did.
 ///
@@ -74,7 +74,7 @@ fn subpaths(steps: &[Step]) -> Vec<std::ops::Range<usize>> {
 fn flatten_span(steps: &[Step]) -> Vec<(f32, f32)> {
     contours(steps)
         .first()
-        .map(|contour| morf_outline::contour_of(contour).to_vec())
+        .map(|contour| crate::contour_of(contour).to_vec())
         .unwrap_or_default()
 }
 

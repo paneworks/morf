@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-morf-outline.workspace = true
+morf-vector.workspace = true
 cosmic-text.workspace = true
 swash.workspace = true
 morf-layout.workspace = true

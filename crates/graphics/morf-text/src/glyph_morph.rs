@@ -10,20 +10,20 @@
 //! the two entry points the glyph fields and the polygon layers ask for.
 
 use cosmic_text::Command;
-use morf_outline::Segment;
+use morf_vector::Segment;
 
 use crate::glyph_steps::steps;
 
-pub use morf_outline::CONTOUR_POINTS;
+pub use morf_vector::CONTOUR_POINTS;
 
 /// Breaks a letter's outline into closed loops of evenly spaced points.
-pub(crate) fn contours(commands: &[Command]) -> Vec<morf_outline::Contour> {
-    morf_outline::contours(&steps(commands))
+pub(crate) fn contours(commands: &[Command]) -> Vec<morf_vector::Contour> {
+    morf_vector::contours(&steps(commands))
 }
 
 /// The outline partway between two letters, as straight pieces to measure.
-pub(crate) fn between(paired: &[morf_outline::Paired], travel: f32) -> Vec<Segment> {
-    morf_outline::between(paired, travel)
+pub(crate) fn between(paired: &[morf_vector::Paired], travel: f32) -> Vec<Segment> {
+    morf_vector::between(paired, travel)
 }
 
-pub(crate) use morf_outline::{Contour, contour_points, pair_up, walk};
+pub(crate) use morf_vector::{Contour, contour_points, pair_up, walk};

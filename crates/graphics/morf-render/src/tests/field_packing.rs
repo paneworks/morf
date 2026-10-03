@@ -53,7 +53,7 @@ fn layers_are_packed_into_the_fields_own_space_and_scaled() {
         &mut materials,
         &mut Vec::new(),
         &mut morf_text::TextSystem::new(),
-        &mut morf_svg::SvgOutlines::new(),
+        &mut morf_vector::svg::SvgOutlines::new(),
     )
     .unwrap();
 
@@ -107,7 +107,7 @@ fn layer_runs_are_addressed_per_field_within_one_shared_buffer() {
         &mut materials,
         &mut Vec::new(),
         &mut morf_text::TextSystem::new(),
-        &mut morf_svg::SvgOutlines::new(),
+        &mut morf_vector::svg::SvgOutlines::new(),
     )
     .unwrap();
     let second = SdfFieldInstance::from_command(
@@ -117,7 +117,7 @@ fn layer_runs_are_addressed_per_field_within_one_shared_buffer() {
         &mut materials,
         &mut Vec::new(),
         &mut morf_text::TextSystem::new(),
-        &mut morf_svg::SvgOutlines::new(),
+        &mut morf_vector::svg::SvgOutlines::new(),
     )
     .unwrap();
 
@@ -160,7 +160,7 @@ fn a_composition_past_the_cap_is_truncated_rather_than_unbounded() {
         &mut materials,
         &mut Vec::new(),
         &mut morf_text::TextSystem::new(),
-        &mut morf_svg::SvgOutlines::new(),
+        &mut morf_vector::svg::SvgOutlines::new(),
     )
     .unwrap();
 
