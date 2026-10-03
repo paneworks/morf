@@ -27,7 +27,7 @@ local CONTROL = { x = true, y = true, z = true, anchors = true, visible = true, 
 local SETTINGS = { text = false, placeholder = false, echo = true, read_only = false, max_length = false,
   validator = true, minimum = true, maximum = true, required = true, revert_on_escape = true, inset = true,
   clear = true, reveal = true, widget = true, on_accepted = true, on_escape = true, on_edited = true,
-  on_invalid = true, on_text_changed = true, on_focus_changed = true }
+  on_invalid = true, on_focus_changed = true }
 
 local function sides(v)
   if type(v) == "table" then return v[1] or 0, v[2] or 0, v[3] or 0, v[4] or 0 end

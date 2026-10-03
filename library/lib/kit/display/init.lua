@@ -20,17 +20,21 @@
 local M = {}
 
 M.GROUPS = { "text", "media", "status", "readings", "charts", "structure" }
+M.DOMAINS = { "aviation", "hud_game", "hud_fui", "audio", "editor" }
 
 --- Adds the shared display functions `kit` lacks, each drawn in `style`.
 function M.install(kit, style)
   style.kit = kit
-  for _, group in ipairs(M.GROUPS) do
-    for name, draw in pairs(require("lib.kit.display." .. group)) do
+  local function add(module)
+    for name, draw in pairs(require(module)) do
       if kit[name] == nil then
         kit[name] = function(spec) return draw(spec or {}, style) end
       end
     end
   end
+  for _, group in ipairs(M.GROUPS) do add("lib.kit.display." .. group) end
+  -- The domain instruments over them (lib/kit/domain): aviation, HUD.
+  for _, group in ipairs(M.DOMAINS) do add("lib.kit.domain." .. group) end
   return kit
 end
 

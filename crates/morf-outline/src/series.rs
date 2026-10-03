@@ -32,6 +32,8 @@ pub enum Kind {
     States,
     StateCells,
     Wave,
+    PolarBars,
+    XyLine,
 }
 
 impl Kind {
@@ -54,6 +56,8 @@ impl Kind {
             "states" => Kind::States,
             "state_cells" => Kind::StateCells,
             "wave" => Kind::Wave,
+            "polar_bars" => Kind::PolarBars,
+            "xy_line" => Kind::XyLine,
             _ => return None,
         })
     }
@@ -245,6 +249,10 @@ pub fn path(values: &[f32], others: &[f32], plot: &Plot) -> String {
             return more::scatter(values, plot, plot.top_for(&ys, &[]));
         }
         Kind::Candles => return more::candles(values, plot, plot.top_for(values, others)),
+        Kind::XyLine => {
+            let ys: Vec<f32> = values.chunks_exact(2).map(|p| p[1]).collect();
+            return more::xy_line(values, plot, plot.top_for(&ys, &[]));
+        }
         _ => {}
     }
     let top = plot.top_for(values, others);
@@ -256,6 +264,7 @@ pub fn path(values: &[f32], others: &[f32], plot: &Plot) -> String {
         Kind::Boxes => return more::boxes(values, plot, top),
         Kind::Radial => return more::radial(values, plot, top),
         Kind::Wave => return more::wave(values, plot, top),
+        Kind::PolarBars => return more::polar_bars(values, plot, top),
         _ => {}
     }
     let y = |v: f32| h - plot.pad_bottom - norm(v) * (h - plot.pad_bottom - plot.pad_top);

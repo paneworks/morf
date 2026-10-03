@@ -156,64 +156,44 @@ function M.build(ctx)
     return (p.identity and p.identity ~= "") and p.identity or (p.name or "")
   end
   local ROW_H = math.max(22, P.lh(theme.size.small))
-  local player_rows = {}
-  for i = 1, 5 do
-    local function row() return players()[i] end
-    local function current() local r = row() return r ~= nil and r.name == active().name end
-    local area = ctx.area {
-      id = "media-player-" .. i, width = AW - 8, height = ROW_H, cursor = "pointer",
-      visible = function() return row() ~= nil end,
-      on_clicked = function()
-        local r = row()
-        if r then control("set_active", r.name) end
-        players_open:set(false)
-      end,
-      kit.text { x = 10, anchors = { vertical_center = true }, width = AW - 8 - 10 - 70, elide = "right",
-        text = function() return player_name(row()) end, font_size = theme.size.small,
-        color = function() return current() and accent() or kit.ink("hi")() end },
-      kit.label { anchors = { right = true, right_margin = 8 }, y = math.floor((ROW_H - LABEL_H) / 2), width = 60,
-        horizontal_alignment = "right", elide = "right",
-        text = function() local r = row() return r and kit.code("player." .. r.name, "STM ##.[##]") or "" end },
-    }
-    player_rows[#player_rows + 1] = kit.hover(area, function(hovered)
-      if current() then return accent():alpha(.18) end
-      return accent():alpha(hovered and .12 or 0)
-    end, P.control_round(ROW_H))
-  end
   local SY, SH = 312, 26
-  local select_area = ctx.area {
-    id = "media-player", x = AX, y = SY, width = AW - SH - 4, height = SH, cursor = "pointer",
-    accessible_name = function() return "Player: " .. player_name(active()) end,
-    on_clicked = function() players_open:set(not players_open:get()) end,
-    kit.icon("video_library", 16, accent, { x = 8, anchors = { vertical_center = true }, fill = true }),
-    kit.text { id = "media-player-name", x = 32, anchors = { vertical_center = true }, width = AW - SH - 4 - 40,
-      elide = "right", text = function() return player_name(active()) end, font_size = theme.size.small },
-  }
-  kit.hover(select_area, function(hovered) return accent():alpha(hovered and .18 or .08) end, P.control_round(SH))
+  -- The player selector is a kit combo box (lib.kit.composites): a press,
+  -- Space, Return or Alt+Down opens the players over it, the arrows and
+  -- Return or a press choose, Escape closes. The chevron beside it opens
+  -- it too.
+  local combo
   local more_area = P.icon_button {
     area = ctx.area, id = "media-player-more", x = AX + AW - SH, y = SY, width = SH, height = SH, size = 18,
     name = "Choose a player",
     icon = function() return players_open:get() and "expand_less" or "expand_more" end,
-    on_clicked = function() players_open:set(not players_open:get()) end,
+    on_clicked = function() if combo then combo.toggle() end end,
   }
-  local MENU_HEAD = CAPTION_H + 6
-  local player_menu = kit.surface {
-    id = "media-player-menu", x = AX, z = 10, width = AW, radius = P.control_round(24),
-    height = function() return #players() * ROW_H + MENU_HEAD + 6 end,
-    y = function() return SY - 4 - (#players() * ROW_H + MENU_HEAD + 6) end,
-    color = function() return C.surfaceContainerHighest end,
-    border_width = 1, border_color = kit.stroke("idle"),
-    visible = function() return players_open:get() end,
-    kit.caption { x = 6, y = 4, width = AW - 12, text = "Players", note = kit.code("media.players", "BRIDGE - A") },
-    ui.Column { x = 4, y = MENU_HEAD, gap = 0, table.unpack(player_rows) },
+  local function player_items()
+    local out = {}
+    for i, p in ipairs(players()) do out[i] = { label = player_name(p), name = p.name } end
+    return out
+  end
+  local select_area
+  select_area, combo = require("lib.kit.composites").combo_box {
+    id = "media-player", x = AX, y = SY, width = AW - SH - 4, height = SH, variant = "select",
+    icon = "video_library", text_size = theme.size.small, item_height = ROW_H, list_width = AW,
+    placement = "top-start", except = { more_area }, visible_items = 5,
+    item_id = function(i) return "media-player-" .. i end,
+    accessible_name = "Player",
+    items = player_items,
+    current = function()
+      local name = active().name
+      for i, p in ipairs(players()) do if p.name == name then return i end end
+      return 0
+    end,
+    on_changed = function(_, item) control("set_active", item.name) end,
+    header = function()
+      return kit.caption { width = AW - 12, text = "Players", note = kit.code("media.players", "BRIDGE - A") }
+    end,
+    on_opened = function() players_open:set(true) end,
+    on_closed = function() players_open:set(false) end,
   }
-  -- A kit Popup where it stands: Escape or a press anywhere but the menu
-  -- and the two controls that open it shuts it.
-  require("lib.kit.popup").track(player_menu, {
-    open = function() return players_open:get() end, close_policy = "escape+outside",
-    anchor = select_area, except = { more_area },
-    on_close = function() players_open:set(false) end,
-  })
+  kit.hover(select_area, function(hovered) return accent():alpha(hovered and .18 or .08) end, P.control_round(SH))
 
   -- ----------------------------------------------- nothing playing --
   -- One framed region over the middle and right columns: the status
@@ -467,7 +447,6 @@ function M.build(ctx)
     side,
     select_area,
     more_area,
-    player_menu,
   }
 end
 

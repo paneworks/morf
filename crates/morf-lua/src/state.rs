@@ -80,6 +80,9 @@ pub(crate) struct DelegateInstance {
     /// The row it shows, as it was last given it: what a row put back while
     /// this one is still leaving is matched against.
     pub(crate) item: morf_scene::Value,
+    /// The index it was last given (0-based): a row that moves keeps its
+    /// delegate, which is rebound when this differs.
+    pub(crate) index: usize,
 }
 
 #[derive(Clone, Copy)]

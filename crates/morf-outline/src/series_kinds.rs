@@ -342,3 +342,47 @@ pub fn wave(values: &[f32], plot: &Plot, top: f64) -> String {
     d.push('Z');
     d
 }
+
+/// Bars standing out from a ring: one per value, evenly round the circle
+/// from `start` across `sweep` degrees, rising from `inner` (a fraction of
+/// the radius) by its value; `gap` is the share of each slot left empty.
+pub fn polar_bars(values: &[f32], plot: &Plot, top: f64) -> String {
+    let n = values.len();
+    if n == 0 {
+        return "M0 0".into();
+    }
+    let (cx, cy) = (plot.width / 2.0, plot.height / 2.0);
+    let outer = cx.min(cy);
+    let inner = outer * plot.inner.clamp(0.0, 0.95);
+    let span = (top - plot.bottom).max(1e-9);
+    let slot = plot.sweep / n as f64;
+    let fill = slot * (1.0 - (plot.gap / 10.0).clamp(0.0, 0.9));
+    let mut d = String::new();
+    for (k, v) in values.iter().enumerate() {
+        let level = ((*v as f64 - plot.bottom) / span).clamp(0.0, 1.0);
+        let r1 = inner + (outer - inner) * level.max(0.02);
+        let from = plot.start + k as f64 * slot + (slot - fill) / 2.0;
+        d.push_str(&marks::sector(cx, cy, inner, r1, from, fill));
+        d.push(' ');
+    }
+    d
+}
+
+/// A line through `x, y` pairs in order: a Lissajous figure, a phase plot.
+/// `x` across `left..right` (their range when not given), `y` up
+/// `bottom..top`.
+pub fn xy_line(values: &[f32], plot: &Plot, top: f64) -> String {
+    let pairs: Vec<(f64, f64)> = values.chunks_exact(2).map(|p| (p[0] as f64, p[1] as f64)).collect();
+    if pairs.len() < 2 {
+        return "M0 0".into();
+    }
+    let (left, right) = range(pairs.iter().map(|p| p.0), plot.left, plot.right);
+    let span = (top - plot.bottom).max(1e-9);
+    let mut d = String::with_capacity(pairs.len() * 16);
+    for (i, (x, y)) in pairs.iter().enumerate() {
+        let px = (x - left) / (right - left) * plot.width;
+        let py = plot.height - ((y - plot.bottom) / span).clamp(0.0, 1.0) * plot.height;
+        let _ = write!(d, "{}{px:.1} {py:.1} ", if i == 0 { 'M' } else { 'L' });
+    }
+    d
+}

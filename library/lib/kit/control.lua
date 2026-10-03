@@ -39,12 +39,14 @@ local SETTINGS = {
   Disclosure = { "expanded", "group", "animated" },
   Drag = { "mode", "axis", "threshold", "minimum", "maximum", "value", "extent", "swipe_distance", "swipe_speed" },
   Navigation = { "mode", "pages", "current", "wrap" },
+  Shell = { "breakpoints", "layouts", "collapse_below", "inspector_below", "regions", "width", "sidebar" },
 }
 -- How each archetype takes focus by default: a press by Tab only, so a click
 -- leaves a search field typing; a range by click too, so the arrows move
 -- what was just dragged.
 local POLICY = { Control = "none", Press = "tab", Range = "strong", Plane = "strong", Selection = "strong",
-  TextField = "none", Scroll = "none", Collection = "strong", Disclosure = "tab", Drag = "tab", Navigation = "none" }
+  TextField = "none", Scroll = "none", Collection = "strong", Disclosure = "tab", Drag = "tab", Navigation = "none",
+  Shell = "none" }
 -- Which take keys and the wheel.
 local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scroll = true, Collection = true,
   Disclosure = true, Drag = true, Navigation = true }
@@ -62,7 +64,8 @@ local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_valu
   on_invalid = true, on_scrolled = true, on_reached_start = true, on_reached_end = true, on_set_text = true,
   on_scroll_to = true, on_sort_changed = true, on_column_resized = true, on_expanded_changed = true,
   on_end_reached = true, on_expanded = true, on_collapsed = true, on_drag_started = true, on_dropped = true,
-  on_reorder = true, on_pushed = true, on_popped = true }
+  on_reorder = true, on_pushed = true, on_popped = true, on_region = true, on_breakpoint = true, on_collapsed = true,
+  on_sidebar_toggled = true }
 -- Every live control's way to take effects another control's event caused
 -- (an exclusive group), by id.
 local appliers = {}
@@ -104,6 +107,8 @@ end
 function M.make(archetype, widget, spec, extra)
   spec = spec or {}
   extra = extra or {}
+  -- The skin is told which widget it draws.
+  if spec.widget == nil then spec.widget = widget end
   local slot_names = native.slots(archetype)
   local fields = {}
   for _, field in ipairs(BASE) do fields[#fields + 1] = field end
@@ -340,6 +345,9 @@ function M.make(archetype, widget, spec, extra)
         waiting[#waiting + 1] = { name, node }
       elseif node then
         slots[name] = node
+        -- A ground goes under what the configuration put in the control (a
+        -- popup's content, a card's children); the other slots over it.
+        if name == "background" and (node.z or 0) == 0 then node.z = -1 end
         ui.reparent(node, root)
       end
     end

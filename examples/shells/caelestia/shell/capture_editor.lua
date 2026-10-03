@@ -10,7 +10,7 @@ local M={phase=morf.signal("caelestia.capture.stage","selecting"),
   settings=morf.signal("caelestia.capture.settings",false),status=morf.signal("caelestia.capture.editor.status",""),
   hint=morf.signal("caelestia.capture.editor.hint",""),
   toolbar=morf.signal("caelestia.capture.toolbar",{x=0,y=0}),upload_confirm=morf.signal("caelestia.capture.upload.confirm",false),
-  picker=morf.signal("caelestia.capture.picker",false),entries=morf.list_model({}),
+  picker=morf.signal("caelestia.capture.picker",false),
   text_value=morf.signal("caelestia.capture.text",""),
   rebinding=morf.signal("caelestia.capture.rebinding",false)}
 local session,source,preview_source,output,finished,watchdog,render_timer,viewport
@@ -79,7 +79,7 @@ function M.cancel()
   generation=generation+1
   M.phase:set("selecting") M.tools_open:set(false) M.more_open:set(false) M.hovered:set(false)
   M.pending:set(false) M.active:set(false) M.busy:set(false) M.settings:set(false) M.upload_confirm:set(false)
-  M.rebinding:set(false) M.picker:set(false) M.entries:replace({},"path") picker_done=nil
+  M.rebinding:set(false) M.picker:set(false) picker_done=nil
   M.hint:set("")
   M.preview:set("") M.document=nil source=nil preview_source=nil viewport=nil rendering=false
   last_hover_window=nil selection_confirmed=false render_dirty=false resize_base=nil render_waiter=nil draft_cache=nil mark_cache=nil
@@ -339,37 +339,38 @@ function M.draft_viewbox()
   local b=M.draft_geometry()
   return {x=b.x,y=b.y,w=math.max(1,b.w),h=math.max(1,b.h)}
 end
+-- The picker is the kit's file chooser (lib.kit.composites.file_chooser),
+-- drawn by the editor's view while `picker` holds what it was opened
+-- with: `{ kind = "save" | "folder", path, name, serial }`. It walks the
+-- folders itself and answers `pick_close(true, target)`.
+local pick_serial=0
 function M.pick_open(kind,path,cb)
   picker_done=cb
   local initial=backend.expand(path)
   local directory=kind=="save" and initial:match("^(.*)/[^/]+$") or initial
   local name=kind=="save" and initial:match("([^/]+)$") or ""
-  M.picker:set({kind=kind,path=directory,name=name}) M.pick_navigate(directory)
+  if directory=="" then directory="/" end
+  pick_serial=pick_serial+1
+  M.picker:set({kind=kind,path=directory,name=name,serial=pick_serial})
 end
-function M.pick_navigate(path)
-  local model,why=backend.directory(path)
-  if not model then M.status:set(tostring(why)) return end
-  local old=M.picker:get() if not old then return end
-  M.picker:set({kind=old.kind,path=model.path,name=old.name}) M.entries:replace(model.entries,"path")
-end
-function M.pick_name(name)
-  local old=M.picker:get() if old then M.picker:set({kind=old.kind,path=old.path,name=name}) end
-end
-function M.pick_close(accept)
+--- Closes the picker: `accept` with the chooser's `target` (the folder,
+--- or the folder and name to save as; the folder it was opened on when
+--- none is given), or cancelled.
+function M.pick_close(accept,target)
   local picker=M.picker:get() if not picker then return end
-  local target=picker.path
+  target=target and backend.expand(target) or (picker.kind=="save" and (picker.path.."/"..picker.name) or picker.path)
   if accept and picker.kind=="save" then
-    if not picker.name or picker.name=="" or picker.name:find("/",1,true) then M.status:set("Enter an image filename") return end
-    if not picker.name:lower():match("%.(png)$") and not picker.name:lower():match("%.jpe?g$") and not picker.name:lower():match("%.webp$") then
+    local name=target:match("([^/]+)$") or ""
+    if name=="" then M.status:set("Enter an image filename") return end
+    if not name:lower():match("%.(png)$") and not name:lower():match("%.jpe?g$") and not name:lower():match("%.webp$") then
       M.status:set("Use .png, .jpg or .webp") return
     end
-    target=target.."/"..picker.name
     if morf.fs.exists(target) and picker.overwrite~=target then
-      M.picker:set({kind=picker.kind,path=picker.path,name=picker.name,overwrite=target})
-      M.status:set("That file exists · press Choose again to replace it") return
+      M.picker:set({kind=picker.kind,path=picker.path,name=name,serial=picker.serial,overwrite=target})
+      M.status:set("That file exists · press Save again to replace it") return
     end
   end
-  M.picker:set(false) M.entries:replace({},"path")
+  M.picker:set(false)
   local cb=picker_done picker_done=nil if cb then cb(accept and target or nil) end
 end
 function M.pick_folder()

@@ -50,6 +50,7 @@ pub(crate) fn execute_delegate(
         node: node.handle,
         updater,
         item: item.clone(),
+        index,
     })
 }
 
@@ -305,6 +306,29 @@ pub(crate) fn reconcile_lua_view(
             }
             if let Some(instance) = view.active.get_mut(id) {
                 instance.item = item.clone();
+                instance.index = *index;
+            }
+            continue;
+        }
+        // A row that kept its delegate but not its place -- moved, or shifted
+        // by rows coming or going above it -- is told its new index, so what
+        // it reads of its place (`s.index()`) is not left behind.
+        if !updated.contains(id)
+            && let Some(instance) = view.active.get(id)
+            && instance.index != *index
+            && instance.updater.is_some()
+        {
+            let updater = instance.updater.as_ref().expect("checked above");
+            let update = execute_delegate_updater(ctx, updater, item, *index, limits)
+                .and_then(|()| flush_reactive(state, ctx, limits));
+            if let Err(error) = update {
+                for (_, _, prepared) in prepared {
+                    remove_scene_subtree(&mut state.borrow_mut(), prepared.node);
+                }
+                return Err(error);
+            }
+            if let Some(instance) = view.active.get_mut(id) {
+                instance.index = *index;
             }
             continue;
         }
@@ -375,7 +399,8 @@ pub(crate) fn reconcile_lua_view(
             }
         }
     }
-    for (id, index, instance) in prepared {
+    for (id, index, mut instance) in prepared {
+        instance.index = index;
         if view.positioned {
             position_view_child(
                 &mut state.borrow_mut().scene,

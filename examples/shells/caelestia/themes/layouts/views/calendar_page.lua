@@ -1,5 +1,6 @@
 -- A month and the selected day's Taskwarrior agenda. Work-calendar events
 -- can be added here later; no account or meeting data is invented.
+local morf = require("morf")
 local ui = require("morf.ui")
 local kit = require("kit")
 local theme = require("theme")
@@ -13,51 +14,33 @@ function M.build(model, w, h)
     props.viewport = function() return viewport end
     return kit.heading(props)
   end
-  local inner, cell = w - 32, (w - 32) / 7
-  local days, agenda, title = model.days, model.agenda, model.month
-  local weekdays = {}
-  for _, name in ipairs(model.weekdays) do
-    weekdays[#weekdays + 1] = kit.centred(cell, 26, widgets.label(name))
+  local inner = w - 32
+  local days, agenda = model.days, model.agenda
+  -- The month: the kit's calendar (a day grid the arrows walk, months that
+  -- slide), on the model's month and day, a dot on each day with tasks.
+  local counts = morf.signal("caelestia.planner.counts", {})
+  local function shown_month()
+    for i = 1, days:len() do local day = days:get(i) if day.current then return day.key:sub(1, 7) end end
+    return nil
   end
+  local month = require("lib.kit.composites").calendar { id = "planner", width = inner, cell_height = 43,
+    value = function() return model.selected_day:get() end,
+    on_changed = function(day) model.select(day) end,
+    month = shown_month,
+    on_month = function(_, delta) model.step(delta) end,
+    marked = function(day) return (counts:get()[day] or 0) > 0 end }
+  morf.effect("caelestia.planner.counts", function()
+    local out = {}
+    for i = 1, days:len() do local day = days:get(i) out[day.key] = day.count end
+    counts:set(out)
+  end, { owner = month })
   viewport_node, viewport, viewport_t, viewport_ctl = kit.scroll({ id = "planner-scroll", anchors = { fill = true, margins = 16 }, clip = true,
       ui.Column { width = inner, gap = 16,
         ui.Item { width = inner, height = 48,
           heading { id = "planner-title", scope = "leftbar.calendar", text = "A day at a time.", font_size = 24, font_weight = 700 },
           widgets.subtitle("Your plans, with space for what comes next.", { id = "planner-subtitle", y = 31 }),
         },
-        ui.Item { width = inner, height = 36,
-          kit.named(widgets.button("planner-previous", "", "chevron_left", 36,
-            function() model.step(-1) end), "Previous month"),
-          heading { id = "planner-month-title", scope = "leftbar.calendar", level = "section", anchors = { center_in = true }, text = function() return title:get() end,
-            font_size = theme.size.large, font_weight = 600 },
-          ui.Item { anchors = { right = true }, width = 36, height = 36,
-            kit.named(widgets.button("planner-next", "", "chevron_right", 36,
-              function() model.step(1) end), "Next month") },
-        },
-        ui.Column { gap = 4,
-          ui.Row { table.unpack(weekdays) },
-          ui.Repeater { model = days, as = "grid", columns = 7, gap = 0,
-            delegate = function(day)
-              local function selected() return model.selected_day:get() == day.key end
-              return kit.action { id = "planner-day-" .. day.key, width = cell, height = 43, cursor = "pointer",
-                on_clicked = function() model.select(day.key) end,
-                kit.surface { anchors = { center_in = true }, width = cell - 6, height = 39, radius = 14,
-                  color = function() return selected() and C.primary or day.today and C.primaryContainer or C.surfaceContainer end,
-                  (function()
-                    local mark = kit.decor("corners", { length = 5,
-                      color = function() return selected() and C.onPrimary or kit.stroke("hot")() end })
-                    if mark then mark.visible = function() return selected() or day.today end return mark end
-                    return ui.Item {}
-                  end)() },
-                kit.text { anchors = { center_in = true }, text = ("%d"):format(day.day), font_weight = 600,
-                  color = function() return selected() and C.onPrimary or day.current and kit.ink("hi")() or kit.stroke("mark")() end },
-                kit.surface { anchors = { horizontal_center = true, bottom = true, bottom_margin = 5 },
-                  width = 4, height = 4, radius = 2, visible = day.count > 0,
-                  color = function() return selected() and C.onPrimary or C.primary end },
-              }
-            end,
-          },
-        },
+        month,
         ui.Row { gap = 8,
           widgets.button("planner-today", "Today", "today", 100, model.today),
           widgets.button("planner-add", "Plan a task", "add", inner - 108, model.plan, function() return true end),

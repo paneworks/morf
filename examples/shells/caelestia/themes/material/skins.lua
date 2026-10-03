@@ -358,6 +358,9 @@ return function(theme, M)
   end
 
   function S.Range(t, spec)
+    -- A layout's own instrument (a fader, a knob, a spin drawn by its
+    -- maker): only the keyboard's mark here.
+    if spec.widget == "area" then return { indicator = ring(t, function() return math.min(12, t.height / 2) end) } end
     if spec.widget == "seek_bar" then return seek_bar(t, spec) end
     if spec.widget == "scroll_bar" then return scroll_bar(t, spec) end
     return slider(t, spec)
@@ -622,6 +625,7 @@ return function(theme, M)
   --- (degrees), rounded, with a white ring for the handle. Any other plane:
   --- a tonal field with the ring.
   function S.Plane(t, spec)
+    if spec.widget == "area" then return { indicator = ring(t, function() return math.min(12, t.height / 2) end) } end
     local W, H = spec.width or 160, spec.height or 160
     local field
     if spec.widget == "colour_plane" then

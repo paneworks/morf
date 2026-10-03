@@ -277,38 +277,40 @@ function V.build(M)
     table.unpack(settings_items),
     }})),
   }
+  -- The save and folder picker: the kit's file chooser, made each time the
+  -- picker opens (at the size the screen gives it then) and let go when it
+  -- shuts. On a narrow screen its places fold into a drawer.
+  local function pw() return math.min(600,g().w-24) end
+  local function ph() return math.min(470,g().h-24) end
+  local chooser_host=ui.Item {x=8,y=48,width=function() return pw()-16 end,height=function() return ph()-56 end}
   local picker=ui.Item {id="capture-file-picker",anchors={fill=true},z=10,visible=function() return M.picker:get()~=false end,
     kit.surface {anchors={fill=true},color=scrim(.56)},
     ui.MouseArea {anchors={fill=true},focus=function() return M.picker:get()~=false end,on_key_pressed=M.key},
-    ui.Item {anchors={center_in=true},width=function() return math.min(500,g().w-24) end,
-      height=function() return math.min(430,g().h-24) end,
+    ui.Item {anchors={center_in=true},width=pw,height=ph,
       kit.card {anchors={fill=true},radius=20,color=function() return C.surfaceContainerHigh end},
+      ui.MouseArea {anchors={fill=true}},
       kit.heading {x=16,y=14,scope="capture.file",font_size=16,
         text=function() local p=M.picker:get() return p and p.kind=="save" and "Save capture" or "Capture folder" end},
-      (kit.text_field("entry", {id="capture-picker-path",x=16,y=50,width=function() return math.min(500,g().w-24)-32 end,height=34,
-        text=function() local p=M.picker:get() return p and p.path or "" end,font_size=13,color=function() return C.onSurface end,
-        on_accepted=M.pick_navigate,on_escape=function() M.pick_close(false) end})),
-      (kit.scroll({x=16,y=94,width=function() return math.min(500,g().w-24)-32 end,
-        height=function() return math.min(430,g().h-24)-196 end,clip=true,
-        ui.Repeater {as="column",gap=4,model=M.entries,width=function() return math.min(500,g().w-24)-32 end,
-          delegate=function(entry)
-            return kit.hover(kit.action {width=function() return math.min(500,g().w-24)-32 end,height=34,on_clicked=function() M.pick_navigate(entry.path) end,
-              kit.icon("folder",18,kit.ink("accent"),{x=8,y=8}),
-              kit.text {x=36,y=9,width=function() return math.min(500,g().w-24)-76 end,elide="middle",text=entry.name,font_size=13},},
-              function(hovered) return C.primary:alpha(hovered and .10 or 0) end,10)
-          end},
-      })),
-      (kit.text_field("entry", {id="capture-picker-name",x=16,y=function() return math.min(430,g().h-24)-92 end,
-        width=function() return math.min(500,g().w-24)-32 end,height=34,
-        visible=function() local p=M.picker:get() return p~=false and p.kind=="save" end,
-        text=function() local p=M.picker:get() return p and p.name or "" end,font_size=13,color=function() return C.onSurface end,
-        on_text_changed=M.pick_name,on_accepted=function(value) M.pick_name(value) M.pick_close(true) end,
-        on_escape=function() M.pick_close(false) end})),
-      button("capture-picker-cancel","Cancel",nil,function() M.pick_close(false) end,16,function() return math.min(430,g().h-24)-48 end,84),
-      button("capture-picker-accept","Choose",nil,function() M.pick_close(true) end,
-        function() return math.min(500,g().w-24)-100 end,function() return math.min(430,g().h-24)-48 end,84),
+      chooser_host,
     },
   }
+  local chooser,shown_serial
+  morf.effect("caelestia.capture.picker.chooser",function()
+    local p=M.picker:get()
+    local serial=p and p.serial or nil
+    if serial==shown_serial then return end
+    shown_serial=serial
+    if chooser then ui.destroy(chooser,true) chooser=nil end
+    if not p then return end
+    local save=p.kind=="save"
+    chooser=require("lib.kit.composites").file_chooser {id="capture-picker",
+      width=math.max(280,pw()-16),height=math.max(240,ph()-56),root="/",path=p.path,name=p.name,
+      mode=save and "save" or "folder",accept_label=save and "Save" or "Choose",
+      filters=save and {{name="Images",patterns={"png","jpg","jpeg","webp"}},{name="All files"}} or nil,
+      on_accepted=function(target) M.pick_close(true,target) end,
+      on_cancelled=function() M.pick_close(false) end}
+    ui.reparent(chooser,chooser_host)
+  end,{owner=picker})
   local upload_confirm = ui.Item {id="capture-upload-confirm",z=8,visible=function() return M.upload_confirm:get() end,anchors={center_in=true},width=320,height=144,
       kit.card {anchors={fill=true},radius=20,color=function() return C.surfaceContainerHigh end},
       ui.MouseArea {anchors={fill=true}},

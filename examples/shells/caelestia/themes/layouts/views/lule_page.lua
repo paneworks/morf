@@ -77,38 +77,21 @@ function M.build(state)
     ui.Item { y = 238, grid("lule-named", named, 3, (inner - 12) / 3, 49, 6, "Theme colours") },
   }
 
-  -- The picker: any colour, a Plane of saturation and value under a hue
-  -- slider, starting from the swatch last chosen.
-  local hue = morf.signal("caelestia.lule.hue", 0)
-  local sat = morf.signal("caelestia.lule.sat", 1)
-  local val = morf.signal("caelestia.lule.val", 1)
-  local function picked_color() return morf.color.hsv(hue:get(), sat:get(), val:get()) end
-  morf.effect("caelestia.lule.picker-seed", function()
-    local value = picked:get()
-    if value == "" then return end
-    local ok, c = pcall(morf.color, value)
-    if not ok then return end
-    local r, g, b = c.r / 255, c.g / 255, c.b / 255
-    local high, low = math.max(r, g, b), math.min(r, g, b)
-    hue:set(c.h or 0) sat:set(high > 0 and (high - low) / high or 0) val:set(high)
-  end)
+  -- The picker: any colour (the kit's colour picker: a Plane of saturation
+  -- and value under a hue slider, the hex, the terminal colours as
+  -- swatches), starting from the swatch last chosen.
   local picking = morf.signal("caelestia.lule.picking", false)
+  local terminal = {}
+  for n = 0, 15 do terminal[#terminal + 1] = function() return color(n) end end
+  local picker_handle
+  local picker_node
+  picker_node, picker_handle = require("lib.kit.composites").colour_picker { id = "lule", width = inner, height = 287,
+    swatches = terminal, swatch_size = 18,
+    value = function() return picked:get() end,
+    trailing = button("lule-picker-copy", "Copy", "content_copy", 100,
+      function() state.copy(picker_handle.value()) end) }
   local picker = ui.Item { x = PAD, y = 47, width = inner, height = 287,
-    visible = function() return picking:get() end,
-    kit.widgets.colour_plane { id = "lule-plane", width = inner, height = 170,
-      hue = function() return hue:get() end, y_from = 1, y_to = 0,
-      x = function() return sat:get() end, y = function() return val:get() end,
-      on_moved = function(x, y) sat:set(x) val:set(y) end },
-    ui.Item { y = 182, width = inner, height = 30,
-      kit.slider { id = "lule-hue", width = inner, height = 22, label = false,
-        value = function() return hue:get() / 360 end, set = function(v) hue:set(v * 360) end } },
-    ui.Item { y = 226, width = inner, height = 40,
-      kit.surface { width = 40, height = 40, radius = 12, color = picked_color },
-      text(function() return picked_color():hex() end, { x = 52, y = 10, font_size = 15, font_weight = 600 }),
-      ui.Item { anchors = { right = true }, width = 100, height = 32, y = 4,
-        button("lule-picker-copy", "Copy", "content_copy", 100, function() state.copy(picked_color():hex()) end) },
-    },
-  }
+    visible = function() return picking:get() end, picker_node }
   swatches.visible = function() return not picking:get() end
   local folder_w = left - 2 * PAD - 212
   local field_node, field = kit.text_field("entry", { id = "lule-folder", width = folder_w - 20, height = 30, x = 10,

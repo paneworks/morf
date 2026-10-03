@@ -30,6 +30,23 @@ function M.kit(kit)
       end
     end
   end
+  -- Composites, each a module of library/lib/kit/composites.
+  local composites = require("lib.kit.composites")
+  for name, composite in pairs(contract.composites) do
+    if due(composite) and not composites.has(name) then
+      problems[#problems + 1] = ("composite %s: lib.kit.composites.%s is missing"):format(name, name)
+    end
+  end
+  -- Domain instruments drawn over the display widgets.
+  for area, domain in pairs(contract.domain) do
+    if due(domain) then
+      for _, fn in ipairs(domain.widgets or {}) do
+        if type(kit[fn]) ~= "function" then
+          problems[#problems + 1] = ("domain %s: kit.%s is missing"):format(area, fn)
+        end
+      end
+    end
+  end
   for name, archetype in pairs(contract.archetypes) do
     if due(archetype) then
       local skins = kit.skins
@@ -77,6 +94,10 @@ function M.summary(kit)
     for _, entry in ipairs(list) do if due(entry) then due_count = due_count + 1 end end
   end
   for _, archetype in pairs(contract.archetypes) do if due(archetype) then due_count = due_count + 1 end end
+  for _, domain in pairs(contract.domain) do
+    if due(domain) then due_count = due_count + #(domain.widgets or {}) end
+  end
+  for _, composite in pairs(contract.composites) do if due(composite) then due_count = due_count + 1 end end
   return { stage = contract.stage, due = due_count, missing = missing }
 end
 

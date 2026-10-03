@@ -384,6 +384,9 @@ return function(theme, M, hud)
   end
 
   function S.Range(t, spec)
+    -- A layout's own instrument (a fader, a knob, a spin drawn by its
+    -- maker): only the keyboard's mark here.
+    if spec.widget == "area" then return { indicator = feedback(t, spec.id) } end
     if spec.widget == "seek_bar" then return seek_bar(t, spec) end
     if spec.widget == "scroll_bar" then return scroll_bar(t, spec) end
     return slider(t, spec)
@@ -655,6 +658,7 @@ return function(theme, M, hud)
   --- square, with a crosshair through a square handle. Any other plane: a
   --- hairline grid with the same crosshair.
   function S.Plane(t, spec)
+    if spec.widget == "area" then return { indicator = feedback(t, spec.id) } end
     local W, H = spec.width or 160, spec.height or 160
     local field
     if spec.widget == "colour_plane" then

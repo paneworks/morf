@@ -82,6 +82,10 @@ pub(crate) struct OverlayState {
     wrappers: HashMap<NodeHandle, NodeHandle>,
     pub(crate) stack: Vec<Overlay>,
     closing: Vec<(NodeHandle, &'static str)>,
+    /// Opens asked for while the same content's close was still pending:
+    /// run once that close has landed, in the same turn, so a close and a
+    /// reopen (a popup re-anchored) both happen, in order.
+    reopening: Vec<(NodeHandle, Option<luna::StashedTable>)>,
 }
 
 /// A list of nodes from Lua (`except = { a, b }`), or none.
@@ -179,6 +183,11 @@ fn open<'gc>(
         .iter()
         .any(|o| o.content == content)
     {
+        let pending = state.borrow().overlays.closing.iter().any(|(c, _)| *c == content);
+        if pending {
+            let stashed = options.map(|t| ctx.stash(t));
+            state.borrow_mut().overlays.reopening.push((content, stashed));
+        }
         return Ok(());
     }
     let anchor = node("anchor")?;
@@ -631,6 +640,18 @@ impl Runtime {
                 self.close_overlay(index, reason);
                 closed = true;
             }
+        }
+        let reopening = std::mem::take(&mut self.reactive.borrow_mut().overlays.reopening);
+        for (content, options) in reopening {
+            let state = Rc::clone(&self.reactive);
+            let result = self.lua.enter(|ctx| {
+                let options = options.as_ref().map(|t| ctx.fetch(t));
+                open(ctx, &state, content, options)
+            });
+            if let Err(message) = result {
+                self.reactive.borrow_mut().log(LogLevel::Warn, format!("overlay reopen: {message}"));
+            }
+            closed = true;
         }
         closed
     }

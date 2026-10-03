@@ -66,9 +66,27 @@ function M.build(model, w, h)
 
   local fields = { gap = 12, width = inner }
   local specs = model.FIELDS
+  -- A date is typed (a Taskwarrior expression or a date and time) or chosen
+  -- from the kit's date picker beside it, which keeps the time typed.
+  local DATES = { scheduled = true, due = true, wait = true, ["until"] = true }
+  local pickers = require("lib.kit.composites")
   for _, spec in ipairs(specs) do
-    local node, input = widgets.field("task-" .. spec[1], spec[2], spec[3], inner, function(value) model.set_field(spec[1], value) end, nil, model.close)
-    fields[#fields + 1], inputs[spec[1]] = node, input
+    local name = spec[1]
+    local dated = DATES[name]
+    local node, input = widgets.field("task-" .. name, spec[2], spec[3], dated and inner - 46 or inner,
+      function(value) model.set_field(name, value) end, nil, model.close)
+    if dated then
+      local picker = pickers.date_picker { id = "task-" .. name .. "-date", compact = true, width = 40, height = 40,
+        placement = "bottom-end", accessible_name = "Choose the " .. spec[2]:lower(),
+        value = function() return (input.text or ""):sub(1, 10) end,
+        on_changed = function(date)
+          local time = (input.text or ""):match("^%d%d%d%d%-%d%d%-%d%d(T[%d:]+)") or ""
+          input.text = date .. time
+          model.set_field(name, input.text)
+        end }
+      node = ui.Row { gap = 6, align = "end", node, picker }
+    end
+    fields[#fields + 1], inputs[name] = node, input
   end
   fields[#fields + 1] = widgets.message(model.help, inner, 60)
   local actions = ui.Row { gap = 6, visible = function() return editing:get() and model.selected:get() ~= "" end,

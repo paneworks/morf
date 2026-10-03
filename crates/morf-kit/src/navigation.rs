@@ -232,6 +232,8 @@ impl Archetype for Navigation {
             }
             "current" => {
                 let page = text(Some(value)).unwrap_or("").to_owned();
+                let before = self.current();
+                let had = !self.history.is_empty();
                 // An empty stack takes the page as its root, "" included.
                 if page != self.current() || self.history.is_empty() {
                     if self.mode == "stack" {
@@ -243,6 +245,14 @@ impl Archetype for Navigation {
                     } else {
                         self.history = vec![page];
                     }
+                }
+                // A binding that moves the page shows it, as `go` would.
+                if had && self.current() != before {
+                    let forward = self.pages.iter().position(|p| *p == self.current())
+                        >= self.pages.iter().position(|p| *p == before);
+                    self.direction = if forward { 1 } else { -1 };
+                    self.fields_into(&mut effects);
+                    effects.raise("current_changed", vec![self.current().into(), self.direction.into()]);
                 }
             }
             "wrap" => self.wrap = expect_boolean(Some(value), field)?,

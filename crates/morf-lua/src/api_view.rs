@@ -73,6 +73,11 @@ pub(crate) fn install_view_api<'gc>(
         move |ctx, _, mut stack| {
             let (model, index): (UserRef<ListModelToken>, i64) = stack.consume(ctx)?;
             track_model_read(&mut state.borrow_mut(), &model.model);
+            // Outside the list, as a Lua table's index is: nothing.
+            if index < 1 || index as usize > model.model.borrow().len() {
+                stack.replace(ctx, LuaValue::Nil);
+                return Ok(CallbackReturn::Return);
+            }
             let value = model_row(ctx, &model.model, lua_index(index)?)?;
             stack.replace(ctx, value);
             Ok(CallbackReturn::Return)

@@ -25,6 +25,7 @@ mod press;
 mod range;
 mod scroll;
 mod selection;
+mod shell;
 mod slots;
 mod text_field;
 mod tokens;
