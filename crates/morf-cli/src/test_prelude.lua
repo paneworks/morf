@@ -253,6 +253,12 @@ function test.accessible_action(row, action, value)
   return host.accessible_action(row.handle, action, value)
 end
 
+-- Configures a window (by its surface label or title) to `width` by
+-- `height`, as a compositor does when it is resized.
+function test.resize_window(surface, width, height)
+  return host.resize_window(surface, width, height)
+end
+
 function test.text_of(node)
   if node == nil then fail("text_of wants a node") end
   return host.text_of(node.handle)

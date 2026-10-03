@@ -285,6 +285,14 @@ return function(theme, M, hud)
     }
   end
 
+  --- An application window's ground (the Shell archetype): the surface,
+  --- framed in a hairline with the registration marks.
+  function S.Shell(t)
+    return { background = ui.Item { anchors = { fill = true },
+      ui.Rect { anchors = { fill = true }, color = function() return C.surface end, border_width = 1,
+        border_color = function() return C.primary:alpha(0.24) end } } }
+  end
+
   -- ------------------------------------------------------------ ranges --
 
   --- The slider: a faint band, the hatched run up to the value, a tick

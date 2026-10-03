@@ -61,7 +61,7 @@ below).
 
 ```sh
 morf check shell.lua [--size WxH] [--screens N] [--ipc 'VERB ARGS']...
-                     [--after MS] [--wait MS] [--strict] [--kit] [--a11y]
+                     [--after MS] [--wait MS] [--strict] [--kit [default]] [--a11y]
                      [--no-dbus | --private-bus] [--isolate] [-- args...]
 ```
 
@@ -290,6 +290,10 @@ ordinary property every element has and nothing in the engine reads:
 | `test.find_all(query)` | every match |
 | `test.nodes()` | every node on every surface |
 | `test.text_of(node)` | the node's text and its descendants', joined by spaces |
+
+`test.resize_window(surface, width, height)` configures a window (by its
+surface label or title) to a new size, as a compositor does when a person
+resizes it or a phone fits it to its screen.
 
 `test.accessible(query)` returns the tree a screen reader would be given,
 one row per accessible node, root first: `role`, `name`, `description`,

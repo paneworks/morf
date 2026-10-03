@@ -403,3 +403,19 @@ pub(crate) fn accessible_action(host: &mut TestHost, arguments: &[IpcValue]) -> 
     let ran = subject.runtime.accessible_action(root, node, &action, value);
     Ok(vec![IpcValue::Boolean(ran)])
 }
+
+/// Configures a window to a new size, as a compositor does when a person
+/// resizes it or a phone fits it to the screen: `(surface label, w, h)`.
+pub(crate) fn resize_window(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
+    let label = arguments.first().and_then(text).ok_or("resize_window wants a surface")?;
+    let width = number(arguments.get(1), "width")?.max(1.0) as u32;
+    let height = number(arguments.get(2), "height")?.max(1.0) as u32;
+    let subject = host.subject()?;
+    let Some(surface) = subject.surfaces.iter_mut().find(|s| s.label() == label || s.name == label) else {
+        return Err(format!("no surface {label}"));
+    };
+    let Some(id) = surface.id else { return Err(format!("{label} is not a window")) };
+    surface.size = (width, height);
+    let changed = subject.runtime.set_window_surface_size(id, width, height);
+    Ok(vec![IpcValue::Boolean(changed)])
+}

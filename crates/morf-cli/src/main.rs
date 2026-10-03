@@ -1,5 +1,6 @@
 use std::process::ExitCode;
 
+mod app;
 mod backdrop;
 mod bundle;
 mod capture;

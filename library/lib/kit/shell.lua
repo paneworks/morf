@@ -116,6 +116,12 @@ function M.make(widget, spec)
     side = region(sidebar, "navigation", spec.sidebar_name or "Sidebar", {
       y = top, width = sidebar_w, height = body_h, z = 20, clip = true,
       x = function() return (live() and t.sidebar_open) and 0 or -sidebar_w end })
+    -- A ground under it, so as a drawer it covers the page it slides over:
+    -- the configuration's colour, else the kit's sidebar tone.
+    local ok, kit = pcall(require, "kit")
+    local P = ok and type(kit) == "table" and kit.theme and kit.theme.P
+    local ground = spec.sidebar_color or (P and function() return P().sidebar end)
+    if ground then ui.reparent(ui.Rect { anchors = { fill = true }, z = -1, color = ground }, side) end
     scrim = ui.MouseArea { y = top, width = W, height = body_h, z = 19,
       visible = function() return live() ~= nil and t.collapsed and t.sidebar_open end,
       on_clicked = function() ctl.send("dismiss") end,

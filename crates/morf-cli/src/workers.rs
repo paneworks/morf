@@ -105,6 +105,16 @@ pub(crate) fn reconcile_workers(
     primary: &mut Option<String>,
     context: &WorkerContext<'_>,
 ) {
+    // An application (`morf app`) is one runtime, whatever the outputs: the
+    // primary's, its windows opened wherever the compositor puts them.
+    let only: BTreeMap<String, ScreenInfo>;
+    let desired = if crate::app::is_app() {
+        let chosen = elect_primary(primary.as_deref(), desired);
+        only = desired.iter().filter(|(name, _)| Some(*name) == chosen.as_ref()).map(|(k, v)| (k.clone(), v.clone())).collect();
+        &only
+    } else {
+        desired
+    };
     reconcile_with(
         workers,
         desired,

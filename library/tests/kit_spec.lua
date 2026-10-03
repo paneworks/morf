@@ -24,6 +24,11 @@ local HOST = [[
         if entry.stage <= contract.stage then kit[entry.fn] = function() end end
       end
     end
+    for _, domain in pairs(contract.domain) do
+      if domain.stage <= contract.stage then
+        for _, fn in ipairs(domain.widgets or {}) do kit[fn] = function() end end
+      end
+    end
     kit.skins = {}
     for name, archetype in pairs(contract.archetypes) do
       if archetype.stage <= contract.stage then kit.skins[name] = function() end end

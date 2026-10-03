@@ -118,6 +118,31 @@ fn parse_ms(option: &str, text: &str) -> Result<Duration, String> {
         .map_err(|_| format!("{option} wants milliseconds, not `{text}`"))
 }
 
+/// The default look's check configuration (library/lib/kit/skins/default/
+/// check.lua): in the project's library beside the working directory, a
+/// `MORF_RUNTIME_PATH` root, or the installed library.
+fn default_kit_config() -> Result<PathBuf, String> {
+    let tail = std::path::Path::new("lib/kit/skins/default/check.lua");
+    let here = std::env::current_dir().map_err(|e| e.to_string())?.join("x");
+    let mut roots: Vec<PathBuf> = morf_lua::project_library(&here).into_iter().collect();
+    roots.extend(
+        std::env::var_os("MORF_RUNTIME_PATH")
+            .into_iter()
+            .flat_map(|value| std::env::split_paths(&value).collect::<Vec<_>>()),
+    );
+    let data = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")));
+    if let Some(data) = data {
+        roots.push(data.join("morf/library"));
+    }
+    roots
+        .into_iter()
+        .map(|root| root.join(tail))
+        .find(|path| path.is_file())
+        .ok_or_else(|| "`--kit default`: no library with lib/kit/skins/default/check.lua found".to_owned())
+}
+
 /// Reads the options of one runner, after its name.
 pub(crate) fn parse_runner(runner: Runner, rest: &[&str]) -> Result<RunnerArgs, String> {
     let mut parsed = RunnerArgs::new(runner);
@@ -176,7 +201,15 @@ pub(crate) fn parse_runner(runner: Runner, rest: &[&str]) -> Result<RunnerArgs, 
             ("--isolate", _) => parsed.isolate = true,
             ("--no-isolate", _) => parsed.isolate = false,
             ("--strict", Runner::Check) => parsed.strict = true,
-            ("--kit", Runner::Check) => parsed.kit = true,
+            ("--kit", Runner::Check) => {
+                parsed.kit = true;
+                // `--kit default`: the library's own default look, checked
+                // with nothing else loaded.
+                if rest.as_slice().first() == Some(&"default") {
+                    rest.next();
+                    parsed.files.push(default_kit_config()?);
+                }
+            }
             ("--a11y", Runner::Check) => parsed.a11y = true,
             ("-o" | "--output", Runner::Render) => {
                 parsed.output = Some(PathBuf::from(value(&mut rest, "-o")?));

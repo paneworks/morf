@@ -18,7 +18,7 @@ use morf_scene::NodeHandle;
 use crate::headless::{Headless, LoadOptions};
 use crate::runner_args::RunnerArgs;
 use crate::test_host_input::{
-    accessible, accessible_action, click, key, leave, motion, nodes, press, text_of, type_text, wheel,
+    accessible, accessible_action, click, resize_window, key, leave, motion, nodes, press, text_of, type_text, wheel,
 };
 
 const SUBJECT: &str = include_str!("test_subject.lua");
@@ -359,7 +359,7 @@ fn snapshot(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>
 /// Installs every host function into the spec's runtime.
 pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
     type Handler = fn(&mut TestHost, &[IpcValue]) -> Result<Vec<IpcValue>, String>;
-    let handlers: [(&'static str, Handler); 28] = [
+    let handlers: [(&'static str, Handler); 29] = [
         ("load", load),
         ("surfaces", |host, _| surfaces(host)),
         ("now", |host, _| {
@@ -394,6 +394,7 @@ pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
         ("nodes", |host, _| nodes(host)),
         ("accessible", |host, _| accessible(host)),
         ("accessible_action", accessible_action),
+        ("resize_window", resize_window),
         ("text_of", text_of),
         ("click", click),
         ("button", press),

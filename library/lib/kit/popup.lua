@@ -76,28 +76,40 @@ local function build_content(widget, spec, close)
   local width = spec.width or 360
   local column = { gap = 12, x = 20, y = 18, width = width - 40 }
   local text = require("morf.ui").Text
+  -- The ink the theme writes in, not a colour of this file's choosing: a
+  -- light dialog ground wants dark text.
+  local has_kit, theme_kit = pcall(require, "kit")
+  local ink = spec.ink or (has_kit and type(theme_kit) == "table" and theme_kit.ink and theme_kit.ink("hi")) or "#ffffff"
+  local ink_lo = spec.ink or (has_kit and type(theme_kit) == "table" and theme_kit.ink and theme_kit.ink("lo")) or ink
   if spec.title then
     column[#column + 1] = text { text = spec.title, font_size = 18, font_weight = 600, width = width - 40,
-      color = spec.ink or "#ffffff" }
+      color = ink }
   end
   if spec.body then
     column[#column + 1] = text { text = spec.body, font_size = 13, width = width - 40, wrap = true,
-      color = spec.ink or "#ffffff" }
+      color = ink_lo }
   end
   if spec.text then
-    column[#column + 1] = text { text = spec.text, font_size = 13, color = spec.ink or "#ffffff" }
+    column[#column + 1] = text { text = spec.text, font_size = 13, color = ink_lo }
   end
   if spec.buttons then
     local row = { gap = 8 }
     for i, b in ipairs(spec.buttons) do
       local clicked = b.on_clicked
-      row[#row + 1] = kit.push { id = b.id or (spec.id and (spec.id .. "-button-" .. i)) or nil,
+      -- A destructive choice (Discard, Reset) or the suggested one is
+      -- drawn as such by the theme.
+      local make = (b.destructive and kit.destructive) or (b.suggested and kit.suggested) or kit.push
+      row[#row + 1] = make { id = b.id or (spec.id and (spec.id .. "-button-" .. i)) or nil,
         label = b.label, width = b.width or 96, height = 34,
         on_clicked = function() if clicked then clicked() end close("activated") end }
     end
-    column[#column + 1] = ui.Row(row)
+    -- At the end of the dialog, as the platforms put them.
+    row.anchors = { right = true }
+    column[#column + 1] = ui.Item { width = width - 40, height = 34, ui.Row(row) }
   end
-  return ui.Column(column)
+  -- The column's own margins count in the dialog's size.
+  local body = ui.Column(column)
+  return ui.Item { width = width, height = function() return (body.layout_height or 0) + 36 end, body }
 end
 
 --- A popup of `widget`. Returns `{ node, open(anchor), close(reason),

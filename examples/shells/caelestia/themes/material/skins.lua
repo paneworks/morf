@@ -237,6 +237,12 @@ return function(theme, M)
     }
   end
 
+  --- An application window's ground (the Shell archetype): the surface
+  --- tone under its regions.
+  function S.Shell(t)
+    return { background = ui.Rect { anchors = { fill = true }, color = function() return C().surface end } }
+  end
+
   -- ------------------------------------------------------------ ranges --
 
   --- The M3 expressive slider: the active part, a gap, a slim upright

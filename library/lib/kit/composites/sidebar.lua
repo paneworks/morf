@@ -33,6 +33,8 @@ return function(spec)
   local kit = require("kit")
   local id = spec.id
   local W, H = spec.width or 240, spec.height or 340
+  -- The height may be a binding (a window's, as it resizes).
+  local Hn = function() return get(H) end
   local RAIL = spec.rail_width or 56
   local ROW = spec.item_height or 38
   local HEAD = spec.header_height or 32
@@ -123,7 +125,7 @@ return function(spec)
     folds[s_index] = t
     ui.reparent(fold, column)
   end
-  local scroller = widgets.scroll_view { id = sid("scroll"), y = TOP, width = W, height = H - TOP, clip = true,
+  local scroller = widgets.scroll_view { id = sid("scroll"), y = TOP, width = W, height = function() return Hn() - TOP end, clip = true,
     scroll_policy_x = "never", column }
   local expanded_view = ui.Item { width = W, height = H, clip = true,
     opacity = function() return st.collapsed and 0 or 1 end,

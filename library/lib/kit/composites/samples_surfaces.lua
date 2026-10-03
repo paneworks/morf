@@ -109,4 +109,15 @@ return {
       caption(kit, "Status bar", 0), bar,
       caption(kit, "Without its ground", 86), quiet }
   end,
+  header_bar = function(kit, composites)
+    local widgets = require("lib.kit.widgets")
+    local ui = require("morf.ui")
+    local back = widgets.icon { id = "gallery-header-back", width = 32, height = 32, icon_on = "arrow_back",
+      icon_off = "arrow_back", on = function() return false end, accessible_name = "Back" }
+    local menu = widgets.icon { id = "gallery-header-menu", width = 32, height = 32, icon_on = "menu",
+      icon_off = "menu", on = function() return false end, accessible_name = "Menu" }
+    local node = composites.header_bar { id = "gallery-header", width = 520, title = "Documents",
+      subtitle = "12 items", start = { back }, ["end"] = { menu } }
+    return ui.Item { width = 520, height = 60, node }
+  end,
 }

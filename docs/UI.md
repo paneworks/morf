@@ -1648,6 +1648,46 @@ back to the node that had it -- the control that opened it -- when it
 closes. Closing hides the content in the layer; opening it again shows it
 there, and destroying it closes it.
 
+### Applications
+
+`morf app app.lua` runs a configuration as an application rather than a
+shell: one runtime whatever the outputs, its own surface shrunk to nothing
+on the background layer, its windows the interface, and the process ended
+when the main window closes. `lib.kit.app` is the side of it a
+configuration writes:
+
+```lua
+local app = require("lib.kit.app")
+local kit = app.kit()          -- the configuration's `kit` module, else the default look
+app.application {
+  title = "Settings", app_id = "dev.morf.Settings", width = 980, height = 660,
+  minimum_width = 340, minimum_height = 480,
+  build = function(win) return root end,   -- laid out at win.width x win.height
+}
+```
+
+The window decorates itself: edges that resize (`start_system_resize`) and,
+from `lib.kit.composites.header_bar { window = win, title, subtitle,
+start, ["end"] }`, a bar whose empty part moves the window and whose
+controls minimise, maximise and close it. `lib.kit.shell.make` (the Shell
+archetype) arranges the header bar, sidebar, content, inspector, bottom
+bar, banner and toasts and adapts at its `breakpoints`: under the first
+the sidebar becomes a drawer (F9 or Ctrl+B opens it, Escape or a press
+outside shuts it), under the last the inspector hides; F6 walks the
+regions, which are landmarks to a screen reader. `app.is_app()` says
+whether `morf app` is running it. `examples/apps/settings/app.lua` is a
+complete one.
+
+### The default look
+
+`lib.kit.skins.default` is a whole kit -- every contract function, a skin
+for every archetype, the display widgets and instruments -- in an
+Adwaita-like look, so an application needs no theme: `make { variant =
+"dark" | "light" | "high_contrast", reduced_motion }`, following the
+desktop's colour scheme, contrast and motion preferences when not told
+(`MORF_KIT_VARIANT` overrides for a run). `morf check --kit default`
+checks it against the contract.
+
 ### Accessibility
 
 A screen reader is told a tree of the shown nodes that mean something:
