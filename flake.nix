@@ -100,8 +100,74 @@
           libxi
           libxrandr
         ];
+        # The libraries morf opens at run time rather than links: the Vulkan
+        # loader and EGL (wgpu), PipeWire (`morf.audio`), PAM (the lock
+        # screen and greeter), udev. A binary built by Nix uses Nix's loader,
+        # which never looks in /usr/lib, so the wrapper puts them on its path.
+        # libwayland-client and libxkbcommon are linked, and also listed so a
+        # dlopen of either finds the same copy.
+        runtimeLibs = with pkgs; [
+          vulkan-loader
+          libglvnd
+          pipewire
+          pam
+          udev
+          wayland
+          libxkbcommon
+        ];
+
+        # The same toolchain as the shell: the code is edition 2024 with
+        # let-chains, newer than the pinned nixpkgs' rustc.
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = pkgs.rust-bin.stable.latest.minimal;
+          rustc = pkgs.rust-bin.stable.latest.minimal;
+        };
+
+        # `nix build` -- the `morf` binary, and the Lua library it ships with
+        # under share/morf/library, where morf finds it through XDG_DATA_DIRS
+        # (a NixOS system profile and a user profile both put their share/
+        # there; the wrapper adds this package's own as well).
+        morf = rustPlatform.buildRustPackage {
+          pname = "morf";
+          version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
+          src = pkgs.lib.cleanSourceWith {
+            src = ./.;
+            # Build outputs and research notes are no part of the source.
+            filter = path: _type:
+              let name = baseNameOf path; in
+              name != "target" && name != "xtra" && name != "result";
+          };
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            # luna comes from git; Cargo.lock pins its revision.
+            allowBuiltinFetchGit = true;
+          };
+          cargoBuildFlags = [ "--package" "morf-cli" ];
+          nativeBuildInputs = with pkgs; [ pkg-config makeWrapper ];
+          buildInputs = with pkgs; [ wayland libxkbcommon ];
+          # The test suites want a GPU, a session bus and a compositor.
+          doCheck = false;
+          postInstall = ''
+            mkdir -p $out/share/morf/library
+            cp -r library/lib library/types $out/share/morf/library/
+            wrapProgram $out/bin/morf \
+              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeLibs} \
+              --suffix XDG_DATA_DIRS : $out/share
+          '';
+          meta = {
+            description = "Rendering and shell engine in Rust, configured in Lua";
+            homepage = "https://github.com/rendrworks/morf";
+            license = pkgs.lib.licenses.mit;
+            mainProgram = "morf";
+            platforms = pkgs.lib.platforms.linux;
+          };
+        };
       in
       {
+        packages.default = morf;
+        packages.morf = morf;
+        apps.default = flake-utils.lib.mkApp { drv = morf; };
+
         # `nix develop .#cross-aarch64` — then `cargo build --release
         # --target aarch64-unknown-linux-musl`, and the binary runs on the
         # phone. Cross-compiling means building the target's libraries from
