@@ -2057,6 +2057,29 @@ is layout and painting, not Lua: the native tier changes it by a few per
 cent. `MORF_JIT_LOG=1` prints the native tier's counters every ten
 seconds.
 
+### Compiled bindings: measured, not built
+
+Compiling simple bindings -- property reads, arithmetic, conditionals over
+signals -- to a native form that runs without entering Lua was planned
+for when binding evaluation shows up next to rendering. It does not:
+
+- a binding's own instructions are a small part of what it costs. Of the
+  6.3 µs a re-run takes (above), most is the flush around it: finding what
+  depends on the signal, entering the VM, converting the value, writing
+  the property and marking what it dirties. A compiled expression still
+  needs all of that but the middle step;
+- caelestia (Tsugumori) at 3840x2160 in the sealed sandbox, opening and
+  closing the dashboard under `MORF_FRAME_LOG=2 MORF_PROFILE=1`: of the
+  frames over 16 ms (148 of them, median 18.6 ms), rendering took 74 % of
+  the time and layout 4 %; every binding and effect that ran in the whole
+  run took about 0.2 s of its 4.5 s of frame time -- under 5 %, so at best
+  that much would be won, before the bookkeeping that stays.
+
+So the work goes where the time is -- painting (cached path textures,
+transforms of static drawings, fewer layers) and layout -- and binding
+evaluation stays in Lua. Should a configuration's profile ever show
+bindings past a fifth of its frames, this is where to look again.
+
 ### What wakes a shell
 
 An idle shell sleeps until something happens, with no poll of its own: the
