@@ -2281,6 +2281,18 @@ selection's `item` and `place` builders; a navigation's `transition`).
 `skin.use(name)` switches every live control at once, keeping its state.
 A theme's kit carries its skins as `kit.skins.<Archetype>`.
 
+A widget may have a look of its own: `kit.skins.<widget>` (`skins.knob`,
+`skins.data_table`) is asked before its archetype's, slot by slot, so it
+fills what it draws differently and the archetype's skin the rest. The
+three looks shipped (the default kit, caelestia's Material and Tsugumori)
+keep them in `widgets/<archetype>.lua` beside their `skins.lua`, one file
+per archetype, each `function(S, theme, M) S.<widget> = ... end`. Every
+widget of every archetype is drawn by the widget galleries
+(`library/tests/default_widgets_gallery_spec.lua`,
+`examples/shells/caelestia/tests/kit_widgets_gallery_spec.lua`) from its
+sample in `library/lib/kit/samples/<archetype>.lua`; `KIT_WIDGETS="Canvas
+Dock"` draws only those archetypes.
+
 ### The contract
 
 `library/lib/kit/contract.lua` is the contract every theme's kit is held
@@ -2495,7 +2507,7 @@ only when acceptable -- and `on_invalid(text)` follow it.
 | signals | on_scrolled, on_reached_start, on_reached_end |
 | keys | arrows, page_up, page_down, home, end, space |
 | slots | background, content, scroll_bar_x, scroll_bar_y, edge_fade, overscroll |
-| widgets | scroll_view, scroll_area, pager, shelf, infinite_scroll, zoomable_canvas |
+| widgets | scroll_view, scroll_area, pager, shelf, infinite_scroll |
 | arrived | stage 9 |
 
 Scrolled views (the Scroll archetype) around the engine's flickable.
@@ -2517,6 +2529,15 @@ arrows, Page keys, Home, End and Space, and snaps (`snap = "items" |
 `edge_fade` and `overscroll`. `scroll_policy_x`/`_y` say when a bar
 shows. `on_scrolled(x, y)`, `on_reached_start`, `on_reached_end` follow
 it.
+
+A snapping view settles once the scrolling pauses: the archetype picks
+the item or page, and the view glides there. A `pager` scrolls sideways
+a page at a time (its skin draws the page dots), a `shelf` sideways an
+item at a time (`item_size`; its skin draws edge fades and arrows), and
+the wheel turns either sideways. An `infinite_scroll` that reaches its
+end sets `t.loading` and calls `on_load_more(done)`; `done()` clears it
+(the skin shows a loading row meanwhile). A skin moves the view with
+`spec.glide(x, y)`, which eases there.
 
 #### Collection
 
@@ -2598,7 +2619,7 @@ with it.
 | signals | on_drag_started, on_dragged, on_dropped, on_swiped |
 | keys | arrows, alt_arrows_reorder |
 | slots | background, content, handle, ghost, drop_indicator |
-| widgets | split_pane, resizable_panel, resize_grip, reorderable_rows, reorderable_tabs, sortable_grid, swipe_dismiss, swipe_actions, pull_to_refresh, sheet_handle, window_move, dock_area, drag_source |
+| widgets | split_pane, resizable_panel, resize_grip, reorderable_rows, reorderable_tabs, sortable_grid, swipe_dismiss, swipe_actions, pull_to_refresh, sheet_handle, window_move, drag_source, drop_zone |
 | arrived | stage 11 |
 
 Drags (the Drag archetype): split panes, resize grips, reorderable rows,
@@ -2683,6 +2704,105 @@ hides. F9 and Ctrl+B toggle the sidebar, F6 and Shift+F6 move between
 the regions. The regions are landmarks: navigation, main and
 complementary to a screen reader. The skin draws `background` and may
 decorate `sidebar`'s edge; the parts are the configuration's.
+
+#### Canvas
+
+| | |
+|---|---|
+| roles | group, image |
+| state | view_x, view_y, zoom, tool, selection, hovered, pointer_x, pointer_y, gesture, band, draft, connect_from, connect_to |
+| tools | select, pan, point, line, rect, ellipse, polyline, polygon, freehand, connect, brush, zoom |
+| signals | on_view_changed, on_selection_changed, on_moved, on_drawn, on_connected, on_activated, on_context, on_brushed, on_deleted |
+| keys | arrows_nudge, plus_minus_zoom, zero_reset, home_fit, ctrl_a, delete, escape, tab_items |
+| slots | background, content, grid, item, wires, selection, draft, band, crosshair, overlay |
+| widgets | zoomable_canvas, node_graph, whiteboard, diagram, map_view, image_viewer, chart_inspector, timeline_track, drawing_board |
+| arrived | stage 21 |
+
+Canvases (the Canvas archetype): a world a viewport looks into, panned
+and zoomed, holding items that are picked, selected, moved, connected
+and drawn. A node graph, a whiteboard, a map, an image viewer, a
+zoomable chart and a timeline are each one drawn differently.
+
+```lua
+local node, view = canvas.make("node_graph", {
+  width = 800, height = 600,
+  items = function() return graph.nodes end,   -- { id, x, y, w, h, shape?, ... }, world units
+  ports = function() return graph.ports end,   -- { id, item, x, y, kind = "in" | "out" }
+  wires = function() return graph.edges end,   -- { id, from = port id, to = port id }
+  delegate = function(item, s) return ui.Rect { anchors = { fill = true }, ... } end,
+  content = world_drawing,                     -- nodes in world units, under the items
+  overlay = zoom_buttons,                      -- nodes in screen units, over everything
+  tool = "select", grid = 16, snap = true,
+  on_moved = function(ids, dx, dy) end, on_connected = function(from, to) end,
+  on_drawn = function(tool, points) end, on_deleted = function(ids) end,
+})
+view.fit()  view.zoom_by(2)  view.center_on(x, y)  view.select { "a" }
+view.to_screen(x, y)  view.to_world(x, y)
+
+```
+The world is one node under a transform, so panning and zooming move a
+drawing that stays drawn; the items are laid in it at their world
+boxes (a rect or an ellipse at x, y, w, h; a line, polygon or point at
+the origin, drawing its own points). A delegate draws an item -- it
+takes no pointer: the canvas picks -- and is told `s.item()`,
+`s.selected()`, `s.hovered()` and `s.zoom()`. Without a delegate the
+skin's `item` builder draws it from its fields (`fill`, `stroke`,
+`label`). Selected items move with a drag before the configuration
+hears `on_moved` and moves them.
+
+The skin draws `background` and `grid` under the world and `wires`
+(a builder: a wire between two world points), `selection` (a builder:
+the outline round a selected item, in screen units), `draft`, `band`,
+`crosshair` and `overlay` over it.
+
+#### Dock
+
+| | |
+|---|---|
+| roles | group, tab_list, tab, tab_panel, splitter |
+| state | focused, focused_panel, maximized, dragging, drop_target, drop_zone, panel_count |
+| signals | on_layout_changed, on_activated, on_closed, on_maximized, on_focus_changed |
+| keys | ctrl_page, ctrl_w, ctrl_shift_m, f6, escape |
+| slots | background, content, tab, stack, divider, floating, drop_indicator |
+| widgets | dock_area, shelf_dock, tabbed_container, document_tabs, tool_windows |
+| arrived | stage 21 |
+
+Docks (the Dock archetype): panels in a tree of splits and tab stacks
+that the user rearranges -- a tab dragged onto a stack's middle joins
+it, onto an edge splits beside it, out of the dock floats -- and
+maximises, closes, and walks by keys.
+
+```lua
+local node, dock = lib.kit.dock.make("dock_area", {
+  width = 1200, height = 800,
+  panels = {
+    files = { title = "Files", icon = "folder", content = file_tree },
+    editor = { title = "main.lua", content = editor, closable = false },
+    log = { title = "Log", content = function() return log_view() end },  -- built when first shown
+  },
+  layout = { orientation = "horizontal", ratios = { 0.2, 0.8 }, children = {
+    { panels = { "files" } },
+    { orientation = "vertical", ratios = { 0.7, 0.3 }, children = {
+      { panels = { "editor" } }, { panels = { "log" } } } } } },
+  on_layout_changed = function(tree, floating) save(tree, floating) end,
+  on_closed = function(panel) end,
+})
+dock.activate("log")  dock.close("log")  dock.maximize("editor")  dock.float("files", x, y, w, h)
+dock.dock("files", stack_id, "left")  dock.layout()
+
+```
+A panel's content is made once and kept: a stack shows its current and
+parks the rest, so a panel moved, hidden or floated keeps its state.
+The skin draws `tab` (a builder: one tab, told `s.title`, `s.icon`,
+`s.current()`, `s.focused()`, `s.hovered()`, `s.closable`, `s.close()`),
+`stack` (a builder: the frame round a stack, told `s.focused()`),
+`divider` (a builder: the handle between two parts, told
+`s.orientation`, `s.hovered()`, `s.dragging()`), `floating` (a builder:
+a floating panel's frame, told `s.title`; its top `tab_height` is the
+bar it is moved by) and `drop_indicator` (where a dragged tab would
+land: a node over the whole dock, shown while a tab is dragged over a
+stack, that puts its plate at `spec.drop_box()` -- x, y, w, h -- and
+may move it there as it likes).
 
 ### Display widgets
 
@@ -3163,7 +3283,8 @@ local node = composites.header_bar {
 A press on the bar's empty part moves the window (`start_system_move`),
 a double press maximises or restores it. The controls are kit icon
 presses with names a screen reader reads. `controls = false` leaves the
-window controls out (a dialog, a phone).
+window controls out (a dialog, a phone). `flat = true` leaves out its
+ground and rule: a kit Shell's skin draws them under its header region.
 
 #### input group
 
@@ -3690,4 +3811,3 @@ why. Going on through the header asks every step on the way; going back
 never asks. Alt+Right is Next. Ids: `<id>-header`, `<id>-step-<i>`,
 `<id>-pages`, `<id>-page-<i>`, `<id>-back`, `<id>-next`, `<id>-finish`,
 `<id>-cancel`, `<id>-error`.
-
