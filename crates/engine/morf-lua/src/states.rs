@@ -4,7 +4,7 @@
 use std::collections::{HashMap, HashSet};
 
 use luna::StashedClosure;
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 use morf_scene::{Behavior, NodeHandle, Value as SceneValue};
 
 use crate::surface_types::IpcValue;

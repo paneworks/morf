@@ -1,4 +1,4 @@
-use morf_reactive::SignalId;
+use crate::reactive::SignalId;
 use slotmap::{SlotMap, new_key_type};
 use std::collections::{BTreeMap, HashMap};
 

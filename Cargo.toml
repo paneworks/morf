@@ -60,7 +60,6 @@ morf-lua = { path = "crates/engine/morf-lua" }
 morf-menu = { path = "crates/platform/morf-menu" }
 morf-outline = { path = "crates/graphics/morf-outline" }
 morf-svg = { path = "crates/graphics/morf-svg" }
-morf-reactive = { path = "crates/core/morf-reactive" }
 morf-region = { path = "crates/core/morf-region" }
 morf-shader = { path = "crates/graphics/morf-shader" }
 morf-render = { path = "crates/graphics/morf-render" }

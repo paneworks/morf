@@ -3,7 +3,7 @@ use crate::states::{Capture, StateSet};
 use luna::{StashedClosure, StashedTable};
 use morf_layout::{TransformTracker, TransformWatcher as NativeTransformWatcher};
 use morf_lifecycle::Retention;
-use morf_reactive::{EffectId, Graph, SignalId};
+use morf_scene::reactive::{EffectId, Graph, SignalId};
 use morf_scene::{GroupId, ListModel, ModelId, NodeHandle, Scene, VirtualList};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};

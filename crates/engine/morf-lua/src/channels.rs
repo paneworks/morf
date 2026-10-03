@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 use morf_scene::{Channel, NodeHandle, Value as SceneValue};
 
 use crate::scene_bindings::HostError;

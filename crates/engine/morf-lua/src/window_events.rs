@@ -17,7 +17,7 @@
 //! dismissed — `on_closed` hears it once it is gone.
 
 use luna::{Callback, CallbackReturn, Closure, Context, UserRef, Value as LuaValue};
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 use std::cell::RefCell;
 use std::rc::Rc;
 

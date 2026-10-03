@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use morf_io::DbusValue;
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 
 use crate::{
     api_prefers::*, api_theme::read_tokens, reactive_bindings::*, state::*, surface_types::*,

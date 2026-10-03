@@ -392,7 +392,7 @@ fn flush_graph(
     // and Lua may create signals or effects of its own while it runs — the
     // first `require` of a module that holds state does — so the graph has to
     // be where Lua can reach it.
-    let mut flush = morf_reactive::Flush::default();
+    let mut flush = morf_scene::reactive::Flush::default();
     let mut remaining = limits.frame_fuel;
     let result = loop {
         let next = state
@@ -406,7 +406,7 @@ fn flush_graph(
             Ok(None) => break Ok(()),
             Err(error) => break Err(error),
         };
-        let mut capture = morf_reactive::EffectCapture::default();
+        let mut capture = morf_scene::reactive::EffectCapture::default();
         let _span = crate::profile::span(|| effect_label(state, ctx, &pending));
         let outcome = evaluate_effect(
             state,
@@ -485,7 +485,7 @@ fn flush_graph(
 fn effect_label(
     state: &Rc<RefCell<ReactiveState>>,
     ctx: Context<'_>,
-    pending: &morf_reactive::PendingEffect,
+    pending: &morf_scene::reactive::PendingEffect,
 ) -> String {
     let state = state.borrow();
     let Some(effect) = state.effects.get(&pending.token()) else {

@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 
 use crate::state::ReactiveState;
 use crate::types::Runtime;

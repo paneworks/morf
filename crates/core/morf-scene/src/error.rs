@@ -3,7 +3,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 
-use morf_reactive::GraphError;
+use crate::reactive::GraphError;
 
 /// A scene graph operation failure.
 #[derive(Clone, Debug, PartialEq)]

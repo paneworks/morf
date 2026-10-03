@@ -24,7 +24,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
 
 use crate::{

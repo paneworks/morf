@@ -6,7 +6,7 @@
 //! allocated a name, subscriber set and producer for every property slot on
 //! every node, even though none could have a subscriber.
 
-use morf_reactive::{GraphError, SignalId};
+use crate::reactive::{GraphError, SignalId};
 use slotmap::SlotMap;
 
 use crate::Value;

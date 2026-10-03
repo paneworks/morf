@@ -22,7 +22,7 @@ pub(crate) struct ModelRevision {
     /// Held weakly, which also keeps the allocation -- and so the key --
     /// from being reused by another model while the entry exists.
     pub(crate) model: Weak<RefCell<ListModel>>,
-    pub(crate) signal: morf_reactive::SignalId,
+    pub(crate) signal: morf_scene::reactive::SignalId,
     pub(crate) revision: i64,
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn track_model_read(state: &mut ReactiveState, model: &Rc<RefCell<Lis
 pub(crate) fn model_read_signals(
     state: &Rc<RefCell<ReactiveState>>,
     models: Vec<Rc<RefCell<ListModel>>>,
-) -> Result<Vec<morf_reactive::SignalId>, String> {
+) -> Result<Vec<morf_scene::reactive::SignalId>, String> {
     let mut signals = Vec::with_capacity(models.len());
     for model in models {
         let key = model_key(&model);

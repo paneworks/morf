@@ -1,7 +1,7 @@
 use crate::states::Capture;
 use luna::{Context, Executor, Fuel, StashedClosure, Table, Value as LuaValue, Variadic};
 use morf_io::{DbusCall, DbusValue};
-use morf_reactive::EffectCapture;
+use morf_scene::reactive::EffectCapture;
 use morf_scene::Value as SceneValue;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -173,7 +173,7 @@ pub(crate) fn evaluate_effect(
 fn read_signal(
     state: &Rc<RefCell<ReactiveState>>,
     effect: &mut EffectCapture<IpcValue>,
-    signal: morf_reactive::SignalId,
+    signal: morf_scene::reactive::SignalId,
 ) -> Result<(), String> {
     let state = state.borrow();
     let graph = state.graph.as_ref().ok_or("reactive graph unavailable")?;

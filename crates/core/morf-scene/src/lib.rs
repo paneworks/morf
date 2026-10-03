@@ -21,6 +21,8 @@ mod gradient;
 mod groups;
 mod hashing;
 pub use morf_value::hct;
+/// The reactive signal graph the scene's properties live in.
+pub mod reactive;
 mod keyframes;
 mod mask;
 mod motion;

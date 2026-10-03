@@ -9,7 +9,6 @@ repository.workspace = true
 [dependencies]
 kurbo.workspace = true
 animato.workspace = true
-morf-reactive.workspace = true
 morf-value.workspace = true
 pastel = "0.12"
 slotmap.workspace = true

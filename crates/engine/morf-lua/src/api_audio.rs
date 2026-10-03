@@ -36,7 +36,7 @@ use luna::{
     Value as LuaValue, Variadic,
 };
 use morf_audio::{Audio, Device, DeviceKind, Stream};
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
 
 use crate::{

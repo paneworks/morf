@@ -11,7 +11,7 @@
 
 use luna::{Callback, CallbackReturn, Context, Function, Table, Value as LuaValue};
 use morf_io::FileView;
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};

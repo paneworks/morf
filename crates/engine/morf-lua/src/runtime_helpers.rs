@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 use morf_scene::{NodeHandle, Scene};
 
 use crate::{

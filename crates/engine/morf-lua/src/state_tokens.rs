@@ -15,7 +15,7 @@ use morf_io::{
     SocketServer, SplitParser, StreamCollector,
 };
 use morf_menu::Menu;
-use morf_reactive::SignalId;
+use morf_scene::reactive::SignalId;
 use morf_scene::{Easing, GroupId, ListModel, NodeHandle, VirtualList};
 use morf_services::{GreetdClient, GreetdConversation, PamSession};
 use std::cell::{Cell, RefCell};
