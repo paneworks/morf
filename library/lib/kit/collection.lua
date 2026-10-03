@@ -96,7 +96,7 @@ function M.make(widget, spec)
     for k, v in pairs(spec) do merged[k] = v end
     if widget == "file_list" and merged.delegate == nil and merged.columns == nil then
       merged.layout = merged.layout or "table"
-      local W0 = merged.width or 300
+      local W0 = tonumber(type(merged.width) == "function" and merged.width() or merged.width) or 300
       local columns = {}
       for i, c in ipairs(FILE_COLUMNS) do
         columns[i] = { key = c.key, title = c.title, sortable = c.sortable, width = math.floor(W0 * c.width) }
@@ -112,7 +112,8 @@ function M.make(widget, spec)
   -- A chat log's messages are as tall as their text.
   if widget == "chat_log" and spec.size_field == "height" and type(spec.rows) == "table" then
     for _, row in ipairs(spec.rows) do
-      if type(row) == "table" and row.height == nil then row.height = bubble_height(row, spec.width or 300) end
+      if type(row) == "table" and row.height == nil then row.height = bubble_height(row,
+        tonumber(type(spec.width) == "function" and spec.width() or spec.width) or 300) end
     end
   end
   local model = spec.rows
@@ -142,7 +143,10 @@ function M.make(widget, spec)
   end
   if layout == "tree" then reflatten() end
   local columns = spec.columns or {}
+  -- (Given as numbers or as bindings: a collection that fills a panel
+  -- follows its size rather than being made again for each.)
   local W, H = spec.width or 300, spec.height or 300
+  local function size_of(v) if type(v) == "function" then return v() or 0 end return v end
   local header_h = tabular and (spec.header_height or 32) or 0
   -- Each column's width as it is now: a drag at a header's edge changes it
   -- live, and the header and the cells follow.
@@ -194,7 +198,9 @@ function M.make(widget, spec)
     end
   end
   if layout == "grid" or layout == "flow" then
-    full.columns = spec.grid_columns or math.max(1, math.floor(W / (spec.cell_width or 96)))
+    full.columns = spec.grid_columns or (type(W) == "function"
+      and function() return math.max(1, math.floor(size_of(W) / (spec.cell_width or 96))) end
+      or math.max(1, math.floor(W / (spec.cell_width or 96))))
   end
   -- A table no one else sorts sorts its own rows: by the column's values,
   -- numbers as numbers, folders before files, the order kept among equals.
@@ -235,7 +241,7 @@ function M.make(widget, spec)
     function s.index() return index_signal:get() end
     function s.row() return model:get(index_signal:get()) end
     function s.count() return model:len() end
-    function s.width() return area.width or W end
+    function s.width() return area.width or size_of(W) end
     function s.current() return t and t.current == index_signal:get() end
     function s.selected() return t and control.has(t.selected, index_signal:get()) end
     function s.hovered() return area.hovered end
@@ -307,7 +313,8 @@ function M.make(widget, spec)
   -- The rows' view: made once the control (and its skin's row builder) is
   -- there, and again on a theme switch.
   local function make_view()
-    local view_props = { model = model, delegate = delegate, y = header_h, width = W, height = H - header_h,
+    local view_props = { model = model, delegate = delegate, y = header_h, width = W,
+      height = type(H) == "function" and function() return math.max(0, size_of(H) - header_h) end or H - header_h,
       overscan = spec.overscan or 2, content_y = offset:get() }
     if layout == "grid" or layout == "flow" then
       view_props.cell_width, view_props.cell_height = spec.cell_width or 96, spec.cell_height or 96
@@ -365,7 +372,7 @@ function M.make(widget, spec)
   view = make_view()
   ui.reparent(view, root)
   -- The wheel scrolls by rows; keeping the current row in sight follows it.
-  local function room() return math.max(0, morf.view_extent(view) - (H - header_h)) end
+  local function room() return math.max(0, morf.view_extent(view) - (size_of(H) - header_h)) end
   local function scroll_to(y)
     y = math.max(0, math.min(y, room()))
     if y ~= offset:get() then offset:set(y) morf.sync_view(view, y) end
@@ -376,7 +383,7 @@ function M.make(widget, spec)
     local top = morf.view_item_start(view, current)
     local bottom = (current < model:len()) and morf.view_item_start(view, current + 1) or morf.view_extent(view)
     local now = offset:get()
-    if top < now then scroll_to(top) elseif bottom > now + H - header_h then scroll_to(bottom - (H - header_h)) end
+    if top < now then scroll_to(top) elseif bottom > now + size_of(H) - header_h then scroll_to(bottom - (size_of(H) - header_h)) end
   end, { owner = root })
   local handle = { node = root, view = view, model = model, t = t }
   function handle.scroll_to(y) scroll_to(y) end

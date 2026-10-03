@@ -1,7 +1,7 @@
 -- The example Editor application (examples/apps/editor/app.lua): it
 -- builds its dock of file tree, documents, map and log; a tab dragged
--- onto another stack's edge splits it and the layout is kept in the
--- application's state; a node in the graph moves; the toolbar's tool
+-- onto another stack's edge splits it and the layout is saved and read
+-- back on the next start; a node in the graph moves; the toolbar's tool
 -- reaches the canvases and a stroke drawn with it lands on the board.
 --
 --     morf test --no-dbus examples/apps/editor/tests/editor_app_spec.lua
@@ -10,8 +10,12 @@
 local test = morf.test
 local function env(name) local v = morf.env(name) if v == false or v == "" then return nil end return v end
 
-local function load()
-  test.load("../app.lua", { size = { 1600, 1000 } })
+-- Each test its own saved layout, unless it reloads to read one back.
+local serial = 0
+local STATE
+local function load(again)
+  if not again then serial = serial + 1 STATE = morf.state_path("editor-test-" .. serial .. ".json") end
+  test.load("../app.lua", { size = { 1600, 1000 }, env = { EDITOR_STATE = STATE } })
   test.settle(1500)
 end
 
@@ -53,6 +57,10 @@ test.it("a tab dragged onto the bottom of another stack splits it, and the layou
   -- (The split the map left had one part and went; the new one joins the column.)
   test.eq(test.ipc("editor-layout"), "H([files],V([graph board],[map],[log]))")
   test.truthy(test.find { id = "editor-map", visible = true }, "the map went missing")
+  -- Saved: started again, it opens as it was left.
+  test.settle(800)
+  load(true)
+  test.eq(test.ipc("editor-layout"), "H([files],V([graph board],[map],[log]))")
 end)
 
 test.it("a node in the graph moves with a drag", function()

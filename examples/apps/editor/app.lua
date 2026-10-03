@@ -30,6 +30,29 @@ local state = morf.state { tool = "select", document = "graph", status = "Ready"
 local layout = morf.signal("editor.layout", nil)
 local floating = morf.signal("editor.floating", {})
 
+-- The layout survives a restart: kept in the state directory
+-- (EDITOR_STATE names another file), read at start, written a moment
+-- after the dock last changed.
+local STATE_FILE = (morf.env and morf.env("EDITOR_STATE")) or morf.state_path("editor.json")
+do
+  local ok, text = pcall(morf.fs.read, STATE_FILE)
+  local ok2, saved = false, nil
+  if ok and type(text) == "string" and text ~= "" then ok2, saved = pcall(morf.json.decode, text) end
+  if ok2 and type(saved) == "table" and type(saved.layout) == "table" then
+    layout:set(saved.layout)
+    floating:set(type(saved.floating) == "table" and saved.floating or {})
+  end
+end
+local save_timer
+local function save()
+  if save_timer then save_timer:cancel() end
+  save_timer = morf.timer(500, function()
+    save_timer = nil
+    local ok, err = pcall(morf.fs.write, STATE_FILE, morf.json.encode { layout = layout:get(), floating = floating:get() })
+    if not ok then morf.log.warn("editor: could not save the layout: " .. tostring(err)) end
+  end, false)
+end
+
 local DEFAULT_LAYOUT = { orientation = "horizontal", ratios = { 0.2, 0.8 }, children = {
   { id = "shelf", panels = { "files" } },
   { orientation = "vertical", ratios = { 0.7, 0.3 }, children = {
@@ -159,22 +182,12 @@ app.application {
         return holder
       end
     end
-    -- A list made for its panel's size (a list is laid out at a size it
-    -- is given), made again as the panel's size moves by a step.
+    -- A list that fills its panel: made once, its size bound to the
+    -- panel's, so a tree keeps its open folders as the dock is resized.
     local function sized(holder, make)
-      local built, bw, bh
-      morf.effect("editor.sized." .. tostring(holder), function()
-        local w = math.floor((holder.layout_width or 0) / 16) * 16
-        local h = math.floor((holder.layout_height or 0) / 16) * 16
-        if w == bw and h == bh then return end
-        bw, bh = w, h
-        if built then ui.destroy(built, true) end
-        built = nil
-        if w > 0 and h > 0 then
-          built = make(w, h)
-          ui.reparent(built, holder)
-        end
-      end, { owner = holder })
+      local built = make(function() return holder.layout_width or 0 end,
+        function() return holder.layout_height or 0 end)
+      if built then ui.reparent(built, holder) end
     end
 
     local panels = {
@@ -240,6 +253,7 @@ app.application {
       on_layout_changed = function(tree, floats)
         layout:set(tree)
         floating:set(floats or {})
+        save()
       end,
       on_activated = function(panel)
         if panel == "graph" or panel == "board" then state.document = panel end

@@ -401,7 +401,7 @@ pub(crate) fn construct_view<'gc>(
             ViewKind::List => {
                 let item_extent =
                     table_number(ctx, properties, "item_extent", 1.0).map_err(HostError)?;
-                let height = table_number(ctx, properties, "height", 0.0).map_err(HostError)?;
+                let height = view_size(ctx, properties, "height")?;
                 let offset = table_number(ctx, properties, "content_y", 0.0).map_err(HostError)?;
                 let overscan = table_number(ctx, properties, "overscan", 1.0).map_err(HostError)?;
                 if item_extent <= 0.0 || height < 0.0 || offset < 0.0 || overscan < 0.0 {
@@ -423,8 +423,8 @@ pub(crate) fn construct_view<'gc>(
                     table_number(ctx, properties, "cell_width", 1.0).map_err(HostError)?;
                 let cell_height =
                     table_number(ctx, properties, "cell_height", 1.0).map_err(HostError)?;
-                let width = table_number(ctx, properties, "width", 0.0).map_err(HostError)?;
-                let height = table_number(ctx, properties, "height", 0.0).map_err(HostError)?;
+                let width = view_size(ctx, properties, "width")?;
+                let height = view_size(ctx, properties, "height")?;
                 let offset = table_number(ctx, properties, "content_y", 0.0).map_err(HostError)?;
                 let overscan = table_number(ctx, properties, "overscan", 1.0).map_err(HostError)?;
                 let default_columns = (width / cell_width).floor().max(1.0);
@@ -512,5 +512,19 @@ fn text_field(value: LuaValue<'_>) -> Option<String> {
     match value {
         LuaValue::String(text) => Some(text.display_lossy().to_string()),
         _ => None,
+    }
+}
+
+/// A view's size as it is made: a number, or 0 for one given as a binding --
+/// the view reads its node's size again as it lays out, so a list bound to
+/// its panel's height shows the rows that fit once the panel is laid out.
+fn view_size<'gc>(
+    ctx: luna::Context<'gc>,
+    properties: luna::Table<'gc>,
+    field: &str,
+) -> Result<f64, luna::Error<'gc>> {
+    match properties.get_value(ctx, field) {
+        luna::Value::Function(_) => Ok(0.0),
+        _ => Ok(table_number(ctx, properties, field, 0.0).map_err(HostError)?),
     }
 }
