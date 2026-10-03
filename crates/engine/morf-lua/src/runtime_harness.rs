@@ -6,6 +6,7 @@
 //! compositor and no frame callbacks. Nothing here changes how a shell runs:
 //! each is off until a runner asks for it.
 
+use crate::ipc_table::{IpcFromLua, IpcToLua};
 use luna::{Callback, CallbackReturn, Table, Value as LuaValue, Variadic};
 use std::rc::Rc;
 use std::time::Duration;

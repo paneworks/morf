@@ -1,7 +1,8 @@
 use std::thread;
 use std::time::Duration;
 
-use morf_lua::{IpcValue, Runtime};
+use morf_lua::Runtime;
+use morf_value::IpcValue;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut runtime = Runtime::default();

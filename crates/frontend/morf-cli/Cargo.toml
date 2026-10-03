@@ -21,6 +21,7 @@ jit = ["morf-lua/jit"]
 kit = ["dep:morf-kit"]
 
 [dependencies]
+morf-value.workspace = true
 libc = "0.2"
 flate2.workspace = true
 serde_json.workspace = true

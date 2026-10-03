@@ -14,7 +14,7 @@
 //! Ctrl+Shift+Tab cycle a switcher; the arrows walk a carousel). Signals:
 //! `pushed` (page), `popped` (page), `current_changed` (page, direction).
 
-use morf_lua::{IpcTable, IpcValue};
+use morf_value::{IpcTable, IpcValue};
 
 use crate::control::ControlState;
 use crate::value::{expect_boolean, text};

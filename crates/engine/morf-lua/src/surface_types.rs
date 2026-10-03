@@ -1,5 +1,3 @@
-use luna::{Context, Value as LuaValue};
-
 use morf_region::Region;
 use morf_scene::{Behavior, NodeHandle, Value as SceneValue};
 
@@ -236,50 +234,10 @@ pub struct ParentTransitionRequest {
     pub behavior: Behavior,
 }
 
-/// Primitive value accepted by the bounded IPC surface.
-#[derive(Clone, Debug, PartialEq)]
-pub enum IpcValue {
-    Nil,
-    Boolean(bool),
-    Integer(i64),
-    Number(f64),
-    String(String),
-    /// A colour value, so a signal or a state field may hold one.
-    Color(morf_scene::Color),
-    /// A table a signal holds: a deep copy of a JSON-like Lua table.
-    /// Compared by content, so writing an equal table changes nothing.
-    Table(std::sync::Arc<crate::ipc_table::IpcTable>),
-}
-
-impl From<bool> for IpcValue {
-    fn from(value: bool) -> Self {
-        Self::Boolean(value)
-    }
-}
-
-impl From<f64> for IpcValue {
-    fn from(value: f64) -> Self {
-        Self::Number(value)
-    }
-}
-
-impl From<i64> for IpcValue {
-    fn from(value: i64) -> Self {
-        Self::Integer(value)
-    }
-}
-
-impl From<&str> for IpcValue {
-    fn from(value: &str) -> Self {
-        Self::String(value.to_owned())
-    }
-}
-
-impl From<String> for IpcValue {
-    fn from(value: String) -> Self {
-        Self::String(value)
-    }
-}
+// The value that crosses the Lua boundary is morf-value's; how Lua reads
+// and writes it is `crate::ipc_table`'s, by trait.
+pub(crate) use morf_value::IpcValue;
+pub(crate) use crate::ipc_table::{IpcFromLua, IpcToLua};
 
 /// Deferred virtual keyboard request produced by Lua.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -390,46 +348,6 @@ pub struct ScreencopyRequest {
     /// The output to capture, by the name `morf.screens` reports; `None` is
     /// the shell's own output, or the first there is.
     pub output: Option<String>,
-}
-
-impl IpcValue {
-    pub(crate) fn to_lua<'gc>(&self, ctx: Context<'gc>) -> LuaValue<'gc> {
-        match self {
-            Self::Nil => LuaValue::Nil,
-            Self::Boolean(value) => LuaValue::Boolean(*value),
-            Self::Integer(value) => LuaValue::Integer(*value),
-            Self::Number(value) => LuaValue::Number(*value),
-            Self::String(value) => LuaValue::String(ctx.intern(value.as_bytes())),
-            Self::Color(color) => crate::api_color::scene_color_userdata(ctx, *color),
-            // A fresh copy each time: what a reader does to it stays with
-            // the reader.
-            Self::Table(table) => table.to_lua(ctx),
-        }
-    }
-
-    pub(crate) fn from_lua(value: LuaValue<'_>) -> Result<Self, String> {
-        match value {
-            LuaValue::Nil => Ok(Self::Nil),
-            LuaValue::Boolean(value) => Ok(Self::Boolean(value)),
-            LuaValue::Integer(value) => Ok(Self::Integer(value)),
-            LuaValue::Number(value) if value.is_finite() => Ok(Self::Number(value)),
-            LuaValue::String(value) => Ok(Self::String(value.display_lossy().to_string())),
-            LuaValue::UserData(userdata)
-                if userdata
-                    .downcast_static::<crate::api_color::ColorToken>()
-                    .is_ok() =>
-            {
-                let token = userdata
-                    .downcast_static::<crate::api_color::ColorToken>()
-                    .expect("checked above");
-                Ok(Self::Color(morf_scene::Color::from_pastel(&token.color)))
-            }
-            value => Err(format!(
-                "values crossing the Lua boundary must be nil, boolean, number, string or colour, found {}",
-                value.type_name()
-            )),
-        }
-    }
 }
 
 /// One selection the configuration asked to own.

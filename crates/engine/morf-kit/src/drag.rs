@@ -19,7 +19,7 @@
 //! `extent` is a row's length then), `moved` (value) for a change by the
 //! user.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 use crate::control::ControlState;
 use crate::value::{expect_number, number, text};

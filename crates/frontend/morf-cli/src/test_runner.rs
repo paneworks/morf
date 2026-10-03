@@ -10,7 +10,8 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Instant;
 
-use morf_lua::{IpcTable, IpcValue, Limits, Runtime};
+use morf_lua::{Limits, Runtime};
+use morf_value::{IpcTable, IpcValue};
 
 use crate::runner_args::RunnerArgs;
 use crate::test_host::{TestHost, install};

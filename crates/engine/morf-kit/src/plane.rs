@@ -20,7 +20,7 @@
 //! modifiers). Signals: `moved` (x, y) for a change by the user,
 //! `value_changed` (x, y) for any.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 use crate::control::ControlState;
 use crate::value::{expect_boolean, expect_number, number, text};

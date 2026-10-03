@@ -1,5 +1,6 @@
 use morf_io::IpcIncoming;
-use morf_lua::{IpcValue, Runtime, SessionLockState};
+use morf_lua::{Runtime, SessionLockState};
+use morf_value::IpcValue;
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_wayland::{LayerClient, LayerEvent, ScreenInfo};
 use std::os::fd::AsFd;

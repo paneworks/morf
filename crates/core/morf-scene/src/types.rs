@@ -110,40 +110,7 @@ impl Element {
     }
 }
 
-/// sRGB-encoded RGBA colour with components in the inclusive zero-to-one range.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Color {
-    /// Red channel.
-    pub red: f32,
-    /// Green channel.
-    pub green: f32,
-    /// Blue channel.
-    pub blue: f32,
-    /// Alpha channel.
-    pub alpha: f32,
-}
-
-impl Color {
-    /// Creates a colour from eight-bit channels.
-    pub const fn rgba8(red: u8, green: u8, blue: u8, alpha: u8) -> Self {
-        Self {
-            red: red as f32 / 255.0,
-            green: green as f32 / 255.0,
-            blue: blue as f32 / 255.0,
-            alpha: alpha as f32 / 255.0,
-        }
-    }
-
-    /// Reads a colour from any form a configuration writes: hex with or
-    /// without `#`, `0x`, `rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`,
-    /// `oklab()`, `oklch()`, `gray()`, `transparent`, and the CSS names.
-    ///
-    /// Returns `None` rather than a fallback so a typo in a colour surfaces as
-    /// an error at the property that used it.
-    pub fn parse(input: &str) -> Option<Self> {
-        crate::color::parse(input)
-    }
-}
+pub use morf_value::Color;
 
 /// Values stored in reactive element properties.
 #[derive(Clone, Debug, PartialEq)]

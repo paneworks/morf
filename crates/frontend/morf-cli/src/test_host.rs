@@ -12,7 +12,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use morf_lua::{IpcTable, IpcValue, LogLevel, Runtime};
+use morf_lua::{LogLevel, Runtime};
+use morf_value::{IpcTable, IpcValue};
 use morf_scene::NodeHandle;
 
 use crate::headless::{Headless, LoadOptions};

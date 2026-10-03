@@ -21,7 +21,7 @@
 //! Signals: `breakpoint` (layout), `collapsed` (bool), `sidebar_toggled`
 //! (open), `region` (name).
 
-use morf_lua::{IpcTable, IpcValue};
+use morf_value::{IpcTable, IpcValue};
 
 use crate::control::ControlState;
 use crate::value::{expect_boolean, expect_number, text};

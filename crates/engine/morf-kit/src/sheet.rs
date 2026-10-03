@@ -29,7 +29,7 @@
 //! c1), `copy`, `cut` (r0, c0, r1, c1), `paste` (row, column),
 //! `activated` (row, column).
 
-use morf_lua::{IpcTable, IpcValue};
+use morf_value::{IpcTable, IpcValue};
 
 use crate::control::ControlState;
 use crate::value::{expect_boolean, expect_number, number, text};

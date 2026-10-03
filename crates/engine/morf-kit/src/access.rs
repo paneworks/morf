@@ -6,7 +6,7 @@
 //! `"button"`, `"check_box"`, `"tab_list"`, ... The glue sets them on the
 //! control's node; a configuration's own `accessible_role` wins.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 /// The role of a control of `archetype` drawn as `widget`; `checkable` makes
 /// a plain press a toggle button.

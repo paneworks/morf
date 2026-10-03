@@ -17,7 +17,7 @@
 //! `"held"`) and `focus_request` (on a group member the arrows moved to);
 //! `hold_canceled` when a hold is let go short.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 use crate::control::ControlState;
 use crate::group::{Member, Membership};

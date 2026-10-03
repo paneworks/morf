@@ -44,7 +44,7 @@ pub use module::install;
 pub use slots::{ARCHETYPES, slots_of};
 pub use tokens::merge_tokens;
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 /// What an archetype answers an event with.
 #[derive(Clone, Debug, Default, PartialEq)]

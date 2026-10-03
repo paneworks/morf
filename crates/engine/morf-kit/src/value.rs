@@ -1,6 +1,6 @@
 //! Reading the values Lua passes in.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 pub(crate) fn number(value: Option<&IpcValue>) -> Option<f64> {
     match value? {

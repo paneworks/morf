@@ -8,6 +8,7 @@
 //! configuration that never requires one pays nothing for it beyond the
 //! table.
 
+use crate::ipc_table::{IpcFromLua, IpcToLua};
 use std::sync::Mutex;
 
 use luna::{Callback, CallbackReturn, Table, Value as LuaValue, Variadic};

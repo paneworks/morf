@@ -18,7 +18,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use morf_lua::{HostFunction, IpcTable, IpcValue, Runtime};
+use morf_lua::{HostFunction, Runtime};
+use morf_value::{IpcTable, IpcValue};
 
 use crate::collection::Collection;
 use crate::disclosure::Disclosure;

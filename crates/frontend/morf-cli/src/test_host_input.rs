@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use morf_lua::{IpcTable, IpcValue};
+use morf_value::{IpcTable, IpcValue};
 use morf_wayland::LayerEvent;
 
 use crate::headless::Headless;

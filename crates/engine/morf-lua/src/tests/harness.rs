@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use super::*;
+use morf_value::IpcTable;
 
 fn integer(runtime: &mut Runtime, verb: &str) -> i64 {
     match runtime.call_ipc(verb, &[]).unwrap().as_slice() {

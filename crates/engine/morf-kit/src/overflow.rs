@@ -18,7 +18,7 @@
 
 use std::sync::Arc;
 
-use morf_lua::{IpcTable, IpcValue};
+use morf_value::{IpcTable, IpcValue};
 
 use crate::control::ControlState;
 use crate::value::{expect_number, number, text};

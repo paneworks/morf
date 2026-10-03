@@ -4,7 +4,8 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use morf_lua::{IpcValue, LogEntry, LogLevel};
+use morf_lua::{LogEntry, LogLevel};
+use morf_value::IpcValue;
 use morf_wayland::{PRIMARY_LAYER, SurfaceRole};
 
 use crate::headless::{Headless, LoadOptions};

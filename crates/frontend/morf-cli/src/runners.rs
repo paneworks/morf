@@ -118,7 +118,7 @@ fn call_ipc(headless: &mut Headless, args: &RunnerArgs) -> Result<(), String> {
     for call in &args.ipc {
         let values = call[1..]
             .iter()
-            .map(|word| morf_lua::IpcValue::String(word.clone()))
+            .map(|word| morf_value::IpcValue::String(word.clone()))
             .collect::<Vec<_>>();
         headless
             .runtime
@@ -192,8 +192,8 @@ fn check_kit(headless: &mut Headless) -> usize {
             return 1;
         }
     };
-    let text = |value: &morf_lua::IpcValue| match value {
-        morf_lua::IpcValue::String(text) => text.clone(),
+    let text = |value: &morf_value::IpcValue| match value {
+        morf_value::IpcValue::String(text) => text.clone(),
         other => format!("{other:?}"),
     };
     let mut lines = lines.iter().map(text);

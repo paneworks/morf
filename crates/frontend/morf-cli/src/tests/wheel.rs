@@ -5,7 +5,8 @@ use crate::pointer_cursor::CursorShapes;
 use crate::surface_pointer::handle_pointer_event;
 use crate::surfaces::{PointerInput, SurfaceLayouts};
 use morf_layout::{Layout, Size};
-use morf_lua::{IpcValue, Runtime};
+use morf_lua::Runtime;
+use morf_value::IpcValue;
 use morf_scene::NodeHandle;
 use morf_wayland::{LayerEvent, SurfaceRole};
 

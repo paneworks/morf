@@ -15,6 +15,7 @@
 //! heard, so each call has the whole of it; `changed` lists what moved in
 //! that burst (0-255, "foreground", "background", "cursor").
 
+use crate::ipc_table::IpcToLua;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

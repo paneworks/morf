@@ -1,5 +1,6 @@
 use morf_io::IpcValue as WireValue;
-use morf_lua::{InputMethodRequest, IpcValue, Runtime, TextInputRequest, VirtualKeyboardRequest};
+use morf_lua::{InputMethodRequest, Runtime, TextInputRequest, VirtualKeyboardRequest};
+use morf_value::IpcValue;
 use morf_wayland::{InputRect, LayerClient, OutputPowerMode};
 use std::collections::BTreeMap;
 

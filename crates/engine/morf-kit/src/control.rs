@@ -2,7 +2,7 @@
 //! enabled, mirrored and highlighted, and the implicit size a skin's slots
 //! give it.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 use crate::value::{expect_boolean, number};
 use crate::{Archetype, Effects};

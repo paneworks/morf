@@ -1,0 +1,11 @@
+[package]
+name = "morf-value"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The values that cross every boundary in morf: colours, and the tables Lua, archetypes and IPC exchange"
+
+[dependencies]
+pastel = "0.12"
+serde_json.workspace = true

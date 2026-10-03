@@ -22,7 +22,7 @@
 //! `show_error` (name, message) / `hide_error` (name) as the policy
 //! decides a field's message should show.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 use crate::control::ControlState;
 use crate::value::{boolean, expect_boolean, text};

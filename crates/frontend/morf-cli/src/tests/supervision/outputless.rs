@@ -204,7 +204,7 @@ fn round_trip(outputs: &[ScreenInfo]) {
 
     let started = started.lock().unwrap();
     let count = |seed: &Option<Seed>| match seed.as_ref().and_then(|seed| seed.get("count")) {
-        Some(morf_lua::IpcValue::Integer(value)) => Some(*value),
+        Some(morf_value::IpcValue::Integer(value)) => Some(*value),
         _ => None,
     };
     // First the outputs, fresh; the outputless runtime from 1; the outputs

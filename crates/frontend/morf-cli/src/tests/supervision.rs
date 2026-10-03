@@ -18,7 +18,7 @@ use crate::workers::handle_worker_command;
 use morf_io::IpcReply;
 use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 use morf_lua::{Limits, Runtime, Screen};
 use morf_wayland::ScreenInfo;
 use std::collections::BTreeMap;

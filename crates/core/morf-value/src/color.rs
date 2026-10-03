@@ -13,7 +13,41 @@
 //! through grey, and the midpoint of two saturated hues is not the muddy one
 //! gamma-space lerping gives.
 
-use crate::types::Color;
+/// sRGB-encoded RGBA colour with components in the inclusive zero-to-one range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Color {
+    /// Red channel.
+    pub red: f32,
+    /// Green channel.
+    pub green: f32,
+    /// Blue channel.
+    pub blue: f32,
+    /// Alpha channel.
+    pub alpha: f32,
+}
+
+impl Color {
+    /// Creates a colour from eight-bit channels.
+    pub const fn rgba8(red: u8, green: u8, blue: u8, alpha: u8) -> Self {
+        Self {
+            red: red as f32 / 255.0,
+            green: green as f32 / 255.0,
+            blue: blue as f32 / 255.0,
+            alpha: alpha as f32 / 255.0,
+        }
+    }
+
+    /// Reads a colour from any form a configuration writes: hex with or
+    /// without `#`, `0x`, `rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`,
+    /// `oklab()`, `oklch()`, `gray()`, `transparent`, and the CSS names.
+    ///
+    /// Returns `None` rather than a fallback so a typo in a colour surfaces as
+    /// an error at the property that used it.
+    pub fn parse(input: &str) -> Option<Self> {
+        parse(input)
+    }
+}
+
 
 /// The space two colours are interpolated in.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -91,7 +125,7 @@ impl Color {
 }
 
 /// Reads a colour from the forms a configuration writes.
-pub(crate) fn parse(input: &str) -> Option<Color> {
+pub fn parse(input: &str) -> Option<Color> {
     let input = input.trim();
     if input.eq_ignore_ascii_case("transparent") {
         return Some(Color::rgba8(0, 0, 0, 0));
@@ -208,7 +242,7 @@ fn linear_to_srgb(value: f64) -> f64 {
 }
 
 /// sRGB to OkLab, Björn Ottosson's matrices.
-pub(crate) fn to_oklab(color: Color) -> [f64; 3] {
+pub fn to_oklab(color: Color) -> [f64; 3] {
     let r = srgb_to_linear(f64::from(color.red));
     let g = srgb_to_linear(f64::from(color.green));
     let b = srgb_to_linear(f64::from(color.blue));
@@ -223,7 +257,7 @@ pub(crate) fn to_oklab(color: Color) -> [f64; 3] {
 }
 
 /// OkLab back to sRGB, clamped into gamut.
-pub(crate) fn from_oklab(lab: [f64; 3], alpha: f64) -> Color {
+pub fn from_oklab(lab: [f64; 3], alpha: f64) -> Color {
     let [big_l, a, b] = lab;
     let l = (big_l + 0.396_337_777_4 * a + 0.215_803_757_3 * b).powi(3);
     let m = (big_l - 0.105_561_345_8 * a - 0.063_854_172_8 * b).powi(3);
@@ -244,7 +278,7 @@ pub(crate) fn from_oklab(lab: [f64; 3], alpha: f64) -> Color {
 ///
 /// For OkLCh the third number is the hue in degrees and is not
 /// premultiplied; a hue has no magnitude to scale.
-pub(crate) fn coords(color: Color, space: ColorSpace) -> [f64; 4] {
+pub fn coords(color: Color, space: ColorSpace) -> [f64; 4] {
     let alpha = f64::from(color.alpha);
     match space {
         ColorSpace::Srgb => [
@@ -267,7 +301,7 @@ pub(crate) fn coords(color: Color, space: ColorSpace) -> [f64; 4] {
 }
 
 /// The colour those four numbers name.
-pub(crate) fn from_coords(coords: [f64; 4], space: ColorSpace) -> Color {
+pub fn from_coords(coords: [f64; 4], space: ColorSpace) -> Color {
     let alpha = coords[3].clamp(0.0, 1.0);
     let un = |value: f64| if alpha > 0.0 { value / alpha } else { 0.0 };
     match space {
@@ -288,7 +322,7 @@ pub(crate) fn from_coords(coords: [f64; 4], space: ColorSpace) -> Color {
 
 /// Puts the second hue on the side of the first that the direction asks
 /// for, so a linear step between them travels that way.
-pub(crate) fn align_hue(from: f64, to: f64, direction: HueDirection) -> f64 {
+pub fn align_hue(from: f64, to: f64, direction: HueDirection) -> f64 {
     let delta = (to - from).rem_euclid(360.0);
     match direction {
         HueDirection::Shorter => {

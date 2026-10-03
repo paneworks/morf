@@ -17,7 +17,8 @@ mod live {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    use morf_lua::{IpcValue, Runtime};
+    use morf_lua::Runtime;
+use morf_value::IpcValue;
     use morf_scene::NodeHandle;
     use morf_wayland::accesskit::{Accessibility, RequestKind};
 

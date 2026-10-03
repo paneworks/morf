@@ -130,7 +130,6 @@ pub use api_focus::FocusReason;
 pub use api_gamma::GammaRequest;
 pub use events::*;
 pub use extensions::{Extension, register_extension};
-pub use ipc_table::IpcTable;
 pub use runtime_harness::HostFunction;
 pub use runtime_input::*;
 pub use runtime_layout::SettledLayout;

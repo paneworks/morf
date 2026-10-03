@@ -48,6 +48,7 @@ wgpu = { version = "=30.0.1", default-features = false, features = ["std", "vulk
 xkbcommon = "=0.8.0"
 zbus = "=5.19.0"
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls", "gzip"] }
+morf-value = { path = "crates/core/morf-value" }
 morf-image = { path = "crates/graphics/morf-image" }
 morf-audio = { path = "crates/platform/morf-audio" }
 morf-desktop = { path = "crates/platform/morf-desktop" }

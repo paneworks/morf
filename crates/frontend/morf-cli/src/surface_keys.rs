@@ -181,7 +181,7 @@ pub(crate) fn key_modifiers(modifiers: morf_wayland::KeyModifiers) -> KeyModifie
 #[cfg(test)]
 mod tests {
     use super::*;
-    use morf_lua::IpcValue;
+    use morf_value::IpcValue;
 
     fn tab_setup(first: &str) -> (Runtime, NodeHandle, NodeHandle) {
         let mut runtime = Runtime::default();

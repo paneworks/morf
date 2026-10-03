@@ -14,7 +14,8 @@
 //!   `"top"` or `"bottom"`.
 
 use morf_layout::Hit;
-use morf_lua::{IpcValue, Runtime, UiEvent};
+use morf_lua::{Runtime, UiEvent};
+use morf_value::IpcValue;
 use morf_scene::NodeHandle;
 use morf_wayland::SurfaceRole;
 

@@ -10,7 +10,7 @@
 //! Return toggle; Left collapses and Right expands, as in a tree).
 //! Signals: `toggled` (expanded), `expanded`, `collapsed`.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 use crate::control::ControlState;
 use crate::group::{Member, Membership};

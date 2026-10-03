@@ -18,7 +18,7 @@
 //! side moves the flickable there), `scrolled` (x, y), `reached_start`,
 //! `reached_end`.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 use crate::control::ControlState;
 use crate::value::{expect_number, number, text};

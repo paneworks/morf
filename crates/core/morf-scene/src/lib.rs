@@ -8,7 +8,9 @@ mod accessible;
 mod animation;
 mod channel;
 mod coerce;
-mod color;
+// Colour lives in morf-value, the bottom of the graph; the scene keeps it
+// under its old paths.
+pub(crate) use morf_value::color;
 mod decoration;
 mod direction;
 mod error;
@@ -18,7 +20,7 @@ mod focus;
 mod gradient;
 mod groups;
 mod hashing;
-pub mod hct;
+pub use morf_value::hct;
 mod keyframes;
 mod mask;
 mod motion;

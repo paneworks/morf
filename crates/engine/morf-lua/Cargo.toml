@@ -11,6 +11,7 @@ repository.workspace = true
 jit = ["luna/jit"]
 
 [dependencies]
+morf-value.workspace = true
 jiff.workspace = true
 luna.workspace = true
 libc = "0.2"

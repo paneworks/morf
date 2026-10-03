@@ -73,7 +73,7 @@ fn a_change_on_one_surface_keeps_another_surfaces_layout() {
     let settings_cache = cached(&runtime, settings);
 
     runtime
-        .call_ipc("tick", &[morf_lua::IpcValue::String("12:01".into())])
+        .call_ipc("tick", &[morf_value::IpcValue::String("12:01".into())])
         .unwrap();
     assert!(
         !still_valid(&runtime, &bar_cache, bar),
@@ -85,7 +85,7 @@ fn a_change_on_one_surface_keeps_another_surfaces_layout() {
     );
 
     runtime
-        .call_ipc("rows", &[morf_lua::IpcValue::Integer(5)])
+        .call_ipc("rows", &[morf_value::IpcValue::Integer(5)])
         .unwrap();
     assert!(!still_valid(&runtime, &settings_cache, settings));
 }

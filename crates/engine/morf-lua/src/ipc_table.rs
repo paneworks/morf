@@ -17,58 +17,73 @@ use luna::{Context, Table, Value as LuaValue};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::surface_types::IpcValue;
+pub(crate) use morf_value::{IpcTable, IpcValue};
 
 /// How deep a signal's table may nest, and how many entries it may hold in
 /// all: a signal is state, not storage.
 const MAX_DEPTH: usize = 16;
 const MAX_ENTRIES: usize = 65_536;
 
-/// The table inside an `IpcValue::Table`.
-#[derive(Clone, Debug, PartialEq)]
-pub enum IpcTable {
-    /// A dense array, `{ a, b, c }`. An empty table is an empty list.
-    List(Vec<IpcValue>),
-    /// A record with string keys.
-    Map(BTreeMap<String, IpcValue>),
+/// A value or a table as Lua sees it: a fresh copy each time, so what a
+/// reader does to it stays with the reader.
+pub(crate) trait IpcToLua {
+    fn to_lua<'gc>(&self, ctx: Context<'gc>) -> LuaValue<'gc>;
 }
 
-impl IpcValue {
-    /// Reads a Lua value a signal may hold: anything `from_lua` takes, and
-    /// tables of those, copied deeply.
-    pub(crate) fn from_lua_deep<'gc>(
-        ctx: Context<'gc>,
-        value: LuaValue<'gc>,
-    ) -> Result<Self, String> {
-        let mut entries = 0;
-        from_lua_deep(ctx, value, 0, &mut entries)
-    }
+/// A Lua value read into one that may cross the boundary.
+pub(crate) trait IpcFromLua: Sized {
+    /// A scalar or a colour: nil, boolean, number, string, colour.
+    fn from_lua(value: LuaValue<'_>) -> Result<Self, String>;
+    /// Anything `from_lua` takes, and tables of those, copied deeply.
+    fn from_lua_deep<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<Self, String>;
+}
 
-    /// The value as JSON: what a table looks like where only text goes.
-    pub fn to_json(&self) -> serde_json::Value {
-        use serde_json::Value as Json;
+impl IpcToLua for IpcValue {
+    fn to_lua<'gc>(&self, ctx: Context<'gc>) -> LuaValue<'gc> {
         match self {
-            Self::Nil => Json::Null,
-            Self::Boolean(value) => Json::Bool(*value),
-            Self::Integer(value) => Json::from(*value),
-            Self::Number(value) => {
-                serde_json::Number::from_f64(*value).map_or(Json::Null, Json::Number)
-            }
-            Self::String(value) => Json::String(value.clone()),
-            Self::Color(color) => Json::String(color.to_pastel().to_rgb_hex_string(true)),
-            Self::Table(table) => match &**table {
-                IpcTable::List(items) => Json::Array(items.iter().map(Self::to_json).collect()),
-                IpcTable::Map(fields) => Json::Object(
-                    fields
-                        .iter()
-                        .map(|(key, value)| (key.clone(), value.to_json()))
-                        .collect(),
-                ),
-            },
+            Self::Nil => LuaValue::Nil,
+            Self::Boolean(value) => LuaValue::Boolean(*value),
+            Self::Integer(value) => LuaValue::Integer(*value),
+            Self::Number(value) => LuaValue::Number(*value),
+            Self::String(value) => LuaValue::String(ctx.intern(value.as_bytes())),
+            Self::Color(color) => crate::api_color::scene_color_userdata(ctx, *color),
+            // A fresh copy each time: what a reader does to it stays with
+            // the reader.
+            Self::Table(table) => table.to_lua(ctx),
         }
     }
 }
 
+impl IpcFromLua for IpcValue {
+    fn from_lua(value: LuaValue<'_>) -> Result<Self, String> {
+        match value {
+            LuaValue::Nil => Ok(Self::Nil),
+            LuaValue::Boolean(value) => Ok(Self::Boolean(value)),
+            LuaValue::Integer(value) => Ok(Self::Integer(value)),
+            LuaValue::Number(value) if value.is_finite() => Ok(Self::Number(value)),
+            LuaValue::String(value) => Ok(Self::String(value.display_lossy().to_string())),
+            LuaValue::UserData(userdata)
+                if userdata
+                    .downcast_static::<crate::api_color::ColorToken>()
+                    .is_ok() =>
+            {
+                let token = userdata
+                    .downcast_static::<crate::api_color::ColorToken>()
+                    .expect("checked above");
+                Ok(Self::Color(morf_scene::Color::from_pastel(&token.color)))
+            }
+            value => Err(format!(
+                "values crossing the Lua boundary must be nil, boolean, number, string or colour, found {}",
+                value.type_name()
+            )),
+        }
+    }
+
+    fn from_lua_deep<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<Self, String> {
+        let mut entries = 0;
+        from_lua_deep(ctx, value, 0, &mut entries)
+    }
+}
 fn from_lua_deep<'gc>(
     ctx: Context<'gc>,
     value: LuaValue<'gc>,
@@ -126,8 +141,8 @@ fn from_lua_deep<'gc>(
     Ok(IpcValue::Table(Arc::new(table)))
 }
 
-impl IpcTable {
-    pub(crate) fn to_lua<'gc>(&self, ctx: Context<'gc>) -> LuaValue<'gc> {
+impl IpcToLua for IpcTable {
+    fn to_lua<'gc>(&self, ctx: Context<'gc>) -> LuaValue<'gc> {
         let table = Table::new(&ctx);
         match self {
             Self::List(items) => {

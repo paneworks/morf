@@ -21,7 +21,7 @@
 //! one it had, BackSpace or Delete alone clears it, and a modifier pressed
 //! alone waits for the key it goes with.
 
-use morf_lua::IpcValue;
+use morf_value::IpcValue;
 
 use crate::control::ControlState;
 use crate::value::{expect_boolean, expect_number, number, text};

@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Values a runtime marked `morf.reloadable`, carried to its replacement.
-pub(crate) type Seed = BTreeMap<String, morf_lua::IpcValue>;
+pub(crate) type Seed = BTreeMap<String, morf_value::IpcValue>;
 
 /// What a worker leaves behind when it ends.
 ///
