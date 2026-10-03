@@ -1822,6 +1822,18 @@ See `examples/demos/motion/exit.lua`.
 
 ### Hover and press
 
+`on_pressed(surface_x, surface_y, local_x, local_y, button, modifiers)`
+and `on_released` and `on_clicked` the same: `button` is `left`, `right`,
+`middle`, `back` or `forward` (nil from a touch), `modifiers` what the
+keyboard holds, `"shift"`, `"ctrl+alt"` or `""`. `on_dragged`,
+`on_drag_started` and `on_position_changed` (the pointer moving over the
+area) are told `(surface_x, surface_y, delta_x, delta_y, local_x,
+local_y, modifiers)`. A Shift-click extends a selection, a Ctrl-click
+toggles one, a Shift-drag holds to an axis: the modifiers come with the
+event, as they were when it happened. Tests press with them:
+`test.click(x, y, { modifiers = "shift" })`, and `test.press`,
+`test.drag` and `test.wheel` take the same option.
+
 A `MouseArea` keeps `hovered` (the pointer is over it, and it is the
 topmost area there) and `pressed` (a button or a touch went down on it and
 has not come up), both read-only. A binding follows them like any other
@@ -1871,7 +1883,9 @@ end)
 ### The wheel
 
 `on_wheel(surface_x, surface_y, pixel_x, pixel_y, step_x, step_y,
-local_x, local_y)` runs for a wheel turn or a touchpad scroll. The wheel
+local_x, local_y, modifiers)` runs for a wheel turn or a touchpad scroll;
+`modifiers` is what is held, as `"ctrl+shift"` (Ctrl with the wheel
+zooms, by custom). The wheel
 bubbles: it goes to the topmost `MouseArea` under the pointer that has an
 `on_wheel`, passing over any that have none, so a switch or a button on a
 scrolling page does not swallow the page's scroll. A `Flickable` under the

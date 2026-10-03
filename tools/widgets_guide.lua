@@ -34,9 +34,9 @@ local function list(t) return t and table.concat(t, ", ") or "" end
 
 local GLUE = { Control = "control", Press = "widgets", Range = "widgets", Plane = "widgets", Selection = "selection",
   Popup = "popup", TextField = "text_field", Scroll = "scroll", Collection = "collection", Disclosure = "disclosure",
-  Drag = "drag", Navigation = "navigation", Shell = "shell" }
+  Drag = "drag", Navigation = "navigation", Shell = "shell", Canvas = "canvas", Dock = "dock" }
 local ORDER = { "Press", "Range", "Plane", "Selection", "Popup", "TextField", "Scroll", "Collection", "Disclosure",
-  "Drag", "Navigation", "Shell" }
+  "Drag", "Navigation", "Shell", "Canvas", "Dock" }
 
 local out = {}
 local function p(s) out[#out + 1] = s or "" end
@@ -56,6 +56,7 @@ for _, name in ipairs(ORDER) do
   p("| roles | " .. list(a.role) .. " |")
   p("| state | " .. list(a.state) .. " |")
   if a.modes then p("| modes | " .. list(a.modes) .. " |") end
+  if a.tools then p("| tools | " .. list(a.tools) .. " |") end
   p("| signals | " .. list(a.signals) .. " |")
   p("| keys | " .. list(a.keys) .. " |")
   p("| slots | background, content, " .. list(a.slots) .. " |")
