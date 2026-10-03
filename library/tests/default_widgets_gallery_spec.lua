@@ -11,6 +11,7 @@ local test = morf.test
 local function env(name) local v = morf.env(name) if v == false or v == "" then return nil end return v end
 local SOURCE = [[
   local function env(name) local v = morf.env(name) if v == false or v == "" then return nil end return v end
+  morf.surface.width, morf.surface.height = 1920, 1080
   local kit = require("lib.kit.skins.default").make { variant = env("MORF_KIT_VARIANT") or "light" }
   package.loaded.kit = kit
 ]] .. require("lib.kit.samples").SOURCE
