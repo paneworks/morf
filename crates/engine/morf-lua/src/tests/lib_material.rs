@@ -11,7 +11,7 @@ use super::*;
 fn runtime(source: &str) -> Runtime {
     let mut runtime = Runtime::default();
     runtime.set_module_roots(vec![
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../library"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../library"),
     ]);
     let prelude = r#"
         local material = require("lib.material")

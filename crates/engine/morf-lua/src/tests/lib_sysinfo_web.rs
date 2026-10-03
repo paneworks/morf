@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use super::*;
 
 fn examples_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../library")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../library")
 }
 
 /// Runs `source` with `library/` as a module root and pumps the loop until

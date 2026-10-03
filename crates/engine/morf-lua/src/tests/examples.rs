@@ -11,7 +11,7 @@ fn fluid_transform_example_animates_square_to_circle_in_rust() {
     runtime
         .execute(
             "examples/demos/motion/fluid-transform.lua",
-            include_bytes!("../../../../examples/demos/motion/fluid-transform.lua"),
+            include_bytes!("../../../../../examples/demos/motion/fluid-transform.lua"),
         )
         .unwrap();
     runtime.tick_animations(Duration::from_secs(2)).unwrap();
@@ -52,7 +52,7 @@ fn morph_stack_example_combines_native_animation_and_geometry() {
     runtime
         .execute(
             "examples/demos/sdf/morph-stack.lua",
-            include_bytes!("../../../../examples/demos/sdf/morph-stack.lua"),
+            include_bytes!("../../../../../examples/demos/sdf/morph-stack.lua"),
         )
         .unwrap();
     runtime.tick_animations(Duration::from_secs(2)).unwrap();
@@ -94,7 +94,7 @@ fn motion_lab_example_drives_loops_shapes_and_field_edges_in_rust() {
     runtime
         .execute(
             "examples/demos/motion/motion-lab.lua",
-            include_bytes!("../../../../examples/demos/motion/motion-lab.lua"),
+            include_bytes!("../../../../../examples/demos/motion/motion-lab.lua"),
         )
         .unwrap();
     let root = runtime.scene().roots()[0];
@@ -173,7 +173,7 @@ fn clipboard_history_example_keeps_copies_and_drops() {
     runtime
         .execute(
             "examples/demos/desktop/clipboard-history.lua",
-            include_bytes!("../../../../examples/demos/desktop/clipboard-history.lua"),
+            include_bytes!("../../../../../examples/demos/desktop/clipboard-history.lua"),
         )
         .unwrap();
     assert!(runtime.watches_clipboard());

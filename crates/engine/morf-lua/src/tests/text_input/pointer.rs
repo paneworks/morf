@@ -155,7 +155,7 @@ fn the_example_types_into_the_field_it_focuses() {
     runtime
         .execute(
             "examples/demos/text/text-input.lua",
-            include_bytes!("../../../../../examples/demos/text/text-input.lua"),
+            include_bytes!("../../../../../../examples/demos/text/text-input.lua"),
         )
         .unwrap();
     let root = runtime.scene().roots()[0];

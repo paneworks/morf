@@ -33,7 +33,7 @@ pub(super) fn run_with_fake(name: &str, body: &str) -> String {
          local function bytes(s) return s end\n\
          {body}"
     );
-    let path = format!("{}/../../library/{name}.lua", env!("CARGO_MANIFEST_DIR"));
+    let path = format!("{}/../../../library/{name}.lua", env!("CARGO_MANIFEST_DIR"));
     let mut runtime = Runtime::default();
     runtime
         .execute(&path, script.as_bytes())
@@ -956,7 +956,7 @@ fn private_bus_notification_with_an_image_and_a_resident_action() {
     }
     let mut runtime = Runtime::default();
     let path = format!(
-        "{}/../../library/test-notifications-bus.lua",
+        "{}/../../../library/test-notifications-bus.lua",
         env!("CARGO_MANIFEST_DIR")
     );
     runtime

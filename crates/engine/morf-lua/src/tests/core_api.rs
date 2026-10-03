@@ -395,7 +395,7 @@ fn desktop_entries_scan_and_lookup_native_data() {
 
 #[test]
 fn transform_example_uses_the_native_watcher() {
-    let source = include_bytes!("../../../../examples/demos/motion/transform.lua");
+    let source = include_bytes!("../../../../../examples/demos/motion/transform.lua");
     let mut runtime = Runtime::default();
     runtime
         .execute("examples/demos/motion/transform.lua", source)

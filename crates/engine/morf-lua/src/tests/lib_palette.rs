@@ -65,7 +65,7 @@ fn pictures(dir: &Path) {
 fn runtime() -> Runtime {
     let mut runtime = Runtime::default();
     runtime.set_module_roots(vec![
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../library"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../library"),
     ]);
     runtime
 }
