@@ -103,6 +103,10 @@ function M.application(spec)
     morf.surface.exclusive_zone = 0
     morf.surface.keyboard_focus = "none"
   end
+  -- The configuration's own surface needs a root, though an application
+  -- draws nothing there: an empty one (its windows are surfaces of their
+  -- own).
+  ui.Item { width = 1, height = 1 }
   local given = spec.on_closed
   local options = {}
   for k, v in pairs(spec) do options[k] = v end
