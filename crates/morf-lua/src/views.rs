@@ -214,6 +214,10 @@ pub(crate) fn reconcile_lua_view(
         && height > 0.0
     {
         view.view.set_viewport(height);
+        // The pool keeps as many rows as two screens of them: a view made
+        // before its size was known (a bound height) learns it here.
+        let shown = view.view.visible_range(view.model.borrow().len()).len();
+        view.reuse_limit = view.reuse_limit.max(shown.max(1) * 2);
     }
     if let Some(field) = view.size_field.clone() {
         let extents = row_extents(&model, &field, view.view.item_extent());
