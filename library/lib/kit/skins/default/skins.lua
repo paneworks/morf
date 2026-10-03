@@ -142,7 +142,7 @@ return function(theme, M)
         behavior = { color = quick() } },
       indicator = ui.Rect { width = K, height = K, radius = K / 2,
         y = function() return oy() + (TH - K) / 2 end,
-        x = function() return ox() + (t.checked and (TW - K - 2) or 2) end,
+        x = function() return ox() + ((t.checked ~= (t.mirrored == true)) and (TW - K - 2) or 2) end,
         color = function() return P().knob end,
         border_width = 1, border_color = function() local p = P() return p.strong and p.ink or p.shade:alpha(p.dark and 0.5 or 0.35) end,
         behavior = { x = slide() } },

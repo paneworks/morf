@@ -155,6 +155,13 @@ pub(crate) fn coerce(
                 return Err(invalid(format!("`{name}` is not quadratic or circular")));
             }
         }
+        "layout_direction" => {
+            if let Value::String(name) = &value
+                && !matches!(name.as_str(), "" | "ltr" | "rtl")
+            {
+                return Err(invalid(format!("`{name}` is not ltr or rtl")));
+            }
+        }
         "accessible_role" => {
             if let Value::String(name) = &value
                 && !crate::accessible::ROLES.contains(&name.as_str())

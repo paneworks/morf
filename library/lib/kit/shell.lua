@@ -97,6 +97,12 @@ function M.make(widget, spec)
   -- the new width and the archetype would never hear of it.)
   local sent = tonumber(get(W))
   if sent and sent > 0 then ctl.send("resize", sent) end
+  -- Right to left the regions swap sides: a place `x` wide `w` from the
+  -- start is that far from the end.
+  local function flip(x, w)
+    if root.effective_direction ~= "rtl" then return x end
+    return (get(W) or 0) - x - w
+  end
   -- The regions, as landmarks.
   local function region(node, role, name, props)
     local holder = ui.Item(props)
@@ -105,17 +111,19 @@ function M.make(widget, spec)
     ui.reparent(node, holder)
     return holder
   end
+  local function main_w()
+    return math.max(0, (get(W) or 0) - (beside() and sidebar_w or 0) - (inspecting() and inspector_w or 0))
+  end
   local main = region(content, "main", spec.content_name or "Content", {
-    x = function() return beside() and sidebar_w or 0 end, y = top,
-    width = function() return math.max(0, (get(W) or 0) - (beside() and sidebar_w or 0) - (inspecting() and inspector_w or 0)) end,
-    height = body_h, clip = true })
+    x = function() return flip(beside() and sidebar_w or 0, main_w()) end, y = top,
+    width = main_w, height = body_h, clip = true })
   local parts = { main }
   local side, scrim
   if sidebar then
     -- Collapsed, the sidebar slides over the content from its edge.
     side = region(sidebar, "navigation", spec.sidebar_name or "Sidebar", {
       y = top, width = sidebar_w, height = body_h, z = 20, clip = true,
-      x = function() return (live() and t.sidebar_open) and 0 or -sidebar_w end })
+      x = function() return flip((live() and t.sidebar_open) and 0 or -sidebar_w, sidebar_w) end })
     -- A ground under it, so as a drawer it covers the page it slides over:
     -- the configuration's colour, else the kit's sidebar tone.
     local ok, kit = pcall(require, "kit")
@@ -131,7 +139,8 @@ function M.make(widget, spec)
   end
   if inspector then
     parts[#parts + 1] = region(inspector, "complementary", spec.inspector_name or "Details", {
-      x = function() return (get(W) or 0) - inspector_w end, y = top, width = inspector_w, height = body_h,
+      x = function() return flip((get(W) or 0) - inspector_w, inspector_w) end, y = top, width = inspector_w,
+      height = body_h,
       visible = function() return inspecting() and true or false end, clip = true })
   end
   if header then

@@ -227,7 +227,7 @@ fn measure_leaf(
                     .map(f64::from)
                     .or(positive(scene.number(node, "width")?)),
                 wrap: scene.bool_value(node, "wrap")?,
-                alignment: text_alignment(scene.string_value(node, "horizontal_alignment")?)?,
+                alignment: text_alignment(scene.directed_alignment(node)?)?,
                 elide: text_elide(scene.string_value(node, "elide")?)?,
                 font_weight: scene.number(node, "font_weight")?,
                 font_source: match scene.string_value(node, "font_source")? {

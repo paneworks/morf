@@ -275,7 +275,7 @@ impl Layout {
                         .copied()
                         .or(positive(scene.number(node, "width")?)),
                     wrap: scene.bool_value(node, "wrap")?,
-                    alignment: text_alignment(scene.string_value(node, "horizontal_alignment")?)?,
+                    alignment: text_alignment(scene.directed_alignment(node)?)?,
                     elide: text_elide(scene.string_value(node, "elide")?)?,
                     font_weight: scene.number(node, "font_weight")?,
                     font_source: match scene.string_value(node, "font_source")? {
@@ -465,6 +465,10 @@ impl Layout {
             parent_geometry.height = (parent_geometry.height - border * 2.0).max(0.0);
         }
         let children = scene.children(parent)?;
+        // Right to left: what is placed against the parent's sides goes
+        // against the other ones (`morf_scene::direction`). A scroller's
+        // content keeps its own origin.
+        let rtl = parent_element != Element::Flickable && scene.is_rtl(parent);
         let packed = matches!(parent_element, Element::Row | Element::Column);
         // Which children the positioner packs: the visible ones. The rest
         // are still placed, where the next shown child would go, at their
@@ -623,6 +627,9 @@ impl Layout {
                     }
                 }
                 _ => {}
+            }
+            if rtl && mirrors(parent_element, anchors) {
+                geometry.x = parent_geometry.width - geometry.x - geometry.width;
             }
             let local = Local::Placed {
                 x: geometry.x,
@@ -877,4 +884,15 @@ impl Layout {
         }
         placed
     }
+}
+
+/// Whether a child's horizontal place is relative to its parent's sides --
+/// packed by a row, column or grid, inset, or anchored left, right, centred or
+/// filling -- and so mirrors right to left. A child placed by its `x` alone
+/// keeps it.
+fn mirrors(parent: Element, anchors: &std::collections::BTreeMap<String, morf_scene::Value>) -> bool {
+    matches!(parent, Element::Row | Element::Column | Element::Grid | Element::Inset)
+        || ["left", "right", "horizontal_center", "fill", "center_in"]
+            .iter()
+            .any(|key| crate::helpers::flag(anchors, key))
 }

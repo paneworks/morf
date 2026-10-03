@@ -111,7 +111,8 @@ function V.build(M)
       kit.heading {
         id = "launcher-section-" .. entry.key, scope = "launcher", level = "section",
         viewport = function() return results end,
-        x = 14, anchors = { bottom = true, bottom_margin = 6 }, width = WIDTH - 2 * PAD - 120, elide = "right",
+        anchors = { left = true, left_margin = 14, bottom = true, bottom_margin = 6 }, width = WIDTH - 2 * PAD - 120,
+        elide = "right",
         text = entry.name, font_size = theme.size.small, font_weight = 600,
         color = kit.ink("lo"), ink = kit.ink("accent"),
       },
@@ -179,7 +180,7 @@ function V.build(M)
       end,
       on_clicked = function() M.activate(bound.row) end,
       ui.Row {
-        x = 12, y = (ROW - 32) / 2, gap = 13, align = "center",
+        anchors = { left = true, left_margin = 12 }, y = (ROW - 32) / 2, gap = 13, align = "center",
         icon_box,
         ui.Column {
           gap = 3,
@@ -217,7 +218,7 @@ function V.build(M)
       -- the answer.
       body = {
         ui.Row {
-          x = 12, y = (ROW - 32) / 2, gap = 17, align = "center",
+          anchors = { left = true, left_margin = 12 }, y = (ROW - 32) / 2, gap = 17, align = "center",
           row_icon(row),
           kit.text {
             id = "launcher-calc", text = row.name, font_size = theme.size.normal + 1,
@@ -506,7 +507,7 @@ function V.build(M)
     anchors = { left = true, right = true, bottom = true }, height = FOOTER,
     kit.surface { anchors = { left = true, right = true, top = true }, height = 1, color = kit.stroke("quiet") },
     ui.Row {
-      x = 16, anchors = { vertical_center = true }, gap = 8, align = "center",
+      anchors = { left = true, left_margin = 16, vertical_center = true }, gap = 8, align = "center",
       kit.icon(function() return select(2, mode_name()) end, 18, kit.ink("accent")),
       mode,
       kit.text {
@@ -531,7 +532,8 @@ function V.build(M)
     ui.Item {
       id = "launcher-field",
       anchors = { left = true, right = true, top = true }, height = SEARCH,
-      kit.icon("search", 24, function() return C.onSurfaceVariant end, { x = 20, y = (SEARCH - 24) / 2 }),
+      kit.icon("search", 24, function() return C.onSurfaceVariant end,
+        { anchors = { left = true, left_margin = 20 }, y = (SEARCH - 24) / 2 }),
       field_node,
       clear,
     },

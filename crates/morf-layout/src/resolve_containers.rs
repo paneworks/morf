@@ -41,9 +41,32 @@ impl Layout {
             self.forget_hidden_flex_children(scene, root)?;
         }
         let mut containers = vec![root];
+        // Right to left: each child's place in its flex parent mirrored in
+        // that parent's width, and everything under it moved with it.
+        let mut shifts: std::collections::HashMap<NodeHandle, f64> = std::collections::HashMap::new();
         for (node, mut placed, leaf, (x, y)) in placed {
             if !leaf {
                 containers.push(node);
+            }
+            let parent = scene.parent(node)?;
+            let inherited = parent.and_then(|p| shifts.get(&p).copied()).unwrap_or(0.0);
+            let mut x = x;
+            let mut own = 0.0;
+            if let Some(parent) = parent
+                && scene.is_rtl(parent)
+            {
+                let parent_width = if parent == root {
+                    geometry.width
+                } else {
+                    self.geometry.get(&parent).map_or(geometry.width, |g| g.width)
+                };
+                let mirrored = parent_width - x - placed.width;
+                own = mirrored - x;
+                x = mirrored;
+            }
+            if inherited != 0.0 || own != 0.0 {
+                placed.x += inherited + own;
+                shifts.insert(node, inherited + own);
             }
             let transition = (
                 scene.number(node, "transition_x")?,

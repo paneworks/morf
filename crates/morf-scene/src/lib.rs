@@ -10,6 +10,7 @@ mod channel;
 mod coerce;
 mod color;
 mod decoration;
+mod direction;
 mod error;
 mod exit;
 mod fling;
@@ -45,6 +46,7 @@ pub use channel::{Channel, MAX_CHANNEL_LEN, channel, channel_by_id, channels_gen
 pub use coerce::{ANCHOR_KEYS, CURSOR_SHAPES};
 pub use color::{ColorSpace, HueDirection, mix as mix_colors};
 pub use decoration::*;
+pub use direction::{default_rtl, locale_is_rtl, locale_rtl_from_env, set_default_rtl};
 pub use exit::ExitSpec;
 pub use focus::FocusPolicy;
 pub use gradient::*;

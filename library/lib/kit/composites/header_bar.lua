@@ -47,7 +47,8 @@ return function(spec)
     ends[#ends + 1] = control("close", "close", "Close", function() win:close() end)
   end
   local starts = spec.start or {}
-  local start_row = ui.Row { x = gap, anchors = { vertical_center = true }, gap = gap, table.unpack(starts) }
+  local start_row = ui.Row { anchors = { left = true, left_margin = gap, vertical_center = true }, gap = gap,
+    table.unpack(starts) }
   local end_row = ui.Row { anchors = { right = true, right_margin = gap, vertical_center = true }, gap = gap,
     table.unpack(ends) }
   local title = kit.text { id = id .. "-title", anchors = { horizontal_center = true },

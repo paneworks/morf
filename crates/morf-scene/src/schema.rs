@@ -72,6 +72,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         // whoever has to find the node again from outside -- `morf test`'s
         // `test.find { id = ... }`, a log line.
         string("id", ""),
+        // "ltr" or "rtl" for this subtree; "" takes the parent's
+        // (`direction.rs`).
+        string("layout_direction", ""),
         // What a screen reader is told (`accessible.rs`): the role, name and
         // description, and one table of the rest -- `value`, `minimum`,
         // `maximum`, `step`, `checked`, `expanded`, `selected`, `disabled`,

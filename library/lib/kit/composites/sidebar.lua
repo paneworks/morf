@@ -75,7 +75,7 @@ return function(spec)
     local ink = function() return (s.current() and kit.ink("accent") or kit.ink("lo"))() end
     if item.icon then
       ui.reparent(kit.icon(item.icon, 20, ink, rail and { anchors = { center_in = true } }
-        or { x = 12, anchors = { vertical_center = true } }), look)
+        or { anchors = { left = true, left_margin = 12, vertical_center = true } }), look)
     end
     local badge = item.badge
     local function has_badge()
@@ -84,7 +84,8 @@ return function(spec)
     end
     if not rail then
       local x = item.icon and 44 or 14
-      ui.reparent(kit.text { x = x, anchors = { vertical_center = true }, width = width - x - 44, elide = "right",
+      ui.reparent(kit.text { anchors = { left = true, left_margin = x, vertical_center = true }, width = width - x - 44,
+        elide = "right",
         text = item.label or key_of(item), font_weight = 500,
         color = function() return (s.current() and kit.ink("hi") or kit.ink("lo"))() end }, look)
     end
@@ -152,9 +153,11 @@ return function(spec)
 
   local toggle = widgets.icon { id = sid("toggle"), accessible_name = "Collapse sidebar", width = 36, height = 36,
     size = 20, icon_off = "side_navigation",
-    x = function() return st.collapsed and (RAIL - 36) / 2 or 10 end, y = 4,
+    -- At the start: (RAIL - 36) / 2 is its margin in the rail as well.
+    anchors = { left = true, left_margin = math.floor((RAIL - 36) / 2) }, y = 4,
     on_clicked = function() collapse(not st.collapsed) end }
-  local title = spec.title and kit.heading { x = 54, y = 10, height = 24, text = spec.title,
+  local title = spec.title and kit.heading { anchors = { left = true, left_margin = 54 }, y = 10, height = 24,
+    text = spec.title,
     visible = function() return not st.collapsed end } or nil
 
   local root = ui.Item { id = id, height = H, clip = true,

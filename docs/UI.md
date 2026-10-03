@@ -1648,6 +1648,24 @@ back to the node that had it -- the control that opened it -- when it
 closes. Closing hides the content in the layer; opening it again shows it
 there, and destroying it closes it.
 
+### Right to left
+
+`layout_direction = "rtl"` (or `"ltr"`) on any node sets the direction of
+its subtree; `""`, the default, takes the parent's, and the root takes the
+locale's (`LC_ALL`, `LC_MESSAGES`, `LANG`: Arabic, Hebrew, Persian, Urdu,
+... write right to left), or `MORF_DIRECTION` for a run. A right-to-left
+subtree mirrors what is placed against its parent's sides: rows, columns
+and grids pack from the right, an inset swaps its margins, a flex row runs
+right to left, a child anchored `left` is anchored right, and a text's
+`left` or `right` alignment swaps so it keeps to its start. A child placed
+by its own `x` keeps it -- a drawing positioned by number is the
+drawing's -- so a layout meant to mirror is anchored to its start
+(`anchors = { left = true, left_margin = 12 }`) rather than placed at
+`x = 12`. `node.effective_direction` reads `"ltr"` or `"rtl"`. Every kit
+control reads it into its archetype's `mirrored`: the arrow keys turn
+round, a slider's `visual_position` runs from the right, a switch's thumb
+starts on the right, and the Shell's sidebar stands on the right.
+
 ### Applications
 
 `morf app app.lua` runs a configuration as an application rather than a

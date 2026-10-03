@@ -240,9 +240,7 @@ pub(crate) fn append_node(
             wrap: scene.bool_value(node, "wrap")?,
             max_lines: scene.number(node, "max_lines")?.max(0.0) as usize,
             elide: render_text_elide(scene.string_value(node, "elide")?)?,
-            horizontal_alignment: render_text_alignment(
-                scene.string_value(node, "horizontal_alignment")?,
-            )?,
+            horizontal_alignment: render_text_alignment(scene.directed_alignment(node)?)?,
             vertical_alignment: vertical_alignment(
                 scene.string_value(node, "vertical_alignment")?,
             )?,

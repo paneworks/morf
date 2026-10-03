@@ -109,6 +109,13 @@ function M.make(archetype, widget, spec, extra)
   extra = extra or {}
   -- The skin is told which widget it draws.
   if spec.widget == nil then spec.widget = widget end
+  -- Right to left where the node lays out so (`layout_direction`, the
+  -- locale's by default): the archetype mirrors its keys and its visual_*
+  -- state. Read once the node is placed, so it follows where it went.
+  local root
+  if spec.mirrored == nil then
+    spec.mirrored = function() return root ~= nil and root.effective_direction == "rtl" end
+  end
   local slot_names = native.slots(archetype)
   local fields = {}
   for _, field in ipairs(BASE) do fields[#fields + 1] = field end
@@ -123,7 +130,7 @@ function M.make(archetype, widget, spec, extra)
   state.width, state.height = 0, 0
   for field, v in pairs(extra.state or {}) do state[field] = v end
   local t = morf.state(state)
-  local root, slots, waiting, builders
+  local slots, waiting, builders
   local repeat_timer
   -- What the click being delivered said, for the configuration's handler.
   local click_args = {}

@@ -56,7 +56,8 @@ local function height_of(spec) return spec.height or ((spec.subtitle and spec.su
 -- The title and subtitle, in `width` from `x`.
 local function titles(spec, x, width, H)
   local kit = K()
-  local col = { x = x, width = width, gap = 2, anchors = { vertical_center = true } }
+  -- Anchored to the start, so a right-to-left row mirrors it.
+  local col = { width = width, gap = 2, anchors = { left = true, left_margin = x, vertical_center = true } }
   if kit.text then
     col[#col + 1] = kit.text { text = spec.title or "", width = width, elide = "right",
       color = kit.ink and kit.ink("hi") }
@@ -79,8 +80,7 @@ local function frame(spec, parts)
   local lead = parts.lead
   if not lead and spec.icon and kit.icon then lead = kit.icon(spec.icon, 22, kit.ink and kit.ink("lo")) end
   if lead then
-    lead.x = PAD
-    lead.anchors = { vertical_center = true }
+    lead.anchors = { left = true, left_margin = PAD, vertical_center = true }
     children[#children + 1] = lead
     x = PAD + (parts.lead_w or 22) + 12
   end

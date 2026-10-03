@@ -58,7 +58,7 @@ return function(theme, M)
         border_color = function() return C().outline end,
         behavior = { color = motion } },
       indicator = ui.Item {
-        x = function() return (t.checked and 36 or 16) - thumb() / 2 end,
+        x = function() return ((t.checked ~= (t.mirrored == true)) and 36 or 16) - thumb() / 2 end,
         y = function() return 16 - thumb() / 2 end,
         width = thumb, height = thumb,
         behavior = { x = jump, y = jump, width = jump, height = jump },

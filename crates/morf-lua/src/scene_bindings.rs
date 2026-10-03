@@ -299,6 +299,19 @@ pub(crate) fn node_metatable<'gc>(
         } else {
             key
         };
+        // The direction the node lays out in, inherited (`layout_direction`
+        // is its own setting, "" when it takes its parent's). A binding that
+        // reads it re-runs when the node is laid out, so one made before
+        // the node had a parent settles once it has.
+        if key == "effective_direction" {
+            let mut state = read_state.borrow_mut();
+            if let Some(active) = &mut state.active {
+                active.property_reads.insert((node.handle, LAYOUT_SIZE.to_owned(), false));
+            }
+            let rtl = state.scene.is_rtl(node.handle);
+            stack.replace(ctx, if rtl { "rtl" } else { "ltr" });
+            return Ok(CallbackReturn::Return);
+        }
         // The laid-out rectangle, as the last frame resolved it. Distinct
         // from `width`, which is what the node asked for and is zero for a
         // node sized by its parent or its children. A binding that reads

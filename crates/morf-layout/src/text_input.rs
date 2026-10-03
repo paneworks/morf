@@ -129,7 +129,7 @@ impl InputShape {
                 width: width.or(positive(scene.number(node, "width")?)),
                 // One line scrolls rather than breaks, whatever `wrap` says.
                 wrap: multiline && scene.bool_value(node, "wrap")?,
-                alignment: text_alignment(scene.string_value(node, "horizontal_alignment")?)?,
+                alignment: text_alignment(scene.directed_alignment(node)?)?,
                 elide: TextElide::None,
                 font_weight: scene.number(node, "font_weight")?,
                 font_source: match scene.string_value(node, "font_source")? {

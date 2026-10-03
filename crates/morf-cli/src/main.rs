@@ -47,6 +47,13 @@ use config::*;
 fn main() -> ExitCode {
     // First, so a fault anywhere after this line leaves something to read.
     crash::install();
+    // The direction a layout with none of its own takes: the locale's, or
+    // MORF_DIRECTION (ltr, rtl) for a run.
+    morf_scene::set_default_rtl(match std::env::var("MORF_DIRECTION").as_deref() {
+        Ok("rtl") => true,
+        Ok("ltr") => false,
+        _ => morf_scene::locale_rtl_from_env(),
+    });
     // The widget archetypes, for every runtime this process makes.
     #[cfg(feature = "kit")]
     morf_kit::register();
