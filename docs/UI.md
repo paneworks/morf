@@ -2347,7 +2347,7 @@ are it -- then how its glue is used.
 | signals | on_clicked, on_pressed, on_released, on_toggled, on_long_pressed, on_double_clicked |
 | keys | space, return, arrows_in_group |
 | slots | background, content, indicator, icon, label, badge |
-| widgets | push, suggested, destructive, flat, raised, outlined, text, tonal, elevated, pill, circular, icon, link, close, copy, loading, toggle, toggle_group_member, switch, checkbox, radio, chip_assist, chip_filter, chip_input, chip_suggestion, tag, tile, card_action, row_activation, menu_item, check_menu_item, radio_menu_item, keycap, fab, extended_fab, speed_dial_item, segment, rating_star, help, disclosure_button, repeat_button, back, forward |
+| widgets | push, suggested, destructive, flat, raised, outlined, text, tonal, elevated, pill, circular, icon, link, close, copy, loading, toggle, toggle_group_member, switch, checkbox, radio, chip_assist, chip_filter, chip_input, chip_suggestion, tag, tile, card_action, row_activation, menu_item, check_menu_item, radio_menu_item, keycap, fab, extended_fab, speed_dial_item, segment, rating_star, help, disclosure_button, repeat_button, back, forward, hold_button |
 | arrived | stage 6 |
 
 Every widget the Press, Range, Plane and Selection archetypes make
@@ -2397,7 +2397,7 @@ Made through `lib.kit.widgets` like a press: `widgets.colour_plane { ... }`.
 | signals | on_current_changed, on_selection_changed, on_activated |
 | keys | arrows, home, end, typeahead, space_toggles, ctrl_a |
 | slots | background, content, item, indicator, separator |
-| widgets | tabs, segmented, view_switcher, inline_view_switcher, radio_group, toggle_group, list_selection, grid_selection, carousel_dots, pagination, stepper_header, sidebar_list, breadcrumbs, day_grid, swatch_grid, emoji_grid, icon_chooser, transfer_side, rating_items |
+| widgets | tabs, segmented, view_switcher, inline_view_switcher, radio_group, toggle_group, list_selection, grid_selection, carousel_dots, pagination, stepper_header, sidebar_list, breadcrumbs, day_grid, swatch_grid, emoji_grid, icon_chooser, transfer_side, rating_items, radial_menu, pie_menu, tumbler |
 | arrived | stage 7 |
 
 Selections (the Selection archetype): tabs, segmented choices, list and
@@ -2428,6 +2428,27 @@ entries instead of the skin (a layout's own swatches); and
 choose it. The live state adds `current_x`, `current_y`,
 `current_width`, `current_height`: the current entry's box within the
 control.
+
+`geometry` lays the entries out other than in a row:
+
+  "radial" (a radial menu, a pie menu): item 1 at twelve o'clock, the
+  rest clockwise on a circle of `radius` (half way between the hub and
+  the rim) in a `size` px square. The pointer over it points from the
+  centre (the archetype's "point": the entry in that sector is current,
+  none within `dead_radius` of the centre) and a release past the dead
+  radius activates -- a marking menu's flick. The live state adds
+  `outer`, `inner` and `radius` for the skin's sectors.
+
+  "tumbler" (a spinning wheel picker): the entries on a drum, `rows`
+  (5) tall. A vertical drag turns it continuously and a release
+  snaps it to the nearest entry, with a little of the flick's speed
+  carried on; a press on an entry off the centre turns it there; the
+  wheel and the arrows step. Entries away from the centre fold over the
+  drum (their area's `translate_y`, `scale_y`, `opacity`). The live
+  state adds `rows` (visible) and `row` (an entry's height).
+
+`selection.pie(spec)` makes a pie menu that opens over everything else:
+see there.
 
 #### Popup
 
@@ -2475,7 +2496,7 @@ drawer) the same behaviour: Escape, a press outside, the stack.
 | signals | on_edited, on_accepted, on_text_changed, on_invalid |
 | keys | editing, return_accepts, escape_reverts |
 | slots | background, content, field, leading, trailing, placeholder, counter, error |
-| widgets | entry, password, search, text_area, url, email, numeric_entry, otp, tag_input, mentions, inline_rename, entry_row, filter_field, code_input |
+| widgets | entry, password, search, text_area, url, email, numeric_entry, otp, tag_input, mentions, inline_rename, entry_row, filter_field, code_input, shortcut_recorder |
 | arrived | stage 9 |
 
 Text fields (the TextField archetype) around the engine's text input.
@@ -2619,7 +2640,7 @@ with it.
 | signals | on_drag_started, on_dragged, on_dropped, on_swiped |
 | keys | arrows, alt_arrows_reorder |
 | slots | background, content, handle, ghost, drop_indicator |
-| widgets | split_pane, resizable_panel, resize_grip, reorderable_rows, reorderable_tabs, sortable_grid, swipe_dismiss, swipe_actions, pull_to_refresh, sheet_handle, window_move, drag_source, drop_zone |
+| widgets | split_pane, resizable_panel, resize_grip, reorderable_rows, reorderable_tabs, sortable_grid, swipe_dismiss, swipe_actions, pull_to_refresh, sheet_handle, window_move, drag_source, drop_zone, slide_to_confirm |
 | arrived | stage 11 |
 
 Drags (the Drag archetype): split panes, resize grips, reorderable rows,
@@ -2803,6 +2824,258 @@ bar it is moved by) and `drop_indicator` (where a dragged tab would
 land: a node over the whole dock, shown while a tab is dragged over a
 stack, that puts its plate at `spec.drop_box()` -- x, y, w, h -- and
 may move it there as it likes).
+
+#### Transform
+
+| | |
+|---|---|
+| roles | group, dialog |
+| state | x, y, box_width, box_height, angle, active, handle, maximized, minimized |
+| signals | on_changed, on_committed, on_maximized, on_minimized |
+| keys | arrows_move, ctrl_arrows_resize, alt_arrows_turn, return_maximize, escape |
+| slots | background, content, frame, handle, rotate_handle, guide |
+| widgets | floating_panel, image_cropper, resize_box, pip_window, event_block |
+| arrived | stage 22 |
+
+Transforms (the Transform archetype): a box the user moves by its body,
+resizes from its edges and corners, and turns -- a floating panel, an
+image cropper's frame, the handles round a canvas item, a
+picture-in-picture window, a calendar's event.
+
+```lua
+local node, box = lib.kit.transform.make("floating_panel", {
+  title = "Inspector", x = 40, y = 40, width = 320, height = 240,
+  container = { 1280, 800 },          -- what it floats in (the area it fills, by default)
+  content = inspector,                -- or the spec's array part
+  on_committed = function(x, y, w, h, angle) save(x, y, w, h) end,
+  on_close = function() end,
+})
+box.maximize()  box.minimize()  box.restore()  box.set(x, y, w, h)  box.t.box_width
+
+```
+The node returned is the area the box floats in (filling its parent, or
+`container` px when given); the box itself (`box.node`) sits in it at
+`t.x`, `t.y`, `t.box_width` x `t.box_height` and carries the content.
+Its body moves it (a floating panel's only by its title bar, the top
+`title_height` px, whose double click maximizes); the skin's `handle`
+builder draws each grip (told `s.name` -- n, ne, e, se, s, sw, w, nw --
+`s.hovered()`, `s.held()`, `s.corner`), and a turned box (`rotatable`)
+has a knob `stalk` px over its top (the skin's `rotate_handle`). The
+skin's other slots: `background` (under the content: a window's ground,
+a cropper's dimming of what is outside), `frame` (over it: an outline,
+a title bar), `guide` (thirds while dragging) and `content`; a skin
+that sets `t.content_radius` has the content cut to those corners.
+
+Every press tells the archetype the box's centre on the surface, a drag
+the pointer on the surface (the box moves under it) and what is held:
+Shift keeps the aspect, Alt resizes about the centre. The arrows, Ctrl
+with them, Alt with them, Return and Escape are the archetype's.
+
+#### Sheet
+
+| | |
+|---|---|
+| roles | grid |
+| state | row, column, anchor_row, anchor_column, range, editing |
+| signals | on_current_changed, on_selection_changed, on_edit_started, on_edited, on_cleared, on_copy, on_cut, on_paste, on_toggled, on_activated |
+| keys | arrows, shift_arrows_range, ctrl_arrows_edge, home_end, page, tab, return, f2, type_to_edit, escape, delete, ctrl_a, ctrl_c_x_v |
+| slots | background, content, cell, header, range, cursor, editor |
+| widgets | spreadsheet, data_grid, step_sequencer, seat_map, cell_grid |
+| arrived | stage 22 |
+
+Sheets (the Sheet archetype): a grid the keyboard walks one cell at a
+time -- a spreadsheet, a data grid that edits in place, a step
+sequencer, a seat map (WAI-ARIA grid).
+
+```lua
+local node, sheet = lib.kit.sheet.make("spreadsheet", {
+  width = 600, height = 400, rows = 1000, columns = 8,
+  cell = function(row, col) return data[row][col] end,   -- a value or a string; may read signals
+  on_edited = function(row, col, text) data[row][col] = text end,
+  on_paste = function(row, col, grid) end,     -- grid: rows of strings, from TSV
+  on_cleared = function(r0, c0, r1, c1) end,
+})
+sheet.refresh()   -- cell() is read again
+
+```
+Spec: `rows`, `columns` (numbers or bindings), `cell(row, col)`,
+`headers` (column titles; A, B, C ... by default; false for none),
+`row_headers` (a list or `function(row)`; 1..n by default; false for
+none), `column_widths` (a list or one number), `row_height`,
+`header_height`, `row_header_width`, `disabled(row, col)` (a cell that
+takes no toggle or edit: a taken seat), `playhead` (a binding: the
+column a step sequencer plays), and the archetype's settings
+(`editable`, `toggle`, `read_only`, `page_rows`, `wrap`). Only the rows
+in sight are built; columns are not virtual. The header row and the row
+headers stay put while the cells scroll under them.
+
+The skin fills `cell` (a builder: `cell(s)` -> node, told `s.column`,
+`s.row()`, `s.value()`, `s.text()`, `s.disabled()`, `s.playing()`,
+`s.zebra`, `s.widget`), `header` (a builder: `header(h)` -> node, told
+`h.kind` -- "column", "row" or "corner" --, `h.index()`, `h.title()`,
+`h.current()`, `h.selected()`), `range` and `cursor` (nodes laid over
+the cells in their own coordinates: `spec.cursor_box(t)` and
+`spec.range_box(t)` give x, y, w, h, and `spec.cell_box(r0, c0, r1,
+c1)` any box; `spec.column_box(c)` a column's) and `editor` (a builder:
+`editor(props)` -> node, input -- a `ui.TextInput` made with `props`).
+
+#### Roving
+
+| | |
+|---|---|
+| roles | toolbar, menu_bar |
+| state | current, open |
+| signals | on_current_changed, on_open, on_close |
+| keys | arrows, home_end, menubar_down_opens, escape |
+| slots | background, content, indicator, separator |
+| widgets | toolbar_group, menubar, button_group, chip_row, icon_bar |
+| arrived | stage 22 |
+
+Rovings (the Roving archetype): one Tab stop for a group of controls the
+arrows move between -- a toolbar's buttons, a menu bar, a linked button
+group, a row of chips, a bar of icons (WAI-ARIA toolbar and menubar).
+
+```lua
+local node, group = roving.make("toolbar_group", {
+  id = "format", accessible_name = "Format",
+  items = {
+    { icon = "format_bold", tooltip = "Bold", checked = false, on_toggled = set_bold },
+    { icon = "format_italic", tooltip = "Italic", on_clicked = italic },
+    { separator = true },
+    some_kit_control,                          -- a node as it is
+    function(i) return build(i) end,           -- or a builder
+  },
+})
+group.focus() group.current() group.open(2) group.close()
+
+```
+A member is a node (a kit control), a builder, or a press described by
+`icon`, `label`, `tooltip`, `on_clicked`, `checked`/`on_toggled`,
+`enabled` (a value or a binding) and `id` -- drawn as the widget's
+member press (a toolbar's flat button, a button group's segment, a chip,
+an icon). `{ separator = true }` puts the skin's separator between two
+members. The current member alone is a Tab stop ("strong"), the others
+take a click ("click"), so Tab stops once and enters where it left; the
+arrows (Left/Right, Up/Down, both in a grid), Home and End move it,
+passing over disabled members.
+
+A menu bar's members are menus: `{ label = "File", items = { ... } }`,
+items as a popup menu's (lib.kit.popup). Down, Return and Space open the
+current one's menu; while one is open Left and Right open the next;
+Escape closes it and focus goes back to its title. F10 focuses the bar.
+
+Other fields: `orientation` ("horizontal", "vertical", "grid"),
+`columns`, `wrap`, `current`, `gap`, `padding`, `item_height`, `x`,
+`y`, `anchors`, `on_current_changed(i)`. The skin draws `background`,
+`indicator` (riding the current member's box: `t.cur_x`, `t.cur_y`,
+`t.cur_w`, `t.cur_h`; `t.within` while focus is inside, `t.keyboard`
+when a keyboard put it there, `t.open`) and `separator(vertical)`, a
+builder.
+
+#### Form
+
+| | |
+|---|---|
+| roles | form |
+| state | valid, dirty, pending, submitting, error_count, tried, first_invalid |
+| signals | on_submitted, on_invalid, on_reset, on_validity_changed, on_dirty_changed, on_show_error, on_hide_error |
+| keys | return_submits, ctrl_return |
+| slots | background, content, summary, message |
+| widgets | form, settings_form, login_form, inline_form |
+| arrived | stage 22 |
+
+Forms (the Form archetype): what a group of fields adds up to -- whether
+it can be sent, whether anything changed, what is wrong and where -- and
+the sending.
+
+```lua
+local node, form = form.make("login_form", {
+  width = 320, submit_label = "Sign in",
+  on_submit = function(values, done) sign_in(values.user, values.password, done) end,
+})
+form.field("user", { label = "Username", control = { widgets.entry { label = "Username", required = true } },
+  message = "Enter your username" })
+
+```
+`make` returns the control and a handle:
+
+* `field(name, opts)` adds a field. `opts.control` is what was made for
+  it: a node, or the returns of a kit control packed in a table
+  (`{ widgets.entry { ... } }`: the control, the input that holds focus,
+  its live state, its handle). `valid`, `dirty`, `message` and `value`
+  are bindings (a message may be a string); a kit text field gives its
+  own (`acceptable`, its text, and what it was made with) when they are
+  left out. `validate(value, done)` checks out of line -- a name still
+  free on the server --: the field is pending until `done(ok, message)`.
+  `label` names it in the summary; `place = false` leaves the node where
+  the configuration put it (bind `error(name)` to show its message);
+  `reset(value)` puts a control that is not a text field back.
+* `error(name)`: the field's message while the policy shows it, else "";
+  `shown(name)` whether it shows.
+* `submit()`, `reset()`, `remove(name)`, `focus(name)`, and `t`, the
+  form's live state (`valid`, `dirty`, `pending`, `submitting`, `tried`,
+  `error_count`, `first_invalid`).
+
+`spec.on_submit(values, done)` sends: `done(ok, message)` finishes it; a
+failure's message shows in the summary. `spec.flick`, the Flickable the
+form scrolls in, is scrolled to a field the form sends the keyboard to.
+
+The widget lays the fields out: `form` a column under its summary with
+the submit button at the end, `login_form` the same with a full-width
+button, `settings_form` a column that saves itself once what changed is
+valid (no button; its summary says unsaved, saving, saved), and
+`inline_form` one row, the field and its button. The skin draws the
+`summary` (errors, a failed send, the save status) and, through its
+`message` builder (name, message, shown, width, id), each field's message
+under it; the submit button is a kit Press drawn as `form_submit` (the
+theme's suggested action, its loading indicator while sending). What
+the policy shows, when the form may send and Return, are the
+archetype's.
+
+#### Overflow
+
+| | |
+|---|---|
+| roles | toolbar |
+| state | shown, hidden, overflowing, menu_open |
+| signals | on_changed |
+| keys | more_return_opens, menu_arrows |
+| slots | background, content, more, menu |
+| widgets | overflow_toolbar, overflow_tabs, overflow_breadcrumbs, chip_overflow, priority_nav |
+| arrived | stage 22 |
+
+Overflows (the Overflow archetype): items sharing a line keep the ones
+that fit and put the rest behind a "more" button (priority+) -- a
+toolbar's actions, a tab strip, a breadcrumb trail, a row of chips, a
+site's navigation.
+
+```lua
+local node, bar = overflow.make("overflow_toolbar", {
+  id = "actions", width = function() return room:get() end,
+  items = {
+    { icon = "content_cut", label = "Cut", on_activated = cut, priority = 2 },
+    { icon = "share", label = "Share", on_activated = share, pinned = true },
+    { node = some_control, label = "Zoom", on_activated = zoom },   -- a node as it is
+  },
+})
+bar.open_menu() bar.close_menu() bar.shown() bar.hidden()
+
+```
+Each item's laid-out width is measured and the archetype decides what
+fits the control's width: higher `priority` stays longer, `pinned`
+never goes, equals go from the end (breadcrumbs: from the middle, so the
+first and the last stay). Shown items sit in a row at running x and
+spring to their places as the line changes; hidden ones are hidden. The
+"more" button (the skin's `more(s)` look on a press; "…" between a
+breadcrumb trail's ends) opens a menu listing the hidden items, and a
+press there runs the item's `on_activated` (or `on_clicked`).
+
+A tab strip and a navigation take `current` (a value or a binding) and
+`on_current_changed(i)`: the current item is chosen and given the
+highest priority, so it never goes. Other fields: `mode` ("end",
+"start", "middle", "priority"), `gap`, `height`, `menu_width`, `x`,
+`y`, `anchors`, `on_changed(shown, hidden)`. Ids: `<id>-item-<n>` (or
+the item's own `id`), `<id>-more`, `<id>-menu`, `<id>-menu-<n>`.
 
 ### Display widgets
 
@@ -3720,8 +3993,11 @@ keeps it in the menu only); one without shows its icon and a tooltip.
 while on, and `on_toggled(on)` hears it. When the items are wider than
 the toolbar the last ones leave it, a "more" button takes their place
 and its menu lists them -- a press there runs the item (or toggles it)
-as the button would. Tab reaches each button; Space and Return press
-it. Other fields: `x`, `y`, `height` (40), `menu_width` (220),
+as the button would. The buttons are one Tab stop (the Roving archetype,
+headless): Tab enters at the one last used, Left/Right, Home and End
+walk the shown ones, passing over disabled ones; Space and Return press
+it. What fits is the Overflow archetype's (headless): higher `priority`
+stays longer. Other fields: `x`, `y`, `height` (40), `menu_width` (220),
 `accessible_name`. Ids: `<id>-item-<n>` (or the item's own `id`),
 `<id>-more`, `<id>-menu`, `<id>-menu-<n>`.
 
