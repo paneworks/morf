@@ -1661,10 +1661,16 @@ input; Tab then walks only the overlay. `escape = false` and
 `outside = false` keep it open on those; a press on the anchor never counts
 as outside, so a button that toggles its menu works. Focus moves to the
 first node in it Tab would reach as it opens (`focus = false` leaves focus
-where it is), with the ring when the focus it took over had one, and goes
-back to the node that had it -- the control that opened it -- when it
-closes. Closing hides the content in the layer; opening it again shows it
-there, and destroying it closes it.
+where it is; focus already inside it, put there by what opened it, stays),
+with the ring when the focus it took over had one, and goes back to the
+node that had it -- the control that opened it -- when it closes
+(`restore = false` leaves it alone). Closing hides the content in the
+layer; opening it again shows it there, and destroying it closes it.
+
+A kit popup (`lib.kit.popup`) closes at once -- focus back, what is under
+it live again -- and then plays its theme's exit: it stays in the layer
+for the theme's `linger` (`popup_motion`'s) as a ghost that takes no input
+and gives no focus back, and is taken back if it opens again meanwhile.
 
 ### Right to left
 

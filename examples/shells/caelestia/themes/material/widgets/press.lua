@@ -128,18 +128,18 @@ return function(S, theme, M)
 
   --- A flat button: no container, the surface's ink, the state layer only.
   function S.flat(t, spec)
-    return button(t, spec, { ink = function() return C().onSurfaceVariant end })
+    return button(t, spec, { ink = function() return get(spec.ink) or C().onSurfaceVariant end })
   end
 
   --- The text button: no container, the primary as its ink.
   function S.text(t, spec)
-    return button(t, spec, { ink = function() return C().primary end })
+    return button(t, spec, { ink = function() return get(spec.ink) or C().primary end })
   end
 
   --- The tonal button: the secondary container.
   function S.tonal(t, spec)
-    return button(t, spec, { container = function() return C().secondaryContainer end,
-      ink = function() return C().onSecondaryContainer end, level = 0, hover_level = 1 })
+    return button(t, spec, { container = function() return get(spec.color) or C().secondaryContainer end,
+      ink = function() return get(spec.ink) or C().onSecondaryContainer end, level = 0, hover_level = 1 })
   end
 
   --- The outlined button: an outline, the primary as its ink.

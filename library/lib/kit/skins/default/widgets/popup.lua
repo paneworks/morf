@@ -97,6 +97,8 @@ return function(S, theme, M)
     local function now() return rest end
     local function shut(key, rest) return function() if state.open() then return rest end return now()[key] end end
     return {
+      -- How long it stays in the layer once shut, while it goes.
+      linger = (theme.reduced or (theme.duration.small or 0) <= 0) and 0 or 220,
       behavior = { scale = grow, scale_x = grow, translate_x = glide, translate_y = glide,
         opacity = { duration = theme.duration.small, easing = theme.ease.decelerate } },
       transform_origin_x = function() return now().ox end, transform_origin_y = function() return now().oy end,

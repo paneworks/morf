@@ -132,8 +132,27 @@ function M.make(widget, spec)
   local root, t, ctl
   -- Whether it is showing, for the theme's motion (`popup_motion`).
   local shown = morf.signal("kit.popup.shown." .. tostring(handle), false)
+  -- "shut", "open", or "leaving": closed, but still in the layer while
+  -- the theme's exit plays (`motion.linger` ms), taking no input.
+  local phase = "shut"
+  local motion, leave_timer
+  -- Each opening's own on_close: a later one makes the earlier stale.
+  local generation = 0
+  local anchor_now
+  local function linger() return motion and tonumber(motion.linger) or 0 end
+  local function leave()
+    phase = "leaving"
+    shown:set(false)
+    if leave_timer then leave_timer:cancel() end
+    leave_timer = morf.timer(linger(), function()
+      leave_timer = nil
+      if phase == "leaving" then morf.overlay.close(root) end
+    end, false)
+  end
+  -- (Out of the layer at once -- focus goes back, what is under it takes
+  -- input -- and, with an exit to play, in again as a ghost: `closed`.)
   local function close(reason)
-    if not t or not t.open then return end
+    if phase ~= "open" then return end
     if spec.on_about_to_close and spec.on_about_to_close(reason or "closed") == false then return end
     morf.overlay.close(root)
   end
@@ -150,42 +169,80 @@ function M.make(widget, spec)
     -- How the theme brings it in (`popup_motion`): its node's pose while
     -- shut and open, and the behaviours that carry it between them.
     local has_kit, theme_kit = pcall(require, "kit")
-    local motion = has_kit and type(theme_kit) == "table" and theme_kit.popup_motion
+    motion = has_kit and type(theme_kit) == "table" and theme_kit.popup_motion
       and theme_kit.popup_motion(widget, spec, {
         open = function() return shown:get() end,
         size = function(axis) return root and root["layout_" .. axis] or 0 end,
       }) or nil
-    if motion and spec.behavior == nil then for k, v in pairs(motion) do props[k] = v end end
+    if motion and spec.behavior ~= nil then motion = nil end
+    if motion then for k, v in pairs(motion) do if k ~= "linger" then props[k] = v end end end
     root, t, ctl = control.make("Popup", widget, spec, { children = { content }, props = props })
     if pad > 0 then content.x, content.y = pad, pad end
     handle.node, handle.t = root, t
   end
-  local anchor_now
+  -- Into the layer: as itself, or as the ghost it leaves as.
+  local function place(ghost, on_close)
+    generation = generation + 1
+    local mine = generation
+    local options = { anchor = anchor_now, root = spec.root, placement = t.placement, gap = spec.gap,
+      except = spec.except,
+      on_close = function(reason) if mine == generation then on_close(reason) end end }
+    -- (A ghost takes no input at all: a press goes through it to what is
+    -- under it, as though it had gone.)
+    root.enabled = not ghost
+    if ghost then
+      options.dim, options.modal, options.escape, options.outside, options.focus = false, false, false, false, false
+      options.restore = false
+    else
+      options.dim, options.modal, options.escape, options.outside, options.focus =
+        t.dim, t.modal, t.escape, t.outside, t.focus_on_open
+    end
+    morf.overlay.open(root, options)
+  end
+  local function closed(reason)
+    if phase == "leaving" then
+      -- The exit has played (or the content went): out of the layer.
+      if reason == "closed" or reason == "gone" then phase = "shut" end
+      return
+    end
+    if phase ~= "open" then return end
+    -- Escape or a press outside, which the layer has done already: a
+    -- popup that refuses opens again; one that goes leaves as a ghost
+    -- while its exit plays. (A close asked for was asked already.)
+    if reason ~= "closed" and spec.on_about_to_close and spec.on_about_to_close(reason) == false then
+      ctl.send("close", reason)
+      phase = "shut"
+      handle.open(anchor_now)
+      return
+    end
+    ctl.send("close", reason)
+    if linger() > 0 and reason ~= "gone" then
+      place(true, closed)
+      leave()
+    else
+      phase = "shut"
+      shown:set(false)
+    end
+  end
   function handle.open(anchor)
     build()
-    if t.open then return end
+    if phase == "open" then return end
+    if leave_timer then leave_timer:cancel() leave_timer = nil end
+    local was = phase
     anchor_now = anchor or spec.anchor
+    phase = "open"
+    -- (Live before it says it opened: what opens it may focus inside.)
+    root.enabled = true
     ctl.send("open")
     shown:set(true)
-    morf.overlay.open(root, {
-      anchor = anchor_now, root = spec.root, placement = t.placement, gap = spec.gap, except = spec.except,
-      dim = t.dim, modal = t.modal, escape = t.escape, outside = t.outside, focus = t.focus_on_open,
-      on_close = function(reason)
-        -- Escape or a press outside, which the layer has done already: a
-        -- popup that refuses opens again.
-        if reason ~= "closed" and spec.on_about_to_close and spec.on_about_to_close(reason) == false then
-          ctl.send("close", reason)
-          handle.open(anchor_now)
-          return
-        end
-        ctl.send("close", reason)
-        shown:set(false)
-      end,
-    })
+    -- (Taken back while leaving: out of the layer as a ghost and in again
+    -- as itself, in the same turn.)
+    if was == "leaving" then morf.overlay.close(root) end
+    place(false, closed)
   end
   handle.close = close
-  function handle.toggle(anchor) if t and t.open then close("closed") else handle.open(anchor) end end
-  function handle.is_open() return t ~= nil and t.open end
+  function handle.toggle(anchor) if phase == "open" then close("closed") else handle.open(anchor) end end
+  function handle.is_open() return phase == "open" end
   return handle
 end
 

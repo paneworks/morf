@@ -90,6 +90,8 @@ return function(S, theme, M, hud)
     local rest = pose(widget, spec.placement, known(spec.width, 280), known(spec.height, 280))
     local function shut(key, at) return function() if state.open() then return at end return rest[key] end end
     return {
+      -- How long it stays in the layer once shut, while it goes.
+      linger = reduced and 0 or 280,
       behavior = { scale_x = open, scale_y = open, translate_x = open, translate_y = open,
         opacity = reduced and { duration = 0 } or { duration = 180, easing = "out_cubic" } },
       transform_origin_x = rest.ox, transform_origin_y = rest.oy,

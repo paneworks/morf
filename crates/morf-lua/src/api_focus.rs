@@ -372,6 +372,16 @@ impl Runtime {
                     let Some(root) = state.scene.root_of(node) else {
                         return false;
                     };
+                    // Already inside it -- what opened it focused a part of
+                    // it first -- there is nowhere to move focus into.
+                    if state
+                        .focus
+                        .owner
+                        .get(&root)
+                        .is_some_and(|owner| within(&state, node, *owner))
+                    {
+                        return false;
+                    }
                     let Some(first) = chain(&state, node).first().copied() else {
                         return false;
                     };

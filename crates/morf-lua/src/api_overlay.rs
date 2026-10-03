@@ -18,7 +18,9 @@
 //! - `escape`, `outside`: whether Escape and a press outside it close it
 //!   (both true). A press on the anchor is not outside.
 //! - `focus`: whether focus moves into it as it opens (true). Closing gives
-//!   focus back to the node that had it, the control that opened it.
+//!   focus back to the node that had it, the control that opened it --
+//!   unless `restore` is false (a popup's ghost playing its exit, which
+//!   must not pull focus out of whatever opened since).
 //! - `on_close(reason)`: called once it has closed -- `"escape"`,
 //!   `"outside"`, `"closed"` (by `morf.overlay.close`) or `"gone"` (its
 //!   content was destroyed).
@@ -65,6 +67,8 @@ pub(crate) struct Overlay {
     on_close: Option<StashedClosure>,
     /// The node that had focus when it opened, and whether it showed it.
     restore: Option<(NodeHandle, bool)>,
+    /// Whether closing gives focus back (`restore`, true).
+    give_back: bool,
     placed: Option<(f64, f64)>,
     /// Left where it is (`morf.overlay.track`): only the behaviour is the
     /// layer's, and `wrapper` is the catcher behind it.
@@ -294,6 +298,7 @@ fn open<'gc>(
         outside: flag("outside", true),
         on_close,
         restore,
+        give_back: flag("restore", true),
         placed: None,
         tracked: false,
         except: nodes_of(ctx, get("except"))?,
@@ -386,6 +391,7 @@ fn track<'gc>(
         outside,
         on_close,
         restore,
+        give_back: flag("restore", true),
         placed: None,
         tracked: true,
         except: nodes_of(ctx, get("except"))?,
@@ -593,7 +599,7 @@ impl Runtime {
                 !state.scene.contains(owner) || within(&state, overlay.content, owner)
             })
         };
-        if refocus {
+        if refocus && overlay.give_back {
             let (node, visual) = overlay.restore.unzip();
             let node = node.filter(|node| self.reactive.borrow().scene.can_hold_focus(*node));
             let reason = if visual == Some(true) {
