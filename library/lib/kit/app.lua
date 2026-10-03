@@ -102,7 +102,6 @@ function M.application(spec)
     morf.surface.width, morf.surface.height = 1, 1
     morf.surface.exclusive_zone = 0
     morf.surface.keyboard_focus = "none"
-    ui.Item { width = 1, height = 1 }
   end
   local given = spec.on_closed
   local options = {}

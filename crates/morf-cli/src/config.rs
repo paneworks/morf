@@ -455,6 +455,13 @@ pub(crate) fn socket_path() -> Result<PathBuf, String> {
     if LOCK_TARGET.load(std::sync::atomic::Ordering::Relaxed) {
         return lock_socket_path_for(display);
     }
+    // An application (`morf app`) runs beside the display's shell and any
+    // other application: a socket of its own, by process.
+    if crate::app::is_app() {
+        let shell = socket_path_for(display)?;
+        let stem = shell.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        return Ok(shell.with_file_name(format!("{stem}-app-{}.sock", std::process::id())));
+    }
     socket_path_for(display)
 }
 
