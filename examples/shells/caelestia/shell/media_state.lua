@@ -6,9 +6,10 @@ local M = { BANDS = 56 }
 
 -- ------------------------------------------------------------- visualiser --
 
--- The bars the ring's dots follow, one per dot, 0 to 1. The monitor runs
--- only while the tab is on screen and something plays.
-local bars = morf.signal("caelestia.media.bars", {})
+-- The bars, 0 to 1: a data channel the audio monitor writes through the
+-- spectrum filter in Rust and the spectrum draws -- no Lua per frame. The
+-- monitor runs only while the tab is on screen and something plays.
+local bars = morf.channel { name = "caelestia.media.bars", size = M.BANDS, mode = "frame" }
 -- Beats heard: a count (the cover's shape turns on every fourth) and the
 -- last one's strength (the cover swells with it).
 local beats = morf.signal("caelestia.media.beats", 0)
@@ -18,20 +19,12 @@ local meter
 
 local function listen(on)
   if on and not meter then
-    local filter = spectrum.filter { bars = M.BANDS }
-    local clock = morf.elapsed_timer()
-    local last = clock:elapsed_ms()
     local ok, m = pcall(morf.audio.monitor, {
       -- Held back as long as the output takes to play it (a Bluetooth
       -- headset's quarter of a second), so the ring moves with what is
       -- heard rather than ahead of it.
       rate_hz = 60, bands = 48, delay = "device",
-      on_level = function(_, _, bands)
-        local now = clock:elapsed_ms()
-        local dt = (now - last) / 1000
-        last = now
-        bars:set(filter.step(bands or {}, dt))
-      end,
+      channel = bars, spectrum = spectrum.options { bars = M.BANDS },
       beat = true,
       on_beat = function(strength)
         beats:set(beats:get() + 1)

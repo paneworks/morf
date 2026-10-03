@@ -2,6 +2,7 @@
 -- value arc glowing over its track, a needle at its head
 -- and end stops; the centre is left to whatever it sits on. Small gauges keep a plain arc over a dashed track. Taken
 -- whole from the Futuristic theme's instruments.
+local morf = require("morf")
 local ui = require("morf.ui")
 
 return function(theme, kit)
@@ -19,15 +20,8 @@ return function(theme, kit)
   end
   local function accent() return kit.signal("accent") end
 
-  local function arc(cx, cy, r, from, sweep)
-    local a0, a1 = math.rad(from), math.rad(from + sweep)
-    local x0, y0 = cx + r * math.sin(a0), cy - r * math.cos(a0)
-    local x1, y1 = cx + r * math.sin(a1), cy - r * math.cos(a1)
-    if sweep >= 359.99 then
-      return ("M%g %g A%g %g 0 1 1 %g %g"):format(cx, cy - r, r, r, cx - .01, cy - r)
-    end
-    return ("M%g %g A%g %g 0 %d 1 %g %g"):format(x0, y0, r, r, sweep > 180 and 1 or 0, x1, y1)
-  end
+  -- (0 degrees at twelve o'clock, clockwise; a full turn too.)
+  local arc = morf.geometry.arc
   G.arc = arc
 
   --- The ring gauge: `size`, `value` (0..1), `color`, `sweep` (300),
@@ -44,15 +38,9 @@ return function(theme, kit)
     local r1 = r0 - 6                          -- tick ring
     local r2 = r1 - 6 - thick / 2              -- value arc
     local r3 = r2 - thick / 2 - 5              -- inner hairline
-    local ticks = {}
-    local count = spec.ticks or 60
-    for k = 0, count do
-      local a = math.rad(from + sweep * k / count)
-      local long = k % 5 == 0
-      local ri = r1 - (long and 5 or 2)
-      ticks[#ticks + 1] = ("M%g %g L%g %g "):format(c + ri * math.sin(a), c - ri * math.cos(a),
-        c + r1 * math.sin(a), c - r1 * math.cos(a))
-    end
+    -- The tick ruler: every fifth tick long.
+    local ticks = { morf.geometry.ticks(c, c, r1 - 2, r1,
+      { from = from, sweep = sweep, count = spec.ticks or 60, major = 5, major_r0 = r1 - 5 }) }
     local function v() return clamp01(get(spec.value)) end
     local value_arc = arc(c, c, r2, from, sweep)
     local function path(props)
@@ -126,14 +114,9 @@ return function(theme, kit)
         trim_end = function() return math.max(.001, v()) end, behavior = { trim_end = settle() } },
     }
     if sweep < 360 then
-      local ticks = {}
-      for _, deg in ipairs { from, from + sweep } do
-        local a = math.rad(deg)
-        local r0, r1 = r - stroke, r + stroke / 2 + 1
-        ticks[#ticks + 1] = ("M%.2f %.2f L%.2f %.2f "):format(size / 2 + r0 * math.sin(a), size / 2 - r0 * math.cos(a),
-          size / 2 + r1 * math.sin(a), size / 2 - r1 * math.cos(a))
-      end
-      node[#node + 1] = ui.Path { anchors = { fill = true }, view_box = { 0, 0, size, size }, d = table.concat(ticks),
+      -- A tick across each end.
+      local ends = morf.geometry.ticks(size / 2, size / 2, r - stroke, r + stroke / 2 + 1, { angles = { from, from + sweep } })
+      node[#node + 1] = ui.Path { anchors = { fill = true }, view_box = { 0, 0, size, size }, d = ends,
         fill_color = "transparent", stroke_width = 1, stroke_color = line("mark", color) }
     end
     for _, child in ipairs(spec) do node[#node + 1] = child end

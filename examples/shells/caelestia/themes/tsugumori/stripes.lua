@@ -1,23 +1,17 @@
 -- Tsugumori's hatched fills: diagonal stripes cut to their box, so a filled
 -- run is a clipped box of these whose width moves while the stripes stay
 -- put -- a changing level redraws nothing but its clip.
+local morf = require("morf")
 local ui = require("morf.ui")
 local S = {}
 
 local cache = {}
 --- Path data for `/` stripes across `w` x `h`, one every `gap` pixels
---- along the bottom edge, each cut where it leaves the box.
+--- along the bottom edge, each cut where it leaves the box
+--- (`morf.geometry.hatch`, kept per size).
 function S.hatch_d(w, h, gap)
   local key = ("d%g:%g:%g"):format(w, h, gap)
-  if cache[key] then return cache[key] end
-  local out = {}
-  for c = -h, w, gap do
-    local x1, x2 = math.max(c, 0), math.min(c + h, w)
-    if x2 > x1 then
-      out[#out + 1] = ("M%.1f %.1f L%.1f %.1f "):format(x1, h - (x1 - c), x2, h - (x2 - c))
-    end
-  end
-  cache[key] = #out > 0 and table.concat(out) or "M0 0"
+  if not cache[key] then cache[key] = morf.geometry.hatch(w, h, gap) end
   return cache[key]
 end
 
@@ -33,43 +27,10 @@ end
 
 --- Path data for the `/` stripes inside the area under a stepped series:
 --- step `i` spans [x0 + (i-1)*dx, x0 + i*dx] at screen height `ys[i]`, the
---- floor is `h`, the box `w` wide. Each stripe walks only the steps it
---- crosses and keeps its inside runs merged, so a stripe is one or a few
---- segments however many samples there are.
+--- floor is `h`, the box `w` wide (`morf.geometry.hatch_under`; a chart
+--- reading a channel draws the same with `plot = { kind = "hatch_steps" }`).
 function S.under_steps_d(x0, dx, ys, w, h, gap)
-  local n = #ys
-  if n == 0 or dx <= 0 then return "M0 0" end
-  local out = {}
-  local floor = math.floor
-  for c = floor((x0 - h) / gap) * gap, w, gap do
-    -- The stripe y = h - (x - c), from x = max(c, x0) to min(c + h, w).
-    local xa, xb = math.max(c, x0), math.min(c + h, w)
-    local i = floor((xa - x0) / dx) + 1
-    local run_a
-    local x = xa
-    while x < xb and i <= n do
-      local step_end = math.min(x0 + i * dx, xb)
-      -- Inside over this step while the stripe is below the level y: x <= c + h - y.
-      local limit = c + h - ys[i]
-      local b = math.min(step_end, limit)
-      if b > x then
-        if not run_a then run_a = x end
-        if b < step_end then
-          out[#out + 1] = ("M%.1f %.1f L%.1f %.1f "):format(run_a, h - (run_a - c), b, h - (b - c))
-          run_a = nil
-        end
-      elseif run_a then
-        out[#out + 1] = ("M%.1f %.1f L%.1f %.1f "):format(run_a, h - (run_a - c), x, h - (x - c))
-        run_a = nil
-      end
-      x = step_end
-      i = i + 1
-    end
-    if run_a and x > run_a then
-      out[#out + 1] = ("M%.1f %.1f L%.1f %.1f "):format(run_a, h - (run_a - c), x, h - (x - c))
-    end
-  end
-  return #out > 0 and table.concat(out) or "M0 0"
+  return morf.geometry.hatch_under(x0, dx, ys, w, h, gap)
 end
 
 return S

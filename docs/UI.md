@@ -1340,6 +1340,56 @@ adds the fill under it. `graph_grid(width, height, columns, rows)` builds the
 grid. Sampling intervals, history ownership, colors and UI structure remain
 configuration choices; only numeric path generation moves into the engine.
 
+The marks a style draws with, as path data (angles in degrees, clockwise
+from twelve o'clock):
+
+| function | |
+|----------|---|
+| `arc(cx, cy, r, from, sweep)` | an arc in pieces of at most 90°, so a full turn too |
+| `hatch(width, height, gap = 6)` | `/` stripes across a box, cut to it |
+| `hatch_under(x0, dx, ys, width, height, gap = 6)` | the stripes under a stepped series, step `i` at height `ys[i]` |
+| `ticks(cx, cy, r0, r1, { from, sweep, count \| angles, major, major_r0 })` | radial ticks; every `major`-th from `major_r0` |
+| `ruler(length, size, { pitch = 8, major = 5, minor = size / 2, min_count = 4, vertical })` | a tick ruler along an edge |
+| `segments(width, height, count, gap = 2, { vertical })` | a segmented bar's cells |
+| `plot(values, plot)` | what a path reading a channel with that `plot` draws (below) |
+
+### Data channels
+
+A chart that changes every frame should not build its outline in Lua. A
+data channel is a run of numbers a producer writes and a `ui.Path` draws:
+
+```lua
+local load = morf.channel { size = 60 }                 -- a ring: the newest 60 pushed
+local bars = morf.channel { size = 56, mode = "frame" } -- a frame: replaced whole
+load:push(0.4)        bars:set({ 0.1, 0.8, ... })
+ui.Path { width = 300, height = 80, view_box = { 0, 0, 300, 80 },
+  series = load.id, plot = { kind = "area", smooth = true }, fill_color = accent }
+```
+
+`ch:get()`, `ch:last()`, `ch:peak()` and `ch:len()` read it, and read
+reactively: a binding that called one runs again when the channel is
+written, by Lua or by a Rust producer. A path with `series` makes its
+outline from the channel's numbers where it is painted (`d` is not read),
+and the loop repaints for a write only when such a path is on show.
+
+`plot` says how: `kind` -- `"line"`, `"area"`, `"steps"`, `"steps_area"`,
+`"hatch_steps"` (the stripes under the steps, `hatch` apart) or `"bars"`;
+`width`, `height` (the view box's by default); `samples` across the width
+(a ring's size by default), newest at the right edge; `bottom`, `top`
+(a frame defaults to 0..1, a ring to its peak times `headroom`, never
+under `bottom + floor`); `pad_top`, `pad_bottom`; `smooth` (a curve
+through the samples); and for bars `gap`, `radius` (the most their ends
+round), `min_bar` (the least one stands, no more than its width) and
+`mirror` (grown from the middle). `with = other.id` puts another channel
+on the same automatic scale.
+
+`lib.channel.from(values)` gives a channel for a channel, a list or a
+function returning one -- copied in by an effect owned by the drawing
+node -- so a component can draw whatever it is handed through a channel.
+`morf.audio.monitor { channel = bars, spectrum = { bars = 56 } }` writes
+filtered bars with no Lua per frame, and `lib.sysinfo.channel(name)` is
+a history as a channel.
+
 ### Fields
 
 A `ui.Sdf` is one surface composed from the shapes beneath it — every

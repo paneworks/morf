@@ -14,16 +14,13 @@ local morf = require("morf")
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
+local channel = require("lib.channel")
 
 local C = theme.color
 local V = {}
 function V.new(samples)
   local M = {SAMPLES=samples}
 
-
-  local function series_path(values,w,h,bottom,top,closed)
-    return morf.geometry.graph_series(values,{width=w,height=h,samples=M.SAMPLES,bottom=bottom,top=top,closed=closed})
-  end
   local grid_path=morf.geometry.graph_grid
 
   --- A graph; returns the node and its `top` function (the value at the top).
@@ -35,13 +32,19 @@ function V.new(samples)
       if type(spec.bottom) == "function" then return spec.bottom() end
       return spec.bottom or 0
     end
+    -- Each series a data channel the paths draw (a function's lists are
+    -- copied in while the graph lives).
+    local first, feed_first = channel.from(spec.first)
+    local second, feed_second
+    if spec.second then second, feed_second = channel.from(spec.second) end
     local function top()
       if type(spec.top) == "function" then return math.max(bottom() + 1e-9, spec.top()) end
       if spec.top then return spec.top end
-      local peak = bottom()
-      for _, v in ipairs(spec.first()) do if v > peak then peak = v end end
-      if spec.second then for _, v in ipairs(spec.second()) do if v > peak then peak = v end end end
+      local peak = math.max(bottom(), first:peak() or 0, second and second:peak() or 0)
       return math.max(peak * 1.15, bottom() + (spec.floor or 1))
+    end
+    local function plot(kind)
+      return function() return { kind = kind, samples = M.SAMPLES, bottom = bottom(), top = top() } end
     end
     local function clear() return color():alpha(0) end
     local box = {
@@ -60,22 +63,25 @@ function V.new(samples)
     end
     box[#box + 1] = ui.Path {
       width = w, height = h, view_box = { 0, 0, w, h },
-      d = function() return series_path(spec.first(), w, h, bottom(), top(), true) end,
+      series = first.id, plot = plot("area"),
       fill_color = function() return color():alpha(0.28) end,
     }
     box[#box + 1] = ui.Path {
       width = w, height = h, view_box = { 0, 0, w, h },
-      d = function() return series_path(spec.first(), w, h, bottom(), top(), false) end,
+      series = first.id, plot = plot("line"),
       stroke_color = color, fill_color = clear, stroke_width = 1.5, stroke_join = "round",
     }
     if spec.second then
       box[#box + 1] = ui.Path {
         width = w, height = h, view_box = { 0, 0, w, h },
-        d = function() return series_path(spec.second(), w, h, bottom(), top(), false) end,
+        series = second.id, plot = plot("line"),
         stroke_color = color, fill_color = clear, stroke_width = 1.5, stroke_join = "round", dash = { 5, 4 },
       }
     end
-    return kit.surface(box), top
+    local node = kit.surface(box)
+    feed_first(node)
+    if feed_second then feed_second(node) end
+    return node, top
   end
 
   --- A graph with its caption over it, left, and its scale, right.

@@ -515,6 +515,15 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 // `stretch`, `preserve_aspect_fit` or `preserve_aspect_crop`,
                 // the words an Image uses.
                 string("fill_mode", "stretch"),
+                // A data channel to draw (`channel.rs`), its id: the outline
+                // is made from its numbers where the path is painted, and
+                // `d` is not read. `plot` says how: `{ kind = "line" |
+                // "area" | "steps" | "steps_area" | "hatch_steps" | "bars",
+                // width, height, samples, bottom, top, headroom, floor,
+                // pad_top, pad_bottom, smooth, gap, radius, min_bar, mirror,
+                // hatch, with }` (`morf_outline::series`).
+                any("series", Value::Nil),
+                any("plot", Value::Nil),
             ]);
         }
         Element::Row | Element::Column => {

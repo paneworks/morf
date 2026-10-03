@@ -279,6 +279,7 @@ pub(crate) fn install_signal_api<'gc>(
         }
     });
     morf.set_field(ctx, "shared", shared);
+    crate::channels::install(ctx, Rc::clone(&state), morf);
     morf.set_field(ctx, "persistent", persistent);
     morf.set_field(ctx, "scope", scope);
     let clock = UserData::new_static(

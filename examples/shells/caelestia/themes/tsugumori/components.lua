@@ -7,6 +7,7 @@ local stroke = require("themes.tsugumori.strokes")
 -- of this theme. Nothing here animates at rest.
 local morf = require("morf")
 local ui = require("morf.ui")
+local channel = require("lib.channel")
 local common = require("themes.kit_common")
 local get, clamp01 = common.get, common.clamp01
 return function(theme)
@@ -105,29 +106,10 @@ return function(theme)
   --- SVG path data for an arc of `sweep` degrees, clockwise from `from`
   --- degrees (0 at twelve o'clock), radius `r` about `(cx, cy)`, in pieces
   --- of at most 90 degrees.
-  function M.arc_path(cx, cy, r, from, sweep)
-    local function at(deg)
-      local a = math.rad(deg)
-      return cx + r * math.sin(a), cy - r * math.cos(a)
-    end
-    local x, y = at(from)
-    local d = { ("M%.3f %.3f"):format(x, y) }
-    local pieces = math.max(1, math.ceil(sweep / 90))
-    for i = 1, pieces do
-      local ex, ey = at(from + sweep * i / pieces)
-      d[#d + 1] = ("A%.3f %.3f 0 0 1 %.3f %.3f"):format(r, r, ex, ey)
-    end
-    return table.concat(d, " ")
-  end
+  M.arc_path = morf.geometry.arc
   --- Short radial strokes at `angles`, from radius `r0` to `r1`.
   local function radials(cx, cy, r0, r1, angles)
-    local out = {}
-    for _, deg in ipairs(angles) do
-      local a = math.rad(deg)
-      local s, c = math.sin(a), math.cos(a)
-      out[#out + 1] = ("M%.2f %.2f L%.2f %.2f "):format(cx + r0 * s, cy - r0 * c, cx + r1 * s, cy - r1 * c)
-    end
-    return table.concat(out)
+    return morf.geometry.ticks(cx, cy, r0, r1, { angles = angles })
   end
 
   -- -------------------------------------------------------------- text --
@@ -971,47 +953,23 @@ return function(theme)
   function M.chart(spec)
     local w, h = spec.width, spec.height
     local color = spec.color or M.signal("accent")
-    local first, second = spec.first or function() return {} end, spec.second
+    -- The series as data channels the paths draw: steps and the hatching
+    -- under them made where they are painted, no Lua building them.
+    local first, feed_first = channel.from(spec.first or {})
+    local second, feed_second
+    if spec.second then second, feed_second = channel.from(spec.second) end
     local function bottom() return tonumber(get(spec.bottom)) or 0 end
     local function top()
       if type(spec.top) == "function" then return math.max(bottom() + 1e-9, spec.top()) end
       if spec.top then return spec.top end
-      local peak = bottom()
-      for _, v in ipairs(first()) do if v > peak then peak = v end end
-      if second then for _, v in ipairs(second()) do if v > peak then peak = v end end end
+      local peak = math.max(bottom(), first:peak() or 0, second and second:peak() or 0)
       return math.max(peak * 1.15, bottom() + (spec.floor or 1))
     end
-    local function stepped(values, closed)
-      local W, H = get(w), get(h)
-      local n = #values
-      if n == 0 then return "M0 0" end
-      local samples = spec.samples or samples_default()
-      local dx = W / math.max(1, samples - 1)
-      local lo, hi = bottom(), top()
-      local function Y(value) return H - clamp01(((tonumber(value) or 0) - lo) / math.max(1e-9, hi - lo)) * (H - 2) end
-      local x0 = W - (n - 1) * dx
-      local out = {}
-      if closed then out[1] = ("M%.1f %.1f V%.1f"):format(x0, H, Y(values[1]))
-      else out[1] = ("M%.1f %.1f"):format(x0, Y(values[1])) end
-      for i = 2, n do out[#out + 1] = (" H%.1f V%.1f"):format(x0 + (i - 1) * dx, Y(values[i])) end
-      if closed then out[#out + 1] = (" V%.1f Z"):format(H) end
-      return table.concat(out)
-    end
-    -- The area under the stepped line, hatched: the series' steps, and
-    -- the `/` stripes cut to each of them.
-    local function hatched(values)
-      local W, H = get(w), get(h)
-      local n = #values
-      if n == 0 then return "M0 0" end
-      local samples = spec.samples or samples_default()
-      local dx = W / math.max(1, samples - 1)
-      local lo, hi = bottom(), top()
-      local x0 = W - (n - 1) * dx
-      local ys = {}
-      for i = 1, n do
-        ys[i] = H - clamp01(((tonumber(values[i]) or 0) - lo) / math.max(1e-9, hi - lo)) * (H - 2)
+    local function plot(kind)
+      return function()
+        return { kind = kind, width = get(w), height = get(h), samples = spec.samples or samples_default(),
+          bottom = bottom(), top = top(), pad_top = 2, pad_bottom = 0, hatch = 6 }
       end
-      return stripes.under_steps_d(x0, dx, ys, W, H, 6)
     end
     local function grid()
       local W, H = get(w), get(h)
@@ -1023,33 +981,35 @@ return function(theme)
     end
     local function box() return { 0, 0, get(w), get(h) } end
     local strong = spec.emphasis or spec.hatch
-    local plot = { width = w, height = h, clip = true,
+    local plot_box = { width = w, height = h, clip = true,
       ui.Rect { anchors = { fill = true }, color = function() return get(color):alpha(.035) end,
         border_width = 1, border_color = M.stroke("idle", color) },
       ui.Path { anchors = { fill = true }, view_box = box, d = grid, fill_color = "transparent",
         stroke_color = M.stroke("faint", color), stroke_width = 1 },
-      ui.Path { anchors = { fill = true }, view_box = box, d = function() return stepped(first(), true) end,
+      ui.Path { anchors = { fill = true }, view_box = box, series = first.id, plot = plot("steps_area"),
         fill_color = function() return get(color):alpha(strong and .14 or .08) end },
-      ui.Path { anchors = { fill = true }, view_box = box, d = function() return hatched(first()) end,
+      ui.Path { anchors = { fill = true }, view_box = box, series = first.id, plot = plot("hatch_steps"),
         fill_color = "transparent", stroke_color = function() return get(color):alpha(strong and .8 or .55) end,
         stroke_width = 1.5, stroke_cap = "butt" },
-      ui.Path { anchors = { fill = true }, view_box = box, d = function() return stepped(first(), false) end,
+      ui.Path { anchors = { fill = true }, view_box = box, series = first.id, plot = plot("steps"),
         fill_color = "transparent", stroke_color = color, stroke_width = 1.5, stroke_join = "miter" },
     }
     if second then
-      plot[#plot + 1] = ui.Path { anchors = { fill = true }, view_box = box,
-        d = function() return stepped(second(), false) end, fill_color = "transparent",
+      plot_box[#plot_box + 1] = ui.Path { anchors = { fill = true }, view_box = box,
+        series = second.id, plot = plot("steps"), fill_color = "transparent",
         stroke_color = function() return get(color):alpha(.55) end, stroke_width = 1, stroke_join = "miter" }
     end
     if spec.caption then
-      plot[#plot + 1] = M.label { text = spec.caption, x = 7, y = 4, font_size = 9 }
+      plot_box[#plot_box + 1] = M.label { text = spec.caption, x = 7, y = 4, font_size = 9 }
     end
     if spec.scale then
-      plot[#plot + 1] = M.label { text = function() return spec.scale(top()) end, anchors = { right = true,
+      plot_box[#plot_box + 1] = M.label { text = function() return spec.scale(top()) end, anchors = { right = true,
         right_margin = 7 }, y = 4, font_size = 9, horizontal_alignment = "right" }
     end
     local node = ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
-      ui.Item(plot), anchored_marks(8, M.stroke("mark", color), -3) }
+      ui.Item(plot_box), anchored_marks(8, M.stroke("mark", color), -3) }
+    feed_first(node)
+    if feed_second then feed_second(node) end
     return node, top
   end
 
@@ -1057,26 +1017,19 @@ return function(theme)
   --- the middle.
   function M.spectrum(spec)
     local w, h = spec.width, spec.height
-    local gap = spec.gap or 1
     local color = spec.color or M.signal("accent")
-    local function bars()
-      local values = get(spec.values) or {}
-      local n = #values
-      if n == 0 then return "M0 0" end
-      local bw = math.max(1, (w - gap * (n - 1)) / n)
-      local out = {}
-      for k, value in ipairs(values) do
-        local x = (k - 1) * (bw + gap)
-        local bh = math.max(1, clamp01(value) * h)
-        local y = spec.mirror and (h - bh) / 2 or h - bh
-        out[#out + 1] = ("M%.1f %.1f h%.1f v%.1f h%.1f Z "):format(x, y, bw, bh, -bw)
-      end
-      return table.concat(out)
-    end
-    return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
+    -- The bars are a data channel's (an audio monitor writes one with no
+    -- Lua per frame), drawn where they are painted: solid and square.
+    local bars, feed = channel.from(spec.channel or spec.values, { size = 512 })
+    local node = ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
       ui.Rect { y = spec.mirror and math.floor(h / 2) or h - 1, width = w, height = 1, color = M.stroke("idle", color) },
-      ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h }, d = bars, fill_color = color },
+      ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h }, series = bars.id,
+        plot = { kind = "bars", width = w, height = h, gap = spec.gap or 1, radius = 0, min_bar = 1,
+          mirror = spec.mirror == true },
+        fill_color = color },
     }
+    feed(node)
+    return node
   end
 
   --- A polygon over spokes: the axes as hairlines with a registration tick

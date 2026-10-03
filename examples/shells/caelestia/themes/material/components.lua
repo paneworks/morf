@@ -3,6 +3,7 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
+local channel = require("lib.channel")
 return function(theme)
 
 local M = {}
@@ -913,36 +914,24 @@ function M.chart(spec)
   local w, h = spec.width, spec.height
   local color = spec.color or M.signal("accent")
   local PAD = 4
+  -- The series as data channels the paths draw: smooth curves made where
+  -- they are painted, no Lua building them.
+  local first, feed_first = channel.from(spec.first)
+  local second, feed_second
+  if spec.second then second, feed_second = channel.from(spec.second) end
   local function bottom() return get(spec.bottom) or 0 end
   local function top()
     if type(spec.top) == "function" then return math.max(bottom() + 1e-9, spec.top()) end
     if spec.top then return spec.top end
-    local peak = bottom()
-    for _, v in ipairs(spec.first()) do if v > peak then peak = v end end
-    if spec.second then for _, v in ipairs(spec.second()) do if v > peak then peak = v end end end
+    local peak = math.max(bottom(), first:peak() or 0, second and second:peak() or 0)
     return math.max(peak * 1.15, bottom() + (spec.floor or 1))
   end
   local function ys(v, b, t) return h - PAD - (h - 2 * PAD) * common.clamp01((v - b) / math.max(1e-9, t - b)) end
-  local function points(values)
-    local b, t = bottom(), top()
-    local n = #values
-    local count = math.max(2, spec.samples or n)
-    local step = w / (count - 1)
-    local pts = {}
-    for i = math.max(1, n - count + 1), n do
-      pts[#pts + 1] = { w - (n - i) * step, ys(values[i], b, t) }
+  local function plot(kind)
+    return function()
+      return { kind = kind, smooth = true, width = w, height = h, samples = spec.samples, bottom = bottom(),
+        top = top(), pad_top = PAD, pad_bottom = PAD }
     end
-    return pts
-  end
-  local function line(values)
-    local pts = points(values)
-    if #pts < 2 then return ("M0 %g H%g"):format(h - PAD, w) end
-    return smooth(pts, PAD, h - PAD)
-  end
-  local function area(values)
-    local pts = points(values)
-    if #pts < 2 then return ("M0 %g H%g V%g H0 Z"):format(h - PAD, w, h) end
-    return smooth(pts, PAD, h - PAD) .. (" L%.2f %g L%.2f %g Z"):format(pts[#pts][1], h, pts[1][1], h)
   end
   local strong = spec.emphasis or spec.hatch
   local grid = {}
@@ -958,29 +947,33 @@ function M.chart(spec)
         return { angle = 180, stops = { { c:alpha(strong and 0.5 or 0.34), 0 }, { c:alpha(0), 1 } } }
       end,
       mask = ui.Path { width = w, height = h, view_box = { 0, 0, w, h },
-        d = function() return area(spec.first()) end, fill_color = "#ffffff" } },
+        series = first.id, plot = plot("area"), fill_color = "#ffffff" } },
   }
   if spec.second then
     box[#box + 1] = ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h },
-      d = function() return line(spec.second()) end, fill_color = "transparent",
+      series = second.id, plot = plot("line"), fill_color = "transparent",
       stroke_color = M.signal("extra"), stroke_width = 2, stroke_cap = "round", stroke_join = "round" }
   end
   box[#box + 1] = ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h },
-    d = function() return line(spec.first()) end, fill_color = "transparent",
+    series = first.id, plot = plot("line"), fill_color = "transparent",
     stroke_color = color, stroke_width = 2.5, stroke_cap = "round", stroke_join = "round" }
   -- The newest value: a dot on a halo of the plot's tone, springing to it.
   local function head()
-    local values = spec.first()
-    return ys(values[#values] or bottom(), bottom(), top())
+    return ys(first:last() or bottom(), bottom(), top())
   end
   box[#box + 1] = ui.Rect { x = w - 11, width = 10, height = 10, radius = 5, color = color,
     border_width = 2, border_color = function() return theme.color.surfaceContainerHigh end,
     y = function() return head() - 5 end, behavior = { y = M.spring(300, 30) } }
   if not spec.caption then
     box.x, box.y, box.anchors = spec.x, spec.y, spec.anchors
-    return ui.Item(box), top
+    local node = ui.Item(box)
+    feed_first(node)
+    if feed_second then feed_second(node) end
+    return node, top
   end
   local node = ui.Item(box)
+  feed_first(node)
+  if feed_second then feed_second(node) end
   return ui.Column { x = spec.x, y = spec.y, anchors = spec.anchors, gap = 6,
     M.caption { width = w, text = spec.caption, color = color,
       note = spec.scale and function() return spec.scale(top()) end or nil },
@@ -993,34 +986,18 @@ end
 --- `gap` (2).
 function M.spectrum(spec)
   local w, h = spec.width, spec.height
-  local gap = spec.gap or 2
-  local function bars()
-    local values = get(spec.values) or {}
-    local n = #values
-    if n == 0 then return "M0 0" end
-    local bw = math.max(1, (w - gap * (n - 1)) / n)
-    local out = {}
-    for k, v in ipairs(values) do
-      local x = (k - 1) * (bw + gap)
-      local bh = math.max(math.min(bw, 4), common.clamp01(v) * h)
-      local r = math.min(bw / 2, bh / 2, 8)
-      if spec.mirror then
-        local y = (h - bh) / 2
-        out[#out + 1] = ("M%.1f %.1f A%.1f %.1f 0 0 1 %.1f %.1f H%.1f A%.1f %.1f 0 0 1 %.1f %.1f V%.1f A%.1f %.1f 0 0 1 %.1f %.1f H%.1f A%.1f %.1f 0 0 1 %.1f %.1f Z ")
-          :format(x, y + r, r, r, x + r, y, x + bw - r, r, r, x + bw, y + r, y + bh - r, r, r, x + bw - r, y + bh,
-            x + r, r, r, x, y + bh - r)
-      else
-        local y = h - bh
-        out[#out + 1] = ("M%.1f %.1f V%.1f A%.1f %.1f 0 0 1 %.1f %.1f H%.1f A%.1f %.1f 0 0 1 %.1f %.1f V%.1f Z ")
-          :format(x, h, y + r, r, r, x + r, y, x + bw - r, r, r, x + bw, y + r, h)
-      end
-    end
-    return table.concat(out)
-  end
-  return ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
-    ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h }, d = bars,
+  -- The bars are a data channel's (an audio monitor writes one with no Lua
+  -- per frame), drawn where they are painted: rounded tops, capsules when
+  -- mirrored, never shorter than their width or 4 px.
+  local bars, feed = channel.from(spec.channel or spec.values, { size = 512 })
+  local node = ui.Item { id = spec.id, x = spec.x, y = spec.y, anchors = spec.anchors, width = w, height = h,
+    ui.Path { anchors = { fill = true }, view_box = { 0, 0, w, h }, series = bars.id,
+      plot = { kind = "bars", width = w, height = h, gap = spec.gap or 2, radius = 8, min_bar = 4,
+        mirror = spec.mirror == true },
       fill_color = spec.color or M.signal("accent") },
   }
+  feed(node)
+  return node
 end
 
 --- A soft blob over a round tonal web: the values as a smooth closed

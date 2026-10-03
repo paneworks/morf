@@ -77,6 +77,15 @@ pub(crate) struct MonitorHandlers {
     pub(crate) on_beat: Option<StashedClosure>,
     pub(crate) on_tempo: Option<StashedClosure>,
     pub(crate) tempo: Option<(f32, f32)>,
+    /// `channel`: each reading's bands written straight to a data channel,
+    /// through the `spectrum` filter when one is given -- no Lua per frame.
+    pub(crate) channel: Option<MonitorChannel>,
+}
+
+pub(crate) struct MonitorChannel {
+    pub(crate) channel: std::sync::Arc<morf_scene::Channel>,
+    pub(crate) filter: Option<morf_audio::spectrum::Filter>,
+    pub(crate) last: Option<std::time::Instant>,
 }
 
 impl AudioHost {
@@ -515,9 +524,31 @@ pub(crate) fn install_audio_api<'gc>(
                     on_beat: optional_closure(ctx, options, "on_beat").map_err(HostError)?,
                     on_tempo: optional_closure(ctx, options, "on_tempo").map_err(HostError)?,
                     tempo: None,
+                    channel: match options.get_value(ctx, "channel") {
+                        LuaValue::Nil => None,
+                        LuaValue::Table(handle) => {
+                            let id = match handle.get_value(ctx, "id") {
+                                LuaValue::Integer(id) => id as u64,
+                                LuaValue::Number(id) => id as u64,
+                                _ => return Err(HostError("monitor channel must be a morf.channel".into()).into()),
+                            };
+                            let channel = morf_scene::channel_by_id(id)
+                                .ok_or_else(|| HostError("monitor channel is gone".into()))?;
+                            let filter = match options.get_value(ctx, "spectrum") {
+                                LuaValue::Nil => None,
+                                LuaValue::Table(o) => Some(
+                                    morf_audio::spectrum::Filter::new(crate::api_audio_spectrum::options(ctx, Some(o))?)
+                                        .map_err(HostError)?,
+                                ),
+                                _ => return Err(HostError("monitor spectrum must be a table".into()).into()),
+                            };
+                            Some(MonitorChannel { channel, filter, last: None })
+                        }
+                        _ => return Err(HostError("monitor channel must be a morf.channel".into()).into()),
+                    },
                 };
-                if handlers.on_level.is_none() && !beat {
-                    return Err(HostError("monitor needs an on_level function".into()).into());
+                if handlers.on_level.is_none() && handlers.channel.is_none() && !beat {
+                    return Err(HostError("monitor needs an on_level function or a channel".into()).into());
                 }
                 if !beat && (handlers.on_beat.is_some() || handlers.on_tempo.is_some()) {
                     return Err(

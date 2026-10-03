@@ -43,6 +43,10 @@ local function options(opts)
   return o
 end
 
+--- The filter's options with the defaults filled in: what a monitor's
+--- `spectrum` takes to filter its bands into a channel in Rust.
+spectrum.options = options
+
 -- Native numeric operations; this module owns only options and subscriptions.
 spectrum.resample=morf.audio.spectrum_resample
 function spectrum.filter(opts)

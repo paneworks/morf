@@ -1873,6 +1873,7 @@ dependencies = [
  "libc",
  "morf-image",
  "morf-layout",
+ "morf-outline",
  "morf-region",
  "morf-scene",
  "morf-shader",

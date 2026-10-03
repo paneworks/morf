@@ -191,6 +191,7 @@ pub(crate) struct ReactiveState {
     pub(crate) hidden_revisions: u64,
     /// `morf.shared` values: this copy's signals for them, and what to publish.
     pub(crate) shared: crate::shared::SharedValues,
+    pub(crate) channels: crate::channels::Channels,
     pub(crate) reload_seed: HashMap<String, IpcValue>,
     pub(crate) reloadable: HashMap<String, SignalId>,
     pub(crate) reload_request: Option<bool>,
@@ -606,6 +607,7 @@ impl ReactiveState {
             service_definitions_revision: u64::MAX,
             hidden_revisions: 0,
             shared: crate::shared::SharedValues::default(),
+            channels: crate::channels::Channels::default(),
             reload_seed: HashMap::new(),
             reloadable: HashMap::new(),
             reload_request: None,

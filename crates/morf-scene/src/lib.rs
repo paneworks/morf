@@ -6,6 +6,7 @@ pub use model::{ListChange, ListModel, ModelId, ViewItem, ViewTransition, Virtua
 
 mod accessible;
 mod animation;
+mod channel;
 mod coerce;
 mod color;
 mod decoration;
@@ -40,6 +41,7 @@ mod types;
 
 pub use accessible::{AccessibleNode, AccessibleValue, Checked, ROLES as ACCESSIBLE_ROLES};
 pub use animation::*;
+pub use channel::{Channel, MAX_CHANNEL_LEN, channel, channel_by_id, channels_generation, drop_channel};
 pub use coerce::{ANCHOR_KEYS, CURSOR_SHAPES};
 pub use color::{ColorSpace, HueDirection, mix as mix_colors};
 pub use decoration::*;

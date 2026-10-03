@@ -90,6 +90,10 @@ pub(crate) fn assign_scene_property(
         .scene
         .assign(node, property, value)
         .map_err(|error| error.to_string())?;
+    // A path that draws a channel: watched for the channel's writes.
+    if property == "series" {
+        state.channels.note_series(node);
+    }
     // Text set in runs may hold links, which the layout places.
     if matches!(property, "spans" | "markup") {
         state.linked_texts.insert(node);

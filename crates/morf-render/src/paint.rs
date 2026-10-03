@@ -675,8 +675,13 @@ fn rect_shadow(scene: &Scene, node: NodeHandle) -> Result<RectShadow, RenderErro
 fn path_paint(scene: &Scene, node: NodeHandle) -> Result<crate::path::PathPaint, RenderError> {
     let word = |property: &str| scene.string_value(node, property);
     let invalid = |message: String| RenderError::Scene(format!("Path: {message}"));
+    let view_box = morf_scene::PathViewBox::parse(scene.current(node, "view_box")?).map_err(invalid)?;
+    let d = match series_d(scene, node, view_box) {
+        Some(d) => d,
+        None => word("d")?.to_owned(),
+    };
     Ok(crate::path::PathPaint {
-        d: word("d")?.to_owned(),
+        d,
         morph_to: word("morph_to")?.to_owned(),
         morph_progress: scene.number(node, "morph_progress")?,
         fill_color: scene.color_value(node, "fill_color")?,
@@ -693,8 +698,74 @@ fn path_paint(scene: &Scene, node: NodeHandle) -> Result<crate::path::PathPaint,
         dash_offset: scene.number(node, "dash_offset")?,
         trim_start: scene.number(node, "trim_start")?,
         trim_end: scene.number(node, "trim_end")?,
-        view_box: morf_scene::PathViewBox::parse(scene.current(node, "view_box")?)
-            .map_err(invalid)?,
+        view_box,
         fill_mode: image_fill_mode(word("fill_mode")?)?,
     })
+}
+
+/// A channel's id, given as a number or as a handle with an `id`.
+fn channel_id(value: &morf_scene::Value) -> Option<u64> {
+    match value {
+        morf_scene::Value::Number(n) if *n >= 1.0 => Some(*n as u64),
+        morf_scene::Value::Map(fields) => match fields.get("id") {
+            Some(morf_scene::Value::Number(n)) if *n >= 1.0 => Some(*n as u64),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The outline of a `Path` that draws a data channel (`series`), made from
+/// the channel's numbers now as its `plot` says; `None` when it draws `d`.
+fn series_d(scene: &Scene, node: NodeHandle, view_box: Option<morf_scene::PathViewBox>) -> Option<String> {
+    use morf_outline::series::{Kind, Plot, path};
+    use morf_scene::Value;
+    let id = channel_id(scene.current(node, "series").ok()?)?;
+    let Some(channel) = morf_scene::channel_by_id(id) else { return Some("M0 0".into()) };
+    let empty = std::collections::BTreeMap::new();
+    let fields = match scene.current(node, "plot") {
+        Ok(Value::Map(fields)) => fields,
+        _ => &empty,
+    };
+    let number = |key: &str| match fields.get(key) {
+        Some(Value::Number(n)) if n.is_finite() => Some(*n),
+        _ => None,
+    };
+    let flag = |key: &str| matches!(fields.get(key), Some(Value::Bool(true)));
+    let base = Plot::default();
+    let plot = Plot {
+        kind: match fields.get("kind") {
+            Some(Value::String(kind)) => Kind::parse(kind).unwrap_or(Kind::Line),
+            _ => Kind::Line,
+        },
+        width: number("width").or(view_box.map(|v| v.width)).unwrap_or(base.width),
+        height: number("height").or(view_box.map(|v| v.height)).unwrap_or(base.height),
+        samples: number("samples").map_or(if channel.is_ring() { channel.capacity() } else { 0 }, |n| n.max(0.0) as usize),
+        bottom: number("bottom").unwrap_or(base.bottom),
+        top: match fields.get("top") {
+            Some(Value::Number(n)) if n.is_finite() => Some(*n),
+            Some(_) => None,
+            // No top: a ring (a history) scales to its peak, a frame to 0..1.
+            None if channel.is_ring() => None,
+            None => base.top,
+        },
+        headroom: number("headroom").unwrap_or(base.headroom),
+        floor: number("floor").unwrap_or(base.floor),
+        pad_top: number("pad_top").unwrap_or(base.pad_top),
+        pad_bottom: number("pad_bottom").unwrap_or(base.pad_bottom),
+        smooth: flag("smooth"),
+        gap: number("gap").unwrap_or(base.gap),
+        radius: number("radius").unwrap_or(base.radius),
+        min_bar: number("min_bar").unwrap_or(base.min_bar),
+        mirror: flag("mirror"),
+        hatch: number("hatch").unwrap_or(base.hatch),
+    };
+    let (values, _) = channel.snapshot();
+    let others = fields
+        .get("with")
+        .and_then(channel_id)
+        .and_then(morf_scene::channel_by_id)
+        .map(|other| other.snapshot().0)
+        .unwrap_or_default();
+    Some(path(&values, &others, &plot))
 }

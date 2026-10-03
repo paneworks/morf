@@ -106,6 +106,24 @@ impl Runtime {
                 }
             }
             let host = state.audio.as_mut().expect("checked above");
+            for level in &poll.levels {
+                // A channel takes the bands in Rust: filtered, written, drawn.
+                let Some(out) = host.monitors.get_mut(&level.monitor).and_then(|m| m.channel.as_mut()) else {
+                    continue;
+                };
+                let now = std::time::Instant::now();
+                let dt = out.last.map(|then| now.duration_since(then).as_secs_f64());
+                out.last = Some(now);
+                let bands: Vec<f64> = level.bands.iter().map(|b| f64::from(*b)).collect();
+                let values: Vec<f32> = match out.filter.as_mut() {
+                    Some(filter) => match filter.step(&bands, dt) {
+                        Ok(values) => values.iter().map(|v| *v as f32).collect(),
+                        Err(_) => continue,
+                    },
+                    None => level.bands.clone(),
+                };
+                out.channel.set(&values);
+            }
             for level in poll.levels {
                 let Some(callback) = host
                     .monitors

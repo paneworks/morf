@@ -267,7 +267,7 @@ function M.build(ctx)
   local spectrum = ui.Item {
     id = "media-visualiser", x = BX, y = SPY, width = BW, height = SPH + 8,
     P.decor_box("grid", { width = SPW, height = SPH, columns = 8, rows = 4, color = kit.stroke("faint") }),
-    kit.spectrum { id = "media-spectrum", width = SPW, height = SPH, values = function() return bars:get() end,
+    kit.spectrum { id = "media-spectrum", width = SPW, height = SPH, channel = bars,
       color = accent, gap = 2 },
     P.decor_box("scale", { x = SPW + 4, y = 0, height = SPH, count = 12, major = 6, size = 6, flip = true,
       color = kit.stroke("idle") }),

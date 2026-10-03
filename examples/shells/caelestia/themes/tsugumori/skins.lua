@@ -80,13 +80,9 @@ return function(theme, M, hud)
 
   -- A tick ruler along `len`: a short tick every 8 px, a long one every 5th.
   local function ruler(x, y, len, size, color)
-    local n = math.max(4, math.floor(len / 8))
-    local d = {}
-    for k = 0, n do
-      d[#d + 1] = ("M%.1f 0 V%g "):format(len * k / n, k % 5 == 0 and size or size / 2)
-    end
     return ui.Path { x = x, y = y, width = len, height = size, view_box = { 0, 0, len, size },
-      d = table.concat(d), fill_color = "transparent", stroke_color = color, stroke_width = 1 }
+      d = morf.geometry.ruler(len, size, { pitch = 8, major = 5, min_count = 4 }),
+      fill_color = "transparent", stroke_color = color, stroke_width = 1 }
   end
 
   -- ----------------------------------------------------------- presses --

@@ -57,10 +57,15 @@ local rings = {}
 -- the sample rather than take it (a shared source's `mirrored`).
 local recording
 
+-- Each series is a ring for `history` and a data channel (morf.channel)
+-- for a chart to draw with no Lua: both take every sample.
 local function ring(name)
   local found = rings[name]
   if not found then
-    found = poll.ring(sysinfo.history_size)
+    local kept = poll.ring(sysinfo.history_size)
+    local channel = morf.channel { size = sysinfo.history_size }
+    found = { list = kept.list, channel = channel,
+      push = function(value) kept.push(value) channel:push(tonumber(value) or 0) end }
     rings[name] = found
   end
   if recording then
@@ -1210,6 +1215,15 @@ function sysinfo.history(name)
   if not feed then error("sysinfo.history: no series " .. tostring(name), 2) end
   sources[feed]:get()
   return ring(name).list()
+end
+
+--- The same series as a data channel (`morf.channel`), for a `ui.Path`'s
+--- `series` to draw. Reading it wakes the section that feeds it, as
+--- `history` does; a chart that keeps reading only the channel lets the
+--- section sleep, so read `history` (or this) where the chart is shown.
+function sysinfo.channel(name)
+  sysinfo.history(name)
+  return rings[name] and rings[name].channel or ring(name).channel
 end
 
 --- In-memory handoff for a soft UI reload; each series remains bounded.

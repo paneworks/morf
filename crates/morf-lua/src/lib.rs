@@ -58,6 +58,7 @@ mod api_ui_json;
 mod api_view;
 mod api_watch;
 pub mod arguments;
+mod channels;
 mod configure;
 mod configure_states;
 mod constructors;

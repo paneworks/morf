@@ -371,6 +371,18 @@ track is near 1, speech near 0. It costs a fraction of a percent of one
 core. An octave is ambiguous by nature: music with a strong half-time feel
 may read at half the tempo a dancer would clap.
 
+A `channel` (`morf.channel`, see UI.md) takes every reading's bands
+instead, written in Rust as they come -- through the filter
+`spectrum = { bars = 56, ... }` describes (`lib.spectrum.options`), when
+there is one -- so a spectrum drawn from the channel runs no Lua per frame;
+`on_level` may then be left out:
+
+```lua
+local bars = morf.channel { size = 56, mode = "frame" }
+morf.audio.monitor { rate_hz = 60, bands = 48, channel = bars, spectrum = spectrum.options { bars = 56 } }
+ui.Path { series = bars.id, plot = { kind = "bars", gap = 2 } }
+```
+
 `morf.audio.spectrum_resample(bands, count)` maps numeric bands to 1–512 bars.
 `morf.audio.spectrum_filter(options)` returns `step(bands, dt)` and `gain()`.
 It performs noise filtering, automatic sensitivity, smoothing, gravity and

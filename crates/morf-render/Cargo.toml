@@ -11,6 +11,7 @@ bytemuck.workspace = true
 kurbo.workspace = true
 morf-image.workspace = true
 morf-layout.workspace = true
+morf-outline.workspace = true
 morf-region.workspace = true
 morf-scene.workspace = true
 morf-shader.workspace = true
