@@ -49,6 +49,243 @@ function M.numbers(encoded)
   return out
 end
 
+--- Path data a skin draws with, in screen units: `polyline(points,
+--- closed)` (flat points), `curve(x0, y0, x1, y1)` (a wire leaving and
+--- arriving level).
+function M.polyline(points, closed)
+  if #points < 4 then return "M0 0" end
+  local parts = { ("M%.1f %.1f"):format(points[1], points[2]) }
+  for i = 3, #points - 1, 2 do parts[#parts + 1] = ("L%.1f %.1f"):format(points[i], points[i + 1]) end
+  if closed then parts[#parts + 1] = "Z" end
+  return table.concat(parts, " ")
+end
+
+function M.curve(x0, y0, x1, y1)
+  local d = math.max(30, math.abs(x1 - x0) / 2)
+  return ("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f"):format(x0, y0, x0 + d, y0, x1 - d, y1, x1, y1)
+end
+
+--- The step a grid's lines stand at on screen along `axis` ("x" or "y"):
+--- the world's grid (`base` when it has none) doubled or halved until
+--- the lines are between `lo` (12) and `hi` (96) pixels apart.
+function M.screen_step(t, axis, base, lo, hi)
+  local g = (t.grid and t.grid > 0) and t.grid or (base or 50)
+  local step = g * ((axis == "y" and t.zoom_y or t.zoom_x) or 1)
+  if step <= 0 then return lo or 12 end
+  while step < (lo or 12) do step = step * 2 end
+  while step > (hi or 96) do step = step / 2 end
+  return step
+end
+
+--- A grid that pans as one still drawing: its path is made again only as
+--- the zoom moves its step (or the canvas its size); the pan only slides
+--- it. `opts`: `kind` ("lines", "dots", "crosses": a plus `arm` px each
+--- way at each crossing, "rows": horizontal lines only, "columns"), `every` (a line every so many steps: a major grid), `base`,
+--- `lo`, `hi` (as `screen_step`), and any `ui.Path` properties
+--- (`stroke_color`, `stroke_width`, `opacity`, `visible`, `id`).
+function M.grid(t, opts)
+  opts = opts or {}
+  local ui_ = require("morf.ui")
+  local kind, every = opts.kind or "lines", opts.every or 1
+  local function step(axis) return M.screen_step(t, axis, opts.base, opts.lo, opts.hi) * every end
+  local function offset(axis)
+    local s = step(axis)
+    local v = axis == "x" and (t.view_x or 0) * (t.zoom_x or 1) or (t.view_y or 0) * (t.zoom_y or 1)
+    return -(v % s) - s
+  end
+  local function W() return (t.width or 0) + step("x") * 2 end
+  local function H() return (t.height or 0) + step("y") * 2 end
+  local props = {}
+  for k, v in pairs(opts) do
+    if k ~= "kind" and k ~= "every" and k ~= "base" and k ~= "lo" and k ~= "hi" and k ~= "arm" then props[k] = v end
+  end
+  props.x = function() return kind == "rows" and 0 or offset("x") end
+  props.y = function() return kind == "columns" and 0 or offset("y") end
+  props.width, props.height = W, H
+  props.fill_color = "transparent"
+  if kind == "dots" then props.stroke_cap = "round" end
+  props.d = function()
+    local sx, sy, w, h = step("x"), step("y"), W(), H()
+    local parts = {}
+    if kind == "dots" then
+      for x = 0, w, sx do
+        for y = 0, h, sy do parts[#parts + 1] = ("M%.1f %.1fh0.01"):format(x, y) end
+      end
+    elseif kind == "crosses" then
+      local a = opts.arm or 4
+      for x = 0, w, sx do
+        for y = 0, h, sy do
+          parts[#parts + 1] = ("M%.1f %.1fH%.1fM%.1f %.1fV%.1f"):format(x - a, y, x + a, x, y - a, y + a)
+        end
+      end
+    else
+      if kind ~= "rows" then for x = 0, w, sx do parts[#parts + 1] = ("M%.1f 0V%.1f"):format(x, h) end end
+      if kind ~= "columns" then for y = 0, h, sy do parts[#parts + 1] = ("M0 %.1fH%.1f"):format(y, w) end end
+    end
+    return #parts > 0 and table.concat(parts, " ") or "M0 0"
+  end
+  return ui_.Path(props)
+end
+
+--- What a skin's `draft` slot draws, as screen path data: the shape a
+--- drag is drawing (a rect, an ellipse, a line), or the points clicked
+--- out so far reaching on to the pointer; "M0 0" while there is none.
+function M.draft_path(t)
+  local function at(x, y) return (x - t.view_x) * t.zoom_x, (y - t.view_y) * t.zoom_y end
+  local pts = M.numbers(t.draft)
+  local g = t.gesture
+  if g == "draw" and #pts >= 4 then
+    local x0, y0 = at(pts[1], pts[2])
+    local x1, y1 = at(pts[3], pts[4])
+    if t.tool == "rect" then
+      return ("M%.1f %.1f H%.1f V%.1f H%.1f Z"):format(x0, y0, x1, y1, x0)
+    elseif t.tool == "ellipse" then
+      local cx, cy, rx, ry = (x0 + x1) / 2, (y0 + y1) / 2, math.abs(x1 - x0) / 2, math.abs(y1 - y0) / 2
+      if rx < 0.5 or ry < 0.5 then return "M0 0" end
+      return ("M%.1f %.1f A%.1f %.1f 0 1 1 %.1f %.1f A%.1f %.1f 0 1 1 %.1f %.1f Z"):format(cx - rx, cy, rx, ry,
+        cx + rx, cy, rx, ry, cx - rx, cy)
+    end
+    return ("M%.1f %.1f L%.1f %.1f"):format(x0, y0, x1, y1)
+  end
+  if #pts >= 2 then
+    local screen = {}
+    for i = 1, #pts - 1, 2 do
+      local x, y = at(pts[i], pts[i + 1])
+      local n = #screen
+      screen[n + 1], screen[n + 2] = x, y
+    end
+    if g == "draft" and t.tool ~= "freehand" and t.pointer_inside then
+      local x, y = at(t.pointer_x, t.pointer_y)
+      local n = #screen
+      screen[n + 1], screen[n + 2] = x, y
+    end
+    if #screen >= 4 then return M.polyline(screen, false) end
+  end
+  return "M0 0"
+end
+
+--- The wire being pulled from a port, as screen path data (`spec` is the
+--- skin's: its `port_point`); `shape(x0, y0, x1, y1)` draws it (a curve).
+function M.pull_path(t, spec, shape)
+  shape = shape or M.curve
+  if t.gesture ~= "connect" or not spec.port_point then return "M0 0" end
+  local fx, fy = spec.port_point(t.connect_from)
+  if not fx then return "M0 0" end
+  local x0, y0 = (fx - t.view_x) * t.zoom_x, (fy - t.view_y) * t.zoom_y
+  local x1, y1 = (t.connect_x - t.view_x) * t.zoom_x, (t.connect_y - t.view_y) * t.zoom_y
+  -- (Pulled backwards from an in port, the curve leaves the other way.)
+  if x1 < x0 and spec.port and (spec.port(t.connect_from) or {}).kind == "in" then return shape(x1, y1, x0, y0) end
+  return shape(x0, y0, x1, y1)
+end
+
+--- The rubber band (or brush, or zoom box) on screen: x, y, w, h.
+function M.band_box(t)
+  local b = M.numbers(t.band)
+  if #b < 4 then return 0, 0, 0, 0 end
+  local x0, y0 = (b[1] - t.view_x) * t.zoom_x, (b[2] - t.view_y) * t.zoom_y
+  local x1, y1 = (b[3] - t.view_x) * t.zoom_x, (b[4] - t.view_y) * t.zoom_y
+  return math.min(x0, x1), math.min(y0, y1), math.abs(x1 - x0), math.abs(y1 - y0)
+end
+
+--- The far corner of a flat list of points from the origin (a path's
+--- box, so nothing it draws is cut): w, h.
+function M.extent(points)
+  local w, h = 1, 1
+  for i = 1, #points - 1, 2 do w, h = math.max(w, points[i]), math.max(h, points[i + 1]) end
+  return w + 1, h + 1
+end
+
+--- The middle of a flat list of points and its size: cx, cy, w, h.
+function M.centre(points)
+  local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+  for i = 1, #points - 1, 2 do
+    x0, x1 = math.min(x0, points[i]), math.max(x1, points[i])
+    y0, y1 = math.min(y0, points[i + 1]), math.max(y1, points[i + 1])
+  end
+  if x0 == math.huge then return 0, 0, 0, 0 end
+  return (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0
+end
+
+--- An arrowhead at a line's last point, `size` long, as path data.
+function M.arrow_path(points, size)
+  local n = #points
+  if n < 4 then return "M0 0" end
+  local x1, y1, x0, y0 = points[n - 1], points[n], points[n - 3], points[n - 2]
+  local dx, dy = x1 - x0, y1 - y0
+  local l = math.max(1e-6, math.sqrt(dx * dx + dy * dy))
+  dx, dy = dx / l, dy / l
+  local bx, by = x1 - dx * size, y1 - dy * size
+  local px, py = -dy * size * 0.55, dx * size * 0.55
+  return ("M%.2f %.2f L%.2f %.2f L%.2f %.2f Z"):format(x1, y1, bx + px, by + py, bx - px, by - py)
+end
+
+--- A series's value at `x` (flat x, y pairs, x rising; straight between
+--- samples), or nil when it has none.
+function M.value_at(series, x)
+  local n = #series
+  if n < 4 then return nil end
+  if x <= series[1] then return series[2] end
+  for i = 3, n - 1, 2 do
+    if series[i] >= x then
+      local x0, y0, x1, y1 = series[i - 2], series[i - 1], series[i], series[i + 1]
+      local f = (x1 > x0) and (x - x0) / (x1 - x0) or 0
+      return y0 + (y1 - y0) * f
+    end
+  end
+  return series[n]
+end
+
+-- Seconds between a time ruler's numbered ticks and the steps between:
+-- the shortest round span at least `min` (80) px long at `zoom`.
+local SPANS = { { 1, 5 }, { 2, 4 }, { 5, 5 }, { 10, 5 }, { 15, 3 }, { 30, 6 }, { 60, 6 }, { 120, 4 }, { 300, 5 },
+  { 600, 5 }, { 900, 3 }, { 1800, 6 }, { 3600, 6 } }
+function M.time_span(zoom, min)
+  for _, sp in ipairs(SPANS) do if sp[1] * zoom >= (min or 80) then return sp[1], sp[2] end end
+  return SPANS[#SPANS][1], SPANS[#SPANS][2]
+end
+
+--- Seconds as a clock reads them: "m:ss", or "h:mm:ss".
+function M.stamp(seconds)
+  seconds = math.floor(seconds + 0.5)
+  if seconds >= 3600 then return ("%d:%02d:%02d"):format(seconds // 3600, seconds // 60 % 60, seconds % 60) end
+  return ("%d:%02d"):format(seconds // 60, seconds % 60)
+end
+
+--- The longest round distance (metres) under `max` px at `zoom` (px a
+--- metre), and its length on screen.
+function M.scale_bar(zoom, max)
+  local per_px = 1 / math.max(1e-12, zoom)
+  local best = 1
+  for _, m in ipairs { 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000,
+    500000, 1000000 } do
+    if m / per_px <= (max or 120) then best = m end
+  end
+  return best, best / per_px, best >= 1000 and ("%g km"):format(best / 1000) or ("%d m"):format(best)
+end
+
+--- Restyles a skin a theme took from another (the default look's
+--- layouts in a theme's palette): `S[name]` becomes the old skin with
+--- `change(slots, t, spec, send)` run over what it gave. A slot `change`
+--- replaces or clears is destroyed, unless `change` returns it in a list
+--- of nodes it kept (put inside its own).
+function M.restyle(S, name, change)
+  local base = S[name]
+  S[name] = function(t, spec, node, send)
+    local slots = base and base(t, spec, node, send) or {}
+    local before = {}
+    for k, v in pairs(slots) do before[k] = v end
+    local kept = {}
+    for _, n in ipairs(change(slots, t, spec, send) or {}) do kept[n] = true end
+    for k, v in pairs(before) do
+      if type(v) ~= "function" and slots[k] ~= v and not kept[v] then require("morf.ui").destroy(v, true) end
+    end
+    return slots
+  end
+end
+
+--- A list of items or ports given as a value or a binding, read now.
+function M.list(v) if type(v) == "function" then return v() or {} end return v or {} end
+
 --- The ids of a list kept in the live state (`t.selection`).
 function M.ids(encoded)
   local out = {}
@@ -90,9 +327,14 @@ function M.make(widget, spec)
   function full.port(id) return port_at[tostring(id)] end
   -- (Content and overlay are the canvas's to place, not the node's children.)
   full.content, full.overlay = nil, nil
+  local rebuilt
   root, t, ctl = control.make("Canvas", widget, full, {
     props = { clip = true, accepted_buttons = { "left", "middle", "right" }, cursor = spec.cursor },
     builders = { item = true, selection = true, wires = true },
+    -- (The band is nil while there is none; known from the start, a skin
+    -- may read it.)
+    state = { band = "" },
+    on_rebuild = function() if rebuilt then rebuilt() end end,
   })
   local send = ctl.send
   -- The pointer's other news: where it hovers, a double click, the wheel
@@ -113,7 +355,7 @@ function M.make(widget, spec)
   end, { owner = root })
 
   -- The world: one node, the view's transform on it.
-  local world = ui.Item { transform_origin_x = 0, transform_origin_y = 0,
+  local world = ui.Item { width = 1, height = 1, transform_origin_x = 0, transform_origin_y = 0,
     transform_matrix = function()
       return { t.zoom_x, 0, 0, t.zoom_y, -t.view_x * t.zoom_x, -t.view_y * t.zoom_y }
     end }
@@ -206,8 +448,12 @@ function M.make(widget, spec)
 
   -- Wires, kept by id, drawn by the skin's builder between their ports.
   local wires = {}
+  -- (Bumped when the theme changes: the items, wires and outlines are
+  -- drawn again by the new skin.)
+  local generation = morf.signal("kit.canvas.generation." .. ctl.id, 0)
   if spec.wires then
     morf.effect("kit.canvas.wires." .. ctl.id, function()
+      generation:get()
       local list = get(spec.wires) or {}
       local seen = {}
       for i, wire in ipairs(list) do
@@ -237,6 +483,7 @@ function M.make(widget, spec)
   -- The outline round each selected item, in screen units so its line
   -- stays one width at any zoom.
   morf.effect("kit.canvas.selection." .. ctl.id, function()
+    generation:get()
     local selected = {}
     for _, key in ipairs(M.ids(t.selection)) do selected[key] = true end
     local build = (ctl.builders() or {}).selection
@@ -251,8 +498,9 @@ function M.make(widget, spec)
         e.mark = ui.Item {
           x = function() local x = screen_box() return x end,
           y = function() local _, y = screen_box() return y end,
-          width = function() local _, _, w = screen_box() return w end,
-          height = function() local _, _, _, h = screen_box() return h end,
+          -- (A point has no box: a pixel, so what it holds is laid out.)
+          width = function() local _, _, w = screen_box() return math.max(1, w) end,
+          height = function() local _, _, _, h = screen_box() return math.max(1, h) end,
         }
         local node = build(item_state(e))
         if node then ui.reparent(node, e.mark) end
@@ -266,9 +514,27 @@ function M.make(widget, spec)
 
   -- The skin's grid goes under the world, the rest over it; the
   -- configuration's overlay over all.
+  -- (The skin's slots were made before the world was put in, so each is
+  -- told where it stands: the ground, grid and content under the world,
+  -- the outlines over it, then the draft, the band and the crosshair, the
+  -- skin's overlay over those.)
+  marks.z = 4
   local function settle()
     local s = ctl.slots and ctl.slots() or {}
     if s.grid then s.grid.z = -1 end
+    if s.content then s.content.z = -1 end
+    for _, name in ipairs { "draft", "band", "crosshair" } do if s[name] then s[name].z = 5 end end
+    if s.overlay then s.overlay.z = 6 end
+  end
+  rebuilt = function()
+    settle()
+    for _, e in pairs(by_id) do
+      ui.destroy(e.holder)
+      if e.mark then ui.destroy(e.mark) e.mark = nil end
+      place(e)
+    end
+    for key, w in pairs(wires) do if w.node then ui.destroy(w.node) end wires[key] = nil end
+    generation:set(generation:get() + 1)
   end
   settle()
   if spec.overlay then

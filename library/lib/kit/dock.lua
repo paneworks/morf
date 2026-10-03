@@ -29,7 +29,9 @@
 -- `s.orientation`, `s.hovered()`, `s.dragging()`), `floating` (a builder:
 -- a floating panel's frame, told `s.title`; its top `tab_height` is the
 -- bar it is moved by) and `drop_indicator` (where a dragged tab would
--- land).
+-- land: a node over the whole dock, shown while a tab is dragged over a
+-- stack, that puts its plate at `spec.drop_box()` -- x, y, w, h -- and
+-- may move it there as it likes).
 local ui = require("morf.ui")
 local morf = require("morf")
 local control = require("lib.kit.control")
@@ -68,6 +70,14 @@ function M.make(widget, spec)
   full.fixed = fixed
   local props = { width = W, height = H, clip = true, focus_policy = "none" }
   local settle
+  -- Where a dragged tab would land (below); the skin binds to it as it is
+  -- built, before the stacks are.
+  local zone_box
+  local zone_ready = morf.signal("kit.dock.zone." .. tostring(full), false)
+  full.drop_box = function()
+    if not zone_ready:get() or not zone_box then return 0, 0, 0, 0 end
+    return zone_box()
+  end
   root, t, ctl = control.make("Dock", widget, full, {
     props = props,
     builders = { tab = true, stack = true, divider = true, floating = true },
@@ -301,10 +311,12 @@ function M.make(widget, spec)
     ui.reparent(layer, root)
   end, { owner = root })
 
-  -- Where a dragged tab would land, over the stack it is on.
-  local indicator = ui.Item { z = 40,
+  -- Where a dragged tab would land, over the stack it is on: the skin's
+  -- indicator fills the dock and puts its plate at `spec.drop_box()`, so
+  -- it may carry it from zone to zone.
+  local indicator = ui.Item { z = 40, anchors = { fill = true },
     visible = function() return t.dragging ~= "" and t.drop_target ~= "" and t.drop_target ~= "float" end }
-  local function zone_box()
+  function zone_box()
     local holder = stacks[t.drop_target]
     if not holder then return 0, 0, 0, 0 end
     local x, y, w, h = box_of(holder)
@@ -315,17 +327,11 @@ function M.make(widget, spec)
     elseif z == "bottom" then return x, y + h / 2, w, h / 2 end
     return x, y, w, h
   end
-  indicator.x = function() local x = zone_box() return x end
-  indicator.y = function() local _, y = zone_box() return y end
-  indicator.width = function() local _, _, w = zone_box() return w end
-  indicator.height = function() local _, _, _, h = zone_box() return h end
+  zone_ready:set(true)
   ui.reparent(indicator, root)
   function settle()
     local s = ctl and ctl.slots and ctl.slots() or {}
-    if s.drop_indicator then
-      s.drop_indicator.anchors = { fill = true }
-      ui.reparent(s.drop_indicator, indicator)
-    end
+    if s.drop_indicator then ui.reparent(s.drop_indicator, indicator) end
   end
   settle()
 
