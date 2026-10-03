@@ -205,6 +205,13 @@ function M.build(ctx)
     kit.caption { x = 6, y = 4, width = AW - 12, text = "Players", note = kit.code("media.players", "BRIDGE - A") },
     ui.Column { x = 4, y = MENU_HEAD, gap = 0, table.unpack(player_rows) },
   }
+  -- A kit Popup where it stands: Escape or a press anywhere but the menu
+  -- and the two controls that open it shuts it.
+  require("lib.kit.popup").track(player_menu, {
+    open = function() return players_open:get() end, close_policy = "escape+outside",
+    anchor = select_area, except = { more_area },
+    on_close = function() players_open:set(false) end,
+  })
 
   -- ----------------------------------------------- nothing playing --
   -- One framed region over the middle and right columns: the status

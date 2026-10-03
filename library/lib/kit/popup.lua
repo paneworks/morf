@@ -1,0 +1,217 @@
+-- Popups (the Popup archetype) on the engine's overlay layer: menus,
+-- tooltips, dialogs, toasts, popovers -- and a shell's drawers, tracked
+-- where they already are.
+--
+--     local menu = popup.make("menu", { items = {
+--       { label = "Copy", icon = "content_copy", on_clicked = copy },
+--       { label = "Wrap", checked = function() return wrap:get() end, on_toggled = set_wrap },
+--     } })
+--     menu.open(button)            -- beside its anchor; menu.close(), menu.toggle(button)
+--
+--     popup.make("dialog", { title = "Discard?", body = "...", width = 360,
+--       buttons = { { label = "Cancel" }, { label = "Discard", on_clicked = discard } } }).open()
+--
+--     popup.toast { text = "Copied", timeout = 2500, root = node }
+--     popup.tooltip(target, "Mute")
+--
+-- A popup's own content is `spec.content` (a node), or what its widget
+-- builds from `items`, `title`, `body` and `buttons`; the theme's skin
+-- draws its `background`. `on_opened`, `on_closed(reason)` and
+-- `on_about_to_close(reason)` -- returning false keeps it open -- follow
+-- it. `popup.track(node, spec)` gives a node that stays where it is (a
+-- drawer) the same behaviour: Escape, a press outside, the stack.
+local ui = require("morf.ui")
+local control = require("lib.kit.control")
+
+local M = {}
+
+-- What each widget is unless its spec says otherwise.
+local DEFAULTS = {
+  menu = { placement = "bottom-start", close_policy = "escape+outside" },
+  context_menu = { placement = "bottom-start", close_policy = "escape+outside" },
+  submenu = { placement = "right-start", close_policy = "escape+outside" },
+  popover = { placement = "bottom", close_policy = "escape+outside" },
+  dropdown = { placement = "bottom-start", close_policy = "escape+outside" },
+  tooltip = { placement = "top", close_policy = "none", focus_on_open = false },
+  rich_tooltip = { placement = "top", close_policy = "escape", focus_on_open = false },
+  dialog = { placement = "center", close_policy = "escape", modal = true, dim = true },
+  alert_dialog = { placement = "center", close_policy = "none", modal = true, dim = true },
+  bottom_sheet = { placement = "center", close_policy = "escape+outside", modal = true, dim = true },
+  toast = { placement = "center", close_policy = "none", focus_on_open = false },
+  snackbar = { placement = "center", close_policy = "none", focus_on_open = false },
+}
+
+local function merged(widget, spec)
+  local out = {}
+  for k, v in pairs(DEFAULTS[widget] or {}) do out[k] = v end
+  for k, v in pairs(spec or {}) do out[k] = v end
+  out.widget = widget
+  return out
+end
+
+--- The content a widget builds from its spec, when it is given none.
+local function build_content(widget, spec, close)
+  if spec.content then return spec.content end
+  local kit = require("lib.kit.widgets")
+  if spec.items then
+    local rows = { gap = 0 }
+    for i, item in ipairs(spec.items) do
+      local entry = {}
+      for k, v in pairs(item) do entry[k] = v end
+      entry.id = item.id or (spec.id and (spec.id .. "-item-" .. i)) or nil
+      entry.width, entry.height = spec.item_width or spec.width or 200, item.height or spec.item_height or 36
+      local kind = "menu_item"
+      if item.checked ~= nil then kind = item.group and "radio_menu_item" or "check_menu_item" end
+      local clicked = item.on_clicked
+      entry.on_clicked = function(...)
+        if clicked then clicked(...) end
+        -- A plain item closes its menu; a checkable one stays to be toggled again.
+        if kind == "menu_item" then close("activated") end
+      end
+      rows[#rows + 1] = kit[kind](entry)
+    end
+    return ui.Column(rows)
+  end
+  -- A dialog: a title, a body and a row of buttons.
+  local width = spec.width or 360
+  local column = { gap = 12, x = 20, y = 18, width = width - 40 }
+  local text = require("morf.ui").Text
+  if spec.title then
+    column[#column + 1] = text { text = spec.title, font_size = 18, font_weight = 600, width = width - 40,
+      color = spec.ink or "#ffffff" }
+  end
+  if spec.body then
+    column[#column + 1] = text { text = spec.body, font_size = 13, width = width - 40, wrap = true,
+      color = spec.ink or "#ffffff" }
+  end
+  if spec.text then
+    column[#column + 1] = text { text = spec.text, font_size = 13, color = spec.ink or "#ffffff" }
+  end
+  if spec.buttons then
+    local row = { gap = 8 }
+    for i, b in ipairs(spec.buttons) do
+      local clicked = b.on_clicked
+      row[#row + 1] = kit.push { id = b.id or (spec.id and (spec.id .. "-button-" .. i)) or nil,
+        label = b.label, width = b.width or 96, height = 34,
+        on_clicked = function() if clicked then clicked() end close("activated") end }
+    end
+    column[#column + 1] = ui.Row(row)
+  end
+  return ui.Column(column)
+end
+
+--- A popup of `widget`. Returns `{ node, open(anchor), close(reason),
+--- toggle(anchor), is_open(), t }`.
+function M.make(widget, spec)
+  spec = merged(widget, spec)
+  local handle = {}
+  local root, t, ctl
+  local function close(reason)
+    if not t or not t.open then return end
+    if spec.on_about_to_close and spec.on_about_to_close(reason or "closed") == false then return end
+    morf.overlay.close(root)
+  end
+  -- Built when first opened: until then it would hang from nothing.
+  local function build()
+    if root then return end
+    local content = build_content(widget, spec, close)
+    local pad = spec.padding or 0
+    root, t, ctl = control.make("Popup", widget, spec, {
+      children = { content },
+      props = {
+        width = spec.width or function() return (content.layout_width or 0) + 2 * pad end,
+        height = spec.height or function() return (content.layout_height or 0) + 2 * pad end,
+        focus_policy = "none",
+      },
+    })
+    if pad > 0 then content.x, content.y = pad, pad end
+    handle.node, handle.t = root, t
+  end
+  local anchor_now
+  function handle.open(anchor)
+    build()
+    if t.open then return end
+    anchor_now = anchor or spec.anchor
+    ctl.send("open")
+    morf.overlay.open(root, {
+      anchor = anchor_now, root = spec.root, placement = t.placement, gap = spec.gap, except = spec.except,
+      dim = t.dim, modal = t.modal, escape = t.escape, outside = t.outside, focus = t.focus_on_open,
+      on_close = function(reason)
+        -- Escape or a press outside, which the layer has done already: a
+        -- popup that refuses opens again.
+        if reason ~= "closed" and spec.on_about_to_close and spec.on_about_to_close(reason) == false then
+          ctl.send("close", reason)
+          handle.open(anchor_now)
+          return
+        end
+        ctl.send("close", reason)
+      end,
+    })
+  end
+  handle.close = close
+  function handle.toggle(anchor) if t and t.open then close("closed") else handle.open(anchor) end end
+  function handle.is_open() return t ~= nil and t.open end
+  return handle
+end
+
+--- A node that stays where it is, given a popup's behaviour while
+--- `spec.open()` says it is open: Escape and a press outside (by
+--- `close_policy`) call `spec.on_close(reason)`, which shuts it.
+function M.track(node, spec)
+  spec = spec or {}
+  local behaviour = control.headless("Popup", {
+    close_policy = spec.close_policy or "escape+outside", modal = spec.modal or false,
+    focus_on_open = spec.focus_on_open or false, owner = node,
+  })
+  local t = behaviour.t
+  local tracked = false
+  morf.effect("kit.popup.track." .. tostring(node), function()
+    local open = spec.open()
+    if open == tracked then return end
+    tracked = open
+    if open then
+      behaviour.send("open")
+      morf.overlay.track(node, { escape = t.escape, outside = t.outside, modal = t.modal, focus = t.focus_on_open,
+        anchor = spec.anchor, except = spec.except,
+        on_close = function(reason)
+          behaviour.send("close", reason)
+          tracked = false
+          if reason ~= "closed" and spec.on_close then spec.on_close(reason) end
+        end })
+    else
+      morf.overlay.close(node)
+    end
+  end, { owner = node })
+  return behaviour
+end
+
+--- A toast: `text` (or `content`), `timeout` (ms, 3000), `root` (the
+--- surface's root, or `anchor` a node on it). Opens at once; returns the
+--- popup.
+function M.toast(spec)
+  local toast = M.make("toast", spec)
+  toast.open(spec.anchor)
+  morf.timer(spec.timeout or 3000, function() toast.close("timeout") end)
+  return toast
+end
+
+--- A tooltip on `target`: `text` (or a spec with `text`/`content`) after the
+--- pointer rests on it for `delay` ms (600), gone when it leaves.
+function M.tooltip(target, text, delay)
+  local spec = type(text) == "table" and text or { text = text }
+  spec.padding = spec.padding or 8
+  local tip = M.make("tooltip", spec)
+  local waiting
+  morf.effect("kit.popup.tooltip." .. tostring(target), function()
+    local over = target.hovered or target.contains_pointer
+    if waiting then waiting:cancel() waiting = nil end
+    if over then
+      waiting = morf.timer(delay or 600, function() waiting = nil tip.open(target) end)
+    else
+      tip.close("left")
+    end
+  end, { owner = target })
+  return tip
+end
+
+return M

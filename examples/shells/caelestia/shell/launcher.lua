@@ -221,6 +221,8 @@ M.width = view.width
 M.drawer = drawer.new {
   name = "launcher", edge = "center", width = view.width, height = view.height,
   content = view.content, props = view.props,
+  -- Escape is the launcher's own: it backs out of a menu first.
+  close_policy = "outside",
 }
 morf.effect("caelestia.launcher.open", function()
   local open = M.drawer.open:get()

@@ -324,8 +324,9 @@ function V.build(M)
     }
   end
 
-  local field = ui.TextInput {
-    id = "launcher-search",
+  -- A kit TextField; the launcher draws its own clear button.
+  local field_node, field = kit.text_field("search", {
+    id = "launcher-search", clear = false,
     tab_navigation = false,
     height = SEARCH,
     anchors = { left = true, right = true, left_margin = 56, right_margin = 52 },
@@ -341,7 +342,7 @@ function V.build(M)
     on_escape = M.escape,
     on_key_pressed = M.key,
     on_key_released = M.release,
-  }
+  })
   local clear
   clear = kit.action {
     id = "launcher-clear",
@@ -493,7 +494,7 @@ function V.build(M)
       id = "launcher-field",
       anchors = { left = true, right = true, top = true }, height = SEARCH,
       kit.icon("search", 24, function() return C.onSurfaceVariant end, { x = 20, y = (SEARCH - 24) / 2 }),
-      field,
+      field_node,
       clear,
     },
     kit.surface { anchors = { left = true, right = true }, y = SEARCH, height = 1, color = kit.stroke("quiet") },

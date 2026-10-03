@@ -29,7 +29,7 @@ function M.button(id, text, icon, width, action, selected)
   }
 end
 function M.field(id, label, placeholder, width, changed, accepted, escaped)
-  local input = ui.TextInput {
+  local input_node, input = kit.text_field("entry", {
     id = id, x = 12, width = width - 24, height = 40,
     font_family = theme.font, font_size = theme.size.normal,
     color = function() return C.onSurface end,
@@ -38,10 +38,10 @@ function M.field(id, label, placeholder, width, changed, accepted, escaped)
     selection_color = function() return C.primary:alpha(0.3) end,
     placeholder = placeholder, on_text_changed = changed, on_accepted = accepted,
     on_escape = escaped,
-  }
+  })
   local node = ui.Column { width = width, gap = 5,
     M.label(label),
-    rows.well { width = width, height = 40, input },
+    rows.well { width = width, height = 40, input_node },
   }
   return node, input
 end

@@ -110,8 +110,10 @@ function M.dismiss()
   close_view()
 end
 
-keys = ui.TextInput {
-  id = "polkit-keys",
+-- A kit password field, hidden: the view draws the dots.
+local keys_node
+keys_node, keys = require("kit").text_field("password", {
+  id = "polkit-keys", reveal = false,
   width = 1, height = 1, opacity = 0, tab_navigation = false,
   password = true,
   read_only = function()
@@ -124,7 +126,7 @@ keys = ui.TextInput {
   end,
   on_accepted = function() M.submit() end,
   on_escape = function() if viewing then M.cancel() else M.dismiss() end end,
-}
+})
 
 
 -- Themes see only request metadata, phase and the masked character count.
@@ -135,8 +137,10 @@ local visual = require("themes").view("polkit").build {
   focus=function() keys.focus=M.can_answer() end,
 }
 function M.shake() visual.shake() end
-ui.reparent(keys,visual.content)
+ui.reparent(keys_node,visual.content)
 M.drawer = drawer.new {name="polkit",edge=visual.edge,width=visual.width,height=visual.height,
+  -- A dialog: only its own buttons and Escape answer it, Tab stays in it.
+  close_policy="none",modal=true,
   content=visual.content,props=visual.props}
 morf.effect("caelestia.polkit.open",function()
   local open=M.drawer.open:get()

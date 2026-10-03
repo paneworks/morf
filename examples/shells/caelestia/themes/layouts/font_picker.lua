@@ -3,13 +3,13 @@ return function(state)
   local kit, theme = require("kit"), require("theme")
   local C, fonts = theme.color, require("themes.fonts")
   local W, SIZE = 434, 5
-  local search = ui.TextInput { id="lule-font-search", x=12,y=9,width=W-48,height=24,
+  local search_node, search = kit.text_field("search", { id="lule-font-search", x=12,y=9,width=W-48,height=24,
     focus=function() return fonts.opened:get() end,
     font_family=theme.font,font_size=13,placeholder="Search installed fonts…",
     color=function() return C.onSurface end,placeholder_color=function() return C.onSurfaceVariant end,
     caret_color=function() return C.primary end,selection_color=function() return C.primary:alpha(.2) end,
     on_text_changed=function(value) fonts.filter(value) end,on_escape=fonts.close,
-    on_accepted=function() local rows=fonts.rows:get() if #rows==1 then fonts.choose(rows[1]) end end }
+    on_accepted=function() local rows=fonts.rows:get() if #rows==1 then fonts.choose(rows[1]) end end })
   local rows={x=12,y=60,gap=2}
   for i=1,SIZE do
     local function family() return fonts.rows:get()[(fonts.page:get()-1)*SIZE+i] end
@@ -33,7 +33,7 @@ return function(state)
   end
   local popup=kit.card {id="lule-font-popup",x=510,y=130,width=W,height=330,radius=16,
     ui.MouseArea {anchors={fill=true},on_clicked=function() end},
-    kit.surface {x=12,y=10,width=W-24,height=40,radius=8,color=function() return C.surfaceContainerHighest end,search,
+    kit.surface {x=12,y=10,width=W-24,height=40,radius=8,color=function() return C.surfaceContainerHighest end,search_node,
       kit.decor("corners",{length=5,color=kit.stroke("mark")})},
     ui.Column(rows),
     kit.subtitle {x=22,y=65,width=W-44,height=40,wrap=true,font_size=12,
@@ -49,9 +49,13 @@ return function(state)
   }
   local root=ui.Item {id="lule-font-picker",anchors={fill=true},z=100,
     visible=function() return fonts.opened:get() end,
-    ui.MouseArea {anchors={fill=true},on_clicked=fonts.close,
+    -- The scrim holds presses back from the page; the picker is a kit
+    -- Popup, shut by Escape or a press outside it.
+    ui.MouseArea {anchors={fill=true},
       kit.surface {anchors={fill=true},color=function() return C.surface:alpha(.5) end}},popup,
   }
+  require("lib.kit.popup").track(popup,{open=function() return fonts.opened:get() end,
+    close_policy="escape+outside",modal=true,on_close=function() fonts.close() end})
   morf.effect("lule.font-picker.close",function()
     if not state.active:get() or state.appearance.busy:get() then fonts.close() end
   end,{owner=root})

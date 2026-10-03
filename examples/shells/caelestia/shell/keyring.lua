@@ -12,7 +12,7 @@ local M = {
   choice=morf.signal("caelestia.keyring.choice",false),
   lengths={morf.signal("caelestia.keyring.length",0),morf.signal("caelestia.keyring.confirm-length",0)},
 }
-local keys, passwords, active, agent = {}, {"",""}, nil, nil
+local keys, key_nodes, passwords, active, agent = {}, {}, {"",""}, nil, nil
 local responding = false
 local services = require("services")
 local here = services.here
@@ -54,7 +54,9 @@ function M.submit()
   password=nil
 end
 for i=1,2 do
-  keys[i]=ui.TextInput {id="keyring-keys-"..i,width=1,height=1,opacity=0,password=true,max_length=4096,tab_navigation=false,
+  -- Kit password fields, hidden: the view draws the dots.
+  key_nodes[i],keys[i]=require("kit").text_field("password",{id="keyring-keys-"..i,reveal=false,
+    width=1,height=1,opacity=0,password=true,max_length=4096,tab_navigation=false,
     read_only=function() return not M.opened:get() or M.busy:get() end,
     on_text_changed=function(value)
       passwords[i]=value or "" M.lengths[i]:set(math.min(24,#passwords[i])) M.error:set("")
@@ -63,11 +65,12 @@ for i=1,2 do
       if i==1 and active and active.properties["password-new"] then M.focus(2) else M.submit() end
     end,
     on_escape=M.cancel,
-  }
+  })
 end
 local visual=require("keyring_view").build(M)
-for i=1,2 do ui.reparent(keys[i],visual.content) end
-M.drawer=require("drawer").new {name="keyring",edge="top",width=visual.width,height=visual.height,content=visual.content}
+for i=1,2 do ui.reparent(key_nodes[i],visual.content) end
+M.drawer=require("drawer").new {name="keyring",edge="top",width=visual.width,height=visual.height,content=visual.content,
+  close_policy="none",modal=true}
 visual.content.visible=function() return M.opened:get() end
 local function close(request)
   if active~=request then return end

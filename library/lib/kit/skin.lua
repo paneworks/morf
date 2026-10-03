@@ -56,17 +56,18 @@ end
 --- Builds the slots of a control: `widget` (its name), `archetype`,
 --- `slots` (the archetype's slot names), `t` (its live state), `spec`
 --- (what the configuration gave it), `node` (the control itself, for a
---- skin that hangs feedback on it). Returns `{ [slot] = node }`.
-function M.build(widget, archetype, slots, t, spec, theme, node)
+--- skin that hangs feedback on it), `send` (sends the control's archetype
+--- an event: a clear button's `"clear"`). Returns `{ [slot] = node }`.
+function M.build(widget, archetype, slots, t, spec, theme, node, send)
   local themes_chain = chain(theme or current:get())
   local built, made = {}, {}
   -- A whole-function skin is called once and gives several slots at once.
   local function from(skin, slot, key)
     if type(skin) == "table" then
       local fill = skin[slot]
-      return fill and fill(t, spec, node) or nil
+      return fill and fill(t, spec, node, send) or nil
     elseif type(skin) == "function" then
-      if made[key] == nil then made[key] = skin(t, spec, node) or false end
+      if made[key] == nil then made[key] = skin(t, spec, node, send) or false end
       return made[key] and made[key][slot] or nil
     end
   end
@@ -80,7 +81,7 @@ function M.build(widget, archetype, slots, t, spec, theme, node)
     if not filled then
       for _, theme_entry in ipairs(themes_chain) do
         local defaults = theme_entry.defaults[archetype]
-        if defaults and defaults[slot] then filled = defaults[slot](t, spec, node) break end
+        if defaults and defaults[slot] then filled = defaults[slot](t, spec, node, send) break end
       end
     end
     built[slot] = filled

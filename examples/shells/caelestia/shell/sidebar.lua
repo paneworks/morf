@@ -15,15 +15,8 @@ local M = { groups = history.groups, clear = history.clear, TABS = model.tabs, p
   tab = model.tab, select = model.select, showing = model.showing, height = view.height }
 M.drawer = require("drawer").new {
   name = "sidebar", edge = view.edge, width = view.width, height = view.height,
-  content = view.content, props = view.props,
+  content = view.content, props = view.props, close_policy = "escape+outside",
 }
-function M.catcher()
-  return ui.MouseArea {
-    id = "sidebar-catcher", anchors = { fill = true },
-    visible = function() return M.drawer.open:get() end,
-    on_clicked = function() M.drawer.set(false) end,
-  }
-end
 morf.effect("caelestia.sidebar.covered", function()
   notifs.covered:set(M.drawer.open:get() and model.showing("notifications"))
 end)

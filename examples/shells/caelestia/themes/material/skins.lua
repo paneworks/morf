@@ -129,8 +129,32 @@ return function(theme, M)
     }
   end
 
+  --- A menu row: its icon and label on a hover wash, a check when checked.
+  local function menu_item(t, spec)
+    local function ink() return C().onSurface end
+    return {
+      background = ui.Rect { anchors = { fill = true }, radius = 8,
+        color = function()
+          if t.down then return C().onSurface:alpha(0.12) end
+          return (t.hovered or t.visual_focus) and C().onSurface:alpha(0.08) or C().onSurface:alpha(0)
+        end, behavior = { color = { duration = theme.duration.small } } },
+      icon = spec.icon and M.icon(spec.icon, 18, function() return C().onSurfaceVariant end,
+        { x = 12, anchors = { vertical_center = true } }) or nil,
+      label = M.text { x = spec.icon and 40 or 14, anchors = { vertical_center = true }, text = spec.label,
+        font_size = theme.size.normal, color = ink },
+      indicator = (spec.widget ~= "menu_item") and M.icon(function()
+        if spec.widget == "radio_menu_item" then return t.checked and "radio_button_checked" or "radio_button_unchecked" end
+        return "check"
+      end, 18, function() return C().primary end, { anchors = { right = true, right_margin = 12, vertical_center = true },
+        visible = function() return spec.widget == "radio_menu_item" or t.checked end }) or nil,
+    }
+  end
+
   function S.Press(t, spec)
     local widget = spec.widget
+    if widget == "menu_item" or widget == "check_menu_item" or widget == "radio_menu_item" then
+      return menu_item(t, spec)
+    end
     -- A layout's own area draws itself: only the keyboard's ring here.
     if widget == "area" or widget == "segment" then
       return { indicator = ring(t, function() return math.min(16, t.height / 2) end) }
@@ -248,9 +272,85 @@ return function(theme, M)
     }
   end
 
+  --- A scroll bar: a slim rounded handle the length of the view's share,
+  --- wider under the pointer.
+  local function scroll_bar(t, spec)
+    local function length() return math.max(24, (get(spec.size) or 1) * t.height) end
+    return {
+      track = ui.Item { anchors = { fill = true } },
+      handle = ui.Rect { anchors = { right = true }, radius = 4,
+        width = function() return (t.hovered or t.down) and 8 or 4 end,
+        height = length,
+        y = function() return t.visual_position * (t.height - length()) end,
+        color = function() return C().onSurfaceVariant:alpha((t.hovered or t.down) and .6 or .35) end,
+        behavior = { width = { duration = theme.duration.small } } },
+    }
+  end
+
   function S.Range(t, spec)
     if spec.widget == "seek_bar" then return seek_bar(t, spec) end
+    if spec.widget == "scroll_bar" then return scroll_bar(t, spec) end
     return slider(t, spec)
+  end
+
+  -- ------------------------------------------------------- text fields --
+
+  --- A text field: Material's filled well when `well` is asked (an input
+  --- set in a layout's own well needs none), an underline that grows from
+  --- the middle with focus and turns to error while what is typed would
+  --- not be accepted, a clear button when `clear`, a reveal for a password,
+  --- and a counter against `max_length`.
+  function S.TextField(t, spec, _, send)
+    local grow = M.spring(460, 30)
+    local function bad() return not t.acceptable and not t.empty end
+    local slots = {
+      error = ui.Rect { anchors = { bottom = true }, height = 2,
+        x = function() return t.focused and 0 or t.width / 2 end,
+        width = function() return t.focused and t.width or 0 end,
+        color = function() return bad() and C().error or C().primary end,
+        behavior = { x = grow, width = grow, color = { duration = theme.duration.small } } },
+    }
+    if spec.well then
+      local r = math.min(12, math.floor((get(spec.height) or 48) / 4))
+      slots.background = ui.Rect { anchors = { fill = true }, top_left_radius = r, top_right_radius = r,
+        color = function()
+          local c = C().surfaceContainerHighest
+          return bad() and c:mix(C().error, 0.06) or c
+        end }
+    end
+    if spec.clear or spec.reveal then
+      local reveal = spec.reveal and spec.echo == "password"
+      slots.trailing = require("lib.kit.widgets").icon { width = 28, height = 28, size = 18,
+        anchors = { right = true, right_margin = 6, vertical_center = true },
+        icon_off = reveal and "visibility" or "close", icon_on = "visibility_off",
+        on = function() return reveal and t.revealed end,
+        visible = function() return reveal or not t.empty end,
+        on_clicked = function() send(reveal and "reveal" or "clear") end }
+    end
+    if spec.max_length then
+      slots.counter = M.text { anchors = { right = true, bottom = true, right_margin = 6, bottom_margin = 4 },
+        font_size = theme.size.smaller, color = function() return bad() and C().error or C().onSurfaceVariant end,
+        text = function() return ("%d/%d"):format(t.length, spec.max_length) end }
+    end
+    return slots
+  end
+
+  -- ------------------------------------------------------------ scrolls --
+
+  --- A scrolled view: a scroll bar (a kit Range) along its right edge
+  --- while there is somewhere to scroll.
+  function S.Scroll(t, spec)
+    local flick = spec.flick
+    local function room() return math.max(0, t.content_height - t.viewport_height) end
+    return {
+      scroll_bar_y = require("lib.kit.widgets").scroll_bar { width = 10, orientation = "vertical", inverted = true,
+        anchors = { right = true, top = true, bottom = true, right_margin = 2, top_margin = 4, bottom_margin = 4 },
+        visible = function() return t.bar_y end,
+        value = function() return t.position_y end,
+        size = function() return t.size_y end,
+        handle_size = function() return math.max(24, t.size_y * t.viewport_height) end,
+        on_moved = function(v) if flick then flick.content_y = v * room() end end },
+    }
   end
 
   -- -------------------------------------------------------- selections --
@@ -380,6 +480,17 @@ return function(theme, M)
   function S.Selection(t, spec)
     if spec.widget == "tabs" then return tabs(t, spec) end
     return entries(t, spec)
+  end
+
+  -- ------------------------------------------------------------ popups --
+
+  --- A popup's ground: the highest tonal surface, rounded, with a hairline.
+  function S.Popup(t, spec)
+    return {
+      background = ui.Rect { anchors = { fill = true }, radius = spec.widget == "tooltip" and 8 or 16,
+        color = function() return spec.widget == "tooltip" and C().inverseSurface or C().surfaceContainerHigh end,
+        border_width = 1, border_color = function() return C().outlineVariant end },
+    }
   end
 
   -- ------------------------------------------------------------ planes --

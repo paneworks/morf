@@ -40,7 +40,7 @@ local RANGE = {
   bipolar_knob = { from = -1, to = 1 },
   spin_button = { step = 1, snap = "always" },
   seek_bar = { live = false },
-  scroll_bar = {},
+  scroll_bar = { wheel = false },
   osd_level = { enabled = false },
 }
 
@@ -83,6 +83,19 @@ for _, widget in ipairs(contract.archetypes.Selection.widgets) do
   M[widget] = function(spec)
     return (require("lib.kit.selection").make(widget, with_defaults(widget, spec, SELECTION)))
   end
+end
+-- A popup widget makes a popup: `widgets.menu(spec)` returns its handle
+-- (lib.kit.popup), not a node -- it lives in the overlay layer.
+for _, widget in ipairs(contract.archetypes.Popup.widgets) do
+  M[widget] = function(spec) return require("lib.kit.popup").make(widget, spec) end
+end
+-- A text field or a scrolled view returns its control and the engine node
+-- inside it: `local node, input = widgets.entry { ... }`.
+for _, widget in ipairs(contract.archetypes.TextField.widgets) do
+  M[widget] = function(spec) return require("lib.kit.text_field").make(widget, spec) end
+end
+for _, widget in ipairs(contract.archetypes.Scroll.widgets) do
+  M[widget] = function(spec) return require("lib.kit.scroll").make(widget, spec) end
 end
 for _, widget in ipairs(contract.archetypes.Range.widgets) do
   M[widget] = function(spec) return (control.make("Range", widget, with_defaults(widget, spec, RANGE))) end

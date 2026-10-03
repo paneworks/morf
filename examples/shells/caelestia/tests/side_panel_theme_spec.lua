@@ -31,9 +31,8 @@ local HOST = [[
   local left,right = require("leftbar"),require("sidebar")
   local opening = ui.Item {x=10,y=10,width=W-20,height=function() return desk:get()-20 end,
     ui.Sdf {anchors={fill=true},fill_color=function() return C.surfaceContainerLowest end,left.drawer.shape,right.drawer.shape},
-    left.catcher and left.catcher() or ui.MouseArea {anchors={fill=true},visible=function() return left.drawer.open:get() end,
-      on_clicked=function() if not left.drawer.panel.contains_pointer then left.drawer.set(false) end end},
-    right.catcher(),left.drawer.panel,right.drawer.panel}
+    -- A press on the desk shuts either panel: their close policy.
+   left.drawer.panel,right.drawer.panel}
   ui.Item {width=W,height=H,ui.Rect {anchors={fill=true},color=function() return C.surface end},opening}
   local panels={left=left,right=right}
   morf.ipc.open=function(side,on) panels[side].drawer.set(on=="yes") end

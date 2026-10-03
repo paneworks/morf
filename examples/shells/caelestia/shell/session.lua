@@ -59,7 +59,7 @@ function M.key(_, _, _, _, key)
 end
 local view = require("themes").view("session").build(M)
 M.drawer = drawer.new { name="session", edge=view.edge, width=view.width, height=view.height,
-  content=view.content, props=view.props }
+  content=view.content, props=view.props, close_policy="outside" }
 M.dim = view.dim
 morf.effect("caelestia.session.open", function()
   local on = M.drawer.open:get()

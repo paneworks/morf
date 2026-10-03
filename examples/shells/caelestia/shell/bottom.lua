@@ -8,7 +8,7 @@ M.height = type(view.height) == "function" and view.height or function() return 
 M.WIDTH = M.width()
 M.drawer = require("drawer").new {
   name = "bottom", edge = view.edge or "bottom", width = view.width, height = view.height,
-  content = view.content, props = view.props,
+  content = view.content, props = view.props, close_policy = "escape+outside",
 }
 morf.effect("caelestia.bottom.shown", function() model.opened:set(M.drawer.open:get()) end)
 return M

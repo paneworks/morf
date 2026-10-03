@@ -1,4 +1,5 @@
 use morf_lua::{EventPoint, FocusReason, Runtime, UiEvent};
+use morf_scene::NodeHandle;
 use morf_wayland::LayerEvent;
 
 use crate::surfaces::*;
@@ -32,7 +33,12 @@ pub(crate) fn handle_touch_event(
                 .map_err(|error| error.to_string())?;
             for root in runtime.overlay_roots() {
                 if hit_layout.geometry(root).is_some() {
-                    repaint |= runtime.overlay_press(root, hit.map(|hit| hit.node));
+                    let inside: Vec<NodeHandle> = runtime
+                        .overlay_nodes(root)
+                        .into_iter()
+                        .filter(|node| hit_layout.contains_point(&runtime.scene(), *node, x, y))
+                        .collect();
+                    repaint |= runtime.overlay_press(root, hit.map(|hit| hit.node), &inside);
                 }
             }
             if let Some(hit) = hit {

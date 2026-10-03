@@ -111,13 +111,13 @@ function M.build(state)
   }
   swatches.visible = function() return not picking:get() end
   local folder_w = left - 2 * PAD - 212
-  local field = ui.TextInput { id = "lule-folder", width = folder_w - 20, height = 30, x = 10,
+  local field_node, field = kit.text_field("entry", { id = "lule-folder", width = folder_w - 20, height = 30, x = 10,
     font_family = theme.font, font_size = 12, placeholder = "~/Pictures/Wallpapers",
     color = function() return C.onSurface end, placeholder_color = function() return C.onSurfaceVariant end,
     caret_color = function() return C.primary end, selection_color = function() return C.primary:alpha(0.25) end,
     on_text_changed = function(value) if state.folder_draft then state.folder_draft:set(value) end end,
     on_accepted = function(value) state.set_folder(value) end,
-    on_escape = state.escape }
+    on_escape = state.escape })
   morf.effect("caelestia.lule.folder-field", function() field.text = (state.folder_draft and state.folder_draft:get()) or state.folder:get() end)
   local use_folder = button("lule-use-folder", "Use folder", nil, 96,
     function() state.set_folder(field.text) end, nil, 30)
@@ -178,7 +178,7 @@ function M.build(state)
     kit.label { text = "Folder", x = PAD, y = 281, width = 104, height = 18, elide = "right",
       font_size = 11, vertical_alignment = "center", color = kit.ink("lo") },
     kit.surface { x = PAD + 110, y = 275, width = folder_w, height = 30, radius = 10,
-      color = function() return C.surfaceContainerHighest end, field,
+      color = function() return C.surfaceContainerHighest end, field_node,
       kit.decor("corners", { length = 5, color = kit.stroke("mark") }) },
     use_folder,
     ui.Row { x = PAD, y = 313, gap = 6,

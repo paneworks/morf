@@ -54,7 +54,7 @@ local function entry(model,w,row)
   })
 end
 function M.build(model,w,h)
-  local viewport
+  local viewport, viewport_node, viewport_t, viewport_ctl
   local kind=model.kind
   local nodes={width=w,gap=(kind=="wired" or kind=="tor") and 12 or 10}
   if kind=="wired" then
@@ -101,15 +101,15 @@ function M.build(model,w,h)
       nodes[#nodes+1]=tor_note
     end
   end
-  viewport=ui.Flickable {id=(kind=="mesh" or kind=="tunnel") and "vpn-"..kind.."-scroll" or kind.."-scroll",
-    width=w,height=h,clip=true,ui.Column(nodes)}
+  viewport_node, viewport, viewport_t, viewport_ctl = kit.scroll({id=(kind=="mesh" or kind=="tunnel") and "vpn-"..kind.."-scroll" or kind.."-scroll",
+    width=w,height=h,clip=true,ui.Column(nodes)})
   if kind=="wired" or kind=="tor" then
     local present=kind=="wired" and model.has_network or model.available
-    viewport.visible=present
+    viewport_node.visible=present
     local missing=note(w,kind=="wired" and "NetworkManager is not running." or "Tor is not installed.")
     missing.visible=function() return not present() end
-    return ui.Item {width=w,height=h,viewport,missing}
+    return ui.Item {width=w,height=h,viewport_node,missing}
   end
-  return viewport
+  return viewport_node
 end
 return M

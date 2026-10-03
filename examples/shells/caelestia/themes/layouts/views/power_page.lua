@@ -12,7 +12,7 @@ local C = theme.color
 local M = {}
 
 function M.build(model, w, h)
-  local viewport
+  local viewport, viewport_node, viewport_t, viewport_ctl
   local first = model.battery
   local function active()
     local value = model.profile()
@@ -116,11 +116,11 @@ function M.build(model, w, h)
     ink = function() return C.onSecondaryContainer end,
   }
 
-  viewport = ui.Flickable {
+  viewport_node, viewport, viewport_t, viewport_ctl = kit.scroll({
     id = "power-scroll", width = w, height = h, clip = true,
     ui.Column { gap = 12, width = w, summary, profile, health, more_area },
-  }
-  return viewport
+  })
+  return viewport_node
 end
 
 return M

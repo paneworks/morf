@@ -23,10 +23,13 @@ use morf_lua::{HostFunction, IpcTable, IpcValue, Runtime};
 use crate::control::{Control, implicit_size};
 use crate::group::arrow_step;
 use crate::plane::Plane;
+use crate::popup::Popup;
 use crate::press::Press;
 use crate::range::Range;
+use crate::scroll::Scroll;
 use crate::selection::Selection;
 use crate::slots::{ARCHETYPES, slots_of};
+use crate::text_field::TextField;
 use crate::tokens::merge_tokens;
 use crate::value::{expect_number, number, text};
 use crate::{Archetype, Effects};
@@ -158,6 +161,9 @@ fn make(archetype: &str) -> Result<Box<dyn Archetype>, String> {
         "Press" => Ok(Box::new(Press::new())),
         "Range" => Ok(Box::new(Range::new())),
         "Plane" => Ok(Box::new(Plane::new())),
+        "Popup" => Ok(Box::new(Popup::new())),
+        "TextField" => Ok(Box::new(TextField::new())),
+        "Scroll" => Ok(Box::new(Scroll::new())),
         "Selection" => Ok(Box::new(Selection::new())),
         other if ARCHETYPES.contains(&other) => {
             Err(format!("archetype {other} has not arrived yet"))

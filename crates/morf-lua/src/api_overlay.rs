@@ -24,6 +24,8 @@
 //!   content was destroyed).
 //!
 //! Closing hides the content in the layer; opening it again shows it there.
+//! `morf.overlay.track(node, options)` gives a node the layer's behaviour
+//! where it already is -- a drawer: see `track`.
 //! `morf.overlay.close(content)` closes one, `morf.overlay.is_open(content)`
 //! asks.
 
@@ -64,6 +66,12 @@ pub(crate) struct Overlay {
     /// The node that had focus when it opened, and whether it showed it.
     restore: Option<(NodeHandle, bool)>,
     placed: Option<(f64, f64)>,
+    /// Left where it is (`morf.overlay.track`): only the behaviour is the
+    /// layer's, and `wrapper` is the catcher behind it.
+    tracked: bool,
+    /// Nodes besides the anchor a press on which is not outside it: the
+    /// other controls that open it.
+    except: Vec<NodeHandle>,
 }
 
 /// Every surface's overlay layer and the overlays open on it.
@@ -74,6 +82,25 @@ pub(crate) struct OverlayState {
     wrappers: HashMap<NodeHandle, NodeHandle>,
     pub(crate) stack: Vec<Overlay>,
     closing: Vec<(NodeHandle, &'static str)>,
+}
+
+/// A list of nodes from Lua (`except = { a, b }`), or none.
+fn nodes_of<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<Vec<NodeHandle>, String> {
+    let LuaValue::Table(table) = value else {
+        return Ok(Vec::new());
+    };
+    let mut nodes = Vec::new();
+    for (_, item) in table.iter(ctx) {
+        let LuaValue::UserData(data) = item else {
+            return Err("overlay except must be a list of nodes".to_owned());
+        };
+        nodes.push(
+            data.downcast_static::<NodeToken>()
+                .map_err(|_| "overlay except must be a list of nodes".to_owned())?
+                .handle,
+        );
+    }
+    Ok(nodes)
 }
 
 fn set(state: &mut ReactiveState, node: NodeHandle, property: &str, value: SceneValue) {
@@ -259,6 +286,100 @@ fn open<'gc>(
         on_close,
         restore,
         placed: None,
+        tracked: false,
+        except: nodes_of(ctx, get("except"))?,
+    });
+    Ok(())
+}
+
+/// `morf.overlay.track(node, options)`: an overlay that stays where it is --
+/// a drawer, a panel the configuration placed itself -- with the layer's
+/// behaviour: the stack, Escape, a press outside it (a catcher behind it
+/// takes presses anywhere else on its surface while it is open), focus in
+/// and back. `options` as `open`'s, less the placement.
+fn track<'gc>(
+    ctx: Context<'gc>,
+    state: &Rc<RefCell<ReactiveState>>,
+    content: NodeHandle,
+    options: Option<Table<'gc>>,
+) -> Result<(), String> {
+    let get = |key: &str| options.map_or(LuaValue::Nil, |t| t.get_value(ctx, key));
+    let flag = |key: &str, default: bool| match get(key) {
+        LuaValue::Nil => default,
+        LuaValue::Boolean(on) => on,
+        _ => true,
+    };
+    if state
+        .borrow()
+        .overlays
+        .stack
+        .iter()
+        .any(|o| o.content == content)
+    {
+        return Ok(());
+    }
+    let anchor = match get("anchor") {
+        LuaValue::UserData(data) => Some(
+            data.downcast_static::<NodeToken>()
+                .map_err(|_| "overlay anchor must be a node".to_owned())?
+                .handle,
+        ),
+        _ => None,
+    };
+    let root = state
+        .borrow()
+        .scene
+        .root_of(content)
+        .ok_or("morf.overlay.track: the node is on no surface")?;
+    let on_close = match get("on_close") {
+        LuaValue::Function(Function::Closure(closure)) => Some(ctx.stash(closure)),
+        LuaValue::Nil => None,
+        _ => return Err("overlay on_close must be a function".to_owned()),
+    };
+    let outside = flag("outside", true);
+    let catcher = create_node(state, Element::MouseArea);
+    let mut s = state.borrow_mut();
+    s.scene
+        .reparent(catcher, Some(root))
+        .map_err(|error| error.to_string())?;
+    set(&mut s, catcher, "anchors", fill());
+    // Behind everything on the surface: presses on the rest of the shell
+    // still reach it; presses on nothing reach the catcher.
+    set(&mut s, catcher, "z", SceneValue::Number(-1.0e6));
+    set(&mut s, catcher, "visible", SceneValue::Bool(outside));
+    set(
+        &mut s,
+        catcher,
+        "id",
+        SceneValue::String("morf-overlay-catcher".to_owned()),
+    );
+    let restore = s.focus.owner.get(&root).copied().map(|node| {
+        (
+            node,
+            s.scene.bool_value(node, "visual_focus").unwrap_or(false),
+        )
+    });
+    if flag("focus", false) {
+        s.focus
+            .requests
+            .push(FocusRequest::Into(content, restore.is_some_and(|(_, v)| v)));
+    }
+    s.overlays.stack.push(Overlay {
+        root,
+        wrapper: catcher,
+        content,
+        anchor,
+        placement: Placement::parse("center").expect("a placement"),
+        gap: 0.0,
+        margin: 0.0,
+        modal: flag("modal", false),
+        escape: flag("escape", true),
+        outside,
+        on_close,
+        restore,
+        placed: None,
+        tracked: true,
+        except: nodes_of(ctx, get("except"))?,
     });
     Ok(())
 }
@@ -288,6 +409,9 @@ impl Runtime {
         }
         for index in 0..state.overlays.stack.len() {
             let overlay = &state.overlays.stack[index];
+            if overlay.tracked {
+                continue;
+            }
             let (root, content, anchor) = (overlay.root, overlay.content, overlay.anchor);
             let (Some(surface), Some(size)) = (layout.geometry(root), layout.geometry(content))
             else {
@@ -352,6 +476,23 @@ impl Runtime {
         roots
     }
 
+    /// The nodes whose boxes decide whether a press on `root` is outside its
+    /// overlays: their contents and anchors.
+    pub fn overlay_nodes(&self, root: NodeHandle) -> Vec<NodeHandle> {
+        let state = self.reactive.borrow();
+        state
+            .overlays
+            .stack
+            .iter()
+            .filter(|o| o.root == root)
+            .flat_map(|o| {
+                std::iter::once(o.content)
+                    .chain(o.anchor)
+                    .chain(o.except.iter().copied())
+            })
+            .collect()
+    }
+
     /// The top overlay open on the surface whose tree is `root`.
     fn top_overlay(&self, root: NodeHandle) -> Option<usize> {
         self.reactive
@@ -374,10 +515,16 @@ impl Runtime {
         }
     }
 
-    /// A press on a surface, on `hit`: closes its top overlay when the press
-    /// is outside it (and not on its anchor) and it closes so. Returns
-    /// whether it closed one.
-    pub fn overlay_press(&mut self, root: NodeHandle, hit: Option<NodeHandle>) -> bool {
+    /// A press on a surface, on `hit`, at a point within the boxes of
+    /// `inside` (of the nodes `overlay_nodes` named): closes its top
+    /// overlay when the press is outside it (and not on its anchor) and it
+    /// closes so. Returns whether it closed one.
+    pub fn overlay_press(
+        &mut self,
+        root: NodeHandle,
+        hit: Option<NodeHandle>,
+        inside: &[NodeHandle],
+    ) -> bool {
         let Some(index) = self.top_overlay(root) else {
             return false;
         };
@@ -385,11 +532,17 @@ impl Runtime {
             let state = self.reactive.borrow();
             let overlay = &state.overlays.stack[index];
             overlay.outside
+                && !inside.contains(&overlay.content)
+                && !overlay
+                    .anchor
+                    .is_some_and(|anchor| inside.contains(&anchor))
+                && !overlay.except.iter().any(|node| inside.contains(node))
                 && !hit.is_some_and(|hit| {
                     within(&state, overlay.content, hit)
                         || overlay
                             .anchor
                             .is_some_and(|anchor| within(&state, anchor, hit))
+                        || overlay.except.iter().any(|node| within(&state, *node, hit))
                 })
         };
         if outside {
@@ -415,7 +568,10 @@ impl Runtime {
         let overlay = self.reactive.borrow_mut().overlays.stack.remove(index);
         let refocus = {
             let mut state = self.reactive.borrow_mut();
-            if state.scene.contains(overlay.wrapper) {
+            if overlay.tracked {
+                // The catcher goes; the node stays, its owner shuts it.
+                crate::runtime_helpers::remove_scene_subtree(&mut state, overlay.wrapper);
+            } else if state.scene.contains(overlay.wrapper) {
                 set(
                     &mut state,
                     overlay.wrapper,
@@ -495,6 +651,17 @@ pub(crate) fn install_overlay_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (content, options): (UserRef<NodeToken>, Option<Table>) = stack.consume(ctx)?;
             open(ctx, &opener, content.handle, options)
+                .map_err(crate::scene_bindings::HostError)?;
+            Ok(CallbackReturn::Return)
+        }),
+    );
+    let tracker = Rc::clone(&state);
+    overlay.set_field(
+        ctx,
+        "track",
+        Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            let (content, options): (UserRef<NodeToken>, Option<Table>) = stack.consume(ctx)?;
+            track(ctx, &tracker, content.handle, options)
                 .map_err(crate::scene_bindings::HostError)?;
             Ok(CallbackReturn::Return)
         }),

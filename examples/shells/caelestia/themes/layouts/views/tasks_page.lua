@@ -50,7 +50,7 @@ function M.build(model, w, h)
         widgets.button("tasks-refresh", "Refresh", "refresh", 96, model.refresh),
       },
       search, ui.Row(filters),
-      ui.Flickable { id = "tasks-list", width = inner, height = function() return math.max(100, h() - 310) end, clip = true,
+      (kit.scroll({ id = "tasks-list", width = inner, height = function() return math.max(100, h() - 310) end, clip = true,
         task_list,
         ui.Column { width = inner, gap = 8, visible = function() return rows:len() == 0 end,
           kit.icon("task_alt", 40, function() return C.primary end),
@@ -60,7 +60,7 @@ function M.build(model, w, h)
             font_size = theme.size.large },
           widgets.message(function() return model.busy:get() and "Loading tasks…" or "Add a task, or choose another view." end, inner),
         },
-      },
+      })),
     },
   }
 
@@ -83,8 +83,8 @@ function M.build(model, w, h)
       ui.Item { anchors = { right = true }, width = 76, height = 36,
         widgets.button("task-cancel", "Back", "arrow_back", 76, model.cancel) },
     },
-    ui.Flickable { id = "task-editor-scroll", x = PAD, y = 70, width = inner,
-      height = function() return math.max(100, h() - 182) end, clip = true, ui.Column(fields) },
+    (kit.scroll({ id = "task-editor-scroll", x = PAD, y = 70, width = inner,
+      height = function() return math.max(100, h() - 182) end, clip = true, ui.Column(fields) })),
     ui.Item { x = PAD, y = function() return h() - 100 end, width = inner, height = 40,
       widgets.button("task-save", function() return model.busy:get() and "Saving…" or "Save task" end,
         "check", inner, model.save, function() return true end) },

@@ -34,12 +34,12 @@ function V.focus_page(model,w,h)
     end
     rows[#rows+1]=ui.Item(card)
   end
-  return ui.Flickable {id="settings-focus-scroll",width=w,height=h,clip=true,ui.Column(rows)}
+  return (kit.scroll({id="settings-focus-scroll",width=w,height=h,clip=true,ui.Column(rows)}))
 end
 function V.build(model,w,h)
 local M={TOGGLES=model.TOGGLES,DETAILS=model.DETAILS,detail=model.detail,RADIUS=V.RADIUS}
 local CARD_W,GAP=math.min(408,w),12
-local overview_viewport
+local overview_viewport, overview_viewport_node, overview_viewport_t, overview_viewport_ctl
 local TILE_H,TILE_GAP=60,8
 local TILE_W=(CARD_W-24-TILE_GAP)/2
 local TILE_ROWS=math.ceil(#M.TOGGLES/2)
@@ -159,11 +159,11 @@ end
 local DETAIL_HEAD = 52
 local SWITCH = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel }
 function M.page(w, h)
-  overview_viewport=ui.Flickable {id="settings-overview-scroll",width=w,height=h,clip=true,
-    ui.Column {gap=GAP,table.unpack(cards)}}
+  overview_viewport_node, overview_viewport, overview_viewport_t, overview_viewport_ctl = kit.scroll({id="settings-overview-scroll",width=w,height=h,clip=true,
+    ui.Column {gap=GAP,table.unpack(cards)}})
   local main = ui.Item {
     id = "utilities", width = w, height = h, clip = true,
-    overview_viewport,
+    overview_viewport_node,
   }
   local dh = function() return h() - DETAIL_HEAD end
   local stack = {}

@@ -25,7 +25,7 @@ local function choice(id, icon, name, on, pick, width)
 end
 
 function M.build(model, w, h)
-  local viewport
+  local viewport, viewport_node, viewport_t, viewport_ctl
   local function card(height, children)
     children.width, children.height = w, height
     return kit.card(children)
@@ -50,7 +50,7 @@ function M.build(model, w, h)
       function() return model.side() == s[1] end, function() model.set_side(s[1]) end, bw)
   end
 
-  viewport = ui.Flickable {
+  viewport_node, viewport, viewport_t, viewport_ctl = kit.scroll({
     id = "bar-scroll", width = w, height = h, clip = true,
     ui.Column {
       gap = 12, width = w,
@@ -80,8 +80,8 @@ function M.build(model, w, h)
         text = "Auto puts the bar up on a narrow screen -- a phone -- and keeps it down on a desk.",
       },
     },
-  }
-  return viewport
+  })
+  return viewport_node
 end
 
 return M

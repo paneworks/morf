@@ -108,31 +108,8 @@ local levels_node=levels.build()
 local overlays={
   -- The desk dims under the session menu.
   session.dim(),
-  -- A click on the desk shuts the sidebar, and the launcher.
-  require("sidebar").catcher(),
-  leftbar.catcher(),
-  -- And the dashboard, however it was opened.
-  dashboard.catcher(),
-  ui.MouseArea {
-    id = "bottom-catcher", anchors = { fill = true },
-    visible = function() return bottom.drawer.open:get() end,
-    on_clicked = function()
-      -- Empty space inside a tab is still part of the panel. Only clicks
-      -- on the surrounding desktop dismiss this workspace.
-      if not bottom.drawer.panel.contains_pointer then bottom.drawer.set(false) end
-    end,
-  },
-  ui.MouseArea {
-    id = "capture-catcher", anchors = { fill = true },
-    visible = function() return capture.drawer.open:get() end,
-    on_clicked = function() capture.drawer.set(false) end,
-  },
-  ui.MouseArea {
-    id = "launcher-catcher",
-    anchors = { fill = true },
-    visible = function() return launcher.drawer.open:get() end,
-    on_clicked = function() launcher.drawer.set(false) end,
-  },
+  -- A press on the desk shuts what is open: each drawer's close policy
+  -- (shell/drawer.lua), not catchers here.
 }
 local triggers={
   dashboard.edge_trigger(),

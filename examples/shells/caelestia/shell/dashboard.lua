@@ -8,7 +8,7 @@ local visual = require("themes").view("dashboard").build(model)
 M.size, M.bud = visual.size, visual.bud
 M.drawer = require("drawer").new {
   name="dashboard",edge=visual.edge or "top",width=visual.width,height=visual.height,
-  content=visual.content,props=visual.props,
+  content=visual.content,props=visual.props,close_policy="escape+outside",
 }
 morf.effect("caelestia.dashboard.shown",function() state.opened:set(M.drawer.open:get()) end)
 morf.effect("caelestia.dashboard.presentation",function()
@@ -19,10 +19,6 @@ end)
 morf.effect("caelestia.dashboard.lule",function()
   require("lule_studio").active:set(state.opened:get() and state.displayed:get()==M.LULE_TAB)
 end)
-function M.catcher()
-  return ui.MouseArea {id="dashboard-catcher",anchors={fill=true},
-    visible=function() return M.drawer.open:get() end,on_clicked=function() M.drawer.set(false) end}
-end
 function M.edge_trigger()
   return require("hover").edge {name="dashboard",drawer=M.drawer,edge="top",length=visual.width,
     setting="dashboard.hover",grace_ms=50}

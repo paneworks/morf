@@ -396,7 +396,7 @@ function M.build(model)
       L.section { y = units_y, width = MW, height = COL_H - units_y, caption_id = "performance-logical-units-title",
         text = "Partitions and volumes", note = function() local n = #(the_drive().units or {})
           return ("%d unit%s"):format(n, n == 1 and "" or "s") end,
-        ui.Flickable {
+        (kit.scroll({
           width = MW, height = COL_H - units_y - CH, clip = true,
           ui.Repeater {
             as = "column", gap = 4, width = MW, model = units.rows,
@@ -424,7 +424,7 @@ function M.build(model)
               }
             end,
           },
-        },
+        })),
       },
     },
     right_column("drive"),
@@ -707,11 +707,11 @@ function M.build(model)
       text = function() local n = list.devices:len() return ("%d device%s"):format(n, n == 1 and "" or "s") end },
     L.rule { x = 12, y = LIST_Y - 4, width = RW_ },
     -- Whole rows only: the list is a number of rows tall and scrolls.
-    ui.Flickable {
+    (kit.scroll({
       x = 12, y = LIST_Y, width = RW_, clip = true,
       height = math.floor((M.HEIGHT - LIST_Y - RADAR_H - 28 + 3) / (ROW_H + 3)) * (ROW_H + 3) - 3,
       ui.Repeater { as = "column", gap = 3, width = RW_, model = list.devices, delegate = device_row },
-    },
+    })),
     ui.Item(radar),
   }
 

@@ -13,21 +13,8 @@ local M = { TABS = model.tabs, panel = model, WIDTH = view.width }
 M.height = view.height
 M.drawer = require("drawer").new {
   name = "leftbar", edge = view.edge, width = view.width, height = view.height,
-  content = view.content, props = view.props,
+  content = view.content, props = view.props, close_policy = "escape+outside",
 }
-function M.catcher()
-  return ui.MouseArea {
-    id = "leftbar-catcher", anchors = { fill = true },
-    visible = function()
-      -- Register containment even when the edge-hover controller is disabled.
-      local inside = M.drawer.panel.contains_pointer
-      return M.drawer.open:get()
-    end,
-    on_clicked = function()
-      if not M.drawer.panel.contains_pointer then M.drawer.set(false) end
-    end,
-  }
-end
 morf.effect("caelestia.leftbar.shown", function()
   local open = M.drawer.open:get()
   model.opened:set(open)

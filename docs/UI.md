@@ -1579,6 +1579,17 @@ back to the node that had it -- the control that opened it -- when it
 closes. Closing hides the content in the layer; opening it again shows it
 there, and destroying it closes it.
 
+`except = { node, ... }` names more nodes a press on which is not outside
+-- the other controls that open it. `morf.overlay.track(node, options)`
+gives a node the layer's behaviour where it already stands -- a drawer, a
+panel a layout placed itself: the stack, Escape, focus in and back, and a
+press anywhere else on its surface closing it, for which the engine puts a
+catcher behind everything on that surface while it is open. A press is
+outside by where it lands, not by what it hits: empty space inside the
+node is inside. Its `on_close(reason)` shuts it; `morf.overlay.close(node)`
+ends the tracking. `lib.kit.popup` builds menus, dialogs, tooltips and
+toasts on both, and `popup.track` is how a shell's drawers become popups.
+
 ### Entering
 
 `enter = { opacity = 0, translate_x = 32 }` on any node is where its

@@ -302,14 +302,14 @@ local function output_page()
   return ui.Item {
     id = "sound-page",
     width = w, height = h, clip = true,
-    ui.Flickable {id="sound-scroll",width=w,height=h,clip=true,ui.Column {
+    (kit.scroll({id="sound-scroll",width=w,height=h,clip=true,ui.Column {
       gap = GAP,
       output_card(OUT_H),
       kit.pill {id="sound-equalizer",width=w,height=60,label="Equalizer  ›",
         on_clicked=model.open_equalizer},
       devices_card(function() return DEV_H end),
       apps_card(apps_h),
-    }},
+    }})),
   }
 end
 

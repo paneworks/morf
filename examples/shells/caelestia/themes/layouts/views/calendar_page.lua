@@ -8,7 +8,7 @@ local C = theme.color
 local M = {}
 
 function M.build(model, w, h)
-  local viewport
+  local viewport, viewport_node, viewport_t, viewport_ctl
   local function heading(props)
     props.viewport = function() return viewport end
     return kit.heading(props)
@@ -19,7 +19,7 @@ function M.build(model, w, h)
   for _, name in ipairs(model.weekdays) do
     weekdays[#weekdays + 1] = kit.centred(cell, 26, widgets.label(name))
   end
-  viewport = ui.Flickable { id = "planner-scroll", anchors = { fill = true, margins = 16 }, clip = true,
+  viewport_node, viewport, viewport_t, viewport_ctl = kit.scroll({ id = "planner-scroll", anchors = { fill = true, margins = 16 }, clip = true,
       ui.Column { width = inner, gap = 16,
         ui.Item { width = inner, height = 48,
           heading { id = "planner-title", scope = "leftbar.calendar", text = "A day at a time.", font_size = 24, font_weight = 700 },
@@ -94,7 +94,7 @@ function M.build(model, w, h)
         },
         widgets.message(function() return model.error:get() end, inner, 64),
       },
-    }
-  return kit.card { id = "planner-calendar", width = w, height = h, viewport }
+    })
+  return kit.card { id = "planner-calendar", width = w, height = h, viewport_node }
 end
 return M

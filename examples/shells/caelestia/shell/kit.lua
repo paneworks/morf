@@ -86,6 +86,22 @@ function kit.media_progress(spec)
   return widgets.seek_bar(s)
 end
 
+--- A text field (a kit TextField): `widget` ("entry", "password",
+--- "search", ...) and the props of a `ui.TextInput`, plus the field's own
+--- (`validator`, `clear`, `well`, `inset`, ...). Returns the control to
+--- place and the input inside it, which keeps the props' `id`.
+function kit.text_field(widget, props)
+  return require("lib.kit.text_field").make(widget, props)
+end
+
+--- A scrolled view (a kit Scroll): the props of a `ui.Flickable` and its
+--- content. Returns the control to place and the flickable inside it,
+--- which keeps the props' `id`; the keys scroll it and the theme draws its
+--- scroll bar.
+function kit.scroll(props)
+  return require("lib.kit.scroll").make("scroll_view", props)
+end
+
 --- The tab row: `id`, `tabs` (`{ key, name, icon | icon_build }`), `tab`
 --- (a signal, from 1), `width`, `height`, `pad`, `ids` (`"name"`: each tab
 --- is `<id>-tab-<name:lower()>`; `"key"` by default), `growing` (the row

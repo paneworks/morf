@@ -275,15 +275,17 @@ function V.build(M)
     return 0
   end
 
-  local stack = ui.Flickable {
+  local stack_node, stack, stack_t, stack_ctl = kit.scroll({
     id = "notification-stack", x = LEFT, y = TOP, width = CARD_W,
     height = function() return height() - TOP - BOTTOM end, clip = true,
-  }
-  ui.reparent(ui.Item { width = CARD_W, height = total,
+  })
+  local stacked = ui.Item { width = CARD_W, height = total,
     ui.Sdf(layers),
     ui.Column { gap = GAP, table.unpack(cards) },
-  }, stack)
-  local content = ui.Item { anchors = { fill = true }, stack }
+  }
+  ui.reparent(stacked, stack)
+  stack_ctl.set_content(stacked)
+  local content = ui.Item { anchors = { fill = true }, stack_node }
 
   if theme.motion.notification_acquire then
     theme.motion.notification_acquire(content, cards, M, shown)

@@ -469,8 +469,8 @@ return function(W, H, NAME)
       kb.node,
     }
   end
-  local viewport=ui.Flickable {id="lock-sheet-scroll",width=SW,height=sheet_h,clip=true,
-    ui.Column(sheet_nodes)}
+  local viewport_node, viewport, viewport_t, viewport_ctl = require("lib.kit.scroll").make("scroll_view", {id="lock-sheet-scroll",width=SW,height=sheet_h,clip=true,
+    ui.Column(sheet_nodes)})
   morf.effect("lock.sheet-scroll."..NAME,function()
     local st=stage:get()
     if st~="sheet" then viewport.content_y=0 return end
@@ -488,7 +488,7 @@ return function(W, H, NAME)
     behavior = skin.sheet_motion or { opacity = { duration = 260, delay = 120 },
       translate_y = GROW },
     visible = function() return main() and (stage:get() == "sheet" or stage:get() == "opening") end,
-    viewport,
+    viewport_node,
   }
 
   if skin.sheet then skin.sheet(sheet, {role="lock", width=SW, scale=s,

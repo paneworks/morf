@@ -24,7 +24,13 @@ local groups = 0
 --- `spec`: `name`, `edge` ("top", "bottom", "left" or "right"), `width`,
 --- `height` (numbers or bindings), `content` (a node, laid out in the
 --- panel), `props` (more properties for the panel: a side drawer is
---- centred on its edge unless they place it, `y` for one).
+--- centred on its edge unless they place it, `y` for one),
+--- `close_policy` (what shuts it while open, as a kit Popup's: "outside"
+--- -- a press anywhere else on the surface --, "escape", both joined by
+--- "+", or "none": a popup still, in the stack, that only its own controls
+--- shut), `modal` (Tab stays inside it while open), `on_dismiss` (what
+--- shutting it that way does; `set(false)` by default). A drawer with no
+--- policy is not a popup at all.
 function M.new(spec)
   groups = groups + 1
   local d = { name = spec.name, edge = spec.edge }
@@ -121,6 +127,16 @@ function M.new(spec)
   end
   function d.toggle() d.set(not d.open:get()) end
   function d.is_open() return d.open:get() end
+
+  -- While open it is a kit Popup where it stands: the overlay layer shuts
+  -- it on a press outside or Escape, by its policy -- no catcher of its own.
+  if spec.close_policy then
+    require("lib.kit.popup").track(panel, {
+      open = function() return d.open:get() end,
+      close_policy = spec.close_policy, modal = spec.modal,
+      on_close = function(reason) if spec.on_dismiss then spec.on_dismiss(reason) else d.set(false) end end,
+    })
+  end
 
   M.all[#M.all + 1] = d
   M[spec.name] = d

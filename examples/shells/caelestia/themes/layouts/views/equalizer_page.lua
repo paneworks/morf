@@ -56,7 +56,7 @@ function M.build(model,w,h)
       function() return model.current("bands")[i] end,function(v) model.set_band(i,v) end,-12,12," dB")
   end
   band_rows[#band_rows+1]=kit.pill {id="equalizer-reset",width=inner,height=32,label="Reset tone adjustments",on_clicked=model.reset_bands}
-  return ui.Flickable {id="equalizer-scroll",width=w,height=h,clip=true,
+  return (kit.scroll({id="equalizer-scroll",width=w,height=h,clip=true,
     ui.Column {width=w,gap=12,
       box("equalizer-controls",w,168,{
         flag("equalizer-enabled","Equalizer",inner,function() return model.get("enabled") end,function(v) model.set("enabled",v) end),
@@ -91,17 +91,17 @@ function M.build(model,w,h)
           function(v) model.set_current("trim",v) end,-24,0," dB"),
         note("Automatic attenuation includes overlapping boosts. It is not a limiter.",inner),
       }),
-    }}
+    }}))
 end
 function M.audiogram(model,w,h)
   local inner=w-32
   local function input(id,ear,index,width)
-    local node=ui.TextInput {id=id,width=width-16,height=30,x=8,
+    local node_node, node = kit.text_field("numeric_entry", {id=id,width=width-16,height=30,x=8,
       text=function() local draft=model.draft:get() return tostring(ear=="label" and draft.label or draft[ear][index]) end,
       font_family=theme.font,font_size=theme.size.normal,color=function() return C.onSurface end,
       caret_color=function() return C.primary end,selection_color=function() return C.primary:alpha(.25) end,
-      on_text_changed=function(value) model.edit(ear,index,value) end}
-    return rows.well {width=width,height=34,node}
+      on_text_changed=function(value) model.edit(ear,index,value) end})
+    return rows.well {width=width,height=34,node_node}
   end
   local rows={width=inner,gap=10}
   rows[#rows+1]=ui.Row {width=inner,gap=8,
@@ -114,7 +114,7 @@ function M.audiogram(model,w,h)
       input("audiogram-left-"..i,"left",i,(inner-80)/2),
       input("audiogram-right-"..i,"right",i,(inner-80)/2)}
   end
-  return ui.Flickable {id="audiogram-scroll",width=w,height=h,clip=true,
+  return (kit.scroll({id="audiogram-scroll",width=w,height=h,clip=true,
     box("audiogram-editor",w,646,{
       title("Measured thresholds",inner,"settings.sound/equalizer/audiogram"),
       note("Copy an existing audiogram. Values can range from −10 to 120 dB HL; blank profiles start at zero.",inner),
@@ -123,6 +123,6 @@ function M.audiogram(model,w,h)
       note(function() return model.editor_error:get() end,inner),
       kit.pill {id="audiogram-save",width=inner,height=36,label="Save audiogram",on_clicked=model.save_profile},
       note("Back discards unsaved edits.",inner),
-    })}
+    })}))
 end
 return M

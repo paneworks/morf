@@ -15,10 +15,13 @@ mod control;
 mod group;
 mod module;
 mod plane;
+mod popup;
 mod press;
 mod range;
+mod scroll;
 mod selection;
 mod slots;
+mod text_field;
 mod tokens;
 mod value;
 

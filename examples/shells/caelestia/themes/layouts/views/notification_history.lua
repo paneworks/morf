@@ -194,15 +194,17 @@ function V.build(state, width, height)
     }
   end
   -- The list scrolls; its headings reveal as they scroll into view.
-  local list = ui.Flickable {
+  local list_node, list, list_t, list_ctl = kit.scroll({
     id = "sidebar-history-list",
     x = 12, y = TOP, width = ROW_W,
     height = function() return math.max(40, height() - TOP - FOOT) end,
     clip = true,
-  }
+  })
   local function build_rows() for i = 1, GROUPS do rows[i] = group_row(i) end end
   if kit.with_viewport then kit.with_viewport(function() return list end, build_rows) else build_rows() end
-  ui.reparent(ui.Column { gap = 8, table.unpack(rows) }, list)
+  local column = ui.Column { gap = 8, table.unpack(rows) }
+  ui.reparent(column, list)
+  list_ctl.set_content(column)
 
   -- ------------------------------------------------------------------ pane --
 
@@ -287,7 +289,7 @@ function V.build(state, width, height)
         return kit.signal("accent")()
       end },
     L.rule { x = 12, y = TOP - 8, width = ROW_W },
-    list,
+    list_node,
     empty,
     -- The foot rule and the tally under the list.
     L.rule { x = 12, anchors = { bottom = true, bottom_margin = FOOT - 6 }, width = ROW_W },

@@ -20,21 +20,62 @@ return function(theme, M, hud)
   -- holds hundreds of controls, most never touched.
   local function lazy(_, build) return build end
 
-  -- The wash a press or the pointer lays over a target, its two
-  -- registration marks on the diagonal, and the keyboard's brackets.
-  local function feedback(t)
-    return lazy(t, function() return ui.Item { anchors = { fill = true }, z = 40,
-      ui.Rect { anchors = { fill = true }, color = function() return C.primary end,
-        opacity = function() return t.down and .16 or t.hovered and .07 or 0 end, behavior = { opacity = quick } },
-      ui.Path { x = 1, y = 1, width = 7, height = 7, view_box = { 0, 0, 7, 7 }, d = MARK,
-        fill_color = function() return C.primary end,
-        opacity = function() return (t.hovered or t.down) and 1 or 0 end, behavior = { opacity = quick } },
-      ui.Path { anchors = { right = true, bottom = true, right_margin = 1, bottom_margin = 1 }, width = 7, height = 7,
-        view_box = { 0, 0, 7, 7 }, d = MARK, rotation = 180, fill_color = function() return C.primary end,
-        opacity = function() return (t.hovered or t.down) and 1 or 0 end, behavior = { opacity = quick } },
-      hud().corners { length = 6, weight = 2, color = function() return C.primary end,
-        visible = function() return t.visual_focus end },
-    } end)
+  -- The feedback a press or the pointer gives a target: a faint wash, one
+  -- glint that crosses it on entry or press, the two registration marks
+  -- on its diagonal parting outward while hovered, and the keyboard's
+  -- brackets. Built the first time the control is reached (a lazy slot);
+  -- the target's input box never moves. `id` names the pieces
+  -- (`<id>-wash`, `<id>-glint`, `<id>-mark-1`).
+  local function feedback(t, id)
+    return lazy(t, function()
+      id = id or "tsugumori-control"
+      local holder = ui.Item { anchors = { fill = true }, z = 40 }
+      local wash = ui.Rect { id = id .. "-wash", anchors = { fill = true },
+        color = function() return C.primary end, opacity = 0,
+        behavior = { opacity = { duration = 140, easing = "out_cubic" } } }
+      local glint = ui.Path { id = id .. "-glint", x = -36, width = 28,
+        height = function() return math.max(1, t.height) end,
+        view_box = { 0, 0, 28, 100 }, d = "M20 0 H28 L8 100 H0 Z",
+        fill_color = function() return C.primary end, opacity = 0 }
+      ui.reparent(wash, holder)
+      ui.reparent(ui.Item { id = id .. "-glint-clip", anchors = { fill = true }, clip = true, glint }, holder)
+      local marks = {}
+      for i, corner in ipairs { { left = true, top = true }, { right = true, bottom = true } } do
+        marks[i] = ui.Path { id = id .. "-mark-" .. i, anchors = corner, width = 7, height = 7,
+          view_box = { 0, 0, 7, 7 }, d = MARK, rotation = i == 1 and 0 or 180,
+          fill_color = function() return C.primary end, opacity = 0,
+          behavior = { translate_x = { duration = 340, easing = "out_cubic" },
+            translate_y = { duration = 340, easing = "out_cubic" }, opacity = { duration = 180 } } }
+        ui.reparent(marks[i], holder)
+      end
+      ui.reparent(hud().corners { length = 6, weight = 2, color = function() return C.primary end,
+        visible = function() return t.visual_focus end }, holder)
+      local hovered, pressed, running = false, false, nil
+      morf.effect(id .. ".feedback", function()
+        local over, down = t.hovered, t.down
+        local fire = (over and not hovered) or (down and not pressed)
+        hovered, pressed = over, down
+        wash.opacity = down and 0.18 or over and 0.055 or 0
+        for i, mark in ipairs(marks) do
+          local shift = (over and not down) and (i == 1 and -3 or 3) or 0
+          mark.translate_x, mark.translate_y = shift, shift
+          mark.opacity = over and 1 or 0
+        end
+        if not over and not down then
+          if running then running:stop() running = nil end
+          glint.opacity = 0
+        elseif fire then
+          if running then running:stop() end
+          running = morf.animation.play { { parallel = {
+            { node = glint, property = "x", from = -36, to = t.width + 36, duration = 330, easing = "out_cubic" },
+            { node = glint, property = "opacity", duration = 330, keyframes = {
+              { at = 0, value = 0 }, { at = .13, value = .33 }, { at = .65, value = .27 }, { at = 1, value = 0 },
+            } },
+          } }, on_finished = function() running = nil end }
+        end
+      end, { owner = holder })
+      return holder
+    end)
   end
 
   -- A tick ruler along `len`: a short tick every 8 px, a long one every 5th.
@@ -91,12 +132,12 @@ return function(theme, M, hud)
         border_color = function() return t.hovered and stroke(C, "focus") or stroke(C, "idle") end,
         behavior = { color = quick, border_color = quick } },
       content = ui.Item { anchors = { fill = true }, measure, content },
-      badge = feedback(t),
+      badge = feedback(t, spec.id),
     }
   end
 
   --- A square rail with a block that slides across and takes the accent.
-  local function switch(t)
+  local function switch(t, spec)
     return {
       background = ui.Rect { anchors = { fill = true }, radius = 0, border_width = 1,
         color = function() return C.surfaceContainerHighest end,
@@ -104,7 +145,7 @@ return function(theme, M, hud)
       indicator = ui.Rect { y = 5, x = function() return t.checked and 28 or 5 end, width = 19, height = 22,
         color = function() return t.checked and C.primary or C.outline end,
         behavior = { x = { duration = 150, easing = "out_cubic" } } },
-      badge = feedback(t),
+      badge = feedback(t, spec.id),
     }
   end
 
@@ -124,7 +165,7 @@ return function(theme, M, hud)
         { anchors = { center_in = true }, fill = on }),
       indicator = ui.Rect { x = w - c - 1, y = 2, width = c - 1, height = 2, color = alert,
         opacity = function() return on() and 1 or 0 end, behavior = { opacity = quick } },
-      badge = feedback(t),
+      badge = feedback(t, spec.id),
     }
   end
 
@@ -152,12 +193,33 @@ return function(theme, M, hud)
     }
   end
 
+  --- A menu row: a mono label, the accent plate under the pointer, a
+  --- block when checked.
+  local function menu_item(t, spec)
+    return {
+      background = ui.Rect { anchors = { fill = true },
+        color = function() return C.primary:alpha(t.down and .2 or (t.hovered or t.visual_focus) and .1 or 0) end,
+        behavior = { color = quick } },
+      icon = spec.icon and M.icon(spec.icon, 16, function() return C.onSurfaceVariant end,
+        { x = 10, anchors = { vertical_center = true } }) or nil,
+      label = M.menu_label { x = spec.icon and 34 or 12, anchors = { vertical_center = true },
+        text = tostring(spec.label or ""):upper(), color = function() return C.onSurface end },
+      indicator = (spec.widget ~= "menu_item") and ui.Rect { anchors = { right = true, right_margin = 12,
+        vertical_center = true }, width = 8, height = 8, color = function() return C.primary end,
+        visible = function() return t.checked end } or nil,
+      badge = feedback(t, spec.id),
+    }
+  end
+
   function S.Press(t, spec)
     local widget = spec.widget
+    if widget == "menu_item" or widget == "check_menu_item" or widget == "radio_menu_item" then
+      return menu_item(t, spec)
+    end
     -- A layout's own area draws itself: the wash, the marks and the
     -- keyboard's brackets here.
-    if widget == "area" or widget == "segment" then return { badge = feedback(t) } end
-    if widget == "switch" then return switch(t)
+    if widget == "area" or widget == "segment" then return { badge = feedback(t, spec.id) } end
+    if widget == "switch" then return switch(t, spec)
     elseif widget == "icon" then return icon(t, spec)
     elseif widget == "checkbox" or widget == "check_menu_item" then return checkbox(t)
     elseif widget == "radio" or widget == "radio_menu_item" then return radio(t)
@@ -203,8 +265,7 @@ return function(theme, M, hud)
         width = 46, height = 18, horizontal_alignment = "right", font_size = 12,
         color = function() return engaged() and C.primary or C.onSurfaceVariant end,
         text = function() return ("%03d"):format(math.floor(clamp01(t.position) * 100 + .5)) end } or nil,
-      second_handle = hud().corners { length = 6, weight = 2, color = function() return C.primary end,
-        visible = function() return t.visual_focus end },
+      second_handle = feedback(t, spec.id),
     }
   end
 
@@ -250,9 +311,74 @@ return function(theme, M, hud)
     }
   end
 
+  --- A scroll bar: a hairline rail and a square block the length of the
+  --- view's share, lit under the pointer.
+  local function scroll_bar(t, spec)
+    local function length() return math.max(24, (get(spec.size) or 1) * t.height) end
+    return {
+      track = ui.Rect { anchors = { right = true, top = true, bottom = true }, width = 1,
+        color = function() return stroke(C, "quiet") end },
+      handle = ui.Rect { anchors = { right = true }, width = function() return (t.hovered or t.down) and 6 or 3 end,
+        height = length, y = function() return t.visual_position * (t.height - length()) end,
+        color = function() return C.primary:alpha((t.hovered or t.down) and .9 or .5) end,
+        behavior = { width = quick } },
+    }
+  end
+
   function S.Range(t, spec)
     if spec.widget == "seek_bar" then return seek_bar(t, spec) end
+    if spec.widget == "scroll_bar" then return scroll_bar(t, spec) end
     return slider(t, spec)
+  end
+
+  -- ------------------------------------------------------- text fields --
+
+  --- A text field: a hairline well when `well` is asked, a rail along the
+  --- foot that lights with focus and turns to alert while what is typed
+  --- would not be accepted, a framed clear (or reveal) key, a mono counter.
+  function S.TextField(t, spec, _, send)
+    local function bad() return not t.acceptable and not t.empty end
+    local slots = {
+      error = ui.Rect { anchors = { left = true, right = true, bottom = true }, height = 2,
+        color = function() return bad() and M.signal("alert")() or C.primary end,
+        opacity = function() return (t.focused or bad()) and 1 or 0 end, behavior = { opacity = quick } },
+    }
+    if spec.well then
+      slots.background = ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainerHigh end,
+        border_width = 1, border_color = function() return t.focused and stroke(C, "focus") or stroke(C, "idle") end }
+    end
+    if spec.clear or spec.reveal then
+      local reveal = spec.reveal and spec.echo == "password"
+      slots.trailing = require("lib.kit.widgets").icon { width = 26, height = 26,
+        anchors = { right = true, right_margin = 5, vertical_center = true },
+        icon_off = reveal and "visibility" or "close", icon_on = "visibility_off",
+        on = function() return reveal and t.revealed end,
+        visible = function() return reveal or not t.empty end,
+        on_clicked = function() send(reveal and "reveal" or "clear") end }
+    end
+    if spec.max_length then
+      slots.counter = M.menu_label { anchors = { right = true, bottom = true, right_margin = 6, bottom_margin = 4 },
+        color = function() return bad() and M.signal("alert")() or C.onSurfaceVariant end,
+        text = function() return ("%03d/%03d"):format(t.length, spec.max_length) end }
+    end
+    return slots
+  end
+
+  -- ------------------------------------------------------------ scrolls --
+
+  --- A scrolled view: the hairline scroll bar (a kit Range) on its right.
+  function S.Scroll(t, spec)
+    local flick = spec.flick
+    local function room() return math.max(0, t.content_height - t.viewport_height) end
+    return {
+      scroll_bar_y = require("lib.kit.widgets").scroll_bar { width = 8, orientation = "vertical", inverted = true,
+        anchors = { right = true, top = true, bottom = true, right_margin = 1, top_margin = 2, bottom_margin = 2 },
+        visible = function() return t.bar_y end,
+        value = function() return t.position_y end,
+        size = function() return t.size_y end,
+        handle_size = function() return math.max(24, t.size_y * t.viewport_height) end,
+        on_moved = function(v) if flick then flick.content_y = v * room() end end },
+    }
   end
 
   -- -------------------------------------------------------- selections --
@@ -400,6 +526,18 @@ return function(theme, M, hud)
   function S.Selection(t, spec)
     if spec.widget == "tabs" then return tabs(t, spec) end
     return entries(t, spec)
+  end
+
+  -- ------------------------------------------------------------ popups --
+
+  --- A popup's ground: a square framed panel with corner brackets.
+  function S.Popup(t, spec)
+    return {
+      background = ui.Item { anchors = { fill = true },
+        ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainerHigh end,
+          border_width = 1, border_color = function() return stroke(C, "focus") end },
+        hud().corners { length = 8, color = function() return C.primary end } },
+    }
   end
 
   -- ------------------------------------------------------------ planes --

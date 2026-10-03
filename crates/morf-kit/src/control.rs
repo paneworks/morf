@@ -101,7 +101,9 @@ impl ControlState {
                     effects.set("visual_focus", visual);
                 }
             }
-            "pressed" => {}
+            // Motion and the wheel mean nothing to the base; an archetype
+            // that drags or scrolls takes them before it gets here.
+            "pressed" | "dragged" | "drag_started" | "drag_finished" | "wheel" | "moved" => {}
             _ => return None,
         }
         Some(effects)

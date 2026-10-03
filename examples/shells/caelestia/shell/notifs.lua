@@ -148,6 +148,8 @@ function M.dismiss_at(index)
 end
 visual=require("themes").view("notifications").build(M)
 M.drawer=drawer.new {name="notifications",edge=visual.edge,width=visual.width,height=visual.height,
+  -- Toasts: they stay until their time is up, a click or a swipe.
+  close_policy="none",
   content=visual.content,props=visual.props}
 morf.effect("caelestia.notifications.shown",function()
   M.drawer.set(#M.list:get()>0 and not M.covered:get() and not M.dnd:get() and require("services").here())

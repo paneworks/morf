@@ -181,11 +181,8 @@ function V.build(M)
       anchors = { fill = true },
       color = function() return C.surface:alpha(M.opened:get() and .55 or 0) end,
       behavior = { color = { duration = theme.duration.normal, easing = theme.ease.standard } },
-      ui.MouseArea {
-        anchors = { fill = true },
-        visible = function() return M.opened:get() end,
-        on_clicked = function() M.close() end,
-      },
+      -- A press on it shuts the menu: the drawer's close policy, not a
+      -- catcher here.
     }
   end
 

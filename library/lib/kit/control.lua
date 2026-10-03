@@ -30,13 +30,18 @@ local SETTINGS = {
   Plane = { "x_from", "x_to", "y_from", "y_to", "x", "y", "step_x", "step_y", "constraint", "y_up" },
   Selection = { "count", "labels", "current", "selected", "mode", "wrap", "orientation", "columns", "page",
     "disabled", "follow_focus" },
+  Popup = { "modal", "dim", "close_policy", "placement", "focus_on_open", "restore_focus" },
+  TextField = { "text", "placeholder", "echo", "read_only", "max_length", "validator", "minimum", "maximum",
+    "required", "revert_on_escape" },
+  Scroll = { "scroll_policy_x", "scroll_policy_y", "snap", "item_size", "step" },
 }
 -- How each archetype takes focus by default: a press by Tab only, so a click
 -- leaves a search field typing; a range by click too, so the arrows move
 -- what was just dragged.
-local POLICY = { Control = "none", Press = "tab", Range = "strong", Plane = "strong", Selection = "strong" }
+local POLICY = { Control = "none", Press = "tab", Range = "strong", Plane = "strong", Selection = "strong",
+  TextField = "none", Scroll = "none" }
 -- Which take keys and the wheel.
-local KEYS = { Press = true, Range = true, Plane = true, Selection = true }
+local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scroll = true }
 local WHEEL = { Range = true, Plane = true }
 -- The clock typeahead measures pauses on.
 local clock = morf.elapsed_timer()
@@ -44,7 +49,9 @@ local clock = morf.elapsed_timer()
 -- given to the node.
 local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_value_changed = true,
   on_long_pressed = true, on_double_clicked = true, on_current_changed = true, on_selection_changed = true,
-  on_activated = true }
+  on_activated = true, on_opened = true, on_closed = true, on_about_to_close = true, on_edited = true,
+  on_invalid = true, on_scrolled = true, on_reached_start = true, on_reached_end = true, on_set_text = true,
+  on_scroll_to = true }
 -- Every live control's way to take effects another control's event caused
 -- (an exclusive group), by id.
 local appliers = {}
@@ -115,6 +122,9 @@ function M.make(archetype, widget, spec, extra)
         end)
       elseif name == "focus_request" then
         if root then morf.focus.set(root, true) end
+      elseif name == "set_text" or name == "scroll_to" then
+        local handler = spec["on_" .. name]
+        if handler then handler(table.unpack(signal, 2)) end
       elseif name == "pressed" or name == "released" then
         -- The configuration's own pointer handlers hear the event itself.
       elseif name == "clicked" then
@@ -178,7 +188,10 @@ function M.make(archetype, widget, spec, extra)
       native.drop(id)
     end,
   }
-  if KEYS[archetype] then
+  -- (A control that cannot take focus takes no keys either: it would
+  -- otherwise be where a surface with no focus sends them.)
+  local focusable = (extra.props and extra.props.focus_policy or props.focus_policy) ~= "none"
+  if KEYS[archetype] and focusable then
     -- A key the archetype does not use goes on to what is around it.
     props.on_key_pressed = function(keysym, text, modifiers, repeat_, name)
       local effects = native.send(id, "key", name or "", modifiers or "", text or "", clock:elapsed_ms())
@@ -188,7 +201,9 @@ function M.make(archetype, widget, spec, extra)
       return false
     end
   end
-  if WHEEL[archetype] then
+  -- (`wheel = false`: the wheel goes past it -- a scroll bar leaves it to
+  -- the view it scrolls.)
+  if WHEEL[archetype] and spec.wheel ~= false then
     props.on_wheel = function(_, _, _, _, step_x, step_y) send("wheel", step_x or 0, step_y or 0) end
   end
   -- The configuration's other handlers go to the node as they are.
@@ -237,7 +252,7 @@ function M.make(archetype, widget, spec, extra)
   local function build()
     if slots then for _, node in pairs(slots) do ui.destroy(node, true) end end
     slots, waiting, builders = {}, nil, {}
-    local built = skin.build(widget, archetype, slot_names, t, spec, nil, root)
+    local built = skin.build(widget, archetype, slot_names, t, spec, nil, root, send)
     for _, name in ipairs(slot_names) do
       local node = built[name]
       if (extra.builders or {})[name] then
