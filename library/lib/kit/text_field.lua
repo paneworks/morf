@@ -27,7 +27,10 @@ local CONTROL = { x = true, y = true, z = true, anchors = true, visible = true, 
 local SETTINGS = { text = false, placeholder = false, echo = true, read_only = false, max_length = false,
   validator = true, minimum = true, maximum = true, required = true, revert_on_escape = true, inset = true,
   clear = true, reveal = true, widget = true, on_accepted = true, on_escape = true, on_edited = true,
-  on_invalid = true, on_focus_changed = true }
+  on_invalid = true, on_focus_changed = true,
+  -- What the skin draws around the input: a well, a floating `label`, a
+  -- `supporting` line under it, a leading `icon`, a `unit`, `tags` as chips.
+  well = true, label = true, supporting = true, icon = true, unit = true, tags = true }
 
 local function sides(v)
   if type(v) == "table" then return v[1] or 0, v[2] or 0, v[3] or 0, v[4] or 0 end
@@ -40,6 +43,8 @@ local DEFAULTS = {
   password = { echo = "password", reveal = true },
   url = { validator = "url" }, email = { validator = "email" },
   numeric_entry = { validator = "number" }, search = { clear = true },
+  otp = { max_length = 6, validator = "integer" },
+  text_area = { multiline = true, wrap = true, vertical_alignment = "top" },
 }
 
 function M.make(widget, spec)

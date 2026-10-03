@@ -37,7 +37,7 @@ local DEFAULTS = {
   dialog = { placement = "center", close_policy = "escape", modal = true, dim = true },
   alert_dialog = { placement = "center", close_policy = "none", modal = true, dim = true },
   bottom_sheet = { placement = "center", close_policy = "escape+outside", modal = true, dim = true },
-  toast = { placement = "center", close_policy = "none", focus_on_open = false },
+  toast = { placement = "center", close_policy = "none", focus_on_open = false, padding = 12 },
   snackbar = { placement = "center", close_policy = "none", focus_on_open = false },
 }
 
@@ -75,12 +75,24 @@ local function build_content(widget, spec, close)
   -- A dialog: a title, a body and a row of buttons.
   local width = spec.width or 360
   local column = { gap = 12, x = 20, y = 18, width = width - 40 }
-  local text = require("morf.ui").Text
   -- The ink the theme writes in, not a colour of this file's choosing: a
   -- light dialog ground wants dark text.
   local has_kit, theme_kit = pcall(require, "kit")
-  local ink = spec.ink or (has_kit and type(theme_kit) == "table" and theme_kit.ink and theme_kit.ink("hi")) or "#ffffff"
-  local ink_lo = spec.ink or (has_kit and type(theme_kit) == "table" and theme_kit.ink and theme_kit.ink("lo")) or ink
+  -- (A theme whose ground for this widget is not its usual one -- a dark
+  -- tooltip or toast -- says which ink reads on it: `popup_ink`.)
+  local themed = has_kit and type(theme_kit) == "table"
+  -- In the theme's face, when there is a theme.
+  local text = (themed and theme_kit.text) or require("morf.ui").Text
+  local function ink_of(level)
+    local own = themed and theme_kit.popup_ink and theme_kit.popup_ink(widget, level)
+    return own or (themed and theme_kit.ink and theme_kit.ink(level)) or nil
+  end
+  local ink = spec.ink or ink_of("hi") or "#ffffff"
+  local ink_lo = spec.ink or ink_of("lo") or ink
+  -- Words alone (a tooltip, a toast): as wide as they are.
+  if spec.text and not spec.title and not spec.body and not spec.buttons then
+    return text { text = spec.text, font_size = 13, color = ink }
+  end
   if spec.title then
     column[#column + 1] = text { text = spec.title, font_size = 18, font_weight = 600, width = width - 40,
       color = ink }
@@ -118,6 +130,8 @@ function M.make(widget, spec)
   spec = merged(widget, spec)
   local handle = {}
   local root, t, ctl
+  -- Whether it is showing, for the theme's motion (`popup_motion`).
+  local shown = morf.signal("kit.popup.shown." .. tostring(handle), false)
   local function close(reason)
     if not t or not t.open then return end
     if spec.on_about_to_close and spec.on_about_to_close(reason or "closed") == false then return end
@@ -128,14 +142,21 @@ function M.make(widget, spec)
     if root then return end
     local content = build_content(widget, spec, close)
     local pad = spec.padding or 0
-    root, t, ctl = control.make("Popup", widget, spec, {
-      children = { content },
-      props = {
-        width = spec.width or function() return (content.layout_width or 0) + 2 * pad end,
-        height = spec.height or function() return (content.layout_height or 0) + 2 * pad end,
-        focus_policy = "none",
-      },
-    })
+    local props = {
+      width = spec.width or function() return (content.layout_width or 0) + 2 * pad end,
+      height = spec.height or function() return (content.layout_height or 0) + 2 * pad end,
+      focus_policy = "none",
+    }
+    -- How the theme brings it in (`popup_motion`): its node's pose while
+    -- shut and open, and the behaviours that carry it between them.
+    local has_kit, theme_kit = pcall(require, "kit")
+    local motion = has_kit and type(theme_kit) == "table" and theme_kit.popup_motion
+      and theme_kit.popup_motion(widget, spec, {
+        open = function() return shown:get() end,
+        size = function(axis) return root and root["layout_" .. axis] or 0 end,
+      }) or nil
+    if motion and spec.behavior == nil then for k, v in pairs(motion) do props[k] = v end end
+    root, t, ctl = control.make("Popup", widget, spec, { children = { content }, props = props })
     if pad > 0 then content.x, content.y = pad, pad end
     handle.node, handle.t = root, t
   end
@@ -145,6 +166,7 @@ function M.make(widget, spec)
     if t.open then return end
     anchor_now = anchor or spec.anchor
     ctl.send("open")
+    shown:set(true)
     morf.overlay.open(root, {
       anchor = anchor_now, root = spec.root, placement = t.placement, gap = spec.gap, except = spec.except,
       dim = t.dim, modal = t.modal, escape = t.escape, outside = t.outside, focus = t.focus_on_open,
@@ -157,6 +179,7 @@ function M.make(widget, spec)
           return
         end
         ctl.send("close", reason)
+        shown:set(false)
       end,
     })
   end
@@ -203,7 +226,7 @@ end
 function M.toast(spec)
   local toast = M.make("toast", spec)
   toast.open(spec.anchor)
-  morf.timer(spec.timeout or 3000, function() toast.close("timeout") end)
+  morf.timer(spec.timeout or 3000, function() toast.close("timeout") end, false)
   return toast
 end
 
@@ -218,7 +241,7 @@ function M.tooltip(target, text, delay)
     local over = target.hovered or target.contains_pointer
     if waiting then waiting:cancel() waiting = nil end
     if over then
-      waiting = morf.timer(delay or 600, function() waiting = nil tip.open(target) end)
+      waiting = morf.timer(delay or 600, function() waiting = nil tip.open(target) end, false)
     else
       tip.close("left")
     end

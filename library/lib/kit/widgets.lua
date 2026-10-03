@@ -24,44 +24,75 @@ local PRESS = {
   toggle_group_member = { checkable = true, exclusive = true },
   segment = { checkable = true, exclusive = true },
   rating_star = { checkable = true },
-  repeat_button = { auto_repeat = true },
+  repeat_button = { auto_repeat = true, width = 40, height = 40 },
   disclosure_button = { checkable = true },
+  -- A quick-settings tile turns something on and off.
+  tile = { checkable = true },
+  -- Icon-only presses have no label to size them by.
+  circular = { width = 48, height = 48 },
+  close = { width = 40, height = 40 },
+  help = { width = 40, height = 40 },
+  back = { width = 40, height = 40 },
+  forward = { width = 40, height = 40 },
+  fab = { width = 56, height = 56 },
+  extended_fab = { height = 56 },
 }
 local RANGE = {
   vertical_slider = { orientation = "vertical" },
-  fader = { orientation = "vertical" },
+  fader = { orientation = "vertical", value = 0.75 },
   range_slider = { range = true },
-  discrete_slider = { snap = "always", step = 1 },
-  stepped_knob = { snap = "always", step = 1, drag_mode = "vertical" },
+  -- Eleven stops, 0 to 10.
+  discrete_slider = { snap = "always", step = 1, from = 0, to = 10 },
+  stepped_knob = { snap = "always", step = 1, from = 0, to = 10, drag_mode = "vertical" },
   rating = { snap = "always", step = 1, from = 0, to = 5 },
-  log_slider = { logarithmic = true },
+  -- The audible frequencies, in Hz.
+  log_slider = { logarithmic = true, from = 20, to = 20000, value = 1000 },
   angle_slider = { wrap = true, from = 0, to = 360, drag_mode = "angular", angle_from = 0, angle_sweep = 360 },
   knob = { drag_mode = "vertical" },
   bipolar_knob = { from = -1, to = 1, value = 0, drag_mode = "vertical" },
-  zoom = { from = 0.25, to = 4, value = 1, logarithmic = true },
-  spin_button = { step = 1, snap = "always" },
+  -- Its buttons and the arrows step by a quarter.
+  zoom = { from = 0.25, to = 4, value = 1, logarithmic = true, step = 0.25 },
+  -- A drag up or down over a spin button scrubs it.
+  spin_button = { step = 1, snap = "always", from = 0, to = 100, drag_mode = "vertical" },
   seek_bar = { live = false },
   scroll_bar = { wheel = false },
-  osd_level = { enabled = false },
+  volume = { from = 0, to = 1 },
+  brightness = { from = 0, to = 1 },
+  level_control = { from = 0, to = 1 },
+  osd_level = { enabled = false, from = 0, to = 1 },
 }
 
 local PLANE = {
-  hue_wheel = { polar = true },
+  hue_wheel = { polar = true, y = 1 },
   joystick = { constraint = "circle", x_from = -1, x_to = 1, y_from = -1, y_to = 1, y_up = true, spring = true },
   xy_pad = { y_up = true },
+  -- Left to right and front to back, the listener in the middle.
+  pan_pad = { constraint = "circle", x_from = -1, x_to = 1, y_from = -1, y_to = 1, y_up = true },
+  -- A breakpoint's time across and level up.
+  envelope_point = { y_up = true },
 }
+-- (Entry sizes are a fallback for a configuration that names none: an
+-- entry with no size of its own draws nothing.)
 local SELECTION = {
   tabs = { orientation = "horizontal" },
-  segmented = { orientation = "horizontal" },
-  list_selection = { orientation = "vertical" },
-  sidebar_list = { orientation = "vertical" },
-  grid_selection = { orientation = "grid" },
-  swatch_grid = { orientation = "grid" },
-  emoji_grid = { orientation = "grid" },
-  icon_chooser = { orientation = "grid" },
-  day_grid = { orientation = "grid", columns = 7 },
-  toggle_group = { mode = "multi" },
-  transfer_side = { orientation = "vertical", mode = "range" },
+  segmented = { orientation = "horizontal", item_width = 80, item_height = 36 },
+  view_switcher = { orientation = "horizontal", item_width = 88, item_height = 56 },
+  inline_view_switcher = { orientation = "horizontal", item_width = 96, item_height = 36 },
+  radio_group = { orientation = "vertical", item_width = 200, item_height = 40 },
+  toggle_group = { mode = "multi", item_width = 44, item_height = 40 },
+  list_selection = { orientation = "vertical", item_width = 220, item_height = 40 },
+  sidebar_list = { orientation = "vertical", item_width = 220, item_height = 40 },
+  grid_selection = { orientation = "grid", item_width = 56, item_height = 56 },
+  carousel_dots = { orientation = "horizontal", item_width = 24, item_height = 24 },
+  pagination = { orientation = "horizontal", item_width = 36, item_height = 36 },
+  stepper_header = { orientation = "horizontal", item_width = 96, item_height = 64 },
+  breadcrumbs = { orientation = "horizontal", item_height = 36 },
+  swatch_grid = { orientation = "grid", item_width = 32, item_height = 32 },
+  emoji_grid = { orientation = "grid", item_width = 40, item_height = 40 },
+  icon_chooser = { orientation = "grid", item_width = 44, item_height = 44 },
+  day_grid = { orientation = "grid", columns = 7, item_width = 40, item_height = 36 },
+  transfer_side = { orientation = "vertical", mode = "range", item_width = 220, item_height = 36 },
+  rating_items = { orientation = "horizontal", item_width = 36, item_height = 36 },
 }
 
 local function with_defaults(widget, spec, defaults)
@@ -110,6 +141,10 @@ for _, widget in ipairs(contract.archetypes.Drag.widgets) do
 end
 for _, widget in ipairs(contract.archetypes.Navigation.widgets) do
   M[widget] = function(spec) return require("lib.kit.navigation").make(widget, spec) end
+end
+-- A shell returns its control and a handle (`toggle_sidebar`, `dismiss`).
+for _, widget in ipairs(contract.archetypes.Shell.widgets) do
+  M[widget] = function(spec) return require("lib.kit.shell").make(widget, spec) end
 end
 -- A canvas or a dock returns its control and a handle (`fit`, `zoom_by`,
 -- `select` ...; `activate`, `close`, `float` ...).
