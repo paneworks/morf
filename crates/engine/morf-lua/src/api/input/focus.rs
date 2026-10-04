@@ -19,7 +19,7 @@
 //! the loop, outside whatever handler asked.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+
 use std::rc::Rc;
 
 use luna::{Callback, CallbackReturn, Context, Table, UserRef};
@@ -33,60 +33,12 @@ use crate::scene_bindings::{assign_scene_property, node_userdata};
 use crate::state::ReactiveState;
 use crate::state_tokens::NodeToken;
 
-/// Why focus moved, which decides whether the ring shows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FocusReason {
-    /// A click or a touch: no ring.
-    Click,
-    /// Tab or Shift+Tab, or a program that asked as a keyboard would: a ring.
-    Keyboard,
-    /// A program, with no keyboard behind it: no ring.
-    Program,
-    /// Handed on after the focused node went away: the ring stays as it was.
-    Restore,
-}
-
-/// What a configuration asked of focus, settled at the next turn.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum FocusRequest {
-    Set(NodeHandle, bool),
-    /// A node's `focus` turned true: it takes focus if it can hold it.
-    Claim(NodeHandle),
-    /// A node's `focus` turned false: it gives focus up if it had it.
-    Release(NodeHandle),
-    /// Focus into a subtree that opened (an overlay): its first node Tab
-    /// would reach, with a ring when the focus it took over had one.
-    Into(NodeHandle, bool),
-    Clear(NodeHandle),
-    Step(bool),
-}
-
-/// Who has focus, per surface, and what each scope remembers.
-#[derive(Default)]
-pub(crate) struct FocusState {
-    /// The focused node of each scene root.
-    pub(crate) owner: HashMap<NodeHandle, NodeHandle>,
-    /// The scopes the owner sat in when it took focus, innermost first: where
-    /// focus goes when the owner is gone and its ancestry with it.
-    pub(crate) scopes: HashMap<NodeHandle, Vec<NodeHandle>>,
-    /// The node in each scope that last had focus.
-    pub(crate) memory: HashMap<NodeHandle, NodeHandle>,
-    /// Scene roots whose surface the keyboard has left: their owner keeps
-    /// focus but does not show it.
-    pub(crate) inactive: HashSet<NodeHandle>,
-    /// The root the last key or click went to, for `morf.focus.next()`.
-    pub(crate) last_root: Option<NodeHandle>,
-    pub(crate) requests: Vec<FocusRequest>,
-}
+pub use morf_runtime::focus::FocusReason;
+pub(crate) use morf_runtime::focus::{FocusRequest, FocusState};
 
 /// Queues what a write to a node's `focus` asks.
 pub(crate) fn request_by_property(state: &mut ReactiveState, node: NodeHandle, on: bool) {
-    let request = if on {
-        FocusRequest::Claim(node)
-    } else {
-        FocusRequest::Release(node)
-    };
-    state.focus.requests.push(request);
+    state.focus.request_by_property(node, on);
 }
 
 fn chain(state: &ReactiveState, root: NodeHandle) -> Vec<NodeHandle> {
@@ -127,74 +79,20 @@ impl Runtime {
     ) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
         let chain = chain(&state, root);
-        let count = chain.len();
-        if count == 0 {
-            return None;
-        }
-        let step = |index: usize| {
-            if backwards {
-                (index + count - 1) % count
-            } else {
-                (index + 1) % count
-            }
-        };
-        let at = current.and_then(|node| chain.iter().position(|n| *n == node));
-        let mut index = match at {
-            Some(index) => step(index),
-            None if backwards => count - 1,
-            None => 0,
-        };
-        // Leaving a scope leaves all of it: its nodes are one run of the
-        // chain, so step past the run's far end.
-        if let Some(current) = current.filter(|_| at.is_some())
-            && let Some(scope) = state.scene.focus_scope_of(current)
-            && !within(&state, scope, chain[index])
-        {
-            let first = chain.iter().position(|n| within(&state, scope, *n));
-            let last = chain.iter().rposition(|n| within(&state, scope, *n));
-            if let (Some(first), Some(last)) = (first, last) {
-                index = if backwards { step(first) } else { step(last) };
-            }
-        }
-        let candidate = chain[index];
-        // Entering a scope lands where it last had focus: the outermost
-        // scope entered remembers the deepest node.
-        let mut entered = None;
-        let mut scope = state.scene.focus_scope_of(candidate);
-        while let Some(s) = scope {
-            if current.is_some_and(|c| within(&state, s, c)) {
-                break;
-            }
-            entered = Some(s);
-            scope = state.scene.focus_scope_of(s);
-        }
-        if let Some(scope) = entered
-            && let Some(remembered) = state.focus.memory.get(&scope).copied()
-            && remembered != candidate
-            && within(&state, scope, remembered)
-            && chain.contains(&remembered)
-        {
-            return Some(remembered);
-        }
-        Some(candidate)
+        morf_runtime::focus::next_in(
+            &state.scene,
+            &chain,
+            &state.focus.memory,
+            current,
+            backwards,
+        )
     }
 
     /// The node a click on `node` focuses: the nearest that takes focus by
     /// click, itself or an ancestor.
     pub fn click_focus_target(&self, node: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        let mut current = Some(node);
-        while let Some(node) = current {
-            if state
-                .scene
-                .focus_policy(node)
-                .by_click(takes_keys(&state, node))
-            {
-                return state.scene.can_hold_focus(node).then_some(node);
-            }
-            current = state.scene.parent(node).ok().flatten();
-        }
-        None
+        morf_runtime::focus::click_target(&state.scene, node, |node| takes_keys(&state, node))
     }
 
     /// Gives focus under `root` to `node`, or to nothing. Writes `focused`

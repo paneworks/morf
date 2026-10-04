@@ -3,9 +3,10 @@
 //!
 //! Subsystems arrive here one at a time from `morf-lua` (PLAN.md phase 5):
 //! handlers, timers, the reactive scheduler, the event vocabulary, the
-//! gesture recogniser and shortcuts so far.
+//! gesture recogniser, shortcuts and focus movement so far.
 
 pub mod events;
+pub mod focus;
 pub mod gestures;
 pub mod handler;
 pub mod keys;
