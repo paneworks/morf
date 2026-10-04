@@ -99,9 +99,7 @@ pub fn handle_data_event(
                 let local = surface_layout(
                     surface,
                     &state.layout,
-                    &state.popup_surfaces,
-                    &state.floating_surfaces,
-                    &state.layer_surfaces,
+                    &state.windows,
                 )
                 .map(|layout| layout.local_point(&runtime.scene(), node, x, y))
                 .unwrap_or((x, y));
@@ -147,9 +145,7 @@ fn follow_drag(
     let hit = match surface_layout(
         drag.surface,
         &state.layout,
-        &state.popup_surfaces,
-        &state.floating_surfaces,
-        &state.layer_surfaces,
+        &state.windows,
     ) {
         Some(layout) => layout
             .drop_hit_test(&runtime.scene(), x, y)

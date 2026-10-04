@@ -6,6 +6,7 @@ use morf_app::{
 };
 use std::collections::{HashMap, HashSet};
 
+use crate::host::windows::{Kind, Windows};
 use crate::{surface_layers::*, surfaces::*};
 
 // Popups: how a configuration's description of one becomes a positioner, and
@@ -139,14 +140,15 @@ pub fn open_popup_surface(
     surface: &WindowSurfaceConfig,
     config: &PopupSurfaceConfig,
     parent: WindowId,
-    popups: &mut HashMap<u64, AuxiliarySurface>,
+    windows: &mut Windows,
 ) -> Result<(), String> {
     client
         .open(WindowId::Popup(surface.id), WindowKind::Popup { parent: parent, config: popup_client_config(config)? })
         .map_err(|error| error.to_string())?;
-    popups.insert(
+    windows.insert(
+        Kind::Popup,
         surface.id,
-        AuxiliarySurface {
+        Window {
             id: surface.id,
             root: surface.root,
             updates_enabled: surface.updates_enabled,

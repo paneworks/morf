@@ -40,9 +40,7 @@ pub fn surface_key(
     let Some(root) = surface_root(
         surface,
         state.primary_root,
-        &state.popup_surfaces,
-        &state.floating_surfaces,
-        &state.layer_surfaces,
+        &state.windows,
     ) else {
         return false;
     };

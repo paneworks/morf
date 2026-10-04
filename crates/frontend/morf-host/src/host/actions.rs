@@ -2,8 +2,8 @@ use morf_layout::{Layout, ReparentTransition, Size};
 use morf_lua::{Runtime, WindowSurfaceAction};
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_app::{Edge, LayerClient};
-use std::collections::HashMap;
 
+use crate::host::windows::{Kind, Windows};
 use crate::surfaces::*;
 use morf_app::Backend as _;
 use morf_app::WindowId;
@@ -11,14 +11,14 @@ use morf_app::WindowId;
 pub fn apply_window_surface_actions(
     runtime: &mut Runtime,
     client: &LayerClient,
-    floatings: &HashMap<u64, AuxiliarySurface>,
+    windows: &Windows,
 ) {
     for action in runtime.take_window_surface_actions() {
         match action {
-            WindowSurfaceAction::Move { id } if floatings.contains_key(&id) => {
+            WindowSurfaceAction::Move { id } if windows.contains(Kind::Toplevel, id) => {
                 client.start_move(WindowId::Toplevel(id));
             }
-            WindowSurfaceAction::Resize { id, edge } if floatings.contains_key(&id) => {
+            WindowSurfaceAction::Resize { id, edge } if windows.contains(Kind::Toplevel, id) => {
                 let edge = match edge.as_str() {
                     "top" => Edge::Top,
                     "bottom" => Edge::Bottom,

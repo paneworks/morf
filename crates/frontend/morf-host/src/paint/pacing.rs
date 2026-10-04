@@ -2,6 +2,7 @@ use morf_lua::Runtime;
 use morf_app::{LayerClient, PRIMARY_LAYER};
 use std::time::Duration;
 
+use crate::host::windows::Kind;
 use crate::{surface_layers::*, surfaces::*};
 use morf_app::Backend as _;
 use morf_app::WindowId;
@@ -171,7 +172,7 @@ pub fn primary_frame(
     // tick is what tells them a repaint is due, and a surface that is
     // already idle needs a frame callback to come back on.
     if advanced {
-        for surface in state.layer_surfaces.values_mut() {
+        for surface in state.windows.of_kind_mut(Kind::Layer).map(|(_, surface)| surface) {
             if surface.updates_enabled && !surface.needs_paint {
                 surface.needs_paint = true;
                 // Committed, or the request waits for a commit that an idle

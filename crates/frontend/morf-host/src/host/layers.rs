@@ -8,8 +8,9 @@ use morf_app::{
     LayerConfig, KeyboardFocus, LayerAnchors, LayerClient, PRIMARY_LAYER, ShellLayer,
     physical_size,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
+use crate::host::windows::{Kind, Windows};
 use crate::render_target::surface_backend;
 use crate::{capture::*, paint::*, services::*, surfaces::*};
 use morf_app::{Backend as _, WindowKind};
@@ -286,22 +287,22 @@ pub fn sync_layer_surfaces(
     client: &mut LayerClient,
     output: &str,
     desired: &[&WindowSurfaceConfig],
-    layers: &mut HashMap<u64, AuxiliarySurface>,
+    windows: &mut Windows,
 ) -> Result<bool, String> {
     let mut resumed = false;
     let live = desired
         .iter()
         .map(|surface| surface.id)
         .collect::<HashSet<_>>();
-    let mut stale = layers
-        .keys()
+    let mut stale = windows
+        .ids(Kind::Layer)
+        .into_iter()
         .filter(|id| !live.contains(id))
-        .copied()
         .collect::<Vec<_>>();
     stale.sort_unstable_by(|a, b| b.cmp(a));
     for id in stale {
         client.close(WindowId::Layer(window_layer_id(id)));
-        layers.remove(&id);
+        windows.remove(Kind::Layer, id);
     }
     for surface in desired {
         let id = surface.id;
@@ -309,8 +310,8 @@ pub fn sync_layer_surfaces(
             unreachable!("only layer surfaces reach the layer sync");
         };
         let update = layer_update(
-            layers
-                .get(&id)
+            windows
+                .get(Kind::Layer, id)
                 .and_then(|current| current.layer_config.as_ref()),
             config,
             client.supports_live_layer_change(),
@@ -319,9 +320,10 @@ pub fn sync_layer_surfaces(
             client
                 .open(WindowId::Layer(window_layer_id(id)), WindowKind::Layer(runtime_bar_config(config, output)?))
                 .map_err(|error| error.to_string())?;
-            layers.insert(
+            windows.insert(
+                Kind::Layer,
                 id,
-                AuxiliarySurface {
+                Window {
                     id,
                     root: surface.root,
                     updates_enabled: surface.updates_enabled,
@@ -342,7 +344,7 @@ pub fn sync_layer_surfaces(
                 .set_layer_geometry(window_layer_id(id), &runtime_bar_config(config, output)?)
                 .map_err(|error| error.to_string())?;
         }
-        let Some(current) = layers.get_mut(&id) else {
+        let Some(current) = windows.get_mut(Kind::Layer, id) else {
             continue;
         };
         if update == LayerUpdate::Geometry {
@@ -381,7 +383,7 @@ pub fn layer_surface_configure(
     let Some(id) = window_surface_id(layer) else {
         return Ok(());
     };
-    let Some(surface) = state.layer_surfaces.get_mut(&id) else {
+    let Some(surface) = state.windows.get_mut(Kind::Layer, id) else {
         return Ok(());
     };
     let initial = surface.renderer.is_none();
@@ -415,7 +417,7 @@ pub fn layer_surface_scale(
     let Some(id) = window_surface_id(layer) else {
         return Ok(());
     };
-    let Some(surface) = state.layer_surfaces.get_mut(&id) else {
+    let Some(surface) = state.windows.get_mut(Kind::Layer, id) else {
         return Ok(());
     };
     let scale = client.layer_scale_120(layer).unwrap_or(120);
@@ -444,9 +446,7 @@ pub fn layer_surface_frame(
     let Some(id) = window_surface_id(layer) else {
         return Ok(());
     };
-    let Some(surface) = state
-        .layer_surfaces
-        .get_mut(&id)
+    let Some(surface) = state.windows.get_mut(Kind::Layer, id)
         .filter(|surface| surface.updates_enabled && surface.needs_paint)
     else {
         return Ok(());
@@ -465,7 +465,7 @@ pub fn layer_surface_closed(
     let Some(id) = window_surface_id(layer) else {
         return;
     };
-    if state.layer_surfaces.remove(&id).is_some() {
+    if state.windows.remove(Kind::Layer, id).is_some() {
         runtime.set_window_surface_visible(id, false);
     }
 }

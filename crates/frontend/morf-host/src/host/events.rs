@@ -4,6 +4,7 @@ use morf_app::Backend as _;
 use morf_app::{Event, LayerClient, PRIMARY_LAYER, WindowId, physical_size};
 use std::sync::mpsc;
 
+use crate::host::windows::Kind;
 use crate::render_target::surface_backend;
 use crate::{
     lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*,
@@ -29,9 +30,7 @@ pub fn handle_surface_event(
     // Then the pointer and the fingers, which need only the layouts.
     let layouts = LayerLayouts {
         layout: &state.layout,
-        popups: &state.popup_surfaces,
-        floatings: &state.floating_surfaces,
-        layers: &state.layer_surfaces,
+        windows: &state.windows,
     };
     let event = match handle_pointer_event(runtime, client, &mut state.input, &layouts, event)? {
         Ok(repaint) => return Ok(repaint),
@@ -42,9 +41,7 @@ pub fn handle_surface_event(
             let (width, height) = client.physical_size();
             renderer.resize(width, height);
             for surface in state
-                .popup_surfaces
-                .values_mut()
-                .chain(state.floating_surfaces.values_mut())
+                .windows.values_mut().filter(|surface| surface.layer_config.is_none())
             {
                 if let Some(renderer) = &mut surface.renderer {
                     // Still the layer's scale here, as a fallback: a compositor
@@ -84,9 +81,7 @@ pub fn handle_surface_event(
             if let Some(root) = surface_root(
                 surface,
                 state.primary_root,
-                &state.popup_surfaces,
-                &state.floating_surfaces,
-                &state.layer_surfaces,
+                &state.windows,
             ) {
                 repaint |= runtime.set_focus_active(root, focused);
                 state.keyboard_changes.push((root, focused));
@@ -146,7 +141,7 @@ pub fn handle_surface_event(
             );
         }
         Event::PopupConfigure { id, width, height } => {
-            if let Some(surface) = state.popup_surfaces.get_mut(&id) {
+            if let Some(surface) = state.windows.get_mut(Kind::Popup, id) {
                 let initial = surface.renderer.is_none();
                 surface.width = width.max(1);
                 surface.height = height.max(1);
@@ -179,8 +174,8 @@ pub fn handle_surface_event(
             // A popup on a 2x screen opened from a bar on a 1x one used to be
             // rendered at the bar's scale and stretched. It has its own now.
             let surface = match role {
-                WindowId::Popup(id) => state.popup_surfaces.get_mut(&id),
-                WindowId::Toplevel(id) => state.floating_surfaces.get_mut(&id),
+                WindowId::Popup(id) => state.windows.get_mut(Kind::Popup, id),
+                WindowId::Toplevel(id) => state.windows.get_mut(Kind::Toplevel, id),
                 WindowId::Layer(_) | WindowId::Lock(_) => None,
             };
             if let Some(surface) = surface
@@ -192,22 +187,20 @@ pub fn handle_surface_event(
             }
         }
         Event::PopupFrame { id, .. } => {
-            if let Some(surface) = state
-                .popup_surfaces
-                .get_mut(&id)
+            if let Some(surface) = state.windows.get_mut(Kind::Popup, id)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_popup_surface(runtime, client, surface)?;
             }
         }
         Event::PopupDone { id } => {
-            if let Some(surface) = state.popup_surfaces.remove(&id) {
+            if let Some(surface) = state.windows.remove(Kind::Popup, id) {
                 runtime.set_window_surface_visible(surface.id, false);
                 repaint |= runtime.dispatch_window_closed(surface.id);
             }
         }
         Event::ToplevelConfigure { id, width, height } => {
-            if let Some(surface) = state.floating_surfaces.get_mut(&id) {
+            if let Some(surface) = state.windows.get_mut(Kind::Toplevel, id) {
                 let initial = surface.renderer.is_none();
                 surface.width = width.max(1);
                 surface.height = height.max(1);
@@ -234,9 +227,7 @@ pub fn handle_surface_event(
             }
         }
         Event::ToplevelFrame { id, .. } => {
-            if let Some(surface) = state
-                .floating_surfaces
-                .get_mut(&id)
+            if let Some(surface) = state.windows.get_mut(Kind::Toplevel, id)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_floating_surface(runtime, client, surface)?;
@@ -246,7 +237,7 @@ pub fn handle_surface_event(
             // A request, not a close: the window stays until the
             // configuration's `on_close_requested` lets it go, and then the
             // next sync takes it down like any hidden window.
-            if state.floating_surfaces.contains_key(&id) {
+            if state.windows.contains(Kind::Toplevel, id) {
                 repaint |= runtime.request_window_close(id);
             }
         }

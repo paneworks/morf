@@ -11,10 +11,11 @@ use morf_app::{
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
+use crate::host::windows::{Kind, Windows};
 use crate::{pacing::*, paint::*, surface_layers::*, surface_popups::*};
 use morf_app::{Backend as _, WindowKind};
 
-pub struct AuxiliarySurface {
+pub struct Window {
     pub id: u64,
     pub root: NodeHandle,
     pub updates_enabled: bool,
@@ -110,20 +111,12 @@ pub trait SurfaceLayouts {
 /// The shell's surfaces: the primary layer and whatever hangs off it.
 pub struct LayerLayouts<'a> {
     pub layout: &'a Layout,
-    pub popups: &'a HashMap<u64, AuxiliarySurface>,
-    pub floatings: &'a HashMap<u64, AuxiliarySurface>,
-    pub layers: &'a HashMap<u64, AuxiliarySurface>,
+    pub windows: &'a Windows,
 }
 
 impl SurfaceLayouts for LayerLayouts<'_> {
     fn layout_of(&self, surface: WindowId) -> Option<&Layout> {
-        surface_layout(
-            surface,
-            self.layout,
-            self.popups,
-            self.floatings,
-            self.layers,
-        )
+        surface_layout(surface, self.layout, self.windows)
     }
 }
 
@@ -136,9 +129,8 @@ pub struct SurfaceEventState {
     /// node in the scene, deep-cloned every window-surface config and allocated
     /// three collections — on every repaint and every key press.
     pub primary_root: NodeHandle,
-    pub popup_surfaces: HashMap<u64, AuxiliarySurface>,
-    pub floating_surfaces: HashMap<u64, AuxiliarySurface>,
-    pub layer_surfaces: HashMap<u64, AuxiliarySurface>,
+    /// Every popup, toplevel and extra layer surface that is live.
+    pub windows: Windows,
     pub last_frame: Option<u32>,
     /// What this surface can afford, and when it last painted.
     pub pacer: FramePacer,
@@ -207,9 +199,7 @@ pub fn frame_stall(refresh: Duration) -> Duration {
 pub fn sync_window_surfaces(
     runtime: &mut Runtime,
     client: &mut LayerClient,
-    popups: &mut HashMap<u64, AuxiliarySurface>,
-    floatings: &mut HashMap<u64, AuxiliarySurface>,
-    layers: &mut HashMap<u64, AuxiliarySurface>,
+    windows: &mut Windows,
     output: &str,
 ) -> Result<bool, String> {
     let mut resumed = false;
@@ -248,38 +238,38 @@ pub fn sync_window_surfaces(
         .map(|surface| surface.id)
         .collect::<HashSet<_>>();
 
-    let mut stale_popups = popups
-        .keys()
+    let mut stale_popups = windows
+        .ids(Kind::Popup)
+        .into_iter()
         .filter(|id| !desired_popup_ids.contains(id))
-        .copied()
         .collect::<Vec<_>>();
     stale_popups.sort_unstable_by(|a, b| b.cmp(a));
     let mut closed = Vec::new();
     for id in stale_popups {
         client.close(WindowId::Popup(id));
-        popups.remove(&id);
+        windows.remove(Kind::Popup, id);
         closed.push(id);
     }
-    let mut stale_floatings = floatings
-        .keys()
+    let mut stale_floatings = windows
+        .ids(Kind::Toplevel)
+        .into_iter()
         .filter(|id| !desired_floating_ids.contains(id))
-        .copied()
         .collect::<Vec<_>>();
     stale_floatings.sort_unstable_by(|a, b| b.cmp(a));
     for id in stale_floatings {
         client.close(WindowId::Toplevel(id));
-        floatings.remove(&id);
+        windows.remove(Kind::Toplevel, id);
         closed.push(id);
     }
-    resumed |= sync_layer_surfaces(client, output, &desired_layers, layers)?;
+    resumed |= sync_layer_surfaces(client, output, &desired_layers, windows)?;
     let mut reopened = HashSet::new();
     for surface in desired_floatings {
         let id = surface.id;
         let WindowSurfaceKind::Toplevel(config) = &surface.kind else {
             unreachable!();
         };
-        let changed = floatings
-            .get(&id)
+        let changed = windows
+            .get(Kind::Toplevel, id)
             .is_none_or(|current| current.floating_config.as_ref() != Some(config))
             || config
                 .parent
@@ -302,9 +292,10 @@ pub fn sync_window_surfaces(
                     } })
                 .map_err(|error| error.to_string())?;
             reopened.insert(id);
-            floatings.insert(
+            windows.insert(
+                Kind::Toplevel,
                 id,
-                AuxiliarySurface {
+                Window {
                     id: surface.id,
                     root: surface.root,
                     updates_enabled: surface.updates_enabled,
@@ -318,7 +309,7 @@ pub fn sync_window_surfaces(
                     needs_paint: true,
                 },
             );
-        } else if let Some(current) = floatings.get_mut(&id) {
+        } else if let Some(current) = windows.get_mut(Kind::Toplevel, id) {
             // The stored size is the compositor's, from its last configure,
             // and is left alone: a change to the requested size is a change
             // to the config and reopens the window above. Writing the
@@ -345,8 +336,8 @@ pub fn sync_window_surfaces(
         };
         // A popup the compositor has dismissed is gone from the client while the
         // host still tracks it, and has nothing left to reposition.
-        let tracked = popups
-            .get(&id)
+        let tracked = windows
+            .get(Kind::Popup, id)
             .and_then(|current| current.popup_config.as_ref())
             .filter(|_| client.popup_surface(id).is_some());
         // A popup whose parent was just re-created is anchored to a surface that
@@ -367,9 +358,9 @@ pub fn sync_window_surfaces(
         }
         if structural {
             let parent = popup_parent_role(config, &surfaces_by_id)?;
-            open_popup_surface(client, surface, config, parent, popups)?;
+            open_popup_surface(client, surface, config, parent, windows)?;
             reopened.insert(id);
-        } else if let Some(current) = popups.get_mut(&id) {
+        } else if let Some(current) = windows.get_mut(Kind::Popup, id) {
             // The stored size is deliberately left alone. A repositioned popup
             // keeps its current dimensions until the compositor answers with the
             // configure carrying the geometry it settled on, and that configure
@@ -396,36 +387,18 @@ pub fn sync_window_surfaces(
 pub fn surface_layout<'a>(
     surface: WindowId,
     layer: &'a Layout,
-    popups: &'a HashMap<u64, AuxiliarySurface>,
-    floatings: &'a HashMap<u64, AuxiliarySurface>,
-    layers: &'a HashMap<u64, AuxiliarySurface>,
+    windows: &'a Windows,
 ) -> Option<&'a Layout> {
     match surface {
         WindowId::Layer(PRIMARY_LAYER) => Some(layer),
-        WindowId::Layer(id) => {
-            Some(&layers.get(&window_surface_id(id)?)?.layout.as_ref()?.layout)
-        }
-        WindowId::Popup(id) => Some(&popups.get(&id)?.layout.as_ref()?.layout),
-        WindowId::Toplevel(id) => Some(&floatings.get(&id)?.layout.as_ref()?.layout),
-        WindowId::Lock(_) => None,
+        _ => Some(&windows.by_window(surface)?.layout.as_ref()?.layout),
     }
 }
 
-pub fn surface_root(
-    surface: WindowId,
-    layer: NodeHandle,
-    popups: &HashMap<u64, AuxiliarySurface>,
-    floatings: &HashMap<u64, AuxiliarySurface>,
-    layers: &HashMap<u64, AuxiliarySurface>,
-) -> Option<NodeHandle> {
+pub fn surface_root(surface: WindowId, layer: NodeHandle, windows: &Windows) -> Option<NodeHandle> {
     match surface {
         WindowId::Layer(PRIMARY_LAYER) => Some(layer),
-        WindowId::Layer(id) => layers
-            .get(&window_surface_id(id)?)
-            .map(|surface| surface.root),
-        WindowId::Popup(id) => popups.get(&id).map(|surface| surface.root),
-        WindowId::Toplevel(id) => floatings.get(&id).map(|surface| surface.root),
-        WindowId::Lock(_) => None,
+        _ => windows.by_window(surface).map(|surface| surface.root),
     }
 }
 

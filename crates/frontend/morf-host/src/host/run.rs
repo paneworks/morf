@@ -1,13 +1,13 @@
 use morf_lua::{Limits, Runtime, Screen};
 use morf_render::{RenderEngine, ShaderRegistration, WgpuBackend};
 use morf_app::{LayerClient, Event, PRIMARY_LAYER, Output};
-use std::collections::HashMap;
 use std::os::fd::AsFd;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+use crate::host::windows::{Kind, Windows};
 use crate::desktop::{desktop_for, dispatch_desktop};
 use crate::render_target::{primary_target, surface_backend};
 use crate::{
@@ -259,18 +259,14 @@ fn drive_surface(
     let layout = paint(runtime, &mut renderer, &client, primary_root, None)?;
     slow(&name, "the first frame", first);
     let windows_opening = Instant::now();
-    let mut popup_surfaces = HashMap::new();
-    let mut floating_surfaces = HashMap::new();
-    let mut layer_surfaces = HashMap::new();
+    let mut windows = Windows::default();
     runtime.take_window_surface_change();
     runtime.take_layer_surface_change();
     apply_backdrop(&mut client, &runtime.layer_surface_config(), &name);
     let _ = sync_window_surfaces(
         runtime,
         &mut client,
-        &mut popup_surfaces,
-        &mut floating_surfaces,
-        &mut layer_surfaces,
+        &mut windows,
         &name,
     )?;
     apply_service_requests(runtime, &mut client, &mut desktop);
@@ -279,9 +275,7 @@ fn drive_surface(
     let mut state = SurfaceEventState {
         layout,
         primary_root,
-        popup_surfaces,
-        floating_surfaces,
-        layer_surfaces,
+        windows,
         animating_shaders,
         last_frame: None,
         pacer: FramePacer::new(),
@@ -385,10 +379,7 @@ fn drive_surface(
                 state.animating_shaders = runtime.shaders_animate();
                 register_shaders(runtime, &mut renderer)?;
                 for surface in state
-                    .popup_surfaces
-                    .values_mut()
-                    .chain(state.floating_surfaces.values_mut())
-                    .chain(state.layer_surfaces.values_mut())
+                    .windows.values_mut()
                 {
                     surface.layout = None;
                 }
@@ -409,9 +400,7 @@ fn drive_surface(
             renderer = RenderEngine::new(backend);
             // The adapter is new, so every pipeline it held is gone with it.
             register_shaders(runtime, &mut renderer)?;
-            state.popup_surfaces.clear();
-            state.floating_surfaces.clear();
-            state.layer_surfaces.clear();
+            state.windows.clear();
             client = replacement;
             desktop = desktop_for(&client)?;
             desktop.set_idle_timeouts(&runtime.idle_timeouts());
@@ -469,9 +458,7 @@ fn drive_surface(
             repaint |= sync_window_surfaces(
                 runtime,
                 &mut client,
-                &mut state.popup_surfaces,
-                &mut state.floating_surfaces,
-                &mut state.layer_surfaces,
+                &mut state.windows,
                 &name,
             )?;
         }
@@ -506,7 +493,7 @@ fn drive_surface(
         }
         apply_service_requests(runtime, &mut client, &mut desktop);
         apply_capture_releases(runtime, &mut renderer);
-        apply_window_surface_actions(runtime, &client, &state.floating_surfaces);
+        apply_window_surface_actions(runtime, &client, &state.windows);
         advance_without_callbacks(runtime, &client, &mut state)?;
         // Motion with nothing to drive it: started where no turn noticed (a
         // binding flushed after an animation's `on_finished`, say) while no
@@ -538,15 +525,13 @@ fn drive_surface(
         // when it comes, makes the paint.
         if repaint && !owed && client.layer_frame_wait(PRIMARY_LAYER).is_some() {
             state.primary_deferred = true;
-            for surface in state.layer_surfaces.values_mut() {
+            for surface in state.windows.of_kind_mut(Kind::Layer).map(|(_, surface)| surface) {
                 surface.needs_paint |= surface.updates_enabled;
             }
             repaint = false;
             // The layer surfaces are not held by the primary's callback;
             // each paints when its own allows.
-            for surface in state
-                .layer_surfaces
-                .values_mut()
+            for surface in state.windows.of_kind_mut(Kind::Layer).map(|(_, surface)| surface)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_layer_surface(runtime, &client, surface)?;
@@ -565,10 +550,7 @@ fn drive_surface(
             if !removed.is_empty() {
                 renderer.backend_mut().forget_nodes(&removed);
                 for renderer in state
-                    .popup_surfaces
-                    .values_mut()
-                    .chain(state.floating_surfaces.values_mut())
-                    .chain(state.layer_surfaces.values_mut())
+                    .windows.values_mut()
                     .filter_map(|surface| surface.renderer.as_mut())
                 {
                     renderer.backend_mut().forget_nodes(&removed);
@@ -603,23 +585,17 @@ fn drive_surface(
                 }
                 Err(error) => return Err(error),
             }
-            for surface in state
-                .popup_surfaces
-                .values_mut()
+            for surface in state.windows.of_kind_mut(Kind::Popup).map(|(_, surface)| surface)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_popup_surface(runtime, &client, surface)?;
             }
-            for surface in state
-                .floating_surfaces
-                .values_mut()
+            for surface in state.windows.of_kind_mut(Kind::Toplevel).map(|(_, surface)| surface)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_floating_surface(runtime, &client, surface)?;
             }
-            for surface in state
-                .layer_surfaces
-                .values_mut()
+            for surface in state.windows.of_kind_mut(Kind::Layer).map(|(_, surface)| surface)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_layer_surface(runtime, &client, surface)?;
@@ -651,9 +627,7 @@ fn drive_surface(
         // After the paints, so a node built this turn is laid out by now.
         let layouts = LayerLayouts {
             layout: &state.layout,
-            popups: &state.popup_surfaces,
-            floatings: &state.floating_surfaces,
-            layers: &state.layer_surfaces,
+            windows: &state.windows,
         };
         if answer_new_containment(runtime, &state.input, &layouts) {
             containment_repaint = true;
@@ -751,7 +725,7 @@ fn advance_without_callbacks(
         .map_err(|error| error.to_string())?;
     if frame.active || frame.changed > 0 || state.animating_shaders {
         state.primary_deferred = true;
-        for surface in state.layer_surfaces.values_mut() {
+        for surface in state.windows.of_kind_mut(Kind::Layer).map(|(_, surface)| surface) {
             if surface.updates_enabled {
                 surface.needs_paint = true;
                 paint_layer_surface(runtime, client, surface)?;

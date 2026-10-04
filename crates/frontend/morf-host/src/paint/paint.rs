@@ -474,7 +474,7 @@ pub fn paint_layer(
 pub fn paint_layer_surface(
     runtime: &mut Runtime,
     client: &LayerClient,
-    surface: &mut AuxiliarySurface,
+    surface: &mut Window,
 ) -> Result<(), String> {
     // Cleared here rather than at one of the two call sites, because there are
     // two: the frame callback honoured the flag and the main repaint block did
@@ -601,7 +601,7 @@ impl AuxiliaryKind {
 pub fn paint_popup_surface(
     runtime: &mut Runtime,
     client: &LayerClient,
-    surface: &mut AuxiliarySurface,
+    surface: &mut Window,
 ) -> Result<(), String> {
     paint_auxiliary_surface(AuxiliaryKind::Popup, runtime, client, surface)
 }
@@ -609,7 +609,7 @@ pub fn paint_popup_surface(
 pub fn paint_floating_surface(
     runtime: &mut Runtime,
     client: &LayerClient,
-    surface: &mut AuxiliarySurface,
+    surface: &mut Window,
 ) -> Result<(), String> {
     paint_auxiliary_surface(AuxiliaryKind::Floating, runtime, client, surface)
 }
@@ -619,7 +619,7 @@ pub fn paint_auxiliary_surface(
     kind: AuxiliaryKind,
     runtime: &mut Runtime,
     client: &LayerClient,
-    surface: &mut AuxiliarySurface,
+    surface: &mut Window,
 ) -> Result<(), String> {
     let Some(renderer) = &mut surface.renderer else {
         return Ok(());

@@ -22,7 +22,8 @@ use morf_value::IpcValue;
     use morf_scene::NodeHandle;
     use morf_app::accesskit::{Accessibility, RequestKind};
 
-    use crate::surfaces::SurfaceEventState;
+    
+use crate::surfaces::SurfaceEventState;
 
     /// How stale a tree may get on layout alone (things moving with no
     /// property written): bounds a screen reader reads are this fresh.
@@ -59,10 +60,7 @@ use morf_value::IpcValue;
             let mut roots: Vec<NodeHandle> = vec![state.primary_root];
             roots.extend(
                 state
-                    .popup_surfaces
-                    .values()
-                    .chain(state.floating_surfaces.values())
-                    .chain(state.layer_surfaces.values())
+                    .windows.values()
                     .map(|s| s.root),
             );
             self.adapters.retain(|root, _| roots.contains(root));
@@ -105,10 +103,7 @@ use morf_value::IpcValue;
                     Some(&*state.layout)
                 } else {
                     state
-                        .popup_surfaces
-                        .values()
-                        .chain(state.floating_surfaces.values())
-                        .chain(state.layer_surfaces.values())
+                        .windows.values()
                         .find(|s| s.root == *root)
                         .and_then(|s| s.layout.as_deref())
                 };
