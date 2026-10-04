@@ -128,6 +128,8 @@ pub(crate) struct ReactiveState {
     /// Compiled once at load. The renderer is handed the generated WGSL when
     /// the host starts up, and a node only ever carries the program's hash.
     pub(crate) shaders: HashMap<String, RegisteredShader>,
+    /// The session lock, the primary duty and the output list's revision.
+    pub(crate) session: morf_runtime::session::Session,
     pub(crate) scene: Scene,
     /// Every text input's editing, and which has the keyboard
     /// (`morf_runtime::editing`).
@@ -152,13 +154,6 @@ pub(crate) struct ReactiveState {
     pub(crate) clock_minutes: SignalId,
     /// `morf.hour_clock`, "HH", for what changes by the hour or the day.
     pub(crate) clock_hours: SignalId,
-    /// `morf.session_lock`: where this process's session lock stands, as the
-    /// compositor last said — see [`crate::SessionLockState`].
-    pub(crate) session_lock: SignalId,
-    /// Told when that changes, each with whether it wants only `locked`.
-    pub(crate) session_lock_callbacks: Vec<(Handler, bool)>,
-    /// `morf.lock_surface`: builds one output's lock tree, given its screen.
-    pub(crate) lock_surface_builder: Option<Handler>,
     /// Each node's handler for each event, and the `contains_pointer` watches.
     pub(crate) events: morf_runtime::events::Events,
     pub(crate) states: HashMap<NodeHandle, StateSet>,
@@ -223,15 +218,6 @@ pub(crate) struct ReactiveState {
     /// `morf.toplevels`, installed with the runtime and fed by
     /// `Runtime::set_windows`.
     pub(crate) toplevels: Option<crate::api_toplevels::ToplevelHost>,
-    /// `morf.screens_revision()`: the signal a binding follows to hear the
-    /// output list change, how many times it has, and what it last was.
-    pub(crate) screens_revision: Option<(SignalId, i64)>,
-    pub(crate) screens_signature: String,
-    /// `morf.primary()`: the signal a binding follows to hear this runtime
-    /// become, or stop being, the primary one, and what it is now.
-    pub(crate) primary: Option<(SignalId, bool)>,
-    /// `morf.on_primary(fn)`: called with the new value when it changes.
-    pub(crate) primary_callbacks: Vec<Handler>,
     /// Every bus name `morf.dbus.serve` took, so a runtime that ends or
     /// hands its duties over gives them back first.
     pub(crate) owned_bus_names: Vec<std::rc::Weak<std::cell::RefCell<morf_io::DbusService>>>,

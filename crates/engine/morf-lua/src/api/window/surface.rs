@@ -292,7 +292,7 @@ pub(crate) fn install_shell_api<'gc>(
     let builder_state = Rc::clone(&state);
     let lock_surface = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let builder: Option<Closure> = stack.consume(ctx)?;
-        builder_state.borrow_mut().lock_surface_builder =
+        builder_state.borrow_mut().session.lock_surface_builder =
             builder.map(|builder| crate::vm::handler_store::register(ctx.stash(builder)));
         Ok(CallbackReturn::Return)
     });
@@ -308,10 +308,10 @@ pub(crate) fn install_shell_api<'gc>(
         let register = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let callback: Closure = stack.consume(ctx)?;
             let mut state = callbacks_state.borrow_mut();
-            if state.session_lock_callbacks.len() >= 64 {
+            if state.session.session_lock_callbacks.len() >= 64 {
                 return Err(HostError("session lock callback limit reached".into()).into());
             }
-            state.session_lock_callbacks.push((
+            state.session.session_lock_callbacks.push((
                 crate::vm::handler_store::register(ctx.stash(callback)),
                 locked_only,
             ));

@@ -21,6 +21,7 @@ pub mod reactive;
 pub mod requests;
 pub mod retention;
 pub mod screens;
+pub mod session;
 pub mod shortcuts;
 pub mod states;
 pub mod timers;

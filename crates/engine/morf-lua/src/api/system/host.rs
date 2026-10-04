@@ -199,8 +199,10 @@ pub(crate) fn install_host_service_api<'gc>(
             .signal("screens.revision", IpcValue::Integer(0));
         state.reactive.values.insert(revision, IpcValue::Integer(0));
         state.reactive.signals.push(revision);
-        state.screens_revision = Some((revision, 0));
-        state.screens_signature = screen.map(screens_signature_of_one).unwrap_or_default();
+        state.session.screens_revision = Some((revision, 0));
+        state.session.screens_signature = screen
+            .map(morf_runtime::session::screen_signature)
+            .unwrap_or_default();
     }
     let revision_state = Rc::clone(&state);
     morf.set_field(
@@ -208,7 +210,7 @@ pub(crate) fn install_host_service_api<'gc>(
         "screens_revision",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let mut state = revision_state.borrow_mut();
-            let Some((signal, count)) = state.screens_revision else {
+            let Some((signal, count)) = state.session.screens_revision else {
                 stack.replace(ctx, 0);
                 return Ok(CallbackReturn::Return);
             };
@@ -237,7 +239,7 @@ pub(crate) fn install_host_service_api<'gc>(
             .values
             .insert(signal, IpcValue::Boolean(true));
         state.reactive.signals.push(signal);
-        state.primary = Some((signal, true));
+        state.session.primary = Some((signal, true));
     }
     let primary_state = Rc::clone(&state);
     morf.set_field(
@@ -245,7 +247,7 @@ pub(crate) fn install_host_service_api<'gc>(
         "primary",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let mut state = primary_state.borrow_mut();
-            let Some((signal, primary)) = state.primary else {
+            let Some((signal, primary)) = state.session.primary else {
                 stack.replace(ctx, true);
                 return Ok(CallbackReturn::Return);
             };
@@ -263,10 +265,11 @@ pub(crate) fn install_host_service_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let callback: Closure = stack.consume(ctx)?;
             let mut state = on_primary_state.borrow_mut();
-            if state.primary_callbacks.len() >= 64 {
+            if state.session.primary_callbacks.len() >= 64 {
                 return Err(HostError("primary callback limit reached".into()).into());
             }
             state
+                .session
                 .primary_callbacks
                 .push(crate::vm::handler_store::register(ctx.stash(callback)));
             Ok(CallbackReturn::Return)
@@ -371,20 +374,4 @@ pub(crate) fn screen_entry<'gc>(ctx: Context<'gc>, screen: &Screen) -> Table<'gc
     );
     value.set_field(ctx, "serial_number", LuaValue::Nil);
     value
-}
-
-/// What makes two output lists the same for `morf.screens_revision`.
-pub(crate) fn screens_signature(screens: &[Screen]) -> String {
-    screens
-        .iter()
-        .map(screens_signature_of_one)
-        .collect::<Vec<_>>()
-        .join(";")
-}
-
-fn screens_signature_of_one(screen: &Screen) -> String {
-    format!(
-        "{}|{:?}|{:?}x{:?}|{}|{}",
-        screen.name, screen.position, screen.width, screen.height, screen.scale, screen.transform
-    )
 }

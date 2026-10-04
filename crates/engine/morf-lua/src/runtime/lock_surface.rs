@@ -19,7 +19,11 @@ use crate::{
 impl Runtime {
     /// Whether the configuration builds its lock per output.
     pub fn has_lock_surface_builder(&self) -> bool {
-        self.reactive.borrow().lock_surface_builder.is_some()
+        self.reactive
+            .borrow()
+            .session
+            .lock_surface_builder
+            .is_some()
     }
 
     /// Builds one output's lock tree. `screen.width` and `screen.height` are
@@ -35,6 +39,7 @@ impl Runtime {
         let builder = self
             .reactive
             .borrow()
+            .session
             .lock_surface_builder
             .clone()
             .ok_or_else(|| Error::Runtime("no lock surface builder is registered".into()))?;
