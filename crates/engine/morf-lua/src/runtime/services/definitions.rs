@@ -4,69 +4,9 @@
 use super::*;
 
 /// Brings the native timers in line with the `Timer` nodes, when the scene
-/// changed. Returns whether anything did.
+/// changed (`Engine::reconcile_timers`). Returns whether anything did.
 pub(super) fn reconcile_timers(state: &mut ReactiveState, definitions_changed: bool) -> bool {
-    let mut service_changed = false;
-    let timer_definitions = if definitions_changed {
-        state
-            .timer_callbacks
-            .iter()
-            .map(|(node, callback)| (*node, callback.clone()))
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    let mut stale_timers = Vec::new();
-    for (node, callback) in timer_definitions {
-        let Ok(running) = state.scene.bool_value(node, "running") else {
-            stale_timers.push(node);
-            continue;
-        };
-        let interval = state.scene.number(node, "interval").unwrap_or(0.0);
-        let repeat = state.scene.bool_value(node, "repeat").unwrap_or(false);
-        let duration = (interval.is_finite() && interval > 0.0)
-            .then(|| Duration::from_secs_f64(interval / 1_000.0));
-        if !running || duration.is_none() {
-            service_changed |= state.timers.remove_node(node);
-            continue;
-        }
-        let duration = duration.expect("validated duration");
-        let matches = state
-            .timers
-            .for_node(node)
-            .is_some_and(|timer| timer.interval == duration && timer.repeat == repeat);
-        if matches {
-            continue;
-        }
-        state.timers.remove_node(node);
-        match state.timers.source(duration) {
-            Ok(source) => {
-                let id = state.timers.next_id();
-                let origin = state
-                    .timer_origins
-                    .get(&node)
-                    .cloned()
-                    .unwrap_or_else(|| format!("ui.Timer {node:?}").into());
-                state.timers.add(Timer {
-                    id,
-                    source,
-                    handler: callback,
-                    repeat,
-                    interval: duration,
-                    node: Some(node),
-                    origin,
-                });
-            }
-            Err(error) => state.log(LogLevel::Warn, format!("Timer: {error}")),
-        }
-        service_changed = true;
-    }
-    for node in stale_timers {
-        state.timer_callbacks.remove(&node);
-        state.timers.remove_node(node);
-        state.timer_origins.remove(&node);
-    }
-    service_changed
+    state.engine.reconcile_timers(definitions_changed)
 }
 
 /// Brings each `Loader` node's item in line with what the node asks for:

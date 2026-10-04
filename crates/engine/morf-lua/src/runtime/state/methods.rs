@@ -3,16 +3,6 @@
 use super::*;
 
 impl ReactiveState {
-    /// Hands the graph what removed nodes left behind, when it is here to
-    /// take them; while a flush holds it they wait for the next call.
-    pub(crate) fn collect_graph_garbage(&mut self) {
-        if self.reactive.flushing {
-            return;
-        }
-        self.collect_dead_models();
-        self.reactive.collect_garbage();
-    }
-
     pub(crate) fn new() -> Self {
         Self {
             engine: morf_runtime::Engine::new(),

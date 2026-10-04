@@ -12,7 +12,7 @@ use crate::{
     types::*, views::*,
 };
 use morf_runtime::Handler;
-use morf_runtime::timers::{DueTimer, Timer};
+use morf_runtime::timers::DueTimer;
 
 mod collect;
 mod definitions;
@@ -24,7 +24,7 @@ use definitions::{reconcile_loaders, reconcile_timers};
 /// How long a preloading Loader waits for the scene to be still before it
 /// builds anyway: an animation that never ends (a spinner, a visualiser)
 /// must not hold a preload back for ever.
-pub(crate) const PRELOAD_PATIENCE: Duration = Duration::from_millis(1500);
+pub(crate) use morf_runtime::engine::PRELOAD_PATIENCE;
 
 /// What one turn collects while the state is borrowed, to be run once it is
 /// let go.

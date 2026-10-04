@@ -60,8 +60,7 @@ impl Runtime {
     /// The finest clock anything currently reads, or nothing when no binding
     /// shows the time: the grain the loop has to wake at for the clock.
     pub fn clock_precision(&self) -> Option<ClockPrecision> {
-        let state = self.reactive.borrow();
-        state.clocks.precision(&state.reactive)
+        self.reactive.borrow().engine.clock_precision()
     }
 
     /// The earliest moment something in this runtime comes due on the wall
@@ -71,10 +70,6 @@ impl Runtime {
     /// grain it is read at, and the loop owns the wall-clock text.
     pub fn next_deadline(&self) -> Option<(Instant, DeadlineCause)> {
         let state = self.reactive.borrow();
-        let timers = state
-            .timers
-            .next_wall_deadline()
-            .map(|at| (at, DeadlineCause::Timer));
         let caret = crate::text_inputs::next_blink(&*state).map(|at| (at, DeadlineCause::Caret));
         let image = state.images.due().map(|at| (at, DeadlineCause::Image));
         let dbus = state
@@ -93,47 +88,27 @@ impl Runtime {
             .filter_map(|subscription| subscription.host.next_deadline())
             .min()
             .map(|at| (at, DeadlineCause::TrayRetry));
-        // Due at once while the scene is still; moving, only once it has
-        // waited as long as a preload waits for anything.
-        let still = !state.scene.has_motion();
-        let preload = state
-            .retained
-            .preload_pending
-            .values()
-            .min()
-            .map(|since| {
-                if still {
-                    *since
-                } else {
-                    *since + crate::runtime_services::PRELOAD_PATIENCE
-                }
-            })
-            .map(|at| (at, DeadlineCause::Preload));
-        let long_press =
-            crate::gestures::long_press_due(&state).map(|at| (at, DeadlineCause::LongPress));
         morf_runtime::wake::earliest([
-            timers, caret, image, dbus, terminal, tray, preload, long_press,
+            state.engine.next_deadline(),
+            caret,
+            image,
+            dbus,
+            terminal,
+            tray,
         ])
     }
 
     /// Whether the last turn left work for [`Runtime::poll_services`] that
-    /// no thread will ring for: the scene changed since it last ran (a
-    /// handler started a `ui.Timer`, activated a `Loader`), a model a view
-    /// follows changed, a node waits to be torn down, a transform watcher
-    /// owes its callback. The loop takes another turn at once for it rather
-    /// than leaving it until something else wakes the shell.
+    /// no thread will ring for: the engine's (`Engine::has_pending_work`), or
+    /// a transform watcher that owes its callback. The loop takes another
+    /// turn at once for it rather than leaving it until something else wakes
+    /// the shell.
     pub fn has_pending_work(&self) -> bool {
         let state = self.reactive.borrow();
-        state.revisions.scene_revision != state.revisions.polled_revision
-            || state.revisions.scene_revision != state.revisions.service_definitions_revision
-            || !state.retained.retained_destroy_queue.is_empty()
+        state.engine.has_pending_work()
             || state
                 .transform_watchers
                 .values()
                 .any(|watcher| watcher.pending && watcher.callback.is_some())
-            || state
-                .views
-                .values()
-                .any(|view| view.model.borrow().has_changes())
     }
 }

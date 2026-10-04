@@ -18,6 +18,12 @@ use morf_value::IpcValue;
 
 use crate::Handler;
 
+mod queries;
+mod scene;
+mod services;
+pub use queries::{PRELOAD_PATIENCE, node_path};
+pub use scene::{scoped_id, validate_scope_part};
+
 /// A `ui.Layout` container's `measure` and `place` functions.
 #[derive(Clone)]
 pub struct CustomLayoutFns {

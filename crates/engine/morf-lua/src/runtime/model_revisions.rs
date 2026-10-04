@@ -144,11 +144,4 @@ pub(crate) fn replace_model_rows(
     model_changed(state, ctx, limits, model)
 }
 
-impl ReactiveState {
-    /// Forgets the revision signals of models nothing holds any more.
-    pub(crate) fn collect_dead_models(&mut self) {
-        self.engine
-            .model_revisions
-            .collect_dead(&mut self.engine.reactive);
-    }
-}
+impl ReactiveState {}

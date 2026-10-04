@@ -224,8 +224,7 @@ impl Runtime {
     /// A host hit-testing a Flickable should also ask whether it has room to
     /// move; see [`Runtime::scroll_flickable`].
     pub fn takes_wheel(&self, node: NodeHandle) -> bool {
-        let state = self.reactive.borrow();
-        routing::takes_wheel(&state.scene, &state.events, node)
+        self.reactive.borrow().engine.takes_wheel(node)
     }
 
     /// Scrolls a Flickable by a wheel's pixel delta, keeping its
@@ -263,6 +262,9 @@ impl Runtime {
 
     /// Returns whether a MouseArea accepts one Linux input button code.
     pub fn accepts_pointer_button(&self, node: NodeHandle, button: u32) -> bool {
-        routing::accepts_pointer_button(&self.reactive.borrow().scene, node, button)
+        self.reactive
+            .borrow()
+            .engine
+            .accepts_pointer_button(node, button)
     }
 }
