@@ -14,6 +14,7 @@ pub(crate) fn handle_surface_event(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
     client: &mut LayerClient,
+    desktop: &mut morf_desktop::Desktop,
     state: &mut SurfaceEventState,
     event: Event,
     tx: &mpsc::Sender<SupervisorMessage>,
@@ -27,7 +28,7 @@ pub(crate) fn handle_surface_event(
         Err(event) => event,
     };
     // Then selections and drags, which need the layout and the client.
-    let event = match crate::surface_drag::handle_data_event(runtime, client, state, event) {
+    let event = match crate::surface_drag::handle_data_event(runtime, client, desktop, state, event) {
         Ok(repaint) => return repaint,
         Err(event) => event,
     };
@@ -107,8 +108,7 @@ pub(crate) fn handle_surface_event(
         }
         // Already taken above; named so a new event cannot slip past unmatched.
         Event::Screencopy { .. } | Event::CaptureOffer { .. } => {}
-        Event::Selection { .. }
-        | Event::OfferRead { .. }
+        Event::OfferRead { .. }
         | Event::DragEnter { .. }
         | Event::DragMotion { .. }
         | Event::DragLeave { .. }

@@ -64,13 +64,6 @@ impl LayerState {
     }
 
     pub(crate) fn refresh_data_devices(&mut self, qh: &QueueHandle<Self>) {
-        // Data control watches one seat: the first. A second seat's clipboard
-        // is a second clipboard, and no shell has asked for two yet.
-        if let Some(control) = &mut self.data_control
-            && let Some(seat) = self.seats.seats().next()
-        {
-            control.ensure_device(&seat, qh);
-        }
         let Some(manager) = &self.data_device_manager else {
             return;
         };

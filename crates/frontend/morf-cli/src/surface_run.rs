@@ -38,8 +38,8 @@ fn capabilities_of(
         ("layer_shell", client.supports_layer_shell()),
         ("layer_surfaces", client.supports_layer_surfaces()),
         ("clipboard", client.supports_clipboard()),
-        ("data_control", client.supports_data_control()),
-        ("primary_selection", client.supports_primary_selection()),
+        ("data_control", desktop.supports_data_control()),
+        ("primary_selection", desktop.supports_primary_selection()),
         ("drag_and_drop", client.supports_drag_and_drop()),
         ("virtual_keyboard", client.supports_virtual_keyboard()),
         ("input_method", client.supports_input_method()),
@@ -212,7 +212,6 @@ fn drive_surface(
                 | Event::AuxScale { .. }
                 | Event::ShortcutsInhibited { .. }
                 | Event::Clipboard { .. }
-                | Event::Selection { .. }
                 | Event::OfferRead { .. }
                 | Event::DragEnter { .. }
                 | Event::DragMotion { .. }
@@ -509,6 +508,7 @@ fn drive_surface(
                 runtime,
                 &mut renderer,
                 &mut client,
+                &mut desktop,
                 &mut state,
                 event,
                 tx,

@@ -1,7 +1,8 @@
 //! The desktop protocols a shell uses, on the same Wayland connection as its
 //! windows but on an event queue of its own: gamma ramps, output power,
-//! workspaces and idle notification so far, then the rest of what moves here
-//! from `morf-app` (capture, clipboard over data-control, foreign toplevels).
+//! workspaces, idle notification and the clipboard over data control so far,
+//! then the rest of what moves here from `morf-app` (capture, foreign
+//! toplevels).
 //!
 //! The queue is its own because every protocol handler of smithay's toolkit
 //! is implemented on one state type, and a state type of another crate
@@ -9,6 +10,7 @@
 //! its own outputs, and the host dispatches it after each wake of its loop
 //! (any read of the socket fills this queue too).
 
+mod data_control;
 mod gamma;
 mod idle;
 mod output_power;
@@ -16,6 +18,7 @@ mod workspaces;
 
 use std::collections::VecDeque;
 
+use morf_app::OfferInfo;
 use smithay_client_toolkit::output::{OutputHandler, OutputState};
 use smithay_client_toolkit::seat::{Capability, SeatHandler, SeatState};
 use smithay_client_toolkit::registry::{ProvidesRegistryState, RegistryState};
@@ -41,6 +44,18 @@ pub enum DesktopEvent {
         input_only: bool,
         idle: bool,
     },
+    /// The selection changed, as data control sees it: with no focus needed,
+    /// and before anything is read. `offer` is `None` when it was cleared.
+    Selection {
+        /// Whether this is the primary selection (middle-click paste).
+        primary: bool,
+        offer: Option<OfferInfo>,
+    },
+    /// A read asked for with [`Desktop::read_offer`] finished.
+    OfferRead {
+        request_id: u64,
+        result: Result<Vec<u8>, String>,
+    },
 }
 
 /// What the desktop protocols know, dispatched on their own queue.
@@ -56,6 +71,7 @@ pub struct DesktopState {
     output_power: output_power::OutputPowerState,
     workspaces: workspaces::WorkspaceState,
     idle: idle::IdleState,
+    clipboard: data_control::ClipboardState,
 }
 
 /// The desktop protocols, on a connection a window backend opened.
@@ -81,12 +97,18 @@ impl Desktop {
             output_power: output_power::OutputPowerState::bind(&globals, &qh),
             workspaces: workspaces::WorkspaceState::bind(&globals, &qh),
             idle: idle::IdleState::bind(&globals, &qh),
+            clipboard: data_control::ClipboardState::bind(&globals, &qh),
         };
         // The outputs' names arrive as events: hear them before anything is
         // asked of an output by name.
         queue
             .roundtrip(&mut state)
             .map_err(|error| format!("could not hear the outputs: {error}"))?;
+        // A seat already there when the registry was read is announced to no
+        // `new_seat`: the clipboard is watched on it here.
+        if let Some(seat) = state.seat() {
+            state.clipboard.seat_added(&seat, &qh);
+        }
         Ok(Self { connection, queue, state })
     }
 
@@ -104,6 +126,7 @@ impl Desktop {
 
     /// The next thing the desktop protocols have to tell.
     pub fn next_event(&mut self) -> Option<DesktopEvent> {
+        self.state.clipboard.drain_reads(&mut self.state.events);
         self.state.events.pop_front()
     }
 
@@ -184,6 +207,7 @@ impl SeatHandler for DesktopState {
 
     fn new_seat(&mut self, _: &Connection, qh: &QueueHandle<Self>, seat: wl_seat::WlSeat) {
         self.idle.refresh(Some(&seat), qh);
+        self.clipboard.seat_added(&seat, qh);
     }
 
     fn new_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat, _: Capability) {}

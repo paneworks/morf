@@ -10,7 +10,8 @@ use morf_scene::NodeHandle;
 use morf_app::mime::{
     TEXT_MIMES, URI_LIST_MIME, accept_mime, encode_uri_list, path_to_uri, uri_to_path,
 };
-use morf_app::{LayerClient, Event, OfferInfo, WindowId};
+use morf_app::{Event, LayerClient, OfferInfo, WindowId};
+use morf_desktop::Desktop;
 use std::sync::Arc;
 
 use crate::surfaces::*;
@@ -35,13 +36,11 @@ fn description(offer: &OfferInfo) -> OfferDescription {
 pub(crate) fn handle_data_event(
     runtime: &mut Runtime,
     client: &mut LayerClient,
+    desktop: &mut Desktop,
     state: &mut SurfaceEventState,
     event: Event,
 ) -> Result<Result<bool, String>, Event> {
     let repaint = match event {
-        Event::Selection { primary, offer } => {
-            runtime.dispatch_selection(primary, offer.as_ref().map(description))
-        }
         Event::OfferRead { request_id, result } => {
             runtime.dispatch_offer_read(request_id, result)
         }
@@ -125,7 +124,7 @@ pub(crate) fn handle_data_event(
             state.drag = None;
             // Reads the drop handler asked for go out before `finish`, which
             // is the last moment the offer may still be read.
-            apply_offer_reads(runtime, client);
+            apply_offer_reads(runtime, client, desktop);
             client.finish_drop();
             repaint
         }
@@ -199,9 +198,20 @@ fn leave_target(runtime: &mut Runtime, state: &mut SurfaceEventState) -> bool {
 }
 
 /// Sends every read the configuration asked for.
-pub(crate) fn apply_offer_reads(runtime: &mut Runtime, client: &mut LayerClient) {
+/// Starts the offer reads the configuration asked for, each on whichever
+/// side announced its offer: a drag's is the window client's, a selection's
+/// the desktop's.
+pub(crate) fn apply_offer_reads(
+    runtime: &mut Runtime,
+    client: &mut LayerClient,
+    desktop: &mut Desktop,
+) {
     for read in runtime.take_offer_reads() {
-        client.read_offer(read.id, read.offer, &read.mime);
+        if desktop.owns_offer(read.offer) {
+            desktop.read_offer(read.id, read.offer, &read.mime);
+        } else {
+            client.read_offer(read.id, read.offer, &read.mime);
+        }
     }
 }
 

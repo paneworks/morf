@@ -7,9 +7,11 @@ mod data;
 mod event;
 mod input;
 mod kind;
+pub mod mime;
 mod output;
 pub mod placement;
 mod positioner;
+pub mod transfer;
 mod window;
 
 pub use backend::{Backend, Capabilities, RenderTarget, WindowKind};

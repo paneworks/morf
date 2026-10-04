@@ -30,8 +30,8 @@ pub(crate) fn apply_service_requests(
 ) {
     apply_output_power_requests(runtime, desktop);
     crate::services::apply_gamma_requests(runtime, desktop);
-    apply_clipboard_requests(runtime, client);
-    crate::surface_drag::apply_offer_reads(runtime, client);
+    apply_clipboard_requests(runtime, client, desktop);
+    crate::surface_drag::apply_offer_reads(runtime, client, desktop);
     crate::surface_drag::apply_drag_requests(runtime, client);
     apply_screencopy_requests(runtime, client);
     apply_virtual_keyboard_requests(runtime, client);

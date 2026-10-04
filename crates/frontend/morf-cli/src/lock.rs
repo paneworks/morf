@@ -340,16 +340,6 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                 Event::Clipboard { text } => {
                     repaint |= runtime.dispatch_clipboard(text);
                 }
-                Event::Selection { primary, offer } => {
-                    repaint |= runtime.dispatch_selection(
-                        primary,
-                        offer.map(|offer| morf_lua::OfferDescription {
-                            id: offer.id,
-                            mime_types: offer.mime_types,
-                            ..morf_lua::OfferDescription::default()
-                        }),
-                    );
-                }
                 Event::OfferRead { request_id, result } => {
                     repaint |= runtime.dispatch_offer_read(request_id, result);
                 }

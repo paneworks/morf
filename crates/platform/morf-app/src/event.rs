@@ -83,13 +83,6 @@ pub enum Event {
     },
     /// The compositor clipboard selection changed.
     Clipboard { text: Option<String> },
-    /// The selection changed, as data control sees it: with no focus needed,
-    /// and before anything is read. `offer` is `None` when it was cleared.
-    Selection {
-        /// Whether this is the primary selection (middle-click paste).
-        primary: bool,
-        offer: Option<OfferInfo>,
-    },
     /// A read asked for with [`LayerClient::read_offer`] finished.
     OfferRead {
         request_id: u64,

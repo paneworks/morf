@@ -84,8 +84,8 @@ use wayland_protocols_wlr::screencopy::v1::client::{
     zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1,
 };
 
-use crate::backend::wayland::data_control::DataControl;
-use crate::backend::wayland::offer_io::ReadDone;
+use crate::backend::wayland::client_data::ReadTag;
+use crate::transfer::ReadDone;
 use crate::backend::wayland::{client_surface::*, surface_types::*, types::*};
 
 /// Owned Wayland display and surface handles for graphics APIs.
@@ -276,13 +276,11 @@ pub(crate) struct LayerState {
     pub(crate) clipboard_rx: mpsc::Receiver<Option<String>>,
     pub(crate) clipboard_reads: Arc<AtomicUsize>,
     pub(crate) clipboard_writes: Arc<AtomicUsize>,
-    /// Data control, when the compositor offers either spelling of it.
-    pub(crate) data_control: Option<DataControl>,
     /// The last offer identifier handed out; selections and drags share it.
     pub(crate) next_offer_id: u64,
     /// Where reader threads report, drained by `next_event`.
-    pub(crate) read_tx: mpsc::Sender<ReadDone>,
-    pub(crate) read_rx: mpsc::Receiver<ReadDone>,
+    pub(crate) read_tx: mpsc::Sender<ReadDone<ReadTag>>,
+    pub(crate) read_rx: mpsc::Receiver<ReadDone<ReadTag>>,
     /// Rung by a transfer thread when it finishes, so the loop wakes for it.
     pub(crate) waker: Option<fn()>,
     /// A drag from elsewhere currently over one of these surfaces, or dropped

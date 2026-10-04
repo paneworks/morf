@@ -11,8 +11,9 @@ use wayland_client::protocol::wl_data_device_manager::DndAction;
 use wayland_client::protocol::{wl_data_device, wl_data_source, wl_surface};
 use wayland_client::{Connection, QueueHandle};
 
-use crate::backend::wayland::mime::{URI_LIST_MIME, best_text_mime};
-use crate::backend::wayland::offer_io::{ReadTag, pipe, spawn_read, spawn_write, take_slot};
+use crate::backend::wayland::client_data::ReadTag;
+use crate::mime::{URI_LIST_MIME, best_text_mime};
+use crate::transfer::{pipe, spawn_read, spawn_write, take_slot};
 use crate::backend::wayland::{state_types::*, surface_types::*};
 
 impl LayerState {

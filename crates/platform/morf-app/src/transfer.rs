@@ -17,38 +17,27 @@ use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::backend::wayland::mime::MAX_OFFER_BYTES;
+use crate::mime::MAX_OFFER_BYTES;
 
 /// How long a source has to finish handing over what it offered.
-pub(crate) const READ_DEADLINE: Duration = Duration::from_secs(10);
+pub const READ_DEADLINE: Duration = Duration::from_secs(10);
 
 /// How many transfers may be in flight at once, each way.
-pub(crate) const MAX_TRANSFERS: usize = 8;
+pub const MAX_TRANSFERS: usize = 8;
 
-/// What a finished read was for.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum ReadTag {
-    /// A configuration asked for it, under this request id.
-    Request(u64),
-    /// Fetched ahead of a drop so the drop can carry it: the URI list.
-    DropUris(u64),
-    /// Fetched ahead of a drop so the drop can carry it: the text.
-    DropText(u64),
-}
-
-/// One finished read.
-pub(crate) struct ReadDone {
-    pub(crate) tag: ReadTag,
-    pub(crate) result: Result<Vec<u8>, String>,
+/// One finished read, and `tag`: what it was for.
+pub struct ReadDone<T> {
+    pub tag: T,
+    pub result: Result<Vec<u8>, String>,
 }
 
 /// A fresh close-on-exec pipe: `(read, write)`.
-pub(crate) fn pipe() -> Result<(OwnedFd, OwnedFd), String> {
+pub fn pipe() -> Result<(OwnedFd, OwnedFd), String> {
     pipe_with(PipeFlags::CLOEXEC).map_err(|error| format!("could not create a pipe: {error}"))
 }
 
 /// Takes a slot for one more transfer, or says there is none.
-pub(crate) fn take_slot(active: &AtomicUsize) -> bool {
+pub fn take_slot(active: &AtomicUsize) -> bool {
     active
         .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
             (count < MAX_TRANSFERS).then_some(count + 1)
@@ -59,10 +48,10 @@ pub(crate) fn take_slot(active: &AtomicUsize) -> bool {
 /// Reads a pipe to its end on a thread, then reports and wakes the loop.
 ///
 /// The caller has already taken a slot from `active`; this gives it back.
-pub(crate) fn spawn_read(
+pub fn spawn_read<T: Send + 'static>(
     fd: OwnedFd,
-    tag: ReadTag,
-    tx: mpsc::Sender<ReadDone>,
+    tag: T,
+    tx: mpsc::Sender<ReadDone<T>>,
     waker: Option<fn()>,
     active: Arc<AtomicUsize>,
 ) {
@@ -77,7 +66,7 @@ pub(crate) fn spawn_read(
 }
 
 /// Writes bytes into a pipe on a thread; the compositor closes nothing for us.
-pub(crate) fn spawn_write(fd: OwnedFd, bytes: Arc<Vec<u8>>, active: Arc<AtomicUsize>) {
+pub fn spawn_write(fd: OwnedFd, bytes: Arc<Vec<u8>>, active: Arc<AtomicUsize>) {
     thread::spawn(move || {
         let _ = write_all(&fd, &bytes, READ_DEADLINE);
         active.fetch_sub(1, Ordering::Relaxed);
@@ -103,7 +92,7 @@ fn remaining(deadline: Instant) -> Option<Timespec> {
 }
 
 /// Reads until end of file, the byte limit, or the deadline.
-pub(crate) fn read_all(fd: &OwnedFd, limit: usize, within: Duration) -> Result<Vec<u8>, String> {
+pub fn read_all(fd: &OwnedFd, limit: usize, within: Duration) -> Result<Vec<u8>, String> {
     nonblocking(fd);
     let deadline = Instant::now() + within;
     let mut bytes = Vec::new();
@@ -134,7 +123,7 @@ pub(crate) fn read_all(fd: &OwnedFd, limit: usize, within: Duration) -> Result<V
 }
 
 /// Writes every byte, or gives up at the deadline or a closed reader.
-pub(crate) fn write_all(fd: &OwnedFd, mut bytes: &[u8], within: Duration) -> Result<(), String> {
+pub fn write_all(fd: &OwnedFd, mut bytes: &[u8], within: Duration) -> Result<(), String> {
     nonblocking(fd);
     let deadline = Instant::now() + within;
     while !bytes.is_empty() {

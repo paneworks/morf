@@ -13,7 +13,14 @@
 //! names, so each is wrapped in the same small enums and handled by one macro.
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
+use std::os::fd::AsFd;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, mpsc};
+
+use morf_app::OfferInfo;
+use morf_app::mime::resolve_mime;
+use morf_app::transfer::{ReadDone, pipe, spawn_read, spawn_write, take_slot};
+use wayland_client::globals::GlobalList;
 use wayland_client::backend::ObjectId;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
@@ -30,8 +37,7 @@ use wayland_protocols_wlr::data_control::v1::client::{
     zwlr_data_control_source_v1::{self, ZwlrDataControlSourceV1},
 };
 
-use crate::backend::wayland::offer_io::{spawn_write, take_slot};
-use crate::backend::wayland::{state_types::*, surface_types::*};
+use crate::{Desktop, DesktopEvent, DesktopState};
 
 /// How many announced offers stay readable after a newer one replaced them.
 ///
@@ -110,6 +116,175 @@ pub(crate) struct OwnedSource {
     data: Vec<(String, Arc<Vec<u8>>)>,
 }
 
+/// Where the desktop's offer ids start: far from the window client's own
+/// (a drag's), so a read names exactly one of them.
+const OFFER_ID_BASE: u64 = 1 << 48;
+
+/// The selection as data control sees it, and the reads of it in flight.
+pub(crate) struct ClipboardState {
+    control: Option<DataControl>,
+    next_offer_id: u64,
+    reads: Arc<AtomicUsize>,
+    writes: Arc<AtomicUsize>,
+    read_tx: mpsc::Sender<ReadDone<u64>>,
+    read_rx: mpsc::Receiver<ReadDone<u64>>,
+    /// Rung when a read finishes on its thread, so the loop wakes for it.
+    waker: Option<fn()>,
+}
+
+impl ClipboardState {
+    /// Data control: the standard spelling first, the wlroots one where it
+    /// is all there is. Version 2 of the latter adds the primary selection.
+    pub(crate) fn bind(globals: &GlobalList, qh: &QueueHandle<DesktopState>) -> Self {
+        let control = globals
+            .bind::<ExtDataControlManagerV1, _, _>(qh, 1..=1, ())
+            .map(DcManager::Ext)
+            .or_else(|_| {
+                globals
+                    .bind::<ZwlrDataControlManagerV1, _, _>(qh, 1..=2, ())
+                    .map(DcManager::Wlr)
+            })
+            .ok()
+            .map(DataControl::new);
+        let (read_tx, read_rx) = mpsc::channel();
+        Self {
+            control,
+            next_offer_id: OFFER_ID_BASE,
+            reads: Arc::default(),
+            writes: Arc::default(),
+            read_tx,
+            read_rx,
+            waker: None,
+        }
+    }
+
+    /// Watches the selection on `seat` (the first: a second seat's clipboard
+    /// is a second clipboard, and no shell has asked for two yet).
+    pub(crate) fn seat_added(&mut self, seat: &WlSeat, qh: &QueueHandle<DesktopState>) {
+        if let Some(control) = &mut self.control {
+            control.ensure_device(seat, qh);
+        }
+    }
+
+    /// Reads that finished, as events.
+    pub(crate) fn drain_reads(&mut self, events: &mut VecDeque<DesktopEvent>) {
+        while let Ok(done) = self.read_rx.try_recv() {
+            events.push_back(DesktopEvent::OfferRead {
+                request_id: done.tag,
+                result: done.result,
+            });
+        }
+    }
+
+    fn live(&self, offer_id: u64) -> Option<&LiveOffer> {
+        self.control
+            .as_ref()
+            .and_then(|control| control.live.iter().find(|live| live.id == offer_id))
+    }
+}
+
+impl Desktop {
+    /// Rings `waker` whenever a read finishes on its thread.
+    pub fn set_waker(&mut self, waker: fn()) {
+        self.state.clipboard.waker = Some(waker);
+    }
+
+    /// Whether the selection can be watched and set without focus.
+    pub fn supports_data_control(&self) -> bool {
+        self.state
+            .clipboard
+            .control
+            .as_ref()
+            .is_some_and(|control| control.device.is_some())
+    }
+
+    /// Which data-control protocol is bound, if any.
+    pub fn data_control_protocol(&self) -> Option<&'static str> {
+        self.state.clipboard.control.as_ref().map(DataControl::protocol)
+    }
+
+    /// Whether the primary selection can be watched and set too.
+    pub fn supports_primary_selection(&self) -> bool {
+        self.supports_data_control()
+            && self
+                .state
+                .clipboard
+                .control
+                .as_ref()
+                .is_some_and(DataControl::supports_primary)
+    }
+
+    /// Owns the selection, offering each type with its bytes. No focus or
+    /// input serial needed.
+    pub fn set_selection(&mut self, data: Vec<(String, Arc<Vec<u8>>)>, primary: bool) -> bool {
+        let qh = self.handle();
+        self.state
+            .clipboard
+            .control
+            .as_mut()
+            .is_some_and(|control| control.set_selection(data, primary, &qh))
+    }
+
+    /// Clears the selection.
+    pub fn clear_selection(&mut self, primary: bool) -> bool {
+        self.state
+            .clipboard
+            .control
+            .as_mut()
+            .is_some_and(|control| control.clear_selection(primary))
+    }
+
+    /// Whether `offer_id` is one of the selection offers announced here.
+    pub fn owns_offer(&self, offer_id: u64) -> bool {
+        offer_id > OFFER_ID_BASE
+    }
+
+    /// Reads one type from an announced offer, off the loop.
+    ///
+    /// `mime` may be a shorthand -- `text`, `image`, `uris` -- resolved
+    /// against what the offer lists. The answer arrives as
+    /// [`DesktopEvent::OfferRead`] with the same `request_id`, failures
+    /// included, so a caller has exactly one place to hear back.
+    pub fn read_offer(&mut self, request_id: u64, offer_id: u64, mime: &str) {
+        if let Err(error) = self.start_offer_read(request_id, offer_id, mime) {
+            self.state.events.push_back(DesktopEvent::OfferRead {
+                request_id,
+                result: Err(error),
+            });
+        }
+    }
+
+    fn start_offer_read(&mut self, request_id: u64, offer_id: u64, mime: &str) -> Result<(), String> {
+        let clipboard = &self.state.clipboard;
+        let live = clipboard
+            .live(offer_id)
+            .ok_or_else(|| "the offer is gone".to_owned())?;
+        let mime = resolve_mime(mime, &live.mime_types)
+            .ok_or_else(|| format!("the offer has no `{mime}`"))?;
+        if !take_slot(&clipboard.reads) {
+            return Err("too many reads in flight".to_owned());
+        }
+        let (reader, writer) = match pipe() {
+            Ok(pair) => pair,
+            Err(error) => {
+                clipboard.reads.fetch_sub(1, Ordering::Relaxed);
+                return Err(error);
+            }
+        };
+        live.offer.receive(mime, writer.as_fd());
+        drop(writer);
+        spawn_read(
+            reader,
+            request_id,
+            clipboard.read_tx.clone(),
+            clipboard.waker,
+            Arc::clone(&clipboard.reads),
+        );
+        let _ = self.connection.flush();
+        Ok(())
+    }
+}
+
 /// Everything data control needs to remember between events.
 pub(crate) struct DataControl {
     pub(crate) manager: DcManager,
@@ -150,7 +325,7 @@ impl DataControl {
     }
 
     /// Binds the device for a seat, once.
-    pub(crate) fn ensure_device(&mut self, seat: &WlSeat, qh: &QueueHandle<LayerState>) {
+    pub(crate) fn ensure_device(&mut self, seat: &WlSeat, qh: &QueueHandle<DesktopState>) {
         if self.device.is_some() {
             return;
         }
@@ -165,7 +340,7 @@ impl DataControl {
         &mut self,
         data: Vec<(String, Arc<Vec<u8>>)>,
         primary: bool,
-        qh: &QueueHandle<LayerState>,
+        qh: &QueueHandle<DesktopState>,
     ) -> bool {
         if primary && !self.supports_primary() {
             return false;
@@ -267,7 +442,7 @@ impl DataControl {
     }
 }
 
-impl LayerState {
+impl DesktopState {
     /// Announces a new selection offer, or its absence.
     fn data_control_selection(
         &mut self,
@@ -275,34 +450,34 @@ impl LayerState {
         object: Option<ObjectId>,
         primary: bool,
     ) {
-        let Some(control) = &mut self.data_control else {
+        let Some(control) = &mut self.clipboard.control else {
             return;
         };
         let announced = match (offer, object) {
             (Some(offer), Some(object)) => {
                 let mime_types = control.pending.remove(&object).unwrap_or_default();
-                self.next_offer_id += 1;
-                let id = self.next_offer_id;
+                self.clipboard.next_offer_id += 1;
+                let id = self.clipboard.next_offer_id;
                 control.remember(id, offer, mime_types.clone());
                 Some(OfferInfo { id, mime_types })
             }
             _ => None,
         };
-        self.events.push_back(Event::Selection {
+        self.events.push_back(DesktopEvent::Selection {
             primary,
             offer: announced,
         });
     }
 
     fn data_control_send(&mut self, source: ObjectId, mime: String, fd: std::os::fd::OwnedFd) {
-        let Some(control) = &self.data_control else {
+        let Some(control) = &self.clipboard.control else {
             return;
         };
         let Some(bytes) = control.source_data(&source, &mime) else {
             return;
         };
-        if take_slot(&self.clipboard_writes) {
-            spawn_write(fd, bytes, Arc::clone(&self.clipboard_writes));
+        if take_slot(&self.clipboard.writes) {
+            spawn_write(fd, bytes, Arc::clone(&self.clipboard.writes));
         }
     }
 }
@@ -316,7 +491,7 @@ macro_rules! data_control_dispatch {
         $source:ty, $source_mod:ident,
         $variant:ident
     ) => {
-        impl Dispatch<$manager, ()> for LayerState {
+        impl Dispatch<$manager, ()> for DesktopState {
             fn event(
                 _state: &mut Self,
                 _proxy: &$manager,
@@ -328,7 +503,7 @@ macro_rules! data_control_dispatch {
             }
         }
 
-        impl Dispatch<$device, ()> for LayerState {
+        impl Dispatch<$device, ()> for DesktopState {
             fn event(
                 state: &mut Self,
                 _proxy: &$device,
@@ -339,7 +514,7 @@ macro_rules! data_control_dispatch {
             ) {
                 match event {
                     $device_mod::Event::DataOffer { id } => {
-                        if let Some(control) = &mut state.data_control {
+                        if let Some(control) = &mut state.clipboard.control {
                             control.pending.insert(id.id(), Vec::new());
                         }
                     }
@@ -352,7 +527,7 @@ macro_rules! data_control_dispatch {
                         state.data_control_selection(id.map(DcOffer::$variant), object, true);
                     }
                     $device_mod::Event::Finished => {
-                        if let Some(control) = &mut state.data_control {
+                        if let Some(control) = &mut state.clipboard.control {
                             control.finished();
                         }
                     }
@@ -360,12 +535,12 @@ macro_rules! data_control_dispatch {
                 }
             }
 
-            wayland_client::event_created_child!(LayerState, $device, [
+            wayland_client::event_created_child!(DesktopState, $device, [
                 $device_mod::EVT_DATA_OFFER_OPCODE => ($offer, ())
             ]);
         }
 
-        impl Dispatch<$offer, ()> for LayerState {
+        impl Dispatch<$offer, ()> for DesktopState {
             fn event(
                 state: &mut Self,
                 proxy: &$offer,
@@ -375,14 +550,14 @@ macro_rules! data_control_dispatch {
                 _qh: &QueueHandle<Self>,
             ) {
                 if let $offer_mod::Event::Offer { mime_type } = event
-                    && let Some(control) = &mut state.data_control
+                    && let Some(control) = &mut state.clipboard.control
                 {
                     control.offer_listed(proxy.id(), mime_type);
                 }
             }
         }
 
-        impl Dispatch<$source, ()> for LayerState {
+        impl Dispatch<$source, ()> for DesktopState {
             fn event(
                 state: &mut Self,
                 proxy: &$source,
@@ -396,7 +571,7 @@ macro_rules! data_control_dispatch {
                         state.data_control_send(proxy.id(), mime_type, fd);
                     }
                     $source_mod::Event::Cancelled => {
-                        if let Some(control) = &mut state.data_control {
+                        if let Some(control) = &mut state.clipboard.control {
                             control.cancel_source(&proxy.id());
                         }
                     }

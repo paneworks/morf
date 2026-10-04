@@ -87,14 +87,18 @@ pub(crate) fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut Desktop)
     }
 }
 
-pub(crate) fn apply_clipboard_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+pub(crate) fn apply_clipboard_requests(
+    runtime: &mut Runtime,
+    client: &mut LayerClient,
+    desktop: &mut Desktop,
+) {
     // Data control first: no focus, no serial, any type. Without it only text
     // can be set, and only once an input serial exists to set it with, so the
     // requests wait for one.
-    if client.supports_data_control() {
+    if desktop.supports_data_control() {
         for request in runtime.take_clipboard_requests() {
             let primary = request.primary;
-            client.set_selection(crate::surface_drag::clipboard_payload(request), primary);
+            desktop.set_selection(crate::surface_drag::clipboard_payload(request), primary);
         }
         return;
     }

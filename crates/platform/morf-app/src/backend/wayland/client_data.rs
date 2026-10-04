@@ -1,45 +1,29 @@
-//! The client's side of selections and drags: reading, setting, accepting.
+//! The client's side of drags: reading what one carries, accepting it,
+//! starting one. (The selection, watched and set without focus, is
+//! `morf-desktop`'s data control.)
 
-use std::os::fd::AsFd;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 use wayland_client::protocol::wl_data_device_manager::DndAction;
 
-use crate::backend::wayland::mime::{parse_uri_list, resolve_mime};
-use crate::backend::wayland::offer_io::{ReadTag, pipe, spawn_read, take_slot};
+use crate::mime::{parse_uri_list, resolve_mime};
 use crate::backend::wayland::{state_types::*, surface_types::*};
+
+/// What a finished read was for.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum ReadTag {
+    /// A configuration asked for it, under this request id.
+    Request(u64),
+    /// Fetched ahead of a drop so the drop can carry it: the URI list.
+    DropUris(u64),
+    /// Fetched ahead of a drop so the drop can carry it: the text.
+    DropText(u64),
+}
 
 impl LayerClient {
     /// A function a transfer thread calls when it finishes, so a loop asleep
     /// in [`Self::dispatch_timeout_or`] wakes for the result at once.
     pub fn set_waker(&mut self, waker: fn()) {
         self.state.waker = Some(waker);
-    }
-
-    /// Whether the selection can be watched and set without focus.
-    pub fn supports_data_control(&self) -> bool {
-        self.state
-            .data_control
-            .as_ref()
-            .is_some_and(|control| control.device.is_some())
-    }
-
-    /// Which data-control protocol is bound, if any.
-    pub fn data_control_protocol(&self) -> Option<&'static str> {
-        self.state
-            .data_control
-            .as_ref()
-            .map(|control| control.protocol())
-    }
-
-    /// Whether the primary selection can be watched and set too.
-    pub fn supports_primary_selection(&self) -> bool {
-        self.supports_data_control()
-            && self
-                .state
-                .data_control
-                .as_ref()
-                .is_some_and(|control| control.supports_primary())
     }
 
     /// Whether drags can come in and go out: a `wl_data_device` exists.
@@ -70,35 +54,6 @@ impl LayerClient {
         mime: &str,
     ) -> Result<(), String> {
         let state = &mut self.state;
-        if let Some(live) = state
-            .data_control
-            .as_ref()
-            .and_then(|control| control.live.iter().find(|live| live.id == offer_id))
-        {
-            let mime = resolve_mime(mime, &live.mime_types)
-                .ok_or_else(|| format!("the offer has no `{mime}`"))?;
-            if !take_slot(&state.clipboard_reads) {
-                return Err("too many reads in flight".to_owned());
-            }
-            let (reader, writer) = match pipe() {
-                Ok(pair) => pair,
-                Err(error) => {
-                    state.clipboard_reads.fetch_sub(1, Ordering::Relaxed);
-                    return Err(error);
-                }
-            };
-            live.offer.receive(mime, writer.as_fd());
-            drop(writer);
-            spawn_read(
-                reader,
-                ReadTag::Request(request_id),
-                state.read_tx.clone(),
-                state.waker,
-                Arc::clone(&state.clipboard_reads),
-            );
-            let _ = self.connection.flush();
-            return Ok(());
-        }
         let Some(drag) = state.drag.as_ref().filter(|drag| drag.id == offer_id) else {
             return Err("the offer is gone".to_owned());
         };
@@ -113,24 +68,6 @@ impl LayerClient {
         state.read_drag(&offer, &mime, ReadTag::Request(request_id))?;
         let _ = self.connection.flush();
         Ok(())
-    }
-
-    /// Owns the selection through data control, offering each type with its
-    /// bytes. No focus or input serial needed, unlike [`Self::set_clipboard`].
-    pub fn set_selection(&mut self, data: Vec<(String, Arc<Vec<u8>>)>, primary: bool) -> bool {
-        let qh = self.queue.handle();
-        self.state
-            .data_control
-            .as_mut()
-            .is_some_and(|control| control.set_selection(data, primary, &qh))
-    }
-
-    /// Clears the selection through data control.
-    pub fn clear_selection(&mut self, primary: bool) -> bool {
-        self.state
-            .data_control
-            .as_mut()
-            .is_some_and(|control| control.clear_selection(primary))
     }
 
     /// Says which type, if any, the target under the drag would take.
