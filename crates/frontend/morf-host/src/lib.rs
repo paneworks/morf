@@ -4,38 +4,45 @@
 //! application mode -- and the headless runner `check`, `render` and `test`
 //! stand on. The command line is `morf-cli`'s.
 
+pub mod a11y;
 pub mod app;
-pub mod backdrop;
 pub mod capture;
-pub mod crash;
-pub mod desktop;
 pub mod headless;
-pub mod headless_env;
-pub mod headless_input;
-pub mod headless_render;
-pub mod headless_surfaces;
+pub mod host;
+pub mod input;
 pub mod lock;
-pub mod lock_ipc;
-pub mod lock_outputs;
-pub mod outputless;
-pub mod pacing;
 pub mod paint;
-pub mod pointer_cursor;
-pub mod render_target;
-pub mod services;
-pub mod socket_path;
-pub mod supervisor;
-pub mod surface_a11y;
-pub mod surface_actions;
-pub mod surface_drag;
-pub mod surface_events;
-pub mod surface_gesture;
-pub mod surface_keys;
-pub mod surface_layers;
-pub mod surface_pointer;
-pub mod surface_popups;
-pub mod surface_run;
-pub mod surface_touch;
-pub mod surfaces;
-pub mod wake_plan;
-pub mod workers;
+pub mod process;
+
+// Every module under the name it had before the directories: paths
+// throughout this crate and the command line keep working.
+pub use self::paint::backdrop;
+pub use self::process::crash;
+pub use self::host::desktop;
+pub use self::headless::env as headless_env;
+pub use self::headless::input as headless_input;
+pub use self::headless::render as headless_render;
+pub use self::headless::surfaces as headless_surfaces;
+pub use self::lock::ipc as lock_ipc;
+pub use self::lock::outputs as lock_outputs;
+pub use self::paint::outputless;
+pub use self::paint::pacing;
+pub use self::input::cursor as pointer_cursor;
+pub use self::paint::render_target;
+pub use self::process::services;
+pub use self::process::socket_path;
+pub use self::process::supervisor;
+pub use self::a11y::surface as surface_a11y;
+pub use self::host::actions as surface_actions;
+pub use self::input::drag as surface_drag;
+pub use self::host::events as surface_events;
+pub use self::input::gesture as surface_gesture;
+pub use self::input::keys as surface_keys;
+pub use self::host::layers as surface_layers;
+pub use self::input::pointer as surface_pointer;
+pub use self::host::popups as surface_popups;
+pub use self::host::run as surface_run;
+pub use self::input::touch as surface_touch;
+pub use self::host::surfaces;
+pub use self::paint::wake_plan;
+pub use self::process::workers;
