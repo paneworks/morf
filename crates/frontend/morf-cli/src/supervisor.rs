@@ -1,6 +1,6 @@
 use morf_io::{IpcReply, IpcRequest, IpcServer, IpcValue as WireValue};
 use morf_lua::{LogEntry, LogLevel, Runtime, Screen};
-use morf_wayland::{LayerClient, ScreenInfo};
+use morf_app::{LayerClient, ScreenInfo};
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::os::unix::fs::MetadataExt;

@@ -9,7 +9,7 @@
 
 use morf_lua::{Runtime, Screencopy as LuaScreencopy};
 use morf_render::{FOURCC_ARGB8888, FOURCC_XRGB8888, RenderEngine, WgpuBackend, split_dev_t};
-use morf_wayland::{CaptureBuffer, LayerClient, LayerEvent, ScreencopyFormat};
+use morf_app::{CaptureBuffer, LayerClient, LayerEvent, ScreencopyFormat};
 use std::os::fd::AsFd;
 
 pub(crate) fn apply_screencopy_requests(runtime: &mut Runtime, client: &mut LayerClient) {
@@ -55,7 +55,7 @@ pub(crate) fn dispatch_screencopy(
     // the configuration; only the ready-made image source does not.
     mut renderer: Option<&mut RenderEngine<WgpuBackend>>,
     request_id: u64,
-    result: Result<morf_wayland::ScreencopyFrame, String>,
+    result: Result<morf_app::ScreencopyFrame, String>,
 ) -> bool {
     // Published where `ui.Image` can find it, before the configuration is told
     // the capture arrived — so a handler can put the thumbnail straight into
@@ -298,7 +298,7 @@ fn capture_bgra(rgba: &[u8]) -> Vec<u8> {
 /// `xrgb8888` has no alpha channel to speak of; the fourth byte is padding, and
 /// leaving it as whatever the compositor put there gives a transparent
 /// thumbnail.
-fn capture_rgba(frame: &morf_wayland::ScreencopyFrame) -> Vec<u8> {
+fn capture_rgba(frame: &morf_app::ScreencopyFrame) -> Vec<u8> {
     let opaque = matches!(frame.format, ScreencopyFormat::Xrgb8888);
     let mut rgba = Vec::with_capacity(frame.pixels.len());
     for row in 0..frame.height as usize {

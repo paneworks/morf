@@ -1,7 +1,7 @@
 use morf_io::IpcValue as WireValue;
 use morf_lua::{InputMethodRequest, Runtime, TextInputRequest, VirtualKeyboardRequest};
 use morf_value::IpcValue;
-use morf_wayland::{InputRect, LayerClient, OutputPowerMode};
+use morf_app::{InputRect, LayerClient, OutputPowerMode};
 use std::collections::BTreeMap;
 
 use crate::lock::*;
@@ -67,7 +67,7 @@ pub(crate) fn apply_gamma_requests(runtime: &mut Runtime, client: &mut LayerClie
         let result = match request.set {
             Some((temperature, brightness, gamma)) => client.set_gamma(
                 output,
-                morf_wayland::GammaSettings {
+                morf_app::GammaSettings {
                     temperature,
                     brightness,
                     gamma,

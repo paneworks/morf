@@ -8,9 +8,9 @@ use crate::surfaces::primary_surface_root;
 use crate::surfaces::runtime_bar_config;
 use morf_lua::Runtime;
 use morf_lua::WindowSurfaceKind;
-use morf_wayland::KeyboardFocus;
-use morf_wayland::PRIMARY_LAYER;
-use morf_wayland::ShellLayer;
+use morf_app::KeyboardFocus;
+use morf_app::PRIMARY_LAYER;
+use morf_app::ShellLayer;
 
 use morf_lua::LayerSurfaceConfig;
 

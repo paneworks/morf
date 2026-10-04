@@ -1,0 +1,36 @@
+[package]
+name = "morf-app"
+description = "Windows, input and outputs for morf: its own windowing, on Wayland or headless"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+# Surfaces' accessible trees on AT-SPI (AccessKit), built only while a
+# screen reader asks.
+a11y = ["dep:accesskit", "dep:accesskit_unix", "dep:morf-scene"]
+
+[dependencies]
+morf-value.workspace = true
+accesskit = { workspace = true, optional = true }
+accesskit_unix = { workspace = true, optional = true }
+morf-scene = { workspace = true, optional = true }
+raw-window-handle.workspace = true
+rustix.workspace = true
+smithay-client-toolkit.workspace = true
+wayland-backend.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true
+wayland-protocols-misc.workspace = true
+wayland-protocols-wlr.workspace = true
+xkbcommon.workspace = true
+
+[dev-dependencies]
+# The library does not touch these; only the smoke examples do, which is what
+# the unused-dependency lint noticed.
+morf-layout.workspace = true
+morf-render.workspace = true
+morf-scene.workspace = true
+pollster.workspace = true

@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use morf_lua::WindowSurfaceKind;
 use morf_scene::NodeHandle;
-use morf_wayland::{PRIMARY_LAYER, ScreenInfo, SurfaceRole};
+use morf_app::{PRIMARY_LAYER, ScreenInfo, SurfaceRole};
 
 use crate::headless::{Headless, Surface};
 use crate::surface_popups::window_surface_effectively_visible;

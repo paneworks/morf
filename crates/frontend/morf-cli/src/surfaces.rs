@@ -4,7 +4,7 @@ use morf_lua::{
 };
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
-use morf_wayland::{
+use morf_app::{
     BarConfig, FloatingConfig, KeyboardFocus, LayerAnchors, LayerClient, LayerEvent, PRIMARY_LAYER,
     ShellLayer, SurfaceRole,
 };

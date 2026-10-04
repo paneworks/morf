@@ -2,7 +2,7 @@
 
 use morf_lua::{FocusReason, KeyModifiers, Runtime};
 use morf_scene::NodeHandle;
-use morf_wayland::SurfaceRole;
+use morf_app::SurfaceRole;
 
 use crate::surfaces::*;
 
@@ -35,7 +35,7 @@ pub(crate) fn surface_key(
     action: KeyAction,
     keysym: u32,
     text: Option<&str>,
-    modifiers: morf_wayland::KeyModifiers,
+    modifiers: morf_app::KeyModifiers,
 ) -> bool {
     let Some(root) = surface_root(
         surface,
@@ -169,7 +169,7 @@ pub(crate) fn dispatch_key_in_subtree(
 }
 
 /// The compositor's modifier state, as the runtime reads it.
-pub(crate) fn key_modifiers(modifiers: morf_wayland::KeyModifiers) -> KeyModifiers {
+pub(crate) fn key_modifiers(modifiers: morf_app::KeyModifiers) -> KeyModifiers {
     KeyModifiers {
         ctrl: modifiers.ctrl,
         shift: modifiers.shift,

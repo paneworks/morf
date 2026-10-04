@@ -9,7 +9,7 @@
 use morf_layout::Hit;
 use morf_lua::{EventPoint, FocusReason, Runtime, UiEvent};
 use morf_scene::NodeHandle;
-use morf_wayland::{LayerEvent, PRIMARY_LAYER, SurfaceRole};
+use morf_app::{LayerEvent, PRIMARY_LAYER, SurfaceRole};
 
 use crate::{backdrop::*, pointer_cursor::CursorShapes, surface_touch::*, surfaces::*};
 

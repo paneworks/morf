@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use morf_layout::Layout;
-use morf_wayland::{LayerEvent, SurfaceRole};
+use morf_app::{LayerEvent, SurfaceRole};
 
 use crate::headless::{Headless, Surface};
 use crate::pointer_cursor::CursorShapes;
@@ -79,7 +79,7 @@ impl Headless {
         surface: SurfaceRole,
         (x, y): (f64, f64),
         button: u32,
-        modifiers: morf_wayland::KeyModifiers,
+        modifiers: morf_app::KeyModifiers,
     ) -> Result<(), String> {
         self.pointer(LayerEvent::PointerMotion { surface, x, y })?;
         self.pointer(LayerEvent::PointerButton {
@@ -191,7 +191,7 @@ pub(crate) fn modifiers(names: &[String]) -> Result<morf_lua::KeyModifiers, Stri
 }
 
 /// The modifiers a pointer event is sent with, as `"ctrl+shift"`.
-pub(crate) fn pointer_modifiers(names: Option<&str>) -> Result<morf_wayland::KeyModifiers, String> {
+pub(crate) fn pointer_modifiers(names: Option<&str>) -> Result<morf_app::KeyModifiers, String> {
     let names: Vec<String> = names
         .unwrap_or("")
         .split(['+', ',', ' '])
@@ -199,7 +199,7 @@ pub(crate) fn pointer_modifiers(names: Option<&str>) -> Result<morf_wayland::Key
         .map(str::to_owned)
         .collect();
     let held = modifiers(&names)?;
-    Ok(morf_wayland::KeyModifiers {
+    Ok(morf_app::KeyModifiers {
         ctrl: held.ctrl,
         shift: held.shift,
         alt: held.alt,

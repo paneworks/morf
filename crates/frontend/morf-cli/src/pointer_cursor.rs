@@ -2,7 +2,7 @@
 
 use morf_lua::Runtime;
 use morf_scene::NodeHandle;
-use morf_wayland::{LayerClient, SurfaceRole};
+use morf_app::{LayerClient, SurfaceRole};
 
 /// Whatever takes the pointer's shape: the compositor connection, or in a
 /// test a recorder, so the input path runs without a display.

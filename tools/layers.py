@@ -57,17 +57,11 @@ PENDING = {
     "morf-cli depends on morf-render, not in its row": "phase 7: morf-host",
     "morf-cli depends on morf-scene, not in its row": "phase 7: morf-host",
     "morf-cli depends on morf-text, not in its row": "phase 7: morf-host",
-    "morf-cli depends on morf-wayland, not in its row": "phase 3: morf-app",
+    "morf-cli depends on morf-app, not in its row": "phase 7: morf-host",
+    "morf-app depends on morf-scene, not in its row": "phase 3: the AccessKit adapter reads a neutral tree",
     "morf-render names wayland-backend; only morf-app and morf-desktop may": "phase 3: render takes a RenderTarget",
     "morf-render names wayland-client; only morf-app and morf-desktop may": "phase 3: render takes a RenderTarget",
     "morf-render names wayland-protocols; only morf-app and morf-desktop may": "phase 3: render takes a RenderTarget",
-    "morf-wayland: not in the plan's table (being merged or renamed)": "phases 3-4: morf-app, morf-desktop",
-    "morf-wayland names smithay-client-toolkit; only morf-app and morf-desktop may": "phase 3",
-    "morf-wayland names wayland-backend; only morf-app and morf-desktop may": "phase 3",
-    "morf-wayland names wayland-client; only morf-app and morf-desktop may": "phase 3",
-    "morf-wayland names wayland-protocols; only morf-app and morf-desktop may": "phase 3",
-    "morf-wayland names wayland-protocols-misc; only morf-app and morf-desktop may": "phase 3",
-    "morf-wayland names wayland-protocols-wlr; only morf-app and morf-desktop may": "phase 3",
 }
 NO_LUA_BELOW = {"morf-shader", "morf-lua", "morf-host", "morf-cli"}
 WAYLAND_ALLOWED = {"morf-app", "morf-desktop", "morf-host", "morf-cli"}

@@ -8,7 +8,7 @@ use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_value::IpcValue;
 use morf_scene::NodeHandle;
-use morf_wayland::{LayerEvent, SurfaceRole};
+use morf_app::{LayerEvent, SurfaceRole};
 
 struct NoText;
 
@@ -62,7 +62,7 @@ fn laid_out(runtime: &Runtime) -> One {
 fn wheel(runtime: &mut Runtime, x: f64, y: f64, vertical: f64) -> bool {
     let layouts = laid_out(runtime);
     let event = LayerEvent::PointerAxis {
-        surface: SurfaceRole::Layer(morf_wayland::PRIMARY_LAYER),
+        surface: SurfaceRole::Layer(morf_app::PRIMARY_LAYER),
         x,
         y,
         horizontal: 0.0,

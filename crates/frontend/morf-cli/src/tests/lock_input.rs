@@ -9,7 +9,7 @@ use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_value::IpcValue;
 use morf_scene::NodeHandle;
-use morf_wayland::{LayerEvent, SurfaceRole};
+use morf_app::{LayerEvent, SurfaceRole};
 
 struct NoText;
 

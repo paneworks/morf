@@ -3,7 +3,7 @@ use morf_lua::{
     WorkspaceRequest,
 };
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_wayland::{
+use morf_app::{
     BarConfig, KeyboardFocus, LayerAnchors, LayerClient, PRIMARY_LAYER, ShellLayer, ToplevelAction,
     physical_size,
 };

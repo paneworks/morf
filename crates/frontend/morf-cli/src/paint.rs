@@ -3,7 +3,7 @@ use morf_lua::{LayerSurfaceConfig, Runtime};
 use morf_value::region::{Rect as RegionRect, Region};
 use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
-use morf_wayland::{InputRect, LayerClient, PRIMARY_LAYER, SurfaceRole, physical_size};
+use morf_app::{InputRect, LayerClient, PRIMARY_LAYER, SurfaceRole, physical_size};
 
 use crate::{surface_layers::*, surfaces::*};
 

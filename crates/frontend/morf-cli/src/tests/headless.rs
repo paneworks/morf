@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use morf_lua::{LogEntry, LogLevel};
 use morf_value::IpcValue;
-use morf_wayland::{PRIMARY_LAYER, SurfaceRole};
+use morf_app::{PRIMARY_LAYER, SurfaceRole};
 
 use crate::headless::{Headless, LoadOptions};
 use crate::headless_input::{button, keysym, modifiers};

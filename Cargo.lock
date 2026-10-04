@@ -1738,6 +1738,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "morf-app"
+version = "0.1.5"
+dependencies = [
+ "accesskit",
+ "accesskit_unix",
+ "morf-layout",
+ "morf-render",
+ "morf-scene",
+ "morf-value",
+ "pollster",
+ "raw-window-handle",
+ "rustix",
+ "smithay-client-toolkit",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-misc",
+ "wayland-protocols-wlr",
+ "xkbcommon",
+]
+
+[[package]]
 name = "morf-audio"
 version = "0.1.5"
 dependencies = [
@@ -1754,6 +1776,7 @@ dependencies = [
  "image",
  "jiff",
  "libc",
+ "morf-app",
  "morf-io",
  "morf-kit",
  "morf-layout",
@@ -1762,7 +1785,6 @@ dependencies = [
  "morf-scene",
  "morf-text",
  "morf-value",
- "morf-wayland",
  "pollster",
  "serde_json",
 ]
@@ -1925,28 +1947,6 @@ version = "0.1.5"
 dependencies = [
  "morf-image",
  "resvg",
-]
-
-[[package]]
-name = "morf-wayland"
-version = "0.1.5"
-dependencies = [
- "accesskit",
- "accesskit_unix",
- "morf-layout",
- "morf-render",
- "morf-scene",
- "morf-value",
- "pollster",
- "raw-window-handle",
- "rustix",
- "smithay-client-toolkit",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-misc",
- "wayland-protocols-wlr",
- "xkbcommon",
 ]
 
 [[package]]

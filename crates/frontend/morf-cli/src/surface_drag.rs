@@ -7,10 +7,10 @@
 
 use morf_lua::{ClipboardRequest, EventPoint, OfferDescription, Runtime};
 use morf_scene::NodeHandle;
-use morf_wayland::mime::{
+use morf_app::mime::{
     TEXT_MIMES, URI_LIST_MIME, accept_mime, encode_uri_list, path_to_uri, uri_to_path,
 };
-use morf_wayland::{LayerClient, LayerEvent, OfferInfo, SurfaceRole};
+use morf_app::{LayerClient, LayerEvent, OfferInfo, SurfaceRole};
 use std::sync::Arc;
 
 use crate::surfaces::*;

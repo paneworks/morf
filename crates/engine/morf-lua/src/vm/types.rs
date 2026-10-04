@@ -266,7 +266,7 @@ impl LogEntry {
 
 /// One workspace, as the engine hands it to a configuration.
 ///
-/// Mirrors `morf_wayland::WorkspaceInfo` rather than re-exporting it, so the
+/// Mirrors `morf_app::WorkspaceInfo` rather than re-exporting it, so the
 /// Lua runtime does not depend on the Wayland crate — the same separation the
 /// window list beside it keeps.
 #[derive(Clone, Debug, Default)]

@@ -4,10 +4,10 @@ use crate::surface_popups::popup_parent_role;
 use morf_lua::PopupSurfaceConfig;
 use morf_lua::Runtime;
 use morf_lua::WindowSurfaceKind;
-use morf_wayland::PRIMARY_LAYER;
-use morf_wayland::PopupAnchor;
-use morf_wayland::PopupGravity;
-use morf_wayland::SurfaceRole;
+use morf_app::PRIMARY_LAYER;
+use morf_app::PopupAnchor;
+use morf_app::PopupGravity;
+use morf_app::SurfaceRole;
 use std::collections::HashMap;
 
 /// Builds the popup configurations one Lua source registers, in identifier order.

@@ -3,7 +3,7 @@
 
 use crate::lock_outputs::{LockOutput, LockTrees, ensure_lock_tree, release_lock_tree};
 use morf_lua::Runtime;
-use morf_wayland::{ScreenInfo, SurfaceRole};
+use morf_app::{ScreenInfo, SurfaceRole};
 
 fn screen(name: &str, width: i32, height: i32) -> ScreenInfo {
     ScreenInfo {

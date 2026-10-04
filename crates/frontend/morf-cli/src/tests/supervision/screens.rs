@@ -5,7 +5,7 @@ use crate::supervisor::store_outputs;
 use crate::workers::handle_worker_command;
 use crate::*;
 use morf_lua::{Limits, Runtime};
-use morf_wayland::ScreenInfo;
+use morf_app::ScreenInfo;
 
 // The compositor's output list reaching every worker's `morf.screens`.
 

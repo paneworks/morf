@@ -1,6 +1,6 @@
 use morf_lua::{Limits, Runtime, Screen};
 use morf_render::{RenderEngine, ShaderRegistration, WgpuBackend};
-use morf_wayland::{LayerClient, LayerEvent, PRIMARY_LAYER, ScreenInfo};
+use morf_app::{LayerClient, LayerEvent, PRIMARY_LAYER, ScreenInfo};
 use std::collections::HashMap;
 use std::os::fd::AsFd;
 use std::path::Path;

@@ -14,7 +14,7 @@
 //! all, since a layer surface's place in its layer is fixed at creation.
 
 use morf_lua::LayerSurfaceConfig;
-use morf_wayland::{InputRect, KeyboardFocus, LayerAnchors, LayerClient};
+use morf_app::{InputRect, KeyboardFocus, LayerAnchors, LayerClient};
 
 use crate::surfaces::*;
 

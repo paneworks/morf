@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use morf_value::{IpcTable, IpcValue};
-use morf_wayland::LayerEvent;
+use morf_app::LayerEvent;
 
 use crate::headless::Headless;
 use crate::headless_input::{button, keysym, modifiers};
@@ -19,7 +19,7 @@ use crate::test_host::{TestHost, list, map, number, optional_text, string, text}
 fn key_role(
     subject: &Headless,
     surface: Option<&IpcValue>,
-) -> Result<morf_wayland::SurfaceRole, String> {
+) -> Result<morf_app::SurfaceRole, String> {
     if optional_text(surface).is_none()
         && let Some(clicked) = subject.keyboard
         && subject
@@ -35,7 +35,7 @@ fn key_role(
 fn role(
     subject: &Headless,
     surface: Option<&IpcValue>,
-) -> Result<morf_wayland::SurfaceRole, String> {
+) -> Result<morf_app::SurfaceRole, String> {
     let wanted = optional_text(surface);
     let index = subject.surface_index(wanted.as_deref())?;
     Ok(subject.surfaces[index].role)

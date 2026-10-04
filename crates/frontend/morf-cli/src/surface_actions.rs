@@ -1,7 +1,7 @@
 use morf_layout::{Layout, ReparentTransition, Size};
 use morf_lua::{Runtime, WindowSurfaceAction};
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_wayland::{FloatingResizeEdge, LayerClient};
+use morf_app::{FloatingResizeEdge, LayerClient};
 use std::collections::HashMap;
 
 use crate::surfaces::*;

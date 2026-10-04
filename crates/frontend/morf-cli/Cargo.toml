@@ -13,8 +13,8 @@ path = "src/main.rs"
 [features]
 default = ["kit", "a11y"]
 # Surfaces' accessible trees on AT-SPI, built only while a screen reader
-# asks: crates/morf-wayland/src/accesskit.rs.
-a11y = ["morf-wayland/a11y"]
+# asks: crates/platform/morf-app/src/backend/wayland/accesskit.rs.
+a11y = ["morf-app/a11y"]
 # luna's native Lua tier; see crates/morf-lua/src/runtime_jit.rs.
 jit = ["morf-lua/jit"]
 # The widget archetypes (`morf.kit.native`): crates/morf-kit.
@@ -33,6 +33,6 @@ morf-io.workspace = true
 morf-render.workspace = true
 morf-scene.workspace = true
 morf-text.workspace = true
-morf-wayland.workspace = true
+morf-app.workspace = true
 pollster.workspace = true
 image.workspace = true

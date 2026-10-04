@@ -1,5 +1,5 @@
 use morf_lua::{PopupSurfaceConfig, WindowSurfaceConfig, WindowSurfaceKind};
-use morf_wayland::{
+use morf_app::{
     InputRect, LayerClient, PRIMARY_LAYER, PopupAnchor, PopupConfig, PopupConstraints,
     PopupGravity, SurfaceRole,
 };

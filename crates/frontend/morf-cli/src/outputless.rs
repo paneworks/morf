@@ -13,7 +13,7 @@
 //! runtimes afresh, handing them what it kept with `morf.reloadable`.
 
 use morf_lua::{Limits, Runtime};
-use morf_wayland::{LayerClient, LayerEvent, ScreenInfo};
+use morf_app::{LayerClient, LayerEvent, ScreenInfo};
 use std::os::fd::AsFd;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};

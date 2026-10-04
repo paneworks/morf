@@ -20,7 +20,7 @@ use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
 use morf_value::IpcValue;
 use morf_lua::{Limits, Runtime, Screen};
-use morf_wayland::ScreenInfo;
+use morf_app::ScreenInfo;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;

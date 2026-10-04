@@ -1,5 +1,5 @@
 //! Each surface's accessible tree, for a screen reader (the `a11y`
-//! feature: AT-SPI through AccessKit, `morf_wayland::accesskit`).
+//! feature: AT-SPI through AccessKit, `morf_app::accesskit`).
 //!
 //! Every surface gets an adapter as it appears; none builds a tree until a
 //! screen reader asks for one. While one is wanted, the loop's turn after
@@ -20,7 +20,7 @@ mod live {
     use morf_lua::Runtime;
 use morf_value::IpcValue;
     use morf_scene::NodeHandle;
-    use morf_wayland::accesskit::{Accessibility, RequestKind};
+    use morf_app::accesskit::{Accessibility, RequestKind};
 
     use crate::surfaces::SurfaceEventState;
 

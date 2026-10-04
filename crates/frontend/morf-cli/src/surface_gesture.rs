@@ -17,7 +17,7 @@ use morf_layout::Hit;
 use morf_lua::{Runtime, UiEvent};
 use morf_value::IpcValue;
 use morf_scene::NodeHandle;
-use morf_wayland::SurfaceRole;
+use morf_app::SurfaceRole;
 
 use crate::surfaces::{PointerInput, SurfaceLayouts};
 

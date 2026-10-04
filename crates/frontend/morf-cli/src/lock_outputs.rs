@@ -23,7 +23,7 @@ use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::{Element, NodeHandle};
-use morf_wayland::{LayerClient, ScreenInfo, SurfaceRole};
+use morf_app::{LayerClient, ScreenInfo, SurfaceRole};
 
 use crate::{supervisor::lua_screen, surfaces::*};
 

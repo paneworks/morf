@@ -16,7 +16,7 @@ use morf_layout::{Layout, Size};
 use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
-use morf_wayland::SurfaceRole;
+use morf_app::SurfaceRole;
 
 use crate::config::LoadPolicy;
 use crate::headless_surfaces::headless_screens;

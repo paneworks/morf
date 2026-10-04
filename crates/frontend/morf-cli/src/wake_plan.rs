@@ -12,7 +12,7 @@
 //! cost in the field is traced to the thing that causes it.
 
 use morf_lua::{ClockPrecision, DeadlineCause, Runtime};
-use morf_wayland::Woke;
+use morf_app::Woke;
 use std::time::{Duration, Instant};
 
 /// Why the loop set the deadline it set.

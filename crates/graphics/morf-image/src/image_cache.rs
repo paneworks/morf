@@ -455,7 +455,7 @@ impl ImageCache {
 /// Converts one logical dimension to physical pixels for a decode request.
 ///
 /// This crate depends on nothing, so it cannot share the surface-sizing
-/// conversion in `morf-wayland`, and it deliberately answers differently: a
+/// conversion in `morf-app`, and it deliberately answers differently: a
 /// zero-sized image is a request that cannot be satisfied, where a zero-sized
 /// surface has to be rounded up to something drawable.
 ///

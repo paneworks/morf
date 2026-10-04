@@ -8,7 +8,7 @@
 //! `step`) and states (`checked`, `expanded`, `selected`, `disabled`,
 //! `pressed`, `read_only`, `modal`, `orientation`, `placeholder`, `level`);
 //! `accessible_hidden` takes a subtree out. Nothing here knows a platform:
-//! a backend (AccessKit, in `morf-wayland`) turns [`AccessibleNode`]s into
+//! a backend (AccessKit, in `morf-app`) turns [`AccessibleNode`]s into
 //! its own, and only while a screen reader asks for them.
 
 use crate::types::{Element, NodeHandle, Scene, Value};

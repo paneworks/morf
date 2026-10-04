@@ -236,7 +236,7 @@ make.recipe{
   name = "wayland-smoke",
   desc = "present a layer surface and receive its frame callback",
   run = function()
-    sh.cargo("build", "--release", "--package", "morf-wayland", "--example", "layer_smoke")
+    sh.cargo("build", "--release", "--package", "morf-app", "--example", "layer_smoke")
     local command = { "target/release/examples/layer_smoke" }
     local wrapper = oslo.run{ "sh", "-c", "command -v nixVulkan", capture = true }
     if wrapper.ok then
@@ -250,7 +250,7 @@ make.recipe{
   name = "popup-smoke",
   desc = "present an xdg popup anchored to a layer-surface click",
   run = function()
-    sh.cargo("build", "--release", "--package", "morf-wayland", "--example", "popup_smoke")
+    sh.cargo("build", "--release", "--package", "morf-app", "--example", "popup_smoke")
     local command = { "target/release/examples/popup_smoke" }
     local wrapper = oslo.run{ "sh", "-c", "command -v nixVulkan", capture = true }
     if wrapper.ok then

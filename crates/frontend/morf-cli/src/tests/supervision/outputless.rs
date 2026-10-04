@@ -11,7 +11,7 @@ use crate::workers::{
 };
 use morf_io::{IpcReply, IpcRequest, IpcValue as WireValue};
 use morf_lua::{Limits, Runtime, Screen};
-use morf_wayland::ScreenInfo;
+use morf_app::ScreenInfo;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};

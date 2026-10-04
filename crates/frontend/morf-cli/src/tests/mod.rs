@@ -7,8 +7,8 @@ use crate::surfaces::primary_surface_root;
 use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
 use morf_lua::Runtime;
-use morf_wayland::ScreenInfo;
-use morf_wayland::physical_size;
+use morf_app::ScreenInfo;
+use morf_app::physical_size;
 use std::fs;
 use std::path::PathBuf;
 

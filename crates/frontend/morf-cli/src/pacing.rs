@@ -1,5 +1,5 @@
 use morf_lua::Runtime;
-use morf_wayland::{LayerClient, PRIMARY_LAYER};
+use morf_app::{LayerClient, PRIMARY_LAYER};
 use std::time::Duration;
 
 use crate::{surface_layers::*, surfaces::*};

@@ -1,6 +1,6 @@
 use morf_lua::Runtime;
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_wayland::{LayerClient, LayerEvent, PRIMARY_LAYER, SurfaceRole, physical_size};
+use morf_app::{LayerClient, LayerEvent, PRIMARY_LAYER, SurfaceRole, physical_size};
 use std::sync::mpsc;
 
 use crate::{
@@ -303,10 +303,10 @@ pub(crate) fn handle_surface_event(
 /// Which of the configuration's surfaces a role is: `Some(None)` for the
 /// shell's own, `Some(Some(id))` for a window, `None` for one the engine
 /// keeps for itself (the backdrop, the edge reservers, a lock surface).
-fn surface_window(surface: morf_wayland::SurfaceRole) -> Option<Option<u64>> {
-    use morf_wayland::SurfaceRole;
+fn surface_window(surface: morf_app::SurfaceRole) -> Option<Option<u64>> {
+    use morf_app::SurfaceRole;
     match surface {
-        SurfaceRole::Layer(morf_wayland::PRIMARY_LAYER) => Some(None),
+        SurfaceRole::Layer(morf_app::PRIMARY_LAYER) => Some(None),
         SurfaceRole::Layer(layer) => crate::surface_layers::window_surface_id(layer)
             .filter(|_| layer < crate::surface_layers::RESERVE_LAYER_BASE)
             .map(Some),
