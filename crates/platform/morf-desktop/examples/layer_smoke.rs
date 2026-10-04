@@ -135,7 +135,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if backdrop {
         client.set_layer_backdrop_region(
             morf_app::PRIMARY_LAYER,
-            Some(&[morf_value::region::Rect {
+            Some(&[morf_app::InputRect {
                 x: 0,
                 y: 0,
                 width: width as i32,

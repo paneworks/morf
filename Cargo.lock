@@ -1743,7 +1743,6 @@ version = "0.1.5"
 dependencies = [
  "accesskit",
  "accesskit_unix",
- "morf-desktop",
  "morf-layout",
  "morf-render",
  "morf-scene",
@@ -1796,6 +1795,10 @@ name = "morf-desktop"
 version = "0.1.5"
 dependencies = [
  "morf-app",
+ "morf-layout",
+ "morf-render",
+ "morf-scene",
+ "pollster",
  "rustix",
  "smithay-client-toolkit",
  "wayland-client",

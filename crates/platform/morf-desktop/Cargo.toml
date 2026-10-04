@@ -13,3 +13,11 @@ smithay-client-toolkit.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
 wayland-protocols-wlr.workspace = true
+
+[dev-dependencies]
+# The layer smoke example presents a surface beside the desktop protocols it
+# reports on.
+morf-layout.workspace = true
+morf-render.workspace = true
+morf-scene.workspace = true
+pollster.workspace = true

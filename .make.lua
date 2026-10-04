@@ -236,7 +236,7 @@ make.recipe{
   name = "wayland-smoke",
   desc = "present a layer surface and receive its frame callback",
   run = function()
-    sh.cargo("build", "--release", "--package", "morf-app", "--example", "layer_smoke")
+    sh.cargo("build", "--release", "--package", "morf-desktop", "--example", "layer_smoke")
     local command = { "target/release/examples/layer_smoke" }
     local wrapper = oslo.run{ "sh", "-c", "command -v nixVulkan", capture = true }
     if wrapper.ok then
