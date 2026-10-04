@@ -123,13 +123,22 @@ pub fn primary_frame(
 ) -> Result<bool, String> {
     let mut repaint = false;
     let delta = animation_delta(state.last_frame, time_ms);
-    let frame = runtime
-        .tick_frame_animations(delta)
-        .map_err(|error| error.to_string())?;
+    // A display's clock starts an animation on the tick after it was asked
+    // for; a clock moved by hand (a headless host, which draws nothing)
+    // means its deltas exactly (`Scene::set_start_on_tick`).
+    let frame = if state.painter.gpu().is_some() {
+        runtime.tick_frame_animations(delta)
+    } else {
+        runtime.tick_animations(delta)
+    }
+    .map_err(|error| error.to_string())?;
     // Carried forward only while motion continues, so the next run of
     // animation starts from a clean timebase rather than inheriting
     // however long the shell was idle.
-    state.last_frame = frame.active.then_some(time_ms);
+    //
+    // A clock moved by hand keeps its timebase: its callbacks come every
+    // frame (the headless runner asks for each), and each means its delta.
+    state.last_frame = (frame.active || state.painter.gpu().is_none()).then_some(time_ms);
     // The callbacks themselves are the clock: whatever rate the
     // compositor offers this output is the rate to pace against.
     if !delta.is_zero() {

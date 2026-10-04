@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use morf_app::WindowId;
+use morf_app::{Backend, WindowId};
 use morf_app::backend::headless::{HeadlessBackend, VirtualSeat, virtual_outputs};
 use morf_layout::Layout;
 use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
@@ -312,6 +312,10 @@ impl Headless {
         match self.host.as_mut() {
             Some(host) => {
                 if let Some(backend) = host.backend.as_headless_mut() {
+                    // Every frame calls back, whether or not the last paint
+                    // asked: the frames are this clock's ticks, each of
+                    // `delta`.
+                    backend.request_frame(WindowId::Layer(morf_app::PRIMARY_LAYER));
                     backend.advance(delta);
                 }
                 for _ in 0..SETTLE_PASSES {
