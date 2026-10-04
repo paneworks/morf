@@ -9,9 +9,9 @@ use morf_layout::{TransformTracker, TransformWatcher as NativeTransformWatcher};
 use morf_runtime::Handler;
 use morf_scene::reactive::{Graph, SignalId};
 use morf_scene::retain::Retention;
-use morf_scene::{GroupId, ListModel, ModelId, NodeHandle, Scene, VirtualList};
+use morf_scene::{GroupId, ListModel, NodeHandle, Scene};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -31,29 +31,7 @@ mod methods;
 
 pub(crate) use follow::{Follow, apply_follows};
 
-pub(crate) struct LuaVirtualView {
-    pub(crate) model: Rc<RefCell<ListModel>>,
-    pub(crate) view: VirtualList,
-    pub(crate) delegate: Handler,
-    pub(crate) active: HashMap<ModelId, DelegateInstance>,
-    pub(crate) reusable: HashMap<ModelId, DelegateInstance>,
-    pub(crate) reuse_order: VecDeque<ModelId>,
-    pub(crate) reuse_limit: usize,
-    pub(crate) pool_root: Option<NodeHandle>,
-    /// Delegates of rows the model removed that are still playing their
-    /// exit, in the parent, out of its flow.
-    pub(crate) exiting: Vec<DelegateInstance>,
-    pub(crate) column_extent: f64,
-    /// Whether the view places its delegates itself (a scrolling view) or
-    /// leaves that to its own node's kind (a `Repeater`, which may be a
-    /// `Row`, a `Column` or a `Grid`).
-    pub(crate) positioned: bool,
-    /// The row field that says how tall a row is, when rows differ.
-    pub(crate) size_field: Option<String>,
-    /// The row field that says which kind of delegate a row takes: a
-    /// delegate is only ever reused for a row of its own kind.
-    pub(crate) kind_field: Option<String>,
-}
+pub(crate) use morf_runtime::views::{Delegate, VirtualView};
 
 /// A `morf.state` table: each named field its own signal, each nested
 /// table its own proxy, each array a list model.
@@ -82,17 +60,6 @@ pub(crate) struct StateFields {
 pub(crate) struct CustomLayoutFns {
     pub(crate) measure: Handler,
     pub(crate) place: Handler,
-}
-
-pub(crate) struct DelegateInstance {
-    pub(crate) node: NodeHandle,
-    pub(crate) updater: Option<Handler>,
-    /// The row it shows, as it was last given it: what a row put back while
-    /// this one is still leaving is matched against.
-    pub(crate) item: morf_scene::Value,
-    /// The index it was last given (0-based): a row that moves keeps its
-    /// delegate, which is rebound when this differs.
-    pub(crate) index: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -307,7 +274,7 @@ pub(crate) struct ReactiveState {
     pub(crate) text_input_enable_requested: bool,
     pub(crate) text_input_requests: Vec<TextInputRequest>,
     pub(crate) text_input_callbacks: Vec<Handler>,
-    pub(crate) views: HashMap<NodeHandle, LuaVirtualView>,
+    pub(crate) views: morf_runtime::views::Views,
     pub(crate) pam_tasks: Vec<PendingPam>,
     pub(crate) pam_sessions: Vec<PendingPamSession>,
     pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
