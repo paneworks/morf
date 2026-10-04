@@ -18,4 +18,4 @@ pub mod timers;
 pub mod wake;
 pub mod windows;
 
-pub use handler::{Handler, HandlerId, HandlerRegistry};
+pub use handler::{Handler, HandlerId, HandlerRegistry, Handlers};

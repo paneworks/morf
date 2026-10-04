@@ -47,3 +47,17 @@ impl Runtime {
         result
     }
 }
+
+/// The runtime's subsystems call handlers through this: each call is one
+/// handler, with its flush, as any other the host runs.
+impl morf_runtime::Handlers for Runtime {
+    fn call(
+        &mut self,
+        handler: &morf_runtime::Handler,
+        args: &[crate::IpcValue],
+    ) -> Result<Vec<crate::IpcValue>, String> {
+        self.run_handler(|ctx, limits| {
+            crate::reactive_execute::execute_ipc_handler(ctx, handler, args, limits)
+        })
+    }
+}

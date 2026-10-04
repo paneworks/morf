@@ -51,6 +51,17 @@ impl Handler {
     }
 }
 
+/// What runs handlers: the scripting layer. The runtime's subsystems call
+/// a handler through this and never see the language it is written in.
+pub trait Handlers {
+    /// Calls `handler` with `args`; what it returned, or why it failed.
+    fn call(
+        &mut self,
+        handler: &Handler,
+        args: &[morf_value::IpcValue],
+    ) -> Result<Vec<morf_value::IpcValue>, String>;
+}
+
 impl fmt::Debug for Handler {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Handler({})", self.0.id.0)
