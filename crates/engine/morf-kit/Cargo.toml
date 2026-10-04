@@ -8,4 +8,3 @@ repository.workspace = true
 
 [dependencies]
 morf-value.workspace = true
-morf-lua.workspace = true

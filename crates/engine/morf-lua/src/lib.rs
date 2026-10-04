@@ -118,6 +118,8 @@ pub use api_focus::FocusReason;
 pub use api_gamma::GammaRequest;
 pub use events::*;
 pub use extensions::{Extension, register_extension};
+#[cfg(feature = "kit")]
+pub use self::api::kit::register as register_kit;
 pub use runtime_harness::HostFunction;
 pub use runtime_layout::SettledLayout;
 pub use runtime_session_lock::SessionLockState;

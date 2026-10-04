@@ -23,7 +23,7 @@ fn main() -> ExitCode {
     });
     // The widget archetypes, for every runtime this process makes.
     #[cfg(feature = "kit")]
-    morf_kit::register();
+    morf_lua::register_kit();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

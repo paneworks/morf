@@ -1778,7 +1778,6 @@ dependencies = [
  "morf-app",
  "morf-host",
  "morf-io",
- "morf-kit",
  "morf-layout",
  "morf-lua",
  "morf-render",
@@ -1855,7 +1854,6 @@ dependencies = [
 name = "morf-kit"
 version = "0.1.5"
 dependencies = [
- "morf-lua",
  "morf-value",
 ]
 
@@ -1879,6 +1877,7 @@ dependencies = [
  "morf-audio",
  "morf-image",
  "morf-io",
+ "morf-kit",
  "morf-layout",
  "morf-runtime",
  "morf-scene",

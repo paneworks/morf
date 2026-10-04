@@ -9,8 +9,11 @@ repository.workspace = true
 [features]
 # luna's native tier (Cranelift; Linux x86-64 and aarch64). See runtime_jit.rs.
 jit = ["luna/jit"]
+# The widget archetypes as `morf.kit.native` (morf-kit).
+kit = ["dep:morf-kit"]
 
 [dependencies]
+morf-kit = { workspace = true, optional = true }
 morf-value.workspace = true
 jiff.workspace = true
 luna.workspace = true

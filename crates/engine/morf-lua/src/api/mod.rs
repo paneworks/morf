@@ -6,6 +6,8 @@ pub(crate) mod geometry;
 pub(crate) mod input;
 pub(crate) mod install;
 pub(crate) mod io;
+#[cfg(feature = "kit")]
+pub(crate) mod kit;
 pub(crate) mod media;
 pub(crate) mod module;
 pub(crate) mod motion;

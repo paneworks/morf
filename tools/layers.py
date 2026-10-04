@@ -49,9 +49,7 @@ ALLOWED = {
 # morf-shader reads Lua-syntax shaders with luna's parser: the Lua layer.
 # What still breaks the rules, and the phase of PLAN.md that ends it.
 PENDING = {
-    "morf-kit depends on morf-lua, not in its row": "phase 6: morf.kit.native moves to morf-lua",
     "morf-cli depends on morf-io, not in its row": "phase 7: morf-host",
-    "morf-cli depends on morf-kit, not in its row": "phase 7: morf-host",
     "morf-cli depends on morf-layout, not in its row": "phase 7: morf-host",
     "morf-cli depends on morf-lua, not in its row": "phase 7: morf-host",
     "morf-cli depends on morf-scene, not in its row": "phase 7: morf-host",

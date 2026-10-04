@@ -18,7 +18,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use morf_lua::{HostFunction, Runtime};
 use morf_value::{IpcTable, IpcValue};
 
 use crate::collection::Collection;
@@ -202,15 +201,19 @@ fn sides(value: Option<&IpcValue>) -> [f64; 4] {
     }
 }
 
-/// Adds `morf.kit.native` to a runtime.
-pub fn install(runtime: &mut Runtime) {
+/// One function of the native module: Lua values in, Lua values out.
+pub type NativeFunction = Rc<dyn Fn(Vec<IpcValue>) -> Result<Vec<IpcValue>, String>>;
+
+/// The functions of `morf.kit.native`, each by its name. The scripting
+/// layer makes them a module.
+pub fn native_module() -> Vec<(&'static str, NativeFunction)> {
     let registry = Rc::new(RefCell::new(Registry::default()));
     let id_of = |arguments: &[IpcValue]| match arguments.first() {
         Some(IpcValue::Integer(id)) => Ok(*id),
         Some(IpcValue::Number(id)) => Ok(*id as i64),
         _ => Err("expected a control id".to_owned()),
     };
-    let mut functions: Vec<(&'static str, HostFunction)> = Vec::new();
+    let mut functions: Vec<(&'static str, NativeFunction)> = Vec::new();
     let r = Rc::clone(&registry);
     functions.push((
         "new",
@@ -367,5 +370,5 @@ pub fn install(runtime: &mut Runtime) {
             Ok(vec![merge_tokens(&parent, &overrides)])
         }),
     ));
-    runtime.add_native_module("morf.kit.native", functions);
+    functions
 }

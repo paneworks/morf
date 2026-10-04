@@ -17,7 +17,7 @@ a11y = ["morf-host/a11y"]
 # luna's native Lua tier; see crates/morf-lua/src/runtime_jit.rs.
 jit = ["morf-lua/jit"]
 # The widget archetypes (`morf.kit.native`): crates/morf-kit.
-kit = ["dep:morf-kit"]
+kit = ["morf-lua/kit"]
 
 [dependencies]
 morf-host.workspace = true
@@ -27,7 +27,6 @@ flate2.workspace = true
 serde_json.workspace = true
 morf-layout.workspace = true
 morf-lua.workspace = true
-morf-kit = { workspace = true, optional = true }
 morf-io.workspace = true
 morf-scene.workspace = true
 morf-text.workspace = true

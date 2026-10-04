@@ -40,7 +40,7 @@ mod value;
 
 pub use access::{item_role, role_of, states_of};
 pub use control::{ControlState, implicit_size};
-pub use module::install;
+pub use module::{NativeFunction, native_module};
 pub use slots::{ARCHETYPES, slots_of};
 pub use tokens::merge_tokens;
 
@@ -114,8 +114,3 @@ pub trait Archetype {
     }
 }
 
-/// Registers the kit with the engine: every runtime made afterwards can
-/// `require("morf.kit.native")`.
-pub fn register() {
-    morf_lua::register_extension(install);
-}
