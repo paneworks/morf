@@ -35,10 +35,6 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
     zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
 };
-use wayland_protocols_wlr::output_power_management::v1::client::{
-    zwlr_output_power_manager_v1::ZwlrOutputPowerManagerV1,
-    zwlr_output_power_v1::{self, ZwlrOutputPowerV1},
-};
 use wayland_protocols_wlr::screencopy::v1::client::{
     zwlr_screencopy_frame_v1::{self, ZwlrScreencopyFrameV1},
     zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1,
@@ -269,43 +265,6 @@ impl Dispatch<ExtIdleNotificationV1, (u32, bool)> for LayerState {
     }
 }
 
-impl Dispatch<ZwlrOutputPowerV1, wl_output::WlOutput> for LayerState {
-    fn event(
-        state: &mut Self,
-        proxy: &ZwlrOutputPowerV1,
-        event: zwlr_output_power_v1::Event,
-        output: &wl_output::WlOutput,
-        _connection: &Connection,
-        _qh: &QueueHandle<Self>,
-    ) {
-        match event {
-            zwlr_output_power_v1::Event::Mode { mode } => {
-                let mode = match mode {
-                    wayland_client::WEnum::Value(zwlr_output_power_v1::Mode::Off) => {
-                        OutputPowerMode::Off
-                    }
-                    wayland_client::WEnum::Value(zwlr_output_power_v1::Mode::On) => {
-                        OutputPowerMode::On
-                    }
-                    _ => return,
-                };
-                // Recorded, not announced: nothing consumed the event.
-                let _ = (output, mode);
-            }
-            zwlr_output_power_v1::Event::Failed => {
-                if let Some(index) = state
-                    .output_power
-                    .iter()
-                    .position(|control| control.control == *proxy)
-                {
-                    state.output_power.remove(index).control.destroy();
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
 impl Dispatch<ZwlrScreencopyFrameV1, ()> for LayerState {
     fn event(
         state: &mut Self,
@@ -509,7 +468,6 @@ smithay_client_toolkit::delegate_dispatch2!(LayerState);
 wayland_client::delegate_noop!(LayerState: ignore WpFractionalScaleManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore WpViewporter);
 wayland_client::delegate_noop!(LayerState: ignore ExtIdleNotifierV1);
-wayland_client::delegate_noop!(LayerState: ignore ZwlrOutputPowerManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore ZwlrScreencopyManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore ZwpVirtualKeyboardManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore ZwpVirtualKeyboardV1);

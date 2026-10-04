@@ -32,7 +32,6 @@ use wayland_protocols::wp::viewporter::client::wp_viewporter::WpViewporter;
 use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_method_manager_v2::ZwpInputMethodManagerV2;
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1;
 use wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1;
-use wayland_protocols_wlr::output_power_management::v1::client::zwlr_output_power_manager_v1::ZwlrOutputPowerManagerV1;
 use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
 use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1;
 
@@ -120,9 +119,6 @@ impl LayerClient {
             .ok();
         let text_input_manager = globals
             .bind::<ZwpTextInputManagerV3, _, _>(&qh, 1..=2, ())
-            .ok();
-        let output_power_manager = globals
-            .bind::<ZwlrOutputPowerManagerV1, _, _>(&qh, 1..=1, ())
             .ok();
         let shm = Shm::bind(&globals, &qh).ok();
         // Blur behind a surface. Absent on compositors that do not implement it,
@@ -257,10 +253,7 @@ impl LayerClient {
             text_input: None,
             text_input_requested: false,
             text_input_pending: TextInputState::default(),
-            output_power_manager,
-            output_power: Vec::new(),
             output_power_target: None,
-            output_power_mode: None,
             shm,
             screencopy_manager,
             toplevel_list,

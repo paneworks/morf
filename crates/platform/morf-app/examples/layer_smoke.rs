@@ -4,7 +4,8 @@ use morf_render::{
     WgpuBackend,
 };
 use morf_scene::{Color, Element, Scene};
-use morf_app::{LayerConfig, LayerClient, Event, OutputPowerMode};
+use morf_app::{Event, LayerClient, LayerConfig};
+use morf_desktop::{Desktop, OutputPowerMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = LayerConfig {
@@ -13,7 +14,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut client = LayerClient::connect(config)?;
     let idle_notify = client.set_idle_timeouts(&[(600_000, false)]);
-    let output_power = client.set_output_power(OutputPowerMode::On);
+    let mut desktop = Desktop::new(client.connection())?;
+    let output_power = desktop.set_output_power(OutputPowerMode::On);
     // Turned on and straight back off, because the point here is that the
     // compositor accepts both halves against a real surface — an inhibitor
     // built on a bad one is a fatal protocol error, so surviving this line is

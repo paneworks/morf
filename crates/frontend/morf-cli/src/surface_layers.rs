@@ -28,7 +28,7 @@ pub(crate) fn apply_service_requests(
     client: &mut LayerClient,
     desktop: &mut morf_desktop::Desktop,
 ) {
-    apply_output_power_requests(runtime, client);
+    apply_output_power_requests(runtime, desktop);
     crate::services::apply_gamma_requests(runtime, desktop);
     apply_clipboard_requests(runtime, client);
     crate::surface_drag::apply_offer_reads(runtime, client);

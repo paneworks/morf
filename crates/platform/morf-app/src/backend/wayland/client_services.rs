@@ -372,27 +372,6 @@ impl LayerClient {
         self.state.idle_inhibit_manager.is_some()
     }
 
-    /// Requests a power state for the configured output, or every output for a lock client.
-    pub fn set_output_power(&mut self, mode: OutputPowerMode) -> bool {
-        if self.state.output_power_manager.is_none() {
-            return false;
-        }
-        self.state.output_power_mode = Some(mode);
-        let available = self.state.outputs.outputs().collect::<Vec<_>>();
-        let outputs = match self.state.output_power_target.clone() {
-            Some(output) => available
-                .into_iter()
-                .filter(|item| *item == output)
-                .collect(),
-            None => available,
-        };
-        let qh = self.queue.handle();
-        for output in outputs {
-            self.state.apply_output_power(&output, mode, &qh);
-        }
-        true
-    }
-
     /// Starts an asynchronous capture of the named output, or of the
     /// configured or first one.
     pub fn capture_output(

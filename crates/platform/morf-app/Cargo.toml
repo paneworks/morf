@@ -31,6 +31,8 @@ wayland-protocols-wlr.workspace = true
 xkbcommon.workspace = true
 
 [dev-dependencies]
+# The smoke examples exercise the desktop protocols beside the windows.
+morf-desktop.workspace = true
 # The library does not touch these; only the smoke examples do, which is what
 # the unused-dependency lint noticed.
 morf-layout.workspace = true

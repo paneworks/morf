@@ -86,9 +86,6 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
     zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
 };
-use wayland_protocols_wlr::output_power_management::v1::client::{
-    zwlr_output_power_manager_v1::ZwlrOutputPowerManagerV1, zwlr_output_power_v1::ZwlrOutputPowerV1,
-};
 use wayland_protocols_wlr::screencopy::v1::client::{
     zwlr_screencopy_frame_v1::ZwlrScreencopyFrameV1,
     zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1,
@@ -337,10 +334,7 @@ pub(crate) struct LayerState {
     pub(crate) text_input: Option<ZwpTextInputV3>,
     pub(crate) text_input_requested: bool,
     pub(crate) text_input_pending: TextInputState,
-    pub(crate) output_power_manager: Option<ZwlrOutputPowerManagerV1>,
-    pub(crate) output_power: Vec<OutputPowerControl>,
     pub(crate) output_power_target: Option<wl_output::WlOutput>,
-    pub(crate) output_power_mode: Option<OutputPowerMode>,
     pub(crate) shm: Option<Shm>,
     pub(crate) screencopy_manager: Option<ZwlrScreencopyManagerV1>,
     /// `ext-background-effect-v1`, when the compositor offers it.
@@ -427,11 +421,6 @@ pub(crate) struct DragState {
 pub(crate) struct OwnedDrag {
     pub(crate) source: smithay_client_toolkit::data_device_manager::data_source::DragSource,
     pub(crate) data: Vec<(String, Arc<Vec<u8>>)>,
-}
-
-pub(crate) struct OutputPowerControl {
-    pub(crate) output: wl_output::WlOutput,
-    pub(crate) control: ZwlrOutputPowerV1,
 }
 
 pub(crate) struct PendingScreencopy {

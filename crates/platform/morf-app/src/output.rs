@@ -18,12 +18,3 @@ pub struct Output {
     /// `vertical_rgb` or `vertical_bgr`.
     pub subpixel: &'static str,
 }
-
-/// Compositor output power state.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum OutputPowerMode {
-    /// The output is powered down.
-    Off,
-    /// The output is powered on.
-    On,
-}

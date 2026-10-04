@@ -223,11 +223,6 @@ impl OutputHandler for LayerState {
         output: wl_output::WlOutput,
     ) {
         self.refresh_screens(None);
-        if self.output_power_target.is_none()
-            && let Some(mode) = self.output_power_mode
-        {
-            self.apply_output_power(&output, mode, qh);
-        }
         self.create_lock_surface(output, qh);
     }
 
@@ -272,13 +267,6 @@ impl OutputHandler for LayerState {
         // Told before the toolkit forgets it: the list must leave it out here,
         // or an output going away never changed the list at all.
         self.refresh_screens(Some(&output));
-        if let Some(index) = self
-            .output_power
-            .iter()
-            .position(|control| control.output == output)
-        {
-            self.output_power.remove(index).control.destroy();
-        }
         if let Some(index) = self
             .lock_surfaces
             .iter()

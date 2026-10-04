@@ -1,7 +1,8 @@
 use morf_io::IpcValue as WireValue;
 use morf_lua::{InputMethodRequest, Runtime, TextInputRequest, VirtualKeyboardRequest};
 use morf_value::IpcValue;
-use morf_app::{InputRect, LayerClient, OutputPowerMode};
+use morf_app::{InputRect, LayerClient};
+use morf_desktop::{Desktop, OutputPowerMode};
 use std::collections::BTreeMap;
 
 use crate::lock::*;
@@ -51,9 +52,9 @@ pub(crate) fn apply_shortcuts_inhibit(runtime: &mut Runtime, client: &mut LayerC
     }
 }
 
-pub(crate) fn apply_output_power_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+pub(crate) fn apply_output_power_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
     for on in runtime.take_output_power_requests() {
-        client.set_output_power(if on {
+        desktop.set_output_power(if on {
             OutputPowerMode::On
         } else {
             OutputPowerMode::Off
@@ -61,7 +62,7 @@ pub(crate) fn apply_output_power_requests(runtime: &mut Runtime, client: &mut La
     }
 }
 
-pub(crate) fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
+pub(crate) fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
     for request in runtime.take_gamma_requests() {
         let output = request.output.as_deref();
         let result = match request.set {

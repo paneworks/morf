@@ -1,7 +1,7 @@
 //! The desktop protocols a shell uses, on the same Wayland connection as its
-//! windows but on an event queue of its own: gamma ramps first, then the
-//! rest of what moves here from `morf-app` (capture, clipboard over
-//! data-control, workspaces, foreign toplevels, idle, output power).
+//! windows but on an event queue of its own: gamma ramps and output power so
+//! far, then the rest of what moves here from `morf-app` (capture, clipboard
+//! over data-control, workspaces, foreign toplevels, idle).
 //!
 //! The queue is its own because every protocol handler of smithay's toolkit
 //! is implemented on one state type, and a state type of another crate
@@ -10,6 +10,7 @@
 //! (any read of the socket fills this queue too).
 
 mod gamma;
+mod output_power;
 
 use smithay_client_toolkit::output::{OutputHandler, OutputState};
 use smithay_client_toolkit::registry::{ProvidesRegistryState, RegistryState};
@@ -18,6 +19,7 @@ use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::wl_output;
 use wayland_client::{Connection, EventQueue, QueueHandle};
 
+pub use output_power::OutputPowerMode;
 pub use gamma::{
     GammaSettings, NEUTRAL as NEUTRAL_TEMPERATURE, TEMPERATURE_RANGE, ramps as gamma_ramps,
     white_point,
@@ -31,6 +33,7 @@ pub struct DesktopState {
     /// has said: what a request naming no output is for.
     own_output: Option<String>,
     gamma: gamma::GammaState,
+    output_power: output_power::OutputPowerState,
 }
 
 /// The desktop protocols, on a connection a window backend opened.
@@ -51,6 +54,7 @@ impl Desktop {
             outputs: OutputState::new(&globals, &qh),
             own_output: None,
             gamma: gamma::GammaState::bind(&globals, &qh),
+            output_power: output_power::OutputPowerState::bind(&globals, &qh),
         };
         // The outputs' names arrive as events: hear them before anything is
         // asked of an output by name.
@@ -119,7 +123,10 @@ impl OutputHandler for DesktopState {
         &mut self.outputs
     }
 
-    fn new_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_output::WlOutput) {}
+    fn new_output(&mut self, _: &Connection, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
+        let for_every_output = self.own_output.is_none();
+        self.output_power.output_added(&output, for_every_output, qh);
+    }
 
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_output::WlOutput) {}
 
@@ -130,6 +137,7 @@ impl OutputHandler for DesktopState {
         output: wl_output::WlOutput,
     ) {
         self.gamma.forget(&output);
+        self.output_power.forget(&output);
     }
 }
 

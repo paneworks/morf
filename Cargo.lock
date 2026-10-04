@@ -1743,6 +1743,7 @@ version = "0.1.5"
 dependencies = [
  "accesskit",
  "accesskit_unix",
+ "morf-desktop",
  "morf-layout",
  "morf-render",
  "morf-scene",

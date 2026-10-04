@@ -1,7 +1,6 @@
 use smithay_client_toolkit::shm::slot::SlotPool;
 use wayland_client::protocol::{wl_output, wl_shm};
 use wayland_client::{Proxy, QueueHandle};
-use wayland_protocols_wlr::output_power_management::v1::client::zwlr_output_power_v1::{self};
 use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_frame_v1::ZwlrScreencopyFrameV1;
 
 use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*, types::*};
@@ -84,34 +83,6 @@ impl LayerState {
                 self.data_devices.push(manager.get_data_device(qh, &seat));
             }
         }
-    }
-
-    pub(crate) fn apply_output_power(
-        &mut self,
-        output: &wl_output::WlOutput,
-        mode: OutputPowerMode,
-        qh: &QueueHandle<Self>,
-    ) {
-        let Some(manager) = self.output_power_manager.clone() else {
-            return;
-        };
-        let control = self
-            .output_power
-            .iter()
-            .find(|control| control.output == *output)
-            .map(|control| control.control.clone())
-            .unwrap_or_else(|| {
-                let control = manager.get_output_power(output, qh, output.clone());
-                self.output_power.push(OutputPowerControl {
-                    output: output.clone(),
-                    control: control.clone(),
-                });
-                control
-            });
-        control.set_mode(match mode {
-            OutputPowerMode::Off => zwlr_output_power_v1::Mode::Off,
-            OutputPowerMode::On => zwlr_output_power_v1::Mode::On,
-        });
     }
 
     pub(crate) fn start_screencopy(&mut self, frame: &ZwlrScreencopyFrameV1) -> Result<(), String> {
