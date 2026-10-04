@@ -124,7 +124,7 @@ impl Runtime {
                 if state.scene.contains(old)
                     && state.scene.element(old).ok() != Some(Element::TextInput)
                 {
-                    state.input_events.push((
+                    state.editing.events.push((
                         old,
                         UiEvent::FocusChanged,
                         vec![IpcValue::Boolean(false)],
@@ -147,7 +147,7 @@ impl Runtime {
                     if old != Some(node)
                         && state.scene.element(node).ok() != Some(Element::TextInput)
                     {
-                        state.input_events.push((
+                        state.editing.events.push((
                             node,
                             UiEvent::FocusChanged,
                             vec![IpcValue::Boolean(true)],
@@ -225,7 +225,7 @@ impl Runtime {
             }
             // A field the configuration focused by writing `focus` has the
             // keyboard: it has focus too.
-            if let Some(input) = state.focused_input
+            if let Some(input) = state.editing.focused
                 && let Some(root) = state.scene.root_of(input)
                 && state.focus.owner.get(&root) != Some(&input)
                 && !moves.iter().any(|(r, _, _)| *r == root)

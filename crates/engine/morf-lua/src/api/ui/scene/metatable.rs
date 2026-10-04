@@ -278,9 +278,9 @@ pub(crate) fn node_metatable<'gc>(
         // A text input takes a write in at once, so the caret a handler
         // reads back after setting `text` is already the one that text has.
         if state.scene.element(node.handle).ok() == Some(Element::TextInput) {
-            crate::text_inputs::pull(&mut state, node.handle);
+            crate::text_inputs::pull(&mut *state, node.handle);
             if property == "focus" {
-                crate::text_inputs::reconcile_focus(&mut state);
+                crate::text_inputs::reconcile_focus(&mut *state);
             }
         }
         Ok(CallbackReturn::Return)

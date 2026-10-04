@@ -186,14 +186,9 @@ pub(crate) struct ReactiveState {
     /// the host starts up, and a node only ever carries the program's hash.
     pub(crate) shaders: HashMap<String, RegisteredShader>,
     pub(crate) scene: Scene,
-    /// Every live text input's editing state.
-    pub(crate) text_inputs: HashMap<NodeHandle, crate::text_inputs::InputState>,
-    /// When each text input was made, so ties between them are settled the
-    /// same way every time.
-    pub(crate) text_input_order: HashMap<NodeHandle, u64>,
-    pub(crate) last_text_input: u64,
-    /// The text input that has the keyboard, if one does.
-    pub(crate) focused_input: Option<NodeHandle>,
+    /// Every text input's editing, and which has the keyboard
+    /// (`morf_runtime::editing`).
+    pub(crate) editing: morf_runtime::editing::Editing,
     /// Which node of each surface has focus (`api_focus.rs`).
     pub(crate) focus: crate::api_focus::FocusState,
     /// Each node's `shortcuts` (`shortcut.rs`), and a sequence half typed.
@@ -206,11 +201,6 @@ pub(crate) struct ReactiveState {
     pub(crate) gestures: crate::gestures::GestureState,
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
     pub(crate) overlays: crate::api_overlay::OverlayState,
-    /// Callbacks text inputs owe, run once whatever made them is done.
-    pub(crate) input_events: Vec<(NodeHandle, UiEvent, Vec<IpcValue>)>,
-    /// Whether those callbacks are being run, so running one does not start
-    /// running them again from inside itself.
-    pub(crate) draining_input_events: bool,
     /// The clipboard's text as last seen, for a text input to paste.
     pub(crate) clipboard_text: Option<String>,
     pub(crate) effect_runs: u64,

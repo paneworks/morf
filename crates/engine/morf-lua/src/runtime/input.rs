@@ -119,12 +119,12 @@ impl Runtime {
             {
                 let mut state = self.reactive.borrow_mut();
                 match event {
-                    UiEvent::Pressed => crate::text_inputs::press(&mut state, node, local),
+                    UiEvent::Pressed => crate::text_inputs::press(&mut *state, node, local),
                     UiEvent::PointerMoved | UiEvent::Dragged | UiEvent::DragStarted => {
-                        crate::text_inputs::drag(&mut state, node, local);
+                        crate::text_inputs::drag(&mut *state, node, local);
                     }
                     UiEvent::Released | UiEvent::DragFinished => {
-                        crate::text_inputs::release(&mut state, node);
+                        crate::text_inputs::release(&mut *state, node);
                     }
                     _ => {}
                 }

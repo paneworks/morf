@@ -8,5 +8,7 @@ repository.workspace = true
 
 [dependencies]
 jiff.workspace = true
+morf-layout.workspace = true
 morf-scene.workspace = true
+morf-text.workspace = true
 morf-value.workspace = true

@@ -6,13 +6,11 @@ use morf_layout::{InputShape, Layout, TextMeasurer};
 use morf_scene::{Element, NodeHandle};
 use morf_text::TextSystem;
 
-use crate::text_inputs::{self, KeyModifiers, KeyOutcome};
-use crate::{events::*, reactive_bindings::*, runtime_helpers::*, surface_types::*, types::*};
+use morf_runtime::editing::CALLBACK_ROUNDS;
+pub(crate) use morf_runtime::editing::key_args;
 
-/// How many rounds of callbacks one event may set off before the rest are
-/// dropped: a handler that edits its own field from `on_text_changed` would
-/// otherwise go round for ever.
-const CALLBACK_ROUNDS: usize = 16;
+use crate::text_inputs::{self, KeyModifiers, KeyOutcome};
+use crate::{events::*, reactive_bindings::*, runtime_helpers::*, types::*};
 
 impl Runtime {
     /// Whether a node is a text input.
@@ -24,7 +22,7 @@ impl Runtime {
     pub fn focused_text_input_in(&mut self, root: NodeHandle) -> Option<NodeHandle> {
         self.settle_text_inputs();
         let state = self.reactive.borrow();
-        state.focused_input.filter(|node| {
+        state.editing.focused.filter(|node| {
             scene_node_in_subtree(&state.scene, root, *node)
                 && state.scene.bool_value(*node, "enabled").unwrap_or(false)
                 && state.scene.bool_value(*node, "visible").unwrap_or(false)
@@ -44,18 +42,18 @@ impl Runtime {
         };
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            let before = state.focused_input;
+            let before = state.editing.focused;
             match node {
                 Some(node) if state.scene.element(node).ok() == Some(Element::TextInput) => {
-                    text_inputs::set_focus(&mut state, node, true);
+                    text_inputs::set_focus(&mut *state, node, true);
                 }
                 _ => {
-                    if let Some(focused) = state.focused_input {
-                        text_inputs::set_focus(&mut state, focused, false);
+                    if let Some(focused) = state.editing.focused {
+                        text_inputs::set_focus(&mut *state, focused, false);
                     }
                 }
             }
-            state.focused_input != before
+            state.editing.focused != before
         };
         self.finish_text_input_work();
         changed || terminal_moved
@@ -106,8 +104,8 @@ impl Runtime {
         let outcome = if self.is_text_input(node) {
             let outcome = {
                 let mut state = self.reactive.borrow_mut();
-                text_inputs::reconcile_focus(&mut state);
-                text_inputs::key(&mut state, node, keysym, text, modifiers)
+                text_inputs::reconcile_focus(&mut *state);
+                text_inputs::key(&mut *state, node, keysym, text, modifiers)
             };
             self.finish_text_input_work();
             outcome
@@ -154,8 +152,8 @@ impl Runtime {
         let revision = self.reactive.borrow().scene_revision;
         {
             let mut state = self.reactive.borrow_mut();
-            text_inputs::reconcile_focus(&mut state);
-            for node in text_inputs::tracked(&state) {
+            text_inputs::reconcile_focus(&mut *state);
+            for node in text_inputs::tracked(&state.editing) {
                 let Some(geometry) = layout.geometry(node) else {
                     continue;
                 };
@@ -173,7 +171,7 @@ impl Runtime {
                 );
                 let map = text.caret_map(node).unwrap_or_default();
                 text_inputs::observe_shaped(
-                    &mut state,
+                    &mut *state,
                     node,
                     geometry,
                     &shape.display.text,
@@ -181,7 +179,7 @@ impl Runtime {
                     measured.height,
                 );
             }
-            text_inputs::blink(&mut state, Instant::now());
+            text_inputs::blink(&mut *state, Instant::now());
         }
         self.finish_text_input_work();
         // Links in text set in runs: where the shaper put them.
@@ -245,8 +243,8 @@ impl Runtime {
     pub(crate) fn blink_text_inputs(&mut self) -> bool {
         let blinked = {
             let mut state = self.reactive.borrow_mut();
-            text_inputs::reconcile_focus(&mut state);
-            text_inputs::blink(&mut state, Instant::now())
+            text_inputs::reconcile_focus(&mut *state);
+            text_inputs::blink(&mut *state, Instant::now())
         };
         self.finish_text_input_work();
         blinked
@@ -254,7 +252,7 @@ impl Runtime {
 
     /// Picks up `focus` writes the configuration made, and runs what they owe.
     fn settle_text_inputs(&mut self) {
-        text_inputs::reconcile_focus(&mut self.reactive.borrow_mut());
+        text_inputs::reconcile_focus(&mut *self.reactive.borrow_mut());
         self.finish_text_input_work();
     }
 
@@ -267,8 +265,8 @@ impl Runtime {
     ) -> bool {
         let edited = {
             let mut state = self.reactive.borrow_mut();
-            text_inputs::reconcile_focus(&mut state);
-            text_inputs::input_method_commit(&mut state, commit, before, after)
+            text_inputs::reconcile_focus(&mut *state);
+            text_inputs::input_method_commit(&mut *state, commit, before, after)
         };
         self.finish_text_input_work();
         edited
@@ -298,51 +296,27 @@ impl Runtime {
     pub(crate) fn drain_input_events(&mut self) {
         {
             let mut state = self.reactive.borrow_mut();
-            if state.draining_input_events
-                || state.handler_depth > 0
-                || state.input_events.is_empty()
-            {
+            let in_handler = state.handler_depth > 0;
+            if !state.editing.start_draining(in_handler) {
                 return;
             }
-            state.draining_input_events = true;
         }
         for _ in 0..CALLBACK_ROUNDS {
-            let events = std::mem::take(&mut self.reactive.borrow_mut().input_events);
+            let events = std::mem::take(&mut self.reactive.borrow_mut().editing.events);
             if events.is_empty() {
                 break;
             }
             for (node, event, args) in events {
                 self.dispatch_ui_event_with_args(node, event, &args);
             }
-            text_inputs::reconcile_focus(&mut self.reactive.borrow_mut());
+            text_inputs::reconcile_focus(&mut *self.reactive.borrow_mut());
         }
         let mut state = self.reactive.borrow_mut();
-        state.draining_input_events = false;
-        if !state.input_events.is_empty() {
-            state.input_events.clear();
+        if state.editing.finish_draining() {
             state.log(
                 LogLevel::Warn,
                 "text input callbacks kept editing their own fields; the rest were dropped",
             );
         }
     }
-}
-
-/// The arguments a key handler is called with; `repeat` only for presses.
-pub(crate) fn key_args(
-    keysym: u32,
-    text: Option<&str>,
-    modifiers: KeyModifiers,
-    repeat: Option<bool>,
-) -> Vec<IpcValue> {
-    let mut args = vec![
-        IpcValue::Integer(i64::from(keysym)),
-        text.map_or(IpcValue::Nil, |value| IpcValue::String(value.to_owned())),
-        IpcValue::String(modifiers.name()),
-    ];
-    // The key's name comes fifth for a press and a release alike: after
-    // whether it repeats, which a release does not say.
-    args.push(repeat.map_or(IpcValue::Nil, IpcValue::Boolean));
-    args.push(crate::keys::name(keysym).map_or(IpcValue::Nil, IpcValue::String));
-    args
 }
