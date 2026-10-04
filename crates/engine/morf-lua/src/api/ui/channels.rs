@@ -73,17 +73,17 @@ impl Runtime {
                     writes.push((*signal, IpcValue::Integer(revision as i64)));
                 }
             }
-            if let Some(graph) = state.reactive.graph.as_mut() {
+            if let Some(graph) = state.engine.reactive.graph.as_mut() {
                 for (signal, value) in writes {
                     if graph.write(signal, value.clone()).is_ok() {
-                        state.reactive.values.insert(signal, value);
+                        state.engine.reactive.values.insert(signal, value);
                         flush = true;
                     }
                 }
             }
             // A path on show whose channel moved: a frame.
             let mut shown = false;
-            let scene = &state.scene;
+            let scene = &state.engine.scene;
             state.channels.series_nodes.retain(|node, drawn| {
                 if !scene.contains(*node) {
                     return false;

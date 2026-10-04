@@ -100,8 +100,11 @@ impl Runtime {
         {
             let mut state = self.reactive.borrow_mut();
             let state = &mut *state;
-            if !state.session.screens_changed(&mut state.reactive, screens)
-                || state.session.screens_revision.is_none()
+            if !state
+                .engine
+                .session
+                .screens_changed(&mut state.engine.reactive, screens)
+                || state.engine.session.screens_revision.is_none()
             {
                 return;
             }

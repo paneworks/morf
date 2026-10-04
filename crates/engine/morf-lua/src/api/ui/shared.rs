@@ -3,15 +3,13 @@
 
 use crate::types::Runtime;
 
-pub(crate) use morf_runtime::shared::SharedValues;
-
 impl Runtime {
     /// [`SharedValues::sync`], then the bindings that read what came in.
     pub(crate) fn poll_shared(&mut self) -> bool {
         let (changed, published) = {
             let mut state = self.reactive.borrow_mut();
             let state = &mut *state;
-            state.shared.sync(&mut state.reactive)
+            state.engine.shared.sync(&mut state.engine.reactive)
         };
         if published {
             // The other copies sleep until something wakes them.

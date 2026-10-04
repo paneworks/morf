@@ -32,9 +32,13 @@ fn with_hub<R>(
     state: &mut ReactiveState,
     work: impl FnOnce(&mut TerminalHub, &mut Scene) -> R,
 ) -> R {
-    let result = work(&mut state.terminals, &mut state.scene);
+    let result = work(&mut state.terminals, &mut state.engine.scene);
     let effects = state.terminals.take_effects();
-    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(effects.screens);
+    state.engine.revisions.scene_revision = state
+        .engine
+        .revisions
+        .scene_revision
+        .wrapping_add(effects.screens);
     for (node, property, value) in effects.properties {
         let _ = assign_scene_property(state, node, property, value);
     }

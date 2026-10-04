@@ -109,7 +109,7 @@ impl Runtime {
         let closed = {
             let mut state = self.reactive.borrow_mut();
             let state = &mut *state;
-            state.overlays.press(&state.scene, root, hit, inside)
+            state.overlays.press(&state.engine.scene, root, hit, inside)
         };
         closed
             .map(|overlay| self.close_overlay(overlay, "outside"))
@@ -159,7 +159,7 @@ impl Runtime {
             let state = &mut *state;
             state
                 .overlays
-                .take_closing(|content| state.scene.contains(content))
+                .take_closing(|content| state.engine.scene.contains(content))
         };
         let mut closed = false;
         for (content, reason) in closing {

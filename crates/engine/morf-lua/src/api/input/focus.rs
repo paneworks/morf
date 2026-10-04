@@ -34,7 +34,7 @@ use crate::state::ReactiveState;
 use crate::state_tokens::NodeToken;
 
 pub use morf_runtime::focus::FocusReason;
-pub(crate) use morf_runtime::focus::{FocusRequest, FocusState};
+pub(crate) use morf_runtime::focus::FocusRequest;
 
 /// Queues what a write to a node's `focus` asks.
 pub(crate) fn request_by_property(state: &mut ReactiveState, node: NodeHandle, on: bool) {

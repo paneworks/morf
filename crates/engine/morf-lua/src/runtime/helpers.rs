@@ -1,6 +1,6 @@
 use luna::{Context, Table, Value as LuaValue};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use morf_scene::reactive::SignalId;
@@ -20,74 +20,19 @@ pub(crate) fn takes_keys(state: &ReactiveState, node: NodeHandle) -> bool {
     morf_runtime::events::routing::takes_keys(&state.scene, &state.events, node)
 }
 
+/// Removes `node` and its subtree: from the engine (`Engine::remove_subtree`)
+/// and from what this layer keeps per node.
 pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) {
-    let mut nodes = vec![node];
-    let mut index = 0;
-    while index < nodes.len() {
-        let children = state.scene.children(nodes[index]).unwrap_or_default();
-        nodes.extend_from_slice(children);
-        index += 1;
-    }
-    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
-    if state.scene.remove(node).is_err() {
+    let Some(removed) = state.engine.remove_subtree(node) else {
         return;
-    }
-    // Deepest first, so a child lets go of what it holds before the parent
-    // that may have lent it. They run later, once nothing is borrowed and no
-    // flush is under way: see `run_destroyed_hooks`.
-    for removed in nodes.iter().rev() {
-        if let Some(hook) = state.destroy_hooks.remove(removed) {
-            state.pending_destroyed.push(hook);
-        }
-    }
-    let removed = nodes.into_iter().collect::<HashSet<_>>();
+    };
     for node in &removed {
-        state.retained.forget(node);
-        state.states.remove(node);
-        state.views.remove(node);
-        state.timer_callbacks.remove(node);
         state.terminals.remove(*node);
         state.images.remove(*node);
-        state.linked_texts.remove(node);
-        state.shortcuts.remove(node);
     }
-    // A removed field cannot keep the keyboard. The node that had focus is
-    // handed on by `Runtime::check_focus`, which still needs to know it went.
-    state.editing.forget(&removed);
-    state
-        .focus
-        .memory
-        .retain(|scope, node| !removed.contains(scope) && !removed.contains(node));
-    state.animation.forget(&removed);
-    state.events.forget(&removed);
-    state.timers.retain_nodes(|node| !removed.contains(&node));
-    // Bindings that drive a removed node, and the signals that tracked its
-    // properties' reads: the graph forgets both, or every one of them keeps
-    // re-running and growing for the life of the shell.
-    state.reactive.forget_effects_of(&removed);
-    let dead_signals = state
-        .property_signals
-        .iter()
-        .filter(|((node, _, _), _)| removed.contains(node))
-        .map(|(_, signal)| *signal)
-        .collect::<HashSet<_>>();
-    state.reactive.forget_signals(dead_signals);
-    state.collect_graph_garbage();
-    state
-        .property_signals
-        .retain(|(node, _, _), _| !removed.contains(node));
-    state
-        .current_property_names
-        .retain(|_, (node, _)| !removed.contains(node));
     state
         .transform_watchers
         .retain(|_, watcher| !removed.contains(&watcher.a) && !removed.contains(&watcher.b));
-    let windows = &mut state.windows;
-    windows.window_surfaces_changed |= morf_runtime::layout::forget_windows_of(
-        &removed,
-        &mut windows.window_surfaces,
-        &mut windows.popup_node_anchors,
-    );
 }
 
 pub(crate) fn finish_retained_destroy(
@@ -113,33 +58,13 @@ pub(crate) fn finish_retained_destroy(
 /// tree, drawn and out of the flow, held in `retention` until the exit ends.
 /// `false` when it has no exit to play, and whoever let go of it removes it.
 pub(crate) fn begin_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bool {
-    let state = &mut *state;
-    let start = morf_runtime::animation::exits::begin_exit(
-        &mut state.scene,
-        &mut state.retained.retention,
-        &mut state.animation,
-        node,
-    );
-    if start == morf_runtime::animation::exits::ExitStart::Started {
-        state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
-    }
-    start.leaving()
+    state.engine.begin_node_exit(node)
 }
 
 /// Takes back a node that was on its way out: it rejoins the flow and its
 /// properties go back to where they were aimed. `false` if it was not leaving.
 pub(crate) fn cancel_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bool {
-    let state = &mut *state;
-    if !morf_runtime::animation::exits::cancel_exit(
-        &mut state.scene,
-        &mut state.retained.retention,
-        &mut state.animation,
-        node,
-    ) {
-        return false;
-    }
-    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
-    true
+    state.engine.cancel_node_exit(node)
 }
 
 /// A node whose exit has ended: its hold on it goes, and unless something
@@ -154,8 +79,8 @@ pub(crate) fn finish_node_exit(
         let mut state = state.borrow_mut();
         let state = &mut *state;
         match morf_runtime::animation::exits::finish_exit(
-            &state.scene,
-            &mut state.retained.retention,
+            &state.engine.scene,
+            &mut state.engine.retained.retention,
             node,
         ) {
             Some(destroy) => destroy,
@@ -221,39 +146,7 @@ pub(crate) fn register_reloadable_value(
     name: String,
     initial: IpcValue,
 ) -> Result<(SignalId, bool), String> {
-    // Here, not at each door. Four different entry points reach this one map,
-    // and they applied three different rules between them — so what counted as
-    // a legal name depended on which way you came in, and a name accepted by
-    // one door could collide with, or be unreachable from, another.
-    validate_scope_part(&name)?;
-    if state.reloadable.contains_key(&name) {
-        return Err(format!("reloadable id `{name}` is already registered"));
-    }
-    let mut restored = false;
-    let value = match state.reload_seed.remove(&name) {
-        Some(value) if std::mem::discriminant(&value) == std::mem::discriminant(&initial) => {
-            restored = true;
-            value
-        }
-        Some(_) => {
-            state.log(
-                LogLevel::Warn,
-                format!("reloadable `{name}` changed value type; using its new default"),
-            );
-            initial
-        }
-        None => initial,
-    };
-    let id = state
-        .reactive
-        .graph
-        .as_mut()
-        .ok_or_else(|| "reactive graph is already running".to_owned())?
-        .signal(format!("reloadable.{name}"), value.clone());
-    state.reactive.values.insert(id, value);
-    state.reactive.signals.push(id);
-    state.reloadable.insert(name, id);
-    Ok((id, restored))
+    state.engine.register_reloadable(name, initial)
 }
 
 pub(crate) fn create_persistent_token<'gc>(
@@ -295,22 +188,4 @@ pub(crate) fn create_persistent_token<'gc>(
     })
 }
 
-pub(crate) fn validate_scope_part(value: &str) -> Result<(), String> {
-    if value.is_empty() || value.len() > 256 {
-        return Err("scope IDs must be 1..256 bytes".into());
-    }
-    if value.starts_with('.') || value.ends_with('.') || value.contains("..") {
-        return Err("scope IDs cannot contain empty segments".into());
-    }
-    Ok(())
-}
-
-pub(crate) fn scoped_id(prefix: &str, name: &str) -> Result<String, String> {
-    validate_scope_part(prefix)?;
-    validate_scope_part(name)?;
-    let value = format!("{prefix}.{name}");
-    if value.len() > 256 {
-        return Err("scoped reloadable ID exceeds 256 bytes".into());
-    }
-    Ok(value)
-}
+pub(crate) use morf_runtime::engine::{scoped_id, validate_scope_part};

@@ -53,13 +53,7 @@ impl Runtime {
     /// a node sliding on `translate_x` moves without its layout changing.
     /// Free when nothing in the scene stretches.
     pub fn observe_stretch(&mut self, layout: &Layout) {
-        let mut state = self.reactive.borrow_mut();
-        if !state.scene.has_stretch() {
-            return;
-        }
-        if let Err(error) = morf_layout::observe_stretch(&mut state.scene, layout) {
-            state.log(LogLevel::Warn, format!("stretch: {error}"));
-        }
+        self.reactive.borrow_mut().engine.observe_stretch(layout);
     }
 
     /// Updates native transform watchers from one rendered surface layout.
@@ -110,16 +104,16 @@ impl Runtime {
         let mut state = self.reactive.borrow_mut();
         let state = &mut *state;
         if morf_runtime::layout::place_popup_anchors(
-            &state.windows.popup_node_anchors,
-            &state.transform_tracker,
-            &mut state.windows.window_surfaces,
+            &state.engine.windows.popup_node_anchors,
+            &state.engine.transform_tracker,
+            &mut state.engine.windows.window_surfaces,
         ) {
-            state.windows.window_surfaces_changed = true;
+            state.engine.windows.window_surfaces_changed = true;
         }
         let (changed, errors) = morf_runtime::layout::observe_transform_watches(
             &mut state.transform_watchers,
-            &state.scene,
-            &state.transform_tracker,
+            &state.engine.scene,
+            &state.engine.transform_tracker,
         );
         for error in errors {
             state.log(LogLevel::Warn, error);

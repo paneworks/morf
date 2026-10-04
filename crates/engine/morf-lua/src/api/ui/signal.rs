@@ -278,7 +278,10 @@ pub(crate) fn install_signal_api<'gc>(
                 .and_then(|()| {
                     let mut state = state.borrow_mut();
                     let state = &mut *state;
-                    state.shared.register(&mut state.reactive, name, initial)
+                    state
+                        .engine
+                        .shared
+                        .register(&mut state.engine.reactive, name, initial)
                 })
                 .map_err(HostError)?;
             let userdata = UserData::new_static(&ctx, SignalToken { id });

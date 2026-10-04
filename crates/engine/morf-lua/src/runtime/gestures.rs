@@ -8,28 +8,10 @@
 //! - `on_swiped(direction, velocity_x, velocity_y)`: `direction` is
 //!   `"left"`, `"right"`, `"up"` or `"down"`.
 
-use std::time::Instant;
-
-use morf_runtime::gestures::{Completed, clock, wall};
+use morf_runtime::gestures::{Completed, clock};
 use morf_scene::NodeHandle;
 
-use crate::state::ReactiveState;
 use crate::{EventPoint, IpcValue, Runtime, UiEvent};
-
-pub(crate) use morf_runtime::gestures::Gestures as GestureState;
-
-fn has(state: &ReactiveState, node: NodeHandle, event: UiEvent) -> bool {
-    state.events.has(node, event)
-}
-
-/// When the press being held becomes a long press, if one is held where a
-/// long press is wanted.
-pub(crate) fn long_press_due(state: &ReactiveState) -> Option<Instant> {
-    let due = state
-        .gestures
-        .long_press_due(|node| has(state, node, UiEvent::LongPressed))?;
-    Some(wall(state.timers.virtual_now(), due))
-}
 
 impl Runtime {
     /// Watches one pointer event. Returns false for a click a long press
@@ -85,9 +67,9 @@ impl Runtime {
         let due = {
             let mut state = self.reactive.borrow_mut();
             let now = clock(state.timers.virtual_now());
-            let ReactiveState {
+            let morf_runtime::Engine {
                 gestures, events, ..
-            } = &mut *state;
+            } = &mut state.engine;
             gestures.take_long_press(now, |node| events.has(node, UiEvent::LongPressed))
         };
         match due {
@@ -104,7 +86,7 @@ impl Runtime {
 impl Runtime {
     /// Whether `node` has a handler for `event`.
     pub fn handles(&self, node: NodeHandle, event: UiEvent) -> bool {
-        has(&self.reactive.borrow(), node, event)
+        self.reactive.borrow().engine.events.has(node, event)
     }
 
     /// Calls `node`'s handler for a gesture the host recognised (a pinch, an
