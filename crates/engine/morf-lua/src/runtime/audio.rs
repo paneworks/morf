@@ -6,8 +6,8 @@ use std::rc::Rc;
 use morf_audio::{Audio, Backend, DeviceKind};
 use morf_scene::Value as SceneValue;
 
-use crate::runtime::handler::Handler;
 use crate::{api_audio::*, reactive_bindings::flush_reactive, surface_types::*, types::*};
+use morf_runtime::Handler;
 
 impl Runtime {
     /// Gives `morf.audio` a backend of the host's choosing — a fake one in a

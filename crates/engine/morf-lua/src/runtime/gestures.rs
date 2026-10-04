@@ -34,7 +34,8 @@ const SWIPE_WINDOW: Duration = Duration::from_millis(100);
 fn clock(state: &ReactiveState) -> Duration {
     static START: OnceLock<Instant> = OnceLock::new();
     state
-        .virtual_now
+        .timers
+        .virtual_now()
         .unwrap_or_else(|| START.get_or_init(Instant::now).elapsed())
 }
 

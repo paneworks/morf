@@ -1,9 +1,9 @@
 use crate::states::Capture;
 use luna::{Context, Executor, Fuel, Table, Value as LuaValue, Variadic};
 
-use crate::runtime::handler::Handler;
 use crate::vm::handler_store::stashed;
 use morf_io::{DbusCall, DbusValue};
+use morf_runtime::Handler;
 use morf_scene::Value as SceneValue;
 use morf_scene::reactive::EffectCapture;
 use std::cell::RefCell;

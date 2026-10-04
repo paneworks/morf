@@ -9,7 +9,6 @@ pub(crate) mod editing;
 pub(crate) mod events;
 pub(crate) mod focus_keys;
 pub(crate) mod gestures;
-pub(crate) mod handler;
 pub(crate) mod helpers;
 pub(crate) mod host_types;
 pub(crate) mod image_host;

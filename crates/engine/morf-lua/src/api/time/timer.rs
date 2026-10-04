@@ -1,6 +1,7 @@
 use luna::{
     Callback, CallbackReturn, Closure, Context, Table, UserData, UserRef, Value as LuaValue,
 };
+use morf_runtime::timers::Timer;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -265,23 +266,16 @@ pub(crate) fn install_timer_api<'gc>(
     let cancel_state = Rc::clone(&state);
     let timer_cancel = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let token: UserRef<TimerToken> = stack.consume(ctx)?;
-        let mut state = cancel_state.borrow_mut();
-        let before = state.timers.len();
-        state.timers.retain(|timer| timer.id != token.id);
-        state.due_one_shots.remove(&token.id);
         // Whether there was anything to stop: a second cancel, or a cancel of
         // a one-shot that already fired, is not an error but is worth knowing.
-        stack.replace(ctx, state.timers.len() != before);
+        let stopped = cancel_state.borrow_mut().timers.cancel(token.id);
+        stack.replace(ctx, stopped);
         Ok(CallbackReturn::Return)
     });
     let active_state = Rc::clone(&state);
     let timer_active = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let token: UserRef<TimerToken> = stack.consume(ctx)?;
-        let active = active_state
-            .borrow()
-            .timers
-            .iter()
-            .any(|timer| timer.id == token.id);
+        let active = active_state.borrow().timers.is_active(token.id);
         stack.replace(ctx, active);
         Ok(CallbackReturn::Return)
     });
@@ -314,14 +308,15 @@ pub(crate) fn install_timer_api<'gc>(
         };
         let interval = Duration::from_secs_f64(milliseconds / 1_000.0);
         let mut state = timer_state.borrow_mut();
-        let timer = state
-            .new_timer(interval)
+        let source = state
+            .timers
+            .source(interval)
             .map_err(|error| HostError(error.to_string()))?;
-        let id = state.next_timer_id();
-        state.timers.push(PendingTimer {
+        let id = state.timers.next_id();
+        state.timers.add(Timer {
             id,
-            timer,
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
+            source,
+            handler: crate::vm::handler_store::register(ctx.stash(callback)),
             repeat,
             interval,
             node: None,

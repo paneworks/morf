@@ -49,10 +49,10 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::runtime::handler::Handler;
 use crate::{
     Limits, reactive_execute::drive_executor, scene_bindings::*, serialization::*, state::*,
 };
+use morf_runtime::Handler;
 
 /// Requests one configuration may have outstanding. The pool puts at most
 /// sixteen on the wire at once; this caps the queue behind them, so a loop

@@ -6,8 +6,8 @@ use std::collections::{HashMap, HashSet};
 use morf_scene::reactive::SignalId;
 use morf_scene::{Behavior, NodeHandle, Value as SceneValue};
 
-use crate::runtime::handler::Handler;
 use crate::surface_types::IpcValue;
+use morf_runtime::Handler;
 
 #[derive(Clone)]
 pub(crate) struct StateDefinition {

@@ -1,4 +1,5 @@
 use luna::{Callback, CallbackReturn, Context, Function, Table, Value as LuaValue};
+use morf_runtime::timers::Timer;
 use morf_scene::{Element, VirtualList};
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -174,24 +175,24 @@ pub(crate) fn timer_constructor<'gc>(
             let callback =
                 callback.ok_or_else(|| HostError("running Timer requires on_triggered".into()))?;
             let interval = Duration::from_secs_f64(interval / 1_000.0);
-            let timer = state
+            let source = state
                 .borrow()
-                .new_timer(interval)
+                .timers
+                .source(interval)
                 .map_err(|error| HostError(error.to_string()))?;
-            let id = state.borrow_mut().next_timer_id();
-            state.borrow_mut().timers.push(PendingTimer {
+            let handler = crate::vm::handler_store::register(callback);
+            let mut state = state.borrow_mut();
+            let id = state.timers.next_id();
+            state.timers.add(Timer {
                 id,
-                timer,
-                callback: crate::vm::handler_store::register(callback.clone()),
+                source,
+                handler: handler.clone(),
                 repeat,
                 interval,
                 node: Some(node),
                 origin,
             });
-            state
-                .borrow_mut()
-                .timer_callbacks
-                .insert(node, crate::vm::handler_store::register(callback));
+            state.timer_callbacks.insert(node, handler);
         } else if let Some(callback) = callback {
             state
                 .borrow_mut()

@@ -21,11 +21,11 @@ use morf_scene::reactive::SignalId;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::runtime::handler::Handler;
 use crate::{
     reactive_bindings::*, reactive_execute::*, scene_bindings::*, state::*, surface_types::*,
     types::*,
 };
+use morf_runtime::Handler;
 
 /// The three things a window hears.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

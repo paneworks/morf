@@ -34,10 +34,10 @@ use morf_terminal::{
 };
 use morf_text::TextSystem;
 
-use crate::runtime::handler::Handler;
 use crate::scene_bindings::assign_scene_property;
 use crate::state::ReactiveState;
 use crate::surface_types::IpcValue;
+use morf_runtime::Handler;
 
 /// Bytes of a program's output fed to its emulator per turn of the loop.
 pub(crate) const FEED_PER_TURN: usize = 256 * 1024;

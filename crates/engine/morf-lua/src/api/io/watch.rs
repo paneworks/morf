@@ -30,8 +30,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::runtime::handler::Handler;
 use crate::{Limits, reactive_execute::drive_executor, scene_bindings::*, state::*};
+use morf_runtime::Handler;
 
 /// Callbacks one watch may have run per turn of the loop.
 const BATCH: usize = 64;

@@ -27,11 +27,11 @@ use std::rc::Rc;
 use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
 
-use crate::runtime::handler::Handler;
 use crate::{
     reactive_execute::drive_executor, scene_bindings::*, serialization::scene_to_lua, state::*,
     state_tokens::*, surface_types::*, types::*,
 };
+use morf_runtime::Handler;
 
 /// How many `on_changed` handlers one configuration may hold.
 const MAX_LISTENERS: usize = 32;

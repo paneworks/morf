@@ -122,9 +122,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     state
         .input_events
         .retain(|(node, _, _)| !removed.contains(node));
-    state
-        .timers
-        .retain(|timer| timer.node.is_none_or(|node| !removed.contains(&node)));
+    state.timers.retain_nodes(|node| !removed.contains(&node));
     // Bindings that drive a removed node, and the signals that tracked its
     // properties' reads: the graph forgets both, or every one of them keeps
     // re-running and growing for the life of the shell.

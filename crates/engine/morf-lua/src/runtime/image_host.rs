@@ -8,8 +8,8 @@ use luna::{Context, Executor, Table, Value as LuaValue, Variadic};
 
 use crate::api_image_ops::rgba_color;
 use crate::image_jobs::{CaptureSave, ImageJob, ImageOutcome, RawCapture};
-use crate::runtime::handler::Handler;
 use crate::{reactive_execute::drive_executor, surface_types::Screencopy, types::*};
+use morf_runtime::Handler;
 
 impl Runtime {
     /// Runs the callbacks of every image job that has finished.

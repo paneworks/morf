@@ -2,8 +2,8 @@ pub(crate) use crate::api_shader::RegisteredShader;
 use crate::states::{Capture, StateSet};
 use luna::StashedTable;
 
-use crate::runtime::handler::Handler;
 use morf_layout::{TransformTracker, TransformWatcher as NativeTransformWatcher};
+use morf_runtime::Handler;
 use morf_scene::reactive::{EffectId, Graph, SignalId};
 use morf_scene::retain::Retention;
 use morf_scene::{GroupId, ListModel, ModelId, NodeHandle, Scene, VirtualList};
@@ -226,9 +226,6 @@ pub(crate) struct ReactiveState {
     /// Filled once the connection is up; read by `morf.capabilities` and by
     /// `morf info`.
     pub(crate) capabilities: Vec<(String, String)>,
-    /// The last timer id handed out. Never reused: a handle to a timer that
-    /// finished must not find a newer one wearing its number.
-    pub(crate) last_timer_id: u64,
     pub(crate) reload_completed_callbacks: Vec<Handler>,
     pub(crate) reload_failed_callbacks: Vec<Handler>,
     pub(crate) effects: HashMap<u64, LuaEffect>,
@@ -344,13 +341,8 @@ pub(crate) struct ReactiveState {
     pub(crate) pam_tasks: Vec<PendingPam>,
     pub(crate) pam_sessions: Vec<PendingPamSession>,
     pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
-    pub(crate) timers: Vec<PendingTimer>,
-    /// One-shot timers that came due this turn and have not yet fired: a
-    /// cancel before their turn in the batch takes them out, so it holds.
-    pub(crate) due_one_shots: HashSet<u64>,
-    /// The virtual clock's reading, when the runtime keeps one instead of
-    /// running its timers off the wall clock (`Runtime::use_virtual_clock`).
-    pub(crate) virtual_now: Option<std::time::Duration>,
+    /// Every `morf.timer` and `Timer` node, and the clock they run on.
+    pub(crate) timers: morf_runtime::timers::Timers,
     pub(crate) timer_callbacks: HashMap<NodeHandle, Handler>,
     /// Where each `ui.Timer` was built, for `MORF_WAKE_LOG`.
     pub(crate) timer_origins: HashMap<NodeHandle, std::rc::Rc<str>>,
@@ -527,15 +519,6 @@ impl ReactiveState {
         registered
     }
 
-    /// A fresh timer id.
-    /// A timer every `interval`, on whichever clock this runtime keeps.
-    pub(crate) fn new_timer(
-        &self,
-        interval: std::time::Duration,
-    ) -> std::io::Result<crate::state_pending::TimerSource> {
-        crate::state_pending::TimerSource::every(interval, self.virtual_now)
-    }
-
     /// The clock signal a reader at `precision` depends on.
     pub(crate) fn clock_signal(&self, precision: crate::ClockPrecision) -> SignalId {
         match precision {
@@ -543,11 +526,6 @@ impl ReactiveState {
             crate::ClockPrecision::Minutes => self.clock_minutes,
             crate::ClockPrecision::Hours => self.clock_hours,
         }
-    }
-
-    pub(crate) fn next_timer_id(&mut self) -> u64 {
-        self.last_timer_id += 1;
-        self.last_timer_id
     }
 
     /// Records one line, stamped with when it happened.
@@ -631,7 +609,6 @@ impl ReactiveState {
             shortcuts_callbacks: Vec::new(),
             lint_warned: HashSet::new(),
             capabilities: Vec::new(),
-            last_timer_id: 0,
             reload_completed_callbacks: Vec::new(),
             reload_failed_callbacks: Vec::new(),
             effects: HashMap::new(),
@@ -700,9 +677,7 @@ impl ReactiveState {
             pam_tasks: Vec::new(),
             pam_sessions: Vec::new(),
             greetd_sessions: Vec::new(),
-            timers: Vec::new(),
-            due_one_shots: HashSet::new(),
-            virtual_now: None,
+            timers: morf_runtime::timers::Timers::default(),
             timer_callbacks: HashMap::new(),
             timer_origins: HashMap::new(),
             destroy_hooks: HashMap::new(),

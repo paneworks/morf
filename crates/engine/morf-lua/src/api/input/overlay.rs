@@ -44,11 +44,11 @@ use crate::IpcValue;
 use crate::Runtime;
 use crate::api_focus::{FocusReason, FocusRequest};
 use crate::reactive_execute::execute_ipc_handler;
-use crate::runtime::handler::Handler;
 use crate::scene_bindings::{assign_scene_property, create_node};
 use crate::state::ReactiveState;
 use crate::state_tokens::NodeToken;
 use crate::types::LogLevel;
+use morf_runtime::Handler;
 
 const DIM: &str = "#00000052";
 

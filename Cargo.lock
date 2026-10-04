@@ -1860,6 +1860,7 @@ dependencies = [
  "morf-image",
  "morf-io",
  "morf-layout",
+ "morf-runtime",
  "morf-scene",
  "morf-shader",
  "morf-system",
@@ -1890,6 +1891,13 @@ dependencies = [
  "raw-window-handle",
  "resvg",
  "wgpu",
+]
+
+[[package]]
+name = "morf-runtime"
+version = "0.1.5"
+dependencies = [
+ "morf-scene",
 ]
 
 [[package]]

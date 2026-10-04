@@ -20,6 +20,7 @@ morf-image.workspace = true
 morf-io.workspace = true
 morf-layout.workspace = true
 morf-vector.workspace = true
+morf-runtime.workspace = true
 morf-scene.workspace = true
 morf-shader.workspace = true
 morf-text.workspace = true

@@ -39,7 +39,6 @@ use morf_audio::{Audio, Device, DeviceKind, Stream};
 use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
 
-use crate::runtime::handler::Handler;
 use crate::{
     reactive_execute::drive_executor,
     scene_bindings::*,
@@ -49,6 +48,7 @@ use crate::{
     table_menu::{optional_closure, table_bool, table_number},
     types::*,
 };
+use morf_runtime::Handler;
 
 /// How many `on_changed` handlers and monitors one configuration may hold.
 const MAX_LISTENERS: usize = 32;

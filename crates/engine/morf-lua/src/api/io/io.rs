@@ -64,8 +64,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::runtime::handler::Handler;
 use crate::{Limits, reactive_execute::drive_executor, scene_bindings::*, state::*, table_menu::*};
+use morf_runtime::Handler;
 
 /// Children one runtime may have running at once.
 const MAX_PROCESSES: usize = 64;

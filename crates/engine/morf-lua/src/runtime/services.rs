@@ -3,11 +3,11 @@ use std::time::Duration;
 
 use morf_scene::{NodeHandle, Value as SceneValue};
 
-use crate::runtime::handler::Handler;
 use crate::{
     reactive_execute::*, runtime_helpers::*, scene_bindings::*, state::*, surface_types::*,
     types::*, views::*,
 };
+use morf_runtime::timers::{DueTimer, Timer};
 
 /// How long a preloading Loader waits for the scene to be still before it
 /// builds anyway: an animation that never ends (a spinner, a visualiser)
@@ -93,39 +93,31 @@ impl Runtime {
                 let repeat = state.scene.bool_value(node, "repeat").unwrap_or(false);
                 let duration = (interval.is_finite() && interval > 0.0)
                     .then(|| Duration::from_secs_f64(interval / 1_000.0));
-                let current = state
-                    .timers
-                    .iter()
-                    .position(|timer| timer.node == Some(node));
                 if !running || duration.is_none() {
-                    if let Some(index) = current {
-                        state.timers.swap_remove(index);
-                        service_changed = true;
-                    }
+                    service_changed |= state.timers.remove_node(node);
                     continue;
                 }
                 let duration = duration.expect("validated duration");
-                let matches = current.is_some_and(|index| {
-                    state.timers[index].interval == duration && state.timers[index].repeat == repeat
-                });
+                let matches = state
+                    .timers
+                    .for_node(node)
+                    .is_some_and(|timer| timer.interval == duration && timer.repeat == repeat);
                 if matches {
                     continue;
                 }
-                if let Some(index) = current {
-                    state.timers.swap_remove(index);
-                }
-                match state.new_timer(duration) {
-                    Ok(timer) => {
-                        let id = state.next_timer_id();
+                state.timers.remove_node(node);
+                match state.timers.source(duration) {
+                    Ok(source) => {
+                        let id = state.timers.next_id();
                         let origin = state
                             .timer_origins
                             .get(&node)
                             .cloned()
                             .unwrap_or_else(|| format!("ui.Timer {node:?}").into());
-                        state.timers.push(PendingTimer {
+                        state.timers.add(Timer {
                             id,
-                            timer,
-                            callback,
+                            source,
+                            handler: callback,
                             repeat,
                             interval: duration,
                             node: Some(node),
@@ -138,7 +130,7 @@ impl Runtime {
             }
             for node in stale_timers {
                 state.timer_callbacks.remove(&node);
-                state.timers.retain(|timer| timer.node != Some(node));
+                state.timers.remove_node(node);
                 state.timer_origins.remove(&node);
             }
             let loader_definitions = if definitions_changed || !state.preload_pending.is_empty() {
@@ -284,44 +276,24 @@ impl Runtime {
                 state.dormant_loaders.remove(&node);
                 state.preload_pending.remove(&node);
             }
-            let mut index = 0;
-            let now = state.virtual_now;
-            while index < state.timers.len() {
-                let interval = state.timers[index].interval;
-                if state.timers[index].timer.fire(now, interval) {
-                    let timer = &state.timers[index];
-                    if wake_log_wanted() {
-                        eprintln!(
-                            "{} morf: timer {} fired ({:.0} ms{})",
-                            crate::profile::stamp(),
-                            timer.origin,
-                            interval.as_secs_f64() * 1000.0,
-                            if timer.repeat { ", repeating" } else { "" }
-                        );
-                    }
-                    timers.push(DueTimer {
-                        origin: std::rc::Rc::clone(&timer.origin),
-                        id: timer.id,
-                        node: timer.node,
-                        repeat: timer.repeat,
-                        callback: timer.callback.clone(),
-                    });
-                    if !state.timers[index].repeat {
-                        let id = state.timers[index].id;
-                        state.due_one_shots.insert(id);
-                        if let Some(node) = state.timers[index].node {
-                            let _ = assign_scene_property(
-                                &mut state,
-                                node,
-                                "running",
-                                SceneValue::Bool(false),
-                            );
-                        }
-                        state.timers.swap_remove(index);
-                        continue;
-                    }
+            for timer in state.timers.collect_due() {
+                if wake_log_wanted() {
+                    eprintln!(
+                        "{} morf: timer {} fired ({:.0} ms{})",
+                        crate::profile::stamp(),
+                        timer.origin,
+                        timer.interval.as_secs_f64() * 1000.0,
+                        if timer.repeat { ", repeating" } else { "" }
+                    );
                 }
-                index += 1;
+                // A one-shot `Timer` node has run its course.
+                if !timer.repeat
+                    && let Some(node) = timer.node
+                {
+                    let _ =
+                        assign_scene_property(&mut state, node, "running", SceneValue::Bool(false));
+                }
+                timers.push(timer);
             }
             for subscription in &state.dbus_signals {
                 while let Some(event) = subscription.signal.next_event(Duration::ZERO) {
@@ -652,7 +624,8 @@ impl Runtime {
             id,
             node,
             repeat,
-            callback,
+            handler: callback,
+            ..
         } in timers
         {
             let _span = crate::profile::span(|| format!("timer {origin}"));
@@ -805,15 +778,6 @@ impl Runtime {
     }
 }
 
-/// A timer that came due this turn, as collected before any callback ran.
-struct DueTimer {
-    origin: std::rc::Rc<str>,
-    id: u64,
-    node: Option<NodeHandle>,
-    repeat: bool,
-    callback: Handler,
-}
-
 /// Whether a timer collected as due should still fire, now that everything
 /// before it in this turn has run.
 ///
@@ -827,7 +791,7 @@ fn timer_still_due(
     node: Option<NodeHandle>,
     repeat: bool,
 ) -> bool {
-    let one_shot_pending = !repeat && state.due_one_shots.remove(&id);
+    let settled = state.timers.settle(id, repeat);
     if let Some(node) = node {
         if !state.timer_callbacks.contains_key(&node) {
             return false;
@@ -839,11 +803,7 @@ fn timer_still_due(
             return false;
         }
     }
-    if repeat {
-        state.timers.iter().any(|timer| timer.id == id)
-    } else {
-        one_shot_pending
-    }
+    settled
 }
 
 /// Whether `MORF_WAKE_LOG` asks for wakes -- and so the timers behind them --

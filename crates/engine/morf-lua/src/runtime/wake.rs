@@ -195,9 +195,7 @@ impl Runtime {
         let state = self.reactive.borrow();
         let timers = state
             .timers
-            .iter()
-            .filter_map(|timer| timer.timer.wall_deadline())
-            .min()
+            .next_wall_deadline()
             .map(|at| (at, DeadlineCause::Timer));
         let caret = crate::text_inputs::next_blink(&state).map(|at| (at, DeadlineCause::Caret));
         let image = state.images.due().map(|at| (at, DeadlineCause::Image));

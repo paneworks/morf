@@ -22,10 +22,10 @@ use morf_image::ImageCache;
 use morf_layout::Layout;
 use morf_scene::{NodeHandle, Scene, Value as SceneValue};
 
-use crate::runtime::handler::Handler;
 use crate::scene_bindings::assign_scene_property;
 use crate::state::ReactiveState;
 use crate::surface_types::IpcValue;
+use morf_runtime::Handler;
 
 /// A picture not drawn for this long stops playing, whatever the flag the
 /// last paint left: its surface is no longer painting.

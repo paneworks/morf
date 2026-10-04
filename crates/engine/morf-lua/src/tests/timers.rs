@@ -77,7 +77,14 @@ fn a_hidden_timers_animated_interval_reconciles_on_its_final_tick() {
     assert!(!runtime.has_motion());
     runtime.poll_services();
     assert_eq!(
-        runtime.reactive.borrow().timers[0].interval,
+        runtime
+            .reactive
+            .borrow()
+            .timers
+            .iter()
+            .next()
+            .unwrap()
+            .interval,
         Duration::from_millis(2000)
     );
 }

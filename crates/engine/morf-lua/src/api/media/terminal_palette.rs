@@ -23,10 +23,10 @@ use luna::{Callback, CallbackReturn, Context, Table};
 use morf_terminal::palette::{BACKGROUND, CURSOR, ColorChange, FOREGROUND, PaletteTty};
 
 use crate::ipc_table::IpcTable;
-use crate::runtime::handler::Handler;
 use crate::scene_bindings::HostError;
 use crate::state::ReactiveState;
 use crate::surface_types::IpcValue;
+use morf_runtime::Handler;
 
 /// The most listeners a runtime keeps: each is a terminal and a thread.
 const MAX_LISTENERS: usize = 8;

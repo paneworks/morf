@@ -24,9 +24,9 @@
 //! runtime goes, the callbacks go with it; a worker that finishes afterwards
 //! finds nobody listening and stops.
 
-use crate::runtime::handler::Handler;
 use morf_image::PaletteEntry;
 use morf_image::ops::{self, ImageInfo, OutputFormat, ProcessRequest};
+use morf_runtime::Handler;
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;

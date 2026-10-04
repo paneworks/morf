@@ -28,9 +28,9 @@ use morf_scene::{Element, NodeHandle};
 
 use crate::IpcValue;
 use crate::reactive_execute::execute_ipc_handler;
-use crate::runtime::handler::Handler;
 use crate::text_inputs::KeyModifiers;
 use crate::types::LogLevel;
+use morf_runtime::Handler;
 
 /// How long the first chords of a sequence wait for the next.
 pub(crate) const SEQUENCE_TIMEOUT: Duration = Duration::from_millis(1500);

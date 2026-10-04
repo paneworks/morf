@@ -7,7 +7,6 @@ use morf_scene::{
     Element, ListChange, ModelId, NodeHandle, Scene, Value as SceneValue, ViewTransition,
 };
 
-use crate::runtime::handler::Handler;
 use crate::{
     reactive_bindings::*,
     reactive_execute::*,
@@ -17,6 +16,7 @@ use crate::{
     state::*,
     types::*,
 };
+use morf_runtime::Handler;
 
 pub(crate) fn execute_delegate(
     ctx: Context<'_>,

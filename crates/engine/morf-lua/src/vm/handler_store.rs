@@ -14,7 +14,7 @@ use std::rc::Rc;
 
 use luna::StashedClosure;
 
-use crate::runtime::handler::{Handler, HandlerId, HandlerRegistry};
+use morf_runtime::{Handler, HandlerId, HandlerRegistry};
 
 thread_local! {
     static CLOSURES: RefCell<HashMap<HandlerId, StashedClosure>> = RefCell::new(HashMap::new());
