@@ -1,7 +1,5 @@
 //! Cutting a byte stream into bounded lines.
 
-
-
 /// Cuts a byte stream into lines of at most `max` bytes.
 ///
 /// A line longer than that is delivered cut at `max`, and the rest of it,
