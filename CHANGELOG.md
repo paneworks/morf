@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.1] - 2026-10-04
+
+### <!-- 0 -->⛰️  Features
+
+- Cache engine and Lua releases
+- MORF_DAMAGE_LOG also says when the whole surface is redrawn because the engine forgot it
+- MORF_DAMAGE_LOG=1 names what made a large damage area
+
+### <!-- 4 -->⚡ Performance
+
+- The machine's fonts are scanned once per process, not once per renderer
+- Commands pushed along by an insertion are not damage
+- The frame pacer judges a surface by what painting costs now
+- A shape joining or leaving a field damages where it is, not the whole field
+
 ## [0.2.0] - 2026-10-04
 
 ### <!-- 0 -->⛰️  Features
