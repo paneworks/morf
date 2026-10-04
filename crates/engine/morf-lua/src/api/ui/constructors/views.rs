@@ -189,7 +189,7 @@ pub(crate) fn construct_view<'gc>(
             let _ = view.sync(&model_handle.borrow(), &[]);
             state.borrow_mut().views.insert(
                 node,
-                LuaVirtualView {
+                VirtualView {
                     model: model_handle,
                     view,
                     delegate,

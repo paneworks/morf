@@ -10,29 +10,30 @@ const MULTI_CLICK: Duration = Duration::from_millis(400);
 const MULTI_CLICK_SLOP: f64 = 4.0;
 
 /// Turns a point in the node into an offset in its text.
-fn offset_at(state: &ReactiveState, node: NodeHandle, local: (f64, f64)) -> usize {
-    let shown = display(state, node);
+fn offset_at(state: &impl EditHost, node: NodeHandle, local: (f64, f64)) -> usize {
+    let shown = display(state.scene(), node);
     let map = caret_map(state, node, &shown);
     let offset_y = state
-        .text_inputs
+        .editing()
+        .inputs
         .get(&node)
         .map_or(0.0, |input| input.offset_y);
-    let x = local.0 + state.scene.number(node, "scroll_x").unwrap_or(0.0);
-    let y = local.1 + state.scene.number(node, "scroll_y").unwrap_or(0.0) - offset_y;
-    let text = state.scene.string_value(node, "text").unwrap_or_default();
+    let x = local.0 + state.scene().number(node, "scroll_x").unwrap_or(0.0);
+    let y = local.1 + state.scene().number(node, "scroll_y").unwrap_or(0.0) - offset_y;
+    let text = state.scene().string_value(node, "text").unwrap_or_default();
     shown.to_model(text, map.index_at(x as f32, y as f32))
 }
 
 /// A press on the field: focus, and a caret where it landed — or a word for
 /// a double click, a line for a triple.
-pub(crate) fn press(state: &mut ReactiveState, node: NodeHandle, local: (f64, f64)) {
+pub fn press(state: &mut impl EditHost, node: NodeHandle, local: (f64, f64)) {
     if !pull(state, node) {
         return;
     }
     set_focus(state, node, true);
     let offset = offset_at(state, node, local);
     let now = Instant::now();
-    let Some(input) = state.text_inputs.get_mut(&node) else {
+    let Some(input) = state.editing_mut().inputs.get_mut(&node) else {
         return;
     };
     let count = match input.press {
@@ -77,9 +78,10 @@ pub(crate) fn press(state: &mut ReactiveState, node: NodeHandle, local: (f64, f6
 
 /// The pointer moved while a press on the field is held: the selection
 /// follows it, a letter, a word or a line at a time.
-pub(crate) fn drag(state: &mut ReactiveState, node: NodeHandle, local: (f64, f64)) -> bool {
+pub fn drag(state: &mut impl EditHost, node: NodeHandle, local: (f64, f64)) -> bool {
     if state
-        .text_inputs
+        .editing()
+        .inputs
         .get(&node)
         .is_none_or(|input| input.drag.is_none())
         || !pull(state, node)
@@ -87,7 +89,7 @@ pub(crate) fn drag(state: &mut ReactiveState, node: NodeHandle, local: (f64, f64
         return false;
     }
     let offset = offset_at(state, node, local);
-    let Some(input) = state.text_inputs.get_mut(&node) else {
+    let Some(input) = state.editing_mut().inputs.get_mut(&node) else {
         return false;
     };
     let buffer = &mut input.buffer;
@@ -114,8 +116,8 @@ pub(crate) fn drag(state: &mut ReactiveState, node: NodeHandle, local: (f64, f64
 }
 
 /// The press on the field ended.
-pub(crate) fn release(state: &mut ReactiveState, node: NodeHandle) {
-    if let Some(input) = state.text_inputs.get_mut(&node) {
+pub fn release(state: &mut impl EditHost, node: NodeHandle) {
+    if let Some(input) = state.editing_mut().inputs.get_mut(&node) {
         input.drag = None;
     }
 }
@@ -124,12 +126,12 @@ pub(crate) fn release(state: &mut ReactiveState, node: NodeHandle) {
 ///
 /// One field has it at a time, so focusing one takes it from whichever had
 /// it. The `on_focus_changed` callbacks this owes are queued with the rest.
-pub(crate) fn set_focus(state: &mut ReactiveState, node: NodeHandle, focused: bool) {
-    if state.scene.element(node).ok() != Some(Element::TextInput) {
+pub fn set_focus(state: &mut impl EditHost, node: NodeHandle, focused: bool) {
+    if state.scene().element(node).ok() != Some(Element::TextInput) {
         return;
     }
-    if let Err(message) = assign_scene_property(state, node, "focus", SceneValue::Bool(focused)) {
-        state.log(LogLevel::Warn, format!("TextInput.focus: {message}"));
+    if let Err(message) = state.assign(node, "focus", Value::Bool(focused)) {
+        state.warn(format!("TextInput.focus: {message}"));
     }
     reconcile_focus(state);
 }
@@ -139,54 +141,61 @@ pub(crate) fn set_focus(state: &mut ReactiveState, node: NodeHandle, focused: bo
 ///
 /// The field that most recently claimed it keeps it; any other that still
 /// says `focus = true` is told it has lost it.
-pub(crate) fn reconcile_focus(state: &mut ReactiveState) {
+pub fn reconcile_focus(state: &mut impl EditHost) {
     let current = state
-        .focused_input
-        .filter(|node| state.scene.element(*node).ok() == Some(Element::TextInput));
+        .editing()
+        .focused
+        .filter(|node| state.scene().element(*node).ok() == Some(Element::TextInput));
     let mut claimed = state
-        .text_inputs
+        .editing()
+        .inputs
         .keys()
         .copied()
         .filter(|node| Some(*node) != current)
-        .filter(|node| state.scene.bool_value(*node, "focus").unwrap_or(false))
+        .filter(|node| state.scene().bool_value(*node, "focus").unwrap_or(false))
         .collect::<Vec<_>>();
     // In creation order, so which of two claims wins does not depend on how a
     // hash map happens to be laid out.
-    claimed.sort_by_key(|node| state.text_input_order.get(node).copied());
-    let still = current.is_some_and(|node| state.scene.bool_value(node, "focus").unwrap_or(false));
+    claimed.sort_by_key(|node| state.editing().order.get(node).copied());
+    let still =
+        current.is_some_and(|node| state.scene().bool_value(node, "focus").unwrap_or(false));
     let next = claimed.last().copied().or(current.filter(|_| still));
     for node in claimed.iter().chain(current.iter()) {
-        if Some(*node) != next && state.scene.bool_value(*node, "focus").unwrap_or(false) {
-            let _ = assign_scene_property(state, *node, "focus", SceneValue::Bool(false));
+        if Some(*node) != next && state.scene().bool_value(*node, "focus").unwrap_or(false) {
+            let _ = state.assign(*node, "focus", Value::Bool(false));
         }
     }
-    if next == state.focused_input {
+    if next == state.editing().focused {
         return;
     }
-    if let Some(old) = state.focused_input {
-        state
-            .input_events
-            .push((old, UiEvent::FocusChanged, vec![IpcValue::Boolean(false)]));
-        if let Some(input) = state.text_inputs.get_mut(&old) {
+    if let Some(old) = state.editing().focused {
+        state.editing_mut().events.push((
+            old,
+            UiEvent::FocusChanged,
+            vec![IpcValue::Boolean(false)],
+        ));
+        if let Some(input) = state.editing_mut().inputs.get_mut(&old) {
             input.drag = None;
             input.ime_rect = None;
         }
     }
-    state.focused_input = next;
+    state.editing_mut().focused = next;
     match next {
         Some(new) => {
-            state
-                .input_events
-                .push((new, UiEvent::FocusChanged, vec![IpcValue::Boolean(true)]));
-            if let Some(input) = state.text_inputs.get_mut(&new) {
+            state.editing_mut().events.push((
+                new,
+                UiEvent::FocusChanged,
+                vec![IpcValue::Boolean(true)],
+            ));
+            if let Some(input) = state.editing_mut().inputs.get_mut(&new) {
                 input.blink_start = Instant::now();
             }
-            let _ = assign_scene_property(state, new, "caret_visible", SceneValue::Bool(true));
+            let _ = state.assign(new, "caret_visible", Value::Bool(true));
             // The compositor's input method follows the keyboard into the
             // field: typing through it arrives as text for this one.
-            state.text_input_enable_requested = true;
-            let password = state.scene.bool_value(new, "password").unwrap_or(false);
-            let multiline = state.scene.bool_value(new, "multiline").unwrap_or(false);
+            state.enable_text_input();
+            let password = state.scene().bool_value(new, "password").unwrap_or(false);
+            let multiline = state.scene().bool_value(new, "multiline").unwrap_or(false);
             // text-input-v3: hidden text and sensitive data for a password,
             // with the password purpose; a multi-line hint otherwise.
             let (hints, purpose) = if password {
@@ -196,22 +205,20 @@ pub(crate) fn reconcile_focus(state: &mut ReactiveState) {
             } else {
                 (0, 0)
             };
-            state
-                .text_input_requests
-                .push(TextInputRequest::ContentType { hints, purpose });
+            state.text_input(TextInputRequest::ContentType { hints, purpose });
             tell_input_method(state, new);
         }
-        None => state.text_input_requests.push(TextInputRequest::Disable),
+        None => state.text_input(TextInputRequest::Disable),
     }
 }
 
 /// Tells the input method what surrounds the caret of the focused field.
-pub(super) fn tell_input_method(state: &mut ReactiveState, node: NodeHandle) {
-    let Some(input) = state.text_inputs.get(&node) else {
+pub(super) fn tell_input_method(state: &mut impl EditHost, node: NodeHandle) {
+    let Some(input) = state.editing().inputs.get(&node) else {
         return;
     };
     // A password's letters are not the input method's business.
-    let (text, cursor, anchor) = if state.scene.bool_value(node, "password").unwrap_or(false) {
+    let (text, cursor, anchor) = if state.scene().bool_value(node, "password").unwrap_or(false) {
         (String::new(), 0, 0)
     } else {
         (
@@ -224,30 +231,28 @@ pub(super) fn tell_input_method(state: &mut ReactiveState, node: NodeHandle) {
     if text.len() > 4000 {
         return;
     }
-    state
-        .text_input_requests
-        .push(TextInputRequest::Surrounding {
-            text,
-            cursor,
-            anchor,
-        });
+    state.text_input(TextInputRequest::Surrounding {
+        text,
+        cursor,
+        anchor,
+    });
 }
 
 /// An input method's committed batch, applied to the focused field: the
 /// text either side of the caret it asked deleted, and what it committed.
-pub(crate) fn input_method_commit(
-    state: &mut ReactiveState,
+pub fn input_method_commit(
+    state: &mut impl EditHost,
     commit: Option<&str>,
     before: u32,
     after: u32,
 ) -> bool {
-    let Some(node) = state.focused_input else {
+    let Some(node) = state.editing().focused else {
         return false;
     };
-    if !pull(state, node) || state.scene.bool_value(node, "read_only").unwrap_or(false) {
+    if !pull(state, node) || state.scene().bool_value(node, "read_only").unwrap_or(false) {
         return false;
     }
-    let Some(input) = state.text_inputs.get_mut(&node) else {
+    let Some(input) = state.editing_mut().inputs.get_mut(&node) else {
         return false;
     };
     let buffer = &mut input.buffer;

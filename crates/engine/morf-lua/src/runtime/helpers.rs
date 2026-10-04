@@ -94,12 +94,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     }
     // A removed field cannot keep the keyboard. The node that had focus is
     // handed on by `Runtime::check_focus`, which still needs to know it went.
-    if state
-        .focused_input
-        .is_some_and(|node| removed.contains(&node))
-    {
-        state.focused_input = None;
-    }
+    state.editing.forget(&removed);
     state
         .focus
         .memory
@@ -110,13 +105,6 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     state
         .handlers
         .retain(|(node, _), _| !removed.contains(node));
-    state.text_inputs.retain(|node, _| !removed.contains(node));
-    state
-        .text_input_order
-        .retain(|node, _| !removed.contains(node));
-    state
-        .input_events
-        .retain(|(node, _, _)| !removed.contains(node));
     state.timers.retain_nodes(|node| !removed.contains(&node));
     // Bindings that drive a removed node, and the signals that tracked its
     // properties' reads: the graph forgets both, or every one of them keeps

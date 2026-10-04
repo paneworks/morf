@@ -57,7 +57,7 @@ pub(crate) fn element_constructor<'gc>(
             }
         }
         if element == Element::TextInput {
-            crate::text_inputs::register(&mut state.borrow_mut(), node);
+            crate::text_inputs::register(&mut *state.borrow_mut(), node);
         }
         if element == Element::Inset && {
             let state = state.borrow();

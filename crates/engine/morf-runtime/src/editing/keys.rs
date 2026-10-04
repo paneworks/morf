@@ -32,7 +32,7 @@ mod keysym {
 
 /// What a key did to a field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum KeyOutcome {
+pub enum KeyOutcome {
     /// The field used it.
     Handled,
     /// Not a key the field has any use for; whoever else wants it may have it.
@@ -40,8 +40,8 @@ pub(crate) enum KeyOutcome {
 }
 
 /// One key pressed while a field has the keyboard.
-pub(crate) fn key(
-    state: &mut ReactiveState,
+pub fn key(
+    state: &mut impl EditHost,
     node: NodeHandle,
     keysym: u32,
     text: Option<&str>,
@@ -50,9 +50,9 @@ pub(crate) fn key(
     if !pull(state, node) {
         return KeyOutcome::Ignored;
     }
-    let read_only = state.scene.bool_value(node, "read_only").unwrap_or(false);
-    let password = state.scene.bool_value(node, "password").unwrap_or(false);
-    let multiline = state.scene.bool_value(node, "multiline").unwrap_or(false);
+    let read_only = state.scene().bool_value(node, "read_only").unwrap_or(false);
+    let password = state.scene().bool_value(node, "password").unwrap_or(false);
+    let multiline = state.scene().bool_value(node, "multiline").unwrap_or(false);
     let KeyModifiers {
         ctrl, shift, alt, ..
     } = modifiers;
@@ -62,18 +62,20 @@ pub(crate) fn key(
     let mut edited = false;
     let mut vertical = false;
     let outcome = {
-        let shown = display(state, node);
+        let shown = display(state.scene(), node);
         let map = caret_map(state, node, &shown);
         let page = state
-            .text_inputs
+            .editing()
+            .inputs
             .get(&node)
             .and_then(|input| input.geometry)
             .map_or(1, |geometry| {
                 let line = map.lines().first().map_or(1.0, |line| line.height.max(1.0));
                 ((geometry.height as f32 / line).floor() as isize).max(1)
             });
-        let clipboard = state.clipboard_text.clone();
-        let Some(input) = state.text_inputs.get_mut(&node) else {
+        let clipboard = state.clipboard_text();
+        let editing = state.editing_mut();
+        let Some(input) = editing.inputs.get_mut(&node) else {
             return KeyOutcome::Ignored;
         };
         let buffer = &mut input.buffer;
@@ -218,13 +220,13 @@ pub(crate) fn key(
             }
             (keysym::RETURN | keysym::KP_ENTER, _) => {
                 let text = buffer.text().to_owned();
-                state
-                    .input_events
+                editing
+                    .events
                     .push((node, UiEvent::Accepted, vec![IpcValue::String(text)]));
                 KeyOutcome::Handled
             }
             (keysym::ESCAPE, _) => {
-                state.input_events.push((node, UiEvent::Escape, Vec::new()));
+                editing.events.push((node, UiEvent::Escape, Vec::new()));
                 KeyOutcome::Handled
             }
             _ => match text.filter(|text| !text.is_empty()) {
@@ -245,17 +247,12 @@ pub(crate) fn key(
             },
         };
         if let Some(copied) = copy {
-            state.clipboard_text = Some(copied.clone());
-            state.clipboard_requests.push(ClipboardRequest {
-                data: copied.into_bytes(),
-                mime: None,
-                primary: false,
-            });
+            state.copy(copied);
         }
         outcome
     };
     if outcome == KeyOutcome::Handled {
-        if !vertical && let Some(input) = state.text_inputs.get_mut(&node) {
+        if !vertical && let Some(input) = state.editing_mut().inputs.get_mut(&node) {
             input.goal_x = None;
         }
         push(state, node, edited);

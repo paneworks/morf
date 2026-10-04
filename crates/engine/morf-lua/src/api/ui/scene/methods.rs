@@ -110,13 +110,13 @@ pub(super) fn text_input_method<'gc>(
         "select" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (node, start, end): (UserRef<NodeToken>, i64, i64) = stack.consume(ctx)?;
             let mut state = state.try_borrow_mut().map_err(|_| busy())?;
-            text_inputs::select(&mut state, node.handle, offset(start), offset(end));
+            text_inputs::select(&mut *state, node.handle, offset(start), offset(end));
             Ok(CallbackReturn::Return)
         }),
         "select_all" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let node: UserRef<NodeToken> = stack.consume(ctx)?;
             let mut state = state.try_borrow_mut().map_err(|_| busy())?;
-            text_inputs::select_all(&mut state, node.handle);
+            text_inputs::select_all(&mut *state, node.handle);
             Ok(CallbackReturn::Return)
         }),
         "deselect" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -126,20 +126,20 @@ pub(super) fn text_input_method<'gc>(
                 .scene
                 .number(node.handle, "cursor_position")
                 .unwrap_or(0.0);
-            text_inputs::select(&mut state, node.handle, cursor as usize, cursor as usize);
+            text_inputs::select(&mut *state, node.handle, cursor as usize, cursor as usize);
             Ok(CallbackReturn::Return)
         }),
         "insert" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (node, text): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
             let mut state = state.try_borrow_mut().map_err(|_| busy())?;
-            let edited = text_inputs::insert(&mut state, node.handle, &text);
+            let edited = text_inputs::insert(&mut *state, node.handle, &text);
             stack.replace(ctx, edited);
             Ok(CallbackReturn::Return)
         }),
         "selected_text" => Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let node: UserRef<NodeToken> = stack.consume(ctx)?;
             let mut state = state.try_borrow_mut().map_err(|_| busy())?;
-            let text = text_inputs::selected_text(&mut state, node.handle);
+            let text = text_inputs::selected_text(&mut *state, node.handle);
             stack.replace(ctx, luna::String::from_slice(&ctx, text.as_bytes()));
             Ok(CallbackReturn::Return)
         }),
@@ -148,7 +148,7 @@ pub(super) fn text_input_method<'gc>(
             Callback::from_fn(&ctx, move |ctx, _, mut stack| {
                 let node: UserRef<NodeToken> = stack.consume(ctx)?;
                 let mut state = state.try_borrow_mut().map_err(|_| busy())?;
-                let changed = text_inputs::history(&mut state, node.handle, redo);
+                let changed = text_inputs::history(&mut *state, node.handle, redo);
                 stack.replace(ctx, changed);
                 Ok(CallbackReturn::Return)
             })

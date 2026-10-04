@@ -9,9 +9,9 @@ use morf_layout::{TransformTracker, TransformWatcher as NativeTransformWatcher};
 use morf_runtime::Handler;
 use morf_scene::reactive::{Graph, SignalId};
 use morf_scene::retain::Retention;
-use morf_scene::{GroupId, ListModel, ModelId, NodeHandle, Scene, VirtualList};
+use morf_scene::{GroupId, ListModel, NodeHandle, Scene};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -31,29 +31,7 @@ mod methods;
 
 pub(crate) use follow::{Follow, apply_follows};
 
-pub(crate) struct LuaVirtualView {
-    pub(crate) model: Rc<RefCell<ListModel>>,
-    pub(crate) view: VirtualList,
-    pub(crate) delegate: Handler,
-    pub(crate) active: HashMap<ModelId, DelegateInstance>,
-    pub(crate) reusable: HashMap<ModelId, DelegateInstance>,
-    pub(crate) reuse_order: VecDeque<ModelId>,
-    pub(crate) reuse_limit: usize,
-    pub(crate) pool_root: Option<NodeHandle>,
-    /// Delegates of rows the model removed that are still playing their
-    /// exit, in the parent, out of its flow.
-    pub(crate) exiting: Vec<DelegateInstance>,
-    pub(crate) column_extent: f64,
-    /// Whether the view places its delegates itself (a scrolling view) or
-    /// leaves that to its own node's kind (a `Repeater`, which may be a
-    /// `Row`, a `Column` or a `Grid`).
-    pub(crate) positioned: bool,
-    /// The row field that says how tall a row is, when rows differ.
-    pub(crate) size_field: Option<String>,
-    /// The row field that says which kind of delegate a row takes: a
-    /// delegate is only ever reused for a row of its own kind.
-    pub(crate) kind_field: Option<String>,
-}
+pub(crate) use morf_runtime::views::{Delegate, VirtualView};
 
 /// A `morf.state` table: each named field its own signal, each nested
 /// table its own proxy, each array a list model.
@@ -82,17 +60,6 @@ pub(crate) struct StateFields {
 pub(crate) struct CustomLayoutFns {
     pub(crate) measure: Handler,
     pub(crate) place: Handler,
-}
-
-pub(crate) struct DelegateInstance {
-    pub(crate) node: NodeHandle,
-    pub(crate) updater: Option<Handler>,
-    /// The row it shows, as it was last given it: what a row put back while
-    /// this one is still leaving is matched against.
-    pub(crate) item: morf_scene::Value,
-    /// The index it was last given (0-based): a row that moves keeps its
-    /// delegate, which is rebound when this differs.
-    pub(crate) index: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -219,14 +186,9 @@ pub(crate) struct ReactiveState {
     /// the host starts up, and a node only ever carries the program's hash.
     pub(crate) shaders: HashMap<String, RegisteredShader>,
     pub(crate) scene: Scene,
-    /// Every live text input's editing state.
-    pub(crate) text_inputs: HashMap<NodeHandle, crate::text_inputs::InputState>,
-    /// When each text input was made, so ties between them are settled the
-    /// same way every time.
-    pub(crate) text_input_order: HashMap<NodeHandle, u64>,
-    pub(crate) last_text_input: u64,
-    /// The text input that has the keyboard, if one does.
-    pub(crate) focused_input: Option<NodeHandle>,
+    /// Every text input's editing, and which has the keyboard
+    /// (`morf_runtime::editing`).
+    pub(crate) editing: morf_runtime::editing::Editing,
     /// Which node of each surface has focus (`api_focus.rs`).
     pub(crate) focus: crate::api_focus::FocusState,
     /// Each node's `shortcuts` (`shortcut.rs`), and a sequence half typed.
@@ -239,11 +201,6 @@ pub(crate) struct ReactiveState {
     pub(crate) gestures: crate::gestures::GestureState,
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
     pub(crate) overlays: crate::api_overlay::OverlayState,
-    /// Callbacks text inputs owe, run once whatever made them is done.
-    pub(crate) input_events: Vec<(NodeHandle, UiEvent, Vec<IpcValue>)>,
-    /// Whether those callbacks are being run, so running one does not start
-    /// running them again from inside itself.
-    pub(crate) draining_input_events: bool,
     /// The clipboard's text as last seen, for a text input to paste.
     pub(crate) clipboard_text: Option<String>,
     pub(crate) effect_runs: u64,
@@ -307,7 +264,7 @@ pub(crate) struct ReactiveState {
     pub(crate) text_input_enable_requested: bool,
     pub(crate) text_input_requests: Vec<TextInputRequest>,
     pub(crate) text_input_callbacks: Vec<Handler>,
-    pub(crate) views: HashMap<NodeHandle, LuaVirtualView>,
+    pub(crate) views: morf_runtime::views::Views,
     pub(crate) pam_tasks: Vec<PendingPam>,
     pub(crate) pam_sessions: Vec<PendingPamSession>,
     pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
