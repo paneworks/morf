@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-engine=$(realpath "${1:?engine output required}")
-library=$(realpath "${2:?library output required}")
+engine=$(realpath -e "${1:?engine output required}")
+library=$(realpath -e "${2:?library output required}")
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$source_dir/Cargo.toml")
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/morf-nix-smoke.XXXXXXXX")

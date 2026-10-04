@@ -87,7 +87,7 @@ oslo make nix-build
 oslo make nix-check
 
 nix build .#morf
-nix build .#morf-library --out-link result-library
+nix build .#morf-library --no-link --print-out-paths
 ```
 
 After a release's cache workflow succeeds, replace `vX.Y.Z` below with that tag:
@@ -122,6 +122,10 @@ The Lua modules use Morf's native APIs; this is not a replacement engine or a
 standalone Lua interpreter package. Keep the engine and library versions aligned.
 The library can be downloaded independently; building it from source also
 compiles the engine needed to generate its definitions.
+
+The default kit's named icons require the **Material Symbols Rounded** font on
+the host. CI provisions a checksum-pinned test copy through `tools/test-fonts.sh`
+and `FONTCONFIG_FILE`, without installing fonts into the system.
 
 ### Cache publishing and retention
 
