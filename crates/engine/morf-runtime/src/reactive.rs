@@ -10,7 +10,7 @@
 //! `require` of a module that holds state does), so the graph has to be
 //! where the handler can reach it, and the caller owns the evaluation.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use morf_scene::NodeHandle;
 use morf_scene::reactive::{EffectCapture, EffectId, Flush, Graph, PendingEffect, SignalId};
@@ -322,5 +322,42 @@ impl Default for Revisions {
             service_definitions_revision: u64::MAX,
             hidden_revisions: 0,
         }
+    }
+}
+
+impl Reactive {
+    /// Forgets the bindings that drive a removed node -- a property, a state
+    /// or a loop of it -- and the effects owned by one: the graph lets go of
+    /// them after the flush under way, if any.
+    pub fn forget_effects_of(&mut self, removed: &HashSet<NodeHandle>) {
+        let dead = self
+            .effects
+            .iter()
+            .filter(|(_, effect)| match &effect.sink {
+                Some(EffectSink::Property(sink)) => removed.contains(&sink.node),
+                Some(EffectSink::State(node) | EffectSink::Loop(node)) => removed.contains(node),
+                // A `morf.effect` given `owner = node` goes with its node.
+                None => effect.owner.is_some_and(|owner| removed.contains(&owner)),
+            })
+            .map(|(token, _)| *token)
+            .collect::<Vec<_>>();
+        for token in dead {
+            self.effects.remove(&token);
+            if let Some(id) = self.effect_ids.remove(&token) {
+                self.dead_effects.push(id);
+            }
+        }
+    }
+
+    /// Forgets signals nothing will read again, for the graph to let go of.
+    pub fn forget_signals(&mut self, dead: HashSet<SignalId>) {
+        if dead.is_empty() {
+            return;
+        }
+        for signal in &dead {
+            self.values.remove(signal);
+        }
+        self.signals.retain(|signal| !dead.contains(signal));
+        self.dead_signals.extend(dead);
     }
 }

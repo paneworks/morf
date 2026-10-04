@@ -160,6 +160,32 @@ pub fn observe_transform_watches(
     (changed, errors)
 }
 
+/// Forgets the windows rooted in removed nodes, and the anchors of popups
+/// placed against one (such a popup is hidden). Returns whether the window
+/// surfaces changed.
+pub fn forget_windows_of(
+    removed: &std::collections::HashSet<NodeHandle>,
+    surfaces: &mut HashMap<u64, WindowSurfaceConfig>,
+    anchors: &mut HashMap<u64, PopupNodeAnchor>,
+) -> bool {
+    let count = surfaces.len();
+    surfaces.retain(|_, surface| !removed.contains(&surface.root));
+    let mut changed = surfaces.len() != count;
+    let orphaned = anchors
+        .iter()
+        .filter_map(|(id, anchor)| removed.contains(&anchor.node).then_some(*id))
+        .collect::<Vec<_>>();
+    for id in orphaned {
+        anchors.remove(&id);
+        if let Some(surface) = surfaces.get_mut(&id) {
+            surface.visible = false;
+            changed = true;
+        }
+    }
+    anchors.retain(|id, anchor| surfaces.contains_key(id) && !removed.contains(&anchor.node));
+    changed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

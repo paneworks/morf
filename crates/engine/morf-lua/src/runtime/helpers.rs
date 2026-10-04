@@ -64,40 +64,14 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     // Bindings that drive a removed node, and the signals that tracked its
     // properties' reads: the graph forgets both, or every one of them keeps
     // re-running and growing for the life of the shell.
-    let dead_tokens = state
-        .reactive
-        .effects
-        .iter()
-        .filter(|(_, effect)| match &effect.sink {
-            Some(EffectSink::Property(sink)) => removed.contains(&sink.node),
-            Some(EffectSink::State(node) | EffectSink::Loop(node)) => removed.contains(node),
-            // A `morf.effect` given `owner = node` goes with its node.
-            None => effect.owner.is_some_and(|owner| removed.contains(&owner)),
-        })
-        .map(|(token, _)| *token)
-        .collect::<Vec<_>>();
-    for token in dead_tokens {
-        state.reactive.effects.remove(&token);
-        if let Some(id) = state.reactive.effect_ids.remove(&token) {
-            state.reactive.dead_effects.push(id);
-        }
-    }
+    state.reactive.forget_effects_of(&removed);
     let dead_signals = state
         .property_signals
         .iter()
         .filter(|((node, _, _), _)| removed.contains(node))
         .map(|(_, signal)| *signal)
         .collect::<HashSet<_>>();
-    if !dead_signals.is_empty() {
-        for signal in &dead_signals {
-            state.reactive.values.remove(signal);
-        }
-        state
-            .reactive
-            .signals
-            .retain(|signal| !dead_signals.contains(signal));
-        state.reactive.dead_signals.extend(dead_signals);
-    }
+    state.reactive.forget_signals(dead_signals);
     state.collect_graph_garbage();
     state
         .property_signals
@@ -108,35 +82,12 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     state
         .transform_watchers
         .retain(|_, watcher| !removed.contains(&watcher.a) && !removed.contains(&watcher.b));
-    let surface_count = state.windows.window_surfaces.len();
-    state
-        .windows
-        .window_surfaces
-        .retain(|_, surface| !removed.contains(&surface.root));
-    let removed_anchors = state
-        .windows
-        .popup_node_anchors
-        .iter()
-        .filter_map(|(id, anchor)| removed.contains(&anchor.node).then_some(*id))
-        .collect::<Vec<_>>();
-    for id in removed_anchors {
-        state.windows.popup_node_anchors.remove(&id);
-        if let Some(surface) = state.windows.window_surfaces.get_mut(&id) {
-            surface.visible = false;
-            state.windows.window_surfaces_changed = true;
-        }
-    }
-    let surface_ids = state
-        .windows
-        .window_surfaces
-        .keys()
-        .copied()
-        .collect::<HashSet<_>>();
-    state
-        .windows
-        .popup_node_anchors
-        .retain(|id, anchor| surface_ids.contains(id) && !removed.contains(&anchor.node));
-    state.windows.window_surfaces_changed |= state.windows.window_surfaces.len() != surface_count;
+    let windows = &mut state.windows;
+    windows.window_surfaces_changed |= morf_runtime::layout::forget_windows_of(
+        &removed,
+        &mut windows.window_surfaces,
+        &mut windows.popup_node_anchors,
+    );
 }
 
 pub(crate) fn finish_retained_destroy(
