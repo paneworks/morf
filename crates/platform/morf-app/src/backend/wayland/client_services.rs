@@ -5,18 +5,7 @@ use std::time::Duration;
 
 use crate::backend::wayland::surface_types::*;
 
-/// What ended a [`LayerClient::wait_for`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Woke {
-    /// Events were already queued; there was no sleep.
-    Queued,
-    /// The compositor sent something.
-    Compositor,
-    /// The loop's alarm rang: a thread has something for it.
-    Alarm,
-    /// The timeout passed.
-    Timeout,
-}
+pub use crate::backend::Woke;
 
 impl LayerClient {
     /// Blocks until at least one Wayland event is dispatched.

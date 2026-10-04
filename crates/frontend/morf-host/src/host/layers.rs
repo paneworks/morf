@@ -28,17 +28,22 @@ use morf_app::WindowKind;
 pub fn apply_service_requests(
     runtime: &mut Runtime,
     client: &mut dyn Backend,
-    desktop: &mut morf_desktop::Desktop,
+    mut desktop: Option<&mut morf_desktop::Desktop>,
 ) {
-    apply_output_power_requests(runtime, desktop);
-    crate::services::apply_gamma_requests(runtime, desktop);
-    apply_clipboard_requests(runtime, client, desktop);
-    crate::surface_drag::apply_offer_reads(runtime, client, desktop);
+    apply_clipboard_requests(runtime, client, desktop.as_deref_mut());
+    crate::surface_drag::apply_offer_reads(runtime, client, desktop.as_deref_mut());
     crate::surface_drag::apply_drag_requests(runtime, client);
-    apply_screencopy_requests(runtime, desktop);
     apply_virtual_keyboard_requests(runtime, client);
     apply_input_method_requests(runtime, client);
     apply_text_input_requests(runtime, client);
+    // The rest is the desktop protocols'; a host without them (headless)
+    // leaves those requests unanswered, as a compositor without them would.
+    let Some(desktop) = desktop else {
+        return;
+    };
+    apply_output_power_requests(runtime, desktop);
+    crate::services::apply_gamma_requests(runtime, desktop);
+    apply_screencopy_requests(runtime, desktop);
     publish_windows(runtime, desktop);
     publish_workspaces(runtime, desktop);
     apply_workspace_requests(runtime, desktop);
@@ -391,14 +396,14 @@ pub fn layer_surface_configure(
     let Some(surface) = state.windows.get_mut(Kind::Layer, id) else {
         return Ok(());
     };
-    let initial = surface.renderer.is_none();
+    let initial = surface.renderer.is_none() && surface.layout.is_none();
     surface.width = width.max(1);
     surface.height = height.max(1);
     let scale = client.layer_scale_120(layer).unwrap_or(120);
     let (physical_width, physical_height) = physical_size((surface.width, surface.height), scale);
     if let Some(renderer) = &mut surface.renderer {
         renderer.resize(physical_width, physical_height);
-    } else {
+    } else if state.painter.gpu().is_some() {
         let target = client
             .render_target(WindowId::Layer(layer))
             .ok_or_else(|| "configured layer surface disappeared".to_owned())?;
@@ -407,7 +412,7 @@ pub fn layer_surface_configure(
         surface.renderer = Some(RenderEngine::new(backend));
     }
     if initial || surface.updates_enabled {
-        paint_layer_surface(runtime, client, surface)?;
+        paint_layer_surface(runtime, client, surface, state.painter.layout_only())?;
     }
     Ok(())
 }
@@ -436,7 +441,7 @@ pub fn layer_surface_scale(
     // be a very long time. Its two siblings, the primary-layer scale change and
     // the configure for this same surface, both repaint here.
     if surface.updates_enabled {
-        paint_layer_surface(runtime, client, surface)?;
+        paint_layer_surface(runtime, client, surface, state.painter.layout_only())?;
     }
     Ok(())
 }
@@ -458,7 +463,7 @@ pub fn layer_surface_frame(
     else {
         return Ok(());
     };
-    paint_layer_surface(runtime, client, surface)
+    paint_layer_surface(runtime, client, surface, state.painter.layout_only())
 }
 
 /// Drops one configured layer surface the compositor closed.

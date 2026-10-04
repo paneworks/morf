@@ -217,7 +217,7 @@ fn drive_outputless(
         let (Some(client), Some(desktop)) = (client.as_mut(), desktop.as_mut()) else {
             continue;
         };
-        apply_service_requests(runtime, client, desktop);
+        apply_service_requests(runtime, client, Some(&mut *desktop));
         apply_idle_timeouts(runtime, desktop);
         while let Some(event) = client.next_event() {
             follow_up = true;
@@ -233,7 +233,7 @@ fn drive_outputless(
                 _ => {}
             }
         }
-        apply_service_requests(runtime, client, desktop);
+        apply_service_requests(runtime, client, Some(&mut *desktop));
     }
 }
 

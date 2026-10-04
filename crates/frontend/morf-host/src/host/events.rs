@@ -1,6 +1,6 @@
 use morf_app::Backend;
 use morf_lua::Runtime;
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_render::RenderEngine;
 
 use morf_app::{Event, PRIMARY_LAYER, WindowId, physical_size};
 use std::sync::mpsc;
@@ -14,12 +14,11 @@ use crate::{
 
 pub fn handle_surface_event(
     runtime: &mut Runtime,
-    renderer: &mut RenderEngine<WgpuBackend>,
     client: &mut dyn Backend,
-    desktop: &mut morf_desktop::Desktop,
+    desktop: Option<&mut morf_desktop::Desktop>,
     state: &mut SurfaceEventState,
     event: Event,
-    tx: &mpsc::Sender<SupervisorMessage>,
+    tx: Option<&mpsc::Sender<SupervisorMessage>>,
     name: &str,
 ) -> Result<bool, String> {
     let mut repaint = false;
@@ -47,7 +46,7 @@ pub fn handle_surface_event(
     match event {
         Event::Configure { id, .. } | Event::Scale { id, .. } if id == PRIMARY_LAYER => {
             let (width, height) = client.physical_size();
-            renderer.resize(width, height);
+            state.painter.resize(width, height);
             for surface in state
                 .windows
                 .values_mut()
@@ -148,7 +147,7 @@ pub fn handle_surface_event(
         }
         Event::PopupConfigure { id, width, height } => {
             if let Some(surface) = state.windows.get_mut(Kind::Popup, id) {
-                let initial = surface.renderer.is_none();
+                let initial = surface.renderer.is_none() && surface.layout.is_none();
                 surface.width = width.max(1);
                 surface.height = height.max(1);
                 // Before the paint, so the bindings that read `win.width` and
@@ -160,7 +159,7 @@ pub fn handle_surface_event(
                 );
                 if let Some(renderer) = &mut surface.renderer {
                     renderer.resize(physical_width, physical_height);
-                } else {
+                } else if state.painter.gpu().is_some() {
                     let target = client
                         .render_target(WindowId::Popup(id))
                         .ok_or_else(|| "configured popup disappeared".to_owned())?;
@@ -169,7 +168,7 @@ pub fn handle_surface_event(
                     surface.renderer = Some(RenderEngine::new(backend));
                 }
                 if initial || surface.updates_enabled {
-                    paint_popup_surface(runtime, client, surface)?;
+                    paint_popup_surface(runtime, client, surface, state.painter.layout_only())?;
                 }
             }
         }
@@ -198,7 +197,7 @@ pub fn handle_surface_event(
                 .get_mut(Kind::Popup, id)
                 .filter(|surface| surface.updates_enabled)
             {
-                paint_popup_surface(runtime, client, surface)?;
+                paint_popup_surface(runtime, client, surface, state.painter.layout_only())?;
             }
         }
         Event::PopupDone { id } => {
@@ -209,7 +208,7 @@ pub fn handle_surface_event(
         }
         Event::ToplevelConfigure { id, width, height } => {
             if let Some(surface) = state.windows.get_mut(Kind::Toplevel, id) {
-                let initial = surface.renderer.is_none();
+                let initial = surface.renderer.is_none() && surface.layout.is_none();
                 surface.width = width.max(1);
                 surface.height = height.max(1);
                 // Before the paint, so the bindings that read `win.width` and
@@ -221,7 +220,7 @@ pub fn handle_surface_event(
                 );
                 if let Some(renderer) = &mut surface.renderer {
                     renderer.resize(physical_width, physical_height);
-                } else {
+                } else if state.painter.gpu().is_some() {
                     let target = client
                         .render_target(WindowId::Toplevel(id))
                         .ok_or_else(|| "configured floating surface disappeared".to_owned())?;
@@ -230,7 +229,7 @@ pub fn handle_surface_event(
                     surface.renderer = Some(RenderEngine::new(backend));
                 }
                 if initial || surface.updates_enabled {
-                    paint_floating_surface(runtime, client, surface)?;
+                    paint_floating_surface(runtime, client, surface, state.painter.layout_only())?;
                 }
             }
         }
@@ -240,7 +239,7 @@ pub fn handle_surface_event(
                 .get_mut(Kind::Toplevel, id)
                 .filter(|surface| surface.updates_enabled)
             {
-                paint_floating_surface(runtime, client, surface)?;
+                paint_floating_surface(runtime, client, surface, state.painter.layout_only())?;
             }
         }
         Event::ToplevelClose { id } => {
@@ -270,11 +269,14 @@ pub fn handle_surface_event(
             // supervisor records the list and hands it back to every worker, so
             // each runtime's `morf.screens` follows the hotplug rather than
             // keeping the entry for a monitor that has gone away.
-            tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
-                output: name.to_owned(),
-                screens,
-            }))
-            .map_err(|_| "output supervisor stopped".to_owned())?;
+            // A host with no supervisor (headless) has its outputs given.
+            if let Some(tx) = tx {
+                tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
+                    output: name.to_owned(),
+                    screens,
+                }))
+                .map_err(|_| "output supervisor stopped".to_owned())?;
+            }
         }
     }
     Ok(repaint)

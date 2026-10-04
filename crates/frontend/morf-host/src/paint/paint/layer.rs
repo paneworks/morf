@@ -69,46 +69,7 @@ pub fn paint_layer(
     runtime.observe_stretch(&layout);
     split.mark("text inputs");
     let scene = runtime.scene();
-    let input = if let Some(regions) = &config.input_regions {
-        // A configured mask is a static surface setting — nothing animates it —
-        // so rasterising it and re-sending it every paint asks the compositor
-        // to rebuild an identical region sixty times a second. The branch below
-        // has always deduped; this one opted out of the cache by returning an
-        // empty vector, which also made every frame look like a change.
-        //
-        // The sentinel is what the cache compares: an empty vector would match
-        // a surface that genuinely has no interactive area, so a shape that
-        // stands for "the configured mask, unchanged" is stored instead.
-        let input = vec![MASK_SENTINEL];
-        if cache.as_deref().is_none_or(|cached| cached.input != input) {
-            client
-                .set_layer_composed_input_region(layer, regions)
-                .map_err(|error| error.to_string())?;
-        }
-        input
-    } else {
-        let input = layout
-            .input_geometry(&scene)
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .map(|geometry| {
-                let left = geometry.x.floor() as i32;
-                let top = geometry.y.floor() as i32;
-                let right = (geometry.x + geometry.width).ceil() as i32;
-                let bottom = (geometry.y + geometry.height).ceil() as i32;
-                InputRect {
-                    x: left,
-                    y: top,
-                    width: right - left,
-                    height: bottom - top,
-                }
-            })
-            .collect::<Vec<_>>();
-        if cache.as_deref().is_none_or(|cached| cached.input != input) {
-            client.set_input_region(WindowId::Layer(layer), Some(&input));
-        }
-        input
-    };
+    let input = send_input_region(&scene, &layout, client, layer, config, cache.as_deref())?;
     split.mark("input region");
     let mut backdrop = Vec::new();
     // Where the compositor should blur what is behind this surface. Nothing is
@@ -257,11 +218,18 @@ pub fn paint_layer(
 }
 
 /// Paints one configured layer surface into its own renderer.
+///
+/// `text`: the host's text system when it draws nothing; the surface is laid
+/// out with it instead.
 pub fn paint_layer_surface(
     runtime: &mut Runtime,
     client: &dyn Backend,
     surface: &mut Window,
+    text: Option<&mut morf_text::TextSystem>,
 ) -> Result<(), String> {
+    if let Some(text) = text {
+        return super::lay_out_layer_surface(runtime, text, client, surface);
+    }
     // Cleared here rather than at one of the two call sites, because there are
     // two: the frame callback honoured the flag and the main repaint block did
     // not, so an animating configured layer surface was painted twice for every
@@ -306,4 +274,57 @@ pub fn paint_layer_surface(
     surface.needs_paint = runtime.scene().layout_revision_of(surface.root) != painted.revision;
     surface.layout = Some(painted);
     Ok(())
+}
+
+/// Hands the compositor where the layer takes the pointer: the configured
+/// mask, or the live geometry of its interactive items. Sent only when it
+/// differs from what `cache` says was sent last.
+pub fn send_input_region(
+    scene: &morf_scene::Scene,
+    layout: &morf_layout::Layout,
+    client: &dyn Backend,
+    layer: u64,
+    config: &LayerSurfaceConfig,
+    cache: Option<&CachedLayout>,
+) -> Result<Vec<InputRect>, String> {
+    Ok(if let Some(regions) = &config.input_regions {
+        // A configured mask is a static surface setting — nothing animates it —
+        // so rasterising it and re-sending it every paint asks the compositor
+        // to rebuild an identical region sixty times a second. The branch below
+        // has always deduped; this one opted out of the cache by returning an
+        // empty vector, which also made every frame look like a change.
+        //
+        // The sentinel is what the cache compares: an empty vector would match
+        // a surface that genuinely has no interactive area, so a shape that
+        // stands for "the configured mask, unchanged" is stored instead.
+        let input = vec![MASK_SENTINEL];
+        if cache.is_none_or(|cached| cached.input != input) {
+            client
+                .set_layer_composed_input_region(layer, regions)
+                .map_err(|error| error.to_string())?;
+        }
+        input
+    } else {
+        let input = layout
+            .input_geometry(&scene)
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .map(|geometry| {
+                let left = geometry.x.floor() as i32;
+                let top = geometry.y.floor() as i32;
+                let right = (geometry.x + geometry.width).ceil() as i32;
+                let bottom = (geometry.y + geometry.height).ceil() as i32;
+                InputRect {
+                    x: left,
+                    y: top,
+                    width: right - left,
+                    height: bottom - top,
+                }
+            })
+            .collect::<Vec<_>>();
+        if cache.is_none_or(|cached| cached.input != input) {
+            client.set_input_region(WindowId::Layer(layer), Some(&input));
+        }
+        input
+    })
 }

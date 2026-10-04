@@ -7,6 +7,7 @@
 
 use std::time::Duration;
 
+use std::os::fd::BorrowedFd;
 use std::sync::Arc;
 
 use crate::{
@@ -30,6 +31,19 @@ pub fn physical_size(logical: (u32, u32), scale_120: u32) -> (u32, u32) {
         ((logical.0 as u64 * scale).div_ceil(120)).max(1) as u32,
         ((logical.1 as u64 * scale).div_ceil(120)).max(1) as u32,
     )
+}
+
+/// What ended a [`Backend::wait`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Woke {
+    /// Events were already queued; there was no sleep.
+    Queued,
+    /// The compositor sent something.
+    Compositor,
+    /// The loop's alarm rang: a thread has something for it.
+    Alarm,
+    /// The timeout passed.
+    Timeout,
 }
 
 /// What a window is, and what it is opened with.
@@ -130,6 +144,24 @@ pub trait Backend {
     fn as_wayland(&self) -> Option<&wayland::LayerClient> {
         None
     }
+
+    /// Waits as [`Backend::dispatch`] does, waking early too when `wake`
+    /// (a thread's alarm) becomes readable; says what ended the wait.
+    fn wait(
+        &mut self,
+        timeout: Option<Duration>,
+        _wake: Option<BorrowedFd<'_>>,
+    ) -> Result<Woke, String> {
+        self.dispatch(timeout)
+            .map(|came| if came { Woke::Queued } else { Woke::Timeout })
+    }
+    /// Whether events are queued, so a wait would not sleep.
+    fn has_queued_events(&self) -> bool {
+        false
+    }
+    /// Called from any thread that finishes something the loop must hear
+    /// (a clipboard read, a drop), so the loop wakes for it.
+    fn set_waker(&mut self, _waker: fn()) {}
 
     fn screens(&self) -> &[Output] {
         self.outputs()

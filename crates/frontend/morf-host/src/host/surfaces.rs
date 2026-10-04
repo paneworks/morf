@@ -165,6 +165,9 @@ pub struct SurfaceEventState {
     /// When a paint the shell owed was last made without waiting any longer
     /// for an overdue frame callback ([`owed_paint_due`]).
     pub forced_paint: Option<std::time::Instant>,
+    /// What the shell's own surface is painted with, and what tells every
+    /// window whether it is drawn or only laid out.
+    pub painter: crate::painter::Painter,
 }
 
 /// Whether a paint the shell's own surface owes -- deferred until its frame

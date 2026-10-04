@@ -18,7 +18,7 @@ use crate::{paint::*, surfaces::*};
 /// with its callback outstanding, the clock ticks at the measured refresh and
 /// the other surfaces paint on their own callbacks. The next real callback
 /// takes over again from a clean timebase.
-pub(super) fn advance_without_callbacks(
+pub(crate) fn advance_without_callbacks(
     runtime: &mut Runtime,
     client: &dyn Backend,
     state: &mut SurfaceEventState,
@@ -50,7 +50,7 @@ pub(super) fn advance_without_callbacks(
         {
             if surface.updates_enabled {
                 surface.needs_paint = true;
-                paint_layer_surface(runtime, client, surface)?;
+                paint_layer_surface(runtime, client, surface, state.painter.layout_only())?;
             }
         }
     }
@@ -62,7 +62,7 @@ pub(super) fn advance_without_callbacks(
 /// after the callback was asked for, then every refresh. Nothing while no
 /// callback is outstanding or nothing moves -- the callbacks themselves, or
 /// the event that starts the motion, wake the loop then.
-pub(super) fn motion_deadline(
+pub(crate) fn motion_deadline(
     runtime: &Runtime,
     client: &dyn Backend,
     state: &SurfaceEventState,

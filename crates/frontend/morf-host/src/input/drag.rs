@@ -37,7 +37,7 @@ fn description(offer: &OfferInfo) -> OfferDescription {
 pub fn handle_data_event(
     runtime: &mut Runtime,
     client: &mut dyn Backend,
-    desktop: &mut Desktop,
+    desktop: Option<&mut Desktop>,
     state: &mut SurfaceEventState,
     event: Event,
 ) -> Result<Result<bool, String>, Event> {
@@ -188,9 +188,15 @@ fn leave_target(runtime: &mut Runtime, state: &mut SurfaceEventState) -> bool {
 /// Starts the offer reads the configuration asked for, each on whichever
 /// side announced its offer: a drag's is the window client's, a selection's
 /// the desktop's.
-pub fn apply_offer_reads(runtime: &mut Runtime, client: &mut dyn Backend, desktop: &mut Desktop) {
+pub fn apply_offer_reads(
+    runtime: &mut Runtime,
+    client: &mut dyn Backend,
+    mut desktop: Option<&mut Desktop>,
+) {
     for read in runtime.take_offer_reads() {
-        if desktop.owns_offer(read.offer) {
+        if let Some(desktop) = desktop.as_deref_mut()
+            && desktop.owns_offer(read.offer)
+        {
             desktop.read_offer(read.id, read.offer, &read.mime);
         } else {
             client.read_offer(read.id, read.offer, &read.mime);

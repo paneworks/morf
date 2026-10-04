@@ -16,7 +16,9 @@ mod window;
 
 #[cfg(feature = "wayland")]
 pub use backend::wayland::*;
-pub use backend::{Backend, Capabilities, PRIMARY_LAYER, RenderTarget, WindowKind, physical_size};
+pub use backend::{
+    Backend, Capabilities, PRIMARY_LAYER, RenderTarget, WindowKind, Woke, physical_size,
+};
 pub use data::*;
 pub use event::*;
 pub use input::*;

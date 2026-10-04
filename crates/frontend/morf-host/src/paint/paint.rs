@@ -1,4 +1,5 @@
 mod layer;
+mod layout_only;
 
 use morf_app::Backend;
 use morf_app::{InputRect, PRIMARY_LAYER, WindowId, physical_size};
@@ -10,11 +11,15 @@ use morf_value::region::Region;
 
 use crate::surfaces::*;
 
-pub use layer::{paint_layer, paint_layer_surface};
+pub use layer::{paint_layer, paint_layer_surface, send_input_region};
+pub use layout_only::{lay_out_auxiliary, lay_out_layer, lay_out_layer_surface};
+
+use crate::painter::Painter;
+use morf_text::TextSystem;
 
 pub fn paint(
     runtime: &mut Runtime,
-    renderer: &mut RenderEngine<WgpuBackend>,
+    painter: &mut Painter,
     client: &dyn Backend,
     root: NodeHandle,
     cache: Option<&mut CachedLayout>,
@@ -23,15 +28,21 @@ pub fn paint(
     // took on the CPU side, submission included, so a configuration that
     // feels slow can be read rather than guessed at.
     let started = frame_log_wanted().then(std::time::Instant::now);
-    let painted = paint_layer(
-        runtime,
-        renderer,
-        client,
-        PRIMARY_LAYER,
-        root,
-        &runtime.layer_surface_config(),
-        cache,
-    );
+    let config = runtime.layer_surface_config();
+    let painted = match painter {
+        Painter::Gpu(renderer) => paint_layer(
+            runtime,
+            renderer,
+            client,
+            PRIMARY_LAYER,
+            root,
+            &config,
+            cache,
+        ),
+        Painter::Layout(text) => {
+            lay_out_layer(runtime, text, client, PRIMARY_LAYER, root, &config, cache)
+        }
+    };
     if let Some(started) = started {
         eprintln!(
             "{} frame on {} took {:.2} ms",
@@ -330,20 +341,30 @@ impl AuxiliaryKind {
     }
 }
 
+/// `text`: the host's text system when it draws nothing (see
+/// [`Painter::layout_only`]); the window is laid out with it instead.
 pub fn paint_popup_surface(
     runtime: &mut Runtime,
     client: &dyn Backend,
     surface: &mut Window,
+    text: Option<&mut TextSystem>,
 ) -> Result<(), String> {
-    paint_auxiliary_surface(AuxiliaryKind::Popup, runtime, client, surface)
+    match text {
+        Some(text) => lay_out_auxiliary(AuxiliaryKind::Popup, runtime, text, client, surface),
+        None => paint_auxiliary_surface(AuxiliaryKind::Popup, runtime, client, surface),
+    }
 }
 
 pub fn paint_floating_surface(
     runtime: &mut Runtime,
     client: &dyn Backend,
     surface: &mut Window,
+    text: Option<&mut TextSystem>,
 ) -> Result<(), String> {
-    paint_auxiliary_surface(AuxiliaryKind::Floating, runtime, client, surface)
+    match text {
+        Some(text) => lay_out_auxiliary(AuxiliaryKind::Floating, runtime, text, client, surface),
+        None => paint_auxiliary_surface(AuxiliaryKind::Floating, runtime, client, surface),
+    }
 }
 
 /// Paints one popup or floating surface.

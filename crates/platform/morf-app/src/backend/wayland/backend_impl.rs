@@ -4,8 +4,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::backend::wayland::{LayerClient, Woke};
-use crate::backend::{Backend, Capabilities, RenderTarget, WindowKind};
+use crate::backend::wayland::LayerClient;
+use crate::backend::{Backend, Capabilities, RenderTarget, WindowKind, Woke};
 use crate::{Edge, Event, InputRect, KeyboardFocus, LayerConfig, Output, PopupConfig, WindowId};
 
 impl Backend for LayerClient {
@@ -159,6 +159,21 @@ impl Backend for LayerClient {
         if let Some(surface) = surface {
             surface.damage_buffer(x, y, width, height);
         }
+    }
+
+    fn wait(
+        &mut self,
+        timeout: Option<Duration>,
+        wake: Option<std::os::fd::BorrowedFd<'_>>,
+    ) -> Result<Woke, String> {
+        self.wait_for(timeout, wake)
+            .map_err(|error| error.to_string())
+    }
+    fn has_queued_events(&self) -> bool {
+        LayerClient::has_queued_events(self)
+    }
+    fn set_waker(&mut self, waker: fn()) {
+        LayerClient::set_waker(self, waker)
     }
 
     fn as_wayland(&self) -> Option<&LayerClient> {

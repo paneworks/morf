@@ -1,8 +1,4 @@
-mod stall;
-mod turn;
-
-use morf_app::Backend;
-use morf_app::{Event, LayerClient, Output, PRIMARY_LAYER};
+use morf_app::{LayerClient, Output};
 use morf_lua::{Limits, Runtime, Screen};
 use morf_render::{RenderEngine, ShaderRegistration, WgpuBackend};
 use std::path::Path;
@@ -11,62 +7,12 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use crate::desktop::desktop_for;
-use crate::host::windows::Windows;
-use crate::render_target::{primary_target, surface_backend};
 use crate::{
-    backdrop::*, lock::*, pacing::*, paint::*, supervisor::*, surface_actions::*,
-    surface_layers::*, surfaces::*, wake_plan::*, workers::*,
+    lock::*, supervisor::*, surfaces::*, wake_plan::*, workers::*,
 };
 
-use stall::{advance_without_callbacks, motion_deadline};
-use turn::turn_loop;
-
-/// What this output can do, as name = value pairs.
-///
-/// Booleans for the protocols, because "is there screencopy here" is the
-/// question; strings for the GPU, because "which one" is.
-fn capabilities_of(
-    client: &dyn Backend,
-    desktop: &morf_desktop::Desktop,
-    renderer: &mut RenderEngine<WgpuBackend>,
-) -> Vec<(String, String)> {
-    let info = renderer.backend_mut().info();
-    let mut list = vec![
-        ("gpu".to_owned(), info.name.clone()),
-        ("gpu_backend".to_owned(), format!("{:?}", info.backend)),
-        (
-            "scale_120".to_owned(),
-            client.primary_scale_120().to_string(),
-        ),
-    ];
-    for (name, supported) in [
-        ("desktop_canvas", false),
-        ("layer_shell", client.supports_layer_shell()),
-        ("layer_surfaces", client.supports_layer_surfaces()),
-        ("clipboard", client.supports_clipboard()),
-        ("data_control", desktop.supports_data_control()),
-        ("primary_selection", desktop.supports_primary_selection()),
-        ("drag_and_drop", client.supports_drag_and_drop()),
-        ("virtual_keyboard", client.supports_virtual_keyboard()),
-        ("input_method", client.supports_input_method()),
-        ("text_input", client.supports_text_input()),
-        ("screencopy", desktop.supports_screencopy()),
-        ("image_capture", desktop.supports_image_capture()),
-        ("window_capture", desktop.supports_window_capture()),
-        (
-            "dmabuf_capture",
-            desktop.supports_dmabuf_capture() && info.dmabuf,
-        ),
-        ("backdrop_blur", client.supports_backdrop_blur()),
-        ("toplevels", desktop.supports_toplevels()),
-        ("toplevel_control", desktop.supports_toplevel_control()),
-        ("gamma_control", desktop.supports_gamma_control()),
-        ("idle_inhibit", client.supports_idle_inhibit()),
-    ] {
-        list.push((name.to_owned(), supported.to_string()));
-    }
-    list
-}
+use crate::host::turn::{Host, Links, StartOptions, Turn};
+use std::os::fd::AsFd;
 
 pub fn run_surface(start: WorkerStart, screen: Output) -> Result<(), String> {
     let name = screen
@@ -150,163 +96,52 @@ fn drive_surface(
     if desktop_canvas {
         bar_config.output = None;
     }
-    let mut client = LayerClient::connect(bar_config).map_err(|error| error.to_string())?;
-    let mut desktop = desktop_for(&client)?;
-    // A clipboard or drop read finishing on its thread rings every loop, so
-    // this one wakes for its answer rather than sleeping past it. Set before
-    // the first configure, since a read can start before it.
-    client.set_waker(morf_io::wake_all);
-    open_reserve_layers(&mut client, &layer_config, &name)?;
-    open_backdrop_layer(&mut client, &layer_config, &name)?;
-    // What the reservers were last built from. A reserver is a separate surface
-    // per edge, so a thickness change is the one part of `morf.surface` that
-    // still has to rebuild something, and it must not rebuild on every
-    // unrelated margin the configuration animates.
-    let reserve = layer_config.reserve;
-
-    desktop.set_idle_timeouts(&runtime.idle_timeouts());
+    let client = LayerClient::connect(bar_config).map_err(|error| error.to_string())?;
+    let desktop = desktop_for(&client)?;
     tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
         output: name.clone(),
         screens: client.screens().to_vec(),
     }))
     .map_err(|_| "output supervisor stopped".to_owned())?;
-    let configuring = Instant::now();
-    let mut early_pointer = None;
-    'configured: loop {
-        client
-            .blocking_dispatch()
-            .map_err(|error| error.to_string())?;
-        while let Some(event) = client.next_event() {
-            match event {
-                Event::Configure { id, .. } if id == PRIMARY_LAYER => break 'configured,
-                Event::Closed { id } if id == PRIMARY_LAYER => {
-                    return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
-                }
-                Event::PointerMotion { surface, x, y } => {
-                    early_pointer = Some((surface, x, y));
-                }
-                Event::PointerLeave { surface } => {
-                    if early_pointer.is_some_and(|(role, _, _)| role == surface) {
-                        early_pointer = None;
-                    }
-                }
-                Event::Configure { .. }
-                | Event::Closed { .. }
-                | Event::Scale { .. }
-                | Event::AuxScale { .. }
-                | Event::ShortcutsInhibited { .. }
-                | Event::Clipboard { .. }
-                | Event::OfferRead { .. }
-                | Event::DragEnter { .. }
-                | Event::DragMotion { .. }
-                | Event::DragLeave { .. }
-                | Event::Drop { .. }
-                | Event::DragSourceEnded { .. }
-                | Event::KeyboardFocus { .. }
-                | Event::SurfaceKeyboard { .. }
-                | Event::SurfacePointer { .. }
-                | Event::InputMethod(_)
-                | Event::TextInput(_)
-                | Event::Frame { .. }
-                | Event::PointerButton { .. }
-                | Event::PointerAxis { .. }
-                | Event::TouchDown { .. }
-                | Event::TouchMotion { .. }
-                | Event::TouchUp { .. }
-                | Event::TouchCancel
-                | Event::Key { .. }
-                | Event::Screens(_)
-                | Event::PopupConfigure { .. }
-                | Event::PopupFrame { .. }
-                | Event::PopupDone { .. }
-                | Event::ToplevelConfigure { .. }
-                | Event::ToplevelFrame { .. }
-                | Event::ToplevelClose { .. }
-                | Event::SessionLocked
-                | Event::SessionLockFinished
-                | Event::SessionLockConfigure { .. }
-                | Event::SessionLockSurfaceRemoved { .. }
-                | Event::SessionLockFrame { .. } => {}
-            }
-        }
-    }
-    slow(
-        &name,
-        "waiting for the compositor's first configure",
-        configuring,
-    );
-    let gpu = Instant::now();
-    let (width, height) = client.physical_size();
-    let backend = surface_backend(primary_target(&client)?, width, height)
-        .map_err(|error| error.to_string())?;
-    let mut renderer = RenderEngine::new(backend);
-    // Known only now: the protocols came with the connection, the GPU with
-    // the renderer. Everything a configuration or `morf info` might ask.
-    let mut capabilities = capabilities_of(&client, &desktop, &mut renderer);
-    if desktop_canvas {
-        for (key, value) in &mut capabilities {
-            if key == "desktop_canvas" {
-                *value = "true".to_owned();
-            }
-        }
-    }
-    runtime.set_capabilities(&capabilities);
-    slow(&name, "starting the GPU", gpu);
-    let shaders = Instant::now();
-    register_shaders(runtime, &mut renderer)?;
-    slow(&name, "building shaders", shaders);
-    let animating_shaders = runtime.shaders_animate();
-    let started = Instant::now();
-    let clock = clock_text();
-    runtime
-        .update_clock(&clock)
-        .map_err(|error| error.to_string())?;
-    apply_parent_transitions(runtime, &mut renderer, &client)?;
-    let primary_root = primary_surface_root(runtime)?;
-    let first = Instant::now();
-    let layout = paint(runtime, &mut renderer, &client, primary_root, None)?;
-    slow(&name, "the first frame", first);
-    let windows_opening = Instant::now();
-    let mut windows = Windows::default();
-    runtime.take_window_surface_change();
-    runtime.take_layer_surface_change();
-    apply_backdrop(&mut client, &runtime.layer_surface_config(), &name);
-    let _ = sync_window_surfaces(runtime, &mut client, &mut windows, &name)?;
-    apply_service_requests(runtime, &mut client, &mut desktop);
-    slow(&name, "opening the other surfaces", windows_opening);
-
-    let state = SurfaceEventState {
-        layout,
-        primary_root,
-        windows,
-        animating_shaders,
-        last_frame: None,
-        pacer: FramePacer::new(),
-        // Until a callback says otherwise, assume the commonest refresh.
-        refresh: Duration::from_micros(16_667),
-        input: PointerInput {
-            pointer: early_pointer,
-            ..PointerInput::default()
-        },
-        drag: None,
-        primary_deferred: false,
-        keyboard_changes: Vec::new(),
-        fallback_tick: None,
-        forced_paint: None,
-    };
-    turn_loop(
+    let mut host = Host::start(
         runtime,
-        start,
-        name,
-        runtime_screen,
-        client,
-        desktop,
-        renderer,
-        reserve,
-        clock,
-        started,
-        state,
-    )
+        Box::new(client),
+        Some(desktop),
+        StartOptions {
+            name: name.clone(),
+            gpu: true,
+            publish_capabilities: true,
+            desktop_canvas,
+        },
+    )?;
+    let links = Links {
+        policy,
+        tx,
+        commands,
+        screen: runtime_screen,
+    };
+    let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
+    loop {
+        if stop.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        host.wait(runtime, Some(wake.as_fd()))?;
+        wake.drain();
+        match host.turn(runtime, Some(&links))? {
+            Turn::Again => {}
+            Turn::Stop => return Ok(()),
+            Turn::Recreate => {
+                let replacement = connect_runtime_surface(runtime, &name)?;
+                let desktop = desktop_for(&replacement)?;
+                tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
+                    output: name.clone(),
+                    screens: replacement.screens().to_vec(),
+                }))
+                .map_err(|_| "output supervisor stopped".to_owned())?;
+                host.replace_backend(runtime, Box::new(replacement), Some(desktop))?;
+            }
+        }
+    }
 }
 
 /// Says, on stderr, when one stage of the loop held the output longer than a

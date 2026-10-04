@@ -4,6 +4,7 @@ pub mod backdrop;
 pub mod outputless;
 pub mod pacing;
 pub mod paint;
+pub mod painter;
 pub mod render_target;
 pub mod wake_plan;
 

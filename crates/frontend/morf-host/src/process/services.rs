@@ -91,12 +91,14 @@ pub fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
 pub fn apply_clipboard_requests(
     runtime: &mut Runtime,
     client: &mut dyn Backend,
-    desktop: &mut Desktop,
+    desktop: Option<&mut Desktop>,
 ) {
     // Data control first: no focus, no serial, any type. Without it only text
     // can be set, and only once an input serial exists to set it with, so the
     // requests wait for one.
-    if desktop.supports_data_control() {
+    if let Some(desktop) = desktop
+        && desktop.supports_data_control()
+    {
         for request in runtime.take_clipboard_requests() {
             let primary = request.primary;
             desktop.set_selection(crate::surface_drag::clipboard_payload(request), primary);

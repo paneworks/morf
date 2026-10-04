@@ -43,6 +43,7 @@ pub use self::lock::outputs as lock_outputs;
 pub use self::paint::backdrop;
 pub use self::paint::outputless;
 pub use self::paint::pacing;
+pub use self::paint::painter;
 pub use self::paint::render_target;
 pub use self::paint::wake_plan;
 pub use self::process::crash;
