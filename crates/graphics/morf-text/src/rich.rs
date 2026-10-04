@@ -7,12 +7,51 @@
 
 use std::ops::Range;
 
-use cosmic_text::{Attrs, Style, Weight};
-use morf_layout::TextStyle;
+use cosmic_text::{Align, Attrs, Buffer, FontSystem, Shaping, Style, Weight};
+use morf_layout::{TextOptions, TextStyle};
 use morf_scene::{NodeHandle, RichSpan, RichText};
 
-use crate::style::{LineBand, face_band, text_metrics, word_shifts};
-use crate::{BufferKey, ResolvedFamily, TextSystem};
+use crate::style::{LineBand, face_band, shaping_weight, text_attrs, text_metrics, word_shifts};
+use crate::{BufferKey, ResolvedFamily, TextSystem, resolve_family};
+
+pub(crate) fn set_text(
+    buffer: &mut Buffer,
+    fonts: &FontSystem,
+    displayed: &str,
+    family: &str,
+    size: f32,
+    options: &TextOptions,
+    align: Option<Align>,
+) {
+    let family = resolve_family(fonts, family);
+    let base = text_attrs(&family, shaping_weight(options), size, &options.style);
+    let Some(rich) = &options.style.rich else {
+        buffer.set_text(displayed, &base, Shaping::Advanced, align);
+        return;
+    };
+    let families: Vec<_> = rich
+        .spans
+        .iter()
+        .map(|span| {
+            span.family
+                .as_deref()
+                .map(|name| resolve_family(fonts, name))
+        })
+        .collect();
+    let segments = segments(rich, displayed);
+    let runs = segments.iter().map(|(range, index)| {
+        let attrs = span_attrs(
+            &base,
+            &rich.spans[*index],
+            *index,
+            families[*index].as_ref(),
+            size,
+            &options.style,
+        );
+        (&displayed[range.clone()], attrs)
+    });
+    buffer.set_rich_text(runs, &base, Shaping::Advanced, align);
+}
 
 /// Which line a run's band is.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

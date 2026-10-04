@@ -78,9 +78,10 @@ jobs:
           skipPush: true
       - name: Download both outputs without builders and exercise Lua consumers
         run: |
-          nix build --accept-flake-config --no-update-lock-file \
-            --max-jobs 0 --builders '' --out-link result-library .#morf-library
-          test ! -e result-library/bin/morf
-          nix build --accept-flake-config --no-update-lock-file \
-            --max-jobs 0 --builders '' --out-link result .#morf
-          bash tools/nix-smoke.sh result result-library
+          library=$(nix build --accept-flake-config --no-update-lock-file \
+            --max-jobs 0 --builders '' --no-link --print-out-paths .#morf-library)
+          test -d "$library/share/morf/library"
+          test ! -e "$library/bin/morf"
+          engine=$(nix build --accept-flake-config --no-update-lock-file \
+            --max-jobs 0 --builders '' --no-link --print-out-paths .#morf)
+          bash tools/nix-smoke.sh "$engine" "$library"

@@ -1,12 +1,12 @@
 // What the layout engine asks of text: how big a string comes out, given a
 // font, a size and the room it has.
 
-use cosmic_text::{Align, Buffer, Shaping, Wrap};
+use cosmic_text::{Align, Buffer, Wrap};
 use morf_layout::{Size, TextAlignment, TextMeasurer, TextOptions};
 use morf_scene::NodeHandle;
 
-use crate::style::{run_gain, shaping_weight, text_attrs, text_metrics};
-use crate::{BufferKey, CachedBuffer, TextInput, TextSystem, elided_text, resolve_family};
+use crate::style::{run_gain, shaping_weight, text_metrics};
+use crate::{BufferKey, CachedBuffer, TextInput, TextSystem, elided_text};
 
 impl TextSystem {
     /// Shapes and measures the text a node is morphing towards.
@@ -79,7 +79,6 @@ impl TextSystem {
             let rich = options.style.rich.clone();
             let source = rich.as_ref().map_or(text, |rich| rich.text.as_str());
             let displayed = elided_text(&mut self.fonts, source, family, size, &options);
-            let family = resolve_family(&self.fonts, family);
             cached.word_spacing = options.style.word_spacing as f32;
             cached.alignment = options.alignment;
             let align = Some(match options.alignment {
@@ -88,40 +87,15 @@ impl TextSystem {
                 TextAlignment::Center => Align::Center,
                 TextAlignment::Justified => Align::Justified,
             });
-            let base = text_attrs(&family, font_weight, size, &options.style);
-            match &rich {
-                None => cached
-                    .buffer
-                    .set_text(&displayed, &base, Shaping::Advanced, align),
-                Some(rich) => {
-                    // Each run's family resolved once, and kept alive for the
-                    // attributes that borrow it.
-                    let families: Vec<_> = rich
-                        .spans
-                        .iter()
-                        .map(|span| {
-                            span.family
-                                .as_deref()
-                                .map(|name| resolve_family(&self.fonts, name))
-                        })
-                        .collect();
-                    let segments = crate::rich::segments(rich, &displayed);
-                    let runs = segments.iter().map(|(range, index)| {
-                        let attrs = crate::rich::span_attrs(
-                            &base,
-                            &rich.spans[*index],
-                            *index,
-                            families[*index].as_ref(),
-                            size,
-                            &options.style,
-                        );
-                        (&displayed[range.clone()], attrs)
-                    });
-                    cached
-                        .buffer
-                        .set_rich_text(runs, &base, Shaping::Advanced, align);
-                }
-            }
+            crate::rich::set_text(
+                &mut cached.buffer,
+                &self.fonts,
+                &displayed,
+                family,
+                size,
+                &options,
+                align,
+            );
             cached.rich = rich;
             cached.buffer.shape_until_scroll(&mut self.fonts, false);
             cached.input = Some(input);

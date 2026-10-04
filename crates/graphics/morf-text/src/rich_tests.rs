@@ -96,8 +96,49 @@ fn a_run_may_set_its_own_size_and_an_elided_run_keeps_its_style() {
             ..options(long.clone())
         },
     );
-    assert!(elided.width <= 125.0, "{elided:?}");
+    assert!(elided.width <= 120.01, "{elided:?}");
     let segments = crate::rich::segments(&long, "bold words the…");
     assert_eq!(segments[0], (0..10, 0));
     assert_eq!(segments.last().unwrap().0.end, "bold words the…".len());
+}
+
+#[test]
+fn elision_measures_each_runs_font_size() {
+    let mut scene = Scene::new();
+    let node = scene.create(Element::Text);
+    let mut text = TextSystem::new();
+    let rich = RichText::from_spans(&morf_scene::Value::List(vec![morf_scene::Value::Map(
+        std::collections::BTreeMap::from([
+            (
+                "text".to_owned(),
+                morf_scene::Value::String("WIDE WIDE WIDE WIDE".to_owned()),
+            ),
+            ("size".to_owned(), morf_scene::Value::Number(40.0)),
+        ]),
+    )]))
+    .unwrap()
+    .unwrap();
+    for elide in [
+        morf_layout::TextElide::Left,
+        morf_layout::TextElide::Middle,
+        morf_layout::TextElide::Right,
+    ] {
+        let measured = text.measure(
+            node,
+            "",
+            "sans-serif",
+            12.0,
+            TextOptions {
+                width: Some(120.0),
+                elide,
+                ..options(rich.clone())
+            },
+        );
+        assert!(measured.width <= 120.01, "{elide:?}: {measured:?}");
+        assert!(
+            text.rasterize(node, (0.0, 0.0), 1.0, true)
+                .iter()
+                .any(|glyph| glyph.font_size == 40.0)
+        );
+    }
 }

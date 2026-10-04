@@ -6,12 +6,11 @@
 //! the last with one. Both search over graphemes, each probe a throwaway
 //! shape, so the cost is paid only by text that overflows.
 
-use cosmic_text::{Align, Buffer, FontSystem, Shaping, Wrap};
+use cosmic_text::{Align, Buffer, FontSystem, Wrap};
 use morf_layout::{TextElide, TextOptions};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::resolve_family;
-use crate::style::{run_gain, shaping_weight, text_attrs, text_metrics};
+use crate::style::{run_gain, text_metrics};
 
 pub(crate) fn elided_text(
     fonts: &mut FontSystem,
@@ -92,16 +91,10 @@ fn wrapped_lines(
     options: &TextOptions,
     width: f32,
 ) -> usize {
-    let family = resolve_family(fonts, family);
     let mut buffer = Buffer::new(fonts, text_metrics(size, &options.style));
     buffer.set_size(Some(width), None);
     buffer.set_wrap(Wrap::WordOrGlyph);
-    buffer.set_text(
-        text,
-        &text_attrs(&family, shaping_weight(options), size, &options.style),
-        Shaping::Advanced,
-        None,
-    );
+    crate::rich::set_text(&mut buffer, fonts, text, family, size, options, None);
     buffer.shape_until_scroll(fonts, false);
     buffer.layout_runs().count()
 }
@@ -131,13 +124,15 @@ pub(crate) fn shaped_width(
     size: f32,
     options: &TextOptions,
 ) -> f32 {
-    let family = resolve_family(fonts, family);
     let mut buffer = Buffer::new(fonts, text_metrics(size, &options.style));
     buffer.set_wrap(Wrap::None);
-    buffer.set_text(
+    crate::rich::set_text(
+        &mut buffer,
+        fonts,
         text,
-        &text_attrs(&family, shaping_weight(options), size, &options.style),
-        Shaping::Advanced,
+        family,
+        size,
+        options,
         Some(Align::Left),
     );
     buffer.shape_until_scroll(fonts, false);
