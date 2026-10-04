@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use morf_scene::{Behavior, NodeHandle, Physics, Repeat, RotationDirection};
+use morf_scene::{Behavior, NodeHandle, Repeat, RotationDirection};
 
 use crate::{
     events::*, lua_values::*, reactive_bindings::*, scene_bindings::*, state::*, table_menu::*,
@@ -223,7 +223,11 @@ pub(crate) fn configure_element<'gc>(
             }
             value => {
                 let value = lua_to_scene(ctx, value, 0)?;
-                crate::node_loops::apply_loops(&mut state.borrow_mut(), node, &value)?;
+                morf_runtime::animation::loops::apply_loops(
+                    &mut *state.borrow_mut(),
+                    node,
+                    &value,
+                )?;
             }
         }
     }

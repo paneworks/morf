@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use morf_scene::AnimationFrame;
 
-use crate::{api_animation::*, reactive_execute::*, surface_types::*, types::*};
+use crate::{surface_types::*, types::*};
 
 // The animation frame tick and the Lua handlers it reports completions to.
 
@@ -84,7 +84,7 @@ impl Runtime {
 
     pub fn has_motion(&self) -> bool {
         let state = self.reactive.borrow();
-        state.scene.has_motion() || !state.theme_fades.is_empty()
+        state.scene.has_motion() || state.animation.fading()
     }
 
     /// Moves every theme colour easing to a new value on by `delta`, and
@@ -93,17 +93,13 @@ impl Runtime {
     fn advance_theme_fades(&mut self, delta: Duration) -> usize {
         let writes = {
             let mut state = self.reactive.borrow_mut();
-            if state.theme_fades.is_empty() {
+            if !state.animation.fading() {
                 return 0;
             }
-            let mut writes = Vec::new();
-            state.theme_fades.retain_mut(|fade| {
-                fade.elapsed += delta;
-                let (colour, done) = fade.colour();
-                writes.push((fade.signal, IpcValue::Color(colour)));
-                !done
-            });
-            writes
+            morf_runtime::animation::fades::advance(&mut state.animation.fades, delta)
+                .into_iter()
+                .map(|(signal, colour)| (signal, IpcValue::Color(colour)))
+                .collect::<Vec<_>>()
         };
         let moved = writes.len();
         {
@@ -175,37 +171,10 @@ impl Runtime {
             return Ok(frame);
         }
         // A group callback is registered once and fires once, so it is taken
-        // out of the map as it is collected rather than left to leak.
-        let finished = {
-            let mut state = self.reactive.borrow_mut();
-            let mut finished = frame
-                .events
-                .iter()
-                .filter_map(|event| {
-                    let key = (event.node, event.property.to_owned());
-                    let callback = state.animation_callbacks.get(&key)?.clone();
-                    Some((callback, event.property.to_owned(), event.end, "behavior"))
-                })
-                .collect::<Vec<_>>();
-            for event in &frame.groups {
-                if let Some(callback) = state.group_callbacks.remove(&event.group) {
-                    finished.push((callback, String::new(), event.end, "animation group"));
-                }
-            }
-            finished
-        };
-        for (callback, property, end, source) in finished {
-            let mut args = vec![IpcValue::String(animation_end_name(end).to_owned())];
-            if !property.is_empty() {
-                args.insert(0, IpcValue::String(property));
-            }
-            if let Err(message) =
-                self.run_handler(|ctx, limits| execute_handler_args(ctx, &callback, &args, limits))
-            {
-                self.reactive
-                    .borrow_mut()
-                    .log(LogLevel::Warn, format!("{source} on_finished: {message}"));
-            }
+        // out as it is collected rather than left to leak.
+        let finished = self.reactive.borrow_mut().animation.finished(&frame);
+        for warning in morf_runtime::animation::report_finished(self, finished) {
+            self.reactive.borrow_mut().log(LogLevel::Warn, warning);
         }
         Ok(frame)
     }

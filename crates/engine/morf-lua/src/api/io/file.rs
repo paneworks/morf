@@ -1,6 +1,7 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
 use morf_io::{
-    DEFAULT_BUFFER, DocumentOptions, FileDocument, FileEvent, FileView, MAX_VIEW_BYTES, buffer_limit,
+    DEFAULT_BUFFER, DocumentOptions, FileDocument, FileEvent, FileView, MAX_VIEW_BYTES,
+    buffer_limit,
 };
 use std::cell::RefCell;
 
@@ -18,13 +19,18 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     });
     let file_write = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (file, bytes): (UserRef<FileToken>, String) = stack.consume(ctx)?;
-        file.file.write_bounded(bytes.as_bytes()).map_err(HostError)?;
+        file.file
+            .write_bounded(bytes.as_bytes())
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let watcher_next = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (watcher, timeout_ms): (UserRef<FileWatcherToken>, i64) = stack.consume(ctx)?;
         let timeout = bounded_timeout(timeout_ms).map_err(HostError)?;
-        stack.replace(ctx, watcher.watcher.next_event(timeout).map(FileEvent::name));
+        stack.replace(
+            ctx,
+            watcher.watcher.next_event(timeout).map(FileEvent::name),
+        );
         Ok(CallbackReturn::Return)
     });
     let watcher_methods = Table::new(&ctx);

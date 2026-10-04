@@ -103,7 +103,8 @@ pub(crate) fn install_group_api<'gc>(
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(callback) = callback {
                     state
-                        .group_callbacks
+                        .animation
+                        .groups
                         .insert(id, crate::vm::handler_store::register(callback));
                 }
                 id

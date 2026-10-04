@@ -9,7 +9,7 @@ use morf_layout::{TransformTracker, TransformWatcher as NativeTransformWatcher};
 use morf_runtime::Handler;
 use morf_scene::reactive::{Graph, SignalId};
 use morf_scene::retain::Retention;
-use morf_scene::{GroupId, ListModel, NodeHandle, Scene};
+use morf_scene::{ListModel, NodeHandle, Scene};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -29,7 +29,8 @@ pub(crate) use crate::state_tokens::*;
 mod follow;
 mod methods;
 
-pub(crate) use follow::{Follow, apply_follows};
+pub(crate) use follow::apply_follows;
+pub(crate) use morf_runtime::animation::Follow;
 
 pub(crate) use morf_runtime::views::{Delegate, VirtualView};
 
@@ -273,18 +274,16 @@ pub(crate) struct ReactiveState {
     pub(crate) timer_callbacks: HashMap<NodeHandle, Handler>,
     /// Where each `ui.Timer` was built, for `MORF_WAKE_LOG`.
     pub(crate) timer_origins: HashMap<NodeHandle, std::rc::Rc<str>>,
+    /// Motion beside the scene's own: `on_finished` handlers, loops,
+    /// follows, theme fades and exits.
+    pub(crate) animation: morf_runtime::animation::Animation,
     /// Each node's `on_destroyed`, until the node goes.
     pub(crate) destroy_hooks: HashMap<NodeHandle, Handler>,
-    /// The properties each node is looping, from its `loop`.
-    pub(crate) node_loops:
-        HashMap<NodeHandle, std::collections::BTreeMap<String, crate::node_loops::RunningLoop>>,
     /// Hooks of nodes already removed, waiting for a moment Lua can run:
     /// removal happens with the state borrowed, often inside a flush.
     pub(crate) pending_destroyed: Vec<Handler>,
     /// The pending hooks are being run; removals they cause join the queue.
     pub(crate) running_destroyed: bool,
-    pub(crate) animation_callbacks: HashMap<(NodeHandle, String), Handler>,
-    pub(crate) group_callbacks: HashMap<GroupId, Handler>,
     pub(crate) loader_factories: HashMap<NodeHandle, Handler>,
     /// Loaders whose source raised, left alone until they are deactivated.
     pub(crate) failed_loaders: HashSet<NodeHandle>,
@@ -303,9 +302,6 @@ pub(crate) struct ReactiveState {
     pub(crate) retention: Retention<NodeHandle>,
     pub(crate) retain_callbacks: HashMap<NodeHandle, RetainCallbacks>,
     pub(crate) retained_destroy_queue: HashSet<NodeHandle>,
-    /// Nodes held in `retention` only because they are on their way out:
-    /// taken back, they leave it again rather than stay registered.
-    pub(crate) exit_registered: HashSet<NodeHandle>,
     pub(crate) window_surfaces: HashMap<u64, WindowSurfaceConfig>,
     pub(crate) next_window_surface: u64,
     pub(crate) window_surfaces_changed: bool,
@@ -340,8 +336,6 @@ pub(crate) struct ReactiveState {
     pub(crate) state_metatable: Option<StashedTable>,
     /// Theme token files being watched.
     pub(crate) theme_sources: Vec<ThemeSource>,
-    /// Theme colours easing to what was written to them.
-    pub(crate) theme_fades: Vec<ThemeFade>,
     /// `morf.terminal.listen`: terminals of our own hearing colour sequences.
     pub(crate) palette_listeners: Vec<crate::api_palette::PaletteListener>,
     pub(crate) next_palette_listener: u64,
@@ -377,8 +371,6 @@ pub(crate) struct ReactiveState {
     pub(crate) terminals: crate::terminals::TerminalHub,
     /// Text nodes set in runs, whose links the layout places.
     pub(crate) linked_texts: std::collections::HashSet<NodeHandle>,
-    /// Properties tied to another node's (`ui.follow`), applied every tick.
-    pub(crate) follows: Vec<Follow>,
     /// Every node something has read `contains_pointer` of, with what it
     /// said last. Only these are tested against the pointer when it moves,
     /// so a node nobody asks about costs nothing.

@@ -7,7 +7,11 @@ use crate::{lua_values::*, scene_bindings::*, state::*, table_menu::*};
 pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let socket_send = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (socket, bytes): (UserRef<SocketToken>, String) = stack.consume(ctx)?;
-        socket.state.borrow_mut().send(bytes.as_bytes()).map_err(HostError)?;
+        socket
+            .state
+            .borrow_mut()
+            .send(bytes.as_bytes())
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let socket_flush = Callback::from_fn(&ctx, |ctx, _, mut stack| {

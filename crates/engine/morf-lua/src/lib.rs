@@ -87,7 +87,6 @@ use self::runtime::images;
 pub use self::runtime::keys;
 use self::runtime::layout as runtime_layout;
 use self::runtime::model_revisions;
-use self::runtime::node_loops;
 use self::runtime::pending as state_pending;
 use self::runtime::services as runtime_services;
 use self::runtime::session_lock as runtime_session_lock;
@@ -113,13 +112,13 @@ pub use self::vm::profile;
 use self::vm::types;
 use self::vm::types_gen;
 
+#[cfg(feature = "kit")]
+pub use self::api::kit::register as register_kit;
 pub use api_broadcast::set_shell_socket;
 pub use api_focus::FocusReason;
 pub use api_gamma::GammaRequest;
 pub use events::*;
 pub use extensions::{Extension, register_extension};
-#[cfg(feature = "kit")]
-pub use self::api::kit::register as register_kit;
 pub use runtime_harness::HostFunction;
 pub use runtime_layout::SettledLayout;
 pub use runtime_session_lock::SessionLockState;

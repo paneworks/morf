@@ -75,7 +75,6 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     let removed = nodes.into_iter().collect::<HashSet<_>>();
     for node in &removed {
         state.retention.unregister(*node);
-        state.exit_registered.remove(node);
         state.retain_callbacks.remove(node);
         state.states.remove(node);
         state.views.remove(node);
@@ -85,7 +84,6 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         state.loaded_loaders.remove(node);
         state.dormant_loaders.remove(node);
         state.preload_pending.remove(node);
-        state.node_loops.remove(node);
         state.terminals.remove(*node);
         state.images.remove(*node);
         state.linked_texts.remove(node);
@@ -99,9 +97,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         .focus
         .memory
         .retain(|scope, node| !removed.contains(scope) && !removed.contains(node));
-    state
-        .animation_callbacks
-        .retain(|(owner, _), _| !removed.contains(owner));
+    state.animation.forget(&removed);
     state
         .handlers
         .retain(|(node, _), _| !removed.contains(node));
@@ -207,33 +203,30 @@ pub(crate) fn finish_retained_destroy(
 /// tree, drawn and out of the flow, held in `retention` until the exit ends.
 /// `false` when it has no exit to play, and whoever let go of it removes it.
 pub(crate) fn begin_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bool {
-    if state.scene.is_exiting(node) {
-        return true;
+    let state = &mut *state;
+    let start = morf_runtime::animation::exits::begin_exit(
+        &mut state.scene,
+        &mut state.retention,
+        &mut state.animation,
+        node,
+    );
+    if start == morf_runtime::animation::exits::ExitStart::Started {
+        state.scene_revision = state.scene_revision.wrapping_add(1);
     }
-    if !matches!(state.scene.begin_exit(node), Ok(true)) {
-        return false;
-    }
-    if state.retention.state(node).is_none() {
-        state.retention.register(node);
-        state.exit_registered.insert(node);
-    }
-    let _ = state.retention.lock(node);
-    let _ = state.retention.begin_drop(node);
-    state.scene_revision = state.scene_revision.wrapping_add(1);
-    true
+    start.leaving()
 }
 
 /// Takes back a node that was on its way out: it rejoins the flow and its
 /// properties go back to where they were aimed. `false` if it was not leaving.
 pub(crate) fn cancel_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bool {
-    if !state.scene.cancel_exit(node).unwrap_or(false) {
+    let state = &mut *state;
+    if !morf_runtime::animation::exits::cancel_exit(
+        &mut state.scene,
+        &mut state.retention,
+        &mut state.animation,
+        node,
+    ) {
         return false;
-    }
-    if state.exit_registered.remove(&node) {
-        state.retention.unregister(node);
-    } else {
-        let _ = state.retention.unlock(node);
-        let _ = state.retention.cancel_drop(node);
     }
     state.scene_revision = state.scene_revision.wrapping_add(1);
     true
@@ -249,11 +242,12 @@ pub(crate) fn finish_node_exit(
 ) {
     let destroy = {
         let mut state = state.borrow_mut();
-        if !state.scene.contains(node) {
-            return;
+        let state = &mut *state;
+        match morf_runtime::animation::exits::finish_exit(&state.scene, &mut state.retention, node)
+        {
+            Some(destroy) => destroy,
+            None => return,
         }
-        let _ = state.retention.unlock(node);
-        state.retention.should_destroy(node).unwrap_or(true)
     };
     if destroy {
         finish_retained_destroy(state, ctx, limits, node);
@@ -285,7 +279,7 @@ pub(crate) fn drop_retainable(
     // exit plays first, and holds it as a lock of its own.
     let registered = {
         let state = state.borrow();
-        state.retention.state(node).is_some() && !state.exit_registered.contains(&node)
+        state.retention.state(node).is_some() && !state.animation.exit_registered.contains(&node)
     };
     let exiting = begin_node_exit(&mut state.borrow_mut(), node);
     if !registered {

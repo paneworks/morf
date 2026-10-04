@@ -122,9 +122,11 @@ pub(crate) fn evaluate_effect(
                     &sink.property,
                     value.clone(),
                 ),
-                EffectSink::Loop(node) => {
-                    crate::node_loops::apply_loops(&mut state.borrow_mut(), node, value)
-                }
+                EffectSink::Loop(node) => morf_runtime::animation::loops::apply_loops(
+                    &mut *state.borrow_mut(),
+                    node,
+                    value,
+                ),
                 EffectSink::State(_) => Ok(()),
             }
         } else {

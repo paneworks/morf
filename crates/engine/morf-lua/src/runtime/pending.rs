@@ -73,34 +73,7 @@ pub(crate) struct PendingStatusNotifier {
 }
 
 /// A JSON file a theme takes its tokens from, watched for rewrites.
-/// A theme token's colour on its way to the one last written to it.
-pub(crate) struct ThemeFade {
-    pub(crate) signal: morf_scene::reactive::SignalId,
-    pub(crate) from: morf_scene::Color,
-    pub(crate) to: morf_scene::Color,
-    pub(crate) elapsed: std::time::Duration,
-    pub(crate) duration: std::time::Duration,
-    pub(crate) easing: morf_scene::Easing,
-}
-
-impl ThemeFade {
-    /// The colour on show now, and whether the fade is over.
-    pub(crate) fn colour(&self) -> (morf_scene::Color, bool) {
-        let progress = if self.duration.is_zero() {
-            1.0
-        } else {
-            (self.elapsed.as_secs_f64() / self.duration.as_secs_f64()).min(1.0)
-        };
-        let colour = self.easing.interpolate_color(
-            progress,
-            self.from,
-            self.to,
-            morf_scene::ColorSpace::Oklab,
-            morf_scene::HueDirection::Shorter,
-        );
-        (colour, progress >= 1.0)
-    }
-}
+pub(crate) use morf_runtime::animation::ThemeFade;
 
 pub(crate) struct ThemeSource {
     pub(crate) path: PathBuf,
@@ -125,4 +98,3 @@ pub(crate) struct Prefers {
     /// reading that was already on its way must not overwrite.
     pub(crate) overridden: HashSet<&'static str>,
 }
-
