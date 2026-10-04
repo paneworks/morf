@@ -23,15 +23,32 @@ fn signal<'a>(effects: &'a Effects, name: &str) -> Option<&'a Vec<IpcValue>> {
 fn a_knob_turns_by_dragging_up_or_round() {
     let mut knob = range(&[("drag_mode", "vertical".into()), ("value", 0.5.into())]);
     // The press does not jump; a hundred pixels up is half the travel.
-    let effects = knob.handle("pressed", &[5.0.into(), 150.0.into(), 40.0.into(), 40.0.into()]).unwrap();
+    let effects = knob
+        .handle(
+            "pressed",
+            &[5.0.into(), 150.0.into(), 40.0.into(), 40.0.into()],
+        )
+        .unwrap();
     assert_eq!(signal(&effects, "moved"), None);
-    knob.handle("dragged", &[5.0.into(), 50.0.into(), 40.0.into(), 40.0.into()]).unwrap();
+    knob.handle(
+        "dragged",
+        &[5.0.into(), 50.0.into(), 40.0.into(), 40.0.into()],
+    )
+    .unwrap();
     assert!((knob.values[0] - 1.0).abs() < 1e-9);
     let mut dial = range(&[("drag_mode", "angular".into())]);
     // Straight up is the middle of a 270-degree sweep from -135.
-    dial.handle("pressed", &[20.0.into(), 0.0.into(), 40.0.into(), 40.0.into()]).unwrap();
+    dial.handle(
+        "pressed",
+        &[20.0.into(), 0.0.into(), 40.0.into(), 40.0.into()],
+    )
+    .unwrap();
     assert!((dial.values[0] - 0.5).abs() < 1e-9);
-    let angle = dial.state().into_iter().find(|(k, _)| k == "angle").map(|(_, v)| v);
+    let angle = dial
+        .state()
+        .into_iter()
+        .find(|(k, _)| k == "angle")
+        .map(|(_, v)| v);
     assert_eq!(angle, Some(0.0.into()));
 }
 

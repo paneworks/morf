@@ -78,7 +78,11 @@ impl Plane {
             let angle = self.position(0) * std::f64::consts::TAU;
             let r = self.position(1) * 0.5;
             let angle = if self.base.mirrored { -angle } else { angle };
-            return if axis == 0 { 0.5 + r * angle.sin() } else { 0.5 - r * angle.cos() };
+            return if axis == 0 {
+                0.5 + r * angle.sin()
+            } else {
+                0.5 - r * angle.cos()
+            };
         }
         let p = self.position(axis);
         let flip = if axis == 0 {
@@ -148,7 +152,7 @@ impl Plane {
         effects
     }
 
-    fn from_point(&self, arguments: &[IpcValue]) -> Option<[f64; 2]> {
+    fn value_at_point(&self, arguments: &[IpcValue]) -> Option<[f64; 2]> {
         let (x, y) = (number(arguments.first())?, number(arguments.get(1))?);
         let (w, h) = (
             number(arguments.get(2))?.max(1.0),
@@ -211,7 +215,7 @@ impl Archetype for Plane {
                     return Ok(effects);
                 }
                 self.dragging = true;
-                if let Some(value) = self.from_point(arguments) {
+                if let Some(value) = self.value_at_point(arguments) {
                     effects.extend(self.set(value, true));
                 }
                 Ok(effects)
@@ -337,14 +341,28 @@ mod tests {
 
     #[test]
     fn a_joystick_springs_home_and_a_wheel_is_polar() {
-        let mut stick = plane(&[("x_from", (-1.0).into()), ("y_from", (-1.0).into()), ("spring", true.into())]);
-        stick.handle("pressed", &[90.0.into(), 50.0.into(), 100.0.into(), 100.0.into()]).unwrap();
+        let mut stick = plane(&[
+            ("x_from", (-1.0).into()),
+            ("y_from", (-1.0).into()),
+            ("spring", true.into()),
+        ]);
+        stick
+            .handle(
+                "pressed",
+                &[90.0.into(), 50.0.into(), 100.0.into(), 100.0.into()],
+            )
+            .unwrap();
         assert!(stick.value[0] > 0.5);
         stick.handle("released", &[]).unwrap();
         assert_eq!(stick.value, [0.0, 0.0]);
         let mut wheel = plane(&[("polar", true.into())]);
         // Right of the centre at the rim: a quarter turn, all the way out.
-        wheel.handle("pressed", &[100.0.into(), 50.0.into(), 100.0.into(), 100.0.into()]).unwrap();
+        wheel
+            .handle(
+                "pressed",
+                &[100.0.into(), 50.0.into(), 100.0.into(), 100.0.into()],
+            )
+            .unwrap();
         assert!((wheel.value[0] - 0.25).abs() < 1e-9 && (wheel.value[1] - 1.0).abs() < 1e-9);
         assert!((wheel.visual(0) - 1.0).abs() < 1e-9 && (wheel.visual(1) - 0.5).abs() < 1e-9);
     }

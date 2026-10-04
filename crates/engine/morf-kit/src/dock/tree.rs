@@ -42,8 +42,17 @@ impl Zone {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Node {
-    Split { id: String, vertical: bool, ratios: Vec<f64>, children: Vec<Node> },
-    Stack { id: String, panels: Vec<String>, current: usize },
+    Split {
+        id: String,
+        vertical: bool,
+        ratios: Vec<f64>,
+        children: Vec<Node>,
+    },
+    Stack {
+        id: String,
+        panels: Vec<String>,
+        current: usize,
+    },
 }
 
 impl Node {
@@ -73,14 +82,18 @@ impl Node {
     /// The stack holding `panel`.
     pub(super) fn stack_of(&self, panel: &str) -> Option<&str> {
         match self {
-            Node::Stack { id, panels, .. } => panels.iter().any(|p| p == panel).then_some(id.as_str()),
+            Node::Stack { id, panels, .. } => {
+                panels.iter().any(|p| p == panel).then_some(id.as_str())
+            }
             Node::Split { children, .. } => children.iter().find_map(|c| c.stack_of(panel)),
         }
     }
 
     pub(super) fn remove_panel(&mut self, panel: &str) -> bool {
         match self {
-            Node::Stack { panels, current, .. } => match panels.iter().position(|p| p == panel) {
+            Node::Stack {
+                panels, current, ..
+            } => match panels.iter().position(|p| p == panel) {
                 Some(i) => {
                     panels.remove(i);
                     if *current >= panels.len() || (i < *current) {
@@ -99,10 +112,18 @@ impl Node {
         match self {
             Node::Stack { ref panels, .. } if panels.is_empty() => None,
             Node::Stack { .. } => Some(self),
-            Node::Split { id, vertical, ratios, children } => {
+            Node::Split {
+                id,
+                vertical,
+                ratios,
+                children,
+            } => {
                 let mut kept = Vec::new();
                 let mut kept_ratios = Vec::new();
-                for (child, ratio) in children.into_iter().zip(ratios.into_iter().chain(std::iter::repeat(0.0))) {
+                for (child, ratio) in children
+                    .into_iter()
+                    .zip(ratios.into_iter().chain(std::iter::repeat(0.0)))
+                {
                     if let Some(child) = child.tidy() {
                         kept.push(child);
                         kept_ratios.push(ratio);
@@ -118,7 +139,12 @@ impl Node {
                         } else {
                             vec![1.0 / n as f64; n]
                         };
-                        Some(Node::Split { id, vertical, ratios, children: kept })
+                        Some(Node::Split {
+                            id,
+                            vertical,
+                            ratios,
+                            children: kept,
+                        })
                     }
                 }
             }
@@ -128,18 +154,46 @@ impl Node {
     pub(super) fn to_ipc(&self) -> IpcValue {
         let mut map = BTreeMap::new();
         match self {
-            Node::Split { id, vertical, ratios, children } => {
+            Node::Split {
+                id,
+                vertical,
+                ratios,
+                children,
+            } => {
                 map.insert("id".into(), id.as_str().into());
                 map.insert("kind".into(), "split".into());
-                map.insert("orientation".into(), if *vertical { "vertical" } else { "horizontal" }.into());
-                map.insert("ratios".into(), list(ratios.iter().map(|r| (*r).into()).collect()));
-                map.insert("children".into(), list(children.iter().map(Node::to_ipc).collect()));
+                map.insert(
+                    "orientation".into(),
+                    if *vertical { "vertical" } else { "horizontal" }.into(),
+                );
+                map.insert(
+                    "ratios".into(),
+                    list(ratios.iter().map(|r| (*r).into()).collect()),
+                );
+                map.insert(
+                    "children".into(),
+                    list(children.iter().map(Node::to_ipc).collect()),
+                );
             }
-            Node::Stack { id, panels, current } => {
+            Node::Stack {
+                id,
+                panels,
+                current,
+            } => {
                 map.insert("id".into(), id.as_str().into());
                 map.insert("kind".into(), "stack".into());
-                map.insert("panels".into(), list(panels.iter().map(|p| p.as_str().into()).collect()));
-                map.insert("current".into(), panels.get(*current).map(String::as_str).unwrap_or("").into());
+                map.insert(
+                    "panels".into(),
+                    list(panels.iter().map(|p| p.as_str().into()).collect()),
+                );
+                map.insert(
+                    "current".into(),
+                    panels
+                        .get(*current)
+                        .map(String::as_str)
+                        .unwrap_or("")
+                        .into(),
+                );
             }
         }
         IpcValue::Table(Arc::new(IpcTable::Map(map)))
@@ -148,10 +202,22 @@ impl Node {
 
 /// Puts `new` beside the stack `target` on `zone`'s side: into the split
 /// around it when that runs the same way, else a split of the two.
-pub(super) fn insert_beside(node: &mut Node, target: &str, new: Node, zone: Zone, fresh_id: &mut dyn FnMut() -> String) -> Result<(), Node> {
+pub(super) fn insert_beside(
+    node: &mut Node,
+    target: &str,
+    new: Node,
+    zone: Zone,
+    fresh_id: &mut dyn FnMut() -> String,
+) -> Result<(), Node> {
     let vertical = matches!(zone, Zone::Top | Zone::Bottom);
     let before = matches!(zone, Zone::Left | Zone::Top);
-    if let Node::Split { vertical: v, ratios, children, .. } = node {
+    if let Node::Split {
+        vertical: v,
+        ratios,
+        children,
+        ..
+    } = node
+    {
         if let Some(i) = children.iter().position(|c| c.id() == target) {
             if *v == vertical {
                 let half = ratios[i] / 2.0;
@@ -161,9 +227,25 @@ pub(super) fn insert_beside(node: &mut Node, target: &str, new: Node, zone: Zone
                 ratios.insert(at, half);
                 return Ok(());
             }
-            let old = std::mem::replace(&mut children[i], Node::Stack { id: String::new(), panels: Vec::new(), current: 0 });
-            let pair = if before { vec![new, old] } else { vec![old, new] };
-            children[i] = Node::Split { id: fresh_id(), vertical, ratios: vec![0.5, 0.5], children: pair };
+            let old = std::mem::replace(
+                &mut children[i],
+                Node::Stack {
+                    id: String::new(),
+                    panels: Vec::new(),
+                    current: 0,
+                },
+            );
+            let pair = if before {
+                vec![new, old]
+            } else {
+                vec![old, new]
+            };
+            children[i] = Node::Split {
+                id: fresh_id(),
+                vertical,
+                ratios: vec![0.5, 0.5],
+                children: pair,
+            };
             return Ok(());
         }
         let mut new = new;
@@ -176,9 +258,25 @@ pub(super) fn insert_beside(node: &mut Node, target: &str, new: Node, zone: Zone
         return Err(new);
     }
     if node.id() == target {
-        let old = std::mem::replace(node, Node::Stack { id: String::new(), panels: Vec::new(), current: 0 });
-        let pair = if before { vec![new, old] } else { vec![old, new] };
-        *node = Node::Split { id: fresh_id(), vertical, ratios: vec![0.5, 0.5], children: pair };
+        let old = std::mem::replace(
+            node,
+            Node::Stack {
+                id: String::new(),
+                panels: Vec::new(),
+                current: 0,
+            },
+        );
+        let pair = if before {
+            vec![new, old]
+        } else {
+            vec![old, new]
+        };
+        *node = Node::Split {
+            id: fresh_id(),
+            vertical,
+            ratios: vec![0.5, 0.5],
+            children: pair,
+        };
         return Ok(());
     }
     Err(new)

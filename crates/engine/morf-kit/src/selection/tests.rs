@@ -8,12 +8,16 @@ fn a_radial_menu_points_by_angle_and_a_flick_activates() {
     let mut s = Selection::new();
     s.configure("count", &4.0.into()).unwrap();
     // Right of centre: the second of four (three o'clock).
-    s.handle("point", &[40.0.into(), 0.0.into(), 16.0.into()]).unwrap();
+    s.handle("point", &[40.0.into(), 0.0.into(), 16.0.into()])
+        .unwrap();
     assert_eq!(s.current, 2);
-    let e = s.handle("point_release", &[0.0.into(), 50.0.into(), 16.0.into()]).unwrap();
+    let e = s
+        .handle("point_release", &[0.0.into(), 50.0.into(), 16.0.into()])
+        .unwrap();
     assert_eq!(s.current, 3);
     assert!(e.signals.iter().any(|(n, _)| n == "activated"));
-    s.handle("point", &[3.0.into(), 3.0.into(), 16.0.into()]).unwrap();
+    s.handle("point", &[3.0.into(), 3.0.into(), 16.0.into()])
+        .unwrap();
     assert_eq!(s.current, 3);
 }
 

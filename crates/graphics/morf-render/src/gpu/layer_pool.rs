@@ -405,14 +405,13 @@ impl LayerPool {
             .entries
             .iter()
             .enumerate()
-            .filter_map(|(index, entry)| {
-                (!entry.taken).then(|| {
-                    (
-                        index,
-                        u64::from(entry.texture.width()) * u64::from(entry.texture.height()),
-                        entry.idle,
-                    )
-                })
+            .filter(|&(_index, entry)| !entry.taken)
+            .map(|(index, entry)| {
+                (
+                    index,
+                    u64::from(entry.texture.width()) * u64::from(entry.texture.height()),
+                    entry.idle,
+                )
             })
             .collect();
         let evicted = spare_evictions(unused, SPARE_PIXELS);

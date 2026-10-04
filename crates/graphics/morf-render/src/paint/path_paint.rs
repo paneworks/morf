@@ -4,10 +4,14 @@
 use super::*;
 
 /// Reads a `Path` node's outline and how it is drawn.
-pub(super) fn path_paint(scene: &Scene, node: NodeHandle) -> Result<crate::path::PathPaint, RenderError> {
+pub(super) fn path_paint(
+    scene: &Scene,
+    node: NodeHandle,
+) -> Result<crate::path::PathPaint, RenderError> {
     let word = |property: &str| scene.string_value(node, property);
     let invalid = |message: String| RenderError::Scene(format!("Path: {message}"));
-    let view_box = morf_scene::PathViewBox::parse(scene.current(node, "view_box")?).map_err(invalid)?;
+    let view_box =
+        morf_scene::PathViewBox::parse(scene.current(node, "view_box")?).map_err(invalid)?;
     let d = match series_d(scene, node, view_box) {
         Some(d) => d,
         None => word("d")?.to_owned(),
@@ -49,11 +53,17 @@ fn channel_id(value: &morf_scene::Value) -> Option<u64> {
 
 /// The outline of a `Path` that draws a data channel (`series`), made from
 /// the channel's numbers now as its `plot` says; `None` when it draws `d`.
-fn series_d(scene: &Scene, node: NodeHandle, view_box: Option<morf_scene::PathViewBox>) -> Option<String> {
-    use morf_vector::series::{Plot, path};
+fn series_d(
+    scene: &Scene,
+    node: NodeHandle,
+    view_box: Option<morf_scene::PathViewBox>,
+) -> Option<String> {
     use morf_scene::Value;
+    use morf_vector::series::{Plot, path};
     let id = channel_id(scene.current(node, "series").ok()?)?;
-    let Some(channel) = morf_scene::channel_by_id(id) else { return Some("M0 0".into()) };
+    let Some(channel) = morf_scene::channel_by_id(id) else {
+        return Some("M0 0".into());
+    };
     let empty = std::collections::BTreeMap::new();
     let fields = match scene.current(node, "plot") {
         Ok(Value::Map(fields)) => fields,
@@ -76,7 +86,11 @@ fn series_d(scene: &Scene, node: NodeHandle, view_box: Option<morf_scene::PathVi
         None => None,
     };
     let size = view_box.map_or((100.0, 100.0), |v| (v.width, v.height));
-    let samples = if channel.is_ring() { channel.capacity() } else { 0 };
+    let samples = if channel.is_ring() {
+        channel.capacity()
+    } else {
+        0
+    };
     let plot = Plot::from_fields(number, flag, word, top, size, samples);
     let (values, _) = channel.snapshot();
     let others = fields

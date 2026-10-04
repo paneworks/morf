@@ -48,6 +48,14 @@ distribution -- those live in Lua libraries a configuration chooses.
 
 ## A turn of the loop
 
+One `Host` (morf-host) runs an output: it owns the backend (any
+`morf_app::Backend`), the desktop protocols where there is a compositor,
+the live windows and what they are painted with. `Host::start` opens the
+shell's surface, waits for its first configure, paints the first frame and
+opens the declared windows; then the driver alternates `Host::wait` (sleep
+on the backend until something is due) and `Host::turn`. The supervisor of
+a live shell is reached through `Links`; a headless runner has none.
+
 A backend (morf-app) delivers one `Event` type for every window: configures,
 frames, pointer, keys, touch, drags. morf-host routes each to the window it
 names (`Windows`, one map keyed by `WindowId`) and hands input to the
@@ -73,9 +81,16 @@ calls for one.
 
 ## Headless
 
-`morf check`, `render` and `test` run on virtual outputs with a virtual
-seat and a clock that moves only when told (morf-app's headless backend),
-so the same spec fires the same timers every run.
+`morf check`, `render` and `test` run the same `Host` on morf-app's headless
+backend: virtual outputs that configure every window opened, a virtual seat
+that carries a test's clicks and keys to the host's own pointer and key
+paths, and a clock that moves only when told (with the runtime's virtual
+one), so the same spec fires the same timers and frame callbacks every run.
+With no GPU the host's `Painter` is a text system: every window is laid
+out, observed and given its input region and frames, and nothing is drawn;
+`morf render` draws a surface on demand. What the host has not opened (a
+hidden panel) the runner lays out itself, so `morf check` finds its
+problems too.
 
 ## Lua
 

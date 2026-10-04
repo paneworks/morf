@@ -63,7 +63,12 @@ fn library_dir_of(address: *const std::ffi::c_void) -> Option<std::path::PathBuf
         .map(std::path::Path::to_path_buf)
 }
 
-pub(super) fn run(pw: Arc<Pw>, events: Events, mut receiver: Receiver<Message>, waker: SharedWaker) {
+pub(super) fn run(
+    pw: Arc<Pw>,
+    events: Events,
+    mut receiver: Receiver<Message>,
+    waker: SharedWaker,
+) {
     static INIT: Once = Once::new();
     // SAFETY: pw_init takes optional argc/argv and is safe to call with none.
     INIT.call_once(|| {

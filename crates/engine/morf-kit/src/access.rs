@@ -32,7 +32,11 @@ pub fn role_of(archetype: &str, widget: &str, checkable: bool) -> &'static str {
         },
         "Plane" => "slider",
         "Selection" => match widget {
-            "tabs" | "view_switcher" | "inline_view_switcher" | "carousel_dots" | "pagination"
+            "tabs"
+            | "view_switcher"
+            | "inline_view_switcher"
+            | "carousel_dots"
+            | "pagination"
             | "stepper_header" => "tab_list",
             "segmented" | "radio_group" | "toggle_group" | "rating_items" => "radio_group",
             "grid_selection" | "day_grid" | "swatch_grid" | "emoji_grid" | "icon_chooser" => "grid",
@@ -119,7 +123,11 @@ pub fn item_role(archetype: &str, widget: &str) -> Option<&'static str> {
 /// `expanded`, `disabled`, `pressed`, `read_only`, `modal`, `value`,
 /// `minimum`, `maximum`, `step`, `orientation`, `placeholder`. A state the
 /// archetype does not have is left out.
-pub fn states_of(archetype: &str, role: &str, state: &[(String, IpcValue)]) -> Vec<(String, IpcValue)> {
+pub fn states_of(
+    archetype: &str,
+    role: &str,
+    state: &[(String, IpcValue)],
+) -> Vec<(String, IpcValue)> {
     let get = |name: &str| state.iter().find(|(k, _)| k == name).map(|(_, v)| v);
     let truth = |name: &str| matches!(get(name), Some(IpcValue::Boolean(true)));
     let mut out: Vec<(String, IpcValue)> = Vec::new();
@@ -130,7 +138,10 @@ pub fn states_of(archetype: &str, role: &str, state: &[(String, IpcValue)]) -> V
     match archetype {
         "Press" => {
             let checkable = truth("checkable")
-                || matches!(role, "switch" | "check_box" | "radio_button" | "toggle_button")
+                || matches!(
+                    role,
+                    "switch" | "check_box" | "radio_button" | "toggle_button"
+                )
                 || matches!(role, "menu_item_check" | "menu_item_radio");
             if checkable {
                 if truth("partial") {
@@ -150,9 +161,19 @@ pub fn states_of(archetype: &str, role: &str, state: &[(String, IpcValue)]) -> V
                 _ => None,
             };
             let (value, from, to, step) = if archetype == "Plane" {
-                (number("x"), number("x_from"), number("x_to"), number("step_x"))
+                (
+                    number("x"),
+                    number("x_from"),
+                    number("x_to"),
+                    number("step_x"),
+                )
             } else {
-                (number("value"), number("from"), number("to"), number("step"))
+                (
+                    number("value"),
+                    number("from"),
+                    number("to"),
+                    number("step"),
+                )
             };
             if let Some(v) = value {
                 put("value", v.into());
@@ -218,6 +239,10 @@ mod tests {
         assert!(out.contains(&("checked".to_owned(), IpcValue::Boolean(true))));
         assert!(out.contains(&("disabled".to_owned(), IpcValue::Boolean(false))));
         let field = vec![("text".to_owned(), IpcValue::String("hunter2".into()))];
-        assert!(states_of("TextField", "password_text", &field).iter().all(|(k, _)| k != "value"));
+        assert!(
+            states_of("TextField", "password_text", &field)
+                .iter()
+                .all(|(k, _)| k != "value")
+        );
     }
 }

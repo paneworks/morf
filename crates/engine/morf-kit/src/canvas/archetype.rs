@@ -19,10 +19,15 @@ impl Archetype for Canvas {
     }
 
     fn handle(&mut self, event: &str, arguments: &[IpcValue]) -> Result<Effects, String> {
-        let point = |i: usize| -> Option<[f64; 2]> { Some([number(arguments.get(i))?, number(arguments.get(i + 1))?]) };
+        let point = |i: usize| -> Option<[f64; 2]> {
+            Some([number(arguments.get(i))?, number(arguments.get(i + 1))?])
+        };
         Ok(match event {
             "resize" => {
-                let (w, h) = (number(arguments.first()).unwrap_or(0.0), number(arguments.get(1)).unwrap_or(0.0));
+                let (w, h) = (
+                    number(arguments.first()).unwrap_or(0.0),
+                    number(arguments.get(1)).unwrap_or(0.0),
+                );
                 self.changing(|s, _| {
                     s.size = [w.max(0.0), h.max(0.0)];
                     s.clamp_view();
@@ -40,7 +45,9 @@ impl Archetype for Canvas {
                 base
             }
             "dragged" => {
-                let Some(at) = point(0) else { return Ok(Effects::default()) };
+                let Some(at) = point(0) else {
+                    return Ok(Effects::default());
+                };
                 let modifiers = text(arguments.get(4)).unwrap_or("").to_owned();
                 self.changing(|s, e| s.drag(at, &modifiers, e))
             }
@@ -70,11 +77,15 @@ impl Archetype for Canvas {
                 base
             }
             "double_clicked" => {
-                let Some(at) = point(0) else { return Ok(Effects::default()) };
+                let Some(at) = point(0) else {
+                    return Ok(Effects::default());
+                };
                 self.changing(|s, e| {
                     if !s.draft.is_empty() && matches!(s.tool, Tool::Polyline | Tool::Polygon) {
                         // The double click's first press added a point twice.
-                        if s.draft.len() >= 2 && s.draft[s.draft.len() - 1] == s.draft[s.draft.len() - 2] {
+                        if s.draft.len() >= 2
+                            && s.draft[s.draft.len() - 1] == s.draft[s.draft.len() - 2]
+                        {
                             s.draft.pop();
                         }
                         s.finish_draft(e);
@@ -86,16 +97,30 @@ impl Archetype for Canvas {
                 })
             }
             "wheel" => {
-                let steps = [number(arguments.first()).unwrap_or(0.0), number(arguments.get(1)).unwrap_or(0.0)];
-                let pixels = [number(arguments.get(2)).unwrap_or(0.0), number(arguments.get(3)).unwrap_or(0.0)];
+                let steps = [
+                    number(arguments.first()).unwrap_or(0.0),
+                    number(arguments.get(1)).unwrap_or(0.0),
+                ];
+                let pixels = [
+                    number(arguments.get(2)).unwrap_or(0.0),
+                    number(arguments.get(3)).unwrap_or(0.0),
+                ];
                 let at = point(4).unwrap_or_else(|| self.centre());
                 let modifiers = text(arguments.get(6)).unwrap_or("").to_owned();
                 let mut effects = self.changing(|s, _| {
                     if s.wheel_zooms != modifiers.contains("ctrl") {
-                        let notches = if steps[1] != 0.0 { steps[1] } else { pixels[1] / 40.0 };
+                        let notches = if steps[1] != 0.0 {
+                            steps[1]
+                        } else {
+                            pixels[1] / 40.0
+                        };
                         s.zoom_about(s.zoom_step.powf(-notches), at);
                     } else {
-                        let mut d = if pixels != [0.0, 0.0] { pixels } else { [steps[0] * 40.0, steps[1] * 40.0] };
+                        let mut d = if pixels != [0.0, 0.0] {
+                            pixels
+                        } else {
+                            [steps[0] * 40.0, steps[1] * 40.0]
+                        };
                         // Shift turns a mouse wheel sideways.
                         if modifiers.contains("shift") && d[0] == 0.0 {
                             d = [d[1], 0.0];
@@ -151,13 +176,16 @@ impl Archetype for Canvas {
             "center_on" => {
                 let at = point(0).unwrap_or([0.0, 0.0]);
                 self.changing(|s, _| {
+                    #[allow(clippy::needless_range_loop)] // one index across four arrays
                     for axis in 0..2 {
                         s.origin[axis] = at[axis] - s.size[axis] / 2.0 / s.zoom[axis];
                     }
                     s.clamp_view();
                 })
             }
-            "clicked" | "key" | "long_pressed" | "drag_started" | "drag_finished" => Effects::default(),
+            "clicked" | "key" | "long_pressed" | "drag_started" | "drag_finished" => {
+                Effects::default()
+            }
             _ => self.base.handle(event, arguments).unwrap_or_default(),
         })
     }
@@ -209,7 +237,10 @@ impl Archetype for Canvas {
                 self.changing(|s, _| s.axes = axes)
             }
             "bounds" => {
-                let b: Vec<f64> = entries(value).iter().filter_map(|v| number(Some(v))).collect();
+                let b: Vec<f64> = entries(value)
+                    .iter()
+                    .filter_map(|v| number(Some(v)))
+                    .collect();
                 let bounds = (b.len() == 4).then(|| [b[0], b[1], b[2], b[3]]);
                 self.changing(|s, _| {
                     s.bounds = bounds;
@@ -242,7 +273,8 @@ impl Archetype for Canvas {
                     s.items = items;
                     // What is gone is not selected or hovered.
                     let known = |id: &String| s.items.iter().any(|i| &i.id == id);
-                    let kept: Vec<String> = s.selection.iter().filter(|id| known(id)).cloned().collect();
+                    let kept: Vec<String> =
+                        s.selection.iter().filter(|id| known(id)).cloned().collect();
                     s.selection = kept;
                     if !known(&s.hovered) {
                         s.hovered.clear();

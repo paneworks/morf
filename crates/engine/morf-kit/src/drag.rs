@@ -73,7 +73,13 @@ impl Drag {
         match self.axis.as_str() {
             "x" => dx,
             "y" => dy,
-            _ => if dx.abs() >= dy.abs() { dx } else { dy },
+            _ => {
+                if dx.abs() >= dy.abs() {
+                    dx
+                } else {
+                    dy
+                }
+            }
         }
     }
 
@@ -113,7 +119,10 @@ impl Archetype for Drag {
             "pressed" => {
                 effects = self.base.handle(event, arguments).unwrap_or_default();
                 if self.base.enabled {
-                    self.origin = Some((number(arguments.first()).unwrap_or(0.0), number(arguments.get(1)).unwrap_or(0.0)));
+                    self.origin = Some((
+                        number(arguments.first()).unwrap_or(0.0),
+                        number(arguments.get(1)).unwrap_or(0.0),
+                    ));
                     self.start_value = self.value;
                     self.reordered = 0;
                     self.swiped = false;
@@ -123,7 +132,10 @@ impl Archetype for Drag {
                 let Some((ox, oy)) = self.origin else {
                     return Ok(effects);
                 };
-                let (x, y) = (number(arguments.first()).unwrap_or(ox), number(arguments.get(1)).unwrap_or(oy));
+                let (x, y) = (
+                    number(arguments.first()).unwrap_or(ox),
+                    number(arguments.get(1)).unwrap_or(oy),
+                );
                 let (mut dx, mut dy) = (x - ox, y - oy);
                 if self.axis == "x" {
                     dy = 0.0;
@@ -169,11 +181,18 @@ impl Archetype for Drag {
                 effects = self.base.handle(event, arguments).unwrap_or_default();
                 if self.active {
                     if event == "released" && self.mode == "swipe" {
-                        let (vx, vy) = (number(arguments.first()).unwrap_or(0.0), number(arguments.get(1)).unwrap_or(0.0));
+                        let (vx, vy) = (
+                            number(arguments.first()).unwrap_or(0.0),
+                            number(arguments.get(1)).unwrap_or(0.0),
+                        );
                         let moved = self.along(self.delta.0, self.delta.1);
                         let speed = self.along(vx, vy);
                         if moved.abs() >= self.swipe_distance || speed.abs() >= self.swipe_speed {
-                            let forward = if moved.abs() >= self.swipe_distance { moved } else { speed } > 0.0;
+                            let forward = if moved.abs() >= self.swipe_distance {
+                                moved
+                            } else {
+                                speed
+                            } > 0.0;
                             let direction = match (self.axis.as_str(), forward) {
                                 ("y", true) => "down",
                                 ("y", false) => "up",
@@ -203,7 +222,10 @@ impl Archetype for Drag {
             // A fling the engine saw as the press let go (its velocity): a
             // swipe that was quick if not long.
             "fling" if self.mode == "swipe" && !self.swiped => {
-                let (vx, vy) = (number(arguments.first()).unwrap_or(0.0), number(arguments.get(1)).unwrap_or(0.0));
+                let (vx, vy) = (
+                    number(arguments.first()).unwrap_or(0.0),
+                    number(arguments.get(1)).unwrap_or(0.0),
+                );
                 let speed = self.along(vx, vy);
                 if speed.abs() >= self.swipe_speed {
                     let direction = match (self.axis.as_str(), speed > 0.0) {
@@ -240,7 +262,13 @@ impl Archetype for Drag {
                         self.set_value(v, &mut effects);
                     }
                     "move" | "resize" => {
-                        let v = self.value + sign * if modifiers.contains("shift") { 1.0 } else { 10.0 };
+                        let v = self.value
+                            + sign
+                                * if modifiers.contains("shift") {
+                                    1.0
+                                } else {
+                                    10.0
+                                };
                         self.set_value(v, &mut effects);
                     }
                     _ => return Ok(effects),
@@ -248,7 +276,12 @@ impl Archetype for Drag {
                 effects.handled = true;
             }
             "clicked" | "key" | "fling" => {}
-            _ => return self.base.handle(event, arguments).ok_or_else(|| format!("Drag has no event `{event}`")),
+            _ => {
+                return self
+                    .base
+                    .handle(event, arguments)
+                    .ok_or_else(|| format!("Drag has no event `{event}`"));
+            }
         }
         Ok(effects)
     }
@@ -262,8 +295,13 @@ impl Archetype for Drag {
         match field {
             "mode" => {
                 let mode = text(Some(value)).unwrap_or("move");
-                if !matches!(mode, "move" | "resize" | "split" | "reorder" | "swipe" | "transfer" | "confirm") {
-                    return Err("mode is move, resize, split, reorder, swipe, transfer or confirm".into());
+                if !matches!(
+                    mode,
+                    "move" | "resize" | "split" | "reorder" | "swipe" | "transfer" | "confirm"
+                ) {
+                    return Err(
+                        "mode is move, resize, split, reorder, swipe, transfer or confirm".into(),
+                    );
                 }
                 self.mode = mode.into();
             }
@@ -307,14 +345,31 @@ mod tests {
 
     #[test]
     fn a_split_follows_the_pointer_within_its_bounds() {
-        let mut split = drag(&[("mode", "split".into()), ("axis", "x".into()), ("extent", 400.0.into()),
-            ("minimum", 0.2.into()), ("maximum", 0.8.into()), ("value", 0.5.into())]);
-        split.handle("pressed", &[200.0.into(), 10.0.into()]).unwrap();
-        split.handle("dragged", &[240.0.into(), 50.0.into()]).unwrap();
+        let mut split = drag(&[
+            ("mode", "split".into()),
+            ("axis", "x".into()),
+            ("extent", 400.0.into()),
+            ("minimum", 0.2.into()),
+            ("maximum", 0.8.into()),
+            ("value", 0.5.into()),
+        ]);
+        split
+            .handle("pressed", &[200.0.into(), 10.0.into()])
+            .unwrap();
+        split
+            .handle("dragged", &[240.0.into(), 50.0.into()])
+            .unwrap();
         assert!((split.value - 0.6).abs() < 1e-9);
-        split.handle("dragged", &[600.0.into(), 50.0.into()]).unwrap();
+        split
+            .handle("dragged", &[600.0.into(), 50.0.into()])
+            .unwrap();
         assert_eq!(split.value, 0.8);
-        assert!(split.handle("key", &["Left".into(), "".into()]).unwrap().handled);
+        assert!(
+            split
+                .handle("key", &["Left".into(), "".into()])
+                .unwrap()
+                .handled
+        );
     }
 
     #[test]
@@ -329,18 +384,38 @@ mod tests {
     fn a_swipe_past_its_distance_says_which_way() {
         let mut card = drag(&[("mode", "swipe".into()), ("axis", "x".into())]);
         card.handle("pressed", &[0.0.into(), 0.0.into()]).unwrap();
-        card.handle("dragged", &[IpcValue::Number(-120.0), 0.0.into()]).unwrap();
+        card.handle("dragged", &[IpcValue::Number(-120.0), 0.0.into()])
+            .unwrap();
         let effects = card.handle("released", &[0.0.into(), 0.0.into()]).unwrap();
-        assert!(effects.signals.iter().any(|(n, a)| n == "swiped" && a == &vec![IpcValue::from("left")]));
+        assert!(
+            effects
+                .signals
+                .iter()
+                .any(|(n, a)| n == "swiped" && a == &vec![IpcValue::from("left")])
+        );
     }
 
     #[test]
     fn a_reorder_says_each_row_it_passes() {
-        let mut row = drag(&[("mode", "reorder".into()), ("axis", "y".into()), ("extent", 40.0.into())]);
+        let mut row = drag(&[
+            ("mode", "reorder".into()),
+            ("axis", "y".into()),
+            ("extent", 40.0.into()),
+        ]);
         row.handle("pressed", &[0.0.into(), 0.0.into()]).unwrap();
         let effects = row.handle("dragged", &[0.0.into(), 90.0.into()]).unwrap();
-        assert_eq!(effects.signals.iter().filter(|(n, _)| n == "reorder").count(), 2);
+        assert_eq!(
+            effects
+                .signals
+                .iter()
+                .filter(|(n, _)| n == "reorder")
+                .count(),
+            2
+        );
         let effects = row.handle("key", &["Up".into(), "alt".into()]).unwrap();
-        assert_eq!(effects.signals[0], ("reorder".into(), vec![IpcValue::Integer(-1)]));
+        assert_eq!(
+            effects.signals[0],
+            ("reorder".into(), vec![IpcValue::Integer(-1)])
+        );
     }
 }

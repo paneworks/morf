@@ -1,5 +1,5 @@
-use morf_vector::svg::SvgOutlines;
 use morf_text::TextSystem;
+use morf_vector::svg::SvgOutlines;
 
 use crate::{DrawList, SdfFieldInstance, SdfFieldLayer, SdfFieldMaterial, ShaderBinding};
 

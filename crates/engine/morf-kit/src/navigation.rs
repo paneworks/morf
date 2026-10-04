@@ -58,7 +58,8 @@ impl Navigation {
             "stack" => (self.history.len() > 1, false),
             _ => (
                 index.is_some_and(|i| i > 0) || (self.wrap && self.pages.len() > 1),
-                index.is_some_and(|i| i + 1 < self.pages.len()) || (self.wrap && self.pages.len() > 1),
+                index.is_some_and(|i| i + 1 < self.pages.len())
+                    || (self.wrap && self.pages.len() > 1),
             ),
         };
         vec![
@@ -112,7 +113,10 @@ impl Navigation {
         self.direction = -1;
         self.fields_into(effects);
         effects.raise("popped", vec![gone.into()]);
-        effects.raise("current_changed", vec![self.current().into(), IpcValue::Integer(-1)]);
+        effects.raise(
+            "current_changed",
+            vec![self.current().into(), IpcValue::Integer(-1)],
+        );
         true
     }
 }
@@ -132,7 +136,9 @@ impl Archetype for Navigation {
         let mut effects = Effects::default();
         match event {
             "push" => {
-                let page = text(arguments.first()).ok_or("push wants a page name")?.to_owned();
+                let page = text(arguments.first())
+                    .ok_or("push wants a page name")?
+                    .to_owned();
                 if self.mode == "stack" {
                     if page != self.current() {
                         self.direction = 1;
@@ -148,7 +154,9 @@ impl Archetype for Navigation {
                 }
             }
             "go" => {
-                let page = text(arguments.first()).ok_or("go wants a page name")?.to_owned();
+                let page = text(arguments.first())
+                    .ok_or("go wants a page name")?
+                    .to_owned();
                 if self.mode == "stack" {
                     // Back to a page already in the stack, or a new root.
                     if let Some(at) = self.history.iter().position(|p| *p == page) {
@@ -198,7 +206,12 @@ impl Archetype for Navigation {
                 effects.handled = handled;
             }
             "clicked" | "key" => {}
-            _ => return self.base.handle(event, arguments).ok_or_else(|| format!("Navigation has no event `{event}`")),
+            _ => {
+                return self
+                    .base
+                    .handle(event, arguments)
+                    .ok_or_else(|| format!("Navigation has no event `{event}`"));
+            }
         }
         Ok(effects)
     }
@@ -219,7 +232,10 @@ impl Archetype for Navigation {
             "pages" => {
                 self.pages = match value {
                     IpcValue::Table(t) => match t.as_ref() {
-                        IpcTable::List(items) => items.iter().filter_map(|v| text(Some(v)).map(str::to_owned)).collect(),
+                        IpcTable::List(items) => items
+                            .iter()
+                            .filter_map(|v| text(Some(v)).map(str::to_owned))
+                            .collect(),
                         _ => Vec::new(),
                     },
                     _ => Vec::new(),
@@ -252,7 +268,10 @@ impl Archetype for Navigation {
                         >= self.pages.iter().position(|p| *p == before);
                     self.direction = if forward { 1 } else { -1 };
                     self.fields_into(&mut effects);
-                    effects.raise("current_changed", vec![self.current().into(), self.direction.into()]);
+                    effects.raise(
+                        "current_changed",
+                        vec![self.current().into(), self.direction.into()],
+                    );
                 }
             }
             "wrap" => self.wrap = expect_boolean(Some(value), field)?,
@@ -279,20 +298,33 @@ mod tests {
         assert_eq!(nav.current(), "sound");
         nav.handle("go", &["settings".into()]).unwrap();
         assert_eq!(nav.history, vec!["settings".to_owned()]);
-        assert!(!nav.handle("pop", &[]).unwrap().signals.iter().any(|(n, _)| n == "popped"), "the root stays");
+        assert!(
+            !nav.handle("pop", &[])
+                .unwrap()
+                .signals
+                .iter()
+                .any(|(n, _)| n == "popped"),
+            "the root stays"
+        );
     }
 
     #[test]
     fn a_switcher_cycles_with_ctrl_tab_and_a_carousel_with_the_arrows() {
-        let pages = IpcValue::Table(std::sync::Arc::new(IpcTable::List(vec!["a".into(), "b".into(), "c".into()])));
+        let pages = IpcValue::Table(std::sync::Arc::new(IpcTable::List(vec![
+            "a".into(),
+            "b".into(),
+            "c".into(),
+        ])));
         let mut nav = Navigation::new();
         nav.configure("mode", &"switcher".into()).unwrap();
         nav.configure("pages", &pages).unwrap();
         nav.configure("wrap", &true.into()).unwrap();
         nav.handle("key", &["Tab".into(), "ctrl".into()]).unwrap();
         assert_eq!(nav.current(), "b");
-        nav.handle("key", &["ISO_Left_Tab".into(), "ctrl+shift".into()]).unwrap();
-        nav.handle("key", &["ISO_Left_Tab".into(), "ctrl+shift".into()]).unwrap();
+        nav.handle("key", &["ISO_Left_Tab".into(), "ctrl+shift".into()])
+            .unwrap();
+        nav.handle("key", &["ISO_Left_Tab".into(), "ctrl+shift".into()])
+            .unwrap();
         assert_eq!(nav.current(), "c", "wrapped round");
         nav.configure("mode", &"carousel".into()).unwrap();
         nav.handle("key", &["Right".into(), "".into()]).unwrap();

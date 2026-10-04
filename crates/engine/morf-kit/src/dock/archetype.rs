@@ -59,9 +59,14 @@ impl Archetype for Dock {
                     match s.drop.take() {
                         Some((target, _)) if target == "float" => {
                             s.take(&panel);
-                            s.floating.push(Floating { panel: panel.clone(), rect });
+                            s.floating.push(Floating {
+                                panel: panel.clone(),
+                                rect,
+                            });
                         }
-                        Some((target, zone)) if !panel.is_empty() => s.dock(&panel, &target, zone, e),
+                        Some((target, zone)) if !panel.is_empty() => {
+                            s.dock(&panel, &target, zone, e)
+                        }
                         _ => {}
                     }
                 })
@@ -71,15 +76,18 @@ impl Archetype for Dock {
                 s.drop = None;
             }),
             "resize" => {
-                let (split, index, position) = (word(0), n(1).max(0.0) as usize, n(2).clamp(0.0, 1.0));
+                let (split, index, position) =
+                    (word(0), n(1).max(0.0) as usize, n(2).clamp(0.0, 1.0));
                 let min = self.min_ratio;
                 self.changing(|s, _| {
-                    if let Some(Node::Split { ratios, .. }) = s.root.as_mut().and_then(|r| r.find_mut(&split))
+                    if let Some(Node::Split { ratios, .. }) =
+                        s.root.as_mut().and_then(|r| r.find_mut(&split))
                         && index + 1 < ratios.len()
                     {
                         let start: f64 = ratios[..index].iter().sum();
                         let pair = ratios[index] + ratios[index + 1];
-                        let first = (position - start).clamp(min.min(pair / 2.0), (pair - min).max(pair / 2.0));
+                        let first = (position - start)
+                            .clamp(min.min(pair / 2.0), (pair - min).max(pair / 2.0));
                         ratios[index] = first;
                         ratios[index + 1] = pair - first;
                     }

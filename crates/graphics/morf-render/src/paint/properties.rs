@@ -11,7 +11,10 @@ pub(super) enum MaskSource {
     Node(NodeHandle),
 }
 
-pub(super) fn mask_source(scene: &Scene, node: NodeHandle) -> Result<Option<MaskSource>, RenderError> {
+pub(super) fn mask_source(
+    scene: &Scene,
+    node: NodeHandle,
+) -> Result<Option<MaskSource>, RenderError> {
     if let Some(mask) = scene.mask(node)
         && scene.bool_value(mask, "visible")?
     {
@@ -61,7 +64,12 @@ pub(super) fn gradient_mask(
 }
 
 /// A layer that only groups: composited as it is, at full opacity.
-pub(super) fn plain_layer(node: NodeHandle, start: usize, parent: Option<usize>, bounds: Geometry) -> Layer {
+pub(super) fn plain_layer(
+    node: NodeHandle,
+    start: usize,
+    parent: Option<usize>,
+    bounds: Geometry,
+) -> Layer {
     Layer {
         node,
         commands: start..start,
@@ -84,7 +92,10 @@ pub(super) fn plain_layer(node: NodeHandle, start: usize, parent: Option<usize>,
 /// Thickness is in logical pixels of edge movement, which is what a
 /// configuration can reason about: asking for half a pixel more weight means
 /// the same thing at every size, where a shift in field units would not.
-pub(super) fn text_field_style(scene: &Scene, node: NodeHandle) -> Result<DistanceFieldStyle, RenderError> {
+pub(super) fn text_field_style(
+    scene: &Scene,
+    node: NodeHandle,
+) -> Result<DistanceFieldStyle, RenderError> {
     Ok(DistanceFieldStyle {
         thickness: scene.number(node, "thickness")? as f32,
         softness: scene.number(node, "softness")?.max(0.0) as f32,

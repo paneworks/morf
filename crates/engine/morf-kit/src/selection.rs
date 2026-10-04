@@ -26,8 +26,8 @@ use std::collections::BTreeSet;
 
 use morf_value::{IpcTable, IpcValue};
 
-use crate::control::ControlState;
 use crate::Effects;
+use crate::control::ControlState;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Mode {
@@ -191,11 +191,8 @@ impl Selection {
         self.typed_at = now;
         self.typed.push_str(&typed.to_lowercase());
         // Repeating one letter cycles through the items it begins.
-        let single = self
-            .typed
-            .chars()
-            .all(|c| Some(c) == self.typed.chars().next())
-            && self.typed.chars().count() > 1;
+        let single =
+            self.typed.chars().all(|c| self.typed.starts_with(c)) && self.typed.chars().count() > 1;
         let needle = if single {
             self.typed
                 .chars()

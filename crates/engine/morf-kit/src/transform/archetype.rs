@@ -36,7 +36,9 @@ impl Archetype for Transform {
                 if !self.base.enabled || self.maximized {
                     return Ok(effects);
                 }
-                let handle = handle_name(text(arguments.get(2)).unwrap_or("body")).unwrap_or("body").to_owned();
+                let handle = handle_name(text(arguments.get(2)).unwrap_or("body"))
+                    .unwrap_or("body")
+                    .to_owned();
                 let allowed = match handle.as_str() {
                     "body" => self.movable,
                     "rotate" => self.rotatable,
@@ -86,7 +88,12 @@ impl Archetype for Transform {
                 self.changing(|s, _| {
                     s.container = [w, h];
                     if s.maximized {
-                        s.rect = Rect { x: 0.0, y: 0.0, w: w.max(s.min[0]), h: h.max(s.min[1]) };
+                        s.rect = Rect {
+                            x: 0.0,
+                            y: 0.0,
+                            w: w.max(s.min[0]),
+                            h: h.max(s.min[1]),
+                        };
                     }
                 })
             }
@@ -103,13 +110,22 @@ impl Archetype for Transform {
                 s.minimize(false, e);
             }),
             "set" => {
-                let r = Rect { x: n(0), y: n(1), w: n(2), h: n(3) };
+                let r = Rect {
+                    x: n(0),
+                    y: n(1),
+                    w: n(2),
+                    h: n(3),
+                };
                 self.changing(|s, _| s.rect = s.fit(r))
             }
             "key" if self.base.enabled => {
                 let name = text(arguments.first()).unwrap_or("").to_owned();
                 let modifiers = text(arguments.get(1)).unwrap_or("").to_owned();
-                let step = if modifiers.contains("shift") { 10.0 } else { 1.0 };
+                let step = if modifiers.contains("shift") {
+                    10.0
+                } else {
+                    1.0
+                };
                 let dir = match name.as_str() {
                     "Left" => Some([-1.0, 0.0]),
                     "Right" => Some([1.0, 0.0]),
@@ -119,44 +135,52 @@ impl Archetype for Transform {
                 };
                 let mirrored = self.base.mirrored;
                 let mut used = true;
-                let mut effects = self.changing(|s, e| {
-                    match (dir, name.as_str()) {
-                        (Some(mut d), _) => {
-                            if mirrored {
-                                d[0] = -d[0];
-                            }
-                            if modifiers.contains("alt") && s.rotatable {
-                                s.angle = (s.angle + d[0] * if step > 1.0 { 15.0 } else { 1.0 }).rem_euclid(360.0);
-                            } else if modifiers.contains("ctrl") && s.resizable {
-                                let r = Rect { w: s.rect.w + d[0] * step, h: s.rect.h + d[1] * step, ..s.rect };
-                                s.rect = s.fit(r);
-                            } else if s.movable && !s.maximized {
-                                let r = Rect { x: s.rect.x + d[0] * step, y: s.rect.y + d[1] * step, ..s.rect };
-                                s.rect = s.fit(r);
-                            } else {
-                                used = false;
-                            }
-                            if used {
-                                e.raise("committed", s.box_args());
-                            }
+                let mut effects = self.changing(|s, e| match (dir, name.as_str()) {
+                    (Some(mut d), _) => {
+                        if mirrored {
+                            d[0] = -d[0];
                         }
-                        (None, "Return") | (None, "KP_Enter") => {
-                            let on = !s.maximized;
-                            s.maximize(on, e);
+                        if modifiers.contains("alt") && s.rotatable {
+                            s.angle = (s.angle + d[0] * if step > 1.0 { 15.0 } else { 1.0 })
+                                .rem_euclid(360.0);
+                        } else if modifiers.contains("ctrl") && s.resizable {
+                            let r = Rect {
+                                w: s.rect.w + d[0] * step,
+                                h: s.rect.h + d[1] * step,
+                                ..s.rect
+                            };
+                            s.rect = s.fit(r);
+                        } else if s.movable && !s.maximized {
+                            let r = Rect {
+                                x: s.rect.x + d[0] * step,
+                                y: s.rect.y + d[1] * step,
+                                ..s.rect
+                            };
+                            s.rect = s.fit(r);
+                        } else {
+                            used = false;
                         }
-                        (None, "Escape") if s.gesture.is_some() => {
-                            if let Some((_, _, start, angle)) = s.gesture.take() {
-                                s.rect = start;
-                                s.angle = angle;
-                            }
+                        if used {
+                            e.raise("committed", s.box_args());
                         }
-                        _ => used = false,
                     }
+                    (None, "Return") | (None, "KP_Enter") => {
+                        let on = !s.maximized;
+                        s.maximize(on, e);
+                    }
+                    (None, "Escape") if s.gesture.is_some() => {
+                        if let Some((_, _, start, angle)) = s.gesture.take() {
+                            s.rect = start;
+                            s.angle = angle;
+                        }
+                    }
+                    _ => used = false,
                 });
                 effects.handled = used;
                 effects
             }
-            "clicked" | "key" | "drag_started" | "drag_finished" | "long_pressed" | "double_clicked" => Effects::default(),
+            "clicked" | "key" | "drag_started" | "drag_finished" | "long_pressed"
+            | "double_clicked" => Effects::default(),
             _ => self.base.handle(event, arguments).unwrap_or_default(),
         })
     }

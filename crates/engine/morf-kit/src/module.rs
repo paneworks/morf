@@ -21,11 +21,11 @@ use std::sync::Arc;
 use morf_value::{IpcTable, IpcValue};
 
 use crate::collection::Collection;
+use crate::control::{Control, implicit_size};
 use crate::disclosure::Disclosure;
 use crate::drag::Drag;
-use crate::navigation::Navigation;
-use crate::control::{Control, implicit_size};
 use crate::group::arrow_step;
+use crate::navigation::Navigation;
 use crate::plane::Plane;
 use crate::popup::Popup;
 use crate::press::Press;
@@ -228,8 +228,9 @@ pub fn native_module() -> Vec<(&'static str, NativeFunction)> {
                 let rank = |field: &str| match field {
                     "from" | "to" | "range" | "orientation" | "logarithmic" | "wrap" | "step"
                     | "tristate" | "checkable" | "group" | "exclusive" | "allow_none" => 0,
-                    "mode" | "axis" | "pages" | "extent" | "minimum" | "maximum" | "layout" | "columns_spec" | "tree_rows" | "count" | "labels" | "columns"
-                    | "x_from" | "x_to" | "y_from" | "y_to" | "disabled" => 0,
+                    "mode" | "axis" | "pages" | "extent" | "minimum" | "maximum" | "layout"
+                    | "columns_spec" | "tree_rows" | "count" | "labels" | "columns" | "x_from"
+                    | "x_to" | "y_from" | "y_to" | "disabled" => 0,
                     "value" | "first" | "second" | "checked" | "partial" | "current"
                     | "selected" | "x" | "y" => 2,
                     _ => 1,
@@ -315,8 +316,13 @@ pub fn native_module() -> Vec<(&'static str, NativeFunction)> {
             let archetype = text(arguments.first()).ok_or("kit.role wants an archetype name")?;
             let widget = text(arguments.get(1)).unwrap_or("");
             let checkable = matches!(arguments.get(2), Some(IpcValue::Boolean(true)));
-            let item = crate::access::item_role(archetype, widget).map(IpcValue::from).unwrap_or(IpcValue::Nil);
-            Ok(vec![crate::access::role_of(archetype, widget, checkable).into(), item])
+            let item = crate::access::item_role(archetype, widget)
+                .map(IpcValue::from)
+                .unwrap_or(IpcValue::Nil);
+            Ok(vec![
+                crate::access::role_of(archetype, widget, checkable).into(),
+                item,
+            ])
         }),
     ));
     let r = Rc::clone(&registry);
@@ -328,7 +334,11 @@ pub fn native_module() -> Vec<(&'static str, NativeFunction)> {
             let role = text(arguments.get(1)).unwrap_or("group").to_owned();
             let registry = r.borrow();
             let control = registry.controls.get(&id).ok_or("no such control")?;
-            Ok(vec![table(crate::access::states_of(control.name(), &role, &control.state()))])
+            Ok(vec![table(crate::access::states_of(
+                control.name(),
+                &role,
+                &control.state(),
+            ))])
         }),
     ));
     functions.push((

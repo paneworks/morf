@@ -32,8 +32,8 @@ use std::sync::Arc;
 
 use morf_value::{IpcTable, IpcValue};
 
-use crate::control::ControlState;
 use crate::Effects;
+use crate::control::ControlState;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Rect {
@@ -88,7 +88,12 @@ impl Transform {
     pub(crate) fn new() -> Self {
         Self {
             base: ControlState::default(),
-            rect: Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 },
+            rect: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 100.0,
+                h: 100.0,
+            },
             angle: 0.0,
             min: [16.0, 16.0],
             max: [f64::INFINITY, f64::INFINITY],
@@ -150,11 +155,21 @@ impl Transform {
     }
 
     fn box_args(&self) -> Vec<IpcValue> {
-        vec![self.rect.x.into(), self.rect.y.into(), self.rect.w.into(), self.rect.h.into(), self.angle.into()]
+        vec![
+            self.rect.x.into(),
+            self.rect.y.into(),
+            self.rect.w.into(),
+            self.rect.h.into(),
+            self.angle.into(),
+        ]
     }
 
     fn snapped(&self, v: f64) -> f64 {
-        if self.snap > 0.0 { (v / self.snap).round() * self.snap } else { v }
+        if self.snap > 0.0 {
+            (v / self.snap).round() * self.snap
+        } else {
+            v
+        }
     }
 
     /// The box kept to its limits and inside its bounds.
@@ -174,10 +189,28 @@ impl Transform {
         let (west, east) = (handle.contains('w'), handle.contains('e'));
         let (north, south) = (handle.starts_with('n'), handle.starts_with('s'));
         let k = if centred { 2.0 } else { 1.0 };
-        let mut w = start.w + if east { d[0] * k } else if west { -d[0] * k } else { 0.0 };
-        let mut h = start.h + if south { d[1] * k } else if north { -d[1] * k } else { 0.0 };
-        w = self.snapped(w).clamp(self.min[0], self.max[0].max(self.min[0]));
-        h = self.snapped(h).clamp(self.min[1], self.max[1].max(self.min[1]));
+        let mut w = start.w
+            + if east {
+                d[0] * k
+            } else if west {
+                -d[0] * k
+            } else {
+                0.0
+            };
+        let mut h = start.h
+            + if south {
+                d[1] * k
+            } else if north {
+                -d[1] * k
+            } else {
+                0.0
+            };
+        w = self
+            .snapped(w)
+            .clamp(self.min[0], self.max[0].max(self.min[0]));
+        h = self
+            .snapped(h)
+            .clamp(self.min[1], self.max[1].max(self.min[1]));
         if keep > 0.0 {
             // An edge drives the other side; a corner, whichever moved more.
             let by_width = if (east || west) && !(north || south) {
@@ -209,7 +242,9 @@ impl Transform {
     }
 
     fn drag(&mut self, at: [f64; 2], modifiers: &str) {
-        let Some((handle, from, start, start_angle)) = self.gesture.clone() else { return };
+        let Some((handle, from, start, start_angle)) = self.gesture.clone() else {
+            return;
+        };
         let d = [at[0] - from[0], at[1] - from[1]];
         let shift = modifiers.contains("shift");
         match handle.as_str() {
@@ -223,7 +258,9 @@ impl Transform {
             }
             "rotate" => {
                 let centre = self.centre;
-                let a0 = (from[0] - centre[0]).atan2(centre[1] - from[1]).to_degrees();
+                let a0 = (from[0] - centre[0])
+                    .atan2(centre[1] - from[1])
+                    .to_degrees();
                 let a1 = (at[0] - centre[0]).atan2(centre[1] - at[1]).to_degrees();
                 let mut angle = start_angle + a1 - a0;
                 if shift {
@@ -255,7 +292,12 @@ impl Transform {
                 self.saved = Some(self.rect);
             }
             self.minimized = false;
-            self.rect = Rect { x: 0.0, y: 0.0, w: self.container[0].max(self.min[0]), h: self.container[1].max(self.min[1]) };
+            self.rect = Rect {
+                x: 0.0,
+                y: 0.0,
+                w: self.container[0].max(self.min[0]),
+                h: self.container[1].max(self.min[1]),
+            };
         } else if let Some(saved) = self.saved.take() {
             self.rect = saved;
         }

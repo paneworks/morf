@@ -61,21 +61,39 @@ impl Shell {
     }
 
     fn layout(&self) -> String {
-        let index = self.breakpoints.iter().filter(|b| self.width >= **b).count();
-        self.layouts.get(index).cloned().unwrap_or_else(|| format!("layout{index}"))
+        let index = self
+            .breakpoints
+            .iter()
+            .filter(|b| self.width >= **b)
+            .count();
+        self.layouts
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| format!("layout{index}"))
     }
 
     fn collapsed(&self) -> bool {
-        let below = self.collapse_below.or(self.breakpoints.first().copied()).unwrap_or(0.0);
+        let below = self
+            .collapse_below
+            .or(self.breakpoints.first().copied())
+            .unwrap_or(0.0);
         self.has_sidebar && self.width < below
     }
 
     fn sidebar_open(&self) -> bool {
-        self.has_sidebar && if self.collapsed() { self.drawer_open } else { self.shown_wide }
+        self.has_sidebar
+            && if self.collapsed() {
+                self.drawer_open
+            } else {
+                self.shown_wide
+            }
     }
 
     fn inspector_shown(&self) -> bool {
-        let below = self.inspector_below.or(self.breakpoints.last().copied()).unwrap_or(0.0);
+        let below = self
+            .inspector_below
+            .or(self.breakpoints.last().copied())
+            .unwrap_or(0.0);
         self.width >= below
     }
 
@@ -87,7 +105,14 @@ impl Shell {
             ("sidebar_open".into(), self.sidebar_open().into()),
             ("inspector_shown".into(), self.inspector_shown().into()),
             ("bottom_bar".into(), self.collapsed().into()),
-            ("region".into(), self.regions.get(self.region).cloned().unwrap_or_default().into()),
+            (
+                "region".into(),
+                self.regions
+                    .get(self.region)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into(),
+            ),
         ]
     }
 
@@ -134,7 +159,11 @@ impl Shell {
         let n = self.regions.len();
         // A hidden sidebar is not a region to move to.
         for _ in 0..n {
-            self.region = if back { (self.region + n - 1) % n } else { (self.region + 1) % n };
+            self.region = if back {
+                (self.region + n - 1) % n
+            } else {
+                (self.region + 1) % n
+            };
             if self.regions[self.region] != "sidebar" || self.sidebar_open() {
                 break;
             }
@@ -166,7 +195,10 @@ fn numbers(value: &IpcValue) -> Vec<f64> {
 fn words(value: &IpcValue) -> Vec<String> {
     match value {
         IpcValue::Table(t) => match t.as_ref() {
-            IpcTable::List(items) => items.iter().filter_map(|v| text(Some(v)).map(str::to_owned)).collect(),
+            IpcTable::List(items) => items
+                .iter()
+                .filter_map(|v| text(Some(v)).map(str::to_owned))
+                .collect(),
             _ => Vec::new(),
         },
         _ => Vec::new(),
@@ -207,7 +239,9 @@ impl Archetype for Shell {
                     "F9" => self.toggle(),
                     "b" | "B" if ctrl => self.toggle(),
                     "F6" => self.cycle(shift),
-                    "Escape" if self.collapsed() && self.drawer_open => self.changing(|s| s.drawer_open = false),
+                    "Escape" if self.collapsed() && self.drawer_open => {
+                        self.changing(|s| s.drawer_open = false)
+                    }
                     _ => return Ok(Effects::default()),
                 };
                 effects.handled = true;
@@ -265,7 +299,11 @@ mod tests {
     use super::*;
 
     fn get(state: &[(String, IpcValue)], key: &str) -> IpcValue {
-        state.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone()).unwrap_or(IpcValue::Nil)
+        state
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+            .unwrap_or(IpcValue::Nil)
     }
 
     #[test]
@@ -275,15 +313,24 @@ mod tests {
         let effects = shell.handle("resize", &[IpcValue::Number(500.0)]).unwrap();
         assert!(effects.signals.iter().any(|s| s.0 == "collapsed"));
         assert_eq!(get(&shell.state(), "layout"), IpcValue::from("narrow"));
-        assert_eq!(get(&shell.state(), "sidebar_open"), IpcValue::Boolean(false));
+        assert_eq!(
+            get(&shell.state(), "sidebar_open"),
+            IpcValue::Boolean(false)
+        );
         let effects = shell.handle("key", &["F9".into(), "".into()]).unwrap();
         assert!(effects.handled);
         assert_eq!(get(&shell.state(), "sidebar_open"), IpcValue::Boolean(true));
         shell.handle("key", &["Escape".into(), "".into()]).unwrap();
-        assert_eq!(get(&shell.state(), "sidebar_open"), IpcValue::Boolean(false));
+        assert_eq!(
+            get(&shell.state(), "sidebar_open"),
+            IpcValue::Boolean(false)
+        );
         shell.handle("resize", &[IpcValue::Number(1000.0)]).unwrap();
         assert_eq!(get(&shell.state(), "sidebar_open"), IpcValue::Boolean(true));
-        assert_eq!(get(&shell.state(), "inspector_shown"), IpcValue::Boolean(true));
+        assert_eq!(
+            get(&shell.state(), "inspector_shown"),
+            IpcValue::Boolean(true)
+        );
         let effects = shell.handle("key", &["F6".into(), "".into()]).unwrap();
         assert!(effects.signals.iter().any(|s| s.0 == "region"));
         assert_eq!(get(&shell.state(), "region"), IpcValue::from("sidebar"));

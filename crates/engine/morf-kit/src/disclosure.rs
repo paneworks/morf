@@ -26,7 +26,12 @@ pub(crate) struct Disclosure {
 
 impl Disclosure {
     pub(crate) fn new() -> Self {
-        Self { base: ControlState::default(), expanded: false, animated: true, group: None }
+        Self {
+            base: ControlState::default(),
+            expanded: false,
+            animated: true,
+            group: None,
+        }
     }
 
     fn set(&mut self, expanded: bool) -> Effects {
@@ -82,7 +87,11 @@ impl Archetype for Disclosure {
             }
             "key" if self.base.enabled => {
                 let name = text(arguments.first()).unwrap_or("");
-                let (collapse, expand) = if self.base.mirrored { ("Right", "Left") } else { ("Left", "Right") };
+                let (collapse, expand) = if self.base.mirrored {
+                    ("Right", "Left")
+                } else {
+                    ("Left", "Right")
+                };
                 let effects = match name {
                     "space" | "Return" | "KP_Enter" => {
                         let mut e = self.set(!self.expanded);
@@ -102,7 +111,10 @@ impl Archetype for Disclosure {
                 Ok(effects.handled())
             }
             "clicked" | "key" => Ok(Effects::default()),
-            _ => self.base.handle(event, arguments).ok_or_else(|| format!("Disclosure has no event `{event}`")),
+            _ => self
+                .base
+                .handle(event, arguments)
+                .ok_or_else(|| format!("Disclosure has no event `{event}`")),
         }
     }
 
@@ -129,7 +141,11 @@ impl Archetype for Disclosure {
             }
             "group" => {
                 let name = text(Some(value)).ok_or("group must be a name")?.to_owned();
-                self.group = Some(Membership { name, exclusive: true, allow_none: true });
+                self.group = Some(Membership {
+                    name,
+                    exclusive: true,
+                    allow_none: true,
+                });
                 Ok(Effects::default())
             }
             _ => Err(format!("Disclosure has no setting `{field}`")),
@@ -154,9 +170,18 @@ mod tests {
         let mut d = Disclosure::new();
         let effects = d.handle("clicked", &[]).unwrap();
         assert!(effects.signals.iter().any(|(n, _)| n == "expanded"));
-        assert!(d.handle("key", &["Left".into(), "".into()]).unwrap().handled);
+        assert!(
+            d.handle("key", &["Left".into(), "".into()])
+                .unwrap()
+                .handled
+        );
         assert!(!d.expanded);
-        assert!(!d.handle("key", &["Left".into(), "".into()]).unwrap().handled, "already shut");
+        assert!(
+            !d.handle("key", &["Left".into(), "".into()])
+                .unwrap()
+                .handled,
+            "already shut"
+        );
         d.handle("key", &["Right".into(), "".into()]).unwrap();
         assert!(d.expanded);
     }

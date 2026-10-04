@@ -64,16 +64,16 @@
 //! `activated` (id or "", x, y), `context` (id or "", x, y), `brushed` (x0,
 //! y0, x1, y1), `deleted` (ids), `resized` (id, x, y, w, h).
 
-mod values;
+mod archetype;
 mod geometry;
 mod gestures;
 mod keys;
-mod archetype;
+mod values;
 
 use morf_value::IpcValue;
 
-use crate::control::ControlState;
 use crate::Effects;
+use crate::control::ControlState;
 
 use geometry::spanned;
 use values::{Fields, entries, flat, id_list, ids, item_from, list, port_from};
@@ -169,20 +169,49 @@ struct Port {
 enum Gesture {
     None,
     /// From the screen point pressed and the view then.
-    Pan { from: [f64; 2], origin: [f64; 2] },
+    Pan {
+        from: [f64; 2],
+        origin: [f64; 2],
+    },
     /// From the world point pressed; the item pressed, and whether the
     /// press should narrow the selection to it if nothing moves.
-    Move { from: [f64; 2], item: String, narrow: bool },
-    Band { from: [f64; 2], to: [f64; 2], additive: bool },
+    Move {
+        from: [f64; 2],
+        item: String,
+        narrow: bool,
+    },
+    Band {
+        from: [f64; 2],
+        to: [f64; 2],
+        additive: bool,
+    },
     /// A line, rect or ellipse: from one corner to the other.
-    Draw { from: [f64; 2], to: [f64; 2] },
+    Draw {
+        from: [f64; 2],
+        to: [f64; 2],
+    },
     Freehand,
-    Connect { from: String },
-    Brush { from: [f64; 2], to: [f64; 2] },
+    Connect {
+        from: String,
+    },
+    Brush {
+        from: [f64; 2],
+        to: [f64; 2],
+    },
     /// An item's box dragged by a handle: which, from where, the box then
     /// and the box it has reached.
-    Resize { id: String, handle: &'static str, from: [f64; 2], start: [f64; 4], now: [f64; 4] },
-    Zoom { from: [f64; 2], to: [f64; 2], out: bool },
+    Resize {
+        id: String,
+        handle: &'static str,
+        from: [f64; 2],
+        start: [f64; 4],
+        now: [f64; 4],
+    },
+    Zoom {
+        from: [f64; 2],
+        to: [f64; 2],
+        out: bool,
+    },
 }
 
 pub(crate) struct Canvas {
@@ -280,7 +309,9 @@ impl Canvas {
 
     fn band(&self) -> Option<[f64; 4]> {
         match &self.gesture {
-            Gesture::Band { from, to, .. } | Gesture::Zoom { from, to, .. } => Some(spanned(*from, *to)),
+            Gesture::Band { from, to, .. } | Gesture::Zoom { from, to, .. } => {
+                Some(spanned(*from, *to))
+            }
             Gesture::Brush { from, to } => Some(self.brushed(*from, *to)),
             _ => None,
         }
@@ -307,7 +338,10 @@ impl Canvas {
 
     fn fields(&self) -> Fields {
         let pointer = self.pointer.unwrap_or([0.0, 0.0]);
-        let band = self.band().map(|b| list(b.iter().map(|v| (*v).into()).collect())).unwrap_or(IpcValue::Nil);
+        let band = self
+            .band()
+            .map(|b| list(b.iter().map(|v| (*v).into()).collect()))
+            .unwrap_or(IpcValue::Nil);
         let from = match &self.gesture {
             Gesture::Connect { from } => from.clone(),
             _ => String::new(),
@@ -315,14 +349,20 @@ impl Canvas {
         vec![
             ("view_x".into(), self.origin[0].into()),
             ("view_y".into(), self.origin[1].into()),
-            ("zoom".into(), self.zoom[if self.axes == Axes::Y { 1 } else { 0 }].into()),
+            (
+                "zoom".into(),
+                self.zoom[if self.axes == Axes::Y { 1 } else { 0 }].into(),
+            ),
             ("zoom_x".into(), self.zoom[0].into()),
             ("zoom_y".into(), self.zoom[1].into()),
             ("viewport_width".into(), self.size[0].into()),
             ("viewport_height".into(), self.size[1].into()),
             ("tool".into(), self.tool.name().into()),
             ("selection".into(), ids(&self.selection)),
-            ("selected_count".into(), (self.selection.len() as i64).into()),
+            (
+                "selected_count".into(),
+                (self.selection.len() as i64).into(),
+            ),
             ("hovered".into(), self.hovered.as_str().into()),
             ("hovered_port".into(), self.hovered_port.as_str().into()),
             ("pointer_x".into(), pointer[0].into()),
@@ -360,7 +400,12 @@ impl Canvas {
     /// view and the selection signals when they changed.
     fn changing(&mut self, change: impl FnOnce(&mut Self, &mut Effects)) -> Effects {
         let before = self.fields();
-        let (origin, zoom, selection, hovered) = (self.origin, self.zoom, self.selection.clone(), self.hovered.clone());
+        let (origin, zoom, selection, hovered) = (
+            self.origin,
+            self.zoom,
+            self.selection.clone(),
+            self.hovered.clone(),
+        );
         let mut effects = Effects::default();
         change(self, &mut effects);
         let mut out = Effects::default();
@@ -370,7 +415,14 @@ impl Canvas {
             }
         }
         if self.origin != origin || self.zoom != zoom {
-            out.raise("view_changed", vec![self.origin[0].into(), self.origin[1].into(), self.zoom[0].into()]);
+            out.raise(
+                "view_changed",
+                vec![
+                    self.origin[0].into(),
+                    self.origin[1].into(),
+                    self.zoom[0].into(),
+                ],
+            );
         }
         if self.selection != selection {
             out.raise("selection_changed", vec![ids(&self.selection)]);
@@ -387,7 +439,10 @@ impl Canvas {
         self.hovered_handle = self.handle_at(screen).unwrap_or("");
         let p = self.world(screen);
         self.pointer = Some(p);
-        self.hovered_port = self.port_at(screen).map(|port| port.id.clone()).unwrap_or_default();
+        self.hovered_port = self
+            .port_at(screen)
+            .map(|port| port.id.clone())
+            .unwrap_or_default();
         self.hovered = self.item_at(p).unwrap_or_default();
     }
 

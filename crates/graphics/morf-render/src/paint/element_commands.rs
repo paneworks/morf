@@ -23,7 +23,7 @@ pub(super) fn text_command(
         font_source: scene.string_value(node, "font_source")?.to_owned(),
         size: scene.number(node, "font_size")?,
         font_weight: scene.number(node, "font_weight")?,
-        color: resolved_color(scene, node, &inherited)?,
+        color: resolved_color(scene, node, inherited)?,
         color_overlay,
         wrap: scene.bool_value(node, "wrap")?,
         max_lines: scene.number(node, "max_lines")?.max(0.0) as usize,

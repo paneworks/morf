@@ -69,12 +69,22 @@ impl Sheet {
     }
 
     fn range(&self) -> (usize, usize, usize, usize) {
-        (self.at.0.min(self.anchor.0), self.at.1.min(self.anchor.1), self.at.0.max(self.anchor.0), self.at.1.max(self.anchor.1))
+        (
+            self.at.0.min(self.anchor.0),
+            self.at.1.min(self.anchor.1),
+            self.at.0.max(self.anchor.0),
+            self.at.1.max(self.anchor.1),
+        )
     }
 
     fn range_args(&self) -> Vec<IpcValue> {
         let (r0, c0, r1, c1) = self.range();
-        vec![(r0 as i64).into(), (c0 as i64).into(), (r1 as i64).into(), (c1 as i64).into()]
+        vec![
+            (r0 as i64).into(),
+            (c0 as i64).into(),
+            (r1 as i64).into(),
+            (c1 as i64).into(),
+        ]
     }
 
     fn fields(&self) -> Vec<(String, IpcValue)> {
@@ -101,7 +111,10 @@ impl Sheet {
             }
         }
         if self.at != at {
-            out.raise("current_changed", vec![(self.at.0 as i64).into(), (self.at.1 as i64).into()]);
+            out.raise(
+                "current_changed",
+                vec![(self.at.0 as i64).into(), (self.at.1 as i64).into()],
+            );
         }
         if self.range() != range {
             out.raise("selection_changed", self.range_args());
@@ -112,7 +125,10 @@ impl Sheet {
     }
 
     fn clamp(&self, row: i64, column: i64) -> (usize, usize) {
-        (row.clamp(1, self.rows.max(1) as i64) as usize, column.clamp(1, self.columns.max(1) as i64) as usize)
+        (
+            row.clamp(1, self.rows.max(1) as i64) as usize,
+            column.clamp(1, self.columns.max(1) as i64) as usize,
+        )
     }
 
     fn go(&mut self, to: (usize, usize), extend: bool) {
@@ -132,7 +148,14 @@ impl Sheet {
         }
         self.editing = true;
         self.anchor = self.at;
-        effects.raise("edit_started", vec![(self.at.0 as i64).into(), (self.at.1 as i64).into(), with.into()]);
+        effects.raise(
+            "edit_started",
+            vec![
+                (self.at.0 as i64).into(),
+                (self.at.1 as i64).into(),
+                with.into(),
+            ],
+        );
         true
     }
 
@@ -157,7 +180,11 @@ impl Sheet {
         let to = match name {
             "Left" | "Right" => {
                 let d = if name == "Right" { right } else { -right };
-                Some(if ctrl { (r, if d > 0 { columns } else { 1 }) } else { (r, c + d) })
+                Some(if ctrl {
+                    (r, if d > 0 { columns } else { 1 })
+                } else {
+                    (r, c + d)
+                })
             }
             "Up" => Some(if ctrl { (1, c) } else { (r - 1, c) }),
             "Down" => Some(if ctrl { (rows, c) } else { (r + 1, c) }),
@@ -221,8 +248,14 @@ impl Sheet {
             _ => {
                 // A character typed on a cell starts editing it with that
                 // character -- as a spreadsheet does.
-                let printable = !ctrl && !modifiers.contains("alt") && typed.chars().next().is_some_and(|ch| !ch.is_control());
-                if printable { self.start_edit(typed, effects) } else { false }
+                let printable = !ctrl
+                    && !modifiers.contains("alt")
+                    && typed.chars().next().is_some_and(|ch| !ch.is_control());
+                if printable {
+                    self.start_edit(typed, effects)
+                } else {
+                    false
+                }
             }
         }
     }
@@ -231,7 +264,11 @@ impl Sheet {
 fn indices(value: &IpcValue) -> Vec<usize> {
     match value {
         IpcValue::Table(t) => match t.as_ref() {
-            IpcTable::List(items) => items.iter().filter_map(|v| number(Some(v))).map(|n| n as usize).collect(),
+            IpcTable::List(items) => items
+                .iter()
+                .filter_map(|v| number(Some(v)))
+                .map(|n| n as usize)
+                .collect(),
             IpcTable::Map(_) => Vec::new(),
         },
         _ => Vec::new(),
@@ -251,7 +288,10 @@ impl Archetype for Sheet {
 
     fn handle(&mut self, event: &str, arguments: &[IpcValue]) -> Result<Effects, String> {
         let cell = |s: &Self| -> Option<(usize, usize)> {
-            Some(s.clamp(number(arguments.first())? as i64, number(arguments.get(1))? as i64))
+            Some(s.clamp(
+                number(arguments.first())? as i64,
+                number(arguments.get(1))? as i64,
+            ))
         };
         Ok(match event {
             "key" if self.base.enabled => {
@@ -265,7 +305,9 @@ impl Archetype for Sheet {
             }
             "pressed" => {
                 let mut effects = self.base.handle(event, arguments).unwrap_or_default();
-                let Some(at) = cell(self) else { return Ok(effects) };
+                let Some(at) = cell(self) else {
+                    return Ok(effects);
+                };
                 let extend = text(arguments.get(2)).is_some_and(|m| m.contains("shift"));
                 effects.extend(self.changing(|s, e| {
                     if s.editing && at != s.at {
@@ -295,7 +337,10 @@ impl Archetype for Sheet {
                 Some(at) => self.changing(|s, e| {
                     s.go(at, false);
                     if !s.start_edit("", e) {
-                        e.raise("activated", vec![(at.0 as i64).into(), (at.1 as i64).into()]);
+                        e.raise(
+                            "activated",
+                            vec![(at.0 as i64).into(), (at.1 as i64).into()],
+                        );
                     }
                 }),
                 None => Effects::default(),
@@ -308,7 +353,10 @@ impl Archetype for Sheet {
                         return;
                     }
                     s.editing = false;
-                    e.raise("edited", vec![(s.at.0 as i64).into(), (s.at.1 as i64).into(), typed.into()]);
+                    e.raise(
+                        "edited",
+                        vec![(s.at.0 as i64).into(), (s.at.1 as i64).into(), typed.into()],
+                    );
                     if down {
                         let next = s.clamp(s.at.0 as i64 + 1, s.at.1 as i64);
                         s.go(next, false);
@@ -321,7 +369,9 @@ impl Archetype for Sheet {
                     e.raise("edit_canceled", Vec::new());
                 }
             }),
-            "clicked" | "key" | "long_pressed" | "drag_started" | "drag_finished" => Effects::default(),
+            "clicked" | "key" | "long_pressed" | "drag_started" | "drag_finished" => {
+                Effects::default()
+            }
             _ => self.base.handle(event, arguments).unwrap_or_default(),
         })
     }
@@ -335,7 +385,11 @@ impl Archetype for Sheet {
             "rows" | "columns" => {
                 let v = n()?.max(1.0) as usize;
                 self.changing(|s, _| {
-                    if field == "rows" { s.rows = v } else { s.columns = v }
+                    if field == "rows" {
+                        s.rows = v
+                    } else {
+                        s.columns = v
+                    }
                     s.at = s.clamp(s.at.0 as i64, s.at.1 as i64);
                     s.anchor = s.clamp(s.anchor.0 as i64, s.anchor.1 as i64);
                 })
@@ -343,7 +397,11 @@ impl Archetype for Sheet {
             "row" | "column" => {
                 let v = n()? as i64;
                 self.changing(|s, _| {
-                    let to = if field == "row" { s.clamp(v, s.at.1 as i64) } else { s.clamp(s.at.0 as i64, v) };
+                    let to = if field == "row" {
+                        s.clamp(v, s.at.1 as i64)
+                    } else {
+                        s.clamp(s.at.0 as i64, v)
+                    };
                     s.go(to, false);
                 })
             }
@@ -384,7 +442,8 @@ mod tests {
     }
 
     fn key(s: &mut Sheet, name: &str, modifiers: &str, typed: &str) -> Effects {
-        s.handle("key", &[name.into(), modifiers.into(), typed.into()]).unwrap()
+        s.handle("key", &[name.into(), modifiers.into(), typed.into()])
+            .unwrap()
     }
 
     #[test]
@@ -407,9 +466,20 @@ mod tests {
         let mut s = sheet();
         let e = key(&mut s, "7", "", "7");
         assert!(s.editing);
-        assert_eq!(e.signals.iter().find(|(n, _)| n == "edit_started").unwrap().1[2], "7".into());
+        assert_eq!(
+            e.signals
+                .iter()
+                .find(|(n, _)| n == "edit_started")
+                .unwrap()
+                .1[2],
+            "7".into()
+        );
         let e = s.handle("commit", &["72".into()]).unwrap();
-        assert!(e.signals.iter().any(|(n, a)| n == "edited" && a[2] == "72".into()));
+        assert!(
+            e.signals
+                .iter()
+                .any(|(n, a)| n == "edited" && a[2] == "72".into())
+        );
         assert_eq!(s.at, (2, 1));
         key(&mut s, "F2", "", "");
         assert!(key(&mut s, "Escape", "", "").handled);
@@ -420,7 +490,9 @@ mod tests {
     fn a_step_sequencer_toggles_instead_of_editing() {
         let mut s = sheet();
         s.configure("toggle", &true.into()).unwrap();
-        let e = s.handle("pressed", &[3.0.into(), 4.0.into(), "".into()]).unwrap();
+        let e = s
+            .handle("pressed", &[3.0.into(), 4.0.into(), "".into()])
+            .unwrap();
         assert!(e.signals.iter().any(|(n, _)| n == "toggled"));
         let e = key(&mut s, "space", "", " ");
         assert!(e.signals.iter().any(|(n, _)| n == "toggled"));

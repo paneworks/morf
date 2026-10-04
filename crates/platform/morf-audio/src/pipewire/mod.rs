@@ -26,11 +26,11 @@
 mod ffi;
 pub(crate) mod pod;
 
-mod thread;
 mod callbacks;
+mod control;
 mod registry;
 mod report;
-mod control;
+mod thread;
 
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{c_int, c_void};

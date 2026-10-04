@@ -54,7 +54,12 @@ impl Session {
     ///
     /// # Safety
     /// `session` is the live session, and nothing else borrows it.
-    pub(super) unsafe fn global(session: *mut Session, id: u32, kind: &str, props: HashMap<String, String>) {
+    pub(super) unsafe fn global(
+        session: *mut Session,
+        id: u32,
+        kind: &str,
+        props: HashMap<String, String>,
+    ) {
         // SAFETY: promised by the caller.
         let this = unsafe { &mut *session };
         match kind {

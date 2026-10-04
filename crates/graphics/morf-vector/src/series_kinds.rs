@@ -34,16 +34,30 @@ fn rect(d: &mut String, x: f64, y: f64, w: f64, h: f64, r: f64) {
 }
 
 fn circle(d: &mut String, cx: f64, cy: f64, r: f64) {
-    let _ = write!(d, "M{:.1} {cy:.1} a{r:.1} {r:.1} 0 1 0 {:.1} 0 a{r:.1} {r:.1} 0 1 0 {:.1} 0 Z ", cx - r, 2.0 * r, -2.0 * r);
+    let _ = write!(
+        d,
+        "M{:.1} {cy:.1} a{r:.1} {r:.1} 0 1 0 {:.1} 0 a{r:.1} {r:.1} 0 1 0 {:.1} 0 Z ",
+        cx - r,
+        2.0 * r,
+        -2.0 * r
+    );
 }
 
-fn range(values: impl Iterator<Item = f64> + Clone, low: Option<f64>, high: Option<f64>) -> (f64, f64) {
+fn range(
+    values: impl Iterator<Item = f64> + Clone,
+    low: Option<f64>,
+    high: Option<f64>,
+) -> (f64, f64) {
     let lo = low.unwrap_or_else(|| values.clone().fold(f64::INFINITY, f64::min));
     let hi = high.unwrap_or_else(|| values.fold(f64::NEG_INFINITY, f64::max));
     if !lo.is_finite() || !hi.is_finite() {
         return (0.0, 1.0);
     }
-    if hi - lo < 1e-9 { (lo, lo + 1.0) } else { (lo, hi) }
+    if hi - lo < 1e-9 {
+        (lo, lo + 1.0)
+    } else {
+        (lo, hi)
+    }
 }
 
 /// Cells, column by column (`rows` to a column, the newest column at the
@@ -52,7 +66,11 @@ fn range(values: impl Iterator<Item = f64> + Clone, low: Option<f64>, high: Opti
 pub fn cells(values: &[f32], plot: &Plot, top: f64) -> String {
     let rows = plot.rows.max(1);
     let total_cols = values.len().div_ceil(rows).max(1);
-    let cols = if plot.columns > 0 { plot.columns } else { total_cols };
+    let cols = if plot.columns > 0 {
+        plot.columns
+    } else {
+        total_cols
+    };
     let gap = plot.gap.max(0.0);
     let cw = (plot.width - gap * (cols - 1) as f64) / cols as f64;
     let ch = (plot.height - gap * (rows - 1) as f64) / rows as f64;
@@ -68,7 +86,14 @@ pub fn cells(values: &[f32], plot: &Plot, top: f64) -> String {
         }
         let col = i / rows - skip + offset;
         let row = i % rows;
-        rect(&mut d, col as f64 * (cw + gap), row as f64 * (ch + gap), cw, ch, plot.radius);
+        rect(
+            &mut d,
+            col as f64 * (cw + gap),
+            row as f64 * (ch + gap),
+            cw,
+            ch,
+            plot.radius,
+        );
     }
     if d.is_empty() { "M0 0".into() } else { d }
 }
@@ -76,14 +101,18 @@ pub fn cells(values: &[f32], plot: &Plot, top: f64) -> String {
 /// Points from `x, y` pairs: `x` across `left..right` (their range when not
 /// given), `y` up `bottom..top`; a dot of radius `point` each.
 pub fn scatter(values: &[f32], plot: &Plot, top: f64) -> String {
-    let pairs: Vec<(f64, f64)> = values.chunks_exact(2).map(|p| (p[0] as f64, p[1] as f64)).collect();
+    let pairs: Vec<(f64, f64)> = values
+        .chunks_exact(2)
+        .map(|p| (p[0] as f64, p[1] as f64))
+        .collect();
     let (left, right) = range(pairs.iter().map(|p| p.0), plot.left, plot.right);
     let span = (top - plot.bottom).max(1e-9);
     let r = plot.point.max(0.5);
     let mut d = String::new();
     for (x, y) in pairs {
         let px = r + (x - left) / (right - left) * (plot.width - 2.0 * r);
-        let py = plot.height - r - ((y - plot.bottom) / span).clamp(0.0, 1.0) * (plot.height - 2.0 * r);
+        let py =
+            plot.height - r - ((y - plot.bottom) / span).clamp(0.0, 1.0) * (plot.height - 2.0 * r);
         circle(&mut d, px, py, r);
     }
     if d.is_empty() { "M0 0".into() } else { d }
@@ -93,12 +122,19 @@ pub fn scatter(values: &[f32], plot: &Plot, top: f64) -> String {
 /// close, a wick from low to high; `direction` 1 draws only rising ones, -1
 /// only falling ones, 0 all.
 pub fn candles(values: &[f32], plot: &Plot, top: f64) -> String {
-    let quads: Vec<[f64; 4]> = values.chunks_exact(4).map(|q| [q[0] as f64, q[1] as f64, q[2] as f64, q[3] as f64]).collect();
+    let quads: Vec<[f64; 4]> = values
+        .chunks_exact(4)
+        .map(|q| [q[0] as f64, q[1] as f64, q[2] as f64, q[3] as f64])
+        .collect();
     let n = quads.len();
     if n == 0 {
         return "M0 0".into();
     }
-    let (low, high) = range(quads.iter().flat_map(|q| [q[1], q[2]]), Some(plot.bottom).filter(|_| plot.top.is_some()), plot.top.map(|_| top));
+    let (low, high) = range(
+        quads.iter().flat_map(|q| [q[1], q[2]]),
+        Some(plot.bottom).filter(|_| plot.top.is_some()),
+        plot.top.map(|_| top),
+    );
     let y = |v: f64| plot.height - (v - low) / (high - low) * plot.height;
     let gap = plot.gap.max(0.0);
     let bw = ((plot.width - gap * (n - 1) as f64) / n as f64).max(1.0);
@@ -112,7 +148,14 @@ pub fn candles(values: &[f32], plot: &Plot, top: f64) -> String {
         let (a, b) = (y(open.max(close)), y(open.min(close)));
         rect(&mut d, x, a, bw, (b - a).max(1.0), plot.radius);
         let wick = 1.0f64.max(bw / 8.0);
-        rect(&mut d, x + (bw - wick) / 2.0, y(hi), wick, (y(lo) - y(hi)).max(0.0), 0.0);
+        rect(
+            &mut d,
+            x + (bw - wick) / 2.0,
+            y(hi),
+            wick,
+            (y(lo) - y(hi)).max(0.0),
+            0.0,
+        );
     }
     if d.is_empty() { "M0 0".into() } else { d }
 }
@@ -120,7 +163,18 @@ pub fn candles(values: &[f32], plot: &Plot, top: f64) -> String {
 /// Box plots from `min, q1, median, q3, max` fives: the box from q1 to q3
 /// with a gap at the median, whiskers to min and max, and their caps.
 pub fn boxes(values: &[f32], plot: &Plot, top: f64) -> String {
-    let fives: Vec<[f64; 5]> = values.chunks_exact(5).map(|f| [f[0] as f64, f[1] as f64, f[2] as f64, f[3] as f64, f[4] as f64]).collect();
+    let fives: Vec<[f64; 5]> = values
+        .chunks_exact(5)
+        .map(|f| {
+            [
+                f[0] as f64,
+                f[1] as f64,
+                f[2] as f64,
+                f[3] as f64,
+                f[4] as f64,
+            ]
+        })
+        .collect();
     let n = fives.len();
     if n == 0 {
         return "M0 0".into();
@@ -134,12 +188,54 @@ pub fn boxes(values: &[f32], plot: &Plot, top: f64) -> String {
     for (k, [min, q1, median, q3, max]) in fives.into_iter().enumerate() {
         let x = k as f64 * (bw + gap);
         let mid = x + bw / 2.0;
-        rect(&mut d, x, y(q3), bw, (y(median) - y(q3) - line / 2.0).max(0.0), plot.radius);
-        rect(&mut d, x, y(median) + line / 2.0, bw, (y(q1) - y(median) - line / 2.0).max(0.0), plot.radius);
-        rect(&mut d, mid - line / 2.0, y(max), line, (y(q3) - y(max)).max(0.0), 0.0);
-        rect(&mut d, mid - line / 2.0, y(q1), line, (y(min) - y(q1)).max(0.0), 0.0);
-        rect(&mut d, x + bw / 4.0, y(max) - line / 2.0, bw / 2.0, line, 0.0);
-        rect(&mut d, x + bw / 4.0, y(min) - line / 2.0, bw / 2.0, line, 0.0);
+        rect(
+            &mut d,
+            x,
+            y(q3),
+            bw,
+            (y(median) - y(q3) - line / 2.0).max(0.0),
+            plot.radius,
+        );
+        rect(
+            &mut d,
+            x,
+            y(median) + line / 2.0,
+            bw,
+            (y(q1) - y(median) - line / 2.0).max(0.0),
+            plot.radius,
+        );
+        rect(
+            &mut d,
+            mid - line / 2.0,
+            y(max),
+            line,
+            (y(q3) - y(max)).max(0.0),
+            0.0,
+        );
+        rect(
+            &mut d,
+            mid - line / 2.0,
+            y(q1),
+            line,
+            (y(min) - y(q1)).max(0.0),
+            0.0,
+        );
+        rect(
+            &mut d,
+            x + bw / 4.0,
+            y(max) - line / 2.0,
+            bw / 2.0,
+            line,
+            0.0,
+        );
+        rect(
+            &mut d,
+            x + bw / 4.0,
+            y(min) - line / 2.0,
+            bw / 2.0,
+            line,
+            0.0,
+        );
     }
     d
 }
@@ -176,7 +272,12 @@ pub fn stack(values: &[f32], plot: &Plot, bars: bool) -> String {
     let k = plot.layer.min(layers - 1);
     let top = stack_top(values, plot);
     let span = (top - plot.bottom).max(1e-9);
-    let y = |v: f64| plot.height - plot.pad_bottom - ((v - plot.bottom) / span).clamp(0.0, 1.0) * (plot.height - plot.pad_bottom - plot.pad_top);
+    let y = |v: f64| {
+        plot.height
+            - plot.pad_bottom
+            - ((v - plot.bottom) / span).clamp(0.0, 1.0)
+                * (plot.height - plot.pad_bottom - plot.pad_top)
+    };
     let levels = stacked(values, layers, k);
     let n = levels.len();
     if n == 0 {
@@ -188,20 +289,52 @@ pub fn stack(values: &[f32], plot: &Plot, bars: bool) -> String {
         let bw = ((plot.width - gap * (n - 1) as f64) / n as f64).max(1.0);
         for (i, (lo, hi)) in levels.iter().enumerate() {
             let (a, b) = (y(*hi), y(*lo));
-            rect(&mut d, i as f64 * (bw + gap), a, bw, b - a, if k == layers - 1 { plot.radius } else { 0.0 });
+            rect(
+                &mut d,
+                i as f64 * (bw + gap),
+                a,
+                bw,
+                b - a,
+                if k == layers - 1 { plot.radius } else { 0.0 },
+            );
         }
         return if d.is_empty() { "M0 0".into() } else { d };
     }
-    let count = if plot.samples == 0 { n.max(2) } else { plot.samples.max(2) };
+    let count = if plot.samples == 0 {
+        n.max(2)
+    } else {
+        plot.samples.max(2)
+    };
     let shown = &levels[n.saturating_sub(count)..];
     let dx = plot.width / (count - 1) as f64;
     let x0 = plot.width - shown.len().saturating_sub(1) as f64 * dx;
-    let tops: Vec<(f64, f64)> = shown.iter().enumerate().map(|(i, (_, hi))| (x0 + i as f64 * dx, y(*hi))).collect();
-    let floors: Vec<(f64, f64)> = shown.iter().enumerate().rev().map(|(i, (lo, _))| (x0 + i as f64 * dx, y(*lo))).collect();
+    let tops: Vec<(f64, f64)> = shown
+        .iter()
+        .enumerate()
+        .map(|(i, (_, hi))| (x0 + i as f64 * dx, y(*hi)))
+        .collect();
+    let floors: Vec<(f64, f64)> = shown
+        .iter()
+        .enumerate()
+        .rev()
+        .map(|(i, (lo, _))| (x0 + i as f64 * dx, y(*lo)))
+        .collect();
     if plot.smooth && tops.len() > 1 {
         // Both edges as curves, the floor walked back the way it came.
-        curve(&mut d, &tops, true, plot.pad_top, plot.height - plot.pad_bottom);
-        curve(&mut d, &floors, false, plot.pad_top, plot.height - plot.pad_bottom);
+        curve(
+            &mut d,
+            &tops,
+            true,
+            plot.pad_top,
+            plot.height - plot.pad_bottom,
+        );
+        curve(
+            &mut d,
+            &floors,
+            false,
+            plot.pad_top,
+            plot.height - plot.pad_bottom,
+        );
     } else {
         for (i, (x, y)) in tops.iter().enumerate() {
             let _ = write!(d, "{}{x:.2} {y:.2} ", if i == 0 { 'M' } else { 'L' });
@@ -220,7 +353,13 @@ fn curve(d: &mut String, points: &[(f64, f64)], start: bool, lo: f64, hi: f64) {
     let n = points.len();
     let at = |i: isize| points[i.clamp(0, n as isize - 1) as usize];
     let cy = |y: f64| y.clamp(lo.min(hi), hi.max(lo));
-    let _ = write!(d, "{}{:.2} {:.2} ", if start { 'M' } else { 'L' }, points[0].0, points[0].1);
+    let _ = write!(
+        d,
+        "{}{:.2} {:.2} ",
+        if start { 'M' } else { 'L' },
+        points[0].0,
+        points[0].1
+    );
     for i in 0..n as isize - 1 {
         let (p0, p1, p2, p3) = (at(i - 1), at(i), at(i + 1), at(i + 2));
         let _ = write!(
@@ -287,7 +426,11 @@ pub fn radial(values: &[f32], plot: &Plot, top: f64) -> String {
 /// The runs of samples in state `state` (a value rounded), as full-height
 /// bars, right-aligned like a line: one state's colour of a timeline.
 pub fn states(values: &[f32], plot: &Plot) -> String {
-    let count = if plot.samples == 0 { values.len().max(1) } else { plot.samples.max(1) };
+    let count = if plot.samples == 0 {
+        values.len().max(1)
+    } else {
+        plot.samples.max(1)
+    };
     let shown = &values[values.len().saturating_sub(count)..];
     let dx = plot.width / count as f64;
     let x0 = plot.width - shown.len() as f64 * dx;
@@ -300,7 +443,14 @@ pub fn states(values: &[f32], plot: &Plot) -> String {
             (true, None) => run = Some(i),
             (false, Some(start)) => {
                 let x = x0 + start as f64 * dx;
-                rect(&mut d, x, 0.0, (i - start) as f64 * dx - plot.gap.max(0.0).min(dx / 2.0), plot.height, plot.radius);
+                rect(
+                    &mut d,
+                    x,
+                    0.0,
+                    (i - start) as f64 * dx - plot.gap.max(0.0).min(dx / 2.0),
+                    plot.height,
+                    plot.radius,
+                );
                 run = None;
             }
             _ => {}
@@ -314,15 +464,34 @@ pub fn states(values: &[f32], plot: &Plot) -> String {
 pub fn state_cells(values: &[f32], plot: &Plot) -> String {
     let rows = plot.rows.max(1);
     let want = plot.state.round();
-    let mask: Vec<f32> = values.iter().map(|v| if (*v as f64).round() == want { 1.0 } else { 0.0 }).collect();
-    let cells_plot = Plot { bottom: 0.0, lo: 0.5, hi: 1.0, rows, ..*plot };
+    let mask: Vec<f32> = values
+        .iter()
+        .map(|v| {
+            if (*v as f64).round() == want {
+                1.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let cells_plot = Plot {
+        bottom: 0.0,
+        lo: 0.5,
+        hi: 1.0,
+        rows,
+        ..*plot
+    };
     cells(&mask, &cells_plot, 1.0)
 }
 
 /// A waveform: each sample's amplitude drawn up and down from the middle,
 /// right-aligned like a line, as one filled shape.
 pub fn wave(values: &[f32], plot: &Plot, top: f64) -> String {
-    let count = if plot.samples == 0 { values.len().max(2) } else { plot.samples.max(2) };
+    let count = if plot.samples == 0 {
+        values.len().max(2)
+    } else {
+        plot.samples.max(2)
+    };
     let shown = &values[values.len().saturating_sub(count)..];
     if shown.is_empty() {
         return "M0 0".into();
@@ -331,10 +500,18 @@ pub fn wave(values: &[f32], plot: &Plot, top: f64) -> String {
     let x0 = plot.width - shown.len().saturating_sub(1) as f64 * dx;
     let mid = plot.height / 2.0;
     let span = (top - plot.bottom).max(1e-9);
-    let a = |v: f32| (((v as f64).abs() - plot.bottom) / span).clamp(0.0, 1.0) * (mid - plot.pad_top).max(0.0);
+    let a = |v: f32| {
+        (((v as f64).abs() - plot.bottom) / span).clamp(0.0, 1.0) * (mid - plot.pad_top).max(0.0)
+    };
     let mut d = String::new();
     for (i, v) in shown.iter().enumerate() {
-        let _ = write!(d, "{}{:.2} {:.2} ", if i == 0 { 'M' } else { 'L' }, x0 + i as f64 * dx, mid - a(*v).max(0.5));
+        let _ = write!(
+            d,
+            "{}{:.2} {:.2} ",
+            if i == 0 { 'M' } else { 'L' },
+            x0 + i as f64 * dx,
+            mid - a(*v).max(0.5)
+        );
     }
     for (i, v) in shown.iter().enumerate().rev() {
         let _ = write!(d, "L{:.2} {:.2} ", x0 + i as f64 * dx, mid + a(*v).max(0.5));
@@ -372,7 +549,10 @@ pub fn polar_bars(values: &[f32], plot: &Plot, top: f64) -> String {
 /// `x` across `left..right` (their range when not given), `y` up
 /// `bottom..top`.
 pub fn xy_line(values: &[f32], plot: &Plot, top: f64) -> String {
-    let pairs: Vec<(f64, f64)> = values.chunks_exact(2).map(|p| (p[0] as f64, p[1] as f64)).collect();
+    let pairs: Vec<(f64, f64)> = values
+        .chunks_exact(2)
+        .map(|p| (p[0] as f64, p[1] as f64))
+        .collect();
     if pairs.len() < 2 {
         return "M0 0".into();
     }

@@ -49,10 +49,7 @@ pub(crate) struct Slot {
 }
 
 impl Slot {
-    pub(crate) fn new(
-        texture: wgpu::Texture,
-        link: Option<super::present_link::SlotLink>,
-    ) -> Self {
+    pub(crate) fn new(texture: wgpu::Texture, link: Option<super::present_link::SlotLink>) -> Self {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         Self {
             texture,

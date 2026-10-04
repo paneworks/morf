@@ -195,8 +195,20 @@ impl Archetype for TextField {
             "key" if self.capture && self.base.enabled => {
                 let name = text(arguments.first()).unwrap_or("").to_owned();
                 let modifiers = text(arguments.get(1)).unwrap_or("").to_owned();
-                const ALONE: &[&str] = &["Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R",
-                    "Super_L", "Super_R", "Meta_L", "Meta_R", "ISO_Level3_Shift", "Caps_Lock"];
+                const ALONE: &[&str] = &[
+                    "Shift_L",
+                    "Shift_R",
+                    "Control_L",
+                    "Control_R",
+                    "Alt_L",
+                    "Alt_R",
+                    "Super_L",
+                    "Super_R",
+                    "Meta_L",
+                    "Meta_R",
+                    "ISO_Level3_Shift",
+                    "Caps_Lock",
+                ];
                 effects.handled = true;
                 if name.is_empty() || ALONE.contains(&name.as_str()) {
                     return Ok(effects);
@@ -215,8 +227,16 @@ impl Archetype for TextField {
                         return Ok(effects);
                     }
                     _ => {
-                        let key = if name.chars().count() == 1 { name.to_lowercase() } else { name.clone() };
-                        if modifiers.is_empty() { key } else { format!("{modifiers}+{key}") }
+                        let key = if name.chars().count() == 1 {
+                            name.to_lowercase()
+                        } else {
+                            name.clone()
+                        };
+                        if modifiers.is_empty() {
+                            key
+                        } else {
+                            format!("{modifiers}+{key}")
+                        }
                     }
                 };
                 self.set_text(chord.clone(), &mut effects);

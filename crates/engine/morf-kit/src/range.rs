@@ -31,9 +31,9 @@ mod archetype;
 
 use morf_value::IpcValue;
 
+use crate::Effects;
 use crate::control::ControlState;
 use crate::value::number;
-use crate::Effects;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DragMode {
@@ -183,7 +183,11 @@ impl Range {
 
     /// A position as a knob turns: inverted runs it backwards.
     fn visual_angle(&self, position: f64) -> f64 {
-        if self.inverted { 1.0 - position } else { position }
+        if self.inverted {
+            1.0 - position
+        } else {
+            position
+        }
     }
 
     /// The position a point at an angle round the centre stands for; past
@@ -218,7 +222,10 @@ impl Range {
             ("position".into(), shown(0).into()),
             ("visual_position".into(), self.visual(shown(0)).into()),
             ("dragging".into(), self.dragging.is_some().into()),
-            ("angle".into(), (self.angle_from + self.visual_angle(shown(0)) * self.angle_sweep).into()),
+            (
+                "angle".into(),
+                (self.angle_from + self.visual_angle(shown(0)) * self.angle_sweep).into(),
+            ),
         ];
         if self.pair {
             fields.extend([

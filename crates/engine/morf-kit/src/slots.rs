@@ -62,11 +62,26 @@ pub fn slots_of(archetype: &str) -> Option<&'static [&'static str]> {
         // `divider` is a builder too: the handle between a split's parts.
         // The box's ground, its frame, the handles (a builder: one per
         // handle name), the turning handle, a guide while it moves.
-        "Transform" => &["background", "frame", "handle", "rotate_handle", "guide", "content"],
+        "Transform" => &[
+            "background",
+            "frame",
+            "handle",
+            "rotate_handle",
+            "guide",
+            "content",
+        ],
         // `cell` and `header` are builders: a cell's look, a row's or a
         // column's header; `cursor` the current cell's ring, `range` the
         // selected range, `editor` the field an edit happens in.
-        "Sheet" => &["background", "cell", "header", "range", "cursor", "editor", "content"],
+        "Sheet" => &[
+            "background",
+            "cell",
+            "header",
+            "range",
+            "cursor",
+            "editor",
+            "content",
+        ],
         // The group's ground and the ring round the member with focus.
         "Roving" => &["background", "indicator", "separator", "content"],
         // A form's ground, its summary of what is wrong, and a field's

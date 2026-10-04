@@ -73,7 +73,11 @@ impl Form {
     }
 
     fn first_invalid(&self) -> String {
-        self.fields.iter().find(|f| !f.valid).map(|f| f.name.clone()).unwrap_or_default()
+        self.fields
+            .iter()
+            .find(|f| !f.valid)
+            .map(|f| f.name.clone())
+            .unwrap_or_default()
     }
 
     fn state_fields(&self) -> Vec<(String, IpcValue)> {
@@ -82,7 +86,10 @@ impl Form {
             ("dirty".into(), self.dirty().into()),
             ("pending".into(), self.pending().into()),
             ("submitting".into(), self.submitting.into()),
-            ("error_count".into(), (self.fields.iter().filter(|f| !f.valid).count() as i64).into()),
+            (
+                "error_count".into(),
+                (self.fields.iter().filter(|f| !f.valid).count() as i64).into(),
+            ),
             ("tried".into(), self.tried.into()),
             ("first_invalid".into(), self.first_invalid().into()),
             ("submit_on_enter".into(), self.submit_on_enter.into()),
@@ -93,7 +100,11 @@ impl Form {
         if let Some(i) = self.fields.iter().position(|f| f.name == name) {
             return &mut self.fields[i];
         }
-        self.fields.push(Field { name: name.to_owned(), valid: true, ..Field::default() });
+        self.fields.push(Field {
+            name: name.to_owned(),
+            valid: true,
+            ..Field::default()
+        });
         self.fields.last_mut().expect("just pushed")
     }
 
@@ -109,7 +120,10 @@ impl Form {
                     _ => tried || f.touched,
                 };
             if due && !f.shown {
-                effects.raise("show_error", vec![f.name.as_str().into(), f.message.as_str().into()]);
+                effects.raise(
+                    "show_error",
+                    vec![f.name.as_str().into(), f.message.as_str().into()],
+                );
                 f.shown = true;
             } else if !due && f.shown {
                 f.shown = false;
@@ -252,15 +266,37 @@ mod tests {
     #[test]
     fn a_form_sends_only_when_valid_and_shows_errors_by_policy() {
         let mut f = Form::new();
-        f.handle("field", &["email".into(), false.into(), true.into(), "Not an address".into()]).unwrap();
-        f.handle("field", &["name".into(), true.into(), true.into(), "".into()]).unwrap();
+        f.handle(
+            "field",
+            &[
+                "email".into(),
+                false.into(),
+                true.into(),
+                "Not an address".into(),
+            ],
+        )
+        .unwrap();
+        f.handle(
+            "field",
+            &["name".into(), true.into(), true.into(), "".into()],
+        )
+        .unwrap();
         assert!(!f.valid() && f.dirty());
         // Not yet touched: the message waits.
         let e = f.handle("touched", &["email".into()]).unwrap();
         assert!(has(&e, "show_error"));
         let e = f.handle("submit", &[]).unwrap();
-        assert!(e.signals.iter().any(|(n, a)| n == "invalid" && a[0] == "email".into()));
-        let e = f.handle("field", &["email".into(), true.into(), true.into(), "".into()]).unwrap();
+        assert!(
+            e.signals
+                .iter()
+                .any(|(n, a)| n == "invalid" && a[0] == "email".into())
+        );
+        let e = f
+            .handle(
+                "field",
+                &["email".into(), true.into(), true.into(), "".into()],
+            )
+            .unwrap();
         assert!(has(&e, "hide_error") && has(&e, "validity_changed"));
         let e = f.handle("key", &["Return".into(), "".into()]).unwrap();
         assert!(e.handled && has(&e, "submitted"));
@@ -268,6 +304,9 @@ mod tests {
         assert!(!has(&f.handle("submit", &[]).unwrap(), "submitted"));
         f.handle("done", &[true.into()]).unwrap();
         f.handle("pending", &["name".into(), true.into()]).unwrap();
-        assert!(!has(&f.handle("submit", &[]).unwrap(), "submitted"), "a check under way holds it");
+        assert!(
+            !has(&f.handle("submit", &[]).unwrap(), "submitted"),
+            "a check under way holds it"
+        );
     }
 }

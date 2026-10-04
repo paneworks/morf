@@ -12,8 +12,8 @@
 //! untouched, and contributes no crossings, which leaves the winding untouched.
 
 use morf_layout::Geometry;
-use morf_value::region::{BlendProfile, Operation, Shape};
 use morf_scene::Color;
+use morf_value::region::{BlendProfile, Operation, Shape};
 
 use crate::commands::SdfLayer;
 use crate::field::glyph_layer::{OUTLINE_SPAN, polygon_params};

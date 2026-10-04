@@ -35,17 +35,17 @@
 //! Signals: `layout_changed` (tree, floating), `activated` (panel),
 //! `closed` (panel), `maximized` (panel or ""), `focus_changed` (stack).
 
-mod tree;
 mod archetype;
+mod tree;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use morf_value::{IpcTable, IpcValue};
 
+use crate::Effects;
 use crate::control::ControlState;
 use crate::value::{number, text};
-use crate::Effects;
 
 use tree::{Node, Zone, insert_beside};
 
@@ -74,7 +74,10 @@ fn entries(value: Option<&IpcValue>) -> Vec<IpcValue> {
 }
 
 fn words(value: Option<&IpcValue>) -> Vec<String> {
-    entries(value).iter().filter_map(|v| text(Some(v)).map(str::to_owned)).collect()
+    entries(value)
+        .iter()
+        .filter_map(|v| text(Some(v)).map(str::to_owned))
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -122,12 +125,18 @@ impl Dock {
     fn parse(&mut self, value: &IpcValue) -> Option<Node> {
         let id = text(field(value, "id")).map(str::to_owned);
         if let Some(children) = field(value, "children") {
-            let children: Vec<Node> = entries(Some(children)).iter().filter_map(|c| self.parse(c)).collect();
+            let children: Vec<Node> = entries(Some(children))
+                .iter()
+                .filter_map(|c| self.parse(c))
+                .collect();
             if children.is_empty() {
                 return None;
             }
             let n = children.len();
-            let mut ratios: Vec<f64> = entries(field(value, "ratios")).iter().filter_map(|v| number(Some(v))).collect();
+            let mut ratios: Vec<f64> = entries(field(value, "ratios"))
+                .iter()
+                .filter_map(|v| number(Some(v)))
+                .collect();
             if ratios.len() != n || ratios.iter().sum::<f64>() <= 0.0 {
                 ratios = vec![1.0 / n as f64; n];
             }
@@ -135,12 +144,23 @@ impl Dock {
             let ratios = ratios.iter().map(|r| r / sum).collect();
             let vertical = text(field(value, "orientation")) == Some("vertical");
             let id = id.unwrap_or_else(|| self.fresh("split"));
-            return Some(Node::Split { id, vertical, ratios, children });
+            return Some(Node::Split {
+                id,
+                vertical,
+                ratios,
+                children,
+            });
         }
         let panels = words(field(value, "panels"));
-        let current = text(field(value, "current")).and_then(|c| panels.iter().position(|p| p == c)).unwrap_or(0);
+        let current = text(field(value, "current"))
+            .and_then(|c| panels.iter().position(|p| p == c))
+            .unwrap_or(0);
         let id = id.unwrap_or_else(|| self.fresh("stack"));
-        Some(Node::Stack { id, panels, current })
+        Some(Node::Stack {
+            id,
+            panels,
+            current,
+        })
     }
 
     fn stacks(&self) -> Vec<&Node> {
@@ -155,7 +175,11 @@ impl Dock {
         self.stacks()
             .into_iter()
             .find_map(|s| match s {
-                Node::Stack { id, panels, current } if id == stack => panels.get(*current).cloned(),
+                Node::Stack {
+                    id,
+                    panels,
+                    current,
+                } if id == stack => panels.get(*current).cloned(),
                 _ => None,
             })
             .unwrap_or_default()
@@ -180,7 +204,10 @@ impl Dock {
         };
         vec![
             ("focused".into(), self.focused.as_str().into()),
-            ("focused_panel".into(), self.current_of(&self.focused).into()),
+            (
+                "focused_panel".into(),
+                self.current_of(&self.focused).into(),
+            ),
             ("maximized".into(), self.maximized.as_str().into()),
             ("dragging".into(), self.dragging.as_str().into()),
             ("drop_target".into(), target.into()),
@@ -190,7 +217,11 @@ impl Dock {
     }
 
     fn layout_signal(&self) -> Vec<IpcValue> {
-        let tree = self.root.as_ref().map(Node::to_ipc).unwrap_or(IpcValue::Nil);
+        let tree = self
+            .root
+            .as_ref()
+            .map(Node::to_ipc)
+            .unwrap_or(IpcValue::Nil);
         let floating = list(
             self.floating
                 .iter()
@@ -211,15 +242,29 @@ impl Dock {
     /// layout when the tree or the floating panels changed, the focus.
     fn changing(&mut self, change: impl FnOnce(&mut Self, &mut Effects)) -> Effects {
         let before = self.fields();
-        let (tree, floating, focused, maximized) =
-            (self.root.clone(), self.floating.clone(), self.focused.clone(), self.maximized.clone());
+        let (tree, floating, focused, maximized) = (
+            self.root.clone(),
+            self.floating.clone(),
+            self.focused.clone(),
+            self.maximized.clone(),
+        );
         let mut inner = Effects::default();
         change(self, &mut inner);
         // A focused stack that has gone hands the focus to the first.
         if !self.stacks().iter().any(|s| s.id() == self.focused) {
-            self.focused = self.stacks().first().map(|s| s.id().to_owned()).unwrap_or_default();
+            self.focused = self
+                .stacks()
+                .first()
+                .map(|s| s.id().to_owned())
+                .unwrap_or_default();
         }
-        if !self.maximized.is_empty() && self.root.as_ref().and_then(|r| r.stack_of(&self.maximized)).is_none() {
+        if !self.maximized.is_empty()
+            && self
+                .root
+                .as_ref()
+                .and_then(|r| r.stack_of(&self.maximized))
+                .is_none()
+        {
             self.maximized.clear();
         }
         let mut out = Effects::default();
@@ -247,20 +292,29 @@ impl Dock {
             self.floating.remove(i);
             return true;
         }
-        let Some(mut root) = self.root.take() else { return false };
+        let Some(mut root) = self.root.take() else {
+            return false;
+        };
         let removed = root.remove_panel(panel);
         self.root = root.tidy();
         removed
     }
 
     fn activate(&mut self, panel: &str, effects: &mut Effects) {
-        let Some(stack) = self.root.as_ref().and_then(|r| r.stack_of(panel)).map(str::to_owned) else {
+        let Some(stack) = self
+            .root
+            .as_ref()
+            .and_then(|r| r.stack_of(panel))
+            .map(str::to_owned)
+        else {
             return;
         };
-        if let Some(Node::Stack { panels, current, .. }) = self.root.as_mut().and_then(|r| r.find_mut(&stack)) {
-            if let Some(i) = panels.iter().position(|p| p == panel) {
-                *current = i;
-            }
+        if let Some(Node::Stack {
+            panels, current, ..
+        }) = self.root.as_mut().and_then(|r| r.find_mut(&stack))
+            && let Some(i) = panels.iter().position(|p| p == panel)
+        {
+            *current = i;
         }
         self.focused = stack;
         effects.raise("activated", vec![panel.into()]);
@@ -268,7 +322,11 @@ impl Dock {
 
     fn dock(&mut self, panel: &str, target: &str, zone: Zone, effects: &mut Effects) {
         // Onto its own stack's middle, a panel stays where it is.
-        let home = self.root.as_ref().and_then(|r| r.stack_of(panel)).map(str::to_owned);
+        let home = self
+            .root
+            .as_ref()
+            .and_then(|r| r.stack_of(panel))
+            .map(str::to_owned);
         if home.as_deref() == Some(target) {
             let alone = self.stacks().iter().any(|s| matches!(s, Node::Stack { id, panels, .. } if id == target && panels.len() == 1));
             if zone == Zone::Center || alone {
@@ -277,20 +335,35 @@ impl Dock {
         }
         self.take(panel);
         let stack_id = self.fresh("stack");
-        let new = Node::Stack { id: stack_id.clone(), panels: vec![panel.to_owned()], current: 0 };
+        let new = Node::Stack {
+            id: stack_id.clone(),
+            panels: vec![panel.to_owned()],
+            current: 0,
+        };
         match self.root.take() {
             None => self.root = Some(new),
             Some(mut root) => {
                 let target_exists = root.find_mut(target).is_some();
                 if zone == Zone::Center && target_exists {
-                    if let Some(Node::Stack { panels, current, .. }) = root.find_mut(target) {
+                    if let Some(Node::Stack {
+                        panels, current, ..
+                    }) = root.find_mut(target)
+                    {
                         panels.push(panel.to_owned());
                         *current = panels.len() - 1;
                     }
                     self.root = Some(root);
                 } else {
-                    let target = if target_exists { target.to_owned() } else { root.id().to_owned() };
-                    let zone = if zone == Zone::Center { Zone::Right } else { zone };
+                    let target = if target_exists {
+                        target.to_owned()
+                    } else {
+                        root.id().to_owned()
+                    };
+                    let zone = if zone == Zone::Center {
+                        Zone::Right
+                    } else {
+                        zone
+                    };
                     let mut counter = self.next_id;
                     let mut fresh = || {
                         counter += 1;
@@ -326,14 +399,21 @@ impl Dock {
 
     fn walk_tabs(&mut self, back: bool) -> bool {
         let focused = self.focused.clone();
-        let Some(Node::Stack { panels, current, .. }) = self.root.as_mut().and_then(|r| r.find_mut(&focused)) else {
+        let Some(Node::Stack {
+            panels, current, ..
+        }) = self.root.as_mut().and_then(|r| r.find_mut(&focused))
+        else {
             return false;
         };
         if panels.len() < 2 {
             return false;
         }
         let n = panels.len();
-        *current = if back { (*current + n - 1) % n } else { (*current + 1) % n };
+        *current = if back {
+            (*current + n - 1) % n
+        } else {
+            (*current + 1) % n
+        };
         true
     }
 
@@ -349,13 +429,24 @@ impl Dock {
     }
 
     fn zone_at(&self, x: f64, y: f64, w: f64, h: f64) -> Zone {
-        let (fx, fy) = ((x / w.max(1.0)).clamp(0.0, 1.0), (y / h.max(1.0)).clamp(0.0, 1.0));
+        let (fx, fy) = (
+            (x / w.max(1.0)).clamp(0.0, 1.0),
+            (y / h.max(1.0)).clamp(0.0, 1.0),
+        );
         let e = self.edge;
         if fx > e && fx < 1.0 - e && fy > e && fy < 1.0 - e {
             return Zone::Center;
         }
-        let near = [(fx, Zone::Left), (1.0 - fx, Zone::Right), (fy, Zone::Top), (1.0 - fy, Zone::Bottom)];
-        near.iter().min_by(|a, b| a.0.total_cmp(&b.0)).map(|n| n.1).unwrap_or(Zone::Center)
+        let near = [
+            (fx, Zone::Left),
+            (1.0 - fx, Zone::Right),
+            (fy, Zone::Top),
+            (1.0 - fy, Zone::Bottom),
+        ];
+        near.iter()
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|n| n.1)
+            .unwrap_or(Zone::Center)
     }
 
     fn mirror(&self, zone: Zone) -> Zone {

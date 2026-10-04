@@ -53,7 +53,10 @@ impl Roving {
     }
 
     fn fields(&self) -> Vec<(String, IpcValue)> {
-        vec![("current".into(), (self.current as i64).into()), ("open".into(), (self.open as i64).into())]
+        vec![
+            ("current".into(), (self.current as i64).into()),
+            ("open".into(), (self.open as i64).into()),
+        ]
     }
 
     /// The next member `step` away that is not disabled, if any.
@@ -118,7 +121,11 @@ impl Archetype for Roving {
             "key" if self.base.enabled => {
                 let name = text(arguments.first()).unwrap_or("");
                 let right = if self.base.mirrored { -1 } else { 1 };
-                let cols = if self.grid { self.columns.max(1) as i64 } else { 1 };
+                let cols = if self.grid {
+                    self.columns.max(1) as i64
+                } else {
+                    1
+                };
                 let target = match name {
                     "Left" if !self.vertical || self.grid => self.step(self.current, -right),
                     "Right" if !self.vertical || self.grid => self.step(self.current, right),
@@ -186,7 +193,8 @@ impl Archetype for Roving {
                 effects.set("current", self.current as i64);
             }
             "current" => {
-                self.current = (expect_number(Some(value), field)? as usize).clamp(1, self.count.max(1));
+                self.current =
+                    (expect_number(Some(value), field)? as usize).clamp(1, self.count.max(1));
                 effects.set("current", self.current as i64);
             }
             "orientation" => {
@@ -200,7 +208,11 @@ impl Archetype for Roving {
             "disabled" => {
                 self.disabled = match value {
                     IpcValue::Table(t) => match t.as_ref() {
-                        IpcTable::List(items) => items.iter().filter_map(|v| number(Some(v))).map(|n| n as usize).collect(),
+                        IpcTable::List(items) => items
+                            .iter()
+                            .filter_map(|v| number(Some(v)))
+                            .map(|n| n as usize)
+                            .collect(),
                         IpcTable::Map(_) => Vec::new(),
                     },
                     _ => Vec::new(),
@@ -220,7 +232,11 @@ mod tests {
     fn arrows_skip_disabled_members_and_a_menubar_opens_and_follows() {
         let mut r = Roving::new();
         r.configure("count", &4.0.into()).unwrap();
-        r.configure("disabled", &IpcValue::Table(std::sync::Arc::new(IpcTable::List(vec![2.0.into()])))).unwrap();
+        r.configure(
+            "disabled",
+            &IpcValue::Table(std::sync::Arc::new(IpcTable::List(vec![2.0.into()]))),
+        )
+        .unwrap();
         let e = r.handle("key", &["Right".into(), "".into()]).unwrap();
         assert!(e.handled);
         assert_eq!(r.current, 3);
@@ -230,9 +246,17 @@ mod tests {
         assert_eq!(r.current, 1);
         r.configure("menubar", &true.into()).unwrap();
         let e = r.handle("key", &["Down".into(), "".into()]).unwrap();
-        assert!(e.signals.iter().any(|(n, a)| n == "open" && a[0] == 1i64.into()));
+        assert!(
+            e.signals
+                .iter()
+                .any(|(n, a)| n == "open" && a[0] == 1i64.into())
+        );
         let e = r.handle("key", &["Right".into(), "".into()]).unwrap();
-        assert!(e.signals.iter().any(|(n, a)| n == "open" && a[0] == 3i64.into()));
+        assert!(
+            e.signals
+                .iter()
+                .any(|(n, a)| n == "open" && a[0] == 3i64.into())
+        );
         let e = r.handle("key", &["Escape".into(), "".into()]).unwrap();
         assert!(e.signals.iter().any(|(n, _)| n == "close"));
         // Up and Down mean nothing to a horizontal toolbar.

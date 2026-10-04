@@ -17,11 +17,21 @@ pub(super) fn list(values: Vec<IpcValue>) -> IpcValue {
 }
 
 pub(super) fn ids(values: &[String]) -> IpcValue {
-    list(values.iter().map(|id| IpcValue::from(id.as_str())).collect())
+    list(
+        values
+            .iter()
+            .map(|id| IpcValue::from(id.as_str()))
+            .collect(),
+    )
 }
 
 pub(super) fn flat(points: &[[f64; 2]]) -> IpcValue {
-    list(points.iter().flat_map(|p| [p[0].into(), p[1].into()]).collect())
+    list(
+        points
+            .iter()
+            .flat_map(|p| [p[0].into(), p[1].into()])
+            .collect(),
+    )
 }
 
 pub(super) fn entries(value: &IpcValue) -> Vec<IpcValue> {
@@ -56,12 +66,20 @@ fn id_of(value: Option<&IpcValue>) -> Option<String> {
 }
 
 fn points_of(value: Option<&IpcValue>) -> Vec<[f64; 2]> {
-    let numbers: Vec<f64> = value.map(entries).unwrap_or_default().iter().filter_map(|v| number(Some(v))).collect();
+    let numbers: Vec<f64> = value
+        .map(entries)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|v| number(Some(v)))
+        .collect();
     numbers.chunks_exact(2).map(|p| [p[0], p[1]]).collect()
 }
 
 pub(super) fn id_list(value: &IpcValue) -> Vec<String> {
-    entries(value).iter().filter_map(|v| id_of(Some(v))).collect()
+    entries(value)
+        .iter()
+        .filter_map(|v| id_of(Some(v)))
+        .collect()
 }
 
 pub(super) fn item_from(value: &IpcValue) -> Option<Item> {
@@ -70,12 +88,19 @@ pub(super) fn item_from(value: &IpcValue) -> Option<Item> {
     let shape = match text(field(value, "shape")).unwrap_or("rect") {
         "ellipse" | "circle" => Shape::Ellipse([n("x"), n("y"), n("w"), n("h")]),
         "point" => Shape::Point([n("x"), n("y")], number(field(value, "r")).unwrap_or(6.0)),
-        "line" => Shape::Line(points_of(field(value, "points")), number(field(value, "width")).unwrap_or(2.0)),
+        "line" => Shape::Line(
+            points_of(field(value, "points")),
+            number(field(value, "width")).unwrap_or(2.0),
+        ),
         "polygon" => Shape::Polygon(points_of(field(value, "points"))),
         _ => Shape::Rect([n("x"), n("y"), n("w"), n("h")]),
     };
     let selectable = !matches!(field(value, "selectable"), Some(IpcValue::Boolean(false)));
-    Some(Item { id, shape, selectable })
+    Some(Item {
+        id,
+        shape,
+        selectable,
+    })
 }
 
 pub(super) fn port_from(value: &IpcValue) -> Option<Port> {

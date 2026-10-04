@@ -13,9 +13,9 @@ use std::time::Instant;
 
 use morf_value::{IpcTable, IpcValue};
 
+use crate::rows::{device_row, stream_row};
 use crate::spectrum::Filter;
 use crate::{Audio, DeviceKind, MonitorDelay, ObjectId};
-use crate::rows::{device_row, stream_row};
 
 /// How many change handlers one shell may hold.
 pub const MAX_LISTENERS: usize = 32;
@@ -291,8 +291,10 @@ mod tests {
 
     #[test]
     fn listeners_are_counted_and_removed() {
-        let mut session: Session<u32, ()> = Session::default();
-        session.factory = Some(Box::new(Audio::unavailable));
+        let mut session: Session<u32, ()> = Session {
+            factory: Some(Box::new(Audio::unavailable)),
+            ..Session::default()
+        };
         for handler in 0..MAX_LISTENERS as u32 {
             session.listen(handler).unwrap();
         }

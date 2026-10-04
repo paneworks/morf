@@ -9,31 +9,66 @@ use super::*;
 use crate::Archetype;
 
 fn map(entries: &[(&str, IpcValue)]) -> IpcValue {
-    IpcValue::Table(Arc::new(IpcTable::Map(entries.iter().map(|(k, v)| ((*k).to_owned(), v.clone())).collect())))
+    IpcValue::Table(Arc::new(IpcTable::Map(
+        entries
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), v.clone()))
+            .collect(),
+    )))
 }
 
 fn canvas() -> Canvas {
     let mut c = Canvas::new();
     c.handle("resize", &[400.0.into(), 300.0.into()]).unwrap();
     let items = list(vec![
-        map(&[("id", "a".into()), ("x", 10.0.into()), ("y", 10.0.into()), ("w", 50.0.into()), ("h", 30.0.into())]),
-        map(&[("id", "b".into()), ("x", 200.0.into()), ("y", 100.0.into()), ("w", 40.0.into()), ("h", 40.0.into())]),
+        map(&[
+            ("id", "a".into()),
+            ("x", 10.0.into()),
+            ("y", 10.0.into()),
+            ("w", 50.0.into()),
+            ("h", 30.0.into()),
+        ]),
+        map(&[
+            ("id", "b".into()),
+            ("x", 200.0.into()),
+            ("y", 100.0.into()),
+            ("w", 40.0.into()),
+            ("h", 40.0.into()),
+        ]),
     ]);
     c.configure("items", &items).unwrap();
     c
 }
 
 fn signal<'a>(effects: &'a Effects, name: &str) -> Option<&'a Vec<IpcValue>> {
-    effects.signals.iter().find(|(n, _)| n == name).map(|(_, a)| a)
+    effects
+        .signals
+        .iter()
+        .find(|(n, _)| n == name)
+        .map(|(_, a)| a)
 }
 
 fn press(c: &mut Canvas, x: f64, y: f64, button: &str, modifiers: &str) -> Effects {
-    c.handle("pressed", &[x.into(), y.into(), 400.0.into(), 300.0.into(), button.into(), modifiers.into()])
-        .unwrap()
+    c.handle(
+        "pressed",
+        &[
+            x.into(),
+            y.into(),
+            400.0.into(),
+            300.0.into(),
+            button.into(),
+            modifiers.into(),
+        ],
+    )
+    .unwrap()
 }
 
 fn drag(c: &mut Canvas, x: f64, y: f64) -> Effects {
-    c.handle("dragged", &[x.into(), y.into(), 400.0.into(), 300.0.into(), "".into()]).unwrap()
+    c.handle(
+        "dragged",
+        &[x.into(), y.into(), 400.0.into(), 300.0.into(), "".into()],
+    )
+    .unwrap()
 }
 
 #[test]
@@ -51,7 +86,10 @@ fn the_selected_box_resizes_by_a_handle_on_the_grid() {
     let e = c.handle("released", &[]).unwrap();
     let resized = signal(&e, "resized").unwrap();
     assert_eq!(resized[0], "a".into());
-    assert_eq!((resized[3].clone(), resized[4].clone()), (80.0.into(), 60.0.into()));
+    assert_eq!(
+        (resized[3].clone(), resized[4].clone()),
+        (80.0.into(), 60.0.into())
+    );
     // Too small: held at the minimum.
     press(&mut c, 30.0, 30.0, "left", "");
     c.handle("released", &[]).unwrap();
@@ -68,10 +106,16 @@ fn a_press_picks_and_a_drag_moves_on_the_grid() {
     c.configure("grid", &10.0.into()).unwrap();
     c.configure("snap", &true.into()).unwrap();
     let e = press(&mut c, 20.0, 20.0, "left", "");
-    assert_eq!(signal(&e, "selection_changed"), Some(&vec![ids(&["a".into()])]));
+    assert_eq!(
+        signal(&e, "selection_changed"),
+        Some(&vec![ids(&["a".into()])])
+    );
     drag(&mut c, 44.0, 27.0);
     let e = c.handle("released", &[]).unwrap();
-    assert_eq!(signal(&e, "moved"), Some(&vec![ids(&["a".into()]), 20.0.into(), 10.0.into()]));
+    assert_eq!(
+        signal(&e, "moved"),
+        Some(&vec![ids(&["a".into()]), 20.0.into(), 10.0.into()])
+    );
 }
 
 #[test]
@@ -93,14 +137,37 @@ fn ctrl_wheel_zooms_about_the_pointer() {
     let mut c = canvas();
     let before = c.world([100.0, 100.0]);
     let e = c
-        .handle("wheel", &[0.into(), (-1).into(), 0.0.into(), 0.0.into(), 100.0.into(), 100.0.into(), "ctrl".into()])
+        .handle(
+            "wheel",
+            &[
+                0.into(),
+                (-1).into(),
+                0.0.into(),
+                0.0.into(),
+                100.0.into(),
+                100.0.into(),
+                "ctrl".into(),
+            ],
+        )
         .unwrap();
     assert!(signal(&e, "view_changed").is_some());
     assert!((c.zoom[0] - 1.2).abs() < 1e-9);
     let after = c.world([100.0, 100.0]);
     assert!((before[0] - after[0]).abs() < 1e-9 && (before[1] - after[1]).abs() < 1e-9);
     // Plain, it pans.
-    c.handle("wheel", &[0.into(), 1.into(), 0.0.into(), 0.0.into(), 0.0.into(), 0.0.into(), "".into()]).unwrap();
+    c.handle(
+        "wheel",
+        &[
+            0.into(),
+            1.into(),
+            0.0.into(),
+            0.0.into(),
+            0.0.into(),
+            0.0.into(),
+            "".into(),
+        ],
+    )
+    .unwrap();
     assert!(c.origin[1] > after[1] - 100.0 / 1.2);
 }
 
@@ -120,8 +187,20 @@ fn home_fits_everything_and_the_x_axis_zooms_alone() {
 fn a_wire_joins_out_to_in_and_dropped_says_where() {
     let mut c = canvas();
     let ports = list(vec![
-        map(&[("id", "a.out".into()), ("item", "a".into()), ("x", 60.0.into()), ("y", 25.0.into()), ("kind", "out".into())]),
-        map(&[("id", "b.in".into()), ("item", "b".into()), ("x", 200.0.into()), ("y", 120.0.into()), ("kind", "in".into())]),
+        map(&[
+            ("id", "a.out".into()),
+            ("item", "a".into()),
+            ("x", 60.0.into()),
+            ("y", 25.0.into()),
+            ("kind", "out".into()),
+        ]),
+        map(&[
+            ("id", "b.in".into()),
+            ("item", "b".into()),
+            ("x", 200.0.into()),
+            ("y", 120.0.into()),
+            ("kind", "in".into()),
+        ]),
     ]);
     c.configure("ports", &ports).unwrap();
     press(&mut c, 60.0, 25.0, "left", "");
@@ -129,7 +208,10 @@ fn a_wire_joins_out_to_in_and_dropped_says_where() {
     drag(&mut c, 201.0, 121.0);
     assert_eq!(c.connect_to, "b.in");
     let e = c.handle("released", &[]).unwrap();
-    assert_eq!(signal(&e, "connected"), Some(&vec!["a.out".into(), "b.in".into()]));
+    assert_eq!(
+        signal(&e, "connected"),
+        Some(&vec!["a.out".into(), "b.in".into()])
+    );
     press(&mut c, 60.0, 25.0, "left", "");
     drag(&mut c, 300.0, 250.0);
     let e = c.handle("released", &[]).unwrap();

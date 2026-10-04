@@ -68,7 +68,9 @@ impl Session {
                     .device
                     .or(default_node)
                     .and_then(|id| self.nodes.get(&id))
-                    .map_or(Duration::ZERO, |node| node.latency.saturating_sub(ANALYSIS_LAG)),
+                    .map_or(Duration::ZERO, |node| {
+                        node.latency.saturating_sub(ANALYSIS_LAG)
+                    }),
             };
             if std::env::var_os("MORF_AUDIO_LOG").is_some() {
                 eprintln!(
@@ -126,7 +128,12 @@ impl Session {
         });
     }
 
-    pub(super) fn metadata_property(&mut self, subject: u32, key: Option<String>, value: Option<String>) {
+    pub(super) fn metadata_property(
+        &mut self,
+        subject: u32,
+        key: Option<String>,
+        value: Option<String>,
+    ) {
         if subject != PW_ID_CORE {
             return;
         }

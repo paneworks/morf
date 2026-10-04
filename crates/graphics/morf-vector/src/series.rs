@@ -170,9 +170,12 @@ impl Plot {
         samples: usize,
     ) -> Plot {
         let base = Plot::default();
-        let count = |key: &str, default: usize| number(key).map_or(default, |n| n.max(0.0) as usize);
+        let count =
+            |key: &str, default: usize| number(key).map_or(default, |n| n.max(0.0) as usize);
         Plot {
-            kind: word("kind").and_then(|k| Kind::parse(&k)).unwrap_or(Kind::Line),
+            kind: word("kind")
+                .and_then(|k| Kind::parse(&k))
+                .unwrap_or(Kind::Line),
             width: number("width").unwrap_or(width_height.0),
             height: number("height").unwrap_or(width_height.1),
             samples: count("samples", samples),
@@ -219,7 +222,11 @@ impl Plot {
         if let Some(top) = self.top {
             return top.max(self.bottom + 1e-9);
         }
-        let peak = values.iter().chain(others).map(|v| *v as f64).fold(self.bottom, f64::max);
+        let peak = values
+            .iter()
+            .chain(others)
+            .map(|v| *v as f64)
+            .fold(self.bottom, f64::max);
         (peak * self.headroom).max(self.bottom + self.floor)
     }
 }
@@ -239,10 +246,16 @@ pub fn path(values: &[f32], others: &[f32], plot: &Plot) -> String {
         Kind::StateCells => return more::state_cells(values, plot),
         Kind::Histogram => {
             let counts = more::histogram_counts(values, plot);
-            let bars_plot = Plot { kind: Kind::Bars, bottom: 0.0, ..*plot };
+            let bars_plot = Plot {
+                kind: Kind::Bars,
+                bottom: 0.0,
+                ..*plot
+            };
             let top = bars_plot.top_for(&counts, &[]);
             let span = top.max(1e-9);
-            return bars(&counts, &bars_plot, &|v: f32| (v as f64 / span).clamp(0.0, 1.0));
+            return bars(&counts, &bars_plot, &|v: f32| {
+                (v as f64 / span).clamp(0.0, 1.0)
+            });
         }
         Kind::Scatter => {
             let ys: Vec<f32> = values.chunks_exact(2).map(|p| p[1]).collect();
@@ -268,12 +281,20 @@ pub fn path(values: &[f32], others: &[f32], plot: &Plot) -> String {
         _ => {}
     }
     let y = |v: f32| h - plot.pad_bottom - norm(v) * (h - plot.pad_bottom - plot.pad_top);
-    let count = if plot.samples == 0 { values.len().max(2) } else { plot.samples.max(2) };
+    let count = if plot.samples == 0 {
+        values.len().max(2)
+    } else {
+        plot.samples.max(2)
+    };
     let shown = &values[values.len().saturating_sub(count)..];
     let dx = w / (count - 1) as f64;
     let n = shown.len();
     let x0 = w - n.saturating_sub(1) as f64 * dx;
-    let points: Vec<(f64, f64)> = shown.iter().enumerate().map(|(i, v)| (x0 + i as f64 * dx, y(*v))).collect();
+    let points: Vec<(f64, f64)> = shown
+        .iter()
+        .enumerate()
+        .map(|(i, v)| (x0 + i as f64 * dx, y(*v)))
+        .collect();
     let floor_y = h - plot.pad_bottom;
     let mut d = String::with_capacity(points.len() * 28 + 32);
     match plot.kind {
@@ -396,13 +417,40 @@ mod tests {
 
     #[test]
     fn plots_steps_bars_and_lines() {
-        let plot = Plot { kind: Kind::Steps, width: 30.0, height: 10.0, samples: 4, pad_top: 2.0, pad_bottom: 0.0, ..Plot::default() };
+        let plot = Plot {
+            kind: Kind::Steps,
+            width: 30.0,
+            height: 10.0,
+            samples: 4,
+            pad_top: 2.0,
+            pad_bottom: 0.0,
+            ..Plot::default()
+        };
         assert_eq!(path(&[0.0, 1.0], &[], &plot), "M20.0 10.0 H30.0 V2.0");
-        let bars = Plot { kind: Kind::Bars, width: 10.0, height: 10.0, gap: 0.0, ..Plot::default() };
-        assert_eq!(path(&[1.0, 0.5], &[], &bars), "M0.0 0.0 h5.0 v10.0 h-5.0 Z M5.0 5.0 h5.0 v5.0 h-5.0 Z ");
-        let auto = Plot { top: None, headroom: 2.0, ..Plot::default() };
+        let bars = Plot {
+            kind: Kind::Bars,
+            width: 10.0,
+            height: 10.0,
+            gap: 0.0,
+            ..Plot::default()
+        };
+        assert_eq!(
+            path(&[1.0, 0.5], &[], &bars),
+            "M0.0 0.0 h5.0 v10.0 h-5.0 Z M5.0 5.0 h5.0 v5.0 h-5.0 Z "
+        );
+        let auto = Plot {
+            top: None,
+            headroom: 2.0,
+            ..Plot::default()
+        };
         assert_eq!(auto.top_for(&[1.0, 3.0], &[4.0]), 8.0);
-        let line = Plot { kind: Kind::Area, smooth: true, width: 10.0, height: 10.0, ..Plot::default() };
+        let line = Plot {
+            kind: Kind::Area,
+            smooth: true,
+            width: 10.0,
+            height: 10.0,
+            ..Plot::default()
+        };
         let d = path(&[0.0, 1.0, 0.5], &[], &line);
         assert!(d.starts_with("M0.00 9.00 C") && d.ends_with("Z"), "{d}");
     }

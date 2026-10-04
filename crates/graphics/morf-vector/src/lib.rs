@@ -10,8 +10,6 @@
 //! Whoever has the outline converts it into [`Step`]s once; from there a font
 //! and an SVG are indistinguishable, and so are the shapes they make.
 
-/// SVG documents read as outlines, not pictures.
-pub mod svg;
 mod contours;
 mod corners;
 mod flatten;
@@ -20,10 +18,12 @@ pub mod geometry_named;
 mod geometry_resample;
 pub mod graph;
 pub mod marks;
+mod morph;
 pub mod series;
 mod series_kinds;
-mod morph;
 mod step;
+/// SVG documents read as outlines, not pictures.
+pub mod svg;
 
 pub use contours::{CONTOUR_POINTS, Contour, contour_of, contours, resample};
 pub use corners::{Corner, corner_points, corners};

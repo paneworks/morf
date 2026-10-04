@@ -56,7 +56,14 @@ fn encode(indices: &[usize]) -> String {
     if indices.is_empty() {
         return ",".into();
     }
-    format!(",{},", indices.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(","))
+    format!(
+        ",{},",
+        indices
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    )
 }
 
 impl Overflow {
@@ -77,7 +84,10 @@ impl Overflow {
     }
 
     fn width_of(&self, set: &[usize]) -> f64 {
-        let items: f64 = set.iter().map(|i| self.widths.get(i - 1).copied().unwrap_or(0.0)).sum();
+        let items: f64 = set
+            .iter()
+            .map(|i| self.widths.get(i - 1).copied().unwrap_or(0.0))
+            .sum();
         items + self.gap * set.len().saturating_sub(1) as f64
     }
 
@@ -95,7 +105,11 @@ impl Overflow {
                 _ => -(i as f64),
             }
         };
-        order.sort_by(|a, b| priority(*a).total_cmp(&priority(*b)).then(rank(*a).total_cmp(&rank(*b))));
+        order.sort_by(|a, b| {
+            priority(*a)
+                .total_cmp(&priority(*b))
+                .then(rank(*a).total_cmp(&rank(*b)))
+        });
         order
     }
 
@@ -142,7 +156,8 @@ impl Overflow {
             }
         }
         if self.shown != shown || self.hidden != hidden {
-            let as_list = |v: &[usize]| list(v.iter().map(|i| IpcValue::Integer(*i as i64)).collect());
+            let as_list =
+                |v: &[usize]| list(v.iter().map(|i| IpcValue::Integer(*i as i64)).collect());
             out.raise("changed", vec![as_list(&self.shown), as_list(&self.hidden)]);
         }
         out
@@ -231,7 +246,11 @@ mod tests {
 
     fn bar(widths: &[f64]) -> Overflow {
         let mut o = Overflow::new();
-        o.configure("widths", &list(widths.iter().map(|w| (*w).into()).collect())).unwrap();
+        o.configure(
+            "widths",
+            &list(widths.iter().map(|w| (*w).into()).collect()),
+        )
+        .unwrap();
         o.configure("gap", &0.0.into()).unwrap();
         o
     }
@@ -243,7 +262,11 @@ mod tests {
         // 2 x 100 + 40 for "more".
         assert_eq!(o.shown, vec![1, 2]);
         assert_eq!(o.hidden, vec![3, 4]);
-        o.configure("priorities", &list(vec![0.0.into(), 0.0.into(), 0.0.into(), 5.0.into()])).unwrap();
+        o.configure(
+            "priorities",
+            &list(vec![0.0.into(), 0.0.into(), 0.0.into(), 5.0.into()]),
+        )
+        .unwrap();
         assert_eq!(o.shown, vec![1, 4]);
         let mut crumbs = bar(&[60.0, 60.0, 60.0, 60.0, 60.0]);
         crumbs.configure("mode", &"middle".into()).unwrap();

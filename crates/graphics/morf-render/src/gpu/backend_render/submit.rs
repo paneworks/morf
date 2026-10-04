@@ -158,7 +158,7 @@ impl WgpuBackend {
             let shading = super::super::profile::Shading::of(
                 list,
                 damage,
-                &reach,
+                reach,
                 |command| command_layers[command].is_some(),
                 scale_120,
             );

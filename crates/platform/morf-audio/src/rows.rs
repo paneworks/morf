@@ -82,7 +82,9 @@ pub fn stream_row(stream: &Stream) -> IpcValue {
     row.insert("channels".into(), number(stream.channels() as f64));
     row.insert(
         "pid".into(),
-        stream.pid.map_or(IpcValue::Nil, |pid| number(f64::from(pid))),
+        stream
+            .pid
+            .map_or(IpcValue::Nil, |pid| number(f64::from(pid))),
     );
     map(row)
 }

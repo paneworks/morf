@@ -63,7 +63,10 @@ impl Archetype for Selection {
             // A radial menu: item 1 at twelve o'clock, the rest clockwise,
             // each a sector of the circle.
             "point" | "point_release" => {
-                let (dx, dy) = (number(arguments.first()).unwrap_or(0.0), number(arguments.get(1)).unwrap_or(0.0));
+                let (dx, dy) = (
+                    number(arguments.first()).unwrap_or(0.0),
+                    number(arguments.get(1)).unwrap_or(0.0),
+                );
                 let dead = number(arguments.get(2)).unwrap_or(16.0);
                 if !self.base.enabled || self.count == 0 || dx.hypot(dy) < dead {
                     return Ok(effects);
@@ -71,7 +74,8 @@ impl Archetype for Selection {
                 let n = self.count as f64;
                 let dx = if self.base.mirrored { -dx } else { dx };
                 let angle = dx.atan2(-dy).to_degrees().rem_euclid(360.0);
-                let index = (((angle + 180.0 / n) / (360.0 / n)).floor() as i64).rem_euclid(self.count as i64) + 1;
+                let index =
+                    (((angle + 180.0 / n) / (360.0 / n)).floor() as i64).rem_euclid(self.count) + 1;
                 if self.usable(index) {
                     self.go(index, &mut effects);
                     if event == "point_release" {
@@ -100,8 +104,10 @@ impl Archetype for Selection {
                 if self.reorderable && modifiers.contains("alt") && self.current > 0 {
                     let forward = if self.base.mirrored { -1 } else { 1 };
                     let step = match (self.orientation, name) {
-                        (Orientation::Vertical, "Up") | (Orientation::Horizontal | Orientation::Grid, "Left") => Some(-forward),
-                        (Orientation::Vertical, "Down") | (Orientation::Horizontal | Orientation::Grid, "Right") => Some(forward),
+                        (Orientation::Vertical, "Up")
+                        | (Orientation::Horizontal | Orientation::Grid, "Left") => Some(-forward),
+                        (Orientation::Vertical, "Down")
+                        | (Orientation::Horizontal | Orientation::Grid, "Right") => Some(forward),
                         _ => None,
                     };
                     if let Some(step) = step {

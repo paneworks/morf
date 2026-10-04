@@ -64,12 +64,15 @@ pub(crate) fn text_input_command(
     // A code editor's colours, over what is typed (never over a placeholder
     // or a password's dots).
     let mut style = shape.options.style;
-    if !edit.placeholder && !scene.bool_value(node, "password")? {
-        if let Some(rich) = morf_scene::RichText::from_highlights(&shape.display.text, scene.current(node, "highlights")?)
-            .map_err(|message| RenderError::Scene(format!("TextInput highlights: {message}")))?
-        {
-            style.rich = Some(std::sync::Arc::new(rich));
-        }
+    if !edit.placeholder
+        && !scene.bool_value(node, "password")?
+        && let Some(rich) = morf_scene::RichText::from_highlights(
+            &shape.display.text,
+            scene.current(node, "highlights")?,
+        )
+        .map_err(|message| RenderError::Scene(format!("TextInput highlights: {message}")))?
+    {
+        style.rich = Some(std::sync::Arc::new(rich));
     }
     Ok(DrawCommand::Text {
         node,
