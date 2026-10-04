@@ -20,7 +20,7 @@ pub(super) fn install_monitor<'gc>(
                 let options: Table = stack.consume(ctx)?;
                 let beat = table_bool(ctx, options, "beat", false)
                     .map_err(|error| HostError(format!("monitor {error}")))?;
-                let handlers = MonitorHandlers {
+                let handlers = Monitor {
                     on_level: optional_closure(ctx, options, "on_level").map_err(HostError)?,
                     on_beat: optional_closure(ctx, options, "on_beat").map_err(HostError)?,
                     on_tempo: optional_closure(ctx, options, "on_tempo").map_err(HostError)?,
@@ -55,11 +55,7 @@ pub(super) fn install_monitor<'gc>(
                                     .into());
                                 }
                             };
-                            Some(MonitorChannel {
-                                channel,
-                                filter,
-                                last: None,
-                            })
+                            Some(MonitorChannel::new(channel, filter))
                         }
                         _ => {
                             return Err(
@@ -108,30 +104,21 @@ pub(super) fn install_monitor<'gc>(
                     ))
                     .into());
                 }
-                let id = {
-                    let mut state = state.borrow_mut();
-                    let host = host(&mut state);
-                    if host.monitors.len() >= MAX_MONITORS {
-                        return Err(HostError("too many audio monitors running".into()).into());
-                    }
-                    let id = host.started().monitor_delayed(
-                        device,
-                        rate_hz as f32,
-                        bands as usize,
-                        beat,
-                        delay,
-                    );
-                    host.monitors.insert(id, handlers);
-                    id
+                let spec = MonitorSpec {
+                    device,
+                    rate_hz: rate_hz as f32,
+                    bands: bands as usize,
+                    beat,
+                    delay,
                 };
+                let id = host(&mut state.borrow_mut())
+                    .session
+                    .monitor(spec, handlers)
+                    .map_err(HostError)?;
                 let stop = Callback::from_fn(&ctx, {
                     let state = Rc::clone(&state);
                     move |_, _, _| {
-                        let mut state = state.borrow_mut();
-                        let host = host(&mut state);
-                        if host.monitors.remove(&id).is_some() {
-                            host.started().stop_monitor(id);
-                        }
+                        host(&mut state.borrow_mut()).session.stop_monitor(id);
                         Ok(CallbackReturn::Return)
                     }
                 });
@@ -142,10 +129,7 @@ pub(super) fn install_monitor<'gc>(
                     move |ctx, _, mut stack| {
                         let (_, key): (Table, LuaValue) = stack.consume(ctx)?;
                         let mut state = state.borrow_mut();
-                        let tempo = host(&mut state)
-                            .monitors
-                            .get(&id)
-                            .and_then(|handlers| handlers.tempo);
+                        let tempo = host(&mut state).session.tempo(id);
                         let value = match (key, tempo) {
                             (LuaValue::String(key), Some((bpm, confidence))) => {
                                 match key.as_bytes() {

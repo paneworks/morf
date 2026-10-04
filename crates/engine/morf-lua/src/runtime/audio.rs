@@ -1,9 +1,8 @@
 //! Keeping `morf.audio` current between frames.
 
-use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use morf_audio::{Audio, Backend, DeviceKind};
+use morf_audio::{Audio, Backend};
 use morf_scene::Value as SceneValue;
 
 use crate::{api_audio::*, reactive_bindings::flush_reactive, surface_types::*, types::*};
@@ -16,9 +15,9 @@ impl Runtime {
     pub fn set_audio_backend(&mut self, backend: impl Backend) {
         let mut state = self.reactive.borrow_mut();
         if let Some(host) = &mut state.audio
-            && host.audio.is_none()
+            && host.session.audio.is_none()
         {
-            host.factory = Some(Box::new(move || Audio::with_backend(backend)));
+            host.session.factory = Some(Box::new(move || Audio::with_backend(backend)));
         }
     }
 
@@ -31,37 +30,31 @@ impl Runtime {
             let state = self.reactive.borrow();
             (state.scene_revision, state.hidden_revisions)
         };
-        let mut handlers: Vec<(Handler, Vec<SceneValue>)> = Vec::new();
         let mut moved = false;
+        let handlers: Vec<(Handler, Vec<SceneValue>)>;
         {
             let mut guard = self.reactive.borrow_mut();
             let state = &mut *guard;
             let Some(host) = state.audio.as_mut() else {
                 return false;
             };
-            let Some(audio) = host.audio.as_mut() else {
+            // A channel takes the bands in Rust: filtered, written, drawn.
+            let Some(polled) = host.session.poll(|channel, values| channel.set(values)) else {
                 return false;
             };
-            let poll = audio.poll();
-            let errors = poll.errors;
-            if poll.changes.any() {
-                let snapshot = audio.state();
-                let rows = |kind| {
-                    snapshot
-                        .devices(kind)
-                        .map(|device| device_row(device, snapshot.is_default(device.id)))
-                        .collect::<Vec<_>>()
-                };
-                let sinks = rows(DeviceKind::Sink);
-                let sources = rows(DeviceKind::Source);
-                let streams = snapshot.streams().map(stream_row).collect::<Vec<_>>();
-                let available = snapshot.available();
+            handlers = polled
+                .calls
+                .into_iter()
+                .map(|(handler, args)| (handler, args.iter().map(scene).collect()))
+                .collect();
+            if let Some(rows) = polled.rows {
                 let mut changed_models = Vec::new();
                 for (model, rows) in [
-                    (&host.sinks, sinks),
-                    (&host.sources, sources),
-                    (&host.streams, streams),
+                    (&host.sinks, rows.sinks),
+                    (&host.sources, rows.sources),
+                    (&host.streams, rows.streams),
                 ] {
+                    let rows = rows.iter().map(scene).collect();
                     model.borrow_mut().reconcile(rows, Some("id"));
                     changed_models.push(Rc::clone(model));
                     // A list nothing draws would keep its change journal
@@ -74,20 +67,10 @@ impl Runtime {
                         model.borrow_mut().take_changes();
                     }
                 }
-                host.revisions += 1;
                 let writes = [
-                    (host.available, IpcValue::Boolean(available)),
-                    (host.revision, IpcValue::Integer(host.revisions)),
+                    (host.available, IpcValue::Boolean(rows.available)),
+                    (host.revision, IpcValue::Integer(rows.revision)),
                 ];
-                let what = SceneValue::Map(BTreeMap::from([
-                    ("available".into(), SceneValue::Bool(poll.changes.available)),
-                    ("devices".into(), SceneValue::Bool(poll.changes.devices)),
-                    ("streams".into(), SceneValue::Bool(poll.changes.streams)),
-                    ("defaults".into(), SceneValue::Bool(poll.changes.defaults)),
-                ]));
-                for (_, callback) in &host.listeners {
-                    handlers.push((callback.clone(), vec![what.clone()]));
-                }
                 for (id, value) in writes {
                     if state.reactive.values.get(&id) == Some(&value) {
                         continue;
@@ -106,85 +89,7 @@ impl Runtime {
                     }
                 }
             }
-            let host = state.audio.as_mut().expect("checked above");
-            for level in &poll.levels {
-                // A channel takes the bands in Rust: filtered, written, drawn.
-                let Some(out) = host
-                    .monitors
-                    .get_mut(&level.monitor)
-                    .and_then(|m| m.channel.as_mut())
-                else {
-                    continue;
-                };
-                let now = std::time::Instant::now();
-                let dt = out.last.map(|then| now.duration_since(then).as_secs_f64());
-                out.last = Some(now);
-                let bands: Vec<f64> = level.bands.iter().map(|b| f64::from(*b)).collect();
-                let values: Vec<f32> = match out.filter.as_mut() {
-                    Some(filter) => match filter.step(&bands, dt) {
-                        Ok(values) => values.iter().map(|v| *v as f32).collect(),
-                        Err(_) => continue,
-                    },
-                    None => level.bands.clone(),
-                };
-                out.channel.set(&values);
-            }
-            for level in poll.levels {
-                let Some(callback) = host
-                    .monitors
-                    .get(&level.monitor)
-                    .and_then(|handlers| handlers.on_level.as_ref())
-                else {
-                    continue;
-                };
-                let bands = if level.bands.is_empty() {
-                    SceneValue::Nil
-                } else {
-                    SceneValue::List(
-                        level
-                            .bands
-                            .iter()
-                            .map(|band| SceneValue::Number(f64::from(*band)))
-                            .collect(),
-                    )
-                };
-                handlers.push((
-                    callback.clone(),
-                    vec![
-                        SceneValue::Number(f64::from(level.left)),
-                        SceneValue::Number(f64::from(level.right)),
-                        bands,
-                    ],
-                ));
-            }
-            for beat in poll.beats {
-                if let Some(callback) = host
-                    .monitors
-                    .get(&beat.monitor)
-                    .and_then(|monitor| monitor.on_beat.as_ref())
-                {
-                    handlers.push((
-                        callback.clone(),
-                        vec![SceneValue::Number(f64::from(beat.strength))],
-                    ));
-                }
-            }
-            for tempo in poll.tempos {
-                let Some(monitor) = host.monitors.get_mut(&tempo.monitor) else {
-                    continue;
-                };
-                monitor.tempo = Some((tempo.bpm, tempo.confidence));
-                if let Some(callback) = &monitor.on_tempo {
-                    handlers.push((
-                        callback.clone(),
-                        vec![
-                            SceneValue::Number(f64::from(tempo.bpm)),
-                            SceneValue::Number(f64::from(tempo.confidence)),
-                        ],
-                    ));
-                }
-            }
-            for error in errors {
+            for error in polled.errors {
                 state.log(LogLevel::Warn, format!("audio: {error}"));
             }
         }

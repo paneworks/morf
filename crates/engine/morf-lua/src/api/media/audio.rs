@@ -27,17 +27,20 @@
 //! never opens a connection. Without a server everything reads empty and
 //! every command answers false.
 
+
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use luna::{
     Callback, CallbackReturn, Closure, Context, Executor, Table, UserData, Value as LuaValue,
     Variadic,
 };
-use morf_audio::{Audio, Device, DeviceKind, Stream};
+use morf_audio::session::{Monitor, MonitorChannel, MonitorSpec, Session};
+use morf_audio::{Device, DeviceKind, Stream, rows};
 use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
+use morf_value::IpcTable;
 
 use crate::{
     reactive_execute::drive_executor,
@@ -53,130 +56,52 @@ use morf_runtime::Handler;
 mod commands;
 mod monitor;
 
-/// How many `on_changed` handlers and monitors one configuration may hold.
-const MAX_LISTENERS: usize = 32;
-const MAX_MONITORS: usize = 8;
-
-/// What `morf.audio` keeps between frames.
+/// What `morf.audio` keeps between frames: the session, and the lists and
+/// signals bindings follow.
 pub(crate) struct AudioHost {
-    pub(crate) audio: Option<Audio>,
-    /// What starts the audio when first asked; the machine's server unless
-    /// a host (a test) said otherwise.
-    pub(crate) factory: Option<Box<dyn FnOnce() -> Audio>>,
+    pub(crate) session: Session<Handler, Arc<morf_scene::Channel>>,
     pub(crate) sinks: Rc<RefCell<ListModel>>,
     pub(crate) sources: Rc<RefCell<ListModel>>,
     pub(crate) streams: Rc<RefCell<ListModel>>,
     pub(crate) available: SignalId,
     /// Moves on every change, so a reader that depends on any of it reruns.
     pub(crate) revision: SignalId,
-    pub(crate) revisions: i64,
-    pub(crate) listeners: Vec<(u64, Handler)>,
-    pub(crate) monitors: HashMap<u64, MonitorHandlers>,
-    pub(crate) next_listener: u64,
-}
-
-/// What one `morf.audio.monitor` calls, and the tempo it last heard.
-pub(crate) struct MonitorHandlers {
-    pub(crate) on_level: Option<Handler>,
-    pub(crate) on_beat: Option<Handler>,
-    pub(crate) on_tempo: Option<Handler>,
-    pub(crate) tempo: Option<(f32, f32)>,
-    /// `channel`: each reading's bands written straight to a data channel,
-    /// through the `spectrum` filter when one is given -- no Lua per frame.
-    pub(crate) channel: Option<MonitorChannel>,
-}
-
-pub(crate) struct MonitorChannel {
-    pub(crate) channel: std::sync::Arc<morf_scene::Channel>,
-    pub(crate) filter: Option<morf_audio::spectrum::Filter>,
-    pub(crate) last: Option<std::time::Instant>,
 }
 
 impl AudioHost {
     /// The audio, started on first use.
-    pub(crate) fn started(&mut self) -> &mut Audio {
-        let factory = &mut self.factory;
-        self.audio
-            .get_or_insert_with(|| factory.take().map_or_else(Audio::connect, |start| start()))
+    pub(crate) fn started(&mut self) -> &mut morf_audio::Audio {
+        self.session.started()
     }
 }
 
-/// A volume for Lua: four decimals, so 0.54 reads as 0.54 and not as the
-/// float nearest it.
-fn tidy(volume: f32) -> f64 {
-    (f64::from(volume) * 10_000.0).round() / 10_000.0
-}
-
-fn text(value: &Option<String>) -> SceneValue {
-    value
-        .as_ref()
-        .map_or(SceneValue::Nil, |value| SceneValue::String(value.clone()))
+/// A plain value as a scene value: what list models hold and handlers take.
+pub(crate) fn scene(value: &IpcValue) -> SceneValue {
+    match value {
+        IpcValue::Nil => SceneValue::Nil,
+        IpcValue::Boolean(value) => SceneValue::Bool(*value),
+        IpcValue::Integer(value) => SceneValue::Number(*value as f64),
+        IpcValue::Number(value) => SceneValue::Number(*value),
+        IpcValue::String(value) => SceneValue::String(value.clone()),
+        IpcValue::Color(color) => SceneValue::Color(*color),
+        IpcValue::Table(table) => match &**table {
+            IpcTable::List(items) => SceneValue::List(items.iter().map(scene).collect()),
+            IpcTable::Map(fields) => SceneValue::Map(
+                fields
+                    .iter()
+                    .map(|(key, value)| (key.clone(), scene(value)))
+                    .collect(),
+            ),
+        },
+    }
 }
 
 pub(crate) fn device_row(device: &Device, default: bool) -> SceneValue {
-    let mut row = BTreeMap::new();
-    row.insert("id".into(), SceneValue::Number(f64::from(device.id)));
-    row.insert("name".into(), SceneValue::String(device.name.clone()));
-    row.insert(
-        "description".into(),
-        SceneValue::String(device.description.clone()),
-    );
-    row.insert("kind".into(), SceneValue::String(device.kind.name().into()));
-    row.insert("volume".into(), SceneValue::Number(tidy(device.volume())));
-    row.insert(
-        "volumes".into(),
-        SceneValue::List(
-            device
-                .channel_volumes
-                .iter()
-                .map(|gain| SceneValue::Number(tidy(morf_audio::volume::from_linear(*gain))))
-                .collect(),
-        ),
-    );
-    row.insert("muted".into(), SceneValue::Bool(device.muted));
-    row.insert("default".into(), SceneValue::Bool(default));
-    row.insert(
-        "channels".into(),
-        SceneValue::Number(device.channels() as f64),
-    );
-    row.insert("icon_name".into(), text(&device.icon_name));
-    SceneValue::Map(row)
+    scene(&rows::device_row(device, default))
 }
 
 pub(crate) fn stream_row(stream: &Stream) -> SceneValue {
-    let mut row = BTreeMap::new();
-    row.insert("id".into(), SceneValue::Number(f64::from(stream.id)));
-    row.insert(
-        "app_name".into(),
-        SceneValue::String(stream.app_name.clone()),
-    );
-    row.insert("app_id".into(), text(&stream.app_id));
-    row.insert("binary".into(), text(&stream.binary));
-    row.insert("icon_name".into(), text(&stream.icon_name));
-    row.insert("media_name".into(), text(&stream.media_name));
-    row.insert(
-        "direction".into(),
-        SceneValue::String(stream.direction.name().into()),
-    );
-    row.insert(
-        "device".into(),
-        stream.device.map_or(SceneValue::Nil, |device| {
-            SceneValue::Number(f64::from(device))
-        }),
-    );
-    row.insert("volume".into(), SceneValue::Number(tidy(stream.volume())));
-    row.insert("muted".into(), SceneValue::Bool(stream.muted));
-    row.insert(
-        "channels".into(),
-        SceneValue::Number(stream.channels() as f64),
-    );
-    row.insert(
-        "pid".into(),
-        stream
-            .pid
-            .map_or(SceneValue::Nil, |pid| SceneValue::Number(f64::from(pid))),
-    );
-    SceneValue::Map(row)
+    scene(&rows::stream_row(stream))
 }
 
 /// A row as a Lua table, with its counts and ids as integers.
@@ -269,17 +194,12 @@ pub(crate) fn install_audio_api<'gc>(
         state.reactive.signals.push(available);
         state.reactive.signals.push(revision);
         state.audio = Some(AudioHost {
-            audio: None,
-            factory: None,
+            session: Session::default(),
             sinks: Rc::new(RefCell::new(ListModel::default())),
             sources: Rc::new(RefCell::new(ListModel::default())),
             streams: Rc::new(RefCell::new(ListModel::default())),
             available,
             revision,
-            revisions: 0,
-            listeners: Vec::new(),
-            monitors: HashMap::new(),
-            next_listener: 1,
         });
     }
 
