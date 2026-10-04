@@ -12,7 +12,7 @@
 //! surface lands where a wlroots compositor with layer-shell would put it on an
 //! output the size of the primary surface.
 
-use crate::backend::wayland::types::{BarConfig, LayerAnchors, ShellLayer};
+use crate::{BarConfig, LayerAnchors, ShellLayer};
 
 /// The part of a layer surface's configuration that decides where it goes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -31,7 +31,7 @@ use wayland_protocols_wlr::data_control::v1::client::{
 };
 
 use crate::backend::wayland::offer_io::{spawn_write, take_slot};
-use crate::backend::wayland::{state_types::*, surface_types::*, types::*};
+use crate::backend::wayland::{state_types::*, surface_types::*};
 
 /// How many announced offers stay readable after a newer one replaced them.
 ///

@@ -13,7 +13,7 @@ use wayland_client::{Connection, QueueHandle};
 
 use crate::backend::wayland::mime::{URI_LIST_MIME, best_text_mime};
 use crate::backend::wayland::offer_io::{ReadTag, pipe, spawn_read, spawn_write, take_slot};
-use crate::backend::wayland::{state_types::*, surface_types::*, types::*};
+use crate::backend::wayland::{state_types::*, surface_types::*};
 
 impl LayerState {
     /// The drag offer SCTK is holding for one data device.

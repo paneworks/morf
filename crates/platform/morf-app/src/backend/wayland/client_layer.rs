@@ -12,7 +12,7 @@ use wayland_client::protocol::{wl_output, wl_subcompositor, wl_subsurface, wl_su
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1;
 
 use crate::backend::wayland::layer_placement::{LayerRequest, arrange, stacking, stacks_below_primary};
-use crate::backend::wayland::{state_types::*, surface_types::*, types::*};
+use crate::backend::wayland::{state_types::*, surface_types::*};
 
 wayland_client::delegate_noop!(LayerState: ignore wl_subcompositor::WlSubcompositor);
 wayland_client::delegate_noop!(LayerState: ignore wl_subsurface::WlSubsurface);

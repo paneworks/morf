@@ -44,7 +44,7 @@ use wayland_protocols_wlr::screencopy::v1::client::{
     zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1,
 };
 
-use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*, types::*};
+use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*};
 
 /// One output, in the shape the rest of morf describes outputs in.
 pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> ScreenInfo {

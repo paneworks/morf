@@ -37,7 +37,7 @@ use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLi
 use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1;
 
 use crate::backend::wayland::data_control::{DataControl, DcManager};
-use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*, types::*};
+use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*};
 use wayland_protocols::ext::data_control::v1::client::ext_data_control_manager_v1::ExtDataControlManagerV1;
 use wayland_protocols_wlr::data_control::v1::client::zwlr_data_control_manager_v1::ZwlrDataControlManagerV1;
 
