@@ -1,9 +1,9 @@
-use crate::supervisor::execute_config;
-use crate::supervisor::lua_snapshot;
-use crate::supervisor::named_screens;
-use crate::supervisor::runtimepath_roots;
-use crate::surface_popups::window_surface_effectively_visible;
-use crate::surfaces::primary_surface_root;
+use morf_host::supervisor::execute_config;
+use morf_host::supervisor::lua_snapshot;
+use morf_host::supervisor::named_screens;
+use morf_host::supervisor::runtimepath_roots;
+use morf_host::surface_popups::window_surface_effectively_visible;
+use morf_host::surfaces::primary_surface_root;
 use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
 use morf_lua::Runtime;
@@ -213,7 +213,7 @@ fn lua_file_changes_are_pushed_and_other_files_ignored() {
     let thread_root = root.clone();
     let thread_enabled = Arc::clone(&enabled);
     std::thread::spawn(move || {
-        crate::supervisor::follow_lua_files(&[thread_root], &thread_enabled, |_| {
+        morf_host::supervisor::follow_lua_files(&[thread_root], &thread_enabled, |_| {
             tx.send(()).is_ok()
         });
     });

@@ -28,7 +28,7 @@ use morf_lua::Runtime;
 use morf_scene::Scene;
 
 use crate::config::LoadPolicy;
-use crate::supervisor::execute_config;
+use morf_host::supervisor::execute_config;
 
 /// The last bytes of a bundle: the payload's length, then this.
 const MAGIC: &[u8; 8] = b"MORFBNDL";

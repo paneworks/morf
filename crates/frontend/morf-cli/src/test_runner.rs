@@ -189,7 +189,7 @@ pub(crate) fn run(args: &RunnerArgs) -> Result<bool, String> {
     for path in &args.files {
         // Each spec file starts from an empty home, as it would alone.
         if args.isolate {
-            crate::headless_env::empty_home(&crate::headless_env::scratch_dir());
+            morf_host::headless_env::empty_home(&morf_host::headless_env::scratch_dir());
         }
         if let Err(error) = run_spec(path, args, &mut number, &mut tally) {
             number += 1;

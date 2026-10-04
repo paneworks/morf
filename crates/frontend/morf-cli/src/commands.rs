@@ -12,7 +12,7 @@ use morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
 use morf_lua::{LogEntry, LogLevel};
 
 use crate::config::config_root;
-use crate::socket_path::{socket_dir, socket_path};
+use morf_host::socket_path::{socket_dir, socket_path};
 
 /// Prints the shell's log, once or until interrupted.
 ///
@@ -72,7 +72,7 @@ pub(crate) fn list_instances(json: bool, show_dead: bool) -> Result<(), String> 
     let dir = socket_dir()?;
     let mut entries = sockets_in(&dir)?;
     // Sockets whose proper path was too long to bind live here instead.
-    let fallback = crate::socket_path::fallback_dir();
+    let fallback = morf_host::socket_path::fallback_dir();
     if fallback != dir {
         entries.extend(sockets_in(&fallback)?);
     }

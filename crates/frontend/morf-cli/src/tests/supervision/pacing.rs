@@ -1,4 +1,4 @@
-use crate::pacing::FramePacer;
+use morf_host::pacing::FramePacer;
 use std::time::Duration;
 
 const REFRESH: Duration = Duration::from_micros(16_667);
@@ -96,13 +96,13 @@ fn resting_clears_the_cadence_so_motion_restarts_on_the_next_callback() {
 fn a_hidden_surface_hands_the_clock_over_after_a_few_refreshes() {
     // A slow frame is not a hidden surface: a few refreshes first, bounded
     // so a very slow or very fast output still hands over in time.
-    assert_eq!(crate::surfaces::frame_stall(REFRESH), REFRESH * 4);
+    assert_eq!(morf_host::surfaces::frame_stall(REFRESH), REFRESH * 4);
     assert_eq!(
-        crate::surfaces::frame_stall(Duration::from_millis(4)),
+        morf_host::surfaces::frame_stall(Duration::from_millis(4)),
         Duration::from_millis(50)
     );
     assert_eq!(
-        crate::surfaces::frame_stall(Duration::from_millis(100)),
+        morf_host::surfaces::frame_stall(Duration::from_millis(100)),
         Duration::from_millis(250)
     );
 }

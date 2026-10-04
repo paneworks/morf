@@ -1,6 +1,6 @@
-use crate::surface_popups::popup_change_is_structural;
-use crate::surface_popups::popup_client_config;
-use crate::surface_popups::popup_parent_role;
+use morf_host::surface_popups::popup_change_is_structural;
+use morf_host::surface_popups::popup_client_config;
+use morf_host::surface_popups::popup_parent_role;
 use morf_lua::PopupSurfaceConfig;
 use morf_lua::Runtime;
 use morf_lua::WindowSurfaceKind;

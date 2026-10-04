@@ -1,7 +1,7 @@
 // A lock built per output: each output's tree is its own, laid out against
 // its own size.
 
-use crate::lock_outputs::{LockOutput, LockTrees, ensure_lock_tree, release_lock_tree};
+use morf_host::lock_outputs::{LockOutput, LockTrees, ensure_lock_tree, release_lock_tree};
 use morf_lua::Runtime;
 use morf_app::{Output, WindowId};
 

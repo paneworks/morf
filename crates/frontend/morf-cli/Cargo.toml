@@ -12,28 +12,29 @@ path = "src/main.rs"
 
 [features]
 default = ["kit", "a11y"]
-# Surfaces' accessible trees on AT-SPI, built only while a screen reader
-# asks: crates/platform/morf-app/src/backend/wayland/accesskit.rs.
-a11y = ["morf-app/a11y"]
+# Surfaces' accessible trees on AT-SPI (morf-host).
+a11y = ["morf-host/a11y"]
 # luna's native Lua tier; see crates/morf-lua/src/runtime_jit.rs.
 jit = ["morf-lua/jit"]
 # The widget archetypes (`morf.kit.native`): crates/morf-kit.
 kit = ["dep:morf-kit"]
 
 [dependencies]
+morf-host.workspace = true
 morf-value.workspace = true
 libc = "0.2"
 flate2.workspace = true
 serde_json.workspace = true
-jiff.workspace = true
 morf-layout.workspace = true
 morf-lua.workspace = true
 morf-kit = { workspace = true, optional = true }
 morf-io.workspace = true
-morf-render.workspace = true
 morf-scene.workspace = true
 morf-text.workspace = true
 morf-app.workspace = true
-morf-desktop.workspace = true
-pollster.workspace = true
 image.workspace = true
+
+[dev-dependencies]
+# The frame benchmarks draw with the renderer directly.
+morf-render.workspace = true
+pollster.workspace = true

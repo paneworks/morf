@@ -9,8 +9,8 @@ use std::sync::Arc;
 use morf_value::{IpcTable, IpcValue};
 use morf_app::Event;
 
-use crate::headless::Headless;
-use crate::headless_input::{button, keysym, modifiers};
+use morf_host::headless::Headless;
+use morf_host::headless_input::{button, keysym, modifiers};
 use crate::test_host::{TestHost, list, map, number, optional_text, string, text};
 
 /// Where keys go: the surface named, else the one last clicked (a
@@ -47,7 +47,7 @@ pub(crate) fn click(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     let pressed = button(&optional_text(arguments.get(2)).unwrap_or_else(|| "left".to_owned()))?;
     let subject = host.subject()?;
     let surface = role(subject, arguments.get(3))?;
-    let held = crate::headless_input::pointer_modifiers(optional_text(arguments.get(4)).as_deref())?;
+    let held = morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(4)).as_deref())?;
     subject.click(surface, (x, y), pressed, held)?;
     Ok(Vec::new())
 }
@@ -59,7 +59,7 @@ pub(crate) fn press(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     let pressed = matches!(arguments.get(3), Some(IpcValue::Boolean(true)));
     let subject = host.subject()?;
     let surface = role(subject, arguments.get(4))?;
-    let modifiers = crate::headless_input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?;
+    let modifiers = morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?;
     subject.pointer(Event::PointerButton {
         surface,
         button: code,
@@ -111,7 +111,7 @@ pub(crate) fn wheel(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
         vertical,
         horizontal_steps: steps(horizontal),
         vertical_steps: steps(vertical),
-        modifiers: crate::headless_input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?,
+        modifiers: morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?,
     })?;
     Ok(Vec::new())
 }

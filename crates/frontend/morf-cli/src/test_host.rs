@@ -16,7 +16,7 @@ use morf_lua::{LogLevel, Runtime};
 use morf_value::{IpcTable, IpcValue};
 use morf_scene::NodeHandle;
 
-use crate::headless::{Headless, LoadOptions};
+use morf_host::headless::{Headless, LoadOptions};
 use crate::runner_args::RunnerArgs;
 use crate::test_host_input::{
     accessible, accessible_action, click, resize_window, key, leave, motion, nodes, press, text_of, type_text, wheel,
@@ -188,7 +188,7 @@ fn load(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, St
     let options_value = arguments.get(1);
     let source = optional_text(field(options_value, "source"));
     let path = match (optional_text(arguments.first()), &source) {
-        (Some(path), _) => crate::headless::resolve(&path, Some(&host.spec_dir)),
+        (Some(path), _) => morf_host::headless::resolve(&path, Some(&host.spec_dir)),
         (None, Some(_)) => host.spec_dir.join("inline.lua"),
         (None, None) => return Err("test.load wants a path or { source = ... }".to_owned()),
     };
@@ -343,7 +343,7 @@ fn snapshot(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>
     let scale = host.defaults.scale;
     let wanted = optional_text(arguments.get(1));
     let subject = host.subject()?;
-    match crate::headless_render::render_to(subject, wanted.as_deref(), scale, &path) {
+    match morf_host::headless_render::render_to(subject, wanted.as_deref(), scale, &path) {
         Ok(_) => Ok(vec![
             IpcValue::Boolean(true),
             string(path.display().to_string()),

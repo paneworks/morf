@@ -65,6 +65,7 @@ morf-text = { path = "crates/graphics/morf-text" }
 morf-app = { path = "crates/platform/morf-app" }
 morf-desktop = { path = "crates/platform/morf-desktop" }
 morf-runtime = { path = "crates/engine/morf-runtime" }
+morf-host = { path = "crates/frontend/morf-host", default-features = false }
 
 # cosmic-text 0.19.0 with one change: `Attrs::variations`, a variable font's
 # axes beyond `wght`, reaching the shaper. Upstream shapes every face at its

@@ -4,10 +4,10 @@
 
 use super::outputless::{Started, call, named, output, spawner};
 use crate::config::LoadPolicy;
-use crate::lock::{Worker, WorkerCommand, WorkerSender};
-use crate::outputless::{OUTPUTLESS, Outputless, outputless_screen};
-use crate::services::stop_workers;
-use crate::workers::{
+use morf_host::lock::{Worker, WorkerCommand, WorkerSender};
+use morf_host::outputless::{OUTPUTLESS, Outputless, outputless_screen};
+use morf_host::services::stop_workers;
+use morf_host::workers::{
     Handover, Seed, WorkerStart, desired_workers, elect_primary, hand_over_primary,
     handle_worker_command, reconcile_with,
 };
@@ -48,7 +48,7 @@ fn ask(worker: &Worker, verb: &str) -> WireValue {
         .recv_timeout(Duration::from_secs(2))
         .expect("answered")
         .expect("not refused");
-    crate::services::wire_ipc_value(&values[0])
+    morf_host::services::wire_ipc_value(&values[0])
 }
 
 fn number(value: WireValue) -> i64 {
@@ -220,11 +220,11 @@ fn logging_spawner<'a>(
             primary,
         };
         let (name, events) = (name.to_owned(), Arc::clone(events));
-        let screen_for_lua = crate::supervisor::lua_screen(screen);
+        let screen_for_lua = morf_host::supervisor::lua_screen(screen);
         let join = thread::spawn(move || {
             let mut runtime = Runtime::for_screen(Limits::default(), screen_for_lua.clone());
             runtime.set_primary(start.primary);
-            crate::supervisor::execute_config(
+            morf_host::supervisor::execute_config(
                 &mut runtime,
                 &start.path,
                 &start.source,

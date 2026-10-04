@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use morf_lua::{ClockPrecision, DeadlineCause, Runtime};
 
-use crate::lock::{WorkerCommand, WorkerSender};
-use crate::wake_plan::{Reason, Sleep};
+use morf_host::lock::{WorkerCommand, WorkerSender};
+use morf_host::wake_plan::{Reason, Sleep};
 
 fn runtime_with(source: &str) -> Runtime {
     let mut runtime = Runtime::default();
@@ -112,7 +112,7 @@ fn a_paint_owed_on_an_overdue_frame_callback_is_made_once_a_stall() {
     // empty commit asked for; the change the shell owes a paint for then
     // showed only after the next unrelated event. Past a stall it is painted
     // anyway -- and not again until another stall has passed.
-    use crate::surfaces::{frame_stall, owed_paint_due};
+    use morf_host::surfaces::{frame_stall, owed_paint_due};
     let refresh = Duration::from_millis(16);
     let stall = frame_stall(refresh);
     let now = Instant::now();

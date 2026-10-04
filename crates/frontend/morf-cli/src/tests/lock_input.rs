@@ -1,10 +1,10 @@
 // The lock screen's input: pointer, touch and wheel on lock surfaces go
 // through the same hit test and handlers a layer surface's do.
 
-use crate::lock_outputs::{LockLayouts, LockOutput};
-use crate::pointer_cursor::CursorShapes;
-use crate::surface_pointer::handle_pointer_event;
-use crate::surfaces::PointerInput;
+use morf_host::lock_outputs::{LockLayouts, LockOutput};
+use morf_host::pointer_cursor::CursorShapes;
+use morf_host::surface_pointer::handle_pointer_event;
+use morf_host::surfaces::PointerInput;
 use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_value::IpcValue;
@@ -272,7 +272,7 @@ fn pointer_entry_before_the_first_lock_frame_selects_that_surface_after_layout()
     );
     assert_eq!(count(&mut runtime, "inside"), IpcValue::Boolean(false));
     outputs[0].layout = Some(laid_out(&runtime));
-    assert!(crate::surface_pointer::answer_new_containment(
+    assert!(morf_host::surface_pointer::answer_new_containment(
         &mut runtime,
         &input,
         &LockLayouts(&outputs),

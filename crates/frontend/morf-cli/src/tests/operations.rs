@@ -51,7 +51,7 @@ fn an_auxiliary_surface_is_addressed_by_its_own_kind() {
     // travels with the number: identifiers do not share a space, so a layer
     // surface and a popup may both be `1`, and keying scale on the number alone
     // would have a popup's scale change resize a bar.
-    use crate::paint::AuxiliaryKind;
+    use morf_host::paint::AuxiliaryKind;
     use morf_app::WindowId;
 
     assert_eq!(AuxiliaryKind::Popup.role(1), WindowId::Popup(1));
@@ -77,7 +77,7 @@ fn a_panic_leaves_a_report_behind() {
         std::env::set_var("XDG_STATE_HOME", &directory);
         std::env::remove_var("MORF_DISABLE_CRASH_HANDLER");
     }
-    crate::crash::install();
+    morf_host::crash::install();
 
     let panicked = std::panic::catch_unwind(|| panic!("a deliberate fault"));
     assert!(panicked.is_err(), "the panic happened");
@@ -108,7 +108,7 @@ fn the_crash_screen_is_started_as_a_shell_with_the_report_as_its_argument() {
     // draws it. Started through `sh` with a delay because the dying process
     // still holds the socket, and with every path as its own argument so a
     // space in one cannot split it.
-    let command = crate::crash::crash_screen_command(
+    let command = morf_host::crash::crash_screen_command(
         std::path::Path::new("/opt/morf bin/morf"),
         std::path::Path::new("/home/me/crash screen.lua"),
         std::path::Path::new("/tmp/report 1.log"),
@@ -190,16 +190,16 @@ fn an_instance_is_named_by_its_display() {
     // through the function under test rather than concurrently.
     unsafe { std::env::set_var("XDG_RUNTIME_DIR", "/run/morf-test") };
     assert_eq!(
-        crate::socket_path::socket_path_for(Some("wayland-7")).unwrap(),
+        morf_host::socket_path::socket_path_for(Some("wayland-7")).unwrap(),
         std::path::PathBuf::from("/run/morf-test/morf/wayland-7.sock")
     );
     assert_eq!(
-        crate::socket_path::socket_path_for(Some("../escape")).unwrap_err(),
+        morf_host::socket_path::socket_path_for(Some("../escape")).unwrap_err(),
         "WAYLAND_DISPLAY must be one path component"
     );
     // libwayland takes an absolute path as the socket itself; it names an
     // instance of its own, apart from a socket of the same name elsewhere.
-    use crate::socket_path::display_instance;
+    use morf_host::socket_path::display_instance;
     let nested = display_instance("/run/user/1000/nested/wayland-1").unwrap();
     assert!(nested.starts_with("wayland-1-"), "{nested}");
     assert_ne!(nested, display_instance("/tmp/other/wayland-1").unwrap());
@@ -219,7 +219,7 @@ fn an_instance_is_named_by_its_display() {
 fn an_automatic_exclusive_zone_is_the_surfaces_own_extent_on_its_edge() {
     // quickshell's ExclusionMode.Auto. A bar that grows should push windows
     // with it, without the configuration keeping a number in step by hand.
-    use crate::surfaces::auto_exclusive_zone;
+    use morf_host::surfaces::auto_exclusive_zone;
     use morf_lua::LayerSurfaceConfig;
     let mut surface = LayerSurfaceConfig {
         height: 40,

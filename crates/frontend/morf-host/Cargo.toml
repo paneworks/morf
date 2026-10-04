@@ -1,0 +1,30 @@
+[package]
+name = "morf-host"
+description = "Runs a morf configuration: live windows, the loop, the lock screen, the processes around a shell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["a11y"]
+# Surfaces' accessible trees on AT-SPI, built only while a screen reader
+# asks: crates/platform/morf-app/src/backend/wayland/accesskit.rs.
+a11y = ["morf-app/a11y"]
+
+[dependencies]
+morf-value.workspace = true
+libc = "0.2"
+flate2.workspace = true
+serde_json.workspace = true
+jiff.workspace = true
+morf-layout.workspace = true
+morf-lua.workspace = true
+morf-io.workspace = true
+morf-render.workspace = true
+morf-scene.workspace = true
+morf-text.workspace = true
+morf-app.workspace = true
+morf-desktop.workspace = true
+pollster.workspace = true
+image.workspace = true

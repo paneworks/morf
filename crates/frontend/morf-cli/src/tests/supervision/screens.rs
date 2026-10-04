@@ -1,8 +1,8 @@
-use crate::lock::WorkerCommand;
-use crate::supervisor::known_outputs;
-use crate::supervisor::lua_screen;
-use crate::supervisor::store_outputs;
-use crate::workers::handle_worker_command;
+use morf_host::lock::WorkerCommand;
+use morf_host::supervisor::known_outputs;
+use morf_host::supervisor::lua_screen;
+use morf_host::supervisor::store_outputs;
+use morf_host::workers::handle_worker_command;
 use crate::*;
 use morf_lua::{Limits, Runtime};
 use morf_app::Output;

@@ -1774,10 +1774,9 @@ version = "0.1.5"
 dependencies = [
  "flate2",
  "image",
- "jiff",
  "libc",
  "morf-app",
- "morf-desktop",
+ "morf-host",
  "morf-io",
  "morf-kit",
  "morf-layout",
@@ -1804,6 +1803,27 @@ dependencies = [
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-wlr",
+]
+
+[[package]]
+name = "morf-host"
+version = "0.1.5"
+dependencies = [
+ "flate2",
+ "image",
+ "jiff",
+ "libc",
+ "morf-app",
+ "morf-desktop",
+ "morf-io",
+ "morf-layout",
+ "morf-lua",
+ "morf-render",
+ "morf-scene",
+ "morf-text",
+ "morf-value",
+ "pollster",
+ "serde_json",
 ]
 
 [[package]]

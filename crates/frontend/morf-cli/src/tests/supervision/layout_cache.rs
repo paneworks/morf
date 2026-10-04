@@ -1,4 +1,4 @@
-use crate::paint::CachedLayout;
+use morf_host::paint::CachedLayout;
 
 use morf_layout::Layout;
 

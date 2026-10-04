@@ -4,9 +4,10 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{commands::*, supervisor::*};
-use crate::socket_path::{select_instance, socket_path};
-pub(crate) use crate::supervisor::LoadPolicy;
+use crate::{commands::*};
+use morf_host::{supervisor::*};
+use morf_host::socket_path::{select_instance, socket_path};
+pub(crate) use morf_host::supervisor::LoadPolicy;
 
 pub(crate) fn usage() -> &'static str {
     "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf <shell|lock|greet> [-c NAME] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf app <app.lua> [-- args...]   (run a configuration as an application: its windows, one process)\n       morf [--no-plugin | --clean] -c <name>[/shell|/lock|/greet] [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf check <shell.lua> [--size WxH] [--screens N] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--strict] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf render <shell.lua> -o <out.png> [--size WxH] [--scale S] [--surface NAME|INDEX|screen] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf test <spec.lua>... [--filter PATTERN] [--size WxH] [--scale S] [--snapshots DIR] [--no-dbus | --private-bus] [--no-isolate]\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments after `--`.\n\ncheck, render and test run a configuration with no compositor: nothing\nconnects to Wayland and time is virtual. See docs/TESTING.md."
@@ -227,7 +228,7 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         ["info"] => Ok(Command::Info),
         ["types", dir] => Ok(Command::Types(PathBuf::from(dir))),
         ["app", path, rest @ ..] if !path.starts_with('-') => {
-            crate::app::enter();
+            morf_host::app::enter();
             Ok(Command::Run(PathBuf::from(path), policy, own(rest)?, daemonize))
         }
         ["check", rest @ ..] => runner(crate::runner_args::Runner::Check, rest, policy),
@@ -296,7 +297,7 @@ fn leading_options<'a>(
                 strings = rest;
             }
             ["--lock", rest @ ..] => {
-                crate::socket_path::target_lock();
+                morf_host::socket_path::target_lock();
                 strings = rest;
             }
             ["-i" | "--instance", display, rest @ ..] => {

@@ -1,7 +1,7 @@
 // A surface's cached layout lasts until its own tree changes: a clock
 // ticking on the bar does not lay the settings window out again.
 
-use crate::paint::CachedLayout;
+use morf_host::paint::CachedLayout;
 use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_scene::NodeHandle;
@@ -67,7 +67,7 @@ fn a_change_on_one_surface_keeps_another_surfaces_layout() {
             "#,
         )
         .unwrap();
-    let bar = crate::surfaces::primary_surface_root(&runtime).unwrap();
+    let bar = morf_host::surfaces::primary_surface_root(&runtime).unwrap();
     let settings = runtime.window_surface_configs()[0].root;
     let bar_cache = cached(&runtime, bar);
     let settings_cache = cached(&runtime, settings);

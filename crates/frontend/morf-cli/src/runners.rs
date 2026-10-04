@@ -3,8 +3,8 @@
 
 use morf_lua::{LogEntry, LogLevel};
 
-use crate::headless::{Headless, LoadOptions};
-use crate::headless_env::{PrivateBus, isolate_from_session, isolate_home, scratch_dir};
+use morf_host::headless::{Headless, LoadOptions};
+use morf_host::headless_env::{PrivateBus, isolate_from_session, isolate_home, scratch_dir};
 use crate::runner_args::{Runner, RunnerArgs};
 
 /// Runs whichever runner was asked for. Isolation first, before anything
@@ -327,7 +327,7 @@ fn render(args: &RunnerArgs) -> Result<bool, String> {
     call_ipc(&mut headless, args)?;
     headless.advance(args.after, args.wait);
     let output = args.output.clone().expect("render has an output");
-    let (width, height, what) = crate::headless_render::render_to(
+    let (width, height, what) = morf_host::headless_render::render_to(
         &mut headless,
         args.surface.as_deref(),
         args.scale,
