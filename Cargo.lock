@@ -1962,6 +1962,7 @@ dependencies = [
  "libc",
  "morf-io",
  "morf-scene",
+ "morf-value",
  "rustix",
 ]
 

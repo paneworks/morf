@@ -14,6 +14,7 @@
 
 mod emulator;
 pub mod input;
+pub mod hub;
 pub mod palette;
 mod pty;
 
