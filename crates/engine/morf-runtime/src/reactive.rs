@@ -292,3 +292,35 @@ pub struct ResourceStats {
     pub tracked_signals: usize,
     pub handlers: usize,
 }
+
+/// How far the scene has moved, and how far each reader of it has seen.
+pub struct Revisions {
+    /// Moves on with every property write a binding may have read.
+    pub property_revision: i64,
+    /// Advances whenever the scene actually changes: a property lands on a
+    /// new value, or a node is created, reparented, or removed. This is what
+    /// tells the host a repaint is due -- a service callback merely running
+    /// is not.
+    pub scene_revision: u64,
+    /// The scene's revision when the services were last polled: a scene that
+    /// moved on since may hold a timer to start or a loader to fill.
+    pub polled_revision: u64,
+    /// The revision seen before timers and loaders were reconciled, which can
+    /// itself unload a tree that must preload again on the next turn.
+    pub service_definitions_revision: u64,
+    /// How many of the scene's revisions were a property of a node nothing
+    /// shows: work for the loop, not a reason to paint.
+    pub hidden_revisions: u64,
+}
+
+impl Default for Revisions {
+    fn default() -> Self {
+        Self {
+            property_revision: 0,
+            scene_revision: 0,
+            polled_revision: 0,
+            service_definitions_revision: u64::MAX,
+            hidden_revisions: 0,
+        }
+    }
+}

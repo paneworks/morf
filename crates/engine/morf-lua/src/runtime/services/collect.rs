@@ -180,7 +180,7 @@ pub(super) fn drain(state: &mut ReactiveState, collected: &mut Collected) {
     });
     (*io_calls, *io_more) = state.io.collect();
     (*watch_calls, *watch_more) = state.watches.collect();
-    retained_destroys.extend(state.retained_destroy_queue.drain());
+    retained_destroys.extend(state.retained.retained_destroy_queue.drain());
     for watcher in state.transform_watchers.values_mut() {
         if watcher.pending {
             watcher.pending = false;

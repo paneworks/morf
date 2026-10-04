@@ -19,6 +19,7 @@ pub mod models;
 pub mod overlays;
 pub mod reactive;
 pub mod requests;
+pub mod retention;
 pub mod screens;
 pub mod shortcuts;
 pub mod states;

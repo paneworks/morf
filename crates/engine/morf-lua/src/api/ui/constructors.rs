@@ -102,7 +102,11 @@ pub(crate) fn loader_constructor<'gc>(
         let node = create_node(&state, Element::Loader);
         configure_element(&state, ctx, limits, node, clean).map_err(HostError)?;
         if let Some(source) = source.clone() {
-            state.borrow_mut().loader_factories.insert(node, source);
+            state
+                .borrow_mut()
+                .retained
+                .loader_factories
+                .insert(node, source);
         }
         if state
             .borrow()
@@ -117,7 +121,7 @@ pub(crate) fn loader_constructor<'gc>(
                 .scene
                 .reparent(child, Some(node))
                 .map_err(|error| HostError(error.to_string()))?;
-            state.borrow_mut().loaded_loaders.insert(node);
+            state.borrow_mut().retained.loaded_loaders.insert(node);
         }
         stack.replace(ctx, node_userdata(ctx, Rc::clone(&state), node));
         Ok(CallbackReturn::Return)

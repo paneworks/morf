@@ -25,7 +25,10 @@ impl Runtime {
     pub fn update_clock(&mut self, value: impl Into<String>) -> Result<bool, Error> {
         let (revision_before, hidden_before) = {
             let state = self.reactive.borrow();
-            (state.scene_revision, state.hidden_revisions)
+            (
+                state.revisions.scene_revision,
+                state.revisions.hidden_revisions,
+            )
         };
         let value: String = value.into();
         // "HH:MM:SS" carries the coarser grains in its prefix; a value in
@@ -64,8 +67,8 @@ impl Runtime {
                 .map_err(Error::Runtime)?;
         }
         let state = self.reactive.borrow();
-        Ok(state.scene_revision.wrapping_sub(revision_before)
-            > state.hidden_revisions.wrapping_sub(hidden_before))
+        Ok(state.revisions.scene_revision.wrapping_sub(revision_before)
+            > state.revisions.hidden_revisions.wrapping_sub(hidden_before))
     }
 
     /// The finest clock anything currently reads, or nothing when no binding
@@ -116,6 +119,7 @@ impl Runtime {
         // waited as long as a preload waits for anything.
         let still = !state.scene.has_motion();
         let preload = state
+            .retained
             .preload_pending
             .values()
             .min()
@@ -142,9 +146,9 @@ impl Runtime {
     /// than leaving it until something else wakes the shell.
     pub fn has_pending_work(&self) -> bool {
         let state = self.reactive.borrow();
-        state.scene_revision != state.polled_revision
-            || state.scene_revision != state.service_definitions_revision
-            || !state.retained_destroy_queue.is_empty()
+        state.revisions.scene_revision != state.revisions.polled_revision
+            || state.revisions.scene_revision != state.revisions.service_definitions_revision
+            || !state.retained.retained_destroy_queue.is_empty()
             || state
                 .transform_watchers
                 .values()

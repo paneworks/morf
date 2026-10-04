@@ -268,20 +268,20 @@ impl Runtime {
 
     /// Takes a reload request raised by Lua configuration.
     pub fn take_reload_request(&mut self) -> Option<bool> {
-        self.reactive.borrow_mut().reload_request.take()
+        self.reactive.borrow_mut().lifecycle.reload_request.take()
     }
 
     pub fn take_watch_files_change(&mut self) -> Option<bool> {
         let mut state = self.reactive.borrow_mut();
-        state.watch_files_changed.then(|| {
-            state.watch_files_changed = false;
-            state.watch_files
+        state.lifecycle.watch_files_changed.then(|| {
+            state.lifecycle.watch_files_changed = false;
+            state.lifecycle.watch_files
         })
     }
 
     /// Whether the configuration has asked the shell to stop.
     pub fn quit_requested(&self) -> bool {
-        self.reactive.borrow().quit_requested
+        self.reactive.borrow().lifecycle.quit_requested
     }
 
     pub fn dispatch_reload_completed(&mut self) -> bool {
@@ -300,9 +300,9 @@ impl Runtime {
         let callbacks = {
             let state = self.reactive.borrow();
             if completed {
-                state.reload_completed_callbacks.clone()
+                state.lifecycle.reload_completed_callbacks.clone()
             } else {
-                state.reload_failed_callbacks.clone()
+                state.lifecycle.reload_failed_callbacks.clone()
             }
         };
         let args = error.map(IpcValue::String).into_iter().collect::<Vec<_>>();

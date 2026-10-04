@@ -28,7 +28,10 @@ impl Runtime {
     pub(crate) fn poll_audio(&mut self) -> bool {
         let (revision_before, hidden_before) = {
             let state = self.reactive.borrow();
-            (state.scene_revision, state.hidden_revisions)
+            (
+                state.revisions.scene_revision,
+                state.revisions.hidden_revisions,
+            )
         };
         let mut moved = false;
         let handlers: Vec<(Handler, Vec<SceneValue>)>;
@@ -112,7 +115,7 @@ impl Runtime {
             }
         }
         let state = self.reactive.borrow();
-        state.scene_revision.wrapping_sub(revision_before)
-            > state.hidden_revisions.wrapping_sub(hidden_before)
+        state.revisions.scene_revision.wrapping_sub(revision_before)
+            > state.revisions.hidden_revisions.wrapping_sub(hidden_before)
     }
 }

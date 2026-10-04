@@ -34,7 +34,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         nodes.extend_from_slice(children);
         index += 1;
     }
-    state.scene_revision = state.scene_revision.wrapping_add(1);
+    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     if state.scene.remove(node).is_err() {
         return;
     }
@@ -48,16 +48,16 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     }
     let removed = nodes.into_iter().collect::<HashSet<_>>();
     for node in &removed {
-        state.retention.unregister(*node);
-        state.retain_callbacks.remove(node);
+        state.retained.retention.unregister(*node);
+        state.retained.retain_callbacks.remove(node);
         state.states.remove(node);
         state.views.remove(node);
         state.timer_callbacks.remove(node);
-        state.loader_factories.remove(node);
-        state.failed_loaders.remove(node);
-        state.loaded_loaders.remove(node);
-        state.dormant_loaders.remove(node);
-        state.preload_pending.remove(node);
+        state.retained.loader_factories.remove(node);
+        state.retained.failed_loaders.remove(node);
+        state.retained.loaded_loaders.remove(node);
+        state.retained.dormant_loaders.remove(node);
+        state.retained.preload_pending.remove(node);
         state.terminals.remove(*node);
         state.images.remove(*node);
         state.linked_texts.remove(node);
@@ -159,6 +159,7 @@ pub(crate) fn finish_retained_destroy(
 ) {
     let callback = state
         .borrow()
+        .retained
         .retain_callbacks
         .get(&node)
         .and_then(|callbacks| callbacks.about_to_destroy.clone());
@@ -181,12 +182,12 @@ pub(crate) fn begin_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bo
     let state = &mut *state;
     let start = morf_runtime::animation::exits::begin_exit(
         &mut state.scene,
-        &mut state.retention,
+        &mut state.retained.retention,
         &mut state.animation,
         node,
     );
     if start == morf_runtime::animation::exits::ExitStart::Started {
-        state.scene_revision = state.scene_revision.wrapping_add(1);
+        state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     }
     start.leaving()
 }
@@ -197,13 +198,13 @@ pub(crate) fn cancel_node_exit(state: &mut ReactiveState, node: NodeHandle) -> b
     let state = &mut *state;
     if !morf_runtime::animation::exits::cancel_exit(
         &mut state.scene,
-        &mut state.retention,
+        &mut state.retained.retention,
         &mut state.animation,
         node,
     ) {
         return false;
     }
-    state.scene_revision = state.scene_revision.wrapping_add(1);
+    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     true
 }
 
@@ -218,8 +219,11 @@ pub(crate) fn finish_node_exit(
     let destroy = {
         let mut state = state.borrow_mut();
         let state = &mut *state;
-        match morf_runtime::animation::exits::finish_exit(&state.scene, &mut state.retention, node)
-        {
+        match morf_runtime::animation::exits::finish_exit(
+            &state.scene,
+            &mut state.retained.retention,
+            node,
+        ) {
             Some(destroy) => destroy,
             None => return,
         }
@@ -254,7 +258,8 @@ pub(crate) fn drop_retainable(
     // exit plays first, and holds it as a lock of its own.
     let registered = {
         let state = state.borrow();
-        state.retention.state(node).is_some() && !state.animation.exit_registered.contains(&node)
+        state.retained.retention.state(node).is_some()
+            && !state.animation.exit_registered.contains(&node)
     };
     let exiting = begin_node_exit(&mut state.borrow_mut(), node);
     if !registered {
@@ -266,8 +271,9 @@ pub(crate) fn drop_retainable(
     }
     let callback = {
         let mut state = state.borrow_mut();
-        let _ = state.retention.begin_drop(node);
+        let _ = state.retained.retention.begin_drop(node);
         state
+            .retained
             .retain_callbacks
             .get(&node)
             .and_then(|callbacks| callbacks.dropped.clone())
@@ -281,6 +287,7 @@ pub(crate) fn drop_retainable(
     }
     if state
         .borrow()
+        .retained
         .retention
         .should_destroy(node)
         .unwrap_or(true)

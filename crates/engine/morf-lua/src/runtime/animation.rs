@@ -143,7 +143,8 @@ impl Runtime {
             {
                 // Check before the tick removes a completed animation: the
                 // final interval also has to reach the native timer.
-                state.service_definitions_revision = state.scene_revision.wrapping_sub(1);
+                state.revisions.service_definitions_revision =
+                    state.revisions.scene_revision.wrapping_sub(1);
             }
         }
         let mut frame = self

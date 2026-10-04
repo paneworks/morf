@@ -80,8 +80,9 @@ pub(super) fn reconcile_loaders(
     loader_drops: &mut Vec<NodeHandle>,
 ) -> bool {
     let mut service_changed = false;
-    let loader_definitions = if definitions_changed || !state.preload_pending.is_empty() {
+    let loader_definitions = if definitions_changed || !state.retained.preload_pending.is_empty() {
         state
+            .retained
             .loader_factories
             .iter()
             .map(|(node, factory)| (*node, factory.clone()))
@@ -111,16 +112,16 @@ pub(super) fn reconcile_loaders(
         // and asked again; trying it every frame filled the log with
         // one error sixty times a second and spent a frame on it each.
         if !requested {
-            state.failed_loaders.remove(&node);
-        } else if state.failed_loaders.contains(&node) {
+            state.retained.failed_loaders.remove(&node);
+        } else if state.retained.failed_loaders.contains(&node) {
             continue;
         }
         let keep = state.scene.bool_value(node, "keep").unwrap_or(false);
         let preload = state.scene.bool_value(node, "preload").unwrap_or(false);
         // A hidden item stays while the Loader holds it for a reason:
         // kept, or built ahead of being asked for.
-        let preloaded_and_waiting = preload && state.dormant_loaders.contains(&node);
-        if requested && state.dormant_loaders.remove(&node) {
+        let preloaded_and_waiting = preload && state.retained.dormant_loaders.contains(&node);
+        if requested && state.retained.dormant_loaders.remove(&node) {
             // Built already: shown, not built again.
             let children = state.scene.children(node).unwrap_or_default().to_vec();
             for child in children {
@@ -132,8 +133,8 @@ pub(super) fn reconcile_loaders(
                 let _ = assign_scene_property(state, node, "active", SceneValue::Bool(true));
             }
             service_changed = true;
-        } else if requested && state.loaded_loaders.insert(node) {
-            state.preload_pending.remove(&node);
+        } else if requested && state.retained.loaded_loaders.insert(node) {
+            state.retained.preload_pending.remove(&node);
             // Let go and asked for again before its item had finished
             // leaving: that item is taken back rather than built anew.
             let leaving = state
@@ -159,43 +160,43 @@ pub(super) fn reconcile_loaders(
             }
         } else if !requested
             && keep
-            && state.loaded_loaders.contains(&node)
-            && !state.dormant_loaders.contains(&node)
+            && state.retained.loaded_loaders.contains(&node)
+            && !state.retained.dormant_loaders.contains(&node)
         {
             // Let go, but kept: hidden until it is asked for again.
             let children = state.scene.children(node).unwrap_or_default().to_vec();
             for child in children {
                 let _ = assign_scene_property(state, child, "visible", SceneValue::Bool(false));
             }
-            state.dormant_loaders.insert(node);
+            state.retained.dormant_loaders.insert(node);
             service_changed = true;
         } else if !requested
-            && state.loaded_loaders.contains(&node)
+            && state.retained.loaded_loaders.contains(&node)
             && !keep
             && !preloaded_and_waiting
         {
-            state.loaded_loaders.remove(&node);
-            state.dormant_loaders.remove(&node);
+            state.retained.loaded_loaders.remove(&node);
+            state.retained.dormant_loaders.remove(&node);
             loader_drops.extend_from_slice(state.scene.children(node).unwrap_or_default());
             service_changed = true;
-        } else if !requested && preload && !state.loaded_loaders.contains(&node) {
-            let since = *state.preload_pending.entry(node).or_insert(now);
+        } else if !requested && preload && !state.retained.loaded_loaders.contains(&node) {
+            let since = *state.retained.preload_pending.entry(node).or_insert(now);
             let waited = now.duration_since(since) >= PRELOAD_PATIENCE;
             if (still || waited) && preloads.is_empty() {
-                state.preload_pending.remove(&node);
-                state.loaded_loaders.insert(node);
+                state.retained.preload_pending.remove(&node);
+                state.retained.loaded_loaders.insert(node);
                 preloads.push((node, factory));
             }
         } else if !preload {
-            state.preload_pending.remove(&node);
+            state.retained.preload_pending.remove(&node);
         }
     }
     for node in stale_loaders {
-        state.loader_factories.remove(&node);
-        state.loaded_loaders.remove(&node);
-        state.failed_loaders.remove(&node);
-        state.dormant_loaders.remove(&node);
-        state.preload_pending.remove(&node);
+        state.retained.loader_factories.remove(&node);
+        state.retained.loaded_loaders.remove(&node);
+        state.retained.failed_loaders.remove(&node);
+        state.retained.dormant_loaders.remove(&node);
+        state.retained.preload_pending.remove(&node);
     }
     service_changed
 }
@@ -239,7 +240,7 @@ impl Runtime {
                             "visible",
                             SceneValue::Bool(false),
                         );
-                        state.dormant_loaders.insert(node);
+                        state.retained.dormant_loaders.insert(node);
                         service_changed = true;
                     } else if !preloaded && state.scene.reparent(child, Some(node)).is_ok() {
                         let _ = assign_scene_property(
@@ -263,22 +264,22 @@ impl Runtime {
                         service_changed = true;
                     } else {
                         remove_scene_subtree(&mut state, child);
-                        state.loaded_loaders.remove(&node);
+                        state.retained.loaded_loaders.remove(&node);
                     }
                 }
                 Err(error) if preloaded => {
                     // Not tried ahead of time again: built when asked for,
                     // where a failure is reported as any Loader's is.
                     let mut state = self.reactive.borrow_mut();
-                    state.loaded_loaders.remove(&node);
+                    state.retained.loaded_loaders.remove(&node);
                     let _ =
                         assign_scene_property(&mut state, node, "preload", SceneValue::Bool(false));
                     state.log(LogLevel::Warn, format!("Loader preload: {error}"));
                 }
                 Err(error) => {
                     let mut state = self.reactive.borrow_mut();
-                    state.loaded_loaders.remove(&node);
-                    state.failed_loaders.insert(node);
+                    state.retained.loaded_loaders.remove(&node);
+                    state.retained.failed_loaders.insert(node);
                     let _ =
                         assign_scene_property(&mut state, node, "loading", SceneValue::Bool(false));
                     let _ = assign_scene_property(

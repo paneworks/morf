@@ -18,7 +18,7 @@ impl Runtime {
         let mut state = self.reactive.borrow_mut();
         // Native writes must invalidate the same service definitions as Lua
         // writes (for example, a Timer started through the Scene API).
-        state.scene_revision = state.scene_revision.wrapping_add(1);
+        state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
         RefMut::map(state, |state| &mut state.scene)
     }
 

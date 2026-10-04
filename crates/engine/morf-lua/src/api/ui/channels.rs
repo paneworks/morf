@@ -104,7 +104,7 @@ impl Runtime {
                 true
             });
             if shown {
-                state.scene_revision = state.scene_revision.wrapping_add(1);
+                state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
             }
             (flush, shown)
         };
