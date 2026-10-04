@@ -86,7 +86,6 @@ use self::runtime::images;
 pub use self::runtime::keys;
 use self::runtime::layout as runtime_layout;
 use self::runtime::model_revisions;
-use self::runtime::node_loops;
 use self::runtime::pending as state_pending;
 use self::runtime::services as runtime_services;
 use self::runtime::session_lock as runtime_session_lock;

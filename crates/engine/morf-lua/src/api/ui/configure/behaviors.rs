@@ -1,6 +1,8 @@
 //! `behaviors`: how a node's properties move when written, and the option
 //! readers a behaviour shares with the rest of the API.
 
+use morf_runtime::animation::behaviors;
+
 use super::*;
 
 pub(crate) fn configure_behaviors<'gc>(
@@ -26,12 +28,13 @@ pub(crate) fn configure_behaviors<'gc>(
             LuaValue::Nil => {
                 state
                     .borrow_mut()
-                    .animation_callbacks
+                    .animation
+                    .callbacks
                     .remove(&(node, property.clone()));
             }
             LuaValue::Function(Function::Closure(callback)) => {
                 let callback = ctx.stash(callback);
-                state.borrow_mut().animation_callbacks.insert(
+                state.borrow_mut().animation.callbacks.insert(
                     (node, property.clone()),
                     crate::vm::handler_store::register(callback),
                 );
@@ -44,12 +47,12 @@ pub(crate) fn configure_behaviors<'gc>(
             _ => return Err("behavior kind must be a string".to_owned()),
         };
         if kind.as_deref() == Some("spring") {
-            let physics = Physics::Spring {
-                mass: table_number(ctx, behavior, "mass", 1.0)?,
-                damping: table_number(ctx, behavior, "damping", 18.0)?,
-                stiffness: table_number(ctx, behavior, "stiffness", 180.0)?,
-                epsilon: table_number(ctx, behavior, "epsilon", 0.001)?,
-            };
+            let physics = behaviors::spring(
+                table_number(ctx, behavior, "mass", 1.0)?,
+                table_number(ctx, behavior, "damping", 18.0)?,
+                table_number(ctx, behavior, "stiffness", 180.0)?,
+                table_number(ctx, behavior, "epsilon", 0.001)?,
+            );
             state
                 .borrow_mut()
                 .scene
@@ -58,9 +61,7 @@ pub(crate) fn configure_behaviors<'gc>(
             continue;
         }
         if kind.as_deref() == Some("smoothed") {
-            let physics = Physics::Smoothed {
-                velocity: table_number(ctx, behavior, "velocity", 1_000.0)?,
-            };
+            let physics = behaviors::smoothed(table_number(ctx, behavior, "velocity", 1_000.0)?);
             state
                 .borrow_mut()
                 .scene
@@ -76,19 +77,11 @@ pub(crate) fn configure_behaviors<'gc>(
             LuaValue::Number(value) if value.is_finite() => value,
             _ => return Err("behavior duration must be milliseconds".to_owned()),
         };
-        if duration < 0.0 {
-            return Err("behavior duration cannot be negative".to_owned());
-        }
+        let duration = behaviors::duration(duration)?;
         let easing = parse_easing(ctx, behavior.get_value(ctx, "easing"))?;
         let rotation_direction = parse_rotation_direction(ctx, behavior)?;
-        let delay = table_number(ctx, behavior, "delay", 0.0)?;
-        if delay < 0.0 {
-            return Err("behavior delay cannot be negative".to_owned());
-        }
-        let time_scale = table_number(ctx, behavior, "time_scale", 1.0)?;
-        if time_scale <= 0.0 {
-            return Err("behavior time_scale must be greater than zero".to_owned());
-        }
+        let delay = behaviors::delay(table_number(ctx, behavior, "delay", 0.0)?)?;
+        let time_scale = behaviors::time_scale(table_number(ctx, behavior, "time_scale", 1.0)?)?;
         state
             .borrow_mut()
             .scene
@@ -96,10 +89,10 @@ pub(crate) fn configure_behaviors<'gc>(
                 node,
                 &property,
                 Some(Behavior {
-                    duration: Duration::from_secs_f64(duration / 1_000.0),
+                    duration,
                     easing,
                     rotation_direction,
-                    delay: Duration::from_secs_f64(delay / 1_000.0),
+                    delay,
                     time_scale,
                     repeat: parse_repeat(ctx, behavior)?,
                     enabled: parse_enabled(ctx, behavior)?,
@@ -129,49 +122,39 @@ pub(crate) fn parse_repeat<'gc>(ctx: Context<'gc>, options: Table<'gc>) -> Resul
             _ => return Err(format!("behavior {field} must be boolean")),
         }
     }
-    let count = |value: f64| -> Result<u32, String> {
-        if !value.is_finite() || value < 1.0 {
-            return Err("behavior loops must be at least one pass".to_owned());
-        }
-        Ok(value as u32)
+    let loops = match options.get_value(ctx, "loops") {
+        LuaValue::Nil => behaviors::Loops::Absent,
+        LuaValue::Integer(value) => behaviors::Loops::Count(value as f64),
+        LuaValue::Number(value) => behaviors::Loops::Count(value),
+        LuaValue::String(value) => behaviors::Loops::Name(value.display_lossy().to_string()),
+        _ => return Err("behavior loops must be a pass count or a mode name".to_owned()),
     };
-    match options.get_value(ctx, "loops") {
-        LuaValue::Nil if alternating => Ok(Repeat::PingPong),
-        LuaValue::Nil => Ok(Repeat::Once),
-        LuaValue::Integer(value) => Ok(match alternating {
-            true => Repeat::PingPongTimes(count(value as f64)?),
-            false => Repeat::Times(count(value as f64)?),
-        }),
-        LuaValue::Number(value) => Ok(match alternating {
-            true => Repeat::PingPongTimes(count(value)?),
-            false => Repeat::Times(count(value)?),
-        }),
-        LuaValue::String(value) => match value.display_lossy().to_string().as_str() {
-            "once" => Ok(Repeat::Once),
-            "forever" => Ok(Repeat::Forever),
-            "ping_pong" => Ok(Repeat::PingPong),
-            name => Err(format!("unknown behavior loops mode `{name}`")),
-        },
-        _ => Err("behavior loops must be a pass count or a mode name".to_owned()),
+    behaviors::repeat(loops, alternating)
+}
+
+/// A field that is a name or absent; anything else is `wrong`.
+fn optional_name<'gc>(
+    ctx: Context<'gc>,
+    options: Table<'gc>,
+    field: &str,
+    wrong: &str,
+) -> Result<Option<String>, String> {
+    match options.get_value(ctx, field) {
+        LuaValue::Nil => Ok(None),
+        LuaValue::String(value) => Ok(Some(value.display_lossy().to_string())),
+        _ => Err(wrong.to_owned()),
     }
 }
 
-/// `retarget = "blend" | "restart"`: whether a write to a moving property
-/// carries its speed into the new motion (`"blend"`, the default) or starts
-/// the animation over from where the property is (`"restart"`, Qt's
-/// Behavior). True for blend.
+/// `retarget = "blend" | "restart"`, true for blend (the default).
 pub(crate) fn parse_retarget<'gc>(ctx: Context<'gc>, options: Table<'gc>) -> Result<bool, String> {
-    match options.get_value(ctx, "retarget") {
-        LuaValue::Nil => Ok(true),
-        LuaValue::String(value) => match value.display_lossy().to_string().as_str() {
-            "blend" => Ok(true),
-            "restart" => Ok(false),
-            name => Err(format!(
-                "behavior retarget must be \"blend\" or \"restart\", not `{name}`"
-            )),
-        },
-        _ => Err("behavior retarget must be a string".to_owned()),
-    }
+    let name = optional_name(
+        ctx,
+        options,
+        "retarget",
+        "behavior retarget must be a string",
+    )?;
+    behaviors::retarget(name.as_deref())
 }
 
 /// Reads the optional `enabled` switch, defaulting an absent one to on.
@@ -188,14 +171,8 @@ pub(crate) fn parse_color_space<'gc>(
     ctx: Context<'gc>,
     options: Table<'gc>,
 ) -> Result<morf_scene::ColorSpace, String> {
-    match options.get_value(ctx, "space") {
-        LuaValue::Nil => Ok(morf_scene::ColorSpace::default()),
-        LuaValue::String(value) => {
-            morf_scene::ColorSpace::parse(&value.display_lossy().to_string())
-                .ok_or_else(|| "space must be srgb, oklab or oklch".to_owned())
-        }
-        _ => Err("space must be a string".to_owned()),
-    }
+    let name = optional_name(ctx, options, "space", "space must be a string")?;
+    behaviors::color_space(name.as_deref())
 }
 
 /// `hue = "shorter" | "longer"`: which way round the wheel in `oklch`.
@@ -203,32 +180,19 @@ pub(crate) fn parse_hue<'gc>(
     ctx: Context<'gc>,
     options: Table<'gc>,
 ) -> Result<morf_scene::HueDirection, String> {
-    match options.get_value(ctx, "hue") {
-        LuaValue::Nil => Ok(morf_scene::HueDirection::default()),
-        LuaValue::String(value) => {
-            morf_scene::HueDirection::parse(&value.display_lossy().to_string())
-                .ok_or_else(|| "hue must be shorter or longer".to_owned())
-        }
-        _ => Err("hue must be a string".to_owned()),
-    }
+    let name = optional_name(ctx, options, "hue", "hue must be a string")?;
+    behaviors::hue(name.as_deref())
 }
 
 pub(crate) fn parse_rotation_direction<'gc>(
     ctx: Context<'gc>,
     options: Table<'gc>,
 ) -> Result<RotationDirection, String> {
-    match options.get_value(ctx, "rotation_direction") {
-        LuaValue::Nil => Ok(RotationDirection::Numerical),
-        LuaValue::String(value) => match value.display_lossy().to_string().as_str() {
-            "numerical" => Ok(RotationDirection::Numerical),
-            "shortest" => Ok(RotationDirection::Shortest),
-            "clockwise" => Ok(RotationDirection::Clockwise),
-            "counterclockwise" => Ok(RotationDirection::CounterClockwise),
-            _ => Err(
-                "rotation_direction must be numerical, shortest, clockwise, or counterclockwise"
-                    .to_owned(),
-            ),
-        },
-        _ => Err("rotation_direction must be a string".to_owned()),
-    }
+    let name = optional_name(
+        ctx,
+        options,
+        "rotation_direction",
+        "rotation_direction must be a string",
+    )?;
+    behaviors::rotation_direction(name.as_deref())
 }

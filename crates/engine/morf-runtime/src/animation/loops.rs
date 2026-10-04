@@ -24,11 +24,12 @@ use std::time::Duration;
 
 use morf_scene::{Behavior, NodeHandle, Repeat, Value};
 
-use crate::{lua_values::easing_from_scene, scene_bindings::assign_scene_property, state::*};
+use super::AnimationHost;
+use super::easing::easing_from_scene;
 
 /// One property a node is looping, and where it goes back to.
 #[derive(Clone, Debug)]
-pub(crate) struct RunningLoop {
+pub struct RunningLoop {
     /// The declaration it was started from, so a binding that returns the
     /// same table again leaves the motion alone instead of restarting it.
     spec: Value,
@@ -40,8 +41,8 @@ pub(crate) struct RunningLoop {
 }
 
 /// Starts, keeps, restarts or ends a node's loops to match `value`.
-pub(crate) fn apply_loops(
-    state: &mut ReactiveState,
+pub fn apply_loops(
+    host: &mut dyn AnimationHost,
     node: NodeHandle,
     value: &Value,
 ) -> Result<(), String> {
@@ -51,19 +52,18 @@ pub(crate) fn apply_loops(
         Value::List(entries) if entries.is_empty() => BTreeMap::new(),
         _ => return Err("loop must be a property-keyed table".to_owned()),
     };
-    let mut previous = state.node_loops.remove(&node).unwrap_or_default();
+    let mut previous = host.animation().loops.remove(&node).unwrap_or_default();
     for (property, ended) in &previous {
         if wanted.contains_key(property) {
             continue;
         }
         // Stopping leaves the value where the motion had it, and makes that
         // the target; a held loop ends there.
-        state
-            .scene
+        host.scene()
             .stop_animation(node, property)
             .map_err(|error| error.to_string())?;
         if !ended.hold {
-            assign_scene_property(state, node, property, ended.rest.clone())?;
+            host.assign(node, property, ended.rest.clone())?;
         }
     }
     let mut running = BTreeMap::new();
@@ -71,8 +71,8 @@ pub(crate) fn apply_loops(
         let old = previous.remove(&property);
         if let Some(old) = &old
             && old.spec == spec
-            && state
-                .scene
+            && host
+                .scene()
                 .is_animating(node, &property)
                 .map_err(|error| error.to_string())?
         {
@@ -85,15 +85,14 @@ pub(crate) fn apply_loops(
             Some(from) => from,
             None => match &old {
                 Some(old) if !old.hold => old.rest.clone(),
-                _ => state
-                    .scene
+                _ => host
+                    .scene()
                     .current(node, &property)
                     .map_err(|error| error.to_string())?
                     .clone(),
             },
         };
-        state
-            .scene
+        host.scene()
             .animate_from(node, &property, from.clone(), parsed.to, parsed.behavior)
             .map_err(|error| format!("loop `{property}`: {error}"))?;
         running.insert(
@@ -106,7 +105,7 @@ pub(crate) fn apply_loops(
         );
     }
     if !running.is_empty() {
-        state.node_loops.insert(node, running);
+        host.animation().loops.insert(node, running);
     }
     Ok(())
 }

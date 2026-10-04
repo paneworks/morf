@@ -2,7 +2,7 @@ use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue}
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use morf_scene::{AnimationEnd, Color, NodeHandle, Scene, SceneError, Value as SceneValue};
+use morf_scene::{Color, NodeHandle, Scene, SceneError, Value as SceneValue};
 
 use crate::{lua_values::*, scene_bindings::*, serialization::*, state::*};
 
@@ -265,13 +265,4 @@ pub(crate) fn read_axes<'gc>(
             ))),
         })
         .collect()
-}
-
-/// Names the reason an animation ended for the Lua callback that receives it.
-pub(crate) fn animation_end_name(end: AnimationEnd) -> &'static str {
-    match end {
-        AnimationEnd::Completed => "completed",
-        AnimationEnd::Stopped => "stopped",
-        AnimationEnd::Canceled => "canceled",
-    }
 }

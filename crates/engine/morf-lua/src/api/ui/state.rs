@@ -184,9 +184,9 @@ pub(crate) fn install_state_api<'gc>(
                         && let Some(IpcValue::Color(from)) = state.reactive.values.get(&id).cloned()
                         && !duration.is_zero()
                     {
-                        state.theme_fades.retain(|fade| fade.signal != id);
+                        state.animation.fades.retain(|fade| fade.signal != id);
                         if from != *to {
-                            state.theme_fades.push(crate::state::ThemeFade {
+                            state.animation.fades.push(crate::state::ThemeFade {
                                 signal: id,
                                 from,
                                 to: *to,

@@ -171,6 +171,7 @@ pub(crate) fn install_ui_json_api<'gc>(
             stack.consume(ctx)?;
         let mut state = follow_state.borrow_mut();
         state
+            .animation
             .follows
             .retain(|f| !(f.target == target.handle && f.property == property));
         let Some(spec) = spec else {
@@ -193,7 +194,7 @@ pub(crate) fn install_ui_json_api<'gc>(
             LuaValue::String(name) => name.to_str().unwrap_or(&property).to_owned(),
             _ => property.clone(),
         };
-        state.follows.push(crate::state::Follow {
+        state.animation.follows.push(crate::state::Follow {
             target: target.handle,
             property,
             source: source.handle,

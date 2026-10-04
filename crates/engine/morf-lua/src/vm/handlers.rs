@@ -60,4 +60,15 @@ impl morf_runtime::Handlers for Runtime {
             crate::reactive_execute::execute_ipc_handler(ctx, handler, args, limits)
         })
     }
+
+    /// Whatever the handler returns is dropped unread, as a callback's is.
+    fn notify(
+        &mut self,
+        handler: &morf_runtime::Handler,
+        args: &[crate::IpcValue],
+    ) -> Result<(), String> {
+        self.run_handler(|ctx, limits| {
+            crate::reactive_execute::execute_handler_args(ctx, handler, args, limits)
+        })
+    }
 }

@@ -60,6 +60,12 @@ pub trait Handlers {
         handler: &Handler,
         args: &[morf_value::IpcValue],
     ) -> Result<Vec<morf_value::IpcValue>, String>;
+
+    /// Calls `handler` for its effect, whatever it returns: a notification
+    /// (an animation finished, say) rather than a question.
+    fn notify(&mut self, handler: &Handler, args: &[morf_value::IpcValue]) -> Result<(), String> {
+        self.call(handler, args).map(|_| ())
+    }
 }
 
 impl fmt::Debug for Handler {

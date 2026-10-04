@@ -2,23 +2,9 @@ use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue}
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use morf_scene::Physics;
+use morf_runtime::animation::fling;
 
 use crate::{scene_bindings::*, state::*};
-
-/// Presets from Animato, named so a configuration need not tune friction by
-/// hand for the ordinary cases.
-pub(crate) fn fling_preset(name: &str) -> Option<(f64, f64)> {
-    Some(match name {
-        // Long-running, for scrolling a list or a canvas.
-        "smooth" => (1400.0, 2.0),
-        // Short and responsive, for something being directly manipulated.
-        "snappy" => (3600.0, 4.0),
-        // Slow to give up, for large panels.
-        "heavy" => (800.0, 1.0),
-        _ => return None,
-    })
-}
 
 /// Installs `morf.animation.fling`, which sets a property coasting.
 ///
@@ -60,18 +46,13 @@ pub(crate) fn install_fling_api<'gc>(
         };
 
         // A preset supplies both numbers; either may then be overridden.
-        let (mut friction, mut min_velocity) = match table.get_value(ctx, "preset") {
-            LuaValue::Nil => (1400.0, 2.0),
-            LuaValue::String(name) => {
-                let name = name.display_lossy().to_string();
-                fling_preset(&name).ok_or_else(|| {
-                    HostError(format!(
-                        "unknown fling preset `{name}`; expected smooth, snappy, or heavy"
-                    ))
-                })?
-            }
+        let preset = match table.get_value(ctx, "preset") {
+            LuaValue::Nil => None,
+            LuaValue::String(name) => Some(name.display_lossy().to_string()),
             _ => return Err(HostError("fling preset must be a string".into()).into()),
         };
+        let (mut friction, mut min_velocity) =
+            fling::preset_or_default(preset.as_deref()).map_err(HostError)?;
         if let Some(value) = optional_number(ctx, table, "friction")? {
             friction = value;
         }
@@ -82,29 +63,13 @@ pub(crate) fn install_fling_api<'gc>(
         let restitution = optional_number(ctx, table, "bounce")?.unwrap_or(0.0);
         let low = optional_number(ctx, table, "min")?;
         let high = optional_number(ctx, table, "max")?;
-        let bounds = match (low, high) {
-            (Some(low), Some(high)) => Some((low, high)),
-            (None, None) => None,
-            _ => {
-                return Err(HostError("a fling bound needs both `min` and `max`".into()).into());
-            }
-        };
+        let physics = fling::decay(friction, min_velocity, gravity, restitution, low, high)
+            .map_err(HostError)?;
 
         state
             .borrow_mut()
             .scene
-            .fling(
-                node,
-                &property,
-                velocity,
-                Physics::Decay {
-                    friction,
-                    min_velocity,
-                    bounds,
-                    gravity,
-                    restitution,
-                },
-            )
+            .fling(node, &property, velocity, physics)
             .map_err(|error| HostError(error.to_string()))?;
         stack.replace(ctx, true);
         Ok(CallbackReturn::Return)

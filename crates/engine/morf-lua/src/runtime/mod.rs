@@ -21,7 +21,6 @@ pub(crate) mod layout;
 pub(crate) mod layout_host;
 pub(crate) mod lock_surface;
 pub(crate) mod model_revisions;
-pub(crate) mod node_loops;
 pub(crate) mod pending;
 pub(crate) mod prefers;
 pub(crate) mod primary;

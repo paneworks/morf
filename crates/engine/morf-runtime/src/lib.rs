@@ -4,8 +4,10 @@
 //! Subsystems arrive here one at a time from `morf-lua` (PLAN.md phase 5):
 //! handlers, timers, the reactive scheduler, the event vocabulary, the
 //! gesture recogniser, shortcuts, focus movement, wake causes, window
-//! declarations, platform requests, overlays, views and text editing so far.
+//! declarations, platform requests, overlays, views, text editing and motion
+//! (animation) so far.
 
+pub mod animation;
 pub mod editing;
 pub mod events;
 pub mod focus;
