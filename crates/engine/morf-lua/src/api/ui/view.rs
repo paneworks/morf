@@ -414,6 +414,7 @@ pub(crate) fn install_view_api<'gc>(
         };
         transition_state
             .borrow_mut()
+            .windows
             .parent_transitions
             .push(ParentTransitionRequest {
                 node: node.handle,

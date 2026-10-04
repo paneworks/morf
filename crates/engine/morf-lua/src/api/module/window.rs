@@ -16,6 +16,7 @@ pub(super) fn window_metatable<'gc>(
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let visible = state
                 .borrow()
+                .windows
                 .window_surfaces
                 .get(&surface.id)
                 .map(|surface| surface.visible)
@@ -30,12 +31,13 @@ pub(super) fn window_metatable<'gc>(
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let mut state = state.borrow_mut();
             let surface = state
+                .windows
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
             if !surface.visible {
                 surface.visible = true;
-                state.window_surfaces_changed = true;
+                state.windows.window_surfaces_changed = true;
             }
             Ok(CallbackReturn::Return)
         }
@@ -46,12 +48,13 @@ pub(super) fn window_metatable<'gc>(
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let mut state = state.borrow_mut();
             let surface = state
+                .windows
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
             if surface.visible {
                 surface.visible = false;
-                state.window_surfaces_changed = true;
+                state.windows.window_surfaces_changed = true;
             }
             Ok(CallbackReturn::Return)
         }
@@ -96,6 +99,7 @@ pub(super) fn window_metatable<'gc>(
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let kind = state
                 .borrow()
+                .windows
                 .window_surfaces
                 .get(&surface.id)
                 .map(|surface| match surface.kind {
@@ -202,6 +206,7 @@ pub(super) fn window_metatable<'gc>(
         let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
         let mut state = move_state.borrow_mut();
         let valid = state
+            .windows
             .window_surfaces
             .get(&surface.id)
             .is_some_and(|surface| {
@@ -209,6 +214,7 @@ pub(super) fn window_metatable<'gc>(
             });
         if valid {
             state
+                .windows
                 .window_surface_actions
                 .push(WindowSurfaceAction::Move { id: surface.id });
         }
@@ -234,6 +240,7 @@ pub(super) fn window_metatable<'gc>(
         }
         let mut state = resize_state.borrow_mut();
         let valid = state
+            .windows
             .window_surfaces
             .get(&surface.id)
             .is_some_and(|surface| {
@@ -241,6 +248,7 @@ pub(super) fn window_metatable<'gc>(
             });
         if valid {
             state
+                .windows
                 .window_surface_actions
                 .push(WindowSurfaceAction::Resize {
                     id: surface.id,
@@ -290,7 +298,12 @@ pub(super) fn window_metatable<'gc>(
                 stack.replace(ctx, value);
                 return Ok(CallbackReturn::Return);
             }
-            let value = match state.window_surfaces.get(&surface.id).map(|s| &s.kind) {
+            let value = match state
+                .windows
+                .window_surfaces
+                .get(&surface.id)
+                .map(|s| &s.kind)
+            {
                 Some(WindowSurfaceKind::Layer(config)) => layer_setting_to_lua(ctx, config, &key),
                 _ => LuaValue::Nil,
             };

@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use crate::{
     surface_types::*,
-    types::{LogEntry, LogLevel, ToplevelRequest, WorkspaceRequest},
+    types::{LogEntry, LogLevel},
 };
 // Re-exported, because these moved out of this file only to satisfy the line
 // gate: every consumer reaches for them through `state::*` and there is no
@@ -78,18 +78,7 @@ pub(crate) struct LuaTransformWatcher {
     pub(crate) pending: bool,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct PopupNodeAnchor {
-    pub(crate) node: NodeHandle,
-    pub(crate) x: i32,
-    pub(crate) y: i32,
-    pub(crate) width: Option<i32>,
-    pub(crate) height: Option<i32>,
-    pub(crate) margin_top: i32,
-    pub(crate) margin_right: i32,
-    pub(crate) margin_bottom: i32,
-    pub(crate) margin_left: i32,
-}
+pub(crate) use morf_runtime::windows::PopupNodeAnchor;
 
 pub(crate) use morf_runtime::reactive::Effect as LuaEffect;
 
@@ -148,18 +137,6 @@ pub(crate) struct ReactiveState {
     /// One-way: nothing clears it but the supervisor reading it, and by then
     /// the process is on its way out. A configuration cannot un-quit.
     pub(crate) quit_requested: bool,
-    /// Whether the configuration is holding the session awake, and whether that
-    /// has changed since the compositor was last told.
-    /// What a configuration asked to do to workspaces this frame.
-    pub(crate) workspace_requests: Vec<WorkspaceRequest>,
-    /// What a configuration asked to do to other windows this frame.
-    pub(crate) toplevel_requests: Vec<ToplevelRequest>,
-    pub(crate) idle_inhibited: bool,
-    pub(crate) idle_inhibit_changed: bool,
-    pub(crate) shortcuts_inhibited: bool,
-    pub(crate) shortcuts_inhibit_changed: bool,
-    /// Told the compositor's answer, which is not always yes.
-    pub(crate) shortcuts_callbacks: Vec<Handler>,
     /// Nodes the lint has already complained about, so a bar that paints
     /// sixty times a second says it once.
     pub(crate) lint_warned: HashSet<NodeHandle>,
@@ -201,8 +178,6 @@ pub(crate) struct ReactiveState {
     pub(crate) gestures: crate::gestures::GestureState,
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
     pub(crate) overlays: crate::api_overlay::OverlayState,
-    /// The clipboard's text as last seen, for a text input to paste.
-    pub(crate) clipboard_text: Option<String>,
     pub(crate) effect_runs: u64,
     /// `morf.clock`, "HH:MM:SS", written every second something reads it.
     pub(crate) clock: SignalId,
@@ -220,51 +195,12 @@ pub(crate) struct ReactiveState {
     pub(crate) lock_surface_builder: Option<Handler>,
     /// Each node's handler for each event, and the `contains_pointer` watches.
     pub(crate) events: morf_runtime::events::Events,
-    pub(crate) parent_transitions: Vec<ParentTransitionRequest>,
     pub(crate) states: HashMap<NodeHandle, StateSet>,
     pub(crate) ipc_handlers: HashMap<String, Handler>,
-    /// Keyed on the threshold and whether it ignores inhibitors, because the
-    /// same number of milliseconds means two different things to the compositor.
-    /// Each with the id its subscription handle cancels it by.
-    pub(crate) idle_callbacks: HashMap<(u32, bool), Vec<(u64, Handler)>>,
-    pub(crate) next_idle_subscription: u64,
-    /// Whether the set of thresholds changed since the loop last asked, so
-    /// the compositor's notifications follow a subscription made (or
-    /// cancelled) at any time, not only the ones made while loading.
-    pub(crate) idle_timeouts_changed: bool,
-    pub(crate) output_power_requests: Vec<bool>,
-    pub(crate) gamma_requests: Vec<crate::api_gamma::GammaRequest>,
-    pub(crate) clipboard_requests: Vec<ClipboardRequest>,
-    pub(crate) clipboard_callbacks: Vec<Handler>,
-    /// `morf.clipboard.watch` callbacks, each with whether it wants the
-    /// primary selection too.
-    pub(crate) clipboard_watchers: Vec<(Handler, bool)>,
-    pub(crate) offer_reads: Vec<OfferReadRequest>,
-    pub(crate) offer_read_callbacks: HashMap<u64, Handler>,
-    pub(crate) next_offer_read: u64,
-    pub(crate) drag_requests: Vec<DragRequest>,
-    /// Told once how the drag they started ended.
-    pub(crate) drag_end_callbacks: Vec<Handler>,
-    pub(crate) keyboard_focus_callbacks: Vec<Handler>,
-    pub(crate) backdrop_callbacks: Vec<Handler>,
-    pub(crate) screencopy_requests: Vec<ScreencopyRequest>,
-    pub(crate) screencopy_callbacks: HashMap<u64, Handler>,
-    /// The chosen name of each capture in flight, by request.
-    pub(crate) screencopy_names: HashMap<u64, String>,
-    /// Published captures the configuration is done with.
-    pub(crate) screencopy_releases: Vec<String>,
     /// Captures to be written to a file rather than handed to Lua, by request.
     pub(crate) screencopy_saves: HashMap<u64, crate::image_jobs::CaptureSave>,
-    pub(crate) next_screencopy: u64,
     /// `morf.image` work on its way through the worker pool.
     pub(crate) image_jobs: crate::image_jobs::ImageJobs,
-    pub(crate) virtual_keyboard_requests: Vec<VirtualKeyboardRequest>,
-    pub(crate) input_method_enable_requested: bool,
-    pub(crate) input_method_requests: Vec<InputMethodRequest>,
-    pub(crate) input_method_callbacks: Vec<Handler>,
-    pub(crate) text_input_enable_requested: bool,
-    pub(crate) text_input_requests: Vec<TextInputRequest>,
-    pub(crate) text_input_callbacks: Vec<Handler>,
     pub(crate) views: morf_runtime::views::Views,
     pub(crate) pam_tasks: Vec<PendingPam>,
     pub(crate) pam_sessions: Vec<PendingPamSession>,
@@ -302,20 +238,6 @@ pub(crate) struct ReactiveState {
     pub(crate) retention: Retention<NodeHandle>,
     pub(crate) retain_callbacks: HashMap<NodeHandle, RetainCallbacks>,
     pub(crate) retained_destroy_queue: HashSet<NodeHandle>,
-    pub(crate) window_surfaces: HashMap<u64, WindowSurfaceConfig>,
-    pub(crate) next_window_surface: u64,
-    pub(crate) window_surfaces_changed: bool,
-    /// The size the compositor last configured each popup and floating
-    /// window to, as the two signals `win.width` and `win.height` read.
-    pub(crate) window_sizes: HashMap<u64, crate::window_events::WindowSize>,
-    /// `win:on_resize`, `win:on_close_requested` and `win:on_closed`.
-    pub(crate) window_handlers: HashMap<(u64, crate::window_events::WindowEvent), Handler>,
-    /// `morf.surface.on_focus_changed` and `on_pointer_changed`, for the
-    /// shell's own surface.
-    pub(crate) surface_handlers: HashMap<crate::window_events::WindowEvent, Handler>,
-    pub(crate) layer_surface_changed: bool,
-    pub(crate) window_surface_actions: Vec<WindowSurfaceAction>,
-    pub(crate) popup_node_anchors: HashMap<u64, PopupNodeAnchor>,
     pub(crate) transform_tracker: TransformTracker,
     /// The one metatable every scene-node handle shares.
     ///
@@ -374,6 +296,9 @@ pub(crate) struct ReactiveState {
     /// Every `ui.Image`: what became of its source, and its playback.
     pub(crate) images: crate::images::ImageNodes,
     pub(crate) session_unlock_requested: bool,
-    pub(crate) layer_surface: LayerSurfaceConfig,
     pub(crate) shell_root: PathBuf,
+    /// What handlers asked of the platform, queued for the host.
+    pub(crate) requests: morf_runtime::requests::Requests,
+    /// The windows the configuration declared, as the host reads them.
+    pub(crate) windows: morf_runtime::windows::Declarations,
 }

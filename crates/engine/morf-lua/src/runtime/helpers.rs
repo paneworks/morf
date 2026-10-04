@@ -120,31 +120,35 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     state
         .transform_watchers
         .retain(|_, watcher| !removed.contains(&watcher.a) && !removed.contains(&watcher.b));
-    let surface_count = state.window_surfaces.len();
+    let surface_count = state.windows.window_surfaces.len();
     state
+        .windows
         .window_surfaces
         .retain(|_, surface| !removed.contains(&surface.root));
     let removed_anchors = state
+        .windows
         .popup_node_anchors
         .iter()
         .filter_map(|(id, anchor)| removed.contains(&anchor.node).then_some(*id))
         .collect::<Vec<_>>();
     for id in removed_anchors {
-        state.popup_node_anchors.remove(&id);
-        if let Some(surface) = state.window_surfaces.get_mut(&id) {
+        state.windows.popup_node_anchors.remove(&id);
+        if let Some(surface) = state.windows.window_surfaces.get_mut(&id) {
             surface.visible = false;
-            state.window_surfaces_changed = true;
+            state.windows.window_surfaces_changed = true;
         }
     }
     let surface_ids = state
+        .windows
         .window_surfaces
         .keys()
         .copied()
         .collect::<HashSet<_>>();
     state
+        .windows
         .popup_node_anchors
         .retain(|id, anchor| surface_ids.contains(id) && !removed.contains(&anchor.node));
-    state.window_surfaces_changed |= state.window_surfaces.len() != surface_count;
+    state.windows.window_surfaces_changed |= state.windows.window_surfaces.len() != surface_count;
 }
 
 pub(crate) fn finish_retained_destroy(

@@ -237,3 +237,68 @@ pub struct ParentTransitionRequest {
     pub anchors: Option<std::collections::BTreeMap<String, SceneValue>>,
     pub behavior: Behavior,
 }
+
+/// The things a window hears.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum WindowEvent {
+    Resized,
+    CloseRequested,
+    Closed,
+    /// The keyboard came to the surface, or left it.
+    FocusChanged,
+    /// The pointer came over the surface, or left it.
+    PointerChanged,
+}
+
+impl WindowEvent {
+    pub const ALL: [Self; 5] = [
+        Self::Resized,
+        Self::CloseRequested,
+        Self::Closed,
+        Self::FocusChanged,
+        Self::PointerChanged,
+    ];
+
+    /// The method that sets it, and the constructor key.
+    pub fn method(self) -> &'static str {
+        match self {
+            Self::Resized => "on_resize",
+            Self::CloseRequested => "on_close_requested",
+            Self::Closed => "on_closed",
+            Self::FocusChanged => "on_focus_changed",
+            Self::PointerChanged => "on_pointer_changed",
+        }
+    }
+
+    /// Whether a layer surface hears it, as popups and floating windows do.
+    pub fn for_layers(self) -> bool {
+        matches!(self, Self::FocusChanged | Self::PointerChanged)
+    }
+}
+
+/// One window's configured size and the signals its reads track.
+#[derive(Clone, Copy, Debug)]
+pub struct WindowSize {
+    pub width: morf_scene::reactive::SignalId,
+    pub height: morf_scene::reactive::SignalId,
+    pub size: (u32, u32),
+}
+
+/// A popup placed against a node of its parent's tree, kept so the popup
+/// follows the node as it moves.
+#[derive(Clone, Debug)]
+pub struct PopupNodeAnchor {
+    pub node: NodeHandle,
+    pub x: i32,
+    pub y: i32,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub margin_top: i32,
+    pub margin_right: i32,
+    pub margin_bottom: i32,
+    pub margin_left: i32,
+}
+
+mod declarations;
+
+pub use declarations::Declarations;

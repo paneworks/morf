@@ -165,3 +165,38 @@ pub struct OfferDescription {
     /// The text, for a drop that offered some.
     pub text: Option<String>,
 }
+
+/// What `morf.gamma.set` or `reset` asked of an output.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GammaRequest {
+    /// The output's name; `None` is the one this shell is on.
+    pub output: Option<String>,
+    /// `(temperature, brightness, gamma)`, or `None` to reset.
+    pub set: Option<(f64, f64, f64)>,
+}
+
+/// What a configuration asked to do to a workspace.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WorkspaceRequest {
+    Activate(String),
+    Remove(String),
+    /// Move the workspace to the group on the named output.
+    Assign {
+        key: String,
+        output: String,
+    },
+}
+
+/// Something a configuration asked to do to another window.
+#[derive(Clone, Debug)]
+pub struct ToplevelRequest {
+    pub identifier: String,
+    pub action: String,
+    pub value: bool,
+    /// For `set_minimize_target`: x, y, width, height on the shell's surface.
+    pub rect: Option<(i32, i32, i32, i32)>,
+}
+
+mod queue;
+
+pub use queue::Requests;

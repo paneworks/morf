@@ -149,7 +149,7 @@ impl Runtime {
 
     /// Takes what a configuration asked to do to other windows.
     pub fn take_toplevel_requests(&mut self) -> Vec<ToplevelRequest> {
-        std::mem::take(&mut self.reactive.borrow_mut().toplevel_requests)
+        self.reactive.borrow_mut().requests.take_toplevel_requests()
     }
 
     /// Replaces `morf.workspaces` with the compositor's current workspace list.
@@ -213,6 +213,9 @@ impl Runtime {
 
     /// Takes what a configuration asked to do to workspaces.
     pub fn take_workspace_requests(&mut self) -> Vec<WorkspaceRequest> {
-        std::mem::take(&mut self.reactive.borrow_mut().workspace_requests)
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_workspace_requests()
     }
 }

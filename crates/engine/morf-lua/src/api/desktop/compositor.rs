@@ -22,10 +22,7 @@ fn push_workspace_request(
     request: WorkspaceRequest,
 ) -> Result<(), HostError> {
     let mut state = state.borrow_mut();
-    if state.workspace_requests.len() >= 64 {
-        return Err(HostError("workspace request limit reached".into()));
-    }
-    state.workspace_requests.push(request);
+    state.requests.queue_workspace(request).map_err(HostError)?;
     Ok(())
 }
 
@@ -80,21 +77,21 @@ pub(crate) fn install_compositor_api<'gc>(
         let entry = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (identifier, value): (String, Option<bool>) = stack.consume(ctx)?;
             let mut state = request_state.borrow_mut();
-            if state.toplevel_requests.len() >= 64 {
-                return Err(HostError("window request limit reached".into()).into());
-            }
-            state.toplevel_requests.push(ToplevelRequest {
-                identifier,
-                action: action.clone(),
-                // The setters default to turning the state on, so
-                // `set_maximized(id)` reads the way it looks.
-                value: if takes_value {
-                    value.unwrap_or(true)
-                } else {
-                    true
-                },
-                rect: None,
-            });
+            state
+                .requests
+                .queue_toplevel(ToplevelRequest {
+                    identifier,
+                    action: action.clone(),
+                    // The setters default to turning the state on, so
+                    // `set_maximized(id)` reads the way it looks.
+                    value: if takes_value {
+                        value.unwrap_or(true)
+                    } else {
+                        true
+                    },
+                    rect: None,
+                })
+                .map_err(HostError)?;
             Ok(CallbackReturn::Return)
         });
         toplevel.set_field(ctx, name, entry);
@@ -109,15 +106,15 @@ pub(crate) fn install_compositor_api<'gc>(
                 .map_err(|_| HostError(format!("`{value}` does not fit a surface coordinate")))
         };
         let mut state = target_state.borrow_mut();
-        if state.toplevel_requests.len() >= 64 {
-            return Err(HostError("window request limit reached".into()).into());
-        }
-        state.toplevel_requests.push(ToplevelRequest {
-            identifier,
-            action: "set_minimize_target".to_owned(),
-            value: true,
-            rect: Some((narrow(x)?, narrow(y)?, narrow(width)?, narrow(height)?)),
-        });
+        state
+            .requests
+            .queue_toplevel(ToplevelRequest {
+                identifier,
+                action: "set_minimize_target".to_owned(),
+                value: true,
+                rect: Some((narrow(x)?, narrow(y)?, narrow(width)?, narrow(height)?)),
+            })
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     toplevel.set_field(ctx, "set_minimize_target", set_minimize_target);
@@ -128,9 +125,10 @@ pub(crate) fn install_compositor_api<'gc>(
     let shortcuts_state = Rc::clone(&state);
     let shortcuts_inhibit = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let inhibited: bool = stack.consume(ctx)?;
-        let mut state = shortcuts_state.borrow_mut();
-        state.shortcuts_inhibited = inhibited;
-        state.shortcuts_inhibit_changed = true;
+        shortcuts_state
+            .borrow_mut()
+            .requests
+            .set_shortcuts_inhibited(inhibited);
         Ok(CallbackReturn::Return)
     });
     // The compositor's answer, delivered rather than polled: a binding that
@@ -139,10 +137,11 @@ pub(crate) fn install_compositor_api<'gc>(
     let shortcuts_subscribe = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
         let mut state = subscribe_state.borrow_mut();
-        if state.shortcuts_callbacks.len() >= 64 {
+        if state.requests.shortcuts_callbacks.len() >= 64 {
             return Err(HostError("shortcuts callback limit reached".into()).into());
         }
         state
+            .requests
             .shortcuts_callbacks
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)

@@ -104,9 +104,9 @@ pub(crate) fn register_window_surface(
     updates_enabled: bool,
     kind: WindowSurfaceKind,
 ) -> u64 {
-    let id = state.next_window_surface;
-    state.next_window_surface = state.next_window_surface.wrapping_add(1);
-    state.window_surfaces.insert(
+    let id = state.windows.next_window_surface;
+    state.windows.next_window_surface = state.windows.next_window_surface.wrapping_add(1);
+    state.windows.window_surfaces.insert(
         id,
         WindowSurfaceConfig {
             id,
@@ -116,6 +116,6 @@ pub(crate) fn register_window_surface(
             kind,
         },
     );
-    state.window_surfaces_changed = true;
+    state.windows.window_surfaces_changed = true;
     id
 }

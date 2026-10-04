@@ -209,12 +209,15 @@ pub(crate) fn apply_state(
                     .reparent(node, Some(parent))
                     .map_err(|error| error.to_string())?;
             } else {
-                state.parent_transitions.push(ParentTransitionRequest {
-                    node,
-                    parent,
-                    anchors: definition.anchors,
-                    behavior: transition.unwrap_or_default(),
-                });
+                state
+                    .windows
+                    .parent_transitions
+                    .push(ParentTransitionRequest {
+                        node,
+                        parent,
+                        anchors: definition.anchors,
+                        behavior: transition.unwrap_or_default(),
+                    });
             }
         }
     }

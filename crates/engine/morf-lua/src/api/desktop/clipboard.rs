@@ -65,14 +65,14 @@ pub(crate) fn install_clipboard_api<'gc>(
             return Err(HostError("clipboard mime must be 1..256 bytes".into()).into());
         }
         let mut state = set_state.borrow_mut();
-        if state.clipboard_requests.len() >= 64 {
-            return Err(HostError("clipboard request limit reached".into()).into());
-        }
-        state.clipboard_requests.push(ClipboardRequest {
-            data,
-            mime,
-            primary,
-        });
+        state
+            .requests
+            .queue_clipboard(ClipboardRequest {
+                data,
+                mime,
+                primary,
+            })
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let subscribe_state = Rc::clone(&state);
@@ -81,10 +81,11 @@ pub(crate) fn install_clipboard_api<'gc>(
     let clipboard_subscribe = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
         let mut state = subscribe_state.borrow_mut();
-        if state.clipboard_callbacks.len() >= 64 {
+        if state.requests.clipboard_callbacks.len() >= 64 {
             return Err(HostError("clipboard callback limit reached".into()).into());
         }
         state
+            .requests
             .clipboard_callbacks
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
@@ -99,10 +100,10 @@ pub(crate) fn install_clipboard_api<'gc>(
             matches!(options.get_value(ctx, "primary"), LuaValue::Boolean(true))
         });
         let mut state = watch_state.borrow_mut();
-        if state.clipboard_watchers.len() >= 64 {
+        if state.requests.clipboard_watchers.len() >= 64 {
             return Err(HostError("clipboard watch limit reached".into()).into());
         }
-        state.clipboard_watchers.push((
+        state.requests.clipboard_watchers.push((
             crate::vm::handler_store::register(ctx.stash(callback)),
             primary,
         ));
@@ -138,16 +139,12 @@ pub(crate) fn install_clipboard_api<'gc>(
     let drag_start = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (payload, done): (Table, Option<Closure>) = stack.consume(ctx)?;
         let request = drag_request(ctx, payload).map_err(HostError)?;
-        let mut state = drag_state.borrow_mut();
-        if state.drag_requests.len() >= 4 {
-            return Err(HostError("drag request limit reached".into()).into());
-        }
-        state.drag_requests.push(request);
-        if let Some(done) = done {
-            state
-                .drag_end_callbacks
-                .push(crate::vm::handler_store::register(ctx.stash(done)));
-        }
+        let done = done.map(|done| crate::vm::handler_store::register(ctx.stash(done)));
+        drag_state
+            .borrow_mut()
+            .requests
+            .queue_drag(request, done)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let drag_supported_state = Rc::clone(&state);
@@ -292,17 +289,18 @@ pub(crate) fn offer_table<'gc>(
             return Err(HostError("offer mime must be 1..256 bytes".into()).into());
         }
         let mut state = read_state.borrow_mut();
-        if state.offer_read_callbacks.len() >= MAX_PENDING_READS {
+        if state.requests.offer_read_callbacks.len() >= MAX_PENDING_READS {
             return Err(HostError("offer read limit reached".into()).into());
         }
-        state.next_offer_read = state.next_offer_read.wrapping_add(1);
-        let id = state.next_offer_read;
-        state.offer_reads.push(OfferReadRequest {
+        state.requests.next_offer_read = state.requests.next_offer_read.wrapping_add(1);
+        let id = state.requests.next_offer_read;
+        state.requests.offer_reads.push(OfferReadRequest {
             id,
             offer: offer_id,
             mime,
         });
         state
+            .requests
             .offer_read_callbacks
             .insert(id, crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)

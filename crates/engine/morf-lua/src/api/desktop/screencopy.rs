@@ -18,11 +18,11 @@ const MAX_PENDING: usize = 4;
 
 /// Captures in flight, whether a callback or a file is waiting on each.
 fn pending(state: &ReactiveState) -> usize {
-    state.screencopy_callbacks.len()
+    state.requests.screencopy_callbacks.len()
         + state
             .screencopy_saves
             .keys()
-            .filter(|id| !state.screencopy_callbacks.contains_key(id))
+            .filter(|id| !state.requests.screencopy_callbacks.contains_key(id))
             .count()
 }
 
@@ -44,9 +44,9 @@ pub(crate) fn install_screencopy_api<'gc>(
         if pending(&state) >= MAX_PENDING {
             return Err(HostError("screencopy request limit reached".into()).into());
         }
-        let id = state.next_screencopy;
-        state.next_screencopy = state.next_screencopy.wrapping_add(1);
-        state.screencopy_requests.push(ScreencopyRequest {
+        let id = state.requests.next_screencopy;
+        state.requests.next_screencopy = state.requests.next_screencopy.wrapping_add(1);
+        state.requests.screencopy_requests.push(ScreencopyRequest {
             id,
             include_cursor,
             window: None,
@@ -55,9 +55,10 @@ pub(crate) fn install_screencopy_api<'gc>(
             output,
         });
         if let Some(name) = name {
-            state.screencopy_names.insert(id, name);
+            state.requests.screencopy_names.insert(id, name);
         }
         state
+            .requests
             .screencopy_callbacks
             .insert(id, crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
@@ -75,9 +76,9 @@ pub(crate) fn install_screencopy_api<'gc>(
         if pending(&state) >= MAX_PENDING {
             return Err(HostError("screencopy request limit reached".into()).into());
         }
-        let id = state.next_screencopy;
-        state.next_screencopy = state.next_screencopy.wrapping_add(1);
-        state.screencopy_requests.push(ScreencopyRequest {
+        let id = state.requests.next_screencopy;
+        state.requests.next_screencopy = state.requests.next_screencopy.wrapping_add(1);
+        state.requests.screencopy_requests.push(ScreencopyRequest {
             id,
             include_cursor: false,
             window: Some(identifier),
@@ -86,9 +87,10 @@ pub(crate) fn install_screencopy_api<'gc>(
             output: None,
         });
         if let Some(name) = name {
-            state.screencopy_names.insert(id, name);
+            state.requests.screencopy_names.insert(id, name);
         }
         state
+            .requests
             .screencopy_callbacks
             .insert(id, crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
@@ -99,7 +101,11 @@ pub(crate) fn install_screencopy_api<'gc>(
     let release_state = Rc::clone(&state);
     let screencopy_release = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let source: String = stack.consume(ctx)?;
-        release_state.borrow_mut().screencopy_releases.push(source);
+        release_state
+            .borrow_mut()
+            .requests
+            .screencopy_releases
+            .push(source);
         Ok(CallbackReturn::Return)
     });
     // `save { path, output?, window?, region?, include_cursor?, format?,
@@ -137,9 +143,9 @@ pub(crate) fn install_screencopy_api<'gc>(
         if pending(&state) >= MAX_PENDING {
             return Err(HostError("screencopy request limit reached".into()).into());
         }
-        let id = state.next_screencopy;
-        state.next_screencopy = state.next_screencopy.wrapping_add(1);
-        state.screencopy_requests.push(ScreencopyRequest {
+        let id = state.requests.next_screencopy;
+        state.requests.next_screencopy = state.requests.next_screencopy.wrapping_add(1);
+        state.requests.screencopy_requests.push(ScreencopyRequest {
             id,
             include_cursor: include_cursor && window.is_none(),
             window,
@@ -158,6 +164,7 @@ pub(crate) fn install_screencopy_api<'gc>(
         );
         if let Some(callback) = callback {
             state
+                .requests
                 .screencopy_callbacks
                 .insert(id, crate::vm::handler_store::register(ctx.stash(callback)));
         }

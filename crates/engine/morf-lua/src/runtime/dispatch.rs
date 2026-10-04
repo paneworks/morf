@@ -24,7 +24,7 @@ impl Runtime {
 
     /// Drains parent transitions queued by Lua handlers.
     pub fn take_parent_transitions(&mut self) -> Vec<ParentTransitionRequest> {
-        std::mem::take(&mut self.reactive.borrow_mut().parent_transitions)
+        self.reactive.borrow_mut().windows.take_parent_transitions()
     }
 
     /// Returns the number of Lua effect evaluations performed by this runtime.
@@ -40,23 +40,17 @@ impl Runtime {
     /// Returns compositor idle thresholds requested by Lua callbacks, each
     /// with whether it should ignore idle inhibitors.
     pub fn idle_timeouts(&self) -> Vec<(u32, bool)> {
-        let mut timeouts = self
-            .reactive
-            .borrow()
-            .idle_callbacks
-            .keys()
-            .copied()
-            .collect::<Vec<_>>();
-        timeouts.sort_unstable();
-        timeouts
+        self.reactive.borrow().requests.idle_timeouts()
     }
 
     /// The thresholds, when they changed since this was last asked: a
     /// subscription made or cancelled after loading, which the compositor
     /// has to hear about now rather than at the next reload.
     pub fn take_idle_timeouts_change(&mut self) -> Option<Vec<(u32, bool)>> {
-        let changed = std::mem::take(&mut self.reactive.borrow_mut().idle_timeouts_changed);
-        changed.then(|| self.idle_timeouts())
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_idle_timeouts_change()
     }
 
     /// Dispatches one compositor idle state change to registered Lua callbacks.
@@ -64,15 +58,8 @@ impl Runtime {
         let callbacks = self
             .reactive
             .borrow()
-            .idle_callbacks
-            .get(&(timeout_ms, input_only))
-            .map(|callbacks| {
-                callbacks
-                    .iter()
-                    .map(|(_, callback)| callback.clone())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+            .requests
+            .idle_subscribers(timeout_ms, input_only);
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_handler_args(ctx, callback, &[IpcValue::Boolean(idle)], limits)
@@ -88,41 +75,42 @@ impl Runtime {
     /// Takes pending compositor output power requests.
     /// Takes the `morf.gamma` requests made since the last call, in order.
     pub fn take_gamma_requests(&mut self) -> Vec<crate::GammaRequest> {
-        std::mem::take(&mut self.reactive.borrow_mut().gamma_requests)
+        self.reactive.borrow_mut().requests.take_gamma_requests()
     }
 
     pub fn take_output_power_requests(&mut self) -> Vec<bool> {
-        std::mem::take(&mut self.reactive.borrow_mut().output_power_requests)
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_output_power_requests()
     }
 
     /// Takes a pending change to whether the session is being held awake.
     pub fn take_idle_inhibit_change(&mut self) -> Option<bool> {
-        let mut state = self.reactive.borrow_mut();
-        state.idle_inhibit_changed.then(|| {
-            state.idle_inhibit_changed = false;
-            state.idle_inhibited
-        })
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_idle_inhibit_change()
     }
 
     /// Takes a pending change to whether the shell wants the compositor's
     /// shortcuts held off it.
     pub fn take_shortcuts_inhibit_change(&mut self) -> Option<bool> {
-        let mut state = self.reactive.borrow_mut();
-        state.shortcuts_inhibit_changed.then(|| {
-            state.shortcuts_inhibit_changed = false;
-            state.shortcuts_inhibited
-        })
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_shortcuts_inhibit_change()
     }
 
     /// Whether the shell currently asks for the compositor's shortcuts to be
     /// held off it (what `morf.shortcuts.inhibit` last said).
     pub fn shortcuts_inhibited(&self) -> bool {
-        self.reactive.borrow().shortcuts_inhibited
+        self.reactive.borrow().requests.shortcuts_inhibited
     }
 
     /// Delivers the compositor's answer to that request.
     pub fn dispatch_shortcuts_inhibited(&mut self, active: bool) -> bool {
-        let callbacks = self.reactive.borrow().shortcuts_callbacks.clone();
+        let callbacks = self.reactive.borrow().requests.shortcuts_callbacks.clone();
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_handler_args(ctx, callback, &[IpcValue::Boolean(active)], limits)
@@ -138,8 +126,8 @@ impl Runtime {
     /// Dispatches a compositor clipboard selection to registered Lua callbacks.
     pub fn dispatch_clipboard(&mut self, text: Option<String>) -> bool {
         // Kept for a text input to paste, whether or not anybody subscribed.
-        self.reactive.borrow_mut().clipboard_text = text.clone();
-        let callbacks = self.reactive.borrow().clipboard_callbacks.clone();
+        self.reactive.borrow_mut().requests.clipboard_text = text.clone();
+        let callbacks = self.reactive.borrow().requests.clipboard_callbacks.clone();
         let value = text.map_or(IpcValue::Nil, IpcValue::String);
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
@@ -155,7 +143,12 @@ impl Runtime {
 
     /// Tells the configuration the keyboard came to its surface, or left it.
     pub fn dispatch_keyboard_focus(&mut self, active: bool) -> bool {
-        let callbacks = self.reactive.borrow().keyboard_focus_callbacks.clone();
+        let callbacks = self
+            .reactive
+            .borrow()
+            .requests
+            .keyboard_focus_callbacks
+            .clone();
         let value = IpcValue::Boolean(active);
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
@@ -172,7 +165,7 @@ impl Runtime {
 
     /// Tells the configuration the backdrop was clicked: somewhere else.
     pub fn dispatch_backdrop_click(&mut self) -> bool {
-        let callbacks = self.reactive.borrow().backdrop_callbacks.clone();
+        let callbacks = self.reactive.borrow().requests.backdrop_callbacks.clone();
         for callback in &callbacks {
             if let Err(message) =
                 self.run_handler(|ctx, limits| execute_handler_args(ctx, callback, &[], limits))
@@ -187,22 +180,28 @@ impl Runtime {
 
     /// Takes pending output-capture requests.
     pub fn take_screencopy_requests(&mut self) -> Vec<ScreencopyRequest> {
-        std::mem::take(&mut self.reactive.borrow_mut().screencopy_requests)
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_screencopy_requests()
     }
 
     /// Takes the name a capture asked to be published under, if it chose one.
     pub fn take_screencopy_name(&mut self, request_id: u64) -> Option<String> {
         self.reactive
             .borrow_mut()
-            .screencopy_names
-            .remove(&request_id)
+            .requests
+            .take_screencopy_name(request_id)
     }
 
     /// Takes the published captures a configuration has released.
     ///
     /// Each is a source string as `frame.source` gave it, or the bare name.
     pub fn take_screencopy_releases(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.reactive.borrow_mut().screencopy_releases)
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_screencopy_releases()
     }
 
     /// Dispatches one output capture to its requesting Lua callback.
@@ -218,6 +217,7 @@ impl Runtime {
         let Some(callback) = self
             .reactive
             .borrow_mut()
+            .requests
             .screencopy_callbacks
             .remove(&request_id)
         else {
@@ -235,17 +235,26 @@ impl Runtime {
 
     /// Takes pending virtual keyboard protocol requests.
     pub fn take_virtual_keyboard_requests(&mut self) -> Vec<VirtualKeyboardRequest> {
-        std::mem::take(&mut self.reactive.borrow_mut().virtual_keyboard_requests)
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_virtual_keyboard_requests()
     }
 
     /// Takes whether Lua requested the compositor input-method role.
     pub fn take_input_method_enable_request(&mut self) -> bool {
-        std::mem::take(&mut self.reactive.borrow_mut().input_method_enable_requested)
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_input_method_enable_request()
     }
 
     /// Takes pending input-method protocol requests.
     pub fn take_input_method_requests(&mut self) -> Vec<InputMethodRequest> {
-        std::mem::take(&mut self.reactive.borrow_mut().input_method_requests)
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_input_method_requests()
     }
 
     /// Dispatches an atomically committed input-method context to Lua.
@@ -257,7 +266,12 @@ impl Runtime {
         anchor: u32,
         serial: u32,
     ) -> bool {
-        let callbacks = self.reactive.borrow().input_method_callbacks.clone();
+        let callbacks = self
+            .reactive
+            .borrow()
+            .requests
+            .input_method_callbacks
+            .clone();
         let args = [
             IpcValue::Boolean(active),
             surrounding_text.map_or(IpcValue::Nil, IpcValue::String),
@@ -279,12 +293,18 @@ impl Runtime {
 
     /// Takes whether Lua requested text-input-v3 creation.
     pub fn take_text_input_enable_request(&mut self) -> bool {
-        std::mem::take(&mut self.reactive.borrow_mut().text_input_enable_requested)
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_text_input_enable_request()
     }
 
     /// Takes pending text-input-v3 state requests.
     pub fn take_text_input_requests(&mut self) -> Vec<TextInputRequest> {
-        std::mem::take(&mut self.reactive.borrow_mut().text_input_requests)
+        self.reactive
+            .borrow_mut()
+            .requests
+            .take_text_input_requests()
     }
 
     /// Dispatches one atomically committed text-input edit batch to Lua.
@@ -304,7 +324,7 @@ impl Runtime {
         // before the configuration's own subscribers hear of it.
         let edited = (commit.is_some() || delete_before > 0 || delete_after > 0)
             && self.commit_text_input(commit.as_deref(), delete_before, delete_after);
-        let callbacks = self.reactive.borrow().text_input_callbacks.clone();
+        let callbacks = self.reactive.borrow().requests.text_input_callbacks.clone();
         let args = [
             IpcValue::Boolean(focused),
             preedit.map_or(IpcValue::Nil, IpcValue::String),
