@@ -61,7 +61,7 @@ pub struct LayerClient {
 /// primary surface only. Every other layer surface (a dock, a menu, an OSD)
 /// becomes a `wl_subsurface` of that toplevel, placed inside it by its anchors,
 /// margins and size exactly where layer-shell would put it on an output the
-/// primary's size (`layer_placement`). Opening each as a toplevel of its own
+/// primary's size (`placement`). Opening each as a toplevel of its own
 /// instead stacked unrelated fullscreen windows, and dropped every anchor.
 pub(crate) enum ShellSurface {
     /// A `wlr-layer-shell` surface: what a shell wants.

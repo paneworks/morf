@@ -7,7 +7,11 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = []
+default = ["wayland", "headless"]
+# A compositor's windows.
+wayland = []
+# Virtual outputs, a scripted seat, offscreen targets and a manual clock.
+headless = []
 # Surfaces' accessible trees on AT-SPI (AccessKit), built only while a
 # screen reader asks.
 a11y = ["dep:accesskit", "dep:accesskit_unix"]

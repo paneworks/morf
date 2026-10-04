@@ -17,9 +17,9 @@ use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
 use morf_app::WindowId;
+use morf_app::backend::headless::{VirtualSeat, virtual_outputs};
 
 use crate::config::LoadPolicy;
-use crate::headless_surfaces::headless_screens;
 use crate::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};
 use crate::surfaces::{PointerInput, primary_surface_root};
 
@@ -149,11 +149,11 @@ pub(crate) struct Headless {
     /// The virtual clock's reading, and when the last frame was.
     now: Duration,
     last_frame: Duration,
-    /// Where the pointer is, for a wheel or a release with no position.
-    pub(crate) pointer: Option<(WindowId, f64, f64)>,
-    /// The surface a button was last pressed on: the one a compositor gives
-    /// the keyboard to, and where keys go when a test names no surface.
-    pub(crate) keyboard: Option<WindowId>,
+    /// The headless backend's seat: where the pointer is (for a wheel or a
+    /// release with no position), and the surface a button was last pressed
+    /// on -- the one a compositor gives the keyboard to, and where keys go
+    /// when a test names no surface.
+    pub(crate) seat: VirtualSeat,
     /// Loaded with no screen: nothing it declares is mapped.
     pub(crate) outputless: bool,
 }
@@ -165,7 +165,7 @@ impl Headless {
             error,
             logs: Vec::new(),
         };
-        let screens = headless_screens(options.screens, options.size, options.scale);
+        let screens = virtual_outputs(options.screens, options.size, options.scale);
         // No screen at all is the shell with every output gone: the
         // configuration runs as the outputless runtime does (outputless.rs).
         let outputless = options.screens == 0;
@@ -241,8 +241,7 @@ impl Headless {
             problems: Vec::new(),
             now: Duration::ZERO,
             last_frame: Duration::ZERO,
-            pointer: None,
-            keyboard: None,
+            seat: VirtualSeat::default(),
             outputless,
         };
         // The first frame, at time zero: what the shell draws before any

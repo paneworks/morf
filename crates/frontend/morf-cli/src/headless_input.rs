@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use morf_layout::Layout;
+use morf_app::backend::headless::VirtualSeat;
 use morf_app::{Event, WindowId};
 
 use crate::headless::{Headless, Surface};
@@ -37,27 +38,7 @@ impl Headless {
     /// Hands one pointer event to the shell's own pointer path, then lets a
     /// frame's worth of nothing pass so the layout shows what it did.
     pub(crate) fn pointer(&mut self, event: Event) -> Result<(), String> {
-        match &event {
-            Event::PointerMotion { surface, x, y }
-            | Event::PointerButton { surface, x, y, .. }
-            | Event::PointerAxis { surface, x, y, .. } => {
-                self.pointer = Some((*surface, *x, *y))
-            }
-            Event::PointerLeave { surface } => {
-                if self.pointer.is_some_and(|(on, _, _)| on == *surface) {
-                    self.pointer = None;
-                }
-            }
-            _ => {}
-        }
-        if let Event::PointerButton {
-            surface,
-            pressed: true,
-            ..
-        } = &event
-        {
-            self.keyboard = Some(*surface);
-        }
+        self.seat.observe(&event);
         let layouts = Layouts(&self.surfaces);
         match handle_pointer_event(
             &mut self.runtime,
@@ -81,23 +62,10 @@ impl Headless {
         button: u32,
         modifiers: morf_app::KeyModifiers,
     ) -> Result<(), String> {
-        self.pointer(Event::PointerMotion { surface, x, y })?;
-        self.pointer(Event::PointerButton {
-            surface,
-            button,
-            pressed: true,
-            x,
-            y,
-            modifiers,
-        })?;
-        self.pointer(Event::PointerButton {
-            surface,
-            button,
-            pressed: false,
-            x,
-            y,
-            modifiers,
-        })
+        for event in VirtualSeat::click(surface, (x, y), button, modifiers) {
+            self.pointer(event)?;
+        }
+        Ok(())
     }
 
     /// One key, pressed and released, into a surface's focused node.

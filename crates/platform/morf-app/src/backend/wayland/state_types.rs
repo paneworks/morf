@@ -170,8 +170,8 @@ pub(crate) struct LayerRecord {
     pub(crate) blank_color: [u8; 4],
     /// Where the surface asked to be. Layer-shell is told directly and the
     /// compositor places it; without layer-shell this is what places the
-    /// subsurface standing in for it (`layer_placement`).
-    pub(crate) request: crate::backend::wayland::layer_placement::LayerRequest,
+    /// subsurface standing in for it (`placement`).
+    pub(crate) request: crate::placement::LayerRequest,
     /// When the surface was opened, from `LayerState::layer_sequence`: breaks
     /// stacking ties between subsurfaces on one layer.
     pub(crate) sequence: u64,
@@ -226,6 +226,8 @@ pub(crate) struct LayerState {
     /// add the same subsurface offset its creation did.
     pub(crate) popup_parents: HashMap<u64, WindowId>,
     pub(crate) popups: HashMap<u64, Popup>,
+    /// The size of each popup's last configure.
+    pub(crate) popup_sizes: HashMap<u64, (u32, u32)>,
     /// Reposition tokens sent to, and echoed back by, each live popup.
     pub(crate) popup_repositions: HashMap<u64, PopupReposition>,
     pub(crate) floatings: HashMap<u64, Window>,
@@ -394,6 +396,8 @@ pub(crate) struct LayerState {
     /// what *it* will draw into, which is the narrower and the right answer.
     pub(crate) linux_dmabuf: Option<ZwpLinuxDmabufV1>,
     pub(crate) session_locks: SessionLockState,
+    /// Whether the compositor offers `ext-session-lock`.
+    pub(crate) has_session_lock: bool,
     pub(crate) session_lock: Option<SessionLock>,
     pub(crate) lock_surfaces: Vec<LockSurface>,
 }

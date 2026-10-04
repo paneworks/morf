@@ -8,31 +8,12 @@ use std::collections::{HashMap, HashSet};
 
 use morf_lua::WindowSurfaceKind;
 use morf_scene::NodeHandle;
-use morf_app::{PRIMARY_LAYER, Output, WindowId};
+use morf_app::backend::headless::{self, layer_extent as stretched, layer_position};
+use morf_app::{LayerAnchors, PRIMARY_LAYER, ShellLayer, WindowId};
 
 use crate::headless::{Headless, Surface};
 use crate::surface_popups::window_surface_effectively_visible;
 use crate::surfaces::primary_surface_root;
-
-/// The screens a headless run has: side by side, all the same size. None at
-/// all is the shell with every output gone.
-pub(crate) fn headless_screens(count: usize, size: (u32, u32), scale: i32) -> Vec<Output> {
-    (0..count)
-        .map(|index| Output {
-            id: index as u32 + 1,
-            name: Some(format!("HEADLESS-{}", index + 1)),
-            make: "morf".to_owned(),
-            model: "headless".to_owned(),
-            description: Some("morf headless output".to_owned()),
-            position: Some((size.0 as i32 * index as i32, 0)),
-            size: Some((size.0 as i32, size.1 as i32)),
-            physical_size: None,
-            scale: scale.max(1),
-            transform: "normal",
-            subpixel: "unknown",
-        })
-        .collect()
-}
 
 impl Headless {
     /// Works out the surfaces the configuration has asked for, and their
@@ -253,85 +234,46 @@ impl Headless {
     }
 }
 
-/// A surface's extent along one axis: the screen's when anchored to both
-/// edges or given none, what it asked for otherwise.
-fn stretched(near: bool, far: bool, asked: u32, screen: u32, content: u32) -> u32 {
-    // Layer shell: a size of zero on an axis anchored at both ends is the
-    // output's extent; a size given is kept, centred between the anchors,
-    // as a compositor does (a layer that forgets `height = 0` shows as a
-    // 32 px band on screen, and must show as one here too).
-    if near && far && asked == 0 {
-        return screen;
-    }
-    if asked == 0 {
-        return content.min(screen).max(1);
-    }
-    asked
-}
-
 fn nonzero(asked: u32, fallback: u32) -> u32 {
     if asked == 0 { fallback.max(1) } else { asked }
 }
 
-/// Where a layer surface of `size` sits on a screen, from its anchors and
-/// margins: centred on an axis it is anchored to neither or both ends of.
+/// Where a layer surface of `size` sits on a screen (the headless backend's
+/// arithmetic, from the configuration's anchors and margins).
 fn placed(
     config: &morf_lua::LayerSurfaceConfig,
     size: (u32, u32),
     screen: (u32, u32),
 ) -> (i32, i32) {
-    let along = |near: bool, far: bool, size: u32, full: u32, before: i32, after: i32| {
-        let free = i64::from(full) - i64::from(size);
-        let at = match (near, far) {
-            (true, false) => i64::from(before),
-            (false, true) => free - i64::from(after),
-            _ => free / 2,
-        };
-        at.clamp(0, free.max(0)) as i32
+    let anchors = LayerAnchors {
+        top: config.anchors.top,
+        right: config.anchors.right,
+        bottom: config.anchors.bottom,
+        left: config.anchors.left,
     };
-    (
-        along(
-            config.anchors.left,
-            config.anchors.right,
-            size.0,
-            screen.0,
-            config.margin_left,
-            config.margin_right,
-        ),
-        along(
-            config.anchors.top,
-            config.anchors.bottom,
-            size.1,
-            screen.1,
-            config.margin_top,
-            config.margin_bottom,
-        ),
-    )
+    let margins = (
+        config.margin_top,
+        config.margin_right,
+        config.margin_bottom,
+        config.margin_left,
+    );
+    layer_position(anchors, margins, size, screen)
 }
 
 /// A layer-shell layer's place in the stack, bottom first; an unknown name
 /// is `top`, the layer a surface gets when it names none.
 pub(crate) fn layer_stack(layer: &str) -> u8 {
-    match layer {
-        "background" => 0,
-        "bottom" => 1,
-        "overlay" => 3,
-        _ => 2,
-    }
+    headless::layer_stack(match layer {
+        "background" => ShellLayer::Background,
+        "bottom" => ShellLayer::Bottom,
+        "overlay" => ShellLayer::Overlay,
+        _ => ShellLayer::Top,
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{layer_stack, stretched};
-
-    #[test]
-    fn a_layer_anchored_at_both_ends_stretches_only_when_it_asks_for_no_size() {
-        assert_eq!(stretched(true, true, 0, 1080, 40), 1080);
-        // The 32 px a layer gets by default stays 32 px, as on a compositor.
-        assert_eq!(stretched(true, true, 32, 1080, 40), 32);
-        assert_eq!(stretched(true, false, 0, 1080, 40), 40);
-        assert_eq!(stretched(false, false, 300, 1080, 40), 300);
-    }
+    use super::layer_stack;
 
     #[test]
     fn surfaces_compose_bottom_layer_first_and_keep_their_order_within_one() {

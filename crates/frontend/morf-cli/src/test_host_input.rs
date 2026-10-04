@@ -21,7 +21,7 @@ fn key_role(
     surface: Option<&IpcValue>,
 ) -> Result<morf_app::WindowId, String> {
     if optional_text(surface).is_none()
-        && let Some(clicked) = subject.keyboard
+        && let Some(clicked) = subject.seat.keyboard
         && subject
             .surfaces
             .iter()
@@ -84,7 +84,7 @@ pub(crate) fn motion(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<
 /// as a compositor says so when it moves off the surface's input region.
 pub(crate) fn leave(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
     let subject = host.subject()?;
-    let surface = match (subject.pointer, optional_text(arguments.first())) {
+    let surface = match (subject.seat.pointer, optional_text(arguments.first())) {
         (Some((surface, _, _)), None) => surface,
         _ => role(subject, arguments.first())?,
     };
@@ -97,7 +97,7 @@ pub(crate) fn wheel(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     let vertical = number(arguments.get(1), "dy")?;
     let subject = host.subject()?;
     let named = arguments.get(4).and_then(text).is_some();
-    let (surface, x, y) = match (subject.pointer, named) {
+    let (surface, x, y) = match (subject.seat.pointer, named) {
         (Some((surface, x, y)), false) => (surface, x, y),
         _ => (role(subject, arguments.get(4))?, 0.0, 0.0),
     };

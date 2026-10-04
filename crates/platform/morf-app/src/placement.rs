@@ -1,4 +1,5 @@
-//! Where a layer surface lands when there is no layer-shell to put it there.
+//! Where a layer surface lands when no compositor puts it there: inside the
+//! fallback toplevel on Wayland, and on the headless backend's virtual outputs.
 //!
 //! Without `wlr-layer-shell` the primary surface stands in as a fullscreen
 //! toplevel and every other layer surface becomes a `wl_subsurface` of it
@@ -16,24 +17,24 @@ use crate::{LayerConfig, LayerAnchors, ShellLayer};
 
 /// The part of a layer surface's configuration that decides where it goes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct LayerRequest {
-    pub(crate) anchors: LayerAnchors,
+pub struct LayerRequest {
+    pub anchors: LayerAnchors,
     /// Requested width; zero stretches across the bounds.
-    pub(crate) width: u32,
+    pub width: u32,
     /// Requested height; zero stretches across the bounds.
-    pub(crate) height: u32,
-    pub(crate) margin_top: i32,
-    pub(crate) margin_right: i32,
-    pub(crate) margin_bottom: i32,
-    pub(crate) margin_left: i32,
+    pub height: u32,
+    pub margin_top: i32,
+    pub margin_right: i32,
+    pub margin_bottom: i32,
+    pub margin_left: i32,
     /// Positive reserves an edge, zero respects others' reservations, `-1`
     /// ignores them.
-    pub(crate) exclusive_zone: i32,
-    pub(crate) layer: ShellLayer,
+    pub exclusive_zone: i32,
+    pub layer: ShellLayer,
 }
 
 impl LayerRequest {
-    pub(crate) fn from_config(config: &LayerConfig) -> Self {
+    pub fn from_config(config: &LayerConfig) -> Self {
         Self {
             anchors: config.anchors,
             width: config.width,
@@ -50,11 +51,11 @@ impl LayerRequest {
 
 /// A rectangle in the primary surface's (the stand-in output's) coordinates.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct Placement {
-    pub(crate) x: i32,
-    pub(crate) y: i32,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
+pub struct Placement {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// A signed working rectangle: an area can shrink past zero while zones are
@@ -68,7 +69,7 @@ struct Area {
 }
 
 /// Stacking rank of a layer, lowest first.
-pub(crate) fn layer_rank(layer: ShellLayer) -> u8 {
+pub fn layer_rank(layer: ShellLayer) -> u8 {
     match layer {
         ShellLayer::Background => 0,
         ShellLayer::Bottom => 1,
@@ -82,7 +83,7 @@ pub(crate) fn layer_rank(layer: ShellLayer) -> u8 {
 /// A subsurface can only go below or above its parent, and the parent is the
 /// fullscreen primary, so "background" and "bottom" land under it (visible
 /// only where the primary is transparent) and "top" and "overlay" above it.
-pub(crate) fn stacks_below_primary(layer: ShellLayer) -> bool {
+pub fn stacks_below_primary(layer: ShellLayer) -> bool {
     layer_rank(layer) < layer_rank(ShellLayer::Top)
 }
 
@@ -184,7 +185,7 @@ fn apply_exclusive(usable: &mut Area, request: &LayerRequest) {
 /// area the next one gets; the rest are then placed from the overlay layer
 /// down in what is left, or in the whole output when their zone is `-1`.
 /// Sizes that come out below one pixel are clamped to one.
-pub(crate) fn arrange(size: (u32, u32), surfaces: &[(u64, LayerRequest)]) -> Vec<(u64, Placement)> {
+pub fn arrange(size: (u32, u32), surfaces: &[(u64, LayerRequest)]) -> Vec<(u64, Placement)> {
     let full = Area {
         x: 0,
         y: 0,
@@ -225,7 +226,7 @@ pub(crate) fn arrange(size: (u32, u32), surfaces: &[(u64, LayerRequest)]) -> Vec
 ///
 /// `surfaces` is `(id, layer, sequence)`; the sequence breaks ties within a
 /// layer, later on top, as a compositor stacks surfaces mapped later.
-pub(crate) fn stacking(surfaces: &[(u64, ShellLayer, u64)]) -> Vec<u64> {
+pub fn stacking(surfaces: &[(u64, ShellLayer, u64)]) -> Vec<u64> {
     let mut order = surfaces.to_vec();
     order.sort_by_key(|(_, layer, sequence)| (layer_rank(*layer), *sequence));
     order.into_iter().map(|(id, _, _)| id).collect()

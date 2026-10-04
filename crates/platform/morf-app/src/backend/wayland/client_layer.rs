@@ -11,7 +11,7 @@ use wayland_client::Proxy;
 use wayland_client::protocol::{wl_output, wl_subcompositor, wl_subsurface, wl_surface};
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1;
 
-use crate::backend::wayland::layer_placement::{LayerRequest, arrange, stacking, stacks_below_primary};
+use crate::placement::{LayerRequest, arrange, stacking, stacks_below_primary};
 use crate::backend::wayland::{state_types::*, surface_types::*};
 
 wayland_client::delegate_noop!(LayerState: ignore wl_subcompositor::WlSubcompositor);
@@ -625,7 +625,7 @@ impl LayerState {
     ///
     /// The primary's configured size stands for the output's, and each
     /// subsurface goes where layer-shell would put its surface on it
-    /// (`layer_placement::arrange`). One that moves gets a new position; one
+    /// (`placement::arrange`). One that moves gets a new position; one
     /// whose size changed, or that was never placed, gets a configure of its
     /// own — the compositor sends a subsurface none, and nothing paints until
     /// one arrives. Positions and stacking are pending state of the parent, so

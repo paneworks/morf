@@ -8,9 +8,12 @@ mod event;
 mod input;
 mod kind;
 mod output;
+pub mod placement;
 mod positioner;
 mod window;
 
+pub use backend::{Backend, Capabilities, RenderTarget, WindowKind};
+#[cfg(feature = "wayland")]
 pub use backend::wayland::*;
 pub use data::*;
 pub use event::*;

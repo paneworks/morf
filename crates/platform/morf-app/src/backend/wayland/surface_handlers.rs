@@ -309,11 +309,10 @@ impl PopupHandler for LayerState {
         // request it answers. Recording it here is what lets a caller tell the
         // configure for the move it just asked for apart from a reactive one
         // the compositor sent on its own.
-        self.events.push_back(Event::PopupConfigure {
-            id,
-            width: config.width.max(1) as u32,
-            height: config.height.max(1) as u32,
-        });
+        let (width, height) = (config.width.max(1) as u32, config.height.max(1) as u32);
+        self.popup_sizes.insert(id, (width, height));
+        self.events
+            .push_back(Event::PopupConfigure { id, width, height });
     }
 
     fn done(&mut self, _connection: &Connection, _qh: &QueueHandle<Self>, popup: &Popup) {

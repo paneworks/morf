@@ -160,6 +160,10 @@ impl LayerClient {
         // a capture can use.
         let linux_dmabuf = globals.bind::<ZwpLinuxDmabufV1, _, _>(&qh, 2..=5, ()).ok();
         let session_locks = SessionLockState::new(&globals, &qh);
+        let has_session_lock = globals.contents().with_list(|list| {
+            list.iter()
+                .any(|global| global.interface == "ext_session_lock_manager_v1")
+        });
         let (clipboard_tx, clipboard_rx) = mpsc::channel();
         let (read_tx, read_rx) = mpsc::channel();
         // Data control: the standard spelling first, the wlroots one where it
@@ -188,6 +192,7 @@ impl LayerClient {
             subsurface_stack: Vec::new(),
             popup_parents: HashMap::new(),
             popups: HashMap::new(),
+            popup_sizes: HashMap::new(),
             popup_repositions: HashMap::new(),
             floatings: HashMap::new(),
             floating_sizes: HashMap::new(),
@@ -281,6 +286,7 @@ impl LayerClient {
             screencopies: Vec::new(),
             screens: Vec::new(),
             session_locks,
+            has_session_lock,
             session_lock: None,
             lock_surfaces: Vec::new(),
         };

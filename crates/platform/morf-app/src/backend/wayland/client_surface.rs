@@ -270,6 +270,7 @@ impl LayerClient {
     pub fn close_popup(&mut self, id: u64) {
         self.state.popups.remove(&id);
         self.state.popup_parents.remove(&id);
+        self.state.popup_sizes.remove(&id);
         self.state.aux_scales.remove(&WindowId::Popup(id));
         self.state.popup_repositions.remove(&id);
         self.forget_surface(WindowId::Popup(id));

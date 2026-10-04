@@ -4,6 +4,7 @@
 
 #[cfg(feature = "a11y")]
 pub mod accesskit;
+mod backend_impl;
 mod buffer_sink;
 mod capture_dmabuf;
 mod capture_handlers;
@@ -24,7 +25,6 @@ mod helpers;
 mod inhibit_handlers;
 mod input_handlers;
 mod key_repeat;
-mod layer_placement;
 pub mod mime;
 mod offer_io;
 mod protocol_handlers;
