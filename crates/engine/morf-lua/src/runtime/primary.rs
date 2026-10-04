@@ -32,7 +32,10 @@ impl Runtime {
         let value = {
             let mut state = self.reactive.borrow_mut();
             let state = &mut *state;
-            let Some((value, written)) = state.session.set_primary(&mut state.reactive, primary)
+            let Some((value, written)) = state
+                .engine
+                .session
+                .set_primary(&mut state.engine.reactive, primary)
             else {
                 return false;
             };

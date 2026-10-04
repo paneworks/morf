@@ -50,6 +50,7 @@ impl Runtime {
             // A list nothing draws would keep its change journal forever;
             // one a view follows is drained by the view.
             let followed = state
+                .engine
                 .views
                 .values()
                 .any(|view| std::rc::Rc::ptr_eq(&view.model, &host.model));

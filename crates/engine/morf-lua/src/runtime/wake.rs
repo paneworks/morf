@@ -26,16 +26,17 @@ impl Runtime {
         let (revision_before, hidden_before) = {
             let state = self.reactive.borrow();
             (
-                state.revisions.scene_revision,
-                state.revisions.hidden_revisions,
+                state.engine.revisions.scene_revision,
+                state.engine.revisions.hidden_revisions,
             )
         };
         let changed = {
             let mut state = self.reactive.borrow_mut();
             let state = &mut *state;
             state
+                .engine
                 .clocks
-                .update(&mut state.reactive, value.into())
+                .update(&mut state.engine.reactive, value.into())
                 .map_err(Error::Runtime)?
         };
         if changed {
@@ -44,8 +45,16 @@ impl Runtime {
                 .map_err(Error::Runtime)?;
         }
         let state = self.reactive.borrow();
-        Ok(state.revisions.scene_revision.wrapping_sub(revision_before)
-            > state.revisions.hidden_revisions.wrapping_sub(hidden_before))
+        Ok(state
+            .engine
+            .revisions
+            .scene_revision
+            .wrapping_sub(revision_before)
+            > state
+                .engine
+                .revisions
+                .hidden_revisions
+                .wrapping_sub(hidden_before))
     }
 
     /// The finest clock anything currently reads, or nothing when no binding

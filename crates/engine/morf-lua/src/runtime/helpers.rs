@@ -115,13 +115,14 @@ pub(crate) fn finish_retained_destroy(
 pub(crate) fn begin_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bool {
     let state = &mut *state;
     let start = morf_runtime::animation::exits::begin_exit(
-        &mut state.scene,
-        &mut state.retained.retention,
-        &mut state.animation,
+        &mut state.engine.scene,
+        &mut state.engine.retained.retention,
+        &mut state.engine.animation,
         node,
     );
     if start == morf_runtime::animation::exits::ExitStart::Started {
-        state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
+        state.engine.revisions.scene_revision =
+            state.engine.revisions.scene_revision.wrapping_add(1);
     }
     start.leaving()
 }
@@ -131,14 +132,14 @@ pub(crate) fn begin_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bo
 pub(crate) fn cancel_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bool {
     let state = &mut *state;
     if !morf_runtime::animation::exits::cancel_exit(
-        &mut state.scene,
-        &mut state.retained.retention,
-        &mut state.animation,
+        &mut state.engine.scene,
+        &mut state.engine.retained.retention,
+        &mut state.engine.animation,
         node,
     ) {
         return false;
     }
-    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
+    state.engine.revisions.scene_revision = state.engine.revisions.scene_revision.wrapping_add(1);
     true
 }
 
@@ -154,8 +155,8 @@ pub(crate) fn finish_node_exit(
         let mut state = state.borrow_mut();
         let state = &mut *state;
         match morf_runtime::animation::exits::finish_exit(
-            &state.scene,
-            &mut state.retained.retention,
+            &state.engine.scene,
+            &mut state.engine.retained.retention,
             node,
         ) {
             Some(destroy) => destroy,

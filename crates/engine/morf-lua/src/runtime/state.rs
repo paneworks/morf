@@ -2,19 +2,15 @@
 //! types its fields are made of.
 
 pub(crate) use crate::api_shader::RegisteredShader;
-use crate::states::{Capture, StateSet};
 use luna::StashedTable;
 
-use morf_layout::TransformTracker;
 use morf_runtime::Handler;
-use morf_scene::reactive::{Graph, SignalId};
+use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, NodeHandle, Scene};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::{surface_types::*, types::LogLevel};
 // Re-exported, because these moved out of this file only to satisfy the line
 // gate: every consumer reaches for them through `state::*` and there is no
 // reason to make them all learn a second module name.
@@ -51,12 +47,7 @@ pub(crate) struct StateFields {
     pub(crate) lists: HashMap<String, (luna::StashedUserData, Rc<RefCell<ListModel>>)>,
 }
 
-/// What a `ui.Layout` container answers layout with.
-#[derive(Clone)]
-pub(crate) struct CustomLayoutFns {
-    pub(crate) measure: Handler,
-    pub(crate) place: Handler,
-}
+pub(crate) use morf_runtime::engine::CustomLayoutFns;
 
 #[derive(Clone, Copy)]
 pub(crate) enum ViewKind {
@@ -78,104 +69,30 @@ pub(crate) use morf_runtime::reactive::{EffectSink, PropertySink};
 pub(crate) use morf_runtime::log::MAX_LOG_ENTRIES;
 
 pub(crate) struct ReactiveState {
+    /// Every subsystem the engine runs (`morf_runtime::Engine`); what
+    /// follows is what only the Lua layer can hold.
+    pub(crate) engine: morf_runtime::Engine,
     /// The runtime's limits, for a binding made where they are not at hand
     /// (a function assigned to a node's property).
     pub(crate) limits: crate::Limits,
-    /// The graph, the signal mirror, the declared effects and the flush.
-    pub(crate) reactive: morf_runtime::reactive::Reactive,
-    pub(crate) property_signals: HashMap<(NodeHandle, String, bool), SignalId>,
-    pub(crate) current_property_names: HashMap<String, (NodeHandle, String)>,
-    /// How far the scene has moved, and how far each reader of it has seen.
-    pub(crate) revisions: morf_runtime::reactive::Revisions,
-    /// Each list model a binding has read, by address, with the revision
-    /// signal that binding depends on.
-    pub(crate) model_revisions: morf_runtime::models::ModelRevisions,
-    /// `morf.shared` values: this copy's signals for them, and what to publish.
-    pub(crate) shared: crate::shared::SharedValues,
     pub(crate) channels: crate::channels::Channels,
-    pub(crate) reload_seed: HashMap<String, IpcValue>,
-    pub(crate) reloadable: HashMap<String, SignalId>,
-    /// A reload, file watching, quitting and unlocking, as asked.
-    pub(crate) lifecycle: morf_runtime::requests::Lifecycle,
-    /// Nodes the lint has already complained about, so a bar that paints
-    /// sixty times a second says it once.
-    pub(crate) lint_warned: HashSet<NodeHandle>,
-    /// What this output's compositor and GPU can do, as name = value pairs.
-    /// Filled once the connection is up; read by `morf.capabilities` and by
-    /// `morf info`.
-    pub(crate) capabilities: Vec<(String, String)>,
-    pub(crate) next_effect: u64,
-    pub(crate) active: Option<Capture>,
-    /// How many Lua handlers are on the stack: an event handler, a timer, an
-    /// IPC verb, a D-Bus call. While one runs, a signal write or a property
-    /// write marks the graph dirty and nothing more; the one flush happens
-    /// when the outermost handler returns. Three writes in a handler used to
-    /// be three full flushes, and a bare property write was none at all.
-    pub(crate) handler_depth: u32,
-    /// Whether something wrote while a handler was running.
-    pub(crate) flush_pending: bool,
-    pub(crate) logs: morf_runtime::log::Log,
     /// Shaders the configuration registered, by name.
     ///
     /// Compiled once at load. The renderer is handed the generated WGSL when
     /// the host starts up, and a node only ever carries the program's hash.
     pub(crate) shaders: HashMap<String, RegisteredShader>,
-    /// The session lock, the primary duty and the output list's revision.
-    pub(crate) session: morf_runtime::session::Session,
-    /// `morf.clock` and its coarser grains.
-    pub(crate) clocks: morf_runtime::wake::Clocks,
-    pub(crate) scene: Scene,
-    /// Every text input's editing, and which has the keyboard
-    /// (`morf_runtime::editing`).
-    pub(crate) editing: morf_runtime::editing::Editing,
-    /// Which node of each surface has focus (`api_focus.rs`).
-    pub(crate) focus: crate::api_focus::FocusState,
-    /// Each node's `shortcuts` (`shortcut.rs`), and a sequence half typed.
-    pub(crate) shortcuts: HashMap<NodeHandle, crate::shortcut::NodeShortcuts>,
-    pub(crate) shortcut_pending: crate::shortcut::Pending,
-    /// A modifier pressed on its own, while nothing else has been: a tap of
-    /// it if it is let go next.
-    pub(crate) modifier_tap: Option<u32>,
-    /// Presses under way that may become gestures (`gestures.rs`).
-    pub(crate) gestures: crate::gestures::GestureState,
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
     pub(crate) overlays: crate::api_overlay::OverlayState,
-    pub(crate) effect_runs: u64,
-    /// Each node's handler for each event, and the `contains_pointer` watches.
-    pub(crate) events: morf_runtime::events::Events,
-    pub(crate) states: HashMap<NodeHandle, StateSet>,
-    pub(crate) ipc_handlers: HashMap<String, Handler>,
     /// Captures to be written to a file rather than handed to Lua, by request.
     pub(crate) screencopy_saves: HashMap<u64, crate::image_jobs::CaptureSave>,
     /// `morf.image` work on its way through the worker pool.
     pub(crate) image_jobs: crate::image_jobs::ImageJobs,
-    pub(crate) views: morf_runtime::views::Views,
     pub(crate) pam_tasks: Vec<PendingPam>,
     pub(crate) pam_sessions: Vec<PendingPamSession>,
     pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
-    /// Every `morf.timer` and `Timer` node, and the clock they run on.
-    pub(crate) timers: morf_runtime::timers::Timers,
-    pub(crate) timer_callbacks: HashMap<NodeHandle, Handler>,
-    /// Where each `ui.Timer` was built, for `MORF_WAKE_LOG`.
-    pub(crate) timer_origins: HashMap<NodeHandle, std::rc::Rc<str>>,
-    /// Motion beside the scene's own: `on_finished` handlers, loops,
-    /// follows, theme fades and exits.
-    pub(crate) animation: morf_runtime::animation::Animation,
-    /// Each node's `on_destroyed`, until the node goes.
-    pub(crate) destroy_hooks: HashMap<NodeHandle, Handler>,
-    /// Hooks of nodes already removed, waiting for a moment Lua can run:
-    /// removal happens with the state borrowed, often inside a flush.
-    pub(crate) pending_destroyed: Vec<Handler>,
-    /// The pending hooks are being run; removals they cause join the queue.
-    pub(crate) running_destroyed: bool,
-    /// Loaders' items and retained nodes, and the handlers told as they go.
-    pub(crate) retained: morf_runtime::retention::Retained,
-    /// The `measure` and `place` functions of every `ui.Layout` container.
-    pub(crate) custom_layouts: HashMap<NodeHandle, CustomLayoutFns>,
     /// The list model's metatable, kept so a list inside `morf.state` is
     /// the same kind of object as `morf.list_model` makes.
     pub(crate) model_metatable: Option<luna::StashedTable>,
-    pub(crate) transform_tracker: TransformTracker,
     /// The one metatable every scene-node handle shares.
     ///
     /// Built on first use rather than at install time, because it needs the
@@ -219,13 +136,20 @@ pub(crate) struct ReactiveState {
     pub(crate) watches: crate::api_watch::WatchHub,
     /// `ui.Terminal` nodes: their emulators and their programs.
     pub(crate) terminals: crate::terminals::TerminalHub,
-    /// Text nodes set in runs, whose links the layout places.
-    pub(crate) linked_texts: std::collections::HashSet<NodeHandle>,
     /// Every `ui.Image`: what became of its source, and its playback.
     pub(crate) images: crate::images::ImageNodes,
-    pub(crate) shell_root: PathBuf,
-    /// What handlers asked of the platform, queued for the host.
-    pub(crate) requests: morf_runtime::requests::Requests,
-    /// The windows the configuration declared, as the host reads them.
-    pub(crate) windows: morf_runtime::windows::Declarations,
+}
+
+impl std::ops::Deref for ReactiveState {
+    type Target = morf_runtime::Engine;
+
+    fn deref(&self) -> &Self::Target {
+        &self.engine
+    }
+}
+
+impl std::ops::DerefMut for ReactiveState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.engine
+    }
 }

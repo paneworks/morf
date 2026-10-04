@@ -176,11 +176,11 @@ impl Runtime {
         let mut state = self.reactive.borrow_mut();
         let removed = state.scene.take_removed_nodes();
         if !removed.is_empty() {
-            let ReactiveState {
+            let morf_runtime::Engine {
                 scene,
                 transform_tracker,
                 ..
-            } = &mut *state;
+            } = &mut state.engine;
             transform_tracker.retain_scene(&*scene);
         }
         removed

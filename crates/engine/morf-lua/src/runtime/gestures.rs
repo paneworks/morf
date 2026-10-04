@@ -16,8 +16,6 @@ use morf_scene::NodeHandle;
 use crate::state::ReactiveState;
 use crate::{EventPoint, IpcValue, Runtime, UiEvent};
 
-pub(crate) use morf_runtime::gestures::Gestures as GestureState;
-
 fn has(state: &ReactiveState, node: NodeHandle, event: UiEvent) -> bool {
     state.events.has(node, event)
 }
@@ -85,9 +83,9 @@ impl Runtime {
         let due = {
             let mut state = self.reactive.borrow_mut();
             let now = clock(state.timers.virtual_now());
-            let ReactiveState {
+            let morf_runtime::Engine {
                 gestures, events, ..
-            } = &mut *state;
+            } = &mut state.engine;
             gestures.take_long_press(now, |node| events.has(node, UiEvent::LongPressed))
         };
         match due {

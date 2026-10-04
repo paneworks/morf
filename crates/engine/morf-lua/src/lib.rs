@@ -65,7 +65,6 @@ use self::api::ui::constructors_layout;
 use self::api::ui::group as api_group;
 use self::api::ui::retention as api_retention;
 use self::api::ui::scene as scene_bindings;
-use self::api::ui::shared;
 use self::api::ui::signal as api_signal;
 use self::api::ui::state as api_state;
 use self::api::ui::transform as api_transform;

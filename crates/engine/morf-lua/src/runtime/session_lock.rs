@@ -27,7 +27,10 @@ impl Runtime {
         let value = {
             let mut state = self.reactive.borrow_mut();
             let state = &mut *state;
-            let Some((value, written)) = state.session.set_lock_state(&mut state.reactive, next)
+            let Some((value, written)) = state
+                .engine
+                .session
+                .set_lock_state(&mut state.engine.reactive, next)
             else {
                 return false;
             };

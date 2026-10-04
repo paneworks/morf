@@ -50,8 +50,9 @@ pub(crate) fn model_read_signals(
     for model in models {
         signals.push(
             state
+                .engine
                 .model_revisions
-                .signal_or_make(&mut state.reactive, &model)?,
+                .signal_or_make(&mut state.engine.reactive, &model)?,
         );
     }
     Ok(signals)
@@ -146,6 +147,8 @@ pub(crate) fn replace_model_rows(
 impl ReactiveState {
     /// Forgets the revision signals of models nothing holds any more.
     pub(crate) fn collect_dead_models(&mut self) {
-        self.model_revisions.collect_dead(&mut self.reactive);
+        self.engine
+            .model_revisions
+            .collect_dead(&mut self.engine.reactive);
     }
 }
