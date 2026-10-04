@@ -11,8 +11,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use morf_app::{Backend, WindowId};
 use morf_app::backend::headless::{HeadlessBackend, VirtualSeat, virtual_outputs};
+use morf_app::{Backend, WindowId};
 use morf_layout::Layout;
 use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
 use morf_scene::NodeHandle;

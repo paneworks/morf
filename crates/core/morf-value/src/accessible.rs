@@ -45,4 +45,3 @@ pub struct AccessibleNode<Id> {
     pub bounds: Option<(f64, f64, f64, f64)>,
     pub children: Vec<Id>,
 }
-

@@ -7,8 +7,8 @@
 //! [`TerminalScreen`], rebuilding only the lines the parser touched since the
 //! last picture and sharing the rest.
 
-mod selection;
 mod picture;
+mod selection;
 
 use std::cell::RefCell;
 use std::rc::Rc;

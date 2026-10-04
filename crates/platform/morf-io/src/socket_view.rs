@@ -74,7 +74,11 @@ impl SocketView {
 
     /// Up to `maximum` bytes within `timeout`: `None` when closed or when
     /// nothing came in time.
-    pub fn receive(&mut self, maximum: usize, timeout: Duration) -> Result<Option<Vec<u8>>, String> {
+    pub fn receive(
+        &mut self,
+        maximum: usize,
+        timeout: Duration,
+    ) -> Result<Option<Vec<u8>>, String> {
         let maximum = receive_limit(maximum as i64)?;
         let Some(stream) = self.socket.as_mut() else {
             return Ok(None);

@@ -43,7 +43,8 @@ impl Layout {
         let mut containers = vec![root];
         // Right to left: each child's place in its flex parent mirrored in
         // that parent's width, and everything under it moved with it.
-        let mut shifts: std::collections::HashMap<NodeHandle, f64> = std::collections::HashMap::new();
+        let mut shifts: std::collections::HashMap<NodeHandle, f64> =
+            std::collections::HashMap::new();
         for (node, mut placed, leaf, (x, y)) in placed {
             if !leaf {
                 containers.push(node);
@@ -58,7 +59,9 @@ impl Layout {
                 let parent_width = if parent == root {
                     geometry.width
                 } else {
-                    self.geometry.get(&parent).map_or(geometry.width, |g| g.width)
+                    self.geometry
+                        .get(&parent)
+                        .map_or(geometry.width, |g| g.width)
                 };
                 let mirrored = parent_width - x - placed.width;
                 own = mirrored - x;

@@ -23,7 +23,6 @@ use wayland_protocols::wp::linux_dmabuf::zv1::client::{
     zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
 };
 
-
 /// `DRM_FORMAT_XRGB8888`: the one capture format with nothing in the top byte.
 pub(crate) const FOURCC_XRGB8888: u32 = 0x3432_5258;
 

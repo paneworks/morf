@@ -294,9 +294,14 @@ impl Layout {
 /// packed by a row, column or grid, inset, or anchored left, right, centred or
 /// filling -- and so mirrors right to left. A child placed by its `x` alone
 /// keeps it.
-fn mirrors(parent: Element, anchors: &std::collections::BTreeMap<String, morf_scene::Value>) -> bool {
-    matches!(parent, Element::Row | Element::Column | Element::Grid | Element::Inset)
-        || ["left", "right", "horizontal_center", "fill", "center_in"]
-            .iter()
-            .any(|key| crate::helpers::flag(anchors, key))
+fn mirrors(
+    parent: Element,
+    anchors: &std::collections::BTreeMap<String, morf_scene::Value>,
+) -> bool {
+    matches!(
+        parent,
+        Element::Row | Element::Column | Element::Grid | Element::Inset
+    ) || ["left", "right", "horizontal_center", "fill", "center_in"]
+        .iter()
+        .any(|key| crate::helpers::flag(anchors, key))
 }

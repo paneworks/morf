@@ -321,7 +321,11 @@ impl VirtualList {
         let mut at = 0.0;
         starts.push(at);
         for extent in extents {
-            at += if extent.is_finite() && *extent > 0.0 { *extent } else { self.item_extent };
+            at += if extent.is_finite() && *extent > 0.0 {
+                *extent
+            } else {
+                self.item_extent
+            };
             starts.push(at);
         }
         self.starts = Some(starts);
@@ -330,7 +334,10 @@ impl VirtualList {
     /// Where item `index` starts along the view.
     pub fn item_start(&self, index: usize) -> f64 {
         match &self.starts {
-            Some(starts) => starts.get(index).copied().unwrap_or_else(|| starts.last().copied().unwrap_or(0.0)),
+            Some(starts) => starts
+                .get(index)
+                .copied()
+                .unwrap_or_else(|| starts.last().copied().unwrap_or(0.0)),
             None => (index / self.columns) as f64 * self.item_extent,
         }
     }
@@ -355,7 +362,8 @@ impl VirtualList {
             // The first item whose end is past the offset, the first whose
             // start is past the viewport's end.
             let first = starts[1..=count].partition_point(|end| *end <= offset);
-            let last = starts[..count].partition_point(|start| *start < offset + self.viewport_extent);
+            let last =
+                starts[..count].partition_point(|start| *start < offset + self.viewport_extent);
             let start = first.saturating_sub(self.overscan);
             let end = (last + self.overscan).min(count);
             return start..end.max(start);

@@ -18,6 +18,7 @@ pub struct RetainCallbacks {
 }
 
 /// Loaders' items and retained nodes, and the handlers told as they go.
+#[derive(Default)]
 pub struct Retained {
     /// Each loader's source: what builds its item.
     pub loader_factories: HashMap<NodeHandle, Handler>,
@@ -36,21 +37,6 @@ pub struct Retained {
     pub retain_callbacks: HashMap<NodeHandle, RetainCallbacks>,
     /// Retained nodes to destroy once Lua can run.
     pub retained_destroy_queue: HashSet<NodeHandle>,
-}
-
-impl Default for Retained {
-    fn default() -> Self {
-        Self {
-            loader_factories: HashMap::new(),
-            failed_loaders: HashSet::new(),
-            loaded_loaders: HashSet::new(),
-            dormant_loaders: HashSet::new(),
-            preload_pending: HashMap::new(),
-            retention: Retention::default(),
-            retain_callbacks: HashMap::new(),
-            retained_destroy_queue: HashSet::new(),
-        }
-    }
 }
 
 impl Retained {

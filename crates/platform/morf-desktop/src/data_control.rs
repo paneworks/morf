@@ -21,8 +21,8 @@ use std::sync::{Arc, mpsc};
 
 use morf_app::mime::resolve_mime;
 use morf_app::transfer::{ReadDone, pipe, spawn_read, take_slot};
-use wayland_client::globals::GlobalList;
 use wayland_client::backend::ObjectId;
+use wayland_client::globals::GlobalList;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::ext::data_control::v1::client::{
@@ -201,7 +201,11 @@ impl Desktop {
 
     /// Which data-control protocol is bound, if any.
     pub fn data_control_protocol(&self) -> Option<&'static str> {
-        self.state.clipboard.control.as_ref().map(DataControl::protocol)
+        self.state
+            .clipboard
+            .control
+            .as_ref()
+            .map(DataControl::protocol)
     }
 
     /// Whether the primary selection can be watched and set too.
@@ -255,7 +259,12 @@ impl Desktop {
         }
     }
 
-    fn start_offer_read(&mut self, request_id: u64, offer_id: u64, mime: &str) -> Result<(), String> {
+    fn start_offer_read(
+        &mut self,
+        request_id: u64,
+        offer_id: u64,
+        mime: &str,
+    ) -> Result<(), String> {
         let clipboard = &self.state.clipboard;
         let live = clipboard
             .live(offer_id)

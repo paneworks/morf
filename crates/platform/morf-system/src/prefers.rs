@@ -237,8 +237,7 @@ impl Portal {
             let DbusValue::List(parts) = value else {
                 continue;
             };
-            if let [DbusValue::String(namespace), DbusValue::String(key), value] =
-                parts.as_slice()
+            if let [DbusValue::String(namespace), DbusValue::String(key), value] = parts.as_slice()
                 && let Some(change) = preference_from_setting(namespace, key, value.clone())
             {
                 changes.push(change);
@@ -296,6 +295,9 @@ mod tests {
             preference_from_setting(INTERFACE, "enable-animations", DbusValue::Bool(false)),
             Some(("reduced_motion", IpcValue::Boolean(true)))
         );
-        assert_eq!(preference_from_setting(INTERFACE, "font-name", DbusValue::Bool(false)), None);
+        assert_eq!(
+            preference_from_setting(INTERFACE, "font-name", DbusValue::Bool(false)),
+            None
+        );
     }
 }

@@ -50,7 +50,7 @@ impl Runtime {
     pub fn sync_terminals(&mut self, layout: &Layout, text: &mut TextSystem) -> bool {
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            if state.terminals.len() == 0 {
+            if state.terminals.is_empty() {
                 return false;
             }
             crate::terminals::sync(&mut state, layout, text)

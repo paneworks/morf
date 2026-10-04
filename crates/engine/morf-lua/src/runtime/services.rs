@@ -26,6 +26,15 @@ use definitions::{reconcile_loaders, reconcile_timers};
 /// must not hold a preload back for ever.
 pub(crate) use morf_runtime::engine::PRELOAD_PATIENCE;
 
+/// A finished HTTP request, with what its handler is called with.
+type HttpAnswer = (
+    Handler,
+    Result<morf_io::HttpResponse, String>,
+    String,
+    crate::api_http::JsonKinds,
+    std::rc::Rc<crate::api_http::HttpHandleState>,
+);
+
 /// What one turn collects while the state is borrowed, to be run once it is
 /// let go.
 #[derive(Default)]
@@ -44,13 +53,7 @@ struct Collected {
     greetd_messages: Vec<(Handler, GreetdEvent)>,
     udev_events: Vec<(Handler, morf_system::UdevEvent)>,
     status_updates: Vec<(Handler, Vec<morf_system::StatusNotifierAddress>)>,
-    http_answers: Vec<(
-        Handler,
-        Result<morf_io::HttpResponse, String>,
-        String,
-        crate::api_http::JsonKinds,
-        std::rc::Rc<crate::api_http::HttpHandleState>,
-    )>,
+    http_answers: Vec<HttpAnswer>,
     io_calls: Vec<crate::api_io::IoCall>,
     io_more: bool,
     watch_calls: Vec<crate::api_watch::WatchCall>,

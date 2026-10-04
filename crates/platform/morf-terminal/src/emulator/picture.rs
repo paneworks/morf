@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::selection::SelectionRange;
-use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::TermDamage;
+use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, CursorShape, NamedColor};
 use morf_scene::{
     TerminalCell, TerminalCursor, TerminalCursorShape, TerminalLine, TerminalScreen, cell_style,

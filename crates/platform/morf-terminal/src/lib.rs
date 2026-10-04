@@ -13,8 +13,8 @@
 //! behind `ui.Terminal`.
 
 mod emulator;
-pub mod input;
 pub mod hub;
+pub mod input;
 pub mod palette;
 mod pty;
 

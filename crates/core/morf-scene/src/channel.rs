@@ -38,7 +38,13 @@ struct Registry {
 
 fn registry() -> &'static Mutex<Registry> {
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
-    REGISTRY.get_or_init(|| Mutex::new(Registry { next: 0, by_id: HashMap::new(), by_name: HashMap::new() }))
+    REGISTRY.get_or_init(|| {
+        Mutex::new(Registry {
+            next: 0,
+            by_id: HashMap::new(),
+            by_name: HashMap::new(),
+        })
+    })
 }
 
 /// Moves on every write to any channel: a loop that saw this number has
@@ -80,7 +86,12 @@ pub fn channel(name: Option<&str>, capacity: usize, ring: bool) -> Arc<Channel> 
 
 /// The channel numbered `id`.
 pub fn channel_by_id(id: u64) -> Option<Arc<Channel>> {
-    registry().lock().unwrap_or_else(|e| e.into_inner()).by_id.get(&id).cloned()
+    registry()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .by_id
+        .get(&id)
+        .cloned()
 }
 
 /// Forgets an unnamed channel; nodes still naming it draw nothing.
@@ -150,7 +161,10 @@ impl Channel {
     }
 
     pub fn clear(&self) {
-        self.values.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.values
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         self.wrote();
     }
 
@@ -169,12 +183,21 @@ impl Channel {
     }
 
     pub fn last(&self) -> Option<f32> {
-        self.values.lock().unwrap_or_else(|e| e.into_inner()).last().copied()
+        self.values
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last()
+            .copied()
     }
 
     /// The largest number, or `None` when empty.
     pub fn peak(&self) -> Option<f32> {
-        self.values.lock().unwrap_or_else(|e| e.into_inner()).iter().copied().reduce(f32::max)
+        self.values
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .copied()
+            .reduce(f32::max)
     }
 }
 
@@ -197,7 +220,10 @@ mod tests {
         assert_eq!(frame.snapshot().0, vec![0.5, 0.0]);
         assert_eq!(frame.peak(), Some(0.5));
         let named = channel(Some("test.channel.same"), 8, true);
-        assert_eq!(channel(Some("test.channel.same"), 2, false).id(), named.id());
+        assert_eq!(
+            channel(Some("test.channel.same"), 2, false).id(),
+            named.id()
+        );
         assert!(channel_by_id(named.id()).is_some());
     }
 }

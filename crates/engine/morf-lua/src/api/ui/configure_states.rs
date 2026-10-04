@@ -196,7 +196,7 @@ fn build_state_selector<'gc>(
             .set(
                 ctx,
                 index as i64 + 1,
-                ctx.fetch(&crate::vm::handler_store::stashed(*when)),
+                ctx.fetch(&crate::vm::handler_store::stashed(when)),
             )
             .map_err(|error| error.to_string())?;
     }

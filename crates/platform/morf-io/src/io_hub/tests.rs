@@ -4,7 +4,9 @@ fn drain(hub: &mut IoHub<u8>) -> Vec<IoCall<u8>> {
     let mut calls = Vec::new();
     for _ in 0..400 {
         let (mut more, _) = hub.collect();
-        let done = more.iter().any(|call| matches!(call.args, CallArgs::Run(_)));
+        let done = more
+            .iter()
+            .any(|call| matches!(call.args, CallArgs::Run(_)));
         calls.append(&mut more);
         if done {
             break;

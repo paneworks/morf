@@ -35,7 +35,12 @@ impl<H> Hub<H> {
     }
 
     /// Where a point inside the node is on its grid.
-    fn cell_at(&self, scene: &Scene, node: NodeHandle, local: (f64, f64)) -> Option<(usize, usize)> {
+    fn cell_at(
+        &self,
+        scene: &Scene,
+        node: NodeHandle,
+        local: (f64, f64),
+    ) -> Option<(usize, usize)> {
         self.cell_and_half_at(scene, node, local)
             .map(|(column, row, _)| (column, row))
     }

@@ -15,7 +15,6 @@ use wayland_protocols::ext::foreign_toplevel_list::v1::client::{
     ext_foreign_toplevel_list_v1::{self, ExtForeignToplevelListV1},
 };
 
-
 impl Dispatch<ExtForeignToplevelListV1, ()> for DesktopState {
     /// A window appeared, or the compositor stopped telling us about them.
     ///

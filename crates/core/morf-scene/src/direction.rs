@@ -25,10 +25,26 @@ pub fn default_rtl() -> bool {
 
 /// Whether a locale (`ar_EG.UTF-8`, `he`, `fa_IR`, ...) writes right to left.
 pub fn locale_is_rtl(locale: &str) -> bool {
-    let language = locale.split(['_', '.', '@', '-']).next().unwrap_or("").to_ascii_lowercase();
+    let language = locale
+        .split(['_', '.', '@', '-'])
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     matches!(
         language.as_str(),
-        "ar" | "he" | "iw" | "fa" | "ur" | "yi" | "ji" | "ps" | "sd" | "ug" | "dv" | "ckb" | "syr" | "ku"
+        "ar" | "he"
+            | "iw"
+            | "fa"
+            | "ur"
+            | "yi"
+            | "ji"
+            | "ps"
+            | "sd"
+            | "ug"
+            | "dv"
+            | "ckb"
+            | "syr"
+            | "ku"
     )
 }
 
@@ -79,15 +95,25 @@ mod tests {
 
     #[test]
     fn locales_and_inheritance() {
-        assert!(locale_is_rtl("ar_EG.UTF-8") && locale_is_rtl("he") && !locale_is_rtl("en_US.UTF-8"));
+        assert!(
+            locale_is_rtl("ar_EG.UTF-8") && locale_is_rtl("he") && !locale_is_rtl("en_US.UTF-8")
+        );
         let mut scene = Scene::new();
         let root = scene.create(crate::Element::Item);
         let child = scene.create(crate::Element::Item);
         scene.reparent(child, Some(root)).unwrap();
         assert!(!scene.is_rtl(child));
-        scene.assign(root, "layout_direction", crate::Value::String("rtl".into())).unwrap();
+        scene
+            .assign(root, "layout_direction", crate::Value::String("rtl".into()))
+            .unwrap();
         assert!(scene.is_rtl(child));
-        scene.assign(child, "layout_direction", crate::Value::String("ltr".into())).unwrap();
+        scene
+            .assign(
+                child,
+                "layout_direction",
+                crate::Value::String("ltr".into()),
+            )
+            .unwrap();
         assert!(!scene.is_rtl(child));
     }
 }

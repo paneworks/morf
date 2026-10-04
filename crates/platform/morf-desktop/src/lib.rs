@@ -22,9 +22,14 @@ use std::collections::{HashMap, VecDeque};
 
 use morf_app::OfferInfo;
 use smithay_client_toolkit::output::{OutputHandler, OutputState};
+use smithay_client_toolkit::registry::{ProvidesRegistryState, RegistryState};
 use smithay_client_toolkit::seat::{Capability, SeatHandler, SeatState};
 use smithay_client_toolkit::shm::{Shm, ShmHandler};
+use smithay_client_toolkit::{delegate_registry, registry_handlers};
 use wayland_client::backend::ObjectId;
+use wayland_client::globals::registry_queue_init;
+use wayland_client::protocol::{wl_output, wl_seat, wl_surface};
+use wayland_client::{Connection, EventQueue, QueueHandle};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::{
     ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1,
@@ -40,20 +45,15 @@ use wayland_protocols_wlr::foreign_toplevel::v1::client::{
     zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1,
 };
 use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1;
-use smithay_client_toolkit::registry::{ProvidesRegistryState, RegistryState};
-use smithay_client_toolkit::{delegate_registry, registry_handlers};
-use wayland_client::globals::registry_queue_init;
-use wayland_client::protocol::{wl_output, wl_seat, wl_surface};
-use wayland_client::{Connection, EventQueue, QueueHandle};
 
 pub use capture::{CaptureBuffer, ScreencopyFormat, ScreencopyFrame};
-pub use output_power::OutputPowerMode;
-pub use toplevels::{ToplevelAction, ToplevelInfo};
-pub use workspaces::WorkspaceInfo;
 pub use gamma::{
     GammaSettings, NEUTRAL as NEUTRAL_TEMPERATURE, TEMPERATURE_RANGE, ramps as gamma_ramps,
     white_point,
 };
+pub use output_power::OutputPowerMode;
+pub use toplevels::{ToplevelAction, ToplevelInfo};
+pub use workspaces::WorkspaceInfo;
 
 /// What the desktop protocols tell the host.
 #[derive(Clone, Debug, PartialEq)]
@@ -223,7 +223,11 @@ impl Desktop {
         if let Some(seat) = state.seat() {
             state.clipboard.seat_added(&seat, &qh);
         }
-        Ok(Self { connection, queue, state })
+        Ok(Self {
+            connection,
+            queue,
+            state,
+        })
     }
 
     /// Hears what the compositor sent this queue. The host's loop reads the
@@ -304,7 +308,8 @@ impl OutputHandler for DesktopState {
 
     fn new_output(&mut self, _: &Connection, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
         let for_every_output = self.own_output.is_none();
-        self.output_power.output_added(&output, for_every_output, qh);
+        self.output_power
+            .output_added(&output, for_every_output, qh);
     }
 
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_output::WlOutput) {}
@@ -330,16 +335,32 @@ impl SeatHandler for DesktopState {
         self.clipboard.seat_added(&seat, qh);
     }
 
-    fn new_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat, _: Capability) {}
+    fn new_capability(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: wl_seat::WlSeat,
+        _: Capability,
+    ) {
+    }
 
-    fn remove_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat, _: Capability) {}
+    fn remove_capability(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: wl_seat::WlSeat,
+        _: Capability,
+    ) {
+    }
 
     fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
 }
 
 impl ShmHandler for DesktopState {
     fn shm_state(&mut self) -> &mut Shm {
-        self.shm.as_mut().expect("a capture asks for shared memory only when there is some")
+        self.shm
+            .as_mut()
+            .expect("a capture asks for shared memory only when there is some")
     }
 }
 

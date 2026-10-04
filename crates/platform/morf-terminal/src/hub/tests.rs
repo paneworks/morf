@@ -13,7 +13,10 @@ fn spec() -> Spec {
 
 #[test]
 fn colours_read_from_names_and_values() {
-    assert_eq!(rgba(&SceneValue::String("#ff0000".into())), Some([255, 0, 0, 255]));
+    assert_eq!(
+        rgba(&SceneValue::String("#ff0000".into())),
+        Some([255, 0, 0, 255])
+    );
     assert_eq!(rgba(&SceneValue::Number(1.0)), None);
     let colors = SceneValue::Map(BTreeMap::from([
         ("foreground".into(), SceneValue::String("#00ff00".into())),

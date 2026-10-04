@@ -1,5 +1,9 @@
 //! Sandboxed execution of morf configuration code.
 
+// Each `api/` area keeps its main table in a file named for it
+// (`api/color/color.rs`), as PLAN.md lays the binding out.
+#![allow(clippy::module_inception)]
+
 mod api;
 mod runtime;
 mod value;

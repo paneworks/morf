@@ -13,7 +13,8 @@ use crate::quantize::ImageData;
 mod decode;
 
 pub(crate) use decode::{
-    decode_path, decode_svg, is_svg_path, normalize_source, read_source, source_dimensions, svg_tree,
+    decode_path, decode_svg, is_svg_path, normalize_source, read_source, source_dimensions,
+    svg_tree,
 };
 
 /// Image or icon loading failure.

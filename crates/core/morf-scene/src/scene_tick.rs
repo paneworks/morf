@@ -151,8 +151,11 @@ impl Scene {
                 // Bumping anyway made every callback a fresh layout, and that
                 // paint asked for the next callback: hidden motion kept the
                 // surface repainting forever.
-                let unchanged =
-                    !complete && self.properties.read(slot.current).is_ok_and(|now| *now == value);
+                let unchanged = !complete
+                    && self
+                        .properties
+                        .read(slot.current)
+                        .is_ok_and(|now| *now == value);
                 if !unchanged {
                     if affects_layout(key.property) {
                         self.bump_layout(key.node);

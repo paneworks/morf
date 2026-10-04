@@ -14,8 +14,8 @@
 //! until the manager says `done` — the same contract the window list beside
 //! this one has, and for the same reason.
 
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
 use std::collections::HashMap;
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
 
 use wayland_client::backend::ObjectId;
 use wayland_client::globals::GlobalList;
@@ -111,7 +111,13 @@ impl Desktop {
     /// whatever order it happens to and a bar whose workspaces reshuffle
     /// between frames is unusable.
     pub fn workspaces(&self) -> Vec<WorkspaceInfo> {
-        let mut workspaces = self.state.workspaces.list.values().cloned().collect::<Vec<_>>();
+        let mut workspaces = self
+            .state
+            .workspaces
+            .list
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
         workspaces.sort_by(|a, b| a.coordinates.cmp(&b.coordinates).then(a.key.cmp(&b.key)));
         workspaces
     }

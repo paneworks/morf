@@ -87,9 +87,8 @@ pub fn inflate(bytes: &[u8], name: Option<&str>, max_output: usize) -> Result<Ve
         None | Some("auto") => detect(bytes).ok_or_else(|| {
             "unknown compression format (give one: gzip, zlib, deflate, zstd, xz, lzma)".to_string()
         })?,
-        Some(name) => {
-            Compression::parse(name).ok_or_else(|| format!("unknown compression format {name:?}"))?
-        }
+        Some(name) => Compression::parse(name)
+            .ok_or_else(|| format!("unknown compression format {name:?}"))?,
     };
     decompress(bytes, format, max_output)
 }

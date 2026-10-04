@@ -140,9 +140,10 @@ impl RichText {
             }
             let color = match fields.get("color") {
                 Some(Value::Color(color)) => Some(*color),
-                Some(Value::String(name)) => {
-                    Some(Color::parse(name).ok_or_else(|| format!("highlight colour `{name}` is not a colour"))?)
-                }
+                Some(Value::String(name)) => Some(
+                    Color::parse(name)
+                        .ok_or_else(|| format!("highlight colour `{name}` is not a colour"))?,
+                ),
                 _ => None,
             };
             let flag = |name: &str| matches!(fields.get(name), Some(Value::Bool(true)));
@@ -167,15 +168,28 @@ impl RichText {
                 continue;
             }
             if mark.range.start > at {
-                spans.push(RichSpan { range: at..mark.range.start, ..RichSpan::default() });
+                spans.push(RichSpan {
+                    range: at..mark.range.start,
+                    ..RichSpan::default()
+                });
             }
             at = mark.range.end;
             spans.push(mark);
         }
         if at < text.len() {
-            spans.push(RichSpan { range: at..text.len(), ..RichSpan::default() });
+            spans.push(RichSpan {
+                range: at..text.len(),
+                ..RichSpan::default()
+            });
         }
-        Ok(Some(RichText { text: text.to_owned(), spans, key: 0 }.seal()))
+        Ok(Some(
+            RichText {
+                text: text.to_owned(),
+                spans,
+                key: 0,
+            }
+            .seal(),
+        ))
     }
 }
 
@@ -365,12 +379,22 @@ mod highlight_tests {
     #[test]
     fn highlights_cover_the_text_in_order_and_cut_overlaps() {
         let text = "local x = 1";
-        let rich = RichText::from_highlights(text, &Value::List(vec![mark(8.0, 9.0, "#ff0000"), mark(0.0, 5.0, "#0000ff"), mark(3.0, 7.0, "#00ff00")]))
-            .unwrap()
-            .unwrap();
+        let rich = RichText::from_highlights(
+            text,
+            &Value::List(vec![
+                mark(8.0, 9.0, "#ff0000"),
+                mark(0.0, 5.0, "#0000ff"),
+                mark(3.0, 7.0, "#00ff00"),
+            ]),
+        )
+        .unwrap()
+        .unwrap();
         let ranges: Vec<_> = rich.spans.iter().map(|s| s.range.clone()).collect();
         assert_eq!(ranges, vec![0..5, 5..7, 7..8, 8..9, 9..11]);
         assert!(rich.spans[1].color.is_some() && rich.spans[2].color.is_none());
-        assert_eq!(RichText::from_highlights(text, &Value::List(Vec::new())).unwrap(), None);
+        assert_eq!(
+            RichText::from_highlights(text, &Value::List(Vec::new())).unwrap(),
+            None
+        );
     }
 }

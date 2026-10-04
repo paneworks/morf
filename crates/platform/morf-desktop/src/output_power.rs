@@ -84,7 +84,11 @@ impl OutputPowerState {
 
     /// Lets go of the control of an output that went away.
     pub(crate) fn forget(&mut self, output: &wl_output::WlOutput) {
-        if let Some(index) = self.controls.iter().position(|control| control.output == *output) {
+        if let Some(index) = self
+            .controls
+            .iter()
+            .position(|control| control.output == *output)
+        {
             self.controls.remove(index).control.destroy();
         }
     }

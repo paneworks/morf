@@ -35,7 +35,6 @@ pub enum ToplevelAction {
     },
 }
 
-
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ToplevelInfo {
     /// Stable for the life of the window, and unique on this compositor.

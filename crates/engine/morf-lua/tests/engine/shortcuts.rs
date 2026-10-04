@@ -46,17 +46,15 @@ fn hits(runtime: &mut Runtime) -> String {
 fn the_nearest_shortcut_around_focus_wins() {
     let (mut runtime, root, inner, field) = setup();
     assert!(runtime.dispatch_shortcut(root, Some(field), 'b' as u32, ctrl()));
-    assert!(
-        runtime.dispatch_shortcut(
-            root,
-            Some(root),
-            'B' as u32,
-            KeyModifiers {
-                shift: true,
-                ..ctrl()
-            }
-        ) == false
-    );
+    assert!(!runtime.dispatch_shortcut(
+        root,
+        Some(root),
+        'B' as u32,
+        KeyModifiers {
+            shift: true,
+            ..ctrl()
+        }
+    ));
     assert!(runtime.dispatch_shortcut(root, Some(root), 'b' as u32, ctrl()));
     assert_eq!(hits(&mut runtime), "inner:ctrl+b,root:ctrl+b");
     // Returning false passes the key on, to the surface's shortcuts.

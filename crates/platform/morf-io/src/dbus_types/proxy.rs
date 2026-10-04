@@ -15,8 +15,8 @@ use crate::dbus_decode::DbusSignal;
 use zbus::zvariant::{DynamicDeserialize, DynamicType, OwnedValue, Value};
 
 use super::{
-    Bus, DEFAULT_CALL_TIMEOUT, PendingReply, Route, positional_arguments, router, shared_connection,
-    spawn_call,
+    Bus, DEFAULT_CALL_TIMEOUT, PendingReply, Route, positional_arguments, router,
+    shared_connection, spawn_call,
 };
 
 /// A file descriptor that arrived over the bus, or is going back onto it.

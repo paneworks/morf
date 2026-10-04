@@ -41,7 +41,8 @@ impl ProcessView {
         if self.process.is_some() {
             return Ok(false);
         }
-        self.process = Some(Process::spawn_config(&self.config).map_err(|error| error.to_string())?);
+        self.process =
+            Some(Process::spawn_config(&self.config).map_err(|error| error.to_string())?);
         Ok(true)
     }
 
@@ -182,6 +183,9 @@ mod tests {
         assert!(working_directory(String::new()).is_err());
         assert!(working_directory("a\0b".into()).is_err());
         assert!(working_directory("x".repeat(MAX_WORKING_DIRECTORY + 1)).is_err());
-        assert_eq!(working_directory("/tmp".into()).unwrap(), PathBuf::from("/tmp"));
+        assert_eq!(
+            working_directory("/tmp".into()).unwrap(),
+            PathBuf::from("/tmp")
+        );
     }
 }

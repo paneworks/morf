@@ -3,8 +3,8 @@
 use std::os::fd::OwnedFd;
 use std::os::unix::process::ExitStatusExt;
 use std::process::Child;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use rustix::event::epoll;

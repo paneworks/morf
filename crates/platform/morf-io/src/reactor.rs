@@ -26,8 +26,8 @@
 //! spawned `detached`, which are left running and reaped by a thread of
 //! their own when they exit.
 
-mod options;
 mod lines;
+mod options;
 
 use std::io;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};

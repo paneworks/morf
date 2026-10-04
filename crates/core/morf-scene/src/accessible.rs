@@ -17,14 +17,78 @@ use crate::types::{Element, NodeHandle, Scene, Value};
 
 /// Every role a node may name, the engine's vocabulary.
 pub const ROLES: &[&str] = &[
-    "", "window", "application", "dialog", "alert_dialog", "alert", "status", "tooltip", "menu", "menu_bar",
-    "menu_item", "menu_item_check", "menu_item_radio", "button", "toggle_button", "check_box", "radio_button",
-    "switch", "link", "slider", "spin_button", "scroll_bar", "progress", "meter", "tab_list", "tab", "tab_panel",
-    "list_box", "list_box_option", "radio_group", "tree", "tree_item", "tree_grid", "grid", "grid_cell", "list",
-    "list_item", "table", "row", "cell", "column_header", "row_header", "text_field", "password_text",
-    "text_area", "search_field", "scroll_pane", "group", "splitter", "grip", "label", "heading", "image",
-    "separator", "toolbar", "navigation", "main", "complementary", "region", "banner", "content_info", "search",
-    "form", "figure", "generic", "time", "timer", "marquee", "log", "note", "paragraph", "document",
+    "",
+    "window",
+    "application",
+    "dialog",
+    "alert_dialog",
+    "alert",
+    "status",
+    "tooltip",
+    "menu",
+    "menu_bar",
+    "menu_item",
+    "menu_item_check",
+    "menu_item_radio",
+    "button",
+    "toggle_button",
+    "check_box",
+    "radio_button",
+    "switch",
+    "link",
+    "slider",
+    "spin_button",
+    "scroll_bar",
+    "progress",
+    "meter",
+    "tab_list",
+    "tab",
+    "tab_panel",
+    "list_box",
+    "list_box_option",
+    "radio_group",
+    "tree",
+    "tree_item",
+    "tree_grid",
+    "grid",
+    "grid_cell",
+    "list",
+    "list_item",
+    "table",
+    "row",
+    "cell",
+    "column_header",
+    "row_header",
+    "text_field",
+    "password_text",
+    "text_area",
+    "search_field",
+    "scroll_pane",
+    "group",
+    "splitter",
+    "grip",
+    "label",
+    "heading",
+    "image",
+    "separator",
+    "toolbar",
+    "navigation",
+    "main",
+    "complementary",
+    "region",
+    "banner",
+    "content_info",
+    "search",
+    "form",
+    "figure",
+    "generic",
+    "time",
+    "timer",
+    "marquee",
+    "log",
+    "note",
+    "paragraph",
+    "document",
 ];
 
 /// Roles whose children are presentational: the node is read as one thing,
@@ -32,10 +96,33 @@ pub const ROLES: &[&str] = &[
 fn is_leaf(role: &str) -> bool {
     matches!(
         role,
-        "button" | "toggle_button" | "check_box" | "radio_button" | "switch" | "link" | "menu_item"
-            | "menu_item_check" | "menu_item_radio" | "slider" | "spin_button" | "scroll_bar" | "progress"
-            | "meter" | "tab" | "text_field" | "password_text" | "text_area" | "search_field" | "label"
-            | "heading" | "image" | "splitter" | "grip" | "separator" | "time" | "timer"
+        "button"
+            | "toggle_button"
+            | "check_box"
+            | "radio_button"
+            | "switch"
+            | "link"
+            | "menu_item"
+            | "menu_item_check"
+            | "menu_item_radio"
+            | "slider"
+            | "spin_button"
+            | "scroll_bar"
+            | "progress"
+            | "meter"
+            | "tab"
+            | "text_field"
+            | "password_text"
+            | "text_area"
+            | "search_field"
+            | "label"
+            | "heading"
+            | "image"
+            | "splitter"
+            | "grip"
+            | "separator"
+            | "time"
+            | "timer"
     )
 }
 
@@ -43,8 +130,19 @@ fn is_leaf(role: &str) -> bool {
 fn named_by_content(role: &str) -> bool {
     matches!(
         role,
-        "list_item" | "list_box_option" | "grid_cell" | "tree_item" | "row" | "cell" | "column_header"
-            | "row_header" | "status" | "alert" | "tooltip" | "note" | "paragraph"
+        "list_item"
+            | "list_box_option"
+            | "grid_cell"
+            | "tree_item"
+            | "row"
+            | "cell"
+            | "column_header"
+            | "row_header"
+            | "status"
+            | "alert"
+            | "tooltip"
+            | "note"
+            | "paragraph"
     )
 }
 
@@ -125,13 +223,19 @@ impl Scene {
                 }
             }
             Ok(Element::Image | Element::Icon)
-                if !self.string_value(node, "accessible_name").unwrap_or("").is_empty() =>
+                if !self
+                    .string_value(node, "accessible_name")
+                    .unwrap_or("")
+                    .is_empty() =>
             {
                 "image".into()
             }
             // A pressable thing Tab reaches, that nobody named the role of.
             Ok(Element::MouseArea)
-                if matches!(self.string_value(node, "focus_policy").unwrap_or(""), "tab" | "strong") =>
+                if matches!(
+                    self.string_value(node, "focus_policy").unwrap_or(""),
+                    "tab" | "strong"
+                ) =>
             {
                 "button".into()
             }
@@ -165,12 +269,23 @@ impl Scene {
         };
         let mut name = string("accessible_name");
         // (A range's text is its reading, not its name.)
-        let ranged = matches!(role.as_str(), "slider" | "spin_button" | "scroll_bar" | "progress" | "meter");
+        let ranged = matches!(
+            role.as_str(),
+            "slider" | "spin_button" | "scroll_bar" | "progress" | "meter"
+        );
         if name.is_empty() && !ranged && (is_leaf(&role) || named_by_content(&role)) {
             name = self.accessible_text_under(node);
         }
-        if name.is_empty() && matches!(role.as_str(), "text_field" | "text_area" | "search_field" | "password_text") {
-            name = self.string_value(node, "placeholder").unwrap_or("").to_owned();
+        if name.is_empty()
+            && matches!(
+                role.as_str(),
+                "text_field" | "text_area" | "search_field" | "password_text"
+            )
+        {
+            name = self
+                .string_value(node, "placeholder")
+                .unwrap_or("")
+                .to_owned();
         }
         let value = match entry("value") {
             Some(Value::Number(n)) => Some(AccessibleValue::Number(*n)),
@@ -199,12 +314,14 @@ impl Scene {
             checked,
             expanded: flag("expanded"),
             selected: flag("selected"),
-            disabled: flag("disabled").unwrap_or(false) || !self.bool_value(node, "enabled").unwrap_or(true),
+            disabled: flag("disabled").unwrap_or(false)
+                || !self.bool_value(node, "enabled").unwrap_or(true),
             pressed: flag("pressed").unwrap_or(false),
             read_only: flag("read_only").unwrap_or(false),
             modal: flag("modal").unwrap_or(false),
             focusable: policy != "none"
-                && (matches!(policy, "tab" | "strong" | "click") || self.element(node) == Ok(Element::TextInput)),
+                && (matches!(policy, "tab" | "strong" | "click")
+                    || self.element(node) == Ok(Element::TextInput)),
             focused: self.bool_value(node, "focused").unwrap_or(false),
             orientation: text("orientation"),
             placeholder: text("placeholder"),
@@ -286,9 +403,15 @@ mod tests {
         scene.reparent(button, Some(panel)).unwrap();
         scene.reparent(label, Some(button)).unwrap();
         scene.reparent(hidden, Some(panel)).unwrap();
-        scene.assign(button, "accessible_role", Value::String("button".into())).unwrap();
-        scene.assign(label, "text", Value::String("Apply".into())).unwrap();
-        scene.assign(hidden, "text", Value::String("secret".into())).unwrap();
+        scene
+            .assign(button, "accessible_role", Value::String("button".into()))
+            .unwrap();
+        scene
+            .assign(label, "text", Value::String("Apply".into()))
+            .unwrap();
+        scene
+            .assign(hidden, "text", Value::String("secret".into()))
+            .unwrap();
         scene.assign(hidden, "visible", Value::Bool(false)).unwrap();
         let tree = scene.accessible_tree(root, "window", "Shell", &|_| None);
         assert_eq!(tree.len(), 2, "{tree:?}");

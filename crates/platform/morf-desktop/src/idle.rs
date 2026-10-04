@@ -68,7 +68,8 @@ impl IdleState {
             return;
         };
         for key in added {
-            self.notifications.push(notification(notifier, seat, key, qh));
+            self.notifications
+                .push(notification(notifier, seat, key, qh));
         }
     }
 
@@ -182,7 +183,11 @@ mod tests {
         let held = [(60_000, false), (300_000, true)];
         let (removed, added) = idle_changes(&held, &[(5_000, false), (60_000, false)]);
         assert_eq!(removed, [(300_000, true)]);
-        assert_eq!(added, [(5_000, false)], "the minute keeps its running clock");
+        assert_eq!(
+            added,
+            [(5_000, false)],
+            "the minute keeps its running clock"
+        );
         let (removed, added) = idle_changes(&held, &held);
         assert!(removed.is_empty() && added.is_empty());
     }

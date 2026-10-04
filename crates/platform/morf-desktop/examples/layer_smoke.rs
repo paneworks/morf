@@ -1,11 +1,11 @@
+use morf_app::{Event, LayerClient, LayerConfig};
+use morf_desktop::{Desktop, OutputPowerMode};
 use morf_layout::{Geometry, TextAlignment, TextElide, Transform2D};
 use morf_render::{
     DamageRect, DistanceFieldStyle, DrawCommand, DrawList, RenderBackend, VerticalAlignment,
     WgpuBackend,
 };
 use morf_scene::{Color, Element, Scene};
-use morf_app::{Event, LayerClient, LayerConfig};
-use morf_desktop::{Desktop, OutputPowerMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = LayerConfig {

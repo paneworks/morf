@@ -209,7 +209,6 @@ mod tests {
             y: 20.6,
             width: 30.0,
             height: 0.2,
-            ..Geometry::default()
         };
         assert_eq!(anchor.resolve(&geometry), (99, 18, 37, 14));
     }

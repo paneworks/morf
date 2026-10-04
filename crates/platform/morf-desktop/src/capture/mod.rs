@@ -26,7 +26,6 @@ pub enum ScreencopyFormat {
     Xrgb8888,
 }
 
-
 /// One completed output capture in row-major shared-memory layout.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScreencopyFrame {
@@ -49,7 +48,6 @@ pub struct ScreencopyFrame {
     /// shared memory.
     pub dmabuf: bool,
 }
-
 
 /// A dmabuf to capture into, described the way `zwp_linux_dmabuf_v1` wants it.
 ///
@@ -75,7 +73,6 @@ pub struct CaptureBuffer<'a> {
     pub stride: u32,
 }
 
-
 pub(crate) struct PendingScreencopy {
     pub(crate) request_id: u64,
     pub(crate) frame: ZwlrScreencopyFrameV1,
@@ -85,7 +82,6 @@ pub(crate) struct PendingScreencopy {
     pub(crate) format: Option<ScreencopyFormat>,
     pub(crate) y_invert: bool,
 }
-
 
 /// One capture in flight on `ext-image-copy-capture-v1`.
 ///

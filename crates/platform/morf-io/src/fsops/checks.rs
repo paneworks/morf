@@ -157,7 +157,11 @@ mod tests {
     #[test]
     fn limits_and_modes_are_bounded() {
         assert_eq!(read_limit(10, "fs.read"), Ok(10));
-        assert!(read_limit(-1, "fs.read").unwrap_err().starts_with("fs.read limit"));
+        assert!(
+            read_limit(-1, "fs.read")
+                .unwrap_err()
+                .starts_with("fs.read limit")
+        );
         assert!(read_limit(MAX_BYTES as i64 + 1, "x").is_err());
         assert_eq!(read_window(None, None), Ok((0, DEFAULT_READ)));
         assert!(read_window(Some(-1), None).is_err());

@@ -24,7 +24,7 @@ fn per_run(runtime: &mut Runtime, mut body: impl FnMut(&mut Runtime)) -> Duratio
     while started.elapsed() < Duration::from_secs(1) {
         body(runtime);
         runs += 1;
-        if runs % 64 == 0 {
+        if runs.is_multiple_of(64) {
             runtime.poll_services();
         }
     }

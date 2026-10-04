@@ -258,7 +258,13 @@ impl<C> IoHub<C> {
             .count()
     }
 
-    fn insert(&mut self, handle: IoHandle, status: Rc<HandleStatus>, kind: IoKind<C>, process: bool) {
+    fn insert(
+        &mut self,
+        handle: IoHandle,
+        status: Rc<HandleStatus>,
+        kind: IoKind<C>,
+        process: bool,
+    ) {
         self.entries.insert(
             handle.id(),
             Entry {

@@ -27,7 +27,6 @@ use wayland_protocols_wlr::foreign_toplevel::v1::client::{
     zwlr_foreign_toplevel_manager_v1::{self, ZwlrForeignToplevelManagerV1},
 };
 
-
 /// One window as the control protocol describes it.
 ///
 /// Its own record rather than fields on `ToplevelInfo`, because this half is

@@ -2,8 +2,8 @@
 
 use std::io;
 use std::os::fd::OwnedFd;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use rustix::event::epoll;
@@ -13,7 +13,7 @@ use rustix::net::{AddressFamily, SendFlags, SocketAddrUnix, SocketFlags, SocketT
 use crate::reactor::{CloseReason, ConnectOptions, Endpoint, IoEvent, IoId, LineSplitter, Shared};
 
 use super::{
-    Core, CONNECT_RETRY, Pending, READS_PER_WAKE, SOCKET, Sock, SockState, over_high_water, token,
+    CONNECT_RETRY, Core, Pending, READS_PER_WAKE, SOCKET, Sock, SockState, over_high_water, token,
     unregister,
 };
 

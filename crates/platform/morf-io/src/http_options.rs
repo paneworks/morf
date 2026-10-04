@@ -23,7 +23,9 @@ pub const MAX_HEADERS: usize = 64;
 /// Refuses one more request when `in_flight` already fill the queue.
 pub fn check_pending(in_flight: usize) -> Result<(), String> {
     if in_flight >= MAX_HTTP_PENDING {
-        return Err(format!("more than {MAX_HTTP_PENDING} HTTP requests in flight"));
+        return Err(format!(
+            "more than {MAX_HTTP_PENDING} HTTP requests in flight"
+        ));
     }
     Ok(())
 }
@@ -123,7 +125,10 @@ mod tests {
         request
             .set_header("content-type".into(), "text/plain".into())
             .unwrap();
-        assert_eq!(request.headers, vec![("content-type".into(), "text/plain".into())]);
+        assert_eq!(
+            request.headers,
+            vec![("content-type".into(), "text/plain".into())]
+        );
         for index in 1..MAX_HEADERS {
             request.set_header(format!("h{index}"), "v".into()).unwrap();
         }

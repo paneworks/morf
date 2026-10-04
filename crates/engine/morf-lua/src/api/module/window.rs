@@ -11,7 +11,7 @@ pub(super) fn window_metatable<'gc>(
     limits: crate::Limits,
 ) -> luna::StashedTable {
     let window_visible = Callback::from_fn(&ctx, {
-        let state = Rc::clone(&state);
+        let state = Rc::clone(state);
         move |ctx, _, mut stack| {
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let visible = state
@@ -26,7 +26,7 @@ pub(super) fn window_metatable<'gc>(
         }
     });
     let window_open = Callback::from_fn(&ctx, {
-        let state = Rc::clone(&state);
+        let state = Rc::clone(state);
         move |ctx, _, mut stack| {
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let mut state = state.borrow_mut();
@@ -43,7 +43,7 @@ pub(super) fn window_metatable<'gc>(
         }
     });
     let window_close = Callback::from_fn(&ctx, {
-        let state = Rc::clone(&state);
+        let state = Rc::clone(state);
         move |ctx, _, mut stack| {
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let mut state = state.borrow_mut();
@@ -66,7 +66,7 @@ pub(super) fn window_metatable<'gc>(
     // Destroying twice is nothing. Child windows parented to it are not
     // destroyed with it: with their parent gone they are never shown.
     let window_destroy = Callback::from_fn(&ctx, {
-        let state = Rc::clone(&state);
+        let state = Rc::clone(state);
         move |ctx, _, mut stack| {
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let on_closed =
@@ -94,7 +94,7 @@ pub(super) fn window_metatable<'gc>(
         }
     });
     let window_kind = Callback::from_fn(&ctx, {
-        let state = Rc::clone(&state);
+        let state = Rc::clone(state);
         move |ctx, _, mut stack| {
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let kind = state
@@ -124,84 +124,84 @@ pub(super) fn window_metatable<'gc>(
     window_methods.set_field(
         ctx,
         "updates_enabled",
-        window_updates_enabled_method(ctx, Rc::clone(&state)),
+        window_updates_enabled_method(ctx, Rc::clone(state)),
     );
     for property in ["minimized", "maximized", "fullscreen"] {
         window_methods.set_field(
             ctx,
             property,
-            floating_state_method(ctx, Rc::clone(&state), property),
+            floating_state_method(ctx, Rc::clone(state), property),
         );
     }
     for property in ["title", "app_id"] {
         window_methods.set_field(
             ctx,
             property,
-            floating_string_method(ctx, Rc::clone(&state), property),
+            floating_string_method(ctx, Rc::clone(state), property),
         );
     }
-    window_methods.set_field(ctx, "size", window_size_method(ctx, Rc::clone(&state)));
+    window_methods.set_field(ctx, "size", window_size_method(ctx, Rc::clone(state)));
     for property in ["minimum_size", "maximum_size"] {
         window_methods.set_field(
             ctx,
             property,
-            floating_size_method(ctx, Rc::clone(&state), property),
+            floating_size_method(ctx, Rc::clone(state), property),
         );
     }
     window_methods.set_field(
         ctx,
         "grab_focus",
-        popup_bool_method(ctx, Rc::clone(&state), "grab_focus"),
+        popup_bool_method(ctx, Rc::clone(state), "grab_focus"),
     );
     for property in ["anchor_edge", "gravity"] {
         window_methods.set_field(
             ctx,
             property,
-            popup_string_method(ctx, Rc::clone(&state), property),
+            popup_string_method(ctx, Rc::clone(state), property),
         );
     }
     window_methods.set_field(
         ctx,
         "anchor_rect",
-        popup_anchor_rect_method(ctx, Rc::clone(&state)),
+        popup_anchor_rect_method(ctx, Rc::clone(state)),
     );
-    window_methods.set_field(ctx, "offset", popup_offset_method(ctx, Rc::clone(&state)));
+    window_methods.set_field(ctx, "offset", popup_offset_method(ctx, Rc::clone(state)));
     window_methods.set_field(
         ctx,
         "constraints",
-        popup_constraints_method(ctx, Rc::clone(&state)),
+        popup_constraints_method(ctx, Rc::clone(state)),
     );
     window_methods.set_field(
         ctx,
         "parent_id",
-        window_parent_id_method(ctx, Rc::clone(&state)),
+        window_parent_id_method(ctx, Rc::clone(state)),
     );
     window_methods.set_field(
         ctx,
         "set_parent",
-        window_set_parent_method(ctx, Rc::clone(&state)),
+        window_set_parent_method(ctx, Rc::clone(state)),
     );
     window_methods.set_field(
         ctx,
         "item_position",
-        window_item_position_method(ctx, Rc::clone(&state)),
+        window_item_position_method(ctx, Rc::clone(state)),
     );
     window_methods.set_field(
         ctx,
         "item_rect",
-        window_item_rect_method(ctx, Rc::clone(&state)),
+        window_item_rect_method(ctx, Rc::clone(state)),
     );
     window_methods.set_field(
         ctx,
         "map_from_item",
-        window_map_from_item_method(ctx, Rc::clone(&state)),
+        window_map_from_item_method(ctx, Rc::clone(state)),
     );
     window_methods.set_field(
         ctx,
         "map_rect_from_item",
-        window_map_rect_from_item_method(ctx, Rc::clone(&state)),
+        window_map_rect_from_item_method(ctx, Rc::clone(state)),
     );
-    let move_state = Rc::clone(&state);
+    let move_state = Rc::clone(state);
     let start_system_move = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
         let mut state = move_state.borrow_mut();
@@ -222,7 +222,7 @@ pub(super) fn window_metatable<'gc>(
         Ok(CallbackReturn::Return)
     });
     window_methods.set_field(ctx, "start_system_move", start_system_move);
-    let resize_state = Rc::clone(&state);
+    let resize_state = Rc::clone(state);
     let start_system_resize = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, edge): (UserRef<WindowSurfaceToken>, String) = stack.consume(ctx)?;
         if !matches!(
@@ -262,13 +262,13 @@ pub(super) fn window_metatable<'gc>(
     window_methods.set_field(
         ctx,
         "configure",
-        window_configure_method(ctx, Rc::clone(&state)),
+        window_configure_method(ctx, Rc::clone(state)),
     );
     for event in crate::window_events::WindowEvent::ALL {
         window_methods.set_field(
             ctx,
             event.method(),
-            crate::window_events::window_handler_method(ctx, Rc::clone(&state), event),
+            crate::window_events::window_handler_method(ctx, Rc::clone(state), event),
         );
     }
     // Methods first; on a layer surface any other name reads that layer
@@ -276,7 +276,7 @@ pub(super) fn window_metatable<'gc>(
     // `morf.surface.<key>` does for the shell's own.
     let window_method_table = ctx.stash(window_methods);
     let window_index = Callback::from_fn(&ctx, {
-        let state = Rc::clone(&state);
+        let state = Rc::clone(state);
         move |ctx, _, mut stack| {
             let (surface, key): (UserRef<WindowSurfaceToken>, LuaValue) = stack.consume(ctx)?;
             let method = ctx.fetch(&window_method_table).get_value(ctx, key);
@@ -312,7 +312,7 @@ pub(super) fn window_metatable<'gc>(
         }
     });
     let window_new_index = Callback::from_fn(&ctx, {
-        let state = Rc::clone(&state);
+        let state = Rc::clone(state);
         move |ctx, _, mut stack| {
             let (surface, key, value): (UserRef<WindowSurfaceToken>, String, LuaValue) =
                 stack.consume(ctx)?;

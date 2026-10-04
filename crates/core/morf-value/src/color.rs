@@ -48,7 +48,6 @@ impl Color {
     }
 }
 
-
 /// The space two colours are interpolated in.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ColorSpace {

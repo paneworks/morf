@@ -28,7 +28,6 @@ use wayland_protocols::ext::image_copy_capture::v1::client::{
     ext_image_copy_capture_session_v1::{self, ExtImageCopyCaptureSessionV1},
 };
 
-
 // The factories and the source handle say nothing back.
 wayland_client::delegate_noop!(DesktopState: ignore ExtImageCopyCaptureManagerV1);
 wayland_client::delegate_noop!(DesktopState: ignore ExtOutputImageCaptureSourceManagerV1);

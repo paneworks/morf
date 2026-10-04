@@ -21,10 +21,6 @@ mod gradient;
 mod groups;
 mod hashing;
 pub use morf_value::hct;
-/// The reactive signal graph the scene's properties live in.
-pub mod reactive;
-/// Retention: locks that keep something alive until they are let go.
-pub mod retain;
 mod keyframes;
 mod mask;
 mod motion;
@@ -33,6 +29,10 @@ pub mod overlay;
 mod path_style;
 mod playback;
 mod property_store;
+/// The reactive signal graph the scene's properties live in.
+pub mod reactive;
+/// Retention: locks that keep something alive until they are let go.
+pub mod retain;
 mod rich_text;
 mod scene;
 mod scene_access;
@@ -49,7 +49,9 @@ mod types;
 
 pub use accessible::{AccessibleNode, AccessibleValue, Checked, ROLES as ACCESSIBLE_ROLES};
 pub use animation::*;
-pub use channel::{Channel, MAX_CHANNEL_LEN, channel, channel_by_id, channels_generation, drop_channel};
+pub use channel::{
+    Channel, MAX_CHANNEL_LEN, channel, channel_by_id, channels_generation, drop_channel,
+};
 pub use coerce::{ANCHOR_KEYS, CURSOR_SHAPES};
 pub use color::{ColorSpace, HueDirection, mix as mix_colors};
 pub use decoration::*;

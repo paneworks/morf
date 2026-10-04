@@ -14,8 +14,8 @@ use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::AsFd;
 
 use rustix::fs::{MemfdFlags, memfd_create};
-use wayland_client::protocol::wl_output;
 use wayland_client::globals::GlobalList;
+use wayland_client::protocol::wl_output;
 use wayland_client::{Connection, Dispatch, QueueHandle};
 use wayland_protocols_wlr::gamma_control::v1::client::{
     zwlr_gamma_control_manager_v1::ZwlrGammaControlManagerV1,
