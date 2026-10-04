@@ -9,7 +9,7 @@ use std::thread::{self};
 use std::time::Duration;
 
 use crate::{
-    config::*, lock::*, outputless::*, paint::*, services::*, supervisor::*, surface_run::*,
+    lock::*, outputless::*, paint::*, services::*, supervisor::*, surface_run::*,
     surfaces::*,
 };
 

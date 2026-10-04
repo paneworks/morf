@@ -19,7 +19,7 @@ use morf_text::TextSystem;
 use morf_app::WindowId;
 use morf_app::backend::headless::{VirtualSeat, virtual_outputs};
 
-use crate::config::LoadPolicy;
+use crate::supervisor::LoadPolicy;
 use crate::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};
 use crate::surfaces::{PointerInput, primary_surface_root};
 

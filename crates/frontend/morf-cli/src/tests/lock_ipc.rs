@@ -1,6 +1,6 @@
 // A lock process answers IPC on a socket of its own.
 
-use crate::config::lock_variant;
+use crate::socket_path::lock_variant;
 use crate::lock_ipc::answer_lock_request;
 use morf_io::{IpcRequest, IpcValue as WireValue};
 use morf_lua::Runtime;

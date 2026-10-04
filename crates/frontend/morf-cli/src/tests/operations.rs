@@ -190,16 +190,16 @@ fn an_instance_is_named_by_its_display() {
     // through the function under test rather than concurrently.
     unsafe { std::env::set_var("XDG_RUNTIME_DIR", "/run/morf-test") };
     assert_eq!(
-        socket_path_for(Some("wayland-7")).unwrap(),
+        crate::socket_path::socket_path_for(Some("wayland-7")).unwrap(),
         std::path::PathBuf::from("/run/morf-test/morf/wayland-7.sock")
     );
     assert_eq!(
-        socket_path_for(Some("../escape")).unwrap_err(),
+        crate::socket_path::socket_path_for(Some("../escape")).unwrap_err(),
         "WAYLAND_DISPLAY must be one path component"
     );
     // libwayland takes an absolute path as the socket itself; it names an
     // instance of its own, apart from a socket of the same name elsewhere.
-    use crate::config::display_instance;
+    use crate::socket_path::display_instance;
     let nested = display_instance("/run/user/1000/nested/wayland-1").unwrap();
     assert!(nested.starts_with("wayland-1-"), "{nested}");
     assert_ne!(nested, display_instance("/tmp/other/wayland-1").unwrap());

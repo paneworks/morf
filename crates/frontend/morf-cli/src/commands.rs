@@ -11,7 +11,8 @@ use std::path::PathBuf;
 use morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
 use morf_lua::{LogEntry, LogLevel};
 
-use crate::config::{config_root, socket_dir, socket_path};
+use crate::config::config_root;
+use crate::socket_path::{socket_dir, socket_path};
 
 /// Prints the shell's log, once or until interrupted.
 ///

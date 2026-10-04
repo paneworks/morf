@@ -10,7 +10,24 @@ use std::sync::{Arc, mpsc};
 use std::thread::{self};
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::{config::*, lock::*, outputless::*, services::*, workers::*};
+use crate::socket_path::socket_path;
+use crate::{lock::*, outputless::*, services::*, workers::*};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct LoadPolicy {
+    pub(crate) plugins: bool,
+    pub(crate) external_roots: bool,
+}
+
+impl Default for LoadPolicy {
+    fn default() -> Self {
+        Self {
+            plugins: true,
+            external_roots: true,
+        }
+    }
+}
+
 
 /// What a worker ends with when the compositor closes its surface -- which is
 /// what a compositor does to every surface on an output it switches off or

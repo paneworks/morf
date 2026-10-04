@@ -28,7 +28,7 @@ impl LockIpc {
     /// Binds the lock's socket. Its requests ring the loop's wake, so a call
     /// is answered at once rather than at the next fallback tick.
     pub(crate) fn bind(config: &Path) -> Result<Self, String> {
-        let socket = crate::config::lock_socket_path()?;
+        let socket = crate::socket_path::lock_socket_path()?;
         let (tx, forwarded) = mpsc::channel();
         let server = IpcServer::bind(&socket, tx).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AddrInUse {
