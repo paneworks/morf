@@ -171,7 +171,9 @@ pub fn palette_of(image: &ImageData, count: usize) -> Vec<PaletteEntry> {
     let count = count.clamp(1, 64);
     let pixels: Vec<[u8; 4]> = image
         .rgba
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|pixel| pixel[3] >= 128)
         .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
         .collect();

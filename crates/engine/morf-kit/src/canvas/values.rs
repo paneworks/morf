@@ -72,7 +72,7 @@ fn points_of(value: Option<&IpcValue>) -> Vec<[f64; 2]> {
         .iter()
         .filter_map(|v| number(Some(v)))
         .collect();
-    numbers.chunks_exact(2).map(|p| [p[0], p[1]]).collect()
+    numbers.as_chunks::<2>().0.to_vec()
 }
 
 pub(super) fn id_list(value: &IpcValue) -> Vec<String> {

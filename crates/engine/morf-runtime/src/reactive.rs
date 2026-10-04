@@ -281,7 +281,7 @@ mod tests {
     }
 }
 
-/// See [`Runtime::resource_stats`].
+/// Reported by the host runtime's `resource_stats` method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ResourceStats {
     pub nodes: usize,

@@ -123,7 +123,9 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for DesktopState {
                 entry.pending.minimized = false;
                 entry.pending.fullscreen = false;
                 for value in bits
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .map(|chunk| u32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
                 {
                     match value {

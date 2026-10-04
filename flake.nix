@@ -1,6 +1,11 @@
 {
   description = "morf Rust development shell";
 
+  nixConfig = {
+    extra-substituters = [ "https://paneworks.cachix.org" ];
+    extra-trusted-public-keys = [ "paneworks.cachix.org-1:5XAOHaQHgDEM4dL1Cpu56zcKZxUWYP7zmv8GD3Siy0Q=" ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs?rev=4c1018dae018162ec878d42fec712642d214fdfa";
     flake-utils.url = "github:numtide/flake-utils";
@@ -130,6 +135,7 @@
         morf = rustPlatform.buildRustPackage {
           pname = "morf";
           version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
+          outputs = [ "out" "library" ];
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
             # Build outputs and research notes are no part of the source.
@@ -145,29 +151,35 @@
           cargoBuildFlags = [ "--package" "morf-cli" ];
           nativeBuildInputs = with pkgs; [ pkg-config makeWrapper ];
           buildInputs = with pkgs; [ wayland libxkbcommon ];
-          # The test suites want a GPU, a session bus and a compositor.
           doCheck = false;
           postInstall = ''
-            mkdir -p $out/share/morf/library
-            cp -r library/lib library/types $out/share/morf/library/
+            mkdir -p $library/share/morf/library $out/share/morf
+            cp -r library/lib library/README.md library/luarc.template.json $library/share/morf/library/
+            substituteInPlace $library/share/morf/library/luarc.template.json \
+              --replace-fail '~/.local/share/morf/library' "$library/share/morf/library"
+            $out/bin/morf types $library/share/morf/library/types
+            ln -s $library/share/morf/library $out/share/morf/library
             wrapProgram $out/bin/morf \
               --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeLibs} \
               --suffix XDG_DATA_DIRS : $out/share
           '';
+          doInstallCheck = true;
+          installCheckPhase = ''
+            runHook preInstallCheck
+            bash tools/nix-smoke.sh "$out" "$library"
+            runHook postInstallCheck
+          '';
           meta = {
             description = "Rendering and shell engine in Rust, configured in Lua";
-            homepage = "https://github.com/rendrworks/morf";
+            homepage = "https://github.com/paneworks/morf";
             license = pkgs.lib.licenses.mit;
             mainProgram = "morf";
             platforms = pkgs.lib.platforms.linux;
+            outputsToInstall = [ "out" ];
           };
         };
       in
       {
-        packages.default = morf;
-        packages.morf = morf;
-        apps.default = flake-utils.lib.mkApp { drv = morf; };
-
         # `nix develop .#cross-aarch64` — then `cargo build --release
         # --target aarch64-unknown-linux-musl`, and the binary runs on the
         # phone. Cross-compiling means building the target's libraries from
@@ -248,6 +260,15 @@
           WGPU_VALIDATION = "0";
           WGPU_DEBUG = "0";
         };
-      }
+      } // (if builtins.elem system [ "x86_64-linux" "aarch64-linux" ] then {
+        packages = {
+          default = morf;
+          inherit morf;
+          morf-library = morf.library;
+        };
+        apps.default = flake-utils.lib.mkApp { drv = morf; };
+        apps.morf = flake-utils.lib.mkApp { drv = morf; };
+        checks.morf = morf;
+      } else {})
     );
 }

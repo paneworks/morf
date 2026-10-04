@@ -226,10 +226,10 @@ fn wait_for_configure(backend: &mut dyn Backend) -> Result<FirstFrame, String> {
                 Event::PointerMotion { surface, x, y } => {
                     early_pointer = Some((surface, x, y));
                 }
-                Event::PointerLeave { surface } => {
-                    if early_pointer.is_some_and(|(role, _, _)| role == surface) {
-                        early_pointer = None;
-                    }
+                Event::PointerLeave { surface }
+                    if early_pointer.is_some_and(|(role, _, _)| role == surface) =>
+                {
+                    early_pointer = None;
                 }
                 _ => {}
             }

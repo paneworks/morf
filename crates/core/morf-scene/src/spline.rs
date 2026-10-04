@@ -55,7 +55,7 @@ pub fn intern_spline(points: &[f64]) -> Result<&'static [f64], String> {
         return Err("easing spline points must be finite numbers".into());
     }
     let mut start_x = 0.0;
-    for segment in points.chunks_exact(6) {
+    for segment in points.as_chunks::<6>().0 {
         let [x1, _, x2, _, x, _] = [
             segment[0], segment[1], segment[2], segment[3], segment[4], segment[5],
         ];
@@ -114,7 +114,7 @@ fn cubic_slope(p0: f64, p1: f64, p2: f64, p3: f64, t: f64) -> f64 {
 pub fn spline_value(points: &[f64], progress: f64) -> f64 {
     let x = progress.clamp(0.0, 1.0);
     let (mut start_x, mut start_y) = (0.0, 0.0);
-    for segment in points.chunks_exact(6) {
+    for segment in points.as_chunks::<6>().0 {
         let (x1, y1, x2, y2, end_x, end_y) = (
             segment[0], segment[1], segment[2], segment[3], segment[4], segment[5],
         );

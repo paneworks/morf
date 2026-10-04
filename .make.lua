@@ -14,17 +14,9 @@
 
 local make = oslo.make
 
--- Name and version live in PROJECT, one per line, so every tool reads them from one place.
-local function project()
-  local found = {}
-  for line in (oslo.fs.read("PROJECT") or ""):gmatch("[^\n]+") do
-    local value = line:match("^%s*([^#%[%s]%S*)%s*$")
-    if value then found[#found + 1] = value end
-  end
-  return found[1] or "morf", found[2] or "0.1.0"
-end
-
-local NAME, VERSION = project()
+local NAME = "morf"
+local VERSION = oslo.fs.read("Cargo.toml"):match('\nversion%s*=%s*"([^"]+)"')
+assert(VERSION, "Cargo.toml is missing its workspace version")
 
 ------------------------------------------------------------------ what was built
 
@@ -348,7 +340,7 @@ make.recipe{
     assert(listed.ok, "could not inventory Rust sources")
     local oversized = {}
     for path in (listed.out or ""):gmatch("[^\n]+") do
-      if not path:match("^xtra/") then
+      if not path:match("^xtra/") and not path:match("^vendor/") then
         local source = oslo.fs.read(path) or ""
         local _, lines = source:gsub("\n", "")
         if #source > 0 and source:sub(-1) ~= "\n" then lines = lines + 1 end
@@ -511,3 +503,19 @@ make.recipe{
            "check-all", "test-all", "clippy", "rustdoc", "link-check" },
 }
 make.alias("v", "verify")
+
+make.recipe{
+  name = "nix-build",
+  desc = "build the Nix engine and Lua library outputs",
+  run = function()
+    sh.nix("build", "--accept-flake-config", "--no-update-lock-file", ".#morf", ".#morf-library")
+  end,
+}
+
+make.recipe{
+  name = "nix-check",
+  desc = "check the Nix package and installed Lua library",
+  run = function()
+    sh.nix("flake", "check", "--accept-flake-config", "--no-update-lock-file", "--print-build-logs")
+  end,
+}

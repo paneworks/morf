@@ -4,6 +4,14 @@ use std::time::Duration;
 
 use super::*;
 
+fn runtime() -> Runtime {
+    let mut runtime = Runtime::default();
+    runtime
+        .set_preference("reduced_motion", IpcValue::Boolean(false))
+        .unwrap();
+    runtime
+}
+
 fn text(runtime: &mut Runtime, verb: &str) -> String {
     match &runtime.call_ipc(verb, &[]).unwrap()[..] {
         [IpcValue::String(text)] => text.clone(),
@@ -53,7 +61,7 @@ const LOADER: &[u8] = br#"
 
 #[test]
 fn a_loader_let_go_plays_its_items_exit_then_removes_it() {
-    let mut runtime = Runtime::default();
+    let mut runtime = runtime();
     runtime.execute("loader.lua", LOADER).unwrap();
     runtime.poll_services();
     assert_eq!(text(&mut runtime, "state"), "built 1 gone 0");
@@ -82,7 +90,7 @@ fn a_loader_let_go_plays_its_items_exit_then_removes_it() {
 
 #[test]
 fn a_loader_asked_for_again_takes_its_leaving_item_back() {
-    let mut runtime = Runtime::default();
+    let mut runtime = runtime();
     runtime.execute("loader.lua", LOADER).unwrap();
     runtime.poll_services();
     runtime.call_ipc("close", &[]).unwrap();
@@ -146,7 +154,7 @@ const ROWS: &[u8] = br#"
 
 #[test]
 fn a_removed_row_leaves_and_a_row_put_back_takes_its_node_back() {
-    let mut runtime = Runtime::default();
+    let mut runtime = runtime();
     runtime.execute("rows.lua", ROWS).unwrap();
     runtime.poll_services();
     assert_eq!(text(&mut runtime, "state"), "built 3 gone 0");
@@ -182,7 +190,7 @@ fn a_removed_row_leaves_and_a_row_put_back_takes_its_node_back() {
 
 #[test]
 fn destroy_plays_the_exit_unless_asked_not_to() {
-    let mut runtime = Runtime::default();
+    let mut runtime = runtime();
     runtime
         .execute(
             "destroy.lua",
@@ -212,7 +220,7 @@ fn destroy_plays_the_exit_unless_asked_not_to() {
 
 #[test]
 fn a_retainable_lock_outlasts_the_exit() {
-    let mut runtime = Runtime::default();
+    let mut runtime = runtime();
     runtime
         .execute(
             "retained.lua",
@@ -253,7 +261,7 @@ fn a_retainable_lock_outlasts_the_exit() {
 
 #[test]
 fn enter_may_time_itself_and_exit_is_checked_where_it_is_written() {
-    let mut runtime = Runtime::default();
+    let mut runtime = runtime();
     runtime
         .execute(
             "enter.lua",

@@ -5,7 +5,7 @@
 //! And where each goes: the handler table ([`Events`]), the key targets and
 //! where a key goes ([`routing`]), what each handler is called with
 //! ([`args`]) and the delivery itself, keys bubbling up included
-//! ([`deliver`]).
+//! ([`deliver()`]).
 
 pub mod args;
 pub mod deliver;

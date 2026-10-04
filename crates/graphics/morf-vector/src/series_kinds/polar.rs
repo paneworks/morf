@@ -181,7 +181,9 @@ pub fn polar_bars(values: &[f32], plot: &Plot, top: f64) -> String {
 /// `bottom..top`.
 pub fn xy_line(values: &[f32], plot: &Plot, top: f64) -> String {
     let pairs: Vec<(f64, f64)> = values
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| (p[0] as f64, p[1] as f64))
         .collect();
     if pairs.len() < 2 {

@@ -211,7 +211,7 @@ impl DbusProxy {
     }
 
     /// Calls a method without waiting for it, bounded by
-    /// [`MAX_CALLS_IN_FLIGHT`] and by this proxy's own call timeout.
+    /// [`super::MAX_CALLS_IN_FLIGHT`] and by this proxy's own call timeout.
     ///
     /// The configuration-facing form of [`Self::call_later_with`]: the same
     /// thread and poll, with a ceiling on how many a configuration may start.

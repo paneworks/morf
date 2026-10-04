@@ -39,7 +39,7 @@ pub fn pipe() -> Result<(OwnedFd, OwnedFd), String> {
 /// Takes a slot for one more transfer, or says there is none.
 pub fn take_slot(active: &AtomicUsize) -> bool {
     active
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+        .try_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
             (count < MAX_TRANSFERS).then_some(count + 1)
         })
         .is_ok()

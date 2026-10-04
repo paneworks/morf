@@ -2,7 +2,7 @@
 //!
 //! Lua's reactive graph captures dependencies and dispatches bindings. The
 //! scene only needs current/target values with generational handles: it never
-//! registers an effect in its former Graph<Value>. Keeping that second graph
+//! registers an effect in its former `Graph<Value>`. Keeping that second graph
 //! allocated a name, subscriber set and producer for every property slot on
 //! every node, even though none could have a subscriber.
 

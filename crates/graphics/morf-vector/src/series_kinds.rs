@@ -101,7 +101,9 @@ pub fn cells(values: &[f32], plot: &Plot, top: f64) -> String {
 /// given), `y` up `bottom..top`; a dot of radius `point` each.
 pub fn scatter(values: &[f32], plot: &Plot, top: f64) -> String {
     let pairs: Vec<(f64, f64)> = values
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| (p[0] as f64, p[1] as f64))
         .collect();
     let (left, right) = range(pairs.iter().map(|p| p.0), plot.left, plot.right);
@@ -122,7 +124,9 @@ pub fn scatter(values: &[f32], plot: &Plot, top: f64) -> String {
 /// only falling ones, 0 all.
 pub fn candles(values: &[f32], plot: &Plot, top: f64) -> String {
     let quads: Vec<[f64; 4]> = values
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|q| [q[0] as f64, q[1] as f64, q[2] as f64, q[3] as f64])
         .collect();
     let n = quads.len();
@@ -131,7 +135,7 @@ pub fn candles(values: &[f32], plot: &Plot, top: f64) -> String {
     }
     let (low, high) = range(
         quads.iter().flat_map(|q| [q[1], q[2]]),
-        Some(plot.bottom).filter(|_| plot.top.is_some()),
+        plot.top.is_some().then_some(plot.bottom),
         plot.top.map(|_| top),
     );
     let y = |v: f64| plot.height - (v - low) / (high - low) * plot.height;
@@ -163,7 +167,9 @@ pub fn candles(values: &[f32], plot: &Plot, top: f64) -> String {
 /// with a gap at the median, whiskers to min and max, and their caps.
 pub fn boxes(values: &[f32], plot: &Plot, top: f64) -> String {
     let fives: Vec<[f64; 5]> = values
-        .chunks_exact(5)
+        .as_chunks::<5>()
+        .0
+        .iter()
         .map(|f| {
             [
                 f[0] as f64,

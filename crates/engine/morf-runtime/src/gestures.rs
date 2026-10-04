@@ -125,10 +125,8 @@ impl Gestures {
                     }
                 }
             }
-            UiEvent::Clicked => {
-                if self.swallow_click.take() == Some(node) {
-                    return false;
-                }
+            UiEvent::Clicked if self.swallow_click.take() == Some(node) => {
+                return false;
             }
             _ => {}
         }

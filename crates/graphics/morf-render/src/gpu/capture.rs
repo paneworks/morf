@@ -164,7 +164,7 @@ impl WgpuBackend {
             let bytes = &mapped[start..start + (width * 4) as usize];
             // The texture is BGRA; the picture is handed back as RGBA, which is
             // what every other image in the engine is.
-            for pixel in bytes.chunks_exact(4) {
+            for pixel in bytes.as_chunks::<4>().0 {
                 rgba.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
             }
         }

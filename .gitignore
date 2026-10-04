@@ -8,6 +8,8 @@
 /nimcache
 /dist
 /result
+/result-*
+!/flake.lock
 /.direnv
 /.devbox
 /.zig-cache

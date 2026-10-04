@@ -1,8 +1,8 @@
 name: release
 
 on:
-  release:
-    types: [created]
+  push:
+    tags: ['v*']
 
 permissions:
   contents: write
@@ -29,9 +29,14 @@ jobs:
       - name: Build
         run: cargo build --release --bin morf
       - name: Package
-        run: tar -czf "${{ matrix.artifact }}.tar.gz" -C target/release morf
+        run: |
+          stage="$RUNNER_TEMP/morf-release"
+          mkdir -p "$stage/library"
+          cp target/release/morf "$stage/"
+          cp -r library/lib library/README.md library/luarc.template.json "$stage/library/"
+          "$stage/morf" types "$stage/library/types"
+          tar -czf "${{ matrix.artifact }}.tar.gz" -C "$stage" morf library
       - name: Upload artifact
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.artifact }}.tar.gz
-

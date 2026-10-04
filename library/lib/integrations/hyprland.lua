@@ -1268,6 +1268,10 @@ end
 --- Hyprland the common ones are sent as `hl.dispatch(hl.dsp....)`, which is
 --- all it accepts; anything else goes the plain way. `callback(ok, reply)`.
 function hyprland.dispatch(dispatcher, argument, callback)
+  if not instance.directory then
+    unavailable(callback)
+    return false
+  end
   dispatcher = text(dispatcher)
   local payload = "/dispatch " .. dispatcher
   if argument ~= nil and text(argument) ~= "" then payload = payload .. " " .. text(argument) end

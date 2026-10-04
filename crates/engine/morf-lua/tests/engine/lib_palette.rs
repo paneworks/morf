@@ -212,9 +212,11 @@ fn a_picture_gives_the_same_palette_every_time_and_the_second_is_cached() {
             assert(now == palette.build.json(p), "the cache gives back what it was given")
             -- Other options are another palette.
             local other
-            palette.from_image(path, {{ cache_dir = "{base}/cache", mode = "light" }}, function(ok, q)
-                other = q and q.cached
-            end)
+            palette.from_image(path, {{ cache_dir = "{base}/cache", mode = "light" }}, answer("light", function(q)
+                other = q.cached
+                assert(q.cached == false and q.mode == "light")
+                return "ok"
+            end))
             assert(other == nil, "a different mode is not served from the dark one's cache")
             return "ok"
         end))
@@ -230,8 +232,9 @@ fn a_picture_gives_the_same_palette_every_time_and_the_second_is_cached() {
     assert!(first.contains("\"accent\""), "{first}");
     assert_eq!(first, second);
     assert_eq!(pump(&mut runtime, "fresh"), "ok");
+    assert_eq!(pump(&mut runtime, "light"), "ok");
     let cached: Vec<_> = std::fs::read_dir(dir.join("cache")).unwrap().collect();
-    assert_eq!(cached.len(), 1);
+    assert_eq!(cached.len(), 2);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

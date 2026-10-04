@@ -21,10 +21,10 @@ impl VirtualSeat {
             Event::PointerMotion { surface, x, y }
             | Event::PointerButton { surface, x, y, .. }
             | Event::PointerAxis { surface, x, y, .. } => self.pointer = Some((*surface, *x, *y)),
-            Event::PointerLeave { surface } => {
-                if self.pointer.is_some_and(|(on, _, _)| on == *surface) {
-                    self.pointer = None;
-                }
+            Event::PointerLeave { surface }
+                if self.pointer.is_some_and(|(on, _, _)| on == *surface) =>
+            {
+                self.pointer = None;
             }
             _ => {}
         }

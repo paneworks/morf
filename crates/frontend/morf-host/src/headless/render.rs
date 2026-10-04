@@ -100,7 +100,7 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
 
 /// Undoes premultiplied alpha, which is what a PNG does not hold.
 fn straighten(mut picture: Picture) -> Picture {
-    for pixel in picture.pixels.chunks_exact_mut(4) {
+    for pixel in picture.pixels.as_chunks_mut::<4>().0 {
         let alpha = u32::from(pixel[3]);
         if alpha == 0 || alpha == 255 {
             continue;

@@ -213,7 +213,7 @@ impl LayerState {
         };
         // ARGB8888 is little-endian: blue first in memory.
         let [red, green, blue, alpha] = color;
-        for pixel in canvas.chunks_exact_mut(4) {
+        for pixel in canvas.as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&[blue, green, red, alpha]);
         }
         let Some(record) = self.lock_surfaces.get_mut(index) else {
