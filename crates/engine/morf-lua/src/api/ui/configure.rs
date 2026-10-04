@@ -348,7 +348,7 @@ pub(crate) fn assign_engine_relation<'gc>(
                 .map_err(|error| error.to_string())?;
         }
     }
-    state.scene_revision = state.scene_revision.wrapping_add(1);
+    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     state.flush_pending = true;
     Ok(())
 }

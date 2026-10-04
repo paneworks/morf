@@ -19,32 +19,20 @@ use methods::{terminal_method, text_input_method};
 
 pub(crate) fn create_node(state: &Rc<RefCell<ReactiveState>>, element: Element) -> NodeHandle {
     let mut state = state.borrow_mut();
-    state.scene_revision = state.scene_revision.wrapping_add(1);
+    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     state.scene.create(element)
 }
 
 /// A property of `node` changed: the scene moved on, and -- unless nothing
 /// shows the node -- owes a paint.
 fn bump_revision(state: &mut ReactiveState, node: NodeHandle, property: &str) {
-    state.scene_revision = state.scene_revision.wrapping_add(1);
+    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     if !state.scene.change_is_shown(node, property) {
-        state.hidden_revisions = state.hidden_revisions.wrapping_add(1);
+        state.revisions.hidden_revisions = state.revisions.hidden_revisions.wrapping_add(1);
     }
 }
 
-/// The pseudo-property a binding depends on when it reads `layout_x` or
-/// `layout_y`.
-pub(crate) const LAYOUT_POSITION: &str = "layout_position";
-/// The pseudo-property a binding depends on when it reads `layout_width` or
-/// `layout_height`.
-///
-/// Apart from the position because the two change apart. A label in a panel
-/// that is centred in a growing island moves on every frame of the morph and
-/// keeps its size; a binding that only sizes something to it (a dot under
-/// it, a highlight behind it) re-ran on every one of those frames when one
-/// signal stood for both -- forty-two calendar cells, three milliseconds a
-/// frame, for nothing.
-pub(crate) const LAYOUT_SIZE: &str = "layout_size";
+pub(crate) use morf_runtime::layout::{LAYOUT_POSITION, LAYOUT_SIZE};
 
 /// A node's `contains_pointer`: kept by the runtime for the nodes something
 /// read it of, and the pseudo-property a binding reading it depends on.
@@ -63,8 +51,8 @@ pub(crate) fn bump_property_signal(
     else {
         return Ok(());
     };
-    state.property_revision = state.property_revision.wrapping_add(1);
-    let value = IpcValue::Integer(state.property_revision);
+    state.revisions.property_revision = state.revisions.property_revision.wrapping_add(1);
+    let value = IpcValue::Integer(state.revisions.property_revision);
     if let Some(active) = &mut state.active {
         active.writes.push((signal, value.clone()));
     } else {

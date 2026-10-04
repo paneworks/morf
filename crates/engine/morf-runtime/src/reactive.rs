@@ -10,7 +10,7 @@
 //! `require` of a module that holds state does), so the graph has to be
 //! where the handler can reach it, and the caller owns the evaluation.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use morf_scene::NodeHandle;
 use morf_scene::reactive::{EffectCapture, EffectId, Flush, Graph, PendingEffect, SignalId};
@@ -278,5 +278,101 @@ mod tests {
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
+    }
+}
+
+/// See [`Runtime::resource_stats`].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ResourceStats {
+    pub nodes: usize,
+    pub scene_signals: usize,
+    pub graph_signals: usize,
+    pub graph_effects: usize,
+    pub bindings: usize,
+    pub tracked_signals: usize,
+    pub handlers: usize,
+}
+
+/// How far the scene has moved, and how far each reader of it has seen.
+pub struct Revisions {
+    /// Moves on with every property write a binding may have read.
+    pub property_revision: i64,
+    /// Advances whenever the scene actually changes: a property lands on a
+    /// new value, or a node is created, reparented, or removed. This is what
+    /// tells the host a repaint is due -- a service callback merely running
+    /// is not.
+    pub scene_revision: u64,
+    /// The scene's revision when the services were last polled: a scene that
+    /// moved on since may hold a timer to start or a loader to fill.
+    pub polled_revision: u64,
+    /// The revision seen before timers and loaders were reconciled, which can
+    /// itself unload a tree that must preload again on the next turn.
+    pub service_definitions_revision: u64,
+    /// How many of the scene's revisions were a property of a node nothing
+    /// shows: work for the loop, not a reason to paint.
+    pub hidden_revisions: u64,
+}
+
+impl Default for Revisions {
+    fn default() -> Self {
+        Self {
+            property_revision: 0,
+            scene_revision: 0,
+            polled_revision: 0,
+            service_definitions_revision: u64::MAX,
+            hidden_revisions: 0,
+        }
+    }
+}
+
+impl Reactive {
+    /// Forgets the bindings that drive a removed node -- a property, a state
+    /// or a loop of it -- and the effects owned by one: the graph lets go of
+    /// them after the flush under way, if any.
+    pub fn forget_effects_of(&mut self, removed: &HashSet<NodeHandle>) {
+        let dead = self
+            .effects
+            .iter()
+            .filter(|(_, effect)| match &effect.sink {
+                Some(EffectSink::Property(sink)) => removed.contains(&sink.node),
+                Some(EffectSink::State(node) | EffectSink::Loop(node)) => removed.contains(node),
+                // A `morf.effect` given `owner = node` goes with its node.
+                None => effect.owner.is_some_and(|owner| removed.contains(&owner)),
+            })
+            .map(|(token, _)| *token)
+            .collect::<Vec<_>>();
+        for token in dead {
+            self.effects.remove(&token);
+            if let Some(id) = self.effect_ids.remove(&token) {
+                self.dead_effects.push(id);
+            }
+        }
+    }
+
+    /// Forgets signals nothing will read again, for the graph to let go of.
+    pub fn forget_signals(&mut self, dead: HashSet<SignalId>) {
+        if dead.is_empty() {
+            return;
+        }
+        for signal in &dead {
+            self.values.remove(signal);
+        }
+        self.signals.retain(|signal| !dead.contains(signal));
+        self.dead_signals.extend(dead);
+    }
+}
+
+impl Reactive {
+    /// Takes an effect out of the graph: it never runs again and depends on
+    /// nothing. While a flush holds the graph the removal waits for it to
+    /// finish. False if the effect was already gone.
+    pub fn dispose_effect(&mut self, token: u64) -> bool {
+        if self.effects.remove(&token).is_none() {
+            return false;
+        }
+        if let Some(id) = self.effect_ids.remove(&token) {
+            self.dead_effects.push(id);
+        }
+        true
     }
 }

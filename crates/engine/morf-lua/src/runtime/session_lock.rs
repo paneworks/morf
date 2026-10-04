@@ -6,47 +6,13 @@
 //! `morf.session_lock` (a signal), `morf.session_lock_state()`, and the
 //! `morf.on_session_lock_state` / `morf.on_session_locked` callbacks.
 
-use crate::{IpcValue, reactive_bindings::*, reactive_execute::*, state::*, types::*};
+use crate::{reactive_bindings::*, reactive_execute::*, state::*, types::*};
 
-/// One step of an ext-session-lock-v1 lock's life.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SessionLockState {
-    /// No lock is held by this process.
-    Unlocked,
-    /// The lock was asked for and the compositor has not answered yet.
-    Pending,
-    /// The compositor confirmed the lock (`locked`): the session is hidden.
-    Locked,
-    /// The compositor refused the lock (`finished` before `locked`).
-    Failed,
-}
-
-impl SessionLockState {
-    /// The name Lua sees.
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Unlocked => "unlocked",
-            Self::Pending => "pending",
-            Self::Locked => "locked",
-            Self::Failed => "failed",
-        }
-    }
-
-    fn parse(name: &str) -> Option<Self> {
-        [Self::Unlocked, Self::Pending, Self::Locked, Self::Failed]
-            .into_iter()
-            .find(|state| state.name() == name)
-    }
-}
+pub use morf_runtime::session::SessionLockState;
 
 /// The state as last recorded.
 pub(crate) fn current(state: &ReactiveState) -> SessionLockState {
-    match state.reactive.values.get(&state.session_lock) {
-        Some(IpcValue::String(name)) => {
-            SessionLockState::parse(name).unwrap_or(SessionLockState::Unlocked)
-        }
-        _ => SessionLockState::Unlocked,
-    }
+    state.session.lock_state(&state.reactive)
 }
 
 impl Runtime {
@@ -58,20 +24,18 @@ impl Runtime {
     /// Records what the compositor said about the lock and tells the
     /// configuration, once per change. Returns whether anything changed.
     pub fn set_session_lock_state(&mut self, next: SessionLockState) -> bool {
-        if self.session_lock_state() == next {
-            return false;
-        }
-        let value = IpcValue::String(next.name().to_owned());
-        {
+        let value = {
             let mut state = self.reactive.borrow_mut();
-            let signal = state.session_lock;
-            if let Some(graph) = state.reactive.graph.as_mut()
-                && let Err(error) = graph.write(signal, value.clone())
-            {
+            let state = &mut *state;
+            let Some((value, written)) = state.session.set_lock_state(&mut state.reactive, next)
+            else {
+                return false;
+            };
+            if let Err(error) = written {
                 state.log(LogLevel::Warn, format!("session lock state: {error}"));
             }
-            state.reactive.values.insert(signal, value.clone());
-        }
+            value
+        };
         if let Err(message) = self
             .lua
             .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
@@ -80,7 +44,12 @@ impl Runtime {
                 .borrow_mut()
                 .log(LogLevel::Warn, format!("session lock binding: {message}"));
         }
-        let callbacks = self.reactive.borrow().session_lock_callbacks.clone();
+        let callbacks = self
+            .reactive
+            .borrow()
+            .session
+            .session_lock_callbacks
+            .clone();
         for (callback, locked_only) in &callbacks {
             if *locked_only && next != SessionLockState::Locked {
                 continue;

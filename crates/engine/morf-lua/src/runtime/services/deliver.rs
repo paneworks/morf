@@ -26,7 +26,10 @@ impl Runtime {
         } = collected;
         for (callback, unlock_on_success, result) in ready {
             if unlock_on_success && result.is_ok() {
-                self.reactive.borrow_mut().session_unlock_requested = true;
+                self.reactive
+                    .borrow_mut()
+                    .lifecycle
+                    .session_unlock_requested = true;
             }
             let args = match result {
                 Ok(()) => vec![IpcValue::Boolean(true), IpcValue::Nil],

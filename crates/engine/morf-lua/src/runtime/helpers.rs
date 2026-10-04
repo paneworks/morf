@@ -11,12 +11,6 @@ use crate::{
     types::*,
 };
 
-pub(crate) fn geometry_i32(value: f64) -> i32 {
-    value
-        .round()
-        .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
-}
-
 pub(crate) fn scene_node_in_subtree(scene: &Scene, root: NodeHandle, node: NodeHandle) -> bool {
     morf_runtime::events::routing::node_in_subtree(scene, root, node)
 }
@@ -34,7 +28,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         nodes.extend_from_slice(children);
         index += 1;
     }
-    state.scene_revision = state.scene_revision.wrapping_add(1);
+    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     if state.scene.remove(node).is_err() {
         return;
     }
@@ -48,16 +42,10 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     }
     let removed = nodes.into_iter().collect::<HashSet<_>>();
     for node in &removed {
-        state.retention.unregister(*node);
-        state.retain_callbacks.remove(node);
+        state.retained.forget(node);
         state.states.remove(node);
         state.views.remove(node);
         state.timer_callbacks.remove(node);
-        state.loader_factories.remove(node);
-        state.failed_loaders.remove(node);
-        state.loaded_loaders.remove(node);
-        state.dormant_loaders.remove(node);
-        state.preload_pending.remove(node);
         state.terminals.remove(*node);
         state.images.remove(*node);
         state.linked_texts.remove(node);
@@ -76,40 +64,14 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     // Bindings that drive a removed node, and the signals that tracked its
     // properties' reads: the graph forgets both, or every one of them keeps
     // re-running and growing for the life of the shell.
-    let dead_tokens = state
-        .reactive
-        .effects
-        .iter()
-        .filter(|(_, effect)| match &effect.sink {
-            Some(EffectSink::Property(sink)) => removed.contains(&sink.node),
-            Some(EffectSink::State(node) | EffectSink::Loop(node)) => removed.contains(node),
-            // A `morf.effect` given `owner = node` goes with its node.
-            None => effect.owner.is_some_and(|owner| removed.contains(&owner)),
-        })
-        .map(|(token, _)| *token)
-        .collect::<Vec<_>>();
-    for token in dead_tokens {
-        state.reactive.effects.remove(&token);
-        if let Some(id) = state.reactive.effect_ids.remove(&token) {
-            state.reactive.dead_effects.push(id);
-        }
-    }
+    state.reactive.forget_effects_of(&removed);
     let dead_signals = state
         .property_signals
         .iter()
         .filter(|((node, _, _), _)| removed.contains(node))
         .map(|(_, signal)| *signal)
         .collect::<HashSet<_>>();
-    if !dead_signals.is_empty() {
-        for signal in &dead_signals {
-            state.reactive.values.remove(signal);
-        }
-        state
-            .reactive
-            .signals
-            .retain(|signal| !dead_signals.contains(signal));
-        state.reactive.dead_signals.extend(dead_signals);
-    }
+    state.reactive.forget_signals(dead_signals);
     state.collect_graph_garbage();
     state
         .property_signals
@@ -120,35 +82,12 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     state
         .transform_watchers
         .retain(|_, watcher| !removed.contains(&watcher.a) && !removed.contains(&watcher.b));
-    let surface_count = state.windows.window_surfaces.len();
-    state
-        .windows
-        .window_surfaces
-        .retain(|_, surface| !removed.contains(&surface.root));
-    let removed_anchors = state
-        .windows
-        .popup_node_anchors
-        .iter()
-        .filter_map(|(id, anchor)| removed.contains(&anchor.node).then_some(*id))
-        .collect::<Vec<_>>();
-    for id in removed_anchors {
-        state.windows.popup_node_anchors.remove(&id);
-        if let Some(surface) = state.windows.window_surfaces.get_mut(&id) {
-            surface.visible = false;
-            state.windows.window_surfaces_changed = true;
-        }
-    }
-    let surface_ids = state
-        .windows
-        .window_surfaces
-        .keys()
-        .copied()
-        .collect::<HashSet<_>>();
-    state
-        .windows
-        .popup_node_anchors
-        .retain(|id, anchor| surface_ids.contains(id) && !removed.contains(&anchor.node));
-    state.windows.window_surfaces_changed |= state.windows.window_surfaces.len() != surface_count;
+    let windows = &mut state.windows;
+    windows.window_surfaces_changed |= morf_runtime::layout::forget_windows_of(
+        &removed,
+        &mut windows.window_surfaces,
+        &mut windows.popup_node_anchors,
+    );
 }
 
 pub(crate) fn finish_retained_destroy(
@@ -157,11 +96,7 @@ pub(crate) fn finish_retained_destroy(
     limits: Limits,
     node: NodeHandle,
 ) {
-    let callback = state
-        .borrow()
-        .retain_callbacks
-        .get(&node)
-        .and_then(|callbacks| callbacks.about_to_destroy.clone());
+    let callback = state.borrow().retained.about_to_destroy(node);
     if let Some(callback) = callback
         && let Err(error) = execute_handler_args(ctx, &callback, &[], limits)
     {
@@ -181,12 +116,12 @@ pub(crate) fn begin_node_exit(state: &mut ReactiveState, node: NodeHandle) -> bo
     let state = &mut *state;
     let start = morf_runtime::animation::exits::begin_exit(
         &mut state.scene,
-        &mut state.retention,
+        &mut state.retained.retention,
         &mut state.animation,
         node,
     );
     if start == morf_runtime::animation::exits::ExitStart::Started {
-        state.scene_revision = state.scene_revision.wrapping_add(1);
+        state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     }
     start.leaving()
 }
@@ -197,13 +132,13 @@ pub(crate) fn cancel_node_exit(state: &mut ReactiveState, node: NodeHandle) -> b
     let state = &mut *state;
     if !morf_runtime::animation::exits::cancel_exit(
         &mut state.scene,
-        &mut state.retention,
+        &mut state.retained.retention,
         &mut state.animation,
         node,
     ) {
         return false;
     }
-    state.scene_revision = state.scene_revision.wrapping_add(1);
+    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     true
 }
 
@@ -218,8 +153,11 @@ pub(crate) fn finish_node_exit(
     let destroy = {
         let mut state = state.borrow_mut();
         let state = &mut *state;
-        match morf_runtime::animation::exits::finish_exit(&state.scene, &mut state.retention, node)
-        {
+        match morf_runtime::animation::exits::finish_exit(
+            &state.scene,
+            &mut state.retained.retention,
+            node,
+        ) {
             Some(destroy) => destroy,
             None => return,
         }
@@ -254,7 +192,8 @@ pub(crate) fn drop_retainable(
     // exit plays first, and holds it as a lock of its own.
     let registered = {
         let state = state.borrow();
-        state.retention.state(node).is_some() && !state.animation.exit_registered.contains(&node)
+        state.retained.retention.state(node).is_some()
+            && !state.animation.exit_registered.contains(&node)
     };
     let exiting = begin_node_exit(&mut state.borrow_mut(), node);
     if !registered {
@@ -264,14 +203,7 @@ pub(crate) fn drop_retainable(
         }
         return;
     }
-    let callback = {
-        let mut state = state.borrow_mut();
-        let _ = state.retention.begin_drop(node);
-        state
-            .retain_callbacks
-            .get(&node)
-            .and_then(|callbacks| callbacks.dropped.clone())
-    };
+    let callback = state.borrow_mut().retained.begin_drop(node);
     if let Some(callback) = callback
         && let Err(error) = execute_handler_args(ctx, &callback, &[], limits)
     {
@@ -279,12 +211,7 @@ pub(crate) fn drop_retainable(
             .borrow_mut()
             .log(LogLevel::Warn, format!("Retainable dropped: {error}"));
     }
-    if state
-        .borrow()
-        .retention
-        .should_destroy(node)
-        .unwrap_or(true)
-    {
+    if state.borrow().retained.should_destroy(node) {
         finish_retained_destroy(state, ctx, limits, node);
     }
 }

@@ -7,19 +7,9 @@
 use morf_layout::{Layout, Size, TextMeasurer};
 use morf_scene::NodeHandle;
 
-use crate::{
-    reactive_bindings::*, runtime_helpers::*, scene_bindings::*, surface_types::*, types::*,
-};
+use crate::{reactive_bindings::*, scene_bindings::*, types::*};
 
-/// A layout that has stopped moving, and how many passes it took.
-pub struct SettledLayout {
-    pub layout: Layout,
-    /// Layout passes run, one or more.
-    pub passes: usize,
-    /// Whether the last pass changed nothing a layout reads. False when the
-    /// passes ran out first: a binding that feeds its own geometry back.
-    pub stable: bool,
-}
+pub use morf_runtime::layout::SettledLayout;
 
 impl Runtime {
     /// Lays `root` out until the bindings that read the layout agree with it.
@@ -88,27 +78,14 @@ impl Runtime {
     pub fn observe_layout_with(&mut self, layout: &Layout, geometry_changed: bool) -> bool {
         let moved = if geometry_changed {
             let state = self.reactive.borrow();
-            state
-                .property_signals
-                .keys()
-                .filter_map(|(node, property, _)| {
-                    let size = match property.as_str() {
-                        LAYOUT_SIZE => true,
-                        LAYOUT_POSITION => false,
-                        _ => return None,
-                    };
-                    let now = layout.geometry(*node)?;
-                    let before = state.transform_tracker.geometry(*node);
-                    let changed = match before {
-                        None => true,
-                        Some(before) if size => {
-                            before.width != now.width || before.height != now.height
-                        }
-                        Some(before) => before.x != now.x || before.y != now.y,
-                    };
-                    changed.then_some((*node, if size { LAYOUT_SIZE } else { LAYOUT_POSITION }))
-                })
-                .collect::<Vec<_>>()
+            morf_runtime::layout::moved_nodes(
+                state
+                    .property_signals
+                    .keys()
+                    .map(|(node, property, _)| (*node, property.as_str())),
+                layout,
+                &state.transform_tracker,
+            )
         } else {
             Vec::new()
         };
@@ -131,73 +108,22 @@ impl Runtime {
         }
         self.place_overlays(layout);
         let mut state = self.reactive.borrow_mut();
-        let anchors = state
-            .windows
-            .popup_node_anchors
-            .iter()
-            .map(|(id, anchor)| (*id, anchor.clone()))
-            .collect::<Vec<_>>();
-        for (id, anchor) in anchors {
-            let Some(geometry) = state.transform_tracker.geometry(anchor.node) else {
-                continue;
-            };
-            let node_width = geometry_i32(geometry.width).max(1);
-            let node_height = geometry_i32(geometry.height).max(1);
-            let resolved = (
-                geometry_i32(geometry.x)
-                    .saturating_add(anchor.x)
-                    .saturating_sub(anchor.margin_left),
-                geometry_i32(geometry.y)
-                    .saturating_add(anchor.y)
-                    .saturating_sub(anchor.margin_top),
-                anchor
-                    .width
-                    .unwrap_or(node_width)
-                    .saturating_add(anchor.margin_left)
-                    .saturating_add(anchor.margin_right)
-                    .max(1),
-                anchor
-                    .height
-                    .unwrap_or(node_height)
-                    .saturating_add(anchor.margin_top)
-                    .saturating_add(anchor.margin_bottom)
-                    .max(1),
-            );
-            if let Some(WindowSurfaceConfig {
-                kind: WindowSurfaceKind::Popup(config),
-                ..
-            }) = state.windows.window_surfaces.get_mut(&id)
-                && (
-                    config.anchor_x,
-                    config.anchor_y,
-                    config.anchor_width,
-                    config.anchor_height,
-                ) != resolved
-            {
-                config.anchor_x = resolved.0;
-                config.anchor_y = resolved.1;
-                config.anchor_width = resolved.2;
-                config.anchor_height = resolved.3;
-                state.windows.window_surfaces_changed = true;
-            }
+        let state = &mut *state;
+        if morf_runtime::layout::place_popup_anchors(
+            &state.windows.popup_node_anchors,
+            &state.transform_tracker,
+            &mut state.windows.window_surfaces,
+        ) {
+            state.windows.window_surfaces_changed = true;
         }
-        let mut watchers = std::mem::take(&mut state.transform_watchers);
-        let mut changed = false;
-        for watcher in watchers.values_mut() {
-            match watcher
-                .watcher
-                .observe(&state.scene, &state.transform_tracker)
-            {
-                Ok(true) => {
-                    watcher.revision = watcher.revision.wrapping_add(1);
-                    watcher.pending = true;
-                    changed = true;
-                }
-                Ok(false) => {}
-                Err(error) => state.log(LogLevel::Warn, format!("transform watcher: {error}")),
-            }
+        let (changed, errors) = morf_runtime::layout::observe_transform_watches(
+            &mut state.transform_watchers,
+            &state.scene,
+            &state.transform_tracker,
+        );
+        for error in errors {
+            state.log(LogLevel::Warn, error);
         }
-        state.transform_watchers = watchers;
         changed
     }
 }

@@ -24,11 +24,7 @@ impl ReactiveState {
 
     /// The clock signal a reader at `precision` depends on.
     pub(crate) fn clock_signal(&self, precision: crate::ClockPrecision) -> SignalId {
-        match precision {
-            crate::ClockPrecision::Seconds => self.clock,
-            crate::ClockPrecision::Minutes => self.clock_minutes,
-            crate::ClockPrecision::Hours => self.clock_hours,
-        }
+        self.clocks.signal(precision)
     }
 
     /// Records one line, stamped with when it happened.
@@ -38,44 +34,15 @@ impl ReactiveState {
     /// thousands, and without either there is no way to ask which are serious
     /// or recent.
     pub(crate) fn log(&mut self, level: LogLevel, message: impl Into<String>) {
-        let at_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|since| since.as_millis() as u64)
-            .unwrap_or(0);
-        // A cap, oldest out first: a shell that logs a warning a second
-        // would otherwise hold a day of them.
-        if self.logs.len() >= MAX_LOG_ENTRIES {
-            let excess = self.logs.len() + 1 - MAX_LOG_ENTRIES;
-            self.logs.drain(..excess);
-        }
-        let mut message = message.into();
-        if message.len() > MAX_LOG_MESSAGE {
-            let mut cut = MAX_LOG_MESSAGE;
-            while !message.is_char_boundary(cut) {
-                cut -= 1;
-            }
-            message.truncate(cut);
-            message.push('…');
-        }
-        self.logs.push(LogEntry {
-            level,
-            at_ms,
-            message,
-        });
+        self.logs.push(level, message);
     }
 
     pub(crate) fn new() -> Self {
         let mut graph = Graph::default();
-        let initial_clock = IpcValue::String(String::new());
-        let clock = graph.signal("morf.clock", initial_clock.clone());
-        let clock_minutes = graph.signal("morf.minute_clock", initial_clock.clone());
-        let clock_hours = graph.signal("morf.hour_clock", initial_clock.clone());
+        let (clocks, clock_values) = morf_runtime::wake::Clocks::new(&mut graph);
         let initial_lock = IpcValue::String(crate::SessionLockState::Unlocked.name().to_owned());
         let session_lock = graph.signal("morf.session_lock", initial_lock.clone());
-        let mut values = HashMap::new();
-        values.insert(clock, initial_clock.clone());
-        values.insert(clock_minutes, initial_clock.clone());
-        values.insert(clock_hours, initial_clock);
+        let mut values: HashMap<_, _> = clock_values.into_iter().collect();
         values.insert(session_lock, initial_lock);
         Self {
             requests: Default::default(),
@@ -83,34 +50,25 @@ impl ReactiveState {
             limits: crate::Limits::default(),
             reactive: morf_runtime::reactive::Reactive {
                 values,
-                signals: vec![clock, clock_minutes, clock_hours, session_lock],
+                signals: vec![clocks.seconds, clocks.minutes, clocks.hours, session_lock],
                 ..morf_runtime::reactive::Reactive::new(graph)
             },
             property_signals: HashMap::new(),
             current_property_names: HashMap::new(),
-            property_revision: 0,
-            model_revisions: HashMap::new(),
-            scene_revision: 0,
-            polled_revision: 0,
-            service_definitions_revision: u64::MAX,
-            hidden_revisions: 0,
+            revisions: Default::default(),
+            model_revisions: Default::default(),
             shared: crate::shared::SharedValues::default(),
             channels: crate::channels::Channels::default(),
             reload_seed: HashMap::new(),
             reloadable: HashMap::new(),
-            reload_request: None,
-            watch_files: true,
-            watch_files_changed: false,
-            quit_requested: false,
+            lifecycle: Default::default(),
             lint_warned: HashSet::new(),
             capabilities: Vec::new(),
-            reload_completed_callbacks: Vec::new(),
-            reload_failed_callbacks: Vec::new(),
             next_effect: 0,
             active: None,
             handler_depth: 0,
             flush_pending: false,
-            logs: Vec::new(),
+            logs: Default::default(),
             shaders: HashMap::new(),
             scene: Scene::new(),
             editing: Default::default(),
@@ -121,12 +79,8 @@ impl ReactiveState {
             gestures: Default::default(),
             overlays: Default::default(),
             effect_runs: 0,
-            clock,
-            clock_minutes,
-            clock_hours,
-            session_lock,
-            session_lock_callbacks: Vec::new(),
-            lock_surface_builder: None,
+            clocks,
+            session: morf_runtime::session::Session::new(session_lock),
             events: morf_runtime::events::Events::default(),
             states: HashMap::new(),
             ipc_handlers: HashMap::new(),
@@ -144,17 +98,10 @@ impl ReactiveState {
             images: Default::default(),
             pending_destroyed: Vec::new(),
             running_destroyed: false,
-            loader_factories: HashMap::new(),
-            failed_loaders: HashSet::new(),
+            retained: Default::default(),
             custom_layouts: HashMap::new(),
             model_metatable: None,
-            loaded_loaders: HashSet::new(),
-            dormant_loaders: HashSet::new(),
-            preload_pending: HashMap::new(),
             animation: morf_runtime::animation::Animation::default(),
-            retention: Retention::default(),
-            retain_callbacks: HashMap::new(),
-            retained_destroy_queue: HashSet::new(),
             transform_tracker: TransformTracker::default(),
             node_metatable: None,
             transform_watchers: HashMap::new(),
@@ -166,10 +113,6 @@ impl ReactiveState {
             prefers: None,
             audio: None,
             toplevels: None,
-            screens_revision: None,
-            screens_signature: String::new(),
-            primary: None,
-            primary_callbacks: Vec::new(),
             owned_bus_names: Vec::new(),
             dbus_signals: Vec::new(),
             next_dbus_signal_id: 0,
@@ -181,7 +124,6 @@ impl ReactiveState {
             io: Default::default(),
             watches: Default::default(),
             terminals: Default::default(),
-            session_unlock_requested: false,
             shell_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
         }
     }

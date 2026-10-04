@@ -13,16 +13,13 @@
 //! runtime also does when it is dropped), so the new primary finds the names
 //! free.
 
-use crate::{IpcValue, reactive_bindings::*, reactive_execute::*, types::*};
+use crate::{reactive_bindings::*, reactive_execute::*, types::*};
 
 impl Runtime {
     /// Whether this runtime is the primary one. A runtime nobody told
     /// otherwise is.
     pub fn is_primary(&self) -> bool {
-        self.reactive
-            .borrow()
-            .primary
-            .is_none_or(|(_, primary)| primary)
+        self.reactive.borrow().session.is_primary()
     }
 
     /// Makes this runtime the primary one, or not: `morf.primary()` follows
@@ -32,23 +29,18 @@ impl Runtime {
     /// Set before the configuration runs, it is simply what the configuration
     /// sees from its first line, and no callback is owed.
     pub fn set_primary(&mut self, primary: bool) -> bool {
-        if self.is_primary() == primary {
-            return false;
-        }
-        let value = IpcValue::Boolean(primary);
-        {
+        let value = {
             let mut state = self.reactive.borrow_mut();
-            let Some((signal, _)) = state.primary else {
+            let state = &mut *state;
+            let Some((value, written)) = state.session.set_primary(&mut state.reactive, primary)
+            else {
                 return false;
             };
-            state.primary = Some((signal, primary));
-            if let Some(graph) = state.reactive.graph.as_mut()
-                && let Err(error) = graph.write(signal, value.clone())
-            {
+            if let Err(error) = written {
                 state.log(LogLevel::Warn, format!("primary: {error}"));
             }
-            state.reactive.values.insert(signal, value.clone());
-        }
+            value
+        };
         if let Err(message) = self
             .lua
             .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
@@ -57,7 +49,7 @@ impl Runtime {
                 .borrow_mut()
                 .log(LogLevel::Warn, format!("primary binding: {message}"));
         }
-        let callbacks = self.reactive.borrow().primary_callbacks.clone();
+        let callbacks = self.reactive.borrow().session.primary_callbacks.clone();
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_handler_args(ctx, callback, std::slice::from_ref(&value), limits)

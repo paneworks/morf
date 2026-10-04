@@ -25,7 +25,13 @@ impl Runtime {
 
     /// Takes a successful native authentication request to release a session lock.
     pub fn take_session_unlock_request(&mut self) -> bool {
-        std::mem::take(&mut self.reactive.borrow_mut().session_unlock_requested)
+        std::mem::take(
+            &mut self
+                .reactive
+                .borrow_mut()
+                .lifecycle
+                .session_unlock_requested,
+        )
     }
 
     /// Returns registered IPC verb names in lexical order.

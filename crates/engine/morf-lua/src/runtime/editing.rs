@@ -149,7 +149,7 @@ impl Runtime {
     /// system that frame is painted with — so the caret it scrolls to is
     /// where the glyphs will be drawn. Returns whether it changed anything.
     pub fn sync_text_inputs(&mut self, layout: &Layout, text: &mut TextSystem) -> bool {
-        let revision = self.reactive.borrow().scene_revision;
+        let revision = self.reactive.borrow().revisions.scene_revision;
         {
             let mut state = self.reactive.borrow_mut();
             text_inputs::reconcile_focus(&mut *state);
@@ -187,7 +187,7 @@ impl Runtime {
         // Terminals are fitted to their boxes at the same moment, for the
         // same reason: with the text system this frame is painted with.
         let terminals = self.sync_terminals(layout, text);
-        terminals || self.reactive.borrow().scene_revision != revision
+        terminals || self.reactive.borrow().revisions.scene_revision != revision
     }
 
     /// Writes each linked text's `links`: its link runs' boxes, in its own

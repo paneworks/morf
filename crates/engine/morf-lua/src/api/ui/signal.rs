@@ -274,7 +274,12 @@ pub(crate) fn install_signal_api<'gc>(
         move |ctx, _, mut stack| {
             let (name, initial): (String, LuaValue) = stack.consume(ctx)?;
             let initial = IpcValue::from_lua_deep(ctx, initial).map_err(HostError)?;
-            let id = crate::shared::register(&mut state.borrow_mut(), name, initial)
+            let id = crate::runtime_helpers::validate_scope_part(&name)
+                .and_then(|()| {
+                    let mut state = state.borrow_mut();
+                    let state = &mut *state;
+                    state.shared.register(&mut state.reactive, name, initial)
+                })
                 .map_err(HostError)?;
             let userdata = UserData::new_static(&ctx, SignalToken { id });
             userdata.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
@@ -289,7 +294,7 @@ pub(crate) fn install_signal_api<'gc>(
     let clock = UserData::new_static(
         &ctx,
         SignalToken {
-            id: state.borrow().clock,
+            id: state.borrow().clocks.seconds,
         },
     );
     clock.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
@@ -298,8 +303,8 @@ pub(crate) fn install_signal_api<'gc>(
     // something by the minute or the hour: reading one of these instead of
     // `morf.clock` is what lets an idle shell sleep between them.
     for (name, id) in [
-        ("minute_clock", state.borrow().clock_minutes),
-        ("hour_clock", state.borrow().clock_hours),
+        ("minute_clock", state.borrow().clocks.minutes),
+        ("hour_clock", state.borrow().clocks.hours),
     ] {
         let token = UserData::new_static(&ctx, SignalToken { id });
         token.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
@@ -310,7 +315,7 @@ pub(crate) fn install_signal_api<'gc>(
     let session_lock = UserData::new_static(
         &ctx,
         SignalToken {
-            id: state.borrow().session_lock,
+            id: state.borrow().session.lock,
         },
     );
     session_lock.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));

@@ -34,7 +34,7 @@ fn with_hub<R>(
 ) -> R {
     let result = work(&mut state.terminals, &mut state.scene);
     let effects = state.terminals.take_effects();
-    state.scene_revision = state.scene_revision.wrapping_add(effects.screens);
+    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(effects.screens);
     for (node, property, value) in effects.properties {
         let _ = assign_scene_property(state, node, property, value);
     }

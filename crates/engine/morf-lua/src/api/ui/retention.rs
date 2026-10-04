@@ -20,6 +20,7 @@ pub(crate) fn install_retention_api<'gc>(
             let retainable: UserRef<RetainableToken> = stack.consume(ctx)?;
             let locks = state
                 .borrow_mut()
+                .retained
                 .retention
                 .lock(retainable.node)
                 .map_err(|error| HostError(error.to_string()))?;
@@ -34,10 +35,12 @@ pub(crate) fn install_retention_api<'gc>(
             let (locks, destroy) = {
                 let mut state = state.borrow_mut();
                 let locks = state
+                    .retained
                     .retention
                     .unlock(retainable.node)
                     .map_err(|error| HostError(error.to_string()))?;
                 let destroy = state
+                    .retained
                     .retention
                     .should_destroy(retainable.node)
                     .unwrap_or(false);
@@ -57,10 +60,12 @@ pub(crate) fn install_retention_api<'gc>(
             let destroy = {
                 let mut state = state.borrow_mut();
                 state
+                    .retained
                     .retention
                     .force_unlock(retainable.node)
                     .map_err(|error| HostError(error.to_string()))?;
                 state
+                    .retained
                     .retention
                     .should_destroy(retainable.node)
                     .unwrap_or(false)
@@ -77,6 +82,7 @@ pub(crate) fn install_retention_api<'gc>(
             let retainable: UserRef<RetainableToken> = stack.consume(ctx)?;
             let retained = state
                 .borrow()
+                .retained
                 .retention
                 .state(retainable.node)
                 .is_some_and(|state| state.dropped);
@@ -90,6 +96,7 @@ pub(crate) fn install_retention_api<'gc>(
             let retainable: UserRef<RetainableToken> = stack.consume(ctx)?;
             let locks = state
                 .borrow()
+                .retained
                 .retention
                 .state(retainable.node)
                 .map_or(0, |state| state.locks);
@@ -135,14 +142,18 @@ pub(crate) fn install_retention_api<'gc>(
             }
             {
                 let mut state = state.borrow_mut();
-                state.retention.register(node.handle);
+                state.retained.retention.register(node.handle);
                 if locked {
                     state
+                        .retained
                         .retention
                         .lock(node.handle)
                         .map_err(|error| HostError(error.to_string()))?;
                 }
-                state.retain_callbacks.insert(node.handle, callbacks);
+                state
+                    .retained
+                    .retain_callbacks
+                    .insert(node.handle, callbacks);
             }
             let userdata = UserData::new_static(&ctx, RetainableToken { node: node.handle });
             userdata.set_metatable(ctx, Some(ctx.fetch(&retainable_metatable)));
@@ -166,16 +177,22 @@ pub(crate) fn install_retention_api<'gc>(
                 let mut state = lock.state.borrow_mut();
                 if locked {
                     state
+                        .retained
                         .retention
                         .lock(lock.node)
                         .map_err(|error| HostError(error.to_string()))?;
                     false
                 } else {
                     state
+                        .retained
                         .retention
                         .unlock(lock.node)
                         .map_err(|error| HostError(error.to_string()))?;
-                    state.retention.should_destroy(lock.node).unwrap_or(false)
+                    state
+                        .retained
+                        .retention
+                        .should_destroy(lock.node)
+                        .unwrap_or(false)
                 }
             };
             lock.locked.set(locked);
@@ -190,6 +207,7 @@ pub(crate) fn install_retention_api<'gc>(
         let retained = lock
             .state
             .borrow()
+            .retained
             .retention
             .state(lock.node)
             .is_some_and(|state| state.dropped);
@@ -215,6 +233,7 @@ pub(crate) fn install_retention_api<'gc>(
             if locked {
                 state
                     .borrow_mut()
+                    .retained
                     .retention
                     .lock(retainable.node)
                     .map_err(|error| HostError(error.to_string()))?;
@@ -321,11 +340,8 @@ pub(crate) struct EffectHandleToken {
 /// nothing. While a flush holds the graph the removal waits for it to
 /// finish. False if the effect was already gone.
 pub(crate) fn dispose_effect(state: &mut ReactiveState, token: u64) -> bool {
-    if state.reactive.effects.remove(&token).is_none() {
+    if !state.reactive.dispose_effect(token) {
         return false;
-    }
-    if let Some(id) = state.reactive.effect_ids.remove(&token) {
-        state.reactive.dead_effects.push(id);
     }
     state.collect_graph_garbage();
     true
