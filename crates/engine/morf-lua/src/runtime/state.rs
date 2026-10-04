@@ -16,7 +16,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::{
-    events::*,
     surface_types::*,
     types::{LogEntry, LogLevel, ToplevelRequest, WorkspaceRequest},
 };
@@ -218,7 +217,8 @@ pub(crate) struct ReactiveState {
     pub(crate) session_lock_callbacks: Vec<(Handler, bool)>,
     /// `morf.lock_surface`: builds one output's lock tree, given its screen.
     pub(crate) lock_surface_builder: Option<Handler>,
-    pub(crate) handlers: HashMap<(NodeHandle, UiEvent), Handler>,
+    /// Each node's handler for each event, and the `contains_pointer` watches.
+    pub(crate) events: morf_runtime::events::Events,
     pub(crate) parent_transitions: Vec<ParentTransitionRequest>,
     pub(crate) states: HashMap<NodeHandle, StateSet>,
     pub(crate) ipc_handlers: HashMap<String, Handler>,
@@ -379,10 +379,6 @@ pub(crate) struct ReactiveState {
     pub(crate) linked_texts: std::collections::HashSet<NodeHandle>,
     /// Properties tied to another node's (`ui.follow`), applied every tick.
     pub(crate) follows: Vec<Follow>,
-    /// Every node something has read `contains_pointer` of, with what it
-    /// said last. Only these are tested against the pointer when it moves,
-    /// so a node nobody asks about costs nothing.
-    pub(crate) pointer_watch: morf_runtime::events::PointerWatch,
     /// Every `ui.Image`: what became of its source, and its playback.
     pub(crate) images: crate::images::ImageNodes,
     pub(crate) session_unlock_requested: bool,

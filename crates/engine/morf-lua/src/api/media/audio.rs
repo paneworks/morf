@@ -27,7 +27,6 @@
 //! never opens a connection. Without a server everything reads empty and
 //! every command answers false.
 
-
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;

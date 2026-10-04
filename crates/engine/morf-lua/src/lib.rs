@@ -77,7 +77,6 @@ use self::api::window::layer as layer_parse;
 use self::api::window::methods as window_methods;
 use self::api::window::parse as window_parse;
 use self::api::window::surface as api_shell;
-use self::runtime::editing as runtime_text_inputs;
 use self::runtime::events;
 use self::runtime::gestures;
 use self::runtime::helpers as runtime_helpers;
@@ -113,13 +112,13 @@ pub use self::vm::profile;
 use self::vm::types;
 use self::vm::types_gen;
 
+#[cfg(feature = "kit")]
+pub use self::api::kit::register as register_kit;
 pub use api_broadcast::set_shell_socket;
 pub use api_focus::FocusReason;
 pub use api_gamma::GammaRequest;
 pub use events::*;
 pub use extensions::{Extension, register_extension};
-#[cfg(feature = "kit")]
-pub use self::api::kit::register as register_kit;
 pub use runtime_harness::HostFunction;
 pub use runtime_layout::SettledLayout;
 pub use runtime_session_lock::SessionLockState;

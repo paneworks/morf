@@ -1,6 +1,24 @@
 //! What happens to a node, as its handlers are told it: the events, the
 //! property each handler is set as, and where a pointer was.
 
+//!
+//! And where each goes: the handler table ([`Events`]), the key targets and
+//! where a key goes ([`routing`]), what each handler is called with
+//! ([`args`]) and the delivery itself, keys bubbling up included
+//! ([`deliver`]).
+
+pub mod args;
+pub mod deliver;
+mod held;
+pub mod routing;
+mod table;
+#[cfg(test)]
+mod tests;
+
+pub use deliver::{EventHost, deliver, press_key_bubbling};
+pub use held::{held, set_held};
+pub use table::Events;
+
 use morf_scene::NodeHandle;
 use morf_value::IpcValue;
 

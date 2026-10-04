@@ -112,7 +112,11 @@ pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let process_view_signal = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (process, signal): (UserRef<ProcessViewToken>, i64) = stack.consume(ctx)?;
         let signal = i32::try_from(signal).map_err(|_| HostError("signal must be 1..64".into()))?;
-        process.state.borrow_mut().signal(signal).map_err(HostError)?;
+        process
+            .state
+            .borrow_mut()
+            .signal(signal)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let process_view_command = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -125,7 +129,11 @@ pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         let (process, command): (UserRef<ProcessViewToken>, Table) = stack.consume(ctx)?;
         let command = table_string_array(ctx, command, 64).map_err(HostError)?;
         morf_io::check_command(&command).map_err(HostError)?;
-        process.state.borrow_mut().update(|config| config.command = command).map_err(HostError)?;
+        process
+            .state
+            .borrow_mut()
+            .update(|config| config.command = command)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let process_view_environment = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -145,7 +153,11 @@ pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let process_view_set_environment = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (process, environment): (UserRef<ProcessViewToken>, Table) = stack.consume(ctx)?;
         let environment = table_string_map(ctx, environment, 256).map_err(HostError)?;
-        process.state.borrow_mut().update(|config| config.environment = environment).map_err(HostError)?;
+        process
+            .state
+            .borrow_mut()
+            .update(|config| config.environment = environment)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let process_view_working_directory = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -168,7 +180,11 @@ pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                 return Err(HostError("working directory must be a string or nil".into()).into());
             }
         };
-        process.state.borrow_mut().update(|config| config.working_directory = directory).map_err(HostError)?;
+        process
+            .state
+            .borrow_mut()
+            .update(|config| config.working_directory = directory)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let process_view_clear_environment = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -178,7 +194,11 @@ pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     });
     let process_view_set_clear_environment = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (process, clear): (UserRef<ProcessViewToken>, bool) = stack.consume(ctx)?;
-        process.state.borrow_mut().update(|config| config.clear_environment = clear).map_err(HostError)?;
+        process
+            .state
+            .borrow_mut()
+            .update(|config| config.clear_environment = clear)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let process_view_next = Callback::from_fn(&ctx, |ctx, _, mut stack| {

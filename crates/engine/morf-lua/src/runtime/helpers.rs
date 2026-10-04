@@ -7,8 +7,8 @@ use morf_scene::reactive::SignalId;
 use morf_scene::{NodeHandle, Scene};
 
 use crate::{
-    events::*, reactive_bindings::run_destroyed_hooks, reactive_execute::*, state::*,
-    surface_types::*, types::*,
+    reactive_bindings::run_destroyed_hooks, reactive_execute::*, state::*, surface_types::*,
+    types::*,
 };
 
 pub(crate) fn geometry_i32(value: f64) -> i32 {
@@ -18,38 +18,12 @@ pub(crate) fn geometry_i32(value: f64) -> i32 {
 }
 
 pub(crate) fn scene_node_in_subtree(scene: &Scene, root: NodeHandle, node: NodeHandle) -> bool {
-    let mut current = Some(node);
-    while let Some(candidate) = current {
-        if candidate == root {
-            return true;
-        }
-        current = scene.parent(candidate).ok().flatten();
-    }
-    false
+    morf_runtime::events::routing::node_in_subtree(scene, root, node)
 }
 
-/// Whether a node has a handler for key presses or releases.
-pub(crate) fn handles_keys(state: &ReactiveState, node: NodeHandle) -> bool {
-    state.handlers.contains_key(&(node, UiEvent::KeyPressed))
-        || state.handlers.contains_key(&(node, UiEvent::KeyReleased))
-}
-
-/// Whether keys can go to a node: it handles them, or it is a text input or
-/// a terminal, which take them themselves.
+/// Whether keys can go to a node; see [`morf_runtime::events::routing::takes_keys`].
 pub(crate) fn takes_keys(state: &ReactiveState, node: NodeHandle) -> bool {
-    handles_keys(state, node)
-        || matches!(
-            state.scene.element(node).ok(),
-            Some(morf_scene::Element::TextInput | morf_scene::Element::Terminal)
-        )
-}
-
-/// Every node under `root` that takes keys and can hold focus -- shown,
-/// enabled and staying, through its ancestors -- in tree order.
-pub(crate) fn key_targets_in(state: &ReactiveState, root: NodeHandle) -> Vec<NodeHandle> {
-    state
-        .scene
-        .focus_nodes(root, |node| takes_keys(state, node))
+    morf_runtime::events::routing::takes_keys(&state.scene, &state.events, node)
 }
 
 pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) {
@@ -89,7 +63,6 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         state.terminals.remove(*node);
         state.images.remove(*node);
         state.linked_texts.remove(node);
-        state.pointer_watch.forget(*node);
         state.shortcuts.remove(node);
     }
     // A removed field cannot keep the keyboard. The node that had focus is
@@ -102,9 +75,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     state
         .animation_callbacks
         .retain(|(owner, _), _| !removed.contains(owner));
-    state
-        .handlers
-        .retain(|(node, _), _| !removed.contains(node));
+    state.events.forget(&removed);
     state.timers.retain_nodes(|node| !removed.contains(&node));
     // Bindings that drive a removed node, and the signals that tracked its
     // properties' reads: the graph forgets both, or every one of them keeps

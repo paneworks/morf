@@ -149,7 +149,7 @@ impl Runtime {
         event: UiEvent,
         build: impl for<'gc> FnOnce(Context<'gc>) -> Vec<LuaValue<'gc>>,
     ) -> bool {
-        let handler = self.reactive.borrow().handlers.get(&(node, event)).cloned();
+        let handler = self.reactive.borrow().events.handler(node, event);
         let Some(handler) = handler else {
             return false;
         };

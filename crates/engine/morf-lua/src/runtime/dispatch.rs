@@ -3,8 +3,8 @@ use std::cell::{Ref, RefMut};
 use morf_scene::{NodeHandle, Scene};
 
 use crate::{
-    events::*, reactive_bindings::*, reactive_execute::*, runtime_helpers::*, scene_bindings::*,
-    surface_types::*, types::*,
+    events::*, reactive_bindings::*, reactive_execute::*, scene_bindings::*, surface_types::*,
+    types::*,
 };
 
 impl Runtime {
@@ -330,81 +330,44 @@ impl Runtime {
     /// Returns the first key handler within one scene root.
     pub fn first_key_target_in(&self, root: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        let targets = key_targets_in(&state, root);
-        targets
-            .iter()
-            .copied()
-            .find(|node| state.scene.bool_value(*node, "focus").unwrap_or(false))
-            .or_else(|| targets.first().copied())
+        routing::first_key_target(&state.scene, &state.events, root)
     }
 
     /// Every node on a surface that takes keys, in the order they are
     /// offered a key nothing has focus for (one with `focus` set first).
     pub fn key_targets_in_root(&self, root: NodeHandle) -> Vec<NodeHandle> {
         let state = self.reactive.borrow();
-        let mut targets = key_targets_in(&state, root);
-        targets.sort_by_key(|node| !state.scene.bool_value(*node, "focus").unwrap_or(false));
-        targets
+        routing::key_offer_order(&state.scene, &state.events, root)
     }
 
     /// Returns the nearest key-handling ancestor of a hit-tested node.
     pub fn key_target_for_node(&self, node: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        let mut current = Some(node);
-        while let Some(node) = current {
-            if takes_keys(&state, node)
-                && state.scene.bool_value(node, "enabled").unwrap_or(false)
-                && state.scene.bool_value(node, "visible").unwrap_or(false)
-            {
-                return Some(node);
-            }
-            current = state.scene.parent(node).ok().flatten();
-        }
-        None
+        routing::key_target_for_node(&state.scene, &state.events, node)
     }
 
     /// Returns whether a node belongs to the subtree rooted at `root`.
     pub fn node_in_subtree(&self, root: NodeHandle, node: NodeHandle) -> bool {
         let state = self.reactive.borrow();
-        scene_node_in_subtree(&state.scene, root, node)
-    }
-
-    /// Keeps a `MouseArea`'s `hovered` and `pressed` in step with the
-    /// pointer, so a binding follows hover without a signal per area.
-    /// Returns whether one changed.
-    fn track_pointer_state(&mut self, node: NodeHandle, event: UiEvent) -> bool {
-        let (property, value) = match event {
-            UiEvent::PointerEntered => ("hovered", true),
-            UiEvent::PointerExited => ("hovered", false),
-            UiEvent::Pressed => ("pressed", true),
-            UiEvent::Released | UiEvent::TouchCanceled => ("pressed", false),
-            _ => return false,
-        };
-        let mut state = self.reactive.borrow_mut();
-        if state.scene.element(node).ok() != Some(morf_scene::Element::MouseArea)
-            || state.scene.bool_value(node, property).ok() == Some(value)
-        {
-            return false;
-        }
-        assign_scene_property(&mut state, node, property, morf_scene::Value::Bool(value)).is_ok()
+        routing::node_in_subtree(&state.scene, root, node)
     }
 
     /// Whether anything has read a node's `contains_pointer`: when nothing
     /// has, a pointer event has no containment to work out.
     pub fn has_pointer_watchers(&self) -> bool {
-        !self.reactive.borrow().pointer_watch.is_empty()
+        !self.reactive.borrow().events.pointer_watch.is_empty()
     }
 
     /// Every node something has read `contains_pointer` of: the ones the
     /// host tests against the pointer when it moves.
     pub fn pointer_watchers(&self) -> Vec<NodeHandle> {
-        self.reactive.borrow().pointer_watch.watched()
+        self.reactive.borrow().events.pointer_watch.watched()
     }
 
     /// The nodes first read since this was last asked, for the host to
     /// answer where the pointer is now rather than at its next motion.
     pub fn take_fresh_pointer_watchers(&mut self) -> Vec<NodeHandle> {
-        self.reactive.borrow_mut().pointer_watch.take_fresh()
+        self.reactive.borrow_mut().events.pointer_watch.take_fresh()
     }
 
     /// Records whether the pointer is inside each node, as the host worked
@@ -415,7 +378,7 @@ impl Runtime {
         let mut changed = false;
         {
             let mut state = self.reactive.borrow_mut();
-            for node in state.pointer_watch.answer(answers) {
+            for node in state.events.pointer_watch.answer(answers) {
                 changed = true;
                 state.flush_pending = true;
                 let _ = bump_property_signal(&mut state, node, CONTAINS_POINTER, false);
@@ -460,38 +423,16 @@ impl Runtime {
         current: Option<NodeHandle>,
     ) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        let targets = key_targets_in(&state, root);
-        if targets.is_empty() {
-            return None;
-        }
-        let next = current
-            .and_then(|current| targets.iter().position(|node| *node == current))
-            .map_or(0, |index| (index + 1) % targets.len());
-        Some(targets[next])
+        routing::next_key_target(&state.scene, &state.events, root, current)
     }
 
+    /// Tells `node`'s handler for `event`; see [`morf_runtime::events::deliver`].
     pub(crate) fn dispatch_ui_event_with_args(
         &mut self,
         node: NodeHandle,
         event: UiEvent,
         args: &[IpcValue],
     ) -> bool {
-        let tracked = self.track_pointer_state(node, event);
-        let handler = self.reactive.borrow().handlers.get(&(node, event)).cloned();
-        let Some(handler) = handler else {
-            if tracked {
-                self.flush_after_event();
-            }
-            return tracked;
-        };
-        let result =
-            self.run_handler(|ctx, limits| execute_handler_args(ctx, &handler, args, limits));
-        if let Err(message) = result {
-            self.reactive.borrow_mut().log(
-                LogLevel::Warn,
-                format!("{:?}.{}: {message}", node, event.property()),
-            );
-        }
-        true
+        deliver(self, node, event, args)
     }
 }
