@@ -23,7 +23,7 @@ pub(crate) fn register_property_binding<'gc>(
         state.effects.insert(
             token,
             LuaEffect {
-                closure: ctx.stash(closure),
+                closure: crate::vm::handler_store::register(ctx.stash(closure)),
                 sink: Some(EffectSink::Property(PropertySink { node, property })),
                 owner: None,
             },
@@ -115,7 +115,7 @@ fn register_node_binding<'gc>(
         state.effects.insert(
             token,
             LuaEffect {
-                closure: ctx.stash(closure),
+                closure: crate::vm::handler_store::register(ctx.stash(closure)),
                 sink: Some(sink),
                 owner: None,
             },
@@ -491,7 +491,9 @@ fn effect_label(
     let Some(effect) = state.effects.get(&pending.token()) else {
         return format!("effect {}", pending.name());
     };
-    let origin = crate::profile::closure_origin(ctx.fetch(&effect.closure));
+    let origin = crate::profile::closure_origin(
+        ctx.fetch(&crate::vm::handler_store::stashed(&effect.closure)),
+    );
     let node_path = |node: NodeHandle| {
         let id = state
             .scene

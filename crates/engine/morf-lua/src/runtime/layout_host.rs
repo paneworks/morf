@@ -7,10 +7,11 @@
 
 use std::collections::HashMap;
 
-use luna::{Context, Executor, Lua, StashedClosure, Table, Value as LuaValue, Variadic};
+use luna::{Context, Executor, Lua, Table, Value as LuaValue, Variadic};
 use morf_layout::{CustomLayout, Geometry, Layout, Size, TextMeasurer};
 use morf_scene::NodeHandle;
 
+use crate::runtime::handler::Handler;
 use crate::{reactive_execute::*, state::*, types::*};
 
 pub(crate) struct LuaLayoutHost<'a> {
@@ -46,12 +47,17 @@ fn number<'gc>(ctx: Context<'gc>, table: Table<'gc>, key: &str) -> Option<f64> {
 
 fn call<'gc>(
     ctx: Context<'gc>,
-    function: &StashedClosure,
+    function: &Handler,
     args: Vec<LuaValue<'gc>>,
     limits: Limits,
     what: &str,
 ) -> Result<Vec<LuaValue<'gc>>, String> {
-    let executor = Executor::start(ctx, ctx.fetch(function).into(), Variadic(args));
+    let executor = Executor::start(
+        ctx,
+        ctx.fetch(&crate::vm::handler_store::stashed(function))
+            .into(),
+        Variadic(args),
+    );
     drive_executor(ctx, executor, limits, limits.effect_fuel, what)?;
     match executor.take_result::<Variadic<Vec<LuaValue>>>(ctx) {
         Ok(Ok(Variadic(values))) => Ok(values),

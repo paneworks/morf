@@ -26,10 +26,9 @@ use std::time::{Duration, Instant};
 
 use morf_scene::{Element, NodeHandle};
 
-use luna::StashedClosure;
-
 use crate::IpcValue;
 use crate::reactive_execute::execute_ipc_handler;
+use crate::runtime::handler::Handler;
 use crate::text_inputs::KeyModifiers;
 use crate::types::LogLevel;
 
@@ -140,7 +139,7 @@ pub(crate) struct NodeShortcuts {
     /// Whether they hold anywhere on the surface rather than only around
     /// focus.
     pub(crate) surface: bool,
-    pub(crate) entries: Vec<(String, Vec<Chord>, StashedClosure)>,
+    pub(crate) entries: Vec<(String, Vec<Chord>, Handler)>,
 }
 
 /// The first chords of a sequence, held on one surface.
@@ -190,7 +189,11 @@ pub(crate) fn read_table<'gc>(
             return Err(format!("shortcut `{key}` must be a function"));
         };
         let chords = parse_sequence(&key)?;
-        shortcuts.entries.push((key, chords, ctx.stash(closure)));
+        shortcuts.entries.push((
+            key,
+            chords,
+            crate::vm::handler_store::register(ctx.stash(closure)),
+        ));
     }
     // In a fixed order, so which of two equal sequences wins does not depend
     // on how the table hashed.
@@ -268,7 +271,13 @@ impl crate::Runtime {
         let started = self.reactive.borrow_mut().modifier_tap.take();
         match (started, tap) {
             (Some(a), Some(b)) if a == b => {
-                let chord = Chord { ctrl: false, shift: false, alt: false, logo: false, key: a };
+                let chord = Chord {
+                    ctrl: false,
+                    shift: false,
+                    alt: false,
+                    logo: false,
+                    key: a,
+                };
                 self.run_sequence(root, target, &[chord])
             }
             _ => false,

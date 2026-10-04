@@ -114,7 +114,7 @@ pub(crate) fn configure_element<'gc>(
             state
                 .borrow_mut()
                 .destroy_hooks
-                .insert(node, ctx.stash(closure));
+                .insert(node, crate::vm::handler_store::register(ctx.stash(closure)));
             continue;
         }
         if matches!(property.as_str(), "stretch" | "track" | "shortcuts")
@@ -128,10 +128,10 @@ pub(crate) fn configure_element<'gc>(
             let LuaValue::Function(Function::Closure(closure)) = value else {
                 return Err(format!("{property} must be a function"));
             };
-            state
-                .borrow_mut()
-                .handlers
-                .insert((node, event), ctx.stash(closure));
+            state.borrow_mut().handlers.insert(
+                (node, event),
+                crate::vm::handler_store::register(ctx.stash(closure)),
+            );
             continue;
         }
         // A table holding bindings among its fields is bound as a whole.
@@ -482,10 +482,10 @@ pub(crate) fn configure_behaviors<'gc>(
             }
             LuaValue::Function(Function::Closure(callback)) => {
                 let callback = ctx.stash(callback);
-                state
-                    .borrow_mut()
-                    .animation_callbacks
-                    .insert((node, property.clone()), callback);
+                state.borrow_mut().animation_callbacks.insert(
+                    (node, property.clone()),
+                    crate::vm::handler_store::register(callback),
+                );
             }
             _ => return Err("behavior on_finished must be a function".to_owned()),
         }

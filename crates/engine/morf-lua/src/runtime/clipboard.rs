@@ -1,20 +1,26 @@
 //! Delivering offers — the clipboard's and a drag's — to the configuration.
 
-use luna::{Context, Executor, StashedClosure, Value as LuaValue, Variadic};
+use luna::{Context, Executor, Value as LuaValue, Variadic};
 use morf_scene::{NodeHandle, Value as SceneValue};
 
 use crate::api_clipboard::offer_table;
 use crate::reactive_execute::drive_executor;
+use crate::runtime::handler::Handler;
 use crate::{events::*, runtime_input::EventPoint, surface_types::*, types::*};
 
 /// Runs one callback with arguments built inside the Lua context.
 fn execute_with<'gc>(
     ctx: Context<'gc>,
-    closure: &StashedClosure,
+    closure: &Handler,
     args: Vec<LuaValue<'gc>>,
     limits: Limits,
 ) -> Result<(), String> {
-    let executor = Executor::start(ctx, ctx.fetch(closure).into(), Variadic(args));
+    let executor = Executor::start(
+        ctx,
+        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+            .into(),
+        Variadic(args),
+    );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
         Ok(Ok(())) => Ok(()),

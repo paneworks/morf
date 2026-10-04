@@ -3,10 +3,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use luna::StashedClosure;
 use morf_scene::reactive::SignalId;
 use morf_scene::{Behavior, NodeHandle, Value as SceneValue};
 
+use crate::runtime::handler::Handler;
 use crate::surface_types::IpcValue;
 
 #[derive(Clone)]
@@ -15,7 +15,7 @@ pub(crate) struct StateDefinition {
     pub(crate) anchors: Option<std::collections::BTreeMap<String, SceneValue>>,
     pub(crate) parent: Option<NodeHandle>,
     /// A binding that, when true, selects this state on its own.
-    pub(crate) when: Option<StashedClosure>,
+    pub(crate) when: Option<Handler>,
     /// Which `when` is asked first: lowest first, ties by name.
     pub(crate) order: f64,
 }
@@ -23,7 +23,7 @@ pub(crate) struct StateDefinition {
 #[derive(Clone)]
 pub(crate) enum StateValue {
     Value(SceneValue),
-    Binding(StashedClosure),
+    Binding(Handler),
 }
 
 #[derive(Clone)]

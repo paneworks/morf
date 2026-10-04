@@ -19,10 +19,11 @@ use crate::ipc_table::IpcToLua;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use luna::{Callback, CallbackReturn, Context, StashedClosure, Table};
+use luna::{Callback, CallbackReturn, Context, Table};
 use morf_terminal::palette::{BACKGROUND, CURSOR, ColorChange, FOREGROUND, PaletteTty};
 
 use crate::ipc_table::IpcTable;
+use crate::runtime::handler::Handler;
 use crate::scene_bindings::HostError;
 use crate::state::ReactiveState;
 use crate::surface_types::IpcValue;
@@ -33,7 +34,7 @@ const MAX_LISTENERS: usize = 8;
 pub(crate) struct PaletteListener {
     pub(crate) id: u64,
     pub(crate) tty: PaletteTty,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
     pub(crate) colors: Vec<Option<[u8; 3]>>,
 }
 
@@ -127,7 +128,7 @@ pub(crate) fn install_palette_api<'gc>(
             state.palette_listeners.push(PaletteListener {
                 id,
                 tty,
-                callback: ctx.stash(callback),
+                callback: crate::vm::handler_store::register(ctx.stash(callback)),
                 colors: vec![None; 259],
             });
             let stop_state = std::rc::Rc::clone(&listen_state);

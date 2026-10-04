@@ -123,7 +123,8 @@ pub(crate) fn install_state_api<'gc>(
             let fields = token.fields.borrow();
             if let Some(closure) = fields.derived.get(&key) {
                 // Derived on the spot, with the state as its argument.
-                let function = luna::Function::Closure(ctx.fetch(closure));
+                let function =
+                    luna::Function::Closure(ctx.fetch(&crate::vm::handler_store::stashed(closure)));
                 drop(fields);
                 stack.replace(ctx, this);
                 return Ok(CallbackReturn::Call {

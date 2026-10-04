@@ -51,8 +51,8 @@
 //! `env` to set it anyway.
 
 use luna::{
-    Callback, CallbackReturn, Context, Executor, Function, StashedClosure, StashedTable, Table,
-    UserData, UserRef, Value as LuaValue, Variadic,
+    Callback, CallbackReturn, Context, Executor, Function, StashedTable, Table, UserData, UserRef,
+    Value as LuaValue, Variadic,
 };
 use morf_io::{
     CloseReason, ConnectOptions, Endpoint, IoEvent, IoHandle, IoId, OutputMode, Reactor,
@@ -64,6 +64,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::runtime::handler::Handler;
 use crate::{Limits, reactive_execute::drive_executor, scene_bindings::*, state::*, table_menu::*};
 
 /// Children one runtime may have running at once.
@@ -90,22 +91,22 @@ pub(crate) struct HandleStatus {
 
 enum Kind {
     Spawn {
-        on_stdout: Option<StashedClosure>,
-        on_stderr: Option<StashedClosure>,
-        on_exit: Option<StashedClosure>,
+        on_stdout: Option<Handler>,
+        on_stderr: Option<Handler>,
+        on_exit: Option<Handler>,
     },
     Run {
-        callback: Option<StashedClosure>,
+        callback: Option<Handler>,
         stdout: Vec<u8>,
         stderr: Vec<u8>,
     },
     Connect {
-        on_data: Option<StashedClosure>,
-        on_connect: Option<StashedClosure>,
-        on_close: Option<StashedClosure>,
+        on_data: Option<Handler>,
+        on_connect: Option<Handler>,
+        on_close: Option<Handler>,
     },
     Request {
-        callback: Option<StashedClosure>,
+        callback: Option<Handler>,
         reply: Vec<u8>,
         max: usize,
     },
@@ -122,7 +123,7 @@ struct Entry {
 /// A callback owed, with what it is owed.
 pub(crate) struct IoCall {
     status: Rc<HandleStatus>,
-    callback: StashedClosure,
+    callback: Handler,
     args: CallArgs,
 }
 
@@ -220,7 +221,7 @@ impl Entry {
     /// Turns one event into what it owes. False when the handle is done.
     fn take(&mut self, event: IoEvent, calls: &mut Vec<IoCall>) -> bool {
         let status = &self.status;
-        let mut call = |callback: &Option<StashedClosure>, args| {
+        let mut call = |callback: &Option<Handler>, args| {
             if let Some(callback) = callback {
                 calls.push(IoCall {
                     status: Rc::clone(status),
@@ -512,7 +513,8 @@ pub(crate) fn install_io_api<'gc>(
             None => RUN_DEFAULT_MAX_OUTPUT,
         });
         let kind = Kind::Run {
-            callback: callback.map(|callback| ctx.stash(callback)),
+            callback: callback
+                .map(|callback| crate::vm::handler_store::register(ctx.stash(callback))),
             stdout: Vec::new(),
             stderr: Vec::new(),
         };
@@ -607,7 +609,7 @@ pub(crate) fn install_io_api<'gc>(
         connect.deadline = Some(timeout);
         connect.greeting = data.as_bytes().to_vec();
         let kind = Kind::Request {
-            callback,
+            callback: callback.map(crate::vm::handler_store::register),
             reply: Vec::new(),
             max,
         };
@@ -865,7 +867,12 @@ pub(crate) fn execute_io_call(
             vec![LuaValue::Table(table)]
         }
     };
-    let executor = Executor::start(ctx, ctx.fetch(&call.callback).into(), Variadic(args));
+    let executor = Executor::start(
+        ctx,
+        ctx.fetch(&crate::vm::handler_store::stashed(&call.callback))
+            .into(),
+        Variadic(args),
+    );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
         Ok(Ok(())) => Ok(()),

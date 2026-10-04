@@ -1,5 +1,5 @@
-use morf_value::region::Region;
 use morf_scene::{Behavior, NodeHandle, Value as SceneValue};
+use morf_value::region::Region;
 
 /// Edges used to anchor a configured layer surface.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -236,8 +236,8 @@ pub struct ParentTransitionRequest {
 
 // The value that crosses the Lua boundary is morf-value's; how Lua reads
 // and writes it is `crate::ipc_table`'s, by trait.
-pub(crate) use morf_value::IpcValue;
 pub(crate) use crate::ipc_table::{IpcFromLua, IpcToLua};
+pub(crate) use morf_value::IpcValue;
 
 /// Deferred virtual keyboard request produced by Lua.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

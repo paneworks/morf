@@ -170,10 +170,10 @@ pub(crate) fn install_fs_api<'gc>(
                 _ => return Err(HostError("fs.read_async limit must be an integer".into()).into()),
             };
             let job = crate::image_jobs::ImageJob::ReadFiles { paths, limit };
-            let submitted = state
-                .borrow_mut()
-                .image_jobs
-                .submit(job, Some(ctx.stash(callback)));
+            let submitted = state.borrow_mut().image_jobs.submit(
+                job,
+                Some(crate::vm::handler_store::register(ctx.stash(callback))),
+            );
             match submitted {
                 Ok(()) => stack.replace(ctx, true),
                 Err(message) => fail!(stack, ctx, message),

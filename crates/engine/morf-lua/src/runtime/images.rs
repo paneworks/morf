@@ -18,11 +18,11 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use luna::StashedClosure;
 use morf_image::ImageCache;
 use morf_layout::Layout;
 use morf_scene::{NodeHandle, Scene, Value as SceneValue};
 
+use crate::runtime::handler::Handler;
 use crate::scene_bindings::assign_scene_property;
 use crate::state::ReactiveState;
 use crate::surface_types::IpcValue;
@@ -44,7 +44,7 @@ pub(crate) struct ImageNodes {
 
 #[derive(Default)]
 struct ImageEntry {
-    on_status: Option<StashedClosure>,
+    on_status: Option<Handler>,
     /// The source the status below is about.
     source: Option<String>,
     status: &'static str,
@@ -64,12 +64,12 @@ struct Playback {
 
 /// A callback owed to a configuration: `on_status(status, error)`.
 pub(crate) struct StatusCall {
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
     pub(crate) args: Vec<IpcValue>,
 }
 
 impl ImageNodes {
-    pub(crate) fn register(&mut self, node: NodeHandle, on_status: Option<StashedClosure>) {
+    pub(crate) fn register(&mut self, node: NodeHandle, on_status: Option<Handler>) {
         self.entries.insert(
             node,
             ImageEntry {

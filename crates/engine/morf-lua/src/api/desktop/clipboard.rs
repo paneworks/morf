@@ -84,7 +84,9 @@ pub(crate) fn install_clipboard_api<'gc>(
         if state.clipboard_callbacks.len() >= 64 {
             return Err(HostError("clipboard callback limit reached".into()).into());
         }
-        state.clipboard_callbacks.push(ctx.stash(callback));
+        state
+            .clipboard_callbacks
+            .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     let watch_state = Rc::clone(&state);
@@ -100,9 +102,10 @@ pub(crate) fn install_clipboard_api<'gc>(
         if state.clipboard_watchers.len() >= 64 {
             return Err(HostError("clipboard watch limit reached".into()).into());
         }
-        state
-            .clipboard_watchers
-            .push((ctx.stash(callback), primary));
+        state.clipboard_watchers.push((
+            crate::vm::handler_store::register(ctx.stash(callback)),
+            primary,
+        ));
         Ok(CallbackReturn::Return)
     });
     let supported_state = Rc::clone(&state);
@@ -141,7 +144,9 @@ pub(crate) fn install_clipboard_api<'gc>(
         }
         state.drag_requests.push(request);
         if let Some(done) = done {
-            state.drag_end_callbacks.push(ctx.stash(done));
+            state
+                .drag_end_callbacks
+                .push(crate::vm::handler_store::register(ctx.stash(done)));
         }
         Ok(CallbackReturn::Return)
     });
@@ -297,7 +302,9 @@ pub(crate) fn offer_table<'gc>(
             offer: offer_id,
             mime,
         });
-        state.offer_read_callbacks.insert(id, ctx.stash(callback));
+        state
+            .offer_read_callbacks
+            .insert(id, crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     table.set_field(ctx, "read", read);

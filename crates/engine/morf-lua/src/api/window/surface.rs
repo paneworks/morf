@@ -29,7 +29,9 @@ pub(crate) fn install_shell_api<'gc>(
                 .get(&event)
                 .cloned();
             match handler {
-                Some(handler) => stack.replace(ctx, ctx.fetch(&handler)),
+                Some(handler) => {
+                    stack.replace(ctx, ctx.fetch(&crate::vm::handler_store::stashed(&handler)))
+                }
                 None => stack.replace(ctx, LuaValue::Nil),
             }
             return Ok(CallbackReturn::Return);
@@ -48,7 +50,10 @@ pub(crate) fn install_shell_api<'gc>(
                     state.surface_handlers.remove(&event);
                 }
                 LuaValue::Function(luna::Function::Closure(callback)) => {
-                    state.surface_handlers.insert(event, ctx.stash(callback));
+                    state.surface_handlers.insert(
+                        event,
+                        crate::vm::handler_store::register(ctx.stash(callback)),
+                    );
                 }
                 _ => {
                     return Err(HostError(format!("morf.surface.{key} must be a function")).into());
@@ -238,7 +243,7 @@ pub(crate) fn install_shell_api<'gc>(
         completed_state
             .borrow_mut()
             .reload_completed_callbacks
-            .push(ctx.stash(callback));
+            .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_reload_completed", on_reload_completed);
@@ -248,7 +253,7 @@ pub(crate) fn install_shell_api<'gc>(
         failed_state
             .borrow_mut()
             .reload_failed_callbacks
-            .push(ctx.stash(callback));
+            .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_reload_failed", on_reload_failed);
@@ -279,7 +284,8 @@ pub(crate) fn install_shell_api<'gc>(
     let builder_state = Rc::clone(&state);
     let lock_surface = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let builder: Option<Closure> = stack.consume(ctx)?;
-        builder_state.borrow_mut().lock_surface_builder = builder.map(|builder| ctx.stash(builder));
+        builder_state.borrow_mut().lock_surface_builder =
+            builder.map(|builder| crate::vm::handler_store::register(ctx.stash(builder)));
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "lock_surface", lock_surface);
@@ -297,9 +303,10 @@ pub(crate) fn install_shell_api<'gc>(
             if state.session_lock_callbacks.len() >= 64 {
                 return Err(HostError("session lock callback limit reached".into()).into());
             }
-            state
-                .session_lock_callbacks
-                .push((ctx.stash(callback), locked_only));
+            state.session_lock_callbacks.push((
+                crate::vm::handler_store::register(ctx.stash(callback)),
+                locked_only,
+            ));
             Ok(CallbackReturn::Return)
         });
         morf.set_field(ctx, name, register);

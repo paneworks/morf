@@ -19,8 +19,8 @@
 //! holds at most `Limits::watches` of them (`MORF_LIMITS=watches=N`).
 
 use luna::{
-    Callback, CallbackReturn, Context, Executor, Function, StashedClosure, Table, UserData,
-    UserRef, Value as LuaValue, Variadic,
+    Callback, CallbackReturn, Context, Executor, Function, Table, UserData, UserRef,
+    Value as LuaValue, Variadic,
 };
 use morf_io::{FsChange, Watch, WatchOptions};
 use std::cell::{Cell, RefCell};
@@ -30,6 +30,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use crate::runtime::handler::Handler;
 use crate::{Limits, reactive_execute::drive_executor, scene_bindings::*, state::*};
 
 /// Callbacks one watch may have run per turn of the loop.
@@ -43,7 +44,7 @@ pub(crate) struct WatchStatus {
 
 struct Entry {
     watch: Watch,
-    callback: StashedClosure,
+    callback: Handler,
     status: Rc<WatchStatus>,
     queue: VecDeque<FsChange>,
 }
@@ -51,7 +52,7 @@ struct Entry {
 /// A callback owed.
 pub(crate) struct WatchCall {
     status: Rc<WatchStatus>,
-    callback: StashedClosure,
+    callback: Handler,
     change: FsChange,
 }
 
@@ -182,7 +183,7 @@ pub(crate) fn install_watch_api<'gc>(
         };
         state.watches.entries.push(Entry {
             watch,
-            callback: ctx.stash(callback),
+            callback: crate::vm::handler_store::register(ctx.stash(callback)),
             status,
             queue: VecDeque::new(),
         });
@@ -227,7 +228,8 @@ pub(crate) fn execute_watch_call(
     );
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&call.callback).into(),
+        ctx.fetch(&crate::vm::handler_store::stashed(&call.callback))
+            .into(),
         Variadic(vec![LuaValue::Table(event)]),
     );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;

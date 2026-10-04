@@ -25,7 +25,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use luna::StashedClosure;
 use morf_io::{IoEvent, IoId, Reactor};
 use morf_layout::Layout;
 use morf_scene::{Color, NodeHandle, TerminalMetrics, Value as SceneValue};
@@ -35,6 +34,7 @@ use morf_terminal::{
 };
 use morf_text::TextSystem;
 
+use crate::runtime::handler::Handler;
 use crate::scene_bindings::assign_scene_property;
 use crate::state::ReactiveState;
 use crate::surface_types::IpcValue;
@@ -59,11 +59,11 @@ pub(crate) struct TerminalSpec {
 /// A terminal's callbacks.
 #[derive(Default)]
 pub(crate) struct TerminalCallbacks {
-    pub(crate) on_exit: Option<StashedClosure>,
-    pub(crate) on_title: Option<StashedClosure>,
-    pub(crate) on_bell: Option<StashedClosure>,
-    pub(crate) on_clipboard: Option<StashedClosure>,
-    pub(crate) on_selection: Option<StashedClosure>,
+    pub(crate) on_exit: Option<Handler>,
+    pub(crate) on_title: Option<Handler>,
+    pub(crate) on_bell: Option<Handler>,
+    pub(crate) on_clipboard: Option<Handler>,
+    pub(crate) on_selection: Option<Handler>,
 }
 
 pub(crate) struct TerminalEntry {
@@ -93,7 +93,7 @@ pub(crate) struct TerminalEntry {
 
 /// A callback owed.
 pub(crate) struct TerminalCall {
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
     pub(crate) args: Vec<IpcValue>,
 }
 

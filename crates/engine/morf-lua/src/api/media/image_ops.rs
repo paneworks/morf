@@ -288,7 +288,11 @@ pub(crate) fn queue<'gc>(
     callback: Option<Closure<'gc>>,
 ) -> (LuaValue<'gc>, LuaValue<'gc>) {
     let callback = callback.map(|callback| ctx.stash(callback));
-    match state.borrow_mut().image_jobs.submit(job, callback) {
+    match state
+        .borrow_mut()
+        .image_jobs
+        .submit(job, callback.map(crate::vm::handler_store::register))
+    {
         Ok(()) => (LuaValue::Boolean(true), LuaValue::Nil),
         Err(message) => (
             LuaValue::Nil,

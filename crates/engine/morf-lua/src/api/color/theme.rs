@@ -153,7 +153,10 @@ pub(crate) fn install_theme_api<'gc>(
                 };
                 match value {
                     LuaValue::Function(Function::Closure(closure)) => {
-                        derived.insert(name.display_lossy().to_string(), ctx.stash(closure));
+                        derived.insert(
+                            name.display_lossy().to_string(),
+                            crate::vm::handler_store::register(ctx.stash(closure)),
+                        );
                     }
                     LuaValue::Function(_) => {
                         return Err(HostError(format!(

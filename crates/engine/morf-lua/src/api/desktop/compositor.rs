@@ -142,7 +142,9 @@ pub(crate) fn install_compositor_api<'gc>(
         if state.shortcuts_callbacks.len() >= 64 {
             return Err(HostError("shortcuts callback limit reached".into()).into());
         }
-        state.shortcuts_callbacks.push(ctx.stash(callback));
+        state
+            .shortcuts_callbacks
+            .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     let shortcuts = Table::new(&ctx);

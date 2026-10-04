@@ -21,6 +21,7 @@ use morf_scene::reactive::SignalId;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::runtime::handler::Handler;
 use crate::{
     reactive_bindings::*, reactive_execute::*, scene_bindings::*, state::*, surface_types::*,
     types::*,
@@ -163,10 +164,7 @@ pub(crate) fn window_size_field<'gc>(
 /// With its record gone the shell closes the surface on its next sync, and
 /// the `on_closed` it would run then finds nothing: it is run here instead,
 /// by the caller, once, in both a shell and a headless run.
-pub(crate) fn destroy_window_surface(
-    state: &mut ReactiveState,
-    id: u64,
-) -> Option<luna::StashedClosure> {
+pub(crate) fn destroy_window_surface(state: &mut ReactiveState, id: u64) -> Option<Handler> {
     let window = state.window_surfaces.remove(&id)?;
     state.window_surfaces_changed = true;
     let on_closed = state.window_handlers.remove(&(id, WindowEvent::Closed));
@@ -207,17 +205,16 @@ pub(crate) fn window_handler_method<'gc>(
         if event == WindowEvent::CloseRequested
             && !matches!(window.kind, WindowSurfaceKind::Toplevel(_))
         {
-            return Err(HostError(format!(
-                "{} is only valid for toplevels",
-                event.method()
-            ))
-            .into());
+            return Err(
+                HostError(format!("{} is only valid for toplevels", event.method())).into(),
+            );
         }
         match callback {
             Some(callback) => {
-                state
-                    .window_handlers
-                    .insert((surface.id, event), ctx.stash(callback));
+                state.window_handlers.insert(
+                    (surface.id, event),
+                    crate::vm::handler_store::register(ctx.stash(callback)),
+                );
             }
             None => {
                 state.window_handlers.remove(&(surface.id, event));
@@ -256,9 +253,10 @@ pub(crate) fn window_handlers_from_options<'gc>(
                         event.method()
                     )));
                 }
-                state
-                    .window_handlers
-                    .insert((id, event), ctx.stash(callback));
+                state.window_handlers.insert(
+                    (id, event),
+                    crate::vm::handler_store::register(ctx.stash(callback)),
+                );
             }
             _ => {
                 return Err(HostError(format!(

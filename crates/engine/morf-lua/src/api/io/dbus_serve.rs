@@ -119,7 +119,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
             .position(|entry| Rc::ptr_eq(&entry.service, &service.service));
         let entry = PendingDbusService {
             service: Rc::clone(&service.service),
-            callback: ctx.stash(callback),
+            callback: crate::vm::handler_store::register(ctx.stash(callback)),
         };
         match existing {
             Some(index) => state.dbus_services[index] = entry,

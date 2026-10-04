@@ -68,9 +68,9 @@ pub(crate) fn configure_states<'gc>(
                             return Err(format!("state changes unknown property `{property}`"));
                         }
                         let value = match value {
-                            LuaValue::Function(Function::Closure(closure)) => {
-                                StateValue::Binding(ctx.stash(closure))
-                            }
+                            LuaValue::Function(Function::Closure(closure)) => StateValue::Binding(
+                                crate::vm::handler_store::register(ctx.stash(closure)),
+                            ),
                             value => StateValue::Value(lua_to_scene(ctx, value, 0)?),
                         };
                         properties.push((property, value));
@@ -114,7 +114,7 @@ pub(crate) fn configure_states<'gc>(
                 properties,
                 anchors,
                 parent,
-                when,
+                when: when.map(crate::vm::handler_store::register),
                 order,
             },
         );
@@ -193,7 +193,11 @@ fn build_state_selector<'gc>(
             .set(ctx, index as i64 + 1, ctx.intern(name.as_bytes()))
             .map_err(|error| error.to_string())?;
         tests
-            .set(ctx, index as i64 + 1, ctx.fetch(*when))
+            .set(
+                ctx,
+                index as i64 + 1,
+                ctx.fetch(&crate::vm::handler_store::stashed(*when)),
+            )
             .map_err(|error| error.to_string())?;
     }
     let fallback = if definitions.contains_key("default") {
@@ -263,7 +267,8 @@ pub(crate) fn table_binding<'gc>(
             return out
         end
     "#;
-    let factory = Closure::load(ctx, Some("table binding"), &source[..]).map_err(|error| error.to_string())?;
+    let factory = Closure::load(ctx, Some("table binding"), &source[..])
+        .map_err(|error| error.to_string())?;
     let executor = Executor::start(ctx, factory.into(), Variadic(vec![LuaValue::Table(table)]));
     drive_executor(ctx, executor, limits, limits.effect_fuel, "table binding")?;
     match executor.take_result::<Closure>(ctx) {

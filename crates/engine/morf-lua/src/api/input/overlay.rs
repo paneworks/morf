@@ -35,9 +35,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
-use luna::{
-    Callback, CallbackReturn, Context, Function, StashedClosure, Table, UserRef, Value as LuaValue,
-};
+use luna::{Callback, CallbackReturn, Context, Function, Table, UserRef, Value as LuaValue};
 use morf_layout::{Geometry, Layout};
 use morf_scene::overlay::{Bounds, Placement, place};
 use morf_scene::{Element, NodeHandle, Value as SceneValue};
@@ -46,6 +44,7 @@ use crate::IpcValue;
 use crate::Runtime;
 use crate::api_focus::{FocusReason, FocusRequest};
 use crate::reactive_execute::execute_ipc_handler;
+use crate::runtime::handler::Handler;
 use crate::scene_bindings::{assign_scene_property, create_node};
 use crate::state::ReactiveState;
 use crate::state_tokens::NodeToken;
@@ -64,7 +63,7 @@ pub(crate) struct Overlay {
     modal: bool,
     escape: bool,
     outside: bool,
-    on_close: Option<StashedClosure>,
+    on_close: Option<Handler>,
     /// The node that had focus when it opened, and whether it showed it.
     restore: Option<(NodeHandle, bool)>,
     /// Whether closing gives focus back (`restore`, true).
@@ -187,10 +186,19 @@ fn open<'gc>(
         .iter()
         .any(|o| o.content == content)
     {
-        let pending = state.borrow().overlays.closing.iter().any(|(c, _)| *c == content);
+        let pending = state
+            .borrow()
+            .overlays
+            .closing
+            .iter()
+            .any(|(c, _)| *c == content);
         if pending {
             let stashed = options.map(|t| ctx.stash(t));
-            state.borrow_mut().overlays.reopening.push((content, stashed));
+            state
+                .borrow_mut()
+                .overlays
+                .reopening
+                .push((content, stashed));
         }
         return Ok(());
     }
@@ -296,7 +304,7 @@ fn open<'gc>(
         modal,
         escape: flag("escape", true),
         outside: flag("outside", true),
-        on_close,
+        on_close: on_close.map(crate::vm::handler_store::register),
         restore,
         give_back: flag("restore", true),
         placed: None,
@@ -389,7 +397,7 @@ fn track<'gc>(
         modal: flag("modal", false),
         escape: flag("escape", true),
         outside,
-        on_close,
+        on_close: on_close.map(crate::vm::handler_store::register),
         restore,
         give_back: flag("restore", true),
         placed: None,
@@ -655,7 +663,9 @@ impl Runtime {
                 open(ctx, &state, content, options)
             });
             if let Err(message) = result {
-                self.reactive.borrow_mut().log(LogLevel::Warn, format!("overlay reopen: {message}"));
+                self.reactive
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("overlay reopen: {message}"));
             }
             closed = true;
         }

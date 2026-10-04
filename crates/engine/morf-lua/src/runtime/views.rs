@@ -1,4 +1,4 @@
-use luna::{Context, Executor, Function, StashedClosure, UserRef, Value as LuaValue, Variadic};
+use luna::{Context, Executor, Function, UserRef, Value as LuaValue, Variadic};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -7,6 +7,7 @@ use morf_scene::{
     Element, ListChange, ModelId, NodeHandle, Scene, Value as SceneValue, ViewTransition,
 };
 
+use crate::runtime::handler::Handler;
 use crate::{
     reactive_bindings::*,
     reactive_execute::*,
@@ -19,7 +20,7 @@ use crate::{
 
 pub(crate) fn execute_delegate(
     ctx: Context<'_>,
-    delegate: &StashedClosure,
+    delegate: &Handler,
     item: &SceneValue,
     index: usize,
     limits: Limits,
@@ -28,7 +29,12 @@ pub(crate) fn execute_delegate(
         scene_to_lua(ctx, item)?,
         LuaValue::Integer(index as i64 + 1),
     ]);
-    let executor = Executor::start(ctx, ctx.fetch(delegate).into(), args);
+    let executor = Executor::start(
+        ctx,
+        ctx.fetch(&crate::vm::handler_store::stashed(delegate))
+            .into(),
+        args,
+    );
     drive_executor(ctx, executor, limits, limits.delegate_fuel, "delegate")?;
     let values = match executor.take_result::<Variadic<Vec<LuaValue>>>(ctx) {
         Ok(Ok(values)) => values,
@@ -48,7 +54,7 @@ pub(crate) fn execute_delegate(
     };
     Ok(DelegateInstance {
         node: node.handle,
-        updater,
+        updater: updater.map(crate::vm::handler_store::register),
         item: item.clone(),
         index,
     })
@@ -56,7 +62,7 @@ pub(crate) fn execute_delegate(
 
 pub(crate) fn execute_delegate_updater(
     ctx: Context<'_>,
-    updater: &StashedClosure,
+    updater: &Handler,
     item: &SceneValue,
     index: usize,
     limits: Limits,
@@ -65,7 +71,12 @@ pub(crate) fn execute_delegate_updater(
         scene_to_lua(ctx, item)?,
         LuaValue::Integer(index as i64 + 1),
     ]);
-    let executor = Executor::start(ctx, ctx.fetch(updater).into(), args);
+    let executor = Executor::start(
+        ctx,
+        ctx.fetch(&crate::vm::handler_store::stashed(updater))
+            .into(),
+        args,
+    );
     drive_executor(
         ctx,
         executor,
@@ -82,10 +93,15 @@ pub(crate) fn execute_delegate_updater(
 
 pub(crate) fn execute_node_factory(
     ctx: Context<'_>,
-    factory: &StashedClosure,
+    factory: &Handler,
     limits: Limits,
 ) -> Result<NodeHandle, String> {
-    let executor = Executor::start(ctx, ctx.fetch(factory).into(), ());
+    let executor = Executor::start(
+        ctx,
+        ctx.fetch(&crate::vm::handler_store::stashed(factory))
+            .into(),
+        (),
+    );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "Loader source")?;
     match executor.take_result::<UserRef<NodeToken>>(ctx) {
         Ok(Ok(node)) => Ok(node.handle),

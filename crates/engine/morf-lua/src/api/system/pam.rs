@@ -51,7 +51,7 @@ pub(crate) fn install_pam_api<'gc>(
                     password,
                     confdir.as_deref(),
                 ),
-                callback: ctx.stash(callback),
+                callback: crate::vm::handler_store::register(ctx.stash(callback)),
                 unlock_on_success,
             });
             Ok(CallbackReturn::Return)
@@ -75,7 +75,7 @@ pub(crate) fn install_pam_api<'gc>(
             .position(|entry| Rc::ptr_eq(&entry.session, &session.session));
         let entry = PendingPamSession {
             session: Rc::clone(&session.session),
-            callback: ctx.stash(callback),
+            callback: crate::vm::handler_store::register(ctx.stash(callback)),
         };
         match existing {
             Some(index) => state.pam_sessions[index] = entry,

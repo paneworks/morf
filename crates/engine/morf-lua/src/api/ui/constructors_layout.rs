@@ -55,10 +55,13 @@ pub(crate) fn layout_constructor<'gc>(
         };
         let node = create_node(&state, Element::Custom);
         configure_element(&state, ctx, limits, node, clean).map_err(HostError)?;
-        state
-            .borrow_mut()
-            .custom_layouts
-            .insert(node, CustomLayoutFns { measure, place });
+        state.borrow_mut().custom_layouts.insert(
+            node,
+            CustomLayoutFns {
+                measure: crate::vm::handler_store::register(measure),
+                place: crate::vm::handler_store::register(place),
+            },
+        );
         stack.replace(ctx, node_userdata(ctx, Rc::clone(&state), node));
         Ok(CallbackReturn::Return)
     })

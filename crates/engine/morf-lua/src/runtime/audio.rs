@@ -6,6 +6,7 @@ use std::rc::Rc;
 use morf_audio::{Audio, Backend, DeviceKind};
 use morf_scene::Value as SceneValue;
 
+use crate::runtime::handler::Handler;
 use crate::{api_audio::*, reactive_bindings::flush_reactive, surface_types::*, types::*};
 
 impl Runtime {
@@ -30,7 +31,7 @@ impl Runtime {
             let state = self.reactive.borrow();
             (state.scene_revision, state.hidden_revisions)
         };
-        let mut handlers: Vec<(luna::StashedClosure, Vec<SceneValue>)> = Vec::new();
+        let mut handlers: Vec<(Handler, Vec<SceneValue>)> = Vec::new();
         let mut moved = false;
         {
             let mut guard = self.reactive.borrow_mut();
@@ -108,7 +109,11 @@ impl Runtime {
             let host = state.audio.as_mut().expect("checked above");
             for level in &poll.levels {
                 // A channel takes the bands in Rust: filtered, written, drawn.
-                let Some(out) = host.monitors.get_mut(&level.monitor).and_then(|m| m.channel.as_mut()) else {
+                let Some(out) = host
+                    .monitors
+                    .get_mut(&level.monitor)
+                    .and_then(|m| m.channel.as_mut())
+                else {
                     continue;
                 };
                 let now = std::time::Instant::now();

@@ -1,9 +1,11 @@
 pub(crate) use crate::api_shader::RegisteredShader;
 use crate::states::{Capture, StateSet};
-use luna::{StashedClosure, StashedTable};
+use luna::StashedTable;
+
+use crate::runtime::handler::Handler;
 use morf_layout::{TransformTracker, TransformWatcher as NativeTransformWatcher};
-use morf_scene::retain::Retention;
 use morf_scene::reactive::{EffectId, Graph, SignalId};
+use morf_scene::retain::Retention;
 use morf_scene::{GroupId, ListModel, ModelId, NodeHandle, Scene, VirtualList};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -24,7 +26,7 @@ pub(crate) use crate::state_tokens::*;
 pub(crate) struct LuaVirtualView {
     pub(crate) model: Rc<RefCell<ListModel>>,
     pub(crate) view: VirtualList,
-    pub(crate) delegate: StashedClosure,
+    pub(crate) delegate: Handler,
     pub(crate) active: HashMap<ModelId, DelegateInstance>,
     pub(crate) reusable: HashMap<ModelId, DelegateInstance>,
     pub(crate) reuse_order: VecDeque<ModelId>,
@@ -57,7 +59,7 @@ pub(crate) struct StateFields {
     /// A field computed from the others on every read: a theme's derived
     /// token. Read inside a binding, whatever it reads is what the binding
     /// tracks, so it re-derives exactly when its inputs change.
-    pub(crate) derived: HashMap<String, StashedClosure>,
+    pub(crate) derived: HashMap<String, Handler>,
     /// A theme: a string written to a field that names a colour becomes one.
     pub(crate) theme: bool,
     /// A theme's `transition`: a colour written to a token eases there from
@@ -70,13 +72,13 @@ pub(crate) struct StateFields {
 /// What a `ui.Layout` container answers layout with.
 #[derive(Clone)]
 pub(crate) struct CustomLayoutFns {
-    pub(crate) measure: StashedClosure,
-    pub(crate) place: StashedClosure,
+    pub(crate) measure: Handler,
+    pub(crate) place: Handler,
 }
 
 pub(crate) struct DelegateInstance {
     pub(crate) node: NodeHandle,
-    pub(crate) updater: Option<StashedClosure>,
+    pub(crate) updater: Option<Handler>,
     /// The row it shows, as it was last given it: what a row put back while
     /// this one is still leaving is matched against.
     pub(crate) item: morf_scene::Value,
@@ -96,7 +98,7 @@ pub(crate) struct LuaTransformWatcher {
     pub(crate) a: NodeHandle,
     pub(crate) b: NodeHandle,
     pub(crate) watcher: NativeTransformWatcher,
-    pub(crate) callback: Option<StashedClosure>,
+    pub(crate) callback: Option<Handler>,
     pub(crate) revision: u64,
     pub(crate) pending: bool,
 }
@@ -116,7 +118,7 @@ pub(crate) struct PopupNodeAnchor {
 
 #[derive(Clone)]
 pub(crate) struct LuaEffect {
-    pub(crate) closure: StashedClosure,
+    pub(crate) closure: Handler,
     pub(crate) sink: Option<EffectSink>,
     /// The node whose removal ends a `morf.effect` given `owner = node`.
     pub(crate) owner: Option<morf_scene::NodeHandle>,
@@ -124,8 +126,8 @@ pub(crate) struct LuaEffect {
 
 #[derive(Clone, Default)]
 pub(crate) struct RetainCallbacks {
-    pub(crate) dropped: Option<StashedClosure>,
-    pub(crate) about_to_destroy: Option<StashedClosure>,
+    pub(crate) dropped: Option<Handler>,
+    pub(crate) about_to_destroy: Option<Handler>,
 }
 
 #[derive(Clone)]
@@ -216,7 +218,7 @@ pub(crate) struct ReactiveState {
     pub(crate) shortcuts_inhibited: bool,
     pub(crate) shortcuts_inhibit_changed: bool,
     /// Told the compositor's answer, which is not always yes.
-    pub(crate) shortcuts_callbacks: Vec<StashedClosure>,
+    pub(crate) shortcuts_callbacks: Vec<Handler>,
     /// Nodes the lint has already complained about, so a bar that paints
     /// sixty times a second says it once.
     pub(crate) lint_warned: HashSet<NodeHandle>,
@@ -227,8 +229,8 @@ pub(crate) struct ReactiveState {
     /// The last timer id handed out. Never reused: a handle to a timer that
     /// finished must not find a newer one wearing its number.
     pub(crate) last_timer_id: u64,
-    pub(crate) reload_completed_callbacks: Vec<StashedClosure>,
-    pub(crate) reload_failed_callbacks: Vec<StashedClosure>,
+    pub(crate) reload_completed_callbacks: Vec<Handler>,
+    pub(crate) reload_failed_callbacks: Vec<Handler>,
     pub(crate) effects: HashMap<u64, LuaEffect>,
     pub(crate) next_effect: u64,
     pub(crate) active: Option<Capture>,
@@ -289,17 +291,17 @@ pub(crate) struct ReactiveState {
     /// compositor last said — see [`crate::SessionLockState`].
     pub(crate) session_lock: SignalId,
     /// Told when that changes, each with whether it wants only `locked`.
-    pub(crate) session_lock_callbacks: Vec<(StashedClosure, bool)>,
+    pub(crate) session_lock_callbacks: Vec<(Handler, bool)>,
     /// `morf.lock_surface`: builds one output's lock tree, given its screen.
-    pub(crate) lock_surface_builder: Option<StashedClosure>,
-    pub(crate) handlers: HashMap<(NodeHandle, UiEvent), StashedClosure>,
+    pub(crate) lock_surface_builder: Option<Handler>,
+    pub(crate) handlers: HashMap<(NodeHandle, UiEvent), Handler>,
     pub(crate) parent_transitions: Vec<ParentTransitionRequest>,
     pub(crate) states: HashMap<NodeHandle, StateSet>,
-    pub(crate) ipc_handlers: HashMap<String, StashedClosure>,
+    pub(crate) ipc_handlers: HashMap<String, Handler>,
     /// Keyed on the threshold and whether it ignores inhibitors, because the
     /// same number of milliseconds means two different things to the compositor.
     /// Each with the id its subscription handle cancels it by.
-    pub(crate) idle_callbacks: HashMap<(u32, bool), Vec<(u64, StashedClosure)>>,
+    pub(crate) idle_callbacks: HashMap<(u32, bool), Vec<(u64, Handler)>>,
     pub(crate) next_idle_subscription: u64,
     /// Whether the set of thresholds changed since the loop last asked, so
     /// the compositor's notifications follow a subscription made (or
@@ -308,20 +310,20 @@ pub(crate) struct ReactiveState {
     pub(crate) output_power_requests: Vec<bool>,
     pub(crate) gamma_requests: Vec<crate::api_gamma::GammaRequest>,
     pub(crate) clipboard_requests: Vec<ClipboardRequest>,
-    pub(crate) clipboard_callbacks: Vec<StashedClosure>,
+    pub(crate) clipboard_callbacks: Vec<Handler>,
     /// `morf.clipboard.watch` callbacks, each with whether it wants the
     /// primary selection too.
-    pub(crate) clipboard_watchers: Vec<(StashedClosure, bool)>,
+    pub(crate) clipboard_watchers: Vec<(Handler, bool)>,
     pub(crate) offer_reads: Vec<OfferReadRequest>,
-    pub(crate) offer_read_callbacks: HashMap<u64, StashedClosure>,
+    pub(crate) offer_read_callbacks: HashMap<u64, Handler>,
     pub(crate) next_offer_read: u64,
     pub(crate) drag_requests: Vec<DragRequest>,
     /// Told once how the drag they started ended.
-    pub(crate) drag_end_callbacks: Vec<StashedClosure>,
-    pub(crate) keyboard_focus_callbacks: Vec<StashedClosure>,
-    pub(crate) backdrop_callbacks: Vec<StashedClosure>,
+    pub(crate) drag_end_callbacks: Vec<Handler>,
+    pub(crate) keyboard_focus_callbacks: Vec<Handler>,
+    pub(crate) backdrop_callbacks: Vec<Handler>,
     pub(crate) screencopy_requests: Vec<ScreencopyRequest>,
-    pub(crate) screencopy_callbacks: HashMap<u64, StashedClosure>,
+    pub(crate) screencopy_callbacks: HashMap<u64, Handler>,
     /// The chosen name of each capture in flight, by request.
     pub(crate) screencopy_names: HashMap<u64, String>,
     /// Published captures the configuration is done with.
@@ -334,10 +336,10 @@ pub(crate) struct ReactiveState {
     pub(crate) virtual_keyboard_requests: Vec<VirtualKeyboardRequest>,
     pub(crate) input_method_enable_requested: bool,
     pub(crate) input_method_requests: Vec<InputMethodRequest>,
-    pub(crate) input_method_callbacks: Vec<StashedClosure>,
+    pub(crate) input_method_callbacks: Vec<Handler>,
     pub(crate) text_input_enable_requested: bool,
     pub(crate) text_input_requests: Vec<TextInputRequest>,
-    pub(crate) text_input_callbacks: Vec<StashedClosure>,
+    pub(crate) text_input_callbacks: Vec<Handler>,
     pub(crate) views: HashMap<NodeHandle, LuaVirtualView>,
     pub(crate) pam_tasks: Vec<PendingPam>,
     pub(crate) pam_sessions: Vec<PendingPamSession>,
@@ -349,22 +351,22 @@ pub(crate) struct ReactiveState {
     /// The virtual clock's reading, when the runtime keeps one instead of
     /// running its timers off the wall clock (`Runtime::use_virtual_clock`).
     pub(crate) virtual_now: Option<std::time::Duration>,
-    pub(crate) timer_callbacks: HashMap<NodeHandle, StashedClosure>,
+    pub(crate) timer_callbacks: HashMap<NodeHandle, Handler>,
     /// Where each `ui.Timer` was built, for `MORF_WAKE_LOG`.
     pub(crate) timer_origins: HashMap<NodeHandle, std::rc::Rc<str>>,
     /// Each node's `on_destroyed`, until the node goes.
-    pub(crate) destroy_hooks: HashMap<NodeHandle, StashedClosure>,
+    pub(crate) destroy_hooks: HashMap<NodeHandle, Handler>,
     /// The properties each node is looping, from its `loop`.
     pub(crate) node_loops:
         HashMap<NodeHandle, std::collections::BTreeMap<String, crate::node_loops::RunningLoop>>,
     /// Hooks of nodes already removed, waiting for a moment Lua can run:
     /// removal happens with the state borrowed, often inside a flush.
-    pub(crate) pending_destroyed: Vec<StashedClosure>,
+    pub(crate) pending_destroyed: Vec<Handler>,
     /// The pending hooks are being run; removals they cause join the queue.
     pub(crate) running_destroyed: bool,
-    pub(crate) animation_callbacks: HashMap<(NodeHandle, String), StashedClosure>,
-    pub(crate) group_callbacks: HashMap<GroupId, StashedClosure>,
-    pub(crate) loader_factories: HashMap<NodeHandle, StashedClosure>,
+    pub(crate) animation_callbacks: HashMap<(NodeHandle, String), Handler>,
+    pub(crate) group_callbacks: HashMap<GroupId, Handler>,
+    pub(crate) loader_factories: HashMap<NodeHandle, Handler>,
     /// Loaders whose source raised, left alone until they are deactivated.
     pub(crate) failed_loaders: HashSet<NodeHandle>,
     /// The `measure` and `place` functions of every `ui.Layout` container.
@@ -392,10 +394,10 @@ pub(crate) struct ReactiveState {
     /// window to, as the two signals `win.width` and `win.height` read.
     pub(crate) window_sizes: HashMap<u64, crate::window_events::WindowSize>,
     /// `win:on_resize`, `win:on_close_requested` and `win:on_closed`.
-    pub(crate) window_handlers: HashMap<(u64, crate::window_events::WindowEvent), StashedClosure>,
+    pub(crate) window_handlers: HashMap<(u64, crate::window_events::WindowEvent), Handler>,
     /// `morf.surface.on_focus_changed` and `on_pointer_changed`, for the
     /// shell's own surface.
-    pub(crate) surface_handlers: HashMap<crate::window_events::WindowEvent, StashedClosure>,
+    pub(crate) surface_handlers: HashMap<crate::window_events::WindowEvent, Handler>,
     pub(crate) layer_surface_changed: bool,
     pub(crate) window_surface_actions: Vec<WindowSurfaceAction>,
     pub(crate) popup_node_anchors: HashMap<u64, PopupNodeAnchor>,
@@ -439,7 +441,7 @@ pub(crate) struct ReactiveState {
     /// become, or stop being, the primary one, and what it is now.
     pub(crate) primary: Option<(SignalId, bool)>,
     /// `morf.on_primary(fn)`: called with the new value when it changes.
-    pub(crate) primary_callbacks: Vec<StashedClosure>,
+    pub(crate) primary_callbacks: Vec<Handler>,
     /// Every bus name `morf.dbus.serve` took, so a runtime that ends or
     /// hands its duties over gives them back first.
     pub(crate) owned_bus_names: Vec<std::rc::Weak<std::cell::RefCell<morf_io::DbusService>>>,

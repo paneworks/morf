@@ -32,13 +32,14 @@ use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 use luna::{
-    Callback, CallbackReturn, Closure, Context, Executor, StashedClosure, Table, UserData,
-    Value as LuaValue, Variadic,
+    Callback, CallbackReturn, Closure, Context, Executor, Table, UserData, Value as LuaValue,
+    Variadic,
 };
 use morf_audio::{Audio, Device, DeviceKind, Stream};
 use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
 
+use crate::runtime::handler::Handler;
 use crate::{
     reactive_execute::drive_executor,
     scene_bindings::*,
@@ -66,16 +67,16 @@ pub(crate) struct AudioHost {
     /// Moves on every change, so a reader that depends on any of it reruns.
     pub(crate) revision: SignalId,
     pub(crate) revisions: i64,
-    pub(crate) listeners: Vec<(u64, StashedClosure)>,
+    pub(crate) listeners: Vec<(u64, Handler)>,
     pub(crate) monitors: HashMap<u64, MonitorHandlers>,
     pub(crate) next_listener: u64,
 }
 
 /// What one `morf.audio.monitor` calls, and the tempo it last heard.
 pub(crate) struct MonitorHandlers {
-    pub(crate) on_level: Option<StashedClosure>,
-    pub(crate) on_beat: Option<StashedClosure>,
-    pub(crate) on_tempo: Option<StashedClosure>,
+    pub(crate) on_level: Option<Handler>,
+    pub(crate) on_beat: Option<Handler>,
+    pub(crate) on_tempo: Option<Handler>,
     pub(crate) tempo: Option<(f32, f32)>,
     /// `channel`: each reading's bands written straight to a data channel,
     /// through the `spectrum` filter when one is given -- no Lua per frame.
@@ -491,7 +492,8 @@ pub(crate) fn install_audio_api<'gc>(
                     host.started();
                     let id = host.next_listener;
                     host.next_listener += 1;
-                    host.listeners.push((id, ctx.stash(callback)));
+                    host.listeners
+                        .push((id, crate::vm::handler_store::register(ctx.stash(callback))));
                     id
                 };
                 let stop = Callback::from_fn(&ctx, {
@@ -530,25 +532,48 @@ pub(crate) fn install_audio_api<'gc>(
                             let id = match handle.get_value(ctx, "id") {
                                 LuaValue::Integer(id) => id as u64,
                                 LuaValue::Number(id) => id as u64,
-                                _ => return Err(HostError("monitor channel must be a morf.channel".into()).into()),
+                                _ => {
+                                    return Err(HostError(
+                                        "monitor channel must be a morf.channel".into(),
+                                    )
+                                    .into());
+                                }
                             };
                             let channel = morf_scene::channel_by_id(id)
                                 .ok_or_else(|| HostError("monitor channel is gone".into()))?;
                             let filter = match options.get_value(ctx, "spectrum") {
                                 LuaValue::Nil => None,
                                 LuaValue::Table(o) => Some(
-                                    morf_audio::spectrum::Filter::new(crate::api_audio_spectrum::options(ctx, Some(o))?)
-                                        .map_err(HostError)?,
+                                    morf_audio::spectrum::Filter::new(
+                                        crate::api_audio_spectrum::options(ctx, Some(o))?,
+                                    )
+                                    .map_err(HostError)?,
                                 ),
-                                _ => return Err(HostError("monitor spectrum must be a table".into()).into()),
+                                _ => {
+                                    return Err(HostError(
+                                        "monitor spectrum must be a table".into(),
+                                    )
+                                    .into());
+                                }
                             };
-                            Some(MonitorChannel { channel, filter, last: None })
+                            Some(MonitorChannel {
+                                channel,
+                                filter,
+                                last: None,
+                            })
                         }
-                        _ => return Err(HostError("monitor channel must be a morf.channel".into()).into()),
+                        _ => {
+                            return Err(
+                                HostError("monitor channel must be a morf.channel".into()).into()
+                            );
+                        }
                     },
                 };
                 if handlers.on_level.is_none() && handlers.channel.is_none() && !beat {
-                    return Err(HostError("monitor needs an on_level function or a channel".into()).into());
+                    return Err(HostError(
+                        "monitor needs an on_level function or a channel".into(),
+                    )
+                    .into());
                 }
                 if !beat && (handlers.on_beat.is_some() || handlers.on_tempo.is_some()) {
                     return Err(
@@ -685,7 +710,7 @@ pub(crate) fn install_audio_api<'gc>(
 /// Runs a handler with arguments that may be tables.
 pub(crate) fn execute_audio_handler(
     ctx: Context<'_>,
-    closure: &StashedClosure,
+    closure: &Handler,
     args: &[SceneValue],
     limits: Limits,
 ) -> Result<(), String> {
@@ -693,7 +718,12 @@ pub(crate) fn execute_audio_handler(
         .iter()
         .map(|value| scene_to_lua(ctx, value))
         .collect::<Result<Vec<_>, _>>()?;
-    let executor = Executor::start(ctx, ctx.fetch(closure).into(), Variadic(args));
+    let executor = Executor::start(
+        ctx,
+        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+            .into(),
+        Variadic(args),
+    );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "audio handler")?;
     match executor.take_result::<()>(ctx) {
         Ok(Ok(())) => Ok(()),

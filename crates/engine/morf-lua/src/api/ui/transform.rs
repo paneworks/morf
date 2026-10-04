@@ -106,7 +106,7 @@ pub(crate) fn install_transform_api<'gc>(
                         a,
                         b,
                         watcher: NativeTransformWatcher::new(a, b, common_parent),
-                        callback,
+                        callback: callback.map(crate::vm::handler_store::register),
                         revision: 0,
                         pending: false,
                     },

@@ -286,7 +286,7 @@ pub(crate) fn install_retention_api<'gc>(
                 state.effects.insert(
                     token,
                     LuaEffect {
-                        closure: ctx.stash(closure),
+                        closure: crate::vm::handler_store::register(ctx.stash(closure)),
                         sink: None,
                         owner,
                     },

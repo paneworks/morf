@@ -4,10 +4,11 @@
 //! `on_done(false, message)`, whichever call asked: a configuration writes
 //! one kind of handler and learns it once.
 
-use luna::{Context, Executor, StashedClosure, Table, Value as LuaValue, Variadic};
+use luna::{Context, Executor, Table, Value as LuaValue, Variadic};
 
 use crate::api_image_ops::rgba_color;
 use crate::image_jobs::{CaptureSave, ImageJob, ImageOutcome, RawCapture};
+use crate::runtime::handler::Handler;
 use crate::{reactive_execute::drive_executor, surface_types::Screencopy, types::*};
 
 impl Runtime {
@@ -115,7 +116,7 @@ impl Runtime {
 
 fn execute_image_handler(
     ctx: Context<'_>,
-    closure: &StashedClosure,
+    closure: &Handler,
     result: Result<ImageOutcome, String>,
     limits: Limits,
 ) -> Result<(), String> {
@@ -178,7 +179,12 @@ fn execute_image_handler(
             LuaValue::String(ctx.intern(message.as_bytes())),
         ]),
     };
-    let executor = Executor::start(ctx, ctx.fetch(closure).into(), args);
+    let executor = Executor::start(
+        ctx,
+        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+            .into(),
+        args,
+    );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
         Ok(Ok(())) => Ok(()),

@@ -17,8 +17,8 @@
 //! the dock. `morf.windows` stays the plain snapshot it always was.
 
 use luna::{
-    Callback, CallbackReturn, Closure, Context, Executor, StashedClosure, Table, UserData,
-    Value as LuaValue, Variadic,
+    Callback, CallbackReturn, Closure, Context, Executor, Table, UserData, Value as LuaValue,
+    Variadic,
 };
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -27,6 +27,7 @@ use std::rc::Rc;
 use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
 
+use crate::runtime::handler::Handler;
 use crate::{
     reactive_execute::drive_executor, scene_bindings::*, serialization::scene_to_lua, state::*,
     state_tokens::*, surface_types::*, types::*,
@@ -42,7 +43,7 @@ pub(crate) struct ToplevelHost {
     pub(crate) model: Rc<RefCell<ListModel>>,
     pub(crate) revision: SignalId,
     pub(crate) revisions: i64,
-    pub(crate) listeners: Vec<(u64, StashedClosure)>,
+    pub(crate) listeners: Vec<(u64, Handler)>,
     pub(crate) next_listener: u64,
 }
 
@@ -256,7 +257,8 @@ pub(crate) fn install_toplevels_api<'gc>(
                     }
                     let id = host.next_listener;
                     host.next_listener += 1;
-                    host.listeners.push((id, ctx.stash(callback)));
+                    host.listeners
+                        .push((id, crate::vm::handler_store::register(ctx.stash(callback))));
                     id
                 };
                 let stop = Callback::from_fn(&ctx, {
@@ -306,12 +308,17 @@ pub(crate) fn install_toplevels_api<'gc>(
 /// Runs one `on_changed` handler with its change table.
 pub(crate) fn execute_toplevel_handler(
     ctx: Context<'_>,
-    closure: &StashedClosure,
+    closure: &Handler,
     change: &SceneValue,
     limits: Limits,
 ) -> Result<(), String> {
     let change = scene_to_lua(ctx, change)?;
-    let executor = Executor::start(ctx, ctx.fetch(closure).into(), Variadic(vec![change]));
+    let executor = Executor::start(
+        ctx,
+        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+            .into(),
+        Variadic(vec![change]),
+    );
     drive_executor(
         ctx,
         executor,

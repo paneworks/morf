@@ -41,14 +41,15 @@
 //! rest queue; redirects are followed up to ten deep.
 
 use luna::{
-    Callback, CallbackReturn, Closure, Context, Executor, Function, StashedClosure, StashedTable,
-    StashedUserData, Table, UserData, UserRef, Value as LuaValue, Variadic,
+    Callback, CallbackReturn, Closure, Context, Executor, Function, StashedTable, StashedUserData,
+    Table, UserData, UserRef, Value as LuaValue, Variadic,
 };
 use morf_io::{HttpRequest, HttpResponse, HttpTask, MAX_BODY_LIMIT, MAX_TIMEOUT};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::runtime::handler::Handler;
 use crate::{
     Limits, reactive_execute::drive_executor, scene_bindings::*, serialization::*, state::*,
 };
@@ -81,7 +82,7 @@ pub(crate) struct HttpHandleState {
 /// A request in flight and who is owed its answer.
 pub(crate) struct PendingHttp {
     pub(crate) task: HttpTask,
-    pub(crate) callback: Option<StashedClosure>,
+    pub(crate) callback: Option<Handler>,
     pub(crate) handle: Rc<HttpHandleState>,
     pub(crate) url: String,
     pub(crate) json: JsonKinds,
@@ -221,7 +222,8 @@ impl Starter {
         reactive.http_requests.push(PendingHttp {
             url: request.url.clone(),
             task: HttpTask::start(request),
-            callback: callback.map(|callback| ctx.stash(callback)),
+            callback: callback
+                .map(|callback| crate::vm::handler_store::register(ctx.stash(callback))),
             handle: Rc::clone(&handle),
             json: self.json.clone(),
         });
@@ -416,7 +418,7 @@ fn encode_query<'gc>(ctx: Context<'gc>, values: Table<'gc>) -> Result<String, Ho
 /// Hands one answer to the callback that asked for it, as a response table.
 pub(crate) fn execute_http_handler(
     ctx: Context<'_>,
-    closure: &StashedClosure,
+    closure: &Handler,
     outcome: Result<HttpResponse, String>,
     url: &str,
     json: &JsonKinds,
@@ -476,7 +478,8 @@ pub(crate) fn execute_http_handler(
     response.set_field(ctx, "json", decode);
     let executor = Executor::start(
         ctx,
-        ctx.fetch(closure).into(),
+        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+            .into(),
         Variadic(vec![LuaValue::Table(response)]),
     );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;

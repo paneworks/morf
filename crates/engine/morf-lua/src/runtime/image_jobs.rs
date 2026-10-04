@@ -24,7 +24,7 @@
 //! runtime goes, the callbacks go with it; a worker that finishes afterwards
 //! finds nobody listening and stops.
 
-use luna::StashedClosure;
+use crate::runtime::handler::Handler;
 use morf_image::PaletteEntry;
 use morf_image::ops::{self, ImageInfo, OutputFormat, ProcessRequest};
 use std::collections::HashMap;
@@ -115,7 +115,7 @@ pub(crate) struct ImageJobs {
     results_sender: Sender<Finished>,
     /// `None` for a job nobody asked to hear back from; kept all the same,
     /// because it still counts against the cap.
-    callbacks: HashMap<u64, Option<StashedClosure>>,
+    callbacks: HashMap<u64, Option<Handler>>,
     next_id: u64,
 }
 
@@ -140,7 +140,7 @@ impl ImageJobs {
     pub(crate) fn submit(
         &mut self,
         job: ImageJob,
-        callback: Option<StashedClosure>,
+        callback: Option<Handler>,
     ) -> Result<(), String> {
         if self.callbacks.len() >= MAX_IN_FLIGHT {
             return Err(format!(
@@ -179,7 +179,7 @@ impl ImageJobs {
     }
 
     /// Takes every finished job, paired with the callback owed it.
-    pub(crate) fn drain(&mut self) -> Vec<(StashedClosure, Result<ImageOutcome, String>)> {
+    pub(crate) fn drain(&mut self) -> Vec<(Handler, Result<ImageOutcome, String>)> {
         let mut done = Vec::new();
         while let Ok((id, result)) = self.results.try_recv() {
             if let Some(Some(callback)) = self.callbacks.remove(&id) {

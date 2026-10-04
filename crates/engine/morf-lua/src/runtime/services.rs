@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use morf_scene::{NodeHandle, Value as SceneValue};
 
+use crate::runtime::handler::Handler;
 use crate::{
     reactive_execute::*, runtime_helpers::*, scene_bindings::*, state::*, surface_types::*,
     types::*, views::*,
@@ -485,9 +486,11 @@ impl Runtime {
             let preloaded = index >= asked_for;
             let _span = crate::profile::span(|| {
                 let state = self.reactive.borrow();
-                let origin = self
-                    .lua
-                    .enter(|ctx| crate::profile::closure_origin(ctx.fetch(&factory)));
+                let origin = self.lua.enter(|ctx| {
+                    crate::profile::closure_origin(
+                        ctx.fetch(&crate::vm::handler_store::stashed(&factory)),
+                    )
+                });
                 format!(
                     "loader build {} ({origin})",
                     crate::runtime_config::lint_path(&state.scene, node)
@@ -808,7 +811,7 @@ struct DueTimer {
     id: u64,
     node: Option<NodeHandle>,
     repeat: bool,
-    callback: luna::StashedClosure,
+    callback: Handler,
 }
 
 /// Whether a timer collected as due should still fire, now that everything

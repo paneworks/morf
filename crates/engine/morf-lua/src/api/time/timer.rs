@@ -321,7 +321,7 @@ pub(crate) fn install_timer_api<'gc>(
         state.timers.push(PendingTimer {
             id,
             timer,
-            callback: ctx.stash(callback),
+            callback: crate::vm::handler_store::register(ctx.stash(callback)),
             repeat,
             interval,
             node: None,

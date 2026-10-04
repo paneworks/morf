@@ -57,7 +57,9 @@ pub(crate) fn install_screencopy_api<'gc>(
         if let Some(name) = name {
             state.screencopy_names.insert(id, name);
         }
-        state.screencopy_callbacks.insert(id, ctx.stash(callback));
+        state
+            .screencopy_callbacks
+            .insert(id, crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     let window_state = Rc::clone(&state);
@@ -86,7 +88,9 @@ pub(crate) fn install_screencopy_api<'gc>(
         if let Some(name) = name {
             state.screencopy_names.insert(id, name);
         }
-        state.screencopy_callbacks.insert(id, ctx.stash(callback));
+        state
+            .screencopy_callbacks
+            .insert(id, crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     // `release(source)`: the picture is as large as the screen, on the GPU
@@ -153,7 +157,9 @@ pub(crate) fn install_screencopy_api<'gc>(
             },
         );
         if let Some(callback) = callback {
-            state.screencopy_callbacks.insert(id, ctx.stash(callback));
+            state
+                .screencopy_callbacks
+                .insert(id, crate::vm::handler_store::register(ctx.stash(callback)));
         }
         Ok(CallbackReturn::Return)
     });

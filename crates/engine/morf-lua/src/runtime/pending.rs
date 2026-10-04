@@ -5,10 +5,10 @@
 //! authentication, a bus name, a subscription -- paired with the closure that
 //! is owed the answer. The runtime drains all of them in one pass.
 
-use luna::StashedClosure;
+use crate::runtime::handler::Handler;
 use morf_io::{DbusService, DbusSignal, FileWatcher, PendingReply};
-use morf_scene::reactive::SignalId;
 use morf_scene::NodeHandle;
+use morf_scene::reactive::SignalId;
 use morf_system::{GreetdConversation, PamSession, PamTask, StatusNotifierHost, UdevMonitor};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 pub(crate) struct PendingPam {
     pub(crate) task: PamTask,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
     pub(crate) unlock_on_success: bool,
 }
 
@@ -103,7 +103,7 @@ pub(crate) struct PendingTimer {
     /// Names the timer to whoever holds its handle, so it can be cancelled.
     pub(crate) id: u64,
     pub(crate) timer: TimerSource,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
     pub(crate) repeat: bool,
     pub(crate) interval: Duration,
     pub(crate) node: Option<NodeHandle>,
@@ -117,7 +117,7 @@ pub(crate) struct PendingDbusSignal {
     /// be closed.
     pub(crate) id: u64,
     pub(crate) signal: DbusSignal,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
     pub(crate) kind: DbusSignalKind,
 }
 
@@ -134,7 +134,7 @@ pub(crate) enum DbusSignalKind {
 /// A method call made with `call_async`, and who is owed the answer.
 pub(crate) struct PendingDbusReply {
     pub(crate) reply: PendingReply,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
 }
 
 /// A bus name this configuration owns, and who answers calls on it.
@@ -145,7 +145,7 @@ pub(crate) struct PendingDbusReply {
 /// those calls are delivered to.
 pub(crate) struct PendingDbusService {
     pub(crate) service: Rc<RefCell<DbusService>>,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
 }
 
 /// A PAM conversation in progress, and who is shown its messages.
@@ -155,23 +155,23 @@ pub(crate) struct PendingDbusService {
 /// the same handle from inside the callback that showed it the question.
 pub(crate) struct PendingPamSession {
     pub(crate) session: Rc<RefCell<PamSession>>,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
 }
 
 /// A greetd login in progress, and the configuration listening to it.
 pub(crate) struct PendingGreetdSession {
     pub(crate) conversation: Rc<RefCell<GreetdConversation>>,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
 }
 
 pub(crate) struct PendingUdev {
     pub(crate) monitor: UdevMonitor,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
 }
 
 pub(crate) struct PendingStatusNotifier {
     pub(crate) host: StatusNotifierHost,
-    pub(crate) callback: StashedClosure,
+    pub(crate) callback: Handler,
 }
 
 /// A JSON file a theme takes its tokens from, watched for rewrites.

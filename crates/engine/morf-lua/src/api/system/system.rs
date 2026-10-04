@@ -57,7 +57,7 @@ fn register_subscription<'gc>(
     state.dbus_signals.push(PendingDbusSignal {
         id,
         signal,
-        callback: ctx.stash(callback),
+        callback: crate::vm::handler_store::register(ctx.stash(callback)),
         kind,
     });
     Ok(id)
@@ -208,7 +208,7 @@ pub(crate) fn install_system_service_api<'gc>(
             .map_err(HostError)?;
         state.dbus_replies.push(PendingDbusReply {
             reply,
-            callback: ctx.stash(callback),
+            callback: crate::vm::handler_store::register(ctx.stash(callback)),
         });
         stack.replace(ctx, true);
         Ok(CallbackReturn::Return)
@@ -346,7 +346,7 @@ pub(crate) fn install_system_service_api<'gc>(
         .map_err(HostError)?;
         state.dbus_replies.push(PendingDbusReply {
             reply,
-            callback: ctx.stash(callback),
+            callback: crate::vm::handler_store::register(ctx.stash(callback)),
         });
         stack.replace(ctx, true);
         Ok(CallbackReturn::Return)
@@ -418,7 +418,7 @@ pub(crate) fn install_system_service_api<'gc>(
         let monitor = UdevMonitor::new(subsystem).map_err(|error| HostError(error.to_string()))?;
         udev_state.borrow_mut().udev_monitors.push(PendingUdev {
             monitor,
-            callback: ctx.stash(callback),
+            callback: crate::vm::handler_store::register(ctx.stash(callback)),
         });
         Ok(CallbackReturn::Return)
     });
@@ -458,7 +458,7 @@ pub(crate) fn install_system_service_api<'gc>(
         }
         state.status_notifiers.push(PendingStatusNotifier {
             host,
-            callback: ctx.stash(callback),
+            callback: crate::vm::handler_store::register(ctx.stash(callback)),
         });
         Ok(CallbackReturn::Return)
     });
@@ -546,7 +546,7 @@ pub(crate) fn install_system_service_api<'gc>(
         let mut state = converse_state.borrow_mut();
         let entry = PendingGreetdSession {
             conversation: Rc::clone(&session.conversation),
-            callback: ctx.stash(callback),
+            callback: crate::vm::handler_store::register(ctx.stash(callback)),
         };
         let existing = state
             .greetd_sessions

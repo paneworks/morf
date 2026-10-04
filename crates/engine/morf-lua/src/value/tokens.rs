@@ -5,18 +5,19 @@
 //! `state` at the line gate; they belong together anyway, being the whole set
 //! of things the engine lets a configuration keep a reference to.
 
-use luna::{StashedClosure, UserRef};
-use morf_system::desktop_entries::DesktopEntries;
+use luna::UserRef;
 use morf_image::ImageRect as QuantizeRect;
+use morf_system::desktop_entries::DesktopEntries;
 
+use crate::runtime::handler::Handler;
 use crate::state::ReactiveState;
 use morf_io::{
     DbusProxy, DbusService, FileDocument, FileView, FileWatcher, Process, ProcessConfig, Socket,
     SocketServer, SplitParser, StreamCollector,
 };
-use morf_system::menu::Menu;
 use morf_scene::reactive::SignalId;
 use morf_scene::{Easing, GroupId, ListModel, NodeHandle, VirtualList};
+use morf_system::menu::Menu;
 use morf_system::{GreetdClient, GreetdConversation, PamSession};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -223,7 +224,7 @@ pub(crate) struct DesktopEntriesToken {
 
 pub(crate) struct MenuToken {
     pub(crate) menu: RefCell<Menu>,
-    pub(crate) callbacks: HashMap<String, StashedClosure>,
+    pub(crate) callbacks: HashMap<String, Handler>,
 }
 
 /// A handle to a `morf.timer`, good for one thing: stopping it.

@@ -86,7 +86,7 @@ pub(crate) fn loader_constructor<'gc>(
                 let LuaValue::Function(Function::Closure(factory)) = value else {
                     return Err(HostError("Loader source must be a function".into()).into());
                 };
-                source = Some(ctx.stash(factory));
+                source = Some(crate::vm::handler_store::register(ctx.stash(factory)));
             } else {
                 clean.set(ctx, key, value)?;
             }
@@ -182,15 +182,21 @@ pub(crate) fn timer_constructor<'gc>(
             state.borrow_mut().timers.push(PendingTimer {
                 id,
                 timer,
-                callback: callback.clone(),
+                callback: crate::vm::handler_store::register(callback.clone()),
                 repeat,
                 interval,
                 node: Some(node),
                 origin,
             });
-            state.borrow_mut().timer_callbacks.insert(node, callback);
+            state
+                .borrow_mut()
+                .timer_callbacks
+                .insert(node, crate::vm::handler_store::register(callback));
         } else if let Some(callback) = callback {
-            state.borrow_mut().timer_callbacks.insert(node, callback);
+            state
+                .borrow_mut()
+                .timer_callbacks
+                .insert(node, crate::vm::handler_store::register(callback));
         }
         stack.replace(ctx, node_userdata(ctx, Rc::clone(&state), node));
         Ok(CallbackReturn::Return)
@@ -332,7 +338,9 @@ pub(crate) fn construct_view<'gc>(
             _ => return Err(HostError("view model must be a morf list model".to_owned()).into()),
         };
         let delegate = match properties.get_value(ctx, "delegate") {
-            LuaValue::Function(Function::Closure(delegate)) => ctx.stash(delegate),
+            LuaValue::Function(Function::Closure(delegate)) => {
+                crate::vm::handler_store::register(ctx.stash(delegate))
+            }
             _ => return Err(HostError("view delegate must be a function".to_owned()).into()),
         };
         // A Repeater lays its delegates out as whatever it is asked to be:
@@ -459,7 +467,9 @@ pub(crate) fn construct_view<'gc>(
                 .expect("view range contains live model indexes");
             let child = execute_delegate(ctx, &delegate, item, index, limits).map_err(HostError)?;
             if virtualized {
-                let placing = configured_view.as_ref().expect("a virtual view has its list");
+                let placing = configured_view
+                    .as_ref()
+                    .expect("a virtual view has its list");
                 position_view_child(
                     &mut state.borrow_mut().scene,
                     child.node,

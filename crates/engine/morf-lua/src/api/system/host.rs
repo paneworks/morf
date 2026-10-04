@@ -37,7 +37,7 @@ pub(crate) fn install_host_service_api<'gc>(
             .idle_callbacks
             .entry(key)
             .or_default()
-            .push((id, ctx.stash(callback)));
+            .push((id, crate::vm::handler_store::register(ctx.stash(callback))));
         drop(state);
         // The subscription, so it can be let go: `sub:cancel()`. The last
         // callback on a threshold takes the compositor's notification with it.
@@ -111,7 +111,9 @@ pub(crate) fn install_host_service_api<'gc>(
         if state.keyboard_focus_callbacks.len() >= 64 {
             return Err(HostError("keyboard focus callback limit reached".into()).into());
         }
-        state.keyboard_focus_callbacks.push(ctx.stash(callback));
+        state
+            .keyboard_focus_callbacks
+            .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_keyboard_focus", on_keyboard_focus);
@@ -124,7 +126,9 @@ pub(crate) fn install_host_service_api<'gc>(
         if state.backdrop_callbacks.len() >= 64 {
             return Err(HostError("backdrop callback limit reached".into()).into());
         }
-        state.backdrop_callbacks.push(ctx.stash(callback));
+        state
+            .backdrop_callbacks
+            .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_backdrop_click", on_backdrop_click);
@@ -174,7 +178,9 @@ pub(crate) fn install_host_service_api<'gc>(
         if state.input_method_callbacks.len() >= 64 {
             return Err(HostError("input method callback limit reached".into()).into());
         }
-        state.input_method_callbacks.push(ctx.stash(callback));
+        state
+            .input_method_callbacks
+            .push(crate::vm::handler_store::register(ctx.stash(callback)));
         state.input_method_enable_requested = true;
         Ok(CallbackReturn::Return)
     });
@@ -241,7 +247,9 @@ pub(crate) fn install_host_service_api<'gc>(
         if state.text_input_callbacks.len() >= 64 {
             return Err(HostError("text input callback limit reached".into()).into());
         }
-        state.text_input_callbacks.push(ctx.stash(callback));
+        state
+            .text_input_callbacks
+            .push(crate::vm::handler_store::register(ctx.stash(callback)));
         state.text_input_enable_requested = true;
         Ok(CallbackReturn::Return)
     });
@@ -328,7 +336,7 @@ pub(crate) fn install_host_service_api<'gc>(
                     state
                         .borrow_mut()
                         .ipc_handlers
-                        .insert(name, ctx.stash(closure));
+                        .insert(name, crate::vm::handler_store::register(ctx.stash(closure)));
                 }
                 LuaValue::Nil => {
                     state.borrow_mut().ipc_handlers.remove(&name);
@@ -432,7 +440,9 @@ pub(crate) fn install_host_service_api<'gc>(
             if state.primary_callbacks.len() >= 64 {
                 return Err(HostError("primary callback limit reached".into()).into());
             }
-            state.primary_callbacks.push(ctx.stash(callback));
+            state
+                .primary_callbacks
+                .push(crate::vm::handler_store::register(ctx.stash(callback)));
             Ok(CallbackReturn::Return)
         }),
     );

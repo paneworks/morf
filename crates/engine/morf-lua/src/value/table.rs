@@ -1,6 +1,7 @@
-use luna::{Context, Function, StashedClosure, Table, Value as LuaValue};
+use luna::{Context, Function, Table, Value as LuaValue};
 use std::collections::{BTreeMap, HashMap};
 
+use crate::runtime::handler::Handler;
 use morf_system::menu::{ButtonType, CheckState, MenuEntry};
 
 pub(crate) fn table_number<'gc>(
@@ -33,7 +34,7 @@ pub(crate) fn parse_menu_entries<'gc>(
     ctx: Context<'gc>,
     table: Table<'gc>,
     depth: usize,
-    callbacks: &mut HashMap<String, StashedClosure>,
+    callbacks: &mut HashMap<String, Handler>,
 ) -> Result<Vec<MenuEntry>, String> {
     if depth >= 32 {
         return Err("menu exceeds 32 levels".into());
@@ -98,7 +99,7 @@ pub(crate) fn parse_menu_entries<'gc>(
         match value.get_value(ctx, "on_triggered") {
             LuaValue::Nil => {}
             LuaValue::Function(Function::Closure(closure)) => {
-                callbacks.insert(id, ctx.stash(closure));
+                callbacks.insert(id, crate::vm::handler_store::register(ctx.stash(closure)));
             }
             _ => return Err("menu on_triggered must be a function".into()),
         }
@@ -187,10 +188,12 @@ pub(crate) fn optional_closure<'gc>(
     ctx: Context<'gc>,
     table: Table<'gc>,
     field: &str,
-) -> Result<Option<StashedClosure>, String> {
+) -> Result<Option<Handler>, String> {
     match table.get_value(ctx, field) {
         LuaValue::Nil => Ok(None),
-        LuaValue::Function(Function::Closure(closure)) => Ok(Some(ctx.stash(closure))),
+        LuaValue::Function(Function::Closure(closure)) => {
+            Ok(Some(crate::vm::handler_store::register(ctx.stash(closure))))
+        }
         _ => Err(format!("{field} must be a function or nil")),
     }
 }
