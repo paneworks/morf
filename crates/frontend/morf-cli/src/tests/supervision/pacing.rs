@@ -139,3 +139,23 @@ fn one_slow_frame_does_not_drop_the_rate() {
         assert_eq!(pacer.interval(REFRESH), 1, "after a {cost} µs frame");
     }
 }
+
+#[test]
+fn the_cost_of_starting_up_is_forgotten_by_the_first_motion_after_it() {
+    // The first paints after a start build shaders and glyphs (half a second
+    // each); a shell at rest paints a frame a second. The first motion
+    // minutes later costs ten milliseconds and must be judged on that.
+    let mut pacer = FramePacer::new();
+    let start = std::time::Instant::now();
+    for _ in 0..7 {
+        pacer.observed_at(Duration::from_millis(500), start);
+    }
+    assert_eq!(pacer.interval(REFRESH), 4, "starting up is slow");
+    let later = start + Duration::from_secs(3);
+    pacer.observed_at(Duration::from_millis(10), later);
+    assert_eq!(
+        pacer.interval(REFRESH),
+        1,
+        "a cheap paint now paints every callback"
+    );
+}
