@@ -77,7 +77,7 @@ pub(crate) struct WindowSize {
 fn requested_size(kind: &WindowSurfaceKind) -> Option<(u32, u32)> {
     match kind {
         WindowSurfaceKind::Popup(config) => Some((config.width, config.height)),
-        WindowSurfaceKind::Floating(config) => Some((config.width, config.height)),
+        WindowSurfaceKind::Toplevel(config) => Some((config.width, config.height)),
         WindowSurfaceKind::Layer(_) => None,
     }
 }
@@ -205,10 +205,10 @@ pub(crate) fn window_handler_method<'gc>(
             .into());
         }
         if event == WindowEvent::CloseRequested
-            && !matches!(window.kind, WindowSurfaceKind::Floating(_))
+            && !matches!(window.kind, WindowSurfaceKind::Toplevel(_))
         {
             return Err(HostError(format!(
-                "{} is only valid for floating windows",
+                "{} is only valid for toplevels",
                 event.method()
             ))
             .into());
@@ -249,10 +249,10 @@ pub(crate) fn window_handlers_from_options<'gc>(
                 let floating = state
                     .window_surfaces
                     .get(&id)
-                    .is_some_and(|window| matches!(window.kind, WindowSurfaceKind::Floating(_)));
+                    .is_some_and(|window| matches!(window.kind, WindowSurfaceKind::Toplevel(_)));
                 if event == WindowEvent::CloseRequested && !floating {
                     return Err(HostError(format!(
-                        "{} is only valid for floating windows",
+                        "{} is only valid for toplevels",
                         event.method()
                     )));
                 }

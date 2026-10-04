@@ -66,7 +66,7 @@ local EDGES = {
 function M.window(spec)
   local holder = ui.Item {}
   local win
-  win = morf.window.floating {
+  win = morf.window.toplevel {
     root = holder, title = spec.title or "morf", app_id = spec.app_id or "morf",
     width = spec.width or 800, height = spec.height or 600,
     minimum_width = spec.minimum_width, minimum_height = spec.minimum_height,

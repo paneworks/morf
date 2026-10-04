@@ -144,7 +144,7 @@ fn a_popup_hears_its_size_but_not_a_close_request() {
             "#,
         )
         .unwrap_err();
-    assert!(error.to_string().contains("floating"), "{error}");
+    assert!(error.to_string().contains("toplevel"), "{error}");
 
     let mut runtime = Runtime::default();
     runtime
@@ -316,7 +316,7 @@ fn popups_and_layers_are_destroyed_too() {
                 assert(not pcall(function() layer.height = 40 end))
                 -- A new window after them works as ever.
                 local again = window.floating { root = ui.Item {}, width = 10, height = 10 }
-                assert(again:kind() == "floating")
+                assert(again:kind() == "toplevel")
             "#,
         )
         .unwrap();

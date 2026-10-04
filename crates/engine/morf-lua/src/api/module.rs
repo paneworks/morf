@@ -195,7 +195,7 @@ pub(crate) fn install_module_api<'gc>(
                 .get(&surface.id)
                 .map(|surface| match surface.kind {
                     WindowSurfaceKind::Popup(_) => "popup",
-                    WindowSurfaceKind::Floating(_) => "floating",
+                    WindowSurfaceKind::Toplevel(_) => "toplevel",
                     WindowSurfaceKind::Layer(_) => "layer",
                 })
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -300,7 +300,7 @@ pub(crate) fn install_module_api<'gc>(
             .window_surfaces
             .get(&surface.id)
             .is_some_and(|surface| {
-                surface.visible && matches!(surface.kind, WindowSurfaceKind::Floating(_))
+                surface.visible && matches!(surface.kind, WindowSurfaceKind::Toplevel(_))
             });
         if valid {
             state
@@ -332,7 +332,7 @@ pub(crate) fn install_module_api<'gc>(
             .window_surfaces
             .get(&surface.id)
             .is_some_and(|surface| {
-                surface.visible && matches!(surface.kind, WindowSurfaceKind::Floating(_))
+                surface.visible && matches!(surface.kind, WindowSurfaceKind::Toplevel(_))
             });
         if valid {
             state
@@ -426,9 +426,9 @@ pub(crate) fn install_module_api<'gc>(
                         .window_surfaces
                         .get(&parent)
                         .ok_or_else(|| HostError("popup parent is stale".into()))?;
-                    if !matches!(parent.kind, WindowSurfaceKind::Floating(_)) {
+                    if !matches!(parent.kind, WindowSurfaceKind::Toplevel(_)) {
                         return Err(
-                            HostError("popup parent must be a floating surface".into()).into()
+                            HostError("popup parent must be a toplevel".into()).into()
                         );
                     }
                     if let Some(anchor) = &node_anchor
@@ -487,9 +487,9 @@ pub(crate) fn install_module_api<'gc>(
                         .window_surfaces
                         .get(&parent)
                         .ok_or_else(|| HostError("floating parent is stale".into()))?;
-                    if !matches!(parent.kind, WindowSurfaceKind::Floating(_)) {
+                    if !matches!(parent.kind, WindowSurfaceKind::Toplevel(_)) {
                         return Err(
-                            HostError("floating parent must be a floating surface".into()).into(),
+                            HostError("toplevel parent must be a toplevel".into()).into(),
                         );
                     }
                 }
@@ -501,7 +501,7 @@ pub(crate) fn install_module_api<'gc>(
                     root,
                     visible,
                     updates_enabled,
-                    WindowSurfaceKind::Floating(config),
+                    WindowSurfaceKind::Toplevel(config),
                 );
                 crate::window_events::register_window_size(&mut state, id);
                 crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
@@ -550,6 +550,9 @@ pub(crate) fn install_module_api<'gc>(
     window.set_field(ctx, "layer_surface", morf.get_value(ctx, "surface"));
     window.set_field(ctx, "region", region);
     window.set_field(ctx, "popup", popup_surface);
+    window.set_field(ctx, "toplevel", floating_surface);
+    // The old name, kept for one release: the compositor, not morf, decides
+    // whether a toplevel floats.
     window.set_field(ctx, "floating", floating_surface);
     window.set_field(ctx, "layer", layer_surface);
     morf.set_field(ctx, "core", core);

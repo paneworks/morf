@@ -111,7 +111,7 @@ function M.open(path, title)
   reset()
   local w, h = size_for(path)
   if not window then
-    window = morf.window.floating {
+    window = morf.window.toplevel {
       -- Mixed as Qt mixes, so translucent colours and type match the original.
       blend = require("theme").blend,
       title = title or "Picture", app_id = "impasto-picture",

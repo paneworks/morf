@@ -1,6 +1,6 @@
 use morf_layout::{Hit, Layout};
 use morf_lua::{
-    FloatingSurfaceConfig, LayerSurfaceConfig, PopupSurfaceConfig, Runtime, WindowSurfaceKind,
+    ToplevelSurfaceConfig, LayerSurfaceConfig, PopupSurfaceConfig, Runtime, WindowSurfaceKind,
 };
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
@@ -23,7 +23,7 @@ pub(crate) struct AuxiliarySurface {
     pub(crate) renderer: Option<RenderEngine<WgpuBackend>>,
     pub(crate) layout: Option<CachedLayout>,
     pub(crate) popup_config: Option<PopupSurfaceConfig>,
-    pub(crate) floating_config: Option<FloatingSurfaceConfig>,
+    pub(crate) floating_config: Option<ToplevelSurfaceConfig>,
     pub(crate) layer_config: Option<LayerSurfaceConfig>,
     /// Whether this surface has work pending for the next frame callback.
     ///
@@ -237,7 +237,7 @@ pub(crate) fn sync_window_surfaces(
         surfaces
     };
     let desired_popups = desired(|kind| matches!(kind, WindowSurfaceKind::Popup(_)));
-    let desired_floatings = desired(|kind| matches!(kind, WindowSurfaceKind::Floating(_)));
+    let desired_floatings = desired(|kind| matches!(kind, WindowSurfaceKind::Toplevel(_)));
     let desired_layers = desired(|kind| matches!(kind, WindowSurfaceKind::Layer(_)));
     let desired_popup_ids = desired_popups
         .iter()
@@ -275,7 +275,7 @@ pub(crate) fn sync_window_surfaces(
     let mut reopened = HashSet::new();
     for surface in desired_floatings {
         let id = surface.id;
-        let WindowSurfaceKind::Floating(config) = &surface.kind else {
+        let WindowSurfaceKind::Toplevel(config) = &surface.kind else {
             unreachable!();
         };
         let changed = floatings

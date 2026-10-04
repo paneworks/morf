@@ -128,6 +128,8 @@ impl Surface {
             || wanted == self.plain_label()
             || wanted == self.name
             || wanted == self.kind
+            // `floating`: what a toplevel was called before.
+            || (wanted == "floating" && self.kind == "toplevel")
             || self
                 .id
                 .is_some_and(|id| wanted == format!("{}:{id}", self.kind))

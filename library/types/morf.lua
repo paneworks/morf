@@ -11,6 +11,7 @@
 ---@field cache_dir fun(...): any
 ---@field cache_path fun(...): any
 ---@field capabilities Morf.Capabilities
+---@field channel fun(...): any
 ---@field clipboard Morf.Clipboard
 ---@field clock any
 ---@field color Morf.Color
@@ -271,16 +272,24 @@
 ---@class Morf.Core.Args
 
 ---@class Morf.Core.Geometry
+---@field arc fun(...): any
 ---@field graph_grid fun(...): any
 ---@field graph_series fun(...): any
+---@field hatch fun(...): any
+---@field hatch_under fun(...): any
 ---@field lobes fun(...): any
+---@field plot fun(...): any
 ---@field polygon fun(...): any
 ---@field regular fun(...): any
+---@field ruler fun(...): any
+---@field sector fun(...): any
+---@field segments fun(...): any
 ---@field shape_curves fun(...): any
 ---@field shape_names Morf.Core.Geometry.Shape_names
 ---@field shape_path fun(...): any
 ---@field shape_segments integer
 ---@field star fun(...): any
+---@field ticks fun(...): any
 
 ---@class Morf.Core.Geometry.Shape_names
 
@@ -371,16 +380,24 @@
 ---@field supported fun(...): any
 
 ---@class Morf.Geometry
+---@field arc fun(...): any
 ---@field graph_grid fun(...): any
 ---@field graph_series fun(...): any
+---@field hatch fun(...): any
+---@field hatch_under fun(...): any
 ---@field lobes fun(...): any
+---@field plot fun(...): any
 ---@field polygon fun(...): any
 ---@field regular fun(...): any
+---@field ruler fun(...): any
+---@field sector fun(...): any
+---@field segments fun(...): any
 ---@field shape_curves fun(...): any
 ---@field shape_names Morf.Geometry.Shape_names
 ---@field shape_path fun(...): any
 ---@field shape_segments integer
 ---@field star fun(...): any
+---@field ticks fun(...): any
 
 ---@class Morf.Geometry.Shape_names
 
@@ -680,6 +697,7 @@
 ---@field layer_surface Morf.Window.Layer_surface
 ---@field popup fun(...): any
 ---@field region fun(...): any
+---@field toplevel fun(...): any
 
 ---@class Morf.Window.Layer_surface
 

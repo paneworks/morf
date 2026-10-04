@@ -235,7 +235,7 @@ test.describe("impasto on a screen that is not the focused one", function()
     test.eq(test.ipc("settings", "keys"), nil)
     test.settle(500)
     for _, surface in ipairs(test.surfaces()) do
-      test.ne(surface.kind, "floating", "a settings window opened on the screen at rest")
+      test.ne(surface.kind, "toplevel", "a settings window opened on the screen at rest")
     end
     -- A panel verb is answered by the screen that opens it, not this one.
     test.eq(test.ipc("launcher"), nil)

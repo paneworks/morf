@@ -215,7 +215,7 @@ fn window_blend<'gc>(ctx: Context<'gc>, options: Table<'gc>) -> Result<String, S
 pub(crate) fn parse_floating_surface<'gc>(
     ctx: Context<'gc>,
     options: Table<'gc>,
-) -> Result<(NodeHandle, bool, FloatingSurfaceConfig), String> {
+) -> Result<(NodeHandle, bool, ToplevelSurfaceConfig), String> {
     let root = window_root(ctx, options)?;
     let visible = table_bool(ctx, options, "visible", false)?;
     let parent = window_parent(options.get_value(ctx, "parent"), "floating parent")?;
@@ -236,7 +236,7 @@ pub(crate) fn parse_floating_surface<'gc>(
     Ok((
         root,
         visible,
-        FloatingSurfaceConfig {
+        ToplevelSurfaceConfig {
             parent,
             width: window_u32(ctx, options, "width", 640)?,
             height: window_u32(ctx, options, "height", 480)?,

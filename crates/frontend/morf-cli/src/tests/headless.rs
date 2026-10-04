@@ -139,7 +139,7 @@ fn window_surfaces_are_listed_with_their_sizes() {
         .map(|surface| (surface.label(), surface.size, surface.visible))
         .collect::<Vec<_>>();
     assert!(
-        labels.contains(&("floating:Settings".to_owned(), (300, 200), true)),
+        labels.contains(&("toplevel:Settings".to_owned(), (300, 200), true)),
         "{labels:?}"
     );
     assert!(labels.contains(&("layer:dock".to_owned(), (400, 50), false)));

@@ -155,7 +155,7 @@ pub struct PopupSurfaceConfig {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FloatingSurfaceConfig {
+pub struct ToplevelSurfaceConfig {
     pub parent: Option<u64>,
     pub width: u32,
     pub height: u32,
@@ -177,7 +177,7 @@ pub struct FloatingSurfaceConfig {
 #[derive(Clone, Debug, PartialEq)]
 pub enum WindowSurfaceKind {
     Popup(PopupSurfaceConfig),
-    Floating(FloatingSurfaceConfig),
+    Toplevel(ToplevelSurfaceConfig),
     /// One additional wlr-layer-shell surface beyond the shell's own.
     Layer(LayerSurfaceConfig),
 }

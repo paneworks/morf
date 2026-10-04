@@ -306,7 +306,7 @@ reader asks of it (`"click"`, `"focus"`, `"increment"`, `"decrement"`,
 
 A query is a table of fields that must all equal the node's (`{ id =
 "count" }`, `{ element = "Text", visible = true }`, `{ text = "add one" }`,
-`{ text_contains = "add" }`, `{ surface = "floating" }`), a string (an `id`
+`{ text_contains = "add" }`, `{ surface = "toplevel" }`), a string (an `id`
 or an exact `text`), or a function of the node returning true.
 
 ### Talking to it

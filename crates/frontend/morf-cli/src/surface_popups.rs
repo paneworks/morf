@@ -44,7 +44,7 @@ pub(crate) fn popup_gravity(value: &str) -> Result<PopupGravity, String> {
 pub(crate) fn window_surface_parent(surface: &WindowSurfaceConfig) -> Option<u64> {
     match &surface.kind {
         WindowSurfaceKind::Popup(config) => config.parent,
-        WindowSurfaceKind::Floating(config) => config.parent,
+        WindowSurfaceKind::Toplevel(config) => config.parent,
         WindowSurfaceKind::Layer(_) => None,
     }
 }
@@ -123,7 +123,7 @@ pub(crate) fn popup_parent_role(
         .ok_or_else(|| "popup parent is stale".to_owned())?;
     Ok(match parent.kind {
         WindowSurfaceKind::Popup(_) => WindowId::Popup(parent.id),
-        WindowSurfaceKind::Floating(_) => WindowId::Toplevel(parent.id),
+        WindowSurfaceKind::Toplevel(_) => WindowId::Toplevel(parent.id),
         WindowSurfaceKind::Layer(_) => WindowId::Layer(window_layer_id(parent.id)),
     })
 }

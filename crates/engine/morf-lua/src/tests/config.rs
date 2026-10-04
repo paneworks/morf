@@ -214,7 +214,7 @@ fn general_window_models_validate_popup_and_floating_state() {
                 assert(not popup:grab_focus(false))
                 assert(popup:constraints().resize_x)
                 assert(popup:constraints({ resize_x = false, flip_y = true }).flip_y)
-                assert(floating:kind() == "floating" and not floating:visible())
+                assert(floating:kind() == "toplevel" and not floating:visible())
                 assert(floating:maximized())
                 assert(not floating:fullscreen())
                 assert(floating:fullscreen(true))
@@ -252,7 +252,7 @@ fn general_window_models_validate_popup_and_floating_state() {
     assert!(popup.constraints.flip_y);
     assert!(!popup.grab_focus);
     assert!(surfaces[1].visible);
-    let WindowSurfaceKind::Floating(floating) = &surfaces[1].kind else {
+    let WindowSurfaceKind::Toplevel(floating) = &surfaces[1].kind else {
         panic!("second surface was not floating");
     };
     assert_eq!(floating.title, "Changed");
@@ -330,12 +330,12 @@ fn window_models_keep_multiple_surfaces_independent() {
     assert_eq!(
         surfaces
             .iter()
-            .filter(|surface| matches!(surface.kind, WindowSurfaceKind::Floating(_)))
+            .filter(|surface| matches!(surface.kind, WindowSurfaceKind::Toplevel(_)))
             .count(),
         2
     );
     assert!(surfaces.iter().all(|surface| surface.visible));
-    let WindowSurfaceKind::Floating(second) = &surfaces[1].kind else {
+    let WindowSurfaceKind::Toplevel(second) = &surfaces[1].kind else {
         panic!("second surface was not floating");
     };
     assert_eq!(second.parent, Some(0));

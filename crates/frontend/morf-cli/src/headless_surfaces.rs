@@ -101,9 +101,9 @@ impl Headless {
                     ),
                     config.blend.clone(),
                 ),
-                WindowSurfaceKind::Floating(config) => (
+                WindowSurfaceKind::Toplevel(config) => (
                     WindowId::Toplevel(surface.id),
-                    "floating",
+                    "toplevel",
                     config.title.clone(),
                     (
                         nonzero(config.width, fallback.0),

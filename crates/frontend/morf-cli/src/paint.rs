@@ -559,7 +559,7 @@ impl AuxiliaryKind {
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Popup => "popup",
-            Self::Floating => "floating",
+            Self::Floating => "toplevel",
         }
     }
 

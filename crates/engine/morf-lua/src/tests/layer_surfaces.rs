@@ -111,7 +111,7 @@ fn every_surface_names_the_space_it_blends_in() {
         .map(|surface| match surface.kind {
             WindowSurfaceKind::Layer(config) => config.blend,
             WindowSurfaceKind::Popup(config) => config.blend,
-            WindowSurfaceKind::Floating(config) => config.blend,
+            WindowSurfaceKind::Toplevel(config) => config.blend,
         })
         .collect();
     assert_eq!(blends, ["srgb", "srgb", "linear"]);

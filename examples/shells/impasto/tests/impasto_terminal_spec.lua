@@ -25,7 +25,7 @@ end
 local function floating()
   local count = 0
   for _, surface in ipairs(test.surfaces()) do
-    if surface.kind == "floating" then count = count + 1 end
+    if surface.kind == "toplevel" then count = count + 1 end
   end
   return count
 end

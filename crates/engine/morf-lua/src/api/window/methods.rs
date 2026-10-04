@@ -60,7 +60,7 @@ pub(crate) fn window_size_method<'gc>(
                 .ok_or_else(|| HostError("window destroyed".into()))?;
             let size = match &mut surface.kind {
                 WindowSurfaceKind::Popup(config) => (&mut config.width, &mut config.height),
-                WindowSurfaceKind::Floating(config) => (&mut config.width, &mut config.height),
+                WindowSurfaceKind::Toplevel(config) => (&mut config.width, &mut config.height),
                 WindowSurfaceKind::Layer(config) => (&mut config.width, &mut config.height),
             };
             let before = (*size.0, *size.1);
@@ -339,7 +339,7 @@ pub(crate) fn window_parent_id_method<'gc>(
             .get(&surface.id)
             .map(|surface| match &surface.kind {
                 WindowSurfaceKind::Popup(config) => config.parent,
-                WindowSurfaceKind::Floating(config) => config.parent,
+                WindowSurfaceKind::Toplevel(config) => config.parent,
                 WindowSurfaceKind::Layer(_) => None,
             })
             .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -370,7 +370,7 @@ pub(crate) fn window_set_parent_method<'gc>(
                 .window_surfaces
                 .get(&parent)
                 .ok_or_else(|| HostError("window parent is stale".into()))?;
-            if !matches!(parent_surface.kind, WindowSurfaceKind::Floating(_)) {
+            if !matches!(parent_surface.kind, WindowSurfaceKind::Toplevel(_)) {
                 return Err(HostError("window parent must be a floating surface".into()).into());
             }
             let mut current = Some(parent);
@@ -390,7 +390,7 @@ pub(crate) fn window_set_parent_method<'gc>(
                     .get(&id)
                     .and_then(|surface| match &surface.kind {
                         WindowSurfaceKind::Popup(config) => config.parent,
-                        WindowSurfaceKind::Floating(config) => config.parent,
+                        WindowSurfaceKind::Toplevel(config) => config.parent,
                         WindowSurfaceKind::Layer(_) => None,
                     });
             }
@@ -411,7 +411,7 @@ pub(crate) fn window_set_parent_method<'gc>(
                         HostError("a layer surface cannot have a window parent".into()).into(),
                     );
                 }
-                WindowSurfaceKind::Floating(config) => {
+                WindowSurfaceKind::Toplevel(config) => {
                     if target.visible && config.parent != parent {
                         return Err(HostError(
                             "floating parent cannot change while the window is visible".into(),

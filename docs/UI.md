@@ -1996,7 +1996,7 @@ being kept hidden in a pool. A child window hanging off a destroyed parent
 is not destroyed with it, but with no parent it is never shown.
 
 ```lua
-local dialog = morf.window.floating {
+local dialog = morf.window.toplevel {
   root = build_dialog(), width = 420, height = 200, visible = true,
   on_closed = function() dialog:destroy() end,   -- closed by the compositor
 }
@@ -2021,7 +2021,7 @@ end
 
 ```lua
 local root = ui.Item {}
-local win = morf.window.floating {
+local win = morf.window.toplevel {
   root = root, width = 900, height = 640, title = "Settings",
   on_resize = function(w, h) wide:set(w >= 1200) end,
 }
