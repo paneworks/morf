@@ -42,16 +42,10 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     }
     let removed = nodes.into_iter().collect::<HashSet<_>>();
     for node in &removed {
-        state.retained.retention.unregister(*node);
-        state.retained.retain_callbacks.remove(node);
+        state.retained.forget(node);
         state.states.remove(node);
         state.views.remove(node);
         state.timer_callbacks.remove(node);
-        state.retained.loader_factories.remove(node);
-        state.retained.failed_loaders.remove(node);
-        state.retained.loaded_loaders.remove(node);
-        state.retained.dormant_loaders.remove(node);
-        state.retained.preload_pending.remove(node);
         state.terminals.remove(*node);
         state.images.remove(*node);
         state.linked_texts.remove(node);
@@ -151,12 +145,7 @@ pub(crate) fn finish_retained_destroy(
     limits: Limits,
     node: NodeHandle,
 ) {
-    let callback = state
-        .borrow()
-        .retained
-        .retain_callbacks
-        .get(&node)
-        .and_then(|callbacks| callbacks.about_to_destroy.clone());
+    let callback = state.borrow().retained.about_to_destroy(node);
     if let Some(callback) = callback
         && let Err(error) = execute_handler_args(ctx, &callback, &[], limits)
     {
@@ -263,15 +252,7 @@ pub(crate) fn drop_retainable(
         }
         return;
     }
-    let callback = {
-        let mut state = state.borrow_mut();
-        let _ = state.retained.retention.begin_drop(node);
-        state
-            .retained
-            .retain_callbacks
-            .get(&node)
-            .and_then(|callbacks| callbacks.dropped.clone())
-    };
+    let callback = state.borrow_mut().retained.begin_drop(node);
     if let Some(callback) = callback
         && let Err(error) = execute_handler_args(ctx, &callback, &[], limits)
     {
@@ -279,13 +260,7 @@ pub(crate) fn drop_retainable(
             .borrow_mut()
             .log(LogLevel::Warn, format!("Retainable dropped: {error}"));
     }
-    if state
-        .borrow()
-        .retained
-        .retention
-        .should_destroy(node)
-        .unwrap_or(true)
-    {
+    if state.borrow().retained.should_destroy(node) {
         finish_retained_destroy(state, ctx, limits, node);
     }
 }

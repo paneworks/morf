@@ -52,3 +52,62 @@ impl Default for Retained {
         }
     }
 }
+
+impl Retained {
+    /// Forgets a removed node: its retention, its callbacks and any loader
+    /// bookkeeping it had.
+    pub fn forget(&mut self, node: &NodeHandle) {
+        self.retention.unregister(*node);
+        self.retain_callbacks.remove(node);
+        self.loader_factories.remove(node);
+        self.failed_loaders.remove(node);
+        self.loaded_loaders.remove(node);
+        self.dormant_loaders.remove(node);
+        self.preload_pending.remove(node);
+    }
+
+    /// Starts dropping a retainable: who to tell.
+    pub fn begin_drop(&mut self, node: NodeHandle) -> Option<Handler> {
+        let _ = self.retention.begin_drop(node);
+        self.retain_callbacks
+            .get(&node)
+            .and_then(|callbacks| callbacks.dropped.clone())
+    }
+
+    /// Whether nothing holds a node any more (or it was never held).
+    pub fn should_destroy(&self, node: NodeHandle) -> bool {
+        self.retention.should_destroy(node).unwrap_or(true)
+    }
+
+    /// Who to tell just before a retained node is destroyed.
+    pub fn about_to_destroy(&self, node: NodeHandle) -> Option<Handler> {
+        self.retain_callbacks
+            .get(&node)
+            .and_then(|callbacks| callbacks.about_to_destroy.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use morf_scene::{Element, Scene};
+
+    #[test]
+    fn a_retainable_is_held_until_dropped_and_forgotten_with_its_loader() {
+        let mut scene = Scene::default();
+        let node = scene.create(Element::Item);
+        let mut retained = Retained::default();
+        assert!(retained.should_destroy(node), "never held");
+        retained.retention.register(node);
+        let _ = retained.retention.lock(node);
+        assert!(retained.begin_drop(node).is_none(), "no callback given");
+        assert!(retained.about_to_destroy(node).is_none());
+        assert!(!retained.should_destroy(node), "still locked");
+        let _ = retained.retention.unlock(node);
+        assert!(retained.should_destroy(node));
+        retained.loaded_loaders.insert(node);
+        retained.forget(&node);
+        assert!(retained.loaded_loaders.is_empty());
+        assert!(retained.retention.state(node).is_none());
+    }
+}
