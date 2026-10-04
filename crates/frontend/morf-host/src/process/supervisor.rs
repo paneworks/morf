@@ -1,5 +1,9 @@
+mod outputs;
+mod config;
+mod follow;
+
 use morf_io::{IpcReply, IpcRequest, IpcServer, IpcValue as WireValue};
-use morf_lua::{LogEntry, LogLevel, Runtime, Screen};
+use morf_lua::{LogEntry, LogLevel};
 use morf_app::{LayerClient, Output};
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
@@ -8,10 +12,14 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread::{self};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use crate::socket_path::socket_path;
 use crate::{lock::*, outputless::*, services::*, workers::*};
+
+pub use config::{collect_lua_scripts, execute_config, execute_config_on, runtime_scripts};
+pub use follow::{RELOAD_SETTLE, follow_lua_files, lua_snapshot};
+pub use outputs::{OUTPUTS, known_outputs, lua_screen, lua_screens, named_screens, store_outputs};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LoadPolicy {
@@ -27,7 +35,6 @@ impl Default for LoadPolicy {
         }
     }
 }
-
 
 /// What a worker ends with when the compositor closes its surface -- which is
 /// what a compositor does to every surface on an output it switches off or
@@ -451,271 +458,5 @@ fn bind_shell_socket(tx: &mpsc::Sender<SupervisorMessage>) -> Result<(IpcServer,
     Ok((server, owner))
 }
 
-pub fn named_screens(
-    screens: &[Output],
-) -> Result<BTreeMap<String, Output>, String> {
-    screens
-        .iter()
-        .map(|screen| {
-            screen
-                .name
-                .clone()
-                .map(|name| (name, screen.clone()))
-                .ok_or_else(|| format!("output {} has no compositor name", screen.id))
-        })
-        .collect()
-}
-
-/// Every output the compositor currently advertises, in the order it advertised
-/// them.
-///
-/// One morf process drives every output, one worker thread each, so the output
-/// topology is a fact about the process rather than per-worker state. The
-/// supervisor is the only writer: it seeds this from its probe connection
-/// before the first worker starts and refreshes it whenever a worker reports a
-/// change. Workers read it when they load a configuration, which is what lets
-/// `morf.screens` describe more than the one output a worker draws to.
-pub static OUTPUTS: std::sync::Mutex<Vec<Output>> = std::sync::Mutex::new(Vec::new());
-
-/// Records the compositor's output list, reporting whether it changed.
-pub fn store_outputs(screens: &[Output]) -> bool {
-    let mut outputs = OUTPUTS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if outputs.as_slice() == screens {
-        return false;
-    }
-    outputs.clear();
-    outputs.extend_from_slice(screens);
-    true
-}
-
-/// The recorded output list in the shape `morf.screens` is built from.
-pub fn known_outputs() -> Vec<Screen> {
-    let outputs = OUTPUTS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    lua_screens(&outputs)
-}
-
-/// Converts compositor output descriptions into the Lua-facing shape, keeping
-/// the order the compositor advertised them in.
-pub fn lua_screens(screens: &[Output]) -> Vec<Screen> {
-    screens.iter().map(lua_screen).collect()
-}
-
-/// An output with no compositor name cannot be addressed by a configuration,
-/// but it still occupies the desktop, so it is described with an empty name
-/// rather than dropped from the list.
-pub fn lua_screen(screen: &Output) -> Screen {
-    Screen {
-        id: screen.id,
-        name: screen.name.clone().unwrap_or_default(),
-        make: screen.make.clone(),
-        model: screen.model.clone(),
-        description: screen.description.clone(),
-        position: screen.position,
-        width: screen.size.map(|size| size.0),
-        height: screen.size.map(|size| size.1),
-        physical_size: screen.physical_size,
-        scale: screen.scale,
-        transform: screen.transform.to_owned(),
-    }
-}
-
 /// Where `require` looks, shared with `frame_bench` through morf-lua.
 pub use morf_lua::runtimepath_roots;
-
-pub fn execute_config(
-    runtime: &mut Runtime,
-    path: &Path,
-    source: &[u8],
-    policy: LoadPolicy,
-) -> Result<(), String> {
-    execute_config_on(runtime, path, source, policy, &known_outputs())
-}
-
-/// As [`execute_config`], with `morf.screens` given `screens` rather than
-/// the recorded outputs: the outputless runtime has none by definition.
-pub fn execute_config_on(
-    runtime: &mut Runtime,
-    path: &Path,
-    source: &[u8],
-    policy: LoadPolicy,
-    screens: &[Screen],
-) -> Result<(), String> {
-    let roots = runtimepath_roots(path, policy.external_roots);
-    // Applied before any Lua runs, so a configuration can measure itself
-    // against the whole monitor layout while it loads. Index 1 of
-    // `morf.screens` stays this runtime's own output.
-    if runtime
-        .capabilities()
-        .iter()
-        .any(|value| value == "desktop_canvas=true")
-    {
-        runtime.replace_screens(screens);
-    } else {
-        runtime.set_screens(screens);
-    }
-    runtime.set_module_roots(roots.clone());
-    runtime.set_shell_root(
-        path.parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."))
-            .to_path_buf(),
-    );
-    for plugin in policy
-        .plugins
-        .then(|| runtime_scripts(&roots, "plugin"))
-        .into_iter()
-        .flatten()
-    {
-        match fs::read(&plugin) {
-            Ok(source) => {
-                if let Err(error) = runtime.execute(&plugin.to_string_lossy(), &source) {
-                    eprintln!("morf: plugin {}: {error}", plugin.display());
-                }
-            }
-            Err(error) => eprintln!("morf: plugin {}: {error}", plugin.display()),
-        }
-    }
-    runtime
-        .execute(&path.to_string_lossy(), source)
-        .map_err(|error| error.to_string())?;
-    for after in policy
-        .plugins
-        .then(|| runtime_scripts(&roots, "after/plugin"))
-        .into_iter()
-        .flatten()
-    {
-        match fs::read(&after) {
-            Ok(source) => {
-                if let Err(error) = runtime.execute(&after.to_string_lossy(), &source) {
-                    eprintln!("morf: after plugin {}: {error}", after.display());
-                }
-            }
-            Err(error) => eprintln!("morf: after plugin {}: {error}", after.display()),
-        }
-    }
-    Ok(())
-}
-
-pub fn runtime_scripts(roots: &[PathBuf], directory: &str) -> Vec<PathBuf> {
-    let mut scripts = Vec::new();
-    for root in roots {
-        let mut found = Vec::new();
-        collect_lua_scripts(&root.join(directory), &mut found);
-        found.sort();
-        for path in found {
-            if !scripts.contains(&path) {
-                scripts.push(path);
-            }
-        }
-    }
-    scripts
-}
-
-pub fn collect_lua_scripts(path: &Path, scripts: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(path) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_lua_scripts(&path, scripts);
-        } else if path.extension().and_then(|value| value.to_str()) == Some("lua") {
-            scripts.push(path);
-        }
-    }
-}
-
-/// How long the files must be quiet after a change before it is acted on:
-/// a save, a `git checkout`, a formatter touching every file are one reload.
-pub const RELOAD_SETTLE: Duration = Duration::from_millis(50);
-/// The longest a stream of changes can put a reload off.
-const RELOAD_SETTLE_MAX: Duration = Duration::from_secs(1);
-
-/// Calls `changed` whenever a `.lua` file under `roots` is written, made,
-/// moved or removed, while `enabled` says so; returns when `changed` says to
-/// stop, or when the roots cannot be watched at all.
-///
-/// The roots are watched recursively through the shared inotify thread, so
-/// this sleeps until something under them happens. Every event is only a
-/// reason to look: once the files have been quiet for [`RELOAD_SETTLE`], the
-/// `.lua` snapshot is taken again and compared, and only a difference counts
-/// -- an editor's swap file, a settings file written beside the
-/// configuration, a change made while watching was off, are not reloads.
-pub fn follow_lua_files(
-    roots: &[PathBuf],
-    enabled: &AtomicBool,
-    mut changed: impl FnMut(&BTreeMap<PathBuf, (u64, SystemTime)>) -> bool,
-) {
-    let watches = roots
-        .iter()
-        .filter_map(|root| {
-            morf_io::Watch::new(root, morf_io::WatchOptions { recursive: true }).ok()
-        })
-        .collect::<Vec<_>>();
-    if watches.is_empty() {
-        return;
-    }
-    let mut snapshot = lua_snapshot(roots);
-    loop {
-        morf_io::wait_any(&watches, None);
-        let started = std::time::Instant::now();
-        loop {
-            for watch in &watches {
-                watch.drain();
-            }
-            if started.elapsed() >= RELOAD_SETTLE_MAX
-                || !morf_io::wait_any(&watches, Some(RELOAD_SETTLE))
-            {
-                break;
-            }
-        }
-        for watch in &watches {
-            watch.drain();
-        }
-        let next = lua_snapshot(roots);
-        if next == snapshot {
-            continue;
-        }
-        snapshot = next;
-        if enabled.load(Ordering::Acquire) && !changed(&snapshot) {
-            return;
-        }
-    }
-}
-
-pub fn lua_snapshot(roots: &[PathBuf]) -> BTreeMap<PathBuf, (u64, SystemTime)> {
-    let mut snapshot = BTreeMap::new();
-    let mut pending = roots.to_vec();
-    while let Some(path) = pending.pop() {
-        let Ok(entries) = fs::read_dir(path) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let Ok(kind) = entry.file_type() else {
-                continue;
-            };
-            if kind.is_dir() {
-                pending.push(entry.path());
-                continue;
-            }
-            let path = entry.path();
-            if path.extension().and_then(|value| value.to_str()) != Some("lua") {
-                continue;
-            }
-            if let Ok(metadata) = entry.metadata() {
-                snapshot.insert(
-                    path,
-                    (
-                        metadata.len(),
-                        metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
-                    ),
-                );
-            }
-        }
-    }
-    snapshot
-}
