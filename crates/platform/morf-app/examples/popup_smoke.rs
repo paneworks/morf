@@ -21,8 +21,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bar_node,
                 0.0,
                 0.0,
-                client.logical_size().0 as f64,
-                client.logical_size().1 as f64,
+                client.primary_logical_size().0 as f64,
+                client.primary_logical_size().1 as f64,
                 Color::rgba8(31, 36, 48, 255),
             )],
             layers: Vec::new(),
@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             width: bar_width,
             height: bar_height,
         }],
-        client.scale_120(),
+        client.primary_scale_120(),
     )?;
 
     let (x, y) = popup_anchor(&mut client)?;
@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
     let (width, height) = wait_for_popup(&mut client)?;
-    let scale = client.scale_120();
+    let scale = client.primary_scale_120();
     let physical_width = ((width as u64 * scale as u64).div_ceil(120)) as u32;
     let physical_height = ((height as u64 * scale as u64).div_ceil(120)) as u32;
     let popup_target = client.popup_window_target(0).ok_or("popup was dismissed")?;
@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         scale,
     )?;
     'framed: loop {
-        client.dispatch()?;
+        client.blocking_dispatch()?;
         while let Some(event) = client.next_event() {
             match event {
                 Event::PopupFrame { time_ms, .. } => {
@@ -114,7 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn wait_for_layer(client: &mut LayerClient) -> Result<(), Box<dyn std::error::Error>> {
     loop {
-        client.dispatch()?;
+        client.blocking_dispatch()?;
         while let Some(event) = client.next_event() {
             match event {
                 Event::Configure { .. } => return Ok(()),
@@ -127,10 +127,10 @@ fn wait_for_layer(client: &mut LayerClient) -> Result<(), Box<dyn std::error::Er
 
 fn popup_anchor(client: &mut LayerClient) -> Result<(f64, f64), Box<dyn std::error::Error>> {
     if std::env::var_os("MORF_POPUP_AUTO").is_some() {
-        return Ok((16.0, client.logical_size().1 as f64));
+        return Ok((16.0, client.primary_logical_size().1 as f64));
     }
     loop {
-        client.dispatch()?;
+        client.blocking_dispatch()?;
         while let Some(event) = client.next_event() {
             match event {
                 Event::PointerButton {
@@ -148,7 +148,7 @@ fn popup_anchor(client: &mut LayerClient) -> Result<(f64, f64), Box<dyn std::err
 
 fn wait_for_popup(client: &mut LayerClient) -> Result<(u32, u32), Box<dyn std::error::Error>> {
     loop {
-        client.dispatch()?;
+        client.blocking_dispatch()?;
         while let Some(event) = client.next_event() {
             match event {
                 Event::PopupConfigure { width, height, .. } => return Ok((width, height)),

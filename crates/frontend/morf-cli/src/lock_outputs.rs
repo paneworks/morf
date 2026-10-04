@@ -26,6 +26,7 @@ use morf_scene::{Element, NodeHandle};
 use morf_app::{LayerClient, Output, WindowId};
 
 use crate::{supervisor::lua_screen, surfaces::*};
+use morf_app::Backend as _;
 
 /// One output's lock surface: what draws it, and what it last drew.
 #[derive(Default)]
@@ -236,13 +237,13 @@ pub(crate) fn paint_lock(
     runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
     runtime.observe_stretch(&layout);
     let scene = runtime.scene();
-    client.request_lock_frame(index);
+    client.request_frame(WindowId::Lock(index));
     let scale = client.lock_scale_120(index).unwrap_or(120);
     let damage = renderer
         .render(&scene, &layout, scale, |_| {})
         .map_err(|error| error.to_string())?;
     if damage.is_empty() {
-        client.commit_lock(index);
+        client.commit(WindowId::Lock(index));
     }
     drop(scene);
     // After the render: what the images became is known once they were drawn.

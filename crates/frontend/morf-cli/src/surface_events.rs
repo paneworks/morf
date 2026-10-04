@@ -1,8 +1,10 @@
 use morf_lua::Runtime;
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_app::{LayerClient, Event, PRIMARY_LAYER, WindowId, physical_size};
+use morf_app::Backend as _;
+use morf_app::{Event, LayerClient, PRIMARY_LAYER, WindowId, physical_size};
 use std::sync::mpsc;
 
+use crate::render_target::surface_backend;
 use crate::{
     capture::*, lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*,
     surface_pointer::*, surfaces::*,
@@ -56,7 +58,7 @@ pub(crate) fn handle_surface_event(
                     // all. Where it does, `AuxScale` arrives too and corrects
                     // this with the surface's own.
                     let (width, height) =
-                        physical_size((surface.width, surface.height), client.scale_120());
+                        physical_size((surface.width, surface.height), client.primary_scale_120());
                     renderer.resize(width, height);
                 }
             }
@@ -174,14 +176,9 @@ pub(crate) fn handle_surface_event(
                     renderer.resize(physical_width, physical_height);
                 } else {
                     let target = client
-                        .popup_window_target(id)
+                        .render_target(WindowId::Popup(id))
                         .ok_or_else(|| "configured popup disappeared".to_owned())?;
-                    let backend = pollster::block_on(WgpuBackend::new_surface(
-                        target.clone(),
-                        target.buffer_sink(),
-                        physical_width,
-                        physical_height,
-                    ))
+                    let backend = surface_backend(target, physical_width, physical_height)
                     .map_err(|error| error.to_string())?;
                     surface.renderer = Some(RenderEngine::new(backend));
                 }
@@ -240,14 +237,9 @@ pub(crate) fn handle_surface_event(
                     renderer.resize(physical_width, physical_height);
                 } else {
                     let target = client
-                        .floating_window_target(id)
+                        .render_target(WindowId::Toplevel(id))
                         .ok_or_else(|| "configured floating surface disappeared".to_owned())?;
-                    let backend = pollster::block_on(WgpuBackend::new_surface(
-                        target.clone(),
-                        target.buffer_sink(),
-                        physical_width,
-                        physical_height,
-                    ))
+                    let backend = surface_backend(target, physical_width, physical_height)
                     .map_err(|error| error.to_string())?;
                     surface.renderer = Some(RenderEngine::new(backend));
                 }

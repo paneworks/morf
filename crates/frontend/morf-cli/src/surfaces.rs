@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::{pacing::*, paint::*, surface_layers::*, surface_popups::*};
+use morf_app::{Backend as _, WindowKind};
 
 pub(crate) struct AuxiliarySurface {
     pub(crate) id: u64,
@@ -255,7 +256,7 @@ pub(crate) fn sync_window_surfaces(
     stale_popups.sort_unstable_by(|a, b| b.cmp(a));
     let mut closed = Vec::new();
     for id in stale_popups {
-        client.close_popup(id);
+        client.close(WindowId::Popup(id));
         popups.remove(&id);
         closed.push(id);
     }
@@ -266,7 +267,7 @@ pub(crate) fn sync_window_surfaces(
         .collect::<Vec<_>>();
     stale_floatings.sort_unstable_by(|a, b| b.cmp(a));
     for id in stale_floatings {
-        client.close_floating(id);
+        client.close(WindowId::Toplevel(id));
         floatings.remove(&id);
         closed.push(id);
     }
@@ -284,12 +285,9 @@ pub(crate) fn sync_window_surfaces(
                 .parent
                 .is_some_and(|parent| reopened.contains(&parent));
         if changed {
-            client.close_floating(id);
+            client.close(WindowId::Toplevel(id));
             client
-                .open_floating(
-                    id,
-                    config.parent,
-                    ToplevelConfig {
+                .open(WindowId::Toplevel(id), WindowKind::Toplevel { parent: config.parent, config: ToplevelConfig {
                         width: config.width,
                         height: config.height,
                         minimum_width: config.minimum_width,
@@ -301,8 +299,7 @@ pub(crate) fn sync_window_surfaces(
                         minimized: config.minimized,
                         maximized: config.maximized,
                         fullscreen: config.fullscreen,
-                    },
-                )
+                    } })
                 .map_err(|error| error.to_string())?;
             reopened.insert(id);
             floatings.insert(
@@ -614,7 +611,7 @@ pub(crate) fn connect_runtime_surface(
     open_reserve_layers(&mut client, &config, output)?;
     crate::backdrop::open_backdrop_layer(&mut client, &config, output)?;
     loop {
-        client.dispatch().map_err(|error| error.to_string())?;
+        client.blocking_dispatch().map_err(|error| error.to_string())?;
         while let Some(event) = client.next_event() {
             match event {
                 Event::Configure { id, .. } if id == PRIMARY_LAYER => return Ok(client),

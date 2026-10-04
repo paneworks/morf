@@ -3,6 +3,8 @@ use morf_app::{LayerClient, PRIMARY_LAYER};
 use std::time::Duration;
 
 use crate::{surface_layers::*, surfaces::*};
+use morf_app::Backend as _;
+use morf_app::WindowId;
 
 /// How a surface decides which frame callbacks it can afford to paint on.
 ///
@@ -141,8 +143,8 @@ pub(crate) fn primary_frame(
             // frame has to ask for itself — otherwise the compositor
             // has nothing outstanding, never calls back, and the
             // surface stops dead on the first frame it gives up.
-            client.request_layer_frame(PRIMARY_LAYER);
-            client.commit_layer(PRIMARY_LAYER);
+            client.request_frame(WindowId::Layer(PRIMARY_LAYER));
+            client.commit(WindowId::Layer(PRIMARY_LAYER));
         }
     } else if state.pacer.rest() {
         // The motion landed on a callback the cadence skipped; this is the
@@ -174,8 +176,8 @@ pub(crate) fn primary_frame(
                 surface.needs_paint = true;
                 // Committed, or the request waits for a commit that an idle
                 // surface never makes and the callback never comes.
-                client.request_layer_frame(window_layer_id(surface.id));
-                client.commit_layer(window_layer_id(surface.id));
+                client.request_frame(WindowId::Layer(window_layer_id(surface.id)));
+                client.commit(WindowId::Layer(window_layer_id(surface.id)));
             }
         }
     }

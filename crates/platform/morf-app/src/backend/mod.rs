@@ -71,15 +71,15 @@ pub trait Backend {
     /// The window's scale, in 120ths.
     fn scale_120(&self, id: WindowId) -> u32;
     /// Asks for a frame event when the window may draw again.
-    fn request_frame(&mut self, id: WindowId);
+    fn request_frame(&self, id: WindowId);
     /// Commits the window's pending state.
-    fn commit(&mut self, id: WindowId);
+    fn commit(&self, id: WindowId);
     /// Where the window takes the pointer: `None` is everywhere.
-    fn set_input_region(&mut self, id: WindowId, region: Option<&[InputRect]>);
+    fn set_input_region(&self, id: WindowId, region: Option<&[InputRect]>);
     /// Starts an interactive move of a toplevel. Returns whether it began.
-    fn start_move(&mut self, id: WindowId) -> bool;
+    fn start_move(&self, id: WindowId) -> bool;
     /// Starts an interactive resize of a toplevel from `edge`.
-    fn start_resize(&mut self, id: WindowId, edge: Edge) -> bool;
+    fn start_resize(&self, id: WindowId, edge: Edge) -> bool;
     /// Sets the pointer's shape by its CSS name. Returns whether it could.
     fn set_cursor(&mut self, shape: &str) -> bool;
     /// Locks the session: lock surfaces come, one per output, as events.

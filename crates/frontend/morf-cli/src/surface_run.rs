@@ -8,11 +8,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+use crate::render_target::{primary_target, surface_backend};
 use crate::{
     backdrop::*, capture::*, lock::*, pacing::*, paint::*, services::*, supervisor::*,
     surface_actions::*, surface_events::*, surface_layers::*,
     surface_pointer::answer_new_containment, surfaces::*, wake_plan::*, workers::*,
 };
+use morf_app::Backend as _;
+use morf_app::WindowId;
 
 /// What this output can do, as name = value pairs.
 ///
@@ -26,7 +29,7 @@ fn capabilities_of(
     let mut list = vec![
         ("gpu".to_owned(), info.name.clone()),
         ("gpu_backend".to_owned(), format!("{:?}", info.backend)),
-        ("scale_120".to_owned(), client.scale_120().to_string()),
+        ("scale_120".to_owned(), client.primary_scale_120().to_string()),
     ];
     for (name, supported) in [
         ("desktop_canvas", false),
@@ -161,7 +164,7 @@ fn drive_surface(
     let configuring = Instant::now();
     let mut early_pointer = None;
     'configured: loop {
-        client.dispatch().map_err(|error| error.to_string())?;
+        client.blocking_dispatch().map_err(|error| error.to_string())?;
         while let Some(event) = client.next_event() {
             match event {
                 Event::Configure { id, .. } if id == PRIMARY_LAYER => break 'configured,
@@ -249,12 +252,7 @@ fn drive_surface(
     );
     let gpu = Instant::now();
     let (width, height) = client.physical_size();
-    let backend = pollster::block_on(WgpuBackend::new_surface(
-        client.window_target(),
-        client.window_target().buffer_sink(),
-        width,
-        height,
-    ))
+    let backend = surface_backend(primary_target(&client)?, width, height)
     .map_err(|error| error.to_string())?;
     let mut renderer = RenderEngine::new(backend);
     // Known only now: the protocols came with the connection, the GPU with
@@ -429,12 +427,7 @@ fn drive_surface(
             let mut replacement = connect_runtime_surface(runtime, &name)?;
             replacement.set_idle_timeouts(&runtime.idle_timeouts());
             let (width, height) = replacement.physical_size();
-            let backend = pollster::block_on(WgpuBackend::new_surface(
-                replacement.window_target(),
-                replacement.window_target().buffer_sink(),
-                width,
-                height,
-            ))
+            let backend = surface_backend(primary_target(&replacement)?, width, height)
             .map_err(|error| error.to_string())?;
             renderer = RenderEngine::new(backend);
             // The adapter is new, so every pipeline it held is gone with it.
@@ -618,8 +611,8 @@ fn drive_surface(
                 // Nothing committed, so no callback may be coming: ask for
                 // one, or the owed paint waits for whatever paints next.
                 if client.layer_frame_wait(PRIMARY_LAYER).is_none() {
-                    client.request_layer_frame(PRIMARY_LAYER);
-                    client.commit_layer(PRIMARY_LAYER);
+                    client.request_frame(WindowId::Layer(PRIMARY_LAYER));
+                    client.commit(WindowId::Layer(PRIMARY_LAYER));
                 }
             }
             match painted_frame {

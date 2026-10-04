@@ -19,6 +19,7 @@ mod outputless;
 mod pacing;
 mod paint;
 mod pointer_cursor;
+mod render_target;
 mod runner_args;
 mod runners;
 mod services;

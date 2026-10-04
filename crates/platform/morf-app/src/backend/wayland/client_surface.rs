@@ -55,7 +55,7 @@ impl LayerClient {
     }
 
     /// Requests a compositor callback for the next frame.
-    pub fn request_frame(&self) {
+    pub fn request_primary_frame(&self) {
         self.request_layer_frame(PRIMARY_LAYER);
     }
 
@@ -73,18 +73,18 @@ impl LayerClient {
     }
 
     /// Returns the configured logical dimensions.
-    pub fn logical_size(&self) -> (u32, u32) {
+    pub fn primary_logical_size(&self) -> (u32, u32) {
         self.layer_logical_size(PRIMARY_LAYER).unwrap_or((1, 1))
     }
 
     /// Returns the preferred scale in 120ths.
-    pub fn scale_120(&self) -> u32 {
+    pub fn primary_scale_120(&self) -> u32 {
         self.layer_scale_120(PRIMARY_LAYER).unwrap_or(120)
     }
 
     /// Returns the physical buffer dimensions rounded upward.
     pub fn physical_size(&self) -> (u32, u32) {
-        physical_size(self.logical_size(), self.scale_120())
+        physical_size(self.primary_logical_size(), self.primary_scale_120())
     }
 
     /// The output this client's surface was opened on, as it is now: its

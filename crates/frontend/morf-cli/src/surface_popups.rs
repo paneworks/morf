@@ -1,4 +1,5 @@
 use morf_lua::{PopupSurfaceConfig, WindowSurfaceConfig, WindowSurfaceKind};
+use morf_app::{Backend as _, WindowKind};
 use morf_app::{
     InputRect, LayerClient, PRIMARY_LAYER, PopupAnchor, PopupConfig, PopupConstraints,
     PopupGravity, WindowId,
@@ -141,7 +142,7 @@ pub(crate) fn open_popup_surface(
     popups: &mut HashMap<u64, AuxiliarySurface>,
 ) -> Result<(), String> {
     client
-        .open_popup(surface.id, parent, popup_client_config(config)?)
+        .open(WindowId::Popup(surface.id), WindowKind::Popup { parent: parent, config: popup_client_config(config)? })
         .map_err(|error| error.to_string())?;
     popups.insert(
         surface.id,

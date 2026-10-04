@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let text_input = client.supports_text_input();
     let screencopy = client.supports_screencopy();
     'configured: loop {
-        client.dispatch()?;
+        client.blocking_dispatch()?;
         while let Some(event) = client.next_event() {
             if matches!(event, Event::Configure { .. }) {
                 break 'configured;
@@ -55,8 +55,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bounds: Geometry {
                     x: 0.0,
                     y: 0.0,
-                    width: client.logical_size().0 as f64,
-                    height: client.logical_size().1 as f64,
+                    width: client.primary_logical_size().0 as f64,
+                    height: client.primary_logical_size().1 as f64,
                 },
                 transform: Transform2D::IDENTITY,
                 clip: None,
@@ -109,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
         layers: Vec::new(),
     };
-    client.request_frame();
+    client.request_primary_frame();
     client
         .surface()
         .damage_buffer(0, 0, width as i32, height as i32);
@@ -121,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             width,
             height,
         }],
-        client.scale_120(),
+        client.primary_scale_120(),
     )?;
     // Ask for a blurred backdrop across the whole surface. Whether anything
     // visibly blurs is the compositor's decision — Hyprland, for one, gates it
@@ -143,7 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         client.surface().commit();
     }
     'framed: loop {
-        client.dispatch()?;
+        client.blocking_dispatch()?;
         while let Some(event) = client.next_event() {
             if let Event::Frame { time_ms, .. } = event {
                 let screens = client
@@ -154,9 +154,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .join(",");
                 println!(
                     "{}x{} at {}/120, screens [{}], workspaces [{}], idle {}, inhibit {}, shortcuts {}, power {}, clipboard {}, keyboard {}, input-method {}, text-input {}, capture {}, backdrop-blur {}, windows {}, frame {} ms, {} ({:?})",
-                    client.logical_size().0,
-                    client.logical_size().1,
-                    client.scale_120(),
+                    client.primary_logical_size().0,
+                    client.primary_logical_size().1,
+                    client.primary_scale_120(),
                     screens,
                     client
                         .workspaces()

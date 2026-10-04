@@ -17,6 +17,8 @@ use morf_lua::LayerSurfaceConfig;
 use morf_app::{InputRect, KeyboardFocus, LayerAnchors, LayerClient};
 
 use crate::surfaces::*;
+use morf_app::{Backend as _, WindowKind};
+use morf_app::WindowId;
 
 /// Wayland identifier of the backdrop surface.
 pub(crate) const BACKDROP_LAYER: u64 = u64::MAX - 4;
@@ -47,20 +49,20 @@ pub(crate) fn open_backdrop_layer(
     bar.margin_left = 0;
     bar.keyboard_focus = KeyboardFocus::None;
     client
-        .open_layer(BACKDROP_LAYER, bar)
+        .open(WindowId::Layer(BACKDROP_LAYER), WindowKind::Layer(bar))
         .map_err(|error| error.to_string())?;
-    client.set_layer_input_region(BACKDROP_LAYER, Some(&[]));
+    client.set_input_region(WindowId::Layer(BACKDROP_LAYER), Some(&[]));
     client
         .map_layer_blank(BACKDROP_LAYER)
         .map_err(|error| error.to_string())?;
-    client.commit_layer(BACKDROP_LAYER);
+    client.commit(WindowId::Layer(BACKDROP_LAYER));
     Ok(())
 }
 
 /// Where the shell's own surface sits on its output, in logical pixels: the
 /// hole in the backdrop's input region, so the shell keeps its own clicks.
 fn primary_rect(client: &LayerClient, config: &LayerSurfaceConfig, out: (i32, i32)) -> InputRect {
-    let (width, height) = client.logical_size();
+    let (width, height) = client.primary_logical_size();
     let (width, height) = (width as i32, height as i32);
     let anchors = &config.anchors;
     let x = if anchors.left {
@@ -129,12 +131,12 @@ pub(crate) fn apply_backdrop(client: &mut LayerClient, config: &LayerSurfaceConf
         }
         _ => Vec::new(),
     };
-    client.set_layer_input_region(BACKDROP_LAYER, Some(&regions));
+    client.set_input_region(WindowId::Layer(BACKDROP_LAYER), Some(&regions));
     let dim = if config.backdrop == Some(true) {
         (config.backdrop_dim.clamp(0.0, 1.0) * 255.0) as u8
     } else {
         0
     };
     let _ = client.set_layer_blank_color(BACKDROP_LAYER, dim);
-    client.commit_layer(BACKDROP_LAYER);
+    client.commit(WindowId::Layer(BACKDROP_LAYER));
 }

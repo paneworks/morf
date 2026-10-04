@@ -1,8 +1,9 @@
 use morf_io::IpcIncoming;
 use morf_lua::{Runtime, SessionLockState};
 use morf_value::IpcValue;
-use morf_render::{RenderEngine, WgpuBackend};
-use morf_app::{LayerClient, Event, Output};
+use morf_render::RenderEngine;
+use morf_app::Backend as _;
+use morf_app::{Event, LayerClient, Output, WindowId};
 use std::os::fd::AsFd;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -10,6 +11,7 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use crate::render_target::surface_backend;
 use crate::{
     capture::*, lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*,
     surface_layers::*, surface_pointer::*, surfaces::*, wake_plan::*,
@@ -132,7 +134,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
     let mut client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
     client.set_idle_timeouts(&runtime.idle_timeouts());
     client
-        .begin_session_lock()
+        .lock()
         .map_err(|error| error.to_string())?;
     // Asked for, not yet granted: the compositor says `locked` once every
     // output shows a locked frame, and only then is the session hidden.
@@ -179,7 +181,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
         // finger, a face — is the file's business, not this loop's.
         unlock_pending |= !runtime.layer_surface_config().session_lock;
         if locked && unlock_pending {
-            client.unlock_session().map_err(|error| error.to_string())?;
+            client.unlock().map_err(|error| error.to_string())?;
             runtime.set_session_lock_state(SessionLockState::Unlocked);
             return Ok(());
         }
@@ -262,10 +264,10 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                         // three 4K frames.
                         client.prime_lock(index, root_color_bytes(&runtime, root)?);
                         let target = client
-                            .lock_window_target(index)
+                            .render_target(WindowId::Lock(index))
                             .ok_or_else(|| "configured lock surface disappeared".to_owned())?;
                         let backend =
-                            pollster::block_on(WgpuBackend::new_surface(target.clone(),target.buffer_sink(), width, height))
+                            surface_backend(target, width, height)
                                 .map_err(|error| error.to_string())?;
                         outputs[index].renderer = Some(RenderEngine::new(backend));
                     }

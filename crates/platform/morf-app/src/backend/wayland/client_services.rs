@@ -20,7 +20,7 @@ pub enum Woke {
 
 impl LayerClient {
     /// Blocks until at least one Wayland event is dispatched.
-    pub fn dispatch(&mut self) -> Result<(), WaylandError> {
+    pub fn blocking_dispatch(&mut self) -> Result<(), WaylandError> {
         self.queue
             .blocking_dispatch(&mut self.state)
             .map_err(|error| WaylandError(format!("Wayland dispatch failed: {error}")))?;

@@ -64,7 +64,7 @@ impl Backend for LayerClient {
         self.surface_scale_120(id)
     }
 
-    fn request_frame(&mut self, id: WindowId) {
+    fn request_frame(&self, id: WindowId) {
         match id {
             WindowId::Layer(id) => self.request_layer_frame(id),
             WindowId::Toplevel(id) => self.request_floating_frame(id),
@@ -73,7 +73,7 @@ impl Backend for LayerClient {
         }
     }
 
-    fn commit(&mut self, id: WindowId) {
+    fn commit(&self, id: WindowId) {
         match id {
             WindowId::Layer(id) => self.commit_layer(id),
             WindowId::Lock(index) => self.commit_lock(index),
@@ -90,7 +90,7 @@ impl Backend for LayerClient {
         }
     }
 
-    fn set_input_region(&mut self, id: WindowId, region: Option<&[InputRect]>) {
+    fn set_input_region(&self, id: WindowId, region: Option<&[InputRect]>) {
         // Only layer surfaces take a region from the host; the others take
         // the pointer everywhere.
         if let WindowId::Layer(id) = id {
@@ -98,11 +98,11 @@ impl Backend for LayerClient {
         }
     }
 
-    fn start_move(&mut self, id: WindowId) -> bool {
+    fn start_move(&self, id: WindowId) -> bool {
         matches!(id, WindowId::Toplevel(id) if self.start_floating_move(id))
     }
 
-    fn start_resize(&mut self, id: WindowId, edge: Edge) -> bool {
+    fn start_resize(&self, id: WindowId, edge: Edge) -> bool {
         matches!(id, WindowId::Toplevel(id) if self.start_floating_resize(id, edge))
     }
 

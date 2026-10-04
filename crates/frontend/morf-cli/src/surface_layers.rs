@@ -2,14 +2,17 @@ use morf_lua::{
     LayerSurfaceConfig, Runtime, Toplevel, WindowSurfaceConfig, WindowSurfaceKind, Workspace,
     WorkspaceRequest,
 };
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_render::RenderEngine;
 use morf_app::{
     LayerConfig, KeyboardFocus, LayerAnchors, LayerClient, PRIMARY_LAYER, ShellLayer, ToplevelAction,
     physical_size,
 };
 use std::collections::{HashMap, HashSet};
 
+use crate::render_target::surface_backend;
 use crate::{capture::*, paint::*, services::*, surfaces::*};
+use morf_app::{Backend as _, WindowKind};
+use morf_app::WindowId;
 
 /// Hands every request a configuration has queued to the compositor.
 ///
@@ -206,7 +209,7 @@ pub(crate) fn open_reserve_layers(
     for (index, (edge, thickness)) in config.reserve.edges().into_iter().enumerate() {
         let id = RESERVE_LAYER_BASE + index as u64;
         if thickness == 0 {
-            client.close_layer(id);
+            client.close(WindowId::Layer(id));
             continue;
         }
         let reserve = reserve_bar_config(edge, thickness, output);
@@ -215,13 +218,13 @@ pub(crate) fn open_reserve_layers(
             client
                 .set_layer_geometry(id, &reserve)
                 .map_err(|error| error.to_string())?;
-            client.commit_layer(id);
+            client.commit(WindowId::Layer(id));
             continue;
         }
         client
-            .open_layer(id, reserve)
+            .open(WindowId::Layer(id), WindowKind::Layer(reserve))
             .map_err(|error| error.to_string())?;
-        client.set_layer_input_region(id, Some(&[]));
+        client.set_input_region(WindowId::Layer(id), Some(&[]));
         // A reserver draws nothing, but it still has to map: a compositor
         // computes the output's usable area from the layer surfaces it
         // arranges, and an unmapped one is skipped, so its exclusive zone would
@@ -229,7 +232,7 @@ pub(crate) fn open_reserve_layers(
         client
             .map_layer_blank(id)
             .map_err(|error| error.to_string())?;
-        client.commit_layer(id);
+        client.commit(WindowId::Layer(id));
     }
     Ok(())
 }
@@ -292,7 +295,7 @@ pub(crate) fn sync_layer_surfaces(
         .collect::<Vec<_>>();
     stale.sort_unstable_by(|a, b| b.cmp(a));
     for id in stale {
-        client.close_layer(window_layer_id(id));
+        client.close(WindowId::Layer(window_layer_id(id)));
         layers.remove(&id);
     }
     for surface in desired {
@@ -309,7 +312,7 @@ pub(crate) fn sync_layer_surfaces(
         );
         if update == LayerUpdate::Recreate {
             client
-                .open_layer(window_layer_id(id), runtime_bar_config(config, output)?)
+                .open(WindowId::Layer(window_layer_id(id)), WindowKind::Layer(runtime_bar_config(config, output)?))
                 .map_err(|error| error.to_string())?;
             layers.insert(
                 id,
@@ -385,14 +388,9 @@ pub(crate) fn layer_surface_configure(
         renderer.resize(physical_width, physical_height);
     } else {
         let target = client
-            .layer_window_target(layer)
+            .render_target(WindowId::Layer(layer))
             .ok_or_else(|| "configured layer surface disappeared".to_owned())?;
-        let backend = pollster::block_on(WgpuBackend::new_surface(
-            target.clone(),
-            target.buffer_sink(),
-            physical_width,
-            physical_height,
-        ))
+        let backend = surface_backend(target, physical_width, physical_height)
         .map_err(|error| error.to_string())?;
         surface.renderer = Some(RenderEngine::new(backend));
     }
@@ -458,7 +456,7 @@ pub(crate) fn layer_surface_closed(
     state: &mut SurfaceEventState,
     layer: u64,
 ) {
-    client.close_layer(layer);
+    client.close(WindowId::Layer(layer));
     let Some(id) = window_surface_id(layer) else {
         return;
     };

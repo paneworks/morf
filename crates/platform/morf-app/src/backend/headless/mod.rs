@@ -10,6 +10,7 @@ mod layer;
 mod outputs;
 mod seat;
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::time::Duration;
 
@@ -24,8 +25,6 @@ use crate::{Edge, Event, InputRect, Output, WindowId};
 #[derive(Clone, Debug, PartialEq)]
 struct HeadlessWindow {
     size: (u32, u32),
-    /// Where it takes the pointer: `None` is everywhere.
-    input_region: Option<Vec<InputRect>>,
 }
 
 /// Windows on virtual outputs.
@@ -34,7 +33,11 @@ pub struct HeadlessBackend {
     outputs: Vec<Output>,
     windows: BTreeMap<WindowKey, HeadlessWindow>,
     events: VecDeque<Event>,
-    frames: BTreeSet<WindowKey>,
+    /// The windows that asked for a frame (asked through `&self`, as a
+    /// compositor's frame callback is).
+    frames: RefCell<BTreeSet<WindowKey>>,
+    /// Where each window takes the pointer; absent is everywhere.
+    input_regions: RefCell<BTreeMap<WindowKey, Vec<InputRect>>>,
     /// The clock's reading.
     now: Duration,
     locked: bool,
@@ -114,7 +117,7 @@ impl HeadlessBackend {
     pub fn advance(&mut self, by: Duration) {
         self.now += by;
         let time_ms = self.now.as_millis() as u32;
-        for key in std::mem::take(&mut self.frames) {
+        for key in self.frames.take() {
             if !self.windows.contains_key(&key) {
                 continue;
             }
@@ -129,7 +132,7 @@ impl HeadlessBackend {
 
     fn configure(&mut self, id: WindowId, size: (u32, u32)) {
         let (width, height) = size;
-        self.windows.insert(id.into(), HeadlessWindow { size, input_region: None });
+        self.windows.insert(id.into(), HeadlessWindow { size });
         self.events.push_back(match id {
             WindowId::Layer(id) => Event::Configure { id, width, height },
             WindowId::Toplevel(id) => Event::ToplevelConfigure { id, width, height },
@@ -139,8 +142,8 @@ impl HeadlessBackend {
     }
 
     /// The input region a window was last given.
-    pub fn input_region(&self, id: WindowId) -> Option<&[InputRect]> {
-        self.windows.get(&id.into())?.input_region.as_deref()
+    pub fn input_region(&self, id: WindowId) -> Option<Vec<InputRect>> {
+        self.input_regions.borrow().get(&id.into()).cloned()
     }
 }
 
@@ -191,7 +194,8 @@ impl Backend for HeadlessBackend {
 
     fn close(&mut self, id: WindowId) {
         self.windows.remove(&id.into());
-        self.frames.remove(&id.into());
+        self.frames.borrow_mut().remove(&id.into());
+        self.input_regions.borrow_mut().remove(&id.into());
     }
 
     fn logical_size(&self, id: WindowId) -> Option<(u32, u32)> {
@@ -204,23 +208,28 @@ impl Backend for HeadlessBackend {
             .map_or(120, |output| output.scale.max(1) as u32 * 120)
     }
 
-    fn request_frame(&mut self, id: WindowId) {
-        self.frames.insert(id.into());
+    fn request_frame(&self, id: WindowId) {
+        self.frames.borrow_mut().insert(id.into());
     }
 
-    fn commit(&mut self, _id: WindowId) {}
+    fn commit(&self, _id: WindowId) {}
 
-    fn set_input_region(&mut self, id: WindowId, region: Option<&[InputRect]>) {
-        if let Some(window) = self.windows.get_mut(&id.into()) {
-            window.input_region = region.map(<[InputRect]>::to_vec);
+    fn set_input_region(&self, id: WindowId, region: Option<&[InputRect]>) {
+        if !self.windows.contains_key(&id.into()) {
+            return;
         }
+        let mut regions = self.input_regions.borrow_mut();
+        match region {
+            Some(region) => regions.insert(id.into(), region.to_vec()),
+            None => regions.remove(&id.into()),
+        };
     }
 
-    fn start_move(&mut self, id: WindowId) -> bool {
+    fn start_move(&self, id: WindowId) -> bool {
         matches!(id, WindowId::Toplevel(_)) && self.windows.contains_key(&id.into())
     }
 
-    fn start_resize(&mut self, id: WindowId, _edge: Edge) -> bool {
+    fn start_resize(&self, id: WindowId, _edge: Edge) -> bool {
         self.start_move(id)
     }
 

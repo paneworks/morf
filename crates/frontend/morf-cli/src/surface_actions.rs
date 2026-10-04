@@ -5,6 +5,8 @@ use morf_app::{Edge, LayerClient};
 use std::collections::HashMap;
 
 use crate::surfaces::*;
+use morf_app::Backend as _;
+use morf_app::WindowId;
 
 pub(crate) fn apply_window_surface_actions(
     runtime: &mut Runtime,
@@ -14,7 +16,7 @@ pub(crate) fn apply_window_surface_actions(
     for action in runtime.take_window_surface_actions() {
         match action {
             WindowSurfaceAction::Move { id } if floatings.contains_key(&id) => {
-                client.start_floating_move(id);
+                client.start_move(WindowId::Toplevel(id));
             }
             WindowSurfaceAction::Resize { id, edge } if floatings.contains_key(&id) => {
                 let edge = match edge.as_str() {
@@ -28,7 +30,7 @@ pub(crate) fn apply_window_surface_actions(
                     "bottom_right" => Edge::BottomRight,
                     _ => continue,
                 };
-                client.start_floating_resize(id, edge);
+                client.start_resize(WindowId::Toplevel(id), edge);
             }
             WindowSurfaceAction::Move { .. } | WindowSurfaceAction::Resize { .. } => {}
         }
@@ -45,7 +47,7 @@ pub(crate) fn apply_parent_transitions(
         return Ok(());
     }
     let root = primary_surface_root(runtime)?;
-    let (width, height) = client.logical_size();
+    let (width, height) = client.primary_logical_size();
     let available = Size {
         width: width as f64,
         height: height as f64,

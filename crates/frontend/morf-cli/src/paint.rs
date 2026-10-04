@@ -6,6 +6,7 @@ use morf_scene::NodeHandle;
 use morf_app::{InputRect, LayerClient, PRIMARY_LAYER, WindowId, physical_size};
 
 use crate::{surface_layers::*, surfaces::*};
+use morf_app::Backend as _;
 
 pub(crate) fn paint(
     runtime: &mut Runtime,
@@ -323,7 +324,7 @@ pub(crate) fn paint_layer(
             })
             .collect::<Vec<_>>();
         if cache.as_deref().is_none_or(|cached| cached.input != input) {
-            client.set_layer_input_region(layer, Some(&input));
+            client.set_input_region(WindowId::Layer(layer), Some(&input));
         }
         input
     };
@@ -387,7 +388,7 @@ pub(crate) fn paint_layer(
     }
 
     split.mark("backdrop region");
-    client.request_layer_frame(layer);
+    client.request_frame(WindowId::Layer(layer));
     let surface = client
         .layer_surface(layer)
         .ok_or_else(|| "layer surface disappeared while painting".to_owned())?;
@@ -441,7 +442,7 @@ pub(crate) fn paint_layer(
         );
     }
     if damage.is_empty() {
-        client.commit_layer(layer);
+        client.commit(WindowId::Layer(layer));
     }
     // After the frame is on its way, and only when nothing moves: text laid
     // out but hidden -- a preloaded panel -- gets its glyphs made now, so
@@ -564,8 +565,8 @@ impl AuxiliaryKind {
 
     pub(crate) fn request_frame(self, client: &LayerClient, id: u64) {
         match self {
-            Self::Popup => client.request_popup_frame(id),
-            Self::Floating => client.request_floating_frame(id),
+            Self::Popup => client.request_frame(WindowId::Popup(id)),
+            Self::Floating => client.request_frame(WindowId::Toplevel(id)),
         }
     }
 
