@@ -14,6 +14,9 @@
 use smithay_client_toolkit::shm::slot::SlotPool;
 use wayland_client::protocol::wl_shm;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
+
+use super::{ScreencopyFormat, ScreencopyFrame};
+use crate::{DesktopEvent, DesktopState};
 use wayland_protocols::ext::image_capture_source::v1::client::{
     ext_foreign_toplevel_image_capture_source_manager_v1::ExtForeignToplevelImageCaptureSourceManagerV1,
     ext_image_capture_source_v1::ExtImageCaptureSourceV1,
@@ -25,17 +28,14 @@ use wayland_protocols::ext::image_copy_capture::v1::client::{
     ext_image_copy_capture_session_v1::{self, ExtImageCopyCaptureSessionV1},
 };
 
-use crate::backend::wayland::state_types::LayerState;
-use crate::backend::wayland::surface_types::Event;
-use crate::backend::wayland::types::{ScreencopyFormat, ScreencopyFrame};
 
 // The factories and the source handle say nothing back.
-wayland_client::delegate_noop!(LayerState: ignore ExtImageCopyCaptureManagerV1);
-wayland_client::delegate_noop!(LayerState: ignore ExtOutputImageCaptureSourceManagerV1);
-wayland_client::delegate_noop!(LayerState: ignore ExtForeignToplevelImageCaptureSourceManagerV1);
-wayland_client::delegate_noop!(LayerState: ignore ExtImageCaptureSourceV1);
+wayland_client::delegate_noop!(DesktopState: ignore ExtImageCopyCaptureManagerV1);
+wayland_client::delegate_noop!(DesktopState: ignore ExtOutputImageCaptureSourceManagerV1);
+wayland_client::delegate_noop!(DesktopState: ignore ExtForeignToplevelImageCaptureSourceManagerV1);
+wayland_client::delegate_noop!(DesktopState: ignore ExtImageCaptureSourceV1);
 
-impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for LayerState {
+impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for DesktopState {
     /// The session describing what it can produce.
     ///
     /// `buffer_size` and `shm_format` may each arrive more than once and mean
@@ -98,7 +98,7 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for LayerState {
     }
 }
 
-impl Dispatch<ExtImageCopyCaptureFrameV1, ()> for LayerState {
+impl Dispatch<ExtImageCopyCaptureFrameV1, ()> for DesktopState {
     /// The frame either arrives or does not.
     fn event(
         state: &mut Self,
@@ -135,7 +135,7 @@ fn dev_t_of(bytes: &[u8]) -> Option<u64> {
     Some(u64::from_ne_bytes(array))
 }
 
-impl LayerState {
+impl DesktopState {
     /// Allocates against what the session offered and asks for the picture.
     pub(crate) fn begin_capture_frame(&mut self, index: usize, queue: &QueueHandle<Self>) {
         if self.captures[index].started {
@@ -196,7 +196,7 @@ impl LayerState {
                     width,
                     height,
                     stride: 0,
-                    format: if fourcc == crate::backend::wayland::capture_dmabuf::FOURCC_XRGB8888 {
+                    format: if fourcc == super::dmabuf::FOURCC_XRGB8888 {
                         ScreencopyFormat::Xrgb8888
                     } else {
                         ScreencopyFormat::Argb8888
@@ -232,7 +232,7 @@ impl LayerState {
             })
         })();
         capture.session.destroy();
-        self.events.push_back(Event::Screencopy {
+        self.events.push_back(DesktopEvent::Screencopy {
             request_id,
             result: result.map_err(str::to_owned),
         });
@@ -251,7 +251,7 @@ impl LayerState {
             buffer.destroy();
         }
         capture.session.destroy();
-        self.events.push_back(Event::Screencopy {
+        self.events.push_back(DesktopEvent::Screencopy {
             request_id: capture.request_id,
             result: Err(error),
         });

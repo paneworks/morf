@@ -162,7 +162,7 @@ fn drive_outputless(
                     .wait_for(timeout, Some(wake.as_fd()))
                     .map_err(|error| error.to_string())?;
                 if let Some(desktop) = desktop.as_mut() {
-                    dispatch_desktop(runtime, desktop)?;
+                    dispatch_desktop(runtime, desktop, None)?;
                 }
                 log_wake(OUTPUTLESS, woke, &sleep, slept);
             }

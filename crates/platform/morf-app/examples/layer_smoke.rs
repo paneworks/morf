@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let virtual_keyboard = client.supports_virtual_keyboard();
     let input_method = client.supports_input_method();
     let text_input = client.supports_text_input();
-    let screencopy = client.supports_screencopy();
+    let screencopy = desktop.supports_screencopy();
     'configured: loop {
         client.blocking_dispatch()?;
         while let Some(event) = client.next_event() {
@@ -185,8 +185,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // difference is the difference between a screenshot and an
                     // overview.
                     match (
-                        client.supports_window_capture(),
-                        client.supports_image_capture(),
+                        desktop.supports_window_capture(),
+                        desktop.supports_image_capture(),
                         screencopy,
                     ) {
                         (true, _, _) => "ext+window",
@@ -204,12 +204,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // rather than just whether the protocol is there: the
                     // global being advertised and the list actually arriving
                     // are different claims, and only the second is useful.
-                    if client.supports_toplevels() {
+                    if desktop.supports_toplevels() {
                         // Controllable is the second claim worth making: the
                         // enumeration protocol reports no state and offers no
                         // requests, so a window is only actionable if it also
                         // matched a handle in the control protocol.
-                        let windows = client.toplevels();
+                        let windows = desktop.toplevels();
                         format!(
                             "{} ({} controllable, {} active)",
                             windows.len(),

@@ -7,7 +7,7 @@ use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shm::{Shm, ShmHandler};
 use smithay_client_toolkit::{delegate_registry, registry_handlers};
 use wayland_client::protocol::{wl_output, wl_region, wl_surface};
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
+use wayland_client::{Connection, Dispatch, QueueHandle};
 use wayland_protocols::ext::background_effect::v1::client::{
     ext_background_effect_manager_v1::{self, ExtBackgroundEffectManagerV1},
     ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1,
@@ -30,10 +30,6 @@ use wayland_protocols_misc::zwp_input_method_v2::client::{
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
     zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
-};
-use wayland_protocols_wlr::screencopy::v1::client::{
-    zwlr_screencopy_frame_v1::{self, ZwlrScreencopyFrameV1},
-    zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1,
 };
 
 use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*};
@@ -239,80 +235,6 @@ impl Dispatch<WpFractionalScaleV1, WindowId> for LayerState {
     }
 }
 
-impl Dispatch<ZwlrScreencopyFrameV1, ()> for LayerState {
-    fn event(
-        state: &mut Self,
-        proxy: &ZwlrScreencopyFrameV1,
-        event: zwlr_screencopy_frame_v1::Event,
-        _data: &(),
-        _connection: &Connection,
-        _qh: &QueueHandle<Self>,
-    ) {
-        match event {
-            zwlr_screencopy_frame_v1::Event::Buffer {
-                format,
-                width,
-                height,
-                stride,
-            } => {
-                let format = match format {
-                    wayland_client::WEnum::Value(format) => format,
-                    wayland_client::WEnum::Unknown(value) => {
-                        state.fail_screencopy(proxy, format!("unknown screencopy format {value}"));
-                        return;
-                    }
-                };
-                if let Some(pending) = state
-                    .screencopies
-                    .iter_mut()
-                    .find(|pending| pending.frame == *proxy)
-                {
-                    pending.offer = Some((format, width, height, stride));
-                }
-                if proxy.version() < 3
-                    && let Err(error) = state.start_screencopy(proxy)
-                {
-                    state.fail_screencopy(proxy, error);
-                }
-            }
-            zwlr_screencopy_frame_v1::Event::BufferDone => {
-                if let Err(error) = state.start_screencopy(proxy) {
-                    state.fail_screencopy(proxy, error);
-                }
-            }
-            zwlr_screencopy_frame_v1::Event::Flags { flags } => {
-                if let wayland_client::WEnum::Value(flags) = flags
-                    && let Some(pending) = state
-                        .screencopies
-                        .iter_mut()
-                        .find(|pending| pending.frame == *proxy)
-                {
-                    pending.y_invert = flags.contains(zwlr_screencopy_frame_v1::Flags::YInvert);
-                }
-            }
-            zwlr_screencopy_frame_v1::Event::Ready { .. } => {
-                let Some(request_id) = state
-                    .screencopies
-                    .iter()
-                    .find(|pending| pending.frame == *proxy)
-                    .map(|pending| pending.request_id)
-                else {
-                    return;
-                };
-                let result = state.finish_screencopy(proxy);
-                proxy.destroy();
-                state
-                    .events
-                    .push_back(Event::Screencopy { request_id, result });
-            }
-            zwlr_screencopy_frame_v1::Event::Failed => {
-                state.fail_screencopy(proxy, "compositor rejected screencopy".to_owned());
-            }
-            _ => {}
-        }
-    }
-}
-
 impl Dispatch<ZwpInputMethodV2, ()> for LayerState {
     fn event(
         state: &mut Self,
@@ -441,7 +363,6 @@ delegate_registry!(LayerState);
 smithay_client_toolkit::delegate_dispatch2!(LayerState);
 wayland_client::delegate_noop!(LayerState: ignore WpFractionalScaleManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore WpViewporter);
-wayland_client::delegate_noop!(LayerState: ignore ZwlrScreencopyManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore ZwpVirtualKeyboardManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore ZwpVirtualKeyboardV1);
 wayland_client::delegate_noop!(LayerState: ignore ZwpInputMethodManagerV2);

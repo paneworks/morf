@@ -93,6 +93,15 @@ impl LayerClient {
         self.connection.clone()
     }
 
+    /// The primary layer surface's `wl_surface`, when there is one (a probe
+    /// connection has none).
+    pub fn primary_surface(&self) -> Option<wl_surface::WlSurface> {
+        self.state
+            .layers
+            .get(&crate::backend::wayland::PRIMARY_LAYER)
+            .map(|layer| layer.surface.wl_surface().clone())
+    }
+
     /// The output this client's surface was opened on, as it is now: its
     /// transform and subpixel layout decide how text may be drawn on it.
     pub fn own_output(&self) -> Option<Output> {

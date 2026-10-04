@@ -3,7 +3,7 @@ use rustix::fd::BorrowedFd;
 use rustix::time::Timespec;
 use std::time::Duration;
 
-use crate::backend::wayland::{state_types::*, surface_types::*, types::*};
+use crate::backend::wayland::surface_types::*;
 
 /// What ended a [`LayerClient::wait_for`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,54 +131,6 @@ impl LayerClient {
         fired
     }
 
-    /// What can be done to another window, by identifier.
-    ///
-    /// One entry point rather than five methods, because every one of them is
-    /// the same lookup followed by one request, and the lookup is the part that
-    /// can fail. `false` means the window is not controllable — see
-    /// [`ToplevelInfo::controllable`].
-    pub fn control_toplevel(&mut self, identifier: &str, action: ToplevelAction) -> bool {
-        if !self.supports_toplevel_control() {
-            return false;
-        }
-        let Some(handle) = self.toplevel_control_handle(identifier) else {
-            return false;
-        };
-        match action {
-            ToplevelAction::Activate => {
-                // Activation is scoped to a seat: the protocol wants to know
-                // *whose* focus is moving, and a client with no seat has no
-                // business moving anybody's.
-                let Some(seat) = self.state.seats.seats().next() else {
-                    return false;
-                };
-                handle.activate(&seat);
-            }
-            ToplevelAction::Close => handle.close(),
-            ToplevelAction::Maximized(true) => handle.set_maximized(),
-            ToplevelAction::Maximized(false) => handle.unset_maximized(),
-            ToplevelAction::Minimized(true) => handle.set_minimized(),
-            ToplevelAction::Minimized(false) => handle.unset_minimized(),
-            ToplevelAction::Fullscreen(true) => handle.set_fullscreen(None),
-            ToplevelAction::Fullscreen(false) => handle.unset_fullscreen(),
-            ToplevelAction::MinimizeTarget {
-                x,
-                y,
-                width,
-                height,
-            } => {
-                // Relative to the shell's own primary surface: that is where
-                // the task bar is, and a rectangle on any other surface would
-                // be a window flying towards the wrong thing.
-                let Some(layer) = self.state.layers.get(&crate::backend::wayland::PRIMARY_LAYER) else {
-                    return false;
-                };
-                handle.set_rectangle(layer.surface.wl_surface(), x, y, width, height);
-            }
-        }
-        true
-    }
-
     /// Holds the compositor's shortcuts off the shell, and reports whether
     /// the compositor speaks the protocol at all -- whether it *agrees* comes
     /// later, as `Event::ShortcutsInhibited`.
@@ -186,37 +138,6 @@ impl LayerClient {
         self.state
             .set_shortcuts_inhibited(inhibited, &self.queue.handle());
         self.state.shortcuts_inhibit_manager.is_some()
-    }
-
-    /// Whether this compositor lets a client act on other windows at all.
-    ///
-    /// Separate from a window's own `controllable`, which additionally says
-    /// whether *that* window was matched to a handle.
-    pub fn supports_toplevel_control(&self) -> bool {
-        self.state.toplevel_control_manager.is_some()
-    }
-
-    /// Finds the control handle for a window named by the enumeration protocol.
-    ///
-    /// Matched on application and title, because nothing correlates the two
-    /// protocols' handles — see the module note on `toplevel_control`.
-    fn toplevel_control_handle(
-        &self,
-        identifier: &str,
-    ) -> Option<&wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1>
-    {
-        let listed = self
-            .state
-            .toplevels
-            .values()
-            .find(|info| info.identifier == identifier)?;
-        let key = self
-            .state
-            .toplevel_controls
-            .iter()
-            .find(|(_, control)| control.app_id == listed.app_id && control.title == listed.title)
-            .map(|(key, _)| key)?;
-        self.state.toplevel_control_handles.get(key)
     }
 
     /// One surface's scale in 120ths, whatever kind of surface it is.
@@ -254,112 +175,6 @@ impl LayerClient {
         self.state.idle_inhibit_manager.is_some()
     }
 
-    /// Starts an asynchronous capture of the named output, or of the
-    /// configured or first one.
-    pub fn capture_output(
-        &mut self,
-        request_id: u64,
-        include_cursor: bool,
-        output: Option<&str>,
-    ) -> bool {
-        let Some(output) = self.capture_target(output) else {
-            return false;
-        };
-        let Some(manager) = &self.state.screencopy_manager else {
-            return false;
-        };
-        if self.state.shm.is_none() || self.state.screencopies.len() >= 4 {
-            return false;
-        }
-        let frame =
-            manager.capture_output(i32::from(include_cursor), &output, &self.queue.handle(), ());
-        self.state.screencopies.push(PendingScreencopy {
-            request_id,
-            frame,
-            offer: None,
-            pool: None,
-            buffer: None,
-            format: None,
-            y_invert: false,
-        });
-        true
-    }
-
-    /// Returns whether shared-memory output capture is available.
-    /// Every window the compositor currently knows about.
-    ///
-    /// Sorted by identifier so the order is the same on two consecutive calls:
-    /// the protocol makes no promise about it, and a list that reshuffles under
-    /// a person's cursor is worse than one in an arbitrary but stable order.
-    ///
-    /// Windows still being described are left out. A handle arrives before its
-    /// title does, and a task switcher showing a blank row for half a frame is
-    /// a worse answer than showing nothing for that frame.
-    pub fn toplevels(&self) -> Vec<ToplevelInfo> {
-        let mut toplevels: Vec<ToplevelInfo> = self
-            .state
-            .toplevels
-            .values()
-            .filter(|toplevel| !toplevel.identifier.is_empty())
-            .cloned()
-            .collect();
-        // The control protocol's view folded onto the enumeration's, matched on
-        // application and title. A window with no match keeps its defaults and
-        // stays `controllable: false`, which is the honest answer: the state is
-        // not false, it is unknown.
-        let identifiers: Vec<(String, String, String)> = toplevels
-            .iter()
-            .map(|toplevel| {
-                (
-                    toplevel.app_id.clone(),
-                    toplevel.title.clone(),
-                    toplevel.identifier.clone(),
-                )
-            })
-            .collect();
-        for toplevel in &mut toplevels {
-            let Some(control) = self.state.toplevel_controls.values().find(|control| {
-                control.app_id == toplevel.app_id && control.title == toplevel.title
-            }) else {
-                continue;
-            };
-            toplevel.activated = control.activated;
-            toplevel.maximized = control.maximized;
-            toplevel.minimized = control.minimized;
-            toplevel.fullscreen = control.fullscreen;
-            toplevel.controllable = true;
-            toplevel.outputs = control
-                .outputs
-                .iter()
-                .filter_map(|output| self.state.outputs.info(output).and_then(|info| info.name))
-                .collect();
-            // The parent is a control handle; its window is found the way this
-            // one was, by application and title.
-            toplevel.parent = control
-                .parent
-                .as_ref()
-                .and_then(|parent| self.state.toplevel_controls.get(parent))
-                .and_then(|parent| {
-                    identifiers
-                        .iter()
-                        .find(|(app_id, title, _)| {
-                            *app_id == parent.app_id && *title == parent.title
-                        })
-                        .map(|(_, _, identifier)| identifier.clone())
-                });
-        }
-        toplevels.sort_by(|a, b| a.identifier.cmp(&b.identifier));
-        toplevels
-    }
-
-    /// Whether the window list changed since this was last called.
-    ///
-    /// Taking the flag rather than reading it, so a caller that acts on a
-    /// change cannot act on it twice.
-    pub fn take_toplevels_changed(&mut self) -> bool {
-        std::mem::take(&mut self.state.toplevels_changed)
-    }
-
     /// Whether the compositor speaks layer-shell at all. Without it the
     /// shell's surface is an ordinary window, and there is no edge to hold,
     /// nothing to reserve and nothing to put a backdrop under.
@@ -373,15 +188,6 @@ impl LayerClient {
     /// only with neither, when each would be a window of its own.
     pub fn supports_layer_surfaces(&self) -> bool {
         self.state.layer_shell.is_some() || self.state.subcompositor.is_some()
-    }
-
-    /// Whether the compositor reports its windows at all.
-    pub fn supports_toplevels(&self) -> bool {
-        self.state.toplevel_list.is_some()
-    }
-
-    pub fn supports_screencopy(&self) -> bool {
-        self.state.screencopy_manager.is_some() && self.state.shm.is_some()
     }
 
     /// Publishes UTF-8 text to the clipboard after a compositor input serial is available.

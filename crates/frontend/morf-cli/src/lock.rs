@@ -14,7 +14,7 @@ use std::time::Instant;
 use crate::desktop::{desktop_for, dispatch_desktop};
 use crate::render_target::surface_backend;
 use crate::{
-    capture::*, lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*,
+    lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*,
     surface_layers::*, surface_pointer::*, surfaces::*, wake_plan::*,
 };
 
@@ -171,7 +171,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
         let woke = client
             .wait_for(sleep.timeout(), Some(wake.as_fd()))
             .map_err(|error| error.to_string())?;
-        let desktop_repaint = dispatch_desktop(&mut runtime, &mut desktop)?;
+        let desktop_repaint = dispatch_desktop(&mut runtime, &mut desktop, None)?;
         wake.drain();
         log_wake("lock", woke, &sleep, slept);
         let mut repaint =
@@ -342,31 +342,6 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                 }
                 Event::OfferRead { request_id, result } => {
                     repaint |= runtime.dispatch_offer_read(request_id, result);
-                }
-                Event::Screencopy { request_id, result } => {
-                    repaint |= dispatch_screencopy(&mut runtime, None, request_id, result);
-                }
-                Event::CaptureOffer {
-                    request_id,
-                    width,
-                    height,
-                    device,
-                    formats,
-                } => {
-                    // A lock screen draws one renderer per output, none of
-                    // them the one a capture would name: shared memory.
-                    repaint |= answer_capture_offer(
-                        &mut runtime,
-                        None,
-                        &mut client,
-                        OfferedCapture {
-                            request_id,
-                            width,
-                            height,
-                            device,
-                            formats,
-                        },
-                    );
                 }
                 Event::InputMethod(state) => {
                     repaint |= runtime.dispatch_input_method(

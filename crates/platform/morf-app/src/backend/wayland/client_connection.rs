@@ -15,12 +15,6 @@ use std::time::Instant;
 use wayland_client::Connection;
 use wayland_client::globals::registry_queue_init;
 use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
-use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
-use wayland_protocols::ext::image_capture_source::v1::client::{
-    ext_foreign_toplevel_image_capture_source_manager_v1::ExtForeignToplevelImageCaptureSourceManagerV1,
-    ext_output_image_capture_source_manager_v1::ExtOutputImageCaptureSourceManagerV1,
-};
-use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_capture_manager_v1::ExtImageCopyCaptureManagerV1;
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1;
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
 use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1;
@@ -29,9 +23,6 @@ use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1:
 use wayland_protocols::wp::viewporter::client::wp_viewporter::WpViewporter;
 use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_method_manager_v2::ZwpInputMethodManagerV2;
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1;
-use wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1;
-use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
-use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1;
 
 use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*};
 
@@ -96,11 +87,6 @@ impl LayerClient {
         let shortcuts_inhibit_manager = globals
             .bind::<ZwpKeyboardShortcutsInhibitManagerV1, _, _>(&qh, 1..=1, ())
             .ok();
-        // Version 3 where offered, for `set_fullscreen`; 1 is enough for
-        // activate, close and the maximize/minimize pair.
-        let toplevel_control_manager = globals
-            .bind::<ZwlrForeignToplevelManagerV1, _, _>(&qh, 1..=3, ())
-            .ok();
         let data_device_manager = DataDeviceManagerState::bind(&globals, &qh).ok();
         let virtual_keyboard_manager = globals
             .bind::<ZwpVirtualKeyboardManagerV1, _, _>(&qh, 1..=1, ())
@@ -118,31 +104,6 @@ impl LayerClient {
         let background_effect = globals
             .bind::<ExtBackgroundEffectManagerV1, _, _>(&qh, 1..=1, ())
             .ok();
-        // Every window the compositor knows about, and it tells us as they come
-        // and go. A task switcher or an overview needs this list before it can
-        // ask for a capture of anything in it.
-        let toplevel_list = globals
-            .bind::<ExtForeignToplevelListV1, _, _>(&qh, 1..=1, ())
-            .ok();
-        // The newer capture protocol, and the two things that name what to
-        // capture. Bound separately because a compositor may offer the copy
-        // machinery and only one kind of source.
-        let capture_manager = globals
-            .bind::<ExtImageCopyCaptureManagerV1, _, _>(&qh, 1..=1, ())
-            .ok();
-        let output_source_manager = globals
-            .bind::<ExtOutputImageCaptureSourceManagerV1, _, _>(&qh, 1..=1, ())
-            .ok();
-        let toplevel_source_manager = globals
-            .bind::<ExtForeignToplevelImageCaptureSourceManagerV1, _, _>(&qh, 1..=1, ())
-            .ok();
-        let screencopy_manager = globals
-            .bind::<ZwlrScreencopyManagerV1, _, _>(&qh, 1..=3, ())
-            .ok();
-        // Version 2 is where `create_immed` arrived, and nothing newer is
-        // needed: the capture session, not this global, says which formats
-        // a capture can use.
-        let linux_dmabuf = globals.bind::<ZwpLinuxDmabufV1, _, _>(&qh, 2..=5, ()).ok();
         let session_locks = SessionLockState::new(&globals, &qh);
         let has_session_lock = globals.contents().with_list(|list| {
             list.iter()
@@ -187,9 +148,6 @@ impl LayerClient {
             shortcuts_inhibit_manager,
             shortcuts_inhibitors: HashMap::new(),
             shortcuts_inhibit: Default::default(),
-            toplevel_control_manager,
-            toplevel_controls: HashMap::new(),
-            toplevel_control_handles: HashMap::new(),
             aux_scales: HashMap::new(),
             data_device_manager,
             data_devices: Vec::new(),
@@ -223,21 +181,10 @@ impl LayerClient {
             text_input_pending: TextInputState::default(),
             output_power_target: None,
             shm,
-            screencopy_manager,
-            toplevel_list,
-            toplevels: HashMap::new(),
-            toplevels_changed: false,
-            toplevel_handles: HashMap::new(),
-            capture_manager,
-            output_source_manager,
-            toplevel_source_manager,
-            captures: Vec::new(),
-            linux_dmabuf,
             background_effect,
             // Assumed absent until the manager says otherwise: the capability
             // arrives as an event, so anything sent before it would be a guess.
             blur_capable: false,
-            screencopies: Vec::new(),
             screens: Vec::new(),
             session_locks,
             has_session_lock,

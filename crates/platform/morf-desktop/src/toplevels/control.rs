@@ -20,12 +20,13 @@
 //! whichever matched first.
 
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
+
+use crate::DesktopState;
 use wayland_protocols_wlr::foreign_toplevel::v1::client::{
     zwlr_foreign_toplevel_handle_v1::{self, State, ZwlrForeignToplevelHandleV1},
     zwlr_foreign_toplevel_manager_v1::{self, ZwlrForeignToplevelManagerV1},
 };
 
-use crate::backend::wayland::state_types::LayerState;
 
 /// One window as the control protocol describes it.
 ///
@@ -62,7 +63,7 @@ pub(crate) struct ToplevelPending {
     pub(crate) fullscreen: bool,
 }
 
-impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for LayerState {
+impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for DesktopState {
     fn event(
         state: &mut Self,
         _manager: &ZwlrForeignToplevelManagerV1,
@@ -89,13 +90,13 @@ impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for LayerState {
         }
     }
 
-    wayland_client::event_created_child!(LayerState, ZwlrForeignToplevelManagerV1, [
+    wayland_client::event_created_child!(DesktopState, ZwlrForeignToplevelManagerV1, [
         zwlr_foreign_toplevel_manager_v1::EVT_TOPLEVEL_OPCODE
             => (ZwlrForeignToplevelHandleV1, ()),
     ]);
 }
 
-impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for LayerState {
+impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for DesktopState {
     fn event(
         state: &mut Self,
         handle: &ZwlrForeignToplevelHandleV1,

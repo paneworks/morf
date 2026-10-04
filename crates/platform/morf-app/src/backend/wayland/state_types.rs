@@ -23,34 +23,15 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 use wayland_client::Proxy;
-use wayland_client::backend::ObjectId;
-use wayland_client::protocol::wl_buffer;
 use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::{
-    wl_keyboard, wl_output, wl_pointer, wl_seat, wl_shm, wl_surface, wl_touch,
+    wl_keyboard, wl_output, wl_pointer, wl_seat, wl_surface, wl_touch,
 };
 use wayland_protocols::ext::background_effect::v1::client::{
     ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1,
     ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1,
 };
-use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1;
-use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
-use wayland_protocols::ext::image_capture_source::v1::client::{
-    ext_foreign_toplevel_image_capture_source_manager_v1::ExtForeignToplevelImageCaptureSourceManagerV1,
-    ext_output_image_capture_source_manager_v1::ExtOutputImageCaptureSourceManagerV1,
-};
-use wayland_protocols::ext::image_copy_capture::v1::client::{
-    ext_image_copy_capture_frame_v1::ExtImageCopyCaptureFrameV1,
-    ext_image_copy_capture_manager_v1::ExtImageCopyCaptureManagerV1,
-    ext_image_copy_capture_session_v1::ExtImageCopyCaptureSessionV1,
-};
-use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
-use wayland_protocols_wlr::foreign_toplevel::v1::client::{
-    zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1,
-    zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1,
-};
 
-use crate::backend::wayland::toplevel_control::ToplevelControl;
 use wayland_protocols::wp::cursor_shape::v1::client::{
     wp_cursor_shape_device_v1::WpCursorShapeDeviceV1,
     wp_cursor_shape_manager_v1::WpCursorShapeManagerV1,
@@ -79,14 +60,10 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
     zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
 };
-use wayland_protocols_wlr::screencopy::v1::client::{
-    zwlr_screencopy_frame_v1::ZwlrScreencopyFrameV1,
-    zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1,
-};
 
 use crate::backend::wayland::client_data::ReadTag;
 use crate::transfer::ReadDone;
-use crate::backend::wayland::{client_surface::*, surface_types::*, types::*};
+use crate::backend::wayland::{client_surface::*, surface_types::*};
 
 /// Owned Wayland display and surface handles for graphics APIs.
 #[derive(Clone, Debug)]
@@ -241,12 +218,6 @@ pub(crate) struct LayerState {
     /// The key being held, repeated by the client (`key_repeat`).
     pub(crate) key_repeat: crate::backend::wayland::key_repeat::KeyRepeat,
     pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
-    /// The control half of the window list. Optional: a compositor may offer
-    /// the newer enumeration protocol and not this one, and then windows can be
-    /// listed and not acted on.
-    pub(crate) toplevel_control_manager: Option<ZwlrForeignToplevelManagerV1>,
-    pub(crate) toplevel_controls: HashMap<ObjectId, ToplevelControl>,
-    pub(crate) toplevel_control_handles: HashMap<ObjectId, ZwlrForeignToplevelHandleV1>,
     /// Per-surface scale for popups and floating windows.
     ///
     /// Layer surfaces keep theirs in `LayerRecord`; these have no record of
@@ -308,7 +279,6 @@ pub(crate) struct LayerState {
     pub(crate) text_input_pending: TextInputState,
     pub(crate) output_power_target: Option<wl_output::WlOutput>,
     pub(crate) shm: Option<Shm>,
-    pub(crate) screencopy_manager: Option<ZwlrScreencopyManagerV1>,
     /// `ext-background-effect-v1`, when the compositor offers it.
     ///
     /// The blur it asks for happens entirely on the compositor's side: it holds
@@ -322,43 +292,7 @@ pub(crate) struct LayerState {
     /// compositor may withdraw it at run time — at which point it stops
     /// applying blur even to regions already set.
     pub(crate) blur_capable: bool,
-    pub(crate) screencopies: Vec<PendingScreencopy>,
     pub(crate) screens: Vec<Output>,
-    /// `ext-foreign-toplevel-list-v1`, when the compositor offers it.
-    pub(crate) toplevel_list: Option<ExtForeignToplevelListV1>,
-    /// Every window the compositor has told us about, keyed by its handle.
-    ///
-    /// Held as a map because the protocol describes a window over several
-    /// events and finishes with `done`: a handle arrives bare, then its title,
-    /// app id and identifier follow, and only after `done` is it worth showing
-    /// anybody.
-    pub(crate) toplevels: HashMap<ObjectId, ToplevelInfo>,
-    /// Whether the list changed since a caller last looked.
-    pub(crate) toplevels_changed: bool,
-    /// The handle behind each window, kept so a capture can name one.
-    ///
-    /// Separate from the descriptions because a configuration is given strings
-    /// and hands one back: it never sees a protocol object, and the engine has
-    /// to find its way from an identifier to the handle the compositor knows.
-    pub(crate) toplevel_handles: HashMap<String, ExtForeignToplevelHandleV1>,
-    /// `ext-image-copy-capture-v1` and the two source factories, when offered.
-    ///
-    /// The replacement for `wlr-screencopy`, and the reason to want it: that one
-    /// captures outputs and only outputs, so a thumbnail of a *window* could not
-    /// be had at all — cropping an output gives whatever is on top at that
-    /// rectangle, not the window.
-    pub(crate) capture_manager: Option<ExtImageCopyCaptureManagerV1>,
-    pub(crate) output_source_manager: Option<ExtOutputImageCaptureSourceManagerV1>,
-    pub(crate) toplevel_source_manager: Option<ExtForeignToplevelImageCaptureSourceManagerV1>,
-    /// Captures in flight on the newer protocol.
-    pub(crate) captures: Vec<PendingCapture>,
-    /// `zwp_linux_dmabuf_v1`, when the compositor offers it.
-    ///
-    /// The one thing it is used for here is to turn a dmabuf the renderer
-    /// exported into a `wl_buffer` a capture frame can be given. The formats
-    /// it advertises on its own are not consulted: the capture session says
-    /// what *it* will draw into, which is the narrower and the right answer.
-    pub(crate) linux_dmabuf: Option<ZwpLinuxDmabufV1>,
     pub(crate) session_locks: SessionLockState,
     /// Whether the compositor offers `ext-session-lock`.
     pub(crate) has_session_lock: bool,
@@ -393,46 +327,6 @@ pub(crate) struct DragState {
 pub(crate) struct OwnedDrag {
     pub(crate) source: smithay_client_toolkit::data_device_manager::data_source::DragSource,
     pub(crate) data: Vec<(String, Arc<Vec<u8>>)>,
-}
-
-pub(crate) struct PendingScreencopy {
-    pub(crate) request_id: u64,
-    pub(crate) frame: ZwlrScreencopyFrameV1,
-    pub(crate) offer: Option<(wl_shm::Format, u32, u32, u32)>,
-    pub(crate) pool: Option<SlotPool>,
-    pub(crate) buffer: Option<ShmBuffer>,
-    pub(crate) format: Option<ScreencopyFormat>,
-    pub(crate) y_invert: bool,
-}
-
-/// One capture in flight on `ext-image-copy-capture-v1`.
-///
-/// More states than the older protocol needed, because this one negotiates
-/// before it copies: the session reports the size and formats it can produce,
-/// and only once that is `done` is there anything to allocate a buffer against.
-/// A frame is then created, given the buffer, and told to capture.
-pub(crate) struct PendingCapture {
-    pub(crate) request_id: u64,
-    pub(crate) session: ExtImageCopyCaptureSessionV1,
-    pub(crate) frame: Option<ExtImageCopyCaptureFrameV1>,
-    /// Size the session says it will produce, from `buffer_size`.
-    pub(crate) size: Option<(u32, u32)>,
-    /// The first shared-memory format offered that this engine can carry.
-    pub(crate) format: Option<wl_shm::Format>,
-    pub(crate) pool: Option<SlotPool>,
-    pub(crate) buffer: Option<ShmBuffer>,
-    /// Whether the frame has been created and told to capture.
-    pub(crate) started: bool,
-    /// Whether the configuration asked for the picture on the GPU.
-    pub(crate) gpu: bool,
-    /// Whether a `CaptureOffer` has gone out and is awaiting a buffer.
-    pub(crate) offered: bool,
-    /// The device the compositor wants the dmabuf on, from `dmabuf_device`.
-    pub(crate) dmabuf_device: Option<u64>,
-    /// Every dmabuf format the session offered, with its modifiers.
-    pub(crate) dmabuf_formats: Vec<(u32, Vec<u64>)>,
-    /// The dmabuf `wl_buffer` the frame was given, and its fourcc.
-    pub(crate) dmabuf_buffer: Option<(wl_buffer::WlBuffer, u32)>,
 }
 
 pub(crate) struct LockSurface {

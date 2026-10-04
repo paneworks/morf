@@ -2,9 +2,10 @@ use morf_lua::{
     LayerSurfaceConfig, Runtime, Toplevel, WindowSurfaceConfig, WindowSurfaceKind, Workspace,
     WorkspaceRequest,
 };
+use morf_desktop::ToplevelAction;
 use morf_render::RenderEngine;
 use morf_app::{
-    LayerConfig, KeyboardFocus, LayerAnchors, LayerClient, PRIMARY_LAYER, ShellLayer, ToplevelAction,
+    LayerConfig, KeyboardFocus, LayerAnchors, LayerClient, PRIMARY_LAYER, ShellLayer,
     physical_size,
 };
 use std::collections::{HashMap, HashSet};
@@ -33,14 +34,14 @@ pub(crate) fn apply_service_requests(
     apply_clipboard_requests(runtime, client, desktop);
     crate::surface_drag::apply_offer_reads(runtime, client, desktop);
     crate::surface_drag::apply_drag_requests(runtime, client);
-    apply_screencopy_requests(runtime, client);
+    apply_screencopy_requests(runtime, desktop);
     apply_virtual_keyboard_requests(runtime, client);
     apply_input_method_requests(runtime, client);
     apply_text_input_requests(runtime, client);
-    publish_windows(runtime, client);
+    publish_windows(runtime, desktop);
     publish_workspaces(runtime, desktop);
     apply_workspace_requests(runtime, desktop);
-    apply_toplevel_requests(runtime, client);
+    apply_toplevel_requests(runtime, desktop);
 }
 
 /// Re-states the primary surface's opacity claim.
@@ -59,11 +60,11 @@ pub(crate) fn apply_primary_opaque(runtime: &Runtime, client: &LayerClient) {
 /// a dozen windows, and cheaper than a diff that would have to decide what
 /// identity means for a renamed window — but doing it every frame would rebuild
 /// a dozen Lua tables sixty times a second to say nothing new.
-fn publish_windows(runtime: &mut Runtime, client: &mut LayerClient) {
-    if !client.take_toplevels_changed() {
+fn publish_windows(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
+    if !desktop.take_toplevels_changed() {
         return;
     }
-    let windows: Vec<Toplevel> = client
+    let windows: Vec<Toplevel> = desktop
         .toplevels()
         .into_iter()
         .map(|window| Toplevel {
@@ -111,7 +112,7 @@ fn publish_workspaces(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop
 }
 
 /// Acts on other windows, if the configuration asked.
-fn apply_toplevel_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+fn apply_toplevel_requests(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
     for request in runtime.take_toplevel_requests() {
         let action = match request.action.as_str() {
             "activate" => ToplevelAction::Activate,
@@ -130,7 +131,7 @@ fn apply_toplevel_requests(runtime: &mut Runtime, client: &mut LayerClient) {
             },
             _ => continue,
         };
-        client.control_toplevel(&request.identifier, action);
+        desktop.control_toplevel(&request.identifier, action);
     }
 }
 

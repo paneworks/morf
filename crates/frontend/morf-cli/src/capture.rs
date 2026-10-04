@@ -9,10 +9,10 @@
 
 use morf_lua::{Runtime, Screencopy as LuaScreencopy};
 use morf_render::{FOURCC_ARGB8888, FOURCC_XRGB8888, RenderEngine, WgpuBackend, split_dev_t};
-use morf_app::{CaptureBuffer, LayerClient, Event, ScreencopyFormat};
+use morf_desktop::{CaptureBuffer, Desktop, ScreencopyFormat, ScreencopyFrame};
 use std::os::fd::AsFd;
 
-pub(crate) fn apply_screencopy_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+pub(crate) fn apply_screencopy_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
     for request in runtime.take_screencopy_requests() {
         // A window if one was named, an output otherwise — and for an output,
         // the newer protocol where the compositor has it.
@@ -24,20 +24,20 @@ pub(crate) fn apply_screencopy_requests(runtime: &mut Runtime, client: &mut Laye
         // capture rather than the same one with a pointer drawn on it.
         let output = request.output.as_deref();
         let started = match &request.window {
-            Some(identifier) => client.capture_window(request.id, identifier, request.gpu),
-            None if request.include_cursor => client.capture_output(request.id, true, output),
+            Some(identifier) => desktop.capture_window(request.id, identifier, request.gpu),
+            None if request.include_cursor => desktop.capture_output(request.id, true, output),
             None => {
-                client.capture_output_image(request.id, request.gpu, output)
-                    || client.capture_output(request.id, false, output)
+                desktop.capture_output_image(request.id, request.gpu, output)
+                    || desktop.capture_output(request.id, false, output)
             }
         };
         if !started {
             let why = match (&request.window, output) {
-                (Some(_), _) if !client.supports_window_capture() => {
+                (Some(_), _) if !desktop.supports_window_capture() => {
                     "this compositor cannot capture a single window".to_owned()
                 }
                 (Some(_), _) => "no window with that identifier".to_owned(),
-                (None, Some(name)) if !client.has_output(name) => {
+                (None, Some(name)) if !desktop.has_output(name) => {
                     format!("no output named `{name}`")
                 }
                 (None, _) => "screen capture is unavailable".to_owned(),
@@ -55,7 +55,7 @@ pub(crate) fn dispatch_screencopy(
     // the configuration; only the ready-made image source does not.
     mut renderer: Option<&mut RenderEngine<WgpuBackend>>,
     request_id: u64,
-    result: Result<morf_app::ScreencopyFrame, String>,
+    result: Result<ScreencopyFrame, String>,
 ) -> bool {
     // Published where `ui.Image` can find it, before the configuration is told
     // the capture arrived — so a handler can put the thumbnail straight into
@@ -163,42 +163,6 @@ pub(crate) fn apply_capture_releases(
     }
 }
 
-/// Handles the two capture events, or hands any other event back.
-pub(crate) fn handle_capture_event(
-    runtime: &mut Runtime,
-    renderer: &mut RenderEngine<WgpuBackend>,
-    client: &mut LayerClient,
-    event: Event,
-) -> Result<bool, Event> {
-    match event {
-        Event::Screencopy { request_id, result } => Ok(dispatch_screencopy(
-            runtime,
-            Some(renderer),
-            request_id,
-            result,
-        )),
-        Event::CaptureOffer {
-            request_id,
-            width,
-            height,
-            device,
-            formats,
-        } => Ok(answer_capture_offer(
-            runtime,
-            Some(renderer),
-            client,
-            OfferedCapture {
-                request_id,
-                width,
-                height,
-                device,
-                formats,
-            },
-        )),
-        other => Err(other),
-    }
-}
-
 /// Answers a compositor's offer to draw a capture into a dmabuf.
 ///
 /// The renderer exports an image in a format and layout the compositor
@@ -209,14 +173,14 @@ pub(crate) fn handle_capture_event(
 pub(crate) fn answer_capture_offer(
     runtime: &mut Runtime,
     renderer: Option<&mut RenderEngine<WgpuBackend>>,
-    client: &mut LayerClient,
+    desktop: &mut Desktop,
     offer: OfferedCapture,
 ) -> bool {
-    let why = match export_for_offer(renderer, client, &offer) {
+    let why = match export_for_offer(renderer, desktop, &offer) {
         Ok(()) => return false,
         Err(why) => why,
     };
-    if client.attach_capture_shm(offer.request_id) {
+    if desktop.attach_capture_shm(offer.request_id) {
         return false;
     }
     runtime.dispatch_screencopy(offer.request_id, Err(why))
@@ -233,7 +197,7 @@ pub(crate) struct OfferedCapture {
 
 fn export_for_offer(
     renderer: Option<&mut RenderEngine<WgpuBackend>>,
-    client: &mut LayerClient,
+    desktop: &mut Desktop,
     offer: &OfferedCapture,
 ) -> Result<(), String> {
     let (request_id, width, height, device) =
@@ -260,7 +224,7 @@ fn export_for_offer(
         .find(|(fourcc, _)| *fourcc == FOURCC_XRGB8888 || *fourcc == FOURCC_ARGB8888)
         .ok_or("the compositor offered no format this engine draws")?;
     let image = backend.export_capture(width, height, *fourcc, modifiers)?;
-    client
+    desktop
         .attach_capture_dmabuf(
             request_id,
             &CaptureBuffer {
@@ -272,8 +236,7 @@ fn export_for_offer(
                 offset: image.plane.offset,
                 stride: image.plane.stride,
             },
-        )
-        .map_err(|error| error.to_string())?;
+        )?;
     backend.stash_export(request_id, image);
     Ok(())
 }
@@ -298,7 +261,7 @@ fn capture_bgra(rgba: &[u8]) -> Vec<u8> {
 /// `xrgb8888` has no alpha channel to speak of; the fourth byte is padding, and
 /// leaving it as whatever the compositor put there gives a transparent
 /// thumbnail.
-fn capture_rgba(frame: &morf_app::ScreencopyFrame) -> Vec<u8> {
+fn capture_rgba(frame: &ScreencopyFrame) -> Vec<u8> {
     let opaque = matches!(frame.format, ScreencopyFormat::Xrgb8888);
     let mut rgba = Vec::with_capacity(frame.pixels.len());
     for row in 0..frame.height as usize {

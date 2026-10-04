@@ -6,8 +6,6 @@
 pub mod accesskit;
 mod backend_impl;
 mod buffer_sink;
-mod capture_dmabuf;
-mod capture_handlers;
 mod client_backdrop;
 mod client_connection;
 mod client_data;
@@ -28,8 +26,6 @@ mod state_methods;
 mod state_types;
 mod surface_handlers;
 mod surface_types;
-mod toplevel_control;
-mod toplevel_handlers;
 mod types;
 
 pub use buffer_sink::WaylandBufferSink;
@@ -39,6 +35,5 @@ pub use cursor::cursor_shape;
 pub use helpers::*;
 pub use state_types::*;
 pub use surface_types::*;
-pub use types::*;
 #[cfg(test)]
 mod tests;

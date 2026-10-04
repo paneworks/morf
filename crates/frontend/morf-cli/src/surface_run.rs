@@ -44,16 +44,16 @@ fn capabilities_of(
         ("virtual_keyboard", client.supports_virtual_keyboard()),
         ("input_method", client.supports_input_method()),
         ("text_input", client.supports_text_input()),
-        ("screencopy", client.supports_screencopy()),
-        ("image_capture", client.supports_image_capture()),
-        ("window_capture", client.supports_window_capture()),
+        ("screencopy", desktop.supports_screencopy()),
+        ("image_capture", desktop.supports_image_capture()),
+        ("window_capture", desktop.supports_window_capture()),
         (
             "dmabuf_capture",
-            client.supports_dmabuf_capture() && info.dmabuf,
+            desktop.supports_dmabuf_capture() && info.dmabuf,
         ),
         ("backdrop_blur", client.supports_backdrop_blur()),
-        ("toplevels", client.supports_toplevels()),
-        ("toplevel_control", client.supports_toplevel_control()),
+        ("toplevels", desktop.supports_toplevels()),
+        ("toplevel_control", desktop.supports_toplevel_control()),
         ("gamma_control", desktop.supports_gamma_control()),
         ("idle_inhibit", client.supports_idle_inhibit()),
     ] {
@@ -173,30 +173,6 @@ fn drive_surface(
                 Event::Configure { id, .. } if id == PRIMARY_LAYER => break 'configured,
                 Event::Closed { id } if id == PRIMARY_LAYER => {
                     return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
-                }
-                Event::Screencopy { request_id, result } => {
-                    dispatch_screencopy(runtime, None, request_id, result);
-                }
-                Event::CaptureOffer {
-                    request_id,
-                    width,
-                    height,
-                    device,
-                    formats,
-                } => {
-                    // No renderer yet to export against: shared memory.
-                    answer_capture_offer(
-                        runtime,
-                        None,
-                        &mut client,
-                        OfferedCapture {
-                            request_id,
-                            width,
-                            height,
-                            device,
-                            formats,
-                        },
-                    );
                 }
                 Event::PointerMotion { surface, x, y } => {
                     early_pointer = Some((surface, x, y));
@@ -351,7 +327,7 @@ fn drive_surface(
         let woke = client
             .wait_for(sleep.timeout(), Some(wake.as_fd()))
             .map_err(|error| error.to_string())?;
-        let desktop_repaint = dispatch_desktop(runtime, &mut desktop)?;
+        let desktop_repaint = dispatch_desktop(runtime, &mut desktop, Some(&mut renderer))?;
         wake.drain();
         log_wake(&name, woke, &sleep, slept);
         // Now and then, what keeps the loop drawing, when anything does.

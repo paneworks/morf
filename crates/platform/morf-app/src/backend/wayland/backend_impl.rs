@@ -13,7 +13,8 @@ impl Backend for LayerClient {
             layer_shell: self.supports_layer_shell(),
             layer_surfaces: self.supports_layer_surfaces(),
             live_layer_change: self.supports_live_layer_change(),
-            toplevels: self.supports_toplevels(),
+            // xdg-shell is required, so a toplevel can always be opened.
+            toplevels: true,
             popups: true,
             session_lock: self.state.has_session_lock,
             drag_and_drop: self.supports_drag_and_drop(),

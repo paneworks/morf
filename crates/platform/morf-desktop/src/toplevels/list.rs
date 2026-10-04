@@ -7,14 +7,16 @@
 //! it.
 
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
+
+use crate::DesktopState;
+use crate::toplevels::ToplevelInfo;
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::{
     ext_foreign_toplevel_handle_v1::{self, ExtForeignToplevelHandleV1},
     ext_foreign_toplevel_list_v1::{self, ExtForeignToplevelListV1},
 };
 
-use crate::backend::wayland::{state_types::LayerState, types::ToplevelInfo};
 
-impl Dispatch<ExtForeignToplevelListV1, ()> for LayerState {
+impl Dispatch<ExtForeignToplevelListV1, ()> for DesktopState {
     /// A window appeared, or the compositor stopped telling us about them.
     ///
     /// The handle arrives bare: no title, no application, no name. Those follow
@@ -36,12 +38,12 @@ impl Dispatch<ExtForeignToplevelListV1, ()> for LayerState {
         }
     }
 
-    wayland_client::event_created_child!(LayerState, ExtForeignToplevelListV1, [
+    wayland_client::event_created_child!(DesktopState, ExtForeignToplevelListV1, [
         ext_foreign_toplevel_list_v1::EVT_TOPLEVEL_OPCODE => (ExtForeignToplevelHandleV1, ()),
     ]);
 }
 
-impl Dispatch<ExtForeignToplevelHandleV1, ()> for LayerState {
+impl Dispatch<ExtForeignToplevelHandleV1, ()> for DesktopState {
     /// One window describing itself.
     ///
     /// `title`, `app_id` and `identifier` each arrive on their own, then `done`

@@ -14,16 +14,15 @@
 //! format nobody has in common, and the capture continues as it always did.
 
 use wayland_client::QueueHandle;
+
+use super::CaptureBuffer;
+use crate::{Desktop, DesktopEvent, DesktopState};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_protocols::wp::linux_dmabuf::zv1::client::{
     zwp_linux_buffer_params_v1::{self, ZwpLinuxBufferParamsV1},
     zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
 };
 
-use crate::backend::wayland::WaylandError;
-use crate::backend::wayland::state_types::LayerState;
-use crate::backend::wayland::surface_types::{LayerClient, Event};
-use crate::backend::wayland::types::CaptureBuffer;
 
 /// `DRM_FORMAT_XRGB8888`: the one capture format with nothing in the top byte.
 pub(crate) const FOURCC_XRGB8888: u32 = 0x3432_5258;
@@ -32,11 +31,11 @@ pub(crate) const FOURCC_XRGB8888: u32 = 0x3432_5258;
 // which is broader than what a capture may be; the params object only speaks
 // for the deferred `create`, and this engine uses the immediate one; a buffer
 // says `release`, which matters to a surface and not to a capture.
-wayland_client::delegate_noop!(LayerState: ignore ZwpLinuxDmabufV1);
-wayland_client::delegate_noop!(LayerState: ignore ZwpLinuxBufferParamsV1);
-wayland_client::delegate_noop!(LayerState: ignore WlBuffer);
+wayland_client::delegate_noop!(DesktopState: ignore ZwpLinuxDmabufV1);
+wayland_client::delegate_noop!(DesktopState: ignore ZwpLinuxBufferParamsV1);
+wayland_client::delegate_noop!(DesktopState: ignore WlBuffer);
 
-impl LayerState {
+impl DesktopState {
     /// Reports a GPU-wanted session's description, if there is one to report.
     ///
     /// Returns whether an offer went out -- in which case the capture waits
@@ -56,7 +55,7 @@ impl LayerState {
             return false;
         };
         capture.offered = true;
-        self.events.push_back(Event::CaptureOffer {
+        self.events.push_back(DesktopEvent::CaptureOffer {
             request_id: capture.request_id,
             width,
             height,
@@ -73,7 +72,7 @@ impl LayerState {
     }
 }
 
-impl LayerClient {
+impl Desktop {
     /// Whether a capture can be drawn straight into a dmabuf.
     ///
     /// The protocol side only: whether the renderer can export one is its
@@ -92,17 +91,17 @@ impl LayerClient {
         &mut self,
         request_id: u64,
         buffer: &CaptureBuffer<'_>,
-    ) -> Result<(), WaylandError> {
+    ) -> Result<(), String> {
         let index = self
             .state
             .capture_index(request_id)
-            .ok_or_else(|| WaylandError("no capture is waiting for a buffer".into()))?;
+            .ok_or_else(|| "no capture is waiting for a buffer".to_owned())?;
         let dmabuf = self
             .state
             .linux_dmabuf
             .clone()
-            .ok_or_else(|| WaylandError("the compositor has no dmabuf support".into()))?;
-        let qh: QueueHandle<LayerState> = self.queue.handle();
+            .ok_or_else(|| "the compositor has no dmabuf support".to_owned())?;
+        let qh: QueueHandle<DesktopState> = self.queue.handle();
         let params = dmabuf.create_params(&qh, ());
         params.add(
             buffer.fd,

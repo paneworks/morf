@@ -6,7 +6,7 @@ use std::sync::mpsc;
 
 use crate::render_target::surface_backend;
 use crate::{
-    capture::*, lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*,
+    lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*,
     surface_pointer::*, surfaces::*,
 };
 
@@ -21,12 +21,6 @@ pub(crate) fn handle_surface_event(
     name: &str,
 ) -> Result<bool, String> {
     let mut repaint = false;
-    // Captures first: they are the events that need the renderer and the
-    // client at once, and they are handled where the rest of capture lives.
-    let event = match handle_capture_event(runtime, renderer, client, event) {
-        Ok(repaint) => return Ok(repaint),
-        Err(event) => event,
-    };
     // Then selections and drags, which need the layout and the client.
     let event = match crate::surface_drag::handle_data_event(runtime, client, desktop, state, event) {
         Ok(repaint) => return repaint,
@@ -106,8 +100,6 @@ pub(crate) fn handle_surface_event(
                 repaint |= runtime.dispatch_surface_pointer(window, inside);
             }
         }
-        // Already taken above; named so a new event cannot slip past unmatched.
-        Event::Screencopy { .. } | Event::CaptureOffer { .. } => {}
         Event::OfferRead { .. }
         | Event::DragEnter { .. }
         | Event::DragMotion { .. }
