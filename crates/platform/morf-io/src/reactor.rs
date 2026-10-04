@@ -26,12 +26,13 @@
 //! spawned `detached`, which are left running and reaped by a thread of
 //! their own when they exit.
 
-use std::collections::BTreeMap;
+mod options;
+mod lines;
+
 use std::io;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::os::fd::OwnedFd;
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -39,6 +40,9 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use rustix::event::{EventfdFlags, eventfd};
+
+pub use lines::LineSplitter;
+pub use options::{ConnectOptions, Endpoint, OutputMode, SpawnOptions, StdinMode};
 
 /// Undelivered bytes one handle may have before its reads stop.
 pub const HIGH_WATER: usize = 1024 * 1024;
@@ -51,107 +55,6 @@ pub const DEFAULT_MAX_LINE: usize = 64 * 1024;
 
 /// Names one process or connection for the life of its reactor.
 pub type IoId = u64;
-
-/// What a child's standard input is.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub enum StdinMode {
-    /// `/dev/null`.
-    #[default]
-    Null,
-    /// These bytes, then end of file.
-    Data(Vec<u8>),
-    /// Kept open for [`ReactorControl::write`] until closed.
-    Pipe,
-}
-
-/// What becomes of a child's stdout or stderr.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum OutputMode {
-    /// Read and delivered as events.
-    #[default]
-    Capture,
-    /// `/dev/null`.
-    Null,
-    /// The same stream morf itself writes to.
-    Inherit,
-}
-
-/// How to start a child. Never through a shell: `command` is the argv.
-#[derive(Clone, Debug)]
-pub struct SpawnOptions {
-    pub command: Vec<String>,
-    /// Set in the child on top of what it inherits.
-    pub environment: BTreeMap<String, String>,
-    /// Start from an empty environment instead of morf's.
-    pub clear_environment: bool,
-    pub working_directory: Option<PathBuf>,
-    pub stdin: StdinMode,
-    pub stdout: OutputMode,
-    pub stderr: OutputMode,
-    /// Split output on `\n` and deliver lines rather than chunks.
-    pub lines: bool,
-    pub max_line: usize,
-    /// Output past this many bytes, both streams together, is read and
-    /// dropped; the exit then says `truncated`.
-    pub max_output: Option<usize>,
-    /// Terminated when it runs longer, killed if it will not go.
-    pub timeout: Option<Duration>,
-    /// Left running when the reactor goes, in a process group of its own.
-    pub detached: bool,
-}
-
-impl SpawnOptions {
-    pub fn new(command: Vec<String>) -> Self {
-        Self {
-            command,
-            environment: BTreeMap::new(),
-            clear_environment: false,
-            working_directory: None,
-            stdin: StdinMode::Null,
-            stdout: OutputMode::Capture,
-            stderr: OutputMode::Capture,
-            lines: true,
-            max_line: DEFAULT_MAX_LINE,
-            max_output: None,
-            timeout: None,
-            detached: false,
-        }
-    }
-}
-
-/// Where a connection goes.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Endpoint {
-    Unix(PathBuf),
-    Tcp { host: String, port: u16 },
-}
-
-/// How to open a connection.
-#[derive(Clone, Debug)]
-pub struct ConnectOptions {
-    pub endpoint: Endpoint,
-    pub lines: bool,
-    pub max_line: usize,
-    /// Given up with [`CloseReason::TimedOut`] when not connected by then.
-    pub connect_timeout: Duration,
-    /// The whole connection's life, for a request that must be answered.
-    pub deadline: Option<Duration>,
-    /// Written as soon as the connection is up.
-    pub greeting: Vec<u8>,
-}
-
-impl ConnectOptions {
-    pub fn new(endpoint: Endpoint) -> Self {
-        Self {
-            endpoint,
-            lines: false,
-            max_line: DEFAULT_MAX_LINE,
-            connect_timeout: Duration::from_secs(5),
-            deadline: None,
-            greeting: Vec::new(),
-        }
-    }
-}
 
 /// Why a connection ended.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -563,55 +466,4 @@ pub fn signal_number(name: &str) -> Option<i32> {
         "WINCH" => libc::SIGWINCH,
         _ => return None,
     })
-}
-
-/// Cuts a byte stream into lines of at most `max` bytes.
-///
-/// A line longer than that is delivered cut at `max`, and the rest of it,
-/// up to its newline, is dropped. The newline itself is never part of a line.
-#[derive(Debug)]
-pub struct LineSplitter {
-    buffer: Vec<u8>,
-    max: usize,
-    skipping: bool,
-}
-
-impl LineSplitter {
-    pub fn new(max: usize) -> Self {
-        Self {
-            buffer: Vec::new(),
-            max: max.max(1),
-            skipping: false,
-        }
-    }
-
-    pub fn push(&mut self, mut data: &[u8], mut emit: impl FnMut(Vec<u8>)) {
-        while let Some(newline) = data.iter().position(|&byte| byte == b'\n') {
-            if self.skipping {
-                self.skipping = false;
-            } else {
-                let room = self.max - self.buffer.len();
-                self.buffer.extend_from_slice(&data[..newline.min(room)]);
-                emit(std::mem::take(&mut self.buffer));
-            }
-            data = &data[newline + 1..];
-        }
-        if self.skipping || data.is_empty() {
-            return;
-        }
-        let room = self.max - self.buffer.len();
-        if data.len() > room {
-            self.buffer.extend_from_slice(&data[..room]);
-            emit(std::mem::take(&mut self.buffer));
-            self.skipping = true;
-        } else {
-            self.buffer.extend_from_slice(data);
-        }
-    }
-
-    /// What is left at the end of the stream, as a last line.
-    pub fn finish(&mut self) -> Option<Vec<u8>> {
-        self.skipping = false;
-        (!self.buffer.is_empty()).then(|| std::mem::take(&mut self.buffer))
-    }
 }
