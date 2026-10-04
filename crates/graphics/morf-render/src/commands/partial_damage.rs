@@ -43,11 +43,46 @@ impl DrawCommand {
         else {
             return None;
         };
-        // A shader may read anything anywhere; and a different count shifts
-        // every layer after the change into a different composition.
+        // A shader may read anything anywhere; and past the cap a layer is
+        // not uploaded, so a shift moves layers into or out of the picture.
         if shader.is_some()
-            || layers.len() != old_layers.len()
             || layers.len() > crate::field::MAX_FIELD_LAYERS
+            || old_layers.len() > crate::field::MAX_FIELD_LAYERS
+        {
+            return None;
+        }
+        // The layers that differ: everything between the run the two lists
+        // start with and the run they end with. A shape that took or lost its
+        // size since the last picture (a swell coming out of the frame) is a
+        // layer in one list and not the other; the layers around it are the
+        // same, so only it, where it was or is, changes anything.
+        let prefix = layers
+            .iter()
+            .zip(old_layers)
+            .take_while(|(layer, old)| layer == old)
+            .count();
+        let room = layers.len().min(old_layers.len()) - prefix;
+        let suffix = layers
+            .iter()
+            .rev()
+            .zip(old_layers.iter().rev())
+            .take(room)
+            .take_while(|(layer, old)| layer == old)
+            .count();
+        let new_changed = &layers[prefix..layers.len() - suffix];
+        let old_changed = &old_layers[prefix..old_layers.len() - suffix];
+        // An intersection is the one operation that changes the composition
+        // away from its own shape: it takes away everything outside it.
+        let reaches_everywhere = |layer: &SdfLayer| {
+            matches!(
+                layer.operation,
+                Operation::Intersect | Operation::SmoothIntersect
+            )
+        };
+        if new_changed
+            .iter()
+            .chain(old_changed)
+            .any(reaches_everywhere)
         {
             return None;
         }
@@ -77,11 +112,20 @@ impl DrawCommand {
         let margin = stroke_width.max(0.0) + softness.max(0.0) + seam * 1.5 + 2.0;
         let shadow = shadow_color.alpha > 0.0;
         let mut areas = Vec::new();
-        for (layer, old_layer) in layers.iter().zip(old_layers) {
-            if layer == old_layer {
-                continue;
-            }
-            for changed in [layer, old_layer] {
+        // The same count: each layer against its own old self, so two
+        // changes far apart damage two places and not all between them.
+        let pairwise: Vec<&SdfLayer> = if layers.len() == old_layers.len() {
+            layers
+                .iter()
+                .zip(old_layers)
+                .filter(|(layer, old)| layer != old)
+                .flat_map(|(layer, old)| [layer, old])
+                .collect()
+        } else {
+            new_changed.iter().chain(old_changed).collect()
+        };
+        {
+            for changed in pairwise {
                 let Some(reach) =
                     crate::field::field_reach(0.0, 0.0, std::slice::from_ref(changed))
                 else {
