@@ -2,23 +2,15 @@ use morf_scene::{NodeHandle, Value as SceneValue};
 
 use crate::{events::*, surface_types::*, types::*};
 
-thread_local! {
-    /// The modifier keys the seat last said were held. A seat has one
-    /// keyboard, so this is one value for every runtime on the thread.
-    static HELD: std::cell::Cell<crate::KeyModifiers> = std::cell::Cell::new(crate::KeyModifiers::default());
-}
-
 /// The held modifiers as a pointer handler is told them: `"ctrl+shift"`.
-pub(crate) fn held() -> IpcValue {
-    IpcValue::String(HELD.with(|held| held.get()).name())
-}
+pub(crate) use morf_runtime::events::held;
 
 impl Runtime {
     /// Says which modifiers the seat holds, for the pointer handlers that
     /// follow: a press, a drag or a wheel turn is told them as its last
     /// argument (a Shift-click extends, Ctrl with the wheel zooms).
     pub fn set_held_modifiers(&self, modifiers: crate::KeyModifiers) {
-        HELD.with(|held| held.set(modifiers));
+        set_held(modifiers);
     }
 
     /// Runs one key with no modifiers held; see [`Runtime::dispatch_key`].
@@ -49,18 +41,7 @@ impl Runtime {
         ) {
             return false;
         }
-        let point = point.args(held());
-        self.dispatch_ui_event_with_args(
-            node,
-            event,
-            &[
-                IpcValue::Integer(i64::from(id)),
-                point[0].clone(),
-                point[1].clone(),
-                point[2].clone(),
-                point[3].clone(),
-            ],
-        )
+        self.dispatch_ui_event_with_args(node, event, &args::touch_args(id, point))
     }
 
     /// Dispatches one pointer event, whatever kind it is.
@@ -189,7 +170,7 @@ impl Runtime {
         ) {
             return false;
         }
-        self.dispatch_ui_event_with_args(node, event, &point.args(held()))
+        self.dispatch_ui_event_with_args(node, event, &args::button_args(point))
     }
 
     /// Dispatches pointer coordinates and displacement to a movement handler as
@@ -212,19 +193,7 @@ impl Runtime {
         ) {
             return false;
         }
-        self.dispatch_ui_event_with_args(
-            node,
-            event,
-            &[
-                IpcValue::Number(point.surface_x),
-                IpcValue::Number(point.surface_y),
-                IpcValue::Number(delta.0),
-                IpcValue::Number(delta.1),
-                IpcValue::Number(point.local_x),
-                IpcValue::Number(point.local_y),
-                held(),
-            ],
-        )
+        self.dispatch_ui_event_with_args(node, event, &args::motion_args(point, delta))
     }
 
     /// Dispatches one wheel or touchpad-axis event to a MouseArea as
@@ -243,17 +212,7 @@ impl Runtime {
         self.dispatch_ui_event_with_args(
             node,
             UiEvent::Wheel,
-            &[
-                IpcValue::Number(point.surface_x),
-                IpcValue::Number(point.surface_y),
-                IpcValue::Number(pixels.0),
-                IpcValue::Number(pixels.1),
-                IpcValue::Integer(i64::from(steps.0)),
-                IpcValue::Integer(i64::from(steps.1)),
-                IpcValue::Number(point.local_x),
-                IpcValue::Number(point.local_y),
-                held(),
-            ],
+            &args::wheel_args(point, pixels, steps),
         )
     }
 
@@ -266,11 +225,7 @@ impl Runtime {
     /// move; see [`Runtime::scroll_flickable`].
     pub fn takes_wheel(&self, node: NodeHandle) -> bool {
         let state = self.reactive.borrow();
-        match state.scene.element(node) {
-            Ok(morf_scene::Element::Flickable | morf_scene::Element::Terminal) => true,
-            Ok(_) => state.handlers.contains_key(&(node, UiEvent::Wheel)),
-            Err(_) => false,
-        }
+        routing::takes_wheel(&state.scene, &state.events, node)
     }
 
     /// Scrolls a Flickable by a wheel's pixel delta, keeping its
@@ -287,26 +242,14 @@ impl Runtime {
         let mut moved = false;
         {
             let mut state = self.reactive.borrow_mut();
-            for (property, delta, limit) in [
-                ("content_x", pixels.0, max.0),
-                ("content_y", pixels.1, max.1),
-            ] {
-                if delta == 0.0 {
-                    continue;
-                }
-                let Ok(SceneValue::Number(current)) = state.scene.target(node, property).cloned()
-                else {
-                    continue;
-                };
-                let next = (current + delta).clamp(0.0, limit.max(0.0));
-                if next != current
-                    && crate::scene_bindings::assign_scene_property(
-                        &mut state,
-                        node,
-                        property,
-                        SceneValue::Number(next),
-                    )
-                    .is_ok()
+            for (property, next) in routing::flickable_scroll(&state.scene, node, pixels, max) {
+                if crate::scene_bindings::assign_scene_property(
+                    &mut state,
+                    node,
+                    property,
+                    SceneValue::Number(next),
+                )
+                .is_ok()
                 {
                     moved = true;
                 }
@@ -320,36 +263,6 @@ impl Runtime {
 
     /// Returns whether a MouseArea accepts one Linux input button code.
     pub fn accepts_pointer_button(&self, node: NodeHandle, button: u32) -> bool {
-        let state = self.reactive.borrow();
-        // A text input places its caret with the primary button.
-        if state.scene.element(node).ok() == Some(morf_scene::Element::TextInput) {
-            return button == 0x110;
-        }
-        // A link takes the primary button.
-        if state.scene.element(node).ok() == Some(morf_scene::Element::Text) {
-            return button == 0x110;
-        }
-        // A terminal passes all three on to a program that wants them.
-        if state.scene.element(node).ok() == Some(morf_scene::Element::Terminal) {
-            return matches!(button, 0x110..=0x112);
-        }
-        let Ok(value) = state.scene.current(node, "accepted_buttons") else {
-            return false;
-        };
-        let accepted = |value: &SceneValue| match value {
-            SceneValue::String(name) => match name.as_str() {
-                "all" => true,
-                "left" => button == 0x110,
-                "right" => button == 0x111,
-                "middle" => button == 0x112,
-                _ => false,
-            },
-            SceneValue::Number(code) => *code == f64::from(button),
-            _ => false,
-        };
-        match value {
-            SceneValue::List(values) => values.iter().any(accepted),
-            value => accepted(value),
-        }
+        routing::accepts_pointer_button(&self.reactive.borrow().scene, node, button)
     }
 }

@@ -19,7 +19,7 @@ impl Runtime {
             graph_effects,
             bindings: state.reactive.effects.len(),
             tracked_signals: state.reactive.signals.len(),
-            handlers: state.handlers.len(),
+            handlers: state.events.len(),
         }
     }
 

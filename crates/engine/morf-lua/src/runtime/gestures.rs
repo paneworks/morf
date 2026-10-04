@@ -19,7 +19,7 @@ use crate::{EventPoint, IpcValue, Runtime, UiEvent};
 pub(crate) use morf_runtime::gestures::Gestures as GestureState;
 
 fn has(state: &ReactiveState, node: NodeHandle, event: UiEvent) -> bool {
-    state.handlers.contains_key(&(node, event))
+    state.events.has(node, event)
 }
 
 /// When the press being held becomes a long press, if one is held where a
@@ -86,11 +86,9 @@ impl Runtime {
             let mut state = self.reactive.borrow_mut();
             let now = clock(state.timers.virtual_now());
             let ReactiveState {
-                gestures, handlers, ..
+                gestures, events, ..
             } = &mut *state;
-            gestures.take_long_press(now, |node| {
-                handlers.contains_key(&(node, UiEvent::LongPressed))
-            })
+            gestures.take_long_press(now, |node| events.has(node, UiEvent::LongPressed))
         };
         match due {
             Some((node, point)) => self.dispatch_ui_event_with_args(
