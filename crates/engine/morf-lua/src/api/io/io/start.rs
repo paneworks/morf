@@ -157,7 +157,10 @@ pub(super) fn spawn_options<'gc>(
     Ok(spawn)
 }
 
-pub(super) fn endpoint_of<'gc>(ctx: Context<'gc>, options: Table<'gc>) -> Result<Endpoint, HostError> {
+pub(super) fn endpoint_of<'gc>(
+    ctx: Context<'gc>,
+    options: Table<'gc>,
+) -> Result<Endpoint, HostError> {
     match (
         options.get_value(ctx, "path"),
         options.get_value(ctx, "host"),
