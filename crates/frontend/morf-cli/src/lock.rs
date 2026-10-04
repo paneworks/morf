@@ -11,7 +11,7 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-use crate::desktop::desktop_for;
+use crate::desktop::{desktop_for, dispatch_desktop};
 use crate::render_target::surface_backend;
 use crate::{
     capture::*, lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*,
@@ -134,7 +134,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
     let ipc = crate::lock_ipc::LockIpc::bind(path)?;
     let mut client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
     let mut desktop = desktop_for(&client)?;
-    client.set_idle_timeouts(&runtime.idle_timeouts());
+    desktop.set_idle_timeouts(&runtime.idle_timeouts());
     client
         .lock()
         .map_err(|error| error.to_string())?;
@@ -171,13 +171,14 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
         let woke = client
             .wait_for(sleep.timeout(), Some(wake.as_fd()))
             .map_err(|error| error.to_string())?;
-        desktop.dispatch_pending()?;
+        let desktop_repaint = dispatch_desktop(&mut runtime, &mut desktop)?;
         wake.drain();
         log_wake("lock", woke, &sleep, slept);
-        let mut repaint = std::mem::take(&mut repaint_next) | runtime.poll_services();
+        let mut repaint =
+            std::mem::take(&mut repaint_next) | desktop_repaint | runtime.poll_services();
         repaint |= ipc.serve(&mut runtime);
         apply_service_requests(&mut runtime, &mut client, &mut desktop);
-        apply_idle_timeouts(&mut runtime, &mut client);
+        apply_idle_timeouts(&mut runtime, &mut desktop);
         unlock_pending |= runtime.take_session_unlock_request();
         // The file lifts the lock the way it asked for it: by clearing
         // `morf.surface.session_lock`. Which door was opened — a password, a
@@ -335,13 +336,6 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                     };
                     runtime.set_session_lock_state(state);
                     return Err(error.to_owned());
-                }
-                Event::Idle {
-                    timeout_ms,
-                    input_only,
-                    idle,
-                } => {
-                    repaint |= runtime.dispatch_idle(timeout_ms, input_only, idle);
                 }
                 Event::Clipboard { text } => {
                     repaint |= runtime.dispatch_clipboard(text);

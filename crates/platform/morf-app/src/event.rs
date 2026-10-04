@@ -81,13 +81,6 @@ pub enum Event {
         /// The modifiers held when it did.
         modifiers: KeyModifiers,
     },
-    /// A configured seat idle threshold changed state.
-    Idle {
-        timeout_ms: u32,
-        /// Whether this threshold counts input only, ignoring idle inhibitors.
-        input_only: bool,
-        idle: bool,
-    },
     /// The compositor clipboard selection changed.
     Clipboard { text: Option<String> },
     /// The selection changed, as data control sees it: with no focus needed,

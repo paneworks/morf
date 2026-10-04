@@ -1,6 +1,6 @@
 use smithay_client_toolkit::shm::slot::SlotPool;
 use wayland_client::protocol::{wl_output, wl_shm};
-use wayland_client::{Proxy, QueueHandle};
+use wayland_client::QueueHandle;
 use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_frame_v1::ZwlrScreencopyFrameV1;
 
 use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*, types::*};
@@ -188,52 +188,6 @@ impl LayerState {
         }
     }
 
-    /// Brings the compositor's idle notifications in line with
-    /// `idle_timeouts`, touching only what differs: a notification still
-    /// wanted keeps counting from where it was, so a new subscription does
-    /// not restart every other threshold's clock.
-    pub(crate) fn reconcile_idle(&mut self, qh: &QueueHandle<Self>) {
-        let existing = self
-            .idle_notifications
-            .iter()
-            .filter_map(|notification| notification.data::<(u32, bool)>().copied())
-            .collect::<Vec<_>>();
-        let (removed, added) = idle_changes(&existing, &self.idle_timeouts);
-        self.idle_notifications.retain(|notification| {
-            let keep = notification
-                .data::<(u32, bool)>()
-                .is_some_and(|key| !removed.contains(key));
-            if !keep {
-                notification.destroy();
-            }
-            keep
-        });
-        let (Some(notifier), Some(seat)) = (&self.idle_notifier, self.seats.seats().next()) else {
-            return;
-        };
-        for key in added {
-            self.idle_notifications
-                .push(idle_notification(notifier, &seat, key, qh));
-        }
-    }
-
-    pub(crate) fn refresh_idle(&mut self, qh: &QueueHandle<Self>) {
-        for notification in self.idle_notifications.drain(..) {
-            notification.destroy();
-        }
-        let Some(notifier) = &self.idle_notifier else {
-            return;
-        };
-        let Some(seat) = self.seats.seats().next() else {
-            return;
-        };
-        self.idle_notifications = self
-            .idle_timeouts
-            .iter()
-            .map(|&key| idle_notification(notifier, &seat, key, qh))
-            .collect();
-    }
-
     /// Starts tracking fractional scale for a popup or floating window.
     ///
     /// The same two objects a layer surface gets, kept in `aux_scales` because
@@ -385,46 +339,4 @@ impl LayerState {
         record.primer = Some((pool, buffer));
         true
     }
-}
-
-/// An idle threshold: milliseconds, and whether it ignores inhibitors.
-pub(crate) type IdleKey = (u32, bool);
-
-/// One idle notification for `(timeout, input_only)`.
-fn idle_notification(
-    notifier: &wayland_protocols::ext::idle_notify::v1::client::ext_idle_notifier_v1::ExtIdleNotifierV1,
-    seat: &wayland_client::protocol::wl_seat::WlSeat,
-    (timeout, input_only): (u32, bool),
-    qh: &QueueHandle<LayerState>,
-) -> wayland_protocols::ext::idle_notify::v1::client::ext_idle_notification_v1::ExtIdleNotificationV1
-{
-    // Version 2 of the protocol added the input variant, which counts only
-    // the person and ignores inhibitors. An older compositor gets the
-    // ordinary one for the same key, so the caller's callback still fires --
-    // on inhibited idleness rather than never, which is the better of the two
-    // ways to degrade.
-    if input_only && notifier.version() >= 2 {
-        notifier.get_input_idle_notification(timeout, seat, qh, (timeout, input_only))
-    } else {
-        notifier.get_idle_notification(timeout, seat, qh, (timeout, input_only))
-    }
-}
-
-/// What to destroy and what to create to go from the notifications held to
-/// the thresholds wanted. Pure, so the reconciliation is tested without a
-/// compositor.
-pub(crate) fn idle_changes(held: &[IdleKey], wanted: &[IdleKey]) -> (Vec<IdleKey>, Vec<IdleKey>) {
-    let removed = held
-        .iter()
-        .filter(|key| !wanted.contains(key))
-        .copied()
-        .collect();
-    let mut added = wanted
-        .iter()
-        .filter(|key| !held.contains(key))
-        .copied()
-        .collect::<Vec<_>>();
-    added.sort_unstable();
-    added.dedup();
-    (removed, added)
 }

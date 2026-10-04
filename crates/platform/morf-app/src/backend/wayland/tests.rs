@@ -162,21 +162,6 @@ fn reposition_tokens_count_per_popup_and_record_the_echo() {
 }
 
 #[test]
-fn idle_reconciliation_touches_only_what_changed() {
-    use crate::backend::wayland::state_methods::idle_changes;
-    let held = [(60_000, false), (300_000, true)];
-    let (removed, added) = idle_changes(&held, &[(5_000, false), (60_000, false)]);
-    assert_eq!(removed, [(300_000, true)]);
-    assert_eq!(
-        added,
-        [(5_000, false)],
-        "the minute keeps its running clock"
-    );
-    let (removed, added) = idle_changes(&held, &held);
-    assert!(removed.is_empty() && added.is_empty());
-}
-
-#[test]
 fn fallback_keys_go_to_the_latest_surface_asking_for_them() {
     use crate::backend::wayland::client_layer::fallback_key_target;
     use KeyboardFocus::{Exclusive, None as NoFocus, OnDemand};

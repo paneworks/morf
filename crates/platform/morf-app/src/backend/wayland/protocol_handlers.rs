@@ -12,10 +12,6 @@ use wayland_protocols::ext::background_effect::v1::client::{
     ext_background_effect_manager_v1::{self, ExtBackgroundEffectManagerV1},
     ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1,
 };
-use wayland_protocols::ext::idle_notify::v1::client::{
-    ext_idle_notification_v1::{self, ExtIdleNotificationV1},
-    ext_idle_notifier_v1::ExtIdleNotifierV1,
-};
 use wayland_protocols::wp::fractional_scale::v1::client::{
     wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1,
     wp_fractional_scale_v1::{self, WpFractionalScaleV1},
@@ -243,28 +239,6 @@ impl Dispatch<WpFractionalScaleV1, WindowId> for LayerState {
     }
 }
 
-impl Dispatch<ExtIdleNotificationV1, (u32, bool)> for LayerState {
-    fn event(
-        state: &mut Self,
-        _proxy: &ExtIdleNotificationV1,
-        event: ext_idle_notification_v1::Event,
-        (timeout_ms, input_only): &(u32, bool),
-        _connection: &Connection,
-        _qh: &QueueHandle<Self>,
-    ) {
-        let idle = match event {
-            ext_idle_notification_v1::Event::Idled => true,
-            ext_idle_notification_v1::Event::Resumed => false,
-            _ => return,
-        };
-        state.events.push_back(Event::Idle {
-            timeout_ms: *timeout_ms,
-            input_only: *input_only,
-            idle,
-        });
-    }
-}
-
 impl Dispatch<ZwlrScreencopyFrameV1, ()> for LayerState {
     fn event(
         state: &mut Self,
@@ -467,7 +441,6 @@ delegate_registry!(LayerState);
 smithay_client_toolkit::delegate_dispatch2!(LayerState);
 wayland_client::delegate_noop!(LayerState: ignore WpFractionalScaleManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore WpViewporter);
-wayland_client::delegate_noop!(LayerState: ignore ExtIdleNotifierV1);
 wayland_client::delegate_noop!(LayerState: ignore ZwlrScreencopyManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore ZwpVirtualKeyboardManagerV1);
 wayland_client::delegate_noop!(LayerState: ignore ZwpVirtualKeyboardV1);

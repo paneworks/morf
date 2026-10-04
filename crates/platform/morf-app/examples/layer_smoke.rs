@@ -13,8 +13,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..LayerConfig::default()
     };
     let mut client = LayerClient::connect(config)?;
-    let idle_notify = client.set_idle_timeouts(&[(600_000, false)]);
     let mut desktop = Desktop::new(client.connection())?;
+    let idle_notify = desktop.set_idle_timeouts(&[(600_000, false)]);
     let output_power = desktop.set_output_power(OutputPowerMode::On);
     // Turned on and straight back off, because the point here is that the
     // compositor accepts both halves against a real surface — an inhibitor
@@ -160,7 +160,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     client.primary_logical_size().1,
                     client.primary_scale_120(),
                     screens,
-                    client
+                    desktop
                         .workspaces()
                         .iter()
                         .map(|workspace| format!(

@@ -131,27 +131,6 @@ impl LayerClient {
         fired
     }
 
-    /// Replaces seat idle thresholds and returns whether the compositor supports them.
-    /// Changes the idle thresholds in place: a notification for a threshold
-    /// still wanted is kept (its clock keeps running), one no longer wanted is
-    /// destroyed, a new one is created. ext-idle-notify allows both at any
-    /// time, so a subscription made after startup applies at once.
-    pub fn update_idle_timeouts(&mut self, timeouts: &[(u32, bool)]) -> bool {
-        self.state.idle_timeouts = timeouts.iter().copied().take(64).collect();
-        self.state.idle_timeouts.sort_unstable();
-        self.state.idle_timeouts.dedup();
-        self.state.reconcile_idle(&self.queue.handle());
-        self.state.idle_notifier.is_some()
-    }
-
-    pub fn set_idle_timeouts(&mut self, timeouts: &[(u32, bool)]) -> bool {
-        self.state.idle_timeouts = timeouts.iter().copied().take(64).collect();
-        self.state.idle_timeouts.sort_unstable();
-        self.state.idle_timeouts.dedup();
-        self.state.refresh_idle(&self.queue.handle());
-        self.state.idle_notifier.is_some()
-    }
-
     /// What can be done to another window, by identifier.
     ///
     /// One entry point rather than five methods, because every one of them is
@@ -256,103 +235,6 @@ impl LayerClient {
                 .get(&other)
                 .map_or(120, |entry| entry.scale_120),
         }
-    }
-
-    /// Every workspace the compositor reports, in a stable order.
-    ///
-    /// Sorted by coordinates and then id, because the protocol delivers them in
-    /// whatever order it happens to and a bar whose workspaces reshuffle
-    /// between frames is unusable.
-    pub fn workspaces(&self) -> Vec<WorkspaceInfo> {
-        let mut workspaces = self.state.workspaces.values().cloned().collect::<Vec<_>>();
-        workspaces.sort_by(|a, b| a.coordinates.cmp(&b.coordinates).then(a.key.cmp(&b.key)));
-        workspaces
-    }
-
-    /// Whether the workspace list changed since this was last asked.
-    pub fn take_workspaces_changed(&mut self) -> bool {
-        std::mem::take(&mut self.state.workspaces_changed)
-    }
-
-    /// Switches to a workspace by its key, reporting whether it could.
-    ///
-    /// `false` covers three different disappointments a configuration would
-    /// otherwise have to guess between: no such workspace, a compositor that
-    /// will not switch to it, or no workspace protocol at all.
-    pub fn activate_workspace(&mut self, key: &str) -> bool {
-        let Some(manager) = &self.state.workspace_manager else {
-            return false;
-        };
-        let Some(key) = self
-            .state
-            .workspaces
-            .iter()
-            .find(|(_, info)| info.key == key && info.activatable)
-            .map(|(key, _)| key.clone())
-        else {
-            return false;
-        };
-        let Some(handle) = self.state.workspace_handles.get(&key) else {
-            return false;
-        };
-        handle.activate();
-        // Nothing happens until the manager is told to apply it. The protocol
-        // batches, so a configuration that activated one workspace and
-        // deactivated another gets both or neither.
-        manager.commit();
-        true
-    }
-
-    /// Removes a workspace, reporting whether the compositor will.
-    pub fn remove_workspace(&mut self, key: &str) -> bool {
-        let Some(manager) = &self.state.workspace_manager else {
-            return false;
-        };
-        let Some(handle) = self.workspace_handle(key, |info| info.removable) else {
-            return false;
-        };
-        handle.remove();
-        manager.commit();
-        true
-    }
-
-    /// Moves a workspace to the group on `output`, reporting whether it could.
-    pub fn assign_workspace(&mut self, key: &str, output: &str) -> bool {
-        let Some(manager) = &self.state.workspace_manager else {
-            return false;
-        };
-        let Some(group) = self
-            .state
-            .workspace_group_outputs
-            .iter()
-            .find(|(_, name)| name.as_str() == output)
-            .and_then(|(id, _)| self.state.workspace_group_handles.get(id))
-            .cloned()
-        else {
-            return false;
-        };
-        let Some(handle) = self.workspace_handle(key, |info| info.assignable) else {
-            return false;
-        };
-        handle.assign(&group);
-        manager.commit();
-        true
-    }
-
-    /// The handle behind a workspace key, when the compositor allows the act.
-    fn workspace_handle(
-        &self,
-        key: &str,
-        allowed: impl Fn(&WorkspaceInfo) -> bool,
-    ) -> Option<&wayland_protocols::ext::workspace::v1::client::ext_workspace_handle_v1::ExtWorkspaceHandleV1>
-    {
-        let id = self
-            .state
-            .workspaces
-            .iter()
-            .find(|(_, info)| info.key == key && allowed(info))
-            .map(|(id, _)| id)?;
-        self.state.workspace_handles.get(id)
     }
 
     /// Whether the compositor lets a surface keep the session from idling

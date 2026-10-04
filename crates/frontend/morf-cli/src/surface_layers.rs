@@ -38,8 +38,8 @@ pub(crate) fn apply_service_requests(
     apply_input_method_requests(runtime, client);
     apply_text_input_requests(runtime, client);
     publish_windows(runtime, client);
-    publish_workspaces(runtime, client);
-    apply_workspace_requests(runtime, client);
+    publish_workspaces(runtime, desktop);
+    apply_workspace_requests(runtime, desktop);
     apply_toplevel_requests(runtime, client);
 }
 
@@ -86,11 +86,11 @@ fn publish_windows(runtime: &mut Runtime, client: &mut LayerClient) {
 ///
 /// The same contract as the window list above, and rebuilt the same way for the
 /// same reason.
-fn publish_workspaces(runtime: &mut Runtime, client: &mut LayerClient) {
-    if !client.take_workspaces_changed() {
+fn publish_workspaces(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
+    if !desktop.take_workspaces_changed() {
         return;
     }
-    let workspaces: Vec<Workspace> = client
+    let workspaces: Vec<Workspace> = desktop
         .workspaces()
         .into_iter()
         .map(|workspace| Workspace {
@@ -135,12 +135,12 @@ fn apply_toplevel_requests(runtime: &mut Runtime, client: &mut LayerClient) {
 }
 
 /// Acts on workspaces, if the configuration asked.
-fn apply_workspace_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+fn apply_workspace_requests(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
     for request in runtime.take_workspace_requests() {
         match request {
-            WorkspaceRequest::Activate(key) => client.activate_workspace(&key),
-            WorkspaceRequest::Remove(key) => client.remove_workspace(&key),
-            WorkspaceRequest::Assign { key, output } => client.assign_workspace(&key, &output),
+            WorkspaceRequest::Activate(key) => desktop.activate_workspace(&key),
+            WorkspaceRequest::Remove(key) => desktop.remove_workspace(&key),
+            WorkspaceRequest::Assign { key, output } => desktop.assign_workspace(&key, &output),
         };
     }
 }

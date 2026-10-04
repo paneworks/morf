@@ -23,7 +23,6 @@ impl SeatHandler for LayerState {
         _seat: wl_seat::WlSeat,
     ) {
         self.refresh_data_devices(qh);
-        self.refresh_idle(qh);
     }
 
     fn new_capability(

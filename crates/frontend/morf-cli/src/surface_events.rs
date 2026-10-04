@@ -79,13 +79,6 @@ pub(crate) fn handle_surface_event(
             return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
         }
         Event::Closed { id } => layer_surface_closed(runtime, client, state, id),
-        Event::Idle {
-            timeout_ms,
-            input_only,
-            idle,
-        } => {
-            repaint |= runtime.dispatch_idle(timeout_ms, input_only, idle);
-        }
         Event::Clipboard { text } => {
             repaint |= runtime.dispatch_clipboard(text);
         }

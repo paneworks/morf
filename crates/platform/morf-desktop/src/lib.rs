@@ -1,7 +1,7 @@
 //! The desktop protocols a shell uses, on the same Wayland connection as its
-//! windows but on an event queue of its own: gamma ramps and output power so
-//! far, then the rest of what moves here from `morf-app` (capture, clipboard
-//! over data-control, workspaces, foreign toplevels, idle).
+//! windows but on an event queue of its own: gamma ramps, output power,
+//! workspaces and idle notification so far, then the rest of what moves here
+//! from `morf-app` (capture, clipboard over data-control, foreign toplevels).
 //!
 //! The queue is its own because every protocol handler of smithay's toolkit
 //! is implemented on one state type, and a state type of another crate
@@ -10,30 +10,52 @@
 //! (any read of the socket fills this queue too).
 
 mod gamma;
+mod idle;
 mod output_power;
+mod workspaces;
+
+use std::collections::VecDeque;
 
 use smithay_client_toolkit::output::{OutputHandler, OutputState};
+use smithay_client_toolkit::seat::{Capability, SeatHandler, SeatState};
 use smithay_client_toolkit::registry::{ProvidesRegistryState, RegistryState};
 use smithay_client_toolkit::{delegate_registry, registry_handlers};
 use wayland_client::globals::registry_queue_init;
-use wayland_client::protocol::wl_output;
+use wayland_client::protocol::{wl_output, wl_seat};
 use wayland_client::{Connection, EventQueue, QueueHandle};
 
 pub use output_power::OutputPowerMode;
+pub use workspaces::WorkspaceInfo;
 pub use gamma::{
     GammaSettings, NEUTRAL as NEUTRAL_TEMPERATURE, TEMPERATURE_RANGE, ramps as gamma_ramps,
     white_point,
 };
 
+/// What the desktop protocols tell the host.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DesktopEvent {
+    /// An idle threshold was crossed, one way or the other.
+    Idle {
+        timeout_ms: u32,
+        /// Whether this threshold counts input only, ignoring idle inhibitors.
+        input_only: bool,
+        idle: bool,
+    },
+}
+
 /// What the desktop protocols know, dispatched on their own queue.
 pub struct DesktopState {
     registry: RegistryState,
     outputs: OutputState,
+    seats: SeatState,
+    events: VecDeque<DesktopEvent>,
     /// The output the shell's own surface sits on, by name, when the host
     /// has said: what a request naming no output is for.
     own_output: Option<String>,
     gamma: gamma::GammaState,
     output_power: output_power::OutputPowerState,
+    workspaces: workspaces::WorkspaceState,
+    idle: idle::IdleState,
 }
 
 /// The desktop protocols, on a connection a window backend opened.
@@ -52,9 +74,13 @@ impl Desktop {
         let mut state = DesktopState {
             registry: RegistryState::new(&globals),
             outputs: OutputState::new(&globals, &qh),
+            seats: SeatState::new(&globals, &qh),
+            events: VecDeque::new(),
             own_output: None,
             gamma: gamma::GammaState::bind(&globals, &qh),
             output_power: output_power::OutputPowerState::bind(&globals, &qh),
+            workspaces: workspaces::WorkspaceState::bind(&globals, &qh),
+            idle: idle::IdleState::bind(&globals, &qh),
         };
         // The outputs' names arrive as events: hear them before anything is
         // asked of an output by name.
@@ -76,6 +102,11 @@ impl Desktop {
         Ok(())
     }
 
+    /// The next thing the desktop protocols have to tell.
+    pub fn next_event(&mut self) -> Option<DesktopEvent> {
+        self.state.events.pop_front()
+    }
+
     /// Says which output the shell sits on (by name): a request that names
     /// no output is for that one.
     pub fn set_own_output(&mut self, name: Option<String>) {
@@ -88,6 +119,11 @@ impl Desktop {
 }
 
 impl DesktopState {
+    /// The seat, when there is one.
+    fn seat(&self) -> Option<wl_seat::WlSeat> {
+        self.seats.seats().next()
+    }
+
     /// The output named `name`.
     fn output_named(&self, name: &str) -> Option<wl_output::WlOutput> {
         self.outputs.outputs().find(|output| {
@@ -141,12 +177,28 @@ impl OutputHandler for DesktopState {
     }
 }
 
+impl SeatHandler for DesktopState {
+    fn seat_state(&mut self) -> &mut SeatState {
+        &mut self.seats
+    }
+
+    fn new_seat(&mut self, _: &Connection, qh: &QueueHandle<Self>, seat: wl_seat::WlSeat) {
+        self.idle.refresh(Some(&seat), qh);
+    }
+
+    fn new_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat, _: Capability) {}
+
+    fn remove_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat, _: Capability) {}
+
+    fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
+}
+
 impl ProvidesRegistryState for DesktopState {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry
     }
 
-    registry_handlers![OutputState];
+    registry_handlers![OutputState, SeatState];
 }
 
 delegate_registry!(DesktopState);

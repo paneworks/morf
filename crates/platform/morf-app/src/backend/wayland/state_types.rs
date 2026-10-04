@@ -35,9 +35,6 @@ use wayland_protocols::ext::background_effect::v1::client::{
 };
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1;
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
-use wayland_protocols::ext::idle_notify::v1::client::{
-    ext_idle_notification_v1::ExtIdleNotificationV1, ext_idle_notifier_v1::ExtIdleNotifierV1,
-};
 use wayland_protocols::ext::image_capture_source::v1::client::{
     ext_foreign_toplevel_image_capture_source_manager_v1::ExtForeignToplevelImageCaptureSourceManagerV1,
     ext_output_image_capture_source_manager_v1::ExtOutputImageCaptureSourceManagerV1,
@@ -54,10 +51,6 @@ use wayland_protocols_wlr::foreign_toplevel::v1::client::{
 };
 
 use crate::backend::wayland::toplevel_control::ToplevelControl;
-use wayland_protocols::ext::workspace::v1::client::{
-    ext_workspace_group_handle_v1::ExtWorkspaceGroupHandleV1,
-    ext_workspace_handle_v1::ExtWorkspaceHandleV1, ext_workspace_manager_v1::ExtWorkspaceManagerV1,
-};
 use wayland_protocols::wp::cursor_shape::v1::client::{
     wp_cursor_shape_device_v1::WpCursorShapeDeviceV1,
     wp_cursor_shape_manager_v1::WpCursorShapeManagerV1,
@@ -247,7 +240,6 @@ pub(crate) struct LayerState {
     pub(crate) keyboard_surface: Option<WindowId>,
     /// The key being held, repeated by the client (`key_repeat`).
     pub(crate) key_repeat: crate::backend::wayland::key_repeat::KeyRepeat,
-    pub(crate) idle_notifier: Option<ExtIdleNotifierV1>,
     pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
     /// The control half of the window list. Optional: a compositor may offer
     /// the newer enumeration protocol and not this one, and then windows can be
@@ -263,21 +255,6 @@ pub(crate) struct LayerState {
     /// as the bar that opened it, and wrong the moment it is not -- which on a
     /// mixed-DPI desk is most of the time.
     pub(crate) aux_scales: HashMap<WindowId, AuxSurfaceScale>,
-    pub(crate) workspace_manager: Option<ExtWorkspaceManagerV1>,
-    /// Every workspace the compositor reports, keyed by its protocol object.
-    pub(crate) workspaces: HashMap<ObjectId, WorkspaceInfo>,
-    /// The handles behind them, so `activate` has something to call. A
-    /// configuration is only ever given strings, so the engine is what finds
-    /// its way back from an id to the object the compositor knows.
-    pub(crate) workspace_handles: HashMap<ObjectId, ExtWorkspaceHandleV1>,
-    /// Which group each workspace belongs to, and which output each group is
-    /// on. Two maps rather than one because the protocol delivers the two facts
-    /// separately and in either order.
-    pub(crate) workspace_groups: HashMap<ObjectId, ObjectId>,
-    /// The group handles themselves, so `assign` has something to hand over.
-    pub(crate) workspace_group_handles: HashMap<ObjectId, ExtWorkspaceGroupHandleV1>,
-    pub(crate) workspace_group_outputs: HashMap<ObjectId, String>,
-    pub(crate) workspaces_changed: bool,
     /// The live inhibitor, if the shell is currently holding the session awake.
     ///
     /// Its existence *is* the inhibition — the protocol has no "off", only a
@@ -291,9 +268,6 @@ pub(crate) struct LayerState {
     /// protocol honours an inhibitor only while *its* surface has focus.
     pub(crate) shortcuts_inhibitors: HashMap<WindowId, ZwpKeyboardShortcutsInhibitorV1>,
     pub(crate) shortcuts_inhibit: crate::backend::wayland::inhibit_handlers::ShortcutsInhibit,
-    pub(crate) idle_notifications: Vec<ExtIdleNotificationV1>,
-    /// Thresholds, each with whether it should ignore inhibitors.
-    pub(crate) idle_timeouts: Vec<(u32, bool)>,
     pub(crate) data_device_manager: Option<DataDeviceManagerState>,
     pub(crate) data_devices: Vec<DataDevice>,
     pub(crate) clipboard_source: Option<CopyPasteSource>,

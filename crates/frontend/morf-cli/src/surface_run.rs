@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use crate::desktop::desktop_for;
+use crate::desktop::{desktop_for, dispatch_desktop};
 use crate::render_target::{primary_target, surface_backend};
 use crate::{
     backdrop::*, capture::*, lock::*, pacing::*, paint::*, services::*, supervisor::*,
@@ -158,7 +158,7 @@ fn drive_surface(
     // unrelated margin the configuration animates.
     let mut reserve = layer_config.reserve;
 
-    client.set_idle_timeouts(&runtime.idle_timeouts());
+    desktop.set_idle_timeouts(&runtime.idle_timeouts());
     tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
         output: name.clone(),
         screens: client.screens().to_vec(),
@@ -211,7 +211,6 @@ fn drive_surface(
                 | Event::Scale { .. }
                 | Event::AuxScale { .. }
                 | Event::ShortcutsInhibited { .. }
-                | Event::Idle { .. }
                 | Event::Clipboard { .. }
                 | Event::Selection { .. }
                 | Event::OfferRead { .. }
@@ -353,7 +352,7 @@ fn drive_surface(
         let woke = client
             .wait_for(sleep.timeout(), Some(wake.as_fd()))
             .map_err(|error| error.to_string())?;
-        desktop.dispatch_pending()?;
+        let desktop_repaint = dispatch_desktop(runtime, &mut desktop)?;
         wake.drain();
         log_wake(&name, woke, &sleep, slept);
         // Now and then, what keeps the loop drawing, when anything does.
@@ -369,7 +368,7 @@ fn drive_surface(
         // Before the services, so a callback reading the time reads it as it
         // is now, not as it was when the loop last woke.
         let next_clock = clock_text();
-        let mut repaint = std::mem::take(&mut containment_repaint);
+        let mut repaint = std::mem::take(&mut containment_repaint) | desktop_repaint;
         if next_clock != clock {
             clock = next_clock;
             repaint |= runtime
@@ -400,7 +399,7 @@ fn drive_surface(
                 state.input.reset();
             }
             if update.refresh_idle {
-                client.set_idle_timeouts(&runtime.idle_timeouts());
+                desktop.set_idle_timeouts(&runtime.idle_timeouts());
             }
             if update.reloaded {
                 // Node handles and layout revisions belong to a single runtime.
@@ -428,8 +427,7 @@ fn drive_surface(
             }
         }
         if recreate_surface {
-            let mut replacement = connect_runtime_surface(runtime, &name)?;
-            replacement.set_idle_timeouts(&runtime.idle_timeouts());
+            let replacement = connect_runtime_surface(runtime, &name)?;
             let (width, height) = replacement.physical_size();
             let backend = surface_backend(primary_target(&replacement)?, width, height)
             .map_err(|error| error.to_string())?;
@@ -441,6 +439,7 @@ fn drive_surface(
             state.layer_surfaces.clear();
             client = replacement;
             desktop = desktop_for(&client)?;
+            desktop.set_idle_timeouts(&runtime.idle_timeouts());
             client.set_waker(morf_io::wake_all);
             reserve = runtime.layer_surface_config().reserve;
             tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
@@ -463,7 +462,7 @@ fn drive_surface(
             return Ok(());
         }
         apply_idle_inhibit(runtime, &mut client);
-        apply_idle_timeouts(runtime, &mut client);
+        apply_idle_timeouts(runtime, &mut desktop);
         apply_shortcuts_inhibit(runtime, &mut client);
         if let Some(enabled) = runtime.take_watch_files_change() {
             tx.send(SupervisorMessage::WatchFiles(enabled))

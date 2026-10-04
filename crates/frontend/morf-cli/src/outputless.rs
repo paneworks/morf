@@ -18,7 +18,7 @@ use std::os::fd::AsFd;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use crate::desktop::desktop_for;
+use crate::desktop::{desktop_for, dispatch_desktop};
 use crate::{
     lock::*, paint::clock_text, services::apply_idle_timeouts, supervisor::execute_config_on,
     surface_layers::apply_service_requests, wake_plan::*, workers::*,
@@ -139,8 +139,11 @@ fn drive_outputless(
             && attempted.is_none_or(|at: Instant| at.elapsed() >= RECONNECT)
         {
             attempted = Some(Instant::now());
-            client = connect_client(runtime, &send)?;
+            client = connect_client(&send)?;
             desktop = client.as_ref().map(desktop_for).transpose()?;
+            if let Some(desktop) = desktop.as_mut() {
+                desktop.set_idle_timeouts(&runtime.idle_timeouts());
+            }
         }
         let sleep = Sleep::plan_with(
             runtime,
@@ -159,7 +162,7 @@ fn drive_outputless(
                     .wait_for(timeout, Some(wake.as_fd()))
                     .map_err(|error| error.to_string())?;
                 if let Some(desktop) = desktop.as_mut() {
-                    desktop.dispatch_pending()?;
+                    dispatch_desktop(runtime, desktop)?;
                 }
                 log_wake(OUTPUTLESS, woke, &sleep, slept);
             }
@@ -184,10 +187,8 @@ fn drive_outputless(
                     output: OUTPUTLESS.to_owned(),
                     wanted: runtime.layer_surface_config().outputless,
                 })?;
-                if let Some(client) = client.as_mut() {
-                    client.set_idle_timeouts(&runtime.idle_timeouts());
-                }
                 if let Some(desktop) = desktop.as_mut() {
+                    desktop.set_idle_timeouts(&runtime.idle_timeouts());
                     let _ = desktop.reset_gamma(None);
                 }
             }
@@ -214,7 +215,7 @@ fn drive_outputless(
             continue;
         };
         apply_service_requests(runtime, client, desktop);
-        apply_idle_timeouts(runtime, client);
+        apply_idle_timeouts(runtime, desktop);
         while let Some(event) = client.next_event() {
             follow_up = true;
             match event {
@@ -222,13 +223,6 @@ fn drive_outputless(
                     output: OUTPUTLESS.to_owned(),
                     screens,
                 })?,
-                Event::Idle {
-                    timeout_ms,
-                    input_only,
-                    idle,
-                } => {
-                    runtime.dispatch_idle(timeout_ms, input_only, idle);
-                }
                 Event::Clipboard { text } => {
                     runtime.dispatch_clipboard(text);
                 }
@@ -243,14 +237,12 @@ fn drive_outputless(
 /// A Wayland connection with no surface, which hears outputs arrive; `None`
 /// while the compositor cannot be reached.
 fn connect_client(
-    runtime: &Runtime,
     send: &impl Fn(WorkerMessage) -> Result<(), String>,
 ) -> Result<Option<LayerClient>, String> {
     let Ok(mut client) = LayerClient::probe() else {
         return Ok(None);
     };
     client.set_waker(morf_io::wake_all);
-    client.set_idle_timeouts(&runtime.idle_timeouts());
     // An output may have come in the moment before this connection did.
     send(WorkerMessage::Screens {
         output: OUTPUTLESS.to_owned(),

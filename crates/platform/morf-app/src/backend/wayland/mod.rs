@@ -34,7 +34,6 @@ mod surface_types;
 mod toplevel_control;
 mod toplevel_handlers;
 mod types;
-mod workspace_handlers;
 
 pub use buffer_sink::WaylandBufferSink;
 pub use client_layer::*;

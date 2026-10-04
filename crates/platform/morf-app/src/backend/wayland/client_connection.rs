@@ -16,13 +16,11 @@ use wayland_client::Connection;
 use wayland_client::globals::registry_queue_init;
 use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
-use wayland_protocols::ext::idle_notify::v1::client::ext_idle_notifier_v1::ExtIdleNotifierV1;
 use wayland_protocols::ext::image_capture_source::v1::client::{
     ext_foreign_toplevel_image_capture_source_manager_v1::ExtForeignToplevelImageCaptureSourceManagerV1,
     ext_output_image_capture_source_manager_v1::ExtOutputImageCaptureSourceManagerV1,
 };
 use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_capture_manager_v1::ExtImageCopyCaptureManagerV1;
-use wayland_protocols::ext::workspace::v1::client::ext_workspace_manager_v1::ExtWorkspaceManagerV1;
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1;
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
 use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1;
@@ -95,15 +93,11 @@ impl LayerClient {
         let cursor_shape_manager = globals
             .bind::<WpCursorShapeManagerV1, _, _>(&qh, 1..=2, ())
             .ok();
-        let idle_notifier = globals.bind::<ExtIdleNotifierV1, _, _>(&qh, 1..=2, ()).ok();
         let idle_inhibit_manager = globals
             .bind::<ZwpIdleInhibitManagerV1, _, _>(&qh, 1..=1, ())
             .ok();
         let shortcuts_inhibit_manager = globals
             .bind::<ZwpKeyboardShortcutsInhibitManagerV1, _, _>(&qh, 1..=1, ())
-            .ok();
-        let workspace_manager = globals
-            .bind::<ExtWorkspaceManagerV1, _, _>(&qh, 1..=1, ())
             .ok();
         // Version 3 where offered, for `set_fullscreen`; 1 is enough for
         // activate, close and the maximize/minimize pair.
@@ -203,7 +197,6 @@ impl LayerClient {
             touch_points: HashMap::new(),
             keyboard_surface: None,
             key_repeat: Default::default(),
-            idle_notifier,
             idle_inhibit_manager,
             idle_inhibitor: None,
             shortcuts_inhibit_manager,
@@ -213,15 +206,6 @@ impl LayerClient {
             toplevel_controls: HashMap::new(),
             toplevel_control_handles: HashMap::new(),
             aux_scales: HashMap::new(),
-            workspace_manager,
-            workspaces: HashMap::new(),
-            workspace_handles: HashMap::new(),
-            workspace_groups: HashMap::new(),
-            workspace_group_handles: HashMap::new(),
-            workspace_group_outputs: HashMap::new(),
-            workspaces_changed: false,
-            idle_notifications: Vec::new(),
-            idle_timeouts: Vec::new(),
             data_device_manager,
             data_devices: Vec::new(),
             clipboard_source: None,
