@@ -53,13 +53,7 @@ impl Runtime {
     /// a node sliding on `translate_x` moves without its layout changing.
     /// Free when nothing in the scene stretches.
     pub fn observe_stretch(&mut self, layout: &Layout) {
-        let mut state = self.reactive.borrow_mut();
-        if !state.scene.has_stretch() {
-            return;
-        }
-        if let Err(error) = morf_layout::observe_stretch(&mut state.scene, layout) {
-            state.log(LogLevel::Warn, format!("stretch: {error}"));
-        }
+        self.reactive.borrow_mut().engine.observe_stretch(layout);
     }
 
     /// Updates native transform watchers from one rendered surface layout.

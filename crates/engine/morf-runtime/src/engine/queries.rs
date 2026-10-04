@@ -131,6 +131,17 @@ impl Engine {
         moved
     }
 
+    /// Tells every stretching node in a frame's layout where it is, so its
+    /// spring steps before the frame is painted. Free when nothing stretches.
+    pub fn observe_stretch(&mut self, layout: &morf_layout::Layout) {
+        if !self.scene.has_stretch() {
+            return;
+        }
+        if let Err(error) = morf_layout::observe_stretch(&mut self.scene, layout) {
+            self.log(crate::log::LogLevel::Warn, format!("stretch: {error}"));
+        }
+    }
+
     /// The node a key pressed while `node` has focus goes to.
     pub fn key_route(&self, node: NodeHandle) -> Option<NodeHandle> {
         routing::key_route(&self.scene, &self.events, node)
