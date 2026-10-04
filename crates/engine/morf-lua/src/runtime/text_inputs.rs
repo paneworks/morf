@@ -34,35 +34,7 @@ pub(crate) use keys::{KeyOutcome, key};
 use pointer::tell_input_method;
 pub(crate) use pointer::{drag, input_method_commit, press, reconcile_focus, release, set_focus};
 
-/// Which modifier keys were held with a key.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct KeyModifiers {
-    /// Either Control.
-    pub ctrl: bool,
-    /// Either Shift.
-    pub shift: bool,
-    /// Either Alt.
-    pub alt: bool,
-    /// The Super (logo) key.
-    pub logo: bool,
-}
-
-impl KeyModifiers {
-    /// The held modifiers as a configuration reads them: `"ctrl+shift"`, or
-    /// an empty string for none.
-    pub fn name(self) -> String {
-        [
-            (self.ctrl, "ctrl"),
-            (self.shift, "shift"),
-            (self.alt, "alt"),
-            (self.logo, "super"),
-        ]
-        .into_iter()
-        .filter_map(|(held, name)| held.then_some(name))
-        .collect::<Vec<_>>()
-        .join("+")
-    }
-}
+pub use morf_runtime::events::KeyModifiers;
 
 /// What a drag started by a press extends by.
 #[derive(Clone, Debug)]

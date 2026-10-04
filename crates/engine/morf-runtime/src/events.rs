@@ -253,3 +253,33 @@ impl PointerWatch {
         self.fresh.retain(|fresh| *fresh != node);
     }
 }
+
+/// Which modifier keys were held with a key.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct KeyModifiers {
+    /// Either Control.
+    pub ctrl: bool,
+    /// Either Shift.
+    pub shift: bool,
+    /// Either Alt.
+    pub alt: bool,
+    /// The Super (logo) key.
+    pub logo: bool,
+}
+
+impl KeyModifiers {
+    /// The held modifiers as a configuration reads them: `"ctrl+shift"`, or
+    /// an empty string for none.
+    pub fn name(self) -> String {
+        [
+            (self.ctrl, "ctrl"),
+            (self.shift, "shift"),
+            (self.alt, "alt"),
+            (self.logo, "super"),
+        ]
+        .into_iter()
+        .filter_map(|(held, name)| held.then_some(name))
+        .collect::<Vec<_>>()
+        .join("+")
+    }
+}

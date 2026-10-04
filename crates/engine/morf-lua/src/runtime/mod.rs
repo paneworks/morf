@@ -16,7 +16,7 @@ pub(crate) mod image_jobs;
 pub(crate) mod images;
 pub(crate) mod input;
 pub(crate) mod ipc;
-pub mod keys;
+pub use morf_runtime::keys;
 pub(crate) mod layout;
 pub(crate) mod layout_host;
 pub(crate) mod lock_surface;

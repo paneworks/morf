@@ -137,7 +137,7 @@ pub(crate) fn install_reactive_api(
         crate::api_fs::install_fs_api(ctx, morf, Rc::clone(&state));
         crate::api_watch::install_watch_api(ctx, Rc::clone(&state), morf, limits);
         crate::api_date::install_date_api(ctx, morf);
-        crate::keys::install_keys_api(ctx, morf);
+        install_keys_api(ctx, morf);
         crate::api_palette::install_palette_api(ctx, Rc::clone(&state), morf);
         crate::api_encoding::install_encoding_api(ctx, morf);
         crate::api_text::install_text_api(ctx, morf);
@@ -167,4 +167,22 @@ pub(crate) fn install_reactive_api(
             limits,
         );
     });
+}
+
+/// `morf.keys`: every named key's keysym by its X name (`morf.keys.Down`),
+/// for comparing against the number a handler gets.
+fn install_keys_api<'gc>(ctx: luna::Context<'gc>, morf: luna::Table<'gc>) {
+    let keys = luna::Table::new(&ctx);
+    for (name, keysym) in crate::keys::NAMED {
+        keys.set_field(ctx, name, i64::from(*keysym));
+    }
+    for number in 1..=35u32 {
+        let name = format!("F{number}");
+        let _ = keys.set(
+            ctx,
+            ctx.intern(name.as_bytes()),
+            i64::from(0xffbe + number - 1),
+        );
+    }
+    morf.set_field(ctx, "keys", keys);
 }

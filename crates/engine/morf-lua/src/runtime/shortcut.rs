@@ -1,159 +1,15 @@
-//! Keyboard shortcuts on nodes.
-//!
-//! `shortcuts = { ["ctrl+b"] = fn, ["ctrl+k ctrl+s"] = fn }` on any node.
-//! A key goes to the shortcuts before it goes to the node with focus: first
-//! those on the focused node and its ancestors, nearest first, then those of
-//! any shown node on the surface whose table says `scope = "surface"`. A
-//! shortcut's function is called with its sequence; returning false passes
-//! the key on as though it had not matched.
-//!
-//! A sequence is chords separated by spaces; a chord is modifiers and a key
-//! joined by `+` (`ctrl`, `shift`, `alt`, `super`, and any key name
-//! `morf.keys` knows -- `back` and `forward` are a mouse's side buttons too).
-//! A key that begins a longer sequence is held until the next key either
-//! finishes it or does not, and then goes on as usual. Plain keys (no Ctrl,
-//! Alt or Super) never reach shortcuts while a text input or terminal has
-//! focus: they are typing. Nor do a field's editing chords (Ctrl+A, C, X,
-//! V, Z, Y, and Ctrl with a key that moves or deletes), nor anything but
-//! Super-chords while a terminal has focus: its program's keys are its own.
-//!
-//! A chord that is a modifier alone -- `"alt"`, `"super"`, `"ctrl"`,
-//! `"shift"` -- is a tap: the key pressed and let go with nothing else in
-//! between (no other key, no click). Alt tapped is how a menu bar is
-//! reached; Alt held with a letter is still an Alt chord.
+//! Keyboard shortcuts on nodes, as a configuration declares them
+//! (`shortcuts = { ["ctrl+b"] = fn }`) and as keys run them. The chords,
+//! sequences, taps and matching are morf-runtime's.
 
-use std::time::{Duration, Instant};
-
-use morf_scene::{Element, NodeHandle};
+use morf_scene::NodeHandle;
 
 use crate::IpcValue;
 use crate::reactive_execute::execute_ipc_handler;
 use crate::text_inputs::KeyModifiers;
 use crate::types::LogLevel;
-use morf_runtime::Handler;
 
-/// How long the first chords of a sequence wait for the next.
-pub(crate) const SEQUENCE_TIMEOUT: Duration = Duration::from_millis(1500);
-
-/// One chord: the modifiers held and the key.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Chord {
-    pub(crate) ctrl: bool,
-    pub(crate) shift: bool,
-    pub(crate) alt: bool,
-    pub(crate) logo: bool,
-    pub(crate) key: u32,
-}
-
-/// A letter's keysym in lower case: Shift+K arrives as `K`, and
-/// `"ctrl+shift+k"` should match it.
-fn fold(keysym: u32) -> u32 {
-    if (0x41..=0x5a).contains(&keysym) {
-        keysym + 0x20
-    } else {
-        keysym
-    }
-}
-
-impl Chord {
-    /// The chord a press makes.
-    pub(crate) fn pressed(keysym: u32, modifiers: KeyModifiers) -> Self {
-        Self {
-            ctrl: modifiers.ctrl,
-            shift: modifiers.shift,
-            alt: modifiers.alt,
-            logo: modifiers.logo,
-            key: fold(keysym),
-        }
-    }
-
-    /// Whether the chord has no Ctrl, Alt or Super: a key that types.
-    pub(crate) fn plain(self) -> bool {
-        !self.ctrl && !self.alt && !self.logo
-    }
-
-    /// Parses `"ctrl+shift+k"`.
-    pub(crate) fn parse(text: &str) -> Result<Self, String> {
-        let mut chord = Self {
-            ctrl: false,
-            shift: false,
-            alt: false,
-            logo: false,
-            key: 0,
-        };
-        let parts: Vec<&str> = if text.ends_with("++") || text == "+" {
-            let mut parts: Vec<&str> = text[..text.len() - 1]
-                .split('+')
-                .filter(|p| !p.is_empty())
-                .collect();
-            parts.push("+");
-            parts
-        } else {
-            text.split('+').collect()
-        };
-        let (key, modifiers) = parts
-            .split_last()
-            .ok_or_else(|| format!("`{text}` names no key"))?;
-        // A modifier alone is its tap.
-        if modifiers.is_empty()
-            && let Some(tap) = tap_key(&key.to_ascii_lowercase())
-        {
-            chord.key = tap;
-            return Ok(chord);
-        }
-        for modifier in modifiers {
-            match modifier.to_ascii_lowercase().as_str() {
-                "ctrl" | "control" => chord.ctrl = true,
-                "shift" => chord.shift = true,
-                "alt" => chord.alt = true,
-                "super" | "logo" | "meta" | "mod4" => chord.logo = true,
-                other => {
-                    return Err(format!(
-                        "`{other}` in `{text}` is not ctrl, shift, alt or super"
-                    ));
-                }
-            }
-        }
-        let keysym = crate::keys::keysym(key)
-            .or_else(|| crate::keys::keysym(&key.to_lowercase()))
-            .ok_or_else(|| format!("`{key}` in `{text}` is not a key name"))?;
-        chord.key = fold(keysym);
-        Ok(chord)
-    }
-}
-
-/// Parses a sequence: chords separated by spaces.
-pub(crate) fn parse_sequence(text: &str) -> Result<Vec<Chord>, String> {
-    let chords = text
-        .split_whitespace()
-        .map(Chord::parse)
-        .collect::<Result<Vec<_>, _>>()?;
-    if chords.is_empty() {
-        return Err("a shortcut needs at least one key".to_owned());
-    }
-    Ok(chords)
-}
-
-/// One node's shortcuts.
-pub(crate) struct NodeShortcuts {
-    /// Whether they hold anywhere on the surface rather than only around
-    /// focus.
-    pub(crate) surface: bool,
-    pub(crate) entries: Vec<(String, Vec<Chord>, Handler)>,
-}
-
-/// The first chords of a sequence, held on one surface.
-#[derive(Default)]
-pub(crate) struct Pending {
-    pub(crate) root: Option<NodeHandle>,
-    pub(crate) chords: Vec<Chord>,
-    pub(crate) since: Option<Instant>,
-}
-
-/// Whether a node is a place keys type into.
-pub(crate) fn types_keys(element: Option<Element>) -> bool {
-    matches!(element, Some(Element::TextInput | Element::Terminal))
-}
+pub(crate) use morf_runtime::shortcuts::*;
 
 /// Reads a `shortcuts` table: `scope` and sequence = function pairs.
 pub(crate) fn read_table<'gc>(
@@ -201,53 +57,6 @@ pub(crate) fn read_table<'gc>(
     Ok(Some(shortcuts))
 }
 
-/// Whether a keysym is only a modifier going down.
-/// The keysym a modifier's tap is known by: the left one of a pair.
-fn tap_key(name: &str) -> Option<u32> {
-    Some(match name {
-        "alt" => 0xffe9,
-        "super" | "logo" | "meta" => 0xffeb,
-        "ctrl" | "control" => 0xffe3,
-        "shift" => 0xffe1,
-        _ => return None,
-    })
-}
-
-/// A modifier's keysym folded to its left one: Alt_R taps as Alt.
-fn tap_of(keysym: u32) -> Option<u32> {
-    Some(match keysym {
-        0xffe9 | 0xffea | 0xfe03 => 0xffe9,
-        0xffeb | 0xffec | 0xffe7 | 0xffe8 => 0xffeb,
-        0xffe3 | 0xffe4 => 0xffe3,
-        0xffe1 | 0xffe2 => 0xffe1,
-        _ => return None,
-    })
-}
-
-fn modifier_only(keysym: u32) -> bool {
-    (0xffe1..=0xffee).contains(&keysym) || keysym == 0xfe03
-}
-
-/// Whether a chord is one a text field edits with: Ctrl with A, C, X, V,
-/// Z or Y, or with a key that moves or deletes.
-fn editing_chord(chord: Chord) -> bool {
-    const EDITING: &[u32] = &[
-        0xff08, 0xffff, 0xff9f, 0xff63, 0xff9e, 0xff51, 0xff52, 0xff53, 0xff54, 0xff50, 0xff57,
-        0xff0d, 0xff8d,
-    ];
-    chord.ctrl
-        && !chord.alt
-        && !chord.logo
-        && (matches!(chord.key, 0x61 | 0x63 | 0x76 | 0x78 | 0x79 | 0x7a)
-            || EDITING.contains(&chord.key))
-}
-
-/// Whether a plain key still means something besides typing: a function
-/// key or a media key.
-fn beyond_typing(keysym: u32) -> bool {
-    (0xffbe..=0xffe0).contains(&keysym) || (0x1008_ff00..=0x1008_ffff).contains(&keysym)
-}
-
 impl crate::Runtime {
     /// Runs the shortcut a key press makes on the surface whose tree is
     /// `root`, with `target` the node keys go to there. Returns whether the
@@ -270,16 +79,7 @@ impl crate::Runtime {
         }
         let started = self.reactive.borrow_mut().modifier_tap.take();
         match (started, tap) {
-            (Some(a), Some(b)) if a == b => {
-                let chord = Chord {
-                    ctrl: false,
-                    shift: false,
-                    alt: false,
-                    logo: false,
-                    key: a,
-                };
-                self.run_sequence(root, target, &[chord])
-            }
+            (Some(a), Some(b)) if a == b => self.run_sequence(root, target, &[tap_chord(a)]),
             _ => false,
         }
     }
@@ -302,24 +102,11 @@ impl crate::Runtime {
         }
         let chord = Chord::pressed(keysym, modifiers);
         let element = target.and_then(|node| self.reactive.borrow().scene.element(node).ok());
-        let typing = types_keys(element);
-        // A field keeps its editing chords and a terminal its program's
-        // keys: only Super reaches past a terminal.
-        let kept = (element == Some(Element::TextInput) && editing_chord(chord))
-            || (element == Some(Element::Terminal) && !chord.logo);
-        if kept || (typing && chord.plain() && !beyond_typing(chord.key)) {
+        if !reaches_shortcuts(element, chord) {
             self.reactive.borrow_mut().shortcut_pending = Pending::default();
             return false;
         }
-        let held = {
-            let mut state = self.reactive.borrow_mut();
-            let pending = std::mem::take(&mut state.shortcut_pending);
-            let fresh = pending.root == Some(root)
-                && pending
-                    .since
-                    .is_some_and(|since| since.elapsed() < SEQUENCE_TIMEOUT);
-            if fresh { pending.chords } else { Vec::new() }
-        };
+        let held = std::mem::take(&mut self.reactive.borrow_mut().shortcut_pending).held_for(root);
         let had_prefix = !held.is_empty();
         let mut sequence = held;
         sequence.push(chord);
@@ -341,31 +128,7 @@ impl crate::Runtime {
             if state.shortcuts.is_empty() {
                 return false;
             }
-            let mut owners = Vec::new();
-            let mut current = target.or(Some(root));
-            while let Some(node) = current {
-                if state.shortcuts.contains_key(&node) && state.scene.can_hold_focus(node) {
-                    owners.push(node);
-                }
-                current = state.scene.parent(node).ok().flatten();
-            }
-            // In tree order, so the nearer to the top of the surface wins.
-            let surface = state.scene.focus_nodes(root, |node| {
-                state.shortcuts.get(&node).is_some_and(|s| s.surface) && !owners.contains(&node)
-            });
-            owners.extend(surface);
-            let mut exact = Vec::new();
-            let mut prefix = false;
-            for node in owners {
-                for (name, chords, closure) in &state.shortcuts[&node].entries {
-                    if chords.as_slice() == sequence {
-                        exact.push((node, name.clone(), closure.clone()));
-                    } else if chords.len() > sequence.len() && chords.starts_with(sequence) {
-                        prefix = true;
-                    }
-                }
-            }
-            (exact, prefix)
+            matching(&state.scene, &state.shortcuts, root, target, sequence)
         };
         for (node, name, closure) in exact {
             let args = [IpcValue::String(name.clone())];
@@ -383,12 +146,7 @@ impl crate::Runtime {
             }
         }
         if prefix {
-            let mut state = self.reactive.borrow_mut();
-            state.shortcut_pending = Pending {
-                root: Some(root),
-                chords: sequence.to_vec(),
-                since: Some(Instant::now()),
-            };
+            self.reactive.borrow_mut().shortcut_pending = Pending::holding(root, sequence);
             return true;
         }
         false
