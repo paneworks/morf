@@ -1897,7 +1897,9 @@ dependencies = [
 name = "morf-runtime"
 version = "0.1.5"
 dependencies = [
+ "jiff",
  "morf-scene",
+ "morf-value",
 ]
 
 [[package]]
