@@ -124,23 +124,15 @@ impl Runtime {
 
     /// Returns the native layer-surface settings assigned by the configuration.
     pub fn layer_surface_config(&self) -> LayerSurfaceConfig {
-        self.reactive.borrow().layer_surface.clone()
+        self.reactive.borrow().windows.layer_surface.clone()
     }
 
     pub fn window_surface_configs(&self) -> Vec<WindowSurfaceConfig> {
-        let mut surfaces = self
-            .reactive
-            .borrow()
-            .window_surfaces
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        surfaces.sort_by_key(|surface| surface.id);
-        surfaces
+        self.reactive.borrow().windows.configs()
     }
 
     pub fn take_window_surface_change(&mut self) -> bool {
-        std::mem::take(&mut self.reactive.borrow_mut().window_surfaces_changed)
+        self.reactive.borrow_mut().windows.take_change()
     }
 
     /// Takes a pending change to the shell's own layer-surface geometry.
@@ -149,24 +141,15 @@ impl Runtime {
     /// be re-issued on a mapped surface, so an assignment to `morf.surface`
     /// reaches the compositor without a reconnect.
     pub fn take_layer_surface_change(&mut self) -> bool {
-        std::mem::take(&mut self.reactive.borrow_mut().layer_surface_changed)
+        self.reactive.borrow_mut().windows.take_layer_change()
     }
 
     pub fn take_window_surface_actions(&mut self) -> Vec<WindowSurfaceAction> {
-        std::mem::take(&mut self.reactive.borrow_mut().window_surface_actions)
+        self.reactive.borrow_mut().windows.take_actions()
     }
 
     pub fn set_window_surface_visible(&mut self, id: u64, visible: bool) -> bool {
-        let mut state = self.reactive.borrow_mut();
-        let Some(surface) = state.window_surfaces.get_mut(&id) else {
-            return false;
-        };
-        if surface.visible == visible {
-            return false;
-        }
-        surface.visible = visible;
-        state.window_surfaces_changed = true;
-        true
+        self.reactive.borrow_mut().windows.set_visible(id, visible)
     }
 
     /// Records what the compositor and GPU under this output can do.

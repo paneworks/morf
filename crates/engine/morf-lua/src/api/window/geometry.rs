@@ -13,6 +13,7 @@ pub(crate) fn checked_window_node(
     node: NodeHandle,
 ) -> Result<NodeHandle, HostError> {
     let surface = state
+        .windows
         .window_surfaces
         .get(&surface)
         .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -157,6 +158,7 @@ pub(crate) fn floating_state_method<'gc>(
         let mut state = state.borrow_mut();
         let (current, changed) = {
             let surface = state
+                .windows
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -176,7 +178,7 @@ pub(crate) fn floating_state_method<'gc>(
             (*current, changed)
         };
         if changed {
-            state.window_surfaces_changed = true;
+            state.windows.window_surfaces_changed = true;
         }
         stack.replace(ctx, current);
         Ok(CallbackReturn::Return)
@@ -199,6 +201,7 @@ pub(crate) fn floating_string_method<'gc>(
         let mut state = state.borrow_mut();
         let (current, changed) = {
             let surface = state
+                .windows
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -216,7 +219,7 @@ pub(crate) fn floating_string_method<'gc>(
             }
             (current.clone(), changed)
         };
-        state.window_surfaces_changed |= changed;
+        state.windows.window_surfaces_changed |= changed;
         stack.replace(ctx, current);
         Ok(CallbackReturn::Return)
     })
@@ -250,6 +253,7 @@ pub(crate) fn floating_size_method<'gc>(
         let mut state = state.borrow_mut();
         let (width, height, changed) = {
             let surface = state
+                .windows
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -304,7 +308,7 @@ pub(crate) fn floating_size_method<'gc>(
             };
             (after.0, after.1, before != after)
         };
-        state.window_surfaces_changed |= changed;
+        state.windows.window_surfaces_changed |= changed;
         let result = Table::new(&ctx);
         result.set_field(ctx, "width", i64::from(width));
         result.set_field(ctx, "height", i64::from(height));

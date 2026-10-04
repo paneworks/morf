@@ -291,17 +291,7 @@ pub struct Workspace {
     pub assignable: bool,
 }
 
-/// What a configuration asked to do to a workspace.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum WorkspaceRequest {
-    Activate(String),
-    Remove(String),
-    /// Move the workspace to the group on the named output.
-    Assign {
-        key: String,
-        output: String,
-    },
-}
+pub use morf_runtime::requests::{ToplevelRequest, WorkspaceRequest};
 
 /// One window the compositor reports, as handed to a configuration.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -324,16 +314,6 @@ pub struct Toplevel {
     pub outputs: Vec<String>,
     /// The identifier of the window this one belongs to, if any.
     pub parent: Option<String>,
-}
-
-/// Something a configuration asked to do to another window.
-#[derive(Clone, Debug)]
-pub struct ToplevelRequest {
-    pub identifier: String,
-    pub action: String,
-    pub value: bool,
-    /// For `set_minimize_target`: x, y, width, height on the shell's surface.
-    pub rect: Option<(i32, i32, i32, i32)>,
 }
 
 /// Output metadata exposed to one per-screen Lua configuration instance.

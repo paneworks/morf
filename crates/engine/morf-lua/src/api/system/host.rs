@@ -27,18 +27,26 @@ pub(crate) fn install_host_service_api<'gc>(
             .map_err(|_| HostError("idle timeout must fit an unsigned 32-bit value".into()))?;
         let key = (milliseconds, input_only.unwrap_or(false));
         let mut state = idle_state.borrow_mut();
-        let callback_count = state.idle_callbacks.values().map(Vec::len).sum::<usize>();
+        let callback_count = state
+            .requests
+            .idle_callbacks
+            .values()
+            .map(Vec::len)
+            .sum::<usize>();
         if callback_count >= 256 {
             return Err(HostError("idle callback limit reached".into()).into());
         }
-        if !state.idle_callbacks.contains_key(&key) && state.idle_callbacks.len() >= 64 {
+        if !state.requests.idle_callbacks.contains_key(&key)
+            && state.requests.idle_callbacks.len() >= 64
+        {
             return Err(HostError("idle timeout limit reached".into()).into());
         }
-        let id = state.next_idle_subscription;
-        state.next_idle_subscription += 1;
+        let id = state.requests.next_idle_subscription;
+        state.requests.next_idle_subscription += 1;
         // A threshold the compositor has not been asked for yet.
-        state.idle_timeouts_changed |= !state.idle_callbacks.contains_key(&key);
+        state.requests.idle_timeouts_changed |= !state.requests.idle_callbacks.contains_key(&key);
         state
+            .requests
             .idle_callbacks
             .entry(key)
             .or_default()
@@ -49,11 +57,11 @@ pub(crate) fn install_host_service_api<'gc>(
         let cancel_state = Rc::clone(&idle_state);
         let cancel = Callback::from_fn(&ctx, move |_, _, _| {
             let mut state = cancel_state.borrow_mut();
-            if let Some(callbacks) = state.idle_callbacks.get_mut(&key) {
+            if let Some(callbacks) = state.requests.idle_callbacks.get_mut(&key) {
                 callbacks.retain(|(held, _)| *held != id);
                 if callbacks.is_empty() {
-                    state.idle_callbacks.remove(&key);
-                    state.idle_timeouts_changed = true;
+                    state.requests.idle_callbacks.remove(&key);
+                    state.requests.idle_timeouts_changed = true;
                 }
             }
             Ok(CallbackReturn::Return)
@@ -69,16 +77,17 @@ pub(crate) fn install_host_service_api<'gc>(
     // each wants the screen to stay awake while nobody touches the input.
     let idle_inhibit = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let inhibited: bool = stack.consume(ctx)?;
-        let mut state = inhibit_state.borrow_mut();
-        state.idle_inhibited = inhibited;
-        state.idle_inhibit_changed = true;
+        inhibit_state
+            .borrow_mut()
+            .requests
+            .set_idle_inhibited(inhibited);
         Ok(CallbackReturn::Return)
     });
     // What was last asked for: whether this shell is keeping the session
     // awake. Whether the compositor can is `morf.capabilities.idle_inhibit`.
     let inhibited_state = Rc::clone(&state);
     let idle_inhibited = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        stack.replace(ctx, inhibited_state.borrow().idle_inhibited);
+        stack.replace(ctx, inhibited_state.borrow().requests.idle_inhibited);
         Ok(CallbackReturn::Return)
     });
     let idle = Table::new(&ctx);
@@ -95,10 +104,7 @@ pub(crate) fn install_host_service_api<'gc>(
             _ => return Err(HostError("output power mode must be `on` or `off`".into()).into()),
         };
         let mut state = output_power_state.borrow_mut();
-        if state.output_power_requests.len() >= 64 {
-            return Err(HostError("output power request limit reached".into()).into());
-        }
-        state.output_power_requests.push(on);
+        state.requests.queue_output_power(on).map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let output_power = Table::new(&ctx);
@@ -113,10 +119,11 @@ pub(crate) fn install_host_service_api<'gc>(
     let on_keyboard_focus = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
         let mut state = keyboard_focus_state.borrow_mut();
-        if state.keyboard_focus_callbacks.len() >= 64 {
+        if state.requests.keyboard_focus_callbacks.len() >= 64 {
             return Err(HostError("keyboard focus callback limit reached".into()).into());
         }
         state
+            .requests
             .keyboard_focus_callbacks
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
@@ -128,10 +135,11 @@ pub(crate) fn install_host_service_api<'gc>(
     let on_backdrop_click = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
         let mut state = backdrop_state.borrow_mut();
-        if state.backdrop_callbacks.len() >= 64 {
+        if state.requests.backdrop_callbacks.len() >= 64 {
             return Err(HostError("backdrop callback limit reached".into()).into());
         }
         state
+            .requests
             .backdrop_callbacks
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)

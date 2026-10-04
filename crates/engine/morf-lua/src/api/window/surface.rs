@@ -25,6 +25,7 @@ pub(crate) fn install_shell_api<'gc>(
         if let Some(event) = surface_event(&key) {
             let handler = surface_read_state
                 .borrow()
+                .windows
                 .surface_handlers
                 .get(&event)
                 .cloned();
@@ -36,7 +37,11 @@ pub(crate) fn install_shell_api<'gc>(
             }
             return Ok(CallbackReturn::Return);
         }
-        let value = layer_setting_to_lua(ctx, &surface_read_state.borrow().layer_surface, &key);
+        let value = layer_setting_to_lua(
+            ctx,
+            &surface_read_state.borrow().windows.layer_surface,
+            &key,
+        );
         stack.replace(ctx, value);
         Ok(CallbackReturn::Return)
     });
@@ -47,10 +52,10 @@ pub(crate) fn install_shell_api<'gc>(
         if let Some(event) = surface_event(&key) {
             match value {
                 LuaValue::Nil => {
-                    state.surface_handlers.remove(&event);
+                    state.windows.surface_handlers.remove(&event);
                 }
                 LuaValue::Function(luna::Function::Closure(callback)) => {
-                    state.surface_handlers.insert(
+                    state.windows.surface_handlers.insert(
                         event,
                         crate::vm::handler_store::register(ctx.stash(callback)),
                     );
@@ -61,9 +66,9 @@ pub(crate) fn install_shell_api<'gc>(
             }
             return Ok(CallbackReturn::Return);
         }
-        let changed =
-            apply_layer_setting(ctx, &mut state.layer_surface, &key, value).map_err(HostError)?;
-        state.layer_surface_changed |= changed;
+        let changed = apply_layer_setting(ctx, &mut state.windows.layer_surface, &key, value)
+            .map_err(HostError)?;
+        state.windows.layer_surface_changed |= changed;
         Ok(CallbackReturn::Return)
     });
     let surface_metatable = Table::new(&ctx);

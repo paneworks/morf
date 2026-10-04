@@ -15,12 +15,10 @@ pub(super) fn install_text_entry<'gc>(
         let keycode = u32::try_from(keycode)
             .map_err(|_| HostError("virtual keycode must fit an unsigned 32-bit value".into()))?;
         let mut state = virtual_key_state.borrow_mut();
-        if state.virtual_keyboard_requests.len() >= 256 {
-            return Err(HostError("virtual keyboard request limit reached".into()).into());
-        }
         state
-            .virtual_keyboard_requests
-            .push(VirtualKeyboardRequest::Key { keycode, pressed });
+            .requests
+            .queue_virtual_keyboard(VirtualKeyboardRequest::Key { keycode, pressed })
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let virtual_modifiers_state = Rc::clone(&state);
@@ -37,10 +35,10 @@ pub(super) fn install_text_entry<'gc>(
                 .map_err(|_| HostError("keyboard group must fit u32".into()))?,
         };
         let mut state = virtual_modifiers_state.borrow_mut();
-        if state.virtual_keyboard_requests.len() >= 256 {
-            return Err(HostError("virtual keyboard request limit reached".into()).into());
-        }
-        state.virtual_keyboard_requests.push(request);
+        state
+            .requests
+            .queue_virtual_keyboard(request)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let virtual_keyboard = Table::new(&ctx);
@@ -50,14 +48,12 @@ pub(super) fn install_text_entry<'gc>(
     let input_method_subscribe_state = Rc::clone(&state);
     let input_method_subscribe = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
-        let mut state = input_method_subscribe_state.borrow_mut();
-        if state.input_method_callbacks.len() >= 64 {
-            return Err(HostError("input method callback limit reached".into()).into());
-        }
-        state
-            .input_method_callbacks
-            .push(crate::vm::handler_store::register(ctx.stash(callback)));
-        state.input_method_enable_requested = true;
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        input_method_subscribe_state
+            .borrow_mut()
+            .requests
+            .subscribe_input_method(callback)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let input_method_commit_state = Rc::clone(&state);
@@ -67,12 +63,10 @@ pub(super) fn install_text_entry<'gc>(
             return Err(HostError("input method text limit reached".into()).into());
         }
         let mut state = input_method_commit_state.borrow_mut();
-        if state.input_method_requests.len() >= 256 {
-            return Err(HostError("input method request limit reached".into()).into());
-        }
         state
-            .input_method_requests
-            .push(InputMethodRequest::Commit(text));
+            .requests
+            .queue_input_method(InputMethodRequest::Commit(text))
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let input_method_preedit_state = Rc::clone(&state);
@@ -86,12 +80,10 @@ pub(super) fn install_text_entry<'gc>(
         let end =
             i32::try_from(end).map_err(|_| HostError("preedit cursor end must fit i32".into()))?;
         let mut state = input_method_preedit_state.borrow_mut();
-        if state.input_method_requests.len() >= 256 {
-            return Err(HostError("input method request limit reached".into()).into());
-        }
         state
-            .input_method_requests
-            .push(InputMethodRequest::Preedit { text, begin, end });
+            .requests
+            .queue_input_method(InputMethodRequest::Preedit { text, begin, end })
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let input_method_delete_state = Rc::clone(&state);
@@ -102,12 +94,10 @@ pub(super) fn install_text_entry<'gc>(
         let after = u32::try_from(after)
             .map_err(|_| HostError("delete after length must fit u32".into()))?;
         let mut state = input_method_delete_state.borrow_mut();
-        if state.input_method_requests.len() >= 256 {
-            return Err(HostError("input method request limit reached".into()).into());
-        }
         state
-            .input_method_requests
-            .push(InputMethodRequest::Delete { before, after });
+            .requests
+            .queue_input_method(InputMethodRequest::Delete { before, after })
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let input_method = Table::new(&ctx);
@@ -119,23 +109,21 @@ pub(super) fn install_text_entry<'gc>(
     let text_input_subscribe_state = Rc::clone(&state);
     let text_input_subscribe = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
-        let mut state = text_input_subscribe_state.borrow_mut();
-        if state.text_input_callbacks.len() >= 64 {
-            return Err(HostError("text input callback limit reached".into()).into());
-        }
-        state
-            .text_input_callbacks
-            .push(crate::vm::handler_store::register(ctx.stash(callback)));
-        state.text_input_enable_requested = true;
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        text_input_subscribe_state
+            .borrow_mut()
+            .requests
+            .subscribe_text_input(callback)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let text_input_disable_state = Rc::clone(&state);
     let text_input_disable = Callback::from_fn(&ctx, move |_, _, _| {
         let mut state = text_input_disable_state.borrow_mut();
-        if state.text_input_requests.len() >= 256 {
-            return Err(HostError("text input request limit reached".into()).into());
-        }
-        state.text_input_requests.push(TextInputRequest::Disable);
+        state
+            .requests
+            .queue_text_input(TextInputRequest::Disable)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let text_input_surrounding_state = Rc::clone(&state);
@@ -149,16 +137,14 @@ pub(super) fn install_text_entry<'gc>(
         let anchor = i32::try_from(anchor)
             .map_err(|_| HostError("text input anchor must fit i32".into()))?;
         let mut state = text_input_surrounding_state.borrow_mut();
-        if state.text_input_requests.len() >= 256 {
-            return Err(HostError("text input request limit reached".into()).into());
-        }
         state
-            .text_input_requests
-            .push(TextInputRequest::Surrounding {
+            .requests
+            .queue_text_input(TextInputRequest::Surrounding {
                 text,
                 cursor,
                 anchor,
-            });
+            })
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let text_input_content_state = Rc::clone(&state);
@@ -169,12 +155,10 @@ pub(super) fn install_text_entry<'gc>(
         let purpose = u32::try_from(purpose)
             .map_err(|_| HostError("text input purpose must fit u32".into()))?;
         let mut state = text_input_content_state.borrow_mut();
-        if state.text_input_requests.len() >= 256 {
-            return Err(HostError("text input request limit reached".into()).into());
-        }
         state
-            .text_input_requests
-            .push(TextInputRequest::ContentType { hints, purpose });
+            .requests
+            .queue_text_input(TextInputRequest::ContentType { hints, purpose })
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let text_input_rect_state = Rc::clone(&state);
@@ -189,10 +173,10 @@ pub(super) fn install_text_entry<'gc>(
                 .map_err(|_| HostError("cursor height must fit i32".into()))?,
         };
         let mut state = text_input_rect_state.borrow_mut();
-        if state.text_input_requests.len() >= 256 {
-            return Err(HostError("text input request limit reached".into()).into());
-        }
-        state.text_input_requests.push(request);
+        state
+            .requests
+            .queue_text_input(request)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let text_input = Table::new(&ctx);

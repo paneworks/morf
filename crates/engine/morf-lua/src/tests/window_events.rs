@@ -280,7 +280,7 @@ fn a_destroyed_window_takes_its_tree_and_hears_closed_once() {
         assert!(message.contains("window destroyed"), "{message}");
     }
     // Its size signals went with it.
-    assert!(runtime.reactive.borrow().window_sizes.is_empty());
+    assert!(runtime.reactive.borrow().windows.window_sizes.is_empty());
 }
 
 #[test]

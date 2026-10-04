@@ -16,18 +16,10 @@ use luna::{Callback, CallbackReturn, Table, Value as LuaValue};
 use crate::scene_bindings::HostError;
 use crate::state::ReactiveState;
 
-/// What `morf.gamma.set` or `reset` asked of an output.
-#[derive(Clone, Debug, PartialEq)]
-pub struct GammaRequest {
-    /// The output's name; `None` is the one this shell is on.
-    pub output: Option<String>,
-    /// `(temperature, brightness, gamma)`, or `None` to reset.
-    pub set: Option<(f64, f64, f64)>,
-}
+pub use morf_runtime::requests::GammaRequest;
 
 /// The temperatures a configuration may ask for, in kelvin.
 pub const TEMPERATURE_RANGE: (f64, f64) = (1000.0, 25000.0);
-const MAX_REQUESTS: usize = 64;
 
 fn number(
     value: LuaValue<'_>,
@@ -59,17 +51,11 @@ fn output_name(value: LuaValue<'_>) -> Result<Option<String>, HostError> {
 }
 
 fn push(state: &Rc<RefCell<ReactiveState>>, request: GammaRequest) -> Result<(), HostError> {
-    let mut state = state.borrow_mut();
-    if state.gamma_requests.len() >= MAX_REQUESTS {
-        return Err(HostError("gamma request limit reached".into()));
-    }
-    // Only the last word for an output matters: a slider dragged through a
-    // hundred temperatures in one turn sends one ramp.
     state
-        .gamma_requests
-        .retain(|queued| queued.output != request.output);
-    state.gamma_requests.push(request);
-    Ok(())
+        .borrow_mut()
+        .requests
+        .queue_gamma(request)
+        .map_err(HostError)
 }
 
 pub(crate) fn install_gamma_api<'gc>(

@@ -132,6 +132,7 @@ impl Runtime {
         self.place_overlays(layout);
         let mut state = self.reactive.borrow_mut();
         let anchors = state
+            .windows
             .popup_node_anchors
             .iter()
             .map(|(id, anchor)| (*id, anchor.clone()))
@@ -165,7 +166,7 @@ impl Runtime {
             if let Some(WindowSurfaceConfig {
                 kind: WindowSurfaceKind::Popup(config),
                 ..
-            }) = state.window_surfaces.get_mut(&id)
+            }) = state.windows.window_surfaces.get_mut(&id)
                 && (
                     config.anchor_x,
                     config.anchor_y,
@@ -177,7 +178,7 @@ impl Runtime {
                 config.anchor_y = resolved.1;
                 config.anchor_width = resolved.2;
                 config.anchor_height = resolved.3;
-                state.window_surfaces_changed = true;
+                state.windows.window_surfaces_changed = true;
             }
         }
         let mut watchers = std::mem::take(&mut state.transform_watchers);
