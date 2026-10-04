@@ -3,7 +3,8 @@
 //!
 //! Subsystems arrive here one at a time from `morf-lua` (PLAN.md phase 5):
 //! handlers, timers, the reactive scheduler, the event vocabulary, the
-//! gesture recogniser, shortcuts, focus movement and wake causes so far.
+//! gesture recogniser, shortcuts, focus movement, wake causes, window
+//! declarations and platform requests so far.
 
 pub mod events;
 pub mod focus;
@@ -11,8 +12,10 @@ pub mod gestures;
 pub mod handler;
 pub mod keys;
 pub mod reactive;
+pub mod requests;
 pub mod shortcuts;
 pub mod timers;
 pub mod wake;
+pub mod windows;
 
 pub use handler::{Handler, HandlerId, HandlerRegistry};
