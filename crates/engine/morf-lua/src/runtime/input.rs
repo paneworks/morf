@@ -9,78 +9,8 @@ thread_local! {
 }
 
 /// The held modifiers as a pointer handler is told them: `"ctrl+shift"`.
-fn held() -> IpcValue {
+pub(crate) fn held() -> IpcValue {
     IpcValue::String(HELD.with(|held| held.get()).name())
-}
-
-/// One pointer or touch position, in both spaces a Lua handler may want.
-///
-/// `surface_x`/`surface_y` are the coordinates the compositor delivered, shared
-/// by every node on the surface — the space `Layout::hit_test` is queried in.
-/// `local_x`/`local_y` are the same point inside the node whose handler runs:
-/// `0.0` at its own top-left corner, its width and height at the far edges,
-/// with every ancestor offset and transform removed. A handler that wants a
-/// fraction of its own extent divides the local pair and nothing else.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct EventPoint {
-    /// Pointer x in surface space.
-    pub surface_x: f64,
-    /// Pointer y in surface space.
-    pub surface_y: f64,
-    /// Pointer x inside the handling node.
-    pub local_x: f64,
-    /// Pointer y inside the handling node.
-    pub local_y: f64,
-    /// The Linux button code of a press, release or click, when there was
-    /// one; handlers get its name as a fifth argument (nil without one) and
-    /// the held modifiers as a sixth.
-    pub button: Option<u32>,
-}
-
-impl EventPoint {
-    /// Builds a point from surface coordinates and their node-local pair.
-    pub fn new(surface: (f64, f64), local: (f64, f64)) -> Self {
-        Self {
-            surface_x: surface.0,
-            surface_y: surface.1,
-            local_x: local.0,
-            local_y: local.1,
-            button: None,
-        }
-    }
-
-    /// The same point, from a press of `button` (a Linux input code).
-    pub fn with_button(mut self, button: u32) -> Self {
-        self.button = Some(button);
-        self
-    }
-
-    /// `left`, `right`, `middle`, `back`, `forward`, or the code as text.
-    pub fn button_name(button: u32) -> String {
-        match button {
-            0x110 => "left".to_owned(),
-            0x111 => "right".to_owned(),
-            0x112 => "middle".to_owned(),
-            0x113 => "back".to_owned(),
-            0x114 => "forward".to_owned(),
-            other => other.to_string(),
-        }
-    }
-
-    pub(crate) fn args(self) -> Vec<IpcValue> {
-        let mut args = vec![
-            IpcValue::Number(self.surface_x),
-            IpcValue::Number(self.surface_y),
-            IpcValue::Number(self.local_x),
-            IpcValue::Number(self.local_y),
-        ];
-        args.push(match self.button {
-            Some(button) => IpcValue::String(Self::button_name(button)),
-            None => IpcValue::Nil,
-        });
-        args.push(held());
-        args
-    }
 }
 
 impl Runtime {
@@ -119,7 +49,7 @@ impl Runtime {
         ) {
             return false;
         }
-        let point = point.args();
+        let point = point.args(held());
         self.dispatch_ui_event_with_args(
             node,
             event,
@@ -259,7 +189,7 @@ impl Runtime {
         ) {
             return false;
         }
-        self.dispatch_ui_event_with_args(node, event, &point.args())
+        self.dispatch_ui_event_with_args(node, event, &point.args(held()))
     }
 
     /// Dispatches pointer coordinates and displacement to a movement handler as

@@ -89,7 +89,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         state.terminals.remove(*node);
         state.images.remove(*node);
         state.linked_texts.remove(node);
-        state.pointer_watch.remove(node);
+        state.pointer_watch.forget(*node);
         state.shortcuts.remove(node);
     }
     // A removed field cannot keep the keyboard. The node that had focus is
@@ -104,11 +104,6 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         .focus
         .memory
         .retain(|scope, node| !removed.contains(scope) && !removed.contains(node));
-    if !state.pointer_watch_fresh.is_empty() {
-        state
-            .pointer_watch_fresh
-            .retain(|node| !removed.contains(node));
-    }
     state
         .animation_callbacks
         .retain(|(owner, _), _| !removed.contains(owner));

@@ -427,9 +427,7 @@ pub(crate) fn install_module_api<'gc>(
                         .get(&parent)
                         .ok_or_else(|| HostError("popup parent is stale".into()))?;
                     if !matches!(parent.kind, WindowSurfaceKind::Toplevel(_)) {
-                        return Err(
-                            HostError("popup parent must be a toplevel".into()).into()
-                        );
+                        return Err(HostError("popup parent must be a toplevel".into()).into());
                     }
                     if let Some(anchor) = &node_anchor
                         && !scene_node_in_subtree(&state.scene, parent.root, anchor.node)
@@ -488,9 +486,7 @@ pub(crate) fn install_module_api<'gc>(
                         .get(&parent)
                         .ok_or_else(|| HostError("floating parent is stale".into()))?;
                     if !matches!(parent.kind, WindowSurfaceKind::Toplevel(_)) {
-                        return Err(
-                            HostError("toplevel parent must be a toplevel".into()).into(),
-                        );
+                        return Err(HostError("toplevel parent must be a toplevel".into()).into());
                     }
                 }
             }

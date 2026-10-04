@@ -12,7 +12,7 @@ use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue}
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::runtime_input::EventPoint;
+use crate::events::EventPoint;
 use crate::{scene_bindings::*, state::*, surface_types::*};
 
 /// The most bytes one `set` may hand the compositor.

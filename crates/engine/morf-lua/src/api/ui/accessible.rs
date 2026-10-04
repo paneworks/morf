@@ -48,17 +48,22 @@ impl Runtime {
             .get(&(node, UiEvent::AccessibleAction))
             .cloned();
         if let Some(handler) = handler {
-            let args = vec![IpcValue::from(action), value.clone().unwrap_or(IpcValue::Nil)];
-            match self.run_handler(|ctx, limits| execute_ipc_handler(ctx, &handler, &args, limits)) {
+            let args = vec![
+                IpcValue::from(action),
+                value.clone().unwrap_or(IpcValue::Nil),
+            ];
+            match self.run_handler(|ctx, limits| execute_ipc_handler(ctx, &handler, &args, limits))
+            {
                 Ok(values) if values.first() == Some(&IpcValue::Boolean(false)) => {}
                 Ok(_) => {
                     self.flush_after_event();
                     return true;
                 }
                 Err(message) => {
-                    self.reactive
-                        .borrow_mut()
-                        .log(LogLevel::Warn, format!("{node:?}.on_accessible_action: {message}"));
+                    self.reactive.borrow_mut().log(
+                        LogLevel::Warn,
+                        format!("{node:?}.on_accessible_action: {message}"),
+                    );
                     return true;
                 }
             }
@@ -78,7 +83,9 @@ impl Runtime {
         if self.activate_by_key(node, key, plain) {
             return true;
         }
-        let Some(target) = self.key_route(node) else { return false };
+        let Some(target) = self.key_route(node) else {
+            return false;
+        };
         let text = (key == SPACE).then_some(" ");
         let ran = self.dispatch_key_press_bubbling(target, key, text, plain, false);
         self.dispatch_key_release(target, key, text, plain);

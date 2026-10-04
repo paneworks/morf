@@ -398,18 +398,13 @@ impl Runtime {
     /// Every node something has read `contains_pointer` of: the ones the
     /// host tests against the pointer when it moves.
     pub fn pointer_watchers(&self) -> Vec<NodeHandle> {
-        self.reactive
-            .borrow()
-            .pointer_watch
-            .keys()
-            .copied()
-            .collect()
+        self.reactive.borrow().pointer_watch.watched()
     }
 
     /// The nodes first read since this was last asked, for the host to
     /// answer where the pointer is now rather than at its next motion.
     pub fn take_fresh_pointer_watchers(&mut self) -> Vec<NodeHandle> {
-        std::mem::take(&mut self.reactive.borrow_mut().pointer_watch_fresh)
+        self.reactive.borrow_mut().pointer_watch.take_fresh()
     }
 
     /// Records whether the pointer is inside each node, as the host worked
@@ -420,11 +415,7 @@ impl Runtime {
         let mut changed = false;
         {
             let mut state = self.reactive.borrow_mut();
-            for &(node, inside) in answers {
-                match state.pointer_watch.get_mut(&node) {
-                    Some(value) if *value != inside => *value = inside,
-                    _ => continue,
-                }
+            for node in state.pointer_watch.answer(answers) {
                 changed = true;
                 state.flush_pending = true;
                 let _ = bump_property_signal(&mut state, node, CONTAINS_POINTER, false);

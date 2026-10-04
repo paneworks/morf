@@ -417,11 +417,7 @@ pub(crate) struct ReactiveState {
     /// Every node something has read `contains_pointer` of, with what it
     /// said last. Only these are tested against the pointer when it moves,
     /// so a node nobody asks about costs nothing.
-    pub(crate) pointer_watch: HashMap<NodeHandle, bool>,
-    /// Nodes read for the first time since the host last looked: it works
-    /// out their answer at the end of the turn, where the pointer is now,
-    /// rather than leaving them `false` until it next moves.
-    pub(crate) pointer_watch_fresh: Vec<NodeHandle>,
+    pub(crate) pointer_watch: morf_runtime::events::PointerWatch,
     /// Every `ui.Image`: what became of its source, and its playback.
     pub(crate) images: crate::images::ImageNodes,
     pub(crate) session_unlock_requested: bool,
@@ -607,8 +603,7 @@ impl ReactiveState {
             destroy_hooks: HashMap::new(),
             linked_texts: Default::default(),
             follows: Vec::new(),
-            pointer_watch: HashMap::new(),
-            pointer_watch_fresh: Vec::new(),
+            pointer_watch: morf_runtime::events::PointerWatch::default(),
             images: Default::default(),
             node_loops: HashMap::new(),
             pending_destroyed: Vec::new(),

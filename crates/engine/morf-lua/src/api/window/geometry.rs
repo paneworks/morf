@@ -161,9 +161,7 @@ pub(crate) fn floating_state_method<'gc>(
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Toplevel(config) = &mut surface.kind else {
-                return Err(
-                    HostError(format!("{property} is only valid for toplevels")).into(),
-                );
+                return Err(HostError(format!("{property} is only valid for toplevels")).into());
             };
             let current = match property {
                 "minimized" => &mut config.minimized,
@@ -205,9 +203,7 @@ pub(crate) fn floating_string_method<'gc>(
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Toplevel(config) = &mut surface.kind else {
-                return Err(
-                    HostError(format!("{property} is only valid for toplevels")).into(),
-                );
+                return Err(HostError(format!("{property} is only valid for toplevels")).into());
             };
             let current = match property {
                 "title" => &mut config.title,
@@ -258,9 +254,7 @@ pub(crate) fn floating_size_method<'gc>(
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
             let WindowSurfaceKind::Toplevel(config) = &mut surface.kind else {
-                return Err(
-                    HostError(format!("{property} is only valid for toplevels")).into(),
-                );
+                return Err(HostError(format!("{property} is only valid for toplevels")).into());
             };
             let before = match property {
                 "size" => (config.width, config.height),

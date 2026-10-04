@@ -2,8 +2,9 @@
 //! a configuration's handlers are called from.
 //!
 //! Subsystems arrive here one at a time from `morf-lua` (PLAN.md phase 5):
-//! handlers, timers and the reactive scheduler so far.
+//! handlers, timers, the reactive scheduler and the event vocabulary so far.
 
+pub mod events;
 pub mod handler;
 pub mod reactive;
 pub mod timers;

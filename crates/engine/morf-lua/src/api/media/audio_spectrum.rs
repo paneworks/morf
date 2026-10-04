@@ -20,7 +20,10 @@ fn list<'gc>(ctx: Context<'gc>, values: &[f64]) -> Table<'gc> {
     }
     out
 }
-pub(crate) fn options<'gc>(ctx: Context<'gc>, table: Option<Table<'gc>>) -> Result<Options, HostError> {
+pub(crate) fn options<'gc>(
+    ctx: Context<'gc>,
+    table: Option<Table<'gc>>,
+) -> Result<Options, HostError> {
     let mut o = Options::default();
     let read = |key, default| match table.map_or(LuaValue::Nil, |t| t.get_value(ctx, key)) {
         LuaValue::Nil => Ok(default),

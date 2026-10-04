@@ -151,7 +151,10 @@ impl Runtime {
                             && (point.surface_x - x).hypot(point.surface_y - y) <= SLOP
                     });
                     if double {
-                        Some((UiEvent::DoubleClicked, point.args()))
+                        Some((
+                            UiEvent::DoubleClicked,
+                            point.args(crate::runtime::input::held()),
+                        ))
                     } else {
                         state.gestures.last_click =
                             Some((node, now, point.surface_x, point.surface_y));
@@ -223,9 +226,11 @@ impl Runtime {
             }
         };
         match due {
-            Some((node, point)) => {
-                self.dispatch_ui_event_with_args(node, UiEvent::LongPressed, &point.args())
-            }
+            Some((node, point)) => self.dispatch_ui_event_with_args(
+                node,
+                UiEvent::LongPressed,
+                &point.args(crate::runtime::input::held()),
+            ),
             None => false,
         }
     }

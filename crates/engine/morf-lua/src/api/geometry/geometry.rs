@@ -33,7 +33,12 @@ fn reading(value: LuaValue<'_>, label: &str) -> Result<f64, HostError> {
     }
     Ok(n)
 }
-fn reading_field<'gc>(ctx: Context<'gc>, o: Table<'gc>, key: &str, default: f64) -> Result<f64, HostError> {
+fn reading_field<'gc>(
+    ctx: Context<'gc>,
+    o: Table<'gc>,
+    key: &str,
+    default: f64,
+) -> Result<f64, HostError> {
     match o.get_value(ctx, key) {
         LuaValue::Nil => Ok(default),
         value => reading(value, key),
@@ -294,8 +299,15 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         ctx,
         "arc",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let (cx, cy, r, from, sweep): (LuaValue, LuaValue, LuaValue, LuaValue, LuaValue) = stack.consume(ctx)?;
-            let d = marks::arc(number(cx, "cx")?, number(cy, "cy")?, number(r, "r")?, number(from, "from")?, number(sweep, "sweep")?);
+            let (cx, cy, r, from, sweep): (LuaValue, LuaValue, LuaValue, LuaValue, LuaValue) =
+                stack.consume(ctx)?;
+            let d = marks::arc(
+                number(cx, "cx")?,
+                number(cy, "cy")?,
+                number(r, "r")?,
+                number(from, "from")?,
+                number(sweep, "sweep")?,
+            );
             stack.replace(ctx, d);
             Ok(CallbackReturn::Return)
         }),
@@ -305,8 +317,22 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         "sector",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             // (cx, cy, r0, r1, from, sweep): a ring's slice, a pie's when r0 is 0.
-            let (cx, cy, r0, r1, from, sweep): (LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue) = stack.consume(ctx)?;
-            let d = marks::sector(number(cx, "cx")?, number(cy, "cy")?, number(r0, "r0")?, number(r1, "r1")?, number(from, "from")?, number(sweep, "sweep")?);
+            let (cx, cy, r0, r1, from, sweep): (
+                LuaValue,
+                LuaValue,
+                LuaValue,
+                LuaValue,
+                LuaValue,
+                LuaValue,
+            ) = stack.consume(ctx)?;
+            let d = marks::sector(
+                number(cx, "cx")?,
+                number(cy, "cy")?,
+                number(r0, "r0")?,
+                number(r1, "r1")?,
+                number(from, "from")?,
+                number(sweep, "sweep")?,
+            );
             stack.replace(ctx, d);
             Ok(CallbackReturn::Return)
         }),
@@ -316,8 +342,15 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         "hatch",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             let (w, h, gap): (LuaValue, LuaValue, LuaValue) = stack.consume(ctx)?;
-            let gap = if matches!(gap, LuaValue::Nil) { 6.0 } else { number(gap, "gap")? };
-            stack.replace(ctx, marks::hatch(number(w, "width")?, number(h, "height")?, gap));
+            let gap = if matches!(gap, LuaValue::Nil) {
+                6.0
+            } else {
+                number(gap, "gap")?
+            };
+            stack.replace(
+                ctx,
+                marks::hatch(number(w, "width")?, number(h, "height")?, gap),
+            );
             Ok(CallbackReturn::Return)
         }),
     );
@@ -325,7 +358,8 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         ctx,
         "hatch_under",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let (x0, dx, ys, w, h, gap): (LuaValue, LuaValue, Table, LuaValue, LuaValue, LuaValue) = stack.consume(ctx)?;
+            let (x0, dx, ys, w, h, gap): (LuaValue, LuaValue, Table, LuaValue, LuaValue, LuaValue) =
+                stack.consume(ctx)?;
             let mut levels = Vec::new();
             for i in 1..=graph::MAX_SAMPLES as i64 {
                 match ys.get_value(ctx, i) {
@@ -333,8 +367,19 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                     v => levels.push(reading(v, "level")?),
                 }
             }
-            let gap = if matches!(gap, LuaValue::Nil) { 6.0 } else { number(gap, "gap")? };
-            let d = marks::hatch_under(number(x0, "x0")?, number(dx, "dx")?, &levels, number(w, "width")?, number(h, "height")?, gap);
+            let gap = if matches!(gap, LuaValue::Nil) {
+                6.0
+            } else {
+                number(gap, "gap")?
+            };
+            let d = marks::hatch_under(
+                number(x0, "x0")?,
+                number(dx, "dx")?,
+                &levels,
+                number(w, "width")?,
+                number(h, "height")?,
+                gap,
+            );
             stack.replace(ctx, d);
             Ok(CallbackReturn::Return)
         }),
@@ -344,8 +389,14 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         "ticks",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             // (cx, cy, r0, r1, { from, sweep, count | angles, major, major_r0 })
-            let (cx, cy, r0, r1, o): (LuaValue, LuaValue, LuaValue, LuaValue, Option<Table>) = stack.consume(ctx)?;
-            let (cx, cy, r0, r1) = (number(cx, "cx")?, number(cy, "cy")?, number(r0, "r0")?, number(r1, "r1")?);
+            let (cx, cy, r0, r1, o): (LuaValue, LuaValue, LuaValue, LuaValue, Option<Table>) =
+                stack.consume(ctx)?;
+            let (cx, cy, r0, r1) = (
+                number(cx, "cx")?,
+                number(cy, "cy")?,
+                number(r0, "r0")?,
+                number(r1, "r1")?,
+            );
             let major = field(ctx, o, "major", 0.0)?.max(0.0) as usize;
             let major_r0 = field(ctx, o, "major_r0", r0)?;
             let angles = o.map_or(LuaValue::Nil, |o| o.get_value(ctx, "angles"));
@@ -360,7 +411,17 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                 marks::radials(cx, cy, r0, r1, &at, major, major_r0)
             } else {
                 let count = field(ctx, o, "count", 12.0)?.clamp(1.0, 4096.0) as usize;
-                marks::ticks(cx, cy, r0, r1, field(ctx, o, "from", 0.0)?, field(ctx, o, "sweep", 360.0)?, count, major, major_r0)
+                marks::ticks(
+                    cx,
+                    cy,
+                    r0,
+                    r1,
+                    field(ctx, o, "from", 0.0)?,
+                    field(ctx, o, "sweep", 360.0)?,
+                    count,
+                    major,
+                    major_r0,
+                )
             };
             stack.replace(ctx, d);
             Ok(CallbackReturn::Return)
@@ -373,7 +434,8 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             // (length, size, { pitch = 8, major = 5, minor = size / 2, min_count = 4, vertical })
             let (length, size, o): (LuaValue, LuaValue, Option<Table>) = stack.consume(ctx)?;
             let (length, size) = (number(length, "length")?, number(size, "size")?);
-            let vertical = o.is_some_and(|o| matches!(o.get_value(ctx, "vertical"), LuaValue::Boolean(true)));
+            let vertical =
+                o.is_some_and(|o| matches!(o.get_value(ctx, "vertical"), LuaValue::Boolean(true)));
             let d = marks::ruler(
                 length,
                 size,
@@ -392,10 +454,22 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         "segments",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             // (width, height, count, gap = 2, { vertical })
-            let (w, h, n, gap, o): (LuaValue, LuaValue, LuaValue, LuaValue, Option<Table>) = stack.consume(ctx)?;
-            let gap = if matches!(gap, LuaValue::Nil) { 2.0 } else { number(gap, "gap")? };
-            let vertical = o.is_some_and(|o| matches!(o.get_value(ctx, "vertical"), LuaValue::Boolean(true)));
-            let d = marks::segments(number(w, "width")?, number(h, "height")?, count(n, 4096)?, gap, vertical);
+            let (w, h, n, gap, o): (LuaValue, LuaValue, LuaValue, LuaValue, Option<Table>) =
+                stack.consume(ctx)?;
+            let gap = if matches!(gap, LuaValue::Nil) {
+                2.0
+            } else {
+                number(gap, "gap")?
+            };
+            let vertical =
+                o.is_some_and(|o| matches!(o.get_value(ctx, "vertical"), LuaValue::Boolean(true)));
+            let d = marks::segments(
+                number(w, "width")?,
+                number(h, "height")?,
+                count(n, 4096)?,
+                gap,
+                vertical,
+            );
             stack.replace(ctx, d);
             Ok(CallbackReturn::Return)
         }),

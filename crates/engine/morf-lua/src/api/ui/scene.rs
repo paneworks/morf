@@ -265,14 +265,7 @@ pub(crate) fn node_metatable<'gc>(
                     .property_reads
                     .insert((node.handle, CONTAINS_POINTER.to_owned(), false));
             }
-            let value = match state.pointer_watch.get(&node.handle) {
-                Some(value) => *value,
-                None => {
-                    state.pointer_watch.insert(node.handle, false);
-                    state.pointer_watch_fresh.push(node.handle);
-                    false
-                }
-            };
+            let value = state.pointer_watch.read(node.handle);
             stack.replace(ctx, LuaValue::Boolean(value));
             return Ok(CallbackReturn::Return);
         }
