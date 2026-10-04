@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2026-10-04
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Verify cached outputs and styled text
+
 ## [0.2.1] - 2026-10-04
 
 ### <!-- 0 -->⛰️  Features
