@@ -188,6 +188,24 @@ pub struct RasterGlyph {
     pub data: Rc<Vec<u8>>,
 }
 
+/// A font system over the machine's fonts, scanned once per process.
+///
+/// Scanning is reading every font file's tables: 145 ms on a desk with 1450
+/// fonts and a warm cache, seconds with a cold one -- and every renderer has a
+/// text system of its own, so a shell on three outputs with a few panels each
+/// scanned a dozen times as it came up, each scan a frame it could not draw.
+/// The database is copied instead (the font data itself is shared and mapped,
+/// not copied); each copy keeps its own faces loaded and its own caches.
+fn system_fonts() -> FontSystem {
+    static SCANNED: std::sync::OnceLock<(String, cosmic_text::fontdb::Database)> =
+        std::sync::OnceLock::new();
+    let (locale, db) = SCANNED.get_or_init(|| {
+        let fonts = FontSystem::new();
+        (fonts.locale().to_owned(), fonts.db().clone())
+    });
+    FontSystem::new_with_locale_and_db(locale.clone(), db.clone())
+}
+
 impl Default for TextSystem {
     fn default() -> Self {
         Self::new()
@@ -197,7 +215,7 @@ impl Default for TextSystem {
 impl TextSystem {
     /// Loads the system font database and initializes empty caches.
     pub fn new() -> Self {
-        let mut fonts = FontSystem::new();
+        let mut fonts = system_fonts();
         configure_generic_families(&mut fonts);
         let mut system = Self {
             fonts,
