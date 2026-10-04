@@ -118,6 +118,7 @@ pub use api_focus::FocusReason;
 pub use api_gamma::GammaRequest;
 pub use events::*;
 pub use extensions::{Extension, register_extension};
+pub use morf_value::IpcValue;
 pub use runtime_harness::HostFunction;
 pub use runtime_layout::SettledLayout;
 pub use runtime_session_lock::SessionLockState;
@@ -127,5 +128,6 @@ pub use surface_types::*;
 pub use text_inputs::KeyModifiers;
 pub use types::*;
 pub use types_gen::generate_types;
+
 #[cfg(test)]
-mod tests;
+mod internal_tests;
