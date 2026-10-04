@@ -10,7 +10,7 @@
 
 use std::time::Instant;
 
-use crate::{Error, IpcValue, reactive_bindings::flush_reactive, types::Runtime};
+use crate::{Error, reactive_bindings::flush_reactive, types::Runtime};
 
 pub use morf_runtime::wake::{ClockPrecision, DeadlineCause};
 
@@ -30,37 +30,14 @@ impl Runtime {
                 state.revisions.hidden_revisions,
             )
         };
-        let value: String = value.into();
-        // "HH:MM:SS" carries the coarser grains in its prefix; a value in
-        // any other shape is written as it is and nothing is derived.
-        let derived = value
-            .get(..5)
-            .filter(|_| value.len() == 8 && value.as_bytes()[2] == b':')
-            .map(|minutes| (minutes.to_owned(), value[..2].to_owned()));
-        let mut changed = false;
-        {
+        let changed = {
             let mut state = self.reactive.borrow_mut();
-            let mut writes = vec![(state.clock, value)];
-            if let Some((minutes, hours)) = derived {
-                writes.push((state.clock_minutes, minutes));
-                writes.push((state.clock_hours, hours));
-            }
-            for (signal, text) in writes {
-                let text = IpcValue::String(text);
-                if state.reactive.values.get(&signal) == Some(&text) {
-                    continue;
-                }
-                state
-                    .reactive
-                    .graph
-                    .as_mut()
-                    .ok_or_else(|| Error::Runtime("reactive graph is already running".to_owned()))?
-                    .write(signal, text.clone())
-                    .map_err(|error| Error::Runtime(error.to_string()))?;
-                state.reactive.values.insert(signal, text);
-                changed = true;
-            }
-        }
+            let state = &mut *state;
+            state
+                .clocks
+                .update(&mut state.reactive, value.into())
+                .map_err(Error::Runtime)?
+        };
         if changed {
             self.lua
                 .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
@@ -75,15 +52,7 @@ impl Runtime {
     /// shows the time: the grain the loop has to wake at for the clock.
     pub fn clock_precision(&self) -> Option<ClockPrecision> {
         let state = self.reactive.borrow();
-        let graph = state.reactive.graph.as_ref()?;
-        [
-            (state.clock, ClockPrecision::Seconds),
-            (state.clock_minutes, ClockPrecision::Minutes),
-            (state.clock_hours, ClockPrecision::Hours),
-        ]
-        .into_iter()
-        .find(|(signal, _)| graph.has_subscribers(*signal))
-        .map(|(_, precision)| precision)
+        state.clocks.precision(&state.reactive)
     }
 
     /// The earliest moment something in this runtime comes due on the wall

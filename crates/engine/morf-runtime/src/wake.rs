@@ -1,6 +1,10 @@
 //! When the loop has to wake on its own, and why: the grains a clock is
 //! read at, and the causes a deadline can have.
 
+use morf_scene::reactive::{Graph, SignalId};
+use morf_value::IpcValue;
+
+use crate::reactive::Reactive;
 use std::time::{Duration, Instant};
 
 /// How fine a clock a configuration reads.
@@ -132,5 +136,124 @@ mod tests {
             ClockPrecision::Seconds
         );
         assert_eq!(ClockPrecision::of_format("%.3f"), ClockPrecision::Seconds);
+    }
+}
+
+/// `morf.clock` ("HH:MM:SS"), `morf.minute_clock` ("HH:MM") and
+/// `morf.hour_clock` ("HH"): one signal per grain, so whatever changes by the
+/// minute does not wake the shell every second.
+#[derive(Clone, Copy, Debug)]
+pub struct Clocks {
+    pub seconds: SignalId,
+    pub minutes: SignalId,
+    pub hours: SignalId,
+}
+
+impl Clocks {
+    /// The three signals, empty, in `graph`; with their values for the
+    /// mirror.
+    pub fn new(graph: &mut Graph<IpcValue>) -> (Self, [(SignalId, IpcValue); 3]) {
+        let empty = IpcValue::String(String::new());
+        let clocks = Self {
+            seconds: graph.signal("morf.clock", empty.clone()),
+            minutes: graph.signal("morf.minute_clock", empty.clone()),
+            hours: graph.signal("morf.hour_clock", empty.clone()),
+        };
+        let values = [
+            (clocks.seconds, empty.clone()),
+            (clocks.minutes, empty.clone()),
+            (clocks.hours, empty),
+        ];
+        (clocks, values)
+    }
+
+    /// The signal a reader at `precision` depends on.
+    pub fn signal(&self, precision: ClockPrecision) -> SignalId {
+        match precision {
+            ClockPrecision::Seconds => self.seconds,
+            ClockPrecision::Minutes => self.minutes,
+            ClockPrecision::Hours => self.hours,
+        }
+    }
+
+    /// Writes the time ("HH:MM:SS"), and the minute and hour clocks from it,
+    /// only the grains that turned over. A value in any other shape is
+    /// written as it is and nothing is derived. Returns whether anything was
+    /// written: the graph then owes a flush.
+    pub fn update(&self, reactive: &mut Reactive, value: String) -> Result<bool, String> {
+        let derived = value
+            .get(..5)
+            .filter(|_| value.len() == 8 && value.as_bytes()[2] == b':')
+            .map(|minutes| (minutes.to_owned(), value[..2].to_owned()));
+        let mut writes = vec![(self.seconds, value)];
+        if let Some((minutes, hours)) = derived {
+            writes.push((self.minutes, minutes));
+            writes.push((self.hours, hours));
+        }
+        let mut changed = false;
+        for (signal, text) in writes {
+            let text = IpcValue::String(text);
+            if reactive.values.get(&signal) == Some(&text) {
+                continue;
+            }
+            reactive
+                .graph
+                .as_mut()
+                .ok_or_else(|| "reactive graph is already running".to_owned())?
+                .write(signal, text.clone())
+                .map_err(|error| error.to_string())?;
+            reactive.values.insert(signal, text);
+            changed = true;
+        }
+        Ok(changed)
+    }
+
+    /// The finest clock anything currently reads, or nothing when no binding
+    /// shows the time: the grain the loop has to wake at for the clock.
+    pub fn precision(&self, reactive: &Reactive) -> Option<ClockPrecision> {
+        let graph = reactive.graph.as_ref()?;
+        [
+            (self.seconds, ClockPrecision::Seconds),
+            (self.minutes, ClockPrecision::Minutes),
+            (self.hours, ClockPrecision::Hours),
+        ]
+        .into_iter()
+        .find(|(signal, _)| graph.has_subscribers(*signal))
+        .map(|(_, precision)| precision)
+    }
+}
+
+#[cfg(test)]
+mod clock_tests {
+    use super::*;
+
+    #[test]
+    fn only_the_grains_that_turned_over_are_written() {
+        let mut graph = Graph::default();
+        let (clocks, values) = Clocks::new(&mut graph);
+        let mut reactive = Reactive {
+            graph: Some(graph),
+            values: values.into_iter().collect(),
+            ..Reactive::default()
+        };
+        assert!(clocks.update(&mut reactive, "10:15:00".to_owned()).unwrap());
+        let read = |reactive: &Reactive, signal| reactive.values[&signal].clone();
+        assert_eq!(
+            read(&reactive, clocks.minutes),
+            IpcValue::String("10:15".to_owned())
+        );
+        assert_eq!(
+            read(&reactive, clocks.hours),
+            IpcValue::String("10".to_owned())
+        );
+        assert!(clocks.update(&mut reactive, "10:15:01".to_owned()).unwrap());
+        assert!(!clocks.update(&mut reactive, "10:15:01".to_owned()).unwrap());
+        assert!(clocks.update(&mut reactive, "soon".to_owned()).unwrap());
+        assert_eq!(
+            read(&reactive, clocks.minutes),
+            IpcValue::String("10:15".to_owned())
+        );
+        assert_eq!(clocks.precision(&reactive), None, "nothing reads them");
+        assert_eq!(clocks.signal(ClockPrecision::Hours), clocks.hours);
     }
 }

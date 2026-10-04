@@ -130,6 +130,8 @@ pub(crate) struct ReactiveState {
     pub(crate) shaders: HashMap<String, RegisteredShader>,
     /// The session lock, the primary duty and the output list's revision.
     pub(crate) session: morf_runtime::session::Session,
+    /// `morf.clock` and its coarser grains.
+    pub(crate) clocks: morf_runtime::wake::Clocks,
     pub(crate) scene: Scene,
     /// Every text input's editing, and which has the keyboard
     /// (`morf_runtime::editing`).
@@ -147,13 +149,6 @@ pub(crate) struct ReactiveState {
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
     pub(crate) overlays: crate::api_overlay::OverlayState,
     pub(crate) effect_runs: u64,
-    /// `morf.clock`, "HH:MM:SS", written every second something reads it.
-    pub(crate) clock: SignalId,
-    /// `morf.minute_clock`, "HH:MM": the clock for whatever changes by the
-    /// minute, so reading the time does not wake the shell every second.
-    pub(crate) clock_minutes: SignalId,
-    /// `morf.hour_clock`, "HH", for what changes by the hour or the day.
-    pub(crate) clock_hours: SignalId,
     /// Each node's handler for each event, and the `contains_pointer` watches.
     pub(crate) events: morf_runtime::events::Events,
     pub(crate) states: HashMap<NodeHandle, StateSet>,

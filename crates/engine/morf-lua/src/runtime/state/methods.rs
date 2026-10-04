@@ -24,11 +24,7 @@ impl ReactiveState {
 
     /// The clock signal a reader at `precision` depends on.
     pub(crate) fn clock_signal(&self, precision: crate::ClockPrecision) -> SignalId {
-        match precision {
-            crate::ClockPrecision::Seconds => self.clock,
-            crate::ClockPrecision::Minutes => self.clock_minutes,
-            crate::ClockPrecision::Hours => self.clock_hours,
-        }
+        self.clocks.signal(precision)
     }
 
     /// Records one line, stamped with when it happened.
@@ -43,16 +39,10 @@ impl ReactiveState {
 
     pub(crate) fn new() -> Self {
         let mut graph = Graph::default();
-        let initial_clock = IpcValue::String(String::new());
-        let clock = graph.signal("morf.clock", initial_clock.clone());
-        let clock_minutes = graph.signal("morf.minute_clock", initial_clock.clone());
-        let clock_hours = graph.signal("morf.hour_clock", initial_clock.clone());
+        let (clocks, clock_values) = morf_runtime::wake::Clocks::new(&mut graph);
         let initial_lock = IpcValue::String(crate::SessionLockState::Unlocked.name().to_owned());
         let session_lock = graph.signal("morf.session_lock", initial_lock.clone());
-        let mut values = HashMap::new();
-        values.insert(clock, initial_clock.clone());
-        values.insert(clock_minutes, initial_clock.clone());
-        values.insert(clock_hours, initial_clock);
+        let mut values: HashMap<_, _> = clock_values.into_iter().collect();
         values.insert(session_lock, initial_lock);
         Self {
             requests: Default::default(),
@@ -60,7 +50,7 @@ impl ReactiveState {
             limits: crate::Limits::default(),
             reactive: morf_runtime::reactive::Reactive {
                 values,
-                signals: vec![clock, clock_minutes, clock_hours, session_lock],
+                signals: vec![clocks.seconds, clocks.minutes, clocks.hours, session_lock],
                 ..morf_runtime::reactive::Reactive::new(graph)
             },
             property_signals: HashMap::new(),
@@ -89,9 +79,7 @@ impl ReactiveState {
             gestures: Default::default(),
             overlays: Default::default(),
             effect_runs: 0,
-            clock,
-            clock_minutes,
-            clock_hours,
+            clocks,
             session: morf_runtime::session::Session::new(session_lock),
             events: morf_runtime::events::Events::default(),
             states: HashMap::new(),
