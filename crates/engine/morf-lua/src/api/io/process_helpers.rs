@@ -1,30 +1,9 @@
 use luna::{Context, Table, Value as LuaValue};
 use morf_image::{ImageRect as QuantizeRect, quantize_colors};
-use morf_io::{Process, ProcessConfig};
 use morf_scene::NodeHandle;
 use std::path::PathBuf;
 
 use crate::{state::*, surface_types::*};
-
-pub(crate) fn update_process_view_config(
-    process: &ProcessViewToken,
-    update: impl FnOnce(&mut ProcessConfig),
-) -> Result<(), String> {
-    let mut state = process.state.borrow_mut();
-    let mut config = state.config.clone();
-    update(&mut config);
-    let replacement = state
-        .process
-        .is_some()
-        .then(|| Process::spawn_config(&config))
-        .transpose()
-        .map_err(|error| error.to_string())?;
-    state.config = config;
-    if let Some(replacement) = replacement {
-        state.process = Some(replacement);
-    }
-    Ok(())
-}
 
 pub(crate) fn parse_quantizer_options<'gc>(
     ctx: Context<'gc>,

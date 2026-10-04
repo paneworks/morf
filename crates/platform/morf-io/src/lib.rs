@@ -9,10 +9,13 @@ mod dbus_types;
 mod files;
 mod fsops;
 mod http;
+mod http_options;
 mod ipc;
 mod process;
+mod process_view;
 mod reactor;
 mod reactor_core;
+mod socket_view;
 mod sockets;
 mod streams;
 mod timer;
@@ -25,13 +28,16 @@ pub use dbus_serve::{DbusCall, DbusService, NameOutcome};
 pub use dbus_types::*;
 pub use files::*;
 pub use http::*;
+pub use http_options::*;
 pub mod fs {
     //! Filesystem operations: every function of the crate's `fsops`.
     pub use crate::fsops::*;
 }
 pub use ipc::*;
 pub use process::*;
+pub use process_view::*;
 pub use reactor::*;
+pub use socket_view::*;
 pub use sockets::*;
 pub use streams::*;
 pub use timer::*;

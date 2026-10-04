@@ -71,6 +71,37 @@ pub fn detect(bytes: &[u8]) -> Option<Compression> {
     }
 }
 
+/// Largest output a decompression may produce unless the caller says less.
+pub const DEFAULT_MAX_OUTPUT: usize = 64 * 1024 * 1024;
+/// Largest output a caller may ask a decompression for.
+pub const MAX_OUTPUT: usize = 512 * 1024 * 1024;
+/// Most tar members listed unless the caller says otherwise.
+pub const DEFAULT_MAX_ENTRIES: usize = 100_000;
+/// Most tar members a caller may ask for.
+pub const MAX_ENTRIES: usize = 1_000_000;
+
+/// Inflates `bytes` as the format `name` spells (`None` or `"auto"`
+/// detects it from the magic number).
+pub fn inflate(bytes: &[u8], name: Option<&str>, max_output: usize) -> Result<Vec<u8>, String> {
+    let format = match name {
+        None | Some("auto") => detect(bytes).ok_or_else(|| {
+            "unknown compression format (give one: gzip, zlib, deflate, zstd, xz, lzma)".to_string()
+        })?,
+        Some(name) => {
+            Compression::parse(name).ok_or_else(|| format!("unknown compression format {name:?}"))?
+        }
+    };
+    decompress(bytes, format, max_output)
+}
+
+/// A tar archive's bytes: inflated first when a magic number says so.
+pub fn tar_bytes(bytes: &[u8], max_output: usize) -> Result<std::borrow::Cow<'_, [u8]>, String> {
+    match detect(bytes) {
+        Some(format) => decompress(bytes, format, max_output).map(std::borrow::Cow::Owned),
+        None => Ok(std::borrow::Cow::Borrowed(bytes)),
+    }
+}
+
 /// Inflates `bytes` as `format`, refusing an output longer than `max_output`.
 pub fn decompress(bytes: &[u8], format: Compression, max_output: usize) -> Result<Vec<u8>, String> {
     let too_big = || format!("{} output exceeds {max_output} bytes", format.name());

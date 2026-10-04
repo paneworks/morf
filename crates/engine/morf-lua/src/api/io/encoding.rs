@@ -5,7 +5,8 @@
 //! `nil, message`, since the input usually came from outside.
 
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
-use morf_io::{archive, codec};
+use morf_io::archive::{self, DEFAULT_MAX_ENTRIES, DEFAULT_MAX_OUTPUT, MAX_ENTRIES, MAX_OUTPUT};
+use morf_io::codec;
 
 use crate::scene_bindings::*;
 
@@ -38,13 +39,6 @@ fn flag<'gc>(
     }
 }
 
-/// Largest output a decompression may produce unless `max_size` says less.
-const DEFAULT_MAX_OUTPUT: usize = 64 * 1024 * 1024;
-/// Largest output a caller may ask a decompression for.
-const MAX_OUTPUT: usize = 512 * 1024 * 1024;
-const DEFAULT_MAX_ENTRIES: usize = 100_000;
-const MAX_ENTRIES: usize = 1_000_000;
-
 fn count_option<'gc>(
     ctx: Context<'gc>,
     options: LuaValue<'gc>,
@@ -63,31 +57,11 @@ fn count_option<'gc>(
     }
 }
 
-/// `format` as given (`nil` or `"auto"` detects), then the bytes inflated.
-fn inflate(input: &[u8], format: Option<&str>, max_output: usize) -> Result<Vec<u8>, String> {
-    let format = match format {
-        None | Some("auto") => archive::detect(input).ok_or_else(|| {
-            "unknown compression format (give one: gzip, zlib, deflate, zstd, xz, lzma)".to_string()
-        })?,
-        Some(name) => archive::Compression::parse(name)
-            .ok_or_else(|| format!("unknown compression format {name:?}"))?,
-    };
-    archive::decompress(input, format, max_output)
-}
-
 fn format_name(value: LuaValue<'_>) -> Result<Option<String>, HostError> {
     match value {
         LuaValue::Nil => Ok(None),
         LuaValue::String(name) => Ok(Some(String::from_utf8_lossy(name.as_bytes()).into_owned())),
         _ => Err(HostError("format must be a string".into())),
-    }
-}
-
-/// A tar archive's bytes: inflated first when a magic number says so.
-fn tar_bytes(input: &[u8], max_output: usize) -> Result<std::borrow::Cow<'_, [u8]>, String> {
-    match archive::detect(input) {
-        Some(format) => archive::decompress(input, format, max_output).map(std::borrow::Cow::Owned),
-        None => Ok(std::borrow::Cow::Borrowed(input)),
     }
 }
 
@@ -141,7 +115,7 @@ pub(crate) fn install_archive_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                 DEFAULT_MAX_ENTRIES,
                 MAX_ENTRIES,
             )?;
-            let listed = tar_bytes(input, max_output).and_then(|tar| {
+            let listed = archive::tar_bytes(input, max_output).and_then(|tar| {
                 archive::tar_entries(&tar, max_entries).map(|entries| (tar, entries))
             });
             match listed {
@@ -176,7 +150,7 @@ pub(crate) fn install_archive_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                 MAX_ENTRIES,
             )?;
             let wanted = String::from_utf8_lossy(name.as_bytes()).into_owned();
-            let found = tar_bytes(input, max_output).and_then(|tar| {
+            let found = archive::tar_bytes(input, max_output).and_then(|tar| {
                 let entries = archive::tar_entries(&tar, max_entries)?;
                 let entry = entries
                     .iter()
@@ -352,7 +326,7 @@ pub(crate) fn install_encoding_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             let format = format_name(format)?;
             let max_output =
                 count_option(ctx, options, "max_size", DEFAULT_MAX_OUTPUT, MAX_OUTPUT)?;
-            match inflate(input, format.as_deref(), max_output) {
+            match archive::inflate(input, format.as_deref(), max_output) {
                 Ok(out) => stack.replace(ctx, luna::String::from_slice(&ctx, out)),
                 Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
             }
