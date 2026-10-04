@@ -5,7 +5,7 @@
 --     morf test library/tests/lyrics_spec.lua
 
 local test = morf.test
-local lyrics = require("lib.lyrics")
+local lyrics = require("lib.integrations.lyrics")
 
 local SONG = table.concat({
   "[ar:Someone]",
@@ -52,7 +52,7 @@ test.describe("lyrics", function()
   -- The rest runs in a configuration of its own, whose loop the runner
   -- steps: `result` answers what the last `find` gave.
   local HOST = [[
-    local lyrics = require("lib.lyrics")
+    local lyrics = require("lib.integrations.lyrics")
     local got = nil
     morf.ipc.find = function(json, opts_json)
       got = false

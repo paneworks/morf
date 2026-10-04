@@ -8,7 +8,7 @@
 --
 -- The actions are wired to clicks only, and pass through `services.act`.
 
-local nm = require("lib.networkmanager")
+local nm = require("lib.services.networkmanager")
 local act = require("services.act")
 
 local M = {}

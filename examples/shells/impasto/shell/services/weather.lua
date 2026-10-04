@@ -10,7 +10,7 @@ local settings = require("services.settings")
 
 local M = {}
 
-local ok, lib = pcall(require, "lib.weather")
+local ok, lib = pcall(require, "lib.integrations.weather")
 if not ok then lib = nil end
 
 local source_handle, source_place = nil, nil

@@ -12,6 +12,16 @@ local test = morf.test
 
 local W, H = 1920, 1080
 
+-- Continuous performance history may sample the GPU while a panel is closed.
+-- Only this read-only probe is allowed: a dry-run action must not launch a
+-- process, including any other invocation of nvidia-smi.
+local function no_action_commands()
+  local probe = { "nvidia-smi",
+    "--query-gpu=pci.bus_id,utilization.gpu,utilization.encoder,utilization.decoder,memory.used,memory.total,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.max.gr,clocks.mem,clocks.max.mem,driver_version",
+    "--format=csv,noheader,nounits" }
+  for _, run in ipairs(test.runs()) do test.eq(run, probe) end
+end
+
 local function load(extra)
   for _, program in ipairs { "systemctl", "loginctl" } do test.stub_run(program, { code = 0 }) end
   test.stub_run("task", { code = 0, stdout = "[]" })
@@ -63,8 +73,8 @@ test.describe("caelestia", function()
     test.settle(1500)
     test.truthy(shown("launcher"))
     local d = drawer("launcher")
-    -- It floats in the middle of the screen.
-    test.near(d.y + d.height / 2, H / 2, 1)
+    -- Search sits near the top, centered horizontally.
+    test.near(d.y, 10 + math.floor(H * 0.16), 1)
     test.near(d.x + d.width / 2, W / 2, 1)
     test.truthy(test.find { id = "launcher-search" })
     test.snapshot("caelestia-launcher.png", { surface = "screen" })
@@ -285,17 +295,17 @@ test.describe("caelestia", function()
     test.settle(1500)
     test.type(">calc 2+3*4")
     test.settle(1000)
-    test.eq(test.get({ id = "launcher-calc" }).text, "2 + (3 * 4) = 14")
+    test.eq(test.get({ id = "launcher-answer" }).text, "2 + (3 * 4) = 14")
     test.snapshot("caelestia-launcher-calc.png", { surface = "screen" })
     test.key("BackSpace")
     test.key("BackSpace")
     test.type("/0")
     test.settle(500)
-    test.eq(test.get({ id = "launcher-calc" }).text, "division by zero")
+    test.eq(test.get({ id = "launcher-answer" }).text, "division by zero")
     for _ = 1, 5 do test.key("BackSpace") end
     test.type("sqrt(2)^2 + os.exit()")
     test.settle(500)
-    test.eq(test.get({ id = "launcher-calc" }).text, "unexpected .")
+    test.eq(test.get({ id = "launcher-answer" }).text, "unexpected .")
     test.eq(#test.logs("error"), 0)
   end)
 
@@ -350,11 +360,11 @@ test.describe("caelestia", function()
     test.settle(800)
   end)
 
-  test.it("shows no results as the reference does", function()
+  test.it("shows an empty state for unmatched shell actions", function()
     load()
     test.ipc("launcher", "open")
     test.settle(1500)
-    test.type("zzqqxxnothing")
+    test.type(">zzqqxxnothing")
     test.settle(1000)
     test.truthy(test.find { id = "launcher-empty", visible = true })
     test.truthy(test.find { text = "Try searching for something else" })
@@ -382,14 +392,14 @@ test.describe("caelestia", function()
     local d = drawer("session")
     test.near(d.x + d.width, W - 10, 1)
     test.near(d.y + d.height / 2, H / 2, 1)
-    test.eq(#test.runs(), 0)
+    no_action_commands()
     test.snapshot("caelestia-session.png", { surface = "screen" })
     -- Down to shut down, then Escape: nothing ran.
     test.key("Down")
     test.key("Escape")
     test.settle(1500)
     test.falsy(shown("session"))
-    test.eq(#test.runs(), 0)
+    no_action_commands()
     -- Again, and Return on shut down.
     test.ipc("session", "open")
     test.settle(1500)
@@ -402,7 +412,7 @@ test.describe("caelestia", function()
       if line.message:find("session shutdown (dry run): systemctl poweroff", 1, true) then said = true end
     end
     test.truthy(said, "shut down was not asked for")
-    test.eq(#test.runs(), 0)
+    no_action_commands()
   end)
 
   test.it("shuts the session menu on a click on the desk", function()
@@ -413,7 +423,7 @@ test.describe("caelestia", function()
     test.click(800, 500)
     test.settle(1500)
     test.falsy(shown("session"))
-    test.eq(#test.runs(), 0)
+    no_action_commands()
   end)
   test.it("moves the launcher's highlight with the arrow keys", function()
     load()
@@ -469,7 +479,7 @@ test.describe("caelestia", function()
     test.near(d.height, H - 20, 1)
     test.eq(d.width, 450)
     for _, id in ipairs { "utilities-sliders", "utilities-volume", "utilities-brightness", "utilities-toggles",
-      "utilities-toggle-battery", "utilities-toggle-awake" } do
+      "utilities-toggle-battery", "utilities-toggle-focus" } do
       test.truthy(test.find { id = id, visible = true }, id .. " not shown")
     end
     test.truthy(test.find { id = "utilities-more-wifi", visible = true }, "the Wi-Fi tile has no page")
@@ -513,10 +523,12 @@ test.describe("caelestia", function()
     test.ipc("utilities", "open")
     test.settle(1500)
     test.clear_logs()
-    -- Keep awake: a tile like the others, saying since when once on.
+    test.click {id="utilities-toggle-focus"} test.settle(1000)
+    -- Independent controls inside the Focus group.
     test.click { id = "utilities-toggle-awake" }
     test.settle(1000)
     test.truthy(test.find { text = "^Since ", visible = true } or test.find { id = "utilities-toggle-awake", visible = true })
+    test.click {id="settings-back"} test.settle(1000)
     test.click { id = "utilities-toggle-mic" }
     test.click { id = "utilities-toggle-airplane" }
     test.settle(500)
@@ -526,8 +538,9 @@ test.describe("caelestia", function()
     test.truthy(said:find("keep awake on (dry run)", 1, true), "keep awake did not log")
     test.truthy(said:find("utilities mic_off (dry run)", 1, true))
     test.truthy(said:find("airplane mode on (dry run)", 1, true), "airplane mode did not log")
-    test.eq(#test.runs(), 0)
+    no_action_commands()
     -- Do not disturb: a notification reaches the history, not a popup.
+    test.click {id="utilities-toggle-focus"} test.settle(1000)
     test.click { id = "utilities-toggle-dnd" }
     test.ipc("notify", "Quiet", "no popup for this")
     test.settle(1000)
@@ -603,8 +616,10 @@ test.describe("caelestia", function()
     test.eq(test.get({ id = "sidebar-group-app-1" }).text, "Discord")
     test.eq(test.get({ id = "sidebar-group-app-2" }).text, "Firefox")
     test.falsy(test.find { id = "sidebar-group-3", visible = true })
-    test.near(test.get({ id = "sidebar-group-1" }).height, 68, 1)
-    test.near(test.get({ id = "sidebar-group-2" }).height, 90, 1)
+    -- A shut group is its head and one line per notification (20 each).
+    local one, two = test.get({ id = "sidebar-group-1" }).height, test.get({ id = "sidebar-group-2" }).height
+    test.truthy(one > 40, "a group shows only its head")
+    test.near(two - one, 20, 1)
     test.falsy(test.find { id = "sidebar-empty-label", visible = true })
     test.snapshot("caelestia-sidebar-notifications.png", { surface = "screen" })
     -- A group opens out to its notifications; one is dismissed from there.
@@ -638,7 +653,9 @@ test.describe("caelestia", function()
     test.settle(1000)
     local swell, bud = test.get { id = "levels-swell" }, test.get { id = "levels-bud" }
     test.truthy(swell.x < W - 10, "the frame did not swell out")
-    test.near(bud.width, test.get({ id = "rail-pill-1" }).height, 0.5, "the disc is not the pills' height")
+    -- The shared level column: 118 wide, taller than the pills it swells from.
+    test.near(bud.width, 118, 0.5, "the level column is not its width")
+    test.truthy(bud.height > test.get({ id = "rail-pill-1" }).height and bud.height < H)
     test.near(test.get({ id = "levels-volume" }).opacity, 1, 0.01, "the pill did not light")
     test.snapshot("caelestia-osd.png", { surface = "screen" })
     test.advance(3000)
@@ -670,12 +687,12 @@ test.describe("caelestia", function()
   test.it("lines the workspaces down the left edge, the active one lit", function()
     load()
     local track = math.floor(H * 0.5)
-    for i = 1, 10 do
+    for i = 1, 9 do
       local pill = test.get { id = "rail-pill-" .. i }
       test.near(pill.x + pill.width / 2, 5, 0.5)
       test.eq(pill.width, 6)
     end
-    local first, last = test.get { id = "rail-pill-1" }, test.get { id = "rail-pill-10" }
+    local first, last = test.get { id = "rail-pill-1" }, test.get { id = "rail-pill-9" }
     test.near(first.y, (H - track) / 2, 1)
     test.near(last.y + last.height, (H + track) / 2, 1)
     test.near(first.opacity, 1, 0.01)

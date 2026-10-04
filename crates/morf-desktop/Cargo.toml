@@ -1,7 +1,0 @@
-[package]
-name = "morf-desktop"
-description = "XDG desktop entry discovery for morf"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true

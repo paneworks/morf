@@ -27,7 +27,7 @@
 local settings = require("services.settings")
 local wallpaper = require("services.wallpaper")
 local theme_service = require("services.theme")
-local palette = require("lib.palette")
+local palette = require("lib.util.palette")
 
 local fs = morf.fs
 local json = morf.json

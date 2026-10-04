@@ -1,18 +1,14 @@
--- The wide bottom workspace. Add future pages to TABS.
+-- Bottom workspace lifecycle and navigation; each theme owns its composition.
 local morf = require("morf")
-local theme = require("theme")
-local tabbed = require("tabbed")
-local drawer = require("drawer")
-local M = {}
-local screen = morf.screens and morf.screens[1] or { width = 1920, height = 1080 }
-M.WIDTH = math.floor(math.min(2120, screen.width - theme.LEFT - theme.BORDER - 20) * 0.8)
-local HEIGHT = math.floor(math.min(1252, screen.height - 2 * theme.BORDER - 40) * 0.6)
-M.TABS = {
-  { key = "assistant", name = "Assistant", icon = "auto_awesome", build = require("assistant").build },
-  { key = "drop", name = "Drop", icon = "forum", build = require("drop").build },
+local model = require("bottom_model").new()
+local view = require("themes").view("bottom").build(model)
+local M = { TABS = model.tabs, panel = model }
+M.width = type(view.width) == "function" and view.width or function() return view.width end
+M.height = type(view.height) == "function" and view.height or function() return view.height end
+M.WIDTH = M.width()
+M.drawer = require("drawer").new {
+  name = "bottom", edge = view.edge or "bottom", width = view.width, height = view.height,
+  content = view.content, props = view.props, close_policy = "escape+outside",
 }
-function M.height() return HEIGHT end
-M.panel = tabbed.new { id = "bottom", width = M.WIDTH, height = M.height, tabs = M.TABS }
-M.drawer = drawer.new { name = "bottom", edge = "bottom", width = M.WIDTH, height = M.height, content = M.panel.content }
-morf.effect("caelestia.bottom.shown", function() M.panel.shown(M.drawer.open:get()) end)
+morf.effect("caelestia.bottom.shown", function() model.opened:set(M.drawer.open:get()) end)
 return M

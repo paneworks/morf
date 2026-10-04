@@ -1,0 +1,36 @@
+[package]
+name = "morf-lua"
+description = "Sandboxed Lua configuration host for morf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# luna's native tier (Cranelift; Linux x86-64 and aarch64). See runtime_jit.rs.
+jit = ["luna/jit"]
+# The widget archetypes as `morf.kit.native` (morf-kit).
+kit = ["dep:morf-kit"]
+
+[dependencies]
+morf-kit = { workspace = true, optional = true }
+morf-value.workspace = true
+jiff.workspace = true
+luna.workspace = true
+libc = "0.2"
+morf-audio.workspace = true
+morf-image.workspace = true
+morf-io.workspace = true
+morf-layout.workspace = true
+morf-vector.workspace = true
+morf-runtime.workspace = true
+morf-scene.workspace = true
+morf-shader.workspace = true
+morf-text.workspace = true
+morf-system.workspace = true
+morf-terminal.workspace = true
+serde_json.workspace = true
+pastel = "0.12"
+
+[dev-dependencies]
+image.workspace = true

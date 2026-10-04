@@ -11,97 +11,70 @@
 -- coming up by itself.
 
 local morf = require("morf")
-local theme = require("theme")
 local config = require("config")
-local drawer = require("drawer")
-local osk = require("lib.osk")
-local keyboards = require("lib.keyboards")
+local osk = require("lib.util.osk")
+local keyboards = require("lib.services.keyboards")
+local M = { opened = morf.signal("caelestia.keyboard.shown", false) }
 
-local C = theme.color
-local M = {}
-
-M.WIDTH = 1060
-local PAD = 12
-
-local function dry_run()
-  local v = morf.env and morf.env("CAELESTIA_DRY_RUN")
-  return v ~= nil and v ~= "" and v ~= "0"
-end
-
--- Whether a text field is asking (the input method is active): text is
--- committed to it then, in any language, not pressed as keys.
 local field = false
 local send = osk.sender { ime = function() return field end }
-
-local d
-local kb = osk.new {
-  prefix = "caelestia.osk",
-  width = M.WIDTH - 2 * PAD,
-  mode = "full",
-  numbers = false,
-  send = function(e)
-    if dry_run() then
-      morf.log("warn", "caelestia: keyboard (dry run): " .. tostring(e.text or e.key) .. ((e.mods and e.mods.shift) and " +shift" or ""))
-      return
-    end
-    send(e)
-  end,
-  look = {
-    panel = function() return C.surfaceContainer:alpha(0) end,
-    key = function() return C.surfaceContainerHighest end,
-    key_dim = function() return C.surfaceContainerHigh end,
-    accent = function() return C.primary end,
-    on_accent = function() return C.onPrimary end,
-    text = function() return C.onSurface end,
-    dim = function() return C.onSurfaceVariant end,
-    press = function() return C.secondaryContainer end,
-    font = theme.font,
-    icons = theme.icon_font,
-  },
-}
-M.keys = kb
-
-local ui = require("morf.ui")
-d = drawer.new {
-  name = "keyboard",
-  edge = "bottom",
-  width = M.WIDTH,
-  height = function() return kb.height() + 2 * PAD end,
-  content = ui.Item { x = PAD, y = PAD, width = M.WIDTH - 2 * PAD, height = kb.height, kb.node },
-}
-M.drawer = d
-
---- Shows it as `mode` ("full", "dev", "letters", "numbers", "phone",
---- "pattern").
-function M.show(mode)
-  if mode then kb.mode:set(mode) end
-  kb.reset()
-  d.set(true)
+function M.active() return M.opened:get() end
+function M.send(event)
+  if not M.active() then return end
+  local dry = morf.env("CAELESTIA_DRY_RUN")
+  if dry and dry ~= "" and dry ~= "0" then return end
+  send(event)
+end
+function M.close() M.drawer.set(false) end
+function M.desk_size()
+  local _, _, w, h = require("bar").desk()
+  return w, h
 end
 
--- ------------------------------------------------------------ by itself --
+local view = require("themes").view("keyboard").build(M)
+M.keys, M.WIDTH = view.keys, view.width
+M.drawer = require("drawer").new {
+  name = "keyboard", edge = view.edge or "bottom", width = view.width,
+  height = view.height, content = view.content, props = view.props,
+}
 
--- Opened because a field asked (and so shut when it goes), or by hand.
 local asked = false
+function M.set(on)
+  asked = false
+  M.drawer.set(on)
+end
+function M.toggle() M.set(not M.drawer.open:get()) end
+function M.show(mode)
+  local valid = mode == nil
+  for _, name in ipairs(osk.MODES) do if mode == name then valid = true end end
+  if not valid then return false end
+  asked = false
+  if mode then M.keys.mode:set(mode) end
+  M.keys.reset()
+  M.set(true)
+  return true
+end
+
 if morf.input_method and morf.input_method.subscribe then
   pcall(morf.input_method.subscribe, function(active)
     field = active == true
     if config.get("keyboard.auto") == false then return end
     if active then
-      if not d.open:get() and not keyboards.attached() then
+      if not M.drawer.open:get() and not keyboards.attached() then
         asked = true
-        kb.reset()
-        d.set(true)
+        M.keys.reset()
+        M.drawer.set(true)
       end
     elseif asked then
       asked = false
-      d.set(false)
+      M.drawer.set(false)
     end
   end)
 end
--- Opened or shut by hand, it is the hand's until the next field.
 morf.effect("caelestia.keyboard.hand", function()
-  if not d.open:get() then asked = false end
+  local on = M.drawer.open:get()
+  M.opened:set(on)
+  if not on then asked = false end
+  if view.shown then view.shown(on) end
 end)
-
 return M

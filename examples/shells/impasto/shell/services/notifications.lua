@@ -19,7 +19,7 @@
 -- entry still carries its `actions`, and `M.invoke(id, key)` answers one,
 -- for a list that draws them.
 
-local daemon = require("lib.notifications")
+local daemon = require("lib.services.notifications")
 local settings = require("services.settings")
 
 local M = {}

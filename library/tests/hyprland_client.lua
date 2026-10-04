@@ -1,7 +1,7 @@
 -- lib/hyprland_config in a configuration, for hyprland_config_spec.lua:
 -- IPC verbs that use it and say what came back.
 local ui = require("morf.ui")
-local config = require("lib.hyprland_config")
+local config = require("lib.integrations.hyprland_config")
 local answers = {}
 morf.ipc.flavour = function() return tostring(config.known_flavour()) end
 morf.ipc.push = function()
@@ -18,7 +18,7 @@ morf.ipc.outputs = function()
   return table.concat(out, " ")
 end
 morf.ipc.keyboard = function()
-  local state = require("lib.hyprland").state
+  local state = require("lib.integrations.hyprland").state
   return tostring(state.keyboard) .. ":" .. tostring(state.keyboard_layout)
 end
 ui.Rect { width = 10, height = 10 }

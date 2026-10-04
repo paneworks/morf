@@ -130,7 +130,7 @@ local account_path
 
 local function bus()
   if client then return client end
-  local ok, dbus_client = pcall(require, "lib.dbus_client")
+  local ok, dbus_client = pcall(require, "lib.services.dbus_client")
   if ok then client = dbus_client.new { bus = "system" } end
   return client
 end

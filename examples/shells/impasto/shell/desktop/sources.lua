@@ -88,7 +88,7 @@ function S.battery.estimate()
   if battery_service then return call(battery_service, "estimate") or "" end
   local d = display()
   if not d then return "" end
-  local ok, up = pcall(require, "lib.upower")
+  local ok, up = pcall(require, "lib.services.upower")
   local fmt = ok and up.format_time or function(s) return math.floor(s / 60) .. " min" end
   if d.charging and (d.time_to_full or 0) > 0 then return fmt(d.time_to_full) .. " to full" end
   if not d.charging and (d.time_to_empty or 0) > 0 then return fmt(d.time_to_empty) .. " left" end
@@ -420,7 +420,7 @@ end
 -- `lib.packages`. Without either the faces say "cannot check".
 S.updates = {}
 local updates_service = optional("services.updates")
-local packages_ok, packages = pcall(require, "lib.packages")
+local packages_ok, packages = pcall(require, "lib.integrations.packages")
 if not packages_ok then packages = nil end
 local packages_handle = nil
 local function updates_now()

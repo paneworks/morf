@@ -24,7 +24,7 @@ end)
 local closed = 0
 local win
 local function open()
-  win = morf.window.floating {
+  win = morf.window.toplevel {
     title = "doomed", width = 300, height = 200, visible = true,
     root = ui.Rect { id = "doomed-root", color = "#333", ui.Text { id = "doomed-text", text = "bye" } },
     on_closed = function() closed = closed + 1 end,
@@ -95,7 +95,7 @@ test.describe("window:destroy", function()
 
   test.it("leaves room for a new window after it", function()
     test.ipc("destroy")
-    test.eq(test.ipc("reopen"), "floating")
+    test.eq(test.ipc("reopen"), "toplevel")
     test.truthy(test.find { id = "doomed-text" })
   end)
 end)

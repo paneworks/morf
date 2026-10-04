@@ -5,7 +5,7 @@
 --     nixVulkanIntel morf test examples/demos/tests/m3shapes_spec.lua   # with snapshots
 
 local test = morf.test
-local shapes = require("lib.m3shapes")
+local shapes = require("lib.util.m3shapes")
 
 local function count(d, pattern)
   local n = 0

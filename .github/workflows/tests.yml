@@ -25,10 +25,22 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             cargo-${{ runner.os }}-
+      - name: Layer rules
+        # PLAN.md sections 3 and 4: the dependency graph, Wayland and luna
+        # where they may appear, files of at most 500 lines.
+        run: python3 tools/layers.py --strict
       - name: Verify
         run: |
           cargo fmt --all -- --check
           cargo check --all-targets --all-features
           cargo clippy --all-targets --all-features -- -Dwarnings
           cargo test --all-targets --all-features
+      - name: Widget contract
+        run: |
+          cargo build -p morf-cli
+          target/debug/morf test --no-dbus library/tests/kit_spec.lua
+          target/debug/morf test --no-dbus examples/shells/caelestia/tests/kit_gallery_spec.lua
+          for style in material tsugumori; do
+            CAELESTIA_STYLE=$style target/debug/morf check --kit --no-dbus examples/shells/caelestia/shell/init.lua
+          done
 

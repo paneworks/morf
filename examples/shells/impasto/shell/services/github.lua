@@ -10,7 +10,7 @@ local settings = require("services.settings")
 
 local M = {}
 
-local ok, lib = pcall(require, "lib.github")
+local ok, lib = pcall(require, "lib.integrations.github")
 if not ok then lib = nil end
 
 local handle, handle_user = nil, nil

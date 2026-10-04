@@ -6,7 +6,7 @@
 -- pictures in ~/Pictures/Wallpapers) and "> calc " (calc.lua).
 
 local morf = require("morf")
-local frecency = require("lib.frecency")
+local frecency = require("lib.util.frecency")
 local config = require("config")
 local calc = require("calc")
 

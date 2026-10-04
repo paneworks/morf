@@ -29,6 +29,7 @@
 #   film LABEL N N screenshots back to back (timestamps in film-LABEL.times)
 #   hc ARGS      hyprctl on the nested instance only (refuses otherwise)
 #   k ARGS       wtype on the nested display          wait S   sleep
+#   a11y LABEL   (A11Y=1) what a screen reader sees, to a11y-LABEL.txt
 #
 # Environment: WORK (scratch root, default ${TMPDIR:-/tmp}/morf-sandbox),
 # UPSTREAM, MORF_REPO, MORF_CONFIG (the configuration the morf kind runs,
@@ -37,7 +38,8 @@
 # AWWW_BIN, INTER_DIR, WTYPE (tools taken from these when not on PATH),
 # CAELESTIA, CAELESTIA_PKG, CAEL_CONFIG (a shell.json to seed), CAEL_SCHEME (a
 # scheme.json to seed; without one caelestia keeps its built-in palette),
-# NIXGL (GL wrapper for the nix-built Quickshell, default nixGLIntel).
+# NIXGL (GL wrapper for the nix-built Quickshell, default nixGLIntel), A11Y
+# (an AT-SPI bus, enabled, on the private session bus).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=${MORF_REPO:-$(cd "$HERE/../.." && pwd)}
@@ -259,6 +261,24 @@ fi
 # not whatever a dev shell left in XDG_DATA_DIRS -- so a launcher lists the
 # installed applications, and the scratch data home first, as XDG says.
 export XDG_DATA_DIRS=/usr/local/share:/usr/share
+# A11Y=1: an accessibility bus on the private session bus, switched on as
+# a screen reader would switch it on, before the shell starts; the a11y
+# LABEL step writes what a screen reader sees (a11ydump.py) to
+# OUT/a11y-LABEL.txt.
+if [ -n "${A11Y:-}" ]; then
+  # (Its switches live in GSettings; no dconf in here, so in memory.)
+  GSETTINGS_BACKEND=memory /usr/lib/at-spi-bus-launcher --launch-immediately > \$OUT/atspi.log 2>&1 &
+  AB=\$!
+  sleep 1
+  # Its registry, which the bus would have systemd start: none in here.
+  /usr/lib/at-spi2-registryd >> \$OUT/atspi.log 2>&1 &
+  AR=\$!
+  sleep 0.5
+  busctl --user set-property org.a11y.Bus /org/a11y/bus org.a11y.Status IsEnabled b true >> \$OUT/atspi.log 2>&1
+  busctl --user set-property org.a11y.Bus /org/a11y/bus org.a11y.Status ScreenReaderEnabled b true >> \$OUT/atspi.log 2>&1
+  busctl --user get-property org.a11y.Bus /org/a11y/bus org.a11y.Status IsEnabled >> \$OUT/atspi.log 2>&1
+fi
+a11y() { asked a11y; timeout 60 /usr/bin/python3 "$HERE/a11ydump.py" \$OUT/a11y-\$1.txt >> \$OUT/atspi.log 2>&1; }
 if [ "$KIND" = caelestia ]; then
   # caelestia paints its own wallpaper. Its Quickshell and Qt come from nix,
   # so it needs nix's GL driver too.
@@ -305,7 +325,7 @@ fi
 sleep \${BOOT:-15}
 [ -n "$WTYPE" ] && { timeout \${TIMEOUT:-240} "$WTYPE" -s 400000 > /dev/null 2>&1 & KP=\$!; }
 . "$STEPS"
-kill \$S \${AW:-} 2>/dev/null
+kill \$S \${AW:-} \${AB:-} \${AR:-} 2>/dev/null
 sleep 1
 kill \$HP 2>/dev/null
 sleep 1

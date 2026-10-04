@@ -3,7 +3,7 @@
 -- own settings change.
 --
 -- Port of SettingsWindow.qml. It is an xdg-shell toplevel
--- (`morf.window.floating`), which the compositor moves, focuses and closes
+-- (`morf.window.toplevel`), which the compositor moves, focuses and closes
 -- like any other window; its title is "Settings" and its app id
 -- "impasto-settings", for a window rule to float it. The page is built when
 -- the window opens and let go when it closes, so pages read the state they
@@ -69,7 +69,7 @@ end
 function M.open(section, part)
   if section and section ~= "" then panel.go(section, part) end
   if not window then
-    window = morf.window.floating {
+    window = morf.window.toplevel {
       -- Mixed as Qt mixes, so translucent colours and type match the original.
       blend = require("theme").blend,
       title = tr("Settings"), app_id = "impasto-settings",

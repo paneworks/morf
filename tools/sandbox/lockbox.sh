@@ -17,7 +17,7 @@
 
 set -eu
 NAME=${1:-caelestia}
-MORF=${MORF:-$HOME/.local/bin/morf}
+MORF=${MORF:-/usr/bin/morf}
 DIR=$(mktemp -d "${TMPDIR:-/tmp}/lockboxXXXX")
 # The machine's own libraries for morf, as outside a nix shell: the shell's
 # library path and data dirs hide the Vulkan driver.

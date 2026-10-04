@@ -33,7 +33,7 @@ local M = {}
 -- ------------------------------------------------------------- hyprland --
 
 local hyprland
-for _, name in ipairs { "lib.hyprland", "hyprland" } do
+for _, name in ipairs { "lib.integrations.hyprland", "hyprland" } do
   local ok, lib = pcall(require, name)
   if ok and type(lib) == "table" and lib.available then
     hyprland = lib

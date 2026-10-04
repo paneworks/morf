@@ -139,7 +139,7 @@ end
 function M.load()
   if s.loading:get() or not pacman then return end
   s.loading:set(true)
-  local poll = require("lib.poll")
+  local poll = require("lib.util.poll")
   local foreign, listed = nil, nil
   local function all_in()
     if not foreign or not listed then return end

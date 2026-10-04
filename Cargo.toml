@@ -1,17 +1,19 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*/*"]
 # Vendored dependencies are patched sources, not members: they are neither
 # linted nor tested as ours.
 exclude = ["vendor"]
 
 [workspace.package]
-version = "0.1.5"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/rendrworks/morf"
 
 [workspace.dependencies]
+accesskit = "=0.25.1"
+accesskit_unix = "=0.24.0"
 alacritty_terminal = { version = "=0.26.0", default-features = false }
 animato = { version = "=1.7.2", default-features = false, features = ["tween", "spring", "physics"] }
 base64 = "=0.23.1"
@@ -22,10 +24,10 @@ kurbo = "=0.13.1"
 image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 libc = "0.2"
 libloading = "0.8"
-luna = { git = "https://github.com/onix-os/luna", rev = "e8b7e98ec977c8973ce1a182d935d0ca1f06f465" }
+luna = { git = "https://github.com/onix-os/luna", branch = "feat/native-jit" }
 pollster = "1.0"
 raw-window-handle = "0.6"
-resvg = { version = "=0.48.1", default-features = false, features = ["raster-images", "text"] }
+resvg = { version = "=0.48.1", default-features = false, features = ["raster-images", "text", "system-fonts", "memmap-fonts"] }
 rustix = { version = "1.1", features = ["event", "fs", "net", "pipe", "process", "pty", "rand", "termios"] }
 slotmap = "1.0"
 signed-distance-field = "=0.6.3"
@@ -46,25 +48,24 @@ wgpu = { version = "=30.0.1", default-features = false, features = ["std", "vulk
 xkbcommon = "=0.8.0"
 zbus = "=5.19.0"
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls", "gzip"] }
-morf-image = { path = "crates/morf-image" }
-morf-audio = { path = "crates/morf-audio" }
-morf-desktop = { path = "crates/morf-desktop" }
-morf-io = { path = "crates/morf-io" }
-morf-layout = { path = "crates/morf-layout" }
-morf-lifecycle = { path = "crates/morf-lifecycle" }
-morf-lua = { path = "crates/morf-lua" }
-morf-menu = { path = "crates/morf-menu" }
-morf-outline = { path = "crates/morf-outline" }
-morf-svg = { path = "crates/morf-svg" }
-morf-reactive = { path = "crates/morf-reactive" }
-morf-region = { path = "crates/morf-region" }
-morf-shader = { path = "crates/morf-shader" }
-morf-render = { path = "crates/morf-render" }
-morf-scene = { path = "crates/morf-scene" }
-morf-services = { path = "crates/morf-services" }
-morf-terminal = { path = "crates/morf-terminal" }
-morf-text = { path = "crates/morf-text" }
-morf-wayland = { path = "crates/morf-wayland" }
+morf-value = { path = "crates/core/morf-value" }
+morf-image = { path = "crates/graphics/morf-image" }
+morf-audio = { path = "crates/platform/morf-audio" }
+morf-io = { path = "crates/platform/morf-io" }
+morf-layout = { path = "crates/core/morf-layout" }
+morf-kit = { path = "crates/engine/morf-kit" }
+morf-lua = { path = "crates/engine/morf-lua" }
+morf-vector = { path = "crates/graphics/morf-vector" }
+morf-shader = { path = "crates/engine/morf-shader" }
+morf-render = { path = "crates/graphics/morf-render" }
+morf-scene = { path = "crates/core/morf-scene" }
+morf-system = { path = "crates/platform/morf-system" }
+morf-terminal = { path = "crates/platform/morf-terminal" }
+morf-text = { path = "crates/graphics/morf-text" }
+morf-app = { path = "crates/platform/morf-app" }
+morf-desktop = { path = "crates/platform/morf-desktop" }
+morf-runtime = { path = "crates/engine/morf-runtime" }
+morf-host = { path = "crates/frontend/morf-host", default-features = false }
 
 # cosmic-text 0.19.0 with one change: `Attrs::variations`, a variable font's
 # axes beyond `wght`, reaching the shaper. Upstream shapes every face at its

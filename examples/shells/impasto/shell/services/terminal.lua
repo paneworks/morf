@@ -139,7 +139,7 @@ function M.run(command, options)
       visible = function() return entry.status:get() ~= "" end,
     },
   }
-  entry.window = morf.window.floating {
+  entry.window = morf.window.toplevel {
     -- Mixed as Qt mixes, so translucent colours and type match the original.
     blend = require("theme").blend,
     title = options.title or command[1], app_id = "impasto-terminal",

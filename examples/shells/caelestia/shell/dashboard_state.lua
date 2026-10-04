@@ -6,7 +6,10 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local sysinfo = require("lib.sysinfo")
+local sysinfo = require("lib.services.sysinfo")
+local session = require("themes.session")
+sysinfo.restore_history(session.restore("graphs"))
+session.register("graphs",sysinfo.snapshot_history)
 
 -- Keep one graph's worth of recent activity even before its tab is opened.
 -- sysinfo's fixed-size rings overwrite the oldest sample; nothing is written
@@ -19,7 +22,8 @@ end
 
 local M = {}
 
-M.tab = morf.signal("caelestia.dashboard.tab", 1)
+M.tab = require("themes.session").keep("caelestia.dashboard.tab", 1)
+M.displayed = require("themes.session").keep("caelestia.dashboard.displayed", 1)
 M.opened = morf.signal("caelestia.dashboard.shown", false)
 
 -- Inspect collection without reading a source (which would wake an idle
@@ -38,7 +42,7 @@ M.areas = {}
 
 --- A MouseArea the panel counts as its own for hover.
 function M.area(props)
-  local a = ui.MouseArea(props)
+  local a = props.cursor == "pointer" and require("kit").action(props) or ui.MouseArea(props)
   M.areas[#M.areas + 1] = a
   return a
 end
@@ -49,8 +53,8 @@ end
 --- is chosen, and `area`.
 function M.context(i)
   return {
-    opened = function() return M.opened:get() and M.tab:get() == i end,
-    current = function() return M.tab:get() == i end,
+    opened = function() return M.opened:get() and M.displayed:get() == i end,
+    current = function() return M.displayed:get() == i end,
     area = M.area,
   }
 end

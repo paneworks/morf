@@ -1,0 +1,10 @@
+[package]
+name = "morf-kit"
+description = "Widget archetypes for morf: behaviour with no look, skinned per theme in Lua"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+morf-value.workspace = true

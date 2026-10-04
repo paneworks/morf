@@ -8,7 +8,7 @@ morf.surface.height = 956
 morf.surface.anchors = { top = true, left = true }
 
 local ui = require("morf.ui")
-local material = require("lib.material")
+local material = require("lib.util.material")
 
 local source = morf.env("MATERIAL_SOURCE") or "#4a7fb5"
 local ROLES = {

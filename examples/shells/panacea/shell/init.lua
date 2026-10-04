@@ -83,7 +83,10 @@ function island.lock()
   island.close()
   local command = config.lockCommand
   if command == "" then
-    if system.slurp("/usr/bin/logre") then command = "logre -- lock" else command = "hyprlock" end
+    local root = morf.env("XDG_CONFIG_HOME") or (morf.fs.home() .. "/.config")
+    if morf.fs.exists(root .. "/morf/caelestia/lock/init.lua") or morf.fs.exists("/etc/xdg/morf/caelestia/lock/init.lua") then
+      command = "morf lock -c caelestia"
+    else command = "hyprlock" end
   end
   system.launch(command)
 end

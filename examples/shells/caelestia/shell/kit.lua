@@ -1,635 +1,172 @@
--- Small pieces every part of the shell uses: a Material Symbols icon, text
--- in the shell's face, a rounded card.
-
-local morf = require("morf")
-local ui = require("morf.ui")
+-- Visual components supplied by the selected theme. Services and state live
+-- outside theme packages; both themes receive the same wallpaper palette.
 local theme = require("theme")
+local kit = require(theme.appearance.components)(theme)
+local widgets = require("lib.kit.widgets")
 
-local M = {}
-
-local function C() return theme.color end
-
---- A Material Symbols Rounded icon by its ligature name (`"wifi_off"`).
---- `name` and `color` may be bindings; `props.fill` (a boolean or a
---- binding) fills it in through the face's FILL axis.
-function M.icon(name, size, color, props)
-  props = props or {}
-  props.text = name
-  props.font_family = theme.icon_font
-  props.font_size = size or 18
-  props.color = color or function() return theme.color.onSurface end
-  if props.fill ~= nil then
-    local fill = props.fill
-    props.fill = nil
-    props.axes = function()
-      local on = fill
-      if type(fill) == "function" then on = fill() end
-      return { FILL = on and 1 or 0 }
-    end
-    props.behavior = props.behavior or {}
-    props.behavior.axes = { duration = theme.duration.small, easing = theme.ease.standard }
-  end
-  return ui.Text(props)
+-- The theme's skins draw the kit's archetypes (lib.kit.skin).
+if kit.skins then
+  local skin = require("lib.kit.skin")
+  skin.define(theme.appearance.id, { skins = kit.skins, defaults = kit.skin_defaults })
+  skin.use(theme.appearance.id)
 end
 
---- Text in Rubik; `props` as a `ui.Text`'s.
-function M.text(props)
-  props.font_family = props.font_family or theme.font
-  if theme.font_file ~= "" and props.font_source == nil then props.font_source = theme.font_file end
-  props.font_size = props.font_size or theme.size.normal
-  -- The reference's font builder sets `opsz` to the size in points (morf's
-  -- automatic optical sizing, like CSS's, uses pixels, which reads a size
-  -- larger and sets it tighter) and `ROND` 25 on every face. A face without
-  -- those axes ignores them.
-  if props.axes == nil and type(props.font_size) == "number" then
-    props.axes = { opsz = props.font_size * 3 / 4, ROND = 25, wght = props.font_weight }
-  elseif props.font_weight and props.axes == nil then
-    props.axes = { wght = props.font_weight }
-  end
-  if props.color == nil then props.color = function() return theme.color.onSurface end end
-  return ui.Text(props)
+local function copy(spec)
+  local out = {}
+  for k, v in pairs(spec or {}) do out[k] = v end
+  return out
 end
 
---- A card: a surfaceContainer box with the large rounding.
---- While a collector is set (`M.collect(list)`), a card is not a `Rect`
---- but an item whose background is a layer of a distance field someone
---- else builds: `list` gets `{ node, radius, color, shape }` for each, so
---- the cards of a page can merge, bud and melt as one liquid surface.
-local collector
-function M.collect(list) collector = list end
+-- Every press and range in the shell is a kit widget: the behaviour is the
+-- archetype's (crates/morf-kit), the look the theme's skin. These keep the
+-- shapes the layouts already call them with.
+kit.widgets = widgets
 
-function M.card(props)
-  props.radius = props.radius or theme.ROUNDING
-  if props.color == nil then props.color = function() return theme.color.surfaceContainer end end
-  if not collector then return ui.Rect(props) end
-  local radius, color = props.radius, props.color
-  props.radius, props.color = nil, nil
-  -- Cards grow in place, evenly about their centres (the default
-  -- origin): no squash and stretch, which skewed them as they grew.
-  local node = ui.Item(props)
-  local entry = { node = node, radius = radius, color = color }
-  entry.shape = ui.SdfShape {
-    shape = "box", radius = radius, track = node,
-    operation = #collector == 0 and "union" or "smooth_union",
-    fill_color = color,
-  }
-  collector[#collector + 1] = entry
+--- A pressable area as a kit Press `widget`: the MouseArea a layout builds
+--- a row, a tile or a choice from. Tab reaches it, Return and Space click
+--- it, and the theme's skin marks hover, press and focus; its properties
+--- and children are the layout's, kept across a theme switch. `settings`
+--- are the Press's own (`checked`, `group`, `on_toggled`, ...).
+function kit.press_area(widget, props, settings, archetype)
+  local spec, node, children = { widget = widget }, {}, {}
+  for key, value in pairs(props or {}) do
+    if type(key) == "number" then children[key] = value
+    elseif type(key) == "string" and key:match("^on_") then spec[key] = value
+    else node[key] = value end
+  end
+  for key, value in pairs(settings or {}) do spec[key] = value end
+  -- A disabled area takes no press, as a MouseArea's `enabled` says, and
+  -- its archetype knows.
+  if node.enabled ~= nil then spec.enabled = node.enabled end
+  return (require("lib.kit.control").make(archetype or "Press", widget, spec, { props = node, children = children }))
+end
+
+--- A header that opens and shuts a region the layout draws, as a kit
+--- Disclosure `area`: Space and Return toggle, Left shuts, Right opens.
+--- `open` (fn) is the truth it follows; `on_toggled(open)` runs only when
+--- a press or a key asks for the other state.
+function kit.disclose_area(props, open, on_toggled)
+  return kit.press_area("area", props, {
+    expanded = open,
+    on_toggled = function(now) if now ~= (open() == true) then on_toggled(now) end end,
+  }, "Disclosure")
+end
+
+--- Gives `node` the name a screen reader reads for it (one with only an
+--- icon, which says nothing), and returns it.
+function kit.named(node, name)
+  node.accessible_name = name
   return node
 end
 
---- An item centred in a box of `w` x `h`.
-function M.centred(w, h, child, props)
-  props = props or {}
-  props.width, props.height = w, h
-  child.anchors = { center_in = true }
-  props[#props + 1] = child
-  return ui.Item(props)
+--- A pressable area (`kit.press_area`'s `area`).
+function kit.action(props) return kit.press_area("area", props) end
+
+--- A filled button: `label`, `icon`, `on_clicked`, `width`, `height` (32),
+--- `color`/`ink`.
+function kit.pill(spec)
+  local s = copy(spec)
+  s.height = s.height or 32
+  return widgets.pill(s)
 end
 
---- Gives a MouseArea a rounded background whose colour follows its hover:
---- `color(hovered)`. (Built after the area, so the binding can read it.)
-function M.hover(area, color, radius)
-  radius = radius or 0
-  local bg = ui.Rect {
-    anchors = { fill = true }, z = -1,
-    -- M3 expressive: pressed, a round button squares up, and springs back.
-    radius = function() return area.pressed and radius * 0.45 or radius end,
-    color = function() return color(area.hovered) end,
-    behavior = {
-      color = { duration = theme.duration.small },
-      radius = ui.spring { stiffness = 520, damping = 22 },
-    },
-  }
-  ui.reparent(bg, area)
-  return area
+--- A switch: `on` (fn), `on_toggled(on)`.
+function kit.switch(spec)
+  local s = copy(spec)
+  s.checked, s.on = spec.on, nil
+  return widgets.switch(s)
 end
 
--- ----------------------------------------------------------------- motion --
-
---- A spring for a `behavior`: the port's one feel for things that move
---- under a hand (selections, thumbs, indicators).
-function M.spring(stiffness, damping)
-  return ui.spring { stiffness = stiffness or 320, damping = damping or 24 }
+--- A small icon toggle: `icon_on`, `icon_off`, `on` (fn: the alert tone
+--- while on), `on_clicked`, `width`, `height`, `size`.
+function kit.icon_button(spec)
+  return widgets.icon(copy(spec))
 end
 
---- Makes `node` ride out with drawer `d` as it opens: `node` sits on the
---- frame's edge, and the drawer's far edge sweeps past it and carries it
---- `distance` px out (negative: to the left), exactly as the drawer moves,
---- so the two stay together; closing, it rides back in.
-function M.ride(name, node, d, distance)
-  -- Tied to the panel itself (ui.follow), not a second animation made to
-  -- look like its slide: on every frame the node is where the panel's
-  -- far edge says, overshoot and all. Left: pushed once the edge reaches
-  -- it, `distance` at the end; right, the same the other way.
-  morf.effect("caelestia.ride." .. name, function()
-    local dist = distance()
-    local spec = { node = d.panel, property = "translate_x", offset = dist }
-    if dist >= 0 then spec.min = 0 else spec.max = 0 end
-    ui.follow(node, "translate_x", spec)
-  end)
+--- A slider: `id`, `width`, `height` (the bar's, 44), `value` (fn, 0..1),
+--- `set(v)`, `icon`, `label` (false hides the reading).
+function kit.slider(spec)
+  local s = copy(spec)
+  s.bar_height = spec.height or 44
+  s.height = s.bar_height + 8
+  s.value, s.set = spec.value, nil
+  s.on_moved = spec.set
+  return widgets.slider(s)
 end
 
---- Squash and stretch for something that travels (see UI.md, `stretch`).
-M.STRETCH = { stiffness = 260, damping = 14, scale = 0.14, max = 0.3 }
+--- The media position, and seeking it: `width`, `value` (fn, 0..1),
+--- `seek(v)`, `active` and `playing` (fns).
+function kit.media_progress(spec)
+  local s = copy(spec)
+  s.height = 34
+  s.id = s.id or "media-seek"
+  s.on_moved, s.seek = spec.seek, nil
+  return widgets.seek_bar(s)
+end
 
---- Moves a bar from `[l0, r0]` to `[l1, r1]` along `axis` ("x" or "y")
---- the way an M3 indicator does: the edge in front leaves first and fast,
---- the one behind follows, so the bar stretches out towards its target and
---- draws itself in there. `node`'s position and size are driven with dense
---- keyframes of the two edges' curves.
-local running = setmetatable({}, { __mode = "k" })
-function M.elastic(node, axis, l0, r0, l1, r1, opts)
-  opts = opts or {}
-  local size = axis == "x" and "width" or "height"
-  local duration = opts.duration or 500
-  local lead = opts.lead or theme.ease.emphasized_decel
-  local trail = opts.trail or theme.ease.standard
-  local forward = l1 >= l0
-  -- The leading edge covers its way in the first 55 % of the time, the
-  -- trailing one starts a little late and takes the rest.
-  local function edge(from, to, t, leading)
-    local u
-    if leading then u = math.min(1, t / 0.55)
-    else u = math.max(0, math.min(1, (t - 0.18) / 0.82)) end
-    local k = morf.easing.value(leading and lead or trail, u)
-    return from + (to - from) * k
+--- A text field (a kit TextField): `widget` ("entry", "password",
+--- "search", ...) and the props of a `ui.TextInput`, plus the field's own
+--- (`validator`, `clear`, `well`, `inset`, ...). Returns the control to
+--- place and the input inside it, which keeps the props' `id`.
+function kit.text_field(widget, props)
+  return require("lib.kit.text_field").make(widget, props)
+end
+
+--- A scrolled view (a kit Scroll): the props of a `ui.Flickable` and its
+--- content. Returns the control to place and the flickable inside it,
+--- which keeps the props' `id`; the keys scroll it and the theme draws its
+--- scroll bar.
+function kit.scroll(props)
+  return require("lib.kit.scroll").make("scroll_view", props)
+end
+
+--- The tab row: `id`, `tabs` (`{ key, name, icon | icon_build }`), `tab`
+--- (a signal, from 1), `width`, `height`, `pad`, `ids` (`"name"`: each tab
+--- is `<id>-tab-<name:lower()>`; `"key"` by default), `growing` (the row
+--- follows an easing drawer). A kit Selection: click, arrows, Home and End.
+function kit.tabs(spec)
+  local s = copy(spec)
+  -- The tabs in the order shown: `reorderable` lets a drag or Alt with the
+  -- arrows move one, while each keeps its index for what it opens.
+  local order = morf.signal("caelestia." .. spec.id .. ".tab-order", {})
+  local function shown()
+    local o = order:get()
+    if #o ~= #spec.tabs then o = {} for i = 1, #spec.tabs do o[i] = i end end
+    return o
   end
-  local pos, len = {}, {}
-  local N = 16
-  for i = 0, N do
-    local t = i / N
-    local l = edge(l0, l1, t, not forward)
-    local r = edge(r0, r1, t, forward)
-    pos[#pos + 1] = { at = t, value = l }
-    len[#len + 1] = { at = t, value = math.max(0, r - l) }
+  local function position(index)
+    for p, i in ipairs(shown()) do if i == index then return p end end
+    return index
   end
-  if running[node] then running[node]:stop() end
-  running[node] = morf.animation.play {
-    {
-      parallel = {
-        { node = node, property = axis, duration = duration, keyframes = pos },
-        { node = node, property = size, duration = duration, keyframes = len },
-      },
-    },
-  }
-  return running[node]
-end
-
---- The contents of a drawer coming in (`coming`) or going: each of `nodes`
---- grows evenly about its own centre from 0.92 (`opts.from`) as it fades in, one a
---- little after the other (`opts.stagger`, 26 ms; `opts.delay` before the
---- first), or shrinks a touch and fades as they go. No offsets and no
---- squash: at rest every node is exactly where and what it was. Returns the
---- handles, for `stop`.
-function M.bud(nodes, coming, opts)
-  opts = opts or {}
-  local handles = {}
-  for k, n in ipairs(nodes) do
-    local steps
-    if coming then
-      local delay = (opts.delay or 40) + (k - 1) * (opts.stagger or 26)
-      steps = {
-        { node = n, property = "scale", from = opts.from or 0.92, to = 1, duration = 420, easing = theme.ease.spatial, delay = delay },
-        { node = n, property = "opacity", from = 0, to = 1, duration = 220, delay = delay },
-      }
-    else
-      steps = {
-        { node = n, property = "scale", to = 0.96, duration = 160, easing = theme.ease.emphasized_accel, delay = (k - 1) * (opts.leave_stagger or 0) },
-        { node = n, property = "opacity", to = 0, duration = 120, delay = (k - 1) * (opts.leave_stagger or 0) },
-      }
-    end
-    handles[#handles + 1] = morf.animation.play { { parallel = steps } }
+  s.items = function()
+    local out = {}
+    for p, i in ipairs(shown()) do out[p] = spec.tabs[i] end
+    return out
   end
-  return handles
-end
-
--- --------------------------------------------------------------- shapes --
-
-local shapes -- lib/m3shapes, loaded on first use
-
---- A Material 3 expressive slider: a tall rounded track, the active part
---- in the primary colour up to a slim handle with a gap either side, the
---- icon inside the track's start and the value at its end (inside the
---- active part once the handle gets there). The level rides a spring; the
---- handle narrows while held. `spec`: `id`, `width`, `height` (44),
---- `value` (a function, 0 to 1), `set` (called with 0 to 1), `icon` (a
---- name or a function; none for a bare slider), `label` (false hides the
---- value).
-function M.slider(spec)
-  local W, H = spec.width, spec.height or 44
-  local GAP = 6
-  local value, set = spec.value, spec.set
-  local held = morf.signal("caelestia.slider." .. spec.id .. ".held", false)
-  local motion = M.spring(190, 9)
-  local function at(x) return math.max(0, math.min(1, (x - H / 2) / (W - H))) end
-  -- The handle's centre: its travel keeps the track's rounded ends clear.
-  local function hx() return H / 2 + (W - H) * math.max(0, math.min(1, value())) end
-  local function grip() return held:get() and 2 or 4 end
-  local C = theme.color
-  local area = ui.MouseArea {
-    id = spec.id, width = W, height = H + 8, cursor = "pointer",
-    on_pressed = function(_, _, x) held:set(true) set(at(x)) end,
-    on_released = function() held:set(false) end,
-    on_dragged = function(_, _, _, _, x) if held:get() then set(at(x)) end end,
-    on_wheel = function(_, _, _, _, _, step_y)
-      if step_y ~= 0 then set(math.max(0, math.min(1, value() + (step_y > 0 and -0.05 or 0.05)))) end
-    end,
-    -- The rest of the track, from past the handle to the end.
-    ui.Rect {
-      y = 4, height = H,
-      x = function() return hx() + grip() / 2 + GAP end,
-      width = function() return math.max(0, W - (hx() + grip() / 2 + GAP)) end,
-      top_left_radius = 6, bottom_left_radius = 6,
-      top_right_radius = H / 2, bottom_right_radius = H / 2,
-      color = function() return C.surfaceContainerHighest end,
-      behavior = { x = motion, width = motion },
-    },
-    -- The active part, from the start to short of the handle.
-    ui.Rect {
-      id = spec.id .. "-level",
-      x = 0, y = 4, height = H,
-      width = function() return math.max(0, hx() - grip() / 2 - GAP) end,
-      top_left_radius = H / 2, bottom_left_radius = H / 2,
-      top_right_radius = 6, bottom_right_radius = 6,
-      color = function() return C.primary end,
-      behavior = { width = motion },
-    },
-    -- The handle: a slim bar standing past the track.
-    ui.Rect {
-      id = spec.id .. "-handle",
-      y = 0, height = H + 8, radius = 2,
-      x = function() return hx() - grip() / 2 end,
-      width = grip,
-      color = function() return C.primary end,
-      behavior = { x = motion, width = { duration = 150 } },
-    },
-  }
-  local size = math.floor(H / 2)
-  if spec.icon then
-    ui.reparent(M.icon(spec.icon, size, function()
-      return hx() - GAP > size + 18 and C.onPrimary or C.onSurfaceVariant
-    end, { x = math.floor(H / 2 - size / 2), y = 4 + (H - size) / 2 }), area)
+  s.tabs, s.tab = nil, nil
+  s.current = function() return position(spec.tab:get()) end
+  s.on_current_changed = function(p) spec.tab:set(shown()[p] or p) end
+  s.on_reorder = function(p, step)
+    local o = shown()
+    local q = p + step
+    if not o[q] then return end
+    o[p], o[q] = o[q], o[p]
+    order:set(o)
   end
-  if spec.label ~= false then
-    ui.reparent(M.text {
-      id = spec.id .. "-value",
-      width = 40, horizontal_alignment = "right",
-      anchors = { vertical_center = true },
-      x = function()
-        if hx() > W - 64 then return hx() - GAP - 10 - 40 end
-        return W - 14 - 40
-      end,
-      text = function() return ("%d"):format(math.floor(value() * 100 + 0.5)) end,
-      font_size = H >= 40 and theme.size.normal or theme.size.small,
-      color = function()
-        return hx() > W - 64 and C.onPrimary or C.onSurfaceVariant
-      end,
-      behavior = { x = motion },
-    }, area)
+  local by_name = spec.ids == "name"
+  s.item_id = function(_, entry)
+    return spec.id .. "-tab-" .. (by_name and entry.name:lower() or (entry.key or entry.name:lower()))
   end
-  return area
-end
-
---- A number whose digits morph into the next ones: each digit is a glyph in
---- a distance field (`shape = "glyph"`), and a new digit in its place walks
---- there from the old, contour onto contour, rather than being swapped.
---- `spec`: `id`, `value` (a function: a number or a string of digits),
---- `size` (the digits' height), `color` (a function), `digits` (the most it
---- shows, 3), `duration` (260), `font` (a family), `weight` (the font
---- weight the digits are cut at, 700). The number is centred in
---- a box `digits` wide; a digit coming or going (9 to 10) takes its place at
---- once, the others morph.
-function M.morph_number(spec)
-  local size = spec.size
-  local n = spec.digits or 3
-  local dw = math.floor(size * 0.62 + 0.5)
-  local family = spec.font or (theme.font:match("^%s*([^,]+)") or "sans-serif")
-  local motion = { duration = spec.duration or 260, easing = theme.ease.standard }
-  local slots, state = {}, {}
-  local field = { id = spec.id, width = n * dw, height = size, fill_color = spec.color }
-  for i = 1, n do
-    slots[i] = ui.SdfShape {
-      id = spec.id and (spec.id .. "-digit-" .. i) or nil,
-      shape = "glyph", morph_to = "glyph",
-      glyph = "", glyph_morph_to = "",
-      font_family = family, font_family_morph_to = family,
-      -- Bold: cut from the face's own bold (a variable face's wght 700).
-      font_weight = spec.weight or 700,
-      x = (i - 1) * dw, y = 0, width = dw, height = size,
-      morph_progress = 0,
-      behavior = { morph_progress = motion, x = motion },
-    }
-    state[i] = { shown = "", at_end = false }
-    field[#field + 1] = slots[i]
+  s.ids = nil
+  s.id, s.tab_id = spec.id .. "-tabs", spec.id
+  if spec.growing then
+    s.width = nil
+    s.anchors = { left = true, right = true, left_margin = spec.pad or 11, right_margin = spec.pad or 11 }
   end
-  local node = ui.Sdf(field)
-  morf.effect("caelestia.morph_number" .. (spec.id and ("." .. spec.id) or ""), function()
-    local text = tostring(spec.value() or "")
-    if #text > n then text = text:sub(-n) end
-    local lead = n - #text
-    for i = 1, n do
-      local c = i > lead and text:sub(i - lead, i - lead) or ""
-      local slot, st = slots[i], state[i]
-      -- Centred: the digits there are, in the middle of the box.
-      slot.x = (i - 1) * dw - lead * dw / 2
-      if c ~= st.shown then
-        if st.shown == "" or c == "" then
-          -- Coming or going: no outline to walk from, so it is simply there.
-          slot.glyph, slot.glyph_morph_to = c, c
-          st.at_end = false
-          slot.morph_progress = 0
-        elseif st.at_end then
-          slot.glyph = c
-          slot.morph_progress = 0
-          st.at_end = false
-        else
-          slot.glyph_morph_to = c
-          slot.morph_progress = 1
-          st.at_end = true
-        end
-        st.shown = c
-      end
-    end
-  end, { owner = node })
-  return node
+  s.height = spec.height or 64
+  -- The skins read the row's own width; a growing row's is the drawer's.
+  s.width_of = spec.width
+  return widgets.tabs(s)
 end
 
---- An M3 expressive shape that morphs whenever `shape()` changes (see
---- lib/m3shapes: `shapes.Shape`). `props` as a `ui.Path`'s; `color` a
---- binding; `duration`, `easing`.
-function M.shape(props)
-  shapes = shapes or require("lib.m3shapes")
-  props.easing = props.easing or theme.ease.spatial
-  props.duration = props.duration or 450
-  return shapes.Shape(props)
-end
-
---- An M3 expressive shape as an inline SVG document, for an `SdfShape`'s
---- `source`: a drawing is an outline to a field, so the shape unions, melts
---- and morphs with the other layers.
-local svgs = {}
-function M.svg(name)
-  shapes = shapes or require("lib.m3shapes")
-  if not svgs[name] then
-    svgs[name] = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="%s"/></svg>')
-      :format(shapes.path(name))
-  end
-  return svgs[name]
-end
-
---- A field layer in an M3 expressive shape that morphs, outline to outline,
---- whenever `shape()` changes. `props` as an `SdfShape`'s, and `duration`,
---- `easing`.
-function M.sdf_shape(props)
-  local source = props.shape
-  local current = type(source) == "function" and source() or source
-  local motion = { duration = props.duration or 450, easing = props.easing or theme.ease.spatial }
-  props.shape, props.duration, props.easing = nil, nil, nil
-  props.source = M.svg(current)
-  props.source_morph_to = M.svg(current)
-  props.morph_progress = 0
-  props.behavior = props.behavior or {}
-  props.behavior.morph_progress = motion
-  local node = ui.SdfShape(props)
-  if type(source) == "function" then
-    -- As lib/m3shapes' Shape: the two ends take turns, so a change never
-    -- jumps back to a start.
-    local at_end = false
-    morf.effect("caelestia.sdf_shape", function()
-      local name = source()
-      if name == current then return end
-      current = name
-      if at_end then
-        node.source = M.svg(name)
-        node.morph_progress = 0
-      else
-        node.source_morph_to = M.svg(name)
-        node.morph_progress = 1
-      end
-      at_end = not at_end
-    end, { owner = node })
-  end
-  return node
-end
-
--- The loading indicator's shapes, in the order M3 expressive cycles them.
-local LOADING = { "soft_burst", "cookie9", "pentagon", "pill", "sunny", "cookie4", "oval", "flower" }
-
---- M3 expressive's loading indicator: a shape that morphs from one to the
---- next every 650 ms while turning, in `color`, `size` across. `active()`
---- (a binding, default always) runs it; stopped, it rests.
-function M.loading(size, color, props)
-  props = props or {}
-  local step = morf.signal("caelestia.loading." .. tostring(props.id or math.random(1e9)), 1)
-  local active = props.active or function() return true end
-  props.active = nil
-  local timer
-  morf.effect("caelestia.loading.run." .. tostring(step), function()
-    if active() then
-      if not timer then
-        timer = morf.timer(650, function() step:set(step:get() % #LOADING + 1) end, true)
-      end
-    elseif timer then
-      timer:cancel()
-      timer = nil
-    end
-  end)
-  props.width, props.height = size, size
-  props.shape = function() return LOADING[step:get()] end
-  props.color = color
-  props.duration = 500
-  props.loop = function()
-    if not active() then return nil end
-    return { rotation = { to = 360, duration = 2600, hold = true } }
-  end
-  return M.shape(props)
-end
-
--- ---------------------------------------------------------------- controls --
-
---- A Material 3 switch, 52 x 32: `on()` (a binding) and `on_toggled(now)`.
---- Off, an outlined dark track and a small handle with a cross; on, a
---- primary track and a large handle with a tick.
-function M.switch(spec)
-  local motion = { duration = theme.duration.small, easing = theme.ease.standard }
-  local function on() return spec.on() == true end
-  local area
-  -- The thumb springs across, grows when on and more when pressed, and
-  -- morphs: a circle off, a scalloped cookie on (M3 expressive).
-  local function thumb() return area and area.pressed and 28 or (on() and 24 or 16) end
-  local jump = M.spring(520, 22)
-  area = ui.MouseArea {
-    id = spec.id, width = 52, height = 32, cursor = "pointer",
-    anchors = spec.anchors, x = spec.x, y = spec.y,
-    on_clicked = function() if spec.on_toggled then spec.on_toggled(not on()) end end,
-    ui.Rect {
-      anchors = { fill = true }, radius = 16,
-      color = function() return on() and C().primary or C().surfaceContainerHighest end,
-      border_width = function() return on() and 0 or 2 end,
-      border_color = function() return C().outline end,
-      behavior = { color = motion },
-    },
-    ui.Item {
-      x = function() return (on() and 36 or 16) - thumb() / 2 end,
-      y = function() return 16 - thumb() / 2 end,
-      width = thumb, height = thumb,
-      behavior = { x = jump, y = jump, width = jump, height = jump },
-      stretch = M.STRETCH,
-      M.shape {
-        anchors = { fill = true },
-        shape = function() return on() and "cookie12" or "circle" end,
-        color = function() return on() and C().onPrimary or C().outline end,
-      },
-      M.icon(function() return on() and "check" or "close" end, 14, function()
-        return on() and C().primary or C().surfaceContainerHighest
-      end, { anchors = { center_in = true }, visible = function() return thumb() >= 20 end }),
-    },
-  }
-  return area
-end
-
---- A pill-shaped filled button: `icon`, `label`, `on_clicked`, `width`,
---- `height` (32), and `color`/`ink` (primaryContainer and its ink).
-function M.pill(spec)
-  local h = spec.height or 32
-  local color = spec.color or function() return C().primaryContainer end
-  local ink = spec.ink or function() return C().onPrimaryContainer end
-  local area = ui.MouseArea {
-    id = spec.id, width = spec.width, height = h, cursor = "pointer",
-    x = spec.x, y = spec.y, anchors = spec.anchors,
-    on_clicked = spec.on_clicked,
-    ui.Row {
-      anchors = { center_in = true }, gap = 8, align = "center",
-      spec.icon and M.icon(spec.icon, 18, ink) or nil,
-      M.text { text = spec.label, font_size = theme.size.normal, color = ink },
-    },
-  }
-  return M.hover(area, function(hovered)
-    local c = color()
-    return hovered and c:mix(ink(), 0.08) or c
-  end, h / 2)
-end
-
--- ----------------------------------------------------------------- gauges --
-
---- SVG path data for an arc of `sweep` degrees, clockwise from `from`
---- degrees (0 at twelve o'clock), radius `r` about `(cx, cy)`, in pieces of
---- at most 90 degrees.
-function M.arc_path(cx, cy, r, from, sweep)
-  local function at(deg)
-    local a = math.rad(deg)
-    return cx + r * math.sin(a), cy - r * math.cos(a)
-  end
-  local x, y = at(from)
-  local d = { ("M%.3f %.3f"):format(x, y) }
-  local pieces = math.max(1, math.ceil(sweep / 90))
-  for i = 1, pieces do
-    local ex, ey = at(from + sweep * i / pieces)
-    d[#d + 1] = ("A%.3f %.3f 0 0 1 %.3f %.3f"):format(r, r, ex, ey)
-  end
-  return table.concat(d, " ")
-end
-
-local function clamp01(x)
-  x = tonumber(x) or 0
-  if x ~= x then return 0 end
-  return math.max(0, math.min(1, x))
-end
-
---- A Material 3 expressive progress arc: the value's part in `color`, a
---- gap, then the rest of the track, and a small stop dot at the track's
---- end. `spec`: `value()` (0..1), `size` (the square it sits in), `stroke`,
---- `from` and `sweep` (degrees, clockwise from twelve o'clock), `color`,
---- `track` (bindings), `gap` (px between the two), `dot` (false for none),
---- `id`, and children to lay over it.
-function M.gauge(spec)
-  local size, stroke = spec.size, spec.stroke or 6
-  local r = size / 2 - stroke / 2
-  local sweep = spec.sweep or 360
-  local d = M.arc_path(size / 2, size / 2, r, spec.from or 0, sweep)
-  local length = 2 * math.pi * r * sweep / 360
-  -- Round caps reach half a stroke past each end: the gap is between them.
-  local gap = ((spec.gap or 4) + stroke) / length
-  local function v() return clamp01(spec.value()) end
-  local motion = { duration = theme.duration.large, easing = theme.ease.emphasized_decel }
-  local node = {
-    id = spec.id, width = size, height = size, x = spec.x, y = spec.y, anchors = spec.anchors,
-    ui.Path {
-      anchors = { fill = true }, view_box = { 0, 0, size, size }, d = d,
-      fill_color = "transparent", stroke_width = stroke, stroke_cap = "round",
-      stroke_color = spec.track,
-      trim_start = function()
-        local x = v()
-        return x <= 0 and 0 or math.min(1, x + gap)
-      end,
-      behavior = { trim_start = motion },
-    },
-    ui.Path {
-      anchors = { fill = true }, view_box = { 0, 0, size, size }, d = d,
-      fill_color = "transparent", stroke_width = stroke, stroke_cap = "round",
-      stroke_color = spec.color,
-      opacity = function() return v() > 0.002 and 1 or 0 end,
-      trim_end = function() return math.max(0.001, v()) end,
-      behavior = { trim_end = motion },
-    },
-  }
-  if spec.dot ~= false and sweep < 360 then
-    local a = math.rad((spec.from or 0) + sweep)
-    local ex, ey = size / 2 + r * math.sin(a), size / 2 - r * math.cos(a)
-    local dot = math.max(2, stroke * 0.55)
-    node[#node + 1] = ui.Rect {
-      x = ex - dot / 2, y = ey - dot / 2, width = dot, height = dot, radius = dot / 2,
-      color = spec.color,
-    }
-  end
-  for _, child in ipairs(spec) do node[#node + 1] = child end
-  return ui.Item(node)
-end
-
---- A straight M3 expressive progress bar: the value in `color`, a gap, the
---- track, a stop dot at the end. `spec`: `width`, `stroke`, `value()`
---- (0..1), `color`, `track`, `id`.
-function M.bar(spec)
-  local w, h = spec.width, spec.stroke or 6
-  local GAP = 4
-  local function v() return clamp01(spec.value()) end
-  local motion = { duration = theme.duration.large, easing = theme.ease.emphasized_decel }
-  local function split() return math.min(w, v() * w + GAP + h) end
-  return ui.Item {
-    id = spec.id, width = w, height = h, x = spec.x, y = spec.y, anchors = spec.anchors,
-    ui.Rect {
-      height = h, radius = h / 2, color = spec.track,
-      x = split,
-      width = function() return math.max(0, w - split()) end,
-      behavior = { x = motion, width = motion },
-    },
-    ui.Rect {
-      height = h, radius = h / 2, color = spec.color,
-      width = function() return math.max(h, v() * w) end,
-      opacity = function() return v() > 0 and 1 or 0 end,
-      behavior = { width = motion },
-    },
-    ui.Rect {
-      x = w - h * 0.7, y = h * 0.15, width = h * 0.7, height = h * 0.7, radius = h * 0.35,
-      color = spec.color,
-    },
-  }
-end
-
---- Bytes as the reference writes them: binary units, one decimal under
---- ten, none above -- "1.1", "MiB". `unit` forces one.
-function M.bytes(n, unit)
-  n = tonumber(n) or 0
-  local units = { "B", "KiB", "MiB", "GiB", "TiB", "PiB" }
-  local i = 1
-  if unit then
-    for k, u in ipairs(units) do if u == unit then i = k end end
-    n = n / 1024 ^ (i - 1)
-  else
-    while n >= 1024 and i < #units do n = n / 1024 i = i + 1 end
-  end
-  local text = (n < 10 and i > 1) and ("%.1f"):format(n) or ("%d"):format(math.floor(n + 0.5))
-  return text, units[i]
-end
-
-return M
+return kit

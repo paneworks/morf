@@ -5,7 +5,11 @@
 -- one).
 
 local morf = require("morf")
-local settings = require("lib.settings")
+local settings = require("lib.util.settings")
+local capture_tools={}
+for _,tool in ipairs(require("lib.util.annotation").tools) do
+  capture_tools[tool[1]]={color="#ef5350",width=tool[1]=="text" and 24 or 4,filled=false}
+end
 
 local path = (morf.env and morf.env("CAELESTIA_SETTINGS")) or morf.state_path("caelestia.json")
 
@@ -57,9 +61,19 @@ return settings.open {
       -- Opens the assistant workspace from the bottom edge.
       hover = true,
     },
+    lule = {
+      -- Empty follows LULE_W, then the current wallpaper's directory.
+      folder = "",
+    },
     capture = {
       -- Where screenshots and recordings go, both.
       folder = "~/Pictures/Captures",
+      editor = true,
+      tools = capture_tools,
+      blur = 24, pixelate = 14, zoom = 2,
+      cursor = false, save_dialog = false, copy_on_save = true, copy_to_disk = false,
+      upload_endpoint = "https://litterbox.catbox.moe/resources/internals/api.php",
+      hotkey = "Print", keybind_file = "",
       -- What each capture runs: `$FILE` is the file to write (in the
       -- folder, named for the time, with its extension), `~/` and `$HOME`
       -- expanded. An empty list runs nothing.

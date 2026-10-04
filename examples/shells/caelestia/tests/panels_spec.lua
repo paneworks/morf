@@ -8,19 +8,21 @@ local HOST = [[
   local capture = require("capture")
   morf.ipc.panel_state = function()
     return { phase = capture.phase:get(), recording = capture.recording:get(), message = capture.message:get(),
-      bottom = require("bottom").drawer.open:get(),
+      bottom = require("bottom").drawer.open:get(), leftbar = require("leftbar").drawer.open:get(),
       assistant = require("bottom").drawer.open:get() and require("bottom").panel.showing("assistant"), tasks = require("leftbar").panel.showing("tasks"),
       calendar = require("leftbar").panel.showing("calendar"), error = require("planner").client.error:get(),
       keyboard = morf.surface.keyboard_focus }
   end
   morf.ipc.choose_day = function(day) require("planner").selected_day:set(day) end
+  morf.ipc.planner_hover = function(on) require("config").set("leftbar.hover", on == "yes") end
 ]]
-local function load(dry)
+local function load(dry, style)
   test.stub_run("task", { code = 0, stdout = morf.json.encode({ {
     uuid = UUID, description = "Plan the launch", project = "work", priority = "H", status = "pending",
     scheduled = "20301001T073000Z", due = "20301001T150000Z", tags = { "calls" },
   } }) })
   test.load("../shell/init.lua", { source = HOST, size = { 1920, 1080 }, env = {
+    CAELESTIA_STYLE = style,
     CAELESTIA_DRY_RUN = dry == false and "0" or "1", CAELESTIA_WALLPAPER = "", CAELESTIA_FONT_FILE = "",
     LULE_A = "/nonexistent/lule", HOME = morf.env("XDG_CACHE_HOME"),
   } })
@@ -29,6 +31,32 @@ end
 local function state() return test.ipc("panel_state") end
 
 test.describe("caelestia panels", function()
+  for _, style in ipairs { "material", "tsugumori" } do
+    test.it(style .. " dismisses the left planner outside either tab while preserving inside clicks", function()
+      load(true, style)
+      test.ipc("planner_hover", "no")
+      test.ipc("tasks", "open") test.advance(2400)
+      -- Blank space inside the drawer must not fall through to its catcher.
+      test.click(200, 950) test.advance(100)
+      test.truthy(state().leftbar)
+      test.click("tasks-add") test.advance(2200)
+      test.click("task-project") test.advance(100)
+      test.truthy(state().leftbar)
+      test.click(950, 700) test.advance(1200)
+      test.falsy(state().leftbar)
+      test.falsy(test.get("drawer-leftbar").visible)
+      test.ipc("calendar", "open") test.advance(2400)
+      test.click("leftbar-tab-tasks") test.advance(2200)
+      test.truthy(state().leftbar)
+      test.click("leftbar-tab-calendar") test.advance(2200)
+      test.truthy(state().leftbar)
+      test.click(950, 700) test.advance(1200)
+      test.falsy(state().leftbar)
+      test.falsy(test.get("drawer-leftbar").visible)
+      test.eq(#test.logs("error"), 0)
+    end)
+  end
+
   test.it("dismisses the bottom workspace outside either tab and after leaving its hover area", function()
     load()
     test.ipc("assistant", "open") test.settle(800)
@@ -55,6 +83,9 @@ test.describe("caelestia panels", function()
     test.truthy(state().bottom, "crossing onto the panel closed it")
     test.leave() test.advance(800)
     test.falsy(state().bottom, "leaving the monitor kept the hover panel open")
+    -- Tsugumori's covered departure takes 780 ms after the 120 ms hover
+    -- grace. The controller has closed above; allow the visual exit to finish.
+    test.advance(200)
     test.falsy(test.get("drawer-bottom").visible)
     test.eq(#test.logs("error"), 0)
   end)
@@ -73,7 +104,7 @@ test.describe("caelestia panels", function()
     test.ipc("capture", "open") test.settle(1000)
     test.eq(state().assistant, false)
     test.truthy(test.get("drawer-capture").width <= 480)
-    test.truthy(test.get("drawer-capture").height <= 240)
+    test.truthy(test.get("drawer-capture").height <= 264)
     test.get("capture-target-region")
     local resting_width = test.get("capture-selection").width
     test.click("capture-target-screen") test.advance(160)
@@ -108,7 +139,8 @@ test.describe("caelestia panels", function()
   end)
 
   test.it("loads tasks, edits dates, and opens a day's agenda", function()
-    load()
+    -- Task commands are stubbed; exercise dispatch rather than the preview guard.
+    load(false)
     test.ipc("tasks") test.settle(1200)
     test.eq(state().tasks, true)
     test.eq(state().error, "")

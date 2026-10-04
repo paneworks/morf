@@ -3,7 +3,7 @@
 local test = morf.test
 
 local HOST = [[
-  local sysinfo = require("lib.sysinfo")
+  local sysinfo = require("lib.services.sysinfo")
   local root = morf.env("XDG_CACHE_HOME") .. "/history-machine"
   local function write(path, text) assert(morf.fs.write(root .. path, text)) end
   local function inputs(n)
@@ -21,18 +21,16 @@ local HOST = [[
   end
   inputs(0)
   sysinfo.configure { root = root }
-  -- Keep the actual drawn line nodes so the integration test checks the
-  -- graph's evaluated path, not just the collector behind it.
-  local ui = require("morf.ui")
-  local rect, lines = ui.Rect, {}
-  ui.Rect = function(spec)
-    if spec.id == "battery-graph-charge" or spec.id == "performance-core-0" then
-      lines[spec.id] = spec[#spec]
-    end
-    return rect(spec)
+  -- Keep what each chart the integration test reads is drawn from (the
+  -- series its line is evaluated over), not just the collector behind it.
+  local kit = require("kit")
+  local chart, charts = kit.chart, {}
+  kit.chart = function(spec)
+    if spec.id == "battery-graph-charge" or spec.id == "performance-cpu-graph" then charts[spec.id] = spec end
+    return chart(spec)
   end
   local state = require("dashboard_state")
-  morf.ipc.graph_path = function(id) return tostring(lines[id].d) end
+  morf.ipc.graph_points = function(id) return #charts[id].first() end
   morf.ipc.inputs = inputs
   morf.ipc.opened = function(on, tab)
     if on ~= nil then state.opened:set(on) end
@@ -56,8 +54,7 @@ local function load(full_shell)
 end
 local function history(name) return morf.json.decode(test.ipc("history", name)) end
 local function points(id)
-  local _, count = test.ipc("graph_path", id):gsub("[ML]", "")
-  return count
+  return test.ipc("graph_points", id)
 end
 
 test.describe("caelestia graph history", function()
@@ -79,7 +76,7 @@ test.describe("caelestia graph history", function()
       "opening the battery graph lost the samples collected while hidden")
     test.click("dashboard-tab-performance")
     test.advance(800)
-    test.eq(points("performance-core-0"), #history("core0"),
+    test.eq(points("performance-cpu-graph"), #history("cpu"),
       "opening performance lost the samples collected while hidden")
     test.ipc("dashboard", "close")
     test.advance(800)
@@ -92,7 +89,7 @@ test.describe("caelestia graph history", function()
       "closing the real drawer stopped battery collection")
     test.ipc("dashboard", "open")
     test.advance(800)
-    test.eq(points("performance-core-0"), #history("core0"))
+    test.eq(points("performance-cpu-graph"), #history("cpu"))
     test.click("dashboard-tab-battery")
     test.advance(800)
     test.eq(points("battery-graph-charge"), #history("bat:BAT0:percent"),

@@ -20,7 +20,7 @@ local M = {}
 M.POLL_MS = 120000
 M.LIMITS_MS = 600000
 
-local ok, lib = pcall(require, "lib.claude_usage")
+local ok, lib = pcall(require, "lib.integrations.claude_usage")
 if not ok then lib = nil end
 
 local handle = nil

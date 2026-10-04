@@ -1,0 +1,405 @@
+use wgpu::util::DeviceExt;
+
+use super::{backend_types::*, shaders::*, textures::*};
+
+mod damage_rects;
+
+pub(crate) use damage_rects::{
+    clamp_scissor, grow_damage, intersect_damage, placed_scissor, quad_reach, union_damage,
+};
+
+pub(crate) fn create_target(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("morf persistent target"),
+        size: wgpu::Extent3d {
+            width: width.max(1),
+            height: height.max(1),
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::TEXTURE_BINDING,
+        // A gamma-blended target is also read through an sRGB view, by the
+        // pass that hands it to an sRGB swapchain; see `composite_view`. And
+        // every target through a plain one, by the pass that copies its bytes
+        // into a buffer of this engine's own; see `plain_view`.
+        view_formats: &[format.add_srgb_suffix(), format.remove_srgb_suffix()],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
+
+pub(crate) fn create_blur_chain(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    (texture, source): (&wgpu::Texture, &wgpu::TextureView),
+    offset: f32,
+    mut target: impl FnMut((u32, u32)) -> (wgpu::Texture, wgpu::TextureView),
+) -> BlurChain {
+    // The chain matches its source: its size, and the format of the blend
+    // space it was rendered in.
+    let (width, height) = (texture.width(), texture.height());
+    let half = ((width / 2).max(1), (height / 2).max(1));
+    let quarter = ((width / 4).max(1), (height / 4).max(1));
+    let sizes = [half, quarter, half, (width.max(1), height.max(1))];
+    let mut textures = Vec::with_capacity(4);
+    let mut views = Vec::with_capacity(4);
+    for (target_width, target_height) in sizes {
+        let (texture, view) = target((target_width, target_height));
+        textures.push(texture);
+        views.push(view);
+    }
+    let sources = [source, &views[0], &views[1], &views[2]];
+    let source_sizes = [(width.max(1), height.max(1)), half, quarter, half];
+    let mut passes = Vec::with_capacity(4);
+    for index in 0..4 {
+        passes.push(create_blur_pass(
+            device,
+            layout,
+            sampler,
+            sources[index],
+            source_sizes[index],
+            offset,
+            if index < 2 { 0.0 } else { 1.0 },
+        ));
+    }
+    BlurChain {
+        _textures: textures,
+        views,
+        passes,
+    }
+}
+
+pub(crate) fn create_blur_pass(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    source: &wgpu::TextureView,
+    source_size: (u32, u32),
+    offset: f32,
+    mode: f32,
+) -> BlurPass {
+    let params = [
+        1.0 / source_size.0.max(1) as f32,
+        1.0 / source_size.1.max(1) as f32,
+        offset,
+        mode,
+    ];
+    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("morf blur parameters"),
+        contents: bytemuck::cast_slice(&params),
+        usage: wgpu::BufferUsages::UNIFORM,
+    });
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("morf blur bind group"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(source),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: buffer.as_entire_binding(),
+            },
+        ],
+    });
+    BlurPass {
+        _params: buffer,
+        bind_group,
+    }
+}
+
+pub(crate) struct SurfaceState {
+    pub(crate) surface: wgpu::Surface<'static>,
+    pub(crate) config: wgpu::SurfaceConfiguration,
+    pub(crate) pipeline: wgpu::RenderPipeline,
+    pub(crate) texture_layout: wgpu::BindGroupLayout,
+    pub(crate) sampler: wgpu::Sampler,
+    pub(crate) bind_group: wgpu::BindGroup,
+    /// Whether the surface asked to be reconfigured while a frame was still in
+    /// hand, so it has to be done before the next one is acquired.
+    pub(crate) stale: bool,
+}
+
+pub(crate) fn create_surface_state(
+    device: &wgpu::Device,
+    adapter: &wgpu::Adapter,
+    surface: wgpu::Surface<'static>,
+    target_view: &wgpu::TextureView,
+    width: u32,
+    height: u32,
+) -> Result<SurfaceState, GpuError> {
+    let capabilities = surface.get_capabilities(adapter);
+    let format = capabilities
+        .formats
+        .iter()
+        .copied()
+        .find(wgpu::TextureFormat::is_srgb)
+        .or_else(|| capabilities.formats.first().copied())
+        .ok_or_else(|| GpuError("GPU surface exposes no texture format".to_owned()))?;
+    // Mailbox, then immediate, then whatever there is: never FIFO by
+    // choice. The shell already paces itself on the compositor's frame
+    // callbacks, so FIFO buys nothing -- and on Wayland Mesa implements it
+    // with the commit-timing protocol, stamping each frame with a target
+    // time it works out from the pace of the last ones. A shell that paints
+    // when something moves and rests when nothing does has no steady pace
+    // to work out, the targets drift a tenth of a second ahead, the
+    // compositor holds the frames until then, and motion arrives late and
+    // in lumps.
+    let preferred = [wgpu::PresentMode::Mailbox, wgpu::PresentMode::Immediate];
+    // `MORF_PRESENT_MODE=fifo|immediate|mailbox` overrides it, for comparing
+    // the compositor's behaviour under each.
+    let asked = std::env::var("MORF_PRESENT_MODE")
+        .ok()
+        .and_then(|value| match value.as_str() {
+            "fifo" => Some(wgpu::PresentMode::Fifo),
+            "immediate" => Some(wgpu::PresentMode::Immediate),
+            "mailbox" => Some(wgpu::PresentMode::Mailbox),
+            _ => None,
+        });
+    let present_mode = asked
+        .into_iter()
+        .chain(preferred.iter().copied())
+        .find(|mode| capabilities.present_modes.contains(mode))
+        .or_else(|| capabilities.present_modes.first().copied())
+        .ok_or_else(|| GpuError("GPU surface exposes no presentation mode".to_owned()))?;
+    let alpha_mode = capabilities
+        .alpha_modes
+        .iter()
+        .copied()
+        .find(|mode| *mode == wgpu::CompositeAlphaMode::PreMultiplied)
+        .or_else(|| capabilities.alpha_modes.first().copied())
+        .ok_or_else(|| GpuError("GPU surface exposes no alpha mode".to_owned()))?;
+    let config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format,
+        color_space: wgpu::SurfaceColorSpace::Auto,
+        width: width.max(1),
+        height: height.max(1),
+        present_mode,
+        desired_maximum_frame_latency: 2,
+        alpha_mode,
+        view_formats: vec![],
+    };
+    surface.configure(device, &config);
+    let CompositePipeline {
+        pipeline,
+        layout: texture_layout,
+        sampler,
+    } = create_composite_pipeline(device, format);
+    let bind_group = create_composite_bind_group(device, &texture_layout, target_view, &sampler);
+    Ok(SurfaceState {
+        stale: false,
+        surface,
+        config,
+        pipeline,
+        texture_layout,
+        sampler,
+        bind_group,
+    })
+}
+
+/// The pass that copies the persistent target onto what is presented, and
+/// what it binds.
+pub(crate) struct CompositePipeline {
+    pub(crate) pipeline: wgpu::RenderPipeline,
+    pub(crate) layout: wgpu::BindGroupLayout,
+    pub(crate) sampler: wgpu::Sampler,
+}
+
+/// A composite pass writing `format`.
+pub(crate) fn create_composite_pipeline(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+) -> CompositePipeline {
+    let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("morf composite texture layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("morf composite sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("morf composite pipeline layout"),
+        bind_group_layouts: &[Some(&texture_layout)],
+        immediate_size: 0,
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("morf composite shader"),
+        source: wgpu::ShaderSource::Wgsl(
+            fullscreen_source(include_str!("../composite.wgsl")).into(),
+        ),
+    });
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("morf composite pipeline"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        multiview_mask: None,
+        cache: None,
+    });
+    CompositePipeline {
+        pipeline,
+        layout: texture_layout,
+        sampler,
+    }
+}
+
+/// The view of the persistent target the surface composite samples.
+///
+/// The swapchain is sRGB, so it encodes what the composite writes. A linear
+/// target decodes on read and the two cancel. A gamma-blended target already
+/// holds encoded values; read through an sRGB view they are decoded, and the
+/// swapchain's encode puts back exactly the bytes that were blended.
+pub(crate) fn composite_view(texture: &wgpu::Texture) -> wgpu::TextureView {
+    texture.create_view(&wgpu::TextureViewDescriptor {
+        format: Some(texture.format().add_srgb_suffix()),
+        ..Default::default()
+    })
+}
+
+/// The persistent target read as the bytes it holds, with no decoding:
+/// what a composite into a plain 8-bit buffer copies. Either blend space
+/// stores sRGB-encoded bytes, which is what a compositor wants.
+pub(crate) fn plain_view(texture: &wgpu::Texture) -> wgpu::TextureView {
+    texture.create_view(&wgpu::TextureViewDescriptor {
+        format: Some(texture.format().remove_srgb_suffix()),
+        ..Default::default()
+    })
+}
+
+pub(crate) fn create_composite_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    view: &wgpu::TextureView,
+    sampler: &wgpu::Sampler,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("morf composite bind group"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
+}
+
+/// The next image to draw into, or `None` if this frame should be skipped.
+///
+/// Not every unsuccessful acquisition is a failure, and wgpu says as much for
+/// each one. A timeout means the compositor has not released a buffer yet, and
+/// occlusion means the surface is not on screen to draw to; the documented
+/// answer to both is to skip this frame and try the next. Treating them as
+/// errors instead took the whole surface down — which is how a shell died with
+/// `could not acquire GPU surface: Timeout` for what is, on a busy compositor
+/// driving three large outputs, an ordinary event.
+///
+/// The genuinely broken states still error. The difference is that they are now
+/// the ones wgpu describes that way.
+pub(crate) fn acquire_frame(
+    device: &wgpu::Device,
+    surface: &mut SurfaceState,
+) -> Result<Option<wgpu::SurfaceTexture>, GpuError> {
+    // Anything the last frame asked for, done now — before a texture is in
+    // hand rather than while one is, which is the only moment it is allowed.
+    if surface.stale {
+        surface.surface.configure(device, &surface.config);
+        surface.stale = false;
+    }
+    match surface.surface.get_current_texture() {
+        wgpu::CurrentSurfaceTexture::Success(frame) => Ok(Some(frame)),
+        // Suboptimal hands back a frame that is perfectly drawable — it only
+        // says the surface no longer matches the swapchain, which is what a
+        // compositor reports when it rescales or rotates a window. So it is
+        // drawn, and the reconfigure waits for the next acquire.
+        //
+        // Reconfiguring here instead is a validation error, and a fatal one:
+        // wgpu requires the surface texture to be dropped first, and this still
+        // held it. Nothing on the desk ever returned Suboptimal, so nothing
+        // ever hit it; a phone whose compositor scales the window returns it on
+        // the very first frame and the process aborts before drawing anything.
+        wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+            surface.stale = true;
+            Ok(Some(frame))
+        }
+        wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => Ok(None),
+        // Outdated wants a reconfigure; lost wants the surface recreated, which
+        // needs a window handle this layer does not hold — so it gets the
+        // reconfigure too, because attempting it and failing is no worse than
+        // failing immediately and is sometimes enough.
+        status @ (wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost) => {
+            surface.surface.configure(device, &surface.config);
+            match surface.surface.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(frame)
+                | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => Ok(Some(frame)),
+                wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                    Ok(None)
+                }
+                after => Err(GpuError(format!(
+                    "could not acquire GPU surface after {status:?}: {after:?}"
+                ))),
+            }
+        }
+        status => Err(GpuError(format!(
+            "could not acquire GPU surface: {status:?}"
+        ))),
+    }
+}

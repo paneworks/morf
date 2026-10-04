@@ -39,7 +39,6 @@ morf.surface.keyboard_focus = "none"
 -- below among them).
 morf.surface.exclusive_zone = -1
 -- Windows keep inside the frame.
-morf.surface.reserve = { left = theme.LEFT, top = theme.BORDER, right = theme.BORDER, bottom = theme.BORDER }
 
 -- ------------------------------------------------------------------ colour --
 
@@ -70,7 +69,9 @@ local launcher = require("launcher")
 local dashboard = require("dashboard")
 local session = require("session")
 local polkit = require("polkit")
+local keyring = require("keyring")
 local authsteps = require("authsteps")
+local headphones = require("headphones")
 local osd = require("osd")
 local notifs = require("notifs")
 local sidebar = require("sidebar")
@@ -92,105 +93,30 @@ local bar = require("bar")
 -- One policy for the shared surface. Closing a launcher or auth dialog
 -- must not disable typing in the task editor that is still open.
 morf.effect("caelestia.keyboard.focus", function()
-  local exclusive = launcher.drawer.open:get() or session.drawer.open:get() or polkit.drawer.open:get()
-  local planner_open = leftbar.drawer.open:get()
-  morf.surface.keyboard_focus = exclusive and "exclusive" or planner_open and "on_demand" or "none"
+  local exclusive = launcher.drawer.open:get() or session.drawer.open:get()
+    or (polkit.drawer.open:get() and polkit.pending:get()) or keyring.drawer.open:get() or capture.editor.active:get()
+  local editor_open = leftbar.drawer.open:get() or (dashboard.drawer.open:get() and dashboard.tab:get() == dashboard.LULE_TAB)
+  morf.surface.keyboard_focus = exclusive and "exclusive" or editor_open and "on_demand" or "none"
 end)
 
 -- ------------------------------------------------------------------- frame --
 
--- The frame: the whole screen as one box, less the rounded opening inside
--- it, and every drawer's background joined to it by a circular seam.
-local field = {
-  id = "frame",
-  anchors = { fill = true },
-  fill_color = function() return theme.color.surface end,
-  blend = theme.SEAM,
-  blend_profile = "circular",
-  -- A soft shadow the frame throws into the opening, as the reference's.
-  shadow_color = "#000000a0",
-  shadow_blur = 6,
-  ui.SdfShape { shape = "box", anchors = { fill = true } },
-  -- The opening, drawn back on the bar's side when it is up.
-  ui.SdfShape {
-    shape = "box",
-    x = function() local x = bar.desk() return x + theme.LEFT end,
-    y = function() local _, y = bar.desk() return y + theme.BORDER end,
-    width = function() local _, _, w = bar.desk() return w - theme.LEFT - theme.BORDER end,
-    height = function() local _, _, _, h = bar.desk() return h - 2 * theme.BORDER end,
-    radius = theme.ROUNDING,
-    operation = "subtract",
-  },
-}
-for _, d in ipairs(drawer.all) do field[#field + 1] = d.shape end
--- The rail's swell is the frame's too.
-local rail_node = rail.build()
-field[#field + 1] = rail.shape
--- And the levels' swell, down the right edge.
-local levels = require("levels")
-local levels_node = levels.build()
-field[#field + 1] = levels.shape
-
-local panels = {
-  id = "opening",
-  anchors = {
-    fill = true,
-    left_margin = theme.LEFT, top_margin = theme.BORDER,
-    right_margin = theme.BORDER, bottom_margin = theme.BORDER,
-  },
-  clip = true,
+-- Frame geometry and composition belong to the selected visual theme.
+local rail_node=rail.build()
+local levels=require("levels")
+local levels_node=levels.build()
+local overlays={
   -- The desk dims under the session menu.
   session.dim(),
-  -- A click on the desk shuts the sidebar, and the launcher.
-  require("sidebar").catcher(),
-  -- And the dashboard, however it was opened.
-  dashboard.catcher(),
-  ui.MouseArea {
-    id = "bottom-catcher", anchors = { fill = true },
-    visible = function() return bottom.drawer.open:get() end,
-    on_clicked = function()
-      -- Empty space inside a tab is still part of the panel. Only clicks
-      -- on the surrounding desktop dismiss this workspace.
-      if not bottom.drawer.panel.contains_pointer then bottom.drawer.set(false) end
-    end,
-  },
-  ui.MouseArea {
-    id = "capture-catcher", anchors = { fill = true },
-    visible = function() return capture.drawer.open:get() end,
-    on_clicked = function() capture.drawer.set(false) end,
-  },
-  ui.MouseArea {
-    id = "launcher-catcher",
-    anchors = { fill = true },
-    visible = function() return launcher.drawer.open:get() end,
-    on_clicked = function() launcher.drawer.set(false) end,
-  },
+  -- A press on the desk shuts what is open: each drawer's close policy
+  -- (shell/drawer.lua), not catchers here.
 }
-for _, d in ipairs(drawer.all) do panels[#panels + 1] = d.panel end
-
-ui.Item {
-  anchors = { fill = true },
-  ui.Sdf(field),
-  -- The bar, in the frame's edge, when it is up.
-  bar.build(),
-  -- The desk: the screen less the bar. Everything that hangs off the
-  -- frame's edges lives in it, so it stays on the opening's edge.
-  ui.Item {
-  id = "desk",
-  x = function() local x = bar.desk() return x end,
-  y = function() local _, y = bar.desk() return y end,
-  width = function() local _, _, w = bar.desk() return w end,
-  height = function() local _, _, _, h = bar.desk() return h end,
-  -- The workspaces down the left edge: a pill each, the active one popping
-  -- out into a numbered bud when it changes.
-  rail_node,
-  levels_node,
-  ui.Item(panels),
+local triggers={
   dashboard.edge_trigger(),
   -- The bottom edge opens the tabbed assistant workspace.
   require("hover").edge {
     name = "bottom", drawer = bottom.drawer, edge = "bottom",
-    length = function() return bottom.WIDTH end, setting = "bottom.hover",
+    length = bottom.width, setting = "bottom.hover",
     enabled = function()
       local phase = capture.phase:get()
       return not capture.drawer.open:get() and (phase == "ready" or phase == "error")
@@ -216,16 +142,26 @@ ui.Item {
     end,
     setting = "leftbar.hover",
   },
-  },
 }
+local frame_view=require("themes").view("frame")
+local frame_root=frame_view.build {desk=bar.desk,bar=bar.build(),drawers=drawer.all,
+  rail={node=rail_node,shape=rail.shape},levels={node=levels_node,shape=levels.shape},
+  overlays=overlays,triggers=triggers}
+-- The shell's window, to a screen reader.
+frame_root.accessible_name = "Caelestia"
+ui.reparent(capture.editor.node,frame_root)
+capture.editor.on_export=function(action,result)
+  notifs.push {summary=action=="copy" and "Capture copied" or action=="save" and "Capture saved" or "Capture uploaded",
+    body=action=="upload" and tostring(result or "Link copied to clipboard") or action=="save" and tostring(result or "") or "",app="Morf"}
+end
+-- Authentication can interrupt editing without ending up behind its overlay.
+morf.effect("caelestia.capture.authentication",function()
+  if (polkit.pending:get() or keyring.request:get()) and capture.editor.running() then capture.cancel() end
+end)
 
 -- Windows keep inside the opening: the frame, and the bar when it is up.
 morf.effect("caelestia.bar.reserve", function()
-  local i = bar.insets()
-  morf.surface.reserve = {
-    left = theme.LEFT + i.left, top = theme.BORDER + i.top,
-    right = theme.BORDER + i.right, bottom = theme.BORDER + i.bottom,
-  }
+  morf.surface.reserve = frame_view.insets(bar.insets())
 end)
 
 if config.get("wallpaper.draw") then wallpaper.open_layer() end
@@ -236,6 +172,9 @@ if config.get("wallpaper.draw") then wallpaper.open_layer() end
 -- the focused screen only (`services.here()`); a close shuts it wherever it
 -- is. A screen that does nothing answers nothing, so the reply is the one
 -- that acted.
+-- Every verb is kept here as well as given to `morf.ipc` (which only
+-- takes them), so the shell's keyboard shortcuts can call the same ones.
+local ipc = setmetatable({}, { __newindex = function(t, k, v) rawset(t, k, v) morf.ipc[k] = v end })
 local here = require("services").here
 local function verb(d)
   return function(how)
@@ -243,7 +182,7 @@ local function verb(d)
     if how == "close" then
       d.set(false)
       if here() then return d.is_open() end
-      return nil
+      return
     end
     if how ~= "open" and how ~= "toggle" and how ~= "state" then
       error("`" .. tostring(how) .. "`: open, close, toggle or state")
@@ -251,7 +190,7 @@ local function verb(d)
     if not here() then
       -- Opened elsewhere now: shut here, so one screen has it at a time.
       if how ~= "state" then d.set(false) end
-      return nil
+      return
     end
     if how == "open" then d.set(true)
     elseif how == "toggle" then d.toggle() end
@@ -261,7 +200,7 @@ end
 
 -- `launcher [how]`, or `launcher apps` / `launcher web`: the launcher on
 -- one of the author's own menus (menus.lua: appy's apps, browsy's web).
-morf.ipc.launcher = function(how)
+ipc.launcher = function(how)
   if how == "apps" or how == "web" then
     if not here() then return nil end
     require("menus").open(how)
@@ -270,26 +209,27 @@ morf.ipc.launcher = function(how)
   end
   return verb(launcher.drawer)(how)
 end
-morf.ipc.dashboard = verb(dashboard.drawer)
-morf.ipc["dashboard-history"] = function(output)
+ipc.dashboard = verb(dashboard.drawer)
+ipc["dashboard-history"] = function(output)
   local name = (morf.screens[1] or {}).name
   if output and output ~= name then return end
   local status = require("dashboard_state").history_status()
   status.output = name
   return status
 end
-morf.ipc.session = verb(session.drawer)
+ipc.session = verb(session.drawer)
 -- `polkit` says whether this screen is the agent and what it is asking;
 -- `polkit demo` opens the dialog on a made-up request (any password but
 -- "wrong" is taken, and it goes nowhere). `view`, `answer` and `cancel`
 -- are the screens talking to each other (polkit.lua).
-morf.ipc.polkit = function(how, ...)
+ipc.polkit = function(how, ...)
   if how == "demo" then
     if not here() then return nil end
     polkit.demo()
     return true
   end
-  if how == "view" or how == "answer" or how == "cancel" then
+  if how == "cancel" and select("#", ...) == 0 then polkit.cancel() return true end
+  if how == "view" or how == "answer" or how == "cancel" or how == "closed" then
     polkit.message(how, ...)
     return nil
   end
@@ -301,47 +241,52 @@ end
 
 -- `auth-step STEP [SERVICE]`: the markers in a PAM stack (tools/pam)
 -- saying where sudo has got to: face, finger, password, ok.
-morf.ipc["auth-step"] = function(step, service) return authsteps.steps.mark(step, service) end
+ipc["auth-step"] = function(step, service) return authsteps.steps.mark(step, service) end
 
 -- `sidebar [how [TAB]]`: TAB is settings or notifications. `utilities`
 -- is the sidebar on its settings; `settings PAGE` opens one of their pages
 -- (network, bluetooth, sound).
-morf.ipc.sidebar = function(how, tab)
+ipc.sidebar = function(how, tab)
   if tab and here() then
     if not sidebar.select(tab) then error("`" .. tostring(tab) .. "`: no such tab") end
   end
   return verb(sidebar.drawer)(how)
 end
-morf.ipc.utilities = function(how)
+ipc.utilities = function(how)
   if here() and how ~= "close" then sidebar.select("settings") end
   return verb(sidebar.drawer)(how)
 end
-morf.ipc.settings = function(page)
+ipc.settings = function(page)
   if not here() then return nil end
+  if not require("utilities").request(page or "") then error("No such Settings page: " .. tostring(page)) end
   sidebar.select("settings")
-  require("utilities").detail:set(page or "")
   sidebar.drawer.set(true)
   return page or ""
 end
-morf.ipc.leftbar = function(how, tab)
+ipc.leftbar = function(how, tab)
   if tab and here() and not leftbar.panel.select(tab) then error("No such left panel tab: " .. tostring(tab)) end
   return verb(leftbar.drawer)(how)
 end
 for _, tab in ipairs { "tasks", "calendar" } do
-  morf.ipc[tab] = function(how)
+  ipc[tab] = function(how)
     if here() and how ~= "close" then leftbar.panel.select(tab) end
     return verb(leftbar.drawer)(how or "open")
   end
 end
--- `capture [how]` opens the capture drawer. `screenshot [WHAT]` and
--- `record [WHAT]` (again: stop) take one at once, of
--- region, window or screen (the chosen one by default).
-morf.ipc.capture = verb(capture.drawer)
-morf.ipc.bottom = function(how, tab)
+-- PrintScreen opens the original bottom capture panel. Screenshot/Record
+-- choose the action and target there; only screenshots enter the editor.
+local capture_popup=verb(capture.drawer)
+ipc.capture = function(how)
+  how=how or "toggle"
+  if how=="menu" then how="open" end
+  if how=="close" or ((how=="open" or how=="toggle") and capture.editor.running()) then capture.cancel() end
+  return capture_popup(how)
+end
+ipc.bottom = function(how, tab)
   if tab and here() and not bottom.panel.select(tab) then error("No such bottom panel tab: " .. tostring(tab)) end
   return verb(bottom.drawer)(how)
 end
-morf.ipc.assistant = function(how)
+ipc.assistant = function(how)
   if here() and how ~= "close" then bottom.panel.select("assistant") end
   return verb(bottom.drawer)(how or "open")
 end
@@ -349,9 +294,9 @@ end
 -- open, close, toggle or state, or a mode to open it in: full, dev,
 -- letters, numbers, phone or pattern.
 do
-  local open_close = verb(keyboard.drawer)
+  local open_close = verb {set=keyboard.set,toggle=keyboard.toggle,is_open=keyboard.drawer.is_open}
   local MODES = { full = true, dev = true, letters = true, numbers = true, phone = true, pattern = true }
-  morf.ipc.keyboard = function(how)
+  ipc.keyboard = function(how)
     if MODES[how] then
       if not here() then return nil end
       keyboard.show(how)
@@ -360,41 +305,58 @@ do
     return open_close(how)
   end
 end
-morf.ipc.screenshot = function(what)
-  if not here() then return nil end
-  return capture.shoot(what)
+ipc["capture-claim"]=function(name)
+  local own=(morf.screens or {})[1]
+  if own and own.name~=name then capture.cancel() capture.drawer.set(false) end
 end
-morf.ipc.record = function(what)
+ipc["capture-editor"] = function(action,...)
+  if action=="cancel" then capture.cancel() return true end
+  if not here() then return end
+  if action=="tool" then capture.editor.choose(...) return true end
+  if action=="copy" or action=="save" or action=="upload" then capture.editor.export(action) return true end
+  return {open=capture.editor.active:get(),pending=capture.editor.pending:get(),busy=capture.editor.busy:get(),phase=capture.editor.phase:get()}
+end
+ipc.screenshot = function(what,how)
+  if not here() then return nil end
+  return capture.shoot(what,how=="quick")
+end
+ipc.record = function(what)
   if not here() then return nil end
   return capture.record(what)
 end
-morf.ipc.workspace = function(n)
+ipc.workspace = function(n)
   if not here() then return nil end
   require("services").workspace.go(n)
   return require("services").workspace.active()
 end
--- `lule`: the terminal the colour tool writes to, and the accents in use.
-morf.ipc.lule = function()
+-- `lule open|close|toggle`: the studio. With no argument, keep the
+-- existing terminal/accent diagnostics used by colour-tool integrations.
+ipc.lule = function(how)
+  if how then
+    if here() and how ~= "close" then dashboard.tab:set(dashboard.LULE_TAB) end
+    return verb(dashboard.drawer)(how)
+  end
   local tty = require("terminal_colors").tty
   return tty and tty.path or "", theme.lule.accent:hex(), theme.color.primary:hex()
 end
-morf.ipc.osd = function()
+ipc.osd = function(kind)
   if not here() then return nil end
-  osd.flash()
+  osd.flash(kind)
   return true
 end
 -- `notify SUMMARY [BODY [critical|normal [APP]]]` raises a notification of
 -- the shell's own, as the reference's toaster does.
-morf.ipc.notify = function(summary, body, urgency, app)
+ipc.notify = function(summary, body, urgency, app)
   return notifs.push { summary = summary, body = body, urgency = urgency == "critical" and 2 or 1, app = app }
 end
-morf.ipc.close = function()
+ipc.close = function()
+  capture.cancel()
   drawer.close_all()
   return true
 end
 -- `drawers` lists the open drawers; `drawers toggle NAME` (open, close)
 -- acts on one by name, as the reference's IPC does.
-morf.ipc.drawers = function(how, name)
+ipc.drawers = function(how, name)
   if how ~= nil and how ~= "list" then
     local d = drawer[name or ""]
     if not d then error("`" .. tostring(name) .. "`: no such drawer") end
@@ -406,3 +368,30 @@ morf.ipc.drawers = function(how, name)
   end
   return table.concat(open, " ")
 end
+
+-- Metadata only: never expose keyring answers through IPC.
+ipc.keyring = function(how,mode)
+  if here() then
+    if how=="demo" then
+      if mode and mode~="unlock" and mode~="new" and mode~="confirm" then
+        error("Use `keyring demo [unlock|new|confirm]`.")
+      end
+      return keyring.demo(mode=="confirm" and "confirm" or "password",mode=="new")
+    elseif how then error("Use `keyring` or `keyring demo [unlock|new|confirm]`.") end
+    return {agent=keyring.registered:get(),open=keyring.drawer.open:get()}
+  end
+end
+
+
+require("themes.switcher").start(function()
+  if polkit.request:get() or keyring.request:get() or authsteps.steps.state.step ~= "idle" then
+    return "Finish the authentication request before changing theme."
+  end
+  local phase = capture.phase:get()
+  if phase ~= "ready" and phase ~= "error" then return "Finish the capture before changing theme." end
+  if require("lule_studio").busy:get() then return "Wait for Lule to finish applying." end
+  if require("planner").client.busy:get() then return "Wait for the task update to finish." end
+end)
+
+-- The verbs above as keys, wherever the shell has the keyboard.
+frame_root.shortcuts = require("shortcuts").table(ipc)

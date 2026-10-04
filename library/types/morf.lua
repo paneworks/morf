@@ -7,9 +7,11 @@
 ---@field archive Morf.Archive
 ---@field args Morf.Args
 ---@field audio Morf.Audio
+---@field broadcast fun(...): any
 ---@field cache_dir fun(...): any
 ---@field cache_path fun(...): any
 ---@field capabilities Morf.Capabilities
+---@field channel fun(...): any
 ---@field clipboard Morf.Clipboard
 ---@field clock any
 ---@field color Morf.Color
@@ -32,10 +34,12 @@
 ---@field executable string
 ---@field file fun(...): any
 ---@field file_view fun(...): any
+---@field focus Morf.Focus
 ---@field font_axes fun(...): any
 ---@field font_families fun(...): any
 ---@field fs Morf.Fs
 ---@field gamma Morf.Gamma
+---@field geometry Morf.Geometry
 ---@field greetd Morf.Greetd
 ---@field has_icon fun(...): any
 ---@field has_version fun(...): any
@@ -67,6 +71,7 @@
 ---@field operands Morf.Operands
 ---@field options Morf.Options
 ---@field output_power Morf.Output_power
+---@field overlay Morf.Overlay
 ---@field pam Morf.Pam
 ---@field persistent fun(...): any
 ---@field prefers any
@@ -90,6 +95,7 @@
 ---@field session_paths fun(...): any
 ---@field shader fun(...): any
 ---@field shader_data fun(...): any
+---@field shared fun(...): any
 ---@field shell_dir fun(...): any
 ---@field shell_id fun(...): any
 ---@field shell_path fun(...): any
@@ -121,6 +127,8 @@
 ---@field ui Morf.Ui
 ---@field variants fun(...): any
 ---@field version string
+---@field view_extent fun(...): any
+---@field view_item_start fun(...): any
 ---@field virtual_keyboard Morf.Virtual_keyboard
 ---@field virtual_list fun(...): any
 ---@field watch_files fun(...): any
@@ -159,12 +167,16 @@
 ---@field default_sink fun(...): any
 ---@field default_source fun(...): any
 ---@field device fun(...): any
+---@field equalizer_curve fun(...): any
 ---@field monitor fun(...): any
 ---@field move_stream fun(...): any
 ---@field on_changed fun(...): any
+---@field set_channel_volumes fun(...): any
 ---@field set_default fun(...): any
 ---@field set_mute fun(...): any
 ---@field set_volume fun(...): any
+---@field spectrum_filter fun(...): any
+---@field spectrum_resample fun(...): any
 ---@field stream fun(...): any
 
 ---@class Morf.Capabilities
@@ -215,6 +227,7 @@
 ---@field exec_detached fun(...): any
 ---@field executable string
 ---@field font_families fun(...): any
+---@field geometry Morf.Core.Geometry
 ---@field has_icon fun(...): any
 ---@field has_version fun(...): any
 ---@field icon_path fun(...): any
@@ -258,6 +271,28 @@
 
 ---@class Morf.Core.Args
 
+---@class Morf.Core.Geometry
+---@field arc fun(...): any
+---@field graph_grid fun(...): any
+---@field graph_series fun(...): any
+---@field hatch fun(...): any
+---@field hatch_under fun(...): any
+---@field lobes fun(...): any
+---@field plot fun(...): any
+---@field polygon fun(...): any
+---@field regular fun(...): any
+---@field ruler fun(...): any
+---@field sector fun(...): any
+---@field segments fun(...): any
+---@field shape_curves fun(...): any
+---@field shape_names Morf.Core.Geometry.Shape_names
+---@field shape_path fun(...): any
+---@field shape_segments integer
+---@field star fun(...): any
+---@field ticks fun(...): any
+
+---@class Morf.Core.Geometry.Shape_names
+
 ---@class Morf.Core.Operands
 
 ---@class Morf.Core.Options
@@ -299,6 +334,13 @@
 ---@field url_encode fun(...): any
 ---@field uuid fun(...): any
 
+---@class Morf.Focus
+---@field clear fun(...): any
+---@field get fun(...): any
+---@field next fun(...): any
+---@field previous fun(...): any
+---@field set fun(...): any
+
 ---@class Morf.Fs
 ---@field append fun(...): any
 ---@field basename fun(...): any
@@ -337,6 +379,28 @@
 ---@field set fun(...): any
 ---@field supported fun(...): any
 
+---@class Morf.Geometry
+---@field arc fun(...): any
+---@field graph_grid fun(...): any
+---@field graph_series fun(...): any
+---@field hatch fun(...): any
+---@field hatch_under fun(...): any
+---@field lobes fun(...): any
+---@field plot fun(...): any
+---@field polygon fun(...): any
+---@field regular fun(...): any
+---@field ruler fun(...): any
+---@field sector fun(...): any
+---@field segments fun(...): any
+---@field shape_curves fun(...): any
+---@field shape_names Morf.Geometry.Shape_names
+---@field shape_path fun(...): any
+---@field shape_segments integer
+---@field star fun(...): any
+---@field ticks fun(...): any
+
+---@class Morf.Geometry.Shape_names
+
 ---@class Morf.Greetd
 ---@field connect fun(...): any
 ---@field converse fun(...): any
@@ -355,6 +419,11 @@
 ---@field subscribe fun(...): any
 
 ---@class Morf.Image
+---@field annotation_bounds fun(...): any
+---@field annotation_hit fun(...): any
+---@field annotation_path fun(...): any
+---@field annotation_pick fun(...): any
+---@field compose fun(...): any
 ---@field encode_png fun(...): any
 ---@field from_dbus fun(...): any
 ---@field from_rgba fun(...): any
@@ -362,6 +431,7 @@
 ---@field limits Morf.Image.Limits
 ---@field palette fun(...): any
 ---@field pixel fun(...): any
+---@field preview fun(...): any
 ---@field process fun(...): any
 ---@field release fun(...): any
 
@@ -486,6 +556,8 @@
 ---@field XF86AudioPlay integer
 ---@field XF86AudioPrev integer
 ---@field XF86AudioRaiseVolume integer
+---@field XF86Back integer
+---@field XF86Forward integer
 ---@field XF86MonBrightnessDown integer
 ---@field XF86MonBrightnessUp integer
 ---@field space integer
@@ -502,6 +574,12 @@
 
 ---@class Morf.Output_power
 ---@field set fun(...): any
+
+---@class Morf.Overlay
+---@field close fun(...): any
+---@field is_open fun(...): any
+---@field open fun(...): any
+---@field track fun(...): any
 
 ---@class Morf.Pam
 ---@field authenticate fun(...): any
@@ -604,6 +682,7 @@
 ---@field Timer fun(...): any
 ---@field destroy fun(...): any
 ---@field each fun(...): any
+---@field follow fun(...): any
 ---@field reparent fun(...): any
 ---@field smoothed fun(...): any
 ---@field spring fun(...): any
@@ -618,6 +697,7 @@
 ---@field layer_surface Morf.Window.Layer_surface
 ---@field popup fun(...): any
 ---@field region fun(...): any
+---@field toplevel fun(...): any
 
 ---@class Morf.Window.Layer_surface
 

@@ -1,0 +1,11 @@
+[package]
+name = "morf-vector"
+description = "Vector geometry for morf: outlines, paths, marks, plots, and SVG read as outlines"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+morf-image.workspace = true
+resvg.workspace = true

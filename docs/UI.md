@@ -366,6 +366,28 @@ Which one, and when it moves:
   names back before the new file runs, so it finds them free too (a file
   that fails to load leaves the shell without them until the next reload).
 
+Work the primary does for every screen hands its answer over with
+`morf.shared(name, initial)`: a signal like `morf.signal`'s (`get`, `set`,
+read by bindings), whose writes reach the signal of the same name in every
+other runtime of the process on their next turn, waking them for it. A
+runtime that asks for the name after a write -- a screen plugged in later,
+the copy after a reload -- starts from that write rather than `initial`.
+Values are what a signal holds: nil, booleans, numbers, strings, colours
+and tables of them; a function cannot cross. Three screens then cost one
+sample, not three:
+
+```lua
+local load = morf.shared("cpu.load", 0)
+if morf.primary() then
+  morf.timer(2000, function() load:set(read_load()) end, true)
+end
+ui.Text { text = function() return ("%d%%"):format(load:get()) end }
+```
+
+`lib.poll` sources take `shared = true` for this (`lib.sysinfo` uses it):
+the primary samples, the others read its samples, and a read on any screen
+keeps the primary sampling.
+
 `ui.ListView` and `ui.GridView` virtualise long lists; scroll them with
 `morf.sync_view(node, offset)`. `ui.each(list, delegate, options)` is a
 Repeater over a `morf.state` list (below).
@@ -1063,13 +1085,31 @@ box. `modifiers` is a string such as `"ctrl+shift"`; every
 `on_key_pressed` receives it.
 
 A field has the keyboard when `focus` is true, and one field at a time
-does: a click, a Tab, or writing `focus = true` moves it, and
-`on_focus_changed(focused)` says so. A field -- or any node with
+does: a click, a Tab or Shift+Tab, or writing `focus = true` moves it, and
+`on_focus_changed(focused)` says so (see [Focus](#focus)). A field -- or any node with
 `on_key_pressed` -- that sets `tab_navigation = false` keeps Tab while it
 has the keyboard: Tab and Shift+Tab go to its `on_key_pressed` (for a
 completion, say) instead of moving focus. While it has it, the compositor's
 input method (text-input-v3) is enabled for it and what the input method
 commits is typed into the field.
+
+`highlights` colours runs of what is typed, as a code editor's syntax
+does: `{ start, stop, color, underline, strike }` tables over byte
+offsets (`text:find` gives them), in any order, overlaps cut back to the
+earlier. Only what leaves every glyph where it was may be set, so the
+caret, the selection and a click land where they would without it; a
+wavy error is `underline = true` in the error's colour. They show over
+typed text, never over the placeholder or a password.
+
+```lua
+editor.highlights = function()
+  local marks = {}
+  for start, word, stop in editor.text:gmatch("()(%a+)()") do
+    if KEYWORDS[word] then marks[#marks + 1] = { start = start - 1, stop = stop - 1, color = theme.keyword } end
+  end
+  return marks
+end
+```
 
 The caret and the selection are properties too, as byte offsets —
 the number of bytes before them, so `text:sub(1, cursor_position)` is
@@ -1305,6 +1345,88 @@ drawn again for each frame they move in, on the CPU, at its on-screen size —
 cheap for an icon or a gauge, worth knowing for a path the size of the
 screen. `examples/demos/sdf/path.lua` has one of each.
 
+`morf.geometry` builds reusable path data in Rust. `shape_path(name,
+{size=100, segments=72})` supplies the named expressive shapes;
+`shape_curves(shape, segments)` returns normalized cubic coordinates.
+`polygon(vertices, opts)`, `regular(sides, opts)`, `star(points, inner, opts)`
+and `lobes(count, inner, opts)` build custom outlines. `lib.m3shapes` wraps these
+operations with the existing `Shape` node and morph animation controls.
+
+`graph_series(values, {width, height, samples, bottom=0, top, closed=false})`
+draws a bounded history with its newest sample at the right edge; `closed=true`
+adds the fill under it. `graph_grid(width, height, columns, rows)` builds the
+grid. Sampling intervals, history ownership, colors and UI structure remain
+configuration choices; only numeric path generation moves into the engine.
+
+The marks a style draws with, as path data (angles in degrees, clockwise
+from twelve o'clock):
+
+| function | |
+|----------|---|
+| `arc(cx, cy, r, from, sweep)` | an arc in pieces of at most 90°, so a full turn too |
+| `sector(cx, cy, r0, r1, from, sweep)` | a ring's slice, closed; a pie's when `r0` is 0 |
+| `hatch(width, height, gap = 6)` | `/` stripes across a box, cut to it |
+| `hatch_under(x0, dx, ys, width, height, gap = 6)` | the stripes under a stepped series, step `i` at height `ys[i]` |
+| `ticks(cx, cy, r0, r1, { from, sweep, count \| angles, major, major_r0 })` | radial ticks; every `major`-th from `major_r0` |
+| `ruler(length, size, { pitch = 8, major = 5, minor = size / 2, min_count = 4, vertical })` | a tick ruler along an edge |
+| `segments(width, height, count, gap = 2, { vertical })` | a segmented bar's cells |
+| `plot(values, plot)` | what a path reading a channel with that `plot` draws (below) |
+
+### Data channels
+
+A chart that changes every frame should not build its outline in Lua. A
+data channel is a run of numbers a producer writes and a `ui.Path` draws:
+
+```lua
+local load = morf.channel { size = 60 }                 -- a ring: the newest 60 pushed
+local bars = morf.channel { size = 56, mode = "frame" } -- a frame: replaced whole
+load:push(0.4)        bars:set({ 0.1, 0.8, ... })
+ui.Path { width = 300, height = 80, view_box = { 0, 0, 300, 80 },
+  series = load.id, plot = { kind = "area", smooth = true }, fill_color = accent }
+```
+
+`ch:get()`, `ch:last()`, `ch:peak()` and `ch:len()` read it, and read
+reactively: a binding that called one runs again when the channel is
+written, by Lua or by a Rust producer. A path with `series` makes its
+outline from the channel's numbers where it is painted (`d` is not read),
+and the loop repaints for a write only when such a path is on show.
+
+`plot` says how: `kind` -- `"line"`, `"area"`, `"steps"`, `"steps_area"`,
+`"hatch_steps"` (the stripes under the steps, `hatch` apart) or `"bars"`;
+`width`, `height` (the view box's by default); `samples` across the width
+(a ring's size by default), newest at the right edge; `bottom`, `top`
+(a frame defaults to 0..1, a ring to its peak times `headroom`, never
+under `bottom + floor`); `pad_top`, `pad_bottom`; `smooth` (a curve
+through the samples); and for bars `gap`, `radius` (the most their ends
+round), `min_bar` (the least one stands, no more than its width) and
+`mirror` (grown from the middle). `with = other.id` puts another channel
+on the same automatic scale.
+
+More kinds read a channel's numbers in layouts of their own, and a chart
+with several tones draws one path per tone over the same channel:
+`"cells"` (column by column, `rows` to a column; the places in `[lo, hi)`
+-- one tone of a heatmap, a spectrogram, a calendar), `"scatter"` (`x, y`
+pairs across `left..right`, dots of radius `point`), `"candles"` (`open,
+high, low, close` fours; `direction = "up" | "down"`), `"boxes"` (`min,
+q1, median, q3, max` fives), `"stack"` and `"stack_bars"` (`layers`
+interleaved series, this path layer `layer`; `smooth` curves a stack),
+`"histogram"` (raw values into `bins`), `"radial"` (a band per value,
+from `inner` out, `sweep` degrees from `start`; `arcs = true` draws each
+band's middle as an open arc to stroke with round caps), `"states"` (the
+runs of samples in state `state`, a timeline's colour) and `"state_cells"`
+(status history squares), and `"wave"` (an amplitude envelope).
+
+A table property holding bindings among its fields -- `accessible`,
+`plot`, `view_box` -- is bound as a whole: `plot = { kind = "bars", top =
+function() return peak:get() end }`.
+
+`lib.channel.from(values)` gives a channel for a channel, a list or a
+function returning one -- copied in by an effect owned by the drawing
+node -- so a component can draw whatever it is handed through a channel.
+`morf.audio.monitor { channel = bars, spectrum = { bars = 56 } }` writes
+filtered bars with no Lua per frame, and `lib.sysinfo.channel(name)` is
+a history as a channel.
+
 ### Fields
 
 A `ui.Sdf` is one surface composed from the shapes beneath it — every
@@ -1417,6 +1539,259 @@ ui.MouseArea {
 A text input types a repeat as it types a press, so a held Backspace
 keeps deleting.
 
+### Focus
+
+Each surface has at most one focused node. `focused` says which, and
+`visual_focus` says a keyboard put it there: a theme draws its focus ring
+from `visual_focus`, so the ring follows Tab and never a click. Both are
+the runtime's to write; a configuration moves focus with
+`morf.focus.set(node, keyboard)` (true draws the ring), `morf.focus.clear(node)`,
+`morf.focus.next()` and `morf.focus.previous()`, and asks with
+`morf.focus.get()`. Those settle at the next turn of the loop. Writing
+`focus = true` on a node asks for focus as well, and `false` gives it back,
+which is how a panel that opens says it wants the keys.
+
+`focus_policy` says how a node takes focus:
+
+| policy | Tab stops at it | a click focuses it |
+|---|---|---|
+| `"auto"` (default) | when it takes keys | when it takes keys |
+| `"tab"` | yes | no |
+| `"click"` | no | yes |
+| `"strong"` | yes | yes |
+| `"none"` | no | no |
+
+A node takes keys when it has `on_key_pressed` or `on_key_released`, or is
+a text input or a terminal. A button made focusable by a theme
+(`kit.focusable`) says `"tab"`: Tab reaches it, and a click on it leaves a
+search field typing. Tab walks the surface's tree in order and Shift+Tab
+walks back, skipping any subtree that is hidden, disabled or leaving; a
+click focuses the nearest node, itself or an ancestor, whose policy takes
+a click, and a click on nothing that does leaves focus where it was.
+
+A key goes to the focused node. When that node takes no keys of its own --
+a button -- Return, the keypad's Enter and Space click it, and any other
+key goes up to the nearest ancestor that takes keys, so a launcher's
+arrows reach the launcher while one of its rows has focus.
+
+`focus_scope = true` makes a group that remembers which of its nodes last
+had focus. Tab into the group lands there, and Tab out of it goes to what
+is beside the group rather than through the rest of it. When the focused
+node is removed, hidden or disabled, focus goes to what its nearest
+surviving scope remembers, or to that scope's first node, and to nothing
+when it was in no scope. When the keyboard leaves a surface its node stops
+showing focus (`focused` goes false) and shows it again when the keyboard
+comes back; `on_focus_changed(focused)` runs on a node as it gains and
+loses focus.
+
+### Shortcuts
+
+`shortcuts` on any node maps key sequences to functions:
+
+```lua
+ui.Item {
+  shortcuts = {
+    ["ctrl+b"] = toggle_bold,
+    ["ctrl+k ctrl+s"] = save_all,      -- a sequence: chords apart by spaces
+    ["back"] = go_back,                -- a mouse's back button, or XF86Back
+  },
+  ...
+}
+```
+
+A key goes to shortcuts before it goes to the node with focus: first those
+on the focused node and its ancestors, nearest first, then those of any
+shown node on the surface whose table says `scope = "surface"`. A
+shortcut's function is called with its sequence (`"ctrl+b"`); returning
+`false` passes the key on as though nothing had matched. A chord is
+modifiers and a key joined by `+`: `ctrl`, `shift`, `alt`, `super`, and any
+name `morf.keys` knows or a single character (`"ctrl+,"`). Shift folds
+letters, so `"ctrl+shift+k"` matches however the keyboard reports the
+capital. A key that begins a longer sequence is held for a second and a
+half for the next; a key that breaks the sequence then goes on alone.
+
+A modifier alone -- `"alt"`, `"super"`, `"ctrl"`, `"shift"` -- names its
+tap: the key pressed and let go with nothing between, no other key and
+no click. It reaches the shortcut even from a text field, as a menu bar's
+Alt does everywhere; Alt held with a letter is still that letter's chord
+and no tap.
+
+Typing comes first. While a text input has focus its plain keys (no Ctrl,
+Alt or Super) and its editing chords (Ctrl with A, C, X, V, Z, Y, or with a
+key that moves or deletes) never reach shortcuts; a terminal keeps every
+key but Super-chords. Function and media keys still do. A mouse's side
+buttons are the keys `back` and `forward` on the surface under the
+pointer, so Alt+Left and the back button can share a function.
+
+### Gestures
+
+Gestures are events like any other, on any node that takes the pointer:
+
+| handler | when |
+|---|---|
+| `on_double_clicked(x, y, local_x, local_y)` | a second click within 400 ms and 8 px of the first, after that click's `on_clicked` |
+| `on_long_pressed(x, y, local_x, local_y)` | a press held within 8 px for half a second; the click its release would make is not delivered |
+| `on_swiped(direction, velocity_x, velocity_y)` | a press moved over 24 px and let go faster than 400 px/s; `direction` is `left`, `right`, `up` or `down` |
+| `on_pinched(scale, phase, x, y)` | two fingers spreading or closing: `scale` against their first spread, `phase` `update` then `end`, `(x, y)` their midpoint |
+| `on_edge_swiped(edge)` | on a surface's root: a finger landing within 20 px of an edge and moving 48 px in |
+
+Two fingers moving together where nothing takes a pinch scroll what lies
+under them, as a touchpad does. A finger is the left button throughout: it
+presses, drags and clicks as the pointer does, so a swipe and a long press
+work under a finger and a mouse alike.
+
+### Overlays
+
+`morf.overlay.open(content, options)` shows `content` over everything else
+on its surface: in the surface's overlay layer, the root's last child.
+What opens there stacks, newest on top, and Escape and a press outside
+close the top one first.
+
+```lua
+local menu = build_menu()            -- any node
+morf.overlay.open(menu, {
+  anchor = button,                   -- beside this node
+  placement = "bottom-start",        -- top|bottom|left|right|center[-start|-end]
+  on_close = function(reason) end,   -- "escape", "outside", "closed", "gone"
+})
+morf.overlay.close(menu)
+morf.overlay.is_open(menu)
+```
+
+An anchored overlay sits `gap` px (4) from its anchor by `placement`,
+flips to the other side when its own has no room, and shifts along to stay
+`margin` px (8) inside the surface; with no anchor (give `root` then) it is
+centred. `dim = true` (or a colour) lays a scrim over the surface under it,
+and `modal` -- true when it dims -- keeps what is under it from taking
+input; Tab then walks only the overlay. `escape = false` and
+`outside = false` keep it open on those; a press on the anchor never counts
+as outside, so a button that toggles its menu works. Focus moves to the
+first node in it Tab would reach as it opens (`focus = false` leaves focus
+where it is; focus already inside it, put there by what opened it, stays),
+with the ring when the focus it took over had one, and goes back to the
+node that had it -- the control that opened it -- when it closes
+(`restore = false` leaves it alone). Closing hides the content in the
+layer; opening it again shows it there, and destroying it closes it.
+
+A kit popup (`lib.kit.popup`) closes at once -- focus back, what is under
+it live again -- and then plays its theme's exit: it stays in the layer
+for the theme's `linger` (`popup_motion`'s) as a ghost that takes no input
+and gives no focus back, and is taken back if it opens again meanwhile.
+
+### Right to left
+
+`layout_direction = "rtl"` (or `"ltr"`) on any node sets the direction of
+its subtree; `""`, the default, takes the parent's, and the root takes the
+locale's (`LC_ALL`, `LC_MESSAGES`, `LANG`: Arabic, Hebrew, Persian, Urdu,
+... write right to left), or `MORF_DIRECTION` for a run. A right-to-left
+subtree mirrors what is placed against its parent's sides: rows, columns
+and grids pack from the right, an inset swaps its margins, a flex row runs
+right to left, a child anchored `left` is anchored right, and a text's
+`left` or `right` alignment swaps so it keeps to its start. A child placed
+by its own `x` keeps it -- a drawing positioned by number is the
+drawing's -- so a layout meant to mirror is anchored to its start
+(`anchors = { left = true, left_margin = 12 }`) rather than placed at
+`x = 12`. `node.effective_direction` reads `"ltr"` or `"rtl"`. Every kit
+control reads it into its archetype's `mirrored`: the arrow keys turn
+round, a slider's `visual_position` runs from the right, a switch's thumb
+starts on the right, and the Shell's sidebar stands on the right.
+
+### Applications
+
+`morf app app.lua` runs a configuration as an application rather than a
+shell: one runtime whatever the outputs, its own surface shrunk to nothing
+on the background layer, its windows the interface, and the process ended
+when the main window closes. `lib.kit.app` is the side of it a
+configuration writes:
+
+```lua
+local app = require("lib.kit.app")
+local kit = app.kit()          -- the configuration's `kit` module, else the default look
+app.application {
+  title = "Settings", app_id = "dev.morf.Settings", width = 980, height = 660,
+  minimum_width = 340, minimum_height = 480,
+  build = function(win) return root end,   -- laid out at win.width x win.height
+}
+```
+
+The window decorates itself: edges that resize (`start_system_resize`) and,
+from `lib.kit.composites.header_bar { window = win, title, subtitle,
+start, ["end"] }`, a bar whose empty part moves the window and whose
+controls minimise, maximise and close it. `lib.kit.shell.make` (the Shell
+archetype) arranges the header bar, sidebar, content, inspector, bottom
+bar, banner and toasts and adapts at its `breakpoints`: under the first
+the sidebar becomes a drawer (F9 or Ctrl+B opens it, Escape or a press
+outside shuts it), under the last the inspector hides; F6 walks the
+regions, which are landmarks to a screen reader. `app.is_app()` says
+whether `morf app` is running it. `examples/apps/settings/app.lua` is a
+complete one.
+
+### The default look
+
+`lib.kit.skins.default` is a whole kit -- every contract function, a skin
+for every archetype, the display widgets and instruments -- in an
+Adwaita-like look, so an application needs no theme: `make { variant =
+"dark" | "light" | "high_contrast", reduced_motion }`, following the
+desktop's colour scheme, contrast and motion preferences when not told
+(`MORF_KIT_VARIANT` overrides for a run). `morf check --kit default`
+checks it against the contract.
+
+### Accessibility
+
+A screen reader is told a tree of the shown nodes that mean something:
+every node with an `accessible_role`, every `Text` with text (a
+`"label"`), every `TextInput` (a `"text_field"`), and every `MouseArea`
+Tab reaches (a `"button"` unless it says otherwise). The boxes between
+them are left out, and so is a subtree under `accessible_hidden = true`.
+
+```lua
+ui.MouseArea { accessible_role = "switch", accessible_name = "Wi-Fi",
+  accessible_description = "Off while flying",
+  accessible = { checked = function() return on:get() end },
+  on_accessible_action = function(action, value) ... end,
+  ... }
+```
+
+| property | |
+|----------|---|
+| `accessible_role` | what the node is: `button`, `toggle_button`, `check_box`, `radio_button`, `switch`, `link`, `menu_item`, `slider`, `spin_button`, `progress`, `tab_list`, `tab`, `tab_panel`, `list_box`, `list_box_option`, `list`, `list_item`, `grid`, `grid_cell`, `tree`, `tree_item`, `table`, `row`, `cell`, `text_field`, `password_text`, `search_field`, `dialog`, `alert_dialog`, `alert`, `status`, `tooltip`, `menu`, `group`, `label`, `heading`, `image`, and the landmarks `navigation`, `main`, `complementary`, `region`, `banner`, `search`, `log`, ... (`morf_scene::ACCESSIBLE_ROLES` lists them all) |
+| `accessible_name` | what it is called; a button, tab, label or list item with none is named by the text under it, a field by its `placeholder` |
+| `accessible_description` | a longer word on it |
+| `accessible` | a table of the rest: `value` (a number or text), `minimum`, `maximum`, `step`, `checked` (`true`, `false`, `"mixed"`), `expanded`, `selected`, `disabled`, `pressed`, `read_only`, `modal`, `orientation`, `placeholder`, `level` |
+| `accessible_hidden` | leaves the node and everything under it out |
+
+A control's children are presentational: a button, a slider or a field is
+read as one thing, and what is under it is not offered separately. A
+range's text is its reading, so a slider is never named by it: name it.
+
+What a screen reader asks -- `"click"`, `"focus"`, `"increment"`,
+`"decrement"`, `"expand"`, `"collapse"`, `"set_value"` (with the value) --
+goes to the node's `on_accessible_action(action, value)` first; returning
+anything but `false` ends it. Otherwise it is the key a keyboard user
+would press, with focus given to the node: Space, Up, Down, Right, Left.
+Every kit control (`lib.kit.control`) sets its role from its archetype and
+widget, its name from its `label`, `title` or `placeholder` (or the
+`accessible_name` given), its states from its live state, and takes a
+slider's or a field's value directly.
+
+On Linux the tree goes to AT-SPI through AccessKit, one window per surface
+(the `a11y` feature of `morf`, on by default). Nothing is built until a
+screen reader asks: an adapter waits on the accessibility bus, and only
+once it is wanted does each turn of the loop rebuild the tree -- when the
+scene has changed, or at most four times a second for layout alone -- and
+send the nodes that changed. `MORF_NO_A11Y=1` turns it off for a run.
+
+`except = { node, ... }` names more nodes a press on which is not outside
+-- the other controls that open it. `morf.overlay.track(node, options)`
+gives a node the layer's behaviour where it already stands -- a drawer, a
+panel a layout placed itself: the stack, Escape, focus in and back, and a
+press anywhere else on its surface closing it, for which the engine puts a
+catcher behind everything on that surface while it is open. A press is
+outside by where it lands, not by what it hits: empty space inside the
+node is inside. Its `on_close(reason)` shuts it; `morf.overlay.close(node)`
+ends the tracking. `lib.kit.popup` builds menus, dialogs, tooltips and
+toasts on both, and `popup.track` is how a shell's drawers become popups.
+
 ### Entering
 
 `enter = { opacity = 0, translate_x = 32 }` on any node is where its
@@ -1477,6 +1852,18 @@ See `examples/demos/motion/exit.lua`.
 
 ### Hover and press
 
+`on_pressed(surface_x, surface_y, local_x, local_y, button, modifiers)`
+and `on_released` and `on_clicked` the same: `button` is `left`, `right`,
+`middle`, `back` or `forward` (nil from a touch), `modifiers` what the
+keyboard holds, `"shift"`, `"ctrl+alt"` or `""`. `on_dragged`,
+`on_drag_started` and `on_position_changed` (the pointer moving over the
+area) are told `(surface_x, surface_y, delta_x, delta_y, local_x,
+local_y, modifiers)`. A Shift-click extends a selection, a Ctrl-click
+toggles one, a Shift-drag holds to an axis: the modifiers come with the
+event, as they were when it happened. Tests press with them:
+`test.click(x, y, { modifiers = "shift" })`, and `test.press`,
+`test.drag` and `test.wheel` take the same option.
+
 A `MouseArea` keeps `hovered` (the pointer is over it, and it is the
 topmost area there) and `pressed` (a button or a touch went down on it and
 has not come up), both read-only. A binding follows them like any other
@@ -1526,7 +1913,9 @@ end)
 ### The wheel
 
 `on_wheel(surface_x, surface_y, pixel_x, pixel_y, step_x, step_y,
-local_x, local_y)` runs for a wheel turn or a touchpad scroll. The wheel
+local_x, local_y, modifiers)` runs for a wheel turn or a touchpad scroll;
+`modifiers` is what is held, as `"ctrl+shift"` (Ctrl with the wheel
+zooms, by custom). The wheel
 bubbles: it goes to the topmost `MouseArea` under the pointer that has an
 `on_wheel`, passing over any that have none, so a switch or a button on a
 scrolling page does not swallow the page's scroll. A `Flickable` under the
@@ -1607,7 +1996,7 @@ being kept hidden in a pool. A child window hanging off a destroyed parent
 is not destroyed with it, but with no parent it is never shown.
 
 ```lua
-local dialog = morf.window.floating {
+local dialog = morf.window.toplevel {
   root = build_dialog(), width = 420, height = 200, visible = true,
   on_closed = function() dialog:destroy() end,   -- closed by the compositor
 }
@@ -1632,7 +2021,7 @@ end
 
 ```lua
 local root = ui.Item {}
-local win = morf.window.floating {
+local win = morf.window.toplevel {
   root = root, width = 900, height = 640, title = "Settings",
   on_resize = function(w, h) wide:set(w >= 1200) end,
 }
@@ -1674,6 +2063,66 @@ answers something and must be quick. A handler that runs out stops with
 "Lua handler fuel exhausted after N instructions"; do heavy work in
 pieces (`morf.timer(1, ...)`) or off the loop. `MORF_LIMITS` takes
 comma-separated `key=N` (`MORF_LIMITS=module=40000000,handler=2000000`).
+
+### What things cost
+
+Measured on the machine this repository is built on (Intel Core
+i7-11800H), release build, with luna's native tier off and on (the `jit`
+Cargo feature; `MORF_JIT=off` switches a jit build back to the
+interpreter). The VM figures come from
+`cargo test --release -p morf-lua --lib [--features jit] bench_vm -- --ignored --nocapture`.
+
+| what | interpreter | native tier |
+|---|---|---|
+| a pure Lua loop, 10 000 iterations (numbers and a table) | 1241 µs | 833 µs |
+| a host-to-Lua call (an IPC verb that returns) | 0.68 µs | 0.78 µs |
+| one binding re-run by a signal change (1000 of them per change) | 6.3 µs | 6.8 µs |
+| a 64-row table written to a signal | 78 µs | 71 µs |
+| one node built with three bindings (200 per build) | 16.2 µs | 16.6 µs |
+
+The native tier compiles loops, arithmetic and table access; calls,
+metamethods and coroutines still run through the interpreter, so only the
+pure loop gains. A binding's cost is almost all the flush around it --
+dependency bookkeeping, entering the VM, converting values -- not its few
+instructions: a thousand bindings re-running is about a third of a 60 Hz
+frame.
+
+caelestia (Tsugumori) at 3840x2160 in the sealed sandbox, CPU time per
+painted frame under `MORF_FRAME_LOG`:
+
+| phase | interpreter, median / p90 | native tier, median / p90 |
+|---|---|---|
+| opening the dashboard | 19.2 / 26.9 ms | 18.9 / 25.7 ms |
+| the media tab, a player on | 21.6 / 28.5 ms | 20.4 / 26.6 ms |
+| the performance tab | 24.1 / 32.6 ms | 24.1 / 32.3 ms |
+
+About a tenth of the shell's Lua instructions ran native. A frame there
+is layout and painting, not Lua: the native tier changes it by a few per
+cent. `MORF_JIT_LOG=1` prints the native tier's counters every ten
+seconds.
+
+### Compiled bindings: measured, not built
+
+Compiling simple bindings -- property reads, arithmetic, conditionals over
+signals -- to a native form that runs without entering Lua was planned
+for when binding evaluation shows up next to rendering. It does not:
+
+- a binding's own instructions are a small part of what it costs. Of the
+  6.3 µs a re-run takes (above), most is the flush around it: finding what
+  depends on the signal, entering the VM, converting the value, writing
+  the property and marking what it dirties. A compiled expression still
+  needs all of that but the middle step;
+- caelestia (Tsugumori) at 3840x2160 in the sealed sandbox, opening and
+  closing the dashboard under `MORF_FRAME_LOG=2 MORF_PROFILE=1`: of the
+  frames over 16 ms (148 of them, median 18.6 ms), rendering took 74 % of
+  the time and layout 4 %; every binding and effect that ran in the whole
+  run took about 0.2 s of its 4.5 s of frame time -- under 5 %, so at best
+  that much would be won, before the bookkeeping that stays.
+
+So the work goes where the time is -- painting (cached path textures,
+transforms of static drawings, fewer layers) and layout -- and binding
+evaluation stays in Lua. Should a configuration's profile ever show
+bindings past a fifth of its frames, this is where to look again.
 
 ### What wakes a shell
 
@@ -1764,3 +2213,1885 @@ swapchain as before.
 - Check before you run: `morf check shell.lua` lays out every surface --
   hidden ones too -- and names what failed and where; `morf test` drives
   it with clicks, keys and virtual time ([TESTING.md](TESTING.md)).
+
+## 9. Widgets
+
+A widget is three things kept apart: an **archetype**, the behaviour with no
+look (a Rust state machine in `crates/morf-kit`: what a press, a drag or a
+key does to its state); a **skin**, the look with no behaviour (Lua, per
+theme: slot trees drawn from the archetype's live state); and the
+**settings** that make a widget what it is (a switch is a checkable press,
+a seek bar a range whose value waits for the release). A theme is a set of
+skins and display functions; it contains no interaction code, so every
+theme's controls behave the same, take the same keys and tell a screen
+reader the same things.
+
+On top of the archetypes: **display widgets** take no input at all (text,
+status, readings, charts, structure -- a kit function each); **composites**
+combine archetypes into bigger controls (a combo box, a date picker, a file
+chooser) shared by every theme; **domain instruments** (aviation, HUD,
+audio, editors) are display widgets and composites for a field.
+
+### Making a control
+
+```lua
+local control = require("lib.kit.control")
+local node, t, ctl = control.make("Press", "push", {
+  label = "Apply", width = 96, height = 34,
+  on_clicked = function() apply() end,
+  enabled = function() return dirty:get() end,   -- a setting given as a binding follows it
+})
+```
+
+`control.make(archetype, widget, spec, extra)` makes the archetype, builds
+the node (a `MouseArea` whose pointer, focus, keys and wheel go to the
+archetype), and asks the current skin for the widget's slots. The
+archetype's answers update `t`, a reactive table of its state the skin
+reads (`t.hovered`, `t.down`, `t.checked`, `t.visual_position`, ...), and
+raise the spec's handlers (`on_clicked`, `on_toggled`, `on_moved`, ...).
+Spec fields that are the archetype's settings (`checked`, `value`, `from`,
+`mode`, ...) configure it, as bindings when given as functions; node
+fields (`id`, `x`, `anchors`, `visible`, ...) go to the node. `extra` takes
+the node's own `props`, its `children`, `builders` (slots that build parts
+rather than nodes: a list's row delegate) and a `voice` (the node a screen
+reader knows the control by). `ctl.send(event, ...)` drives the archetype
+directly. Most code uses the constructors in `lib.kit.widgets`
+(`widgets.switch { ... }`, `widgets.slider { ... }`, `widgets.area { ... }`
+for a layout's own pressable area) and the glue modules named under each
+archetype below.
+
+### Skins and slots
+
+A skin is a function of the live state returning slot trees, or a table of
+one such function per slot; a slot given as a function is built lazily, the
+first time the control is hovered, pressed or focused.
+
+```lua
+local skin = require("lib.kit.skin")
+skin.define("plain", { skins = {
+  Press = function(t, spec)
+    return {
+      background = ui.Rect { anchors = { fill = true }, radius = 6,
+        color = function() return t.down and "#2a2a2a" or (t.hovered and "#3a3a3a" or "#333333") end },
+      label = ui.Text { anchors = { center_in = true }, text = spec.label or "" },
+      indicator = function() return focus_ring(t) end,   -- built when first focused
+    }
+  end,
+} })
+skin.use("plain")      -- every control rebuilds its slots in it
+```
+
+Every archetype has `background` (beneath the control's own children) and
+`content`; each adds its own (a range's `track`, `fill`, `handle`; a
+selection's `item` and `place` builders; a navigation's `transition`).
+`skin.use(name)` switches every live control at once, keeping its state.
+A theme's kit carries its skins as `kit.skins.<Archetype>`.
+
+A widget may have a look of its own: `kit.skins.<widget>` (`skins.knob`,
+`skins.data_table`) is asked before its archetype's, slot by slot, so it
+fills what it draws differently and the archetype's skin the rest. The
+three looks shipped (the default kit, caelestia's Material and Tsugumori)
+keep them in `widgets/<archetype>.lua` beside their `skins.lua`, one file
+per archetype, each `function(S, theme, M) S.<widget> = ... end`. Every
+widget of every archetype is drawn by the widget galleries
+(`library/tests/default_widgets_gallery_spec.lua`,
+`examples/shells/caelestia/tests/kit_widgets_gallery_spec.lua`) from its
+sample in `library/lib/kit/samples/<archetype>.lua`; `KIT_WIDGETS="Canvas
+Dock"` draws only those archetypes.
+
+### The contract
+
+`library/lib/kit/contract.lua` is the contract every theme's kit is held
+to: the base functions (`kit.text`, `kit.icon`, `kit.card`, ...), every
+archetype (roles, state, signals, keys, slots, widgets), every display
+widget, every composite and domain instrument, each with the stage it
+arrived at, and the owner of every row of the element catalogue
+(`library/lib/kit/catalogue.lua`). `morf check --kit` checks a
+configuration's `require("kit")` against what is due (`morf check --kit
+default` checks the default look); the galleries
+(`examples/shells/caelestia/tests/kit_gallery_spec.lua`,
+`composites_gallery_spec.lua`, `library/tests/default_kit_spec.lua`) draw
+every widget in every theme and fail on anything that spills its cell or
+logs an error.
+
+### Focus, keys, popups, lists, channels
+
+The pieces controls stand on are documented where the engine provides
+them: focus policies, Tab, focus scopes and the ring under *Focus*;
+shortcuts under *Shortcuts*; long press, double click, swipes and pinches
+under *Gestures*; popups and the overlay layer under *Overlays*;
+recycled lists under *4. Lists*; data channels and plot kinds under *Data
+channels*; screen readers under *Accessibility*; mirroring under *Right to
+left*; windows under *Applications*; and the theme-free kit under *The
+default look* (all in chapter 6). Each archetype's default focus policy:
+a press and a disclosure by Tab, a range, plane, selection and collection
+strongly (click and Tab), a text field through its input, a popup, scroll,
+navigation and shell not at all.
+
+#### Control (the base)
+
+Every archetype is a `Control`: state `hovered`, `down`, `focused`,
+`visual_focus` (a keyboard gave it focus: the ring shows), `enabled`,
+`mirrored` (right to left: keys and visual positions turn round),
+`highlighted`; geometry `padding` and `insets` (and per side), the implicit
+size `max(background + insets, content + padding)`; slots `background` and
+`content`; `focus_policy`; and `accessible_role`, `accessible_name`,
+`accessible_description` with states from its live state.
+
+### The archetypes
+
+Each archetype below: its accessible roles, its state (fields of `t`), the signals
+it raises, the keys it answers, the slots its skin fills and the widgets that
+are it -- then how its glue is used.
+
+#### Press
+
+| | |
+|---|---|
+| roles | button, toggle_button, check_box, radio_button, switch, link, menu_item |
+| state | checkable, checked, tristate, partial, auto_repeat, delay, interval, pressed_at, group |
+| signals | on_clicked, on_pressed, on_released, on_toggled, on_long_pressed, on_double_clicked |
+| keys | space, return, arrows_in_group |
+| slots | background, content, indicator, icon, label, badge |
+| widgets | push, suggested, destructive, flat, raised, outlined, text, tonal, elevated, pill, circular, icon, link, close, copy, loading, toggle, toggle_group_member, switch, checkbox, radio, chip_assist, chip_filter, chip_input, chip_suggestion, tag, tile, card_action, row_activation, menu_item, check_menu_item, radio_menu_item, keycap, fab, extended_fab, speed_dial_item, segment, rating_star, help, disclosure_button, repeat_button, back, forward, hold_button |
+| arrived | stage 6 |
+
+Every widget the Press, Range, Plane and Selection archetypes make
+(contract.lua), as a
+constructor: `widgets.switch { checked = on, on_toggled = set }`,
+`widgets.slider { value = level, on_moved = set_level }`. A widget is its
+archetype with the settings that make it what it is -- a switch is a
+checkable press, a radio button a press in an exclusive group, a seek
+bar a range whose value waits for the release -- and the theme's skin
+for it (lib.kit.skin; the skin is told which widget through
+`spec.widget`).
+
+#### Range
+
+| | |
+|---|---|
+| roles | slider, spin_button, scroll_bar, progress |
+| state | from, to, value, step, page_step, snap, live, orientation, inverted, logarithmic, position, visual_position, wrap, range, first, second |
+| signals | on_moved, on_value_changed, increase, decrease |
+| keys | arrows, page_up, page_down, home, end |
+| slots | background, content, track, fill, handle, second_handle, ticks, value_label, increase, decrease |
+| widgets | slider, vertical_slider, range_slider, discrete_slider, log_slider, angle_slider, knob, bipolar_knob, stepped_knob, fader, spin_button, scrubber, scroll_bar, seek_bar, volume, brightness, zoom, rating, level_control, osd_level |
+| arrived | stage 6 |
+
+Made through `lib.kit.widgets` like a press: `widgets.slider { ... }`.
+
+#### Plane
+
+| | |
+|---|---|
+| roles | slider |
+| state | x_from, x_to, y_from, y_to, x, y, step_x, step_y, visual_x, visual_y, constraint |
+| signals | on_moved, on_value_changed |
+| keys | arrows, page_up, page_down |
+| slots | background, content, field, handle, crosshair |
+| widgets | colour_plane, hue_wheel, xy_pad, pan_pad, envelope_point, joystick, minimap_viewport, crop_handle |
+| arrived | stage 7 |
+
+Made through `lib.kit.widgets` like a press: `widgets.colour_plane { ... }`.
+
+#### Selection
+
+| | |
+|---|---|
+| roles | tab_list, list_box, radio_group, tree, grid |
+| state | model, current, selected, mode, wrap, orientation, follow_focus |
+| signals | on_current_changed, on_selection_changed, on_activated |
+| keys | arrows, home, end, typeahead, space_toggles, ctrl_a |
+| slots | background, content, item, indicator, separator |
+| widgets | tabs, segmented, view_switcher, inline_view_switcher, radio_group, toggle_group, list_selection, grid_selection, carousel_dots, pagination, stepper_header, sidebar_list, breadcrumbs, day_grid, swatch_grid, emoji_grid, icon_chooser, transfer_side, rating_items, radial_menu, pie_menu, tumbler |
+| arrived | stage 7 |
+
+Selections (the Selection archetype): tabs, segmented choices, list and
+grid selection, swatch grids. The archetype keeps the current item and
+the selected set and answers the keys; this lays out an item per entry
+of `spec.items` with the skin's `item` delegate and keeps the current
+item's box in the live state, so a skin's `indicator` can travel to it.
+
+```lua
+selection.make("tabs", {
+  items = { "Overview", "Media", "Weather" },     -- or a function
+  current = function() return tab:get() end,
+  on_current_changed = function(i) tab:set(i) end,
+  orientation = "horizontal",                     -- vertical, grid
+  columns = 4, gap = 0, item_width = 80, item_height = 36,
+})
+
+```
+A skin's `item(index, value, s)` builds one entry; `s` reads its state:
+`s.current()`, `s.selected()`, `s.hovered()`, `s.down()`, and `s.area`
+(the entry's MouseArea). A skin may also give `place(index, value)`, the
+entry area's own properties (`x`, `width`, `layout`, ...), and
+`container()`, the node the entries go in (a Row, a Column or a Grid by
+`orientation` otherwise). `spec.item_id(index, value)` names each
+entry's area; `spec.delegate(index, value, s)`, when given, draws the
+entries instead of the skin (a layout's own swatches); and
+`spec.press_activates` makes one press activate an entry, not only
+choose it. The live state adds `current_x`, `current_y`,
+`current_width`, `current_height`: the current entry's box within the
+control.
+
+`geometry` lays the entries out other than in a row:
+
+  "radial" (a radial menu, a pie menu): item 1 at twelve o'clock, the
+  rest clockwise on a circle of `radius` (half way between the hub and
+  the rim) in a `size` px square. The pointer over it points from the
+  centre (the archetype's "point": the entry in that sector is current,
+  none within `dead_radius` of the centre) and a release past the dead
+  radius activates -- a marking menu's flick. The live state adds
+  `outer`, `inner` and `radius` for the skin's sectors.
+
+  "tumbler" (a spinning wheel picker): the entries on a drum, `rows`
+  (5) tall. A vertical drag turns it continuously and a release
+  snaps it to the nearest entry, with a little of the flick's speed
+  carried on; a press on an entry off the centre turns it there; the
+  wheel and the arrows step. Entries away from the centre fold over the
+  drum (their area's `translate_y`, `scale_y`, `opacity`). The live
+  state adds `rows` (visible) and `row` (an entry's height).
+
+`selection.pie(spec)` makes a pie menu that opens over everything else:
+see there.
+
+#### Popup
+
+| | |
+|---|---|
+| roles | dialog, alert_dialog, menu, tooltip, list_box_popup |
+| state | open, modal, dim, close_policy, placement, anchor, side, align, flip, shift, focus_on_open, restore_focus |
+| signals | on_opened, on_closed, on_about_to_close |
+| keys | escape, tab_trap |
+| slots | background, content, dim, enter, exit |
+| widgets | menu, context_menu, menu_bar_menu, submenu, popover, tooltip, rich_tooltip, hover_card, dropdown_list, autocomplete_list, command_palette, dialog, alert_dialog, message_dialog, preferences_dialog, about_dialog, shortcuts_dialog, bottom_sheet, side_sheet, drawer, toast, snackbar, banner, notification_popup, lightbox, tour_step |
+| arrived | stage 8 |
+
+Popups (the Popup archetype) on the engine's overlay layer: menus,
+tooltips, dialogs, toasts, popovers -- and a shell's drawers, tracked
+where they already are.
+
+```lua
+local menu = popup.make("menu", { items = {
+  { label = "Copy", icon = "content_copy", on_clicked = copy },
+  { label = "Wrap", checked = function() return wrap:get() end, on_toggled = set_wrap },
+} })
+menu.open(button)            -- beside its anchor; menu.close(), menu.toggle(button)
+
+popup.make("dialog", { title = "Discard?", body = "...", width = 360,
+  buttons = { { label = "Cancel" }, { label = "Discard", on_clicked = discard } } }).open()
+
+popup.toast { text = "Copied", timeout = 2500, root = node }
+popup.tooltip(target, "Mute")
+
+```
+A popup's own content is `spec.content` (a node), or what its widget
+builds from `items`, `title`, `body` and `buttons`; the theme's skin
+draws its `background`. `on_opened`, `on_closed(reason)` and
+`on_about_to_close(reason)` -- returning false keeps it open -- follow
+it. `popup.track(node, spec)` gives a node that stays where it is (a
+drawer) the same behaviour: Escape, a press outside, the stack.
+
+#### TextField
+
+| | |
+|---|---|
+| roles | text_field, password_text, text_area, search_field |
+| state | text, placeholder, echo, read_only, max_length, validator, acceptable, multiline, wrap, selected_text |
+| signals | on_edited, on_accepted, on_text_changed, on_invalid |
+| keys | editing, return_accepts, escape_reverts |
+| slots | background, content, field, leading, trailing, placeholder, counter, error |
+| widgets | entry, password, search, text_area, url, email, numeric_entry, otp, tag_input, mentions, inline_rename, entry_row, filter_field, code_input, shortcut_recorder |
+| arrived | stage 9 |
+
+Text fields (the TextField archetype) around the engine's text input.
+
+```lua
+local node, input = text_field.make("entry", {
+  id = "search", width = 300, height = 40, placeholder = "Search",
+  on_accepted = run, validator = "number", clear = true,
+})
+
+```
+`node` is the control, the one to place; `input` the `ui.TextInput`
+inside it, which keeps the spec's `id` and every text input property
+(`placeholder`, `font_size`, `on_text_changed`, ...). The archetype
+validates (`validator`, `minimum`, `maximum`, `required`,
+`max_length`), reverts on Escape when asked (`revert_on_escape`), and
+reveals a password; the skin draws the field around the input
+(`background`, `placeholder`, `trailing` -- a clear or reveal press --,
+`counter`, `error`). `inset` (px, or `{ l, t, r, b }`) keeps the input
+clear of the skin's edges. `on_edited(text)`, `on_accepted(text)` --
+only when acceptable -- and `on_invalid(text)` follow it.
+
+#### Scroll
+
+| | |
+|---|---|
+| roles | scroll_pane |
+| state | content_x, content_y, content_width, content_height, scroll_policy, snap, at_start, at_end |
+| signals | on_scrolled, on_reached_start, on_reached_end |
+| keys | arrows, page_up, page_down, home, end, space |
+| slots | background, content, scroll_bar_x, scroll_bar_y, edge_fade, overscroll |
+| widgets | scroll_view, scroll_area, pager, shelf, infinite_scroll |
+| arrived | stage 9 |
+
+Scrolled views (the Scroll archetype) around the engine's flickable.
+
+```lua
+local node, flick = scroll.make("scroll_view", {
+  id = "page", width = 400, height = 300, clip = true,
+  ui.Column { ... },                        -- the content
+})
+
+```
+`node` is the control, the one to place -- it takes no pointer input of
+its own --; `flick` the `ui.Flickable`
+inside it, which keeps the spec's `id` and flickable properties
+(`content_y`, `interactive`, ...). The archetype follows where it has
+scrolled (`t.position_y`, `t.size_y`, `t.at_end`, ...), answers the
+arrows, Page keys, Home, End and Space, and snaps (`snap = "items" |
+"pages"`); the skin draws `scroll_bar_x`/`scroll_bar_y` from that,
+`edge_fade` and `overscroll`. `scroll_policy_x`/`_y` say when a bar
+shows. `on_scrolled(x, y)`, `on_reached_start`, `on_reached_end` follow
+it.
+
+A snapping view settles once the scrolling pauses: the archetype picks
+the item or page, and the view glides there. A `pager` scrolls sideways
+a page at a time (its skin draws the page dots), a `shelf` sideways an
+item at a time (`item_size`; its skin draws edge fades and arrows), and
+the wheel turns either sideways. An `infinite_scroll` that reaches its
+end sets `t.loading` and calls `on_load_more(done)`; `done()` clears it
+(the skin shows a loading row meanwhile). A skin moves the view with
+`spec.glide(x, y)`, which eases there.
+
+#### Collection
+
+| | |
+|---|---|
+| roles | list, grid, table, tree, tree_grid |
+| state | model, delegate, layout, columns, expanded, section, item_size |
+| signals | on_row_activated, on_sort_changed, on_expanded_changed, on_end_reached |
+| keys | selection_keys, left_right_tree |
+| slots | background, content, row, header, section_header, footer, empty, loading, placeholder_row |
+| widgets | list, boxed_list, list_box, virtual_list, grid_view, flow_box, data_table, tree_view, tree_table, file_list, timeline, feed, chat_log, kanban_column, transfer_list |
+| arrived | stage 10 |
+
+Collections (the Collection archetype): lists, grids, tables and trees
+over a model, through the engine's list view -- only the rows in sight
+are built, and a row scrolled out is rebound to the row scrolled in.
+
+```lua
+collection.make("list", {
+  rows = model,                 -- a morf.list_model (or a plain array)
+  width = 300, height = 400, row_height = 36,
+  size_field = "height",        -- rows that say how tall they are
+  kind_field = "kind",          -- delegates only reused within a kind
+  on_activated = function(i) end, on_end_reached = load_more,
+})
+collection.make("table", { rows = files, columns = {
+  { key = "name", title = "Name", width = 220, sortable = true },
+  { key = "size", title = "Size", width = 90, sortable = true } },
+  on_sort_changed = function(key, ascending) end })
+collection.make("tree", { tree = { { key = "a", label = "A", children = { ... } } } })
+
+```
+The skin draws each row with its `row(row, s)` builder -- returning a node
+and an updater `function(row)` that rebinds it -- where `s` reads the
+row's state as it is now bound: `s.index()`, `s.current()`,
+`s.selected()`, `s.hovered()`, `s.down()`, and in a tree `s.depth()`,
+`s.expandable()`, `s.expanded()`; a table's cells come from the skin's
+`cell(row, column, s)` and its header from `header(column, t)`. A spec's
+own `delegate(row, s)` (returning node and updater too) draws the rows
+instead.
+
+#### Disclosure
+
+| | |
+|---|---|
+| roles | button_expanded, group |
+| state | expanded, group, animated |
+| signals | on_expanded, on_collapsed |
+| keys | space, return, left_right_tree |
+| slots | background, content, header, indicator, content |
+| widgets | expander, expander_row, accordion, collapsible_header, collapsible_section, details, tree_node, show_more, collapsible_card, fold_out |
+| arrived | stage 11 |
+
+Disclosures (the Disclosure archetype): expanders, accordions,
+collapsible sections, "show more".
+
+```lua
+local node, t = disclosure.make("expander", {
+  title = "Advanced", width = 320, header_height = 40,
+  content = ui.Column { ... },         -- shown while expanded
+  expanded = false, group = "settings", -- one open at a time
+  on_toggled = function(open) end,
+})
+
+```
+The header is the control: a press, Space or Return toggles, Left and
+Right close and open. The skin draws `header` (the row's look, given
+`spec.title`), `indicator` (the chevron) and `background`; the content
+is the spec's, clipped under the header, the whole growing and shrinking
+with it.
+
+#### Drag
+
+| | |
+|---|---|
+| roles | splitter, grip, draggable |
+| state | axis, bounds, threshold, active, delta, target, mode |
+| modes | move, resize, split, reorder, swipe, transfer |
+| signals | on_drag_started, on_dragged, on_dropped, on_swiped |
+| keys | arrows, alt_arrows_reorder |
+| slots | background, content, handle, ghost, drop_indicator |
+| widgets | split_pane, resizable_panel, resize_grip, reorderable_rows, reorderable_tabs, sortable_grid, swipe_dismiss, swipe_actions, pull_to_refresh, sheet_handle, window_move, drag_source, drop_zone, slide_to_confirm |
+| arrived | stage 11 |
+
+Drags (the Drag archetype): split panes, resize grips, reorderable rows,
+swipe-to-dismiss, window move.
+
+```lua
+drag.make("grip", { mode = "resize", axis = "x", minimum = 200, maximum = 600,
+  value = function() return width:get() end, on_moved = function(w) width:set(w) end,
+  width = 8, height = 300 })
+drag.split { first = list, second = detail, width = 800, height = 500,
+  ratio = 0.35, minimum = 0.2, maximum = 0.8 }
+drag.swipe(card, { on_swiped = function(direction) dismiss() end })  -- on a node of the layout's
+
+```
+The control is the handle; the skin draws `handle`, `ghost` and
+`drop_indicator`. `drag.swipe` gives a layout's own node the swipe: a
+headless Drag it feeds the pointer to, which moves the node with the
+finger, lets it go past its distance or speed, and springs it back
+otherwise.
+
+#### Navigation
+
+| | |
+|---|---|
+| roles | tab_panel, group |
+| state | pages, current, mode, can_go_back, history |
+| signals | on_pushed, on_popped, on_current_changed |
+| keys | alt_left, back, ctrl_tab, arrows_carousel |
+| slots | background, content, page, transition, back, indicator |
+| widgets | navigation_view, view_stack, tab_pages, carousel, onboarding, wizard, settings_subpages, master_detail |
+| arrived | stage 11 |
+
+Navigations (the Navigation archetype): a navigation view's push and
+pop, a view stack, a carousel, a wizard.
+
+```lua
+local node, nav = navigation.make("navigation_view", {
+  width = 400, height = 600, current = "settings",
+  pages = { settings = build_settings, sound = build_sound },   -- builders or nodes
+})
+nav.push("sound") ; nav.pop() ; nav.go("settings")
+
+```
+Alt+Left and a mouse's back button pop, wherever focus is inside it (its
+shortcuts); Ctrl+Tab cycles a switcher; a carousel's arrows walk it. A
+page is built when first shown and kept -- its scroll and focus with it
+-- while it is in the stack. The skin's `transition(from, to, direction)`
+moves the pages; without one the new page slides in from its side.
+
+#### Shell
+
+| | |
+|---|---|
+| roles | application, navigation, main, complementary |
+| state | breakpoints, collapsed, layout, sidebar_width, content_width, toolbar_style |
+| signals | on_breakpoint, on_collapsed |
+| keys | f9, ctrl_b, f6 |
+| slots | background, content, header_bar, sidebar, content, inspector, bottom_bar, toolbar_top, toolbar_bottom, banner, toasts |
+| widgets | window_layout, header_bar, toolbar_view, split_view, overlay_split_view, navigation_split_view, multi_pane, breakpoint_bin, clamp, bottom_bar |
+| arrived | stage 16 |
+
+Application shells (the Shell archetype): a window's header bar, sidebar,
+content, inspector, bottom bar, banner and toasts, arranged for the
+window's width and rearranged as it narrows.
+
+```lua
+local node, app = shell.make("window_layout", {
+  width = function() return win.width end, height = function() return win.height end,
+  header_bar = header, sidebar = list, content = page, inspector = details,
+  bottom_bar = tabs, banner = notice, toasts = stack,
+  sidebar_width = 280, inspector_width = 300, breakpoints = { 600, 900 },
+  on_breakpoint = function(layout) end,
+})
+app.toggle_sidebar()
+
+```
+Wide, the sidebar stands beside the content and the inspector beside it
+on the other side; under the first breakpoint the sidebar becomes a
+drawer over the content with a scrim (Escape or a press outside shuts
+it) and the bottom bar takes its place; under the last the inspector
+hides. F9 and Ctrl+B toggle the sidebar, F6 and Shift+F6 move between
+the regions. The regions are landmarks: navigation, main and
+complementary to a screen reader. The skin draws `background` and may
+decorate `sidebar`'s edge; the parts are the configuration's.
+
+#### Canvas
+
+| | |
+|---|---|
+| roles | group, image |
+| state | view_x, view_y, zoom, tool, selection, hovered, pointer_x, pointer_y, gesture, band, draft, connect_from, connect_to |
+| tools | select, pan, point, line, rect, ellipse, polyline, polygon, freehand, connect, brush, zoom |
+| signals | on_view_changed, on_selection_changed, on_moved, on_drawn, on_connected, on_activated, on_context, on_brushed, on_deleted |
+| keys | arrows_nudge, plus_minus_zoom, zero_reset, home_fit, ctrl_a, delete, escape, tab_items |
+| slots | background, content, grid, item, wires, selection, draft, band, crosshair, overlay |
+| widgets | zoomable_canvas, node_graph, whiteboard, diagram, map_view, image_viewer, chart_inspector, timeline_track, drawing_board |
+| arrived | stage 21 |
+
+Canvases (the Canvas archetype): a world a viewport looks into, panned
+and zoomed, holding items that are picked, selected, moved, connected
+and drawn. A node graph, a whiteboard, a map, an image viewer, a
+zoomable chart and a timeline are each one drawn differently.
+
+```lua
+local node, view = canvas.make("node_graph", {
+  width = 800, height = 600,
+  items = function() return graph.nodes end,   -- { id, x, y, w, h, shape?, ... }, world units
+  ports = function() return graph.ports end,   -- { id, item, x, y, kind = "in" | "out" }
+  wires = function() return graph.edges end,   -- { id, from = port id, to = port id }
+  delegate = function(item, s) return ui.Rect { anchors = { fill = true }, ... } end,
+  content = world_drawing,                     -- nodes in world units, under the items
+  overlay = zoom_buttons,                      -- nodes in screen units, over everything
+  tool = "select", grid = 16, snap = true,
+  on_moved = function(ids, dx, dy) end, on_connected = function(from, to) end,
+  on_drawn = function(tool, points) end, on_deleted = function(ids) end,
+  resizable = true, on_resized = function(id, x, y, w, h) end,  -- the one selected box, by its handles
+})
+view.fit()  view.zoom_by(2)  view.center_on(x, y)  view.select { "a" }
+view.to_screen(x, y)  view.to_world(x, y)
+
+```
+The world is one node under a transform, so panning and zooming move a
+drawing that stays drawn; the items are laid in it at their world
+boxes (a rect or an ellipse at x, y, w, h; a line, polygon or point at
+the origin, drawing its own points). A delegate draws an item -- it
+takes no pointer: the canvas picks -- and is told `s.item()`,
+`s.selected()`, `s.hovered()` and `s.zoom()`. Without a delegate the
+skin's `item` builder draws it from its fields (`fill`, `stroke`,
+`label`). Selected items move with a drag before the configuration
+hears `on_moved` and moves them.
+
+The skin draws `background` and `grid` under the world and `wires`
+(a builder: a wire between two world points), `selection` (a builder:
+the outline round a selected item, in screen units), `draft`, `band`,
+`crosshair` and `overlay` over it.
+
+#### Dock
+
+| | |
+|---|---|
+| roles | group, tab_list, tab, tab_panel, splitter |
+| state | focused, focused_panel, maximized, dragging, drop_target, drop_zone, panel_count |
+| signals | on_layout_changed, on_activated, on_closed, on_maximized, on_focus_changed |
+| keys | ctrl_page, ctrl_w, ctrl_shift_m, f6, escape |
+| slots | background, content, tab, stack, divider, floating, drop_indicator |
+| widgets | dock_area, shelf_dock, tabbed_container, document_tabs, tool_windows |
+| arrived | stage 21 |
+
+Docks (the Dock archetype): panels in a tree of splits and tab stacks
+that the user rearranges -- a tab dragged onto a stack's middle joins
+it, onto an edge splits beside it, out of the dock floats -- and
+maximises, closes, and walks by keys.
+
+```lua
+local node, dock = lib.kit.dock.make("dock_area", {
+  width = 1200, height = 800,
+  panels = {
+    files = { title = "Files", icon = "folder", content = file_tree },
+    editor = { title = "main.lua", content = editor, closable = false },
+    log = { title = "Log", content = function() return log_view() end },  -- built when first shown
+  },
+  layout = { orientation = "horizontal", ratios = { 0.2, 0.8 }, children = {
+    { panels = { "files" } },
+    { orientation = "vertical", ratios = { 0.7, 0.3 }, children = {
+      { panels = { "editor" } }, { panels = { "log" } } } } } },
+  on_layout_changed = function(tree, floating) save(tree, floating) end,
+  on_closed = function(panel) end,
+})
+dock.activate("log")  dock.close("log")  dock.maximize("editor")  dock.float("files", x, y, w, h)
+dock.dock("files", stack_id, "left")  dock.layout()
+
+```
+A panel's content is made once and kept: a stack shows its current and
+parks the rest, so a panel moved, hidden or floated keeps its state.
+The skin draws `tab` (a builder: one tab, told `s.title`, `s.icon`,
+`s.current()`, `s.focused()`, `s.hovered()`, `s.closable`, `s.close()`),
+`stack` (a builder: the frame round a stack, told `s.focused()`),
+`divider` (a builder: the handle between two parts, told
+`s.orientation`, `s.hovered()`, `s.dragging()`), `floating` (a builder:
+a floating panel's frame, told `s.title`; its top `tab_height` is the
+bar it is moved by) and `drop_indicator` (where a dragged tab would
+land: a node over the whole dock, shown while a tab is dragged over a
+stack, that puts its plate at `spec.drop_box()` -- x, y, w, h -- and
+may move it there as it likes).
+
+#### Transform
+
+| | |
+|---|---|
+| roles | group, dialog |
+| state | x, y, box_width, box_height, angle, active, handle, maximized, minimized |
+| signals | on_changed, on_committed, on_maximized, on_minimized |
+| keys | arrows_move, ctrl_arrows_resize, alt_arrows_turn, return_maximize, escape |
+| slots | background, content, frame, handle, rotate_handle, guide |
+| widgets | floating_panel, image_cropper, resize_box, pip_window, event_block |
+| arrived | stage 22 |
+
+Transforms (the Transform archetype): a box the user moves by its body,
+resizes from its edges and corners, and turns -- a floating panel, an
+image cropper's frame, the handles round a canvas item, a
+picture-in-picture window, a calendar's event.
+
+```lua
+local node, box = lib.kit.transform.make("floating_panel", {
+  title = "Inspector", x = 40, y = 40, width = 320, height = 240,
+  container = { 1280, 800 },          -- what it floats in (the area it fills, by default)
+  content = inspector,                -- or the spec's array part
+  on_committed = function(x, y, w, h, angle) save(x, y, w, h) end,
+  on_close = function() end,
+})
+box.maximize()  box.minimize()  box.restore()  box.set(x, y, w, h)  box.t.box_width
+
+```
+The node returned is the area the box floats in (filling its parent, or
+`container` px when given); the box itself (`box.node`) sits in it at
+`t.x`, `t.y`, `t.box_width` x `t.box_height` and carries the content.
+Its body moves it (a floating panel's only by its title bar, the top
+`title_height` px, whose double click maximizes); the skin's `handle`
+builder draws each grip (told `s.name` -- n, ne, e, se, s, sw, w, nw --
+`s.hovered()`, `s.held()`, `s.corner`), and a turned box (`rotatable`)
+has a knob `stalk` px over its top (the skin's `rotate_handle`). The
+skin's other slots: `background` (under the content: a window's ground,
+a cropper's dimming of what is outside), `frame` (over it: an outline,
+a title bar), `guide` (thirds while dragging) and `content`; a skin
+that sets `t.content_radius` has the content cut to those corners.
+
+Every press tells the archetype the box's centre on the surface, a drag
+the pointer on the surface (the box moves under it) and what is held:
+Shift keeps the aspect, Alt resizes about the centre. The arrows, Ctrl
+with them, Alt with them, Return and Escape are the archetype's.
+
+#### Sheet
+
+| | |
+|---|---|
+| roles | grid |
+| state | row, column, anchor_row, anchor_column, range, editing |
+| signals | on_current_changed, on_selection_changed, on_edit_started, on_edited, on_cleared, on_copy, on_cut, on_paste, on_toggled, on_activated |
+| keys | arrows, shift_arrows_range, ctrl_arrows_edge, home_end, page, tab, return, f2, type_to_edit, escape, delete, ctrl_a, ctrl_c_x_v |
+| slots | background, content, cell, header, range, cursor, editor |
+| widgets | spreadsheet, data_grid, step_sequencer, seat_map, cell_grid |
+| arrived | stage 22 |
+
+Sheets (the Sheet archetype): a grid the keyboard walks one cell at a
+time -- a spreadsheet, a data grid that edits in place, a step
+sequencer, a seat map (WAI-ARIA grid).
+
+```lua
+local node, sheet = lib.kit.sheet.make("spreadsheet", {
+  width = 600, height = 400, rows = 1000, columns = 8,
+  cell = function(row, col) return data[row][col] end,   -- a value or a string; may read signals
+  on_edited = function(row, col, text) data[row][col] = text end,
+  on_paste = function(row, col, grid) end,     -- grid: rows of strings, from TSV
+  on_cleared = function(r0, c0, r1, c1) end,
+})
+sheet.refresh()   -- cell() is read again
+
+```
+Spec: `rows`, `columns` (numbers or bindings), `cell(row, col)`,
+`headers` (column titles; A, B, C ... by default; false for none),
+`row_headers` (a list or `function(row)`; 1..n by default; false for
+none), `column_widths` (a list or one number), `row_height`,
+`header_height`, `row_header_width`, `disabled(row, col)` (a cell that
+takes no toggle or edit: a taken seat), `playhead` (a binding: the
+column a step sequencer plays), and the archetype's settings
+(`editable`, `toggle`, `read_only`, `page_rows`, `wrap`). Only the rows
+in sight are built; columns are not virtual. The header row and the row
+headers stay put while the cells scroll under them.
+
+The skin fills `cell` (a builder: `cell(s)` -> node, told `s.column`,
+`s.row()`, `s.value()`, `s.text()`, `s.disabled()`, `s.playing()`,
+`s.zebra`, `s.widget`), `header` (a builder: `header(h)` -> node, told
+`h.kind` -- "column", "row" or "corner" --, `h.index()`, `h.title()`,
+`h.current()`, `h.selected()`), `range` and `cursor` (nodes laid over
+the cells in their own coordinates: `spec.cursor_box(t)` and
+`spec.range_box(t)` give x, y, w, h, and `spec.cell_box(r0, c0, r1,
+c1)` any box; `spec.column_box(c)` a column's) and `editor` (a builder:
+`editor(props)` -> node, input -- a `ui.TextInput` made with `props`).
+
+#### Roving
+
+| | |
+|---|---|
+| roles | toolbar, menu_bar |
+| state | current, open |
+| signals | on_current_changed, on_open, on_close |
+| keys | arrows, home_end, menubar_down_opens, escape |
+| slots | background, content, indicator, separator |
+| widgets | toolbar_group, menubar, button_group, chip_row, icon_bar |
+| arrived | stage 22 |
+
+Rovings (the Roving archetype): one Tab stop for a group of controls the
+arrows move between -- a toolbar's buttons, a menu bar, a linked button
+group, a row of chips, a bar of icons (WAI-ARIA toolbar and menubar).
+
+```lua
+local node, group = roving.make("toolbar_group", {
+  id = "format", accessible_name = "Format",
+  items = {
+    { icon = "format_bold", tooltip = "Bold", checked = false, on_toggled = set_bold },
+    { icon = "format_italic", tooltip = "Italic", on_clicked = italic },
+    { separator = true },
+    some_kit_control,                          -- a node as it is
+    function(i) return build(i) end,           -- or a builder
+  },
+})
+group.focus() group.current() group.open(2) group.close()
+
+```
+A member is a node (a kit control), a builder, or a press described by
+`icon`, `label`, `tooltip`, `on_clicked`, `checked`/`on_toggled`,
+`enabled` (a value or a binding) and `id` -- drawn as the widget's
+member press (a toolbar's flat button, a button group's segment, a chip,
+an icon). `{ separator = true }` puts the skin's separator between two
+members. The current member alone is a Tab stop ("strong"), the others
+take a click ("click"), so Tab stops once and enters where it left; the
+arrows (Left/Right, Up/Down, both in a grid), Home and End move it,
+passing over disabled members.
+
+A menu bar's members are menus: `{ label = "File", items = { ... } }`,
+items as a popup menu's (lib.kit.popup). Down, Return and Space open the
+current one's menu; while one is open Left and Right open the next;
+Escape closes it and focus goes back to its title. F10, or Alt tapped
+alone, focuses the bar; Alt tapped again goes back to what had focus.
+
+Other fields: `orientation` ("horizontal", "vertical", "grid"),
+`columns`, `wrap`, `current`, `gap`, `padding`, `item_height`, `x`,
+`y`, `anchors`, `on_current_changed(i)`. The skin draws `background`,
+`indicator` (riding the current member's box: `t.cur_x`, `t.cur_y`,
+`t.cur_w`, `t.cur_h`; `t.within` while focus is inside, `t.keyboard`
+when a keyboard put it there, `t.open`) and `separator(vertical)`, a
+builder.
+
+#### Form
+
+| | |
+|---|---|
+| roles | form |
+| state | valid, dirty, pending, submitting, error_count, tried, first_invalid |
+| signals | on_submitted, on_invalid, on_reset, on_validity_changed, on_dirty_changed, on_show_error, on_hide_error |
+| keys | return_submits, ctrl_return |
+| slots | background, content, summary, message |
+| widgets | form, settings_form, login_form, inline_form |
+| arrived | stage 22 |
+
+Forms (the Form archetype): what a group of fields adds up to -- whether
+it can be sent, whether anything changed, what is wrong and where -- and
+the sending.
+
+```lua
+local node, form = form.make("login_form", {
+  width = 320, submit_label = "Sign in",
+  on_submit = function(values, done) sign_in(values.user, values.password, done) end,
+})
+form.field("user", { label = "Username", control = { widgets.entry { label = "Username", required = true } },
+  message = "Enter your username" })
+
+```
+`make` returns the control and a handle:
+
+* `field(name, opts)` adds a field. `opts.control` is what was made for
+  it: a node, or the returns of a kit control packed in a table
+  (`{ widgets.entry { ... } }`: the control, the input that holds focus,
+  its live state, its handle). `valid`, `dirty`, `message` and `value`
+  are bindings (a message may be a string); a kit text field gives its
+  own (`acceptable`, its text, and what it was made with) when they are
+  left out. `validate(value, done)` checks out of line -- a name still
+  free on the server --: the field is pending until `done(ok, message)`.
+  `label` names it in the summary; `place = false` leaves the node where
+  the configuration put it (bind `error(name)` to show its message);
+  `reset(value)` puts a control that is not a text field back.
+* `error(name)`: the field's message while the policy shows it, else "";
+  `shown(name)` whether it shows.
+* `submit()`, `reset()`, `remove(name)`, `focus(name)`, and `t`, the
+  form's live state (`valid`, `dirty`, `pending`, `submitting`, `tried`,
+  `error_count`, `first_invalid`).
+
+`spec.on_submit(values, done)` sends: `done(ok, message)` finishes it; a
+failure's message shows in the summary. `spec.flick`, the Flickable the
+form scrolls in, is scrolled to a field the form sends the keyboard to.
+
+The widget lays the fields out: `form` a column under its summary with
+the submit button at the end, `login_form` the same with a full-width
+button, `settings_form` a column that saves itself once what changed is
+valid (no button; its summary says unsaved, saving, saved), and
+`inline_form` one row, the field and its button. The skin draws the
+`summary` (errors, a failed send, the save status) and, through its
+`message` builder (name, message, shown, width, id), each field's message
+under it; the submit button is a kit Press drawn as `form_submit` (the
+theme's suggested action, its loading indicator while sending). What
+the policy shows, when the form may send and Return, are the
+archetype's.
+
+#### Overflow
+
+| | |
+|---|---|
+| roles | toolbar |
+| state | shown, hidden, overflowing, menu_open |
+| signals | on_changed |
+| keys | more_return_opens, menu_arrows |
+| slots | background, content, more, menu |
+| widgets | overflow_toolbar, overflow_tabs, overflow_breadcrumbs, chip_overflow, priority_nav |
+| arrived | stage 22 |
+
+Overflows (the Overflow archetype): items sharing a line keep the ones
+that fit and put the rest behind a "more" button (priority+) -- a
+toolbar's actions, a tab strip, a breadcrumb trail, a row of chips, a
+site's navigation.
+
+```lua
+local node, bar = overflow.make("overflow_toolbar", {
+  id = "actions", width = function() return room:get() end,
+  items = {
+    { icon = "content_cut", label = "Cut", on_activated = cut, priority = 2 },
+    { icon = "share", label = "Share", on_activated = share, pinned = true },
+    { node = some_control, label = "Zoom", on_activated = zoom },   -- a node as it is
+  },
+})
+bar.open_menu() bar.close_menu() bar.shown() bar.hidden()
+
+```
+Each item's laid-out width is measured and the archetype decides what
+fits the control's width: higher `priority` stays longer, `pinned`
+never goes, equals go from the end (breadcrumbs: from the middle, so the
+first and the last stay). Shown items sit in a row at running x and
+spring to their places as the line changes; hidden ones are hidden. The
+"more" button (the skin's `more(s)` look on a press; "…" between a
+breadcrumb trail's ends) opens a menu listing the hidden items, and a
+press there runs the item's `on_activated` (or `on_clicked`).
+
+A tab strip and a navigation take `current` (a value or a binding) and
+`on_current_changed(i)`: the current item is chosen and given the
+highest priority, so it never goes. Other fields: `mode` ("end",
+"start", "middle", "priority"), `gap`, `height`, `menu_width`, `x`,
+`y`, `anchors`, `on_changed(shown, hidden)`. Ids: `<id>-item-<n>` (or
+the item's own `id`), `<id>-more`, `<id>-menu`, `<id>-menu-<n>`.
+
+### Display widgets
+
+No input, a kit function each (`kit.<function>(spec)`), drawn by every theme;
+those a theme does not draw itself come from the shared composition in
+`library/lib/kit/display/` through its style (see the head of
+`library/lib/kit/display/init.lua`).
+
+| group | widget | function |
+|---|---|---|
+| charts | chart | `kit.chart` |
+| charts | spectrum | `kit.spectrum` |
+| charts | bars | `kit.bars` |
+| charts | stacked | `kit.stacked` |
+| charts | histogram | `kit.histogram` |
+| charts | scatter | `kit.scatter` |
+| charts | pie | `kit.pie` |
+| charts | donut | `kit.donut` |
+| charts | heatmap | `kit.heatmap` |
+| charts | calendar heatmap | `kit.calendar_heatmap` |
+| charts | waveform | `kit.waveform` |
+| charts | spectrogram | `kit.spectrogram` |
+| charts | candlestick | `kit.candlestick` |
+| charts | box plot | `kit.box_plot` |
+| charts | state timeline | `kit.state_timeline` |
+| charts | gantt | `kit.gantt` |
+| charts | treemap | `kit.treemap` |
+| charts | sunburst | `kit.sunburst` |
+| charts | sankey | `kit.sankey` |
+| charts | funnel | `kit.funnel` |
+| charts | flame graph | `kit.flame_graph` |
+| charts | stacked area | `kit.stacked_area` |
+| charts | radial bar | `kit.radial_bar` |
+| charts | status history | `kit.status_history` |
+| media | icon | `kit.icon` |
+| media | image | `kit.image` |
+| media | avatar | `kit.avatar` |
+| media | thumbnail | `kit.thumbnail` |
+| media | video | `kit.video` |
+| readings | gauge | `kit.gauge` |
+| readings | ring | `kit.ring` |
+| readings | mini ring | `kit.mini_ring` |
+| readings | bar | `kit.bar` |
+| readings | meter | `kit.meter` |
+| readings | fill | `kit.fill` |
+| readings | vmeter | `kit.vmeter` |
+| readings | dial | `kit.dial` |
+| readings | radar | `kit.radar` |
+| readings | cell | `kit.cell` |
+| readings | stat | `kit.stat` |
+| readings | triplet | `kit.triplet` |
+| readings | thermometer | `kit.thermometer` |
+| readings | tank | `kit.tank` |
+| readings | led bar | `kit.led_bar` |
+| readings | seven segment | `kit.seven_segment` |
+| readings | vu meter | `kit.vu_meter` |
+| readings | peak meter | `kit.peak_meter` |
+| readings | compass | `kit.compass` |
+| readings | sparkline | `kit.sparkline` |
+| readings | segmented meter | `kit.segmented_meter` |
+| status | emblem | `kit.emblem` |
+| status | status line | `kit.status_line` |
+| status | status | `kit.status` |
+| status | chip | `kit.chip` |
+| status | spinner | `kit.loading` |
+| status | badge | `kit.badge` |
+| status | dot | `kit.dot` |
+| status | progress bar | `kit.progress` |
+| status | progress ring | `kit.progress_ring` |
+| status | battery | `kit.battery` |
+| status | signal bars | `kit.signal_bars` |
+| status | empty state | `kit.empty_state` |
+| status | skeleton | `kit.skeleton` |
+| status | banner content | `kit.banner` |
+| status | status led | `kit.led` |
+| status | tag | `kit.tag` |
+| status | segmented progress | `kit.segmented_progress` |
+| status | semicircle progress | `kit.semicircle` |
+| status | status card | `kit.status_card` |
+| status | result page | `kit.result_page` |
+| status | toast content | `kit.toast` |
+| structure | card | `kit.card` |
+| structure | panel | `kit.panel` |
+| structure | header | `kit.header` |
+| structure | surface | `kit.surface` |
+| structure | separator | `kit.separator` |
+| structure | spacer | `kit.spacer` |
+| structure | group box | `kit.group_box` |
+| structure | labelled divider | `kit.labelled_divider` |
+| structure | frame | `kit.frame` |
+| structure | inset | `kit.inset` |
+| text | label | `kit.label` |
+| text | heading | `kit.heading` |
+| text | subtitle | `kit.subtitle` |
+| text | caption | `kit.caption` |
+| text | readout | `kit.readout` |
+| text | facts | `kit.facts` |
+| text | body | `kit.text` |
+| text | kbd | `kit.keycap` |
+| text | markup | `kit.markup` |
+| text | code block | `kit.code_block` |
+| text | quote | `kit.quote` |
+| text | mono | `kit.mono` |
+| text | link text | `kit.link_text` |
+
+### Domain instruments
+
+Over the display widgets and the archetypes, in `library/lib/kit/domain/`:
+
+- **audio** (stage 15): automation_lane, audio_visualiser, compressor_curve, eq_bars, lissajous, mixer_strip, piano_keyboard, parametric_eq, tuner
+- **aviation** (stage 14): airspeed_tape, altimeter_tape, attitude_indicator, heading_indicator, course_deviation, eicas_strip, flight_path_marker, heading_tape, hsi, nav_display, pitch_ladder, radar_altimeter, range_rings, bank_scale, rolling_digits, turn_coordinator, vertical_speed, weather_radar
+- **editor** (stage 15): envelope_editor, node_editor, piano_roll, step_sequencer
+- **hud** (stage 14): health_bar, charge_ring, pie_menu, cooldown_sweep, damage_trail_bar, minimap, compass_strip, hotbar, kill_feed, objective_tracker, resource_orb, stamina_ring, xp_bar, achievement_banner, crosshair, shield_bar, ammo_counter, damage_direction, damage_numbers, pip_container, nameplate, buff_row, combo_counter, offscreen_arrow, waypoint_marker, hit_marker, lap_tracker, racing_hud, boss_bar, interaction_prompt, inventory_grid, scoreboard, subtitle_box, tick_ruler, radar_sweep, segmented_arc_ring, target_lock, scan_sweep, waveform_rings, concentric_rings, decode_text, glitch_text, hex_grid, countdown_ring, dot_matrix_progress, biometric_scan, data_stream, striped_loading, signal_noise, crt_scanlines, crosshair_grid, callout, wireframe, telemetry_block, motion_tracker, proximity_ring, bracket_tag, orbit_diagram, starfield, assistant_orb
+
+### Composites
+
+Shared by every theme, built only from archetypes, in
+`library/lib/kit/composites/` (`require("lib.kit.composites").<name>(spec)`).
+
+#### about dialog
+
+Built from Popup, Navigation.
+
+An about dialog: an application's name, version, icon and links, with
+pages for its credits and its legal text (Popup, dialog + Navigation).
+
+```lua
+local node, about = composites.about_dialog {
+  id = "about", root = surface_root,
+  app_name = "Morf", version = "0.15", icon = "deployed_code",
+  comments = "A UI engine for shells and apps.",
+  links = { { label = "Website", url = "https://morf.dev" }, { label = "Report an issue", url = "..." } },
+  credits = { { title = "Developers", names = { "Ada", "Linus" } }, { title = "Design", names = { "Grace" } } },
+  copyright = "© 2026 The Morf authors", license = "MIT",
+  legal = "Permission is hereby granted, ...",
+  on_link = function(url) end,
+}
+about.open() about.close() about.show("credits") about.page()
+
+```
+The pages -- "about", "credits", "legal" -- are a Navigation switcher
+under tabs: a press on a tab, Ctrl+Tab / Ctrl+Shift+Tab, or
+`show(page)` changes the page, which slides in from its side. A page
+with nothing to say (no credits, no legal text or licence) is left
+out. Escape or the close button closes the dialog and focus goes back to
+what opened it. `inline = true` returns the dialog as a node to place.
+Other fields: `width` (420), `height` (460), `developers`, `designers`,
+`artists`, `translators` (lists of names, folded into the credits),
+`website` (a first link), `on_closed(reason)`. Ids: `<id>-tabs`,
+`<id>-tab-<n>`, `<id>-pages`, `<id>-link-<n>`, `<id>-close`,
+`<id>-popup`.
+
+#### calendar
+
+Built from Selection, Navigation.
+
+A calendar (composite: Selection days + Navigation months), inline.
+
+```lua
+local node, cal = composites.calendar {
+  id = "planner", width = 280,
+  value = function() return day:get() end,        -- "YYYY-MM-DD"
+  on_changed = function(date) day:set(date) end,  -- the current day moved
+  on_picked = function(date) end,                 -- a press or Return chose it
+  marked = function(date) return count(date) > 0 end,
+}
+cal.step(1) ; cal.show("2026-12") ; cal.month() --> "2026-10"
+
+```
+The days are a kit `day_grid` (a Selection: the arrows walk the days,
+typing a number jumps to it, Return picks), one per month, in a kit
+Navigation that slides one month in as the other goes. The arrows walk
+across a month's edge into the next; Page Up and Page Down turn the
+month (Shift: the year), keeping the day; Home and End go to the first
+and last of the month.
+
+`month` (a month index -- year * 12 + month - 1 -- or "YYYY-MM", or a
+binding to either) makes the shown month the configuration's: the
+arrows by the title then only ask, through `on_month(month, delta)`.
+`first_weekday` (1 Monday .. 7 Sunday), `cell_height`, `header_height`,
+`band` (a binding to `from, to` dates drawn as a run, for a range) and
+`press_activates` (a press picks, not only moves) are optional; the
+calendar is as tall as the month's weeks unless `fit = false`. Ids:
+`<id>-previous`, `<id>-next`, `<id>-month-title`, `<id>-day-<date>`.
+
+#### carousel
+
+Built from Navigation, Selection, Drag.
+
+A carousel (composite: Navigation carousel + Selection dots + Drag swipe).
+
+```lua
+local node, car = composites.carousel {
+  id = "tips", width = 520, height = 300,
+  slides = {
+    { title = "Welcome", subtitle = "Swipe to go on", icon = "waving_hand" },
+    { content = function(w, h) return my_node end },   -- a node or a builder
+  },
+  current = 1, wrap = false,
+  on_changed = function(index) end,
+}
+car.next() ; car.previous() ; car.go(3) ; car.current()
+
+```
+The slides are a kit `carousel` (a Navigation: each slide is built
+when first shown and slides in from its side; Left and Right walk it
+once it has focus). A swipe across the slide (a Drag swipe: the slide
+follows the finger and springs back when let go short) turns it; the
+arrows at its sides and the dots under it (a kit `carousel_dots`
+Selection) go too. Ids: `<id>-slides`, `<id>-slide-<i>`,
+`<id>-swipe`, `<id>-previous`, `<id>-next`, `<id>-dots`, `<id>-dot-<i>`.
+
+#### colour picker
+
+Built from Plane, Range, TextField, Selection, Popup.
+
+A colour picker (composite: Plane + Range hue + Range alpha + TextField
+hex + Selection swatches; in a Popup when asked).
+
+```lua
+local node, picker = composites.colour_picker {
+  id = "tint", width = 320, height = 300,
+  value = function() return tint:get() end,     -- any colour notation
+  on_changed = function(hex) tint:set(hex) end, -- "#rrggbb" ("#rrggbbaa" with alpha)
+  alpha = true, swatches = { "#e53935", ... },  -- or values / bindings
+}
+
+```
+A kit `colour_plane` holds saturation across and value up, under a hue
+slider and an alpha slider (kit Ranges: dragged, or stepped by the
+arrows once focused); a hex field (a kit entry: Return takes what is
+typed, Escape gives it back) beside a sample of the colour; and a
+`swatch_grid` (a kit Selection: the arrows walk it, a press or Return
+takes a swatch). Without `swatches` it offers twelve hues and greys.
+`trailing` (a node) goes at the end of the hex row; `popup = true`
+makes it a press showing the colour that opens it in a popover. Ids:
+`<id>-plane`, `<id>-hue`, `<id>-alpha`, `<id>-hex`, `<id>-swatches`,
+`<id>-swatch-<i>`, `<id>-field`, `<id>-popup`.
+
+#### combo box
+
+Built from Press, Popup, Selection.
+
+A combo box: a closed field showing the current item that opens a list
+of them (Press + Popup + Selection); with `search = true` the field is a
+text field that filters the list as it is typed into (TextField + Popup
++ Collection: autocomplete).
+
+```lua
+local node, combo = composites.combo_box {
+  id = "size", width = 220, items = { "Small", "Medium", "Large" },
+  current = 2,                      -- or a function (then follow it in on_changed)
+  on_changed = function(index, item) end,
+  variant = "dropdown",             -- "select": no ground, for a row's end
+  placeholder = "Choose…", search = false,
+}
+combo.open() combo.close() combo.current() combo.set(3)
+
+```
+Items are strings or tables (`label`, `icon`, ...). The field opens on a
+press, Space, Return and Alt+Down; the list's arrows move, Return or a
+press picks, Escape closes, and focus goes back to the field. Other
+fields: `x`, `y`, `height` (40), `icon` (leading), `item_height` (36),
+`visible_items` (8), `list_width`, `placement` ("bottom-start"),
+`header` (a node over the list), `item_id(index, item)` (each entry's
+id; `<id>-item-<index>` otherwise), `except` (nodes a press on which
+does not close the list), `text_size`, `accessible_name`,
+`on_opened`, `on_closed(reason)`.
+
+The field's look -- a theme's card under a menu row's wash, the label
+and a chevron -- is exported as `field(spec)` for the composites that
+open something the same way (picker, rows.combo_row).
+
+#### command palette
+
+Built from Popup, TextField, Collection.
+
+A command palette: a search field over a grouped list of commands that
+narrows as it is typed into, in a popup (Popup + TextField + Collection).
+
+```lua
+local node, palette = composites.command_palette {
+  id = "palette", root = surface_root,        -- Ctrl+K and Ctrl+Shift+P open it there
+  commands = {
+    { title = "Open file", subtitle = "Browse the disk", icon = "folder_open",
+      shortcut = "Ctrl+O", group = "File", action = open_file },
+    { title = "Toggle sidebar", icon = "side_navigation", shortcut = "Ctrl+B",
+      group = "View", keywords = "panel", action = toggle },
+  },
+  on_run = function(command, index) end,
+}
+palette.open() palette.close() palette.toggle() palette.is_open()
+
+```
+Commands are `{ title, subtitle, icon, shortcut, group, keywords, action,
+id }` (or a function returning the list). The query ranks them fuzzily
+by title and keywords; they stay under their groups' headers, the groups
+in the order of their best match. Up, Down, Page_Up and Page_Down walk
+the commands from the field, Return or a press runs one (closing the
+palette first), Escape closes it and focus goes back to what had it.
+`inline = true` returns the palette as a node to place, not a popup (a
+gallery, a launcher's page). Other fields: `width` (520), `list_height`
+(320), `placeholder`, `anchor` + `placement` (beside a node; centred on
+`root` otherwise), `shortcuts` (false: no Ctrl+K), `on_opened`,
+`on_closed(reason)`. The node returned is the inline palette, or the
+holder of the shortcuts (already on `root`), or nil. Ids: `<id>-search` (the field), `<id>-list`,
+`<id>-command-<n>` (a command by its index in `commands`), `<id>-popup`.
+
+#### dashboard
+
+Built from Collection, Drag.
+
+A dashboard (composite: a grid Collection of tiles + Drag to rearrange).
+
+```lua
+local node, dash = composites.dashboard {
+  id = "home", width = 520, height = 340,
+  tiles = {
+    { key = "cpu", title = "CPU", icon = "memory", value = function() return "12%" end, level = 0.12 },
+    { key = "net", title = "Network", icon = "wifi", value = "48 Mb/s",
+      build = function(w, h) return node end },        -- a tile's own body
+  },
+  size = "medium",                                       -- small, medium, large
+  on_reordered = function(keys) end, on_size = function(size) end,
+}
+dash.move("cpu", 3) ; dash.order() --> { "net", ... } ; dash.set_size("large")
+
+```
+The tiles are a kit `grid_view` (a Collection: the arrows walk the grid,
+typing jumps to a tile, Return or a double press calls `on_activated`).
+A tile dragged past its threshold (a Drag transfer) leaves a ghost
+under the pointer and lands where it is let go, the others making
+room; Alt and an arrow moves the current tile. The size switch (a kit
+`segmented` Selection) sets every tile's size: small tiles show the
+figure, larger ones its level as a bar too and a `build`er's body.
+Ids: `<id>-grid`, `<id>-tile-<key>`, `<id>-ghost`, `<id>-size`,
+`<id>-size-<size>`.
+
+#### date picker
+
+Built from Press, Popup, Selection, Navigation.
+
+A date picker and a date range picker (composite: Press + Popup +
+Selection day grid + Navigation months).
+
+```lua
+local node, picker = composites.date_picker {
+  id = "due", width = 200,
+  value = function() return due:get() end,       -- "YYYY-MM-DD" or ""
+  on_changed = function(date) due:set(date) end,
+}
+composites.date_picker { id = "trip", range = true,
+  from = "2026-10-03", to = "2026-10-09",
+  on_changed = function(from, to) end }
+
+```
+A press shows the date (`format`, strftime's, "%d %b %Y"; `placeholder`
+while there is none) and opens a popover of the month around it -- a
+kit calendar (lib.kit.composites.calendar): the arrows walk the days
+and across months, Page Up and Page Down turn the month, Home and End
+go to its ends, Return or a press picks and closes. A range picker
+takes two picks, the first its start, and draws the run between.
+`inline = true` gives the calendar alone, picking in place; `compact =
+true` makes the press an icon (beside a field the date is also typed
+in). Ids: `<id>-field` (the press), `<id>-popup`, and the calendar's
+under `<id>` (`<id>-day-<date>`, `<id>-next`, ...).
+
+#### emoji picker
+
+Built from TextField, Selection.
+
+An emoji picker (composite: TextField search + Selection category tabs +
+Selection grid of emoji).
+
+```lua
+local node, picker = composites.emoji_picker {
+  id = "emoji", width = 340, height = 320,
+  on_picked = function(emoji, name) insert(emoji) end,
+}
+
+```
+A search field (a kit `search` entry) over a row of categories (a kit
+segmented Selection, each its icon) and a kit `emoji_grid` (a
+Selection: the arrows walk it, a press or Return picks) in a scrolled
+view, with the emoji the grid is on named under it. Typing searches
+every category by name and keywords, fuzzily; Down from the search goes
+to the grid, Return there picks the first match. `emoji` replaces the
+built-in table (below): a list of `{ key, name, icon, list = { { emoji,
+name, keywords }, ... } }`. Ids: `<id>-search`, `<id>-categories`,
+`<id>-category-<key>`, `<id>-grid`, `<id>-emoji-<i>`, `<id>-name`.
+
+#### file chooser
+
+Built from Shell, Collection, Navigation, TextField.
+
+A file chooser (composite: Shell + Collection of files + Navigation of
+folders + TextField path and name).
+
+```lua
+local node, chooser = composites.file_chooser {
+  id = "open", width = 640, height = 420,       -- numbers or bindings
+  mode = "open",                                -- "save", "folder"; or a binding
+  root = "/",                                   -- nothing above it is shown
+  path = "~/Pictures",                          -- where it starts (root otherwise)
+  name = "capture.png",                         -- save: the name it suggests
+  filters = { { name = "Images", patterns = { "png", "jpg", "webp" } }, { name = "All files" } },
+  places = { { label = "Home", path = "~", icon = "home" }, ... },   -- the sidebar's
+  on_accepted = function(path, info) end,       -- info: { folder, name, is_dir }
+  on_cancelled = function() end,
+}
+chooser.navigate("/tmp") ; chooser.path() ; chooser.selected() ; chooser.accept()
+
+```
+The window is a kit Shell (`window_layout`): the places in its sidebar,
+which narrower than `collapse_below` becomes a drawer over the files
+(F9, Ctrl+B or the header's press open it; Escape or a press outside
+shuts it; F6 moves between the places and the files). Its header holds
+Back, Up, the breadcrumbs (a kit `breadcrumbs` Selection: a press goes
+to that folder) and the path (a kit `entry`: Return goes there). Each
+folder is a page of a kit `navigation_view` (a Navigation: going into
+a folder pushes it, Back and Alt+Left pop, a breadcrumb or a place goes
+straight there), and lists its entries in a kit `file_list` (a
+Collection: the arrows walk it, typing jumps, a press chooses, Return or
+a double press opens a folder or accepts a file; BackSpace goes up).
+Under the files: the name to save as (save), the filter (a combo box)
+and Cancel and the accepting press. Folders list first, then files the
+filter lets through (none in folder mode). The filesystem is read with
+`morf.fs.list`; a folder that cannot be read says why.
+Ids: `<id>-sidebar-toggle`, `<id>-back`, `<id>-up`, `<id>-crumbs`,
+`<id>-crumb-<i>`, `<id>-path`, `<id>-places`, `<id>-place-<i>`,
+`<id>-folders`, `<id>-files` (each folder's list), `<id>-entry-<name>`,
+`<id>-name`, `<id>-filter`, `<id>-status`, `<id>-cancel`, `<id>-accept`.
+
+#### font picker
+
+Built from TextField, Collection.
+
+A font picker (composite: TextField search + Collection + preview).
+
+```lua
+local node, picker = composites.font_picker {
+  id = "font", width = 360, height = 320,
+  fonts = { "Inter", "IBM Plex Mono", ... },   -- or a binding
+  value = function() return font:get() end,
+  on_picked = function(family) font:set(family) end,
+}
+
+```
+A search field (a kit `search` entry) over the families, a kit list (a
+Collection: the arrows walk it, typing jumps, Return or a press picks)
+whose rows set each family's name in the theme's face and a line in
+the family itself, and under them the family the list is on in a
+larger sample (`sample = false` leaves it out). The families are
+`fonts`, or `morf.text.families()` where the engine lists them. The
+search ranks them fuzzily (`filter = false` leaves the list as given
+and only calls `on_search(query)` -- a configuration that pages its own
+list); Return in the search picks the first. An empty name keeps a
+row's place, empty. `status` (a binding) is said while the list is
+empty. Ids: `<id>-search`, `<id>-list`, `<id>-option-<i>`,
+`<id>-preview-<i>`, `<id>-sample`.
+
+#### header bar
+
+Built from Shell, Press.
+
+A header bar (composite: Shell slot + Press): a window's title, its own
+controls at the start and end, and the window controls -- minimise,
+maximise, close -- for a window that decorates itself.
+
+```lua
+local node = composites.header_bar {
+  id = "header", width = function() return win.width end, window = win,
+  title = "Settings", subtitle = function() return page:get() end,
+  start = { toggle_button }, ["end"] = { menu_button },
+}
+
+```
+A press on the bar's empty part moves the window (`start_system_move`),
+a double press maximises or restores it. The controls are kit icon
+presses with names a screen reader reads. `controls = false` leaves the
+window controls out (a dialog, a phone). `flat = true` leaves out its
+ground and rule: a kit Shell's skin draws them under its header region.
+
+#### input group
+
+Built from TextField, Press.
+
+An input group: a text field with parts before and after it, on one
+ground -- "−" [value] "+", "https://" [address] "Go" (TextField + Press).
+
+```lua
+local node, input = composites.input_group {
+  id = "url", width = 360, height = 40,
+  prefix = "https://",                                  -- a label
+  suffix = { label = "Go", on_clicked = go },           -- a button
+  placeholder = "example.org", on_accepted = go,
+}
+
+```
+`prefix` and `suffix` are a part or a list of them: a string is a label,
+a table with `on_clicked` a button (`label` makes a filled button,
+`icon` alone an icon button; `id`, `width`, `auto_repeat`), a node is
+placed as it is. The field takes a text field's own fields (`widget`
+-- "entry", "search", "numeric_entry", ... --, `text`, `placeholder`,
+`validator`, `on_edited` (each edit; `on_text_changed` is heard twice), `on_accepted`, `on_escape`,
+`on_key_pressed`, ...); its id is the group's. `variant = "select"`
+leaves the ground off (a row draws its own). Returns the group's node,
+the text input, and the field's live state and control.
+
+`style(props)` gives a text input the theme's type and inks (its face
+read off a kit text, its colours the kit's inks), for the composites
+that make inputs of their own.
+
+#### kanban
+
+Built from Collection, Drag.
+
+A kanban board (composite: a Collection per column + Drag to move cards).
+
+```lua
+local node, board = composites.kanban {
+  id = "work", width = 520, height = 340,
+  columns = {
+    { key = "todo", title = "To do", cards = { { key = "a", title = "Write docs", tag = "docs" }, ... } },
+    { key = "doing", title = "Doing", cards = { ... } },
+    { key = "done", title = "Done", cards = {} },
+  },
+  on_moved = function(card_key, from_column, to_column, index) end,
+}
+board.move("a", "done") ; board.cards("todo") --> { "b", "c" }
+
+```
+Each column is a kit `kanban_column` (a Collection: the arrows walk its
+cards, typing jumps to one). A card is dragged (a Drag transfer: past
+its threshold a ghost of it follows the pointer) onto another column
+or another place in its own, the drop line showing where it lands. The
+keyboard moves the current card: Alt+Left and Alt+Right to the column
+beside, Alt+Up and Alt+Down within its column. Ids: `<id>-column-<key>`,
+`<id>-list-<key>`, `<id>-card-<card key>`, `<id>-ghost`, `<id>-count-<key>`.
+
+#### media controls
+
+Built from Press, Range.
+
+Media controls: transport presses, a seek bar between the position and
+the length, and a volume slider (Press + Range).
+
+```lua
+local node = composites.media_controls {
+  id = "player", width = 480,
+  playing = function() return state.playing end,
+  position = function() return state.position end,   -- seconds
+  length = function() return state.length end,       -- seconds
+  volume = function() return state.volume end,       -- 0..1
+  on_play_pause = toggle, on_previous = prev, on_next = next,
+  on_seek = function(seconds) end, on_volume = function(v) end,
+}
+
+```
+The presses are `<id>-previous`, `<id>-play`, `<id>-next`; the seek bar
+`<id>-seek` (it seeks on the release; the arrows step it) and the volume
+`<id>-volume`. Leave out `on_volume` (or `volume = false`) for no volume
+slider. `height` is the transport row's (48).
+
+#### menu button
+
+Built from Press, Popup.
+
+A menu button: a button that opens a menu under it (Press + Popup); with
+`split = true`, a split button -- a primary action, and an arrow beside
+it that opens the menu.
+
+```lua
+local node, menu = composites.menu_button {
+  id = "file", label = "File", icon = "description", width = 140,
+  items = {
+    { label = "New", icon = "add", on_clicked = new },
+    { label = "Wrap lines", checked = function() return wrap:get() end, on_toggled = set_wrap },
+  },
+  split = false, on_clicked = save,     -- the primary action, when split
+}
+menu.open() menu.close() menu.is_open()
+
+```
+The button (or the arrow) opens on a press, Space, Return and Alt+Down;
+the menu's own keys walk it, Return runs an item, Escape closes it and
+focus goes back to the button. Items are a popup menu's (lib.kit.popup:
+`label`, `icon`, `on_clicked`, `checked`/`on_toggled`, `group`, `id`;
+`<id>-item-<index>` otherwise). Other fields: `x`, `y`, `height` (36),
+`widget` (the button's Press widget, "pill"), `menu_width` (200),
+`placement` ("bottom-start"), `on_opened`, `on_closed(reason)`,
+`accessible_name`.
+
+#### notification stack
+
+Built from Popup, Collection, Drag.
+
+A notification stack: cards that come in at the top, newest first, stay
+for a while and go -- by a swipe, their close button or their timeout
+-- in a non-modal overlay at a corner of the surface (Popup + Collection
++ Drag, swipe). With `mode = "toast"` it is a toast overlay: slips at
+the bottom centre in the theme's toast look, a few seconds each.
+
+```lua
+local node, stack = composites.notification_stack {
+  id = "notes", root = surface_root, width = 360,
+  timeout = 6000,                        -- ms; 0 keeps them until dismissed
+  on_activated = function(note) end, on_dismissed = function(note, reason) end,
+}
+local key = stack.notify { title = "Mail", body = "Three new messages", icon = "mail",
+  app = "Mail", actions = { { label = "Open", on_clicked = open_mail } } }
+stack.dismiss(key) stack.clear() stack.count() stack.expand(key)
+
+```
+A note is `{ title, body, icon, app, time, urgency ("critical" stays),
+timeout, actions, key }`. Its card shows the icon, the app and the time,
+the title and the body's first line; the chevron expands it to the
+whole body and its actions. A press on the card is `on_activated`. A
+drag sideways past `swipe_distance` (80 px) or a fling dismisses it; let
+go short and it springs back. The overlay opens with the first note and
+closes with the last; it never takes focus or a press outside it.
+`inline = true` returns the stack as a node to place instead. Other
+fields: `max_visible` (4; toasts 3) -- how many cards the stack is tall
+-- `anchor` + `placement` (a corner node of the caller's; by default
+the root's top right, "bottom-end", or its bottom centre for toasts),
+`notifications` (shown at once). Ids: `<id>-list`, `<id>-note-<key>`,
+`<id>-close-<key>`, `<id>-expand-<key>`, `<id>-action-<key>-<n>`.
+
+#### picker
+
+Built from Press, Popup, Selection.
+
+A picker: choose one of a set from a popup grid or list (Press + Popup +
+Selection) -- an icon, a size, a mode.
+
+```lua
+local node, pick = composites.picker {
+  id = "icon", width = 200, columns = 5,
+  items = { { icon = "home", label = "Home" }, { icon = "star", label = "Star" }, ... },
+  current = 1, on_changed = function(index, item) end,
+  layout = "grid",                  -- or "list"
+}
+
+```
+The closed field shows the current item (its icon, or its label) and
+opens on a press, Space, Return and Alt+Down. In the popup the arrows
+move (across and down a grid), Return or a press picks, Escape closes,
+and focus goes back to the field. Items with an icon are drawn as that
+icon; others by the selection's skin. Other fields: `x`, `y`, `height`
+(40), `cell` (44, a grid cell's side), `item_height` (36, a list's
+rows), `popup_width`, `placement`, `placeholder`, `item_id(index,
+item)` (`<id>-item-<index>` otherwise), `accessible_name`.
+
+#### rows
+
+Built from Press, Range, TextField, Disclosure; variants: action_row, switch_row, check_row, combo_row, entry_row, spin_row, expander_row, button_row, property_row, preferences_group, preferences_page.
+
+Preference rows (a row frame with a Press, Range, TextField or
+Disclosure in it), the boxed group they stand in, and the scrolled page
+of groups.
+
+```lua
+local rows = require("lib.kit.composites.rows")
+rows.preferences_page { width = 480, height = 400, groups = {
+  { title = "Display", description = "How it looks", rows = {
+    { kind = "switch_row", title = "Dark mode", active = dark, on_toggled = set_dark },
+    { kind = "combo_row", title = "Scale", items = { "100%", "125%" }, current = 1, on_changed = set_scale },
+    { kind = "spin_row", title = "Font size", value = 11, from = 6, to = 48, on_changed = set_size },
+  } },
+} }
+rows.make { kind = "action_row", title = "About", on_activated = about }
+
+```
+Every row takes `id`, `width` (360), `height`, `title`, `subtitle`,
+`icon` (leading) and returns its node and a handle. The kinds:
+
+| row | what is in it |
+|---|---|
+| action_row | `on_activated` makes the row a press (a chevron when `chevron ~= false`); `suffix`, a node at its end |
+| switch_row | a switch: `active` (a value or fn), `on_toggled(on)`; a press on the row toggles it too |
+| check_row | a checkbox before the title: `active`, `on_toggled(on)` |
+| combo_row | a combo box at its end: `items`, `current`, `on_changed(index, item)` |
+| entry_row | the title over a text field: `text`, `placeholder`, `on_changed(text)`, `on_accepted(text)` |
+| spin_row | − value +: `value`, `from`, `to`, `step`, `digits`, `on_changed(value)`; arrows step it |
+| expander_row | a disclosure: `rows` (nodes or row specs) shown while expanded, `expanded` |
+| button_row | a centred press: `on_activated` |
+| property_row | a title over a read-only value: `value` (a value or fn) |
+
+`preferences_group { title, description, rows, width }` boxes rows (nodes
+or specs with `kind`) on the theme's card with separators between;
+`preferences_page { groups, width, height, gap }` scrolls groups (nodes
+or group specs). `make(spec)` builds `spec.kind` (a row, a group or a
+page).
+
+#### search bar
+
+Built from TextField, Disclosure.
+
+A search bar: a search field that slides into view on Ctrl+F (or its
+toggle) and away on Escape (TextField + Disclosure).
+
+```lua
+local node, bar = composites.search_bar {
+  id = "find", width = 480, placeholder = "Search",
+  on_search = function(text) end,           -- as it is typed
+  on_accepted = function(text) end,         -- Return
+  revealed = false, toggle = true,          -- a search button beside a title
+  title = "Files",                          -- the strip the toggle sits in
+}
+bar.reveal() bar.hide() bar.revealed()
+
+```
+Ctrl+F reveals it and puts the keys in it (from anywhere on the surface
+unless `scope = "local"`, when only from inside it); Escape clears it,
+hides it and gives focus back to what had it. `on_revealed(open)`
+follows. Other fields: `x`, `y`, `height` (the field's, 40), `text`.
+
+#### shortcuts window
+
+Built from Popup, Collection, TextField.
+
+A shortcuts window: an application's keys, grouped, with a search that
+narrows them, in a dialog (Popup + Collection, grouped + TextField).
+
+```lua
+local node, keys = composites.shortcuts_window {
+  id = "keys", title = "Keyboard shortcuts", root = surface_root,
+  groups = {
+    { title = "General", shortcuts = {
+      { keys = "Ctrl+K", description = "Command palette" },
+      { keys = "Ctrl+K Ctrl+S", description = "Save all" },      -- a sequence
+    } },
+  },
+}
+keys.open() keys.close() keys.is_open() keys.filter("save")
+
+```
+Each shortcut's `keys` is a chord (`"Ctrl+Shift+P"`), a sequence of
+chords apart by spaces, or a list of either (alternatives); every key is
+drawn as the theme's keycap. The search ranks the shortcuts fuzzily by
+description and keys and keeps them under their groups. Escape closes
+the window and focus goes back to what opened it; the list scrolls with
+the wheel and walks with the arrows once it has focus (Down from the
+search goes to it). `open_key` (e.g. `"ctrl+?"`) on `root` opens it.
+`inline = true` returns the window as a node to place. Other fields:
+`width` (480), `height` (440), `placeholder`, `on_closed(reason)`. Ids:
+`<id>-search`, `<id>-list`, `<id>-row-<g>-<n>` (group, shortcut),
+`<id>-close`, `<id>-popup`.
+
+#### sidebar
+
+Built from Selection, Disclosure.
+
+A sidebar (composite: Selection items + Disclosure sections).
+
+```lua
+local node, side = composites.sidebar {
+  id = "nav", width = 240, height = 340,
+  sections = {
+    { title = "Library", items = {
+      { key = "inbox", label = "Inbox", icon = "inbox", badge = 4 },   -- badge: a count, a word or a binding
+      { key = "sent", label = "Sent", icon = "send" } } },
+    { title = "Labels", expanded = false, items = { ... } },
+  },
+  current = "inbox",                     -- a key, or a binding
+  on_changed = function(key, item) end,
+  collapsed = false,                     -- icon-only; a binding, or the toggle's
+  on_collapsed = function(collapsed) end,
+}
+side.select("sent") ; side.collapse(true) ; side.current() ; side.toggle_section(2)
+
+```
+Each section is a kit `collapsible_section` (a Disclosure: a press,
+Space or Return folds it, Left and Right close and open) holding a kit
+`sidebar_list` (a Selection: the arrows walk it, typing jumps, a press
+chooses). An item is its icon, label and badge. The toggle at the top
+folds the whole sidebar to its icons -- one list of every item -- and
+back, the width easing
+between. Ids: `<id>-toggle`, `<id>-section-<s>`, `<id>-list-<s>`,
+`<id>-item-<key>`, `<id>-rail`, `<id>-rail-<key>`.
+
+#### status bar
+
+Built from Press.
+
+A status bar: a strip along the foot of a window or a panel with what is
+going on -- words, icons, badges, a progress bar -- in a left, a centre
+and a right zone; an item with `on_clicked` is a press (display widgets
++ Press items).
+
+```lua
+local node, bar = composites.status_bar {
+  id = "status", width = 800,
+  left = { { icon = "check_circle", text = "Ready" },
+           { id = "branch", icon = "commit", text = function() return branch:get() end, on_clicked = pick } },
+  center = { { kind = "progress", value = function() return done:get() end, width = 120 } },
+  right = { { text = "Ln 12, Col 4", on_clicked = go_to_line }, { kind = "badge", count = 3, kind_tone = "alert" },
+            { icon = "notifications", tooltip = "Notifications", on_clicked = show } },
+}
+
+```
+An item is `{ text, icon, kind, tooltip, on_clicked, id, width }`;
+`text` and `icon` may be bindings. `kind` is how it reads: "text" (the
+default: an icon and words), "label" (the quieter label face), "badge"
+(`count` or `text`, `tone`), "dot" (a status dot, `tone`, `pulse`),
+"progress" (`value` 0..1, `width`), "separator", or "node" (`node`, the
+caller's own). A pressable item takes a hover wash and the keyboard's
+ring: Tab reaches it, Space and Return press it; one with only an icon
+shows `tooltip`. The centre zone stays centred whatever the sides hold.
+Other fields: `x`, `y`, `anchors`, `height` (30), `ground` (false: no
+tonal strip), `accessible_name`. Ids: an item's `id`, or
+`<id>-<zone>-<n>`.
+
+#### tab view
+
+Built from Selection, Navigation, Drag, Collection.
+
+A tab view with an overview (composite: Selection tabs + Navigation pages
++ Drag reorder + Collection overview grid).
+
+```lua
+local node, tabs = composites.tab_view {
+  id = "docs", width = 520, height = 340,
+  tabs = { { title = "Notes", icon = "description", content = build_notes }, ... },
+  current = 1, closable = true, addable = true,
+  on_add = function(n) return { title = "Tab " .. n } end,   -- the new tab (nil: none)
+  on_changed = function(index, tab) end,
+  on_closed = function(tab) end, on_reordered = function(titles) end,
+}
+tabs.add { title = "More" } ; tabs.close(2) ; tabs.select(1) ; tabs.toggle_overview()
+
+```
+The tab strip is a kit `tabs` Selection (the arrows walk it; Alt+Left
+and Alt+Right, or a drag along the strip, move the current tab), each
+tab with its icon, title and a close press. The pages are a kit
+`view_stack` (a Navigation: the new page slides in from its side; each
+is built when first shown and kept). The overview press swaps the page
+for a kit `grid_view` (a Collection) of the tabs as cards: a press or
+Return opens one. Ctrl+T adds a tab, Ctrl+W closes the current one.
+A tab's `content` is a node or a builder `function(width, height)`.
+Ids: `<id>-tabs`, `<id>-tab-<i>`, `<id>-close-<i>`, `<id>-add`,
+`<id>-overview`, `<id>-pages`, `<id>-page-<i>` (the page of the tab at
+`i` when it was built), `<id>-grid`, `<id>-card-<i>`.
+
+#### tag input
+
+Built from TextField, Press.
+
+A tag input: a text field that turns what is typed into removable chips
+(TextField + Press).
+
+```lua
+local node, tags = composites.tag_input {
+  id = "labels", width = 420, tags = { "lua", "ui" },
+  placeholder = "Add a tag", on_changed = function(list) end,
+  suggestions = nil, unique = true,
+}
+tags.add("rust") tags.remove(1) tags.list()
+
+```
+Return or a comma adds what is typed; Backspace in an empty field
+removes the last chip; a press on a chip (or Return/Space on it) removes
+it. Chips are `<id>-tag-<index>`. Chips wrap onto new lines as the
+width fills; `height` is one line's (40) and the node grows with them.
+
+#### time picker
+
+Built from Range, Popup.
+
+A time picker (composite: Range spins + Popup).
+
+```lua
+local node, picker = composites.time_picker {
+  id = "alarm", value = function() return alarm:get() end,  -- "HH:MM" (24 h)
+  on_changed = function(time) alarm:set(time) end,
+  seconds = false, twelve_hour = false, minute_step = 5,
+}
+
+```
+Each field -- hours, minutes, seconds -- is a spin: a kit Range that
+wraps round (23 goes on to 00), the reading between a step up and a
+step down. With focus the arrows step it, Page Up and Page Down by a
+larger step, Home and End go to its ends, the wheel turns it, and
+typing two digits sets it; Tab goes to the next field. `twelve_hour`
+reads the hours 1 to 12 beside an AM/PM choice (a kit segmented
+Selection); the value is always "HH:MM[:SS]", 24 h. The press shows the
+time and opens the spins in a popover; `inline = true` gives the spins
+alone. Ids: `<id>-field`, `<id>-popup`, `<id>-hours` (`-minutes`,
+`-seconds`; each with `-up` and `-down`), `<id>-meridiem`.
+
+#### toolbar
+
+Built from Press, Popup.
+
+A toolbar: a row of tool buttons, toggles and separators; what does not
+fit its width goes into an overflow menu at its end (Press items +
+overflow Popup).
+
+```lua
+local node, bar = composites.toolbar {
+  id = "tools", width = 420,                  -- or a binding: it refits as it changes
+  items = {
+    { id = "new", icon = "add", label = "New", on_clicked = new },
+    { id = "bold", icon = "format_bold", tooltip = "Bold", checked = false, on_toggled = set_bold },
+    { separator = true },
+    { id = "share", icon = "share", tooltip = "Share", on_clicked = share },
+  },
+}
+bar.shown() bar.overflowed() bar.open_overflow()
+
+```
+An item with `label` shows it beside its icon (`show_label = false`
+keeps it in the menu only); one without shows its icon and a tooltip.
+`checked` (true, false or a binding) makes a toggle: it stays down
+while on, and `on_toggled(on)` hears it. When the items are wider than
+the toolbar the last ones leave it, a "more" button takes their place
+and its menu lists them -- a press there runs the item (or toggles it)
+as the button would. The buttons are one Tab stop (the Roving archetype,
+headless): Tab enters at the one last used, Left/Right, Home and End
+walk the shown ones, passing over disabled ones; Space and Return press
+it. What fits is the Overflow archetype's (headless): higher `priority`
+stays longer. Other fields: `x`, `y`, `height` (40), `menu_width` (220),
+`accessible_name`. Ids: `<id>-item-<n>` (or the item's own `id`),
+`<id>-more`, `<id>-menu`, `<id>-menu-<n>`.
+
+#### tour
+
+Built from Popup, Navigation.
+
+A tour (coachmarks): a card beside each thing it points out in turn,
+with a ring round that thing, Back / Next / Skip and a dot per step
+(Popup anchored to its targets + Navigation, a wizard of steps).
+
+```lua
+local node, tour = composites.tour {
+  id = "tour", root = surface_root,
+  steps = {
+    { target = search_field, title = "Search", body = "Find anything from here." },
+    { target = function() return sidebar end, title = "Sidebar", body = "..." },
+  },
+  on_finished = function() end, on_skipped = function(step) end,
+}
+tour.start() tour.next() tour.back() tour.skip() tour.step() tour.is_open()
+
+```
+Each step's card opens beside its `target` (a node, or a function
+returning one) by the tour's `placement` ("bottom" -- it flips where
+there is no room); a step without a target is centred on `root`. A ring, the theme's
+accent, is drawn round the target over everything. Next on the last
+step finishes; Skip or Escape ends it early. Right / Left (and Return
+for Next) walk it while the card has focus. `inline = true` returns
+the card as a node to place (it points at nothing: a gallery's, or a
+page's onboarding). Other fields: `width` (300), `ring_padding` (6),
+`labels` ({ next, back, skip, done }). Ids: `<id>-card`, `<id>-steps`,
+`<id>-next`, `<id>-back`, `<id>-skip`, `<id>-dot-<n>`, `<id>-ring`.
+
+#### transfer list
+
+Built from Collection, Press.
+
+A transfer list (composite: two Collections + Press move buttons).
+
+```lua
+local node, transfer = composites.transfer_list {
+  id = "columns", width = 520, height = 300,
+  items = { "Name", "Size", "Type", "Modified" },   -- strings or { key, label, icon }
+  chosen = { "Name" },                             -- keys (or labels) already on the right
+  titles = { "Available", "Shown" },
+  on_changed = function(chosen_keys) end,
+}
+transfer.move_right() ; transfer.move_left() ; transfer.chosen() --> { "Name", ... }
+
+```
+Each side is a kit `transfer_list` (a Collection in multi mode: a press
+toggles an item into the selection, Space too, Ctrl+A takes them all,
+the arrows walk it). Between them, presses move the selected items
+across (or all of them); a double press or Return moves the current
+one. A side's title counts what it holds and what is selected. Ids:
+`<id>-left`, `<id>-right`, `<id>-left-<key>`, `<id>-right-<key>`,
+`<id>-add`, `<id>-add-all`, `<id>-remove`, `<id>-remove-all`.
+
+#### wizard
+
+Built from Navigation, Selection.
+
+A wizard, or stepper (composite: Navigation wizard + Selection header).
+
+```lua
+local node, wiz = composites.wizard {
+  id = "setup", width = 520, height = 340,
+  steps = {
+    { title = "Account", content = function(w, h) return form end,
+      validate = function() if name == "" then return false, "Enter a name" end return true end },
+    { title = "Theme", content = ... },
+    { title = "Done", content = ... },
+  },
+  on_finish = function() end, on_cancel = function() end,   -- on_cancel: a Cancel press
+  on_changed = function(index) end,
+}
+wiz.next() ; wiz.back() ; wiz.go(2) ; wiz.current() ; wiz.finished()
+
+```
+The header is a kit `stepper_header` (a Selection: each step's number,
+or a tick once passed, and its title; the arrows walk it). The pages are
+a kit `wizard` (a Navigation: each built when first shown, the next
+sliding in from its side; Alt+Left goes back). Next and Finish ask the
+step's `validate` first: false (and a message) keeps it there and says
+why. Going on through the header asks every step on the way; going back
+never asks. Alt+Right is Next. Ids: `<id>-header`, `<id>-step-<i>`,
+`<id>-pages`, `<id>-page-<i>`, `<id>-back`, `<id>-next`, `<id>-finish`,
+`<id>-cancel`, `<id>-error`.

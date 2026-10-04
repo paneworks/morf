@@ -1,0 +1,41 @@
+[package]
+name = "morf-cli"
+description = "Command-line interface for morf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "morf"
+path = "src/main.rs"
+
+[features]
+default = ["kit", "a11y"]
+# Surfaces' accessible trees on AT-SPI (morf-host).
+a11y = ["morf-host/a11y"]
+# luna's native Lua tier; see crates/morf-lua/src/runtime_jit.rs.
+jit = ["morf-host/jit"]
+# The widget archetypes (`morf.kit.native`): crates/morf-kit.
+kit = ["morf-host/kit"]
+
+[dependencies]
+morf-host.workspace = true
+morf-value.workspace = true
+libc = "0.2"
+flate2.workspace = true
+serde_json.workspace = true
+image.workspace = true
+
+[dev-dependencies]
+# The tests and benchmarks reach into the engine directly; the command line
+# itself goes through morf-host.
+morf-layout.workspace = true
+morf-lua.workspace = true
+morf-io.workspace = true
+morf-scene.workspace = true
+morf-text.workspace = true
+morf-app.workspace = true
+# The frame benchmarks draw with the renderer directly.
+morf-render.workspace = true
+pollster.workspace = true

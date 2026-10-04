@@ -25,7 +25,7 @@
 local morf = require("morf")
 local config = require("config")
 local calc = require("calc")
-local units = require("lib.units")
+local units = require("lib.util.units")
 local web = require("web")
 
 local M = {}
@@ -276,7 +276,7 @@ end
 -- ----------------------------------------------------------------- windows --
 
 local function windows(term)
-  local ok, hyprland = pcall(require, "lib.hyprland")
+  local ok, hyprland = pcall(require, "lib.integrations.hyprland")
   if not ok or not hyprland.available() then
     return { row { id = "windows", name = "No window list here", description = "It comes from Hyprland", material = "desktop_windows",
       run = function() return "keep" end } }
@@ -351,7 +351,7 @@ end
 
 local function system(term)
   local SYSTEM = {
-    { id = "lock", name = "Lock the screen", material = "lock", run = function() start { "logre", "--", "lock" } return "close" end },
+    { id = "lock", name = "Lock the screen", material = "lock", run = function() start { "morf", "lock" } return "close" end },
     { id = "suspend", name = "Suspend", material = "bedtime", run = function() start { "systemctl", "suspend" } return "close" end },
     { id = "hibernate", name = "Hibernate", material = "downloading", run = confirmed("hibernate", session("hibernate")) },
     { id = "logout", name = "Log out", material = "logout", run = confirmed("logout", session("logout")) },
@@ -384,7 +384,7 @@ end
 
 local function emoji(term)
   local out = {}
-  for _, e in ipairs(require("lib.emoji").search(term, 60)) do
+  for _, e in ipairs(require("lib.util.emoji").search(term, 60)) do
     out[#out + 1] = row {
       id = "emoji:" .. e.char, name = e.char .. "   " .. e.name, description = "Return copies it", material = nil,
       glyph = e.char,
@@ -398,7 +398,7 @@ end
 -- --------------------------------------------------------------- clipboard --
 
 local function clipboard(term)
-  local items = require("lib.clipse").history()
+  local items = require("lib.integrations.clipse").history()
   local list = {}
   for i, item in ipairs(items) do
     local text = item.image ~= "" and ("Picture  " .. tilde(item.image)) or item.value:gsub("%s+", " ")
@@ -411,9 +411,9 @@ local function clipboard(term)
       id = "clip:" .. c.order, name = c.name,
       description = (item.pinned and "Pinned  ·  " or "") .. item.recorded,
       material = item.image ~= "" and "image" or (item.pinned and "push_pin" or "content_paste"),
-      run = function() require("lib.clipse").copy(item) return "close" end,
+      run = function() require("lib.integrations.clipse").copy(item) return "close" end,
       actions = {
-        { name = "Copy it back", material = "content_copy", run = function() require("lib.clipse").copy(item) return "close" end },
+        { name = "Copy it back", material = "content_copy", run = function() require("lib.integrations.clipse").copy(item) return "close" end },
         { name = "Open the picture", material = "image", run = function()
           if item.image ~= "" then return open(item.image) end
           return "keep"

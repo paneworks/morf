@@ -5,7 +5,7 @@
 -- off, never started).
 
 local morf = require("morf")
-local hyprland = require("lib.hyprland")
+local hyprland = require("lib.integrations.hyprland")
 
 local M = {}
 
@@ -29,6 +29,17 @@ local local_workspace = morf.signal("caelestia.workspace", 1)
 -- The output this runtime draws on (every screen runs the shell once).
 local function screen_name()
   return (morf.screens and morf.screens[1] and morf.screens[1].name) or ""
+end
+M.output = screen_name
+
+-- Capture a destination once per authentication request. Later PAM updates
+-- must not open a second dialog just because monitor focus has changed.
+function M.active_output()
+  if hyprland.available() then
+    local focused=hyprland.state.focused_monitor
+    if focused and focused~="" then return focused end
+  end
+  return screen_name()
 end
 
 -- This screen's row in the compositor's monitors, if it has one.
@@ -110,7 +121,7 @@ M.net, M.bt, M.upower = net, bt, power
 -- (lib/ringer.lua): feedbackd's profile on a phone, the shell's own
 -- setting elsewhere.
 do
-  local ok, modem = pcall(require, "lib.modem")
+  local ok, modem = pcall(require, "lib.services.modem")
   local mobile = ok and select(2, pcall(modem.connect)) or nil
   if type(mobile) == "table" and mobile.state and mobile.state.available then M.modem = mobile end
   -- CAELESTIA_FAKE_MODEM=1: a stand-in, to see a phone's parts on a laptop.
@@ -123,7 +134,7 @@ do
 end
 do
   local config = require("config")
-  local ok, ringer = pcall(require, "lib.ringer")
+  local ok, ringer = pcall(require, "lib.util.ringer")
   local ring = ok and select(2, pcall(ringer.connect, { mode = config.get("ringer.mode") })) or nil
   if type(ring) == "table" and ring.state then
     M.ringer = ring
@@ -140,7 +151,7 @@ end
 -- at /proc every few seconds, no command.
 do
   local installed = morf.fs.exists("/usr/bin/tor") or morf.fs.exists("/usr/local/bin/tor")
-  local ok, tor = pcall(require, "lib.tor")
+  local ok, tor = pcall(require, "lib.integrations.tor")
   if ok and installed then
     local t = tor.new { unit = "tor.service", socks = 9050 }
     -- "off", "starting", "on", "stopping" or "failed"
@@ -248,7 +259,7 @@ end
 
 -- MPRIS players on the session bus (lib/mpris.lua), or nil without one.
 do
-  local ok, mpris = pcall(require, "lib.mpris")
+  local ok, mpris = pcall(require, "lib.services.mpris")
   if ok then
     local ok2, media = pcall(mpris.connect)
     if ok2 then M.media = media end
@@ -286,7 +297,7 @@ function M.weather()
   if not weather then
     local config = require("config")
     local location = config.get("services.weather_location")
-    weather = require("lib.weather").new {
+    weather = require("lib.integrations.weather").new {
       location = location ~= "" and location or nil,
       units = config.get("services.imperial") and "imperial" or "metric",
     }

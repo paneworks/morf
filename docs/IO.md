@@ -371,6 +371,24 @@ track is near 1, speech near 0. It costs a fraction of a percent of one
 core. An octave is ambiguous by nature: music with a strong half-time feel
 may read at half the tempo a dancer would clap.
 
+A `channel` (`morf.channel`, see UI.md) takes every reading's bands
+instead, written in Rust as they come -- through the filter
+`spectrum = { bars = 56, ... }` describes (`lib.spectrum.options`), when
+there is one -- so a spectrum drawn from the channel runs no Lua per frame;
+`on_level` may then be left out:
+
+```lua
+local bars = morf.channel { size = 56, mode = "frame" }
+morf.audio.monitor { rate_hz = 60, bands = 48, channel = bars, spectrum = spectrum.options { bars = 56 } }
+ui.Path { series = bars.id, plot = { kind = "bars", gap = 2 } }
+```
+
+`morf.audio.spectrum_resample(bands, count)` maps numeric bands to 1–512 bars.
+`morf.audio.spectrum_filter(options)` returns `step(bands, dt)` and `gain()`.
+It performs noise filtering, automatic sensitivity, smoothing, gravity and
+neighbour spread without depending on an audio service or distribution.
+Options and defaults follow `lib.spectrum`; subscriptions remain in that wrapper.
+
 ## A program on a terminal: `ui.Terminal`
 
 A program that wants a terminal rather than pipes — anything that draws a
@@ -422,3 +440,60 @@ morf.terminal.parse(text)   -- the same palette from a file of sequences (pywal'
 
 The palette gathers everything heard, so each call has the whole of it.
 A runtime keeps at most 8 listeners.
+
+## Image processing
+
+`morf.image.compose { width=..., height=..., background="#000000", output=path,
+ops={...}, on_done=... }` starts with native RGBA pixels rather than an input
+file. It shares `process`'s operations, formats, limits, worker queue and callback
+contract. Background defaults to opaque black; alpha is supported.
+
+`morf.image.process { source=path_or_inline_svg, output=path, ops={...},
+on_done=function(ok, result) ... end }` queues an edit on image workers.
+It returns true when queued, or nil/error when the queue is full; malformed
+arguments raise. PNG, JPEG and WebP are output formats. Operations run in
+order, up to 256 per request. Alongside crop/resize/rotate/flip/blur/grayscale:
+
+```lua
+ops = {
+  {"overlay", svg_or_image, 0, 0}, -- alpha composite; offsets default to zero
+  {"annotations", marks, offset_x, offset_y}, -- typed vectors; offsets default to zero
+  {"blur_region", x, y, width, height, 24},
+  {"pixelate", x, y, width, height, 14},
+  {"zoom_region", x, y, width, height, 2},
+  {"crop", x, y, width, height},
+}
+```
+
+Regions clamp to the image and leave pixels outside unchanged. Blur strength
+is greater than zero and at most 100; pixel size is an integer from 1 to 256;
+zoom factor is 1 to 10. SVG text uses a shared, lazily discovered system font
+database. Re-encoding drops source metadata. Decoded preview caches are bounded
+by both image count and memory; textures currently being drawn remain usable.
+
+For repeated edits of an immutable source, `morf.image.preview(source)` returns
+a native session with `render(ops, on_done)` and `close()`. Rendering uses the
+same worker pool and callback shape as `process`, but `result.path` is a
+`memory:` image source for `ui.Image`. The source is decoded once; each delivered
+frame replaces the previous one without a PNG encode, file write or UI decode.
+Close releases the source and displayed frame immediately, and late results
+cannot publish images. Runtime teardown releases the session automatically.
+There may be four open sessions per runtime, with a 128 MiB limit per source or
+frame and a shared 256 MiB budget for retained preview pixels across the process.
+Temporary worker buffers and GPU textures have their own lifetimes and budgets.
+
+An annotation has `type`, `points={{x=..., y=...}, ...}`, `color="#RRGGBB"`,
+`width=1..128`, and optional `filled`, `text`, `font` and `number`. Vector tools
+are rect, ellipse, line, arrow, pen, marker, text, step and zoom's outline;
+regional effects remain separate operations so their compositing order stays
+explicit. At most 129 marks per request and 4096 points per mark are accepted.
+Geometric tools rasterize bounded tiles directly in Rust; text alone needs font
+shaping through SVG. `morf.image.annotation_path(mark)` returns `stroke` and
+`fill` path data for native `ui.Path` nodes, letting live drags use the same
+geometry as exports without constructing or parsing SVG documents in Lua.
+
+`morf.image.annotation_bounds(mark)` returns `{x,y,w,h}`.
+`annotation_hit(mark, x, y, tolerance)` tests a mark; `annotation_pick(marks,
+x, y, tolerance)` returns the last hit's 1-based index or nil. Tolerance defaults
+to 6 pixels. These native queries also accept blur and pixelate rectangles for
+editing; rendering their effects uses the regional operations above.

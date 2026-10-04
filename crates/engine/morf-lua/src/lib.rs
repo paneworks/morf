@@ -1,0 +1,134 @@
+//! Sandboxed execution of morf configuration code.
+
+// Each `api/` area keeps its main table in a file named for it
+// (`api/color/color.rs`), as PLAN.md lays the binding out.
+#![allow(clippy::module_inception)]
+
+mod api;
+mod runtime;
+mod value;
+mod vm;
+
+// Every module under the name it had before the directories (PLAN.md phase 2):
+// paths throughout the crate keep working while later phases retire them.
+use self::api::color::color as api_color;
+use self::api::color::hct as api_color_hct;
+use self::api::color::ops as api_color_ops;
+use self::api::color::palette as api_color_palette;
+use self::api::color::theme as api_theme;
+use self::api::desktop::clipboard as api_clipboard;
+use self::api::desktop::compositor as api_compositor;
+use self::api::desktop::gamma as api_gamma;
+use self::api::desktop::screencopy as api_screencopy;
+use self::api::desktop::toplevels as api_toplevels;
+use self::api::geometry::geometry as api_geometry;
+use self::api::geometry::text as api_text;
+use self::api::input::focus as api_focus;
+use self::api::input::overlay as api_overlay;
+use self::api::install as api_finish;
+use self::api::io::broadcast as api_broadcast;
+use self::api::io::dbus_serve as api_dbus_serve;
+use self::api::io::encoding as api_encoding;
+use self::api::io::file as api_file;
+use self::api::io::fs as api_fs;
+use self::api::io::http as api_http;
+use self::api::io::io as api_io;
+use self::api::io::process as api_process;
+use self::api::io::process_helpers;
+use self::api::io::socket as api_socket;
+use self::api::io::watch as api_watch;
+use self::api::media::audio as api_audio;
+use self::api::media::audio_equalizer as api_audio_equalizer;
+use self::api::media::audio_spectrum as api_audio_spectrum;
+use self::api::media::image as api_image;
+use self::api::media::image_annotation as api_image_annotation;
+use self::api::media::image_canvas as api_image_canvas;
+use self::api::media::image_geometry as api_image_geometry;
+use self::api::media::image_ops as api_image_ops;
+use self::api::media::image_preview as api_image_preview;
+use self::api::media::image_raw as api_image_raw;
+use self::api::media::shader as api_shader;
+use self::api::media::terminal_palette as api_palette;
+use self::api::module as api_module;
+use self::api::motion::animation as api_animation;
+use self::api::motion::fling as api_fling;
+use self::api::system::host as api_host;
+use self::api::system::log as api_log;
+use self::api::system::menu as api_menu;
+use self::api::system::pam as api_pam;
+use self::api::system::prefers as api_prefers;
+use self::api::system::system as api_system;
+use self::api::time::date as api_date;
+use self::api::time::timer as api_time;
+use self::api::ui::bindings as reactive_bindings;
+use self::api::ui::channels;
+use self::api::ui::configure;
+use self::api::ui::configure_states;
+use self::api::ui::constructors;
+use self::api::ui::constructors_layout;
+use self::api::ui::group as api_group;
+use self::api::ui::retention as api_retention;
+use self::api::ui::scene as scene_bindings;
+use self::api::ui::signal as api_signal;
+use self::api::ui::state as api_state;
+use self::api::ui::transform as api_transform;
+use self::api::ui::ui as api_ui_json;
+use self::api::ui::view as api_view;
+use self::api::window::events as window_events;
+use self::api::window::geometry as window_geometry;
+use self::api::window::layer as layer_parse;
+use self::api::window::methods as window_methods;
+use self::api::window::parse as window_parse;
+use self::api::window::surface as api_shell;
+use self::runtime::events;
+use self::runtime::helpers as runtime_helpers;
+use self::runtime::host_types as surface_types;
+use self::runtime::image_jobs;
+use self::runtime::images;
+pub use self::runtime::keys;
+use self::runtime::layout as runtime_layout;
+use self::runtime::model_revisions;
+use self::runtime::pending as state_pending;
+use self::runtime::session_lock as runtime_session_lock;
+use self::runtime::shortcut;
+use self::runtime::state;
+use self::runtime::states;
+use self::runtime::terminals;
+use self::runtime::text_inputs;
+use self::runtime::views;
+use self::runtime::wake as runtime_wake;
+use self::value::ipc as ipc_table;
+use self::value::lua as lua_values;
+use self::value::table as table_menu;
+use self::value::tokens as state_tokens;
+pub use self::vm::arguments;
+use self::vm::config as runtime_config;
+use self::vm::execute as reactive_execute;
+use self::vm::extensions;
+use self::vm::harness as runtime_harness;
+use self::vm::jit as runtime_jit;
+use self::vm::loader as serialization;
+pub use self::vm::profile;
+use self::vm::types;
+use self::vm::types_gen;
+
+#[cfg(feature = "kit")]
+pub use self::api::kit::register as register_kit;
+pub use api_broadcast::set_shell_socket;
+pub use api_focus::FocusReason;
+pub use api_gamma::GammaRequest;
+pub use events::*;
+pub use extensions::{Extension, register_extension};
+pub use morf_value::IpcValue;
+pub use runtime_harness::HostFunction;
+pub use runtime_layout::SettledLayout;
+pub use runtime_session_lock::SessionLockState;
+pub use runtime_wake::{ClockPrecision, DeadlineCause};
+pub use serialization::{project_library, runtimepath_roots};
+pub use surface_types::*;
+pub use text_inputs::KeyModifiers;
+pub use types::*;
+pub use types_gen::generate_types;
+
+#[cfg(test)]
+mod internal_tests;

@@ -6,7 +6,7 @@
 local test = morf.test
 
 local HOST = [[
-  local settings = require("lib.settings")
+  local settings = require("lib.util.settings")
   local path = morf.env("XDG_CONFIG_HOME") .. "/shell/shell.json"
   local config = settings.open {
     path = path,
@@ -42,6 +42,24 @@ local HOST = [[
 local function path()
   return morf.env("XDG_CONFIG_HOME") .. "/shell/shell.json"
 end
+
+test.it("settings can keep local edits without writing from a secondary runtime",function()
+  local file=morf.state_path("single-writer-test.json")
+  morf.fs.remove(file)
+  test.load {source=[[
+    local owner=false
+    local config=require("lib.util.settings").open {path=morf.state_path("single-writer-test.json"),
+      defaults={volume=30},write_when=function() return owner end}
+    morf.ipc.set=function(v) config.set("volume",tonumber(v)) end
+    morf.ipc.get=function() return config.get("volume") end
+    morf.ipc.owner=function() owner=true end
+    morf.ipc.file=function() local ok,text=pcall(morf.fs.read,config.path) return ok and text or nil end
+  ]]}
+  test.ipc("set","40") test.advance(200)
+  test.eq(test.ipc("get"),40) test.eq(test.ipc("file"),nil)
+  test.ipc("owner") test.ipc("set","50") test.advance(200)
+  test.eq(morf.json.decode(test.ipc("file")).volume,50)
+end)
 
 local function file()
   local ok, text = pcall(morf.fs.read, path())

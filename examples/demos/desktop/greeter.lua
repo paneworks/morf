@@ -64,7 +64,7 @@ local io = require("morf.io")
 -- `examples/demos/text/keyboard.lua` puts in a surface of its own. It cannot have one here
 -- because a kiosk compositor shows a single window, so a login screen's second
 -- surface is never seen; drawn into this one it is the same board either way.
-local board = require("lib.board")
+local board = require("lib.util.board")
 
 -- One file, two doors, and the word after the file's `--` says which. `lock`
 -- is the lock screen, and holds the session unless `window` follows, which

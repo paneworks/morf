@@ -8,12 +8,11 @@
 -- the level rests at zero.
 
 local morf = require("morf")
-local theme = require("theme")
 
 local M = {}
 
 local audio = morf.audio
-local sysinfo = require("lib.sysinfo")
+local sysinfo = require("lib.services.sysinfo")
 
 function M.volume()
   local ok, sink = pcall(function() return audio and audio.available() and audio.default_sink() end)
@@ -37,7 +36,6 @@ function M.set_brightness(v)
 end
 
 local volume, brightness = M.volume, M.brightness
-local set_volume, set_brightness = M.set_volume, M.set_brightness
 
 --- The icon for a volume, and for a brightness.
 function M.volume_icon()

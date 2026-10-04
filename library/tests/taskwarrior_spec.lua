@@ -2,7 +2,7 @@
 -- morf test --no-dbus library/tests/taskwarrior_spec.lua
 local test = morf.test
 local HOST = [[
-  local lib = require("lib.taskwarrior")
+  local lib = require("lib.integrations.taskwarrior")
   local root = morf.env("TASK_TEST_ROOT")
   local client = lib.new { env = { TASKRC = root .. "/taskrc", TASKDATA = root .. "/data" } }
   morf.ipc.refresh = client.refresh
@@ -31,7 +31,7 @@ local function save(id, fields)
 end
 
 test.describe("taskwarrior", function()
-  if not require("lib.poll").which("task") then
+  if not require("lib.util.poll").which("task") then
     test.skip("real task CRUD", "task executable is not installed")
   else
     test.it("adds, schedules, edits, starts, stops, completes and deletes real tasks", function()

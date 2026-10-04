@@ -26,7 +26,7 @@ end
 
 M.current = morf.signal("caelestia.wallpaper", "")
 
-local lule = require("lib.lule")
+local lule = require("lib.integrations.lule")
 local lule_scheme = lule.watch("caelestia.wallpaper.lule")
 
 local function resolve()

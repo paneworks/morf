@@ -5,7 +5,7 @@
 -- device's connection are D-Bus calls, sent only from clicks and through
 -- `services.act`.
 
-local bluez = require("lib.bluez")
+local bluez = require("lib.services.bluez")
 local act = require("services.act")
 
 local M = {}

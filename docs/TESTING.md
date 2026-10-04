@@ -61,7 +61,7 @@ below).
 
 ```sh
 morf check shell.lua [--size WxH] [--screens N] [--ipc 'VERB ARGS']...
-                     [--after MS] [--wait MS] [--strict]
+                     [--after MS] [--wait MS] [--strict] [--kit [default]] [--a11y]
                      [--no-dbus | --private-bus] [--isolate] [-- args...]
 ```
 
@@ -81,6 +81,18 @@ followed by a settle), advances `--after` milliseconds of virtual time
   `lint: Rect > Column laid out to nothing and has 3 children that will
   never be seen` among it --, a layout whose bindings never settle, and
   bindings that read a property while it animates.
+
+`--kit` checks the configuration's `kit` module -- what `require("kit")`
+answers once it has loaded -- against the widget contract
+(`library/lib/kit/contract.lua`): every function, display widget and
+archetype skin due at the contract's stage, and an owner in the contract
+for every row of the element catalogue (`library/lib/kit/catalogue.lua`).
+It prints `kit stage N: D due, M missing` and each problem as an error.
+
+`--a11y` builds the tree a screen reader would be given for every shown
+surface and fails each control it could land on -- one that takes focus,
+or plays a role read by name (a button, switch, slider, tab, field, ...)
+-- that has no name. It prints `a11y N accessible nodes, M unnamed`.
 
 The exit status is 1 when there are errors, and with `--strict` when there
 are warnings too. `--wait MS` spreads that much real time over the run, for
@@ -253,7 +265,7 @@ the primary before anything was.
 | `test.leave([{ surface }])` | the pointer leaving the surface it is on (or the one named), as a compositor says when it moves off the input region: `hovered` and every `contains_pointer` there go false |
 | `test.drag({ x1, y1 }, { x2, y2 }, { steps, button })` | press, move in steps, release |
 | `test.wheel(dx, dy [, { x, y, surface }])` | a wheel turn at the pointer (or `x, y`); positive `dy` scrolls down |
-| `test.key(name [, modifiers])` | one key pressed and released: an X keysym name (`Return`, `Escape`, `Tab`, `BackSpace`, `Left`, `Page_Down`, `F5`, …) or one character. `modifiers` is a list or a string: `"ctrl+shift"` |
+| `test.key(name [, modifiers])` | one key pressed and released: an X keysym name (`Return`, `Escape`, `Tab`, `BackSpace`, `Left`, `Page_Down`, `F5`, …) or one character. `modifiers` is a list or a string: `"ctrl+shift"`; `{ phase = "down" }` only presses it and `{ phase = "up" }` only lets it go -- Alt held across another key -- as the third argument |
 | `test.type(text)` | each character as a key; `\n` is Return |
 
 ### Finding nodes
@@ -265,7 +277,8 @@ and its surface shown, and not fully transparent), `opacity` (its own),
 `exiting` (it is playing its `exit`: drawn, but out of the layout and
 taking no input), `contains_pointer` (the pointer, where the last
 `test.move` left it on this surface, is inside the node's box -- what the
-node's own `contains_pointer` says once something reads it), `depth`, `parent` (a
+node's own `contains_pointer` says once something reads it), `focused` and
+`visual_focus` (it has focus, and a keyboard gave it), `depth`, `parent` (a
 handle), `surface` (the label) and `surface_kind`. A node's `id` is an
 ordinary property every element has and nothing in the engine reads:
 `ui.Rect { id = "panel", ... }`.
@@ -278,9 +291,22 @@ ordinary property every element has and nothing in the engine reads:
 | `test.nodes()` | every node on every surface |
 | `test.text_of(node)` | the node's text and its descendants', joined by spaces |
 
+`test.resize_window(surface, width, height)` configures a window (by its
+surface label or title) to a new size, as a compositor does when a person
+resizes it or a phone fits it to its screen.
+
+`test.accessible(query)` returns the tree a screen reader would be given,
+one row per accessible node, root first: `role`, `name`, `description`,
+`value`, `minimum`, `maximum`, `checked`, `expanded`, `selected`,
+`disabled`, `focusable`, `focused`, the box, `children` (how many),
+`surface`, `id`, `handle` and the accessible `parent`; a query filters the
+rows. `test.accessible_action(row, action, value)` does what a screen
+reader asks of it (`"click"`, `"focus"`, `"increment"`, `"decrement"`,
+`"expand"`, `"collapse"`, `"set_value"`).
+
 A query is a table of fields that must all equal the node's (`{ id =
 "count" }`, `{ element = "Text", visible = true }`, `{ text = "add one" }`,
-`{ text_contains = "add" }`, `{ surface = "floating" }`), a string (an `id`
+`{ text_contains = "add" }`, `{ surface = "toplevel" }`), a string (an `id`
 or an exact `text`), or a function of the node returning true.
 
 ### Talking to it

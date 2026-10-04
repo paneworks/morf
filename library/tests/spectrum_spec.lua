@@ -3,7 +3,7 @@
 --     morf test library/tests/spectrum_spec.lua
 
 local test = morf.test
-local spectrum = require("lib.spectrum")
+local spectrum = require("lib.util.spectrum")
 
 local function run(filter, bands, frames)
   local bars

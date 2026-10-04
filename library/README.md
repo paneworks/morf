@@ -5,7 +5,7 @@ and the engine's API as definitions for the Lua language server.
 
 ```
 library/
-  lib/                 the modules: require("lib.material"), require("lib.hyprland"), ...
+  lib/                 the modules: require("lib.util.material"), require("lib.integrations.hyprland"), ...
   types/               the engine's API for LuaLS, written by `morf types` (do not edit)
     morf.lua           require("morf") and the global `morf`
     morf/ui.lua        require("morf.ui"): every element and its properties
@@ -15,11 +15,10 @@ library/
 
 ## Installed
 
-`make install` puts the binary in `~/.local/bin` and this folder in
-`~/.local/share/morf/library` (`$XDG_DATA_HOME/morf/library`). morf always
-looks there, after the configuration's own folder and
-`~/.local/share/morf/site` (your own modules, found first), so any shell
-can `require("lib.material")` without carrying a copy.
+`make install` installs `/usr/bin/morf` and this folder in
+`/usr/share/morf/library`. The configuration's own modules and the user's
+site modules take precedence, so shells can extend the shared library.
+The installer retires the old `~/.local/bin/morf`.
 
 ## Editor
 
@@ -35,6 +34,73 @@ binary on every `make install`, so they match the engine you run.
 Pure-Lua libraries a configuration can `require("lib.<name>")`. morf's core
 stays compositor- and service-agnostic; anything that speaks one program's
 protocol lives here, built only on the engine's generic APIs.
+
+## equalizer.lua and settings_pages.lua
+
+`lib.equalizer` owns a standalone PipeWire stereo smart filter, with explicit
+left/right channel chains. `new {name, path?}` returns `start(curve)`,
+`update(curve)`, `stop()`, and `status`/`error` signals. Only the shell's primary
+runtime should start it. It requires WirePlumber 0.5+, never restarts services,
+and never changes the default output. Runtime controls are coalesced into a
+single Props update; discovery retries are bounded and there is no idle poll.
+`graph(curve, owner)`, `controls(curve)` and `classify(sink)` are reusable helpers.
+
+`morf.audio.equalizer_curve {left?, right?, bands?, strength?, per_ear?,
+compensation?, enabled?, trim?}` computes the eight-band response in Rust.
+Threshold lists contain eight dB HL values (−10..120), bands eight dB gains
+(−12..12), strength is 0..100, trim −24..0 dB. Returns gains, frequencies,
+preamp attenuation and 160 log-spaced response samples per ear (20 Hz–20 kHz).
+Headroom is estimated from the combined 48 kHz filter response with a 0.5 dB
+margin; it is not a limiter. Compensation uses the MIT-licensed
+[omarchy-audiogram-eq](https://github.com/Fail-Safe/omarchy-audiogram-eq)
+mapping: half the threshold excess over 20 dB HL, capped at 12 dB, then
+scaled by strength. Audio DSP runs in PipeWire's builtin filters.
+
+`lib.settings_pages.new(pages, selected_signal, aliases?)` validates a tree
+of `{key, name, parent?}` descriptors. `request(key)` validates routes,
+`back()` returns to the parent, `path(key)` returns its ancestors and
+`breadcrumb()` labels the selected page's ancestry. Root's key is `""`.
+
+## annotation.lua and capture.lua
+
+`lib.annotation` owns a document in image-pixel coordinates, independent
+of themes, files or compositors. `new(width, height, options)` returns a document
+with `choose`, `style`, `begin`, `update`, `finish`, `abort`, `set_crop`,
+`resize`, `remove`, `undo` and `redo`. It holds vector annotations and regional
+blur/pixelation/zoom, sharing immutable annotations through a bounded undo
+history. `tools` lists shortcuts/icons;
+`ops(document, crop, include_draft)` creates ordered `morf.image.process` ops.
+Bounds, hit testing, picking and rasterization run in Rust through `morf.image`.
+Live drafts use native `ui.Path` geometry; Lua does not generate SVG artwork.
+Cropping happens last; effects apply to preceding artwork.
+`viewport_ops(document, {x,y,w,h}, include_draft, omit_moving)` builds
+operations for an already cropped monitor preview, preserving the original
+document and its export coordinates. Native operations share the original
+point arrays and apply their viewport offset in Rust.
+
+`lib.capture.session(options)` owns temporary snapshots and render outputs.
+`snapshot(output, callback)` captures a monitor, `desktop(screens, callback)`
+stitches scaled outputs (including negative origins), and
+`render(source, ops, callback)` runs image operations on workers.
+`compose(width, height, ops, callback)` starts with a native black RGBA canvas,
+used for desktop stitching without a placeholder SVG. Snapshot
+callbacks receive `(ok, {source, width, height, output|desktop})`; render
+callbacks receive `(ok, path|error)`. `preview(source, ops, callback)` retains
+one decoded immutable source in a native session and returns an in-memory
+image, replacing its previous frame without generating temporary PNGs.
+Older engines fall back to file rendering. Call `remove(path)` for obsolete previews
+and `close()` when done; late callbacks cannot resurrect a closed session.
+Each output owns a private scratch namespace; abandoned scratch data is cleaned
+on the next capture. `windows(callback)`/`window_at` provide compositor geometry.
+KDE acquisition falls back to Spectacle; other supported compositors use native
+screencopy. `directory(path)` supplies the filesystem model for a shell-owned
+picker without requiring an external GUI.
+
+`copy`, `save` and `upload` take asynchronous `(ok, result|error)` callbacks.
+Copy uses wl-copy; upload uses HTTPS curl form upload and copies the returned
+URL. Callers own upload confirmation, notifications, picker UI and preferences.
+`binding_plan` and `rebind` support Hyprland Lua/conf and an optional dedicated
+include file; they do not rewrite the main compositor configuration.
 
 ## taskwarrior.lua
 
@@ -67,7 +133,7 @@ because the engine does not watch arbitrary sockets for readiness; an idle
 tick blocks at most 1 ms per open socket.
 
 ```lua
-local hyprland = require("lib.hyprland")
+local hyprland = require("lib.integrations.hyprland")
 
 -- Reactive state, current from events; bind to it directly.
 ui.Repeater { model = hyprland.state.workspaces, delegate = function(ws) ... end }
@@ -133,7 +199,7 @@ does nothing.
 Each change is a *plan* built by a pure, validated function, then sent:
 
 ```lua
-local config = require("lib.hyprland_config")
+local config = require("lib.integrations.hyprland_config")
 config.apply(function(how)
   return config.options_plan({ { "input:kb_layout", "str", "us,de" },
                                { "input:repeat_rate", "int", 30 } }, how)
@@ -161,7 +227,7 @@ number of cubics (`shapes.SEGMENTS`, 72) starting at the top, so
 `morph_to` walks any one onto any other.
 
 ```lua
-local shapes = require("lib.m3shapes")
+local shapes = require("lib.util.m3shapes")
 ui.Path { width = 48, height = 48, view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie9"), fill_color = accent }
 shapes.Shape { width = 96, height = 96, shape = function() return which:get() end, color = accent, easing = "out_back" }
 ```
@@ -173,11 +239,13 @@ shapes.Shape { width = 96, height = 96, shape = function() return which:get() en
 | `shapes.polygon(vertices, { rounding })`, `shapes.star(points, inner, opts)`, `shapes.regular(sides, opts)`, `shapes.lobes(count, inner, opts)` | outlines of your own, for `path` and `curves` |
 | `shapes.curves(shape, segments)` | the normalised cubics themselves |
 
-Outlines are made once per name and kept. The named shapes at the defaults
-(a 100 square, 72 cubics) are also shipped ready-made in
-`lib/m3shapes_paths.lua`, written by `lib/m3shapes_gen.lua` (`cd examples &&
-lua5.4 lib/m3shapes_gen.lua > lib/m3shapes_paths.lua`): resampling one outline
-costs about a fifth of a module's instruction budget, reading one nothing.
+Rounding, cubic resampling, normalization and path formatting run in
+`morf.geometry`, implemented by `morf-outline`. Default named paths (a 100
+square, 72 cubics) preserve the existing outlines exactly and are shared across
+runtimes. Custom named paths use a bounded native cache. `m3shapes_paths.lua`
+remains a compatibility lookup; the Lua wrapper owns node construction and
+animation controls. Native recipes can be exported with
+`cargo run -p morf-outline --example generate_shapes`.
 `segments = false` keeps an outline as it was made, for a shape that is only
 drawn.
 `examples/demos/sdf/m3shapes.lua` shows every one.
@@ -190,7 +258,7 @@ loudness, a little memory on the way up, a fall under gravity, and peaks
 that lean on their neighbours.
 
 ```lua
-local spectrum = require("lib.spectrum")
+local spectrum = require("lib.util.spectrum")
 local vis = spectrum.new { bars = 24 }      -- vis.bars: a signal of 24 levels, 0 to 1
 ui.Rect { height = function() return 4 + 60 * (vis.bars:get()[3] or 0) end }
 vis:stop()
@@ -199,7 +267,10 @@ vis:stop()
 `spectrum.filter(opts)` is the same shaping, pure: `f.step(bands, dt)`
 gives bars. Options (`spectrum.DEFAULTS`): `bars`, `rate_hz`, `noise`,
 `smoothing`, `gravity`, `spread`, `attack`, `release`, `auto`,
-`sensitivity`.
+`sensitivity`. Options are captured when the filter is constructed.
+The numeric filter lives in `morf.audio.spectrum_filter`, with reusable native
+scratch buffers. Neighbour spread uses two linear passes instead of comparing
+every pair of bars. Lua retains monitor subscriptions, signals and lifecycle.
 
 ## lyrics
 
@@ -209,8 +280,8 @@ track: an `.lrc` beside the playing file, then lrclib.net (keyless), cached
 on disk for a week (a miss too).
 
 ```lua
-local lyrics = require("lib.lyrics")
-local follow = lyrics.follow(require("lib.mpris").connect())
+local lyrics = require("lib.integrations.lyrics")
+local follow = lyrics.follow(require("lib.services.mpris").connect())
 ui.Text { text = function() return follow.line:get() end }
 ```
 
@@ -230,7 +301,7 @@ the file watched so another screen's runtime or an editor changes it live
 keys the defaults lack are kept in the file untouched.
 
 ```lua
-local config = require("lib.settings").open {
+local config = require("lib.util.settings").open {
   path = morf.config_path("shell.json"),
   defaults = { appearance = { rounding = { scale = 1 } }, bar = { persistent = true } },
 }
@@ -249,7 +320,7 @@ config.values.bar.persistent = true       -- the same, through nested tables
 bounded lift among comparable matches otherwise.
 
 ```lua
-local used = require("lib.frecency").open { path = morf.state_path("launches.json") }
+local used = require("lib.util.frecency").open { path = morf.state_path("launches.json") }
 used.record(app.id)
 used.rank(query, apps, { key = "name", id = "id", limit = 30 })   -- fuzzy hits, reordered
 ```
@@ -263,6 +334,14 @@ kept current as lule rewrites it. For the colours themselves as the tool
 sets them on terminals, whatever the tool, see `morf.terminal.listen`
 (docs/IO.md); the caelestia port uses both, the file as the backup.
 
+`lule.generate({ image = "/path/to/wallpaper.png", theme = "dark",
+palette = "pigment" }, callback)` runs generation asynchronously, with a
+60-second timeout and bounded output. It uses Lule's own configuration and
+post-generation hooks. `directory` can replace `image` for random selection;
+`configs`, `cache`, `env` and `command` can isolate a run. The returned process
+handle can be cancelled, and the callback receives the normal `morf.run`
+result. Invalid options return `nil, reason` before starting a process.
+
 ## material
 
 `lib/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
@@ -272,7 +351,7 @@ the `*Fixed` roles, ...) at its tone for dark or light. This is what an M3
 shell's colour tool does, in Lua.
 
 ```lua
-local material = require("lib.material")
+local material = require("lib.util.material")
 local s = material.scheme("#4a7fb5", { variant = "tonal_spot", mode = "dark" })
 s.primary  s.surfaceContainer  s.palettes.tertiary(70)
 material.from_image("~/Pictures/sea.jpg", { mode = "light" }, function(ok, s) ... end)
@@ -300,7 +379,7 @@ It is a port of the substance of impasto's `theme_manager.py`, built on
 `morf.image.palette`, `morf.color`, `morf.fs` and `morf.json`.
 
 ```lua
-local palette = require("lib.palette")
+local palette = require("lib.util.palette")
 
 palette.from_image("~/Pictures/sea.jpg", { mode = "dark" }, function(ok, p)
   if not ok then return morf.log.warn(p) end
@@ -441,7 +520,7 @@ lone scalar bare); `call1` and `first` take the one output out.
 ### `networkmanager` — `org.freedesktop.NetworkManager`, system bus
 
 ```lua
-local net = require("lib.networkmanager").connect()
+local net = require("lib.services.networkmanager").connect()
 net.state.available, .version, .state, .connectivity         -- "full", "portal", ...
 net.state.networking_enabled, .wifi_enabled, .wifi_hardware_enabled
 net.state.primary  { id, type, path }
@@ -482,7 +561,7 @@ waiting on polkit.
 ### `bluez` — `org.bluez`, system bus
 
 ```lua
-local bt = require("lib.bluez").connect()
+local bt = require("lib.services.bluez").connect()
 bt.state.available, .adapter, .address, .powered, .discovering, .discoverable,
        .pairable, .connected_count
 bt.state.adapters -- rows: path, name, address, powered, discovering, discoverable, pairable
@@ -510,7 +589,7 @@ does not register.
 ### `upower` — `org.freedesktop.UPower` and power-profiles-daemon
 
 ```lua
-local power = require("lib.upower").connect()
+local power = require("lib.services.upower").connect()
 power.state.available, .on_battery, .lid_is_closed, .lid_is_present
 power.state.display  { present, percentage, state, charging, time_to_empty, time_to_full,
                        icon_name, energy_rate, kind, warning_level }
@@ -521,7 +600,7 @@ power.state.profiles { available, active, degraded, service, list = rows { name,
 
 power.set_profile("power-saver" | "balanced" | "performance")
 power.devices(), power.refresh()
-require("lib.upower").format_time(seconds)  -- "3 h 12 min"
+require("lib.services.upower").format_time(seconds)  -- "3 h 12 min"
 ```
 
 Power profiles are read from `org.freedesktop.UPower.PowerProfiles`, falling
@@ -531,7 +610,7 @@ running.
 ### `mpris` — `org.mpris.MediaPlayer2.*`, session bus
 
 ```lua
-local media = require("lib.mpris").connect()
+local media = require("lib.services.mpris").connect()
 media.state.available, .count
 media.state.players -- rows: name, identity, desktop_entry, status, playing, title, artist,
                     -- album, art_url, length, position, volume, can_*
@@ -559,7 +638,7 @@ skipped by default (`ignore`).
 ### `logind` — `org.freedesktop.login1`, system bus
 
 ```lua
-local login = require("lib.logind").connect()
+local login = require("lib.services.logind").connect()
 login.state.available
 login.state.session { id, path, user, uid, type, class, seat, vt, active, locked, idle,
                       remote, state, desktop, service }
@@ -628,7 +707,7 @@ The shared machinery for the libraries below that watch something.
 The machine, from `/proc` and `/sys` only.
 
 ```lua
-local sysinfo = require("lib.sysinfo")
+local sysinfo = require("lib.services.sysinfo")
 ui.Text { text = function() return ("CPU %d%%"):format(sysinfo.cpu().usage) end }
 ui.Text { text = function()
   local t = sysinfo.temperatures().cpu
@@ -669,7 +748,7 @@ wttr.in as the fallback and as the answer when no place is given (it guesses
 from the address).
 
 ```lua
-local weather = require("lib.weather")
+local weather = require("lib.integrations.weather")
 local here = weather.new { location = "Wageningen", units = "metric" }
 ui.Text { text = function()
   local now = here:get()
@@ -700,7 +779,7 @@ A public user's contribution calendar: a year of days, each with a count and
 the 0-4 shade GitHub draws it in.
 
 ```lua
-local github = require("lib.github")
+local github = require("lib.integrations.github")
 local me = github.new { user = "torvalds" }          -- or { user = ..., token = "ghp_..." }
 ui.Text { text = function()
   local c = me:get()
@@ -741,7 +820,7 @@ database, installs, or asks for privileges.
 - **flatpak**: `flatpak remote-ls --updates` and `flatpak list`.
 
 ```lua
-local packages = require("lib.packages")
+local packages = require("lib.integrations.packages")
 local updates = packages.new { interval = 60 * 60 * 1000 }
 ui.Text { text = function()
   local state = updates:get()
@@ -765,7 +844,7 @@ Claude Code's token usage from its own transcripts, a port of impasto's
 last seven days, read from `~/.claude/projects/**/*.jsonl` with `morf.fs`.
 
 ```lua
-local claude_usage = require("lib.claude_usage")
+local claude_usage = require("lib.integrations.claude_usage")
 local usage = claude_usage.new {}
 ui.Text { text = function()
   local u = usage:get()

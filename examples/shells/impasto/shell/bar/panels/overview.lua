@@ -166,7 +166,7 @@ end
 -- What the overview asks of Hyprland beyond services/workspaces: the
 -- classic dispatcher first, the Lua one (0.56+) when that is refused, as
 -- impasto's HyprlandService spells it. Nothing is sent in the demo.
-local ok_hypr, hyprland = pcall(require, "lib.hyprland")
+local ok_hypr, hyprland = pcall(require, "lib.integrations.hyprland")
 if not ok_hypr then hyprland = nil end
 
 local function dispatch(classic, argument, lua)

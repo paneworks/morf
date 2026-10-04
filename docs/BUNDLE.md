@@ -2,13 +2,8 @@
 
 A bundle is morf and a configuration in one executable: the configuration,
 the Lua it requires, its assets and its fonts ride inside the file, so the
-result runs on a machine, or as a user, that has none of them on disk. A
-greeter started by greetd as the `greeter` user is the usual reason: that
-user cannot read your `~/.config`, your `~/.local/share/morf/library` or
-your `~/.fonts`, and should not depend on them.
-
-`logre` is the example in this repository: caelestia's greeter and lock
-screen as one file in `/usr/bin`.
+result runs on a machine, or as a user, that has none of them on disk. Bundles are optional for distributing standalone widgets. Shell, lock and
+greeter use the normal morf executable; see [system installation](INSTALL.md).
 
 ## What a bundle is
 
@@ -26,8 +21,8 @@ Arguments go to the configuration, after `--`, exactly as with
 `morf CONFIG -- ARGS`:
 
 ```
-logre                   # the configuration with no arguments
-logre -- lock           # morf.operands = { "lock" }
+./mything               # the configuration with no arguments
+./mything -- preview     # morf.operands = { "preview" }
 ```
 
 ## What goes in
@@ -43,7 +38,7 @@ In this order:
      greet` lands at `greet/…`);
    - a path from anywhere else goes in by its own name (`--with
      library/lib` lands at `lib/…`), which is exactly where
-     `require("lib.auth")` looks.
+     `require("lib.util.auth")` looks.
 4. **Every font the configuration names.** morf runs the configuration once,
    headless, reads the `font_family` of every node it built, and carries
    every file of each family into `fonts/`. Generic names (`sans-serif`,
@@ -57,13 +52,13 @@ faces win over whatever the machine has.
 
 The executable copied into the bundle is whichever morf runs `bundle`. So
 run it with the **dist** binary, the one `make install` puts in
-`~/.local/bin/morf`. That one is linked against the machine's own libraries,
+`/usr/bin/morf`. That one is linked against the machine's own libraries,
 not the Nix store, so the bundle runs outside the development shell. Run it
 outside that shell too, or with its variables cleared, because they hide
 the machine's Vulkan driver:
 
 ```
-env -u LD_LIBRARY_PATH -u XDG_DATA_DIRS ~/.local/bin/morf bundle path/to/init.lua -o mything \
+env -u LD_LIBRARY_PATH -u XDG_DATA_DIRS /usr/bin/morf bundle path/to/init.lua -o mything \
   --with library/lib
 ```
 
@@ -79,80 +74,19 @@ library/lib`. Without it the bundle starts and then fails at the first
 Carrying the whole library costs a few hundred kilobytes; it is simpler than
 working out which modules are used.
 
-### Several parts in one bundle
+## Shell, lock and greeter
 
-One bundle runs one configuration, but that configuration can choose
-between parts by its first argument. `examples/shells/caelestia/logre.lua`
-is all of it:
+These are installed Lua configurations loaded by the same executable:
 
-```lua
-local morf = require("morf")
-
-if morf.operands[1] == "lock" then
-  table.remove(morf.operands, 1)   -- the part reads its own arguments from the first
-  require("lock.init")
-else
-  require("greet.init")
-end
+```sh
+morf shell
+morf lock
+morf greet
 ```
 
-Each part stays a self-contained folder (`greet/init.lua`, `lock/init.lua`),
-runnable on its own with `morf -c caelestia/greet`. The entry file only
-picks one, and `--with` carries both.
-
-## logre
-
-```
-env -u LD_LIBRARY_PATH -u XDG_DATA_DIRS ~/.local/bin/morf bundle examples/shells/caelestia/logre.lua \
-  -o target/dist/logre \
-  --with examples/shells/caelestia/greet \
-  --with examples/shells/caelestia/lock \
-  --with library/lib
-```
-
-That makes about 56 files: the entry, both parts, the library, and Roboto
-and Material Symbols Rounded. The result is about 48 MB, most of it morf
-itself.
-
-`tools/logre/update.sh` does the build and the install in one go. Run it as
-yourself; it asks sudo only for what needs root:
-
-1. it builds `target/dist/logre` as above;
-2. it installs it as `/usr/bin/logre`, keeping the first one it replaces as
-   `/usr/bin/logre.bak-old`;
-3. it points greetd at it: `command = "cage -s -- /usr/bin/logre"` in
-   `/etc/greetd/config.toml`, keeping the old config beside it.
-
-Then:
-
-| what | runs |
-|---|---|
-| the login screen | greetd → `cage -s -- /usr/bin/logre` |
-| the lock key | `logre -- lock` (Super+L in `~/.config/hypr/lua/binds.lua`) |
-| the lock, to look at | `logre -- lock window preview` |
-
-If the greeter does not come up after an update, switch to a text console
-(Ctrl+Alt+F2) and put the old one back:
-
-```
-sudo cp /usr/bin/logre.bak-old /usr/bin/logre
-```
-
-## Checking a bundle before installing it
-
-A bundle can be started in a headless cage with a throwaway home, which is
-close to what the `greeter` user sees: nothing of yours on disk.
-
-```
-env -u LD_LIBRARY_PATH -u XDG_DATA_DIRS -u WAYLAND_DISPLAY -u XDG_DATA_HOME \
-  HOME=$(mktemp -d) WLR_BACKENDS=headless timeout 6 cage -- target/dist/logre
-```
-
-It should run until the timeout (exit 124) with no `morf:` errors. Do the
-same with `-- lock window preview` for the lock. `preview` never touches
-PAM, and that matters: a lock that is killed in the middle of a PAM
-conversation counts as a failed login, and three of those lock the account
-for ten minutes.
+Select a named configuration with `morf lock -c caelestia`, or preview it
+without locking or authenticating with `morf lock -- window preview`.
+See [system installation](INSTALL.md) for greetd setup and migration.
 
 ## Things to know
 
@@ -163,9 +97,9 @@ for ten minutes.
 - **A bundle made from a bundle** drops the old payload first, so rebundling
   is safe.
 - **What is read at run time stays on the machine.** A bundle carries code
-  and fonts, not state. `logre`'s lock still reads your lule colours and
+  and fonts, not state. The lock still reads your lule colours and
   wallpaper (it runs as you); the greeter reads the system's accounts and
   sessions and an optional `/etc/morf/caelestia-accent`. PAM stacks,
   greetd's config and anything in `/etc` are the machine's.
 - **Rebuild after changing the parts or the library.** The bundle is a
-  snapshot; `make install` and `make apply` do not touch `/usr/bin/logre`.
+  snapshot. Normal shell, lock and greeter installations load Lua from disk.

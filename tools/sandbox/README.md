@@ -21,6 +21,16 @@ crops them), `point X Y` / `click X Y [B]` / `scroll N` (the nested pointer),
 Output lands in `$WORK/out/<shell>-<NAME>/`. See the header of `nested.sh` for
 the environment it reads.
 
+`A11Y=1` puts an accessibility bus on the private session bus, switched
+on as a screen reader would switch it on (the bus launcher keeps its
+switches in memory: no dconf in here; its registry is started by hand: no
+systemd), before the shell starts. The step `a11y LABEL` then writes what a
+screen reader sees -- every application's tree over AT-SPI, through
+libatspi (`a11ydump.py`) -- to `a11y-LABEL.txt`:
+
+    A11Y=1 MORF_CONFIG=examples/shells/caelestia/shell/init.lua MORF_ENV="CAELESTIA_DRY_RUN=1" \
+      tools/sandbox/nested.sh morf a11y tools/sandbox/caelestia-a11y.steps
+
 `wlproxy.py` sits between cage and the nested Hyprland: cage 0.3 offers
 `xdg_wm_base` v5 and Hyprland binds v6, which only adds a state a compositor
 may never send, so the proxy advertises v6 and binds v5.
