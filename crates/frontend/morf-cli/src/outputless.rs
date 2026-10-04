@@ -18,6 +18,7 @@ use std::os::fd::AsFd;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
+use crate::desktop::desktop_for;
 use crate::{
     lock::*, paint::clock_text, services::apply_idle_timeouts, supervisor::execute_config_on,
     surface_layers::apply_service_requests, wake_plan::*, workers::*,
@@ -120,6 +121,7 @@ fn drive_outputless(
         return Ok(());
     }
     let mut client = None;
+    let mut desktop = None;
     let mut attempted: Option<Instant> = None;
     let mut clock = clock_text();
     runtime
@@ -138,6 +140,7 @@ fn drive_outputless(
         {
             attempted = Some(Instant::now());
             client = connect_client(runtime, &send)?;
+            desktop = client.as_ref().map(desktop_for).transpose()?;
         }
         let sleep = Sleep::plan_with(
             runtime,
@@ -155,6 +158,9 @@ fn drive_outputless(
                 let woke = client
                     .wait_for(timeout, Some(wake.as_fd()))
                     .map_err(|error| error.to_string())?;
+                if let Some(desktop) = desktop.as_mut() {
+                    desktop.dispatch_pending()?;
+                }
                 log_wake(OUTPUTLESS, woke, &sleep, slept);
             }
             None => {
@@ -180,7 +186,9 @@ fn drive_outputless(
                 })?;
                 if let Some(client) = client.as_mut() {
                     client.set_idle_timeouts(&runtime.idle_timeouts());
-                    let _ = client.reset_gamma(None);
+                }
+                if let Some(desktop) = desktop.as_mut() {
+                    let _ = desktop.reset_gamma(None);
                 }
             }
         }
@@ -202,10 +210,10 @@ fn drive_outputless(
         runtime.take_layer_surface_change();
         runtime.take_window_surface_change();
         runtime.take_removed_nodes();
-        let Some(client) = client.as_mut() else {
+        let (Some(client), Some(desktop)) = (client.as_mut(), desktop.as_mut()) else {
             continue;
         };
-        apply_service_requests(runtime, client);
+        apply_service_requests(runtime, client, desktop);
         apply_idle_timeouts(runtime, client);
         while let Some(event) = client.next_event() {
             follow_up = true;
@@ -228,7 +236,7 @@ fn drive_outputless(
                 _ => {}
             }
         }
-        apply_service_requests(runtime, client);
+        apply_service_requests(runtime, client, desktop);
     }
 }
 

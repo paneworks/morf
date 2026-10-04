@@ -87,6 +87,12 @@ impl LayerClient {
         physical_size(self.primary_logical_size(), self.primary_scale_120())
     }
 
+    /// The connection, for a client of the same compositor on a queue of its
+    /// own (the desktop protocols).
+    pub fn connection(&self) -> wayland_client::Connection {
+        self.connection.clone()
+    }
+
     /// The output this client's surface was opened on, as it is now: its
     /// transform and subpixel layout decide how text may be drawn on it.
     pub fn own_output(&self) -> Option<Output> {

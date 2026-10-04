@@ -1777,6 +1777,7 @@ dependencies = [
  "jiff",
  "libc",
  "morf-app",
+ "morf-desktop",
  "morf-io",
  "morf-kit",
  "morf-layout",
@@ -1787,6 +1788,16 @@ dependencies = [
  "morf-value",
  "pollster",
  "serde_json",
+]
+
+[[package]]
+name = "morf-desktop"
+version = "0.1.5"
+dependencies = [
+ "rustix",
+ "smithay-client-toolkit",
+ "wayland-client",
+ "wayland-protocols-wlr",
 ]
 
 [[package]]

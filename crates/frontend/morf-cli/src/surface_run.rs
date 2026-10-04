@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+use crate::desktop::desktop_for;
 use crate::render_target::{primary_target, surface_backend};
 use crate::{
     backdrop::*, capture::*, lock::*, pacing::*, paint::*, services::*, supervisor::*,
@@ -23,6 +24,7 @@ use morf_app::WindowId;
 /// question; strings for the GPU, because "which one" is.
 fn capabilities_of(
     client: &LayerClient,
+    desktop: &morf_desktop::Desktop,
     renderer: &mut RenderEngine<WgpuBackend>,
 ) -> Vec<(String, String)> {
     let info = renderer.backend_mut().info();
@@ -52,7 +54,7 @@ fn capabilities_of(
         ("backdrop_blur", client.supports_backdrop_blur()),
         ("toplevels", client.supports_toplevels()),
         ("toplevel_control", client.supports_toplevel_control()),
-        ("gamma_control", client.supports_gamma_control()),
+        ("gamma_control", desktop.supports_gamma_control()),
         ("idle_inhibit", client.supports_idle_inhibit()),
     ] {
         list.push((name.to_owned(), supported.to_string()));
@@ -143,6 +145,7 @@ fn drive_surface(
         bar_config.output = None;
     }
     let mut client = LayerClient::connect(bar_config).map_err(|error| error.to_string())?;
+    let mut desktop = desktop_for(&client)?;
     // A clipboard or drop read finishing on its thread rings every loop, so
     // this one wakes for its answer rather than sleeping past it. Set before
     // the first configure, since a read can start before it.
@@ -257,7 +260,7 @@ fn drive_surface(
     let mut renderer = RenderEngine::new(backend);
     // Known only now: the protocols came with the connection, the GPU with
     // the renderer. Everything a configuration or `morf info` might ask.
-    let mut capabilities = capabilities_of(&client, &mut renderer);
+    let mut capabilities = capabilities_of(&client, &desktop, &mut renderer);
     if desktop_canvas {
         for (key, value) in &mut capabilities {
             if key == "desktop_canvas" {
@@ -296,7 +299,7 @@ fn drive_surface(
         &mut layer_surfaces,
         &name,
     )?;
-    apply_service_requests(runtime, &mut client);
+    apply_service_requests(runtime, &mut client, &mut desktop);
     slow(&name, "opening the other surfaces", windows_opening);
 
     let mut state = SurfaceEventState {
@@ -350,6 +353,7 @@ fn drive_surface(
         let woke = client
             .wait_for(sleep.timeout(), Some(wake.as_fd()))
             .map_err(|error| error.to_string())?;
+        desktop.dispatch_pending()?;
         wake.drain();
         log_wake(&name, woke, &sleep, slept);
         // Now and then, what keeps the loop drawing, when anything does.
@@ -414,7 +418,7 @@ fn drive_surface(
                 {
                     surface.layout = None;
                 }
-                let _ = client.reset_gamma(None);
+                let _ = desktop.reset_gamma(None);
                 // What to do once every output is gone may have changed.
                 tx.send(SupervisorMessage::Worker(WorkerMessage::Outputless {
                     output: name.clone(),
@@ -436,6 +440,7 @@ fn drive_surface(
             state.floating_surfaces.clear();
             state.layer_surfaces.clear();
             client = replacement;
+            desktop = desktop_for(&client)?;
             client.set_waker(morf_io::wake_all);
             reserve = runtime.layer_surface_config().reserve;
             tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
@@ -496,7 +501,7 @@ fn drive_surface(
                 &name,
             )?;
         }
-        apply_service_requests(runtime, &mut client);
+        apply_service_requests(runtime, &mut client, &mut desktop);
         while let Some(event) = client.next_event() {
             follow_up = true;
             let handling = Instant::now();
@@ -524,7 +529,7 @@ fn drive_surface(
                 Err(error) => return Err(error),
             }
         }
-        apply_service_requests(runtime, &mut client);
+        apply_service_requests(runtime, &mut client, &mut desktop);
         apply_capture_releases(runtime, &mut renderer);
         apply_window_surface_actions(runtime, &client, &state.floating_surfaces);
         advance_without_callbacks(runtime, &client, &mut state)?;

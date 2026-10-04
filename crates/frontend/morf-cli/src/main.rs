@@ -7,6 +7,7 @@ mod capture;
 mod commands;
 mod config;
 mod crash;
+mod desktop;
 mod headless;
 mod headless_env;
 mod headless_input;

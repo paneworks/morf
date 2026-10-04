@@ -34,5 +34,6 @@ morf-render.workspace = true
 morf-scene.workspace = true
 morf-text.workspace = true
 morf-app.workspace = true
+morf-desktop.workspace = true
 pollster.workspace = true
 image.workspace = true

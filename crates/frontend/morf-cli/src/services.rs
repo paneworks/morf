@@ -61,25 +61,25 @@ pub(crate) fn apply_output_power_requests(runtime: &mut Runtime, client: &mut La
     }
 }
 
-pub(crate) fn apply_gamma_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+pub(crate) fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
     for request in runtime.take_gamma_requests() {
         let output = request.output.as_deref();
         let result = match request.set {
-            Some((temperature, brightness, gamma)) => client.set_gamma(
+            Some((temperature, brightness, gamma)) => desktop.set_gamma(
                 output,
-                morf_app::GammaSettings {
+                morf_desktop::GammaSettings {
                     temperature,
                     brightness,
                     gamma,
                 },
             ),
-            None => client.reset_gamma(output),
+            None => desktop.reset_gamma(output),
         };
         if let Err(error) = result {
             runtime.warn(format!("morf.gamma: {error}"));
         }
     }
-    for output in client.take_gamma_failures() {
+    for output in desktop.take_gamma_failures() {
         runtime.warn(format!(
             "morf.gamma: the compositor refused gamma control of `{output}` (another client may hold it)"
         ));

@@ -11,6 +11,7 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use crate::desktop::desktop_for;
 use crate::render_target::surface_backend;
 use crate::{
     capture::*, lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*,
@@ -132,6 +133,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
     // from the first moment; beside the shell's socket, not over it.
     let ipc = crate::lock_ipc::LockIpc::bind(path)?;
     let mut client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
+    let mut desktop = desktop_for(&client)?;
     client.set_idle_timeouts(&runtime.idle_timeouts());
     client
         .lock()
@@ -139,7 +141,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
     // Asked for, not yet granted: the compositor says `locked` once every
     // output shows a locked frame, and only then is the session hidden.
     runtime.set_session_lock_state(SessionLockState::Pending);
-    apply_service_requests(&mut runtime, &mut client);
+    apply_service_requests(&mut runtime, &mut client, &mut desktop);
     let mut outputs: Vec<LockOutput> = Vec::new();
     let mut last_frame = None;
     // The pointer, the fingers and which node each surface's keys go to: the
@@ -169,11 +171,12 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
         let woke = client
             .wait_for(sleep.timeout(), Some(wake.as_fd()))
             .map_err(|error| error.to_string())?;
+        desktop.dispatch_pending()?;
         wake.drain();
         log_wake("lock", woke, &sleep, slept);
         let mut repaint = std::mem::take(&mut repaint_next) | runtime.poll_services();
         repaint |= ipc.serve(&mut runtime);
-        apply_service_requests(&mut runtime, &mut client);
+        apply_service_requests(&mut runtime, &mut client, &mut desktop);
         apply_idle_timeouts(&mut runtime, &mut client);
         unlock_pending |= runtime.take_session_unlock_request();
         // The file lifts the lock the way it asked for it: by clearing
@@ -429,7 +432,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                 | Event::Closed { .. } => {}
             }
         }
-        apply_service_requests(&mut runtime, &mut client);
+        apply_service_requests(&mut runtime, &mut client, &mut desktop);
         if repaint {
             // A tree taken down leaves shaped text and textures in whichever
             // renderer drew it, keyed on nodes that are gone.

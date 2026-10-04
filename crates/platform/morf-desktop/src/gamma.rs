@@ -15,13 +15,14 @@ use std::os::fd::AsFd;
 
 use rustix::fs::{MemfdFlags, memfd_create};
 use wayland_client::protocol::wl_output;
+use wayland_client::globals::GlobalList;
 use wayland_client::{Connection, Dispatch, QueueHandle};
 use wayland_protocols_wlr::gamma_control::v1::client::{
     zwlr_gamma_control_manager_v1::ZwlrGammaControlManagerV1,
     zwlr_gamma_control_v1::{self, ZwlrGammaControlV1},
 };
 
-use crate::backend::wayland::{LayerClient, LayerState};
+use crate::{Desktop, DesktopState};
 
 /// What an output's ramps should do.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -133,6 +134,24 @@ pub(crate) struct GammaState {
 }
 
 impl GammaState {
+    pub(crate) fn bind(globals: &GlobalList, qh: &QueueHandle<DesktopState>) -> Self {
+        Self {
+            manager: globals.bind(qh, 1..=1, ()).ok(),
+            ..Self::default()
+        }
+    }
+
+    /// Lets go of a control whose output went away.
+    pub(crate) fn forget(&mut self, output: &wl_output::WlOutput) {
+        self.controls.retain(|control| {
+            let keep = control.output != *output;
+            if !keep {
+                control.control.destroy();
+            }
+            keep
+        });
+    }
+
     fn apply(control: &mut GammaControl) {
         let Some(size) = control.size else {
             return;
@@ -157,27 +176,10 @@ impl GammaState {
     }
 }
 
-impl LayerClient {
+impl Desktop {
     /// Whether the compositor offers gamma control.
     pub fn supports_gamma_control(&self) -> bool {
         self.state.gamma.manager.is_some()
-    }
-
-    /// The outputs a gamma request is for: the one named, or the one this
-    /// shell sits on, or else every output.
-    fn gamma_targets(&self, output: Option<&str>) -> Result<Vec<wl_output::WlOutput>, String> {
-        match output {
-            Some(name) => self
-                .layer_output(Some(name))
-                .ok()
-                .flatten()
-                .map(|output| vec![output])
-                .ok_or_else(|| format!("no output named `{name}`")),
-            None => Ok(match self.state.output_power_target.clone() {
-                Some(output) => vec![output],
-                None => self.state.outputs.outputs().collect(),
-            }),
-        }
     }
 
     /// Sets the ramps of the named output, or this shell's own, or all.
@@ -189,8 +191,8 @@ impl LayerClient {
         let Some(manager) = self.state.gamma.manager.clone() else {
             return Err("this compositor has no gamma control".to_owned());
         };
-        let qh = self.queue.handle();
-        for output in self.gamma_targets(output)? {
+        let qh = self.handle();
+        for output in self.state.targets(output)? {
             let gamma = &mut self.state.gamma;
             let index = match gamma
                 .controls
@@ -221,7 +223,7 @@ impl LayerClient {
     /// back.
     pub fn reset_gamma(&mut self, output: Option<&str>) -> Result<(), String> {
         let targets = match output {
-            Some(_) => self.gamma_targets(output)?,
+            Some(_) => self.state.targets(output)?,
             // A reset without a name puts back everything this shell changed.
             None => self
                 .state
@@ -247,7 +249,7 @@ impl LayerClient {
     }
 }
 
-impl Dispatch<ZwlrGammaControlManagerV1, ()> for LayerState {
+impl Dispatch<ZwlrGammaControlManagerV1, ()> for DesktopState {
     fn event(
         _: &mut Self,
         _: &ZwlrGammaControlManagerV1,
@@ -259,7 +261,7 @@ impl Dispatch<ZwlrGammaControlManagerV1, ()> for LayerState {
     }
 }
 
-impl Dispatch<ZwlrGammaControlV1, wl_output::WlOutput> for LayerState {
+impl Dispatch<ZwlrGammaControlV1, wl_output::WlOutput> for DesktopState {
     fn event(
         state: &mut Self,
         proxy: &ZwlrGammaControlV1,
@@ -285,11 +287,7 @@ impl Dispatch<ZwlrGammaControlV1, wl_output::WlOutput> for LayerState {
             zwlr_gamma_control_v1::Event::Failed => {
                 let control = state.gamma.controls.remove(index);
                 control.control.destroy();
-                let name = state
-                    .outputs
-                    .info(output)
-                    .and_then(|info| info.name)
-                    .unwrap_or_default();
+                let name = state.output_name(output);
                 state.gamma.failures.push(name);
             }
             _ => {}

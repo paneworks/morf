@@ -20,7 +20,6 @@ mod client_surface;
 mod cursor;
 mod data_control;
 mod data_handlers;
-mod gamma;
 mod helpers;
 mod inhibit_handlers;
 mod input_handlers;
@@ -41,10 +40,6 @@ pub use buffer_sink::WaylandBufferSink;
 pub use client_layer::*;
 pub use client_services::Woke;
 pub use cursor::cursor_shape;
-pub use gamma::{
-    GammaSettings, NEUTRAL as NEUTRAL_TEMPERATURE, TEMPERATURE_RANGE, ramps as gamma_ramps,
-    white_point,
-};
 pub use helpers::*;
 pub use state_types::*;
 pub use surface_types::*;
