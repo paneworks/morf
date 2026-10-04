@@ -17,9 +17,14 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use morf_layout::{Layout, Size, TextMeasurer, TextOptions};
-use morf_lua::{Limits, Runtime, Screen, WindowSurfaceKind};
-use morf_render::{BlendSpace, DrawList, RenderEngine, ShaderRegistration, WgpuBackend};
+use morf_lua::{Limits, Runtime, Screen};
+use morf_render::DrawList;
 use morf_scene::{Element, NodeHandle};
+
+#[path = "frame_bench/gpu.rs"]
+mod gpu;
+#[path = "frame_bench/trace.rs"]
+mod trace;
 
 /// Text measured by a rule rather than a font stack.
 ///
@@ -206,92 +211,7 @@ fn main() {
     // configuration whose motion misbehaves can be reproduced without a
     // compositor in the way.
     if std::env::args().nth(2).as_deref() == Some("trace") {
-        let mut moving = Vec::new();
-        let mut stack = vec![runtime.scene().roots()[0]];
-        while let Some(node) = stack.pop() {
-            let scene = runtime.scene();
-            if format!("{:?}", scene.element(node).expect("live")) == "SdfShape" {
-                moving.push(node);
-            }
-            stack.extend(scene.children(node).expect("live").iter().copied());
-        }
-        println!("tracing {} shapes", moving.len());
-        // In real time, deliberately. Timers fire off the wall clock, so a
-        // configuration that applies forces from one — anything with parts
-        // that pull on each other — sees those forces only if the trace takes
-        // as long to run as the motion it is tracing. Racing through the
-        // frames traces the motion with every force switched off.
-        // Long enough to show a slow drift, which is the failure a short trace
-        // cannot tell apart from an orbit.
-        let frames: u64 = std::env::args()
-            .nth(3)
-            .and_then(|arg| arg.parse().ok())
-            .map_or(600, |seconds: u64| seconds * 1000 / 16);
-        let started = Instant::now();
-        for frame in 0..frames {
-            let due = Duration::from_millis(frame * 16);
-            if let Some(rest) = due.checked_sub(started.elapsed()) {
-                std::thread::sleep(rest);
-            }
-            runtime.poll_services();
-            let advanced = runtime
-                .tick_animations(Duration::from_millis(16))
-                .expect("tick");
-            if frame % (frames / 20).max(1) == 0 || frame + 1 == frames {
-                let scene = runtime.scene();
-                let placed: Vec<(f64, f64, f64)> = moving
-                    .iter()
-                    .map(|node| {
-                        let size = scene.number(*node, "width").unwrap_or(0.0);
-                        (
-                            scene.number(*node, "x").unwrap_or(f64::NAN) + size / 2.0,
-                            scene.number(*node, "y").unwrap_or(f64::NAN) + size / 2.0,
-                            size / 2.0,
-                        )
-                    })
-                    .collect();
-                // Three numbers say more about a swarm than its coordinates
-                // do: where it sits, how far it reaches, and whether its parts
-                // are still distinct or have piled into one lump.
-                let count = placed.len() as f64;
-                let mid_x = placed.iter().map(|p| p.0).sum::<f64>() / count;
-                let mid_y = placed.iter().map(|p| p.1).sum::<f64>() / count;
-                let reach = placed
-                    .iter()
-                    .map(|p| (p.0 - mid_x).hypot(p.1 - mid_y))
-                    .fold(0.0, f64::max);
-                let mut closest = f64::INFINITY;
-                for (index, a) in placed.iter().enumerate() {
-                    for b in &placed[index + 1..] {
-                        closest = closest.min((a.0 - b.0).hypot(a.1 - b.1) - a.2 - b.2);
-                    }
-                }
-                // How far the worst blob has pushed past the edge of the
-                // surface, which is the one failure that shows on screen as a
-                // shape sliced flat rather than as motion that looks wrong.
-                let root = scene.roots()[0];
-                let wide = scene.number(root, "width").unwrap_or(0.0);
-                let tall = scene.number(root, "height").unwrap_or(0.0);
-                let escaped = placed
-                    .iter()
-                    .map(|p| {
-                        (p.2 - p.0)
-                            .max(p.0 + p.2 - wide)
-                            .max(p.2 - p.1)
-                            .max(p.1 + p.2 - tall)
-                    })
-                    .fold(f64::NEG_INFINITY, f64::max);
-                let spread = format!(
-                    "at ({mid_x:.0},{mid_y:.0}) reach {reach:.0} closest {closest:+.0} escaped {escaped:+.0}"
-                );
-                println!(
-                    "  t={:>5}ms active={} {}",
-                    started.elapsed().as_millis(),
-                    advanced.active,
-                    spread
-                );
-            }
-        }
+        trace::run(&mut runtime);
         return;
     }
 
@@ -320,156 +240,13 @@ fn main() {
         roots[index.min(roots.len() - 1)]
     };
     let size = Size { width, height };
-    let mut computed = settled(&mut runtime, root, size, &mut RuledText, &config);
+    let computed = settled(&mut runtime, root, size, &mut RuledText, &config);
     // `gpu` renders one frame on a real adapter instead of timing anything: a
     // shader the driver refuses looks fine from the CPU side, and the only way
     // to find out is to build the pipelines and draw, headless.
     if std::env::args().nth(2).as_deref() == Some("gpu") {
-        let backend = pollster::block_on(WgpuBackend::new(width as u32, height as u32))
-            .expect("a GPU adapter");
-        let mut engine = RenderEngine::new(backend);
-        // The surface's own blend space, as the shell would paint it.
-        let blend = BlendSpace::parse(&runtime.layer_surface_config().blend).unwrap_or_default();
-        engine.backend_mut().set_blend(blend);
-        // Settled again against the real faces: what the frame draws is
-        // shaped by the renderer's text system, and a binding placing
-        // something beside a label must read that label's real width, not
-        // the ruled estimate the timings use.
-        computed = settled(&mut runtime, root, size, engine.backend_mut(), &config);
-        let mut shaders = 0usize;
-        for shader in runtime.shaders() {
-            engine
-                .backend_mut()
-                .register_shader(ShaderRegistration {
-                    program: shader.program,
-                    wgsl: Some(&shader.wgsl),
-                    vertex: shader.vertex.as_deref(),
-                    offsets: &shader.offsets,
-                    uniform_size: shader.uniform_size,
-                    owns_coverage: shader.owns_coverage,
-                    effect: shader.samples_behind,
-                    textures: &shader.textures,
-                    data: &shader.data,
-                })
-                .unwrap_or_else(|error| panic!("{config}: shader pipeline: {error}"));
-            shaders += 1;
-        }
-        // Twice: the second frame is incremental and reuses an effect layer's
-        // target; `FRAME_BENCH_GPU_FRAMES` draws more, for `MORF_GPU_WAIT=1`.
-        let frames: usize =
-            std::env::var("FRAME_BENCH_GPU_FRAMES").map_or(2, |value| value.parse().unwrap_or(2));
-        for _ in 0..frames.max(2) {
-            if frames > 2 {
-                let _ = runtime.tick_animations(Duration::from_millis(16));
-                computed = settled(&mut runtime, root, size, engine.backend_mut(), &config);
-            }
-            runtime.sync_text_inputs(&computed, engine.backend_mut().text_system());
-            runtime.observe_stretch(&computed);
-            engine
-                .render(&runtime.scene(), &computed, 120, |_| {})
-                .unwrap_or_else(|error| panic!("{config}: render: {error}"));
-        }
-        println!("{config}");
-        println!("  {shaders} shader(s) built and one frame drawn on the GPU");
-        // A fourth argument names a PNG to write the frame to. Every gate in
-        // this repository can pass while a shader is visibly wrong, and the
-        // only way to find that out is to look at what it drew.
-        //
-        // Every visible `morf.window.layer` surface is drawn too, each by its
-        // own renderer in its own blend space, and laid over the shell's
-        // surface where its anchors and margins put it.
-        if let Some(path) = args.get(if gpu_size.is_some() { 4 } else { 3 }) {
-            let (full_width, full_height) = (width as u32, height as u32);
-            let mut picture = engine.backend_mut().read_pixels();
-            for surface in runtime.window_surface_configs() {
-                let WindowSurfaceKind::Layer(config) = &surface.kind else {
-                    continue;
-                };
-                if !surface.visible {
-                    continue;
-                }
-                let anchors = config.anchors;
-                let stretched = |near: bool, far: bool, size: u32, full: u32| {
-                    if size == 0 || (near && far) {
-                        full
-                    } else {
-                        size.min(full)
-                    }
-                };
-                let surface_width =
-                    stretched(anchors.left, anchors.right, config.width, full_width);
-                let surface_height =
-                    stretched(anchors.top, anchors.bottom, config.height, full_height);
-                let place =
-                    |near: bool, far: bool, size: u32, full: u32, before: i32, after: i32| {
-                        let free = i64::from(full) - i64::from(size);
-                        let at = match (near, far) {
-                            (true, false) => i64::from(before),
-                            (false, true) => free - i64::from(after),
-                            _ => free / 2,
-                        };
-                        at.clamp(0, free.max(0)) as u32
-                    };
-                let x = place(
-                    anchors.left,
-                    anchors.right,
-                    surface_width,
-                    full_width,
-                    config.margin_left,
-                    config.margin_right,
-                );
-                let y = place(
-                    anchors.top,
-                    anchors.bottom,
-                    surface_height,
-                    full_height,
-                    config.margin_top,
-                    config.margin_bottom,
-                );
-                let backend = pollster::block_on(WgpuBackend::new(surface_width, surface_height))
-                    .expect("a GPU adapter");
-                let mut surface_engine = RenderEngine::new(backend);
-                surface_engine
-                    .backend_mut()
-                    .set_blend(BlendSpace::parse(&config.blend).unwrap_or_default());
-                let surface_layout = settled(
-                    &mut runtime,
-                    surface.root,
-                    Size {
-                        width: f64::from(surface_width),
-                        height: f64::from(surface_height),
-                    },
-                    surface_engine.backend_mut(),
-                    &config.namespace,
-                );
-                runtime
-                    .sync_text_inputs(&surface_layout, surface_engine.backend_mut().text_system());
-                surface_engine
-                    .render(&runtime.scene(), &surface_layout, 120, |_| {})
-                    .unwrap_or_else(|error| panic!("{}: render: {error}", config.namespace));
-                let pixels = surface_engine.backend_mut().read_pixels();
-                // Premultiplied over, byte for byte, as the compositor lays
-                // one surface on another.
-                for row in 0..surface_height {
-                    for column in 0..surface_width {
-                        let from = ((row * surface_width + column) * 4) as usize;
-                        let to = (((y + row) * full_width + x + column) * 4) as usize;
-                        let alpha = u32::from(pixels[from + 3]);
-                        for channel in 0..4 {
-                            let under = u32::from(picture[to + channel]);
-                            picture[to + channel] = (u32::from(pixels[from + channel])
-                                + (under * (255 - alpha) + 127) / 255)
-                                .min(255) as u8;
-                        }
-                    }
-                }
-            }
-            image::RgbaImage::from_raw(full_width, full_height, picture)
-                .expect("the readback is the size of the target")
-                .save(path)
-                .expect("the image is written");
-            println!("  written to {path}");
-        }
+        let picture = args.get(if gpu_size.is_some() { 4 } else { 3 });
+        gpu::run(&mut runtime, root, size, &config, picture);
         return;
     }
     let scene = runtime.scene();
