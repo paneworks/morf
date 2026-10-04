@@ -361,3 +361,18 @@ impl Reactive {
         self.dead_signals.extend(dead);
     }
 }
+
+impl Reactive {
+    /// Takes an effect out of the graph: it never runs again and depends on
+    /// nothing. While a flush holds the graph the removal waits for it to
+    /// finish. False if the effect was already gone.
+    pub fn dispose_effect(&mut self, token: u64) -> bool {
+        if self.effects.remove(&token).is_none() {
+            return false;
+        }
+        if let Some(id) = self.effect_ids.remove(&token) {
+            self.dead_effects.push(id);
+        }
+        true
+    }
+}

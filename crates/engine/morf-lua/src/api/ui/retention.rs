@@ -340,11 +340,8 @@ pub(crate) struct EffectHandleToken {
 /// nothing. While a flush holds the graph the removal waits for it to
 /// finish. False if the effect was already gone.
 pub(crate) fn dispose_effect(state: &mut ReactiveState, token: u64) -> bool {
-    if state.reactive.effects.remove(&token).is_none() {
+    if !state.reactive.dispose_effect(token) {
         return false;
-    }
-    if let Some(id) = state.reactive.effect_ids.remove(&token) {
-        state.reactive.dead_effects.push(id);
     }
     state.collect_graph_garbage();
     true
