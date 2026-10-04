@@ -1,6 +1,6 @@
+use morf_app::Event;
 use morf_lua::{EventPoint, FocusReason, Runtime, UiEvent};
 use morf_scene::NodeHandle;
-use morf_app::Event;
 
 use crate::surfaces::*;
 

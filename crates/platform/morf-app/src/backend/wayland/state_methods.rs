@@ -1,6 +1,6 @@
 use smithay_client_toolkit::shm::slot::SlotPool;
-use wayland_client::protocol::{wl_output, wl_shm};
 use wayland_client::QueueHandle;
+use wayland_client::protocol::{wl_output, wl_shm};
 
 use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*};
 

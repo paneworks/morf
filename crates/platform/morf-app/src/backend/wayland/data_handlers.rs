@@ -12,9 +12,9 @@ use wayland_client::protocol::{wl_data_device, wl_data_source, wl_surface};
 use wayland_client::{Connection, QueueHandle};
 
 use crate::backend::wayland::client_data::ReadTag;
+use crate::backend::wayland::{state_types::*, surface_types::*};
 use crate::mime::{URI_LIST_MIME, best_text_mime};
 use crate::transfer::{pipe, spawn_read, spawn_write, take_slot};
-use crate::backend::wayland::{state_types::*, surface_types::*};
 
 impl LayerState {
     /// The drag offer SCTK is holding for one data device.
@@ -174,8 +174,7 @@ impl DataDeviceHandler for LayerState {
         drag.x = x;
         drag.y = y;
         let surface = drag.surface;
-        self.events
-            .push_back(Event::DragMotion { surface, x, y });
+        self.events.push_back(Event::DragMotion { surface, x, y });
     }
 
     fn selection(

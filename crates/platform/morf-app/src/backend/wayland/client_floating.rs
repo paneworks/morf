@@ -64,8 +64,7 @@ impl LayerClient {
 
     /// Destroys the current floating window when present.
     pub fn close_floating(&mut self, id: u64) {
-        self.state
-            .release_surface_shortcuts(WindowId::Toplevel(id));
+        self.state.release_surface_shortcuts(WindowId::Toplevel(id));
         self.state.floatings.remove(&id);
         self.state.aux_scales.remove(&WindowId::Toplevel(id));
         self.state.floating_sizes.remove(&id);

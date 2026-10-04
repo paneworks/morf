@@ -28,7 +28,12 @@ impl VirtualSeat {
             }
             _ => {}
         }
-        if let Event::PointerButton { surface, pressed: true, .. } = event {
+        if let Event::PointerButton {
+            surface,
+            pressed: true,
+            ..
+        } = event
+        {
             self.keyboard = Some(*surface);
         }
     }
@@ -41,8 +46,19 @@ impl VirtualSeat {
         button: u32,
         modifiers: KeyModifiers,
     ) -> [Event; 3] {
-        let press = |pressed| Event::PointerButton { surface, button, pressed, x, y, modifiers };
-        [Event::PointerMotion { surface, x, y }, press(true), press(false)]
+        let press = |pressed| Event::PointerButton {
+            surface,
+            button,
+            pressed,
+            x,
+            y,
+            modifiers,
+        };
+        [
+            Event::PointerMotion { surface, x, y },
+            press(true),
+            press(false),
+        ]
     }
 }
 
@@ -59,7 +75,9 @@ mod tests {
         }
         assert_eq!(seat.keyboard, Some(window));
         assert_eq!(seat.pointer, Some((window, 4.0, 5.0)));
-        seat.observe(&Event::PointerLeave { surface: WindowId::Popup(1) });
+        seat.observe(&Event::PointerLeave {
+            surface: WindowId::Popup(1),
+        });
         assert!(seat.pointer.is_some());
         seat.observe(&Event::PointerLeave { surface: window });
         assert_eq!(seat.pointer, None);

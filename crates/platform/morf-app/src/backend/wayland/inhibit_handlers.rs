@@ -89,8 +89,7 @@ impl LayerState {
                 inhibitor.destroy();
             }
             if let Some(active) = self.shortcuts_inhibit.clear() {
-                self.events
-                    .push_back(Event::ShortcutsInhibited { active });
+                self.events.push_back(Event::ShortcutsInhibited { active });
             }
             return;
         }
@@ -137,8 +136,7 @@ impl LayerState {
             inhibitor.destroy();
         }
         if let Some(active) = self.shortcuts_inhibit.set(role, false) {
-            self.events
-                .push_back(Event::ShortcutsInhibited { active });
+            self.events.push_back(Event::ShortcutsInhibited { active });
         }
     }
 }
@@ -163,9 +161,7 @@ impl Dispatch<ZwpKeyboardShortcutsInhibitorV1, WindowId> for LayerState {
             _ => return,
         };
         if let Some(active) = state.shortcuts_inhibit.set(*role, on) {
-            state
-                .events
-                .push_back(Event::ShortcutsInhibited { active });
+            state.events.push_back(Event::ShortcutsInhibited { active });
         }
     }
 }

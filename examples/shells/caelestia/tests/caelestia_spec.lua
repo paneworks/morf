@@ -687,12 +687,12 @@ test.describe("caelestia", function()
   test.it("lines the workspaces down the left edge, the active one lit", function()
     load()
     local track = math.floor(H * 0.5)
-    for i = 1, 10 do
+    for i = 1, 9 do
       local pill = test.get { id = "rail-pill-" .. i }
       test.near(pill.x + pill.width / 2, 5, 0.5)
       test.eq(pill.width, 6)
     end
-    local first, last = test.get { id = "rail-pill-1" }, test.get { id = "rail-pill-10" }
+    local first, last = test.get { id = "rail-pill-1" }, test.get { id = "rail-pill-9" }
     test.near(first.y, (H - track) / 2, 1)
     test.near(last.y + last.height, (H + track) / 2, 1)
     test.near(first.opacity, 1, 0.01)

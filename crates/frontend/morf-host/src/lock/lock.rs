@@ -1,9 +1,9 @@
-use morf_io::IpcIncoming;
-use morf_lua::{Runtime, SessionLockState};
-use morf_value::IpcValue;
-use morf_render::RenderEngine;
 use morf_app::Backend as _;
 use morf_app::{Event, LayerClient, Output, WindowId};
+use morf_io::IpcIncoming;
+use morf_lua::{Runtime, SessionLockState};
+use morf_render::RenderEngine;
+use morf_value::IpcValue;
 use std::os::fd::AsFd;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -11,12 +11,12 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-use crate::host::windows::{Kind, Windows};
 use crate::desktop::{desktop_for, dispatch_desktop};
+use crate::host::windows::{Kind, Windows};
 use crate::render_target::surface_backend;
 use crate::{
-    lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*,
-    surface_layers::*, surface_pointer::*, surfaces::*, wake_plan::*,
+    lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*, surface_layers::*,
+    surface_pointer::*, surfaces::*, wake_plan::*,
 };
 
 pub struct Worker {
@@ -37,10 +37,7 @@ impl WorkerSender {
         Self(sender)
     }
 
-    pub fn send(
-        &self,
-        command: WorkerCommand,
-    ) -> Result<(), mpsc::SendError<WorkerCommand>> {
+    pub fn send(&self, command: WorkerCommand) -> Result<(), mpsc::SendError<WorkerCommand>> {
         let sent = self.0.send(command);
         morf_io::wake_all();
         sent
@@ -136,9 +133,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
     let mut client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
     let mut desktop = desktop_for(&client)?;
     desktop.set_idle_timeouts(&runtime.idle_timeouts());
-    client
-        .lock()
-        .map_err(|error| error.to_string())?;
+    client.lock().map_err(|error| error.to_string())?;
     // Asked for, not yet granted: the compositor says `locked` once every
     // output shows a locked frame, and only then is the session hidden.
     runtime.set_session_lock_state(SessionLockState::Pending);

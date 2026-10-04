@@ -5,13 +5,14 @@
 //! the client, which has to be told that answer while the drag is still
 //! moving, and told when a drop is done with.
 
-use morf_lua::{ClipboardRequest, EventPoint, OfferDescription, Runtime};
-use morf_scene::NodeHandle;
+use morf_app::Backend;
 use morf_app::mime::{
     TEXT_MIMES, URI_LIST_MIME, accept_mime, encode_uri_list, path_to_uri, uri_to_path,
 };
-use morf_app::{Event, LayerClient, OfferInfo, WindowId};
+use morf_app::{Event, OfferInfo, WindowId};
 use morf_desktop::Desktop;
+use morf_lua::{ClipboardRequest, EventPoint, OfferDescription, Runtime};
+use morf_scene::NodeHandle;
 use std::sync::Arc;
 
 use crate::surfaces::*;
@@ -35,15 +36,13 @@ fn description(offer: &OfferInfo) -> OfferDescription {
 /// Handles the events this module owns, and hands every other one back.
 pub fn handle_data_event(
     runtime: &mut Runtime,
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     desktop: &mut Desktop,
     state: &mut SurfaceEventState,
     event: Event,
 ) -> Result<Result<bool, String>, Event> {
     let repaint = match event {
-        Event::OfferRead { request_id, result } => {
-            runtime.dispatch_offer_read(request_id, result)
-        }
+        Event::OfferRead { request_id, result } => runtime.dispatch_offer_read(request_id, result),
         Event::DragSourceEnded { dropped } => runtime.dispatch_drag_ended(dropped),
         Event::DragEnter {
             surface,
@@ -96,13 +95,9 @@ pub fn handle_data_event(
             if let Some((node, accepted)) = target
                 && accepted.is_some()
             {
-                let local = surface_layout(
-                    surface,
-                    &state.layout,
-                    &state.windows,
-                )
-                .map(|layout| layout.local_point(&runtime.scene(), node, x, y))
-                .unwrap_or((x, y));
+                let local = surface_layout(surface, &state.layout, &state.windows)
+                    .map(|layout| layout.local_point(&runtime.scene(), node, x, y))
+                    .unwrap_or((x, y));
                 let paths = drop
                     .uris
                     .iter()
@@ -134,7 +129,7 @@ pub fn handle_data_event(
 /// Re-hit-tests a moving drag and tells the areas it crossed.
 fn follow_drag(
     runtime: &mut Runtime,
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     state: &mut SurfaceEventState,
     x: f64,
     y: f64,
@@ -142,11 +137,7 @@ fn follow_drag(
     let Some(drag) = &state.drag else {
         return Ok(false);
     };
-    let hit = match surface_layout(
-        drag.surface,
-        &state.layout,
-        &state.windows,
-    ) {
+    let hit = match surface_layout(drag.surface, &state.layout, &state.windows) {
         Some(layout) => layout
             .drop_hit_test(&runtime.scene(), x, y)
             .map_err(|error| error.to_string())?,
@@ -197,11 +188,7 @@ fn leave_target(runtime: &mut Runtime, state: &mut SurfaceEventState) -> bool {
 /// Starts the offer reads the configuration asked for, each on whichever
 /// side announced its offer: a drag's is the window client's, a selection's
 /// the desktop's.
-pub fn apply_offer_reads(
-    runtime: &mut Runtime,
-    client: &mut LayerClient,
-    desktop: &mut Desktop,
-) {
+pub fn apply_offer_reads(runtime: &mut Runtime, client: &mut dyn Backend, desktop: &mut Desktop) {
     for read in runtime.take_offer_reads() {
         if desktop.owns_offer(read.offer) {
             desktop.read_offer(read.id, read.offer, &read.mime);
@@ -224,7 +211,7 @@ pub fn clipboard_payload(request: ClipboardRequest) -> Vec<(String, Arc<Vec<u8>>
 }
 
 /// Starts the drags out the configuration asked for; the last one wins.
-pub fn apply_drag_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+pub fn apply_drag_requests(runtime: &mut Runtime, client: &mut dyn Backend) {
     let Some(request) = runtime.take_drag_requests().pop() else {
         return;
     };

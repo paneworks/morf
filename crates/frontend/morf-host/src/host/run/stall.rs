@@ -1,8 +1,9 @@
 //! Motion while the compositor sends the shell's own surface no frame
 //! callbacks: when the wall clock has to tick it, and the tick itself.
 
+use morf_app::Backend;
+use morf_app::PRIMARY_LAYER;
 use morf_lua::Runtime;
-use morf_app::{LayerClient, PRIMARY_LAYER};
 use std::time::{Duration, Instant};
 
 use crate::host::windows::Kind;
@@ -19,7 +20,7 @@ use crate::{paint::*, surfaces::*};
 /// takes over again from a clean timebase.
 pub(super) fn advance_without_callbacks(
     runtime: &mut Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     state: &mut SurfaceEventState,
 ) -> Result<(), String> {
     let stalled = client
@@ -42,7 +43,11 @@ pub(super) fn advance_without_callbacks(
         .map_err(|error| error.to_string())?;
     if frame.active || frame.changed > 0 || state.animating_shaders {
         state.primary_deferred = true;
-        for surface in state.windows.of_kind_mut(Kind::Layer).map(|(_, surface)| surface) {
+        for surface in state
+            .windows
+            .of_kind_mut(Kind::Layer)
+            .map(|(_, surface)| surface)
+        {
             if surface.updates_enabled {
                 surface.needs_paint = true;
                 paint_layer_surface(runtime, client, surface)?;
@@ -59,7 +64,7 @@ pub(super) fn advance_without_callbacks(
 /// the event that starts the motion, wake the loop then.
 pub(super) fn motion_deadline(
     runtime: &Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     state: &SurfaceEventState,
 ) -> Option<Instant> {
     let waiting = client.layer_frame_wait(PRIMARY_LAYER)?;

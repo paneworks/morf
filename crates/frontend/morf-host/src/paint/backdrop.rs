@@ -13,19 +13,20 @@
 //! It is created when the configuration declares `morf.surface.backdrop` at
 //! all, since a layer surface's place in its layer is fixed at creation.
 
+use morf_app::Backend;
+use morf_app::{InputRect, KeyboardFocus, LayerAnchors};
 use morf_lua::LayerSurfaceConfig;
-use morf_app::{InputRect, KeyboardFocus, LayerAnchors, LayerClient};
 
 use crate::surfaces::*;
-use morf_app::{Backend as _, WindowKind};
 use morf_app::WindowId;
+use morf_app::WindowKind;
 
 /// Wayland identifier of the backdrop surface.
 pub const BACKDROP_LAYER: u64 = u64::MAX - 4;
 
 /// Opens the backdrop under the shell's surface, inert, when it is declared.
 pub fn open_backdrop_layer(
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     config: &LayerSurfaceConfig,
     output: &str,
 ) -> Result<(), String> {
@@ -61,7 +62,7 @@ pub fn open_backdrop_layer(
 
 /// Where the shell's own surface sits on its output, in logical pixels: the
 /// hole in the backdrop's input region, so the shell keeps its own clicks.
-fn primary_rect(client: &LayerClient, config: &LayerSurfaceConfig, out: (i32, i32)) -> InputRect {
+fn primary_rect(client: &dyn Backend, config: &LayerSurfaceConfig, out: (i32, i32)) -> InputRect {
     let (width, height) = client.primary_logical_size();
     let (width, height) = (width as i32, height as i32);
     let anchors = &config.anchors;
@@ -88,8 +89,8 @@ fn primary_rect(client: &LayerClient, config: &LayerSurfaceConfig, out: (i32, i3
 }
 
 /// Brings the backdrop's input region up to date with `morf.surface.backdrop`.
-pub fn apply_backdrop(client: &mut LayerClient, config: &LayerSurfaceConfig, output: &str) {
-    if client.layer_surface(BACKDROP_LAYER).is_none() {
+pub fn apply_backdrop(client: &mut dyn Backend, config: &LayerSurfaceConfig, output: &str) {
+    if !client.has_window(WindowId::Layer(BACKDROP_LAYER)) {
         return;
     }
     let screen = client

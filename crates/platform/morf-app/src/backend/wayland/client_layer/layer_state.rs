@@ -3,8 +3,8 @@
 
 use wayland_client::protocol::{wl_subcompositor, wl_surface};
 
-use crate::placement::{arrange, stacking, stacks_below_primary};
 use crate::backend::wayland::{state_types::*, surface_types::*};
+use crate::placement::{arrange, stacking, stacks_below_primary};
 
 use super::PRIMARY_LAYER;
 

@@ -1,13 +1,11 @@
 //! The compositor's outputs: naming them, keeping the last list, and the
 //! screens a runtime is told about.
 
-use morf_lua::Screen;
 use morf_app::Output;
+use morf_lua::Screen;
 use std::collections::BTreeMap;
 
-pub fn named_screens(
-    screens: &[Output],
-) -> Result<BTreeMap<String, Output>, String> {
+pub fn named_screens(screens: &[Output]) -> Result<BTreeMap<String, Output>, String> {
     screens
         .iter()
         .map(|screen| {

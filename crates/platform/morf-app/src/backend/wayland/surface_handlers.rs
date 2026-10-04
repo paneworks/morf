@@ -58,8 +58,7 @@ impl CompositorHandler for LayerState {
             .borrow_mut()
             .remove(&wayland_client::Proxy::id(surface));
         if let Some(id) = self.layer_id(surface) {
-            self.events
-                .push_back(Event::Frame { id, time_ms: time });
+            self.events.push_back(Event::Frame { id, time_ms: time });
         } else if let Some(id) = self
             .popups
             .iter()

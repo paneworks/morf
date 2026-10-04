@@ -1,7 +1,7 @@
 mod commands;
 
-use morf_lua::{LogEntry, Runtime};
 use morf_app::Output;
+use morf_lua::{LogEntry, Runtime};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -109,7 +109,11 @@ pub fn reconcile_workers(
     let only: BTreeMap<String, Output>;
     let desired = if crate::app::is_app() {
         let chosen = elect_primary(primary.as_deref(), desired);
-        only = desired.iter().filter(|(name, _)| Some(*name) == chosen.as_ref()).map(|(k, v)| (k.clone(), v.clone())).collect();
+        only = desired
+            .iter()
+            .filter(|(name, _)| Some(*name) == chosen.as_ref())
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
         &only
     } else {
         desired
@@ -155,10 +159,7 @@ pub fn reconcile_workers(
 /// its runtime is gone (its output unplugged), the output the compositor
 /// announced first takes it -- the lowest `wl_output` global, ties by name
 /// -- and with no output the outputless runtime, the only one there is.
-pub fn elect_primary(
-    current: Option<&str>,
-    desired: &BTreeMap<String, Output>,
-) -> Option<String> {
+pub fn elect_primary(current: Option<&str>, desired: &BTreeMap<String, Output>) -> Option<String> {
     if let Some(current) = current
         && desired.contains_key(current)
     {

@@ -1,7 +1,7 @@
+use morf_app::{Event, InputRect, LayerClient, LayerConfig, PopupConfig};
 use morf_layout::{Geometry, Transform2D};
 use morf_render::{DamageRect, DrawCommand, DrawList, RenderBackend, WgpuBackend};
 use morf_scene::{Color, Element, Scene};
-use morf_app::{LayerConfig, InputRect, LayerClient, Event, PopupConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = LayerClient::connect(LayerConfig::default())?;

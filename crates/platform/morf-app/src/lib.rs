@@ -14,9 +14,9 @@ mod positioner;
 pub mod transfer;
 mod window;
 
-pub use backend::{Backend, Capabilities, RenderTarget, WindowKind};
 #[cfg(feature = "wayland")]
 pub use backend::wayland::*;
+pub use backend::{Backend, Capabilities, PRIMARY_LAYER, RenderTarget, WindowKind, physical_size};
 pub use data::*;
 pub use event::*;
 pub use input::*;

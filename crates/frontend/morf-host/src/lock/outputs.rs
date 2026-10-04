@@ -19,15 +19,15 @@
 //! every size binding against each screen in turn would churn, and animate,
 //! every node that reads it twice a frame.
 
+use morf_app::Backend;
+use morf_app::{Output, WindowId};
 use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::{Element, NodeHandle};
-use morf_app::{LayerClient, Output, WindowId};
 
 use crate::host::windows::{Kind, Windows};
 use crate::{supervisor::lua_screen, surfaces::*};
-use morf_app::Backend as _;
 
 /// The lock surface of output `index`, drawing `root`: a window like any
 /// other, keyed `WindowId::Lock(index)` in the lock's `Windows`.
@@ -92,11 +92,7 @@ impl LockTrees {
 
     /// The tree a key on `surface` goes into: that surface's, or, for a key
     /// the compositor sent without saying where, the first there is.
-    pub fn key_root(
-        self,
-        outputs: &Windows,
-        surface: WindowId,
-    ) -> Option<NodeHandle> {
+    pub fn key_root(self, outputs: &Windows, surface: WindowId) -> Option<NodeHandle> {
         match surface {
             WindowId::Lock(index) => self.root(outputs, index),
             _ => {
@@ -229,7 +225,7 @@ pub fn size_lock_root(
 pub fn paint_lock(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
-    client: &LayerClient,
+    client: &dyn Backend,
     index: usize,
     root: NodeHandle,
 ) -> Result<Layout, String> {

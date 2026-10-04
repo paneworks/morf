@@ -1,6 +1,6 @@
 //! The desktop protocols, beside a window client on its connection.
 
-use morf_app::LayerClient;
+use morf_app::Backend;
 use morf_desktop::{Desktop, DesktopEvent};
 use morf_lua::Runtime;
 use morf_render::{RenderEngine, WgpuBackend};
@@ -9,7 +9,10 @@ use crate::capture::{OfferedCapture, answer_capture_offer, dispatch_screencopy};
 
 /// The desktop protocols on `client`'s connection; a request naming no
 /// output is for the one `client`'s surface sits on.
-pub fn desktop_for(client: &LayerClient) -> Result<Desktop, String> {
+pub fn desktop_for(client: &dyn Backend) -> Result<Desktop, String> {
+    let client = client
+        .as_wayland()
+        .ok_or_else(|| "the desktop protocols need a compositor".to_owned())?;
     let mut desktop = Desktop::new(client.connection())?;
     // A selection read finishing on its thread rings every loop, so the
     // loop wakes for its answer rather than sleeping past it.
@@ -35,7 +38,8 @@ pub fn dispatch_desktop(
     while let Some(event) = desktop.next_event() {
         match event {
             DesktopEvent::Screencopy { request_id, result } => {
-                repaint |= dispatch_screencopy(runtime, renderer.as_deref_mut(), request_id, result);
+                repaint |=
+                    dispatch_screencopy(runtime, renderer.as_deref_mut(), request_id, result);
             }
             DesktopEvent::CaptureOffer {
                 request_id,

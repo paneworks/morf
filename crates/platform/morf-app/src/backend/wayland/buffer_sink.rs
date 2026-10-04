@@ -61,9 +61,10 @@ impl Dispatch<ZwpLinuxDmabufV1, ()> for SinkState {
             modifier_lo,
         } = event
         {
-            state
-                .formats
-                .push((format, (u64::from(modifier_hi) << 32) | u64::from(modifier_lo)));
+            state.formats.push((
+                format,
+                (u64::from(modifier_hi) << 32) | u64::from(modifier_lo),
+            ));
         }
     }
 }

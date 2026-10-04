@@ -11,8 +11,8 @@
 //! `MORF_WAKE_LOG=1` prints every wake and its cause, which is how an idle
 //! cost in the field is traced to the thing that causes it.
 
-use morf_lua::{ClockPrecision, DeadlineCause, Runtime};
 use morf_app::Woke;
+use morf_lua::{ClockPrecision, DeadlineCause, Runtime};
 use std::time::{Duration, Instant};
 
 /// Why the loop set the deadline it set.

@@ -1,14 +1,14 @@
 //! Painting a layer: the shell's own surface, or one configured layer surface
 //! in its own renderer.
 
+use morf_app::Backend;
+use morf_app::{InputRect, WindowId};
 use morf_lua::{LayerSurfaceConfig, Runtime};
-use morf_value::region::{Rect as RegionRect, Region};
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
-use morf_app::{InputRect, LayerClient, WindowId};
+use morf_value::region::{Rect as RegionRect, Region};
 
 use crate::{surface_layers::*, surfaces::*};
-use morf_app::Backend as _;
 
 use super::{
     CachedLayout, FrameSplit, MASK_SENTINEL, apply_blend, apply_subpixel, frame_log_wanted,
@@ -18,7 +18,7 @@ use super::{
 pub fn paint_layer(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
-    client: &LayerClient,
+    client: &dyn Backend,
     layer: u64,
     root: NodeHandle,
     config: &LayerSurfaceConfig,
@@ -158,9 +158,13 @@ pub fn paint_layer(
             .map(|cached| std::mem::take(&mut cached.backdrop))
             .unwrap_or_default();
         if previous != shapes && !previous.is_empty() {
-            let rectangles =
-                morf_value::region::build_scaled(width, height, &previous, morf_value::region::COVERED_EDGE_GRID)
-                    .map_err(|error| error.to_string())?;
+            let rectangles = morf_value::region::build_scaled(
+                width,
+                height,
+                &previous,
+                morf_value::region::COVERED_EDGE_GRID,
+            )
+            .map_err(|error| error.to_string())?;
             client
                 .set_layer_backdrop_region(layer, Some(&rectangles))
                 .map_err(|error| error.to_string())?;
@@ -170,9 +174,9 @@ pub fn paint_layer(
 
     split.mark("backdrop region");
     client.request_frame(WindowId::Layer(layer));
-    let surface = client
-        .layer_surface(layer)
-        .ok_or_else(|| "layer surface disappeared while painting".to_owned())?;
+    if !client.has_window(WindowId::Layer(layer)) {
+        return Err("layer surface disappeared while painting".to_owned());
+    }
     // A backend presenting through its own buffers declares the damage with
     // the buffer itself (`WgpuBackend::declares_damage`).
     let declare = !renderer.backend_mut().declares_damage();
@@ -186,7 +190,8 @@ pub fn paint_layer(
             // fullscreen overlay that declares everything costs a full screen
             // of blending every frame however little of it moved.
             for rect in damage {
-                surface.damage_buffer(
+                client.damage(
+                    WindowId::Layer(layer),
                     rect.x as i32,
                     rect.y as i32,
                     rect.width as i32,
@@ -254,7 +259,7 @@ pub fn paint_layer(
 /// Paints one configured layer surface into its own renderer.
 pub fn paint_layer_surface(
     runtime: &mut Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     surface: &mut Window,
 ) -> Result<(), String> {
     // Cleared here rather than at one of the two call sites, because there are

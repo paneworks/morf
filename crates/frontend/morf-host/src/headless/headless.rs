@@ -12,12 +12,12 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use morf_app::WindowId;
+use morf_app::backend::headless::{VirtualSeat, virtual_outputs};
 use morf_layout::{Layout, Size};
 use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
-use morf_app::WindowId;
-use morf_app::backend::headless::{VirtualSeat, virtual_outputs};
 
 use crate::supervisor::LoadPolicy;
 use crate::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};

@@ -74,7 +74,10 @@ impl From<WindowKey> for WindowId {
 impl HeadlessBackend {
     /// A backend with these outputs.
     pub fn new(outputs: Vec<Output>) -> Self {
-        Self { outputs, ..Self::default() }
+        Self {
+            outputs,
+            ..Self::default()
+        }
     }
 
     /// The first output's logical size, or nothing at all without one.
@@ -82,7 +85,9 @@ impl HeadlessBackend {
         self.outputs
             .first()
             .and_then(|output| output.size)
-            .map_or((0, 0), |(width, height)| (width.max(0) as u32, height.max(0) as u32))
+            .map_or((0, 0), |(width, height)| {
+                (width.max(0) as u32, height.max(0) as u32)
+            })
     }
 
     /// Replaces the outputs, telling the host.
@@ -137,7 +142,11 @@ impl HeadlessBackend {
             WindowId::Layer(id) => Event::Configure { id, width, height },
             WindowId::Toplevel(id) => Event::ToplevelConfigure { id, width, height },
             WindowId::Popup(id) => Event::PopupConfigure { id, width, height },
-            WindowId::Lock(index) => Event::SessionLockConfigure { index, width, height },
+            WindowId::Lock(index) => Event::SessionLockConfigure {
+                index,
+                width,
+                height,
+            },
         });
     }
 
@@ -261,7 +270,8 @@ impl Backend for HeadlessBackend {
             return Err("the session is not locked".to_owned());
         }
         self.locked = false;
-        self.windows.retain(|key, _| !matches!(WindowId::from(*key), WindowId::Lock(_)));
+        self.windows
+            .retain(|key, _| !matches!(WindowId::from(*key), WindowId::Lock(_)));
         Ok(())
     }
 
@@ -297,21 +307,44 @@ mod tests {
     #[test]
     fn a_layer_is_configured_as_soon_as_it_opens_and_framed_only_when_the_clock_moves() {
         let mut backend = backend();
-        backend.open(WindowId::Layer(0), WindowKind::Layer(LayerConfig::default())).unwrap();
-        assert_eq!(backend.next_event(), Some(Event::Configure { id: 0, width: 1920, height: 32 }));
+        backend
+            .open(
+                WindowId::Layer(0),
+                WindowKind::Layer(LayerConfig::default()),
+            )
+            .unwrap();
+        assert_eq!(
+            backend.next_event(),
+            Some(Event::Configure {
+                id: 0,
+                width: 1920,
+                height: 32
+            })
+        );
         backend.request_frame(WindowId::Layer(0));
         assert_eq!(backend.next_event(), None);
         backend.advance(Duration::from_millis(16));
-        assert_eq!(backend.next_event(), Some(Event::Frame { id: 0, time_ms: 16 }));
+        assert_eq!(
+            backend.next_event(),
+            Some(Event::Frame { id: 0, time_ms: 16 })
+        );
         assert_eq!(backend.next_event(), None);
     }
 
     #[test]
     fn a_popup_needs_its_parent_open() {
         let mut backend = backend();
-        let popup = WindowKind::Popup { parent: WindowId::Layer(0), config: PopupConfig::default() };
+        let popup = WindowKind::Popup {
+            parent: WindowId::Layer(0),
+            config: PopupConfig::default(),
+        };
         assert!(backend.open(WindowId::Popup(1), popup.clone()).is_err());
-        backend.open(WindowId::Layer(0), WindowKind::Layer(LayerConfig::default())).unwrap();
+        backend
+            .open(
+                WindowId::Layer(0),
+                WindowKind::Layer(LayerConfig::default()),
+            )
+            .unwrap();
         backend.open(WindowId::Popup(1), popup).unwrap();
         assert!(backend.logical_size(WindowId::Popup(1)).is_some());
     }

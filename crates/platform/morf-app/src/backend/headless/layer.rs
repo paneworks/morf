@@ -65,7 +65,15 @@ mod tests {
 
     #[test]
     fn a_layer_sits_at_its_margin_from_the_one_edge_it_is_anchored_to() {
-        let bottom = LayerAnchors { top: false, right: false, bottom: true, left: false };
-        assert_eq!(layer_position(bottom, (0, 0, 10, 0), (100, 40), (1000, 500)), (450, 450));
+        let bottom = LayerAnchors {
+            top: false,
+            right: false,
+            bottom: true,
+            left: false,
+        };
+        assert_eq!(
+            layer_position(bottom, (0, 0, 10, 0), (100, 40), (1000, 500)),
+            (450, 450)
+        );
     }
 }

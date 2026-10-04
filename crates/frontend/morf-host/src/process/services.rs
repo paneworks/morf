@@ -1,8 +1,9 @@
+use morf_app::Backend;
+use morf_app::InputRect;
+use morf_desktop::{Desktop, OutputPowerMode};
 use morf_io::IpcValue as WireValue;
 use morf_lua::{InputMethodRequest, Runtime, TextInputRequest, VirtualKeyboardRequest};
 use morf_value::IpcValue;
-use morf_app::{InputRect, LayerClient};
-use morf_desktop::{Desktop, OutputPowerMode};
 use std::collections::BTreeMap;
 
 use crate::lock::*;
@@ -32,7 +33,7 @@ pub fn wire_ipc_value(value: &IpcValue) -> WireValue {
     }
 }
 
-pub fn apply_idle_inhibit(runtime: &mut Runtime, client: &mut LayerClient) {
+pub fn apply_idle_inhibit(runtime: &mut Runtime, client: &mut dyn Backend) {
     if let Some(inhibited) = runtime.take_idle_inhibit_change() {
         client.set_idle_inhibited(inhibited);
     }
@@ -46,7 +47,7 @@ pub fn apply_idle_timeouts(runtime: &mut Runtime, desktop: &mut Desktop) {
     }
 }
 
-pub fn apply_shortcuts_inhibit(runtime: &mut Runtime, client: &mut LayerClient) {
+pub fn apply_shortcuts_inhibit(runtime: &mut Runtime, client: &mut dyn Backend) {
     if let Some(inhibited) = runtime.take_shortcuts_inhibit_change() {
         client.set_shortcuts_inhibited(inhibited);
     }
@@ -89,7 +90,7 @@ pub fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
 
 pub fn apply_clipboard_requests(
     runtime: &mut Runtime,
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     desktop: &mut Desktop,
 ) {
     // Data control first: no focus, no serial, any type. Without it only text
@@ -115,7 +116,7 @@ pub fn apply_clipboard_requests(
     }
 }
 
-pub fn apply_virtual_keyboard_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+pub fn apply_virtual_keyboard_requests(runtime: &mut Runtime, client: &mut dyn Backend) {
     for request in runtime.take_virtual_keyboard_requests() {
         match request {
             VirtualKeyboardRequest::Key { keycode, pressed } => {
@@ -133,7 +134,7 @@ pub fn apply_virtual_keyboard_requests(runtime: &mut Runtime, client: &mut Layer
     }
 }
 
-pub fn apply_input_method_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+pub fn apply_input_method_requests(runtime: &mut Runtime, client: &mut dyn Backend) {
     if runtime.take_input_method_enable_request() {
         client.enable_input_method();
     }
@@ -152,7 +153,7 @@ pub fn apply_input_method_requests(runtime: &mut Runtime, client: &mut LayerClie
     }
 }
 
-pub fn apply_text_input_requests(runtime: &mut Runtime, client: &mut LayerClient) {
+pub fn apply_text_input_requests(runtime: &mut Runtime, client: &mut dyn Backend) {
     if runtime.take_text_input_enable_request() {
         client.enable_text_input();
     }

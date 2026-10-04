@@ -119,7 +119,10 @@ pub fn socket_path() -> Result<PathBuf, String> {
     // other application: a socket of its own, by process.
     if crate::app::is_app() {
         let shell = socket_path_for(display)?;
-        let stem = shell.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let stem = shell
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
         return Ok(shell.with_file_name(format!("{stem}-app-{}.sock", std::process::id())));
     }
     socket_path_for(display)
@@ -193,7 +196,6 @@ pub fn socket_path_for(display: Option<&str>) -> Result<PathBuf, String> {
         &fallback_dir(),
     )
 }
-
 
 #[cfg(test)]
 mod tests {

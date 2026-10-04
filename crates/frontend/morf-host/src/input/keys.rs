@@ -1,8 +1,8 @@
 //! Where a key goes: into the focused node of a surface's subtree.
 
+use morf_app::WindowId;
 use morf_lua::{FocusReason, KeyModifiers, Runtime};
 use morf_scene::NodeHandle;
-use morf_app::WindowId;
 
 use crate::surfaces::*;
 
@@ -37,11 +37,7 @@ pub fn surface_key(
     text: Option<&str>,
     modifiers: morf_app::KeyModifiers,
 ) -> bool {
-    let Some(root) = surface_root(
-        surface,
-        state.primary_root,
-        &state.windows,
-    ) else {
+    let Some(root) = surface_root(surface, state.primary_root, &state.windows) else {
         return false;
     };
     runtime.set_held_modifiers(key_modifiers(modifiers));
@@ -140,7 +136,9 @@ pub fn dispatch_key_in_subtree(
     // swallow one a list after it would take.
     if current.is_none() {
         for node in runtime.key_targets_in_root(root) {
-            let Some(route) = runtime.key_route(node) else { continue };
+            let Some(route) = runtime.key_route(node) else {
+                continue;
+            };
             if runtime.dispatch_key_press_bubbling(route, keysym, text, modifiers, repeat) {
                 *focused = Some(node);
                 return true;

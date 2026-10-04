@@ -1,13 +1,14 @@
 //! Keeping the compositor's windows in step with the configuration: opening,
 //! moving and closing its popup, floating and layer windows.
 
+use morf_app::Backend;
+use morf_app::{ToplevelConfig, WindowId};
 use morf_lua::{Runtime, WindowSurfaceKind};
-use morf_app::{ToplevelConfig, LayerClient, WindowId};
 use std::collections::{HashMap, HashSet};
 
 use crate::host::windows::{Kind, Windows};
 use crate::{surface_layers::*, surface_popups::*};
-use morf_app::{Backend as _, WindowKind};
+use morf_app::WindowKind;
 
 use super::Window;
 
@@ -16,7 +17,7 @@ use super::Window;
 /// has its `on_closed` run once the sync is done.
 pub fn sync_window_surfaces(
     runtime: &mut Runtime,
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     windows: &mut Windows,
     output: &str,
 ) -> Result<bool, String> {
@@ -95,19 +96,25 @@ pub fn sync_window_surfaces(
         if changed {
             client.close(WindowId::Toplevel(id));
             client
-                .open(WindowId::Toplevel(id), WindowKind::Toplevel { parent: config.parent, config: ToplevelConfig {
-                        width: config.width,
-                        height: config.height,
-                        minimum_width: config.minimum_width,
-                        minimum_height: config.minimum_height,
-                        maximum_width: config.maximum_width,
-                        maximum_height: config.maximum_height,
-                        title: config.title.clone(),
-                        app_id: config.app_id.clone(),
-                        minimized: config.minimized,
-                        maximized: config.maximized,
-                        fullscreen: config.fullscreen,
-                    } })
+                .open(
+                    WindowId::Toplevel(id),
+                    WindowKind::Toplevel {
+                        parent: config.parent,
+                        config: ToplevelConfig {
+                            width: config.width,
+                            height: config.height,
+                            minimum_width: config.minimum_width,
+                            minimum_height: config.minimum_height,
+                            maximum_width: config.maximum_width,
+                            maximum_height: config.maximum_height,
+                            title: config.title.clone(),
+                            app_id: config.app_id.clone(),
+                            minimized: config.minimized,
+                            maximized: config.maximized,
+                            fullscreen: config.fullscreen,
+                        },
+                    },
+                )
                 .map_err(|error| error.to_string())?;
             reopened.insert(id);
             windows.insert(
@@ -159,7 +166,7 @@ pub fn sync_window_surfaces(
         let tracked = windows
             .get(Kind::Popup, id)
             .and_then(|current| current.popup_config.as_ref())
-            .filter(|_| client.popup_surface(id).is_some());
+            .filter(|_| client.has_window(WindowId::Popup(id)));
         // A popup whose parent was just re-created is anchored to a surface that
         // no longer exists, so it follows its parent down whatever its geometry.
         let mut structural = tracked

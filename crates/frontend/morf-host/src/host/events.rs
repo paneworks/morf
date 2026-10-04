@@ -1,20 +1,21 @@
+use morf_app::Backend;
 use morf_lua::Runtime;
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_app::Backend as _;
-use morf_app::{Event, LayerClient, PRIMARY_LAYER, WindowId, physical_size};
+
+use morf_app::{Event, PRIMARY_LAYER, WindowId, physical_size};
 use std::sync::mpsc;
 
 use crate::host::windows::Kind;
 use crate::render_target::surface_backend;
 use crate::{
-    lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*,
-    surface_pointer::*, surfaces::*,
+    lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*, surface_pointer::*,
+    surfaces::*,
 };
 
 pub fn handle_surface_event(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     desktop: &mut morf_desktop::Desktop,
     state: &mut SurfaceEventState,
     event: Event,
@@ -23,7 +24,8 @@ pub fn handle_surface_event(
 ) -> Result<bool, String> {
     let mut repaint = false;
     // Then selections and drags, which need the layout and the client.
-    let event = match crate::surface_drag::handle_data_event(runtime, client, desktop, state, event) {
+    let event = match crate::surface_drag::handle_data_event(runtime, client, desktop, state, event)
+    {
         Ok(repaint) => return repaint,
         Err(event) => event,
     };
@@ -32,7 +34,13 @@ pub fn handle_surface_event(
         layout: &state.layout,
         windows: &state.windows,
     };
-    let event = match handle_pointer_event(runtime, client, &mut state.input, &layouts, event)? {
+    let event = match handle_pointer_event(
+        runtime,
+        &mut crate::pointer_cursor::BackendCursor(&mut *client),
+        &mut state.input,
+        &layouts,
+        event,
+    )? {
         Ok(repaint) => return Ok(repaint),
         Err(event) => event,
     };
@@ -41,7 +49,9 @@ pub fn handle_surface_event(
             let (width, height) = client.physical_size();
             renderer.resize(width, height);
             for surface in state
-                .windows.values_mut().filter(|surface| surface.layer_config.is_none())
+                .windows
+                .values_mut()
+                .filter(|surface| surface.layer_config.is_none())
             {
                 if let Some(renderer) = &mut surface.renderer {
                     // Still the layer's scale here, as a fallback: a compositor
@@ -78,11 +88,7 @@ pub fn handle_surface_event(
         Event::SurfaceKeyboard { surface, focused } => {
             // The node with focus shows it only while its surface has the
             // keyboard, and shows it again when the keyboard comes back.
-            if let Some(root) = surface_root(
-                surface,
-                state.primary_root,
-                &state.windows,
-            ) {
+            if let Some(root) = surface_root(surface, state.primary_root, &state.windows) {
                 repaint |= runtime.set_focus_active(root, focused);
                 state.keyboard_changes.push((root, focused));
             }
@@ -159,7 +165,7 @@ pub fn handle_surface_event(
                         .render_target(WindowId::Popup(id))
                         .ok_or_else(|| "configured popup disappeared".to_owned())?;
                     let backend = surface_backend(target, physical_width, physical_height)
-                    .map_err(|error| error.to_string())?;
+                        .map_err(|error| error.to_string())?;
                     surface.renderer = Some(RenderEngine::new(backend));
                 }
                 if initial || surface.updates_enabled {
@@ -187,7 +193,9 @@ pub fn handle_surface_event(
             }
         }
         Event::PopupFrame { id, .. } => {
-            if let Some(surface) = state.windows.get_mut(Kind::Popup, id)
+            if let Some(surface) = state
+                .windows
+                .get_mut(Kind::Popup, id)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_popup_surface(runtime, client, surface)?;
@@ -218,7 +226,7 @@ pub fn handle_surface_event(
                         .render_target(WindowId::Toplevel(id))
                         .ok_or_else(|| "configured floating surface disappeared".to_owned())?;
                     let backend = surface_backend(target, physical_width, physical_height)
-                    .map_err(|error| error.to_string())?;
+                        .map_err(|error| error.to_string())?;
                     surface.renderer = Some(RenderEngine::new(backend));
                 }
                 if initial || surface.updates_enabled {
@@ -227,7 +235,9 @@ pub fn handle_surface_event(
             }
         }
         Event::ToplevelFrame { id, .. } => {
-            if let Some(surface) = state.windows.get_mut(Kind::Toplevel, id)
+            if let Some(surface) = state
+                .windows
+                .get_mut(Kind::Toplevel, id)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_floating_surface(runtime, client, surface)?;

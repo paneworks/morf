@@ -1,10 +1,10 @@
-mod outputs;
 mod config;
 mod follow;
+mod outputs;
 
+use morf_app::{LayerClient, Output};
 use morf_io::{IpcReply, IpcRequest, IpcServer, IpcValue as WireValue};
 use morf_lua::{LogEntry, LogLevel};
-use morf_app::{LayerClient, Output};
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -62,11 +62,7 @@ pub enum FailureStep {
 /// or unplugged -- the shell's last one included, when Hyprland switches to
 /// its fallback output -- and the shell stopping for it left the machine
 /// with no shell at all, and nothing to light a screen again.
-pub fn failure_step(
-    error: &str,
-    closures: &mut VecDeque<Instant>,
-    now: Instant,
-) -> FailureStep {
+pub fn failure_step(error: &str, closures: &mut VecDeque<Instant>, now: Instant) -> FailureStep {
     if error != SURFACE_CLOSED {
         return FailureStep::Stop;
     }

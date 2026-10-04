@@ -13,7 +13,7 @@
 //! surface lands where a wlroots compositor with layer-shell would put it on an
 //! output the size of the primary surface.
 
-use crate::{LayerConfig, LayerAnchors, ShellLayer};
+use crate::{LayerAnchors, LayerConfig, ShellLayer};
 
 /// The part of a layer surface's configuration that decides where it goes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

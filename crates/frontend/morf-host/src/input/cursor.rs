@@ -1,13 +1,22 @@
 //! The pointer takes the shape of the area it is over.
 
+use morf_app::{LayerClient, WindowId};
 use morf_lua::Runtime;
 use morf_scene::NodeHandle;
-use morf_app::{LayerClient, WindowId};
 
 /// Whatever takes the pointer's shape: the compositor connection, or in a
 /// test a recorder, so the input path runs without a display.
 pub trait CursorShapes {
     fn set_cursor_shape(&mut self, shape: &str);
+}
+
+/// Any backend's pointer, as the shapes the input code asks for.
+pub struct BackendCursor<'a>(pub &'a mut dyn morf_app::Backend);
+
+impl CursorShapes for BackendCursor<'_> {
+    fn set_cursor_shape(&mut self, shape: &str) {
+        self.0.set_cursor(shape);
+    }
 }
 
 impl CursorShapes for LayerClient {

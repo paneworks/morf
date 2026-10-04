@@ -1,9 +1,9 @@
-use morf_lua::{PopupSurfaceConfig, WindowSurfaceConfig, WindowSurfaceKind};
-use morf_app::{Backend as _, WindowKind};
+use morf_app::Backend;
+use morf_app::WindowKind;
 use morf_app::{
-    InputRect, LayerClient, PRIMARY_LAYER, PopupAnchor, PopupConfig, PopupConstraints,
-    PopupGravity, WindowId,
+    InputRect, PRIMARY_LAYER, PopupAnchor, PopupConfig, PopupConstraints, PopupGravity, WindowId,
 };
+use morf_lua::{PopupSurfaceConfig, WindowSurfaceConfig, WindowSurfaceKind};
 use std::collections::{HashMap, HashSet};
 
 use crate::host::windows::{Kind, Windows};
@@ -104,10 +104,7 @@ pub fn popup_client_config(config: &PopupSurfaceConfig) -> Result<PopupConfig, S
 /// change to any of them is *positional* and goes through `xdg_popup.reposition`.
 /// Two fields are not: the parent is bound when the popup object is created, and
 /// the grab is taken once against an input serial. Only those force a teardown.
-pub fn popup_change_is_structural(
-    current: &PopupSurfaceConfig,
-    next: &PopupSurfaceConfig,
-) -> bool {
+pub fn popup_change_is_structural(current: &PopupSurfaceConfig, next: &PopupSurfaceConfig) -> bool {
     current.parent != next.parent || current.grab_focus != next.grab_focus
 }
 
@@ -136,14 +133,20 @@ pub fn popup_parent_role(
 /// swapchain cannot outlive the surface it was created from. That cost is why
 /// this path is taken only when the popup truly cannot be moved in place.
 pub fn open_popup_surface(
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     surface: &WindowSurfaceConfig,
     config: &PopupSurfaceConfig,
     parent: WindowId,
     windows: &mut Windows,
 ) -> Result<(), String> {
     client
-        .open(WindowId::Popup(surface.id), WindowKind::Popup { parent: parent, config: popup_client_config(config)? })
+        .open(
+            WindowId::Popup(surface.id),
+            WindowKind::Popup {
+                parent: parent,
+                config: popup_client_config(config)?,
+            },
+        )
         .map_err(|error| error.to_string())?;
     windows.insert(
         Kind::Popup,

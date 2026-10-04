@@ -5,9 +5,9 @@
 
 use std::time::Duration;
 
-use morf_layout::Layout;
 use morf_app::backend::headless::VirtualSeat;
 use morf_app::{Event, WindowId};
+use morf_layout::Layout;
 
 use crate::headless::{Headless, Surface};
 use crate::pointer_cursor::CursorShapes;
@@ -96,10 +96,13 @@ impl Headless {
             .map(|candidate| candidate.root)
             .ok_or_else(|| "no surface to type into".to_owned())?;
         let mut focused = self.input.focused.get(&surface).copied();
-        let actions: Vec<KeyAction> = [(press, KeyAction::Press { repeat: false }), (release, KeyAction::Release)]
-            .into_iter()
-            .filter_map(|(on, action)| on.then_some(action))
-            .collect();
+        let actions: Vec<KeyAction> = [
+            (press, KeyAction::Press { repeat: false }),
+            (release, KeyAction::Release),
+        ]
+        .into_iter()
+        .filter_map(|(on, action)| on.then_some(action))
+        .collect();
         for action in actions {
             dispatch_key_in_subtree(
                 &mut self.runtime,

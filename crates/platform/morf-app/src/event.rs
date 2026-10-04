@@ -1,5 +1,7 @@
 //! Everything a backend tells the host, as one event type.
-use crate::{DropInfo, InputMethodState, KeyModifiers, OfferInfo, Output, WindowId, TextInputState};
+use crate::{
+    DropInfo, InputMethodState, KeyModifiers, OfferInfo, Output, TextInputState, WindowId,
+};
 
 /// Event produced by the layer-surface connection.
 #[derive(Clone, Debug, PartialEq)]
@@ -18,11 +20,7 @@ pub enum Event {
     /// The compositor permits the next animation and paint tick.
     Frame { id: u64, time_ms: u32 },
     /// The pointer moved over or entered the surface.
-    PointerMotion {
-        surface: WindowId,
-        x: f64,
-        y: f64,
-    },
+    PointerMotion { surface: WindowId, x: f64, y: f64 },
     /// The pointer left the surface.
     PointerLeave { surface: WindowId },
     /// A pointer button changed state.
@@ -95,11 +93,7 @@ pub enum Event {
         offer: OfferInfo,
     },
     /// The drag moved over the surface it entered.
-    DragMotion {
-        surface: WindowId,
-        x: f64,
-        y: f64,
-    },
+    DragMotion { surface: WindowId, x: f64, y: f64 },
     /// The drag left the surface without dropping, or was cancelled.
     DragLeave { surface: WindowId },
     /// The drag was dropped here, and what it carries has been fetched.

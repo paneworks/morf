@@ -1,20 +1,20 @@
+use morf_app::Backend;
+use morf_app::{
+    KeyboardFocus, LayerAnchors, LayerConfig, PRIMARY_LAYER, ShellLayer, physical_size,
+};
+use morf_desktop::ToplevelAction;
 use morf_lua::{
     LayerSurfaceConfig, Runtime, Toplevel, WindowSurfaceConfig, WindowSurfaceKind, Workspace,
     WorkspaceRequest,
 };
-use morf_desktop::ToplevelAction;
 use morf_render::RenderEngine;
-use morf_app::{
-    LayerConfig, KeyboardFocus, LayerAnchors, LayerClient, PRIMARY_LAYER, ShellLayer,
-    physical_size,
-};
 use std::collections::HashSet;
 
 use crate::host::windows::{Kind, Windows};
 use crate::render_target::surface_backend;
 use crate::{capture::*, paint::*, services::*, surfaces::*};
-use morf_app::{Backend as _, WindowKind};
 use morf_app::WindowId;
+use morf_app::WindowKind;
 
 /// Hands every request a configuration has queued to the compositor.
 ///
@@ -27,7 +27,7 @@ use morf_app::WindowId;
 /// time, for no reason anybody chose.
 pub fn apply_service_requests(
     runtime: &mut Runtime,
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     desktop: &mut morf_desktop::Desktop,
 ) {
     apply_output_power_requests(runtime, desktop);
@@ -51,7 +51,7 @@ pub fn apply_service_requests(
 /// claim is a region of a particular size and a stale one is worse than none:
 /// a bar that grew keeps a smaller opaque region, and the compositor is right
 /// to blend the difference.
-pub fn apply_primary_opaque(runtime: &Runtime, client: &LayerClient) {
+pub fn apply_primary_opaque(runtime: &Runtime, client: &dyn Backend) {
     client.set_layer_opaque(PRIMARY_LAYER, runtime.layer_surface_config().opaque);
 }
 
@@ -205,7 +205,7 @@ pub fn reserve_bar_config(edge: &str, thickness: u32, output: &str) -> LayerConf
 /// the number moved, which is an unmap and a remap the compositor has to
 /// rearrange around.
 pub fn open_reserve_layers(
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     config: &LayerSurfaceConfig,
     output: &str,
 ) -> Result<(), String> {
@@ -219,7 +219,7 @@ pub fn open_reserve_layers(
             continue;
         }
         let reserve = reserve_bar_config(edge, thickness, output);
-        if client.layer_surface(id).is_some() {
+        if client.has_window(WindowId::Layer(id)) {
             // Already mapped: move it rather than rebuild it.
             client
                 .set_layer_geometry(id, &reserve)
@@ -284,7 +284,7 @@ pub fn layer_update(
 
 /// Opens, updates, and closes the layer surfaces a configuration asks for.
 pub fn sync_layer_surfaces(
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     output: &str,
     desired: &[&WindowSurfaceConfig],
     windows: &mut Windows,
@@ -318,7 +318,10 @@ pub fn sync_layer_surfaces(
         );
         if update == LayerUpdate::Recreate {
             client
-                .open(WindowId::Layer(window_layer_id(id)), WindowKind::Layer(runtime_bar_config(config, output)?))
+                .open(
+                    WindowId::Layer(window_layer_id(id)),
+                    WindowKind::Layer(runtime_bar_config(config, output)?),
+                )
                 .map_err(|error| error.to_string())?;
             windows.insert(
                 Kind::Layer,
@@ -376,7 +379,7 @@ pub fn sync_layer_surfaces(
 /// Applies one compositor configure to a configured layer surface.
 pub fn layer_surface_configure(
     runtime: &mut Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     state: &mut SurfaceEventState,
     layer: u64,
     width: u32,
@@ -400,7 +403,7 @@ pub fn layer_surface_configure(
             .render_target(WindowId::Layer(layer))
             .ok_or_else(|| "configured layer surface disappeared".to_owned())?;
         let backend = surface_backend(target, physical_width, physical_height)
-        .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string())?;
         surface.renderer = Some(RenderEngine::new(backend));
     }
     if initial || surface.updates_enabled {
@@ -412,7 +415,7 @@ pub fn layer_surface_configure(
 /// Resizes one configured layer surface after its preferred scale changed.
 pub fn layer_surface_scale(
     runtime: &mut Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     state: &mut SurfaceEventState,
     layer: u64,
 ) -> Result<(), String> {
@@ -441,14 +444,16 @@ pub fn layer_surface_scale(
 /// Paints one configured layer surface when the compositor permits a frame.
 pub fn layer_surface_frame(
     runtime: &mut Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     state: &mut SurfaceEventState,
     layer: u64,
 ) -> Result<(), String> {
     let Some(id) = window_surface_id(layer) else {
         return Ok(());
     };
-    let Some(surface) = state.windows.get_mut(Kind::Layer, id)
+    let Some(surface) = state
+        .windows
+        .get_mut(Kind::Layer, id)
         .filter(|surface| surface.updates_enabled && surface.needs_paint)
     else {
         return Ok(());
@@ -459,7 +464,7 @@ pub fn layer_surface_frame(
 /// Drops one configured layer surface the compositor closed.
 pub fn layer_surface_closed(
     runtime: &mut Runtime,
-    client: &mut LayerClient,
+    client: &mut dyn Backend,
     state: &mut SurfaceEventState,
     layer: u64,
 ) {

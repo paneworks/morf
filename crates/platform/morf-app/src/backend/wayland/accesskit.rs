@@ -18,8 +18,8 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
 use accesskit::{
-    Action, ActionData, ActionHandler, ActionRequest, ActivationHandler, DeactivationHandler, Node, NodeId,
-    Orientation, Rect, Role, Toggled, TreeId, TreeInfo, TreeUpdate,
+    Action, ActionData, ActionHandler, ActionRequest, ActivationHandler, DeactivationHandler, Node,
+    NodeId, Orientation, Rect, Role, Toggled, TreeId, TreeInfo, TreeUpdate,
 };
 use morf_value::accessible::{AccessibleNode, AccessibleValue, Checked};
 
@@ -100,7 +100,10 @@ impl ActionHandler for Actions {
             (Action::SetValue, Some(ActionData::Value(text))) => RequestKind::SetText(text.into()),
             _ => return,
         };
-        let request = Request { node: request.target_node.0, kind };
+        let request = Request {
+            node: request.target_node.0,
+            kind,
+        };
         if let Ok(sender) = self.requests.lock() {
             let _ = sender.send(request);
         }
@@ -126,12 +129,29 @@ impl Accessibility {
         let fresh = Arc::new(AtomicBool::new(false));
         let (sender, requests) = channel();
         let adapter = accesskit_unix::Adapter::new(
-            Activation { wanted: Arc::clone(&wanted), fresh: Arc::clone(&fresh), wake: Arc::clone(&wake) },
-            Actions { requests: Mutex::new(sender), wake },
-            Deactivation { wanted: Arc::clone(&wanted) },
+            Activation {
+                wanted: Arc::clone(&wanted),
+                fresh: Arc::clone(&fresh),
+                wake: Arc::clone(&wake),
+            },
+            Actions {
+                requests: Mutex::new(sender),
+                wake,
+            },
+            Deactivation {
+                wanted: Arc::clone(&wanted),
+            },
         );
         trace("an adapter for a surface");
-        Self { adapter, wanted, fresh, requests, sent: HashMap::new(), root: None, focus: None }
+        Self {
+            adapter,
+            wanted,
+            fresh,
+            requests,
+            sent: HashMap::new(),
+            root: None,
+            focus: None,
+        }
     }
 
     /// Whether a screen reader wants the tree: false until one asks, so a
@@ -165,7 +185,11 @@ impl Accessibility {
             self.root = None;
         }
         let root = first.node.into();
-        let focus = nodes.iter().find(|n| n.focused).map(|n| n.node.into()).unwrap_or(root);
+        let focus = nodes
+            .iter()
+            .find(|n| n.focused)
+            .map(|n| n.node.into())
+            .unwrap_or(root);
         let mut changed: Vec<(NodeId, Node)> = Vec::new();
         let mut next: HashMap<u64, Node> = HashMap::with_capacity(nodes.len());
         for item in nodes {
@@ -305,9 +329,11 @@ pub fn convert<Id: Copy + Into<u64>>(item: &AccessibleNode<Id>) -> Node {
         Some(Checked::True) => node.set_toggled(Toggled::True),
         Some(Checked::False) => node.set_toggled(Toggled::False),
         Some(Checked::Mixed) => node.set_toggled(Toggled::Mixed),
-        None if item.role == "toggle_button" => {
-            node.set_toggled(if item.pressed { Toggled::True } else { Toggled::False })
-        }
+        None if item.role == "toggle_button" => node.set_toggled(if item.pressed {
+            Toggled::True
+        } else {
+            Toggled::False
+        }),
         None => {}
     }
     if let Some(e) = item.expanded {
@@ -338,16 +364,21 @@ pub fn convert<Id: Copy + Into<u64>>(item: &AccessibleNode<Id>) -> Node {
         node.set_level(level);
     }
     if let Some((x, y, w, h)) = item.bounds {
-        node.set_bounds(Rect { x0: x, y0: y, x1: x + w, y1: y + h });
+        node.set_bounds(Rect {
+            x0: x,
+            y0: y,
+            x1: x + w,
+            y1: y + h,
+        });
     }
     if item.focusable && !item.disabled {
         node.add_action(Action::Focus);
     }
     if !item.disabled {
         match item.role.as_str() {
-            "button" | "toggle_button" | "check_box" | "radio_button" | "switch" | "link" | "menu_item"
-            | "menu_item_check" | "menu_item_radio" | "tab" | "list_box_option" | "list_item" | "tree_item"
-            | "grid_cell" => node.add_action(Action::Click),
+            "button" | "toggle_button" | "check_box" | "radio_button" | "switch" | "link"
+            | "menu_item" | "menu_item_check" | "menu_item_radio" | "tab" | "list_box_option"
+            | "list_item" | "tree_item" | "grid_cell" => node.add_action(Action::Click),
             "slider" | "spin_button" | "scroll_bar" => {
                 node.add_action(Action::Increment);
                 node.add_action(Action::Decrement);
@@ -359,7 +390,12 @@ pub fn convert<Id: Copy + Into<u64>>(item: &AccessibleNode<Id>) -> Node {
             _ => {}
         }
     }
-    node.set_children(item.children.iter().map(|c| NodeId((*c).into())).collect::<Vec<_>>());
+    node.set_children(
+        item.children
+            .iter()
+            .map(|c| NodeId((*c).into()))
+            .collect::<Vec<_>>(),
+    );
     node
 }
 
@@ -410,6 +446,14 @@ mod tests {
         let node = convert(&slider);
         assert_eq!(node.numeric_value(), Some(0.4));
         assert!(node.supports_action(Action::Increment) && node.supports_action(Action::SetValue));
-        assert_eq!(node.bounds(), Some(Rect { x0: 1.0, y0: 2.0, x1: 4.0, y1: 6.0 }));
+        assert_eq!(
+            node.bounds(),
+            Some(Rect {
+                x0: 1.0,
+                y0: 2.0,
+                x1: 4.0,
+                y1: 6.0
+            })
+        );
     }
 }

@@ -1,13 +1,13 @@
 mod sync;
 
-use morf_layout::{Hit, Layout};
-use morf_lua::{ToplevelSurfaceConfig, LayerSurfaceConfig, PopupSurfaceConfig, Runtime};
-use morf_render::{RenderEngine, WgpuBackend};
-use morf_scene::NodeHandle;
 use morf_app::{
-    LayerConfig, KeyboardFocus, LayerAnchors, LayerClient, Event, PRIMARY_LAYER, ShellLayer,
+    Event, KeyboardFocus, LayerAnchors, LayerClient, LayerConfig, PRIMARY_LAYER, ShellLayer,
     WindowId,
 };
+use morf_layout::{Hit, Layout};
+use morf_lua::{LayerSurfaceConfig, PopupSurfaceConfig, Runtime, ToplevelSurfaceConfig};
+use morf_render::{RenderEngine, WgpuBackend};
+use morf_scene::NodeHandle;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
@@ -388,17 +388,16 @@ pub fn runtime_bar_config(
     })
 }
 
-pub fn connect_runtime_surface(
-    runtime: &Runtime,
-    output: &str,
-) -> Result<LayerClient, String> {
+pub fn connect_runtime_surface(runtime: &Runtime, output: &str) -> Result<LayerClient, String> {
     let config = runtime.layer_surface_config();
     let mut client =
         LayerClient::connect(runtime_bar_config(&config, output)?).map_err(|e| e.to_string())?;
     open_reserve_layers(&mut client, &config, output)?;
     crate::backdrop::open_backdrop_layer(&mut client, &config, output)?;
     loop {
-        client.blocking_dispatch().map_err(|error| error.to_string())?;
+        client
+            .blocking_dispatch()
+            .map_err(|error| error.to_string())?;
         while let Some(event) = client.next_event() {
             match event {
                 Event::Configure { id, .. } if id == PRIMARY_LAYER => return Ok(client),

@@ -7,7 +7,7 @@ use wayland_client::protocol::{wl_subsurface, wl_surface};
 use wayland_client::{Connection, EventQueue};
 use wayland_protocols::xdg::shell::client::xdg_toplevel;
 
-use crate::backend::wayland::{state_types::*};
+use crate::backend::wayland::state_types::*;
 // The neutral types, under the paths the backend has always used them by.
 pub(crate) use crate::{data::*, event::*, input::*, kind::*, output::*, positioner::*, window::*};
 
@@ -137,4 +137,3 @@ impl ShellSurface {
         }
     }
 }
-

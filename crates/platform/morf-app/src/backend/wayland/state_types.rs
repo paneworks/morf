@@ -24,9 +24,7 @@ use std::sync::{Arc, mpsc};
 use std::time::Instant;
 use wayland_client::Proxy;
 use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
-use wayland_client::protocol::{
-    wl_keyboard, wl_output, wl_pointer, wl_seat, wl_surface, wl_touch,
-};
+use wayland_client::protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_surface, wl_touch};
 use wayland_protocols::ext::background_effect::v1::client::{
     ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1,
     ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1,
@@ -62,8 +60,8 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
 };
 
 use crate::backend::wayland::client_data::ReadTag;
-use crate::transfer::ReadDone;
 use crate::backend::wayland::{client_surface::*, surface_types::*};
+use crate::transfer::ReadDone;
 
 /// Owned Wayland display and surface handles for graphics APIs.
 #[derive(Clone, Debug)]

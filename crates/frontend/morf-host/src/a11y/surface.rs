@@ -17,13 +17,12 @@ mod live {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    use morf_lua::Runtime;
-use morf_value::IpcValue;
-    use morf_scene::NodeHandle;
     use morf_app::accesskit::{Accessibility, RequestKind};
+    use morf_lua::Runtime;
+    use morf_scene::NodeHandle;
+    use morf_value::IpcValue;
 
-    
-use crate::surfaces::SurfaceEventState;
+    use crate::surfaces::SurfaceEventState;
 
     /// How stale a tree may get on layout alone (things moving with no
     /// property written): bounds a screen reader reads are this fresh.
@@ -58,11 +57,7 @@ use crate::surfaces::SurfaceEventState;
                 return false;
             }
             let mut roots: Vec<NodeHandle> = vec![state.primary_root];
-            roots.extend(
-                state
-                    .windows.values()
-                    .map(|s| s.root),
-            );
+            roots.extend(state.windows.values().map(|s| s.root));
             self.adapters.retain(|root, _| roots.contains(root));
             let mut acted = false;
             for root in &roots {
@@ -88,14 +83,19 @@ use crate::surfaces::SurfaceEventState;
                 }
             }
             for root in &roots {
-                let Some(adapter) = self.adapters.get_mut(root) else { continue };
+                let Some(adapter) = self.adapters.get_mut(root) else {
+                    continue;
+                };
                 if !adapter.accessibility.wants_tree() {
                     adapter.built_revision = None;
                     continue;
                 }
                 let revision = runtime.scene_revision();
                 let fresh = adapter.accessibility.is_fresh() || adapter.built_revision.is_none();
-                let stale = painted && adapter.built_at.is_none_or(|at| at.elapsed() >= LAYOUT_STALE);
+                let stale = painted
+                    && adapter
+                        .built_at
+                        .is_none_or(|at| at.elapsed() >= LAYOUT_STALE);
                 if !fresh && !stale && adapter.built_revision == Some(revision) {
                     continue;
                 }
@@ -103,7 +103,8 @@ use crate::surfaces::SurfaceEventState;
                     Some(&*state.layout)
                 } else {
                     state
-                        .windows.values()
+                        .windows
+                        .values()
                         .find(|s| s.root == *root)
                         .and_then(|s| s.layout.as_deref())
                 };
@@ -111,7 +112,9 @@ use crate::surfaces::SurfaceEventState;
                 let nodes = {
                     let scene = runtime.scene();
                     scene.accessible_tree(*root, "window", name, &|node| {
-                        layout.surface_rect(&scene, node).map(|g| (g.x, g.y, g.width, g.height))
+                        layout
+                            .surface_rect(&scene, node)
+                            .map(|g| (g.x, g.y, g.width, g.height))
                     })
                 };
                 adapter.accessibility.update(&nodes);

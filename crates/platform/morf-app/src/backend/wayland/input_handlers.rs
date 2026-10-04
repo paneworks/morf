@@ -116,9 +116,10 @@ impl PointerHandler for LayerState {
                     self.events
                         .push_back(Event::PointerMotion { surface, x, y });
                 }
-                PointerEventKind::Motion { .. } => self
-                    .events
-                    .push_back(Event::PointerMotion { surface, x, y }),
+                PointerEventKind::Motion { .. } => {
+                    self.events
+                        .push_back(Event::PointerMotion { surface, x, y })
+                }
                 PointerEventKind::Leave { .. } => {
                     self.pointer_enter_serial = None;
                     self.cursor_shape_current = None;
@@ -221,8 +222,7 @@ impl TouchHandler for LayerState {
         id: i32,
     ) {
         if let Some(((x, y), surface)) = self.touch_points.remove(&id) {
-            self.events
-                .push_back(Event::TouchUp { surface, id, x, y });
+            self.events.push_back(Event::TouchUp { surface, id, x, y });
         }
     }
 
@@ -297,8 +297,7 @@ impl KeyboardHandler for LayerState {
             });
         }
         if self.keyboard_surface == Some(WindowId::Layer(crate::backend::wayland::PRIMARY_LAYER)) {
-            self.events
-                .push_back(Event::KeyboardFocus { active: true });
+            self.events.push_back(Event::KeyboardFocus { active: true });
         }
     }
 

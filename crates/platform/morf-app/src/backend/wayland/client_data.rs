@@ -5,8 +5,8 @@
 use std::sync::Arc;
 use wayland_client::protocol::wl_data_device_manager::DndAction;
 
-use crate::mime::{parse_uri_list, resolve_mime};
 use crate::backend::wayland::{state_types::*, surface_types::*};
+use crate::mime::{parse_uri_list, resolve_mime};
 
 /// What a finished read was for.
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -1,5 +1,5 @@
-mod regions;
 mod layer_state;
+mod regions;
 
 use smithay_client_toolkit::compositor::FrameCallbackData;
 use smithay_client_toolkit::globals::ProvidesBoundGlobal;
@@ -12,12 +12,12 @@ use wayland_client::Proxy;
 use wayland_client::protocol::{wl_output, wl_subcompositor, wl_subsurface, wl_surface};
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1;
 
-use crate::placement::LayerRequest;
 use crate::backend::wayland::{state_types::*, surface_types::*};
+use crate::placement::LayerRequest;
 
-use regions::note_keyboard_request;
 #[cfg(test)]
 pub(crate) use layer_state::fallback_key_target;
+use regions::note_keyboard_request;
 
 wayland_client::delegate_noop!(LayerState: ignore wl_subcompositor::WlSubcompositor);
 wayland_client::delegate_noop!(LayerState: ignore wl_subsurface::WlSubsurface);
@@ -27,7 +27,7 @@ wayland_client::delegate_noop!(LayerState: ignore wl_subsurface::WlSubsurface);
 /// The role is plural, but one surface is still the shell's own: it is the one
 /// `connect` opens, the one whose size and scale the bare accessors report, and
 /// the parent an unqualified popup attaches to.
-pub const PRIMARY_LAYER: u64 = 0;
+pub use crate::backend::PRIMARY_LAYER;
 
 /// Converts configured anchor edges into the layer-shell bitmask.
 ///
@@ -267,7 +267,11 @@ impl LayerClient {
     ///
     /// Without layer-shell the same change re-places the subsurfaces standing
     /// in for layer surfaces, and one whose size moved hears a configure.
-    pub fn set_layer_geometry(&mut self, id: u64, config: &LayerConfig) -> Result<(), WaylandError> {
+    pub fn set_layer_geometry(
+        &mut self,
+        id: u64,
+        config: &LayerConfig,
+    ) -> Result<(), WaylandError> {
         let serial = self.state.next_layer_sequence();
         let record = self
             .state

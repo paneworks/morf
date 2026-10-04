@@ -1,16 +1,16 @@
 //! One output's loop: each turn sleeps until something is due, runs the
 //! services, commands and events that came, and paints what changed.
 
+use morf_app::{Event, LayerClient, PRIMARY_LAYER};
 use morf_desktop::Desktop;
 use morf_lua::{Runtime, Screen, SurfaceReserve};
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_app::{LayerClient, Event, PRIMARY_LAYER};
 use std::os::fd::AsFd;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use crate::host::windows::Kind;
 use crate::desktop::{desktop_for, dispatch_desktop};
+use crate::host::windows::Kind;
 use crate::render_target::{primary_target, surface_backend};
 use crate::{
     backdrop::*, capture::*, lock::*, paint::*, services::*, surface_actions::*, surface_events::*,
@@ -127,9 +127,7 @@ pub(super) fn turn_loop(
                 state.layout.invalidate_scene();
                 state.animating_shaders = runtime.shaders_animate();
                 register_shaders(runtime, &mut renderer)?;
-                for surface in state
-                    .windows.values_mut()
-                {
+                for surface in state.windows.values_mut() {
                     surface.layout = None;
                 }
                 let _ = desktop.reset_gamma(None);
@@ -145,7 +143,7 @@ pub(super) fn turn_loop(
             let replacement = connect_runtime_surface(runtime, &name)?;
             let (width, height) = replacement.physical_size();
             let backend = surface_backend(primary_target(&replacement)?, width, height)
-            .map_err(|error| error.to_string())?;
+                .map_err(|error| error.to_string())?;
             renderer = RenderEngine::new(backend);
             // The adapter is new, so every pipeline it held is gone with it.
             register_shaders(runtime, &mut renderer)?;
@@ -204,12 +202,7 @@ pub(super) fn turn_loop(
         if runtime.take_window_surface_change() {
             // The only thing that can move the primary root.
             state.primary_root = primary_surface_root_keeping(runtime, state.primary_root)?;
-            repaint |= sync_window_surfaces(
-                runtime,
-                &mut client,
-                &mut state.windows,
-                &name,
-            )?;
+            repaint |= sync_window_surfaces(runtime, &mut client, &mut state.windows, &name)?;
         }
         apply_service_requests(runtime, &mut client, &mut desktop);
         while let Some(event) = client.next_event() {
@@ -274,13 +267,20 @@ pub(super) fn turn_loop(
         // when it comes, makes the paint.
         if repaint && !owed && client.layer_frame_wait(PRIMARY_LAYER).is_some() {
             state.primary_deferred = true;
-            for surface in state.windows.of_kind_mut(Kind::Layer).map(|(_, surface)| surface) {
+            for surface in state
+                .windows
+                .of_kind_mut(Kind::Layer)
+                .map(|(_, surface)| surface)
+            {
                 surface.needs_paint |= surface.updates_enabled;
             }
             repaint = false;
             // The layer surfaces are not held by the primary's callback;
             // each paints when its own allows.
-            for surface in state.windows.of_kind_mut(Kind::Layer).map(|(_, surface)| surface)
+            for surface in state
+                .windows
+                .of_kind_mut(Kind::Layer)
+                .map(|(_, surface)| surface)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_layer_surface(runtime, &client, surface)?;
@@ -299,7 +299,8 @@ pub(super) fn turn_loop(
             if !removed.is_empty() {
                 renderer.backend_mut().forget_nodes(&removed);
                 for renderer in state
-                    .windows.values_mut()
+                    .windows
+                    .values_mut()
                     .filter_map(|surface| surface.renderer.as_mut())
                 {
                     renderer.backend_mut().forget_nodes(&removed);
@@ -334,17 +335,26 @@ pub(super) fn turn_loop(
                 }
                 Err(error) => return Err(error),
             }
-            for surface in state.windows.of_kind_mut(Kind::Popup).map(|(_, surface)| surface)
+            for surface in state
+                .windows
+                .of_kind_mut(Kind::Popup)
+                .map(|(_, surface)| surface)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_popup_surface(runtime, &client, surface)?;
             }
-            for surface in state.windows.of_kind_mut(Kind::Toplevel).map(|(_, surface)| surface)
+            for surface in state
+                .windows
+                .of_kind_mut(Kind::Toplevel)
+                .map(|(_, surface)| surface)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_floating_surface(runtime, &client, surface)?;
             }
-            for surface in state.windows.of_kind_mut(Kind::Layer).map(|(_, surface)| surface)
+            for surface in state
+                .windows
+                .of_kind_mut(Kind::Layer)
+                .map(|(_, surface)| surface)
                 .filter(|surface| surface.updates_enabled)
             {
                 paint_layer_surface(runtime, &client, surface)?;

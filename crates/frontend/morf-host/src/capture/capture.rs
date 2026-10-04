@@ -7,9 +7,9 @@
 //! texture the moment it is done. A configuration asks for the second with
 //! `{ gpu = true }`, and gets the first wherever the second cannot be had.
 
+use morf_desktop::{CaptureBuffer, Desktop, ScreencopyFormat, ScreencopyFrame};
 use morf_lua::{Runtime, Screencopy as LuaScreencopy};
 use morf_render::{FOURCC_ARGB8888, FOURCC_XRGB8888, RenderEngine, WgpuBackend, split_dev_t};
-use morf_desktop::{CaptureBuffer, Desktop, ScreencopyFormat, ScreencopyFrame};
 use std::os::fd::AsFd;
 
 pub fn apply_screencopy_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
@@ -143,10 +143,7 @@ pub fn dispatch_screencopy(
 /// name: whichever side holds it lets go, and a name nothing held is not
 /// an error, since a release after a replacement is the natural thing to
 /// write.
-pub fn apply_capture_releases(
-    runtime: &mut Runtime,
-    renderer: &mut RenderEngine<WgpuBackend>,
-) {
+pub fn apply_capture_releases(runtime: &mut Runtime, renderer: &mut RenderEngine<WgpuBackend>) {
     for source in runtime.take_screencopy_releases() {
         let name = source
             .strip_prefix("gpu:")
@@ -224,19 +221,18 @@ fn export_for_offer(
         .find(|(fourcc, _)| *fourcc == FOURCC_XRGB8888 || *fourcc == FOURCC_ARGB8888)
         .ok_or("the compositor offered no format this engine draws")?;
     let image = backend.export_capture(width, height, *fourcc, modifiers)?;
-    desktop
-        .attach_capture_dmabuf(
-            request_id,
-            &CaptureBuffer {
-                fd: image.plane.fd.as_fd(),
-                width,
-                height,
-                fourcc: *fourcc,
-                modifier: image.modifier,
-                offset: image.plane.offset,
-                stride: image.plane.stride,
-            },
-        )?;
+    desktop.attach_capture_dmabuf(
+        request_id,
+        &CaptureBuffer {
+            fd: image.plane.fd.as_fd(),
+            width,
+            height,
+            fourcc: *fourcc,
+            modifier: image.modifier,
+            offset: image.plane.offset,
+            stride: image.plane.stride,
+        },
+    )?;
     backend.stash_export(request_id, image);
     Ok(())
 }

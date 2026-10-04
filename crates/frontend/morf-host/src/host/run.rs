@@ -1,20 +1,21 @@
-mod turn;
 mod stall;
+mod turn;
 
+use morf_app::Backend;
+use morf_app::{Event, LayerClient, Output, PRIMARY_LAYER};
 use morf_lua::{Limits, Runtime, Screen};
 use morf_render::{RenderEngine, ShaderRegistration, WgpuBackend};
-use morf_app::{LayerClient, Event, PRIMARY_LAYER, Output};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use crate::host::windows::Windows;
 use crate::desktop::desktop_for;
+use crate::host::windows::Windows;
 use crate::render_target::{primary_target, surface_backend};
 use crate::{
-    backdrop::*, lock::*, pacing::*, paint::*, supervisor::*, surface_actions::*, surface_layers::*,
-    surfaces::*, wake_plan::*, workers::*,
+    backdrop::*, lock::*, pacing::*, paint::*, supervisor::*, surface_actions::*,
+    surface_layers::*, surfaces::*, wake_plan::*, workers::*,
 };
 
 use stall::{advance_without_callbacks, motion_deadline};
@@ -25,7 +26,7 @@ use turn::turn_loop;
 /// Booleans for the protocols, because "is there screencopy here" is the
 /// question; strings for the GPU, because "which one" is.
 fn capabilities_of(
-    client: &LayerClient,
+    client: &dyn Backend,
     desktop: &morf_desktop::Desktop,
     renderer: &mut RenderEngine<WgpuBackend>,
 ) -> Vec<(String, String)> {
@@ -33,7 +34,10 @@ fn capabilities_of(
     let mut list = vec![
         ("gpu".to_owned(), info.name.clone()),
         ("gpu_backend".to_owned(), format!("{:?}", info.backend)),
-        ("scale_120".to_owned(), client.primary_scale_120().to_string()),
+        (
+            "scale_120".to_owned(),
+            client.primary_scale_120().to_string(),
+        ),
     ];
     for (name, supported) in [
         ("desktop_canvas", false),
@@ -169,7 +173,9 @@ fn drive_surface(
     let configuring = Instant::now();
     let mut early_pointer = None;
     'configured: loop {
-        client.blocking_dispatch().map_err(|error| error.to_string())?;
+        client
+            .blocking_dispatch()
+            .map_err(|error| error.to_string())?;
         while let Some(event) = client.next_event() {
             match event {
                 Event::Configure { id, .. } if id == PRIMARY_LAYER => break 'configured,
@@ -232,7 +238,7 @@ fn drive_surface(
     let gpu = Instant::now();
     let (width, height) = client.physical_size();
     let backend = surface_backend(primary_target(&client)?, width, height)
-    .map_err(|error| error.to_string())?;
+        .map_err(|error| error.to_string())?;
     let mut renderer = RenderEngine::new(backend);
     // Known only now: the protocols came with the connection, the GPU with
     // the renderer. Everything a configuration or `morf info` might ask.
@@ -265,12 +271,7 @@ fn drive_surface(
     runtime.take_window_surface_change();
     runtime.take_layer_surface_change();
     apply_backdrop(&mut client, &runtime.layer_surface_config(), &name);
-    let _ = sync_window_surfaces(
-        runtime,
-        &mut client,
-        &mut windows,
-        &name,
-    )?;
+    let _ = sync_window_surfaces(runtime, &mut client, &mut windows, &name)?;
     apply_service_requests(runtime, &mut client, &mut desktop);
     slow(&name, "opening the other surfaces", windows_opening);
 

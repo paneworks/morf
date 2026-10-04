@@ -1,21 +1,21 @@
 mod layer;
 
+use morf_app::Backend;
+use morf_app::{InputRect, PRIMARY_LAYER, WindowId, physical_size};
 use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
-use morf_value::region::Region;
 use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
-use morf_app::{InputRect, LayerClient, PRIMARY_LAYER, WindowId, physical_size};
+use morf_value::region::Region;
 
 use crate::surfaces::*;
-use morf_app::Backend as _;
 
 pub use layer::{paint_layer, paint_layer_surface};
 
 pub fn paint(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
-    client: &LayerClient,
+    client: &dyn Backend,
     root: NodeHandle,
     cache: Option<&mut CachedLayout>,
 ) -> Result<CachedLayout, String> {
@@ -292,7 +292,7 @@ impl AuxiliaryKind {
         }
     }
 
-    pub fn request_frame(self, client: &LayerClient, id: u64) {
+    pub fn request_frame(self, client: &dyn Backend, id: u64) {
         match self {
             Self::Popup => client.request_frame(WindowId::Popup(id)),
             Self::Floating => client.request_frame(WindowId::Toplevel(id)),
@@ -302,34 +302,37 @@ impl AuxiliaryKind {
     /// Declares the whole surface damaged, ahead of the render that fills it.
     pub fn damage(
         self,
-        client: &LayerClient,
+        client: &dyn Backend,
         id: u64,
         width: u32,
         height: u32,
     ) -> Result<(), String> {
-        let surface = match self {
-            Self::Popup => client.popup_surface(id),
-            Self::Floating => client.floating_surface(id),
+        let window = self.window(id);
+        if !client.has_window(window) {
+            return Err(format!(
+                "{} surface disappeared while painting",
+                self.name()
+            ));
         }
-        .ok_or_else(|| format!("{} surface disappeared while painting", self.name()))?;
-        surface.damage_buffer(0, 0, width as i32, height as i32);
+        client.damage(window, 0, 0, width as i32, height as i32);
         Ok(())
     }
 
-    pub fn commit(self, client: &LayerClient, id: u64) {
-        let surface = match self {
-            Self::Popup => client.popup_surface(id),
-            Self::Floating => client.floating_surface(id),
-        };
-        if let Some(surface) = surface {
-            surface.commit();
+    pub fn commit(self, client: &dyn Backend, id: u64) {
+        client.commit(self.window(id));
+    }
+
+    fn window(self, id: u64) -> WindowId {
+        match self {
+            Self::Popup => WindowId::Popup(id),
+            Self::Floating => WindowId::Toplevel(id),
         }
     }
 }
 
 pub fn paint_popup_surface(
     runtime: &mut Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     surface: &mut Window,
 ) -> Result<(), String> {
     paint_auxiliary_surface(AuxiliaryKind::Popup, runtime, client, surface)
@@ -337,7 +340,7 @@ pub fn paint_popup_surface(
 
 pub fn paint_floating_surface(
     runtime: &mut Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     surface: &mut Window,
 ) -> Result<(), String> {
     paint_auxiliary_surface(AuxiliaryKind::Floating, runtime, client, surface)
@@ -347,7 +350,7 @@ pub fn paint_floating_surface(
 pub fn paint_auxiliary_surface(
     kind: AuxiliaryKind,
     runtime: &mut Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     surface: &mut Window,
 ) -> Result<(), String> {
     let Some(renderer) = &mut surface.renderer else {
@@ -434,7 +437,7 @@ pub fn clock_text() -> String {
 pub fn apply_subpixel(
     renderer: &mut RenderEngine<WgpuBackend>,
     setting: &str,
-    client: &LayerClient,
+    client: &dyn Backend,
     opaque: bool,
 ) {
     let text = client.own_output().and_then(|output| {

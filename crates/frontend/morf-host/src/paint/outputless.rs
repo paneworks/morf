@@ -12,8 +12,8 @@
 //! arrive on it; the supervisor then stops it and starts the per-output
 //! runtimes afresh, handing them what it kept with `morf.reloadable`.
 
+use morf_app::{Event, LayerClient, Output};
 use morf_lua::{Limits, Runtime};
-use morf_app::{LayerClient, Event, Output};
 use std::os::fd::AsFd;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -140,7 +140,10 @@ fn drive_outputless(
         {
             attempted = Some(Instant::now());
             client = connect_client(&send)?;
-            desktop = client.as_ref().map(desktop_for).transpose()?;
+            desktop = client
+                .as_ref()
+                .map(|client| desktop_for(client))
+                .transpose()?;
             if let Some(desktop) = desktop.as_mut() {
                 desktop.set_idle_timeouts(&runtime.idle_timeouts());
             }

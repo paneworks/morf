@@ -1,16 +1,17 @@
+use morf_app::Backend;
+use morf_app::Edge;
 use morf_layout::{Layout, ReparentTransition, Size};
 use morf_lua::{Runtime, WindowSurfaceAction};
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_app::{Edge, LayerClient};
 
 use crate::host::windows::{Kind, Windows};
 use crate::surfaces::*;
-use morf_app::Backend as _;
+
 use morf_app::WindowId;
 
 pub fn apply_window_surface_actions(
     runtime: &mut Runtime,
-    client: &LayerClient,
+    client: &dyn Backend,
     windows: &Windows,
 ) {
     for action in runtime.take_window_surface_actions() {
@@ -40,7 +41,7 @@ pub fn apply_window_surface_actions(
 pub fn apply_parent_transitions(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
-    client: &LayerClient,
+    client: &dyn Backend,
 ) -> Result<(), String> {
     let transitions = runtime.take_parent_transitions();
     if transitions.is_empty() {

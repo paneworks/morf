@@ -198,9 +198,7 @@ impl Dispatch<WpFractionalScaleV1, u64> for LayerState {
         };
         layer.scale_120 = scale.max(1);
         let scale_120 = layer.scale_120;
-        state
-            .events
-            .push_back(Event::Scale { id: *id, scale_120 });
+        state.events.push_back(Event::Scale { id: *id, scale_120 });
     }
 }
 
