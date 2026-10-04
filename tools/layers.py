@@ -8,7 +8,9 @@ Every crate lives at crates/<group>/<crate>. A crate may depend on crates of
 its own group or of the groups above it (core <- graphics <- platform <-
 engine <- frontend), and on exactly the morf crates its row below names.
 Nothing below morf-lua names `luna`; nothing outside morf-app and
-morf-desktop names a Wayland crate.
+morf-desktop names a Wayland crate. And section 3's house rules: no Rust
+file over 500 lines, each crate's root opens with a `//!` header, and each
+crate has tests (a `tests/` directory or `#[cfg(test)]` code).
 
 Violations a later phase of the plan removes are listed in PENDING, each
 with its phase: --strict fails on anything else, and on a PENDING entry
@@ -65,15 +67,41 @@ def crates():
         deps = set()
         for table in ("dependencies", "build-dependencies"):
             deps |= set(data.get(table, {}).keys())
-        yield name, group, deps
+        yield name, group, deps, manifest.parent
+
+
+MAX_LINES = 500
+
+
+def house_rules(name, path):
+    """PLAN.md section 3, rules 7 and 8, for the crate at `path`."""
+    found = []
+    sources = sorted(path.rglob("*.rs"))
+    for source in sources:
+        if "target" in source.relative_to(path).parts:
+            continue
+        lines = source.read_text(errors="replace").count("\n")
+        if lines > MAX_LINES:
+            found.append(f"{source.relative_to(ROOT)}: {lines} lines, more than {MAX_LINES}")
+    root = next((path / "src" / f for f in ("lib.rs", "main.rs") if (path / "src" / f).exists()), None)
+    if root is None or not root.read_text().lstrip().startswith("//!"):
+        found.append(f"{name}: its root has no //! header saying what it owns")
+    tested = (path / "tests").is_dir() or any(
+        "#[cfg(test)]" in source.read_text(errors="replace") for source in sources
+    )
+    if not tested:
+        found.append(f"{name}: has no tests")
+    return found
 
 
 def main():
     strict = "--strict" in sys.argv
     found = list(crates())
-    group_of = {name: group for name, group, _ in found}
+    group_of = {name: group for name, group, _, _ in found}
     problems, notes = [], []
-    for name, group, deps in found:
+    for name, _, _, path in found:
+        problems.extend(house_rules(name, path))
+    for name, group, deps, _ in found:
         if group is None:
             problems.append(f"{name}: not in a group directory (crates/<group>/<crate>)")
             continue

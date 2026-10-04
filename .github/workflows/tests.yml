@@ -25,6 +25,10 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             cargo-${{ runner.os }}-
+      - name: Layer rules
+        # PLAN.md sections 3 and 4: the dependency graph, Wayland and luna
+        # where they may appear, files of at most 500 lines.
+        run: python3 tools/layers.py --strict
       - name: Verify
         run: |
           cargo fmt --all -- --check
