@@ -3,6 +3,14 @@ use morf_scene::{Color, Element, NodeHandle, Scene};
 
 use crate::{commands::*, effects::*, paint_fields::*, paint_text_input::*, sdf::*};
 
+mod element_commands;
+mod path_paint;
+mod properties;
+
+use element_commands::*;
+use path_paint::path_paint;
+use properties::*;
+
 #[derive(Clone, Copy)]
 pub(crate) struct PaintContext {
     pub(crate) transform: Transform2D,
@@ -225,34 +233,15 @@ pub(crate) fn append_node(
             // that composites the node, not to its own fill.
             shader: shader_binding(scene, node)?.filter(|shader| !shader.samples_behind),
         }),
-        Element::Text => list.commands.push(DrawCommand::Text {
+        Element::Text => list.commands.push(text_command(
+            scene,
             node,
             bounds,
             transform,
             clip,
-            text: scene.string_value(node, "text")?.to_owned(),
-            family: scene.string_value(node, "font_family")?.to_owned(),
-            font_source: scene.string_value(node, "font_source")?.to_owned(),
-            size: scene.number(node, "font_size")?,
-            font_weight: scene.number(node, "font_weight")?,
-            color: resolved_color(scene, node, &inherited)?,
+            &inherited,
             color_overlay,
-            wrap: scene.bool_value(node, "wrap")?,
-            max_lines: scene.number(node, "max_lines")?.max(0.0) as usize,
-            elide: render_text_elide(scene.string_value(node, "elide")?)?,
-            horizontal_alignment: render_text_alignment(scene.directed_alignment(node)?)?,
-            vertical_alignment: vertical_alignment(
-                scene.string_value(node, "vertical_alignment")?,
-            )?,
-            field_style: text_field_style(scene, node)?,
-            morph_to: scene.string_value(node, "morph_to")?.to_owned(),
-            morph_progress: scene.number(node, "morph_progress")?.clamp(0.0, 1.0) as f32,
-            style: morf_layout::TextStyle::from_scene(scene, node)
-                .map_err(|error| RenderError::Scene(error.to_string()))?,
-            decoration: morf_scene::TextDecoration::parse(scene.current(node, "decoration")?)
-                .map_err(RenderError::Scene)?,
-            edit: None,
-        }),
+        )?),
         Element::TextInput => {
             list.commands.push(text_input_command(
                 scene,
@@ -278,36 +267,22 @@ pub(crate) fn append_node(
                 });
             }
         }
-        Element::Image => list.commands.push(DrawCommand::Texture {
+        Element::Image => list.commands.push(image_command(
+            scene,
             node,
             bounds,
             transform,
             clip,
-            source: scene.string_value(node, "source")?.to_owned(),
-            icon_theme: None,
             color_overlay,
-            fill_mode: image_fill_mode(scene.string_value(node, "fill_mode")?)?,
-            smooth: scene.bool_value(node, "smooth")?,
-            distance_field: scene.bool_value(node, "distance_field")?,
-            distance_field_spread: scene.number(node, "distance_field_spread")?.max(0.5) as f32,
-            distance_field_style: text_field_style(scene, node)?,
-            frame: scene.number(node, "frame")?.max(0.0) as u32,
-        }),
-        Element::Icon => list.commands.push(DrawCommand::Texture {
+        )?),
+        Element::Icon => list.commands.push(icon_command(
+            scene,
             node,
             bounds,
             transform,
             clip,
-            source: scene.string_value(node, "name")?.to_owned(),
-            icon_theme: Some(scene.string_value(node, "theme")?.to_owned()),
             color_overlay,
-            fill_mode: image_fill_mode(scene.string_value(node, "fill_mode")?)?,
-            smooth: true,
-            distance_field: scene.bool_value(node, "distance_field")?,
-            distance_field_spread: scene.number(node, "distance_field_spread")?.max(0.5) as f32,
-            distance_field_style: text_field_style(scene, node)?,
-            frame: 0,
-        }),
+        )?),
         Element::Path => list.commands.push(DrawCommand::Path {
             node,
             bounds,
@@ -317,54 +292,10 @@ pub(crate) fn append_node(
             paint: Box::new(path_paint(scene, node)?),
         }),
         Element::Sdf if painted => {
-            let mut layers = Vec::new();
-            let defaults = FieldDefaults {
-                blend: scene.number(node, "blend")?.max(0.0) as f32,
-                color: apply_overlay(scene.color_value(node, "fill_color")?, color_overlay),
-                morph: scene.number(node, "morph_progress")?.clamp(0.0, 1.0) as f32,
-                overlay: color_overlay,
-                profile: BlendProfile::parse(scene.string_value(node, "blend_profile")?)
-                    .unwrap_or_default(),
-                transform,
-                opacity: 1.0,
-            };
-            field_layers(scene, layout, node, defaults, &mut layers)?;
-            // A composition with nothing in it has no zero crossing and would
-            // paint the whole rectangle, so it draws nothing at all.
-            if !layers.is_empty() {
-                list.commands.push(DrawCommand::Field {
-                    node,
-                    bounds,
-                    transform,
-                    clip,
-                    fill_color: apply_overlay(
-                        scene.color_value(node, "fill_color")?,
-                        color_overlay,
-                    ),
-                    stroke_color: apply_overlay(
-                        scene.color_value(node, "stroke_color")?,
-                        color_overlay,
-                    ),
-                    stroke_width: scene.number(node, "stroke_width")?.max(0.0),
-                    stroke_alignment: stroke_alignment(
-                        scene.string_value(node, "stroke_alignment")?,
-                    )?,
-                    softness: scene.number(node, "softness")?.max(0.0),
-                    gradient: scene_gradient(scene, node)?,
-                    color_overlay,
-                    shadow_color: scene.color_value(node, "shadow_color")?,
-                    shadow_blur: scene.number(node, "shadow_blur")?.max(0.0),
-                    shadow_spread: scene.number(node, "shadow_spread")?,
-                    shadow_offset_x: scene.number(node, "shadow_offset_x")?,
-                    shadow_offset_y: scene.number(node, "shadow_offset_y")?,
-                    shadow_inner: scene.bool_value(node, "shadow_inner")?,
-                    // An effect shader belongs to the layer that composites
-                    // this node, not to the node's own fill: leaving it here
-                    // too would have the field pass look for a program that
-                    // was registered against the composite pass.
-                    shader: shader_binding(scene, node)?.filter(|shader| !shader.samples_behind),
-                    layers,
-                });
+            if let Some(command) =
+                field_command(scene, layout, node, bounds, transform, clip, color_overlay)?
+            {
+                list.commands.push(command);
             }
         }
         Element::Rect
@@ -528,28 +459,9 @@ pub(crate) fn append_node(
             )
         });
         match source {
-            MaskSource::Gradient(gradient) => list.commands.push(DrawCommand::Quad {
-                node,
-                bounds,
-                transform,
-                clip,
-                color: Color::rgba8(255, 255, 255, 255),
-                color_overlay: Color::rgba8(0, 0, 0, 0),
-                gradient: Some(gradient),
-                radii: [0.0; 4],
-                border_width: 0.0,
-                antialiasing: true,
-                border_pixel_aligned: false,
-                border_color: Color::rgba8(0, 0, 0, 0),
-                blur: 0.0,
-                shadow_color: Color::rgba8(0, 0, 0, 0),
-                shadow_blur: 0.0,
-                shadow_spread: 0.0,
-                shadow_offset_x: 0.0,
-                shadow_offset_y: 0.0,
-                shadow_inner: false,
-                shader: None,
-            }),
+            MaskSource::Gradient(gradient) => list
+                .commands
+                .push(gradient_mask(node, bounds, transform, clip, gradient)),
             MaskSource::Node(mask) => append_node(
                 scene,
                 layout,
@@ -572,184 +484,4 @@ pub(crate) fn append_node(
         });
     }
     Ok(())
-}
-
-/// What masks a node: the subtree it was given as its mask, while that is
-/// visible, or else the gradient its `mask` property holds.
-#[derive(Clone)]
-enum MaskSource {
-    Gradient(morf_scene::Gradient),
-    Node(NodeHandle),
-}
-
-fn mask_source(scene: &Scene, node: NodeHandle) -> Result<Option<MaskSource>, RenderError> {
-    if let Some(mask) = scene.mask(node)
-        && scene.bool_value(mask, "visible")?
-    {
-        return Ok(Some(MaskSource::Node(mask)));
-    }
-    let value = scene.current(node, "mask")?;
-    // Nearly every node has none, and an empty table has nothing to parse.
-    if matches!(value, morf_scene::Value::Map(entries) if entries.is_empty()) {
-        return Ok(None);
-    }
-    Ok(morf_scene::MaskSpec::parse(value)
-        .map_err(RenderError::Scene)?
-        .map(|spec| MaskSource::Gradient(spec.gradient)))
-}
-
-/// A layer that only groups: composited as it is, at full opacity.
-fn plain_layer(node: NodeHandle, start: usize, parent: Option<usize>, bounds: Geometry) -> Layer {
-    Layer {
-        node,
-        commands: start..start,
-        parent,
-        opacity: 1.0,
-        blur: 0.0,
-        shadow_color: Color::rgba8(0, 0, 0, 0),
-        shadow_blur: 0.0,
-        shadow_offset: [0.0, 0.0],
-        mask: None,
-        shader: None,
-        bounds,
-        alpha_mask: None,
-        mask_for: None,
-    }
-}
-
-/// A rect's drop shadow, read only as far as it is visible.
-/// How a text node wants its glyph fields thresholded.
-///
-/// Thickness is in logical pixels of edge movement, which is what a
-/// configuration can reason about: asking for half a pixel more weight means
-/// the same thing at every size, where a shift in field units would not.
-fn text_field_style(scene: &Scene, node: NodeHandle) -> Result<DistanceFieldStyle, RenderError> {
-    Ok(DistanceFieldStyle {
-        thickness: scene.number(node, "thickness")? as f32,
-        softness: scene.number(node, "softness")?.max(0.0) as f32,
-        outline_width: scene.number(node, "outline_width")?.max(0.0) as f32,
-        outline_color: scene.color_value(node, "outline_color")?,
-    })
-}
-
-struct RectShadow {
-    color: Color,
-    blur: f64,
-    spread: f64,
-    offset_x: f64,
-    offset_y: f64,
-    inner: bool,
-}
-
-impl RectShadow {
-    fn none() -> Self {
-        Self {
-            color: Color::rgba8(0, 0, 0, 0),
-            blur: 0.0,
-            spread: 0.0,
-            offset_x: 0.0,
-            offset_y: 0.0,
-            inner: false,
-        }
-    }
-}
-
-fn rect_shadow(scene: &Scene, node: NodeHandle) -> Result<RectShadow, RenderError> {
-    let color = scene.color_value(node, "shadow_color")?;
-    if color.alpha <= 0.0 {
-        return Ok(RectShadow::none());
-    }
-    Ok(RectShadow {
-        color,
-        blur: scene.number(node, "shadow_blur")?.max(0.0),
-        spread: scene.number(node, "shadow_spread")?,
-        offset_x: scene.number(node, "shadow_offset_x")?,
-        offset_y: scene.number(node, "shadow_offset_y")?,
-        inner: scene.bool_value(node, "shadow_inner")?,
-    })
-}
-
-/// Reads a `Path` node's outline and how it is drawn.
-fn path_paint(scene: &Scene, node: NodeHandle) -> Result<crate::path::PathPaint, RenderError> {
-    let word = |property: &str| scene.string_value(node, property);
-    let invalid = |message: String| RenderError::Scene(format!("Path: {message}"));
-    let view_box = morf_scene::PathViewBox::parse(scene.current(node, "view_box")?).map_err(invalid)?;
-    let d = match series_d(scene, node, view_box) {
-        Some(d) => d,
-        None => word("d")?.to_owned(),
-    };
-    Ok(crate::path::PathPaint {
-        d,
-        morph_to: word("morph_to")?.to_owned(),
-        morph_progress: scene.number(node, "morph_progress")?,
-        fill_color: scene.color_value(node, "fill_color")?,
-        fill_rule: morf_scene::FillRule::parse(word("fill_rule")?)
-            .ok_or_else(|| invalid("unknown fill_rule".to_owned()))?,
-        stroke_color: scene.color_value(node, "stroke_color")?,
-        stroke_width: scene.number(node, "stroke_width")?.max(0.0),
-        stroke_cap: morf_scene::StrokeCap::parse(word("stroke_cap")?)
-            .ok_or_else(|| invalid("unknown stroke_cap".to_owned()))?,
-        stroke_join: morf_scene::StrokeJoin::parse(word("stroke_join")?)
-            .ok_or_else(|| invalid("unknown stroke_join".to_owned()))?,
-        miter_limit: scene.number(node, "miter_limit")?,
-        dash: morf_scene::path_dash(scene.current(node, "dash")?).map_err(invalid)?,
-        dash_offset: scene.number(node, "dash_offset")?,
-        trim_start: scene.number(node, "trim_start")?,
-        trim_end: scene.number(node, "trim_end")?,
-        view_box,
-        fill_mode: image_fill_mode(word("fill_mode")?)?,
-    })
-}
-
-/// A channel's id, given as a number or as a handle with an `id`.
-fn channel_id(value: &morf_scene::Value) -> Option<u64> {
-    match value {
-        morf_scene::Value::Number(n) if *n >= 1.0 => Some(*n as u64),
-        morf_scene::Value::Map(fields) => match fields.get("id") {
-            Some(morf_scene::Value::Number(n)) if *n >= 1.0 => Some(*n as u64),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-/// The outline of a `Path` that draws a data channel (`series`), made from
-/// the channel's numbers now as its `plot` says; `None` when it draws `d`.
-fn series_d(scene: &Scene, node: NodeHandle, view_box: Option<morf_scene::PathViewBox>) -> Option<String> {
-    use morf_vector::series::{Plot, path};
-    use morf_scene::Value;
-    let id = channel_id(scene.current(node, "series").ok()?)?;
-    let Some(channel) = morf_scene::channel_by_id(id) else { return Some("M0 0".into()) };
-    let empty = std::collections::BTreeMap::new();
-    let fields = match scene.current(node, "plot") {
-        Ok(Value::Map(fields)) => fields,
-        _ => &empty,
-    };
-    let number = |key: &str| match fields.get(key) {
-        Some(Value::Number(n)) if n.is_finite() => Some(*n),
-        _ => None,
-    };
-    let flag = |key: &str| matches!(fields.get(key), Some(Value::Bool(true)));
-    let word = |key: &str| match fields.get(key) {
-        Some(Value::String(s)) => Some(s.clone()),
-        _ => None,
-    };
-    let top = match fields.get("top") {
-        Some(Value::Number(n)) if n.is_finite() => Some(Some(*n)),
-        Some(_) => Some(None),
-        // No top: a ring (a history) scales to its peak, a frame to 0..1.
-        None if channel.is_ring() => Some(None),
-        None => None,
-    };
-    let size = view_box.map_or((100.0, 100.0), |v| (v.width, v.height));
-    let samples = if channel.is_ring() { channel.capacity() } else { 0 };
-    let plot = Plot::from_fields(number, flag, word, top, size, samples);
-    let (values, _) = channel.snapshot();
-    let others = fields
-        .get("with")
-        .and_then(channel_id)
-        .and_then(morf_scene::channel_by_id)
-        .map(|other| other.snapshot().0)
-        .unwrap_or_default();
-    Some(path(&values, &others, &plot))
 }
