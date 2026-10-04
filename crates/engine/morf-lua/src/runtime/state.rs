@@ -5,7 +5,7 @@ pub(crate) use crate::api_shader::RegisteredShader;
 use crate::states::{Capture, StateSet};
 use luna::StashedTable;
 
-use morf_layout::{TransformTracker, TransformWatcher as NativeTransformWatcher};
+use morf_layout::TransformTracker;
 use morf_runtime::Handler;
 use morf_scene::reactive::{Graph, SignalId};
 use morf_scene::{ListModel, NodeHandle, Scene};
@@ -65,15 +65,7 @@ pub(crate) enum ViewKind {
     Grid,
 }
 
-pub(crate) struct LuaTransformWatcher {
-    pub(crate) a: NodeHandle,
-    pub(crate) b: NodeHandle,
-    pub(crate) watcher: NativeTransformWatcher,
-    pub(crate) callback: Option<Handler>,
-    pub(crate) revision: u64,
-    pub(crate) pending: bool,
-}
-
+pub(crate) use morf_runtime::layout::TransformWatch as LuaTransformWatcher;
 pub(crate) use morf_runtime::windows::PopupNodeAnchor;
 
 pub(crate) use morf_runtime::reactive::Effect as LuaEffect;

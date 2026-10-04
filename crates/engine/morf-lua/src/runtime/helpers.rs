@@ -11,12 +11,6 @@ use crate::{
     types::*,
 };
 
-pub(crate) fn geometry_i32(value: f64) -> i32 {
-    value
-        .round()
-        .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
-}
-
 pub(crate) fn scene_node_in_subtree(scene: &Scene, root: NodeHandle, node: NodeHandle) -> bool {
     morf_runtime::events::routing::node_in_subtree(scene, root, node)
 }

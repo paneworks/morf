@@ -14,6 +14,7 @@ pub mod focus;
 pub mod gestures;
 pub mod handler;
 pub mod keys;
+pub mod layout;
 pub mod log;
 pub mod models;
 pub mod overlays;
