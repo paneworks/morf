@@ -2,7 +2,6 @@
 
 use std::time::Duration;
 
-use morf_io::DbusValue;
 use morf_scene::reactive::SignalId;
 
 use crate::{
@@ -86,50 +85,7 @@ impl Runtime {
                 ..
             }) = &mut state.prefers
             {
-                // The portal arriving (or changing hands) is a reason to read
-                // it; it leaving is not, and what it said last stands.
-                let mut arrived = false;
-                while let Some(event) = portal.owner.next_event(Duration::ZERO) {
-                    if let Ok(DbusValue::List(parts)) = event.arguments
-                        && matches!(parts.get(2), Some(DbusValue::String(new)) if !new.is_empty())
-                    {
-                        arrived = true;
-                    }
-                }
-                if arrived {
-                    portal.pending = ask_portal();
-                }
-                // First readings, which a host's own setting outranks: it was
-                // made after the question went out, so it is the newer word.
-                portal.pending.retain(|(namespace, key, reply)| {
-                    let Some(answer) = reply.try_take() else {
-                        return true;
-                    };
-                    // `ReadOne` has one output, a variant, and a reply
-                    // decodes as the list of its outputs.
-                    let answer = answer.map(|value| match value {
-                        DbusValue::List(mut outputs) if outputs.len() == 1 => outputs.remove(0),
-                        other => other,
-                    });
-                    if let Ok(value) = answer
-                        && let Some(change) = preference_from_setting(namespace, key, value)
-                        && !overridden.contains(change.0)
-                    {
-                        changes.push(change);
-                    }
-                    false
-                });
-                while let Some(Ok(value)) = portal.changes.next_value(Duration::ZERO) {
-                    let DbusValue::List(parts) = value else {
-                        continue;
-                    };
-                    if let [DbusValue::String(namespace), DbusValue::String(key), value] =
-                        parts.as_slice()
-                        && let Some(change) = preference_from_setting(namespace, key, value.clone())
-                    {
-                        changes.push(change);
-                    }
-                }
+                changes = portal.poll(overridden);
             }
             for (index, source) in state.theme_sources.iter().enumerate() {
                 let Some(watcher) = &source.watcher else {

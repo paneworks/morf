@@ -3,6 +3,32 @@
 use super::*;
 
 #[test]
+fn a_rescan_says_whether_anything_changed_and_launch_names_what_is_missing() {
+    let root = std::env::temp_dir().join(format!("morf-rescan-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let mut entries = DesktopEntries::scan_paths([root.clone()]).unwrap();
+    assert!(!entries.rescan([root.clone()]).unwrap());
+    std::fs::write(
+        root.join("editor.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Editor\nExec=editor\n",
+    )
+    .unwrap();
+    assert!(entries.rescan([root.clone()]).unwrap());
+    assert!(entries.by_id("editor.desktop").is_some() || entries.by_id("editor").is_some());
+    assert_eq!(
+        entries.launch("absent", None),
+        Err("desktop entry `absent` was not found".into())
+    );
+    let id = entries.applications()[0].id.clone();
+    assert_eq!(
+        entries.launch(&id, Some("nope")),
+        Err("desktop action `nope` was not found".into())
+    );
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
 fn parses_application_actions_and_exec_fields() {
     let entry = DesktopEntry::parse(
         "browser",

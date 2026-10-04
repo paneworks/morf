@@ -35,6 +35,8 @@ pub mod equalizer;
 pub mod fake;
 mod model;
 mod pipewire;
+pub mod rows;
+pub mod session;
 pub mod spectrum;
 pub mod volume;
 

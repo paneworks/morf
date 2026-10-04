@@ -116,24 +116,19 @@ pub(super) fn install_commands<'gc>(
                 let id = {
                     let mut state = state.borrow_mut();
                     let host = host(&mut state);
-                    if host.listeners.len() >= MAX_LISTENERS {
+                    if host.session.listeners.len() >= morf_audio::session::MAX_LISTENERS {
                         return Err(
                             HostError("too many morf.audio.on_changed handlers".into()).into()
                         );
                     }
-                    host.started();
-                    let id = host.next_listener;
-                    host.next_listener += 1;
-                    host.listeners
-                        .push((id, crate::vm::handler_store::register(ctx.stash(callback))));
-                    id
+                    host.session
+                        .listen(crate::vm::handler_store::register(ctx.stash(callback)))
+                        .map_err(HostError)?
                 };
                 let stop = Callback::from_fn(&ctx, {
                     let state = Rc::clone(&state);
                     move |_, _, _| {
-                        host(&mut state.borrow_mut())
-                            .listeners
-                            .retain(|(listener, _)| *listener != id);
+                        host(&mut state.borrow_mut()).session.unlisten(id);
                         Ok(CallbackReturn::Return)
                     }
                 });

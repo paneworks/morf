@@ -1,3 +1,6 @@
+//! `morf.menu`, `morf.desktop_entries` and `morf.session_paths`: menu models
+//! and the applications a launcher lists, over `morf_system`'s.
+
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
 use morf_system::desktop_entries::{DesktopEntries, desktop_paths, session_paths};
 use std::cell::RefCell;
@@ -143,30 +146,21 @@ pub(crate) fn install_menu_desktop_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>,
     });
     let desktop_launch = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (entries, id): (UserRef<DesktopEntriesToken>, String) = stack.consume(ctx)?;
-        let entries_ref = entries.entries.borrow();
-        let entry = entries_ref
-            .by_id(&id)
-            .ok_or_else(|| HostError(format!("desktop entry `{id}` was not found")))?;
-        entry
-            .launch()
-            .map_err(|error| HostError(error.to_string()))?;
+        entries
+            .entries
+            .borrow()
+            .launch(&id, None)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let desktop_launch_action = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (entries, id, action): (UserRef<DesktopEntriesToken>, String, String) =
             stack.consume(ctx)?;
-        let entries_ref = entries.entries.borrow();
-        let entry = entries_ref
-            .by_id(&id)
-            .ok_or_else(|| HostError(format!("desktop entry `{id}` was not found")))?;
-        let action = entry
-            .actions
-            .iter()
-            .find(|candidate| candidate.id == action)
-            .ok_or_else(|| HostError(format!("desktop action `{action}` was not found")))?;
-        action
-            .launch(&entry.working_directory)
-            .map_err(|error| HostError(error.to_string()))?;
+        entries
+            .entries
+            .borrow()
+            .launch(&id, Some(&action))
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let desktop_methods = Table::new(&ctx);
@@ -177,12 +171,11 @@ pub(crate) fn install_menu_desktop_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>,
     desktop_methods.set_field(ctx, "launch_action", desktop_launch_action);
     let desktop_refresh = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let entries: UserRef<DesktopEntriesToken> = stack.consume(ctx)?;
-        let next = DesktopEntries::scan_paths(entries.paths.clone())
+        let changed = entries
+            .entries
+            .borrow_mut()
+            .rescan(entries.paths.clone())
             .map_err(|error| HostError(error.to_string()))?;
-        let changed = *entries.entries.borrow() != next;
-        if changed {
-            *entries.entries.borrow_mut() = next;
-        }
         stack.replace(ctx, changed);
         Ok(CallbackReturn::Return)
     });

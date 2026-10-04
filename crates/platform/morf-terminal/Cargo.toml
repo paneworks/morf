@@ -11,4 +11,5 @@ alacritty_terminal.workspace = true
 libc.workspace = true
 morf-io.workspace = true
 morf-scene.workspace = true
+morf-value.workspace = true
 rustix.workspace = true

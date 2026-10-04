@@ -8,6 +8,7 @@ mod greetd;
 mod greetd_conversation;
 mod pam;
 mod pam_conversation;
+pub mod prefers;
 mod status_notifier;
 mod udev;
 mod xkb;
