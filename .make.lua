@@ -273,7 +273,7 @@ make.recipe{
   desc = "call and introspect the session message bus",
   run = function()
     sh.cargo("run", "--release", "--package", "morf-io", "--example", "dbus_smoke")
-    sh.cargo("run", "--release", "--package", "morf-lua", "--example", "dbus_smoke")
+    sh.cargo("run", "--release", "--package", "morf-lua", "--example", "lua_dbus_smoke")
   end,
 }
 
@@ -281,7 +281,7 @@ make.recipe{
   name = "pam-smoke",
   desc = "load PAM and reject invalid credentials",
   run = function()
-    sh.cargo("run", "--release", "--package", "morf-services", "--example", "pam_smoke")
+    sh.cargo("run", "--release", "--package", "morf-system", "--example", "pam_smoke")
   end,
 }
 
@@ -289,7 +289,7 @@ make.recipe{
   name = "udev-smoke",
   desc = "open the native kernel uevent monitor",
   run = function()
-    sh.cargo("run", "--release", "--package", "morf-services", "--example", "udev_smoke")
+    sh.cargo("run", "--release", "--package", "morf-system", "--example", "udev_smoke")
   end,
 }
 

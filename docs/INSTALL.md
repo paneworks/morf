@@ -38,7 +38,7 @@ before updating `/etc/greetd/config.toml`:
 
 ```toml
 [default_session]
-command = "cage -s -- /usr/bin/morf greet -c caelestia"
+command = "cage -m last -s -- /usr/bin/morf greet -c caelestia"
 user = "greeter"
 ```
 

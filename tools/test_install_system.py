@@ -41,7 +41,7 @@ source_profile = false
         updated, user = installer.migrate_config(text, 'caelestia')
         before, after = tomllib.loads(text), tomllib.loads(updated)
         self.assertEqual(user, 'greeter')
-        self.assertEqual(after['default_session']['command'], 'cage -s -- /usr/bin/morf greet -c caelestia')
+        self.assertEqual(after['default_session']['command'], 'cage -m last -s -- /usr/bin/morf greet -c caelestia')
         after['default_session']['command'] = before['default_session']['command']
         self.assertEqual(before, after)
 
