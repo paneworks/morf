@@ -4,6 +4,10 @@
 //! application mode -- and the headless runner `check`, `render` and `test`
 //! stand on. The command line is `morf-cli`'s.
 
+// The engine crates the command line drives a host with, so it names only
+// this one.
+pub use {morf_app, morf_io, morf_lua, morf_scene, morf_text};
+
 pub mod a11y;
 pub mod app;
 pub mod capture;

@@ -8,8 +8,8 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
-use morf_lua::{LogEntry, LogLevel};
+use morf_host::morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
+use morf_host::morf_lua::{LogEntry, LogLevel};
 
 use crate::config::config_root;
 use morf_host::socket_path::{socket_dir, socket_path};

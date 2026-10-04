@@ -1,7 +1,7 @@
 //! `morf check` and `morf render`: a configuration run once, headless, and
 //! either reported on or drawn. `morf test` is in `test_runner`.
 
-use morf_lua::{LogEntry, LogLevel};
+use morf_host::morf_lua::{LogEntry, LogLevel};
 
 use morf_host::headless::{Headless, LoadOptions};
 use morf_host::headless_env::{PrivateBus, isolate_from_session, isolate_home, scratch_dir};
@@ -211,7 +211,7 @@ fn check_kit(headless: &mut Headless) -> usize {
 }
 
 /// Counts the nodes under a root, itself included.
-fn node_count(headless: &Headless, root: morf_scene::NodeHandle) -> usize {
+fn node_count(headless: &Headless, root: morf_host::morf_scene::NodeHandle) -> usize {
     let scene = headless.runtime.scene();
     let mut count = 0;
     let mut pending = vec![root];

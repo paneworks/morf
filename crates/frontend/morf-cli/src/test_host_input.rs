@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use morf_value::{IpcTable, IpcValue};
-use morf_app::Event;
+use morf_host::morf_app::Event;
 
 use morf_host::headless::Headless;
 use morf_host::headless_input::{button, keysym, modifiers};
@@ -19,7 +19,7 @@ use crate::test_host::{TestHost, list, map, number, optional_text, string, text}
 fn key_role(
     subject: &Headless,
     surface: Option<&IpcValue>,
-) -> Result<morf_app::WindowId, String> {
+) -> Result<morf_host::morf_app::WindowId, String> {
     if optional_text(surface).is_none()
         && let Some(clicked) = subject.seat.keyboard
         && subject
@@ -35,7 +35,7 @@ fn key_role(
 fn role(
     subject: &Headless,
     surface: Option<&IpcValue>,
-) -> Result<morf_app::WindowId, String> {
+) -> Result<morf_host::morf_app::WindowId, String> {
     let wanted = optional_text(surface);
     let index = subject.surface_index(wanted.as_deref())?;
     Ok(subject.surfaces[index].role)
@@ -279,7 +279,7 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
 /// A glyph shape's text: the glyph its morph is nearer (`glyph`, or
 /// `glyph_morph_to` past halfway), so a number drawn as morphing glyphs reads
 /// as text does.
-fn shown_glyph(scene: &morf_scene::Scene, node: morf_scene::NodeHandle) -> Option<String> {
+fn shown_glyph(scene: &morf_host::morf_scene::Scene, node: morf_host::morf_scene::NodeHandle) -> Option<String> {
     if scene.string_value(node, "shape").ok()? != "glyph" {
         return None;
     }
@@ -314,10 +314,10 @@ pub(crate) fn text_of(
 }
 
 /// Every visible surface's accessible tree, as a screen reader would be
-/// given it (`morf_scene::Scene::accessible_tree`): rows root first, each
+/// given it (`morf_host::morf_scene::Scene::accessible_tree`): rows root first, each
 /// with its role, name, value and states, and its accessible parent.
 pub(crate) fn accessible(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
-    use morf_scene::{AccessibleValue, Checked};
+    use morf_host::morf_scene::{AccessibleValue, Checked};
     let subject = host.subject()?;
     let mut found = Vec::new();
     {

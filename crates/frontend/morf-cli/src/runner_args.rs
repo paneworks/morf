@@ -125,7 +125,7 @@ fn parse_ms(option: &str, text: &str) -> Result<Duration, String> {
 fn default_kit_config() -> Result<PathBuf, String> {
     let tail = std::path::Path::new("lib/kit/skins/default/check.lua");
     let here = std::env::current_dir().map_err(|e| e.to_string())?.join("x");
-    let mut roots: Vec<PathBuf> = morf_lua::project_library(&here).into_iter().collect();
+    let mut roots: Vec<PathBuf> = morf_host::morf_lua::project_library(&here).into_iter().collect();
     roots.extend(
         std::env::var_os("MORF_RUNTIME_PATH")
             .into_iter()

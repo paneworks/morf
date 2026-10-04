@@ -12,9 +12,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use morf_lua::{LogLevel, Runtime};
+use morf_host::morf_lua::{LogLevel, Runtime};
 use morf_value::{IpcTable, IpcValue};
-use morf_scene::NodeHandle;
+use morf_host::morf_scene::NodeHandle;
 
 use morf_host::headless::{Headless, LoadOptions};
 use crate::runner_args::RunnerArgs;

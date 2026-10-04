@@ -1,5 +1,5 @@
-use morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
-use morf_lua::LogLevel;
+use morf_host::morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
+use morf_host::morf_lua::LogLevel;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,7 +47,7 @@ pub(crate) fn run() -> Result<(), String> {
             _ => {}
         }
         let (policy, daemonize, rest) = leading_options(&strings)?;
-        morf_lua::arguments::install(own(rest)?);
+        morf_host::morf_lua::arguments::install(own(rest)?);
         if daemonize {
             detach()?;
         }
@@ -76,7 +76,7 @@ pub(crate) fn run() -> Result<(), String> {
             }
             // Before anything is loaded, so the very first line of the very
             // first configuration can already ask what it was started with.
-            morf_lua::arguments::install(arguments);
+            morf_host::morf_lua::arguments::install(arguments);
             let path = followed(path);
             carry_fonts(&path);
             let source = fs::read(&path)
@@ -498,7 +498,7 @@ fn parse_list(rest: &[&str]) -> Result<Command, String> {
 /// `morf types DIR`: this build's API as LuaLS definitions (`---@meta`), so
 /// an editor pointed at DIR completes and checks `morf.*` and `ui.*`.
 fn write_types(dir: &std::path::Path) -> Result<(), String> {
-    for (relative, contents) in morf_lua::generate_types() {
+    for (relative, contents) in morf_host::morf_lua::generate_types() {
         let path = dir.join(relative);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)

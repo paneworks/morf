@@ -47,15 +47,8 @@ ALLOWED = {
     "morf-cli": {"morf-host", "morf-value"},
 }
 # morf-shader reads Lua-syntax shaders with luna's parser: the Lua layer.
-# What still breaks the rules, and the phase of PLAN.md that ends it.
-PENDING = {
-    "morf-cli depends on morf-io, not in its row": "phase 7: morf-host",
-    "morf-cli depends on morf-layout, not in its row": "phase 7: morf-host",
-    "morf-cli depends on morf-lua, not in its row": "phase 7: morf-host",
-    "morf-cli depends on morf-scene, not in its row": "phase 7: morf-host",
-    "morf-cli depends on morf-text, not in its row": "phase 7: morf-host",
-    "morf-cli depends on morf-app, not in its row": "phase 7: morf-host",
-}
+# What still breaks the rules, and the phase of PLAN.md that ends it: nothing.
+PENDING = {}
 NO_LUA_BELOW = {"morf-shader", "morf-lua", "morf-host", "morf-cli"}
 WAYLAND_ALLOWED = {"morf-app", "morf-desktop", "morf-host", "morf-cli"}
 WAYLAND = re.compile(r"^(wayland-|smithay-client-toolkit)")

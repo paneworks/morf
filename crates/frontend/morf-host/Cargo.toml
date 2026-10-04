@@ -11,6 +11,10 @@ default = ["a11y"]
 # Surfaces' accessible trees on AT-SPI, built only while a screen reader
 # asks: crates/platform/morf-app/src/backend/wayland/accesskit.rs.
 a11y = ["morf-app/a11y"]
+# luna's native Lua tier.
+jit = ["morf-lua/jit"]
+# The widget archetypes as `morf.kit.native`.
+kit = ["morf-lua/kit"]
 
 [dependencies]
 morf-value.workspace = true

@@ -10,7 +10,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Instant;
 
-use morf_lua::{Limits, Runtime};
+use morf_host::morf_lua::{Limits, Runtime};
 use morf_value::{IpcTable, IpcValue};
 
 use crate::runner_args::RunnerArgs;
@@ -113,7 +113,7 @@ pub(crate) fn run_spec(
     // The spec's own folder, and its project's library: a spec of a library
     // module requires it as a shell would.
     let mut roots = vec![spec_dir.clone()];
-    roots.extend(morf_lua::project_library(path));
+    roots.extend(morf_host::morf_lua::project_library(path));
     runtime.set_module_roots(roots);
     runtime.set_shell_root(spec_dir);
     install(&mut runtime, &host);
