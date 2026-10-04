@@ -1,5 +1,236 @@
 # Changelog
 
+## [0.2.0] - 2026-10-04
+
+### <!-- 0 -->⛰️  Features
+
+- Morf-host, with everything that runs a configuration
+- Morf-runtime, with handlers and timers
+- Morf-desktop, on its own queue; gamma control moves there
+- Morf.window.toplevel; floating kept as its old name
+- The Backend trait, implemented on Wayland and headless
+- Morf-value -- colours and the boundary value at the bottom of the graph
+- Morf as a flake package
+- Nine workspaces a rail, Tsugumori rulers that bracket groups of three, a calmer media cover
+- A canvas's selected box resizes by its handles
+- A modifier tapped alone is a shortcut; Alt reaches the menu bar
+- Hold buttons, slide to confirm, radial and pie menus, tumblers, a shortcut recorder
+- Roving and Overflow in every look; the toolbar uses both
+- Transform in every look; a list made before its size keeps its pool
+- Sheet -- grids walked cell by cell, in every look
+- Form -- fields that add up, sent and reset, in every look
+- The contract reaches stage 22 -- Transform, Sheet, Roving, Form, Overflow
+- Transform, Sheet, Roving, Form and Overflow archetypes; hold, slide, radial and capture
+- Lists and grids take their size as a binding; the editor keeps its layout
+- Popups play their exit; Material flat and text buttons take their ink
+- Every Popup and TextField widget its own look; per-widget defaults
+- Canvas and Dock in every look, and an editor app
+- Every Selection, Disclosure and Navigation widget its own look
+- Every Scroll, Collection, Drag and Shell widget its own look and behaviour
+- Every Press widget its own look in all three looks
+- Every Range and Plane widget its own look in all three looks
+- A text input's highlights -- a code editor's colours over what is typed
+- Canvas and Dock glue and default skins; knobs turn, joysticks spring, hue wheels are polar
+- Canvas and Dock archetypes; pointer events carry the held modifiers
+- Right to left
+- Applications and the default look
+- Every composite, the audio and editor instruments, and glue fixes
+- Aviation and HUD instruments, in both themes
+- Every display widget, in both themes
+- Data channels, and geometry for the marks a style draws
+- Accessibility -- an AT-SPI tree, built only while a screen reader asks
+- Disclosure, Drag and Navigation, and caelestia's on them
+- Collection and recycling
+- Popup, TextField and Scroll, and caelestia's on them
+- Plane and Selection, and caelestia's choices on them
+- Press and Range, and caelestia's controls on them
+- Morf-kit, the Control base and the skin machinery
+- Focus, shortcuts, gestures and the overlay layer
+- The widget contract as data, checked
+- Luna's native tier behind `jit`, and the costs measured
+- Themes as style kits over one shared layout
+- Refine capture and authentication with native rendering
+- Add Tsugumori interaction flashes
+- Add full Material and Tsugumori theming
+- Add task planner and refine capture, panels, and history
+- Sudo's steps as a pill from the top edge
+- The lock hears a finger at rest and a face with the sheet
+- Logre, the greeter and the lock as one bundle
+- The lock per screen, whole on the main one
+- A pattern for the lock and the greeter, and nothing else
+- The greeter in two stages, as the lock
+- The lock in two stages; the reader no longer locks people out
+- Morf.broadcast, and the polkit dialog on the screen in use
+- The shell as the polkit agent, its dialog from the top edge
+- Tor as a quick setting, the bar's status one click
+- VPNs as Mesh and Tunnel
+- Wired, VPN and airplane mode in quick settings
+- Mobile network and ring mode, for a phone
+- The bar with the author's logo, the time in the middle
+- A bar, on any of the four edges
+- Battery and keep awake as quick-settings tiles
+- A whole on-screen keyboard, with modes and a pattern pad
+- An on-screen keyboard
+- The Battery tab, its own design
+- The Battery tab is the battery alone
+- A Battery tab, and a Power page behind the battery row
+- Ui.follow, and pills that stay with the panel
+- A monitor can wait for the device it listens to
+- A lock screen and a greeter
+- Media tab visualiser bars, player volume, honest shuffle
+- NVIDIA readings, and a roomier performance tab
+- The performance tab laid out as Mission Center's
+- The wallpaper is the compositor's unless asked
+- Frame callbacks and slow layouts in the frame log
+- The launcher laid out as Raycast lays its out
+- A launcher after Raycast and Alfred
+- The author's appy and browsy, in the launcher
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Make recipes name the crates as they are now; the greetd command test and doc match the installer
+- A headless host's clock means its deltas exactly
+- Morf check --kit default finds a library installed under XDG_DATA_DIRS
+- An application's own surface gets an empty root
+- With nothing focused, a key is offered to each node that takes keys in turn
+- Overflow's keys in the contract
+- Swipe actions open toward the trailing edge right to left; Material's spinner stops its clock
+- Say whether every timer repeats
+- An application runs beside the shell
+- Graph_series takes any finite reading
+- Authsteps follows one sudo, not every sudo at once
+- Authsteps ignores a sudo that asked nobody
+- Sudo's steps reach the shell while they happen
+- The auth-step marker brings its own PATH
+- The lock starts under a real session lock
+- The polkit agent reads its helper again
+- The bar's status icons only open quick settings
+- Full has no number row unless asked
+- Dev without the symbol and number rows
+- No mode bar, a keyboard for code, rows inside the board
+- Seven days where wttr.in placed you, and metric
+- Dispatch on a Lua-configured Hyprland
+- Motion nothing drives is painted
+
+### <!-- 2 -->🚜 Refactor
+
+- The engine steps stretching nodes from a frame's layout
+- The engine answers a loop's questions and keeps its own scene bookkeeping
+- Morf_runtime::Engine holds every engine subsystem; ReactiveState is the engine plus what only Lua can hold
+- Morf-lua's Lua-driven tests are crate-level tests (tests/engine)
+- Disposing an effect is Reactive::dispose_effect
+- Morf.shared's values are morf-runtime's
+- What a removed subtree takes with it from the graph and the windows is morf-runtime's
+- Dropping a retainable and forgetting a removed node are Retained's
+- What a frame's layout tells the runtime is morf-runtime's
+- The clocks are morf-runtime's
+- The session lock, the primary duty and the screens revision are morf-runtime's Session
+- A configuration's lifecycle, retained nodes and scene revisions are morf-runtime subsystems
+- List-model revisions and declarative states are morf-runtime's
+- The log, screens, workspaces, toplevels and resource stats are morf-runtime's
+- Platform requests and window declarations are morf-runtime's Requests and Declarations
+- Motion lives in morf-runtime's animation: loops, follows, theme fades, exits, on_finished, behaviour and fling settings
+- Events' routing, key targets, hover and press, and keys bubbling up in morf-runtime
+- Morf check, render and test run on the Host, over the headless backend
+- Caret, selection, undo, the input method and keyboard focus of text inputs in morf-runtime's editing
+- The virtual list's window, pool, recycling and placement in morf-runtime's views
+- The overlay stack, placement, dismissal and focus give-back in morf-runtime's overlays
+- Morf-runtime's Handlers trait, so its subsystems call handlers without Lua
+- The fs checks, file documents, watch and I/O hubs, D-Bus handlers and broadcast live in morf-io
+- Http options, archive helpers, process views and socket views live in morf-io
+- The terminals' feeding, fitting, input and bookkeeping live in morf-terminal
+- The settings portal and desktop entry rescans and launches live in morf-system
+- Morf.audio's rows, listeners, monitors and polling live in morf-audio
+- One Host runs an output's windows, on any backend, with or without a GPU
+- The host talks to dyn Backend, never LayerClient, past connecting
+- The lock screen's surfaces are Windows like the rest
+- Morf-host's loop, surfaces, paint and process code and morf-cli's config in files under 500 lines
+- Morf-kit's canvas, dock, range, selection and transform in files under 500 lines
+- Morf-terminal's emulator, morf-app's layer client and morf-desktop's data control in files under 500 lines
+- Morf-audio's PipeWire backend and beat tests in files under 500 lines
+- Morf-io's D-Bus, reactor, fs and watch code in files under 500 lines
+- Morf-lua's vm execute, loader and config in files under 500 lines
+- Morf-lua's system, time, module, window and geometry bindings in files under 500 lines
+- Morf-lua's overlay, audio and ui bindings in files under 500 lines
+- Morf-lua's terminals, services and state in files under 500 lines
+- Morf-lua's fs bindings in files under 500 lines
+- Morf-lua's io bindings in files under 500 lines
+- Morf-lua's tests in files under 500 lines
+- Morf-render's GPU backend in files under 500 lines
+- Morf-render's backdrops, targets, dmabuf and LCD tests in files under 500 lines
+- Morf-render's draw commands, paint and fields in files under 500 lines
+- Morf-image's decoders in a file of their own
+- Morf-text's terminal, fuzzy and font lookup in files under 500 lines
+- Morf-value's HCT and region tests in files under 500 lines
+- Morf-layout's layout pass in files under 500 lines
+- Morf-scene in files under 500 lines
+- Library/lib in services, integrations and util; docs
+- Morf-cli names only morf-host and morf-value
+- Morf.kit.native is morf-lua's; morf-kit names no Lua
+- One Windows map for every declared window
+- Morf-host's modules in the plan's directories
+- The command line's own code apart from the host's
+- Window declarations and platform requests move to morf-runtime
+- Wake causes and clock grains move to morf-runtime
+- Focus state and movement move to morf-runtime
+- Shortcuts, key names and modifiers move to morf-runtime
+- The gesture recogniser moves to morf-runtime
+- The event vocabulary moves to morf-runtime
+- The reactive scheduler moves to morf-runtime
+- Handlers are Handlers, not stashed Lua closures
+- Capture and foreign toplevels move to morf-desktop
+- The clipboard over data control moves to morf-desktop
+- Workspaces and idle notification move to morf-desktop
+- Output power moves to morf-desktop
+- Morf-cli opens, frames, commits and draws windows through Backend
+- Morf-app speaks the plan's words
+- Morf-app's neutral types out of the wayland backend
+- The accessible tree is neutral; morf-app no longer needs the scene
+- Render presents through a BufferSink; its Wayland half moves to morf-app
+- Morf-wayland becomes morf-app, its code the wayland backend
+- Morf-lua's flat files into vm, value, runtime and api modules
+- Morf-system from services, desktop entries and menus; retention into morf-scene
+- Morf-shader to the engine group; the uniform header to morf-value
+- Morf-outline and morf-svg into morf-vector; the XDG directories into morf-image
+- Morf-region into morf-value as its region module
+- Morf-reactive into morf-scene as its reactive module
+
+### <!-- 3 -->📚 Documentation
+
+- The widgets reference with Transform, Sheet, Roving, Form and Overflow
+- The widgets reference regenerated with Canvas and Dock; per-widget looks and galleries
+- Pointer events' button and modifiers; the guide knows Canvas and Dock
+- The widgets guide, and themes without interaction code (Stage 20)
+- Compiled bindings measured and not built (Stage 19)
+- BUNDLE.md, how a bundle is made and how logre is built
+
+### <!-- 4 -->⚡ Performance
+
+- Stop idle repaint loops, share sampling across screens; add equalizer
+- Lock and greeter redraw only the band the swell grows in
+- A held-up compositor skips a frame, not a quarter second
+- A removed node does not force a whole layout
+- A slow frame does not halve the rate
+- An idle shell stays idle
+
+### <!-- 5 -->🎨 Styling
+
+- Clippy-clean morf-lua and morf-runtime
+- Series_kinds and frame_bench split under the line gate
+- Morf-kit's sheet tests in their own file, under the line gate
+
+### <!-- 6 -->🧪 Testing
+
+- Widget gallery snapshots are taken at the gallery's size
+- Widget galleries for every archetype in every look
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Tools/layers.py checks section 3's house rules and runs in CI
+- The layer smoke example lives in morf-desktop
+- The layer checker fails on anything not pending a later phase
+- Crates into their groups; the layer checker; the baseline
+
 ## [0.1.5] - 2026-09-26
 
 ### <!-- 0 -->⛰️  Features
