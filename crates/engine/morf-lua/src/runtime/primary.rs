@@ -42,12 +42,12 @@ impl Runtime {
                 return false;
             };
             state.primary = Some((signal, primary));
-            if let Some(graph) = state.graph.as_mut()
+            if let Some(graph) = state.reactive.graph.as_mut()
                 && let Err(error) = graph.write(signal, value.clone())
             {
                 state.log(LogLevel::Warn, format!("primary: {error}"));
             }
-            state.values.insert(signal, value.clone());
+            state.reactive.values.insert(signal, value.clone());
         }
         if let Err(message) = self
             .lua

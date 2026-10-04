@@ -41,7 +41,7 @@ impl SessionLockState {
 
 /// The state as last recorded.
 pub(crate) fn current(state: &ReactiveState) -> SessionLockState {
-    match state.values.get(&state.session_lock) {
+    match state.reactive.values.get(&state.session_lock) {
         Some(IpcValue::String(name)) => {
             SessionLockState::parse(name).unwrap_or(SessionLockState::Unlocked)
         }
@@ -65,12 +65,12 @@ impl Runtime {
         {
             let mut state = self.reactive.borrow_mut();
             let signal = state.session_lock;
-            if let Some(graph) = state.graph.as_mut()
+            if let Some(graph) = state.reactive.graph.as_mut()
                 && let Err(error) = graph.write(signal, value.clone())
             {
                 state.log(LogLevel::Warn, format!("session lock state: {error}"));
             }
-            state.values.insert(signal, value.clone());
+            state.reactive.values.insert(signal, value.clone());
         }
         if let Err(message) = self
             .lua

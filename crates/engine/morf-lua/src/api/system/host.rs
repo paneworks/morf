@@ -371,12 +371,13 @@ pub(crate) fn install_host_service_api<'gc>(
     {
         let mut state = state.borrow_mut();
         let revision = state
+            .reactive
             .graph
             .as_mut()
             .expect("the graph is not running at install")
             .signal("screens.revision", IpcValue::Integer(0));
-        state.values.insert(revision, IpcValue::Integer(0));
-        state.signals.push(revision);
+        state.reactive.values.insert(revision, IpcValue::Integer(0));
+        state.reactive.signals.push(revision);
         state.screens_revision = Some((revision, 0));
         state.screens_signature = screen.map(screens_signature_of_one).unwrap_or_default();
     }
@@ -405,12 +406,16 @@ pub(crate) fn install_host_service_api<'gc>(
     {
         let mut state = state.borrow_mut();
         let signal = state
+            .reactive
             .graph
             .as_mut()
             .expect("the graph is not running at install")
             .signal("primary", IpcValue::Boolean(true));
-        state.values.insert(signal, IpcValue::Boolean(true));
-        state.signals.push(signal);
+        state
+            .reactive
+            .values
+            .insert(signal, IpcValue::Boolean(true));
+        state.reactive.signals.push(signal);
         state.primary = Some((signal, true));
     }
     let primary_state = Rc::clone(&state);

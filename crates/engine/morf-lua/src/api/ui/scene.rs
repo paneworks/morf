@@ -60,13 +60,14 @@ pub(crate) fn bump_property_signal(
         active.writes.push((signal, value.clone()));
     } else {
         state
+            .reactive
             .graph
             .as_mut()
             .ok_or_else(|| "reactive graph is already running".to_owned())?
             .write(signal, value.clone())
             .map_err(|error| error.to_string())?;
     }
-    state.values.insert(signal, value);
+    state.reactive.values.insert(signal, value);
     Ok(())
 }
 

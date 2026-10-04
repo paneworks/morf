@@ -95,7 +95,7 @@ pub(crate) fn register_window_size(state: &mut ReactiveState, id: u64) {
     else {
         return;
     };
-    let Some(graph) = state.graph.as_mut() else {
+    let Some(graph) = state.reactive.graph.as_mut() else {
         return;
     };
     let width = graph.signal(
@@ -107,12 +107,14 @@ pub(crate) fn register_window_size(state: &mut ReactiveState, id: u64) {
         IpcValue::Integer(i64::from(size.1)),
     );
     state
+        .reactive
         .values
         .insert(width, IpcValue::Integer(i64::from(size.0)));
     state
+        .reactive
         .values
         .insert(height, IpcValue::Integer(i64::from(size.1)));
-    state.signals.extend([width, height]);
+    state.reactive.signals.extend([width, height]);
     state.window_sizes.insert(
         id,
         WindowSize {
@@ -172,9 +174,9 @@ pub(crate) fn destroy_window_surface(state: &mut ReactiveState, id: u64) -> Opti
     state.popup_node_anchors.remove(&id);
     if let Some(size) = state.window_sizes.remove(&id) {
         for signal in [size.width, size.height] {
-            state.values.remove(&signal);
-            state.signals.retain(|other| *other != signal);
-            state.dead_signals.push(signal);
+            state.reactive.values.remove(&signal);
+            state.reactive.signals.retain(|other| *other != signal);
+            state.reactive.dead_signals.push(signal);
         }
     }
     crate::runtime_helpers::remove_scene_subtree(state, window.root);
@@ -288,14 +290,14 @@ impl Runtime {
             let mut changed = false;
             for (signal, value) in [(size.width, width), (size.height, height)] {
                 let value = IpcValue::Integer(i64::from(value));
-                if state.values.get(&signal) == Some(&value) {
+                if state.reactive.values.get(&signal) == Some(&value) {
                     continue;
                 }
-                let Some(graph) = state.graph.as_mut() else {
+                let Some(graph) = state.reactive.graph.as_mut() else {
                     continue;
                 };
                 if graph.write(signal, value.clone()).is_ok() {
-                    state.values.insert(signal, value);
+                    state.reactive.values.insert(signal, value);
                     changed = true;
                 }
             }

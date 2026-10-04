@@ -19,8 +19,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use morf_scene::reactive::SignalId;
 
 use crate::state::ReactiveState;
-use crate::types::Runtime;
 use crate::surface_types::IpcValue;
+use crate::types::Runtime;
 
 /// Moves on with every write any copy publishes.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -67,12 +67,13 @@ pub(crate) fn register(
         None => (initial, 0),
     };
     let signal = state
+        .reactive
         .graph
         .as_mut()
         .ok_or_else(|| "reactive graph is already running".to_owned())?
         .signal(format!("shared.{name}"), value.clone());
-    state.values.insert(signal, value);
-    state.signals.push(signal);
+    state.reactive.values.insert(signal, value);
+    state.reactive.signals.push(signal);
     state.shared.by_name.insert(name.clone(), (signal, seen));
     state.shared.by_signal.insert(signal, name);
     Ok(signal)
@@ -85,9 +86,10 @@ pub(crate) fn sync(state: &mut ReactiveState) -> bool {
     if !dirty.is_empty() {
         let mut values = lock();
         for signal in dirty {
-            let (Some(name), Some(value)) =
-                (state.shared.by_signal.get(&signal), state.values.get(&signal))
-            else {
+            let (Some(name), Some(value)) = (
+                state.shared.by_signal.get(&signal),
+                state.reactive.values.get(&signal),
+            ) else {
                 continue;
             };
             let generation = GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
@@ -122,13 +124,13 @@ pub(crate) fn sync(state: &mut ReactiveState) -> bool {
     };
     let mut changed = false;
     for (signal, value) in incoming {
-        if state.values.get(&signal) == Some(&value) {
+        if state.reactive.values.get(&signal) == Some(&value) {
             continue;
         }
-        if let Some(graph) = state.graph.as_mut()
+        if let Some(graph) = state.reactive.graph.as_mut()
             && graph.write(signal, value.clone()).is_ok()
         {
-            state.values.insert(signal, value);
+            state.reactive.values.insert(signal, value);
             changed = true;
         }
     }
@@ -136,7 +138,9 @@ pub(crate) fn sync(state: &mut ReactiveState) -> bool {
 }
 
 fn lock() -> std::sync::MutexGuard<'static, BTreeMap<String, (u64, IpcValue)>> {
-    VALUES.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    VALUES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl Runtime {

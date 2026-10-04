@@ -127,6 +127,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
     // properties' reads: the graph forgets both, or every one of them keeps
     // re-running and growing for the life of the shell.
     let dead_tokens = state
+        .reactive
         .effects
         .iter()
         .filter(|(_, effect)| match &effect.sink {
@@ -138,9 +139,9 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         .map(|(token, _)| *token)
         .collect::<Vec<_>>();
     for token in dead_tokens {
-        state.effects.remove(&token);
-        if let Some(id) = state.effect_ids.remove(&token) {
-            state.dead_effects.push(id);
+        state.reactive.effects.remove(&token);
+        if let Some(id) = state.reactive.effect_ids.remove(&token) {
+            state.reactive.dead_effects.push(id);
         }
     }
     let dead_signals = state
@@ -151,12 +152,13 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         .collect::<HashSet<_>>();
     if !dead_signals.is_empty() {
         for signal in &dead_signals {
-            state.values.remove(signal);
+            state.reactive.values.remove(signal);
         }
         state
+            .reactive
             .signals
             .retain(|signal| !dead_signals.contains(signal));
-        state.dead_signals.extend(dead_signals);
+        state.reactive.dead_signals.extend(dead_signals);
     }
     state.collect_graph_garbage();
     state
@@ -364,12 +366,13 @@ pub(crate) fn register_reloadable_value(
         None => initial,
     };
     let id = state
+        .reactive
         .graph
         .as_mut()
         .ok_or_else(|| "reactive graph is already running".to_owned())?
         .signal(format!("reloadable.{name}"), value.clone());
-    state.values.insert(id, value);
-    state.signals.push(id);
+    state.reactive.values.insert(id, value);
+    state.reactive.signals.push(id);
     state.reloadable.insert(name, id);
     Ok((id, restored))
 }

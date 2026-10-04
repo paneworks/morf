@@ -250,7 +250,7 @@ pub(crate) fn install_retention_api<'gc>(
         let state = Rc::clone(&state);
         move |ctx, _, mut stack| {
             let handle: UserRef<EffectHandleToken> = stack.consume(ctx)?;
-            let alive = state.borrow().effects.contains_key(&handle.token);
+            let alive = state.borrow().reactive.effects.contains_key(&handle.token);
             stack.replace(ctx, alive);
             Ok(CallbackReturn::Return)
         }
@@ -283,10 +283,10 @@ pub(crate) fn install_retention_api<'gc>(
                 }
                 let token = state.next_effect;
                 state.next_effect = state.next_effect.wrapping_add(1);
-                state.effects.insert(
+                state.reactive.effects.insert(
                     token,
                     LuaEffect {
-                        closure: crate::vm::handler_store::register(ctx.stash(closure)),
+                        handler: crate::vm::handler_store::register(ctx.stash(closure)),
                         sink: None,
                         owner,
                     },
@@ -321,11 +321,11 @@ pub(crate) struct EffectHandleToken {
 /// nothing. While a flush holds the graph the removal waits for it to
 /// finish. False if the effect was already gone.
 pub(crate) fn dispose_effect(state: &mut ReactiveState, token: u64) -> bool {
-    if state.effects.remove(&token).is_none() {
+    if state.reactive.effects.remove(&token).is_none() {
         return false;
     }
-    if let Some(id) = state.effect_ids.remove(&token) {
-        state.dead_effects.push(id);
+    if let Some(id) = state.reactive.effect_ids.remove(&token) {
+        state.reactive.dead_effects.push(id);
     }
     state.collect_graph_garbage();
     true

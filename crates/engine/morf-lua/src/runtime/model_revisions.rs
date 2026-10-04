@@ -74,6 +74,7 @@ pub(crate) fn model_read_signals(
                 let value = IpcValue::Integer(0);
                 let mut state = state.borrow_mut();
                 let signal = state
+                    .reactive
                     .graph
                     .as_mut()
                     .ok_or("reactive graph unavailable")?
@@ -86,7 +87,7 @@ pub(crate) fn model_read_signals(
                         revision: 0,
                     },
                 );
-                state.values.insert(signal, value);
+                state.reactive.values.insert(signal, value);
                 signal
             }
         };
@@ -110,6 +111,7 @@ pub(crate) fn bump_model_revision(
         active.writes.push((signal, value.clone()));
     } else {
         state
+            .reactive
             .graph
             .as_mut()
             .ok_or_else(|| "reactive graph is already running".to_owned())?
@@ -117,7 +119,7 @@ pub(crate) fn bump_model_revision(
             .map_err(|error| error.to_string())?;
         state.flush_pending = true;
     }
-    state.values.insert(signal, value);
+    state.reactive.values.insert(signal, value);
     Ok(true)
 }
 
@@ -193,8 +195,8 @@ impl ReactiveState {
             .collect::<Vec<_>>();
         for key in dead {
             if let Some(entry) = self.model_revisions.remove(&key) {
-                self.values.remove(&entry.signal);
-                self.dead_signals.push(entry.signal);
+                self.reactive.values.remove(&entry.signal);
+                self.reactive.dead_signals.push(entry.signal);
             }
         }
     }

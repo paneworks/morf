@@ -109,10 +109,10 @@ impl Runtime {
         {
             let mut state = self.reactive.borrow_mut();
             for (id, value) in writes {
-                if let Some(graph) = state.graph.as_mut()
+                if let Some(graph) = state.reactive.graph.as_mut()
                     && graph.write(id, value.clone()).is_ok()
                 {
-                    state.values.insert(id, value);
+                    state.reactive.values.insert(id, value);
                 }
             }
         }

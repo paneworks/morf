@@ -73,10 +73,10 @@ impl Runtime {
                     writes.push((*signal, IpcValue::Integer(revision as i64)));
                 }
             }
-            if let Some(graph) = state.graph.as_mut() {
+            if let Some(graph) = state.reactive.graph.as_mut() {
                 for (signal, value) in writes {
                     if graph.write(signal, value.clone()).is_ok() {
-                        state.values.insert(signal, value);
+                        state.reactive.values.insert(signal, value);
                         flush = true;
                     }
                 }
@@ -113,8 +113,12 @@ impl Runtime {
             let limits = self.limits;
             let reactive = Rc::clone(&self.reactive);
             self.lua.enter(|ctx| {
-                if let Err(message) = crate::reactive_bindings::flush_reactive(&reactive, ctx, limits) {
-                    reactive.borrow_mut().log(crate::LogLevel::Warn, format!("channel: {message}"));
+                if let Err(message) =
+                    crate::reactive_bindings::flush_reactive(&reactive, ctx, limits)
+                {
+                    reactive
+                        .borrow_mut()
+                        .log(crate::LogLevel::Warn, format!("channel: {message}"));
                 }
             });
         }
@@ -130,13 +134,17 @@ fn watch(state: &mut ReactiveState, channel: &Arc<Channel>) -> Result<SignalId, 
     let revision = channel.revision();
     let value = IpcValue::Integer(revision as i64);
     let signal = state
+        .reactive
         .graph
         .as_mut()
         .ok_or_else(|| HostError("reactive graph is already running".to_owned()))?
         .signal(format!("channel.{}", channel.id()), value.clone());
-    state.values.insert(signal, value);
-    state.signals.push(signal);
-    state.channels.watched.insert(channel.id(), (Arc::clone(channel), signal, revision));
+    state.reactive.values.insert(signal, value);
+    state.reactive.signals.push(signal);
+    state
+        .channels
+        .watched
+        .insert(channel.id(), (Arc::clone(channel), signal, revision));
     Ok(signal)
 }
 
@@ -184,88 +192,116 @@ pub(crate) fn install<'gc>(ctx: Context<'gc>, state: Rc<RefCell<ReactiveState>>,
         handle.set_field(ctx, "size", channel.capacity() as i64);
         {
             let c = Arc::clone(&channel);
-            handle.set_field(ctx, "push", Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-                let (_, value): (LuaValue, LuaValue) = stack.consume(ctx)?;
-                // A list pushes each of its numbers: a spectrogram's column.
-                if let LuaValue::Table(list) = value {
-                    for i in 1..=morf_scene::MAX_CHANNEL_LEN as i64 {
-                        match list.get_value(ctx, i) {
-                            LuaValue::Nil => break,
-                            v => c.push(number(v)),
+            handle.set_field(
+                ctx,
+                "push",
+                Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+                    let (_, value): (LuaValue, LuaValue) = stack.consume(ctx)?;
+                    // A list pushes each of its numbers: a spectrogram's column.
+                    if let LuaValue::Table(list) = value {
+                        for i in 1..=morf_scene::MAX_CHANNEL_LEN as i64 {
+                            match list.get_value(ctx, i) {
+                                LuaValue::Nil => break,
+                                v => c.push(number(v)),
+                            }
                         }
+                    } else {
+                        c.push(number(value));
                     }
-                } else {
-                    c.push(number(value));
-                }
-                Ok(CallbackReturn::Return)
-            }));
+                    Ok(CallbackReturn::Return)
+                }),
+            );
         }
         {
             let c = Arc::clone(&channel);
-            handle.set_field(ctx, "set", Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-                let (_, list): (LuaValue, Option<Table>) = stack.consume(ctx)?;
-                let mut values = Vec::new();
-                if let Some(list) = list {
-                    for i in 1..=morf_scene::MAX_CHANNEL_LEN as i64 {
-                        match list.get_value(ctx, i) {
-                            LuaValue::Nil => break,
-                            v => values.push(number(v)),
+            handle.set_field(
+                ctx,
+                "set",
+                Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+                    let (_, list): (LuaValue, Option<Table>) = stack.consume(ctx)?;
+                    let mut values = Vec::new();
+                    if let Some(list) = list {
+                        for i in 1..=morf_scene::MAX_CHANNEL_LEN as i64 {
+                            match list.get_value(ctx, i) {
+                                LuaValue::Nil => break,
+                                v => values.push(number(v)),
+                            }
                         }
                     }
-                }
-                c.set(&values);
-                Ok(CallbackReturn::Return)
-            }));
+                    c.set(&values);
+                    Ok(CallbackReturn::Return)
+                }),
+            );
         }
         {
             let c = Arc::clone(&channel);
-            handle.set_field(ctx, "clear", Callback::from_fn(&ctx, move |_, _, mut stack| {
-                stack.clear();
-                c.clear();
-                Ok(CallbackReturn::Return)
-            }));
+            handle.set_field(
+                ctx,
+                "clear",
+                Callback::from_fn(&ctx, move |_, _, mut stack| {
+                    stack.clear();
+                    c.clear();
+                    Ok(CallbackReturn::Return)
+                }),
+            );
         }
         {
             let (c, s) = (Arc::clone(&channel), Rc::clone(&state));
-            handle.set_field(ctx, "get", Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-                track(&s, signal);
-                let list = Table::new(&ctx);
-                for (i, v) in c.snapshot().0.into_iter().enumerate() {
-                    list.set(ctx, i as i64 + 1, v as f64)?;
-                }
-                stack.replace(ctx, list);
-                Ok(CallbackReturn::Return)
-            }));
+            handle.set_field(
+                ctx,
+                "get",
+                Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+                    track(&s, signal);
+                    let list = Table::new(&ctx);
+                    for (i, v) in c.snapshot().0.into_iter().enumerate() {
+                        list.set(ctx, i as i64 + 1, v as f64)?;
+                    }
+                    stack.replace(ctx, list);
+                    Ok(CallbackReturn::Return)
+                }),
+            );
         }
         {
             let (c, s) = (Arc::clone(&channel), Rc::clone(&state));
-            handle.set_field(ctx, "last", Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-                track(&s, signal);
-                match c.last() {
-                    Some(v) => stack.replace(ctx, v as f64),
-                    None => stack.replace(ctx, LuaValue::Nil),
-                }
-                Ok(CallbackReturn::Return)
-            }));
+            handle.set_field(
+                ctx,
+                "last",
+                Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+                    track(&s, signal);
+                    match c.last() {
+                        Some(v) => stack.replace(ctx, v as f64),
+                        None => stack.replace(ctx, LuaValue::Nil),
+                    }
+                    Ok(CallbackReturn::Return)
+                }),
+            );
         }
         {
             let (c, s) = (Arc::clone(&channel), Rc::clone(&state));
-            handle.set_field(ctx, "peak", Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-                track(&s, signal);
-                match c.peak() {
-                    Some(v) => stack.replace(ctx, v as f64),
-                    None => stack.replace(ctx, LuaValue::Nil),
-                }
-                Ok(CallbackReturn::Return)
-            }));
+            handle.set_field(
+                ctx,
+                "peak",
+                Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+                    track(&s, signal);
+                    match c.peak() {
+                        Some(v) => stack.replace(ctx, v as f64),
+                        None => stack.replace(ctx, LuaValue::Nil),
+                    }
+                    Ok(CallbackReturn::Return)
+                }),
+            );
         }
         {
             let (c, s) = (Arc::clone(&channel), Rc::clone(&state));
-            handle.set_field(ctx, "len", Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-                track(&s, signal);
-                stack.replace(ctx, c.len() as i64);
-                Ok(CallbackReturn::Return)
-            }));
+            handle.set_field(
+                ctx,
+                "len",
+                Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+                    track(&s, signal);
+                    stack.replace(ctx, c.len() as i64);
+                    Ok(CallbackReturn::Return)
+                }),
+            );
         }
         stack.replace(ctx, handle);
         Ok(CallbackReturn::Return)

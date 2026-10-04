@@ -205,7 +205,7 @@ fn track(state: &mut ReactiveState, id: SignalId) -> Option<IpcValue> {
     if let Some(active) = &mut state.active {
         active.reads.insert(id);
     }
-    state.values.get(&id).cloned()
+    state.reactive.values.get(&id).cloned()
 }
 
 fn host(state: &mut ReactiveState) -> &mut AudioHost {
@@ -252,15 +252,19 @@ pub(crate) fn install_audio_api<'gc>(
     {
         let mut state = state.borrow_mut();
         let graph = state
+            .reactive
             .graph
             .as_mut()
             .expect("the graph is not running at install");
         let available = graph.signal("audio.available", IpcValue::Boolean(false));
         let revision = graph.signal("audio.revision", IpcValue::Integer(0));
-        state.values.insert(available, IpcValue::Boolean(false));
-        state.values.insert(revision, IpcValue::Integer(0));
-        state.signals.push(available);
-        state.signals.push(revision);
+        state
+            .reactive
+            .values
+            .insert(available, IpcValue::Boolean(false));
+        state.reactive.values.insert(revision, IpcValue::Integer(0));
+        state.reactive.signals.push(available);
+        state.reactive.signals.push(revision);
         state.audio = Some(AudioHost {
             audio: None,
             factory: None,

@@ -89,13 +89,13 @@ impl Runtime {
                     handlers.push((callback.clone(), vec![what.clone()]));
                 }
                 for (id, value) in writes {
-                    if state.values.get(&id) == Some(&value) {
+                    if state.reactive.values.get(&id) == Some(&value) {
                         continue;
                     }
-                    if let Some(graph) = state.graph.as_mut()
+                    if let Some(graph) = state.reactive.graph.as_mut()
                         && graph.write(id, value.clone()).is_ok()
                     {
-                        state.values.insert(id, value);
+                        state.reactive.values.insert(id, value);
                         moved = true;
                     }
                 }

@@ -110,10 +110,10 @@ impl Runtime {
             let count = count + 1;
             state.screens_revision = Some((signal, count));
             let value = IpcValue::Integer(count);
-            if let Some(graph) = state.graph.as_mut()
+            if let Some(graph) = state.reactive.graph.as_mut()
                 && graph.write(signal, value.clone()).is_ok()
             {
-                state.values.insert(signal, value);
+                state.reactive.values.insert(signal, value);
             }
         }
         if let Err(message) = self

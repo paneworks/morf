@@ -2,9 +2,10 @@
 //! a configuration's handlers are called from.
 //!
 //! Subsystems arrive here one at a time from `morf-lua` (PLAN.md phase 5):
-//! handlers and timers so far.
+//! handlers, timers and the reactive scheduler so far.
 
 pub mod handler;
+pub mod reactive;
 pub mod timers;
 
 pub use handler::{Handler, HandlerId, HandlerRegistry};

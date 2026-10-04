@@ -8,6 +8,7 @@ impl Runtime {
     pub fn resource_stats(&self) -> ResourceStats {
         let state = self.reactive.borrow();
         let (graph_signals, graph_effects) = state
+            .reactive
             .graph
             .as_ref()
             .map_or((0, 0), |graph| (graph.signal_count(), graph.effect_count()));
@@ -16,8 +17,8 @@ impl Runtime {
             scene_signals: state.scene.property_signal_count(),
             graph_signals,
             graph_effects,
-            bindings: state.effects.len(),
-            tracked_signals: state.signals.len(),
+            bindings: state.reactive.effects.len(),
+            tracked_signals: state.reactive.signals.len(),
             handlers: state.handlers.len(),
         }
     }

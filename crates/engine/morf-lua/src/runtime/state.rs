@@ -4,7 +4,7 @@ use luna::StashedTable;
 
 use morf_layout::{TransformTracker, TransformWatcher as NativeTransformWatcher};
 use morf_runtime::Handler;
-use morf_scene::reactive::{EffectId, Graph, SignalId};
+use morf_scene::reactive::{Graph, SignalId};
 use morf_scene::retain::Retention;
 use morf_scene::{GroupId, ListModel, ModelId, NodeHandle, Scene, VirtualList};
 use std::cell::RefCell;
@@ -116,13 +116,7 @@ pub(crate) struct PopupNodeAnchor {
     pub(crate) margin_left: i32,
 }
 
-#[derive(Clone)]
-pub(crate) struct LuaEffect {
-    pub(crate) closure: Handler,
-    pub(crate) sink: Option<EffectSink>,
-    /// The node whose removal ends a `morf.effect` given `owner = node`.
-    pub(crate) owner: Option<morf_scene::NodeHandle>,
-}
+pub(crate) use morf_runtime::reactive::Effect as LuaEffect;
 
 #[derive(Clone, Default)]
 pub(crate) struct RetainCallbacks {
@@ -130,19 +124,7 @@ pub(crate) struct RetainCallbacks {
     pub(crate) about_to_destroy: Option<Handler>,
 }
 
-#[derive(Clone)]
-pub(crate) struct PropertySink {
-    pub(crate) node: NodeHandle,
-    pub(crate) property: String,
-}
-
-#[derive(Clone)]
-pub(crate) enum EffectSink {
-    Property(PropertySink),
-    State(NodeHandle),
-    /// A `loop` binding: what it returns is the node's loops.
-    Loop(NodeHandle),
-}
+pub(crate) use morf_runtime::reactive::{EffectSink, PropertySink};
 
 /// The most log entries kept, and the longest one.
 pub(crate) const MAX_LOG_ENTRIES: usize = 2000;
@@ -152,25 +134,9 @@ pub(crate) struct ReactiveState {
     /// The runtime's limits, for a binding made where they are not at hand
     /// (a function assigned to a node's property).
     pub(crate) limits: crate::Limits,
-    pub(crate) graph: Option<Graph<IpcValue>>,
-    pub(crate) values: HashMap<SignalId, IpcValue>,
-    pub(crate) signals: Vec<SignalId>,
-    /// Signals the effects of the flush under way wrote, for the flush to
-    /// confirm against the graph when it ends.
-    pub(crate) flush_writes: Vec<SignalId>,
+    /// The graph, the signal mirror, the declared effects and the flush.
+    pub(crate) reactive: morf_runtime::reactive::Reactive,
     pub(crate) property_signals: HashMap<(NodeHandle, String, bool), SignalId>,
-    /// The graph's handle for each Lua effect token, so an effect can be
-    /// forgotten when the node it drives is removed.
-    pub(crate) effect_ids: HashMap<u64, EffectId>,
-    /// Effects and signals whose owners are gone, waiting for the graph:
-    /// a node removed while a flush holds the graph is forgotten after it.
-    pub(crate) dead_effects: Vec<EffectId>,
-    pub(crate) dead_signals: Vec<SignalId>,
-    /// Effects registered while a flush held the graph -- a binding on a
-    /// node built inside `morf.effect`, or an effect made by a binding.
-    /// Each is `(token, name)`, handed to the graph when the flush ends
-    /// and run by the flush that follows.
-    pub(crate) pending_effects: Vec<(u64, String)>,
     pub(crate) current_property_names: HashMap<String, (NodeHandle, String)>,
     pub(crate) property_revision: i64,
     /// Each list model a binding has read, by address, with the revision
@@ -228,7 +194,6 @@ pub(crate) struct ReactiveState {
     pub(crate) capabilities: Vec<(String, String)>,
     pub(crate) reload_completed_callbacks: Vec<Handler>,
     pub(crate) reload_failed_callbacks: Vec<Handler>,
-    pub(crate) effects: HashMap<u64, LuaEffect>,
     pub(crate) next_effect: u64,
     pub(crate) active: Option<Capture>,
     /// How many Lua handlers are on the stack: an event handler, a timer, an
@@ -239,9 +204,6 @@ pub(crate) struct ReactiveState {
     pub(crate) handler_depth: u32,
     /// Whether something wrote while a handler was running.
     pub(crate) flush_pending: bool,
-    /// A flush is draining the graph. Another asked for meanwhile is folded
-    /// into it, and what removed nodes leave behind waits until it is done.
-    pub(crate) flushing: bool,
     pub(crate) logs: Vec<LogEntry>,
     /// Shaders the configuration registered, by name.
     ///
@@ -471,52 +433,19 @@ impl ReactiveState {
     /// Hands the graph what removed nodes left behind, when it is here to
     /// take them; while a flush holds it they wait for the next call.
     pub(crate) fn collect_graph_garbage(&mut self) {
-        if self.flushing {
+        if self.reactive.flushing {
             return;
         }
         self.collect_dead_models();
-        let Some(graph) = self.graph.as_mut() else {
-            return;
-        };
-        for effect in self.dead_effects.drain(..) {
-            graph.remove_effect(effect);
-        }
-        for signal in self.dead_signals.drain(..) {
-            graph.remove_signal(signal);
-        }
+        self.reactive.collect_garbage();
     }
 
-    /// Hands Lua effect `token` to the graph, or, while a flush holds the
-    /// graph, queues it for [`Self::register_pending_effects`]. Either way
-    /// the effect runs on the next flush. Building a node with bindings
-    /// inside an effect used to panic the whole engine here.
+    /// Hands Lua effect `token` to the graph, or queues it while a flush
+    /// holds the graph. Either way the effect runs on the next flush.
+    /// Building a node with bindings inside an effect used to panic the
+    /// whole engine here.
     pub(crate) fn register_external_effect(&mut self, token: u64, name: String) {
-        match self.graph.as_mut() {
-            Some(graph) => {
-                let id = graph.external_effect(name, token);
-                self.effect_ids.insert(token, id);
-            }
-            None => self.pending_effects.push((token, name)),
-        }
-    }
-
-    /// Registers the effects queued while a flush held the graph, skipping
-    /// any whose owner was removed in the meantime. Returns how many were
-    /// registered; nothing happens while the graph is still away.
-    pub(crate) fn register_pending_effects(&mut self) -> usize {
-        if self.graph.is_none() || self.pending_effects.is_empty() {
-            return 0;
-        }
-        let pending = std::mem::take(&mut self.pending_effects);
-        let mut registered = 0;
-        for (token, name) in pending {
-            if !self.effects.contains_key(&token) {
-                continue;
-            }
-            self.register_external_effect(token, name);
-            registered += 1;
-        }
-        registered
+        self.reactive.register_external_effect(token, name);
     }
 
     /// The clock signal a reader at `precision` depends on.
@@ -576,15 +505,12 @@ impl ReactiveState {
         values.insert(session_lock, initial_lock);
         Self {
             limits: crate::Limits::default(),
-            graph: Some(graph),
-            values,
-            signals: vec![clock, clock_minutes, clock_hours, session_lock],
+            reactive: morf_runtime::reactive::Reactive {
+                values,
+                signals: vec![clock, clock_minutes, clock_hours, session_lock],
+                ..morf_runtime::reactive::Reactive::new(graph)
+            },
             property_signals: HashMap::new(),
-            flush_writes: Vec::new(),
-            effect_ids: HashMap::new(),
-            dead_effects: Vec::new(),
-            dead_signals: Vec::new(),
-            pending_effects: Vec::new(),
             current_property_names: HashMap::new(),
             property_revision: 0,
             model_revisions: HashMap::new(),
@@ -611,12 +537,10 @@ impl ReactiveState {
             capabilities: Vec::new(),
             reload_completed_callbacks: Vec::new(),
             reload_failed_callbacks: Vec::new(),
-            effects: HashMap::new(),
             next_effect: 0,
             active: None,
             handler_depth: 0,
             flush_pending: false,
-            flushing: false,
             logs: Vec::new(),
             shaders: HashMap::new(),
             scene: Scene::new(),

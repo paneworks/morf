@@ -148,16 +148,17 @@ impl Runtime {
             }
             for (signal, text) in writes {
                 let text = IpcValue::String(text);
-                if state.values.get(&signal) == Some(&text) {
+                if state.reactive.values.get(&signal) == Some(&text) {
                     continue;
                 }
                 state
+                    .reactive
                     .graph
                     .as_mut()
                     .ok_or_else(|| Error::Runtime("reactive graph is already running".to_owned()))?
                     .write(signal, text.clone())
                     .map_err(|error| Error::Runtime(error.to_string()))?;
-                state.values.insert(signal, text);
+                state.reactive.values.insert(signal, text);
                 changed = true;
             }
         }
@@ -175,7 +176,7 @@ impl Runtime {
     /// shows the time: the grain the loop has to wake at for the clock.
     pub fn clock_precision(&self) -> Option<ClockPrecision> {
         let state = self.reactive.borrow();
-        let graph = state.graph.as_ref()?;
+        let graph = state.reactive.graph.as_ref()?;
         [
             (state.clock, ClockPrecision::Seconds),
             (state.clock_minutes, ClockPrecision::Minutes),

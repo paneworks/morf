@@ -76,7 +76,7 @@ pub(crate) fn evaluate_effect(
         }
         // A binding whose node was removed during this flush: its effect
         // is waiting to be forgotten and has nothing left to drive.
-        let Some(effect) = state.effects.get(&token).cloned() else {
+        let Some(effect) = state.reactive.effects.get(&token).cloned() else {
             return Ok(());
         };
         state.active = Some(Capture::default());
@@ -85,7 +85,7 @@ pub(crate) fn evaluate_effect(
     };
     let result = execute_effect(
         ctx,
-        &lua_effect.closure,
+        &lua_effect.handler,
         limits,
         frame_remaining,
         lua_effect.sink.is_some(),
@@ -133,6 +133,7 @@ pub(crate) fn evaluate_effect(
             let value = IpcValue::Integer(state.borrow().property_revision);
             let mut state = state.borrow_mut();
             let signal = state
+                .reactive
                 .graph
                 .as_mut()
                 .ok_or("reactive graph unavailable")?
@@ -141,8 +142,8 @@ pub(crate) fn evaluate_effect(
             if !target {
                 state.current_property_names.insert(name, (node, property));
             }
-            state.values.insert(signal, value);
-            state.signals.push(signal);
+            state.reactive.values.insert(signal, value);
+            state.reactive.signals.push(signal);
             signal
         };
         read_signal(state, effect, signal)?;
@@ -158,14 +159,18 @@ pub(crate) fn evaluate_effect(
             let mut state = state.borrow_mut();
             effect
                 .set(
-                    state.graph.as_ref().ok_or("reactive graph unavailable")?,
+                    state
+                        .reactive
+                        .graph
+                        .as_ref()
+                        .ok_or("reactive graph unavailable")?,
                     signal,
                     value.clone(),
                 )
                 .map_err(|error| error.to_string())?;
-            state.values.insert(signal, value);
+            state.reactive.values.insert(signal, value);
             state.shared.note_write(signal);
-            state.flush_writes.push(signal);
+            state.reactive.flush_writes.push(signal);
         }
     }
     state_result?;
@@ -179,7 +184,11 @@ fn read_signal(
     signal: morf_scene::reactive::SignalId,
 ) -> Result<(), String> {
     let state = state.borrow();
-    let graph = state.graph.as_ref().ok_or("reactive graph unavailable")?;
+    let graph = state
+        .reactive
+        .graph
+        .as_ref()
+        .ok_or("reactive graph unavailable")?;
     effect
         .get(graph, signal)
         .map(|_| ())

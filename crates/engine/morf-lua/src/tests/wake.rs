@@ -140,7 +140,7 @@ fn a_minute_binding_runs_once_a_minute_however_often_the_clock_ticks() {
 
 fn morf_clock(runtime: &Runtime) -> String {
     let state = runtime.reactive.borrow();
-    match state.values.get(&state.clock) {
+    match state.reactive.values.get(&state.clock) {
         Some(IpcValue::String(text)) => text.clone(),
         other => panic!("clock is {other:?}"),
     }

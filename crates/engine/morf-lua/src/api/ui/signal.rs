@@ -26,9 +26,9 @@ pub(crate) fn install_signal_api<'gc>(
                     .rev()
                     .find(|(id, _)| *id == signal.id)
                     .map(|(_, value)| value.clone())
-                    .or_else(|| state.values.get(&signal.id).cloned())
+                    .or_else(|| state.reactive.values.get(&signal.id).cloned())
             } else {
-                state.values.get(&signal.id).cloned()
+                state.reactive.values.get(&signal.id).cloned()
             }
             .ok_or_else(|| HostError("stale reactive signal".to_owned()))?;
             stack.replace(ctx, value.to_lua(ctx));
@@ -49,13 +49,14 @@ pub(crate) fn install_signal_api<'gc>(
                     return Ok(CallbackReturn::Return);
                 }
                 let graph = state
+                    .reactive
                     .graph
                     .as_mut()
                     .ok_or_else(|| HostError("reactive graph is already running".to_owned()))?;
                 graph
                     .write(signal.id, value.clone())
                     .map_err(|error| HostError(error.to_string()))?;
-                state.values.insert(signal.id, value);
+                state.reactive.values.insert(signal.id, value);
                 state.shared.note_write(signal.id);
                 // Inside a handler the write is enough: the graph is flushed
                 // once, when the handler returns, however many writes it made.
@@ -86,12 +87,13 @@ pub(crate) fn install_signal_api<'gc>(
             let id = {
                 let mut state = state.borrow_mut();
                 let id = state
+                    .reactive
                     .graph
                     .as_mut()
                     .ok_or_else(|| HostError("reactive graph is already running".to_owned()))?
                     .signal(name, value.clone());
-                state.values.insert(id, value);
-                state.signals.push(id);
+                state.reactive.values.insert(id, value);
+                state.reactive.signals.push(id);
                 id
             };
             let userdata = UserData::new_static(&ctx, SignalToken { id });
@@ -143,9 +145,9 @@ pub(crate) fn install_signal_api<'gc>(
                         .rev()
                         .find(|(signal, _)| *signal == id)
                         .map(|(_, value)| value.clone())
-                        .or_else(|| state.values.get(&id).cloned())
+                        .or_else(|| state.reactive.values.get(&id).cloned())
                 } else {
-                    state.values.get(&id).cloned()
+                    state.reactive.values.get(&id).cloned()
                 }
                 .ok_or_else(|| HostError("stale persistent property".into()))?
             };
@@ -170,6 +172,7 @@ pub(crate) fn install_signal_api<'gc>(
             {
                 let mut state = state.borrow_mut();
                 let current = state
+                    .reactive
                     .values
                     .get(&id)
                     .ok_or_else(|| HostError("stale persistent property".into()))?;
@@ -184,12 +187,13 @@ pub(crate) fn install_signal_api<'gc>(
                     return Ok(CallbackReturn::Return);
                 }
                 state
+                    .reactive
                     .graph
                     .as_mut()
                     .ok_or_else(|| HostError("reactive graph is already running".into()))?
                     .write(id, value.clone())
                     .map_err(|error| HostError(error.to_string()))?;
-                state.values.insert(id, value);
+                state.reactive.values.insert(id, value);
             }
             replace_status(ctx, &mut stack, flush_reactive(&state, ctx, limits));
             Ok(CallbackReturn::Return)

@@ -20,10 +20,10 @@ pub(crate) fn register_property_binding<'gc>(
         let mut state = state.borrow_mut();
         let token = state.next_effect;
         state.next_effect = state.next_effect.wrapping_add(1);
-        state.effects.insert(
+        state.reactive.effects.insert(
             token,
             LuaEffect {
-                closure: crate::vm::handler_store::register(ctx.stash(closure)),
+                handler: crate::vm::handler_store::register(ctx.stash(closure)),
                 sink: Some(EffectSink::Property(PropertySink { node, property })),
                 owner: None,
             },
@@ -46,6 +46,7 @@ pub(crate) fn rebind_property<'gc>(
     let limits = {
         let mut state = state.borrow_mut();
         let old = state
+            .reactive
             .effects
             .iter()
             .filter(|(_, effect)| {
@@ -112,10 +113,10 @@ fn register_node_binding<'gc>(
         let mut state = state.borrow_mut();
         let token = state.next_effect;
         state.next_effect = state.next_effect.wrapping_add(1);
-        state.effects.insert(
+        state.reactive.effects.insert(
             token,
             LuaEffect {
-                closure: crate::vm::handler_store::register(ctx.stash(closure)),
+                handler: crate::vm::handler_store::register(ctx.stash(closure)),
                 sink: Some(sink),
                 owner: None,
             },
@@ -310,7 +311,7 @@ pub(crate) fn flush_reactive(
     // takes it for a moment -- is registered now and gets its first run
     // here, so the caller sees it evaluated.
     for _ in 0..MAX_NESTED_FLUSHES {
-        if state.borrow_mut().register_pending_effects() == 0 {
+        if state.borrow_mut().reactive.register_pending_effects() == 0 {
             break;
         }
         let next = flush_graph(state, ctx, limits);
@@ -338,7 +339,8 @@ pub(crate) fn run_destroyed_hooks(
 ) {
     {
         let mut state = state.borrow_mut();
-        if state.flushing || state.running_destroyed || state.pending_destroyed.is_empty() {
+        if state.reactive.flushing || state.running_destroyed || state.pending_destroyed.is_empty()
+        {
             return;
         }
         state.running_destroyed = true;
@@ -373,34 +375,17 @@ fn flush_graph(
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
-    {
-        let mut state = state.borrow_mut();
-        // A flush asked for from inside one — a binding that registers
-        // another, a module `require`d from a binding writing a signal — has
-        // nothing to do of its own: whatever it would have run is dirty in
-        // the graph, and the flush already under way drains it.
-        if state.flushing {
-            return Ok(());
-        }
-        if state.graph.is_none() {
-            return Err("reactive graph unavailable".to_owned());
-        }
-        state.flushing = true;
-    }
-    // Driven one effect at a time, with the graph left in the state between
-    // the steps rather than taken out for the whole flush. An effect is Lua,
-    // and Lua may create signals or effects of its own while it runs — the
-    // first `require` of a module that holds state does — so the graph has to
-    // be where Lua can reach it.
-    let mut flush = morf_scene::reactive::Flush::default();
-    let mut remaining = limits.frame_fuel;
-    let result = loop {
-        let next = state
-            .borrow_mut()
-            .graph
-            .as_mut()
-            .expect("the graph stays in place during a flush")
-            .next_effect(&mut flush);
+    // A flush asked for from inside one -- a binding that registers another,
+    // a module `require`d from a binding writing a signal -- has nothing to
+    // do of its own: the flush already under way drains it.
+    let Some(mut run) = state.borrow_mut().reactive.begin_flush(limits.frame_fuel)? else {
+        return Ok(());
+    };
+    // Driven one effect at a time, the state borrowed only between the
+    // steps: an effect is Lua, and Lua may create signals or effects of its
+    // own while it runs.
+    let stepped = loop {
+        let next = state.borrow_mut().reactive.next_effect(&mut run);
         let pending = match next {
             Ok(Some(pending)) => pending,
             Ok(None) => break Ok(()),
@@ -412,71 +397,25 @@ fn flush_graph(
             state,
             ctx,
             limits,
-            &mut remaining,
+            &mut run.remaining,
             pending.token(),
             &mut capture,
         );
         state
             .borrow_mut()
-            .graph
-            .as_mut()
-            .expect("the graph stays in place during a flush")
-            .complete_effect(&mut flush, pending, capture, outcome);
+            .reactive
+            .complete_effect(&mut run, pending, capture, outcome);
     };
-    let result = result.map(|()| flush.finish());
 
     let _span =
         crate::profile::span(|| "engine: after a flush (signal copies, graph gc)".to_owned());
     let mut state = state.borrow_mut();
-    state.flushing = false;
-    let graph = state
-        .graph
-        .take()
-        .expect("the graph stays in place during a flush");
-    // The mirror Lua reads signals from is brought in line with the graph.
-    // Every write mirrors itself as it is made, so a clean flush only has to
-    // confirm what its effects wrote -- the graph may still have refused a
-    // write the effect already mirrored. A flush that failed may have rolled
-    // writes back wholesale (a loop restores every original), so after one,
-    // everything is copied. Copying everything after every flush cost a
-    // read and a clone per signal per flush, and building a panel flushes
-    // once per binding: tens of milliseconds on a panel of a thousand.
-    let failed = !matches!(&result, Ok(report) if report.errors.is_empty());
-    let written = std::mem::take(&mut state.flush_writes);
-    if failed {
-        for signal in state.signals.clone() {
-            if let Ok(value) = graph.read(signal) {
-                state.values.insert(signal, value.clone());
-            }
-        }
-    } else {
-        for signal in written {
-            if let Ok(value) = graph.read(signal) {
-                state.values.insert(signal, value.clone());
-            }
-        }
-    }
-    state.graph = Some(graph);
+    let result = state.reactive.finish_flush(run, stepped);
     state.collect_graph_garbage();
-
-    match result {
-        Ok(report) if report.errors.is_empty() => Ok(()),
-        Ok(report) => {
-            let message = report
-                .errors
-                .into_iter()
-                .map(|error| format!("{}: {}", error.effect, error.message))
-                .collect::<Vec<_>>()
-                .join("; ");
-            state.log(LogLevel::Warn, message.clone());
-            Err(message)
-        }
-        Err(error) => {
-            let message = error.to_string();
-            state.log(LogLevel::Warn, message.clone());
-            Err(message)
-        }
+    if let Err(message) = &result {
+        state.log(LogLevel::Warn, message.clone());
     }
+    result
 }
 
 /// What an effect is, for the profiler: a binding by the node path and
@@ -488,11 +427,11 @@ fn effect_label(
     pending: &morf_scene::reactive::PendingEffect,
 ) -> String {
     let state = state.borrow();
-    let Some(effect) = state.effects.get(&pending.token()) else {
+    let Some(effect) = state.reactive.effects.get(&pending.token()) else {
         return format!("effect {}", pending.name());
     };
     let origin = crate::profile::closure_origin(
-        ctx.fetch(&crate::vm::handler_store::stashed(&effect.closure)),
+        ctx.fetch(&crate::vm::handler_store::stashed(&effect.handler)),
     );
     let node_path = |node: NodeHandle| {
         let id = state

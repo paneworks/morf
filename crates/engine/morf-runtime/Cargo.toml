@@ -8,3 +8,4 @@ repository.workspace = true
 
 [dependencies]
 morf-scene.workspace = true
+morf-value.workspace = true

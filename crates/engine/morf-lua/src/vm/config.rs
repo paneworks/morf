@@ -289,7 +289,7 @@ impl Runtime {
     /// Returns bindings that currently read frame-varying scene properties.
     pub fn binding_dependencies(&self) -> Vec<String> {
         let state = self.reactive.borrow();
-        let Some(graph) = state.graph.as_ref() else {
+        let Some(graph) = state.reactive.graph.as_ref() else {
             return Vec::new();
         };
         graph
@@ -329,6 +329,7 @@ impl Runtime {
             .iter()
             .filter_map(|(name, signal)| {
                 state
+                    .reactive
                     .values
                     .get(signal)
                     .map(|value| (name.clone(), value.clone()))
