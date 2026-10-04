@@ -40,6 +40,12 @@ pub struct FramePacer {
 /// cadence changes, which a real change reaches within a few frames.
 pub const COST_WINDOW: usize = 7;
 
+impl Default for FramePacer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FramePacer {
     pub fn new() -> Self {
         Self {
@@ -138,7 +144,10 @@ pub fn primary_frame(
         // A surface that cannot paint inside one refresh paints on
         // every second callback instead, and keeps that cadence rather
         // than missing deadlines at random.
-        if state.pacer.due(state.refresh) {
+        // A host that only lays out paints every callback: its frames cost
+        // no GPU time to pace against, and what a frame shows must not
+        // depend on how fast the machine running a test is.
+        if state.painter.gpu().is_none() || state.pacer.due(state.refresh) {
             repaint = true;
         } else {
             // The next callback is asked for by painting, so a skipped

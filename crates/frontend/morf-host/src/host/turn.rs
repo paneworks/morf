@@ -79,6 +79,8 @@ pub struct Host {
     /// A node first asked for its `contains_pointer` last turn, whose answer
     /// changed what bindings drew: this turn paints it.
     containment_repaint: bool,
+    /// Whether slow stages are reported on stderr.
+    report_slow: bool,
 }
 
 impl Host {
@@ -107,6 +109,13 @@ impl Host {
         self.follow_up || self.backend.has_queued_events()
     }
 
+    /// Whether the last turn left nothing for another at once, for a driver
+    /// that does not [`Host::wait`] (headless): takes the follow-up the turn
+    /// asked for, as a wait would.
+    pub fn settled(&mut self) -> bool {
+        !std::mem::take(&mut self.follow_up) && !self.backend.has_queued_events()
+    }
+
     /// One turn: the desktop's news, the clock, services and timers, the
     /// supervisor's commands, the configuration's window and surface changes,
     /// the backend's events, and the paint of whatever changed.
@@ -133,7 +142,12 @@ impl Host {
         self.report_jit(runtime);
         let polling = Instant::now();
         repaint |= runtime.poll_services();
-        slow(&name, "services, timers and callbacks", polling);
+        slow(
+            self.report_slow,
+            &name,
+            "services, timers and callbacks",
+            polling,
+        );
         let mut recreate_surface = false;
         if let Some(links) = links {
             while let Ok(command) = links.commands.try_recv() {
@@ -141,7 +155,7 @@ impl Host {
                 let started_command = Instant::now();
                 let update =
                     handle_worker_command(runtime, Some(links.screen), links.policy, command);
-                slow(&name, "an IPC call", started_command);
+                slow(self.report_slow, &name, "an IPC call", started_command);
                 repaint |= update.repaint;
                 recreate_surface |= update.recreate_surface;
                 if update.reset_input {
@@ -251,7 +265,7 @@ impl Host {
             tx,
             &self.name,
         );
-        slow(&self.name, what, handling);
+        slow(self.report_slow, &self.name, what, handling);
         match handled {
             Ok(painted) => Ok(painted),
             // A scene that is mid-change (a view that removed a node whose
@@ -370,4 +384,13 @@ fn jit_log_wanted() -> bool {
     })
 }
 
-pub(crate) use crate::surface_run::slow;
+/// [`crate::surface_run::slow`], when the host reports slow stages: a host
+/// that only lays out (a test) has frames far slower than a person notices
+/// as a matter of course, and says nothing of them.
+pub(crate) fn slow(report: bool, name: &str, what: &str, since: Instant) {
+    if report {
+        crate::surface_run::slow(name, what, since);
+    } else {
+        morf_lua::profile::clear();
+    }
+}

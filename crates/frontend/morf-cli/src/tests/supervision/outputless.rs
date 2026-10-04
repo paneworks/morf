@@ -3,6 +3,7 @@
 // per-output ones when an output comes back.
 
 use crate::config::LoadPolicy;
+use morf_app::Output;
 use morf_host::lock::{SupervisorMessage, Worker, WorkerCommand, WorkerMessage, WorkerSender};
 use morf_host::outputless::{OUTPUTLESS, Outputless, outputless_screen, run_outputless};
 use morf_host::services::stop_workers;
@@ -11,7 +12,6 @@ use morf_host::workers::{
 };
 use morf_io::{IpcReply, IpcRequest, IpcValue as WireValue};
 use morf_lua::{Limits, Runtime, Screen};
-use morf_app::Output;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};

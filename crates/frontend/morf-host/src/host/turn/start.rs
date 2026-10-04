@@ -27,6 +27,9 @@ pub struct StartOptions {
     pub publish_capabilities: bool,
     /// A shell drawn over the whole desktop rather than on one output.
     pub desktop_canvas: bool,
+    /// Say on stderr when a stage holds the output longer than a person
+    /// notices (`MORF_SLOW_MS`).
+    pub report_slow: bool,
 }
 
 /// What came before the shell's surface was first configured, for the
@@ -47,6 +50,7 @@ impl Host {
         options: StartOptions,
     ) -> Result<Self, String> {
         let name = options.name;
+        let options_report = options.report_slow;
         primary_surface_root(runtime)?;
         let layer_config = runtime.layer_surface_config();
         // A clipboard or drop read finishing on its thread rings every loop,
@@ -68,6 +72,7 @@ impl Host {
         let configuring = Instant::now();
         let first = wait_for_configure(&mut *backend)?;
         slow(
+            options_report,
             &name,
             "waiting for the compositor's first configure",
             configuring,
@@ -81,9 +86,9 @@ impl Host {
                 .ok_or_else(|| "the primary surface is gone".to_owned())?;
             let renderer =
                 surface_backend(target, width, height).map_err(|error| error.to_string())?;
-            Painter::Gpu(RenderEngine::new(renderer))
+            Painter::Gpu(Box::new(RenderEngine::new(renderer)))
         } else {
-            Painter::Layout(TextSystem::new())
+            Painter::Layout(Box::new(TextSystem::new()))
         };
         if options.publish_capabilities {
             // Known only now: the protocols came with the connection, the GPU
@@ -99,11 +104,11 @@ impl Host {
             }
             runtime.set_capabilities(&capabilities);
         }
-        slow(&name, "starting the GPU", gpu);
+        slow(options_report, &name, "starting the GPU", gpu);
         if let Some(renderer) = painter.gpu() {
             let shaders = Instant::now();
             crate::surface_run::register_shaders(runtime, renderer)?;
-            slow(&name, "building shaders", shaders);
+            slow(options_report, &name, "building shaders", shaders);
         }
         let animating_shaders = runtime.shaders_animate();
         let started = Instant::now();
@@ -115,7 +120,7 @@ impl Host {
         let primary_root = primary_surface_root(runtime)?;
         let painting = Instant::now();
         let layout = paint(runtime, &mut painter, &*backend, primary_root, None)?;
-        slow(&name, "the first frame", painting);
+        slow(options_report, &name, "the first frame", painting);
         let windows_opening = Instant::now();
         let mut windows = Windows::default();
         runtime.take_window_surface_change();
@@ -123,7 +128,12 @@ impl Host {
         apply_backdrop(&mut *backend, &runtime.layer_surface_config(), &name);
         let _ = sync_window_surfaces(runtime, &mut *backend, &mut windows, &name)?;
         apply_service_requests(runtime, &mut *backend, desktop.as_mut());
-        slow(&name, "opening the other surfaces", windows_opening);
+        slow(
+            options_report,
+            &name,
+            "opening the other surfaces",
+            windows_opening,
+        );
 
         let state = SurfaceEventState {
             layout,
@@ -160,6 +170,7 @@ impl Host {
             follow_up: true,
             pending_streak: 0,
             containment_repaint: false,
+            report_slow: options_report,
         })
     }
 
@@ -178,7 +189,7 @@ impl Host {
                 .ok_or_else(|| "the primary surface is gone".to_owned())?;
             let renderer =
                 surface_backend(target, width, height).map_err(|error| error.to_string())?;
-            self.state.painter = Painter::Gpu(RenderEngine::new(renderer));
+            self.state.painter = Painter::Gpu(Box::new(RenderEngine::new(renderer)));
             // The adapter is new, so every pipeline it held is gone with it.
             if let Some(renderer) = self.state.painter.gpu() {
                 crate::surface_run::register_shaders(runtime, renderer)?;

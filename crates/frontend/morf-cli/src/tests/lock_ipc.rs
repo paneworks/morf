@@ -1,7 +1,7 @@
 // A lock process answers IPC on a socket of its own.
 
-use morf_host::socket_path::lock_variant;
 use morf_host::lock_ipc::answer_lock_request;
+use morf_host::socket_path::lock_variant;
 use morf_io::{IpcRequest, IpcValue as WireValue};
 use morf_lua::Runtime;
 use std::path::Path;

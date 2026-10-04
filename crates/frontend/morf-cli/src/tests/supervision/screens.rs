@@ -1,11 +1,11 @@
+use crate::*;
+use morf_app::Output;
 use morf_host::lock::WorkerCommand;
 use morf_host::supervisor::known_outputs;
 use morf_host::supervisor::lua_screen;
 use morf_host::supervisor::store_outputs;
 use morf_host::workers::handle_worker_command;
-use crate::*;
 use morf_lua::{Limits, Runtime};
-use morf_app::Output;
 
 // The compositor's output list reaching every worker's `morf.screens`.
 

@@ -153,7 +153,7 @@ impl Host {
             state.primary_root,
             Some(&mut state.layout),
         );
-        slow(&self.name, "a frame", painting);
+        slow(self.report_slow, &self.name, "a frame", painting);
         // Skipped for want of a buffer: owed, and painted on the next
         // callback (or when the callback is overdue).
         if let Painter::Gpu(renderer) = &mut state.painter

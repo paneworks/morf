@@ -1,13 +1,13 @@
+use morf_app::PRIMARY_LAYER;
+use morf_app::PopupAnchor;
+use morf_app::PopupGravity;
+use morf_app::WindowId;
 use morf_host::surface_popups::popup_change_is_structural;
 use morf_host::surface_popups::popup_client_config;
 use morf_host::surface_popups::popup_parent_role;
 use morf_lua::PopupSurfaceConfig;
 use morf_lua::Runtime;
 use morf_lua::WindowSurfaceKind;
-use morf_app::PRIMARY_LAYER;
-use morf_app::PopupAnchor;
-use morf_app::PopupGravity;
-use morf_app::WindowId;
 use std::collections::HashMap;
 
 /// Builds the popup configurations one Lua source registers, in identifier order.

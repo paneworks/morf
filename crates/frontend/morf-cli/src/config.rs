@@ -6,10 +6,10 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{commands::*};
-use morf_host::{supervisor::*};
+use crate::commands::*;
 use morf_host::socket_path::{select_instance, socket_path};
 pub(crate) use morf_host::supervisor::LoadPolicy;
+use morf_host::supervisor::*;
 
 use paths::carry_fonts;
 pub(crate) use paths::{config_root, default_config_path, followed, named_config_path};
@@ -234,7 +234,12 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         ["types", dir] => Ok(Command::Types(PathBuf::from(dir))),
         ["app", path, rest @ ..] if !path.starts_with('-') => {
             morf_host::app::enter();
-            Ok(Command::Run(PathBuf::from(path), policy, own(rest)?, daemonize))
+            Ok(Command::Run(
+                PathBuf::from(path),
+                policy,
+                own(rest)?,
+                daemonize,
+            ))
         }
         ["check", rest @ ..] => runner(crate::runner_args::Runner::Check, rest, policy),
         ["render", rest @ ..] => runner(crate::runner_args::Runner::Render, rest, policy),

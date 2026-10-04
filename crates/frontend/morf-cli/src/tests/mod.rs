@@ -1,3 +1,5 @@
+use morf_app::Output;
+use morf_app::physical_size;
 use morf_host::supervisor::execute_config;
 use morf_host::supervisor::lua_snapshot;
 use morf_host::supervisor::named_screens;
@@ -7,8 +9,6 @@ use morf_host::surfaces::primary_surface_root;
 use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
 use morf_lua::Runtime;
-use morf_app::Output;
-use morf_app::physical_size;
 use std::fs;
 use std::path::PathBuf;
 

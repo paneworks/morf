@@ -7,9 +7,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use crate::desktop::desktop_for;
-use crate::{
-    lock::*, supervisor::*, surfaces::*, wake_plan::*, workers::*,
-};
+use crate::{lock::*, supervisor::*, surfaces::*, wake_plan::*, workers::*};
 
 use crate::host::turn::{Host, Links, StartOptions, Turn};
 use std::os::fd::AsFd;
@@ -112,6 +110,7 @@ fn drive_surface(
             gpu: true,
             publish_capabilities: true,
             desktop_canvas,
+            report_slow: true,
         },
     )?;
     let links = Links {

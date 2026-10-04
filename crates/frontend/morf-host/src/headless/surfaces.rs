@@ -8,10 +8,11 @@ use std::collections::{HashMap, HashSet};
 
 use morf_app::backend::headless::{self, layer_extent as stretched, layer_position};
 use morf_app::{LayerAnchors, PRIMARY_LAYER, ShellLayer, WindowId};
+use morf_layout::{Layout, Size};
 use morf_lua::WindowSurfaceKind;
 use morf_scene::NodeHandle;
 
-use crate::headless::{Headless, Surface};
+use crate::headless::{Headless, SETTLE_PASSES, Surface};
 use crate::surface_popups::window_surface_effectively_visible;
 use crate::surfaces::primary_surface_root;
 
@@ -60,6 +61,7 @@ impl Headless {
                     visible: true,
                     stack: layer_stack(&config.layer),
                     blend: config.blend.clone(),
+                    open: false,
                     layout: None,
                     laid: None,
                     stable: true,
@@ -151,6 +153,7 @@ impl Headless {
                 visible,
                 stack,
                 blend,
+                open: false,
                 layout: None,
                 laid: None,
                 stable: true,
@@ -168,6 +171,19 @@ impl Headless {
                 surface.stable = old.stable;
             }
         }
+        // What the host has open is the host's: its size is the one the
+        // backend configured, its layout the one the host painted.
+        if let Some(host) = &self.host {
+            for surface in &mut surfaces {
+                if let Some(size) = host.backend.logical_size(surface.role) {
+                    surface.open = true;
+                    surface.size = size;
+                    surface.layout = None;
+                    surface.laid = None;
+                    surface.stable = true;
+                }
+            }
+        }
         // Labels, made unique: two layers may share a namespace.
         let plain = surfaces
             .iter()
@@ -181,6 +197,94 @@ impl Headless {
             };
         }
         self.surfaces = surfaces;
+    }
+
+    /// A surface's last layout: the host's for a window it has open, the one
+    /// laid out here for one it has not.
+    pub fn layout_of<'a>(&'a self, surface: &'a Surface) -> Option<&'a Layout> {
+        if surface.open
+            && let Some(host) = &self.host
+        {
+            return match surface.role {
+                WindowId::Layer(PRIMARY_LAYER) => Some(&host.state.layout.layout),
+                role => host
+                    .state
+                    .windows
+                    .by_window(role)
+                    .and_then(|window| window.layout.as_ref())
+                    .map(|cached| &cached.layout),
+            };
+        }
+        surface.layout.as_ref()
+    }
+
+    /// Lints what the host laid out for each surface it has open, once per
+    /// layout: what the turns settled on, as the host's own paint does not.
+    pub fn lint_open(&mut self) {
+        let mut linted = std::mem::take(&mut self.linted);
+        for surface in self.surfaces.iter().filter(|surface| surface.open) {
+            let Some(layout) = self.layout_of(surface) else {
+                continue;
+            };
+            let revision = self.runtime.scene().layout_revision_of(surface.root);
+            if linted.get(&surface.role) == Some(&revision) {
+                continue;
+            }
+            self.runtime.lint_layout(layout, surface.root);
+            linted.insert(surface.role, revision);
+        }
+        self.linted = linted;
+    }
+
+    /// Lays out every surface the host has not opened, at its size: a
+    /// hidden panel is laid out too, so its problems are found before it is
+    /// opened. As the shell's cache: a tree whose revision has not moved, at
+    /// the size it was laid out at, lays out the same again.
+    pub fn lay_out_hidden(&mut self) {
+        for index in 0..self.surfaces.len() {
+            if self.surfaces[index].open {
+                continue;
+            }
+            let (root, size, label) = {
+                let surface = &self.surfaces[index];
+                (surface.root, surface.size, surface.label())
+            };
+            let revision = self.runtime.scene().layout_revision_of(root);
+            if self.surfaces[index].layout.is_some()
+                && self.surfaces[index].laid == Some((revision, size))
+            {
+                continue;
+            }
+            let available = Size {
+                width: f64::from(size.0),
+                height: f64::from(size.1),
+            };
+            let text = match (self.host.as_mut(), self.text.as_mut()) {
+                (Some(host), _) => host.state.painter.text(),
+                (None, Some(text)) => text,
+                (None, None) => continue,
+            };
+            match self
+                .runtime
+                .settle_layout(root, available, text, SETTLE_PASSES)
+            {
+                Ok(settled) => {
+                    self.runtime.lint_layout(&settled.layout, root);
+                    self.runtime.observe_stretch(&settled.layout);
+                    let revision = self.runtime.scene().layout_revision_of(root);
+                    let surface = &mut self.surfaces[index];
+                    surface.stable = settled.stable;
+                    surface.layout = Some(settled.layout);
+                    surface.laid = Some((revision, size));
+                }
+                Err(error) => {
+                    let problem = format!("{label}: layout: {error}");
+                    if !self.problems.contains(&problem) {
+                        self.problems.push(problem);
+                    }
+                }
+            }
+        }
     }
 
     /// The size a root asks for itself, for a surface whose settings leave

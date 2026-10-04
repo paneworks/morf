@@ -13,14 +13,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use morf_host::morf_lua::{LogLevel, Runtime};
-use morf_value::{IpcTable, IpcValue};
 use morf_host::morf_scene::NodeHandle;
+use morf_value::{IpcTable, IpcValue};
 
-use morf_host::headless::{Headless, LoadOptions};
 use crate::runner_args::RunnerArgs;
 use crate::test_host_input::{
-    accessible, accessible_action, click, resize_window, key, leave, motion, nodes, press, text_of, type_text, wheel,
+    accessible, accessible_action, click, key, leave, motion, nodes, press, resize_window, text_of,
+    type_text, wheel,
 };
+use morf_host::headless::{Headless, LoadOptions};
 
 const SUBJECT: &str = include_str!("test_subject.lua");
 

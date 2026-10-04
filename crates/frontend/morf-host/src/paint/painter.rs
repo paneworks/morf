@@ -6,9 +6,9 @@ use morf_render::{RenderEngine, WgpuBackend};
 use morf_text::TextSystem;
 
 pub enum Painter {
-    Gpu(RenderEngine<WgpuBackend>),
+    Gpu(Box<RenderEngine<WgpuBackend>>),
     /// No GPU: the one text system every window is laid out with.
-    Layout(TextSystem),
+    Layout(Box<TextSystem>),
 }
 
 impl Painter {

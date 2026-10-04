@@ -43,9 +43,9 @@ pub fn lay_out_layer(
         (revision, (width, height), scale_120),
         text,
     )?;
-    if fresh {
-        runtime.lint_layout(&layout, root);
-    }
+    // No lint here: a runner that only lays out lints what it settles on
+    // (the headless runner, once its turns are quiet), not each pass on the
+    // way there.
     runtime.sync_text_inputs(&layout, text);
     runtime.observe_stretch(&layout);
     let input = {

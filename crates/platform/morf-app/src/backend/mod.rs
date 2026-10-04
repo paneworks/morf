@@ -144,6 +144,16 @@ pub trait Backend {
     fn as_wayland(&self) -> Option<&wayland::LayerClient> {
         None
     }
+    /// The headless backend underneath, for a runner that moves its clock
+    /// and drives its seat.
+    #[cfg(feature = "headless")]
+    fn as_headless(&self) -> Option<&headless::HeadlessBackend> {
+        None
+    }
+    #[cfg(feature = "headless")]
+    fn as_headless_mut(&mut self) -> Option<&mut headless::HeadlessBackend> {
+        None
+    }
 
     /// Waits as [`Backend::dispatch`] does, waking early too when `wake`
     /// (a thread's alarm) becomes readable; says what ended the wait.

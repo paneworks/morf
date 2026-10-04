@@ -1,5 +1,6 @@
-//! Input for a headless configuration: the shell's own pointer and key
-//! paths, fed with events nothing real produced.
+//! Input for a headless configuration: events the headless backend's seat
+//! carries to the host, as a compositor's would, through the shell's own
+//! pointer and key paths.
 //!
 //! Split from `headless` at the line gate.
 
@@ -7,51 +8,36 @@ use std::time::Duration;
 
 use morf_app::backend::headless::VirtualSeat;
 use morf_app::{Event, WindowId};
-use morf_layout::Layout;
 
-use crate::headless::{Headless, Surface};
-use crate::pointer_cursor::CursorShapes;
-use crate::surface_keys::{KeyAction, dispatch_key_in_subtree};
-use crate::surface_pointer::handle_pointer_event;
-use crate::surfaces::SurfaceLayouts;
-
-/// The pointer shapes a configuration asks for, which nothing here shows.
-struct NoCursor;
-
-impl CursorShapes for NoCursor {
-    fn set_cursor_shape(&mut self, _shape: &str) {}
-}
-
-/// Each surface's last layout, by the role events carry.
-pub struct Layouts<'a>(pub &'a [Surface]);
-
-impl SurfaceLayouts for Layouts<'_> {
-    fn layout_of(&self, surface: WindowId) -> Option<&Layout> {
-        self.0
-            .iter()
-            .find(|candidate| candidate.role == surface && candidate.visible)
-            .and_then(|candidate| candidate.layout.as_ref())
-    }
-}
+use crate::headless::Headless;
 
 impl Headless {
-    /// Hands one pointer event to the shell's own pointer path, then lets a
+    /// Hands one event to the host through the backend's seat, then lets a
     /// frame's worth of nothing pass so the layout shows what it did.
-    pub fn pointer(&mut self, event: Event) -> Result<(), String> {
-        self.seat.observe(&event);
-        let layouts = Layouts(&self.surfaces);
-        match handle_pointer_event(
-            &mut self.runtime,
-            &mut NoCursor,
-            &mut self.input,
-            &layouts,
-            event,
-        )? {
-            Ok(_) => {}
-            Err(event) => return Err(format!("not a pointer event: {event:?}")),
-        }
+    pub fn send(&mut self, event: Event) -> Result<(), String> {
+        let backend = self
+            .host
+            .as_mut()
+            .and_then(|host| host.backend.as_headless_mut())
+            .ok_or_else(|| "the configuration has no surface to send input to".to_owned())?;
+        backend.inject(event);
         self.frame(Duration::ZERO);
         Ok(())
+    }
+
+    /// One pointer or touch event.
+    pub fn pointer(&mut self, event: Event) -> Result<(), String> {
+        match event {
+            Event::PointerMotion { .. }
+            | Event::PointerLeave { .. }
+            | Event::PointerButton { .. }
+            | Event::PointerAxis { .. }
+            | Event::TouchDown { .. }
+            | Event::TouchMotion { .. }
+            | Event::TouchUp { .. }
+            | Event::TouchCancel => self.send(event),
+            event => Err(format!("not a pointer event: {event:?}")),
+        }
     }
 
     /// Presses and releases a button at a point of a surface: a click.
@@ -89,36 +75,25 @@ impl Headless {
         press: bool,
         release: bool,
     ) -> Result<(), String> {
-        let root = self
-            .surfaces
-            .iter()
-            .find(|candidate| candidate.role == surface)
-            .map(|candidate| candidate.root)
-            .ok_or_else(|| "no surface to type into".to_owned())?;
-        let mut focused = self.input.focused.get(&surface).copied();
-        let actions: Vec<KeyAction> = [
-            (press, KeyAction::Press { repeat: false }),
-            (release, KeyAction::Release),
-        ]
-        .into_iter()
-        .filter_map(|(on, action)| on.then_some(action))
-        .collect();
-        for action in actions {
-            dispatch_key_in_subtree(
-                &mut self.runtime,
-                root,
-                &mut focused,
-                action,
-                keysym,
-                text,
-                modifiers,
-            );
-        }
-        match focused {
-            Some(node) => self.input.focused.insert(surface, node),
-            None => self.input.focused.remove(&surface),
+        let modifiers = morf_app::KeyModifiers {
+            ctrl: modifiers.ctrl,
+            shift: modifiers.shift,
+            alt: modifiers.alt,
+            logo: modifiers.logo,
         };
-        self.frame(Duration::ZERO);
+        for pressed in [press.then_some(true), release.then_some(false)]
+            .into_iter()
+            .flatten()
+        {
+            self.send(Event::Key {
+                surface,
+                keysym,
+                text: text.map(str::to_owned),
+                pressed,
+                repeat: false,
+                modifiers,
+            })?;
+        }
         Ok(())
     }
 }

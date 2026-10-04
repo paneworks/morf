@@ -4,6 +4,7 @@
 
 use super::outputless::{Started, call, named, output, spawner};
 use crate::config::LoadPolicy;
+use morf_app::Output;
 use morf_host::lock::{Worker, WorkerCommand, WorkerSender};
 use morf_host::outputless::{OUTPUTLESS, Outputless, outputless_screen};
 use morf_host::services::stop_workers;
@@ -13,7 +14,6 @@ use morf_host::workers::{
 };
 use morf_io::IpcValue as WireValue;
 use morf_lua::{Limits, Runtime};
-use morf_app::Output;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};

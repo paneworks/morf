@@ -4,6 +4,10 @@
 //! application mode -- and the headless runner `check`, `render` and `test`
 //! stand on. The command line is `morf-cli`'s.
 
+// The layout groups each area in a folder named for its main file
+// (`paint/paint.rs`, `lock/lock.rs`), as PLAN.md lays it out.
+#![allow(clippy::module_inception)]
+
 // The engine crates the command line drives a host with, so it names only
 // this one.
 pub use {morf_app, morf_io, morf_lua, morf_scene, morf_text};

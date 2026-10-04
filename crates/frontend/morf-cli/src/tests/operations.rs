@@ -51,8 +51,8 @@ fn an_auxiliary_surface_is_addressed_by_its_own_kind() {
     // travels with the number: identifiers do not share a space, so a layer
     // surface and a popup may both be `1`, and keying scale on the number alone
     // would have a popup's scale change resize a bar.
-    use morf_host::paint::AuxiliaryKind;
     use morf_app::WindowId;
+    use morf_host::paint::AuxiliaryKind;
 
     assert_eq!(AuxiliaryKind::Popup.role(1), WindowId::Popup(1));
     assert_eq!(AuxiliaryKind::Floating.role(1), WindowId::Toplevel(1));

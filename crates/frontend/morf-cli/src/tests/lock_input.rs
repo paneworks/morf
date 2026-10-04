@@ -1,6 +1,7 @@
 // The lock screen's input: pointer, touch and wheel on lock surfaces go
 // through the same hit test and handlers a layer surface's do.
 
+use morf_app::{Event, WindowId};
 use morf_host::host::windows::{Kind, Windows};
 use morf_host::lock_outputs::lock_window;
 use morf_host::paint::CachedLayout;
@@ -9,9 +10,8 @@ use morf_host::surface_pointer::handle_pointer_event;
 use morf_host::surfaces::PointerInput;
 use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
-use morf_value::IpcValue;
 use morf_scene::NodeHandle;
-use morf_app::{Event, WindowId};
+use morf_value::IpcValue;
 
 struct NoText;
 
@@ -234,14 +234,8 @@ fn a_lock_surface_is_hit_tested_against_its_own_layout() {
         repeat: false,
         modifiers: Default::default(),
     };
-    let handed_back = handle_pointer_event(
-        &mut runtime,
-        &mut shapes,
-        &mut input,
-        &outputs,
-        key.clone(),
-    )
-    .unwrap();
+    let handed_back =
+        handle_pointer_event(&mut runtime, &mut shapes, &mut input, &outputs, key.clone()).unwrap();
     assert_eq!(handed_back, Err(key));
 }
 
@@ -275,7 +269,8 @@ fn pointer_entry_before_the_first_lock_frame_selects_that_surface_after_layout()
         },
     );
     assert_eq!(count(&mut runtime, "inside"), IpcValue::Boolean(false));
-    outputs.get_mut(Kind::Lock, 0).unwrap().layout = Some(CachedLayout::uncached(laid_out(&runtime)));
+    outputs.get_mut(Kind::Lock, 0).unwrap().layout =
+        Some(CachedLayout::uncached(laid_out(&runtime)));
     assert!(morf_host::surface_pointer::answer_new_containment(
         &mut runtime,
         &input,

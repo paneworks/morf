@@ -6,12 +6,12 @@
 
 use std::sync::Arc;
 
-use morf_value::{IpcTable, IpcValue};
 use morf_host::morf_app::Event;
+use morf_value::{IpcTable, IpcValue};
 
+use crate::test_host::{TestHost, list, map, number, optional_text, string, text};
 use morf_host::headless::Headless;
 use morf_host::headless_input::{button, keysym, modifiers};
-use crate::test_host::{TestHost, list, map, number, optional_text, string, text};
 
 /// Where keys go: the surface named, else the one last clicked (a
 /// compositor hands the keyboard to the window pressed on), else the
@@ -21,7 +21,7 @@ fn key_role(
     surface: Option<&IpcValue>,
 ) -> Result<morf_host::morf_app::WindowId, String> {
     if optional_text(surface).is_none()
-        && let Some(clicked) = subject.seat.keyboard
+        && let Some(clicked) = subject.seat().keyboard
         && subject
             .surfaces
             .iter()
@@ -47,7 +47,8 @@ pub(crate) fn click(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     let pressed = button(&optional_text(arguments.get(2)).unwrap_or_else(|| "left".to_owned()))?;
     let subject = host.subject()?;
     let surface = role(subject, arguments.get(3))?;
-    let held = morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(4)).as_deref())?;
+    let held =
+        morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(4)).as_deref())?;
     subject.click(surface, (x, y), pressed, held)?;
     Ok(Vec::new())
 }
@@ -59,7 +60,8 @@ pub(crate) fn press(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     let pressed = matches!(arguments.get(3), Some(IpcValue::Boolean(true)));
     let subject = host.subject()?;
     let surface = role(subject, arguments.get(4))?;
-    let modifiers = morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?;
+    let modifiers =
+        morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?;
     subject.pointer(Event::PointerButton {
         surface,
         button: code,
@@ -84,7 +86,7 @@ pub(crate) fn motion(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<
 /// as a compositor says so when it moves off the surface's input region.
 pub(crate) fn leave(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
     let subject = host.subject()?;
-    let surface = match (subject.seat.pointer, optional_text(arguments.first())) {
+    let surface = match (subject.seat().pointer, optional_text(arguments.first())) {
         (Some((surface, _, _)), None) => surface,
         _ => role(subject, arguments.first())?,
     };
@@ -97,7 +99,7 @@ pub(crate) fn wheel(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     let vertical = number(arguments.get(1), "dy")?;
     let subject = host.subject()?;
     let named = arguments.get(4).and_then(text).is_some();
-    let (surface, x, y) = match (subject.seat.pointer, named) {
+    let (surface, x, y) = match (subject.seat().pointer, named) {
         (Some((surface, x, y)), false) => (surface, x, y),
         _ => (role(subject, arguments.get(4))?, 0.0, 0.0),
     };
@@ -111,7 +113,9 @@ pub(crate) fn wheel(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
         vertical,
         horizontal_steps: steps(horizontal),
         vertical_steps: steps(vertical),
-        modifiers: morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?,
+        modifiers: morf_host::headless_input::pointer_modifiers(
+            optional_text(arguments.get(5)).as_deref(),
+        )?,
     })?;
     Ok(Vec::new())
 }
@@ -175,12 +179,12 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
     {
         let scene = subject.runtime.scene();
         for surface in &subject.surfaces {
-            let Some(layout) = &surface.layout else {
+            let Some(layout) = subject.layout_of(surface) else {
                 continue;
             };
             // Where the pointer is on this surface, if it is on it.
             let pointer = subject
-                .input
+                .input()
                 .pointer
                 .filter(|(role, _, _)| *role == surface.role)
                 .map(|(_, x, y)| (x, y));
@@ -249,8 +253,14 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
                         // Whether it clips what is under it, and turns: a
                         // check of what spills reads the visible box through
                         // both.
-                        ("clip", IpcValue::Boolean(scene.bool_value(node, "clip").unwrap_or(false))),
-                        ("rotation", IpcValue::Number(scene.number(node, "rotation").unwrap_or(0.0))),
+                        (
+                            "clip",
+                            IpcValue::Boolean(scene.bool_value(node, "clip").unwrap_or(false)),
+                        ),
+                        (
+                            "rotation",
+                            IpcValue::Number(scene.number(node, "rotation").unwrap_or(0.0)),
+                        ),
                         ("surface", string(surface.label())),
                         ("surface_kind", string(surface.kind)),
                     ],
@@ -279,7 +289,10 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
 /// A glyph shape's text: the glyph its morph is nearer (`glyph`, or
 /// `glyph_morph_to` past halfway), so a number drawn as morphing glyphs reads
 /// as text does.
-fn shown_glyph(scene: &morf_host::morf_scene::Scene, node: morf_host::morf_scene::NodeHandle) -> Option<String> {
+fn shown_glyph(
+    scene: &morf_host::morf_scene::Scene,
+    node: morf_host::morf_scene::NodeHandle,
+) -> Option<String> {
     if scene.string_value(node, "shape").ok()? != "glyph" {
         return None;
     }
@@ -323,9 +336,13 @@ pub(crate) fn accessible(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
     {
         let scene = subject.runtime.scene();
         for surface in subject.surfaces.iter().filter(|s| s.visible) {
-            let Some(layout) = &surface.layout else { continue };
+            let Some(layout) = subject.layout_of(surface) else {
+                continue;
+            };
             let nodes = scene.accessible_tree(surface.root, "window", &surface.label(), &|node| {
-                layout.surface_rect(&scene, node).map(|g| (g.x, g.y, g.width, g.height))
+                layout
+                    .surface_rect(&scene, node)
+                    .map(|g| (g.x, g.y, g.width, g.height))
             });
             let mut parents = std::collections::HashMap::new();
             for item in &nodes {
@@ -348,8 +365,14 @@ pub(crate) fn accessible(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
                             None => IpcValue::Nil,
                         },
                     ),
-                    ("minimum", item.minimum.map_or(IpcValue::Nil, IpcValue::Number)),
-                    ("maximum", item.maximum.map_or(IpcValue::Nil, IpcValue::Number)),
+                    (
+                        "minimum",
+                        item.minimum.map_or(IpcValue::Nil, IpcValue::Number),
+                    ),
+                    (
+                        "maximum",
+                        item.maximum.map_or(IpcValue::Nil, IpcValue::Number),
+                    ),
                     (
                         "checked",
                         match item.checked {
@@ -394,7 +417,10 @@ pub(crate) fn accessible(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
 }
 
 /// Does what a screen reader asks of a node: `(handle, action, value)`.
-pub(crate) fn accessible_action(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
+pub(crate) fn accessible_action(
+    host: &mut TestHost,
+    arguments: &[IpcValue],
+) -> Result<Vec<IpcValue>, String> {
     let node = host.handle(number(arguments.first(), "node")? as i64)?;
     let action = match arguments.get(1) {
         Some(IpcValue::String(a)) => a.clone(),
@@ -410,22 +436,50 @@ pub(crate) fn accessible_action(host: &mut TestHost, arguments: &[IpcValue]) -> 
         }
         root
     };
-    let ran = subject.runtime.accessible_action(root, node, &action, value);
+    let ran = subject
+        .runtime
+        .accessible_action(root, node, &action, value);
     Ok(vec![IpcValue::Boolean(ran)])
 }
 
 /// Configures a window to a new size, as a compositor does when a person
 /// resizes it or a phone fits it to the screen: `(surface label, w, h)`.
-pub(crate) fn resize_window(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
-    let label = arguments.first().and_then(text).ok_or("resize_window wants a surface")?;
+pub(crate) fn resize_window(
+    host: &mut TestHost,
+    arguments: &[IpcValue],
+) -> Result<Vec<IpcValue>, String> {
+    let label = arguments
+        .first()
+        .and_then(text)
+        .ok_or("resize_window wants a surface")?;
     let width = number(arguments.get(1), "width")?.max(1.0) as u32;
     let height = number(arguments.get(2), "height")?.max(1.0) as u32;
     let subject = host.subject()?;
-    let Some(surface) = subject.surfaces.iter_mut().find(|s| s.label() == label || s.name == label) else {
+    let Some(surface) = subject
+        .surfaces
+        .iter_mut()
+        .find(|s| s.label() == label || s.name == label)
+    else {
         return Err(format!("no surface {label}"));
     };
-    let Some(id) = surface.id else { return Err(format!("{label} is not a window")) };
-    surface.size = (width, height);
-    let changed = subject.runtime.set_window_surface_size(id, width, height);
+    let Some(id) = surface.id else {
+        return Err(format!("{label} is not a window"));
+    };
+    let role = surface.role;
+    if !surface.open {
+        surface.size = (width, height);
+        let changed = subject.runtime.set_window_surface_size(id, width, height);
+        return Ok(vec![IpcValue::Boolean(changed)]);
+    }
+    // An open window is resized as a compositor does it: a configure.
+    let changed = surface.size != (width, height);
+    if let Some(backend) = subject
+        .host
+        .as_mut()
+        .and_then(|host| host.backend.as_headless_mut())
+    {
+        backend.resize(role, (width, height));
+    }
+    subject.frame(std::time::Duration::ZERO);
     Ok(vec![IpcValue::Boolean(changed)])
 }

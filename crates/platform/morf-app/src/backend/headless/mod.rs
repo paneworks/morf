@@ -135,6 +135,14 @@ impl HeadlessBackend {
         }
     }
 
+    /// Gives an open window a new size, as a compositor does when a person
+    /// resizes it or a phone fits it to the screen.
+    pub fn resize(&mut self, id: WindowId, size: (u32, u32)) {
+        if self.windows.contains_key(&id.into()) {
+            self.configure(id, size);
+        }
+    }
+
     fn configure(&mut self, id: WindowId, size: (u32, u32)) {
         let (width, height) = size;
         self.windows.insert(id.into(), HeadlessWindow { size });
@@ -181,9 +189,23 @@ impl Backend for HeadlessBackend {
         let size = match (id, kind) {
             (WindowId::Layer(_), WindowKind::Layer(config)) => {
                 let anchors = config.anchors;
+                // Asked for no size along an edge it is not stretched on, a
+                // compositor's answer is its own; this one gives the output's.
                 (
-                    layer_extent(anchors.left, anchors.right, config.width, output.0, 1),
-                    layer_extent(anchors.top, anchors.bottom, config.height, output.1, 1),
+                    layer_extent(
+                        anchors.left,
+                        anchors.right,
+                        config.width,
+                        output.0,
+                        output.0,
+                    ),
+                    layer_extent(
+                        anchors.top,
+                        anchors.bottom,
+                        config.height,
+                        output.1,
+                        output.1,
+                    ),
                 )
             }
             (WindowId::Toplevel(_), WindowKind::Toplevel { config, .. }) => {
@@ -286,6 +308,18 @@ impl Backend for HeadlessBackend {
 
     fn next_event(&mut self) -> Option<Event> {
         self.events.pop_front()
+    }
+
+    fn has_queued_events(&self) -> bool {
+        !self.events.is_empty()
+    }
+
+    fn as_headless(&self) -> Option<&HeadlessBackend> {
+        Some(self)
+    }
+
+    fn as_headless_mut(&mut self) -> Option<&mut HeadlessBackend> {
+        Some(self)
     }
 
     fn dispatch(&mut self, _timeout: Option<Duration>) -> Result<bool, String> {

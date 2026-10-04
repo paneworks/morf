@@ -124,8 +124,12 @@ fn parse_ms(option: &str, text: &str) -> Result<Duration, String> {
 /// of `XDG_DATA_DIRS` (where a package, a Nix profile among them, puts it).
 fn default_kit_config() -> Result<PathBuf, String> {
     let tail = std::path::Path::new("lib/kit/skins/default/check.lua");
-    let here = std::env::current_dir().map_err(|e| e.to_string())?.join("x");
-    let mut roots: Vec<PathBuf> = morf_host::morf_lua::project_library(&here).into_iter().collect();
+    let here = std::env::current_dir()
+        .map_err(|e| e.to_string())?
+        .join("x");
+    let mut roots: Vec<PathBuf> = morf_host::morf_lua::project_library(&here)
+        .into_iter()
+        .collect();
     roots.extend(
         std::env::var_os("MORF_RUNTIME_PATH")
             .into_iter()
@@ -149,7 +153,9 @@ fn default_kit_config() -> Result<PathBuf, String> {
         .into_iter()
         .map(|root| root.join(tail))
         .find(|path| path.is_file())
-        .ok_or_else(|| "`--kit default`: no library with lib/kit/skins/default/check.lua found".to_owned())
+        .ok_or_else(|| {
+            "`--kit default`: no library with lib/kit/skins/default/check.lua found".to_owned()
+        })
 }
 
 /// Reads the options of one runner, after its name.

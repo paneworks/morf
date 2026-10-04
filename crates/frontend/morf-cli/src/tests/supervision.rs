@@ -9,6 +9,7 @@ mod screens;
 
 // The supervisor and its workers: screen sets, IPC dispatch, hot reload.
 
+use morf_app::Output;
 use morf_host::lock::Worker;
 use morf_host::lock::WorkerCommand;
 use morf_host::services::stop_workers;
@@ -18,9 +19,8 @@ use morf_host::workers::handle_worker_command;
 use morf_io::IpcReply;
 use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
-use morf_value::IpcValue;
 use morf_lua::{Limits, Runtime, Screen};
-use morf_app::Output;
+use morf_value::IpcValue;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;

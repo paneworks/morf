@@ -1,3 +1,6 @@
+use morf_app::KeyboardFocus;
+use morf_app::PRIMARY_LAYER;
+use morf_app::ShellLayer;
 use morf_host::surface_layers::LayerUpdate;
 use morf_host::surface_layers::RESERVE_LAYER_BASE;
 use morf_host::surface_layers::layer_update;
@@ -8,9 +11,6 @@ use morf_host::surfaces::primary_surface_root;
 use morf_host::surfaces::runtime_bar_config;
 use morf_lua::Runtime;
 use morf_lua::WindowSurfaceKind;
-use morf_app::KeyboardFocus;
-use morf_app::PRIMARY_LAYER;
-use morf_app::ShellLayer;
 
 use morf_lua::LayerSurfaceConfig;
 

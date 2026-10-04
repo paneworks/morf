@@ -1,34 +1,36 @@
 //! A configuration run with no compositor: what `morf check`, `morf render`
 //! and `morf test` share.
 //!
-//! The shell's loop is a compositor's frame callbacks, its configure events
-//! and its input. Here all three are stood in for: a surface is as big as its
-//! `morf.surface` settings make it on a screen of a given size, a frame is a
-//! call, and a click is a `Event` handed to the same pointer path the
-//! shell uses. Nothing connects to Wayland -- there is no client to connect
-//! with -- and time is a virtual clock that moves only when asked, so the
-//! same run fires the same timers every time.
+//! The same [`Host`] the shell runs on a compositor, on the headless
+//! backend: its virtual outputs configure every window it opens, its seat
+//! carries the clicks and keys a test sends, and its clock -- with the
+//! runtime's virtual one -- moves only when asked, so the same run fires the
+//! same timers and frame callbacks every time. Nothing is drawn: the host
+//! lays out, and `morf render` draws a surface on demand.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use morf_app::WindowId;
-use morf_app::backend::headless::{VirtualSeat, virtual_outputs};
-use morf_layout::{Layout, Size};
+use morf_app::backend::headless::{HeadlessBackend, VirtualSeat, virtual_outputs};
+use morf_layout::Layout;
 use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
 
+use crate::host::turn::{Host, StartOptions, Turn};
 use crate::supervisor::LoadPolicy;
 use crate::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};
-use crate::surfaces::{PointerInput, primary_surface_root};
+use crate::surfaces::PointerInput;
 
 /// One frame of a 60 Hz output, which is what time advances by between
 /// animation ticks.
 pub const FRAME: Duration = Duration::from_millis(16);
 
-/// Layout passes a frame allows the bindings that read the layout.
-const SETTLE_PASSES: usize = 8;
+/// Turns a frame allows: the bindings that read the layout, and the handlers
+/// that open windows, converge within them as they do on a compositor over
+/// as many turns.
+pub(crate) const SETTLE_PASSES: usize = 8;
 
 /// What to load, and onto what.
 #[derive(Clone, Debug)]
@@ -96,6 +98,10 @@ pub struct Surface {
     /// 2 top, 3 overlay. `screen` composes surfaces in this order.
     pub stack: u8,
     pub blend: String,
+    /// Whether the host has it open; then its layout is the host's
+    /// ([`Headless::layout_of`]), and `layout` is unused.
+    pub open: bool,
+    /// The layout of a surface the host has not opened, laid out here.
     pub layout: Option<Layout>,
     /// The tree revision and size `layout` was computed for.
     pub laid: Option<(u64, (u32, u32))>,
@@ -139,10 +145,14 @@ impl Surface {
 /// A configuration running with nothing under it.
 pub struct Headless {
     pub runtime: Runtime,
-    pub text: TextSystem,
+    /// The host and its headless backend; none with no screen (the outputless
+    /// runtime) or a configuration that built no surface.
+    pub host: Option<Host>,
+    /// Lays out what the host has not opened (a hidden panel), so its
+    /// problems are found before it is shown; with a host, the host's.
+    pub(crate) text: Option<TextSystem>,
     pub screen: (u32, u32),
     pub surfaces: Vec<Surface>,
-    pub input: PointerInput,
     /// Every log line since load, in order.
     pub logs: Vec<LogEntry>,
     /// Problems the runner itself found: layouts that failed, surfaces that
@@ -151,13 +161,13 @@ pub struct Headless {
     /// The virtual clock's reading, and when the last frame was.
     now: Duration,
     last_frame: Duration,
-    /// The headless backend's seat: where the pointer is (for a wheel or a
-    /// release with no position), and the surface a button was last pressed
-    /// on -- the one a compositor gives the keyboard to, and where keys go
-    /// when a test names no surface.
-    pub seat: VirtualSeat,
     /// Loaded with no screen: nothing it declares is mapped.
     pub outputless: bool,
+    /// The layout revision each open surface was last linted at.
+    pub(crate) linted: std::collections::HashMap<WindowId, u64>,
+    /// The seat and pointer of a run with no host.
+    idle_seat: VirtualSeat,
+    idle_input: PointerInput,
 }
 
 impl Headless {
@@ -233,18 +243,57 @@ impl Headless {
         }
         // The shell hands a configuration the time of day once a second.
         let _ = runtime.update_clock(crate::paint::clock_text());
+        let mut problems = Vec::new();
+        let host = match &own {
+            Some(own) if crate::surfaces::primary_surface_root(&runtime).is_ok() => {
+                // The output this runtime draws to, first: where its windows go.
+                let mut ordered = vec![own.clone()];
+                ordered.extend(screens.iter().filter(|screen| screen.id != own.id).cloned());
+                let backend = HeadlessBackend::new(ordered);
+                match Host::start(
+                    &mut runtime,
+                    Box::new(backend),
+                    None,
+                    StartOptions {
+                        name: own.name.clone().unwrap_or_default(),
+                        gpu: false,
+                        publish_capabilities: false,
+                        desktop_canvas: false,
+                        report_slow: false,
+                    },
+                ) {
+                    Ok(host) => Some(host),
+                    Err(error) => {
+                        return Err(LoadFailure {
+                            error,
+                            logs: runtime.take_logs(),
+                        });
+                    }
+                }
+            }
+            Some(_) => {
+                if let Err(error) = crate::surfaces::primary_surface_root(&runtime) {
+                    problems.push(error);
+                }
+                None
+            }
+            None => None,
+        };
+        let text = host.is_none().then(TextSystem::new);
         let mut headless = Self {
             runtime,
-            text: TextSystem::new(),
+            host,
+            text,
             screen: options.size,
             surfaces: Vec::new(),
-            input: PointerInput::default(),
             logs: Vec::new(),
-            problems: Vec::new(),
+            problems,
             now: Duration::ZERO,
             last_frame: Duration::ZERO,
-            seat: VirtualSeat::default(),
             outputless,
+            linted: std::collections::HashMap::new(),
+            idle_seat: VirtualSeat::default(),
+            idle_input: PointerInput::default(),
         };
         // The first frame, at time zero: what the shell draws before any
         // time has passed.
@@ -257,109 +306,47 @@ impl Headless {
         self.now
     }
 
-    /// Lays out every surface at its size, visible or not: a hidden panel is
-    /// laid out too, so its problems are found before it is opened.
-    pub fn layout_all(&mut self) {
-        self.refresh_surfaces();
-        for index in 0..self.surfaces.len() {
-            let (root, size, label) = {
-                let surface = &self.surfaces[index];
-                (surface.root, surface.size, surface.label())
-            };
-            let available = Size {
-                width: f64::from(size.0),
-                height: f64::from(size.1),
-            };
-            // As the shell's cache: a tree whose revision has not moved, at
-            // the size it was laid out at, lays out the same again.
-            let revision = self.runtime.scene().layout_revision_of(root);
-            if self.surfaces[index].layout.is_some()
-                && self.surfaces[index].laid == Some((revision, size))
-            {
-                if let Some(layout) = &self.surfaces[index].layout {
-                    self.runtime.sync_text_inputs(layout, &mut self.text);
-                    self.runtime.observe_stretch(layout);
+    /// One frame: the clock's frame callbacks, `delta` after the last, and
+    /// as many turns of the host as it wants before it is quiet.
+    pub fn frame(&mut self, delta: Duration) {
+        match self.host.as_mut() {
+            Some(host) => {
+                if let Some(backend) = host.backend.as_headless_mut() {
+                    backend.advance(delta);
                 }
-                continue;
-            }
-            match self
-                .runtime
-                .settle_layout(root, available, &mut self.text, SETTLE_PASSES)
-            {
-                Ok(settled) => {
-                    self.runtime.lint_layout(&settled.layout, root);
-                    self.runtime
-                        .sync_text_inputs(&settled.layout, &mut self.text);
-                    self.runtime.observe_stretch(&settled.layout);
-                    let revision = self.runtime.scene().layout_revision_of(root);
-                    let surface = &mut self.surfaces[index];
-                    surface.stable = settled.stable;
-                    surface.layout = Some(settled.layout);
-                    surface.laid = Some((revision, size));
-                }
-                Err(error) => {
-                    let problem = format!("{label}: layout: {error}");
-                    if !self.problems.contains(&problem) {
-                        self.problems.push(problem);
+                for _ in 0..SETTLE_PASSES {
+                    match host.turn(&mut self.runtime, None) {
+                        Ok(Turn::Again) => {}
+                        Ok(_) => break,
+                        Err(error) => {
+                            if !self.problems.contains(&error) {
+                                self.problems.push(error);
+                            }
+                            break;
+                        }
+                    }
+                    if host.settled() {
+                        break;
                     }
                 }
             }
-        }
-    }
-
-    /// One frame: services and timers, `delta` of animation, and a layout.
-    pub fn frame(&mut self, delta: Duration) {
-        self.runtime.poll_services();
-        if let Err(error) = self.runtime.tick_animations(delta) {
-            self.problems.push(format!("animation: {error}"));
-        }
-        self.apply_transitions();
-        self.runtime.take_window_surface_change();
-        self.runtime.take_layer_surface_change();
-        self.layout_all();
-        // A node first asked for its `contains_pointer` is answered where
-        // the pointer is, now that it is laid out; if that changed what a
-        // binding drew, the surfaces are laid out again.
-        let layouts = crate::headless_input::Layouts(&self.surfaces);
-        if crate::surface_pointer::answer_new_containment(&mut self.runtime, &self.input, &layouts)
-        {
-            self.layout_all();
-        }
-        // Twice: the poll is what turns a layout's lint into log lines.
-        self.runtime.poll_services();
-        self.logs.extend(self.runtime.take_logs());
-    }
-
-    /// Moves nodes a configuration asked to reparent with a transition, as
-    /// the shell does before a paint.
-    fn apply_transitions(&mut self) {
-        let transitions = self.runtime.take_parent_transitions();
-        if transitions.is_empty() {
-            return;
-        }
-        let Ok(root) = primary_surface_root(&self.runtime) else {
-            return;
-        };
-        let available = Size {
-            width: f64::from(self.screen.0),
-            height: f64::from(self.screen.1),
-        };
-        for transition in transitions {
-            if let Err(error) = Layout::transition_reparent(
-                &mut self.runtime.scene_mut(),
-                &mut self.text,
-                morf_layout::ReparentTransition {
-                    root,
-                    node: transition.node,
-                    new_parent: transition.parent,
-                    anchors: transition.anchors,
-                    available,
-                    behavior: transition.behavior,
-                },
-            ) {
-                self.problems.push(format!("reparent: {error}"));
+            // No surface to drive frames: the services, the timers and the
+            // animations, as the outputless runtime has them.
+            None => {
+                self.runtime.poll_services();
+                if let Err(error) = self.runtime.tick_animations(delta) {
+                    self.problems.push(format!("animation: {error}"));
+                }
+                self.runtime.take_window_surface_change();
+                self.runtime.take_layer_surface_change();
             }
         }
+        self.refresh_surfaces();
+        self.lint_open();
+        self.lay_out_hidden();
+        // The poll is what turns a layout's lint into log lines.
+        self.runtime.poll_services();
+        self.logs.extend(self.runtime.take_logs());
     }
 
     /// Advances the virtual clock by `by`: a frame every [`FRAME`], and a
@@ -402,8 +389,8 @@ impl Headless {
     }
 
     /// Advances a frame at a time until nothing moves -- no animation
-    /// running, no layout still converging, no service with news -- or
-    /// `limit` has passed. Returns the virtual time it took.
+    /// running, no layout still converging, no turn still owed -- or `limit`
+    /// has passed. Returns the virtual time it took.
     pub fn settle(&mut self, limit: Duration) -> Duration {
         let started = self.now;
         let mut quiet = 0;
@@ -411,19 +398,9 @@ impl Headless {
             let revision = self.runtime.scene().layout_revision();
             self.runtime.advance_virtual_clock(FRAME);
             self.now += FRAME;
-            let changed = self.runtime.poll_services();
-            let frame = self.runtime.tick_animations(FRAME);
             self.last_frame = self.now;
-            self.apply_transitions();
-            self.runtime.take_window_surface_change();
-            self.runtime.take_layer_surface_change();
-            self.layout_all();
-            self.runtime.poll_services();
-            self.logs.extend(self.runtime.take_logs());
-            let moving = changed
-                || frame
-                    .as_ref()
-                    .is_ok_and(|frame| frame.active || frame.changed > 0)
+            self.frame(FRAME);
+            let moving = self.runtime.has_motion()
                 || self.runtime.scene().layout_revision() != revision
                 || self.surfaces.iter().any(|surface| !surface.stable);
             quiet = if moving { 0 } else { quiet + 1 };
@@ -433,6 +410,30 @@ impl Headless {
             }
         }
         self.now - started
+    }
+
+    /// The seat: where the pointer is, and which surface has the keyboard.
+    pub fn seat(&self) -> &VirtualSeat {
+        self.host
+            .as_ref()
+            .and_then(|host| host.backend.as_headless())
+            .map_or(&self.idle_seat, HeadlessBackend::seat)
+    }
+
+    /// Where the pointer, the buttons and the fingers are, as the host's
+    /// pointer path keeps them.
+    pub fn input(&self) -> &PointerInput {
+        self.host
+            .as_ref()
+            .map_or(&self.idle_input, |host| &host.state.input)
+    }
+
+    /// The text system layouts are measured with.
+    pub fn text(&mut self) -> &mut TextSystem {
+        match &mut self.host {
+            Some(host) => host.state.painter.text(),
+            None => self.text.get_or_insert_with(TextSystem::new),
+        }
     }
 
     /// Log lines at `level` or above.

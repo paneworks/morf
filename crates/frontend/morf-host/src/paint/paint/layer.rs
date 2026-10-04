@@ -306,7 +306,7 @@ pub fn send_input_region(
         input
     } else {
         let input = layout
-            .input_geometry(&scene)
+            .input_geometry(scene)
             .map_err(|error| error.to_string())?
             .into_iter()
             .map(|geometry| {

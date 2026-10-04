@@ -3,9 +3,9 @@
 
 use morf_host::morf_lua::{LogEntry, LogLevel};
 
+use crate::runner_args::{Runner, RunnerArgs};
 use morf_host::headless::{Headless, LoadOptions};
 use morf_host::headless_env::{PrivateBus, isolate_from_session, isolate_home, scratch_dir};
-use crate::runner_args::{Runner, RunnerArgs};
 
 /// Runs whichever runner was asked for. Isolation first, before anything
 /// starts a thread: the environment is only safely changed until then.
@@ -134,30 +134,63 @@ fn call_ipc(headless: &mut Headless, args: &RunnerArgs) -> Result<(), String> {
 /// that is read by name -- must have a name. Returns how many have none.
 fn check_a11y(headless: &Headless) -> usize {
     const NAMED: &[&str] = &[
-        "button", "toggle_button", "check_box", "radio_button", "switch", "link", "menu_item", "menu_item_check",
-        "menu_item_radio", "slider", "spin_button", "tab", "text_field", "password_text", "text_area",
-        "search_field", "list_box_option", "image", "dialog", "alert_dialog", "splitter",
+        "button",
+        "toggle_button",
+        "check_box",
+        "radio_button",
+        "switch",
+        "link",
+        "menu_item",
+        "menu_item_check",
+        "menu_item_radio",
+        "slider",
+        "spin_button",
+        "tab",
+        "text_field",
+        "password_text",
+        "text_area",
+        "search_field",
+        "list_box_option",
+        "image",
+        "dialog",
+        "alert_dialog",
+        "splitter",
     ];
     let scene = headless.runtime.scene();
     let mut problems = Vec::new();
     let mut nodes = 0;
     for surface in headless.surfaces.iter().filter(|s| s.visible) {
-        let Some(layout) = &surface.layout else { continue };
+        let Some(layout) = headless.layout_of(surface) else {
+            continue;
+        };
         let tree = scene.accessible_tree(surface.root, "window", &surface.label(), &|node| {
-            layout.surface_rect(&scene, node).map(|g| (g.x, g.y, g.width, g.height))
+            layout
+                .surface_rect(&scene, node)
+                .map(|g| (g.x, g.y, g.width, g.height))
         });
         nodes += tree.len();
         for item in tree.iter().skip(1) {
             if item.name.is_empty() && (item.focusable || NAMED.contains(&item.role.as_str())) {
                 let id = scene.string_value(item.node, "id").unwrap_or("");
-                let id = if id.is_empty() { "no id".to_owned() } else { id.to_owned() };
-                problems.push(format!("{}: a {} with no name ({id})", surface.label(), item.role));
+                let id = if id.is_empty() {
+                    "no id".to_owned()
+                } else {
+                    id.to_owned()
+                };
+                problems.push(format!(
+                    "{}: a {} with no name ({id})",
+                    surface.label(),
+                    item.role
+                ));
             }
         }
     }
     problems.sort();
     problems.dedup();
-    println!("  a11y    {nodes} accessible nodes, {} unnamed", problems.len());
+    println!(
+        "  a11y    {nodes} accessible nodes, {} unnamed",
+        problems.len()
+    );
     for problem in &problems {
         println!("  error: a11y: {problem}");
     }

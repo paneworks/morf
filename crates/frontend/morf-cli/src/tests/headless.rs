@@ -4,15 +4,15 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use morf_app::{PRIMARY_LAYER, WindowId};
 use morf_lua::{LogEntry, LogLevel};
 use morf_value::IpcValue;
-use morf_app::{PRIMARY_LAYER, WindowId};
 
-use morf_host::headless::{Headless, LoadOptions};
-use morf_host::headless_input::{button, keysym, modifiers};
 use crate::runner_args::{Runner, parse_runner, parse_size};
 use crate::runners::is_error;
 use crate::test_runner::{Tally, run_spec};
+use morf_host::headless::{Headless, LoadOptions};
+use morf_host::headless_input::{button, keysym, modifiers};
 
 fn load(source: &str) -> Headless {
     let mut options = LoadOptions::new(PathBuf::from("headless-test.lua"));
@@ -63,8 +63,12 @@ fn a_surface_is_sized_from_its_settings_on_the_screen() {
 fn a_click_reaches_the_area_under_it_and_nothing_beside_it() {
     let mut headless = load(COUNTER);
     let surface = WindowId::Layer(PRIMARY_LAYER);
-    headless.click(surface, (20.0, 20.0), 0x110, Default::default()).unwrap();
-    headless.click(surface, (150.0, 80.0), 0x110, Default::default()).unwrap();
+    headless
+        .click(surface, (20.0, 20.0), 0x110, Default::default())
+        .unwrap();
+    headless
+        .click(surface, (150.0, 80.0), 0x110, Default::default())
+        .unwrap();
     assert_eq!(ask(&mut headless, "clicks"), IpcValue::Integer(1));
 }
 
@@ -100,7 +104,7 @@ fn timers_run_on_the_virtual_clock_without_waiting_for_it() {
 #[test]
 fn a_node_is_found_where_it_was_laid_out() {
     let headless = load(COUNTER);
-    let layout = headless.surfaces[0].layout.as_ref().unwrap();
+    let layout = headless.layout_of(&headless.surfaces[0]).unwrap();
     let scene = headless.runtime.scene();
     let root = headless.surfaces[0].root;
     let button = scene.children(root).unwrap()[0];

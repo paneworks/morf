@@ -143,7 +143,7 @@ pub fn open_popup_surface(
         .open(
             WindowId::Popup(surface.id),
             WindowKind::Popup {
-                parent: parent,
+                parent,
                 config: popup_client_config(config)?,
             },
         )
