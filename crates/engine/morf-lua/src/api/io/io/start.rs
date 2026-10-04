@@ -1,5 +1,5 @@
-//! Starting processes and connections, and reading the options `spawn`,
-//! `run` and `connect` share.
+//! Starting processes and connections through the hub, and reading the
+//! options `spawn`, `run` and `connect` share.
 
 use super::*;
 
@@ -13,57 +13,12 @@ impl Starter {
         options: SpawnOptions,
         kind: Kind,
     ) -> Result<Result<UserData<'gc>, String>, HostError> {
-        let mut state = self.state.borrow_mut();
-        let hub = &mut state.io;
-        if hub.count(true) >= MAX_PROCESSES {
-            return Err(HostError(format!(
-                "more than {MAX_PROCESSES} processes running"
-            )));
-        }
-        let program = options.command[0].clone();
-        let handle = match hub.reactor()?.spawn(options) {
-            Ok(handle) => handle,
-            Err(error) => {
-                let message = format!("{program}: {error}");
-                if let Kind::Run {
-                    callback: Some(callback),
-                    ..
-                } = kind
-                {
-                    hub.deferred.push(IoCall {
-                        status: Rc::new(HandleStatus::default()),
-                        callback,
-                        args: CallArgs::Run(RunResult {
-                            error: Some(message.clone()),
-                            ..RunResult::default()
-                        }),
-                    });
-                    morf_io::wake_all();
-                }
-                return Ok(Err(message));
-            }
+        let spawned = self.state.borrow_mut().io.spawn(options, kind);
+        let link = match spawned.map_err(HostError)? {
+            Ok(link) => link,
+            Err(message) => return Ok(Err(message)),
         };
-        let control = hub.reactor()?.control();
-        let status = Rc::new(HandleStatus::default());
-        status.running.set(true);
-        hub.entries.insert(
-            handle.id(),
-            Entry {
-                handle: handle.clone(),
-                status: Rc::clone(&status),
-                kind,
-                queue: VecDeque::new(),
-                process: true,
-            },
-        );
-        let userdata = UserData::new_static(
-            &ctx,
-            IoToken {
-                handle,
-                control,
-                status,
-            },
-        );
+        let userdata = UserData::new_static(&ctx, IoToken(link));
         userdata.set_metatable(ctx, Some(ctx.fetch(&self.process_metatable)));
         Ok(Ok(userdata))
     }
@@ -74,35 +29,13 @@ impl Starter {
         options: ConnectOptions,
         kind: Kind,
     ) -> Result<UserData<'gc>, HostError> {
-        let mut state = self.state.borrow_mut();
-        let hub = &mut state.io;
-        if hub.count(false) >= MAX_CONNECTIONS {
-            return Err(HostError(format!(
-                "more than {MAX_CONNECTIONS} connections open"
-            )));
-        }
-        let reactor = hub.reactor()?;
-        let handle = reactor.connect(options);
-        let control = reactor.control();
-        let status = Rc::new(HandleStatus::default());
-        hub.entries.insert(
-            handle.id(),
-            Entry {
-                handle: handle.clone(),
-                status: Rc::clone(&status),
-                kind,
-                queue: VecDeque::new(),
-                process: false,
-            },
-        );
-        let userdata = UserData::new_static(
-            &ctx,
-            IoToken {
-                handle,
-                control,
-                status,
-            },
-        );
+        let link = self
+            .state
+            .borrow_mut()
+            .io
+            .connect(options, kind)
+            .map_err(HostError)?;
+        let userdata = UserData::new_static(&ctx, IoToken(link));
         userdata.set_metatable(ctx, Some(ctx.fetch(&self.connection_metatable)));
         Ok(userdata)
     }
@@ -194,4 +127,17 @@ pub(super) fn positive<'gc>(
         LuaValue::Number(value) if value.is_finite() && value >= 1.0 => Ok(Some(value as u64)),
         _ => Err(HostError(format!("{field} must be a positive number"))),
     }
+}
+
+/// A signal as `kill` takes it: a name, a number, or nil for TERM.
+pub(super) fn signal_of(value: LuaValue<'_>) -> Result<i32, HostError> {
+    match value {
+        LuaValue::Nil => morf_io::signal_number("TERM"),
+        LuaValue::Integer(number) => i32::try_from(number)
+            .ok()
+            .and_then(|number| morf_io::signal_number(&number.to_string())),
+        LuaValue::String(name) => morf_io::signal_number(&name.display_lossy().to_string()),
+        _ => None,
+    }
+    .ok_or_else(|| HostError("kill takes a signal name or number".into()))
 }

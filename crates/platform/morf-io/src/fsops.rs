@@ -7,6 +7,7 @@
 //! and a glob stops at [`MAX_ENTRIES`] matches, so a configuration that
 //! points one of these at `/` gets an answer or a refusal, never a stall.
 
+mod checks;
 mod paths;
 mod pattern;
 
@@ -16,6 +17,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+pub use checks::*;
 pub use paths::{expand, home_dir, normalize, user_dir};
 pub use pattern::{glob, matches};
 

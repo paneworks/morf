@@ -40,8 +40,8 @@
 //! Everything is started on the spot, from anywhere: the top level, a
 //! handler, a timer, another callback. A reactor thread (`morf_io::Reactor`)
 //! watches the pipes and sockets and wakes the loop; `poll_services` hands
-//! each handle at most [`BATCH`] events per turn, so a chatty child shares
-//! the loop with everything else. The reactor belongs to the runtime: a
+//! each handle at most [`morf_io::IO_BATCH`] events per turn, so a chatty
+//! child shares the loop with everything else. The reactor belongs to the runtime: a
 //! reload kills every child the old configuration started (except
 //! `detached` ones) and closes its sockets, and nothing it started calls
 //! back into the new one.
@@ -55,11 +55,11 @@ use luna::{
     Value as LuaValue, Variadic,
 };
 use morf_io::{
-    CloseReason, ConnectOptions, Endpoint, IoEvent, IoHandle, IoId, OutputMode, Reactor,
-    ReactorControl, SpawnOptions, StdinMode,
+    CallArgs, ConnectOptions, Endpoint, IoLink, MAX_LINE_LIMIT, MAX_OUTPUT_LIMIT, OutputMode,
+    REQUEST_DEFAULT_MAX, REQUEST_DEFAULT_TIMEOUT, REQUEST_MAX_LIMIT, RUN_DEFAULT_MAX_OUTPUT,
+    SpawnOptions, StdinMode,
 };
-use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, VecDeque};
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
@@ -71,106 +71,16 @@ mod hub;
 mod start;
 
 pub(crate) use hub::execute_io_call;
-use start::{endpoint_of, positive, spawn_options};
+use start::{endpoint_of, positive, signal_of, spawn_options};
 
-/// Children one runtime may have running at once.
-const MAX_PROCESSES: usize = 64;
-/// Connections one runtime may have open at once.
-const MAX_CONNECTIONS: usize = 64;
-/// Callbacks one handle may have run per turn of the loop.
-pub(crate) const BATCH: usize = 64;
-const RUN_DEFAULT_MAX_OUTPUT: usize = 8 * 1024 * 1024;
-const MAX_OUTPUT_LIMIT: usize = 256 * 1024 * 1024;
-const REQUEST_DEFAULT_MAX: usize = 8 * 1024 * 1024;
-const REQUEST_MAX_LIMIT: usize = 64 * 1024 * 1024;
-const MAX_WRITE: usize = 1024 * 1024;
-const MAX_LINE_LIMIT: usize = 16 * 1024 * 1024;
-
-/// What a handle and its entry share.
-#[derive(Default)]
-pub(crate) struct HandleStatus {
-    running: Cell<bool>,
-    connected: Cell<bool>,
-    /// Closed by the configuration: no callback runs for it again.
-    closed: Cell<bool>,
-}
-
-enum Kind {
-    Spawn {
-        on_stdout: Option<Handler>,
-        on_stderr: Option<Handler>,
-        on_exit: Option<Handler>,
-    },
-    Run {
-        callback: Option<Handler>,
-        stdout: Vec<u8>,
-        stderr: Vec<u8>,
-    },
-    Connect {
-        on_data: Option<Handler>,
-        on_connect: Option<Handler>,
-        on_close: Option<Handler>,
-    },
-    Request {
-        callback: Option<Handler>,
-        reply: Vec<u8>,
-        max: usize,
-    },
-}
-
-struct Entry {
-    handle: IoHandle,
-    status: Rc<HandleStatus>,
-    kind: Kind,
-    queue: VecDeque<IoEvent>,
-    process: bool,
-}
-
+/// The runtime's processes and connections, each owing Lua callbacks.
+pub(crate) type IoHub = morf_io::IoHub<Handler>;
 /// A callback owed, with what it is owed.
-pub(crate) struct IoCall {
-    status: Rc<HandleStatus>,
-    callback: Handler,
-    args: CallArgs,
-}
+pub(crate) type IoCall = morf_io::IoCall<Handler>;
+type Kind = morf_io::IoKind<Handler>;
 
-enum CallArgs {
-    None,
-    Bytes(Vec<u8>),
-    Text(String),
-    Exit {
-        code: Option<i32>,
-        signal: Option<i32>,
-        timed_out: bool,
-    },
-    Run(RunResult),
-    Reply(Result<Vec<u8>, String>),
-}
-
-#[derive(Default)]
-struct RunResult {
-    code: Option<i32>,
-    signal: Option<i32>,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    timed_out: bool,
-    truncated: bool,
-    error: Option<String>,
-}
-
-/// The runtime's processes and connections.
-#[derive(Default)]
-pub(crate) struct IoHub {
-    reactor: Option<Reactor>,
-    entries: BTreeMap<IoId, Entry>,
-    /// Answers that need no reactor: a `run` whose program would not start.
-    deferred: Vec<IoCall>,
-}
-
-struct IoToken {
-    handle: IoHandle,
-    control: ReactorControl,
-    status: Rc<HandleStatus>,
-}
+/// A child or a connection as Lua holds it.
+struct IoToken(IoLink);
 
 /// Installs `morf.spawn`, `morf.run`, `morf.connect` and
 /// `morf.request_socket`.
@@ -181,45 +91,26 @@ pub(crate) fn install_io_api<'gc>(
 ) {
     let write = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (token, data): (UserRef<IoToken>, luna::String) = stack.consume(ctx)?;
-        if data.as_bytes().len() > MAX_WRITE {
-            return Err(HostError(format!("a write is at most {MAX_WRITE} bytes")).into());
-        }
-        if token.status.closed.get() {
-            stack.replace(ctx, (false, "closed"));
-            return Ok(CallbackReturn::Return);
-        }
-        match token.control.write(&token.handle, data.as_bytes().to_vec()) {
+        match token.0.write(data.as_bytes()).map_err(HostError)? {
             Ok(()) => stack.replace(ctx, true),
-            Err(error) => stack.replace(ctx, (false, error.to_string().as_str())),
+            Err(error) => stack.replace(ctx, (false, error.as_str())),
         }
         Ok(CallbackReturn::Return)
     });
     let close_stdin = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let token: UserRef<IoToken> = stack.consume(ctx)?;
-        token.control.close_stdin(&token.handle);
+        token.0.close_stdin();
         Ok(CallbackReturn::Return)
     });
     let kill = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (token, signal): (UserRef<IoToken>, LuaValue) = stack.consume(ctx)?;
-        let signal = match signal {
-            LuaValue::Nil => morf_io::signal_number("TERM"),
-            LuaValue::Integer(number) => i32::try_from(number)
-                .ok()
-                .and_then(|number| morf_io::signal_number(&number.to_string())),
-            LuaValue::String(name) => morf_io::signal_number(&name.display_lossy().to_string()),
-            _ => None,
-        }
-        .ok_or_else(|| HostError("kill takes a signal name or number".into()))?;
-        let running = token.status.running.get();
-        if running {
-            token.control.signal(&token.handle, signal);
-        }
-        stack.replace(ctx, running);
+        let signal = signal_of(signal)?;
+        stack.replace(ctx, token.0.kill(signal));
         Ok(CallbackReturn::Return)
     });
     let pid = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let token: UserRef<IoToken> = stack.consume(ctx)?;
-        match token.handle.pid() {
+        match token.0.pid() {
             Some(pid) => stack.replace(ctx, i64::from(pid)),
             None => stack.replace(ctx, LuaValue::Nil),
         }
@@ -227,17 +118,17 @@ pub(crate) fn install_io_api<'gc>(
     });
     let running = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let token: UserRef<IoToken> = stack.consume(ctx)?;
-        stack.replace(ctx, token.status.running.get());
+        stack.replace(ctx, token.0.status().running());
         Ok(CallbackReturn::Return)
     });
     let connected = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let token: UserRef<IoToken> = stack.consume(ctx)?;
-        stack.replace(ctx, token.status.connected.get());
+        stack.replace(ctx, token.0.status().connected());
         Ok(CallbackReturn::Return)
     });
     let close = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let token: UserRef<IoToken> = stack.consume(ctx)?;
-        token.close();
+        token.0.close();
         Ok(CallbackReturn::Return)
     });
 
@@ -324,12 +215,9 @@ pub(crate) fn install_io_api<'gc>(
                 }),
             None => RUN_DEFAULT_MAX_OUTPUT,
         });
-        let kind = Kind::Run {
-            callback: callback
-                .map(|callback| crate::vm::handler_store::register(ctx.stash(callback))),
-            stdout: Vec::new(),
-            stderr: Vec::new(),
-        };
+        let kind = Kind::run(
+            callback.map(|callback| crate::vm::handler_store::register(ctx.stash(callback))),
+        );
         match run_starter.spawn(ctx, spawn, kind)? {
             Ok(userdata) => stack.replace(ctx, userdata),
             Err(_) => stack.replace(ctx, LuaValue::Nil),
@@ -343,19 +231,8 @@ pub(crate) fn install_io_api<'gc>(
     // are refused. Returns true, or false and the reason.
     let kill_pid = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (pid, signal): (i64, LuaValue) = stack.consume(ctx)?;
-        let pid = i32::try_from(pid)
-            .ok()
-            .filter(|pid| *pid > 1)
-            .ok_or_else(|| HostError("kill takes a process id above 1".into()))?;
-        let signal = match signal {
-            LuaValue::Nil => morf_io::signal_number("TERM"),
-            LuaValue::Integer(number) => i32::try_from(number)
-                .ok()
-                .and_then(|number| morf_io::signal_number(&number.to_string())),
-            LuaValue::String(name) => morf_io::signal_number(&name.display_lossy().to_string()),
-            _ => None,
-        }
-        .ok_or_else(|| HostError("kill takes a signal name or number".into()))?;
+        let pid = morf_io::signalable_pid(pid).map_err(HostError)?;
+        let signal = signal_of(signal)?;
         match morf_io::signal_process(pid, signal) {
             Ok(()) => stack.replace(ctx, true),
             Err(error) => stack.replace(ctx, (false, error.to_string().as_str())),
@@ -407,7 +284,7 @@ pub(crate) fn install_io_api<'gc>(
         let mut connect = ConnectOptions::new(Endpoint::Unix(PathBuf::from(
             path.display_lossy().to_string(),
         )));
-        let mut timeout = Duration::from_secs(5);
+        let mut timeout = REQUEST_DEFAULT_TIMEOUT;
         let mut max = REQUEST_DEFAULT_MAX;
         if let Some(options) = options {
             if let Some(ms) = positive(ctx, options, "timeout_ms")? {
@@ -420,11 +297,7 @@ pub(crate) fn install_io_api<'gc>(
         connect.connect_timeout = timeout;
         connect.deadline = Some(timeout);
         connect.greeting = data.as_bytes().to_vec();
-        let kind = Kind::Request {
-            callback: callback.map(crate::vm::handler_store::register),
-            reply: Vec::new(),
-            max,
-        };
+        let kind = Kind::request(callback.map(crate::vm::handler_store::register), max);
         stack.replace(ctx, starter.connect(ctx, connect, kind)?);
         Ok(CallbackReturn::Return)
     });

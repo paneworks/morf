@@ -18,36 +18,12 @@
 //! when there is no shell socket to send through (a headless test, a lock
 //! screen), so the caller can do the thing itself.
 
-use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock, mpsc};
-
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
-use morf_io::{IpcRequest, IpcValue as WireValue};
+use morf_io::IpcValue as WireValue;
 
 use crate::scene_bindings::HostError;
 
-/// Most arguments one broadcast carries.
-const MAX_ARGUMENTS: usize = 32;
-
-/// The way to the sending thread, once the shell's socket is known.
-static OUTBOX: OnceLock<Mutex<mpsc::Sender<IpcRequest>>> = OnceLock::new();
-
-/// Names the shell's IPC socket, once it is bound, and starts the thread
-/// that sends through it. Until then, and in a process that has none,
-/// `morf.broadcast` answers `false`.
-pub fn set_shell_socket(path: PathBuf) {
-    let (sender, requests) = mpsc::channel::<IpcRequest>();
-    let started = std::thread::Builder::new()
-        .name("morf-broadcast".into())
-        .spawn(move || {
-            for request in requests {
-                let _ = morf_io::ipc_call(&path, &request);
-            }
-        });
-    if started.is_ok() {
-        let _ = OUTBOX.set(Mutex::new(sender));
-    }
-}
+pub use morf_io::set_shell_socket;
 
 fn wire_value(value: LuaValue<'_>) -> Result<WireValue, String> {
     Ok(match value {
@@ -66,19 +42,12 @@ pub(crate) fn install_broadcast_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             LuaValue::String(text) => text.display_lossy().to_string(),
             _ => return Err(HostError("broadcast needs a verb".into()).into()),
         };
-        if stack.len() > MAX_ARGUMENTS + 1 {
-            return Err(HostError("broadcast takes at most 32 arguments".into()).into());
-        }
+        morf_io::check_broadcast_arguments(stack.len().saturating_sub(1)).map_err(HostError)?;
         let mut args = Vec::with_capacity(stack.len().saturating_sub(1));
         for index in 1..stack.len() {
             args.push(wire_value(stack.get(index)).map_err(HostError)?);
         }
-        let sent = OUTBOX.get().is_some_and(|outbox| {
-            outbox
-                .lock()
-                .is_ok_and(|outbox| outbox.send(IpcRequest::Call { target, args }).is_ok())
-        });
-        stack.replace(ctx, sent);
+        stack.replace(ctx, morf_io::broadcast(target, args));
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "broadcast", broadcast);

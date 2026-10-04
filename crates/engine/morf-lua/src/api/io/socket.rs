@@ -281,13 +281,10 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let stream_collector = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let options: Table = stack.consume(ctx)?;
         let maximum = match options.get_value(ctx, "maximum_bytes") {
-            LuaValue::Nil => 1024 * 1024,
-            LuaValue::Integer(value) => usize::try_from(value)
-                .ok()
-                .filter(|value| (1..=16 * 1024 * 1024).contains(value))
-                .ok_or_else(|| {
-                    HostError("stream collector maximum_bytes must be 1..16777216".into())
-                })?,
+            LuaValue::Nil => morf_io::DEFAULT_BUFFER,
+            LuaValue::Integer(value) => {
+                morf_io::buffer_limit(value, "stream collector").map_err(HostError)?
+            }
             _ => {
                 return Err(
                     HostError("stream collector maximum_bytes must be an integer".into()).into(),

@@ -12,7 +12,7 @@
 //! which sleeps until the kernel has news and then rings the loop, so an
 //! idle watch costs nothing. `poll_services` takes what each watch has
 //! gathered, coalesced by path since it last looked, and runs the callback
-//! at most [`BATCH`] times per watch per turn.
+//! at most [`morf_io::WATCH_BATCH`] times per watch per turn.
 //!
 //! A watch lives as long as its handle: `:close()` ends it, and so does the
 //! handle being collected, a reload, and the runtime going away. A runtime
@@ -22,9 +22,8 @@ use luna::{
     Callback, CallbackReturn, Context, Executor, Function, Table, UserData, UserRef,
     Value as LuaValue, Variadic,
 };
-use morf_io::{FsChange, Watch, WatchOptions};
-use std::cell::{Cell, RefCell};
-use std::collections::VecDeque;
+use morf_io::{Watch, WatchHandle, WatchOptions};
+use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
@@ -33,83 +32,13 @@ use std::rc::Rc;
 use crate::{Limits, reactive_execute::drive_executor, scene_bindings::*, state::*};
 use morf_runtime::Handler;
 
-/// Callbacks one watch may have run per turn of the loop.
-const BATCH: usize = 64;
-
-/// What a handle and its entry share.
-#[derive(Default)]
-pub(crate) struct WatchStatus {
-    closed: Cell<bool>,
-}
-
-struct Entry {
-    watch: Watch,
-    callback: Handler,
-    status: Rc<WatchStatus>,
-    queue: VecDeque<FsChange>,
-}
-
+/// The runtime's watches, each owing a Lua callback.
+pub(crate) type WatchHub = morf_io::WatchHub<Handler>;
 /// A callback owed.
-pub(crate) struct WatchCall {
-    status: Rc<WatchStatus>,
-    callback: Handler,
-    change: FsChange,
-}
+pub(crate) type WatchCall = morf_io::WatchCall<Handler>;
 
-/// The runtime's watches.
-#[derive(Default)]
-pub(crate) struct WatchHub {
-    entries: Vec<Entry>,
-}
-
-impl WatchHub {
-    /// Open watches.
-    pub(crate) fn len(&self) -> usize {
-        self.entries
-            .iter()
-            .filter(|entry| !entry.status.closed.get())
-            .count()
-    }
-
-    /// What each watch gathered, as the callbacks it is owed; up to
-    /// [`BATCH`] per watch. The second value says more is waiting.
-    pub(crate) fn collect(&mut self) -> (Vec<WatchCall>, bool) {
-        let mut calls = Vec::new();
-        let mut more = false;
-        self.entries.retain_mut(|entry| {
-            if entry.status.closed.get() {
-                return false;
-            }
-            entry.queue.extend(entry.watch.drain());
-            for _ in 0..BATCH {
-                let Some(change) = entry.queue.pop_front() else {
-                    break;
-                };
-                calls.push(WatchCall {
-                    status: Rc::clone(&entry.status),
-                    callback: entry.callback.clone(),
-                    change,
-                });
-            }
-            more |= !entry.queue.is_empty();
-            true
-        });
-        (calls, more)
-    }
-}
-
-struct WatchToken {
-    status: Rc<WatchStatus>,
-    path: PathBuf,
-}
-
-impl Drop for WatchToken {
-    /// Collected: nobody can close it any more, so it closes itself. The
-    /// hub lets go of the kernel's watch on its next turn.
-    fn drop(&mut self) {
-        self.status.closed.set(true);
-    }
-}
+/// A handle as Lua holds it; collected, it closes its watch.
+struct WatchToken(WatchHandle);
 
 /// Adds `watch` to `morf.fs`.
 pub(crate) fn install_watch_api<'gc>(
@@ -120,17 +49,17 @@ pub(crate) fn install_watch_api<'gc>(
 ) {
     let close = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let token: UserRef<WatchToken> = stack.consume(ctx)?;
-        token.status.closed.set(true);
+        token.0.status.close();
         Ok(CallbackReturn::Return)
     });
     let closed = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let token: UserRef<WatchToken> = stack.consume(ctx)?;
-        stack.replace(ctx, token.status.closed.get());
+        stack.replace(ctx, token.0.status.closed());
         Ok(CallbackReturn::Return)
     });
     let path = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let token: UserRef<WatchToken> = stack.consume(ctx)?;
-        stack.replace(ctx, ctx.intern(token.path.as_os_str().as_bytes()));
+        stack.replace(ctx, ctx.intern(token.0.path.as_os_str().as_bytes()));
         Ok(CallbackReturn::Return)
     });
     let methods = Table::new(&ctx);
@@ -162,13 +91,10 @@ pub(crate) fn install_watch_api<'gc>(
             _ => return Err(HostError("fs.watch options must be a table".into()).into()),
         };
         let mut state = state.borrow_mut();
-        if state.watches.len() >= limits.watches {
-            return Err(HostError(format!(
-                "more than {} watches open (MORF_LIMITS=watches=N)",
-                limits.watches
-            ))
-            .into());
-        }
+        state
+            .watches
+            .check_room(limits.watches)
+            .map_err(HostError)?;
         let watch = match Watch::new(&path, WatchOptions { recursive }) {
             Ok(watch) => watch,
             Err(error) => {
@@ -176,17 +102,8 @@ pub(crate) fn install_watch_api<'gc>(
                 return Ok(CallbackReturn::Return);
             }
         };
-        let status = Rc::new(WatchStatus::default());
-        let token = WatchToken {
-            status: Rc::clone(&status),
-            path: watch.path().to_path_buf(),
-        };
-        state.watches.entries.push(Entry {
-            watch,
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
-            status,
-            queue: VecDeque::new(),
-        });
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        let token = WatchToken(state.watches.add(watch, callback));
         let userdata = UserData::new_static(&ctx, token);
         userdata.set_metatable(ctx, Some(ctx.fetch(&metatable)));
         stack.replace(ctx, userdata);
@@ -211,7 +128,7 @@ pub(crate) fn execute_watch_call(
     call: &WatchCall,
     limits: Limits,
 ) -> Result<(), String> {
-    if call.status.closed.get() {
+    if !call.live() {
         return Ok(());
     }
     let event = Table::new(&ctx);

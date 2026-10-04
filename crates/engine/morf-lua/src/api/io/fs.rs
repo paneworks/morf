@@ -14,10 +14,7 @@ use std::path::{Path, PathBuf};
 
 use crate::scene_bindings::*;
 
-/// The most a single read or write moves, in bytes.
-const MAX_BYTES: u64 = 64 * 1024 * 1024;
-/// What a read returns without being told otherwise.
-const DEFAULT_READ: u64 = 16 * 1024 * 1024;
+use ops::{DEFAULT_READ, MAX_ASYNC_FILES};
 
 fn path_of(value: LuaValue<'_>, what: &str) -> Result<PathBuf, HostError> {
     match value {
@@ -96,18 +93,9 @@ fn entry_table<'gc>(ctx: Context<'gc>, entry: &ops::Entry) -> Table<'gc> {
     }
     table.set_field(ctx, "mode", i64::from(entry.mode));
     table.set_field(ctx, "hidden", entry.hidden);
-    let is_dir =
-        entry.kind == ops::EntryKind::Dir || entry.target_kind == Some(ops::EntryKind::Dir);
-    let is_file =
-        entry.kind == ops::EntryKind::File || entry.target_kind == Some(ops::EntryKind::File);
-    table.set_field(ctx, "is_dir", is_dir);
-    table.set_field(ctx, "is_file", is_file);
-    let extension = entry
-        .path
-        .extension()
-        .map(|extension| extension.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-    table.set_field(ctx, "extension", extension);
+    table.set_field(ctx, "is_dir", entry.is_dir());
+    table.set_field(ctx, "is_file", entry.is_file());
+    table.set_field(ctx, "extension", entry.extension());
     table
 }
 
@@ -121,9 +109,6 @@ macro_rules! fail {
 
 mod change;
 mod paths;
-
-/// The most files one `fs.read_async` reads.
-const MAX_ASYNC_FILES: usize = 256;
 
 pub(crate) fn install_fs_api<'gc>(
     ctx: Context<'gc>,
@@ -164,12 +149,9 @@ pub(crate) fn install_fs_api<'gc>(
             };
             let limit = match limit {
                 LuaValue::Nil => DEFAULT_READ,
-                LuaValue::Integer(limit) => u64::try_from(limit)
-                    .ok()
-                    .filter(|limit| *limit <= MAX_BYTES)
-                    .ok_or_else(|| {
-                        HostError(format!("fs.read_async limit must be 0..{MAX_BYTES}"))
-                    })?,
+                LuaValue::Integer(limit) => {
+                    ops::read_limit(limit, "fs.read_async").map_err(HostError)?
+                }
                 _ => return Err(HostError("fs.read_async limit must be an integer".into()).into()),
             };
             let job = crate::image_jobs::ImageJob::ReadFiles { paths, limit };
@@ -195,7 +177,7 @@ pub(crate) fn install_fs_api<'gc>(
             let depth = integer(ctx, opts, "depth")?.unwrap_or(0);
             let list_options = ops::ListOptions {
                 hidden: flag(ctx, opts, "hidden", false)?,
-                depth: usize::try_from(depth.clamp(0, ops::MAX_DEPTH as i64)).unwrap_or(0),
+                depth: ops::list_depth(depth),
                 follow: flag(ctx, opts, "follow", false)?,
             };
             match ops::list(&path, list_options) {
@@ -227,10 +209,10 @@ pub(crate) fn install_fs_api<'gc>(
     );
 
     for (name, test) in [
-        ("exists", 0u8),
-        ("is_dir", 1),
-        ("is_file", 2),
-        ("is_link", 3),
+        ("exists", ops::PathTest::Exists),
+        ("is_dir", ops::PathTest::Dir),
+        ("is_file", ops::PathTest::File),
+        ("is_link", ops::PathTest::Link),
     ] {
         fs.set_field(
             ctx,
@@ -238,13 +220,7 @@ pub(crate) fn install_fs_api<'gc>(
             Callback::from_fn(&ctx, move |ctx, _, mut stack| {
                 let path: LuaValue = stack.consume(ctx)?;
                 let path = path_of(path, name)?;
-                let answer = match test {
-                    0 => std::fs::symlink_metadata(&path).is_ok(),
-                    1 => path.is_dir(),
-                    2 => path.is_file(),
-                    _ => path.is_symlink(),
-                };
-                stack.replace(ctx, answer);
+                stack.replace(ctx, ops::path_is(&path, test));
                 Ok(CallbackReturn::Return)
             }),
         );
@@ -260,14 +236,9 @@ pub(crate) fn install_fs_api<'gc>(
             // what was appended since a remembered offset, the tail of a
             // log. `length` defaults to the rest, bounded like a whole read.
             if let LuaValue::Table(window) = limit {
-                let offset = integer(ctx, Some(window), "offset")?.unwrap_or(0);
-                let length = integer(ctx, Some(window), "length")?.unwrap_or(DEFAULT_READ as i64);
-                let offset = u64::try_from(offset)
-                    .map_err(|_| HostError("fs.read offset must not be negative".into()))?;
-                let length = u64::try_from(length)
-                    .ok()
-                    .filter(|length| *length <= MAX_BYTES)
-                    .ok_or_else(|| HostError(format!("fs.read length must be 0..{MAX_BYTES}")))?;
+                let offset = integer(ctx, Some(window), "offset")?;
+                let length = integer(ctx, Some(window), "length")?;
+                let (offset, length) = ops::read_window(offset, length).map_err(HostError)?;
                 match ops::read_range(&path, offset, length) {
                     Ok(bytes) => stack.replace(ctx, luna::String::from_slice(&ctx, bytes)),
                     Err(error) => fail!(stack, ctx, error),
@@ -276,10 +247,7 @@ pub(crate) fn install_fs_api<'gc>(
             }
             let limit = match limit {
                 LuaValue::Nil => DEFAULT_READ,
-                LuaValue::Integer(limit) => u64::try_from(limit)
-                    .ok()
-                    .filter(|limit| *limit <= MAX_BYTES)
-                    .ok_or_else(|| HostError(format!("fs.read limit must be 0..{MAX_BYTES}")))?,
+                LuaValue::Integer(limit) => ops::read_limit(limit, "fs.read").map_err(HostError)?,
                 _ => {
                     return Err(HostError(
                         "fs.read takes a byte limit or { offset, length }".into(),
@@ -305,16 +273,7 @@ pub(crate) fn install_fs_api<'gc>(
             match ops::read(&path, DEFAULT_READ) {
                 Ok(bytes) => {
                     let out = Table::new(&ctx);
-                    // A final newline ends the last line; it does not start
-                    // an empty one.
-                    let body = bytes.strip_suffix(b"\n").unwrap_or(&bytes);
-                    let lines = if bytes.is_empty() {
-                        Vec::new()
-                    } else {
-                        body.split(|byte| *byte == b'\n').collect::<Vec<_>>()
-                    };
-                    for (index, line) in lines.into_iter().enumerate().take(most) {
-                        let line = line.strip_suffix(b"\r").unwrap_or(line);
+                    for (index, line) in ops::split_lines(&bytes, most).into_iter().enumerate() {
                         out.set(ctx, index as i64 + 1, luna::String::from_slice(&ctx, line))?;
                     }
                     stack.replace(ctx, out);

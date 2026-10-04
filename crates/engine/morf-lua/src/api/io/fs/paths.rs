@@ -11,9 +11,7 @@ pub(super) fn install_paths<'gc>(ctx: Context<'gc>, fs: Table<'gc>) {
         "glob",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             let pattern: String = stack.consume(ctx)?;
-            if pattern.is_empty() || pattern.len() > 4096 {
-                return Err(HostError("fs.glob pattern must be 1..4096 bytes".into()).into());
-            }
+            ops::check_pattern(&pattern).map_err(HostError)?;
             let (found, truncated) = ops::glob(&pattern);
             let out = Table::new(&ctx);
             for (index, path) in found.iter().enumerate() {
@@ -72,30 +70,17 @@ pub(super) fn install_paths<'gc>(ctx: Context<'gc>, fs: Table<'gc>) {
     );
 
     for (name, part) in [
-        ("basename", 0u8),
-        ("dirname", 1),
-        ("extension", 2),
-        ("stem", 3),
+        ("basename", ops::PathPart::Basename),
+        ("dirname", ops::PathPart::Dirname),
+        ("extension", ops::PathPart::Extension),
+        ("stem", ops::PathPart::Stem),
     ] {
         fs.set_field(
             ctx,
             name,
             Callback::from_fn(&ctx, move |ctx, _, mut stack| {
                 let path: String = stack.consume(ctx)?;
-                let path = Path::new(&path);
-                let answer = match part {
-                    0 => path.file_name().map(|s| s.to_string_lossy().into_owned()),
-                    1 => path.parent().map(|p| {
-                        if p.as_os_str().is_empty() {
-                            ".".to_owned()
-                        } else {
-                            text(p)
-                        }
-                    }),
-                    2 => path.extension().map(|s| s.to_string_lossy().into_owned()),
-                    _ => path.file_stem().map(|s| s.to_string_lossy().into_owned()),
-                };
-                stack.replace(ctx, answer.unwrap_or_default());
+                stack.replace(ctx, ops::path_part(Path::new(&path), part));
                 Ok(CallbackReturn::Return)
             }),
         );

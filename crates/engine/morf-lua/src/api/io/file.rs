@@ -1,5 +1,7 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
-use morf_io::{FileDocument, FileEvent, FileView};
+use morf_io::{
+    DEFAULT_BUFFER, DocumentOptions, FileDocument, FileEvent, FileView, MAX_VIEW_BYTES, buffer_limit,
+};
 use std::cell::RefCell;
 
 use crate::{lua_values::*, scene_bindings::*, state::*};
@@ -9,31 +11,20 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         let file: UserRef<FileToken> = stack.consume(ctx)?;
         let bytes = file
             .file
-            .read_bounded(1024 * 1024)
+            .read_bounded(MAX_VIEW_BYTES)
             .map_err(|error| HostError(error.to_string()))?;
         stack.replace(ctx, String::from_utf8_lossy(&bytes).as_ref());
         Ok(CallbackReturn::Return)
     });
     let file_write = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (file, bytes): (UserRef<FileToken>, String) = stack.consume(ctx)?;
-        if bytes.len() > 1024 * 1024 {
-            return Err(HostError("file write exceeds 1 MiB".to_owned()).into());
-        }
-        file.file
-            .write(bytes.as_bytes())
-            .map_err(|error| HostError(error.to_string()))?;
+        file.file.write_bounded(bytes.as_bytes()).map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let watcher_next = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (watcher, timeout_ms): (UserRef<FileWatcherToken>, i64) = stack.consume(ctx)?;
         let timeout = bounded_timeout(timeout_ms).map_err(HostError)?;
-        let event = watcher.watcher.next_event(timeout);
-        match event {
-            Some(FileEvent::Changed) => stack.replace(ctx, "changed"),
-            Some(FileEvent::Moved) => stack.replace(ctx, "moved"),
-            Some(FileEvent::Deleted) => stack.replace(ctx, "deleted"),
-            None => stack.replace(ctx, LuaValue::Nil),
-        }
+        stack.replace(ctx, watcher.watcher.next_event(timeout).map(FileEvent::name));
         Ok(CallbackReturn::Return)
     });
     let watcher_methods = Table::new(&ctx);
@@ -86,11 +77,11 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             LuaValue::Boolean(value) => value,
             _ => return Err(HostError("preload must be boolean".into()).into()),
         };
-        let mut file = file.file.borrow_mut();
-        file.set_preload(preload);
-        file.set_path(&path)
+        let loaded = file
+            .file
+            .borrow_mut()
+            .retarget(&path, preload)
             .map_err(|error| HostError(error.to_string()))?;
-        let loaded = path.is_empty() || !preload || file.reload();
         stack.replace(ctx, loaded);
         Ok(CallbackReturn::Return)
     });
@@ -101,10 +92,7 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     });
     let document_set_preload = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (file, preload): (UserRef<FileDocumentToken>, bool) = stack.consume(ctx)?;
-        let mut file = file.file.borrow_mut();
-        file.set_preload(preload);
-        let loaded =
-            !preload || file.loaded() || file.path().as_os_str().is_empty() || file.reload();
+        let loaded = file.file.borrow_mut().switch_preload(preload);
         stack.replace(ctx, loaded);
         Ok(CallbackReturn::Return)
     });
@@ -180,12 +168,8 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let document_next_change = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (file, timeout_ms): (UserRef<FileDocumentToken>, i64) = stack.consume(ctx)?;
         let timeout = bounded_timeout(timeout_ms).map_err(HostError)?;
-        match file.file.borrow().next_change(timeout) {
-            Some(FileEvent::Changed) => stack.replace(ctx, "changed"),
-            Some(FileEvent::Moved) => stack.replace(ctx, "moved"),
-            Some(FileEvent::Deleted) => stack.replace(ctx, "deleted"),
-            None => stack.replace(ctx, LuaValue::Nil),
-        }
+        let change = file.file.borrow().next_change(timeout);
+        stack.replace(ctx, change.map(FileEvent::name));
         Ok(CallbackReturn::Return)
     });
     let document_methods = Table::new(&ctx);
@@ -235,25 +219,20 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             }
         };
         let maximum = match options.get_value(ctx, "maximum_bytes") {
-            LuaValue::Nil => 1024 * 1024,
-            LuaValue::Integer(value) => usize::try_from(value)
-                .ok()
-                .filter(|value| (1..=16 * 1024 * 1024).contains(value))
-                .ok_or_else(|| HostError("file_view maximum_bytes must be 1..16777216".into()))?,
+            LuaValue::Nil => DEFAULT_BUFFER,
+            LuaValue::Integer(value) => buffer_limit(value, "file_view").map_err(HostError)?,
             _ => {
                 return Err(HostError("file_view maximum_bytes must be an integer".into()).into());
             }
         };
-        let mut file = FileDocument::new(path, maximum);
-        file.set_preload(preload);
-        file.set_atomic_writes(atomic_writes);
-        if preload {
-            file.reload();
-        }
-        if watch_changes {
-            file.set_watch_changes(true)
-                .map_err(|error| HostError(error.to_string()))?;
-        }
+        let options = DocumentOptions {
+            preload,
+            watch_changes,
+            atomic_writes,
+            maximum,
+        };
+        let file =
+            FileDocument::open(path, options).map_err(|error| HostError(error.to_string()))?;
         let userdata = UserData::new_static(
             &ctx,
             FileDocumentToken {
