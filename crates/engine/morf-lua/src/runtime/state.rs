@@ -407,7 +407,7 @@ pub(crate) struct ReactiveState {
     /// Every bus name `morf.dbus.serve` took, so a runtime that ends or
     /// hands its duties over gives them back first.
     pub(crate) owned_bus_names: Vec<std::rc::Weak<std::cell::RefCell<morf_io::DbusService>>>,
-    pub(crate) dbus_services: Vec<PendingDbusService>,
+    pub(crate) dbus_services: morf_io::DbusHandlers<morf_runtime::Handler>,
     pub(crate) udev_monitors: Vec<PendingUdev>,
     pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
     /// `morf.http` requests in flight.

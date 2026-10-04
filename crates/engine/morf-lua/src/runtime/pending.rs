@@ -5,7 +5,7 @@
 //! authentication, a bus name, a subscription -- paired with the closure that
 //! is owed the answer. The runtime drains all of them in one pass.
 
-use morf_io::{DbusService, DbusSignal, FileWatcher, PendingReply};
+use morf_io::{DbusSignal, FileWatcher, PendingReply};
 use morf_runtime::Handler;
 use morf_scene::reactive::SignalId;
 use morf_system::{GreetdConversation, PamSession, PamTask, StatusNotifierHost, UdevMonitor};
@@ -43,17 +43,6 @@ pub(crate) enum DbusSignalKind {
 /// A method call made with `call_async`, and who is owed the answer.
 pub(crate) struct PendingDbusReply {
     pub(crate) reply: PendingReply,
-    pub(crate) callback: Handler,
-}
-
-/// A bus name this configuration owns, and who answers calls on it.
-///
-/// The service is shared rather than owned here because it is reachable from
-/// two directions at once: the runtime polls it for arriving calls, and the
-/// configuration replies through the same handle from inside the callback
-/// those calls are delivered to.
-pub(crate) struct PendingDbusService {
-    pub(crate) service: Rc<RefCell<DbusService>>,
     pub(crate) callback: Handler,
 }
 

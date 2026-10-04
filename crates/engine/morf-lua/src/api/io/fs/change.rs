@@ -11,18 +11,12 @@ pub(super) fn install_changes<'gc>(ctx: Context<'gc>, fs: Table<'gc>) {
             let what = if append { "fs.append" } else { "fs.write" };
             let path = path_of(path, what)?;
             let data = bytes_of(data, what)?;
-            if data.len() as u64 > MAX_BYTES {
-                return Err(HostError(format!("{what} exceeds {MAX_BYTES} bytes")).into());
-            }
+            ops::check_write(data, what).map_err(HostError)?;
             let opts = options(opts, what)?;
             let mode = integer(ctx, opts, "mode")?
-                .map(|mode| {
-                    u32::try_from(mode)
-                        .ok()
-                        .filter(|mode| *mode <= 0o7777)
-                        .ok_or_else(|| HostError("fs mode must be 0..0o7777".into()))
-                })
-                .transpose()?;
+                .map(ops::file_mode)
+                .transpose()
+                .map_err(HostError)?;
             let write_options = ops::WriteOptions {
                 append: append || flag(ctx, opts, "append", false)?,
                 atomic: flag(ctx, opts, "atomic", !append)?,

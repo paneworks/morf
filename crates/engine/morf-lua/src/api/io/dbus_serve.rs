@@ -14,7 +14,7 @@
 use luna::{
     Callback, CallbackReturn, Closure, Context, Table, UserData, UserRef, Value as LuaValue,
 };
-use morf_io::{Bus, DbusService, NameOutcome};
+use morf_io::{DbusService, bus_named, call_id, remember_name};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -51,7 +51,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         service
             .service
             .borrow_mut()
-            .reply(call_id(id)?, &value)
+            .reply(call_id(id).map_err(HostError)?, &value)
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
@@ -61,7 +61,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         service
             .service
             .borrow_mut()
-            .reply_error(call_id(id)?, &name, &message)
+            .reply_error(call_id(id).map_err(HostError)?, &name, &message)
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
@@ -107,24 +107,12 @@ pub(crate) fn install_dbus_serve_api<'gc>(
     let service_on_call = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (service, callback): (UserRef<DbusServiceToken>, Closure) = stack.consume(ctx)?;
         let mut state = on_call_state.borrow_mut();
-        if state.dbus_services.len() >= MAX_DBUS_SERVICES {
-            return Err(HostError("D-Bus service limit reached".into()).into());
-        }
-        // One handler per service. Registering a second replaces the first
-        // rather than fanning out, because two handlers answering one call
-        // means one of them replies to a call the other already answered.
-        let existing = state
+        // One handler per service; a second replaces the first.
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        state
             .dbus_services
-            .iter()
-            .position(|entry| Rc::ptr_eq(&entry.service, &service.service));
-        let entry = PendingDbusService {
-            service: Rc::clone(&service.service),
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
-        };
-        match existing {
-            Some(index) => state.dbus_services[index] = entry,
-            None => state.dbus_services.push(entry),
-        }
+            .set(&service.service, callback)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let close_state = Rc::clone(&state);
@@ -137,7 +125,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         close_state
             .borrow_mut()
             .dbus_services
-            .retain(|entry| !Rc::ptr_eq(&entry.service, &service.service));
+            .remove(&service.service);
         Ok(CallbackReturn::Return)
     });
 
@@ -157,11 +145,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
     let serve = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (bus, name, path, replace): (String, String, String, Option<bool>) =
             stack.consume(ctx)?;
-        let bus = match bus.as_str() {
-            "session" => Bus::Session,
-            "system" => Bus::System,
-            _ => return Err(HostError(format!("unknown D-Bus bus `{bus}`")).into()),
-        };
+        let bus = bus_named(&bus).map_err(HostError)?;
         // Replacing by default. A shell that cannot be restarted without the
         // user first killing whatever holds its name is a shell nobody
         // restarts, and every one of these names is held by a shell.
@@ -172,43 +156,15 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         // (`Runtime::release_bus_names`), not whenever the collector gets to
         // the handle -- which is what makes a handover of the primary
         // runtime's duties clean.
-        {
-            let mut state = serve_state.borrow_mut();
-            state.owned_bus_names.retain(|weak| weak.strong_count() > 0);
-            state.owned_bus_names.push(Rc::downgrade(&service));
-        }
+        remember_name(&mut serve_state.borrow_mut().owned_bus_names, &service);
         let userdata = UserData::new_static(&ctx, DbusServiceToken { service });
         userdata.set_metatable(ctx, Some(ctx.fetch(&service_metatable)));
         // Two values, and the second is the one that matters. Taking a name is
         // allowed to fail without being an error — somebody else runs the
         // notification server — and a configuration that ignores this reads as
         // working right up until nothing is ever sent to it.
-        stack.replace(
-            ctx,
-            (
-                userdata,
-                match outcome {
-                    NameOutcome::Owned => "owned",
-                    NameOutcome::Taken => "taken",
-                    NameOutcome::Queued => "queued",
-                },
-            ),
-        );
+        stack.replace(ctx, (userdata, outcome.name()));
         Ok(CallbackReturn::Return)
     });
     dbus.set_field(ctx, "serve", serve);
-}
-
-/// How many names one configuration may hold.
-///
-/// A shell owns a handful — notifications, a tray watcher, its own control
-/// interface. A configuration asking for hundreds has a loop in it.
-const MAX_DBUS_SERVICES: usize = 32;
-
-/// Narrows a Lua integer to the call id the service handed out.
-///
-/// Ids are opaque and only ever come from a call table, so anything that is not
-/// a positive integer is a configuration replying to something it invented.
-fn call_id(id: i64) -> Result<u64, HostError> {
-    u64::try_from(id).map_err(|_| HostError(format!("`{id}` is not a D-Bus call id")))
 }

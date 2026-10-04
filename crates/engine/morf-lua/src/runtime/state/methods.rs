@@ -228,7 +228,7 @@ impl ReactiveState {
             dbus_signals: Vec::new(),
             next_dbus_signal_id: 0,
             dbus_replies: Vec::new(),
-            dbus_services: Vec::new(),
+            dbus_services: Default::default(),
             udev_monitors: Vec::new(),
             status_notifiers: Vec::new(),
             http_requests: Vec::new(),

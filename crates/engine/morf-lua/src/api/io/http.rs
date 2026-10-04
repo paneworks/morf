@@ -44,23 +44,14 @@ use luna::{
     Callback, CallbackReturn, Closure, Context, Executor, Function, StashedTable, StashedUserData,
     Table, UserData, UserRef, Value as LuaValue, Variadic,
 };
-use morf_io::{HttpRequest, HttpResponse, HttpTask, MAX_BODY_LIMIT, MAX_TIMEOUT};
-use std::cell::{Cell, RefCell};
+use morf_io::{HttpRequest, HttpResponse, HttpTask};
+use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::Duration;
 
 use crate::{
     Limits, reactive_execute::drive_executor, scene_bindings::*, serialization::*, state::*,
 };
 use morf_runtime::Handler;
-
-/// Requests one configuration may have outstanding. The pool puts at most
-/// sixteen on the wire at once; this caps the queue behind them, so a loop
-/// that forgets to wait cannot pile up work without end.
-const MAX_PENDING: usize = 64;
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
-const DEFAULT_MAX_BYTES: usize = 8 * 1024 * 1024;
-const MAX_HEADERS: usize = 64;
 
 /// The tags `morf.json` puts on decoded tables, so `response.json()` returns
 /// the same kind of value `morf.json.decode` does and it encodes back the same.
@@ -71,13 +62,7 @@ pub(crate) struct JsonKinds {
     pub(crate) null: StashedUserData,
 }
 
-/// What a handle and the pending entry share: the one bit of news either
-/// side has for the other.
-#[derive(Default)]
-pub(crate) struct HttpHandleState {
-    pub(crate) done: Cell<bool>,
-    pub(crate) cancelled: Cell<bool>,
-}
+pub(crate) use morf_io::HttpHandle as HttpHandleState;
 
 /// A request in flight and who is owed its answer.
 pub(crate) struct PendingHttp {
@@ -103,12 +88,9 @@ pub(crate) fn install_http_api<'gc>(
 
     let handle_cancel = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let handle: UserRef<HttpHandleToken> = stack.consume(ctx)?;
-        let pending = !handle.state.done.get();
         // The entry is dropped at the next poll, which drops the task and
         // stops the worker; the callback is never run from here on.
-        handle.state.cancelled.set(true);
-        handle.state.done.set(true);
-        stack.replace(ctx, pending);
+        stack.replace(ctx, handle.state.cancel());
         Ok(CallbackReturn::Return)
     });
     let handle_done = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -213,11 +195,7 @@ impl Starter {
         reactive
             .http_requests
             .retain(|entry| !entry.handle.cancelled.get());
-        if reactive.http_requests.len() >= MAX_PENDING {
-            return Err(HostError(format!(
-                "more than {MAX_PENDING} HTTP requests in flight"
-            )));
-        }
+        morf_io::check_pending(reactive.http_requests.len()).map_err(HostError)?;
         let handle = Rc::new(HttpHandleState::default());
         reactive.http_requests.push(PendingHttp {
             url: request.url.clone(),
@@ -272,8 +250,6 @@ fn apply_options<'gc>(
     request: &mut HttpRequest,
     options: Option<Table<'gc>>,
 ) -> Result<(), HostError> {
-    request.timeout = DEFAULT_TIMEOUT;
-    request.max_bytes = DEFAULT_MAX_BYTES;
     let Some(options) = options else {
         return Ok(());
     };
@@ -290,16 +266,9 @@ fn apply_options<'gc>(
                     LuaValue::Number(value) => value.to_string(),
                     _ => return Err(HostError("http header values must be strings".into())),
                 };
-                let name = name.display_lossy().to_string();
-                // A later header of the same name replaces one the call
-                // itself set, content-type after `json` in particular.
                 request
-                    .headers
-                    .retain(|(known, _)| !known.eq_ignore_ascii_case(&name));
-                request.headers.push((name, value));
-                if request.headers.len() > MAX_HEADERS {
-                    return Err(HostError(format!("more than {MAX_HEADERS} http headers")));
-                }
+                    .set_header(name.display_lossy().to_string(), value)
+                    .map_err(HostError)?;
             }
         }
         _ => return Err(HostError("http headers must be a table".into())),
@@ -319,27 +288,17 @@ fn apply_options<'gc>(
         }
         _ => return Err(HostError("http body must be a string".into())),
     }
-    match options.get_value(ctx, "method") {
-        LuaValue::Nil if request.body.is_some() && request.method == "GET" => {
-            request.method = "POST".into();
-        }
-        LuaValue::Nil => {}
-        LuaValue::String(method) => {
-            let method = method.display_lossy().to_string().to_ascii_uppercase();
-            if method.is_empty() || !method.bytes().all(|byte| byte.is_ascii_alphabetic()) {
-                return Err(HostError(format!("http method {method:?} is not valid")));
-            }
-            request.method = method;
-        }
+    let method = match options.get_value(ctx, "method") {
+        LuaValue::Nil => None,
+        LuaValue::String(method) => Some(method.display_lossy().to_string()),
         _ => return Err(HostError("http method must be a string".into())),
-    }
+    };
+    request.set_method(method.as_deref()).map_err(HostError)?;
     if let Some(timeout) = positive(ctx, options, "timeout_ms")? {
-        request.timeout = Duration::from_millis(timeout).min(MAX_TIMEOUT);
+        request.set_timeout_ms(timeout);
     }
     if let Some(max_bytes) = positive(ctx, options, "max_bytes")? {
-        request.max_bytes = usize::try_from(max_bytes)
-            .unwrap_or(MAX_BODY_LIMIT)
-            .min(MAX_BODY_LIMIT);
+        request.set_max_bytes(max_bytes);
     }
     Ok(())
 }
@@ -365,16 +324,12 @@ fn set_json_body<'gc>(
     let mut entries = 0;
     let value = lua_to_json(ctx, value, 0, &mut entries).map_err(HostError)?;
     let body = serde_json::to_vec(&value).map_err(|error| HostError(error.to_string()))?;
-    request.body = Some(body);
-    request.headers.push((
-        "Content-Type".into(),
-        "application/json; charset=utf-8".into(),
-    ));
+    request.set_json_body(body);
     Ok(())
 }
 
-/// `a=1&b=x`, keys sorted so the same table always makes the same URL — and
-/// the same cache key. A list value repeats its key, as most APIs expect.
+/// `a=1&b=x` from a table (see [`morf_io::encode_query`]). A list value
+/// repeats its key, as most APIs expect.
 fn encode_query<'gc>(ctx: Context<'gc>, values: Table<'gc>) -> Result<String, HostError> {
     fn scalar(value: LuaValue<'_>) -> Result<Vec<u8>, HostError> {
         match value {
@@ -401,18 +356,7 @@ fn encode_query<'gc>(ctx: Context<'gc>, values: Table<'gc>) -> Result<String, Ho
             value => pairs.push((key, scalar(value)?)),
         }
     }
-    pairs.sort();
-    Ok(pairs
-        .iter()
-        .map(|(key, value)| {
-            format!(
-                "{}={}",
-                morf_io::url_encode(key),
-                morf_io::url_encode(value)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("&"))
+    Ok(morf_io::encode_query(pairs))
 }
 
 /// Hands one answer to the callback that asked for it, as a response table.

@@ -112,21 +112,9 @@ pub(super) fn drain(state: &mut ReactiveState, collected: &mut Collected) {
         }
         !conversation.ended()
     });
-    // Bounded per frame, unlike the signal drain above. A signal that
-    // arrives faster than it is read is the sender's problem; a *call*
-    // that does is ours, because the caller is blocked until we answer
-    // and answering happens after this loop. Taking them all would let
-    // one chatty peer hold the frame open.
-    // How many calls one service may hand over per frame.
-    const MAX_CALLS_PER_FRAME: usize = 32;
-    for entry in &state.dbus_services {
-        for _ in 0..MAX_CALLS_PER_FRAME {
-            let Some(call) = entry.service.borrow_mut().next_call(Duration::ZERO) else {
-                break;
-            };
-            dbus_calls.push((entry.callback.clone(), call));
-        }
-    }
+    // Bounded per frame (`morf_io::MAX_CALLS_PER_FRAME`): the caller is
+    // blocked until we answer.
+    dbus_calls.extend(state.dbus_services.drain_calls());
     let mut udev_errors = Vec::new();
     for subscription in &mut state.udev_monitors {
         let mut drained = false;

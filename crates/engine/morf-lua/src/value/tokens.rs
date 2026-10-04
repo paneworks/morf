@@ -11,8 +11,8 @@ use morf_system::desktop_entries::DesktopEntries;
 
 use crate::state::ReactiveState;
 use morf_io::{
-    DbusProxy, DbusService, FileDocument, FileView, FileWatcher, Process, ProcessConfig, Socket,
-    SocketServer, SplitParser, StreamCollector,
+    DbusProxy, DbusService, FileDocument, FileView, FileWatcher, Process, ServerView, SocketView,
+    SplitParser, StreamCollector,
 };
 use morf_runtime::Handler;
 use morf_scene::reactive::SignalId;
@@ -134,12 +134,7 @@ pub(crate) struct ProcessToken {
 }
 
 pub(crate) struct ProcessViewToken {
-    pub(crate) state: RefCell<ProcessViewState>,
-}
-
-pub(crate) struct ProcessViewState {
-    pub(crate) config: ProcessConfig,
-    pub(crate) process: Option<Process>,
+    pub(crate) state: RefCell<morf_io::ProcessView>,
 }
 
 pub(crate) struct FileToken {
@@ -155,21 +150,11 @@ pub(crate) struct FileDocumentToken {
 }
 
 pub(crate) struct SocketToken {
-    pub(crate) state: RefCell<SocketState>,
-}
-
-pub(crate) struct SocketState {
-    pub(crate) path: String,
-    pub(crate) socket: Option<Socket>,
+    pub(crate) state: RefCell<SocketView>,
 }
 
 pub(crate) struct SocketServerToken {
-    pub(crate) state: RefCell<SocketServerState>,
-}
-
-pub(crate) struct SocketServerState {
-    pub(crate) path: String,
-    pub(crate) server: Option<SocketServer>,
+    pub(crate) state: RefCell<ServerView>,
 }
 
 pub(crate) struct SplitParserToken {
