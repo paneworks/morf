@@ -73,6 +73,11 @@ impl DamageTracker {
         let current_keys = command_keys(&next.commands);
         let previous = keyed_commands(&self.previous.commands, &previous_keys);
         let current = keyed_commands(&next.commands, &current_keys);
+        // Which commands changed places with another, rather than shifting
+        // along because something was added or taken away before them: a
+        // swell put into a fullscreen frame moved every command after it one
+        // place on, and each was repainted whole for it.
+        let moved = moved_commands(&current_keys, &previous);
         // Each changed area with the paint order it was drawn at, so a frosted
         // panel can tell a change beneath it from one on top of it.
         let mut changed: Vec<(Geometry, usize)> = Vec::new();
@@ -117,7 +122,7 @@ impl DamageTracker {
         }
         for (key, (order, command)) in &current {
             match previous.get(key) {
-                Some((old_order, old)) if old_order == order && *old == *command => {}
+                Some((_, old)) if !moved.contains(key) && *old == *command => {}
                 // Nothing drawn before or after: no pixel changed.
                 Some((_, old)) if old.draws_nothing() && command.draws_nothing() => {}
                 None if command.draws_nothing() => {}
@@ -126,7 +131,7 @@ impl DamageTracker {
                     // that did, not its whole rectangle.
                     // And a field whose layers alone moved damages where they
                     // were and are, not its whole reach.
-                    match (old_order == order)
+                    match (!moved.contains(key))
                         .then(|| {
                             command
                                 .terminal_rows_changed(old)
@@ -137,7 +142,7 @@ impl DamageTracker {
                         Some(rows) => changed.extend(rows.into_iter().map(|row| (row, *order))),
                         None => {
                             explain("command changed", command.node(), command.bounds(), || {
-                                command_change(old, command, *old_order != *order)
+                                command_change(old, command, moved.contains(key))
                             });
                             changed.push((old.bounds(), (*old_order).min(*order)));
                             changed.push((command.bounds(), *order));
@@ -329,6 +334,46 @@ fn keyed_commands<'a>(
         .zip(keys)
         .enumerate()
         .map(|(order, (command, key))| (*key, (order, command)))
+        .collect()
+}
+
+/// The commands present in both frames that changed places relative to the
+/// others: everything outside the longest run of them that kept its order.
+/// A command added or removed is damaged as such; the ones it pushed along
+/// are not moved by it.
+fn moved_commands(
+    current_keys: &[(NodeHandle, u32)],
+    previous: &HashMap<(NodeHandle, u32), (usize, &DrawCommand)>,
+) -> std::collections::HashSet<(NodeHandle, u32)> {
+    // The old place of each command that is in both, in the new paint order.
+    let common: Vec<((NodeHandle, u32), usize)> = current_keys
+        .iter()
+        .filter_map(|key| previous.get(key).map(|(order, _)| (*key, *order)))
+        .collect();
+    // Longest increasing run of old places (patience sorting): `tails[k]`
+    // is the index into `common` ending the best run of length k + 1.
+    let mut tails: Vec<usize> = Vec::new();
+    let mut back: Vec<Option<usize>> = vec![None; common.len()];
+    for (index, &(_, place)) in common.iter().enumerate() {
+        let at = tails.partition_point(|&tail| common[tail].1 < place);
+        back[index] = at.checked_sub(1).map(|before| tails[before]);
+        if at == tails.len() {
+            tails.push(index);
+        } else {
+            tails[at] = index;
+        }
+    }
+    let mut kept = vec![false; common.len()];
+    let mut walk = tails.last().copied();
+    while let Some(index) = walk {
+        kept[index] = true;
+        walk = back[index];
+    }
+    common
+        .iter()
+        .zip(kept)
+        .filter(|(_, kept)| !kept)
+        .map(|((key, _), _)| *key)
         .collect()
 }
 
