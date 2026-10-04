@@ -6,6 +6,8 @@
 //! nothing here knows Lua, a scene or a window (`present` is how a renderer
 //! and a window speak without either knowing the other).
 
+/// The accessible tree a screen reader reads.
+pub mod accessible;
 pub mod color;
 pub mod hct;
 pub mod present;

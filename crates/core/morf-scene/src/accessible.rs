@@ -11,6 +11,8 @@
 //! a backend (AccessKit, in `morf-app`) turns [`AccessibleNode`]s into
 //! its own, and only while a screen reader asks for them.
 
+pub use morf_value::accessible::{AccessibleValue, Checked};
+
 use crate::types::{Element, NodeHandle, Scene, Value};
 
 /// Every role a node may name, the engine's vocabulary.
@@ -46,47 +48,14 @@ fn named_by_content(role: &str) -> bool {
     )
 }
 
-/// The checked state of a check box, switch or toggle.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Checked {
-    False,
-    True,
-    Mixed,
-}
+/// One node of a scene's accessible tree: the neutral node, named by
+/// handle.
+pub type AccessibleNode = morf_value::accessible::AccessibleNode<NodeHandle>;
 
-/// A value read out: a number on a range, text in a field.
-#[derive(Clone, Debug, PartialEq)]
-pub enum AccessibleValue {
-    Number(f64),
-    Text(String),
-}
-
-/// One node of the accessible tree.
-#[derive(Clone, Debug, PartialEq)]
-pub struct AccessibleNode {
-    pub node: NodeHandle,
-    pub role: String,
-    pub name: String,
-    pub description: String,
-    pub value: Option<AccessibleValue>,
-    pub minimum: Option<f64>,
-    pub maximum: Option<f64>,
-    pub step: Option<f64>,
-    pub checked: Option<Checked>,
-    pub expanded: Option<bool>,
-    pub selected: Option<bool>,
-    pub disabled: bool,
-    pub pressed: bool,
-    pub read_only: bool,
-    pub modal: bool,
-    pub focusable: bool,
-    pub focused: bool,
-    pub orientation: String,
-    pub placeholder: String,
-    pub level: Option<usize>,
-    /// The box on the surface: x, y, width, height.
-    pub bounds: Option<(f64, f64, f64, f64)>,
-    pub children: Vec<NodeHandle>,
+impl From<NodeHandle> for u64 {
+    fn from(node: NodeHandle) -> u64 {
+        node.to_bits()
+    }
 }
 
 impl NodeHandle {

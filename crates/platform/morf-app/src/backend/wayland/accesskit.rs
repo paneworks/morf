@@ -21,7 +21,7 @@ use accesskit::{
     Action, ActionData, ActionHandler, ActionRequest, ActivationHandler, DeactivationHandler, Node, NodeId,
     Orientation, Rect, Role, Toggled, TreeId, TreeInfo, TreeUpdate,
 };
-use morf_scene::{AccessibleNode, AccessibleValue, Checked, NodeHandle};
+use morf_value::accessible::{AccessibleNode, AccessibleValue, Checked};
 
 /// What a screen reader asked of a node.
 #[derive(Clone, Debug, PartialEq)]
@@ -41,7 +41,8 @@ pub enum RequestKind {
 /// A request for one node.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request {
-    pub node: NodeHandle,
+    /// The node, as the number its id converted to in [`Accessibility::update`].
+    pub node: u64,
     pub kind: RequestKind,
 }
 
@@ -99,7 +100,7 @@ impl ActionHandler for Actions {
             (Action::SetValue, Some(ActionData::Value(text))) => RequestKind::SetText(text.into()),
             _ => return,
         };
-        let request = Request { node: NodeHandle::from_bits(request.target_node.0), kind };
+        let request = Request { node: request.target_node.0, kind };
         if let Ok(sender) = self.requests.lock() {
             let _ = sender.send(request);
         }
@@ -157,18 +158,18 @@ impl Accessibility {
 
     /// Tells the screen reader the tree as it is now: `nodes` root first
     /// (`morf_scene::Scene::accessible_tree`). Sends what changed.
-    pub fn update(&mut self, nodes: &[AccessibleNode]) {
+    pub fn update<Id: Copy + Into<u64>>(&mut self, nodes: &[AccessibleNode<Id>]) {
         let Some(first) = nodes.first() else { return };
         if self.fresh.swap(false, Ordering::SeqCst) {
             self.sent.clear();
             self.root = None;
         }
-        let root = first.node.to_bits();
-        let focus = nodes.iter().find(|n| n.focused).map(|n| n.node.to_bits()).unwrap_or(root);
+        let root = first.node.into();
+        let focus = nodes.iter().find(|n| n.focused).map(|n| n.node.into()).unwrap_or(root);
         let mut changed: Vec<(NodeId, Node)> = Vec::new();
         let mut next: HashMap<u64, Node> = HashMap::with_capacity(nodes.len());
         for item in nodes {
-            let id = item.node.to_bits();
+            let id: u64 = item.node.into();
             let node = convert(item);
             if self.sent.get(&id) != Some(&node) {
                 changed.push((NodeId(id), node.clone()));
@@ -275,7 +276,7 @@ pub fn role(name: &str) -> Role {
 }
 
 /// An engine node as AccessKit's.
-pub fn convert(item: &AccessibleNode) -> Node {
+pub fn convert<Id: Copy + Into<u64>>(item: &AccessibleNode<Id>) -> Node {
     let mut node = Node::new(role(&item.role));
     // A label's text is its value to AccessKit, which names it from that.
     if item.role == "label" && item.value.is_none() {
@@ -358,7 +359,7 @@ pub fn convert(item: &AccessibleNode) -> Node {
             _ => {}
         }
     }
-    node.set_children(item.children.iter().map(|c| NodeId(c.to_bits())).collect::<Vec<_>>());
+    node.set_children(item.children.iter().map(|c| NodeId((*c).into())).collect::<Vec<_>>());
     node
 }
 
@@ -366,9 +367,9 @@ pub fn convert(item: &AccessibleNode) -> Node {
 mod tests {
     use super::*;
 
-    fn item(role: &str, name: &str) -> AccessibleNode {
+    fn item(role: &str, name: &str) -> AccessibleNode<u64> {
         AccessibleNode {
-            node: NodeHandle::from_bits(1 | (1 << 32)),
+            node: 1 | (1 << 32),
             role: role.into(),
             name: name.into(),
             description: String::new(),

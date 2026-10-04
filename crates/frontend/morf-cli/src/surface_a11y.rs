@@ -85,7 +85,8 @@ use morf_value::IpcValue;
                         RequestKind::SetNumber(n) => ("set_value", Some(IpcValue::Number(n))),
                         RequestKind::SetText(t) => ("set_value", Some(IpcValue::String(t))),
                     };
-                    acted |= runtime.accessible_action(*root, request.node, action, value);
+                    let node = morf_scene::NodeHandle::from_bits(request.node);
+                    acted |= runtime.accessible_action(*root, node, action, value);
                 }
             }
             for root in &roots {
