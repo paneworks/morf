@@ -25,31 +25,27 @@ use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::{Element, NodeHandle};
 use morf_app::{LayerClient, Output, WindowId};
 
+use crate::host::windows::{Kind, Windows};
 use crate::{supervisor::lua_screen, surfaces::*};
 use morf_app::Backend as _;
 
-/// One output's lock surface: what draws it, and what it last drew.
-#[derive(Default)]
-pub struct LockOutput {
-    pub renderer: Option<RenderEngine<WgpuBackend>>,
-    /// The layout of the last frame, which is what a point on this surface
-    /// is hit-tested against.
-    pub layout: Option<Layout>,
-    /// This output's own tree, when the configuration builds per output.
-    pub root: Option<NodeHandle>,
-    /// The logical size that tree was built for.
-    pub built_for: Option<(u32, u32)>,
-}
-
-/// The lock's surfaces, as the input path looks them up.
-pub struct LockLayouts<'a>(pub &'a [LockOutput]);
-
-impl SurfaceLayouts for LockLayouts<'_> {
-    fn layout_of(&self, surface: WindowId) -> Option<&Layout> {
-        match surface {
-            WindowId::Lock(index) => self.0.get(index)?.layout.as_ref(),
-            _ => None,
-        }
+/// The lock surface of output `index`, drawing `root`: a window like any
+/// other, keyed `WindowId::Lock(index)` in the lock's `Windows`.
+pub fn lock_window(index: usize, root: NodeHandle) -> Window {
+    Window {
+        id: index as u64,
+        root,
+        updates_enabled: true,
+        width: 0,
+        height: 0,
+        renderer: None,
+        layout: None,
+        popup_config: None,
+        floating_config: None,
+        layer_config: None,
+        needs_paint: true,
+        owns_root: false,
+        built_for: None,
     }
 }
 
@@ -84,10 +80,13 @@ impl LockTrees {
     }
 
     /// The tree drawn on output `index`.
-    pub fn root(self, outputs: &[LockOutput], index: usize) -> Option<NodeHandle> {
+    pub fn root(self, outputs: &Windows, index: usize) -> Option<NodeHandle> {
         match self {
             Self::Shared(root) => Some(root),
-            Self::PerOutput => outputs.get(index)?.root,
+            Self::PerOutput => outputs
+                .get(Kind::Lock, index as u64)
+                .filter(|window| window.owns_root)
+                .map(|window| window.root),
         }
     }
 
@@ -95,12 +94,18 @@ impl LockTrees {
     /// the compositor sent without saying where, the first there is.
     pub fn key_root(
         self,
-        outputs: &[LockOutput],
+        outputs: &Windows,
         surface: WindowId,
     ) -> Option<NodeHandle> {
         match surface {
             WindowId::Lock(index) => self.root(outputs, index),
-            _ => (0..outputs.len()).find_map(|index| self.root(outputs, index)),
+            _ => {
+                let mut indices = outputs.ids(Kind::Lock);
+                indices.sort_unstable();
+                indices
+                    .into_iter()
+                    .find_map(|index| self.root(outputs, index as usize))
+            }
         }
     }
 }
@@ -125,15 +130,28 @@ pub fn check_lock_root(runtime: &Runtime, root: NodeHandle) -> Result<(), String
 pub fn ensure_lock_tree(
     runtime: &mut Runtime,
     trees: LockTrees,
-    output: &mut LockOutput,
+    outputs: &mut Windows,
     index: usize,
     screen: Option<Output>,
     size: (u32, u32),
 ) -> Result<bool, String> {
-    if trees != LockTrees::PerOutput || (output.root.is_some() && output.built_for == Some(size)) {
+    let LockTrees::PerOutput = trees else {
+        if let LockTrees::Shared(root) = trees
+            && !outputs.contains(Kind::Lock, index as u64)
+        {
+            outputs.insert(Kind::Lock, index as u64, lock_window(index, root));
+        }
+        return Ok(false);
+    };
+    if outputs
+        .get(Kind::Lock, index as u64)
+        .is_some_and(|window| window.owns_root && window.built_for == Some(size))
+    {
         return Ok(false);
     }
-    release_lock_tree(runtime, output);
+    if let Some(window) = outputs.get_mut(Kind::Lock, index as u64) {
+        release_lock_tree(runtime, window);
+    }
     let mut screen = screen.as_ref().map(lua_screen).unwrap_or_default();
     // The size the tree has to cover is the lock surface's, which is the
     // output's logical size by the protocol, but the compositor's word on it
@@ -147,16 +165,24 @@ pub fn ensure_lock_tree(
         runtime.remove_lock_surface(root);
         return Err(error);
     }
-    output.root = Some(root);
-    output.built_for = Some(size);
-    output.layout = None;
+    if !outputs.contains(Kind::Lock, index as u64) {
+        outputs.insert(Kind::Lock, index as u64, lock_window(index, root));
+    }
+    let window = outputs
+        .get_mut(Kind::Lock, index as u64)
+        .expect("just made sure it is there");
+    window.root = root;
+    window.owns_root = true;
+    window.built_for = Some(size);
+    window.layout = None;
     Ok(true)
 }
 
 /// Takes down the tree an output was drawing, if it had its own.
-pub fn release_lock_tree(runtime: &mut Runtime, output: &mut LockOutput) {
-    if let Some(root) = output.root.take() {
-        runtime.remove_lock_surface(root);
+pub fn release_lock_tree(runtime: &mut Runtime, output: &mut Window) {
+    if output.owns_root {
+        runtime.remove_lock_surface(output.root);
+        output.owns_root = false;
     }
     output.built_for = None;
     output.layout = None;

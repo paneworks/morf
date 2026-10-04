@@ -11,6 +11,7 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use crate::host::windows::{Kind, Windows};
 use crate::desktop::{desktop_for, dispatch_desktop};
 use crate::render_target::surface_backend;
 use crate::{
@@ -142,7 +143,8 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
     // output shows a locked frame, and only then is the session hidden.
     runtime.set_session_lock_state(SessionLockState::Pending);
     apply_service_requests(&mut runtime, &mut client, &mut desktop);
-    let mut outputs: Vec<LockOutput> = Vec::new();
+    // Every output's lock surface: a window like the shell's others.
+    let mut outputs = Windows::default();
     let mut last_frame = None;
     // The pointer, the fingers and which node each surface's keys go to: the
     // same state, and the same routing, a layer surface has.
@@ -202,7 +204,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                 &mut runtime,
                 &mut client,
                 &mut input,
-                &LockLayouts(&outputs),
+                &outputs,
                 event,
             ) {
                 Ok(Ok(painted)) => {
@@ -241,14 +243,11 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                     width: logical_width,
                     height: logical_height,
                 } => {
-                    if outputs.len() <= index {
-                        outputs.resize_with(index + 1, LockOutput::default);
-                    }
                     // Before the primer, which is this tree's colour.
                     ensure_lock_tree(
                         &mut runtime,
                         trees,
-                        &mut outputs[index],
+                        &mut outputs,
                         index,
                         client.lock_screen(index),
                         (logical_width, logical_height),
@@ -259,7 +258,11 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                     let (width, height) = client
                         .lock_physical_size(index)
                         .ok_or_else(|| "configured lock surface disappeared".to_owned())?;
-                    if let Some(renderer) = &mut outputs[index].renderer {
+                    let window = outputs
+                        .get_mut(Kind::Lock, index as u64)
+                        .ok_or_else(|| "lock surface has no window".to_owned())?;
+                    (window.width, window.height) = (logical_width, logical_height);
+                    if let Some(renderer) = &mut window.renderer {
                         renderer.resize(width, height);
                     } else {
                         // The root's colour, up before the GPU is looked for,
@@ -273,13 +276,14 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                         let backend =
                             surface_backend(target, width, height)
                                 .map_err(|error| error.to_string())?;
-                        outputs[index].renderer = Some(RenderEngine::new(backend));
+                        if let Some(window) = outputs.get_mut(Kind::Lock, index as u64) {
+                            window.renderer = Some(RenderEngine::new(backend));
+                        }
                     }
                     repaint = true;
                 }
                 Event::SessionLockSurfaceRemoved { index } => {
-                    if index < outputs.len() {
-                        let mut gone = outputs.remove(index);
+                    if let Some(mut gone) = outputs.remove_lock(index) {
                         release_lock_tree(&mut runtime, &mut gone);
                     }
                     // The surfaces after it moved down one, and so did every
@@ -398,23 +402,28 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
             let removed = runtime.take_removed_nodes();
             if !removed.is_empty() {
                 for renderer in outputs
-                    .iter_mut()
+                    .values_mut()
                     .filter_map(|output| output.renderer.as_mut())
                 {
                     renderer.backend_mut().forget_nodes(&removed);
                 }
             }
-            for index in 0..outputs.len() {
+            let mut indices = outputs.ids(Kind::Lock);
+            indices.sort_unstable();
+            for index in indices.into_iter().map(|index| index as usize) {
                 let Some(root) = trees.root(&outputs, index) else {
                     continue;
                 };
-                let output = &mut outputs[index];
+                let Some(output) = outputs.get_mut(Kind::Lock, index as u64) else {
+                    continue;
+                };
                 if let Some(renderer) = &mut output.renderer {
-                    output.layout = Some(paint_lock(&mut runtime, renderer, &client, index, root)?);
+                    let layout = paint_lock(&mut runtime, renderer, &client, index, root)?;
+                    output.layout = Some(CachedLayout::uncached(layout));
                     client.release_lock_primer(index);
                 }
             }
-            if answer_new_containment(&mut runtime, &input, &LockLayouts(&outputs)) {
+            if answer_new_containment(&mut runtime, &input, &outputs) {
                 repaint_next = true;
                 follow_up = true;
             }

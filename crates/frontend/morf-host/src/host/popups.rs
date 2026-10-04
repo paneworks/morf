@@ -160,6 +160,8 @@ pub fn open_popup_surface(
             floating_config: None,
             layer_config: None,
             needs_paint: true,
+            owns_root: false,
+            built_for: None,
         },
     );
     Ok(())

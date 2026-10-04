@@ -34,6 +34,10 @@ pub struct Window {
     /// paints only when something marked it dirty, and asks for another frame
     /// only when it painted.
     pub needs_paint: bool,
+    /// A lock surface's own tree: whether `root` is one built for this
+    /// output (and so taken down with it), and the size it was built for.
+    pub owns_root: bool,
+    pub built_for: Option<(u32, u32)>,
 }
 
 /// Largest frame delta charged to animations in a single tick.

@@ -15,6 +15,8 @@ pub enum Kind {
     Popup,
     Toplevel,
     Layer,
+    /// A lock surface, by its output's index.
+    Lock,
 }
 
 impl Kind {
@@ -25,6 +27,7 @@ impl Kind {
             Self::Popup => WindowId::Popup(id),
             Self::Toplevel => WindowId::Toplevel(id),
             Self::Layer => WindowId::Layer(window_layer_id(id)),
+            Self::Lock => WindowId::Lock(id as usize),
         }
     }
 }
@@ -36,7 +39,7 @@ fn declared(window: WindowId) -> Option<(Kind, u64)> {
         WindowId::Popup(id) => Some((Kind::Popup, id)),
         WindowId::Toplevel(id) => Some((Kind::Toplevel, id)),
         WindowId::Layer(layer) => window_surface_id(layer).map(|id| (Kind::Layer, id)),
-        WindowId::Lock(_) => None,
+        WindowId::Lock(index) => Some((Kind::Lock, index as u64)),
     }
 }
 
@@ -109,7 +112,61 @@ impl Windows {
         self.windows.values_mut()
     }
 
+    /// Takes away the lock surface of output `index`: the surfaces after it
+    /// move down one, as the compositor numbers them.
+    pub fn remove_lock(&mut self, index: usize) -> Option<Window> {
+        let gone = self.windows.remove(&WindowId::Lock(index));
+        let after: Vec<usize> = self
+            .windows
+            .keys()
+            .filter_map(|window| match window {
+                WindowId::Lock(other) if *other > index => Some(*other),
+                _ => None,
+            })
+            .collect();
+        let mut after = after;
+        after.sort_unstable();
+        for other in after {
+            if let Some(mut window) = self.windows.remove(&WindowId::Lock(other)) {
+                window.id = (other - 1) as u64;
+                self.windows.insert(WindowId::Lock(other - 1), window);
+            }
+        }
+        gone
+    }
+
     pub fn clear(&mut self) {
         self.windows.clear();
+    }
+}
+
+impl crate::surfaces::SurfaceLayouts for Windows {
+    fn layout_of(&self, surface: WindowId) -> Option<&morf_layout::Layout> {
+        Some(&self.by_window(surface)?.layout.as_ref()?.layout)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_lock_surface_gone_moves_the_ones_after_it_down() {
+        let mut scene = morf_scene::Scene::default();
+        let root = scene.create(morf_scene::Element::Rect);
+        let mut windows = Windows::default();
+        for index in 0..3 {
+            windows.insert(
+                Kind::Lock,
+                index,
+                crate::lock_outputs::lock_window(index as usize, root),
+            );
+        }
+        assert!(windows.remove_lock(1).is_some());
+        let mut left = windows.ids(Kind::Lock);
+        left.sort_unstable();
+        assert_eq!(left, [0, 1]);
+        assert_eq!(windows.get(Kind::Lock, 1).map(|window| window.id), Some(1));
+        assert!(windows.by_window(WindowId::Lock(2)).is_none());
     }
 }

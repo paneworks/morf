@@ -1,7 +1,9 @@
 // The lock screen's input: pointer, touch and wheel on lock surfaces go
 // through the same hit test and handlers a layer surface's do.
 
-use morf_host::lock_outputs::{LockLayouts, LockOutput};
+use morf_host::host::windows::{Kind, Windows};
+use morf_host::lock_outputs::lock_window;
+use morf_host::paint::CachedLayout;
 use morf_host::pointer_cursor::CursorShapes;
 use morf_host::surface_pointer::handle_pointer_event;
 use morf_host::surfaces::PointerInput;
@@ -62,6 +64,20 @@ fn lock_runtime() -> Runtime {
     runtime
 }
 
+/// One lock window per entry, laid out where the entry says so.
+fn lock_outputs<const N: usize>(runtime: &Runtime, laid: [bool; N]) -> Windows {
+    let root = runtime.scene().roots()[0];
+    let mut outputs = Windows::default();
+    for (index, laid) in laid.into_iter().enumerate() {
+        let mut window = lock_window(index, root);
+        if laid {
+            window.layout = Some(CachedLayout::uncached(laid_out(runtime)));
+        }
+        outputs.insert(Kind::Lock, index as u64, window);
+    }
+    outputs
+}
+
 fn laid_out(runtime: &Runtime) -> Layout {
     let root = runtime.scene().roots()[0];
     Layout::compute(
@@ -83,11 +99,11 @@ fn count(runtime: &mut Runtime, verb: &str) -> IpcValue {
 fn send(
     runtime: &mut Runtime,
     input: &mut PointerInput,
-    outputs: &[LockOutput],
+    outputs: &Windows,
     shapes: &mut Shapes,
     event: Event,
 ) -> bool {
-    match handle_pointer_event(runtime, shapes, input, &LockLayouts(outputs), event) {
+    match handle_pointer_event(runtime, shapes, input, outputs, event) {
         Ok(Ok(repaint)) => repaint,
         Ok(Err(event)) => panic!("pointer path handed back {event:?}"),
         Err(error) => panic!("pointer path failed: {error}"),
@@ -97,10 +113,7 @@ fn send(
 #[test]
 fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
     let mut runtime = lock_runtime();
-    let outputs = vec![LockOutput {
-        layout: Some(laid_out(&runtime)),
-        ..LockOutput::default()
-    }];
+    let outputs = lock_outputs(&runtime, [true]);
     let mut input = PointerInput::default();
     let mut shapes = Shapes::default();
     let surface = WindowId::Lock(0);
@@ -155,10 +168,7 @@ fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
 #[test]
 fn a_tap_on_a_lock_surface_is_a_click() {
     let mut runtime = lock_runtime();
-    let outputs = vec![LockOutput {
-        layout: Some(laid_out(&runtime)),
-        ..LockOutput::default()
-    }];
+    let outputs = lock_outputs(&runtime, [true]);
     let mut input = PointerInput::default();
     let mut shapes = Shapes::default();
     let surface = WindowId::Lock(0);
@@ -194,13 +204,7 @@ fn a_lock_surface_is_hit_tested_against_its_own_layout() {
     let mut runtime = lock_runtime();
     // The second output has not drawn yet: nothing to hit, so nothing clicks,
     // and the first output's layout is not borrowed for it.
-    let outputs = vec![
-        LockOutput {
-            layout: Some(laid_out(&runtime)),
-            ..LockOutput::default()
-        },
-        LockOutput::default(),
-    ];
+    let outputs = lock_outputs(&runtime, [true, false]);
     let mut input = PointerInput::default();
     let mut shapes = Shapes::default();
     let surface = WindowId::Lock(1);
@@ -234,7 +238,7 @@ fn a_lock_surface_is_hit_tested_against_its_own_layout() {
         &mut runtime,
         &mut shapes,
         &mut input,
-        &LockLayouts(&outputs),
+        &outputs,
         key.clone(),
     )
     .unwrap();
@@ -256,7 +260,7 @@ fn pointer_entry_before_the_first_lock_frame_selects_that_surface_after_layout()
             "##,
         )
         .unwrap();
-    let mut outputs = vec![LockOutput::default()];
+    let mut outputs = lock_outputs(&runtime, [false]);
     let mut input = PointerInput::default();
     let mut shapes = Shapes::default();
     send(
@@ -271,11 +275,11 @@ fn pointer_entry_before_the_first_lock_frame_selects_that_surface_after_layout()
         },
     );
     assert_eq!(count(&mut runtime, "inside"), IpcValue::Boolean(false));
-    outputs[0].layout = Some(laid_out(&runtime));
+    outputs.get_mut(Kind::Lock, 0).unwrap().layout = Some(CachedLayout::uncached(laid_out(&runtime)));
     assert!(morf_host::surface_pointer::answer_new_containment(
         &mut runtime,
         &input,
-        &LockLayouts(&outputs),
+        &outputs,
     ));
     assert_eq!(count(&mut runtime, "inside"), IpcValue::Boolean(true));
 }

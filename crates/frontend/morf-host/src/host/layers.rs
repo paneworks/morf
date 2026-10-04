@@ -335,6 +335,8 @@ pub fn sync_layer_surfaces(
                     floating_config: None,
                     layer_config: Some(config.clone()),
                     needs_paint: true,
+                    owns_root: false,
+                    built_for: None,
                 },
             );
             continue;

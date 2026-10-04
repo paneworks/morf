@@ -85,6 +85,19 @@ pub struct CachedLayout {
 }
 
 impl CachedLayout {
+    /// A layout that was computed without the cache: nothing reuses it.
+    pub fn uncached(layout: Layout) -> Self {
+        Self {
+            layout,
+            revision: u64::MAX,
+            size: (0, 0),
+            scale_120: 0,
+            input: Vec::new(),
+            backdrop: Vec::new(),
+            keyboard_focus: String::new(),
+        }
+    }
+
     /// A soft reload replaces the scene, while its Wayland surface survives.
     /// Neither handles nor revision numbers can identify the new layout.
     pub fn invalidate_scene(&mut self) {

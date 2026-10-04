@@ -1,7 +1,8 @@
 // A lock built per output: each output's tree is its own, laid out against
 // its own size.
 
-use morf_host::lock_outputs::{LockOutput, LockTrees, ensure_lock_tree, release_lock_tree};
+use morf_host::host::windows::{Kind, Windows};
+use morf_host::lock_outputs::{LockTrees, ensure_lock_tree, release_lock_tree};
 use morf_lua::Runtime;
 use morf_app::{Output, WindowId};
 
@@ -51,12 +52,12 @@ fn every_output_gets_a_root_sized_by_its_own_screen() {
     let mut runtime = per_output_runtime();
     let trees = LockTrees::of(&runtime).unwrap();
     assert_eq!(trees, LockTrees::PerOutput);
-    let mut outputs = vec![LockOutput::default(), LockOutput::default()];
+    let mut outputs = Windows::default();
     assert!(
         ensure_lock_tree(
             &mut runtime,
             trees,
-            &mut outputs[0],
+            &mut outputs,
             0,
             Some(screen("eDP-1", 1920, 1080)),
             (1920, 1080),
@@ -67,7 +68,7 @@ fn every_output_gets_a_root_sized_by_its_own_screen() {
         ensure_lock_tree(
             &mut runtime,
             trees,
-            &mut outputs[1],
+            &mut outputs,
             1,
             Some(screen("DP-2", 2560, 1440)),
             (2560, 1440),
@@ -89,7 +90,7 @@ fn every_output_gets_a_root_sized_by_its_own_screen() {
         !ensure_lock_tree(
             &mut runtime,
             trees,
-            &mut outputs[0],
+            &mut outputs,
             0,
             Some(screen("eDP-1", 1920, 1080)),
             (1920, 1080),
@@ -99,7 +100,7 @@ fn every_output_gets_a_root_sized_by_its_own_screen() {
     ensure_lock_tree(
         &mut runtime,
         trees,
-        &mut outputs[0],
+        &mut outputs,
         0,
         Some(screen("eDP-1", 1280, 800)),
         (1280, 800),
@@ -111,7 +112,7 @@ fn every_output_gets_a_root_sized_by_its_own_screen() {
     assert_eq!(runtime.scene().roots().len(), 2);
 
     // An output that goes takes its tree with it.
-    release_lock_tree(&mut runtime, &mut outputs[1]);
+    release_lock_tree(&mut runtime, outputs.get_mut(Kind::Lock, 1).unwrap());
     assert!(!runtime.scene().contains(second));
     assert_eq!(runtime.scene().roots(), [rebuilt]);
 }
@@ -132,9 +133,9 @@ fn a_shared_root_is_still_one_tree_for_every_output() {
     let trees = LockTrees::of(&runtime).unwrap();
     let root = runtime.scene().roots()[0];
     assert_eq!(trees, LockTrees::Shared(root));
-    let mut output = LockOutput::default();
-    assert!(!ensure_lock_tree(&mut runtime, trees, &mut output, 0, None, (800, 600)).unwrap());
-    assert_eq!(trees.root(&[output], 0), Some(root));
+    let mut outputs = Windows::default();
+    assert!(!ensure_lock_tree(&mut runtime, trees, &mut outputs, 0, None, (800, 600)).unwrap());
+    assert_eq!(trees.root(&outputs, 0), Some(root));
 }
 
 #[test]
@@ -166,8 +167,8 @@ fn a_builder_that_returns_no_rect_is_refused_and_leaves_nothing() {
         )
         .unwrap();
     let trees = LockTrees::of(&runtime).unwrap();
-    let mut output = LockOutput::default();
-    assert!(ensure_lock_tree(&mut runtime, trees, &mut output, 0, None, (800, 600)).is_err());
+    let mut outputs = Windows::default();
+    assert!(ensure_lock_tree(&mut runtime, trees, &mut outputs, 0, None, (800, 600)).is_err());
     assert!(runtime.scene().roots().is_empty());
-    assert!(output.root.is_none());
+    assert!(trees.root(&outputs, 0).is_none());
 }

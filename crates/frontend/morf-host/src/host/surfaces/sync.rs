@@ -125,6 +125,8 @@ pub fn sync_window_surfaces(
                     floating_config: Some(config.clone()),
                     layer_config: None,
                     needs_paint: true,
+                    owns_root: false,
+                    built_for: None,
                 },
             );
         } else if let Some(current) = windows.get_mut(Kind::Toplevel, id) {
