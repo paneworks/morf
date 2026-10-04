@@ -6,7 +6,7 @@ local function load(style, delayed)
     local ui=require("morf.ui")
     morf.surface.height=650
     local callbacks, requests, cancels, queue = nil, {}, 0, {}
-    package.loaded["lib.polkit_agent"]={serve=function(options) callbacks=options return {} end}
+    package.loaded["lib.services.polkit_agent"]={serve=function(options) callbacks=options return {} end}
     package.loaded.services={here=function() return true end}
     package.loaded.dashboard={drawer={set=function() end}}
     morf.broadcast=function(verb,...)
@@ -114,7 +114,7 @@ test.it("native polkit Cancel stops its helper and completes despite a lost D-Bu
       return {send=function() answers=answers+1 end,flush=function() end,
         close=function() closes=closes+1 end,receive=function() return nil end}
     end
-    local agent=require("lib.polkit_agent").serve {
+    local agent=require("lib.services.polkit_agent").serve {
       on_request=function(request)
         current=request
         if cancel_on_request then request.cancel() end

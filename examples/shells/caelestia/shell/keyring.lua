@@ -142,7 +142,7 @@ morf.effect("caelestia.keyring.agent",function()
   local primary=not morf.primary or morf.primary()
   if dry() then return end
   if primary and not agent then
-    local ok, result, why=pcall(require("lib.keyring_agent").serve,{
+    local ok, result, why=pcall(require("lib.services.keyring_agent").serve,{
       helper=morf.env("MORF_KEYRING_HELPER"),
       on_request=function(request)
         if request.endpoint then

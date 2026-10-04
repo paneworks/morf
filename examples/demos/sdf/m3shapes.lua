@@ -4,7 +4,7 @@
 --   morf render examples/demos/sdf/m3shapes.lua -o shapes.png
 
 local ui = require("morf.ui")
-local shapes = require("lib.m3shapes")
+local shapes = require("lib.util.m3shapes")
 
 local COLS, CELL = 8, 110
 local rows = math.ceil(#shapes.NAMES / COLS) + 1

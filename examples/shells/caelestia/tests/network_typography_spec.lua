@@ -8,7 +8,7 @@ for _,style in ipairs {"material","tsugumori"} do
       for i=1,8 do links[i]={uuid="preview-"..i,id="Campus "..i,type="wireguard",active=false} end
       local state=morf.state {available=true,vpn_connections=links}
       package.loaded.services={net={state=state}}
-      package.loaded["lib.vpns"]={rows={tunnel=morf.signal("vpn.typography.rows",{
+      package.loaded["lib.services.vpns"]={rows={tunnel=morf.signal("vpn.typography.rows",{
         {id="mullvad",detail="Disconnected",address="",up=false,can_toggle=false},
         {id="protonvpn",detail="Disconnected",address="",up=false,can_toggle=false},
       })},is_mesh_link=function() return false end,watch=function() end,release=function() end,

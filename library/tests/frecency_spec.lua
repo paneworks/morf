@@ -5,7 +5,7 @@
 local test = morf.test
 
 local HOST = [[
-  local frecency = require("lib.frecency")
+  local frecency = require("lib.util.frecency")
   local clock = 1000000
   local used = frecency.open {
     path = morf.env("XDG_STATE_HOME") .. "/launches.json",

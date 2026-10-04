@@ -7,7 +7,7 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local notifications = require("lib.notifications")
+local notifications = require("lib.services.notifications")
 
 morf.surface.height = 44
 morf.surface.layer = "overlay"

@@ -7,7 +7,7 @@ local stroke = require("themes.tsugumori.strokes")
 -- of this theme. Nothing here animates at rest.
 local morf = require("morf")
 local ui = require("morf.ui")
-local channel = require("lib.channel")
+local channel = require("lib.util.channel")
 local common = require("themes.kit_common")
 local get, clamp01 = common.get, common.clamp01
 return function(theme)
@@ -945,7 +945,7 @@ return function(theme)
   local history_size
   local function samples_default()
     if not history_size then
-      local ok, sysinfo = pcall(require, "lib.sysinfo")
+      local ok, sysinfo = pcall(require, "lib.services.sysinfo")
       history_size = ok and type(sysinfo) == "table" and sysinfo.history_size or 60
     end
     return history_size

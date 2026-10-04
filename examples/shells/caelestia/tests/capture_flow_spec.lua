@@ -1,7 +1,7 @@
 -- Exercise PrintScreen -> original bottom controls -> selection -> editor.
 local test=morf.test
 local SOURCE=[[
-  local backend=require("lib.capture")
+  local backend=require("lib.util.capture")
   local fixture='<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#37474f"/></svg>'
   local snapshots,closed=0,0
   backend.windows=function(cb) cb({{x=100,y=100,w=500,h=350}}) end

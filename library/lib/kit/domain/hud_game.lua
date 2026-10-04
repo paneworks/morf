@@ -16,7 +16,7 @@
 local morf = require("morf")
 local ui = require("morf.ui")
 local U = require("lib.kit.display.util")
-local channel = require("lib.channel")
+local channel = require("lib.util.channel")
 local get, clamp01 = U.get, U.clamp01
 
 local M = {}

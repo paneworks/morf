@@ -13,7 +13,7 @@ local NOTES={
   tunnel="Proton VPN's app keeps its connections in NetworkManager, above; its command-line client, when installed, is here.",
   tor="Starting it runs the system's tor service until it is stopped or the machine restarts; it is never enabled, so every boot is without it. Point a browser or an app at the SOCKS proxy to go through it.",
 }
-function M.is_mesh_link(name) return require("lib.vpns").is_mesh_link(name) end
+function M.is_mesh_link(name) return require("lib.services.vpns").is_mesh_link(name) end
 local function dry_run()
   local v=morf.env("CAELESTIA_DRY_RUN") return v~=nil and v~="" and v~="0"
 end
@@ -25,7 +25,7 @@ end
 function M.new(kind,active)
   assert(NOTES[kind],"unknown network settings page")
   local vpn=kind=="mesh" or kind=="tunnel"
-  local vpns=vpn and require("lib.vpns") or nil
+  local vpns=vpn and require("lib.services.vpns") or nil
   local rows=morf.state {network={},apps={},tor={}}
   local snapshot=morf.signal("caelestia.net-page."..kind,{available=false,network=false,network_available=false,loaded=false,network_rows={},app_rows={},tor_rows={}})
   local model={key="net-"..kind,kind=kind,active=active,network=rows.network,apps=rows.apps,tor=rows.tor,

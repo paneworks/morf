@@ -65,7 +65,7 @@ test.it("saved font survives a fresh load and default restores theme typography"
   local path=morf.env("XDG_CACHE_HOME").."/font-restart.json"
   for _,family in ipairs {"Goku",""} do
     test.load("../shell/init.lua",{env={CAELESTIA_STYLE="tsugumori",CAELESTIA_APPEARANCE=path},source=([[
-      local settings=require("lib.settings").open {path=%q,defaults={theme="tsugumori",font=""}}
+      local settings=require("lib.util.settings").open {path=%q,defaults={theme="tsugumori",font=""}}
       settings.set("font",%q) settings.flush()
       require("morf.ui").Item {width=100,height=100}
     ]]):format(path,family)})

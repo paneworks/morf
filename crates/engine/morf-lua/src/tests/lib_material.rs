@@ -14,7 +14,7 @@ fn runtime(source: &str) -> Runtime {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../library"),
     ]);
     let prelude = r#"
-        local material = require("lib.material")
+        local material = require("lib.util.material")
         results = {}
         morf.ipc.result = function(key) return results[key] end
     "#;

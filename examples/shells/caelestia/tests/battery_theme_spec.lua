@@ -7,7 +7,7 @@ local HOST=[[
   local revision=morf.signal("test.battery.revision",0)
   local reads,history_reads,keys=0,0,{}
   local rings={}
-  for _,field in ipairs {"percent","power","voltage","temperature"} do rings[field]=require("lib.poll").ring(60) end
+  for _,field in ipairs {"percent","power","voltage","temperature"} do rings[field]=require("lib.util.poll").ring(60) end
   local function sample(n)
     rings.percent.push(n%100)
     rings.power.push(7+math.sin(n/6)*3)
@@ -32,7 +32,7 @@ local HOST=[[
   for _,name in ipairs {"cpu","memory","drives","network","gpu","fans","battery"} do
     sources[name]={interval=3000,pinned=false,pin=function(self,on) self.pinned=on end}
   end
-  package.loaded["lib.sysinfo"]={history_size=60,sources=sources,
+  package.loaded["lib.services.sysinfo"]={history_size=60,sources=sources,
     restore_history=function() end,snapshot_history=function() return {} end,
     battery=function()
       reads=reads+1 tick:get() revision:get()

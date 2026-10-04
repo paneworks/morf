@@ -27,9 +27,9 @@
 
 local M = {}
 
-local ok_lib, hyprland = pcall(require, "lib.hyprland")
+local ok_lib, hyprland = pcall(require, "lib.integrations.hyprland")
 if not ok_lib then hyprland = nil end
-local ok_config, config = pcall(require, "lib.hyprland_config")
+local ok_config, config = pcall(require, "lib.integrations.hyprland_config")
 if not ok_config then config = nil end
 local settings = require("services.settings")
 local act = require("services.act")

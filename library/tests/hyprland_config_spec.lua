@@ -7,7 +7,7 @@
 local test = morf.test
 local fake_hyprland = require("lib.testing.fake_hyprland")
 
-local ok_lib, config = pcall(require, "lib.hyprland_config")
+local ok_lib, config = pcall(require, "lib.integrations.hyprland_config")
 
 test.describe("hyprland_config plans", function()
   test.it("loads without a Hyprland", function()
@@ -59,7 +59,7 @@ test.describe("hyprland_config plans", function()
 
   test.it("reads a devices answer with a bare none in it", function()
     -- Hyprland 0.56 with a virtual keyboard (wtype, wayvnc) connected.
-    local hyprland = require("lib.hyprland")
+    local hyprland = require("lib.integrations.hyprland")
     local raw = '{"keyboards": [{"name": "kb", "active_layout_index": 0, "active_keymap": "English (US)", "main": true},'
       .. '\n{"name": "hl-virtual-keyboard-wtype", "active_layout_index": none, "active_keymap": "none", "main": false}],'
       .. ' "switches": [\n\n]}'

@@ -1,6 +1,6 @@
 local test = morf.test
 local HOST = [[
-  local lule = require("lib.lule")
+  local lule = require("lib.integrations.lule")
   local root = morf.env("LULE_TEST_ROOT")
   local result
   morf.ipc.generate = function()
@@ -17,7 +17,7 @@ local HOST = [[
 ]]
 test.describe("Lule client", function()
   test.it("generates a real palette and invokes only the isolated configuration's hook", function()
-    if not require("lib.poll").which("lule") then test.note("Lule unavailable; skipping real CLI") return end
+    if not require("lib.util.poll").which("lule") then test.note("Lule unavailable; skipping real CLI") return end
     local root = morf.env("XDG_CACHE_HOME") .. "/lule-client-spec"
     morf.fs.mkdir(root .. "/tmp", { parents = true })
     local image = root .. "/image with spaces.png"

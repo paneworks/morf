@@ -69,7 +69,7 @@ function M.new(ctx)
     local mode=r and r.state.mode or "sound"
     model.reading:set {network_icon=network_icon(),mobile_icon=mobile_icon(),battery_icon=battery_icon(),
       battery=b~=nil,percentage=b and ("%d%%"):format(math.floor((b.percentage or 0)+.5)) or "",
-      tor=t~=nil and t.on(),ring=mode~="sound",ring_icon=require("lib.ringer").icon(mode),
+      tor=t~=nil and t.on(),ring=mode~="sound",ring_icon=require("lib.util.ringer").icon(mode),
       technology=m and m.state.technology or ""}
   end)
   morf.effect("caelestia.bar.windows",function()

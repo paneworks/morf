@@ -2,8 +2,8 @@
 -- visual theme. A greeter account without a readable Lule cache falls back
 -- to its administrator-provided accent, then the built-in blue.
 local morf = require("morf")
-local lule = require("lib.lule")
-local material = require("lib.material")
+local lule = require("lib.integrations.lule")
+local material = require("lib.util.material")
 return function(name)
   local accent = "#9ccbfb"
   local ok, words = pcall(morf.fs.read, "/etc/morf/caelestia-accent")

@@ -1,7 +1,7 @@
 -- Shell lifecycle and preferences around the shared capture/document library.
 local morf=require("morf")
-local annotation=require("lib.annotation")
-local backend=require("lib.capture")
+local annotation=require("lib.util.annotation")
+local backend=require("lib.util.capture")
 local config=require("config")
 local M={phase=morf.signal("caelestia.capture.stage","selecting"),
   tools_open=morf.signal("caelestia.capture.tools.open",false),more_open=morf.signal("caelestia.capture.more.open",false),
@@ -398,7 +398,7 @@ function M.binding_key(key,text,mods,_,name)
   M.rebinding:set(false) apply_binding(binding)
 end
 -- Saved shell preferences also restore the binding after a compositor reload.
-local hypr=require("lib.hyprland")
+local hypr=require("lib.integrations.hyprland")
 if hypr.on then
   local function restore()
     if not morf.primary or morf.primary() then live_binding="Print" apply_binding(config.get("capture.hotkey")) end

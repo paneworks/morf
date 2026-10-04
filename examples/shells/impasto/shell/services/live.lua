@@ -18,7 +18,7 @@ local function own()
 end
 
 local function hyprland_focus()
-  local hyprland = package.loaded["lib.hyprland"]
+  local hyprland = package.loaded["lib.integrations.hyprland"]
   if type(hyprland) ~= "table" or not hyprland.available or not hyprland.available() then
     return ""
   end

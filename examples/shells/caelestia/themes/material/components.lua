@@ -3,11 +3,11 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local channel = require("lib.channel")
+local channel = require("lib.util.channel")
 return function(theme)
 
 local M = {}
-function M.shape_path(...) return require("lib.m3shapes").path(...) end
+function M.shape_path(...) return require("lib.util.m3shapes").path(...) end
 -- Non-interactive surfaces, kept distinct from semantic cards and controls.
 M.surface = ui.Rect
 
@@ -326,7 +326,7 @@ end
 --- lib/m3shapes: `shapes.Shape`). `props` as a `ui.Path`'s; `color` a
 --- binding; `duration`, `easing`.
 function M.shape(props)
-  shapes = shapes or require("lib.m3shapes")
+  shapes = shapes or require("lib.util.m3shapes")
   props.easing = props.easing or theme.ease.spatial
   props.duration = props.duration or 450
   return shapes.Shape(props)
@@ -337,7 +337,7 @@ end
 --- and morphs with the other layers.
 local svgs = {}
 function M.svg(name)
-  shapes = shapes or require("lib.m3shapes")
+  shapes = shapes or require("lib.util.m3shapes")
   if not svgs[name] then
     svgs[name] = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="%s"/></svg>')
       :format(shapes.path(name))

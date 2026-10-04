@@ -1,5 +1,2 @@
--- Compatibility lookup; canonical outlines live in the native geometry module.
-local geometry=require("morf").geometry
-local paths={}
-for _,name in ipairs(geometry.shape_names) do paths[name]=geometry.shape_path(name) end
-return paths
+-- Moved to `lib.util.m3shapes_paths`; this path keeps working for one release.
+return require("lib.util.m3shapes_paths")

@@ -9,7 +9,7 @@ function M.new(options)
   local function weather_available()
     if not weather_checked then
       weather_checked = true
-      local ok, lib = pcall(require, "lib.weather")
+      local ok, lib = pcall(require, "lib.integrations.weather")
       if ok then weather_lib = lib end
     end
     return weather_lib ~= nil
@@ -17,7 +17,7 @@ function M.new(options)
   local function media_available()
     if not media_checked then
       media_checked = true
-      local ok, client = pcall(function() return require("lib.mpris").connect() end)
+      local ok, client = pcall(function() return require("lib.services.mpris").connect() end)
       if ok then media = client end
     end
     return media ~= nil
@@ -44,7 +44,7 @@ function M.new(options)
       end,
       player=player,
       artwork=function()
-        if visible() then last_art=require("lib.remote").file(player().art_url or "") end
+        if visible() then last_art=require("lib.util.remote").file(player().art_url or "") end
         return last_art
       end,
       control=function(action)

@@ -11,7 +11,7 @@
 -- `theme.lule`, beside the Material scheme in `theme.color`.
 
 local morf = require("morf")
-local lule = require("lib.lule")
+local lule = require("lib.integrations.lule")
 
 local M = {}
 

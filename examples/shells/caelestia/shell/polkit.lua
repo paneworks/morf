@@ -325,7 +325,7 @@ local function register()
   if agent or config.get("polkit.agent") == "off" or dry_run() then return true end
   -- One screen is the agent; the rest only ever draw.
   if morf.primary and not morf.primary() then return false, "not the primary screen" end
-  local ok, lib = pcall(require, "lib.polkit_agent")
+  local ok, lib = pcall(require, "lib.services.polkit_agent")
   if not ok then return true end
   local served, a, why = pcall(lib.serve, {
     retries = RETRIES,

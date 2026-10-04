@@ -928,7 +928,7 @@ function M.spectrum_away()
   local ok, dock = pcall(require, "services.dock")
   if ok and dock and dock.signals and dock.signals.covered and dock.signals.covered:get() then return true end
   if not settings.spectrumOnEmpty then return false end
-  local okh, hypr = pcall(require, "lib.hyprland")
+  local okh, hypr = pcall(require, "lib.integrations.hyprland")
   if not okh or not hypr.available or not hypr.available() then return false end
   local ws = hypr.state.active_workspace.id
   return ws and ws > 0 and hypr.occupied(ws) or false
@@ -1289,7 +1289,7 @@ function M.close_menu() M.menu_open:set(false) end
 -- Arranging lasts while the screen stays as it was: another workspace, a
 -- window opening or going fullscreen ends it, as in the original.
 do
-  local ok, hypr = pcall(require, "lib.hyprland")
+  local ok, hypr = pcall(require, "lib.integrations.hyprland")
   if ok and hypr and hypr.on then
     for _, event in ipairs { "workspacev2", "activespecialv2", "openwindow" } do
       hypr.on(event, function() if M.editing:get() then M.edit(false) end end)

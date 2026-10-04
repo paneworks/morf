@@ -2,7 +2,7 @@
 local morf = require("morf")
 local drawer = require("drawer")
 local M = {}
-M.steps = require("lib.authsteps").new()
+M.steps = require("lib.util.authsteps").new()
 M.steps.watch()
 M.opened = morf.signal("caelestia.authsteps.opened",false)
 local visual = require("themes").view("authsteps").build {state=M.steps.state,opened=M.opened}

@@ -1,4 +1,4 @@
-//! Closed outlines, and what a field needs from them.
+//! Closed outlines and SVG paths, and what a field needs from them.
 //!
 //! A letter and an icon are the same kind of thing: a set of closed loops with
 //! curves in them. Everything here is about those loops and nothing about where

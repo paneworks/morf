@@ -1,7 +1,7 @@
 local test=morf.test
 local function check(name,body)
   test.it(name,function()
-    test.load {source='local C=require("lib.capture")\n'..body..'\nmorf.ipc.ok=function() return true end'}
+    test.load {source='local C=require("lib.util.capture")\n'..body..'\nmorf.ipc.ok=function() return true end'}
     test.truthy(test.ipc("ok")) test.eq(#test.logs("error"),0)
   end)
 end
@@ -49,7 +49,7 @@ check("file picker expands folders and export failures finish once",[[
 ]])
 test.it("native annotation export renders vectors, text and effects then crops and cleans up",function()
   test.load {source=[[
-    local C=require("lib.capture") local A=require("lib.annotation")
+    local C=require("lib.util.capture") local A=require("lib.util.annotation")
     local session=C.session() local d=A.new(160,100)
     local base='<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="#202020"/></svg>'
     d.choose("rect") d.style("color","#00ff00") d.style("filled",true) d.begin(20,20) d.update(80,60) d.finish()
@@ -76,7 +76,7 @@ test.it("native annotation export renders vectors, text and effects then crops a
 end)
 test.it("desktop acquisition stitches differently scaled monitors without changing coordinates",function()
   test.load {source=[[
-    local C=require("lib.capture") C.kind=function() return "generic" end
+    local C=require("lib.util.capture") C.kind=function() return "generic" end
     local session=C.session() local frame=false local resizes=0
     local render=session.render
     session.render=function(source,ops,cb) if ops[1] and ops[1][1]=="resize" then resizes=resizes+1 end render(source,ops,cb) end
@@ -103,7 +103,7 @@ test.it("desktop acquisition stitches differently scaled monitors without changi
 end)
 test.it("KDE full-desktop acquisition crops the requested monitor",function()
   test.load {source=[[
-    local C=require("lib.capture") C.kind=function() return "kde" end
+    local C=require("lib.util.capture") C.kind=function() return "kde" end
     morf.screens={{name="left",x=-8,y=0,width=8,height=8},{name="right",x=0,y=0,width=8,height=8}}
     morf.run=function(argv,_,done)
       morf.image.process {source='<svg xmlns="http://www.w3.org/2000/svg" width="32" height="16"><rect width="32" height="16" fill="red"/><rect x="16" width="16" height="16" fill="blue"/></svg>',
@@ -143,7 +143,7 @@ check("upload uses HTTPS multipart and copies only a valid returned URL",[[
 
 test.it("cancelled image workers remove late files and scratch directories",function()
   test.load {source=[[
-    local C=require("lib.capture") local process=morf.image.process local done,calls=false,0
+    local C=require("lib.util.capture") local process=morf.image.process local done,calls=false,0
     morf.image.process=function(request)
       local callback=request.on_done
       request.on_done=function(...) callback(...) done=true end

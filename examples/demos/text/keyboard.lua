@@ -27,7 +27,7 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local board = require("lib.board")
+local board = require("lib.util.board")
 
 local screen = morf.screens[1]
 local W = (screen and screen.width) or 1920

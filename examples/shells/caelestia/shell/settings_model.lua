@@ -80,7 +80,7 @@ local local_state = {
 function M.vpn_names(kind)
   local names = {}
   local n = services.net
-  local ok, vpns = pcall(require, "lib.vpns")
+  local ok, vpns = pcall(require, "lib.services.vpns")
   if kind == "tunnel" and n and n.state.available then
     local model = n.state.vpn_connections
     for i = 1, model:len() do
@@ -351,7 +351,7 @@ M.TOGGLES = {
     id = "ringer", name = "Ring mode",
     icon = function()
       local r = services.ringer
-      return require("lib.ringer").icon(r and r.state.mode or "sound")
+      return require("lib.util.ringer").icon(r and r.state.mode or "sound")
     end,
     on = function() local r = services.ringer return r ~= nil and r.state.mode ~= "sound" end,
     set = function()
@@ -428,7 +428,7 @@ M.DETAILS = {
   {key="sound/equalizer",name="Equalizer",parent="sound"},
   {key="sound/equalizer/audiogram",name="Audiogram",parent="sound/equalizer"},
 }
-M.navigation=require("lib.settings_pages").new(M.DETAILS,M.detail,{tor="tunnel"})
+M.navigation=require("lib.util.settings_pages").new(M.DETAILS,M.detail,{tor="tunnel"})
 M.back=M.navigation.back
 M.breadcrumb=M.navigation.breadcrumb
 function M.overview() return M.opened:get() and M.displayed:get()=="" end

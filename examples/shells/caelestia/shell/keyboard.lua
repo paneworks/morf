@@ -12,8 +12,8 @@
 
 local morf = require("morf")
 local config = require("config")
-local osk = require("lib.osk")
-local keyboards = require("lib.keyboards")
+local osk = require("lib.util.osk")
+local keyboards = require("lib.services.keyboards")
 local M = { opened = morf.signal("caelestia.keyboard.shown", false) }
 
 local field = false

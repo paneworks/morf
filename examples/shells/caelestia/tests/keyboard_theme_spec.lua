@@ -6,7 +6,7 @@ local HOST=[[
   morf.surface.keyboard_focus="none"
   package.loaded.bar={desk=function() return 10,10,W-20,H-20 end}
   local attached=false
-  package.loaded["lib.keyboards"]={attached=function() return attached end}
+  package.loaded["lib.services.keyboards"]={attached=function() return attached end}
   local events,ime_callback={},nil
   morf.input_method={subscribe=function(fn) ime_callback=fn end,
     commit=function(value) events[#events+1]={text=value} end}

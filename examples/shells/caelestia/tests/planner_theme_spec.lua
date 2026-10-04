@@ -36,7 +36,7 @@ local HOST=[[
   end
   client.refresh=function() calls[#calls+1]={kind="refresh"} return true end
   client.watch=function() end
-  local dates=require("lib.taskwarrior")
+  local dates=require("lib.integrations.taskwarrior")
   dates.new=function() return client end
   local presentation=require("presentation")
   local shown=morf.signal("planner.fixture.page","")

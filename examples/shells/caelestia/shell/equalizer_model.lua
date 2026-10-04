@@ -1,9 +1,9 @@
 local morf=require("morf")
-local backend=require("lib.equalizer")
+local backend=require("lib.util.equalizer")
 local presentation=require("presentation")
 local M={frequencies=backend.frequencies}
 local zeros={0,0,0,0,0,0,0,0}
-local cfg=require("lib.settings").open {name="caelestia.equalizer",path=morf.state_path("caelestia-equalizer.json"),
+local cfg=require("lib.util.settings").open {name="caelestia.equalizer",path=morf.state_path("caelestia-equalizer.json"),
   write_when=function() return not morf.primary or morf.primary() end,
   defaults={enabled=false,mode="auto",compensation=false,
     profile={label="My audiogram",left=zeros,right=zeros},

@@ -410,10 +410,10 @@ end
 
 function M.start()
   if config ~= nil then return end
-  local ok, lib = pcall(require, "lib.hyprland_config")
+  local ok, lib = pcall(require, "lib.integrations.hyprland_config")
   config = ok and lib or false
   if not config or not config.available() then return end
-  hyprland = require("lib.hyprland")
+  hyprland = require("lib.integrations.hyprland")
   hyprland.on("refreshed", function(kind) if kind == "monitors" then read() end end)
   for _, name in ipairs { "configreloaded", "monitoradded", "monitoraddedv2", "monitorremoved", "monitorremovedv2" } do
     hyprland.on(name, function() disturbed = true end)

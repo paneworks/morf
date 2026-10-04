@@ -4,7 +4,7 @@
 -- the charge, the direction and the estimates; the machine's own battery
 -- row adds the energy and the design capacity for the detail's figures.
 
-local upower = require("lib.upower")
+local upower = require("lib.services.upower")
 local theme = require("theme")
 
 local M = {}

@@ -10,9 +10,9 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local align = require("lib.align")
-local tray_watcher = require("lib.tray_watcher")
-local dbusmenu = require("lib.dbusmenu")
+local align = require("lib.util.align")
+local tray_watcher = require("lib.services.tray_watcher")
+local dbusmenu = require("lib.services.dbusmenu")
 
 morf.surface.height = 40
 

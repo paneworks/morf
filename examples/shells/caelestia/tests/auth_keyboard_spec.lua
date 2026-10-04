@@ -6,7 +6,7 @@ for _,style in ipairs {"material","tsugumori"} do
     test.it(style.." "..part.." cancels held keys when the authentication sheet hides",function()
       test.load("../"..part.."/init.lua",{size={1920,1080},args=part=="lock" and {"window","preview"} or {"preview"},
         env={CAELESTIA_STYLE=style,CAELESTIA_DRY_RUN="1",TEST_AUTH_PART=part},source=[[
-          package.loaded["lib.keyboards"]={attached=function() return false end}
+          package.loaded["lib.services.keyboards"]={attached=function() return false end}
           local part=morf.env("TEST_AUTH_PART")
           local name=require("themes").current[part]
           local build=require(name)

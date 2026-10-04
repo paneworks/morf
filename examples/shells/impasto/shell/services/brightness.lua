@@ -12,7 +12,7 @@
 -- The keys and every single reading follow the focused screen, or the first
 -- that can be dimmed.
 
-local logind = require("lib.logind")
+local logind = require("lib.services.logind")
 local act = require("services.act")
 
 local M = {}
@@ -334,7 +334,7 @@ end
 -- The focused screen, from Hyprland when another part of the shell has it
 -- running; requiring it here would start its socket poll for one name.
 local function focused_name()
-  local hyprland = type(package) == "table" and package.loaded and package.loaded["lib.hyprland"]
+  local hyprland = type(package) == "table" and package.loaded and package.loaded["lib.integrations.hyprland"]
   if type(hyprland) ~= "table" or not hyprland.available or not hyprland.available() then return "" end
   local ok, name = pcall(function() return hyprland.state.focused_monitor end)
   if ok and type(name) == "string" then return name end

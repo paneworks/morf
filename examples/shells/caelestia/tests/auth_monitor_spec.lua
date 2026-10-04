@@ -114,7 +114,7 @@ end)
 test.it("lock chooses the focused external output even when a laptop display exists",function()
   test.load("../lock/init.lua",{args={"window","preview"},source=[[
     morf.screens={{name="eDP-1",width=800,height=650},{name="DP-5",width=800,height=650}}
-    package.loaded["lib.hyprland"]={json=function(_,callback) callback({{name="eDP-1",focused=false},{name="DP-5",focused=true}}) end}
+    package.loaded["lib.integrations.hyprland"]={json=function(_,callback) callback({{name="eDP-1",focused=false},{name="DP-5",focused=true}}) end}
     local theme=require("themes").current
     local build=require(theme.lock)
     local state

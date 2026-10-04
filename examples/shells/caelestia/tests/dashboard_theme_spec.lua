@@ -15,7 +15,7 @@ local HOST=[[
   for _,name in ipairs {"cpu","memory","drives","network","gpu","fans","battery"} do
     sources[name]={pin=function() end,running=function() return true end,samples=0,interval=3000}
   end
-  package.loaded["lib.sysinfo"]={sources=sources,history_size=60,
+  package.loaded["lib.services.sysinfo"]={sources=sources,history_size=60,
     restore_history=function() end,snapshot_history=function() return {} end,
     cpu=function() return read("cpu",{usage=sample:get()}) end,
     memory=function() return read("memory",{percent=58}) end,

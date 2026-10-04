@@ -17,13 +17,13 @@ local tray = {}
 tray.items = morf.list_model({})
 tray.count = morf.signal("panacea.tray.count", 0)
 
-local watcher_ok, tray_watcher = pcall(require, "lib.tray_watcher")
+local watcher_ok, tray_watcher = pcall(require, "lib.services.tray_watcher")
 if watcher_ok then
   local served = tray_watcher.serve and tray_watcher.serve()
   tray.watcher = served
 end
 
-local menus_ok, dbusmenu = pcall(require, "lib.dbusmenu")
+local menus_ok, dbusmenu = pcall(require, "lib.services.dbusmenu")
 
 local subscribed = pcall(morf.status_notifier.subscribe, function(items)
   local rows = {}

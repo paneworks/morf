@@ -3,7 +3,7 @@
 local test = morf.test
 
 local HOST = [[
-  local sysinfo = require("lib.sysinfo")
+  local sysinfo = require("lib.services.sysinfo")
   local root = morf.env("XDG_CACHE_HOME") .. "/history-machine"
   local function write(path, text) assert(morf.fs.write(root .. path, text)) end
   local function inputs(n)

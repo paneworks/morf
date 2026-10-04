@@ -1,7 +1,7 @@
 local test=morf.test
 local function check(name,body)
   test.it(name,function()
-    test.load {source='local A=require("lib.annotation")\n'..body..'\nmorf.ipc.ok=function() return true end'}
+    test.load {source='local A=require("lib.util.annotation")\n'..body..'\nmorf.ipc.ok=function() return true end'}
     test.truthy(test.ipc("ok")) test.eq(#test.logs("error"),0)
   end)
 end

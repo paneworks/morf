@@ -4,22 +4,22 @@ local HOST=[[
   local player=morf.signal("fixture.player",{title="Morning signal",artist="Preview ensemble",playing=false,art_url=""})
   local reads={weather=0,media=0,art=0,weather_new=0,media_new=0}
   local actions={}
-  package.loaded["lib.weather"]={new=function()
+  package.loaded["lib.integrations.weather"]={new=function()
     reads.weather_new=reads.weather_new+1
     return {get=function() reads.weather=reads.weather+1 return weather:get() end}
   end,material_symbol=function() return "sunny" end}
-  package.loaded["lib.mpris"]={connect=function()
+  package.loaded["lib.services.mpris"]={connect=function()
     reads.media_new=reads.media_new+1
     return {state=setmetatable({},{__index=function(_,key)
       if key=="active" then reads.media=reads.media+1 return player:get() end
     end}),previous=function() actions[#actions+1]="previous" end,
       play_pause=function() actions[#actions+1]="play_pause" end,next=function() actions[#actions+1]="next" end}
   end}
-  package.loaded["lib.remote"]={file=function() reads.art=reads.art+1 return "" end}
-  package.loaded["lib.keyboards"]={attached=function() return true end}
+  package.loaded["lib.util.remote"]={file=function() reads.art=reads.art+1 return "" end}
+  package.loaded["lib.services.keyboards"]={attached=function() return true end}
   local person={name="preview",label="Preview User",initial="P",face=""}
-  package.loaded["lib.accounts"]={me=function() return person end,list=function() return {person} end}
-  package.loaded["lib.sessions"]={list=function() return {{name="Desktop",command={"false"}}} end,default_index=function() return 1 end}
+  package.loaded["lib.services.accounts"]={me=function() return person end,list=function() return {person} end}
+  package.loaded["lib.services.sessions"]={list=function() return {{name="Desktop",command={"false"}}} end,default_index=function() return 1 end}
   local part=morf.env("TEST_AUTH_PART")
   local name=require("themes").current[part]
   local build=require(name)
@@ -79,11 +79,11 @@ test.it("lock desktop model shares readers across outputs and guards stale and d
     local active=morf.signal("fixture.active",true)
     local primary=morf.signal("fixture.primary","A")
     local weather_new,media_new,commands,art=0,0,0,0
-    package.loaded["lib.weather"]={new=function() weather_new=weather_new+1 return {get=function() return {temperature=8} end} end,
+    package.loaded["lib.integrations.weather"]={new=function() weather_new=weather_new+1 return {get=function() return {temperature=8} end} end,
       material_symbol=function() return "cloud" end}
-    package.loaded["lib.mpris"]={connect=function() media_new=media_new+1 return {state={active={title="Track",art_url="sample"}},
+    package.loaded["lib.services.mpris"]={connect=function() media_new=media_new+1 return {state={active={title="Track",art_url="sample"}},
       next=function() commands=commands+1 end} end}
-    package.loaded["lib.remote"]={file=function() art=art+1 return "cached.png" end}
+    package.loaded["lib.util.remote"]={file=function() art=art+1 return "cached.png" end}
     local model=require("models.lock_desktop").new {active=function() return active:get() end,primary=function(name) return primary:get()==name end}
     local a,b=model.for_output("A"),model.for_output("B")
     morf.ipc.read=function() a.weather() b.weather() a.player() b.player() a.artwork() b.artwork() end
@@ -117,9 +117,9 @@ end)
 test.it("unavailable lock readers remain optional and failed media connections are not repeated",function()
   test.load("../lock/init.lua",{source=[[
     local calls=0
-    package.loaded["lib.weather"]={new=function() return {get=function() return nil end} end,
+    package.loaded["lib.integrations.weather"]={new=function() return {get=function() return nil end} end,
       material_symbol=function() return "cloud" end}
-    package.loaded["lib.mpris"]={connect=function() calls=calls+1 error("No preview bus") end}
+    package.loaded["lib.services.mpris"]={connect=function() calls=calls+1 error("No preview bus") end}
     local model=require("models.lock_desktop").new {active=function() return true end,primary=function() return true end}
     local page=model.for_output("A")
     morf.ipc.read=function()

@@ -14,7 +14,7 @@ local morf = require("morf")
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
-local channel = require("lib.channel")
+local channel = require("lib.util.channel")
 
 local C = theme.color
 local V = {}

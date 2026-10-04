@@ -37,7 +37,7 @@ local HOST=[[
     for i=1,60 do values[i]=25+15*math.sin(i/6) end
     return values
   end
-  package.loaded["lib.sysinfo"]=sysinfo
+  package.loaded["lib.services.sysinfo"]=sysinfo
   package.loaded.dashboard_state={context=function() return {opened=function() return shown:get() end} end}
   morf.run=function(argv,options,callback)
     requests[#requests+1]=argv pending[#requests]=callback

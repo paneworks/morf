@@ -1,6 +1,6 @@
 -- Performance data, device identity and read-only probes. Themes own the UI.
 local morf=require("morf")
-local sysinfo=require("lib.sysinfo")
+local sysinfo=require("lib.services.sysinfo")
 local M={}
 --- The processor's name without its trademarks and generation: "Intel
 --- Core i7-11800H @ 2.30GHz", as the reference prints it.

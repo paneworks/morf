@@ -1,7 +1,7 @@
 -- Shared media state and actions. Themes own the artwork, layout and motion.
 local morf = require("morf")
 local services = require("services")
-local spectrum = require("lib.spectrum")
+local spectrum = require("lib.util.spectrum")
 local M = { BANDS = 56 }
 
 -- ------------------------------------------------------------- visualiser --
@@ -49,7 +49,7 @@ local function lyrics()
   if follow == nil then
     follow = false
     if services.media then
-      local ok, f = pcall(require("lib.lyrics").follow, services.media)
+      local ok, f = pcall(require("lib.integrations.lyrics").follow, services.media)
       if ok then follow = f end
     end
   end

@@ -33,8 +33,8 @@ local HOST=[[
     ringer={state=setmetatable({},{__index=function() return read("ring") end}),next=function()
       record("ringer",true) data.ring=data.ring=="sound" and "silent" or "sound" update() end},
   }
-  package.loaded["lib.vpns"]={links=function() revision:get() reads=reads+1 return {} end,is_mesh_link=function() return false end}
-  package.loaded["lib.ringer"]={icon=function() return "volume_up" end}
+  package.loaded["lib.services.vpns"]={links=function() revision:get() reads=reads+1 return {} end,is_mesh_link=function() return false end}
+  package.loaded["lib.util.ringer"]={icon=function() return "volume_up" end}
   package.loaded.notifs={dnd=morf.signal("settings.test.dnd",false)}
   package.loaded.osd={volume=function() return read("volume") end,brightness=function() return read("brightness") end,
     volume_icon=function() return "volume_up" end,brightness_icon=function() return "brightness_high" end,
@@ -244,7 +244,7 @@ for _,style in ipairs {"material","tsugumori"} do
       morf.surface.height=500
       local watches,releases,holding=0,0,false
       package.loaded.services={}
-      package.loaded["lib.vpns"]={rows={mesh=morf.signal("vpn.test.rows",{})},
+      package.loaded["lib.services.vpns"]={rows={mesh=morf.signal("vpn.test.rows",{})},
         watch=function() watches=watches+1 holding=true end,
         release=function() releases=releases+1 holding=false end,
         set=function() error("A polling test must not change VPN state") end}

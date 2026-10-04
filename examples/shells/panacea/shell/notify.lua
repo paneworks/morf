@@ -8,7 +8,7 @@
 local morf = require("morf")
 local config = require("config")
 local theme = require("theme")
-local notifications = require("lib.notifications")
+local notifications = require("lib.services.notifications")
 
 local notify = {}
 

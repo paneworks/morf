@@ -107,7 +107,7 @@ function M.build(ctx)
   local RX, RY = AX + math.floor((AW - RS) / 2), TOP + CAPTION_H + 6
   local COVER = 152
   local c = RS / 2
-  local art = function() return require("lib.remote").file(active().art_url) end
+  local art = function() return require("lib.util.remote").file(active().art_url) end
   -- The artwork sits behind the instrument, cropped to its round centre.
   local ring = ui.Item {
     id = "media-reticle", x = RX - AX, y = RY, width = RS, height = RS,

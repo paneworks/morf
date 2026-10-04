@@ -11,7 +11,7 @@ local morf = require("morf")
 local ui = require("morf.ui")
 local config = require("config")
 local theme = require("theme")
-local notifications = require("lib.notifications")
+local notifications = require("lib.services.notifications")
 
 local S = theme.S
 local C = theme.color

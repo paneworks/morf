@@ -3,7 +3,7 @@ local stroke = require("themes.tsugumori.strokes")
 -- See LICENSE-Tsugumori. Receives counts, state and actions, never an authentication secret.
 local morf = require("morf")
 local ui = require("morf.ui")
-local osk = require("lib.osk")
+local osk = require("lib.util.osk")
 local tokens = require("themes.tsugumori.tokens")
 return function(ctx, kind, W, H, main, output)
   local C = ctx.C

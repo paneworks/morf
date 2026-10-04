@@ -116,7 +116,7 @@ end)
 test.it("Lule studio never executes wallpaper hooks in preview mode",function()
   test.load("../shell/init.lua",{size={200,100},env={CAELESTIA_DRY_RUN="1"},source=[[
     local calls=0
-    package.loaded["lib.lule"]={watch=function() return morf.signal("dry.scheme",{wallpaper="/fixture.png"}) end,
+    package.loaded["lib.integrations.lule"]={watch=function() return morf.signal("dry.scheme",{wallpaper="/fixture.png"}) end,
       generate=function() calls=calls+1 return true end}
     local studio=require("lule_studio")
     require("morf.ui").Item {width=200,height=100}

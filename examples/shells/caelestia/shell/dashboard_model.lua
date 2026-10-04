@@ -2,7 +2,7 @@
 local morf = require("morf")
 local state = require("dashboard_state")
 local services = require("services")
-local sysinfo = require("lib.sysinfo")
+local sysinfo = require("lib.services.sysinfo")
 local M = { tab = state.tab, opened = state.opened, displayed = state.displayed }
 M.tabs = {
   { key = "overview", name = "Dashboard", icon = "dashboard" },
@@ -109,7 +109,7 @@ function M.player()
   if visible(1,2) then last.player=services.player() end
   return last.player
 end
-function M.artwork() return require("lib.remote").file(M.player().art_url) end
+function M.artwork() return require("lib.util.remote").file(M.player().art_url) end
 function M.media_control(action)
   if services.media and services.media[action] then pcall(services.media[action]) end
 end

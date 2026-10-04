@@ -39,7 +39,7 @@ function M.run(id)
   if id == "reboot" then return act.run("restarting", login.reboot) end
   if id == "shutdown" then return act.run("shutting down", login.power_off) end
   if id == "logout" then
-    local ok, hyprland = pcall(require, "lib.hyprland")
+    local ok, hyprland = pcall(require, "lib.integrations.hyprland")
     if ok and hyprland.available and hyprland.available() then
       return act.run("logging out", hyprland.dispatch, "exit", "")
     end

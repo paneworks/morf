@@ -11,7 +11,7 @@ local inspect=[[
       folder_draft=lule.folder_draft:get(),busy=require("themes.switcher").busy:get(),
       font=require("theme").font,chosen_font=require("themes").font,
       stored_font=require("themes").preferences.get("font"),font_file=require("theme").font_file,
-      history=require("lib.sysinfo").snapshot_history().history.cpu,
+      history=require("lib.services.sysinfo").snapshot_history().history.cpu,
       stored=require("themes").preferences.get("theme")}
   end
 ]]
@@ -30,7 +30,7 @@ for _,pair in ipairs {{"material","tsugumori"},{"tsugumori","material"},{"tsugum
         local lule=require("lule_studio")
         lule.mode:set("light") lule.method:set("tonal")
         lule.folder_draft:set("/unfinished folder")
-        require("lib.sysinfo").restore_history {history={cpu={11,22,33}}}
+        require("lib.services.sysinfo").restore_history {history={cpu={11,22,33}}}
         return true
       end
       morf.ipc.handoff=function() return require("themes.session").snapshot() end

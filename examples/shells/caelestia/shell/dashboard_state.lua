@@ -6,7 +6,7 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local sysinfo = require("lib.sysinfo")
+local sysinfo = require("lib.services.sysinfo")
 local session = require("themes.session")
 sysinfo.restore_history(session.restore("graphs"))
 session.register("graphs",sysinfo.snapshot_history)

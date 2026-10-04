@@ -22,7 +22,7 @@
 local ui = require("morf.ui")
 local morf = require("morf")
 local U = require("lib.kit.display.util")
-local channel = require("lib.channel")
+local channel = require("lib.util.channel")
 local get, clamp01, A = U.get, U.clamp01, U.alpha
 local geo = morf.geometry
 

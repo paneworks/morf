@@ -8,7 +8,7 @@
 --
 -- Transport is wired to clicks only, through `services.act`.
 
-local mpris = require("lib.mpris")
+local mpris = require("lib.services.mpris")
 local act = require("services.act")
 
 local M = {}

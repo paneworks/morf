@@ -1,7 +1,7 @@
 local ui = require("morf.ui")
 local theme = require("theme")
 local kit = require("kit")
-local osk = require("lib.osk")
+local osk = require("lib.util.osk")
 local C = theme.color
 local V = {}
 function V.build(model)

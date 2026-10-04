@@ -230,7 +230,7 @@ fn wait_for(runtime: &mut Runtime, check: &str) {
 fn start(runtime: &mut Runtime, instance: &Instance) {
     let source = format!(
         r#"
-            H = require("lib.hyprland")
+            H = require("lib.integrations.hyprland")
             seen = {{ ws = 0, stars = 0, connects = 0, disconnects = 0 }}
             H.on("openwindow", function(address, workspace, class, title)
                 seen.open = {{ address, workspace, class, title }}
@@ -533,7 +533,7 @@ fn hyprland_library_is_harmless_without_hyprland() {
         .execute(
             &examples_script(),
             br#"
-                local H = require("lib.hyprland")
+                local H = require("lib.integrations.hyprland")
                 assert(H.start { signature = "" } == false)
                 assert(not H.available())
                 local answered = nil
@@ -557,7 +557,7 @@ fn hyprland_library_parses_event_fields() {
         .execute(
             &examples_script(),
             br##"
-                local H = require("lib.hyprland")
+                local H = require("lib.integrations.hyprland")
                 H.start { signature = "" }
                 local function same(a, b) assert(a == b, tostring(a) .. " ~= " .. tostring(b)) end
                 local id, name, monitor = H.parse_event("moveworkspacev2", "3,a,b,DP-1")
@@ -595,7 +595,7 @@ fn hyprland_library_reads_the_live_compositor() {
         .execute(
             &examples_script(),
             br#"
-                H = require("lib.hyprland")
+                H = require("lib.integrations.hyprland")
                 assert(H.start { poll_ms = 10 })
                 live = {}
                 H.version(function(v) live.version = v end)

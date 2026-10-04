@@ -2,8 +2,8 @@
 -- authentication and password storage belong to the controller.
 local morf = require("morf")
 local ui = require("morf.ui")
-local osk = require("lib.osk")
-local shapes = require("lib.m3shapes")
+local osk = require("lib.util.osk")
+local shapes = require("lib.util.m3shapes")
 return function(ctx)
 local ui = ctx.ui or ui
 local skin = ctx.auth_skin or {}

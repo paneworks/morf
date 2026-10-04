@@ -9,7 +9,7 @@
 -- `reduced` (motion off).
 local morf = require("morf")
 local ui = require("morf.ui")
-local channel = require("lib.channel")
+local channel = require("lib.util.channel")
 
 return function(theme)
   local M = {}
@@ -691,7 +691,7 @@ return function(theme)
   -- ------------------------------------------------------------ shapes --
 
   local shapes
-  local function m3() shapes = shapes or require("lib.m3shapes") return shapes end
+  local function m3() shapes = shapes or require("lib.util.m3shapes") return shapes end
 
   function M.shape_path(...) return m3().path(...) end
 

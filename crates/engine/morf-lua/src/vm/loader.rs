@@ -54,7 +54,7 @@ pub fn runtimepath_roots(config: &std::path::Path, external: bool) -> Vec<PathBu
             });
         if let Some(data) = data {
             // The user's own modules first, then the library `make install`
-            // puts beside the binary: `require("lib.material")` from any
+            // puts beside the binary: `require("lib.util.material")` from any
             // configuration, wherever it lives.
             roots.push(data.join("morf/site"));
             roots.push(data.join("morf/library"));

@@ -126,7 +126,7 @@ fn networkmanager_reads_the_tree_and_types_every_action() {
             } } end,
         })
 
-        local net = require("lib.networkmanager").connect({ dbus = fake.dbus, debounce_ms = 10 })
+        local net = require("lib.services.networkmanager").connect({ dbus = fake.dbus, debounce_ms = 10 })
         local s = net.state
         local eq = fake.eq
         -- Actions answer on a later turn; what they answered lands here.
@@ -276,7 +276,7 @@ fn networkmanager_is_empty_and_unstarted_when_absent() {
     let verdict = run_with_fake(
         "test-networkmanager-absent",
         r#"
-        local net = require("lib.networkmanager").connect({ dbus = fake.dbus })
+        local net = require("lib.services.networkmanager").connect({ dbus = fake.dbus })
         fake.steps({
             function()
                 fake.eq(net.available(), false, "unavailable")
@@ -332,7 +332,7 @@ fn bluez_mirrors_the_object_tree_and_waits_briefly() {
         }, device_methods)
         fake.object("system", B, A .. "/service0001", "org.bluez.GattService1", {})
 
-        local bt = require("lib.bluez").connect({ dbus = fake.dbus, debounce_ms = 10, discovery_poll_ms = 40 })
+        local bt = require("lib.services.bluez").connect({ dbus = fake.dbus, debounce_ms = 10, discovery_poll_ms = 40 })
         local s = bt.state
         local eq = fake.eq
         fake.steps({
@@ -454,7 +454,7 @@ fn upower_reads_batteries_and_profiles_without_starting_anything() {
                          { Profile = "performance", Driver = "x" } },
         })
 
-        local upower = require("lib.upower")
+        local upower = require("lib.services.upower")
         local power = upower.connect({ dbus = fake.dbus, debounce_ms = 10 })
         local s = power.state
         local eq = fake.eq
@@ -554,7 +554,7 @@ fn mpris_picks_the_active_player_and_interpolates_position() {
         player("playerctld", { PlaybackStatus = "Playing", Metadata = {} }, "proxy")
 
         local now = 1000
-        local media = require("lib.mpris").connect({
+        local media = require("lib.services.mpris").connect({
             dbus = fake.dbus, clock = function() return now end, tick_ms = 20, debounce_ms = 10,
         })
         local s = media.state
@@ -679,7 +679,7 @@ fn logind_reads_the_session_and_holds_inhibitors_by_process() {
             Class = "user", Active = true, LockedHint = false, IdleHint = false, VTNr = 2, State = "active",
         }}, {{ Lock = ok, SetLockedHint = ok, SetBrightness = ok }})
 
-        local login = require("lib.logind").connect({{
+        local login = require("lib.services.logind").connect({{
             dbus = fake.dbus, backlight_dir = "{dir}", udev = false,
         }})
         local s = login.state
@@ -916,7 +916,7 @@ fn private_bus_mpris_round_trip() {
 
     let body = format!(
         r#"
-        local media = require("lib.mpris").connect({{ prefix = "{prefix}", debounce_ms = 10 }})
+        local media = require("lib.services.mpris").connect({{ prefix = "{prefix}", debounce_ms = 10 }})
         local s = media.state
         local eq = fake.eq
         fake.steps({{
@@ -965,7 +965,7 @@ fn private_bus_notification_with_an_image_and_a_resident_action() {
             br#"
             local morf = require("morf")
             local ui = require("morf.ui")
-            local notifications = require("lib.notifications")
+            local notifications = require("lib.services.notifications")
             local shown = morf.signal("shown", "waiting")
             ui.Text { text = function() return shown:get() end }
             local server

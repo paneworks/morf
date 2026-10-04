@@ -11,7 +11,7 @@
 -- colours. That writes into the user's own dotfiles, so here it happens
 -- only with `writeAppThemes` on, and only into the files it names.
 
-local palette = require("lib.palette")
+local palette = require("lib.util.palette")
 local theme = require("theme")
 local settings = require("services.settings")
 local wallpaper = require("services.wallpaper")

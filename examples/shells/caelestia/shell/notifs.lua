@@ -40,7 +40,7 @@ local open_ids = morf.signal("caelestia.notifications.open", {})
 
 local server
 do
-  local ok, lib = pcall(require, "lib.notifications")
+  local ok, lib = pcall(require, "lib.services.notifications")
   if ok then
     local ok2, s = pcall(lib.serve, {
       on_change = function(list)

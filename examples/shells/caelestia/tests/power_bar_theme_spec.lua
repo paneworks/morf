@@ -11,7 +11,7 @@ local HOST=[[
   local fail=false
   local battery={ac=false,time_left=8100,time_to_full=3600,batteries={{name="BAT0",capacity=64,
     status="Discharging",power=12.4,health=92,charge_start=40,charge_limit=80,charge_mode="Standard",cycles=185,temperature=31.5}}}
-  package.loaded["lib.sysinfo"]={history_size=60,sources={battery={interval=5000}},
+  package.loaded["lib.services.sysinfo"]={history_size=60,sources={battery={interval=5000}},
     battery=function() revision:get() reads=reads+1 return battery end}
   local profiles=morf.state {available=true,active="balanced",degraded="",list={
     {name="power-saver"},{name="balanced"},{name="performance"}}}

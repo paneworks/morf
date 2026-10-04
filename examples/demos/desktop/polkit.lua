@@ -22,8 +22,8 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local polkit_agent = require("lib.polkit_agent")
-local component = require("lib.component")
+local polkit_agent = require("lib.services.polkit_agent")
+local component = require("lib.util.component")
 
 local W = 520
 local IDLE_HEIGHT, OPEN_HEIGHT = 1, 196

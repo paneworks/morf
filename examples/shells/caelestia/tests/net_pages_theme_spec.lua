@@ -46,7 +46,7 @@ local HOST=[[
     {id="mullvad",up=false,detail="Off",address="",can_toggle=true},
     {id="protonvpn",up=true,detail="Connected",address="1.2.3.4",can_toggle=true}})
   local loaded=morf.signal("net.fixture.loaded",true)
-  package.loaded["lib.vpns"]={rows={mesh={get=function() reads=reads+1 return mesh:get() end},tunnel={get=function() reads=reads+1 return tunnel:get() end}},
+  package.loaded["lib.services.vpns"]={rows={mesh={get=function() reads=reads+1 return mesh:get() end},tunnel={get=function() reads=reads+1 return tunnel:get() end}},
     loaded={mesh=loaded,tunnel=loaded},is_mesh_link=function(name) return name:match("^tailscale")~=nil end,
     watch=function() watches=watches+1 end,release=function() releases=releases+1 end,
     set=function(id,on,done) record("app",id,on,done) end}
@@ -229,7 +229,7 @@ end
 test.it("VPN library reports a completed empty scan separately from initial loading",function()
   test.load("../shell/init.lua",{source=[[
     local ui=require("morf.ui")
-    local vpns=require("lib.vpns")
+    local vpns=require("lib.services.vpns")
     vpns.read=function(_,done) done({}) end
     ui.Item {width=20,height=20}
     morf.ipc.loaded=function() return vpns.loaded.mesh:get() end

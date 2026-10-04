@@ -94,7 +94,7 @@ fn pump(runtime: &mut Runtime, key: &str) -> String {
 }
 
 const PRELUDE: &str = r#"
-    local palette = require("lib.palette")
+    local palette = require("lib.util.palette")
     results = {}
     morf.ipc.result = function(key) return results[key] end
     -- Runs `body(p)` in the answer; whatever it returns (or raises) is the

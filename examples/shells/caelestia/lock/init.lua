@@ -20,8 +20,8 @@
 -- lib.accounts, lib.lule and lib.material for the colours, lib.osk.
 
 local morf = require("morf")
-local accounts = require("lib.accounts")
-local auth = require("lib.auth")
+local accounts = require("lib.services.accounts")
+local auth = require("lib.util.auth")
 
 local HELD = morf.operands[1] ~= "window"
 -- A fingerprint stack to listen on (tools/pam/readers.sh), said in the hint.
@@ -222,7 +222,7 @@ end
 -- just like desktop authentication prompts; the first output is a fallback.
 local main_output = morf.signal("lock.main", (morf.screens and morf.screens[1] and morf.screens[1].name) or "")
 pcall(function()
-  require("lib.hyprland").json("monitors", function(list)
+  require("lib.integrations.hyprland").json("monitors", function(list)
     for _, m in ipairs(type(list) == "table" and list or {}) do
       if m.focused and m.name then main_output:set(m.name) return end
     end
@@ -287,7 +287,7 @@ local context = {
   day = day,
   me = me,
   keyboard_attached = function()
-    local ok, value = pcall(function() return require("lib.keyboards").attached() end)
+    local ok, value = pcall(function() return require("lib.services.keyboards").attached() end)
     return not ok or value
   end,
   typed = typed,

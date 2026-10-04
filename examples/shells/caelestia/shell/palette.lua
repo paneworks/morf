@@ -10,7 +10,7 @@
 -- 60 px bar, 25 px corners, 40 px pills.
 
 local morf = require("morf")
-local material = require("lib.material")
+local material = require("lib.util.material")
 local config = require("config")
 
 local M = {}

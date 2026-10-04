@@ -30,7 +30,7 @@ test.it("live keyring demos are disposable and yield to real requests",function(
     local ui=require("morf.ui")
     local callbacks,answers,cancels
     answers,cancels=0,0
-    package.loaded["lib.keyring_agent"]={serve=function(options)
+    package.loaded["lib.services.keyring_agent"]={serve=function(options)
       callbacks=options
       options.on_status({"org.gnome.keyring.SystemPrompter"})
       return {close=function() end}

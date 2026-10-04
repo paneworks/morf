@@ -27,7 +27,7 @@ local bar = require("bar.bar")
 local kit = require("components.kit")
 local workspaces = require("services.workspaces")
 
-local ok_lib, hyprland = pcall(require, "lib.hyprland")
+local ok_lib, hyprland = pcall(require, "lib.integrations.hyprland")
 if not ok_lib then hyprland = nil end
 
 local C = theme.color

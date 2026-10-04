@@ -22,7 +22,7 @@ local M = {}
 M.POLL_MS = 3000
 M.HISTORY = 100
 
-local ok_sysinfo, sysinfo = pcall(require, "lib.sysinfo")
+local ok_sysinfo, sysinfo = pcall(require, "lib.services.sysinfo")
 if not ok_sysinfo or type(sysinfo) ~= "table" then sysinfo = nil end
 
 local s = {

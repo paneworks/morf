@@ -1,7 +1,7 @@
 -- Lule's applied palette and an independent wallpaper selection. Merely
 -- browsing never writes a scheme or calls the desktop hooks.
 local morf = require("morf")
-local lule = require("lib.lule")
+local lule = require("lib.integrations.lule")
 local config = require("config")
 local M = {}
 local function expand(path)

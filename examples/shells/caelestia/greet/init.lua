@@ -23,9 +23,9 @@
 -- (greetd's conversation), lib.accounts, lib.sessions, lib.material, lib.osk.
 
 local morf = require("morf")
-local accounts = require("lib.accounts")
-local sessions = require("lib.sessions")
-local auth = require("lib.auth")
+local accounts = require("lib.services.accounts")
+local sessions = require("lib.services.sessions")
+local auth = require("lib.util.auth")
 
 -- `-- preview`: as if a pattern were set, for pictures and tests.
 local PREVIEW = morf.operands[1] == "preview"
@@ -34,7 +34,7 @@ local screen = morf.screens[1]
 local W = (screen and screen.width) or 1920
 local H = (screen and screen.height) or 1080
 local function keyboard_attached()
-  local ok, value = pcall(function() return require("lib.keyboards").attached() end)
+  local ok, value = pcall(function() return require("lib.services.keyboards").attached() end)
   return not ok or value
 end
 local s = require("themes.auth_metrics")(W, H, keyboard_attached())

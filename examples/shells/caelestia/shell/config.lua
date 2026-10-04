@@ -5,9 +5,9 @@
 -- one).
 
 local morf = require("morf")
-local settings = require("lib.settings")
+local settings = require("lib.util.settings")
 local capture_tools={}
-for _,tool in ipairs(require("lib.annotation").tools) do
+for _,tool in ipairs(require("lib.util.annotation").tools) do
   capture_tools[tool[1]]={color="#ef5350",width=tool[1]=="text" and 24 or 4,filled=false}
 end
 

@@ -1,6 +1,6 @@
 -- One Taskwarrior connection for both left-panel pages.
 local morf = require("morf")
-local taskwarrior = require("lib.taskwarrior")
+local taskwarrior = require("lib.integrations.taskwarrior")
 local M = { client = taskwarrior.new() }
 M.selected_day = require("themes.session").keep("caelestia.planner.day", morf.time.format("%Y-%m-%d"))
 M.month_offset = require("themes.session").keep("caelestia.planner.month", 0)

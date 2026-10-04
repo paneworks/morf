@@ -3,7 +3,7 @@
 A bundle is morf and a configuration in one executable: the configuration,
 the Lua it requires, its assets and its fonts ride inside the file, so the
 result runs on a machine, or as a user, that has none of them on disk. Bundles are optional for distributing standalone widgets. Shell, lock and
-greeter use the normal morf executable; see [system installation](SYSTEM.md).
+greeter use the normal morf executable; see [system installation](INSTALL.md).
 
 ## What a bundle is
 
@@ -38,7 +38,7 @@ In this order:
      greet` lands at `greet/…`);
    - a path from anywhere else goes in by its own name (`--with
      library/lib` lands at `lib/…`), which is exactly where
-     `require("lib.auth")` looks.
+     `require("lib.util.auth")` looks.
 4. **Every font the configuration names.** morf runs the configuration once,
    headless, reads the `font_family` of every node it built, and carries
    every file of each family into `fonts/`. Generic names (`sans-serif`,
@@ -86,7 +86,7 @@ morf greet
 
 Select a named configuration with `morf lock -c caelestia`, or preview it
 without locking or authenticating with `morf lock -- window preview`.
-See [system installation](SYSTEM.md) for greetd setup and migration.
+See [system installation](INSTALL.md) for greetd setup and migration.
 
 ## Things to know
 

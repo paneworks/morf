@@ -1,5 +1,5 @@
 local test=morf.test
-local eq=require("lib.equalizer")
+local eq=require("lib.util.equalizer")
 local native=morf.audio.equalizer_curve
 test.it("EQ native prescription validates curves and preserves stereo",function()
   local c=native {enabled=true,compensation=true,strength=50,per_ear=true,
@@ -50,7 +50,7 @@ local HOST=[[
     child={kill=function() exits=exits+1 end}
     return child
   end
-  local eq=require("lib.equalizer").new {name="test.equalizer"}
+  local eq=require("lib.util.equalizer").new {name="test.equalizer"}
   local function curve(v) return morf.audio.equalizer_curve {bands={v,0,0,0,0,0,0,0}} end
   morf.ipc.start=function() eq.start(curve(2)) end
   morf.ipc.stop=eq.stop

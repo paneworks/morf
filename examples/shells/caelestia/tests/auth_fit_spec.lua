@@ -6,13 +6,13 @@ local source=[[
     {name="akari",label="Akari",initial="A"},
     {name="ren",label="Ren",initial="R"},
   }
-  package.loaded["lib.accounts"]={me=function() return accounts[1] end,list=function() return accounts end}
-  package.loaded["lib.sessions"]={list=function() return {
+  package.loaded["lib.services.accounts"]={me=function() return accounts[1] end,list=function() return accounts end}
+  package.loaded["lib.services.sessions"]={list=function() return {
     {name="Hyprland",command={"false"}},{name="Plasma",command={"false"}}} end,default_index=function() return 1 end}
-  package.loaded["lib.keyboards"]={attached=function() return morf.env("AUTH_TOUCH")~="1" end}
-  package.loaded["lib.lule"]={watch=function() return {get=function() return nil end} end}
-  package.loaded["lib.weather"]={new=function() return {get=function() return {} end} end,material_symbol=function() return "cloud" end}
-  package.loaded["lib.mpris"]={connect=function() return {state={active={}}} end}
+  package.loaded["lib.services.keyboards"]={attached=function() return morf.env("AUTH_TOUCH")~="1" end}
+  package.loaded["lib.integrations.lule"]={watch=function() return {get=function() return nil end} end}
+  package.loaded["lib.integrations.weather"]={new=function() return {get=function() return {} end} end,material_symbol=function() return "cloud" end}
+  package.loaded["lib.services.mpris"]={connect=function() return {state={active={}}} end}
   local part=morf.env("AUTH_PART")
   local path=require("themes").current[part]
   local build=require(path)

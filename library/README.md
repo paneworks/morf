@@ -5,7 +5,7 @@ and the engine's API as definitions for the Lua language server.
 
 ```
 library/
-  lib/                 the modules: require("lib.material"), require("lib.hyprland"), ...
+  lib/                 the modules: require("lib.util.material"), require("lib.integrations.hyprland"), ...
   types/               the engine's API for LuaLS, written by `morf types` (do not edit)
     morf.lua           require("morf") and the global `morf`
     morf/ui.lua        require("morf.ui"): every element and its properties
@@ -133,7 +133,7 @@ because the engine does not watch arbitrary sockets for readiness; an idle
 tick blocks at most 1 ms per open socket.
 
 ```lua
-local hyprland = require("lib.hyprland")
+local hyprland = require("lib.integrations.hyprland")
 
 -- Reactive state, current from events; bind to it directly.
 ui.Repeater { model = hyprland.state.workspaces, delegate = function(ws) ... end }
@@ -199,7 +199,7 @@ does nothing.
 Each change is a *plan* built by a pure, validated function, then sent:
 
 ```lua
-local config = require("lib.hyprland_config")
+local config = require("lib.integrations.hyprland_config")
 config.apply(function(how)
   return config.options_plan({ { "input:kb_layout", "str", "us,de" },
                                { "input:repeat_rate", "int", 30 } }, how)
@@ -227,7 +227,7 @@ number of cubics (`shapes.SEGMENTS`, 72) starting at the top, so
 `morph_to` walks any one onto any other.
 
 ```lua
-local shapes = require("lib.m3shapes")
+local shapes = require("lib.util.m3shapes")
 ui.Path { width = 48, height = 48, view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie9"), fill_color = accent }
 shapes.Shape { width = 96, height = 96, shape = function() return which:get() end, color = accent, easing = "out_back" }
 ```
@@ -258,7 +258,7 @@ loudness, a little memory on the way up, a fall under gravity, and peaks
 that lean on their neighbours.
 
 ```lua
-local spectrum = require("lib.spectrum")
+local spectrum = require("lib.util.spectrum")
 local vis = spectrum.new { bars = 24 }      -- vis.bars: a signal of 24 levels, 0 to 1
 ui.Rect { height = function() return 4 + 60 * (vis.bars:get()[3] or 0) end }
 vis:stop()
@@ -280,8 +280,8 @@ track: an `.lrc` beside the playing file, then lrclib.net (keyless), cached
 on disk for a week (a miss too).
 
 ```lua
-local lyrics = require("lib.lyrics")
-local follow = lyrics.follow(require("lib.mpris").connect())
+local lyrics = require("lib.integrations.lyrics")
+local follow = lyrics.follow(require("lib.services.mpris").connect())
 ui.Text { text = function() return follow.line:get() end }
 ```
 
@@ -301,7 +301,7 @@ the file watched so another screen's runtime or an editor changes it live
 keys the defaults lack are kept in the file untouched.
 
 ```lua
-local config = require("lib.settings").open {
+local config = require("lib.util.settings").open {
   path = morf.config_path("shell.json"),
   defaults = { appearance = { rounding = { scale = 1 } }, bar = { persistent = true } },
 }
@@ -320,7 +320,7 @@ config.values.bar.persistent = true       -- the same, through nested tables
 bounded lift among comparable matches otherwise.
 
 ```lua
-local used = require("lib.frecency").open { path = morf.state_path("launches.json") }
+local used = require("lib.util.frecency").open { path = morf.state_path("launches.json") }
 used.record(app.id)
 used.rank(query, apps, { key = "name", id = "id", limit = 30 })   -- fuzzy hits, reordered
 ```
@@ -351,7 +351,7 @@ the `*Fixed` roles, ...) at its tone for dark or light. This is what an M3
 shell's colour tool does, in Lua.
 
 ```lua
-local material = require("lib.material")
+local material = require("lib.util.material")
 local s = material.scheme("#4a7fb5", { variant = "tonal_spot", mode = "dark" })
 s.primary  s.surfaceContainer  s.palettes.tertiary(70)
 material.from_image("~/Pictures/sea.jpg", { mode = "light" }, function(ok, s) ... end)
@@ -379,7 +379,7 @@ It is a port of the substance of impasto's `theme_manager.py`, built on
 `morf.image.palette`, `morf.color`, `morf.fs` and `morf.json`.
 
 ```lua
-local palette = require("lib.palette")
+local palette = require("lib.util.palette")
 
 palette.from_image("~/Pictures/sea.jpg", { mode = "dark" }, function(ok, p)
   if not ok then return morf.log.warn(p) end
@@ -520,7 +520,7 @@ lone scalar bare); `call1` and `first` take the one output out.
 ### `networkmanager` — `org.freedesktop.NetworkManager`, system bus
 
 ```lua
-local net = require("lib.networkmanager").connect()
+local net = require("lib.services.networkmanager").connect()
 net.state.available, .version, .state, .connectivity         -- "full", "portal", ...
 net.state.networking_enabled, .wifi_enabled, .wifi_hardware_enabled
 net.state.primary  { id, type, path }
@@ -561,7 +561,7 @@ waiting on polkit.
 ### `bluez` — `org.bluez`, system bus
 
 ```lua
-local bt = require("lib.bluez").connect()
+local bt = require("lib.services.bluez").connect()
 bt.state.available, .adapter, .address, .powered, .discovering, .discoverable,
        .pairable, .connected_count
 bt.state.adapters -- rows: path, name, address, powered, discovering, discoverable, pairable
@@ -589,7 +589,7 @@ does not register.
 ### `upower` — `org.freedesktop.UPower` and power-profiles-daemon
 
 ```lua
-local power = require("lib.upower").connect()
+local power = require("lib.services.upower").connect()
 power.state.available, .on_battery, .lid_is_closed, .lid_is_present
 power.state.display  { present, percentage, state, charging, time_to_empty, time_to_full,
                        icon_name, energy_rate, kind, warning_level }
@@ -600,7 +600,7 @@ power.state.profiles { available, active, degraded, service, list = rows { name,
 
 power.set_profile("power-saver" | "balanced" | "performance")
 power.devices(), power.refresh()
-require("lib.upower").format_time(seconds)  -- "3 h 12 min"
+require("lib.services.upower").format_time(seconds)  -- "3 h 12 min"
 ```
 
 Power profiles are read from `org.freedesktop.UPower.PowerProfiles`, falling
@@ -610,7 +610,7 @@ running.
 ### `mpris` — `org.mpris.MediaPlayer2.*`, session bus
 
 ```lua
-local media = require("lib.mpris").connect()
+local media = require("lib.services.mpris").connect()
 media.state.available, .count
 media.state.players -- rows: name, identity, desktop_entry, status, playing, title, artist,
                     -- album, art_url, length, position, volume, can_*
@@ -638,7 +638,7 @@ skipped by default (`ignore`).
 ### `logind` — `org.freedesktop.login1`, system bus
 
 ```lua
-local login = require("lib.logind").connect()
+local login = require("lib.services.logind").connect()
 login.state.available
 login.state.session { id, path, user, uid, type, class, seat, vt, active, locked, idle,
                       remote, state, desktop, service }
@@ -707,7 +707,7 @@ The shared machinery for the libraries below that watch something.
 The machine, from `/proc` and `/sys` only.
 
 ```lua
-local sysinfo = require("lib.sysinfo")
+local sysinfo = require("lib.services.sysinfo")
 ui.Text { text = function() return ("CPU %d%%"):format(sysinfo.cpu().usage) end }
 ui.Text { text = function()
   local t = sysinfo.temperatures().cpu
@@ -748,7 +748,7 @@ wttr.in as the fallback and as the answer when no place is given (it guesses
 from the address).
 
 ```lua
-local weather = require("lib.weather")
+local weather = require("lib.integrations.weather")
 local here = weather.new { location = "Wageningen", units = "metric" }
 ui.Text { text = function()
   local now = here:get()
@@ -779,7 +779,7 @@ A public user's contribution calendar: a year of days, each with a count and
 the 0-4 shade GitHub draws it in.
 
 ```lua
-local github = require("lib.github")
+local github = require("lib.integrations.github")
 local me = github.new { user = "torvalds" }          -- or { user = ..., token = "ghp_..." }
 ui.Text { text = function()
   local c = me:get()
@@ -820,7 +820,7 @@ database, installs, or asks for privileges.
 - **flatpak**: `flatpak remote-ls --updates` and `flatpak list`.
 
 ```lua
-local packages = require("lib.packages")
+local packages = require("lib.integrations.packages")
 local updates = packages.new { interval = 60 * 60 * 1000 }
 ui.Text { text = function()
   local state = updates:get()
@@ -844,7 +844,7 @@ Claude Code's token usage from its own transcripts, a port of impasto's
 last seven days, read from `~/.claude/projects/**/*.jsonl` with `morf.fs`.
 
 ```lua
-local claude_usage = require("lib.claude_usage")
+local claude_usage = require("lib.integrations.claude_usage")
 local usage = claude_usage.new {}
 ui.Text { text = function()
   local u = usage:get()

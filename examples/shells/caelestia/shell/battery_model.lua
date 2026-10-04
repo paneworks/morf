@@ -1,5 +1,5 @@
 -- Battery readings and bounded source history, independent of presentation.
-local sysinfo=require("lib.sysinfo")
+local sysinfo=require("lib.services.sysinfo")
 local M={}
 function M.duration(seconds)
   if not seconds or seconds<=0 then return "--" end

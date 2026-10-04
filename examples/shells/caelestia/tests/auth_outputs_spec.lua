@@ -3,12 +3,12 @@ test.it("one lock conversation follows the pointer between differently sized out
   test.load("../lock/init.lua",{size={1300,720},env={CAELESTIA_STYLE="tsugumori",CAELESTIA_DRY_RUN="1"},source=[[
     local ui=require("morf.ui")
     morf.screens={{name="laptop",width=800,height=650},{name="external",width=500,height=720}}
-    package.loaded["lib.accounts"]={me=function() return {name="fixture",label="Fixture",initial="F"} end}
-    package.loaded["lib.keyboards"]={attached=function() return true end}
-    package.loaded["lib.lule"]={watch=function() return {get=function() return nil end} end}
-    package.loaded["lib.hyprland"]={json=function(_,done) done({{name="laptop",focused=true}}) end}
+    package.loaded["lib.services.accounts"]={me=function() return {name="fixture",label="Fixture",initial="F"} end}
+    package.loaded["lib.services.keyboards"]={attached=function() return true end}
+    package.loaded["lib.integrations.lule"]={watch=function() return {get=function() return nil end} end}
+    package.loaded["lib.integrations.hyprland"]={json=function(_,done) done({{name="laptop",focused=true}}) end}
     local submits=0
-    package.loaded["lib.auth"]={lock_readers=function() return {} end,
+    package.loaded["lib.util.auth"]={lock_readers=function() return {} end,
       lock=function() return {listen=function() end,stop=function() end,submit=function() submits=submits+1 end} end}
     local ctx
     local roots={}
@@ -59,11 +59,11 @@ test.it("a greeter draft cleared before its grant never contacts authentication 
   test.load("../greet/init.lua",{size={800,650},env={CAELESTIA_STYLE="tsugumori",CAELESTIA_DRY_RUN="1"},source=[[
     morf.screens={{name="fixture",width=800,height=650},{name="other",width=800,height=650}}
     morf.primary=function() return true end
-    package.loaded["lib.accounts"]={list=function() return {{name="fixture",label="Fixture",initial="F"}} end}
-    package.loaded["lib.sessions"]={list=function() return {{name="Fixture",command={"false"}}} end,default_index=function() return 1 end}
-    package.loaded["lib.keyboards"]={attached=function() return true end}
+    package.loaded["lib.services.accounts"]={list=function() return {{name="fixture",label="Fixture",initial="F"}} end}
+    package.loaded["lib.services.sessions"]={list=function() return {{name="Fixture",command={"false"}}} end,default_index=function() return 1 end}
+    package.loaded["lib.services.keyboards"]={attached=function() return true end}
     local submits=0
-    package.loaded["lib.auth"]={greeter=function(options) return {available=true,switch=function() end,
+    package.loaded["lib.util.auth"]={greeter=function(options) return {available=true,switch=function() end,
       submit=function() submits=submits+1 options.on_busy(true) end} end}
     local routing
     local factory=require("models.greet_outputs")
@@ -137,9 +137,9 @@ for _,style in ipairs {"material","tsugumori"} do
   test.it(style.." greeter follows keyboard focus when Cage focuses a different output",function()
     test.load("../greet/init.lua",{size={800,650},args={"preview"},env={CAELESTIA_STYLE=style,CAELESTIA_DRY_RUN="1"},source=[[
       morf.screens={{name="eDP-1",width=800,height=650},{name="DP-5",width=1920,height=1080}}
-      package.loaded["lib.accounts"]={list=function() return {{name="fixture",label="Fixture",initial="F"}} end}
-      package.loaded["lib.sessions"]={list=function() return {{name="Fixture",command={"false"}}} end,default_index=function() return 1 end}
-      package.loaded["lib.keyboards"]={attached=function() return true end}
+      package.loaded["lib.services.accounts"]={list=function() return {{name="fixture",label="Fixture",initial="F"}} end}
+      package.loaded["lib.services.sessions"]={list=function() return {{name="Fixture",command={"false"}}} end,default_index=function() return 1 end}
+      package.loaded["lib.services.keyboards"]={attached=function() return true end}
       local incoming
       morf.on_keyboard_focus=function(callback) incoming=callback end
       -- Broadcast delivery is asynchronous in the real supervisor.

@@ -4,7 +4,7 @@ local SOURCE=[[
   local fixture='<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700"><rect width="1200" height="700" fill="#37474f"/><rect x="100" y="100" width="600" height="400" fill="#607d8b"/></svg>'
   local exports,copies,uploads,closed,saves,binding=0,0,0,0,0,""
   local render_ms,inflight,maxflight,last_ops,hover_updates=20,0,0,{},0
-  local backend=require("lib.capture")
+  local backend=require("lib.util.capture")
   backend.windows=function(cb) cb({{x=100,y=100,w=600,h=400,z=0}}) end
   backend.session=function()
     return {snapshot=function(_,cb) cb(true,{source=fixture,width=1200,height=700}) end,
@@ -308,7 +308,7 @@ end)
 
 test.it("native monitor previews retain their base image and export the same colours",function()
   test.load("../shell/init.lua",{size={800,650},env={CAELESTIA_STYLE="material",CAELESTIA_DRY_RUN="1"},source=[[
-    local ui=require("morf.ui") local backend=require("lib.capture")
+    local ui=require("morf.ui") local backend=require("lib.util.capture")
     morf.screens={{name="active",x=0,y=0,width=800,height=650},{name="left",x=-800,y=0,width=800,height=650}}
     backend.kind=function() return "generic" end backend.windows=function(cb) cb({}) end
     morf.screencopy.save=function(options)
@@ -360,7 +360,7 @@ test.it("native monitor previews retain their base image and export the same col
 end)
 
 test.it("updated configuration keeps rendering with an older installed annotation library",function()
-  local source=SOURCE:gsub('local editor=require%("capture_editor"%)','require("lib.annotation").viewport_ops=nil local editor=require("capture_editor")',1)
+  local source=SOURCE:gsub('local editor=require%("capture_editor"%)','require("lib.util.annotation").viewport_ops=nil local editor=require("capture_editor")',1)
   test.load("../shell/init.lua",{source=source,size={1200,800},env={CAELESTIA_STYLE="material",CAELESTIA_DRY_RUN="1"}})
   test.ipc("start") test.advance(300) test.key("s") tool("arrow")
   test.press(100,100) test.move(400,200) test.release(400,200) test.advance(150)

@@ -1,3 +1,7 @@
+//! The `morf` command line: parsing it, and the runners -- `morf` and its
+//! parts (shell, lock, greet), `app`, `check`, `render`, `test`, `bundle`,
+//! `ipc`, `log`, `kill`. Running a configuration is morf-host's.
+
 use std::process::ExitCode;
 
 mod bundle;

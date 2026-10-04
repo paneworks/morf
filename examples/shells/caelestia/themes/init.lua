@@ -1,6 +1,6 @@
 -- Theme packages own appearance, never wallpaper colors or application state.
 local morf = require("morf")
-local settings = require("lib.settings")
+local settings = require("lib.util.settings")
 local root = morf.env("XDG_CONFIG_HOME") or (morf.fs.home() .. "/.config")
 -- make apply supplies a readable default beside each installed config. The
 -- greeter has no personal settings; a user's explicit preference still wins.

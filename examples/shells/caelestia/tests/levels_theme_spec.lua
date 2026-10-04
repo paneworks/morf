@@ -7,7 +7,7 @@ local HOST=[[
   morf.audio={available=function() return true end,
     default_sink=function() return {id=1,volume=volume:get(),muted=muted:get()} end,
     set_volume=function(_,value) volume:set(value) end}
-  package.loaded["lib.sysinfo"]={backlight=function() return {percent=brightness:get()*100} end,
+  package.loaded["lib.services.sysinfo"]={backlight=function() return {percent=brightness:get()*100} end,
     set_brightness=function(value) brightness:set(value/100) end}
   package.loaded.bar={desk=function() return 0,0,W,H end}
   package.loaded.rail={geometry=function() return {w=W,h=H,item=60,gap=12} end}

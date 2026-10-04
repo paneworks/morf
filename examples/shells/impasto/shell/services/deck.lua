@@ -133,7 +133,7 @@ local hyprland
 local windows_changed = morf.signal("impasto.deck.windows", 0)
 local function watch_hyprland()
   if hyprland ~= nil then return hyprland end
-  local ok, lib = pcall(require, "lib.hyprland")
+  local ok, lib = pcall(require, "lib.integrations.hyprland")
   if not ok or not lib.available() then hyprland = false return false end
   hyprland = lib
   if not lib.state.connected then lib.start() end

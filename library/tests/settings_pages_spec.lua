@@ -1,5 +1,5 @@
 local test=morf.test
-local pages=require("lib.settings_pages")
+local pages=require("lib.util.settings_pages")
 test.it("Settings tree returns one level and derives its breadcrumb",function()
   local selected=morf.signal("test.settings.path","")
   local tree=pages.new({{key="sound",name="Sound"},{key="eq",name="Equalizer",parent="sound"},

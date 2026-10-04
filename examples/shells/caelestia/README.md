@@ -136,7 +136,7 @@ Your appearance preferences stay in your own configuration directory.
 
 Run `morf shell`, `morf lock`, or `morf greet`. Preview without authenticating
 with `morf lock -- window preview` or `morf greet -- preview`.
-See [system installation](../../../docs/SYSTEM.md) for the full workflow.
+See [system installation](../../../docs/INSTALL.md) for the full workflow.
 
 The left panel has **Tasks** and **Calendar** tabs. Tasks uses the installed
 `task` executable and the user's normal Taskwarrior configuration, including

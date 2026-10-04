@@ -8,7 +8,7 @@ local HOST=[[
   package.loaded.bar={desk=function() return 10,10,W-20,H-20 end}
   local change,remote={},{}
   local dismissed={}
-  package.loaded["lib.notifications"]={serve=function(options)
+  package.loaded["lib.services.notifications"]={serve=function(options)
     change=options.on_change
     return {open=function(id) return remote[id]~=nil end,
       dismiss=function(id)

@@ -25,7 +25,7 @@ local morf = require("morf")
 local ui = require("morf.ui")
 local U = require("lib.kit.display.util")
 local L = require("lib.kit.display.layout")
-local channel = require("lib.channel")
+local channel = require("lib.util.channel")
 
 local get = U.get
 local M = {}

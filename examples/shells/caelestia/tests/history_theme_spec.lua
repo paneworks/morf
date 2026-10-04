@@ -5,7 +5,7 @@ local HOST = [[
   morf.surface.height = H
   package.loaded.bar = { desk = function() return 0,0,W,H end }
   package.loaded.services = { here = function() return true end }
-  package.loaded["lib.notifications"] = { serve = function() return { open = function() return false end } end }
+  package.loaded["lib.services.notifications"] = { serve = function() return { open = function() return false end } end }
   local copied = ""
   morf.clipboard.set = function(value) copied = value end
   local notifications = require("notifs")

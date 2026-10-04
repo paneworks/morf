@@ -332,7 +332,7 @@ end
 
 function M.start()
   if config ~= nil then return end
-  local ok, lib = pcall(require, "lib.hyprland_config")
+  local ok, lib = pcall(require, "lib.integrations.hyprland_config")
   config = ok and lib or false
   if not config or not config.available() then
     s.status:set("unavailable")

@@ -31,7 +31,7 @@ local function load(style)
         elseif action=="set_position" then change("position",value) end
       end
     end
-    package.loaded["lib.lyrics"]={follow=function() return {
+    package.loaded["lib.integrations.lyrics"]={follow=function() return {
       status=morf.signal("media.test.lyrics.status","synced"),
       lines=morf.signal("media.test.lyrics.lines",{{text="Signals in the dark"},{text="Find their way home"}}),
       index=morf.signal("media.test.lyrics.index",1),

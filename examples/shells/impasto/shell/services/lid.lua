@@ -61,7 +61,7 @@ function M.start(options)
   options = options or {}
   local login = options.login
   if not login then
-    local ok, logind = pcall(require, "lib.logind")
+    local ok, logind = pcall(require, "lib.services.logind")
     if not ok then return end
     login = logind.connect { udev = false }
   end

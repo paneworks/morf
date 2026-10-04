@@ -198,7 +198,7 @@ fn weather_from_open_meteo_with_a_geocoded_place_and_a_cache() {
     let text = run(
         &format!(
             r##"
-            local weather = require("lib.weather")
+            local weather = require("lib.integrations.weather")
             local here = weather.new {{
               location = "Wageningen", cache_dir = "{cache}",
               geocoding_url = "{base}/v1/search", forecast_url = "{base}/v1/forecast",
@@ -260,7 +260,7 @@ fn weather_falls_back_to_wttr_and_keeps_the_last_answer_offline() {
     let text = run(
         &format!(
             r##"
-            local weather = require("lib.weather")
+            local weather = require("lib.integrations.weather")
             local here = weather.new {{
               latitude = 51.97, longitude = 5.66, units = "imperial", cache_dir = "{cache}",
               forecast_url = "{base}/v1/forecast", wttr_url = "{base}/wttr",
@@ -307,7 +307,7 @@ fn weather_falls_back_to_wttr_and_keeps_the_last_answer_offline() {
 fn weather_codes_read_as_words_icons_and_glyphs() {
     let text = run(
         r##"
-        local weather = require("lib.weather")
+        local weather = require("lib.integrations.weather")
         local clear = weather.condition(0, true)
         assert(clear.text == "Clear" and clear.icon == "weather-clear" and clear.glyph == "☀")
         local night = weather.condition(0, false)
@@ -374,7 +374,7 @@ fn github_reads_the_contributions_page() {
     let text = run(
         &format!(
             r##"
-            local github = require("lib.github")
+            local github = require("lib.integrations.github")
             local octo = github.new {{ user = "octo", base_url = "{base}", cache_dir = "{cache}",
               today = function() return "2026-01-20" end }}
             local reported = false
@@ -442,7 +442,7 @@ fn github_asks_graphql_with_a_token() {
     let text = run(
         &format!(
             r##"
-            local github = require("lib.github")
+            local github = require("lib.integrations.github")
             local octo = github.new {{ user = "octo", token = "secret", api_url = "{base}/graphql",
               cache_dir = "{cache}", today = function() return "2026-01-20" end }}
             local reported = false
@@ -480,7 +480,7 @@ fn github_asks_graphql_with_a_token() {
 fn packages_compares_versions_as_pacman_does() {
     let text = run(
         r##"
-        local packages = require("lib.packages")
+        local packages = require("lib.integrations.packages")
         local v = packages.vercmp
         assert(v("1.0", "1.0") == 0)
         assert(v("1.0", "1.1") == -1 and v("1.1", "1.0") == 1)
@@ -510,7 +510,7 @@ fn packages_asks_pacman_the_aur_and_flatpak() {
     let text = run(
         &format!(
             r##"
-            local packages = require("lib.packages")
+            local packages = require("lib.integrations.packages")
             local ran = {{}}
             local answers = {{
               ["/usr/bin/pacman -Q"] = {{ ok = true, code = 0, stdout = "a 1-1\nb 2-1\nyay 12.3.0-1\nparu 2.0.3-1\n", stderr = "" }},
@@ -579,7 +579,7 @@ fn packages_asks_pacman_the_aur_and_flatpak() {
 fn packages_without_checkupdates_falls_back_to_pacman_qu() {
     let text = run(
         r##"
-        local packages = require("lib.packages")
+        local packages = require("lib.integrations.packages")
         local checker = packages.new {
           aur = false,
           which = function(name) if name == "pacman" then return "/usr/bin/pacman" end end,
@@ -621,7 +621,7 @@ fn packages_without_checkupdates_falls_back_to_pacman_qu() {
 fn poll_runs_programs_directly_and_jobs_in_slices() {
     let text = run(
         r##"
-        local poll = require("lib.poll")
+        local poll = require("lib.util.poll")
         local echo = poll.which("echo")
         assert(echo and echo:sub(1, 1) == "/", tostring(echo))
         assert(poll.which("no-such-program-anywhere") == nil)
@@ -711,7 +711,7 @@ fn transcripts(root: &std::path::Path) {
 fn usage_script(root: &std::path::Path, extra: &str) -> String {
     format!(
         r##"
-        local claude_usage = require("lib.claude_usage")
+        local claude_usage = require("lib.integrations.claude_usage")
         local now = claude_usage.hour_of("2026-01-20T12:00:00Z") * 3600 + 1800
         local root = "{root}"
         local function make()
@@ -817,7 +817,7 @@ fn claude_usage_asks_for_the_limits_only_when_called() {
     let text = run(
         &format!(
             r##"
-            local claude_usage = require("lib.claude_usage")
+            local claude_usage = require("lib.integrations.claude_usage")
             claude_usage.limits({{ credentials = "{root}/.credentials.json", url = "{base}/v1/messages" }},
               function(result)
                 note(tostring(result.available) .. " " .. tostring(result.error ~= nil))
@@ -973,7 +973,7 @@ fn sysinfo_reads_a_fake_machine() {
     let text = run(
         &format!(
             r##"
-            local sysinfo = require("lib.sysinfo")
+            local sysinfo = require("lib.services.sysinfo")
             local fs = morf.fs
             local base = "{root}"
             sysinfo.configure {{ root = base, top = 5 }}
@@ -1075,7 +1075,7 @@ fn sysinfo_polls_only_while_read() {
     let text = run(
         &format!(
             r##"
-            local sysinfo = require("lib.sysinfo")
+            local sysinfo = require("lib.services.sysinfo")
             sysinfo.configure {{ root = "{root}", intervals = {{ memory = 20 }} }}
             local memory = sysinfo.sources.memory
             assert(not memory:running())
@@ -1107,7 +1107,7 @@ fn sysinfo_reads_this_machine() {
     // Read-only: every section once, sanity only.
     let text = run(
         r##"
-        local sysinfo = require("lib.sysinfo")
+        local sysinfo = require("lib.services.sysinfo")
         local cpu = sysinfo.sample("cpu")
         assert(cpu.count >= 1 and cpu.usage >= 0 and cpu.usage <= 100)
         local memory = sysinfo.sample("memory")

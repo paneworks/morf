@@ -6,9 +6,9 @@ for _,style in ipairs {"material","tsugumori"} do
       morf.capabilities={desktop_canvas=true}
       morf.screens={{name="eDP-1",x=-800,y=70,width=800,height=650},
         {name="DP-5",x=0,y=0,width=600,height=720}}
-      package.loaded["lib.accounts"]={list=function() return {{name="fixture",label="Fixture",initial="F"}} end}
-      package.loaded["lib.sessions"]={list=function() return {{name="Fixture",command={"false"}}} end,default_index=function() return 1 end}
-      package.loaded["lib.keyboards"]={attached=function() return true end}
+      package.loaded["lib.services.accounts"]={list=function() return {{name="fixture",label="Fixture",initial="F"}} end}
+      package.loaded["lib.services.sessions"]={list=function() return {{name="Fixture",command={"false"}}} end,default_index=function() return 1 end}
+      package.loaded["lib.services.keyboards"]={attached=function() return true end}
       local revision=morf.signal("fixture.revision",0)
       morf.screens_revision=function() return revision:get() end
       local ctx,count

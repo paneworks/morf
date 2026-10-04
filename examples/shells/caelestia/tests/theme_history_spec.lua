@@ -1,7 +1,7 @@
 local test=morf.test
 test.it("a visual reload keeps bounded graph samples and sampling baselines",function()
   test.load("../shell/init.lua",{source=[[
-    local sys=require("lib.sysinfo")
+    local sys=require("lib.services.sysinfo")
     sys.configure {history=3}
     local saved={history={cpu={10,20,30,40},["bat:BAT0:power"]={1,2,3}},
       stat={cpu={total=100,idle=50}},rc6={card0={ms=15,at=1}},

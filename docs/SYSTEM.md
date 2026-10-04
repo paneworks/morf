@@ -1,59 +1,88 @@
-# One Morf installation
+# How morf is built
 
-Shell, lock and greeter run the same executable:
+morf is one Rust workspace in five groups. A crate may depend on crates of
+its own group or of the groups above it in this list, and only on the morf
+crates its row names; `tools/layers.py --strict` (part of `make verify`)
+fails on anything else.
 
-```sh
-morf shell                 # bare morf also starts the shell
-morf lock
-morf greet
-morf lock -c caelestia     # choose a named configuration
-morf lock -- window preview
-morf greet -- preview
+```
+group      crate          owns                                              may use
+core       morf-value     values that cross every boundary: IpcValue,       (nothing)
+                          Color and HCT, input regions, the accessible
+                          tree, the renderer/window present contract
+core       morf-scene     the scene graph, element properties, signals and  value
+                          effects (reactive), retention, animation state
+core       morf-layout    measuring and placing nodes                       scene value
+graphics   morf-text      shaping, fonts, glyph rasters                     scene layout vector value
+graphics   morf-vector    outlines and SVG                                  image value
+graphics   morf-image     decoding, the image cache, XDG data dirs          value
+graphics   morf-render    painting a laid-out scene with wgpu               scene layout text vector
+                                                                            image value
+platform   morf-app       our own windowing: window kinds, one event type,  value
+                          outputs, input, cursors; Wayland and headless
+                          backends behind the Backend trait
+platform   morf-desktop   the desktop protocols on their own queue:         app value
+                          capture, gamma, data-control clipboard,
+                          workspaces, foreign toplevels, idle, output power
+platform   morf-io        processes, files, sockets, D-Bus, HTTP            value
+platform   morf-audio     PipeWire                                          io value
+platform   morf-terminal  terminal emulation                                io scene value
+platform   morf-system    services, desktop entries, menus                  io image value
+engine     morf-shader    Lua-syntax shaders to WGSL                        value
+engine     morf-runtime   what the engine does with no Lua: handlers,       scene layout text app value
+                          timers, the reactive scheduler, events, gestures,
+                          shortcuts, focus, wake causes, window
+                          declarations and platform requests
+engine     morf-kit       the widget archetypes                             value
+engine     morf-lua       the Lua bindings (the morf.* tables) and the VM   everything above
+frontend   morf-host      running a configuration: live windows, the loop,  everything above
+                          the lock screen, the supervisor and workers,
+                          capture, a11y, the app mode, the headless runner
+frontend   morf-cli       the command line, the runners, the test host      host value
 ```
 
-Run the build recipes as your normal user. Each invokes sudo for its system
-installation step (sudo may reuse an existing authentication timestamp):
+Three more rules hold everywhere: nothing below morf-lua names `luna`;
+nothing outside morf-app and morf-desktop (and the frontend) names a
+Wayland crate; and no core crate knows a compositor, a network manager or a
+distribution -- those live in Lua libraries a configuration chooses.
 
-```sh
-oslo make install
-oslo make apply --example caelestia
-# Subsequent updates can use: oslo make apply
-```
+## A turn of the loop
 
-`make install` builds the portable executable, installs `/usr/bin/morf` and
-`/usr/share/morf/library`, then migrates existing Hyprland commands away from
-`~/.local/bin/morf`. It backs up and removes that local executable. The old
-user library becomes a symlink to the system library, allowing an already
-running engine and editor configurations to keep finding it.
+A backend (morf-app) delivers one `Event` type for every window: configures,
+frames, pointer, keys, touch, drags. morf-host routes each to the window it
+names (`Windows`, one map keyed by `WindowId`) and hands input to the
+runtime. Handlers run; their writes mark effects dirty in the reactive
+graph, and one flush re-runs them. What a handler asked of the platform --
+a capture, the clipboard, gamma, a drag -- is queued as a request and
+carried out by the host against morf-app or morf-desktop. The host lays the
+scene out and paints the windows that owe a frame; morf-render draws into
+the `RenderTarget` the backend handed out, presenting dmabufs through the
+window's `BufferSink` where it can.
 
-`make apply` stages the selected shell's Lua, themes, assets and fonts. It
-publishes the parts under `/etc/xdg/morf/NAME/` and `~/.config/morf/NAME/`, with
-`default` links in both roots. User appearance/settings JSON beside the parts
-is preserved. With no `--example`, it uses the user's current default shell
-(or Caelestia if none is selected). A system Morf installation is required first.
+morf-desktop shares the Wayland connection but keeps its own event queue
+and registry: smithay's toolkit implements every handler on one state type,
+and a state type of another crate cannot be given them. Any read of the
+socket fills its queue too, so the host dispatches it after each wake.
 
-When greetd is installed and the selected shell provides a greeter, apply
-validates the greeter under greetd's own account with an empty temporary home
-before updating `/etc/greetd/config.toml`:
+## Handlers
 
-```toml
-[default_session]
-command = "cage -s -- /usr/bin/morf greet -c caelestia"
-user = "greeter"
-```
+The runtime never holds a Lua closure. It holds `Handler`s: shared handles
+whose last clone releases what they stand for. morf-lua keeps the closures
+behind them (its handler store) and runs a handler when the runtime's code
+calls for one.
 
-Existing greetd account, terminal and other settings are retained. Apply
-never changes PAM or restarts greetd. The command takes effect at the next
-login. After the check succeeds and greetd points to Morf, the obsolete
-`logre` executables are moved into the system backup directory.
+## Headless
 
-User configurations take priority; system configurations are found through
-`XDG_CONFIG_DIRS` (default `/etc/xdg`). Shared libraries are also found through
-`XDG_DATA_DIRS` (default `/usr/local/share:/usr/share`). The greeter uses its
-own account, so it finds the system configuration without reading your home.
+`morf check`, `render` and `test` run on virtual outputs with a virtual
+seat and a clock that moves only when told (morf-app's headless backend),
+so the same spec fires the same timers every run.
 
-System replacements keep one backup in `/var/backups/morf/previous/`.
-User replacements keep one backup in `~/.local/state/morf/previous/`.
-Each operation replaces the previous backup; no dated history is retained. A failed system
-validation restores the replaced files before returning an error. User
-configuration is applied only after the system step succeeds.
+## Lua
+
+`library/lib` holds the shared Lua: `kit/` (the widget kit), `services/`
+(system bindings any shell may use), `integrations/` (opinionated, opt-in:
+Hyprland, weather, ...), `util/` and `testing/`. `library/types` is
+generated by `morf types`.
+
+Installation: [INSTALL.md](INSTALL.md). Writing UI: [UI.md](UI.md).
+Testing: [TESTING.md](TESTING.md).

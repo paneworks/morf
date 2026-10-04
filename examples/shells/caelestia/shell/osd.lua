@@ -12,7 +12,7 @@ local morf = require("morf")
 local M = {}
 
 local audio = morf.audio
-local sysinfo = require("lib.sysinfo")
+local sysinfo = require("lib.services.sysinfo")
 
 function M.volume()
   local ok, sink = pcall(function() return audio and audio.available() and audio.default_sink() end)

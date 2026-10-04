@@ -10,7 +10,18 @@
 
 It exposes native scene, layout, rendering, input, surface, IO, and service primitives through Rust and Lua APIs. Widgets and complete shells are downstream projects.
 
-The `morf-lua` crate embeds [Luna](https://github.com/onix-os/luna) as a boundedconfiguration and extension interface. Built-in engine modules are preloaded by Rust; morf does not ship a Lua implementation tree.
+The `morf-lua` crate embeds [Luna](https://github.com/onix-os/luna) as a bounded configuration and extension interface. Built-in engine modules are preloaded by Rust; morf does not ship a Lua implementation tree.
+
+```
+crates/
+  core/      morf-value  morf-scene  morf-layout
+  graphics/  morf-text  morf-vector  morf-image  morf-render
+  platform/  morf-app  morf-desktop  morf-io  morf-audio  morf-terminal  morf-system
+  engine/    morf-shader  morf-runtime  morf-kit  morf-lua
+  frontend/  morf-host  morf-cli
+```
+
+What each crate owns and may depend on: [`docs/SYSTEM.md`](docs/SYSTEM.md).
 
 ```sh
 oslo make build

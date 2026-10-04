@@ -21,7 +21,7 @@ M.POLL_MS = 30 * 60 * 1000
 
 local pacman = act.which("pacman")
 local checkupdates = act.which("checkupdates")
-local versions = require("lib.packages")
+local versions = require("lib.integrations.packages")
 
 M.AUR_RPC = "https://aur.archlinux.org/rpc/v5/info"
 M.AUR_BATCH = 150

@@ -5,7 +5,7 @@ local function load(style)
     local ui=require("morf.ui")
     morf.surface.height=650
     local callbacks,request,answers,cancels=nil,nil,0,0
-    package.loaded["lib.polkit_agent"]={serve=function(options) callbacks=options return {} end}
+    package.loaded["lib.services.polkit_agent"]={serve=function(options) callbacks=options return {} end}
     package.loaded.services={here=function() return true end}
     package.loaded.dashboard={drawer={set=function() end}}
     morf.broadcast=function() return false end
