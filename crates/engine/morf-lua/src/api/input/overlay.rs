@@ -32,66 +32,26 @@
 //! asks.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use luna::{Callback, CallbackReturn, Context, Function, Table, UserRef, Value as LuaValue};
-use morf_layout::{Geometry, Layout};
-use morf_scene::overlay::{Bounds, Placement, place};
+use morf_scene::overlay::Placement;
 use morf_scene::{Element, NodeHandle, Value as SceneValue};
 
-use crate::IpcValue;
 use crate::Runtime;
-use crate::api_focus::{FocusReason, FocusRequest};
-use crate::reactive_execute::execute_ipc_handler;
+use crate::api_focus::FocusRequest;
 use crate::scene_bindings::{assign_scene_property, create_node};
 use crate::state::ReactiveState;
 use crate::state_tokens::NodeToken;
 use crate::types::LogLevel;
-use morf_runtime::Handler;
+use morf_runtime::overlays::{DIM, Overlay, Overlays};
 
 mod runtime;
 
-const DIM: &str = "#00000052";
-
-pub(crate) struct Overlay {
-    root: NodeHandle,
-    wrapper: NodeHandle,
-    content: NodeHandle,
-    anchor: Option<NodeHandle>,
-    placement: Placement,
-    gap: f64,
-    margin: f64,
-    modal: bool,
-    escape: bool,
-    outside: bool,
-    on_close: Option<Handler>,
-    /// The node that had focus when it opened, and whether it showed it.
-    restore: Option<(NodeHandle, bool)>,
-    /// Whether closing gives focus back (`restore`, true).
-    give_back: bool,
-    placed: Option<(f64, f64)>,
-    /// Left where it is (`morf.overlay.track`): only the behaviour is the
-    /// layer's, and `wrapper` is the catcher behind it.
-    tracked: bool,
-    /// Nodes besides the anchor a press on which is not outside it: the
-    /// other controls that open it.
-    except: Vec<NodeHandle>,
-}
-
-/// Every surface's overlay layer and the overlays open on it.
-#[derive(Default)]
-pub(crate) struct OverlayState {
-    layers: HashMap<NodeHandle, NodeHandle>,
-    /// The wrapper each content was put in, kept while it is closed.
-    wrappers: HashMap<NodeHandle, NodeHandle>,
-    pub(crate) stack: Vec<Overlay>,
-    closing: Vec<(NodeHandle, &'static str)>,
-    /// Opens asked for while the same content's close was still pending:
-    /// run once that close has landed, in the same turn, so a close and a
-    /// reopen (a popup re-anchored) both happen, in order.
-    reopening: Vec<(NodeHandle, Option<luna::StashedTable>)>,
-}
+/// Every surface's overlay layer and the overlays open on it; a reopen
+/// waiting on its close keeps its options.
+pub(crate) type OverlayState = Overlays<Option<luna::StashedTable>>;
 
 /// A list of nodes from Lua (`except = { a, b }`), or none.
 fn nodes_of<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<Vec<NodeHandle>, String> {
@@ -123,10 +83,6 @@ fn fill() -> SceneValue {
         "fill".to_owned(),
         SceneValue::Bool(true),
     )]))
-}
-
-fn within(state: &ReactiveState, outer: NodeHandle, node: NodeHandle) -> bool {
-    crate::runtime_helpers::scene_node_in_subtree(&state.scene, outer, node)
 }
 
 /// The surface's overlay layer, made the first time it is wanted.
@@ -181,27 +137,11 @@ fn open<'gc>(
         LuaValue::Number(n) => n,
         _ => default,
     };
-    if state
-        .borrow()
-        .overlays
-        .stack
-        .iter()
-        .any(|o| o.content == content)
-    {
-        let pending = state
-            .borrow()
+    if state.borrow().overlays.contains(content) {
+        state
+            .borrow_mut()
             .overlays
-            .closing
-            .iter()
-            .any(|(c, _)| *c == content);
-        if pending {
-            let stashed = options.map(|t| ctx.stash(t));
-            state
-                .borrow_mut()
-                .overlays
-                .reopening
-                .push((content, stashed));
-        }
+            .open_again(content, || options.map(|t| ctx.stash(t)));
         return Ok(());
     }
     let anchor = node("anchor")?;
@@ -333,13 +273,7 @@ fn track<'gc>(
         LuaValue::Boolean(on) => on,
         _ => true,
     };
-    if state
-        .borrow()
-        .overlays
-        .stack
-        .iter()
-        .any(|o| o.content == content)
-    {
+    if state.borrow().overlays.contains(content) {
         return Ok(());
     }
     let anchor = match get("anchor") {
@@ -448,8 +382,7 @@ pub(crate) fn install_overlay_api<'gc>(
             closer
                 .borrow_mut()
                 .overlays
-                .closing
-                .push((content.handle, "closed"));
+                .request_close(content.handle, "closed");
             Ok(CallbackReturn::Return)
         }),
     );
@@ -459,19 +392,7 @@ pub(crate) fn install_overlay_api<'gc>(
         "is_open",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let content: UserRef<NodeToken> = stack.consume(ctx)?;
-            let open = {
-                let state = asker.borrow();
-                state
-                    .overlays
-                    .stack
-                    .iter()
-                    .any(|o| o.content == content.handle)
-                    && !state
-                        .overlays
-                        .closing
-                        .iter()
-                        .any(|(c, _)| *c == content.handle)
-            };
+            let open = asker.borrow().overlays.is_open(content.handle);
             stack.replace(ctx, open);
             Ok(CallbackReturn::Return)
         }),
