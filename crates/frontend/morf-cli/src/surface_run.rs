@@ -251,6 +251,7 @@ fn drive_surface(
     let (width, height) = client.physical_size();
     let backend = pollster::block_on(WgpuBackend::new_surface(
         client.window_target(),
+        client.window_target().buffer_sink(),
         width,
         height,
     ))
@@ -430,6 +431,7 @@ fn drive_surface(
             let (width, height) = replacement.physical_size();
             let backend = pollster::block_on(WgpuBackend::new_surface(
                 replacement.window_target(),
+                replacement.window_target().buffer_sink(),
                 width,
                 height,
             ))

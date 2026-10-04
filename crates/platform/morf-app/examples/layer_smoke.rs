@@ -41,6 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (width, height) = client.physical_size();
     let mut backend = pollster::block_on(WgpuBackend::new_surface(
         client.window_target(),
+        client.window_target().buffer_sink(),
         width,
         height,
     ))?;

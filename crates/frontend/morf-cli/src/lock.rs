@@ -265,7 +265,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                             .lock_window_target(index)
                             .ok_or_else(|| "configured lock surface disappeared".to_owned())?;
                         let backend =
-                            pollster::block_on(WgpuBackend::new_surface(target, width, height))
+                            pollster::block_on(WgpuBackend::new_surface(target.clone(),target.buffer_sink(), width, height))
                                 .map_err(|error| error.to_string())?;
                         outputs[index].renderer = Some(RenderEngine::new(backend));
                     }

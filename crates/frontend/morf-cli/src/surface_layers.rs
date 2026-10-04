@@ -388,7 +388,8 @@ pub(crate) fn layer_surface_configure(
             .layer_window_target(layer)
             .ok_or_else(|| "configured layer surface disappeared".to_owned())?;
         let backend = pollster::block_on(WgpuBackend::new_surface(
-            target,
+            target.clone(),
+            target.buffer_sink(),
             physical_width,
             physical_height,
         ))

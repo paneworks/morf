@@ -177,7 +177,8 @@ pub(crate) fn handle_surface_event(
                         .popup_window_target(id)
                         .ok_or_else(|| "configured popup disappeared".to_owned())?;
                     let backend = pollster::block_on(WgpuBackend::new_surface(
-                        target,
+                        target.clone(),
+                        target.buffer_sink(),
                         physical_width,
                         physical_height,
                     ))
@@ -242,7 +243,8 @@ pub(crate) fn handle_surface_event(
                         .floating_window_target(id)
                         .ok_or_else(|| "configured floating surface disappeared".to_owned())?;
                     let backend = pollster::block_on(WgpuBackend::new_surface(
-                        target,
+                        target.clone(),
+                        target.buffer_sink(),
                         physical_width,
                         physical_height,
                     ))

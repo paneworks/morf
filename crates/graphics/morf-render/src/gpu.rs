@@ -48,7 +48,7 @@ mod pipelines;
 mod present;
 #[cfg(test)]
 mod present_tests;
-mod present_wayland;
+mod present_link;
 mod profile;
 mod shader_registry;
 mod shaders;

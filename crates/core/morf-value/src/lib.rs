@@ -3,10 +3,12 @@
 //! exchange.
 //!
 //! The bottom of the crate graph: it depends on nothing of morf's, and
-//! nothing here knows Lua, a scene or a window.
+//! nothing here knows Lua, a scene or a window (`present` is how a renderer
+//! and a window speak without either knowing the other).
 
 pub mod color;
 pub mod hct;
+pub mod present;
 /// Input regions: the shapes a surface takes the pointer in, composed into
 /// the rectangles a compositor is told.
 pub mod region;

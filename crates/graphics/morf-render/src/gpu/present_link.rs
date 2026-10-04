@@ -1,11 +1,11 @@
-//! A ring's buffers on a Wayland surface: dmabufs this engine exports,
-//! handed to the compositor as `wl_buffer`s, attached and committed here.
+//! A ring's buffers shown on a window: dmabufs this engine exports, handed
+//! to the window's [`BufferSink`] and fenced here.
 //!
 //! This is what Mesa's Vulkan WSI does for a swapchain, done by the engine
-//! so that it knows what is in each buffer (see `present`). It talks to the
-//! compositor through the surface's own connection, on an event queue of its
-//! own -- the way a driver does -- so the host hands over a window handle
-//! exactly as it would for a swapchain and never sees any of it.
+//! so that it knows what is in each buffer (see `present`). The window
+//! system's half -- wrapping a dmabuf as a buffer, attaching, committing,
+//! hearing releases -- is the sink's, which the window's backend
+//! (`morf-app`) supplies; this side never names a window system.
 //!
 //! Synchronisation is by sync file, both ways, the same as Mesa's on a
 //! kernel that can:
@@ -23,113 +23,23 @@
 //! nothing here, and are left out -- they would need submissions of their own
 //! outside wgpu's ordering.
 
-use std::any::Any;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
-use std::ptr::NonNull;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use ash::vk;
-use wayland_client::backend::{Backend, ObjectId};
-use wayland_client::globals::{GlobalListContents, registry_queue_init};
-use wayland_client::protocol::{
-    wl_buffer::{self, WlBuffer},
-    wl_registry::WlRegistry,
-    wl_surface::WlSurface,
-};
-use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle};
-use wayland_protocols::wp::linux_dmabuf::zv1::client::{
-    zwp_linux_buffer_params_v1::{self, ZwpLinuxBufferParamsV1},
-    zwp_linux_dmabuf_v1::{self, ZwpLinuxDmabufV1},
-};
+use morf_value::present::{BufferSink, Damage, DmabufPlane, SinkBuffer};
 use wgpu::hal::api::Vulkan;
 
 use super::dmabuf::{self, DmabufImage, FOURCC_ARGB8888, Purpose};
 use super::present::Slot;
 use crate::DamageRect;
 
-/// What the compositor said on this engine's queue.
-#[derive(Default)]
-pub(crate) struct LinkState {
-    /// The modifiers it takes `ARGB8888` with.
-    modifiers: Vec<u64>,
-}
-
-impl Dispatch<WlRegistry, GlobalListContents> for LinkState {
-    fn event(
-        _: &mut Self,
-        _: &WlRegistry,
-        _: <WlRegistry as Proxy>::Event,
-        _: &GlobalListContents,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<ZwpLinuxDmabufV1, ()> for LinkState {
-    fn event(
-        state: &mut Self,
-        _: &ZwpLinuxDmabufV1,
-        event: zwp_linux_dmabuf_v1::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        if let zwp_linux_dmabuf_v1::Event::Modifier {
-            format,
-            modifier_hi,
-            modifier_lo,
-        } = event
-            && format == FOURCC_ARGB8888
-        {
-            state
-                .modifiers
-                .push((u64::from(modifier_hi) << 32) | u64::from(modifier_lo));
-        }
-    }
-}
-
-impl Dispatch<ZwpLinuxBufferParamsV1, ()> for LinkState {
-    fn event(
-        _: &mut Self,
-        _: &ZwpLinuxBufferParamsV1,
-        _: zwp_linux_buffer_params_v1::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        // Only the deferred `create` answers here; buffers are made with
-        // `create_immed`.
-    }
-}
-
-impl Dispatch<WlBuffer, Arc<AtomicBool>> for LinkState {
-    fn event(
-        _: &mut Self,
-        buffer: &WlBuffer,
-        event: wl_buffer::Event,
-        busy: &Arc<AtomicBool>,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        if let wl_buffer::Event::Release = event {
-            if super::present::log_wanted() {
-                eprintln!(
-                    "{} morf: present: released {}",
-                    super::present::stamp(),
-                    buffer.id().protocol_id()
-                );
-            }
-            busy.store(false, Ordering::Release);
-        }
-    }
-}
-
-/// A slot's dmabuf, its `wl_buffer`, and its two semaphores.
+/// A slot's dmabuf, the window system's buffer for it, and its two
+/// semaphores.
 pub(crate) struct SlotLink {
-    buffer: WlBuffer,
+    buffer: Box<dyn SinkBuffer>,
     image: DmabufImage,
     /// Signalled by the submission that finishes a frame in it.
     signal: vk::Semaphore,
@@ -149,7 +59,6 @@ impl SlotLink {
 
 impl Drop for SlotLink {
     fn drop(&mut self) {
-        self.buffer.destroy();
         // A slot is dropped released, and a release comes after the
         // compositor's read, which waited on the frame: nothing submitted
         // still refers to the semaphores.
@@ -160,83 +69,38 @@ impl Drop for SlotLink {
     }
 }
 
-/// The surface a ring presents to, on the surface's own connection.
-pub(crate) struct WaylandLink {
-    connection: Connection,
-    queue: EventQueue<LinkState>,
-    state: LinkState,
-    surface: WlSurface,
-    dmabuf: ZwpLinuxDmabufV1,
-    /// Modifiers both the compositor and the device take.
+/// The window a ring presents to, through the sink its backend gave.
+pub(crate) struct BufferLink {
+    sink: Box<dyn BufferSink>,
+    /// Modifiers both the window system and the device take.
     modifiers: Vec<u64>,
     /// Buffers of an old size, kept until the compositor lets go of them.
     retired: Vec<Slot>,
     device: wgpu::Device,
     raw: ash::Device,
     semaphore_fd: ash::khr::external_semaphore_fd::Device,
-    /// Whatever the host handed over for the window: it keeps the surface's
-    /// connection alive as long as this is.
-    _window: Box<dyn Any + Send + Sync>,
 }
 
-impl WaylandLink {
-    /// Connects to the surface `surface` of the display `display`, or says
-    /// why presenting through the engine's own buffers is not possible here
-    /// and hands `window` back.
-    ///
-    /// # Safety
-    ///
-    /// `display` and `surface` must be a live `wl_display` and a `wl_surface`
-    /// on it, kept alive by `window`.
-    pub(crate) unsafe fn connect(
+impl BufferLink {
+    /// Presents through `sink`, or says why presenting through the engine's
+    /// own buffers is not possible here.
+    pub(crate) fn connect(
         device: &wgpu::Device,
         support: Option<&dmabuf::DmabufSupport>,
-        handles: (NonNull<std::ffi::c_void>, NonNull<std::ffi::c_void>),
-        window: Box<dyn Any + Send + Sync>,
-    ) -> Result<Self, (String, Box<dyn Any + Send + Sync>)> {
-        match unsafe { Self::open(device, support, handles) } {
-            Ok(mut link) => {
-                link._window = window;
-                Ok(link)
-            }
-            Err(error) => Err((error, window)),
-        }
-    }
-
-    unsafe fn open(
-        device: &wgpu::Device,
-        support: Option<&dmabuf::DmabufSupport>,
-        (display, surface): (NonNull<std::ffi::c_void>, NonNull<std::ffi::c_void>),
+        sink: Box<dyn BufferSink>,
     ) -> Result<Self, String> {
         if !support.is_some_and(|support| support.sync_file) {
             return Err("the device cannot export dmabufs with sync files".to_owned());
         }
-        let backend = unsafe { Backend::from_foreign_display(display.as_ptr().cast()) };
-        let connection = Connection::from_backend(backend);
-        let (globals, mut queue) = registry_queue_init::<LinkState>(&connection)
-            .map_err(|error| format!("could not list the globals: {error}"))?;
-        let qh = queue.handle();
-        // Version 3: the one that lists formats and modifiers as events.
-        let dmabuf: ZwpLinuxDmabufV1 = globals
-            .bind(&qh, 3..=3, ())
-            .map_err(|error| format!("no zwp_linux_dmabuf_v1 v3: {error}"))?;
-        let mut state = LinkState::default();
-        queue
-            .roundtrip(&mut state)
-            .map_err(|error| format!("could not hear the dmabuf formats: {error}"))?;
+        let theirs = sink.modifiers(FOURCC_ARGB8888);
         let ours = dmabuf::modifiers_for_purpose(device, FOURCC_ARGB8888, Purpose::PRESENT);
         let modifiers: Vec<u64> = ours
             .into_iter()
-            .filter(|modifier| state.modifiers.contains(modifier))
+            .filter(|modifier| theirs.contains(modifier))
             .collect();
         if modifiers.is_empty() {
-            dmabuf.destroy();
             return Err("the compositor and the GPU agree on no ARGB8888 modifier".to_owned());
         }
-        let id = unsafe { ObjectId::from_ptr(WlSurface::interface(), surface.as_ptr().cast()) }
-            .map_err(|_| "the window is not a wl_surface".to_owned())?;
-        let surface =
-            WlSurface::from_id(&connection, id).map_err(|_| "the wl_surface is gone".to_owned())?;
         let hal = unsafe { device.as_hal::<Vulkan>() }.ok_or("the device is not Vulkan")?;
         let raw = hal.raw_device().clone();
         let semaphore_fd = ash::khr::external_semaphore_fd::Device::new(
@@ -245,70 +109,35 @@ impl WaylandLink {
         );
         drop(hal);
         Ok(Self {
-            connection,
-            queue,
-            state,
-            surface,
-            dmabuf,
+            sink,
             modifiers,
             retired: Vec::new(),
             device: device.clone(),
             raw,
             semaphore_fd,
-            _window: Box::new(()),
         })
     }
 
-    /// Hears whatever the compositor sent this queue: releases, mostly. The
-    /// host's loop reads the socket; this only takes what it read.
+    /// Hears whatever the window system sent the sink: releases, mostly.
+    /// The host's loop reads the socket; this only takes what it read.
     pub(crate) fn dispatch(&mut self) {
-        let _ = self.queue.dispatch_pending(&mut self.state);
+        self.sink.dispatch();
         self.retired
             .retain(|slot| slot.busy.load(Ordering::Acquire));
     }
 
-    /// Reads the socket for this queue until something arrives or `deadline`
+    /// Waits for the window system until something arrives or `deadline`
     /// passes -- at least once, without waiting, when it already has.
     /// Returns whether anything did.
     pub(crate) fn wait_release(&mut self, deadline: Instant) -> bool {
-        // Bounded: a socket busy with other queues' events cannot hold it.
-        for _ in 0..64 {
-            if self.queue.dispatch_pending(&mut self.state).unwrap_or(0) > 0 {
-                self.dispatch();
-                return true;
-            }
-            let _ = self.connection.flush();
-            let Some(guard) = self.queue.prepare_read() else {
-                continue;
-            };
-            let left = deadline.saturating_duration_since(Instant::now());
-            let mut poll = [libc::pollfd {
-                fd: guard.connection_fd().as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            }];
-            let ready = unsafe {
-                libc::poll(
-                    poll.as_mut_ptr(),
-                    1,
-                    left.as_millis().min(i32::MAX as u128) as i32,
-                )
-            };
-            if ready > 0 {
-                if guard.read().is_err() {
-                    return false;
-                }
-            } else {
-                drop(guard);
-                if ready == 0 {
-                    return false;
-                }
-            }
+        let heard = self.sink.wait(deadline);
+        if heard {
+            self.dispatch();
         }
-        false
+        heard
     }
 
-    /// A new buffer of `size`, exported, wrapped as a `wl_buffer`.
+    /// A new buffer of `size`, exported, made the window system's.
     pub(crate) fn allocate(
         &mut self,
         device: &wgpu::Device,
@@ -343,26 +172,23 @@ impl WaylandLink {
                 return Err(format!("could not create a semaphore: {error}"));
             }
         };
-        let qh = self.queue.handle();
-        let params = self.dmabuf.create_params(&qh, ());
-        params.add(
-            image.plane.fd.as_fd(),
-            0,
-            image.plane.offset,
-            image.plane.stride,
-            (image.modifier >> 32) as u32,
-            (image.modifier & 0xffff_ffff) as u32,
-        );
         let busy = Arc::new(AtomicBool::new(false));
-        let buffer = params.create_immed(
-            size.0 as i32,
-            size.1 as i32,
-            FOURCC_ARGB8888,
-            zwp_linux_buffer_params_v1::Flags::empty(),
-            &qh,
-            busy.clone(),
-        );
-        params.destroy();
+        let plane = DmabufPlane {
+            fd: image.plane.fd.as_fd(),
+            offset: image.plane.offset,
+            stride: image.plane.stride,
+            modifier: image.modifier,
+        };
+        let buffer = match self.sink.import(plane, size, FOURCC_ARGB8888, busy.clone()) {
+            Ok(buffer) => buffer,
+            Err(error) => {
+                unsafe {
+                    self.raw.destroy_semaphore(signal, None);
+                    self.raw.destroy_semaphore(wait, None);
+                }
+                return Err(error);
+            }
+        };
         let texture = image.texture.clone();
         let mut slot = Slot::new(
             texture,
@@ -459,37 +285,33 @@ impl WaylandLink {
             eprintln!(
                 "{} morf: present: committed {}",
                 super::present::stamp(),
-                link.buffer.id().protocol_id()
+                link.buffer.label()
             );
         }
-        self.surface.attach(Some(&link.buffer), 0, 0);
-        for rect in damage {
-            self.surface.damage_buffer(
-                rect.x as i32,
-                rect.y as i32,
-                rect.width as i32,
-                rect.height as i32,
-            );
-        }
-        self.surface.commit();
-        let _ = self.connection.flush();
+        let damage: Vec<Damage> = damage
+            .iter()
+            .map(|rect| Damage {
+                x: rect.x,
+                y: rect.y,
+                width: rect.width,
+                height: rect.height,
+            })
+            .collect();
+        self.sink.present(link.buffer.as_ref(), &damage);
     }
 
     /// Commits with the buffer already there: a frame drawn into no buffer
     /// still delivers the frame callback the host asked for.
     pub(crate) fn commit_without_buffer(&mut self) {
-        self.surface.commit();
-        let _ = self.connection.flush();
+        self.sink.commit();
     }
 }
 
-impl Drop for WaylandLink {
+impl Drop for BufferLink {
     fn drop(&mut self) {
         // Every semaphore a slot holds may be in a submission still running.
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         self.retired.clear();
-        self.dmabuf.destroy();
-        let _ = self.connection.flush();
     }
 }
 

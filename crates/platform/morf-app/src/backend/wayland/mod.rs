@@ -4,6 +4,7 @@
 
 #[cfg(feature = "a11y")]
 pub mod accesskit;
+mod buffer_sink;
 mod capture_dmabuf;
 mod capture_handlers;
 mod client_backdrop;
@@ -36,6 +37,7 @@ mod toplevel_handlers;
 mod types;
 mod workspace_handlers;
 
+pub use buffer_sink::WaylandBufferSink;
 pub use client_layer::*;
 pub use client_services::Woke;
 pub use cursor::cursor_shape;

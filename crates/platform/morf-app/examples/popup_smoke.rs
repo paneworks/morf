@@ -9,6 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (bar_width, bar_height) = client.physical_size();
     let mut bar = pollster::block_on(WgpuBackend::new_surface(
         client.window_target(),
+        client.window_target().buffer_sink(),
         bar_width,
         bar_height,
     ))?;
@@ -55,8 +56,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scale = client.scale_120();
     let physical_width = ((width as u64 * scale as u64).div_ceil(120)) as u32;
     let physical_height = ((height as u64 * scale as u64).div_ceil(120)) as u32;
+    let popup_target = client.popup_window_target(0).ok_or("popup was dismissed")?;
     let mut popup = pollster::block_on(WgpuBackend::new_surface(
-        client.popup_window_target(0).ok_or("popup was dismissed")?,
+        popup_target.clone(),
+        popup_target.buffer_sink(),
         physical_width,
         physical_height,
     ))?;

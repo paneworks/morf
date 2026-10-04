@@ -59,9 +59,6 @@ PENDING = {
     "morf-cli depends on morf-text, not in its row": "phase 7: morf-host",
     "morf-cli depends on morf-app, not in its row": "phase 7: morf-host",
     "morf-app depends on morf-scene, not in its row": "phase 3: the AccessKit adapter reads a neutral tree",
-    "morf-render names wayland-backend; only morf-app and morf-desktop may": "phase 3: render takes a RenderTarget",
-    "morf-render names wayland-client; only morf-app and morf-desktop may": "phase 3: render takes a RenderTarget",
-    "morf-render names wayland-protocols; only morf-app and morf-desktop may": "phase 3: render takes a RenderTarget",
 }
 NO_LUA_BELOW = {"morf-shader", "morf-lua", "morf-host", "morf-cli"}
 WAYLAND_ALLOWED = {"morf-app", "morf-desktop", "morf-host", "morf-cli"}

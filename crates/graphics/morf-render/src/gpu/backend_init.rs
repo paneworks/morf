@@ -1,10 +1,9 @@
 use crate::SdfFieldInstance;
 use morf_image::ImageCache;
 use morf_text::{RasterContent, TextSystem};
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
+use morf_value::present::BufferSink;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::collections::HashMap;
-use std::ffi::c_void;
-use std::ptr::NonNull;
 
 /// How many buffers a surface presents through at most
 /// (`MORF_PRESENT_BUFFERS` overrides it). A compositor holds the buffer it
@@ -19,18 +18,6 @@ fn ring_buffers() -> usize {
         .unwrap_or(4)
 }
 
-/// A window's `wl_display` and `wl_surface`, when it is a Wayland one.
-fn wayland_handles(
-    window: &(impl HasWindowHandle + HasDisplayHandle),
-) -> Option<(NonNull<c_void>, NonNull<c_void>)> {
-    let RawWindowHandle::Wayland(surface) = window.window_handle().ok()?.as_raw() else {
-        return None;
-    };
-    let RawDisplayHandle::Wayland(display) = window.display_handle().ok()?.as_raw() else {
-        return None;
-    };
-    Some((display.display, surface.surface))
-}
 use wgpu::util::DeviceExt;
 
 use super::{
@@ -330,48 +317,53 @@ impl WgpuBackend {
     }
 
     /// Creates a renderer presenting to an owned native window target.
-    pub async fn new_surface<T>(window: T, width: u32, height: u32) -> Result<Self, GpuError>
+    ///
+    /// `sink` is the window's own way of showing dmabufs, when its backend
+    /// has one (or why not): then the frames are presented through buffers
+    /// of this engine's own (`present`), and a frame costs what it changed.
+    /// Without one, or a device that cannot, the window gets a swapchain.
+    /// `MORF_PRESENT=swapchain` asks for the swapchain.
+    pub async fn new_surface<T>(
+        window: T,
+        sink: Result<Box<dyn BufferSink>, String>,
+        width: u32,
+        height: u32,
+    ) -> Result<Self, GpuError>
     where
         T: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
     {
         let instance = shared_instance();
-        // A Wayland surface is presented through buffers of this engine's
-        // own when it can be (`present`): then a frame costs what it
-        // changed. Anything else, or a device or compositor that cannot, gets
-        // the swapchain. `MORF_PRESENT=swapchain` asks for the swapchain.
-        let mut window = window;
-        if let Some(handles) = wayland_handles(&window)
-            && std::env::var("MORF_PRESENT").map_or(true, |value| value != "swapchain")
-        {
-            let mut backend = Self::initialize(instance.clone(), None, width, height).await?;
-            // Safety: the handles came from `window`, which the link keeps.
-            let linked = unsafe {
-                super::present_wayland::WaylandLink::connect(
+        let wanted = std::env::var("MORF_PRESENT").map_or(true, |value| value != "swapchain");
+        let linked: Result<(), String> = match sink {
+            Ok(sink) if wanted => {
+                let mut backend = Self::initialize(instance.clone(), None, width, height).await?;
+                match super::present_link::BufferLink::connect(
                     &backend.device,
                     backend.dmabuf.as_ref(),
-                    handles,
-                    Box::new(window),
-                )
-            };
-            match linked {
-                Ok(link) => {
-                    backend.buffers = Some(super::present::BufferRing::new(
-                        &backend.device,
-                        &backend.texture,
-                        ring_buffers(),
-                        Some(link),
-                    ));
-                    return Ok(backend);
-                }
-                Err((error, returned)) => {
-                    if std::env::var_os("MORF_GPU_LOG").is_some() {
-                        eprintln!("morf: gpu: presenting through the swapchain: {error}");
+                    sink,
+                ) {
+                    Ok(link) => {
+                        backend.buffers = Some(super::present::BufferRing::new(
+                            &backend.device,
+                            &backend.texture,
+                            ring_buffers(),
+                            Some(link),
+                        ));
+                        // The sink holds the window's connection and
+                        // surface: the handles are not needed again.
+                        drop(window);
+                        return Ok(backend);
                     }
-                    window = *returned
-                        .downcast::<T>()
-                        .expect("the link hands back the window it was given");
+                    Err(error) => Err(error),
                 }
             }
+            Ok(_) => Err("MORF_PRESENT=swapchain".to_owned()),
+            Err(error) => Err(error),
+        };
+        if let Err(error) = linked
+            && std::env::var_os("MORF_GPU_LOG").is_some()
+        {
+            eprintln!("morf: gpu: presenting through the swapchain: {error}");
         }
         let surface = instance
             .create_surface(window)

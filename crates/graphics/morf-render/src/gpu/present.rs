@@ -14,8 +14,8 @@
 //! while it was away -- the "buffer age" every compositor-side renderer
 //! uses. A buffer too old for the history, or new, is copied whole.
 //!
-//! How the buffers reach the screen is `present_wayland`'s business: dmabufs
-//! handed to the compositor as `wl_buffer`s. Without it (the tests) a ring
+//! How the buffers reach the screen is `present_link`'s business: dmabufs
+//! handed to the window's `BufferSink`. Without it (the tests) a ring
 //! is a set of plain textures whose release the caller decides.
 
 use std::collections::VecDeque;
@@ -138,14 +138,14 @@ pub(crate) struct Slot {
     painted: Option<u64>,
     /// Whether the compositor still has it. Cleared by its `release`.
     pub(crate) busy: Arc<AtomicBool>,
-    /// The dmabuf and `wl_buffer` behind it, when it has any.
-    pub(crate) link: Option<super::present_wayland::SlotLink>,
+    /// The dmabuf and the window system's buffer behind it, when it has any.
+    pub(crate) link: Option<super::present_link::SlotLink>,
 }
 
 impl Slot {
     pub(crate) fn new(
         texture: wgpu::Texture,
-        link: Option<super::present_wayland::SlotLink>,
+        link: Option<super::present_link::SlotLink>,
     ) -> Self {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         Self {
@@ -168,7 +168,7 @@ pub(crate) struct BufferRing {
     composite: CompositePipeline,
     bind_group: wgpu::BindGroup,
     /// Where the buffers go; `None` in the tests.
-    pub(crate) wayland: Option<super::present_wayland::WaylandLink>,
+    pub(crate) link: Option<super::present_link::BufferLink>,
     /// The slot the frame being recorded is drawn into.
     pub(crate) pending: Option<usize>,
     /// The slot last presented, for the tests to read.
@@ -183,7 +183,7 @@ impl BufferRing {
         device: &wgpu::Device,
         target: &wgpu::Texture,
         limit: usize,
-        wayland: Option<super::present_wayland::WaylandLink>,
+        link: Option<super::present_link::BufferLink>,
     ) -> Self {
         let composite = create_composite_pipeline(device, FORMAT);
         let bind_group = create_composite_bind_group(
@@ -199,7 +199,7 @@ impl BufferRing {
             limit: limit.max(1),
             composite,
             bind_group,
-            wayland,
+            link,
             pending: None,
             presented: None,
             undeclared: Vec::new(),
@@ -219,8 +219,8 @@ impl BufferRing {
         if size != self.size {
             self.size = size;
             let old = std::mem::take(&mut self.slots);
-            if let Some(wayland) = &mut self.wayland {
-                wayland.retire(old);
+            if let Some(link) = &mut self.link {
+                link.retire(old);
             }
             self.presented = None;
         }
@@ -232,8 +232,8 @@ impl BufferRing {
     /// A free buffer to draw the next frame into, made if there is room:
     /// the freshest free one, since it has the least to catch up on.
     fn acquire(&mut self, device: &wgpu::Device) -> Option<usize> {
-        if let Some(wayland) = &mut self.wayland {
-            wayland.dispatch();
+        if let Some(link) = &mut self.link {
+            link.dispatch();
         }
         let started = std::time::Instant::now();
         let deadline = started + release_wait();
@@ -284,8 +284,8 @@ impl BufferRing {
                 return free;
             }
             if self.slots.len() < self.limit {
-                let slot = match &mut self.wayland {
-                    Some(wayland) => match wayland.allocate(device, self.size) {
+                let slot = match &mut self.link {
+                    Some(link) => match link.allocate(device, self.size) {
                         Ok(slot) => slot,
                         Err(error) => {
                             eprintln!("morf: gpu: could not make a buffer: {error}");
@@ -308,9 +308,9 @@ impl BufferRing {
             // compositor on a busy GPU held all four that long several times
             // a minute, and each time the output froze, input and all.
             let waited = self
-                .wayland
+                .link
                 .as_mut()
-                .is_some_and(|wayland| wayland.wait_release(deadline));
+                .is_some_and(|link| link.wait_release(deadline));
             if !waited {
                 return None;
             }
@@ -402,8 +402,8 @@ impl BufferRing {
             // No buffer this frame. The surface is still committed, so the
             // frame callback the host asked for comes, and the host keeps
             // drawing; the damage waits for the next buffer.
-            if let Some(wayland) = &mut self.wayland {
-                wayland.commit_without_buffer();
+            if let Some(link) = &mut self.link {
+                link.commit_without_buffer();
             }
             return;
         };
@@ -412,16 +412,16 @@ impl BufferRing {
         self.presented = Some(index);
         let mut declared = std::mem::take(&mut self.undeclared);
         declared.extend_from_slice(damage);
-        if let Some(wayland) = &mut self.wayland {
-            wayland.present(queue, slot, &declared);
+        if let Some(link) = &mut self.link {
+            link.present(queue, slot, &declared);
         }
     }
 
     /// Signals for the submission that finishes the pending buffer, when it
     /// needs any. Called just before it is submitted.
     pub(crate) fn before_submit(&mut self, queue: &wgpu::Queue) {
-        if let (Some(index), Some(wayland)) = (self.pending, &mut self.wayland) {
-            wayland.before_submit(queue, &self.slots[index]);
+        if let (Some(index), Some(link)) = (self.pending, &mut self.link) {
+            link.before_submit(queue, &self.slots[index]);
         }
     }
 

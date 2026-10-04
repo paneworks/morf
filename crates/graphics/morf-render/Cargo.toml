@@ -16,12 +16,9 @@ morf-vector.workspace = true
 morf-scene.workspace = true
 morf-text.workspace = true
 raw-window-handle.workspace = true
-# Presenting into buffers of the engine's own: the surface's connection, on a
-# queue of this crate's, and the dmabuf ioctls that carry a frame's fence.
+# The dmabuf ioctls that carry a frame's fence, presenting into buffers of the
+# engine's own (the window system's half is the window's `BufferSink`).
 libc.workspace = true
-wayland-backend.workspace = true
-wayland-client.workspace = true
-wayland-protocols.workspace = true
 resvg.workspace = true
 wgpu.workspace = true
 # The same ash wgpu-hal speaks, for the handful of Vulkan calls wgpu has no
