@@ -74,8 +74,10 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for DesktopState {
             }
             ext_image_copy_capture_session_v1::Event::DmabufFormat { format, modifiers } => {
                 let modifiers = modifiers
-                    .chunks_exact(8)
-                    .map(|chunk| u64::from_ne_bytes(chunk.try_into().unwrap_or([0; 8])))
+                    .as_chunks::<8>()
+                    .0
+                    .iter()
+                    .map(|chunk| u64::from_ne_bytes(*chunk))
                     .collect();
                 state.captures[index]
                     .dmabuf_formats

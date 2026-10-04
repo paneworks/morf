@@ -4,6 +4,7 @@ use morf_scene::{Element, NodeHandle};
 use std::collections::HashMap;
 
 mod frame_draw;
+mod split;
 mod stages;
 mod submit;
 
@@ -59,6 +60,7 @@ impl RenderBackend for WgpuBackend {
         damage: &[DamageRect],
         scale_120: u32,
     ) -> Result<(), Self::Error> {
+        let mut split = split::RenderSplit::start();
         let FieldBatch {
             indices: field_indices,
             instances: field_instances,
@@ -67,6 +69,7 @@ impl RenderBackend for WgpuBackend {
             outlines: field_outlines,
             shaders: field_shaders,
         } = collect_field_instances(list, scale_120, &mut self.text, &mut self.drawings);
+        split.mark("fields");
         let mut glyph_batch = create_glyph_batch(
             GlyphBatchContext {
                 queue: &self.queue,
@@ -78,6 +81,7 @@ impl RenderBackend for WgpuBackend {
             list,
             scale_120,
         )?;
+        split.mark("glyphs");
         let mut texture_batch = create_texture_batch(
             TextureBatchContext {
                 device: &self.device,
@@ -93,6 +97,7 @@ impl RenderBackend for WgpuBackend {
             list,
             scale_120,
         );
+        split.mark("images");
         push_path_textures(
             TextureBatchContext {
                 device: &self.device,
@@ -109,6 +114,7 @@ impl RenderBackend for WgpuBackend {
             scale_120,
             &mut texture_batch,
         );
+        split.mark("paths");
         let scale = scale_120.max(1) as f64 / 120.0;
         let mut command_layers = vec![None; list.commands.len()];
         let mut child_layers = HashMap::new();
@@ -189,6 +195,7 @@ impl RenderBackend for WgpuBackend {
                     .is_some_and(|draw| draw.refresh.is_some())
             },
         );
+        split.mark("backdrops and layer schedule");
         if self.mask_pipeline.is_none()
             && list.layers.iter().any(|layer| layer.alpha_mask.is_some())
         {
@@ -202,6 +209,7 @@ impl RenderBackend for WgpuBackend {
         let layer_targets =
             self.build_layer_targets(list, &mut texture_batch, scale, &regions, &stages);
         self.layer_pool.end_frame();
+        split.mark("layer targets");
         self.upload_frame(
             list,
             scale_120,
@@ -219,6 +227,7 @@ impl RenderBackend for WgpuBackend {
         // A damage rectangle that misses it skips its draws — a clock ticking
         // in ten panels is ten small rectangles, and each used to issue every
         // draw of the surface, scissored to nothing.
+        split.mark("upload");
         let reach = frame_draw::command_reach(
             self,
             list,
@@ -228,6 +237,7 @@ impl RenderBackend for WgpuBackend {
             &backdrop_draws,
             glyph_batch.as_ref(),
         );
+        split.mark("reach");
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -262,6 +272,10 @@ impl RenderBackend for WgpuBackend {
         if let Some(profile) = &self.profile {
             profile.mark(&mut encoder, 2);
         }
-        self.finish_frame(encoder, list, damage, &reach, &command_layers, scale_120)
+        split.mark("encode");
+        let finished = self.finish_frame(encoder, list, damage, &reach, &command_layers, scale_120);
+        split.mark("acquire, submit, present");
+        split.finish();
+        finished
     }
 }

@@ -360,7 +360,7 @@ impl super::backend_types::WgpuBackend {
     pub(crate) fn ring_pixels(&self, index: usize) -> Vec<u8> {
         let ring = self.buffers.as_ref().expect("a ring");
         let mut pixels = self.read_texture(&ring.slots[index].texture);
-        for pixel in pixels.chunks_exact_mut(4) {
+        for pixel in pixels.as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
         pixels

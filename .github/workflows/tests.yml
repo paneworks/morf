@@ -11,11 +11,17 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      RUST_TEST_THREADS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev pkg-config
       - uses: actions/cache@v4
         with:
           path: |
@@ -43,4 +49,3 @@ jobs:
           for style in material tsugumori; do
             CAELESTIA_STYLE=$style target/debug/morf check --kit --no-dbus examples/shells/caelestia/shell/init.lua
           done
-

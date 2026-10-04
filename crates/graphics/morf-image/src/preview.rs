@@ -14,7 +14,7 @@ pub const MAX_TOTAL_PREVIEW_BYTES: u64 = 256 * 1024 * 1024;
 static HELD_BYTES: AtomicU64 = AtomicU64::new(0);
 fn reserve(bytes: u64) -> Result<(), ImageError> {
     HELD_BYTES
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |held| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |held| {
             held.checked_add(bytes)
                 .filter(|total| *total <= MAX_TOTAL_PREVIEW_BYTES)
         })

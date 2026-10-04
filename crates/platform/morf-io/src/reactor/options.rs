@@ -14,7 +14,7 @@ pub enum StdinMode {
     Null,
     /// These bytes, then end of file.
     Data(Vec<u8>),
-    /// Kept open for [`ReactorControl::write`] until closed.
+    /// Kept open for [`super::ReactorControl::write`] until closed.
     Pipe,
 }
 
@@ -86,7 +86,7 @@ pub struct ConnectOptions {
     pub endpoint: Endpoint,
     pub lines: bool,
     pub max_line: usize,
-    /// Given up with [`CloseReason::TimedOut`] when not connected by then.
+    /// Given up with [`super::CloseReason::TimedOut`] when not connected by then.
     pub connect_timeout: Duration,
     /// The whole connection's life, for a request that must be answered.
     pub deadline: Option<Duration>,

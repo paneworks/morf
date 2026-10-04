@@ -138,7 +138,7 @@ impl Desktop {
         &self,
         identifier: &str,
     ) -> Option<&wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1>
-    {
+{
         let listed = self
             .state
             .toplevels

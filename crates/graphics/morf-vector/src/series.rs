@@ -258,12 +258,12 @@ pub fn path(values: &[f32], others: &[f32], plot: &Plot) -> String {
             });
         }
         Kind::Scatter => {
-            let ys: Vec<f32> = values.chunks_exact(2).map(|p| p[1]).collect();
+            let ys: Vec<f32> = values.as_chunks::<2>().0.iter().map(|p| p[1]).collect();
             return more::scatter(values, plot, plot.top_for(&ys, &[]));
         }
         Kind::Candles => return more::candles(values, plot, plot.top_for(values, others)),
         Kind::XyLine => {
-            let ys: Vec<f32> = values.chunks_exact(2).map(|p| p[1]).collect();
+            let ys: Vec<f32> = values.as_chunks::<2>().0.iter().map(|p| p[1]).collect();
             return more::xy_line(values, plot, plot.top_for(&ys, &[]));
         }
         _ => {}

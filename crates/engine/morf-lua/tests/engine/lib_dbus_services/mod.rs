@@ -35,6 +35,7 @@ pub(super) fn run_with_fake(name: &str, body: &str) -> String {
     );
     let path = format!("{}/../../../library/{name}.lua", env!("CARGO_MANIFEST_DIR"));
     let mut runtime = Runtime::default();
+    runtime.use_virtual_clock();
     runtime
         .execute(&path, script.as_bytes())
         .unwrap_or_else(|error| panic!("{name} failed to load: {error}"));
@@ -50,7 +51,7 @@ pub(super) fn run_with_fake(name: &str, body: &str) -> String {
             return text;
         }
         runtime.poll_services();
-        thread::sleep(Duration::from_millis(1));
+        runtime.advance_virtual_clock(Duration::from_millis(1));
     }
 }
 

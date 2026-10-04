@@ -5,6 +5,9 @@ use std::error::Error as StdError;
 
 use crate::{commands::*, effects::*, sdf::*};
 
+mod explain;
+use explain::{command_change, damage_log_wanted, explain, kind, layer_change};
+
 /// Physical damage rectangle with an exclusive lower-right edge.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DamageRect {
@@ -52,6 +55,12 @@ impl DamageTracker {
     /// Diffs commands and converts changed logical bounds at protocol scale in 120ths.
     pub fn diff(&mut self, next: &DrawList, scale_120: u32) -> Vec<DamageRect> {
         if self.scale_120 != 0 && self.scale_120 != scale_120 {
+            if damage_log_wanted() {
+                eprintln!(
+                    "damage: whole surface: scale {} -> {scale_120}",
+                    self.scale_120
+                );
+            }
             self.scale_120 = scale_120;
             return merge_damage(
                 next.commands
@@ -64,6 +73,11 @@ impl DamageTracker {
         let current_keys = command_keys(&next.commands);
         let previous = keyed_commands(&self.previous.commands, &previous_keys);
         let current = keyed_commands(&next.commands, &current_keys);
+        // Which commands changed places with another, rather than shifting
+        // along because something was added or taken away before them: a
+        // swell put into a fullscreen frame moved every command after it one
+        // place on, and each was repainted whole for it.
+        let moved = moved_commands(&current_keys, &previous);
         // Each changed area with the paint order it was drawn at, so a frosted
         // panel can tell a change beneath it from one on top of it.
         let mut changed: Vec<(Geometry, usize)> = Vec::new();
@@ -78,20 +92,37 @@ impl DamageTracker {
             match previous_layers.get(key) {
                 Some(old) if old == shape => {}
                 Some(old) => {
+                    explain("layer changed", shape.layer.node, old.layer.bounds, || {
+                        layer_change(&old.layer, &shape.layer)
+                    });
                     changed.push((old.layer.bounds, old.start.min(shape.start)));
                     changed.push((shape.layer.bounds, shape.start));
                 }
-                None => changed.push((shape.layer.bounds, shape.start)),
+                None => {
+                    explain(
+                        "layer added",
+                        shape.layer.node,
+                        shape.layer.bounds,
+                        String::new,
+                    );
+                    changed.push((shape.layer.bounds, shape.start));
+                }
             }
         }
         for (key, old) in &previous_layers {
             if !current_layers.contains_key(key) {
+                explain(
+                    "layer removed",
+                    old.layer.node,
+                    old.layer.bounds,
+                    String::new,
+                );
                 changed.push((old.layer.bounds, old.start));
             }
         }
         for (key, (order, command)) in &current {
             match previous.get(key) {
-                Some((old_order, old)) if old_order == order && *old == *command => {}
+                Some((_, old)) if !moved.contains(key) && *old == *command => {}
                 // Nothing drawn before or after: no pixel changed.
                 Some((_, old)) if old.draws_nothing() && command.draws_nothing() => {}
                 None if command.draws_nothing() => {}
@@ -100,7 +131,7 @@ impl DamageTracker {
                     // that did, not its whole rectangle.
                     // And a field whose layers alone moved damages where they
                     // were and are, not its whole reach.
-                    match (old_order == order)
+                    match (!moved.contains(key))
                         .then(|| {
                             command
                                 .terminal_rows_changed(old)
@@ -110,16 +141,27 @@ impl DamageTracker {
                     {
                         Some(rows) => changed.extend(rows.into_iter().map(|row| (row, *order))),
                         None => {
+                            explain("command changed", command.node(), command.bounds(), || {
+                                command_change(old, command, moved.contains(key))
+                            });
                             changed.push((old.bounds(), (*old_order).min(*order)));
                             changed.push((command.bounds(), *order));
                         }
                     }
                 }
-                None => changed.push((command.bounds(), *order)),
+                None => {
+                    explain("command added", command.node(), command.bounds(), || {
+                        kind(command).to_owned()
+                    });
+                    changed.push((command.bounds(), *order));
+                }
             }
         }
         for (key, (order, command)) in &previous {
             if !current.contains_key(key) && !command.draws_nothing() {
+                explain("command removed", command.node(), command.bounds(), || {
+                    kind(command).to_owned()
+                });
                 changed.push((command.bounds(), *order));
             }
         }
@@ -235,6 +277,9 @@ impl<B: RenderBackend> RenderEngine<B> {
     /// is what this is: the resize goes through the engine so the baseline
     /// cannot be left behind.
     pub fn resize(&mut self, width: u32, height: u32) {
+        if damage_log_wanted() {
+            eprintln!("damage: whole surface: resized to {width}x{height}");
+        }
         self.backend.resize(width, height);
         self.damage.forget();
     }
@@ -245,6 +290,11 @@ impl<B: RenderBackend> RenderEngine<B> {
     /// a change of blend space rebuilds it, and nothing the tracker remembers
     /// is on the new one.
     pub fn forget(&mut self) {
+        if damage_log_wanted() {
+            eprintln!(
+                "damage: whole surface: the target was replaced (blend or subpixel text changed)"
+            );
+        }
         self.damage.forget();
     }
 
@@ -284,6 +334,46 @@ fn keyed_commands<'a>(
         .zip(keys)
         .enumerate()
         .map(|(order, (command, key))| (*key, (order, command)))
+        .collect()
+}
+
+/// The commands present in both frames that changed places relative to the
+/// others: everything outside the longest run of them that kept its order.
+/// A command added or removed is damaged as such; the ones it pushed along
+/// are not moved by it.
+fn moved_commands(
+    current_keys: &[(NodeHandle, u32)],
+    previous: &HashMap<(NodeHandle, u32), (usize, &DrawCommand)>,
+) -> std::collections::HashSet<(NodeHandle, u32)> {
+    // The old place of each command that is in both, in the new paint order.
+    let common: Vec<((NodeHandle, u32), usize)> = current_keys
+        .iter()
+        .filter_map(|key| previous.get(key).map(|(order, _)| (*key, *order)))
+        .collect();
+    // Longest increasing run of old places (patience sorting): `tails[k]`
+    // is the index into `common` ending the best run of length k + 1.
+    let mut tails: Vec<usize> = Vec::new();
+    let mut back: Vec<Option<usize>> = vec![None; common.len()];
+    for (index, &(_, place)) in common.iter().enumerate() {
+        let at = tails.partition_point(|&tail| common[tail].1 < place);
+        back[index] = at.checked_sub(1).map(|before| tails[before]);
+        if at == tails.len() {
+            tails.push(index);
+        } else {
+            tails[at] = index;
+        }
+    }
+    let mut kept = vec![false; common.len()];
+    let mut walk = tails.last().copied();
+    while let Some(index) = walk {
+        kept[index] = true;
+        walk = back[index];
+    }
+    common
+        .iter()
+        .zip(kept)
+        .filter(|(_, kept)| !kept)
+        .map(|((key, _), _)| *key)
         .collect()
 }
 

@@ -268,7 +268,9 @@ fn hyprland_library_is_harmless_without_hyprland() {
                 local answered = nil
                 assert(H.request("j/monitors", function(value, err) answered = err end) == false)
                 assert(answered == "unavailable")
-                assert(H.dispatch("workspace", 1) == false)
+                local dispatched = nil
+                assert(H.dispatch("workspace", 1, function(value, err) dispatched = err end) == false)
+                assert(dispatched == "unavailable")
                 assert(H.state.monitors:len() == 0 and H.state.clients:len() == 0)
                 assert(H.state.connected == false and H.state.active_workspace.id == 0)
                 assert(#H.workspace_windows(1) == 0 and H.monitor_workspace() == nil)

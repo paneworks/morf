@@ -1,7 +1,7 @@
 use morf_app::Backend;
 use morf_app::PRIMARY_LAYER;
 use morf_lua::Runtime;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::host::windows::Kind;
 use crate::{surface_layers::*, surfaces::*};
@@ -24,8 +24,8 @@ use morf_app::WindowId;
 pub struct FramePacer {
     /// Typical cost of producing one frame: the median of `recent`.
     pub cost: Option<Duration>,
-    /// The last few paints' costs, oldest first.
-    recent: std::collections::VecDeque<Duration>,
+    /// The last few paints' costs, oldest first, with when each was made.
+    recent: std::collections::VecDeque<(Instant, Duration)>,
     /// Callbacks seen since the last paint, or `None` when the surface is at
     /// rest and the next callback should paint whatever the cadence was.
     pub waited: Option<u32>,
@@ -39,6 +39,15 @@ pub struct FramePacer {
 /// second for the rest of the motion. Half of these must be slow before the
 /// cadence changes, which a real change reaches within a few frames.
 pub const COST_WINDOW: usize = 7;
+
+/// How old a paint's cost may be and still say what painting costs now.
+///
+/// The first frames after a start build every shader and every glyph and cost
+/// hundreds of milliseconds; a shell at rest paints a frame a second, so seven
+/// paints back can reach all the way to them. Judged on those, the first
+/// motion after a start -- a workspace switch, a minute in -- ran at every
+/// fourth callback on a desk that draws it in ten milliseconds.
+pub const COST_FRESHNESS: Duration = Duration::from_secs(2);
 
 impl Default for FramePacer {
     fn default() -> Self {
@@ -57,11 +66,24 @@ impl FramePacer {
 
     /// Records what the last paint cost.
     pub fn observed(&mut self, cost: Duration) {
+        self.observed_at(cost, Instant::now());
+    }
+
+    /// Records what a paint made at `now` cost, forgetting the costs of paints
+    /// older than [`COST_FRESHNESS`].
+    pub fn observed_at(&mut self, cost: Duration, now: Instant) {
+        while self
+            .recent
+            .front()
+            .is_some_and(|(at, _)| now.saturating_duration_since(*at) > COST_FRESHNESS)
+        {
+            self.recent.pop_front();
+        }
         if self.recent.len() == COST_WINDOW {
             self.recent.pop_front();
         }
-        self.recent.push_back(cost);
-        let mut sorted: Vec<Duration> = self.recent.iter().copied().collect();
+        self.recent.push_back((now, cost));
+        let mut sorted: Vec<Duration> = self.recent.iter().map(|(_, cost)| *cost).collect();
         sorted.sort_unstable();
         self.cost = Some(sorted[sorted.len() / 2]);
     }

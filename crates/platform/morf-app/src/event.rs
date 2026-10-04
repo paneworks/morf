@@ -80,7 +80,7 @@ pub enum Event {
     },
     /// The compositor clipboard selection changed.
     Clipboard { text: Option<String> },
-    /// A read asked for with [`LayerClient::read_offer`] finished.
+    /// A read asked for with `LayerClient::read_offer` finished.
     OfferRead {
         request_id: u64,
         result: Result<Vec<u8>, String>,

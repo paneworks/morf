@@ -2,7 +2,7 @@
 //!
 //! An archetype owns a control's state, its response to the pointer and the
 //! keyboard, and the slots a skin fills; a theme's skin, in Lua, draws it.
-//! The engine does not know this crate: [`register`] adds `morf.kit.native`
+//! The engine does not know this crate: `register` adds `morf.kit.native`
 //! to every runtime made afterwards, and `library/lib/kit/` builds controls
 //! on it. A configuration that never requires the kit pays nothing for it.
 //!

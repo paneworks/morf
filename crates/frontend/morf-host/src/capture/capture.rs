@@ -240,7 +240,7 @@ fn export_for_offer(
 /// RGBA back to the little-endian `xrgb8888` bytes a capture arrives as.
 fn capture_bgra(rgba: &[u8]) -> Vec<u8> {
     let mut bgra = Vec::with_capacity(rgba.len());
-    for pixel in rgba.chunks_exact(4) {
+    for pixel in rgba.as_chunks::<4>().0 {
         bgra.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
     }
     bgra
@@ -266,7 +266,7 @@ fn capture_rgba(frame: &ScreencopyFrame) -> Vec<u8> {
         let Some(line) = frame.pixels.get(start..end) else {
             break;
         };
-        for pixel in line.chunks_exact(4) {
+        for pixel in line.as_chunks::<4>().0 {
             rgba.extend_from_slice(&[
                 pixel[2],
                 pixel[1],

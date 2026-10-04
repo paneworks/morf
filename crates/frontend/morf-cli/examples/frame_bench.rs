@@ -102,6 +102,9 @@ fn settled(
 }
 
 fn main() {
+    // As the command line does: a configuration on the kit needs it.
+    #[cfg(feature = "kit")]
+    morf_lua::register_kit();
     let Some(config) = std::env::args().nth(1) else {
         eprintln!("usage: frame_bench <config.lua> [width] [height]");
         std::process::exit(2);
