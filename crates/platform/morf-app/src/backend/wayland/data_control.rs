@@ -288,7 +288,7 @@ impl LayerState {
             }
             _ => None,
         };
-        self.events.push_back(LayerEvent::Selection {
+        self.events.push_back(Event::Selection {
             primary,
             offer: announced,
         });

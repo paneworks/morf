@@ -9,7 +9,7 @@
 
 use morf_lua::{Runtime, Screencopy as LuaScreencopy};
 use morf_render::{FOURCC_ARGB8888, FOURCC_XRGB8888, RenderEngine, WgpuBackend, split_dev_t};
-use morf_app::{CaptureBuffer, LayerClient, LayerEvent, ScreencopyFormat};
+use morf_app::{CaptureBuffer, LayerClient, Event, ScreencopyFormat};
 use std::os::fd::AsFd;
 
 pub(crate) fn apply_screencopy_requests(runtime: &mut Runtime, client: &mut LayerClient) {
@@ -168,16 +168,16 @@ pub(crate) fn handle_capture_event(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
     client: &mut LayerClient,
-    event: LayerEvent,
-) -> Result<bool, LayerEvent> {
+    event: Event,
+) -> Result<bool, Event> {
     match event {
-        LayerEvent::Screencopy { request_id, result } => Ok(dispatch_screencopy(
+        Event::Screencopy { request_id, result } => Ok(dispatch_screencopy(
             runtime,
             Some(renderer),
             request_id,
             result,
         )),
-        LayerEvent::CaptureOffer {
+        Event::CaptureOffer {
             request_id,
             width,
             height,

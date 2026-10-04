@@ -35,7 +35,7 @@ impl CompositorHandler for LayerState {
         };
         layer.scale_120 = factor.max(1) as u32 * 120;
         let scale_120 = layer.scale_120;
-        self.events.push_back(LayerEvent::Scale { id, scale_120 });
+        self.events.push_back(Event::Scale { id, scale_120 });
     }
 
     fn transform_changed(
@@ -59,27 +59,27 @@ impl CompositorHandler for LayerState {
             .remove(&wayland_client::Proxy::id(surface));
         if let Some(id) = self.layer_id(surface) {
             self.events
-                .push_back(LayerEvent::Frame { id, time_ms: time });
+                .push_back(Event::Frame { id, time_ms: time });
         } else if let Some(id) = self
             .popups
             .iter()
             .find_map(|(id, popup)| (surface == popup.wl_surface()).then_some(*id))
         {
             self.events
-                .push_back(LayerEvent::PopupFrame { id, time_ms: time });
+                .push_back(Event::PopupFrame { id, time_ms: time });
         } else if let Some(id) = self
             .floatings
             .iter()
             .find_map(|(id, window)| (surface == window.wl_surface()).then_some(*id))
         {
             self.events
-                .push_back(LayerEvent::FloatingFrame { id, time_ms: time });
+                .push_back(Event::ToplevelFrame { id, time_ms: time });
         } else if let Some(index) = self
             .lock_surfaces
             .iter()
             .position(|lock| surface == lock.surface.wl_surface())
         {
-            self.events.push_back(LayerEvent::SessionLockFrame {
+            self.events.push_back(Event::SessionLockFrame {
                 index,
                 time_ms: time,
             });
@@ -110,7 +110,7 @@ impl LayerShellHandler for LayerState {
         let Some(id) = self.layer_id(layer.wl_surface()) else {
             return;
         };
-        self.events.push_back(LayerEvent::Closed { id });
+        self.events.push_back(Event::Closed { id });
     }
 
     fn configure(
@@ -150,7 +150,7 @@ impl LayerState {
         // itself may attach its buffer now.
         self.attach_blank_buffer(id);
         self.events
-            .push_back(LayerEvent::Configure { id, width, height });
+            .push_back(Event::Configure { id, width, height });
         // Without layer-shell the primary's size is the output's, and every
         // subsurface is placed against it.
         if id == crate::backend::wayland::PRIMARY_LAYER && self.layer_shell.is_none() {
@@ -171,7 +171,7 @@ impl SessionLockHandler for LayerState {
         for output in self.outputs.outputs() {
             self.create_lock_surface(output, qh);
         }
-        self.events.push_back(LayerEvent::SessionLocked);
+        self.events.push_back(Event::SessionLocked);
     }
 
     fn finished(
@@ -183,7 +183,7 @@ impl SessionLockHandler for LayerState {
         self.lock_surfaces.clear();
         self.forget_lock_surfaces();
         self.session_lock = None;
-        self.events.push_back(LayerEvent::SessionLockFinished);
+        self.events.push_back(Event::SessionLockFinished);
     }
 
     fn configure(
@@ -203,7 +203,7 @@ impl SessionLockHandler for LayerState {
         };
         let size = (configure.new_size.0.max(1), configure.new_size.1.max(1));
         self.lock_surfaces[index].size = size;
-        self.events.push_back(LayerEvent::SessionLockConfigure {
+        self.events.push_back(Event::SessionLockConfigure {
             index,
             width: size.0,
             height: size.1,
@@ -255,7 +255,7 @@ impl OutputHandler for LayerState {
             // commit; committing it alone would be a commit without a buffer,
             // which a lock surface is not allowed.
             surface.surface.wl_surface().set_buffer_scale(scale as i32);
-            self.events.push_back(LayerEvent::SessionLockConfigure {
+            self.events.push_back(Event::SessionLockConfigure {
                 index,
                 width: surface.size.0,
                 height: surface.size.1,
@@ -287,7 +287,7 @@ impl OutputHandler for LayerState {
             self.lock_surfaces.remove(index);
             self.forget_lock_surface(index);
             self.events
-                .push_back(LayerEvent::SessionLockSurfaceRemoved { index });
+                .push_back(Event::SessionLockSurfaceRemoved { index });
         }
     }
 }
@@ -309,7 +309,7 @@ impl PopupHandler for LayerState {
         // request it answers. Recording it here is what lets a caller tell the
         // configure for the move it just asked for apart from a reactive one
         // the compositor sent on its own.
-        self.events.push_back(LayerEvent::PopupConfigure {
+        self.events.push_back(Event::PopupConfigure {
             id,
             width: config.width.max(1) as u32,
             height: config.height.max(1) as u32,
@@ -326,9 +326,9 @@ impl PopupHandler for LayerState {
         self.popup_parents.remove(&id);
         // The scale objects go with the surface: keeping them would leak two
         // protocol objects per popup, and a popup is opened per click.
-        self.aux_scales.remove(&SurfaceRole::Popup(id));
+        self.aux_scales.remove(&WindowId::Popup(id));
         self.popup_repositions.remove(&id);
-        self.events.push_back(LayerEvent::PopupDone { id });
+        self.events.push_back(Event::PopupDone { id });
     }
 }
 
@@ -340,7 +340,7 @@ impl WindowHandler for LayerState {
         window: &Window,
     ) {
         if let Some(id) = self.layer_id(window.wl_surface()) {
-            self.events.push_back(LayerEvent::Closed { id });
+            self.events.push_back(Event::Closed { id });
             return;
         }
         let Some(id) = self.floatings.iter().find_map(|(id, candidate)| {
@@ -351,7 +351,7 @@ impl WindowHandler for LayerState {
         // `xdg_toplevel.close` asks; it does not close. The window stays
         // until its owner decides — a settings window may want to ask about
         // unsaved changes first — and is destroyed through `close_floating`.
-        self.events.push_back(LayerEvent::FloatingClose { id });
+        self.events.push_back(Event::ToplevelClose { id });
     }
 
     fn configure(
@@ -383,6 +383,6 @@ impl WindowHandler for LayerState {
         let height = configure.new_size.1.map_or(previous.1, NonZeroU32::get);
         self.floating_sizes.insert(id, (width, height));
         self.events
-            .push_back(LayerEvent::FloatingConfigure { id, width, height });
+            .push_back(Event::ToplevelConfigure { id, width, height });
     }
 }

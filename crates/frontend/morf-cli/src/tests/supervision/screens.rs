@@ -5,30 +5,30 @@ use crate::supervisor::store_outputs;
 use crate::workers::handle_worker_command;
 use crate::*;
 use morf_lua::{Limits, Runtime};
-use morf_app::ScreenInfo;
+use morf_app::Output;
 
 // The compositor's output list reaching every worker's `morf.screens`.
 
 #[test]
 fn a_hotplug_reaches_every_worker_runtime() {
     let screens = [
-        ScreenInfo {
+        Output {
             id: 7,
             name: Some("eDP-1".to_owned()),
             position: Some((0, 0)),
             size: Some((1920, 1080)),
             scale: 1,
             transform: "normal",
-            ..ScreenInfo::default()
+            ..Output::default()
         },
-        ScreenInfo {
+        Output {
             id: 9,
             name: Some("DP-2".to_owned()),
             position: Some((1920, 0)),
             size: Some((2560, 1440)),
             scale: 2,
             transform: "normal",
-            ..ScreenInfo::default()
+            ..Output::default()
         },
     ];
     // The supervisor only tells the workers when the topology actually moved.

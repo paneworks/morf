@@ -84,26 +84,26 @@ fn default_virtual_keymap_round_trips() {
 #[test]
 fn layer_roles_are_distinct_per_surface_identifier() {
     assert_eq!(PRIMARY_LAYER, 0);
-    assert_ne!(SurfaceRole::Layer(0), SurfaceRole::Layer(1));
-    assert_ne!(SurfaceRole::Layer(1), SurfaceRole::Popup(1));
+    assert_ne!(WindowId::Layer(0), WindowId::Layer(1));
+    assert_ne!(WindowId::Layer(1), WindowId::Popup(1));
     let events = [
-        LayerEvent::Configure {
+        Event::Configure {
             id: 3,
             width: 8,
             height: 4,
         },
-        LayerEvent::Scale {
+        Event::Scale {
             id: 3,
             scale_120: 180,
         },
-        LayerEvent::Frame { id: 3, time_ms: 1 },
-        LayerEvent::Closed { id: 3 },
+        Event::Frame { id: 3, time_ms: 1 },
+        Event::Closed { id: 3 },
     ];
     assert!(events.iter().all(|event| match event {
-        LayerEvent::Configure { id, .. }
-        | LayerEvent::Scale { id, .. }
-        | LayerEvent::Frame { id, .. }
-        | LayerEvent::Closed { id } => *id == 3,
+        Event::Configure { id, .. }
+        | Event::Scale { id, .. }
+        | Event::Frame { id, .. }
+        | Event::Closed { id } => *id == 3,
         _ => false,
     }));
 }

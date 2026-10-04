@@ -1,6 +1,6 @@
 use morf_io::{IpcReply, IpcRequest, IpcServer, IpcValue as WireValue};
 use morf_lua::{LogEntry, LogLevel, Runtime, Screen};
-use morf_app::{LayerClient, ScreenInfo};
+use morf_app::{LayerClient, Output};
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -162,9 +162,9 @@ pub(crate) fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> R
                 &if desktop_canvas {
                     BTreeMap::from([(
                         DESKTOP_CANVAS.to_owned(),
-                        ScreenInfo {
+                        Output {
                             name: Some(DESKTOP_CANVAS.to_owned()),
-                            ..ScreenInfo::default()
+                            ..Output::default()
                         },
                     )])
                 } else {
@@ -435,8 +435,8 @@ fn bind_shell_socket(tx: &mpsc::Sender<SupervisorMessage>) -> Result<(IpcServer,
 }
 
 pub(crate) fn named_screens(
-    screens: &[ScreenInfo],
-) -> Result<BTreeMap<String, ScreenInfo>, String> {
+    screens: &[Output],
+) -> Result<BTreeMap<String, Output>, String> {
     screens
         .iter()
         .map(|screen| {
@@ -458,10 +458,10 @@ pub(crate) fn named_screens(
 /// before the first worker starts and refreshes it whenever a worker reports a
 /// change. Workers read it when they load a configuration, which is what lets
 /// `morf.screens` describe more than the one output a worker draws to.
-pub(crate) static OUTPUTS: std::sync::Mutex<Vec<ScreenInfo>> = std::sync::Mutex::new(Vec::new());
+pub(crate) static OUTPUTS: std::sync::Mutex<Vec<Output>> = std::sync::Mutex::new(Vec::new());
 
 /// Records the compositor's output list, reporting whether it changed.
-pub(crate) fn store_outputs(screens: &[ScreenInfo]) -> bool {
+pub(crate) fn store_outputs(screens: &[Output]) -> bool {
     let mut outputs = OUTPUTS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -483,14 +483,14 @@ pub(crate) fn known_outputs() -> Vec<Screen> {
 
 /// Converts compositor output descriptions into the Lua-facing shape, keeping
 /// the order the compositor advertised them in.
-pub(crate) fn lua_screens(screens: &[ScreenInfo]) -> Vec<Screen> {
+pub(crate) fn lua_screens(screens: &[Output]) -> Vec<Screen> {
     screens.iter().map(lua_screen).collect()
 }
 
 /// An output with no compositor name cannot be addressed by a configuration,
 /// but it still occupies the desktop, so it is described with an empty name
 /// rather than dropped from the list.
-pub(crate) fn lua_screen(screen: &ScreenInfo) -> Screen {
+pub(crate) fn lua_screen(screen: &Output) -> Screen {
     Screen {
         id: screen.id,
         name: screen.name.clone().unwrap_or_default(),

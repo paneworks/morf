@@ -23,7 +23,7 @@ use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::{Element, NodeHandle};
-use morf_app::{LayerClient, ScreenInfo, SurfaceRole};
+use morf_app::{LayerClient, Output, WindowId};
 
 use crate::{supervisor::lua_screen, surfaces::*};
 
@@ -44,9 +44,9 @@ pub(crate) struct LockOutput {
 pub(crate) struct LockLayouts<'a>(pub(crate) &'a [LockOutput]);
 
 impl SurfaceLayouts for LockLayouts<'_> {
-    fn layout_of(&self, surface: SurfaceRole) -> Option<&Layout> {
+    fn layout_of(&self, surface: WindowId) -> Option<&Layout> {
         match surface {
-            SurfaceRole::Lock(index) => self.0.get(index)?.layout.as_ref(),
+            WindowId::Lock(index) => self.0.get(index)?.layout.as_ref(),
             _ => None,
         }
     }
@@ -95,10 +95,10 @@ impl LockTrees {
     pub(crate) fn key_root(
         self,
         outputs: &[LockOutput],
-        surface: SurfaceRole,
+        surface: WindowId,
     ) -> Option<NodeHandle> {
         match surface {
-            SurfaceRole::Lock(index) => self.root(outputs, index),
+            WindowId::Lock(index) => self.root(outputs, index),
             _ => (0..outputs.len()).find_map(|index| self.root(outputs, index)),
         }
     }
@@ -126,7 +126,7 @@ pub(crate) fn ensure_lock_tree(
     trees: LockTrees,
     output: &mut LockOutput,
     index: usize,
-    screen: Option<ScreenInfo>,
+    screen: Option<Output>,
     size: (u32, u32),
 ) -> Result<bool, String> {
     if trees != LockTrees::PerOutput || (output.root.is_some() && output.built_for == Some(size)) {

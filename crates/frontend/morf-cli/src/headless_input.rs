@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use morf_layout::Layout;
-use morf_app::{LayerEvent, SurfaceRole};
+use morf_app::{Event, WindowId};
 
 use crate::headless::{Headless, Surface};
 use crate::pointer_cursor::CursorShapes;
@@ -25,7 +25,7 @@ impl CursorShapes for NoCursor {
 pub(crate) struct Layouts<'a>(pub(crate) &'a [Surface]);
 
 impl SurfaceLayouts for Layouts<'_> {
-    fn layout_of(&self, surface: SurfaceRole) -> Option<&Layout> {
+    fn layout_of(&self, surface: WindowId) -> Option<&Layout> {
         self.0
             .iter()
             .find(|candidate| candidate.role == surface && candidate.visible)
@@ -36,21 +36,21 @@ impl SurfaceLayouts for Layouts<'_> {
 impl Headless {
     /// Hands one pointer event to the shell's own pointer path, then lets a
     /// frame's worth of nothing pass so the layout shows what it did.
-    pub(crate) fn pointer(&mut self, event: LayerEvent) -> Result<(), String> {
+    pub(crate) fn pointer(&mut self, event: Event) -> Result<(), String> {
         match &event {
-            LayerEvent::PointerMotion { surface, x, y }
-            | LayerEvent::PointerButton { surface, x, y, .. }
-            | LayerEvent::PointerAxis { surface, x, y, .. } => {
+            Event::PointerMotion { surface, x, y }
+            | Event::PointerButton { surface, x, y, .. }
+            | Event::PointerAxis { surface, x, y, .. } => {
                 self.pointer = Some((*surface, *x, *y))
             }
-            LayerEvent::PointerLeave { surface } => {
+            Event::PointerLeave { surface } => {
                 if self.pointer.is_some_and(|(on, _, _)| on == *surface) {
                     self.pointer = None;
                 }
             }
             _ => {}
         }
-        if let LayerEvent::PointerButton {
+        if let Event::PointerButton {
             surface,
             pressed: true,
             ..
@@ -76,13 +76,13 @@ impl Headless {
     /// Presses and releases a button at a point of a surface: a click.
     pub(crate) fn click(
         &mut self,
-        surface: SurfaceRole,
+        surface: WindowId,
         (x, y): (f64, f64),
         button: u32,
         modifiers: morf_app::KeyModifiers,
     ) -> Result<(), String> {
-        self.pointer(LayerEvent::PointerMotion { surface, x, y })?;
-        self.pointer(LayerEvent::PointerButton {
+        self.pointer(Event::PointerMotion { surface, x, y })?;
+        self.pointer(Event::PointerButton {
             surface,
             button,
             pressed: true,
@@ -90,7 +90,7 @@ impl Headless {
             y,
             modifiers,
         })?;
-        self.pointer(LayerEvent::PointerButton {
+        self.pointer(Event::PointerButton {
             surface,
             button,
             pressed: false,
@@ -103,7 +103,7 @@ impl Headless {
     /// One key, pressed and released, into a surface's focused node.
     pub(crate) fn key(
         &mut self,
-        surface: SurfaceRole,
+        surface: WindowId,
         keysym: u32,
         text: Option<&str>,
         modifiers: morf_lua::KeyModifiers,
@@ -114,7 +114,7 @@ impl Headless {
     /// A key pressed, let go, or both: a modifier held across other keys.
     pub(crate) fn key_phase(
         &mut self,
-        surface: SurfaceRole,
+        surface: WindowId,
         keysym: u32,
         text: Option<&str>,
         modifiers: morf_lua::KeyModifiers,

@@ -112,7 +112,7 @@ impl LayerClient {
     /// Without layer-shell the primary surface becomes a fullscreen toplevel
     /// and every other one a subsurface of it, placed where layer-shell would
     /// have put it; see `ShellSurface`.
-    pub fn open_layer(&mut self, id: u64, config: BarConfig) -> Result<(), WaylandError> {
+    pub fn open_layer(&mut self, id: u64, config: LayerConfig) -> Result<(), WaylandError> {
         self.close_layer(id);
         let qh = self.queue.handle();
         let output = self.layer_output(config.output.as_deref())?;
@@ -236,7 +236,7 @@ impl LayerClient {
                 .map(|record| record.surface.wl_surface().clone())
         {
             self.state
-                .inhibit_surface_shortcuts(SurfaceRole::Layer(id), &surface, &qh);
+                .inhibit_surface_shortcuts(WindowId::Layer(id), &surface, &qh);
         }
         if self.state.layer_shell.is_none() {
             if id == PRIMARY_LAYER {
@@ -262,7 +262,7 @@ impl LayerClient {
     ///
     /// Without layer-shell the same change re-places the subsurfaces standing
     /// in for layer surfaces, and one whose size moved hears a configure.
-    pub fn set_layer_geometry(&mut self, id: u64, config: &BarConfig) -> Result<(), WaylandError> {
+    pub fn set_layer_geometry(&mut self, id: u64, config: &LayerConfig) -> Result<(), WaylandError> {
         let serial = self.state.next_layer_sequence();
         let record = self
             .state
@@ -350,7 +350,7 @@ impl LayerClient {
 
     /// Destroys one layer surface when it is open.
     pub fn close_layer(&mut self, id: u64) {
-        self.state.release_surface_shortcuts(SurfaceRole::Layer(id));
+        self.state.release_surface_shortcuts(WindowId::Layer(id));
         let Some(record) = self.state.layers.remove(&id) else {
             return;
         };
@@ -360,7 +360,7 @@ impl LayerClient {
             .remove(&record.surface.wl_surface().id());
         let subsurface = record.surface.as_subsurface().is_some();
         drop(record);
-        self.forget_surface(SurfaceRole::Layer(id));
+        self.forget_surface(WindowId::Layer(id));
         // A subsurface that reserved an edge gave it back: the rest move.
         if subsurface {
             self.state.arrange_subsurfaces();
@@ -373,7 +373,7 @@ impl LayerClient {
     /// finger still down on a popup as it closed left a touch point addressed
     /// to a surface that no longer existed — and the next motion for that
     /// finger was delivered against it.
-    pub(crate) fn forget_surface(&mut self, role: SurfaceRole) {
+    pub(crate) fn forget_surface(&mut self, role: WindowId) {
         if self.state.keyboard_surface == Some(role) {
             self.state.keyboard_surface = None;
         }
@@ -677,7 +677,7 @@ impl LayerState {
             }
             record.configured = true;
             self.attach_blank_buffer(id);
-            self.events.push_back(LayerEvent::Configure {
+            self.events.push_back(Event::Configure {
                 id,
                 width: placement.width,
                 height: placement.height,
@@ -728,11 +728,11 @@ impl LayerState {
     /// with the toplevel focused: every layer surface then shares that one
     /// focus, and keys go to the one that most recently asked for them
     /// ([`fallback_key_target`]).
-    pub(crate) fn key_target(&self) -> SurfaceRole {
+    pub(crate) fn key_target(&self) -> WindowId {
         let held = self
             .keyboard_surface
-            .unwrap_or(SurfaceRole::Layer(PRIMARY_LAYER));
-        if self.layer_shell.is_some() || held != SurfaceRole::Layer(PRIMARY_LAYER) {
+            .unwrap_or(WindowId::Layer(PRIMARY_LAYER));
+        if self.layer_shell.is_some() || held != WindowId::Layer(PRIMARY_LAYER) {
             return held;
         }
         let askers = self
@@ -743,17 +743,17 @@ impl LayerState {
                 (*id, focus, serial)
             })
             .collect::<Vec<_>>();
-        fallback_key_target(&askers).map_or(held, SurfaceRole::Layer)
+        fallback_key_target(&askers).map_or(held, WindowId::Layer)
     }
 
     /// A press on a layer surface that takes the keyboard on demand makes it
     /// the latest to ask, under the layer-shell fallback — the click that
     /// would have focused it on a compositor with layer-shell.
-    pub(crate) fn note_press(&self, role: SurfaceRole) {
+    pub(crate) fn note_press(&self, role: WindowId) {
         if self.layer_shell.is_some() {
             return;
         }
-        let SurfaceRole::Layer(id) = role else {
+        let WindowId::Layer(id) = role else {
             return;
         };
         let Some(record) = self.layers.get(&id) else {

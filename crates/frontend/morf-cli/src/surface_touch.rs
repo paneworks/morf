@@ -1,6 +1,6 @@
 use morf_lua::{EventPoint, FocusReason, Runtime, UiEvent};
 use morf_scene::NodeHandle;
-use morf_app::LayerEvent;
+use morf_app::Event;
 
 use crate::surfaces::*;
 
@@ -18,11 +18,11 @@ pub(crate) fn handle_touch_event(
     runtime: &mut Runtime,
     input: &mut PointerInput,
     layouts: &dyn SurfaceLayouts,
-    event: LayerEvent,
+    event: Event,
 ) -> Result<bool, String> {
     let mut repaint = false;
     match event {
-        LayerEvent::TouchDown { surface, id, x, y } => {
+        Event::TouchDown { surface, id, x, y } => {
             let Some(hit_layout) = layouts.layout_of(surface) else {
                 return Ok(false);
             };
@@ -57,7 +57,7 @@ pub(crate) fn handle_touch_event(
                 repaint |= runtime.dispatch_touch_event(hit.node, UiEvent::TouchPressed, id, point);
             }
         }
-        LayerEvent::TouchMotion { id, x, y, .. } => {
+        Event::TouchMotion { id, x, y, .. } => {
             if let Some((touch_surface, hit, last_x, last_y, travel)) = input.touches.get_mut(&id) {
                 let delta = (x - *last_x, y - *last_y);
                 *travel += delta.0.abs() + delta.1.abs();
@@ -78,7 +78,7 @@ pub(crate) fn handle_touch_event(
                 repaint |= crate::surface_gesture::finger_moved(runtime, input, layouts, id)?;
             }
         }
-        LayerEvent::TouchUp { surface, id, x, y } => {
+        Event::TouchUp { surface, id, x, y } => {
             repaint |= crate::surface_gesture::finger_up(runtime, input, Some(id));
             if let Some((touch_surface, pressed_hit, _, _, travel)) = input.touches.remove(&id) {
                 let layout = layouts.layout_of(surface);
@@ -128,7 +128,7 @@ pub(crate) fn handle_touch_event(
                 }
             }
         }
-        LayerEvent::TouchCancel => {
+        Event::TouchCancel => {
             repaint |= crate::surface_gesture::finger_up(runtime, input, None);
             for (id, (_, hit, x, y, _)) in input.touches.drain() {
                 let point =

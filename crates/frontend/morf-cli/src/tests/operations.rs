@@ -52,13 +52,13 @@ fn an_auxiliary_surface_is_addressed_by_its_own_kind() {
     // surface and a popup may both be `1`, and keying scale on the number alone
     // would have a popup's scale change resize a bar.
     use crate::paint::AuxiliaryKind;
-    use morf_app::SurfaceRole;
+    use morf_app::WindowId;
 
-    assert_eq!(AuxiliaryKind::Popup.role(1), SurfaceRole::Popup(1));
-    assert_eq!(AuxiliaryKind::Floating.role(1), SurfaceRole::Floating(1));
+    assert_eq!(AuxiliaryKind::Popup.role(1), WindowId::Popup(1));
+    assert_eq!(AuxiliaryKind::Floating.role(1), WindowId::Toplevel(1));
     assert_ne!(
         AuxiliaryKind::Popup.role(1),
-        SurfaceRole::Layer(1),
+        WindowId::Layer(1),
         "the same number, a different surface"
     );
 }

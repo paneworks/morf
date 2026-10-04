@@ -2,7 +2,7 @@
 
 /// Capability-derived compositor output description.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ScreenInfo {
+pub struct Output {
     pub id: u32,
     pub name: Option<String>,
     pub make: String,

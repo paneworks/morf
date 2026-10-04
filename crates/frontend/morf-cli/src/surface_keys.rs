@@ -2,7 +2,7 @@
 
 use morf_lua::{FocusReason, KeyModifiers, Runtime};
 use morf_scene::NodeHandle;
-use morf_app::SurfaceRole;
+use morf_app::WindowId;
 
 use crate::surfaces::*;
 
@@ -31,7 +31,7 @@ impl KeyAction {
 pub(crate) fn surface_key(
     runtime: &mut Runtime,
     state: &mut SurfaceEventState,
-    surface: SurfaceRole,
+    surface: WindowId,
     action: KeyAction,
     keysym: u32,
     text: Option<&str>,

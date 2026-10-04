@@ -9,7 +9,7 @@
 use morf_layout::Hit;
 use morf_lua::{EventPoint, FocusReason, Runtime, UiEvent};
 use morf_scene::NodeHandle;
-use morf_app::{LayerEvent, PRIMARY_LAYER, SurfaceRole};
+use morf_app::{Event, PRIMARY_LAYER, WindowId};
 
 use crate::{backdrop::*, pointer_cursor::CursorShapes, surface_touch::*, surfaces::*};
 
@@ -19,22 +19,22 @@ pub(crate) fn handle_pointer_event(
     client: &mut dyn CursorShapes,
     input: &mut PointerInput,
     layouts: &dyn SurfaceLayouts,
-    event: LayerEvent,
-) -> Result<Result<bool, LayerEvent>, String> {
+    event: Event,
+) -> Result<Result<bool, Event>, String> {
     let mut repaint = false;
-    if let LayerEvent::PointerButton { modifiers, .. } | LayerEvent::PointerAxis { modifiers, .. } = &event {
+    if let Event::PointerButton { modifiers, .. } | Event::PointerAxis { modifiers, .. } = &event {
         runtime.set_held_modifiers(crate::surface_keys::key_modifiers(*modifiers));
     }
     // A click while a modifier is down makes that modifier no tap.
-    if let LayerEvent::PointerButton { pressed: true, .. } = &event {
+    if let Event::PointerButton { pressed: true, .. } = &event {
         runtime.break_modifier_tap();
     }
     match event {
-        LayerEvent::PointerMotion { surface, x, y } => {
+        Event::PointerMotion { surface, x, y } => {
             // Enter can arrive before the surface's first frame. Keep the
             // position so containment can be answered once its layout exists.
             input.pointer = Some((surface, x, y));
-            if surface == SurfaceRole::Layer(BACKDROP_LAYER) {
+            if surface == WindowId::Layer(BACKDROP_LAYER) {
                 client.set_cursor_shape("default");
             }
             let Some(hit_layout) = layouts.layout_of(surface) else {
@@ -53,7 +53,7 @@ pub(crate) fn handle_pointer_event(
             let entered = next_hovered.map(|(role, hit)| (role, hit.node));
             let left = input
                 .hovered
-                .map(|(role, hit): (SurfaceRole, Hit)| (role, hit.node));
+                .map(|(role, hit): (WindowId, Hit)| (role, hit.node));
             if entered != left {
                 if let Some((_, node)) = left {
                     repaint |= runtime.dispatch_ui_event(node, UiEvent::PointerExited);
@@ -103,7 +103,7 @@ pub(crate) fn handle_pointer_event(
                 }
             }
         }
-        LayerEvent::PointerLeave { surface } => {
+        Event::PointerLeave { surface } => {
             if input
                 .pointer
                 .is_some_and(|(pointer_surface, _, _)| pointer_surface == surface)
@@ -120,7 +120,7 @@ pub(crate) fn handle_pointer_event(
             }
             runtime.flush_after_event();
         }
-        LayerEvent::PointerAxis {
+        Event::PointerAxis {
             surface,
             x,
             y,
@@ -141,14 +141,14 @@ pub(crate) fn handle_pointer_event(
                 (horizontal_steps, vertical_steps),
             )?;
         }
-        LayerEvent::PointerButton {
-            surface: SurfaceRole::Layer(BACKDROP_LAYER),
+        Event::PointerButton {
+            surface: WindowId::Layer(BACKDROP_LAYER),
             pressed: true,
             ..
         } => {
             repaint |= runtime.dispatch_backdrop_click();
         }
-        LayerEvent::PointerButton {
+        Event::PointerButton {
             surface,
             button,
             pressed: true,
@@ -198,7 +198,7 @@ pub(crate) fn handle_pointer_event(
             // it every press, wherever the pointer is; one that lands on
             // nothing is the click beside the shell the backdrop exists for.
             if hit.is_none()
-                && surface == SurfaceRole::Layer(PRIMARY_LAYER)
+                && surface == WindowId::Layer(PRIMARY_LAYER)
                 && runtime.layer_surface_config().backdrop == Some(true)
             {
                 repaint |= runtime.dispatch_backdrop_click();
@@ -226,13 +226,13 @@ pub(crate) fn handle_pointer_event(
                 );
             }
         }
-        LayerEvent::TouchDown { .. }
-        | LayerEvent::TouchMotion { .. }
-        | LayerEvent::TouchUp { .. }
-        | LayerEvent::TouchCancel => {
+        Event::TouchDown { .. }
+        | Event::TouchMotion { .. }
+        | Event::TouchUp { .. }
+        | Event::TouchCancel => {
             repaint |= handle_touch_event(runtime, input, layouts, event)?;
         }
-        LayerEvent::PointerButton {
+        Event::PointerButton {
             surface,
             pressed: false,
             x,

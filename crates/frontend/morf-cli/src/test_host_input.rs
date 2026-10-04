@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use morf_value::{IpcTable, IpcValue};
-use morf_app::LayerEvent;
+use morf_app::Event;
 
 use crate::headless::Headless;
 use crate::headless_input::{button, keysym, modifiers};
@@ -19,7 +19,7 @@ use crate::test_host::{TestHost, list, map, number, optional_text, string, text}
 fn key_role(
     subject: &Headless,
     surface: Option<&IpcValue>,
-) -> Result<morf_app::SurfaceRole, String> {
+) -> Result<morf_app::WindowId, String> {
     if optional_text(surface).is_none()
         && let Some(clicked) = subject.keyboard
         && subject
@@ -35,7 +35,7 @@ fn key_role(
 fn role(
     subject: &Headless,
     surface: Option<&IpcValue>,
-) -> Result<morf_app::SurfaceRole, String> {
+) -> Result<morf_app::WindowId, String> {
     let wanted = optional_text(surface);
     let index = subject.surface_index(wanted.as_deref())?;
     Ok(subject.surfaces[index].role)
@@ -60,7 +60,7 @@ pub(crate) fn press(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     let subject = host.subject()?;
     let surface = role(subject, arguments.get(4))?;
     let modifiers = crate::headless_input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?;
-    subject.pointer(LayerEvent::PointerButton {
+    subject.pointer(Event::PointerButton {
         surface,
         button: code,
         pressed,
@@ -76,7 +76,7 @@ pub(crate) fn motion(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<
     let y = number(arguments.get(1), "y")?;
     let subject = host.subject()?;
     let surface = role(subject, arguments.get(2))?;
-    subject.pointer(LayerEvent::PointerMotion { surface, x, y })?;
+    subject.pointer(Event::PointerMotion { surface, x, y })?;
     Ok(Vec::new())
 }
 
@@ -88,7 +88,7 @@ pub(crate) fn leave(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
         (Some((surface, _, _)), None) => surface,
         _ => role(subject, arguments.first())?,
     };
-    subject.pointer(LayerEvent::PointerLeave { surface })?;
+    subject.pointer(Event::PointerLeave { surface })?;
     Ok(Vec::new())
 }
 
@@ -103,7 +103,7 @@ pub(crate) fn wheel(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     };
     let x = number(arguments.get(2), "x").unwrap_or(x);
     let y = number(arguments.get(3), "y").unwrap_or(y);
-    subject.pointer(LayerEvent::PointerAxis {
+    subject.pointer(Event::PointerAxis {
         surface,
         x,
         y,

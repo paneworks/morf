@@ -17,7 +17,7 @@ use morf_layout::Hit;
 use morf_lua::{Runtime, UiEvent};
 use morf_value::IpcValue;
 use morf_scene::NodeHandle;
-use morf_app::SurfaceRole;
+use morf_app::WindowId;
 
 use crate::surfaces::{PointerInput, SurfaceLayouts};
 
@@ -25,7 +25,7 @@ const EDGE: f64 = 20.0;
 const EDGE_TRAVEL: f64 = 48.0;
 
 struct Pinch {
-    surface: SurfaceRole,
+    surface: WindowId,
     fingers: (i32, i32),
     target: Option<NodeHandle>,
     spread: f64,
@@ -47,7 +47,7 @@ pub(crate) struct TouchGestures {
     edge: Option<EdgeSwipe>,
 }
 
-fn finger(input: &PointerInput, id: i32) -> Option<(SurfaceRole, Hit, f64, f64)> {
+fn finger(input: &PointerInput, id: i32) -> Option<(WindowId, Hit, f64, f64)> {
     input
         .touches
         .get(&id)

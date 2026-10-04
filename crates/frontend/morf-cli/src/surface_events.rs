@@ -1,6 +1,6 @@
 use morf_lua::Runtime;
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_app::{LayerClient, LayerEvent, PRIMARY_LAYER, SurfaceRole, physical_size};
+use morf_app::{LayerClient, Event, PRIMARY_LAYER, WindowId, physical_size};
 use std::sync::mpsc;
 
 use crate::{
@@ -13,7 +13,7 @@ pub(crate) fn handle_surface_event(
     renderer: &mut RenderEngine<WgpuBackend>,
     client: &mut LayerClient,
     state: &mut SurfaceEventState,
-    event: LayerEvent,
+    event: Event,
     tx: &mpsc::Sender<SupervisorMessage>,
     name: &str,
 ) -> Result<bool, String> {
@@ -41,7 +41,7 @@ pub(crate) fn handle_surface_event(
         Err(event) => event,
     };
     match event {
-        LayerEvent::Configure { id, .. } | LayerEvent::Scale { id, .. } if id == PRIMARY_LAYER => {
+        Event::Configure { id, .. } | Event::Scale { id, .. } if id == PRIMARY_LAYER => {
             let (width, height) = client.physical_size();
             renderer.resize(width, height);
             for surface in state
@@ -64,31 +64,31 @@ pub(crate) fn handle_surface_event(
             apply_primary_opaque(runtime, client);
             repaint = true;
         }
-        LayerEvent::Configure { id, width, height } => {
+        Event::Configure { id, width, height } => {
             layer_surface_configure(runtime, client, state, id, width, height)?;
         }
-        LayerEvent::Scale { id, .. } => layer_surface_scale(runtime, client, state, id)?,
-        LayerEvent::Frame { id, time_ms } if id == PRIMARY_LAYER => {
+        Event::Scale { id, .. } => layer_surface_scale(runtime, client, state, id)?,
+        Event::Frame { id, time_ms } if id == PRIMARY_LAYER => {
             repaint |= primary_frame(runtime, client, state, time_ms)?;
             repaint |= std::mem::take(&mut state.primary_deferred);
         }
-        LayerEvent::Frame { id, .. } => layer_surface_frame(runtime, client, state, id)?,
-        LayerEvent::Closed { id } if id == PRIMARY_LAYER => {
+        Event::Frame { id, .. } => layer_surface_frame(runtime, client, state, id)?,
+        Event::Closed { id } if id == PRIMARY_LAYER => {
             return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
         }
-        LayerEvent::Closed { id } => layer_surface_closed(runtime, client, state, id),
-        LayerEvent::Idle {
+        Event::Closed { id } => layer_surface_closed(runtime, client, state, id),
+        Event::Idle {
             timeout_ms,
             input_only,
             idle,
         } => {
             repaint |= runtime.dispatch_idle(timeout_ms, input_only, idle);
         }
-        LayerEvent::Clipboard { text } => {
+        Event::Clipboard { text } => {
             repaint |= runtime.dispatch_clipboard(text);
         }
-        LayerEvent::KeyboardFocus { active } => repaint |= runtime.dispatch_keyboard_focus(active),
-        LayerEvent::SurfaceKeyboard { surface, focused } => {
+        Event::KeyboardFocus { active } => repaint |= runtime.dispatch_keyboard_focus(active),
+        Event::SurfaceKeyboard { surface, focused } => {
             // The node with focus shows it only while its surface has the
             // keyboard, and shows it again when the keyboard comes back.
             if let Some(root) = surface_root(
@@ -105,21 +105,21 @@ pub(crate) fn handle_surface_event(
                 repaint |= runtime.dispatch_surface_focus(window, focused);
             }
         }
-        LayerEvent::SurfacePointer { surface, inside } => {
+        Event::SurfacePointer { surface, inside } => {
             if let Some(window) = surface_window(surface) {
                 repaint |= runtime.dispatch_surface_pointer(window, inside);
             }
         }
         // Already taken above; named so a new event cannot slip past unmatched.
-        LayerEvent::Screencopy { .. } | LayerEvent::CaptureOffer { .. } => {}
-        LayerEvent::Selection { .. }
-        | LayerEvent::OfferRead { .. }
-        | LayerEvent::DragEnter { .. }
-        | LayerEvent::DragMotion { .. }
-        | LayerEvent::DragLeave { .. }
-        | LayerEvent::Drop { .. }
-        | LayerEvent::DragSourceEnded { .. } => {}
-        LayerEvent::InputMethod(state) => {
+        Event::Screencopy { .. } | Event::CaptureOffer { .. } => {}
+        Event::Selection { .. }
+        | Event::OfferRead { .. }
+        | Event::DragEnter { .. }
+        | Event::DragMotion { .. }
+        | Event::DragLeave { .. }
+        | Event::Drop { .. }
+        | Event::DragSourceEnded { .. } => {}
+        Event::InputMethod(state) => {
             repaint |= runtime.dispatch_input_method(
                 state.active,
                 state.surrounding_text,
@@ -128,7 +128,7 @@ pub(crate) fn handle_surface_event(
                 state.serial,
             );
         }
-        LayerEvent::TextInput(state) => {
+        Event::TextInput(state) => {
             repaint |= runtime.dispatch_text_input(
                 state.focused,
                 state.preedit,
@@ -140,7 +140,7 @@ pub(crate) fn handle_surface_event(
                 state.serial,
             );
         }
-        LayerEvent::Key {
+        Event::Key {
             surface,
             pressed,
             repeat,
@@ -158,7 +158,7 @@ pub(crate) fn handle_surface_event(
                 modifiers,
             );
         }
-        LayerEvent::PopupConfigure { id, width, height } => {
+        Event::PopupConfigure { id, width, height } => {
             if let Some(surface) = state.popup_surfaces.get_mut(&id) {
                 let initial = surface.renderer.is_none();
                 surface.width = width.max(1);
@@ -168,7 +168,7 @@ pub(crate) fn handle_surface_event(
                 runtime.set_window_surface_size(surface.id, surface.width, surface.height);
                 let (physical_width, physical_height) = physical_size(
                     (surface.width, surface.height),
-                    client.surface_scale_120(SurfaceRole::Popup(id)),
+                    client.surface_scale_120(WindowId::Popup(id)),
                 );
                 if let Some(renderer) = &mut surface.renderer {
                     renderer.resize(physical_width, physical_height);
@@ -190,16 +190,16 @@ pub(crate) fn handle_surface_event(
                 }
             }
         }
-        LayerEvent::ShortcutsInhibited { active } => {
+        Event::ShortcutsInhibited { active } => {
             repaint |= runtime.dispatch_shortcuts_inhibited(active);
         }
-        LayerEvent::AuxScale { role, scale_120 } => {
+        Event::AuxScale { role, scale_120 } => {
             // A popup on a 2x screen opened from a bar on a 1x one used to be
             // rendered at the bar's scale and stretched. It has its own now.
             let surface = match role {
-                SurfaceRole::Popup(id) => state.popup_surfaces.get_mut(&id),
-                SurfaceRole::Floating(id) => state.floating_surfaces.get_mut(&id),
-                SurfaceRole::Layer(_) | SurfaceRole::Lock(_) => None,
+                WindowId::Popup(id) => state.popup_surfaces.get_mut(&id),
+                WindowId::Toplevel(id) => state.floating_surfaces.get_mut(&id),
+                WindowId::Layer(_) | WindowId::Lock(_) => None,
             };
             if let Some(surface) = surface
                 && let Some(renderer) = &mut surface.renderer
@@ -209,7 +209,7 @@ pub(crate) fn handle_surface_event(
                 repaint = true;
             }
         }
-        LayerEvent::PopupFrame { id, .. } => {
+        Event::PopupFrame { id, .. } => {
             if let Some(surface) = state
                 .popup_surfaces
                 .get_mut(&id)
@@ -218,13 +218,13 @@ pub(crate) fn handle_surface_event(
                 paint_popup_surface(runtime, client, surface)?;
             }
         }
-        LayerEvent::PopupDone { id } => {
+        Event::PopupDone { id } => {
             if let Some(surface) = state.popup_surfaces.remove(&id) {
                 runtime.set_window_surface_visible(surface.id, false);
                 repaint |= runtime.dispatch_window_closed(surface.id);
             }
         }
-        LayerEvent::FloatingConfigure { id, width, height } => {
+        Event::ToplevelConfigure { id, width, height } => {
             if let Some(surface) = state.floating_surfaces.get_mut(&id) {
                 let initial = surface.renderer.is_none();
                 surface.width = width.max(1);
@@ -234,7 +234,7 @@ pub(crate) fn handle_surface_event(
                 runtime.set_window_surface_size(surface.id, surface.width, surface.height);
                 let (physical_width, physical_height) = physical_size(
                     (surface.width, surface.height),
-                    client.surface_scale_120(SurfaceRole::Floating(id)),
+                    client.surface_scale_120(WindowId::Toplevel(id)),
                 );
                 if let Some(renderer) = &mut surface.renderer {
                     renderer.resize(physical_width, physical_height);
@@ -256,7 +256,7 @@ pub(crate) fn handle_surface_event(
                 }
             }
         }
-        LayerEvent::FloatingFrame { id, .. } => {
+        Event::ToplevelFrame { id, .. } => {
             if let Some(surface) = state
                 .floating_surfaces
                 .get_mut(&id)
@@ -265,7 +265,7 @@ pub(crate) fn handle_surface_event(
                 paint_floating_surface(runtime, client, surface)?;
             }
         }
-        LayerEvent::FloatingClose { id } => {
+        Event::ToplevelClose { id } => {
             // A request, not a close: the window stays until the
             // configuration's `on_close_requested` lets it go, and then the
             // next sync takes it down like any hidden window.
@@ -274,20 +274,20 @@ pub(crate) fn handle_surface_event(
             }
         }
         // Already taken above, by the pointer path.
-        LayerEvent::PointerMotion { .. }
-        | LayerEvent::PointerLeave { .. }
-        | LayerEvent::PointerAxis { .. }
-        | LayerEvent::PointerButton { .. }
-        | LayerEvent::TouchDown { .. }
-        | LayerEvent::TouchMotion { .. }
-        | LayerEvent::TouchUp { .. }
-        | LayerEvent::TouchCancel => {}
-        LayerEvent::SessionLocked
-        | LayerEvent::SessionLockFinished
-        | LayerEvent::SessionLockConfigure { .. }
-        | LayerEvent::SessionLockSurfaceRemoved { .. }
-        | LayerEvent::SessionLockFrame { .. } => {}
-        LayerEvent::Screens(screens) => {
+        Event::PointerMotion { .. }
+        | Event::PointerLeave { .. }
+        | Event::PointerAxis { .. }
+        | Event::PointerButton { .. }
+        | Event::TouchDown { .. }
+        | Event::TouchMotion { .. }
+        | Event::TouchUp { .. }
+        | Event::TouchCancel => {}
+        Event::SessionLocked
+        | Event::SessionLockFinished
+        | Event::SessionLockConfigure { .. }
+        | Event::SessionLockSurfaceRemoved { .. }
+        | Event::SessionLockFrame { .. } => {}
+        Event::Screens(screens) => {
             // This client sees every output, not just the one it draws to. The
             // supervisor records the list and hands it back to every worker, so
             // each runtime's `morf.screens` follows the hotplug rather than
@@ -305,14 +305,14 @@ pub(crate) fn handle_surface_event(
 /// Which of the configuration's surfaces a role is: `Some(None)` for the
 /// shell's own, `Some(Some(id))` for a window, `None` for one the engine
 /// keeps for itself (the backdrop, the edge reservers, a lock surface).
-fn surface_window(surface: morf_app::SurfaceRole) -> Option<Option<u64>> {
-    use morf_app::SurfaceRole;
+fn surface_window(surface: morf_app::WindowId) -> Option<Option<u64>> {
+    use morf_app::WindowId;
     match surface {
-        SurfaceRole::Layer(morf_app::PRIMARY_LAYER) => Some(None),
-        SurfaceRole::Layer(layer) => crate::surface_layers::window_surface_id(layer)
+        WindowId::Layer(morf_app::PRIMARY_LAYER) => Some(None),
+        WindowId::Layer(layer) => crate::surface_layers::window_surface_id(layer)
             .filter(|_| layer < crate::surface_layers::RESERVE_LAYER_BASE)
             .map(Some),
-        SurfaceRole::Popup(id) | SurfaceRole::Floating(id) => Some(Some(id)),
-        SurfaceRole::Lock(_) => None,
+        WindowId::Popup(id) | WindowId::Toplevel(id) => Some(Some(id)),
+        WindowId::Lock(_) => None,
     }
 }

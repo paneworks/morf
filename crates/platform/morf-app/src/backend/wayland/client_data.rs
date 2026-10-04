@@ -50,13 +50,13 @@ impl LayerClient {
     /// Reads one type from an announced offer, off the loop.
     ///
     /// `mime` may be a shorthand — `text`, `image`, `uris` — resolved against
-    /// what the offer lists. The answer arrives as [`LayerEvent::OfferRead`]
+    /// what the offer lists. The answer arrives as [`Event::OfferRead`]
     /// with the same `request_id`, failures included, so a caller has exactly
     /// one place to hear back.
     pub fn read_offer(&mut self, request_id: u64, offer_id: u64, mime: &str) {
         let result = self.start_offer_read(request_id, offer_id, mime);
         if let Err(error) = result {
-            self.state.events.push_back(LayerEvent::OfferRead {
+            self.state.events.push_back(Event::OfferRead {
                 request_id,
                 result: Err(error),
             });
@@ -213,7 +213,7 @@ impl LayerState {
         while let Ok(done) = self.read_rx.try_recv() {
             match done.tag {
                 ReadTag::Request(request_id) => {
-                    self.events.push_back(LayerEvent::OfferRead {
+                    self.events.push_back(Event::OfferRead {
                         request_id,
                         result: done.result,
                     });

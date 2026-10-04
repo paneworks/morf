@@ -210,7 +210,7 @@ impl LayerState {
             .map(|index| self.screencopies.remove(index).request_id);
         frame.destroy();
         if let Some(request_id) = request_id {
-            self.events.push_back(LayerEvent::Screencopy {
+            self.events.push_back(Event::Screencopy {
                 request_id,
                 result: Err(error),
             });
@@ -271,7 +271,7 @@ impl LayerState {
     /// which is what it did before this existed.
     pub(crate) fn track_aux_scale(
         &mut self,
-        role: SurfaceRole,
+        role: WindowId,
         surface: &wayland_client::protocol::wl_surface::WlSurface,
         qh: &QueueHandle<Self>,
     ) {

@@ -202,7 +202,7 @@ impl LayerClient {
 
     /// Holds the compositor's shortcuts off the shell, and reports whether
     /// the compositor speaks the protocol at all -- whether it *agrees* comes
-    /// later, as `LayerEvent::ShortcutsInhibited`.
+    /// later, as `Event::ShortcutsInhibited`.
     pub fn set_shortcuts_inhibited(&mut self, inhibited: bool) -> bool {
         self.state
             .set_shortcuts_inhibited(inhibited, &self.queue.handle());
@@ -246,10 +246,10 @@ impl LayerClient {
     /// from `aux_scales`. 120 -- one to one -- when the surface is unknown or
     /// the compositor offers no fractional scale, which is what every surface
     /// but the primary layer used to get.
-    pub fn surface_scale_120(&self, role: SurfaceRole) -> u32 {
+    pub fn surface_scale_120(&self, role: WindowId) -> u32 {
         match role {
-            SurfaceRole::Layer(id) => self.layer_scale_120(id).unwrap_or(120),
-            SurfaceRole::Lock(index) => self.lock_scale_120(index).unwrap_or(120),
+            WindowId::Layer(id) => self.layer_scale_120(id).unwrap_or(120),
+            WindowId::Lock(index) => self.lock_scale_120(index).unwrap_or(120),
             other => self
                 .state
                 .aux_scales

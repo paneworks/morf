@@ -47,14 +47,14 @@ use wayland_protocols_wlr::screencopy::v1::client::{
 use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*};
 
 /// One output, in the shape the rest of morf describes outputs in.
-pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> ScreenInfo {
+pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> Output {
     let mode = info
         .modes
         .iter()
         .find(|mode| mode.current)
         .map(|mode| mode.dimensions);
     let size = output_logical_size(info.logical_size, mode, info.transform, info.scale_factor);
-    ScreenInfo {
+    Output {
         id: info.id,
         name: info.name,
         make: info.make,
@@ -126,25 +126,25 @@ impl LayerState {
             .collect::<Vec<_>>();
         if screens != self.screens {
             self.screens = screens.clone();
-            self.events.push_back(LayerEvent::Screens(screens));
+            self.events.push_back(Event::Screens(screens));
         }
     }
 
-    pub(crate) fn surface_role(&self, surface: &wl_surface::WlSurface) -> Option<SurfaceRole> {
+    pub(crate) fn surface_role(&self, surface: &wl_surface::WlSurface) -> Option<WindowId> {
         if let Some(id) = self.layer_id(surface) {
-            Some(SurfaceRole::Layer(id))
+            Some(WindowId::Layer(id))
         } else if let Some(id) = self
             .popups
             .iter()
             .find_map(|(id, popup)| (surface == popup.wl_surface()).then_some(*id))
         {
-            Some(SurfaceRole::Popup(id))
+            Some(WindowId::Popup(id))
         } else if let Some(id) = self
             .floatings
             .iter()
             .find_map(|(id, floating)| (surface == floating.wl_surface()).then_some(*id))
         {
-            Some(SurfaceRole::Floating(id))
+            Some(WindowId::Toplevel(id))
         } else {
             // A lock surface is an input target like any other: the pointer,
             // a finger and the keyboard all arrive on it while the session is
@@ -152,7 +152,7 @@ impl LayerState {
             self.lock_surfaces
                 .iter()
                 .position(|lock| surface == lock.surface.wl_surface())
-                .map(SurfaceRole::Lock)
+                .map(WindowId::Lock)
         }
     }
 
@@ -160,9 +160,9 @@ impl LayerState {
     /// and renumbers what the ones after it held: lock surfaces are addressed
     /// by position, so every later surface has moved down one.
     pub(crate) fn forget_lock_surface(&mut self, index: usize) {
-        let shift = |role: SurfaceRole| match role {
-            SurfaceRole::Lock(at) if at == index => None,
-            SurfaceRole::Lock(at) if at > index => Some(SurfaceRole::Lock(at - 1)),
+        let shift = |role: WindowId| match role {
+            WindowId::Lock(at) if at == index => None,
+            WindowId::Lock(at) if at > index => Some(WindowId::Lock(at - 1)),
             other => Some(other),
         };
         self.keyboard_surface = self.keyboard_surface.and_then(shift);
@@ -174,7 +174,7 @@ impl LayerState {
 
     /// Forgets input held by every lock surface: the lock has ended.
     pub(crate) fn forget_lock_surfaces(&mut self) {
-        let is_lock = |role: &SurfaceRole| matches!(role, SurfaceRole::Lock(_));
+        let is_lock = |role: &WindowId| matches!(role, WindowId::Lock(_));
         if self.keyboard_surface.as_ref().is_some_and(is_lock) {
             self.keyboard_surface = None;
         }
@@ -182,7 +182,7 @@ impl LayerState {
     }
 
     pub(crate) fn push_key(&mut self, event: KeyEvent, pressed: bool, repeat: bool) {
-        self.events.push_back(LayerEvent::Key {
+        self.events.push_back(Event::Key {
             surface: self.key_target(),
             keysym: event.keysym.raw(),
             text: event.utf8,
@@ -212,7 +212,7 @@ impl Dispatch<WpFractionalScaleV1, u64> for LayerState {
         let scale_120 = layer.scale_120;
         state
             .events
-            .push_back(LayerEvent::Scale { id: *id, scale_120 });
+            .push_back(Event::Scale { id: *id, scale_120 });
     }
 }
 
@@ -223,12 +223,12 @@ impl Dispatch<WpFractionalScaleV1, u64> for LayerState {
 /// be `1`, and folding them into one map would have a popup's scale change
 /// resize a bar. The role carries the kind along with the number and so cannot
 /// be confused.
-impl Dispatch<WpFractionalScaleV1, SurfaceRole> for LayerState {
+impl Dispatch<WpFractionalScaleV1, WindowId> for LayerState {
     fn event(
         state: &mut Self,
         _proxy: &WpFractionalScaleV1,
         event: wp_fractional_scale_v1::Event,
-        role: &SurfaceRole,
+        role: &WindowId,
         _connection: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
@@ -240,7 +240,7 @@ impl Dispatch<WpFractionalScaleV1, SurfaceRole> for LayerState {
         };
         entry.scale_120 = scale.max(1);
         let scale_120 = entry.scale_120;
-        state.events.push_back(LayerEvent::AuxScale {
+        state.events.push_back(Event::AuxScale {
             role: *role,
             scale_120,
         });
@@ -261,7 +261,7 @@ impl Dispatch<ExtIdleNotificationV1, (u32, bool)> for LayerState {
             ext_idle_notification_v1::Event::Resumed => false,
             _ => return,
         };
-        state.events.push_back(LayerEvent::Idle {
+        state.events.push_back(Event::Idle {
             timeout_ms: *timeout_ms,
             input_only: *input_only,
             idle,
@@ -370,7 +370,7 @@ impl Dispatch<ZwlrScreencopyFrameV1, ()> for LayerState {
                 proxy.destroy();
                 state
                     .events
-                    .push_back(LayerEvent::Screencopy { request_id, result });
+                    .push_back(Event::Screencopy { request_id, result });
             }
             zwlr_screencopy_frame_v1::Event::Failed => {
                 state.fail_screencopy(proxy, "compositor rejected screencopy".to_owned());
@@ -414,7 +414,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for LayerState {
                 state.input_method_state = state.input_method_pending.clone();
                 state
                     .events
-                    .push_back(LayerEvent::InputMethod(state.input_method_state.clone()));
+                    .push_back(Event::InputMethod(state.input_method_state.clone()));
             }
             zwp_input_method_v2::Event::Unavailable => {
                 if state.input_method.as_ref() == Some(proxy) {
@@ -423,7 +423,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for LayerState {
                 state.input_method_state.active = false;
                 state
                     .events
-                    .push_back(LayerEvent::InputMethod(state.input_method_state.clone()));
+                    .push_back(Event::InputMethod(state.input_method_state.clone()));
                 proxy.destroy();
             }
             _ => {}
@@ -452,7 +452,7 @@ impl Dispatch<ZwpTextInputV3, ()> for LayerState {
                 state.text_input_pending = TextInputState::default();
                 state
                     .events
-                    .push_back(LayerEvent::TextInput(state.text_input_pending.clone()));
+                    .push_back(Event::TextInput(state.text_input_pending.clone()));
             }
             zwp_text_input_v3::Event::PreeditString {
                 text,
@@ -477,7 +477,7 @@ impl Dispatch<ZwpTextInputV3, ()> for LayerState {
                 state.text_input_pending.serial = serial;
                 state
                     .events
-                    .push_back(LayerEvent::TextInput(state.text_input_pending.clone()));
+                    .push_back(Event::TextInput(state.text_input_pending.clone()));
                 state.text_input_pending.preedit = None;
                 state.text_input_pending.commit = None;
                 state.text_input_pending.delete_before = 0;

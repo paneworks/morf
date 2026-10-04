@@ -2,7 +2,7 @@ use morf_io::IpcIncoming;
 use morf_lua::{Runtime, SessionLockState};
 use morf_value::IpcValue;
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_app::{LayerClient, LayerEvent, ScreenInfo};
+use morf_app::{LayerClient, Event, Output};
 use std::os::fd::AsFd;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -19,7 +19,7 @@ pub(crate) struct Worker {
     pub(crate) stop: Arc<AtomicBool>,
     pub(crate) commands: WorkerSender,
     pub(crate) join: JoinHandle<()>,
-    pub(crate) screen: ScreenInfo,
+    pub(crate) screen: Output,
 }
 
 /// The way into an output thread: a channel whose every message rings the
@@ -58,7 +58,7 @@ pub(crate) enum WorkerCommand {
         reply: mpsc::SyncSender<Result<Vec<IpcValue>, String>>,
     },
     /// The compositor's output list, as the supervisor last recorded it.
-    Screens(Vec<ScreenInfo>),
+    Screens(Vec<Output>),
     Verbs(mpsc::SyncSender<Vec<String>>),
     Logs(mpsc::SyncSender<Vec<String>>),
     Capabilities(mpsc::SyncSender<Vec<String>>),
@@ -110,7 +110,7 @@ pub(crate) enum WorkerMessage {
     },
     Screens {
         output: String,
-        screens: Vec<ScreenInfo>,
+        screens: Vec<Output>,
     },
     Failed {
         output: String,
@@ -214,23 +214,23 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
             match event {
                 // A lock client has only lock surfaces, and those are not
                 // popups or floating windows.
-                LayerEvent::AuxScale { .. }
-                | LayerEvent::ShortcutsInhibited { .. }
-                | LayerEvent::KeyboardFocus { .. }
-                | LayerEvent::SurfaceKeyboard { .. }
-                | LayerEvent::SurfacePointer { .. } => {}
-                LayerEvent::SessionLocked => {
+                Event::AuxScale { .. }
+                | Event::ShortcutsInhibited { .. }
+                | Event::KeyboardFocus { .. }
+                | Event::SurfaceKeyboard { .. }
+                | Event::SurfacePointer { .. } => {}
+                Event::SessionLocked => {
                     locked = true;
                     repaint |= runtime.set_session_lock_state(SessionLockState::Locked);
                 }
-                LayerEvent::Screens(screens) => {
+                Event::Screens(screens) => {
                     // Locks have one runtime, outside the normal output-worker
                     // supervisor. Keep its tracked screen list current too, so
                     // Lua can move controls off an unplugged monitor.
                     runtime.replace_screens(&crate::supervisor::lua_screens(&screens));
                     repaint = true;
                 }
-                LayerEvent::SessionLockConfigure {
+                Event::SessionLockConfigure {
                     index,
                     width: logical_width,
                     height: logical_height,
@@ -271,7 +271,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                     }
                     repaint = true;
                 }
-                LayerEvent::SessionLockSurfaceRemoved { index } => {
+                Event::SessionLockSurfaceRemoved { index } => {
                     if index < outputs.len() {
                         let mut gone = outputs.remove(index);
                         release_lock_tree(&mut runtime, &mut gone);
@@ -280,14 +280,14 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                     // role the input state names.
                     input.reset();
                 }
-                LayerEvent::SessionLockFrame { time_ms, .. } => {
+                Event::SessionLockFrame { time_ms, .. } => {
                     let frame = runtime
                         .tick_frame_animations(animation_delta(last_frame, time_ms))
                         .map_err(|error| error.to_string())?;
                     last_frame = frame.active.then_some(time_ms);
                     repaint |= frame.active || frame.changed > 0;
                 }
-                LayerEvent::Key {
+                Event::Key {
                     surface,
                     pressed,
                     repeat,
@@ -320,7 +320,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                         None => input.focused.remove(&surface),
                     };
                 }
-                LayerEvent::SessionLockFinished => {
+                Event::SessionLockFinished => {
                     // Told before the process goes, so a configuration can
                     // say why: refused outright, or ended from outside.
                     let (state, error) = if locked {
@@ -331,17 +331,17 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                     runtime.set_session_lock_state(state);
                     return Err(error.to_owned());
                 }
-                LayerEvent::Idle {
+                Event::Idle {
                     timeout_ms,
                     input_only,
                     idle,
                 } => {
                     repaint |= runtime.dispatch_idle(timeout_ms, input_only, idle);
                 }
-                LayerEvent::Clipboard { text } => {
+                Event::Clipboard { text } => {
                     repaint |= runtime.dispatch_clipboard(text);
                 }
-                LayerEvent::Selection { primary, offer } => {
+                Event::Selection { primary, offer } => {
                     repaint |= runtime.dispatch_selection(
                         primary,
                         offer.map(|offer| morf_lua::OfferDescription {
@@ -351,13 +351,13 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                         }),
                     );
                 }
-                LayerEvent::OfferRead { request_id, result } => {
+                Event::OfferRead { request_id, result } => {
                     repaint |= runtime.dispatch_offer_read(request_id, result);
                 }
-                LayerEvent::Screencopy { request_id, result } => {
+                Event::Screencopy { request_id, result } => {
                     repaint |= dispatch_screencopy(&mut runtime, None, request_id, result);
                 }
-                LayerEvent::CaptureOffer {
+                Event::CaptureOffer {
                     request_id,
                     width,
                     height,
@@ -379,7 +379,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                         },
                     );
                 }
-                LayerEvent::InputMethod(state) => {
+                Event::InputMethod(state) => {
                     repaint |= runtime.dispatch_input_method(
                         state.active,
                         state.surrounding_text,
@@ -388,7 +388,7 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                         state.serial,
                     );
                 }
-                LayerEvent::TextInput(state) => {
+                Event::TextInput(state) => {
                     repaint |= runtime.dispatch_text_input(
                         state.focused,
                         state.preedit,
@@ -400,31 +400,31 @@ pub(crate) fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(
                         state.serial,
                     );
                 }
-                LayerEvent::Configure { .. }
-                | LayerEvent::Scale { .. }
-                | LayerEvent::Frame { .. }
+                Event::Configure { .. }
+                | Event::Scale { .. }
+                | Event::Frame { .. }
                 // Taken above, by the pointer path every surface shares.
-                | LayerEvent::PointerMotion { .. }
-                | LayerEvent::PointerLeave { .. }
-                | LayerEvent::PointerButton { .. }
-                | LayerEvent::PointerAxis { .. }
-                | LayerEvent::TouchDown { .. }
-                | LayerEvent::TouchMotion { .. }
-                | LayerEvent::TouchUp { .. }
-                | LayerEvent::TouchCancel
-                | LayerEvent::PopupConfigure { .. }
-                | LayerEvent::PopupFrame { .. }
-                | LayerEvent::PopupDone { .. }
-                | LayerEvent::FloatingConfigure { .. }
-                | LayerEvent::FloatingFrame { .. }
-                | LayerEvent::FloatingClose { .. }
+                | Event::PointerMotion { .. }
+                | Event::PointerLeave { .. }
+                | Event::PointerButton { .. }
+                | Event::PointerAxis { .. }
+                | Event::TouchDown { .. }
+                | Event::TouchMotion { .. }
+                | Event::TouchUp { .. }
+                | Event::TouchCancel
+                | Event::PopupConfigure { .. }
+                | Event::PopupFrame { .. }
+                | Event::PopupDone { .. }
+                | Event::ToplevelConfigure { .. }
+                | Event::ToplevelFrame { .. }
+                | Event::ToplevelClose { .. }
                 // A lock screen takes no drags, in or out.
-                | LayerEvent::DragEnter { .. }
-                | LayerEvent::DragMotion { .. }
-                | LayerEvent::DragLeave { .. }
-                | LayerEvent::Drop { .. }
-                | LayerEvent::DragSourceEnded { .. }
-                | LayerEvent::Closed { .. } => {}
+                | Event::DragEnter { .. }
+                | Event::DragMotion { .. }
+                | Event::DragLeave { .. }
+                | Event::Drop { .. }
+                | Event::DragSourceEnded { .. }
+                | Event::Closed { .. } => {}
             }
         }
         apply_service_requests(&mut runtime, &mut client);

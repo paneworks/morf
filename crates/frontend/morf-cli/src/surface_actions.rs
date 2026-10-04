@@ -1,7 +1,7 @@
 use morf_layout::{Layout, ReparentTransition, Size};
 use morf_lua::{Runtime, WindowSurfaceAction};
 use morf_render::{RenderEngine, WgpuBackend};
-use morf_app::{FloatingResizeEdge, LayerClient};
+use morf_app::{Edge, LayerClient};
 use std::collections::HashMap;
 
 use crate::surfaces::*;
@@ -18,14 +18,14 @@ pub(crate) fn apply_window_surface_actions(
             }
             WindowSurfaceAction::Resize { id, edge } if floatings.contains_key(&id) => {
                 let edge = match edge.as_str() {
-                    "top" => FloatingResizeEdge::Top,
-                    "bottom" => FloatingResizeEdge::Bottom,
-                    "left" => FloatingResizeEdge::Left,
-                    "right" => FloatingResizeEdge::Right,
-                    "top_left" => FloatingResizeEdge::TopLeft,
-                    "top_right" => FloatingResizeEdge::TopRight,
-                    "bottom_left" => FloatingResizeEdge::BottomLeft,
-                    "bottom_right" => FloatingResizeEdge::BottomRight,
+                    "top" => Edge::Top,
+                    "bottom" => Edge::Bottom,
+                    "left" => Edge::Left,
+                    "right" => Edge::Right,
+                    "top_left" => Edge::TopLeft,
+                    "top_right" => Edge::TopRight,
+                    "bottom_left" => Edge::BottomLeft,
+                    "bottom_right" => Edge::BottomRight,
                     _ => continue,
                 };
                 client.start_floating_resize(id, edge);

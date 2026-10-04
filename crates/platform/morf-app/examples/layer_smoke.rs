@@ -4,12 +4,12 @@ use morf_render::{
     WgpuBackend,
 };
 use morf_scene::{Color, Element, Scene};
-use morf_app::{BarConfig, LayerClient, LayerEvent, OutputPowerMode};
+use morf_app::{LayerConfig, LayerClient, Event, OutputPowerMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = BarConfig {
+    let config = LayerConfig {
         output: std::env::var("MORF_OUTPUT").ok(),
-        ..BarConfig::default()
+        ..LayerConfig::default()
     };
     let mut client = LayerClient::connect(config)?;
     let idle_notify = client.set_idle_timeouts(&[(600_000, false)]);
@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     'configured: loop {
         client.dispatch()?;
         while let Some(event) = client.next_event() {
-            if matches!(event, LayerEvent::Configure { .. }) {
+            if matches!(event, Event::Configure { .. }) {
                 break 'configured;
             }
         }
@@ -145,7 +145,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     'framed: loop {
         client.dispatch()?;
         while let Some(event) = client.next_event() {
-            if let LayerEvent::Frame { time_ms, .. } = event {
+            if let Event::Frame { time_ms, .. } = event {
                 let screens = client
                     .screens()
                     .iter()

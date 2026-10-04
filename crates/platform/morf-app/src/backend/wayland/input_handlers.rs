@@ -110,21 +110,21 @@ impl PointerHandler for LayerState {
                     // again on the next hover.
                     self.pointer_enter_serial = Some(serial);
                     self.cursor_shape_current = None;
-                    self.events.push_back(LayerEvent::SurfacePointer {
+                    self.events.push_back(Event::SurfacePointer {
                         surface,
                         inside: true,
                     });
                     self.events
-                        .push_back(LayerEvent::PointerMotion { surface, x, y });
+                        .push_back(Event::PointerMotion { surface, x, y });
                 }
                 PointerEventKind::Motion { .. } => self
                     .events
-                    .push_back(LayerEvent::PointerMotion { surface, x, y }),
+                    .push_back(Event::PointerMotion { surface, x, y }),
                 PointerEventKind::Leave { .. } => {
                     self.pointer_enter_serial = None;
                     self.cursor_shape_current = None;
-                    self.events.push_back(LayerEvent::PointerLeave { surface });
-                    self.events.push_back(LayerEvent::SurfacePointer {
+                    self.events.push_back(Event::PointerLeave { surface });
+                    self.events.push_back(Event::SurfacePointer {
                         surface,
                         inside: false,
                     });
@@ -133,7 +133,7 @@ impl PointerHandler for LayerState {
                     self.latest_input_serial = Some(serial);
                     self.pressed_surface = Some(event.surface.clone());
                     self.note_press(surface);
-                    self.events.push_back(LayerEvent::PointerButton {
+                    self.events.push_back(Event::PointerButton {
                         surface,
                         button,
                         pressed: true,
@@ -143,7 +143,7 @@ impl PointerHandler for LayerState {
                     });
                 }
                 PointerEventKind::Release { button, .. } => {
-                    self.events.push_back(LayerEvent::PointerButton {
+                    self.events.push_back(Event::PointerButton {
                         surface,
                         button,
                         pressed: false,
@@ -169,7 +169,7 @@ impl PointerHandler for LayerState {
                                 axis.value120 / 120
                             }
                         };
-                        self.events.push_back(LayerEvent::PointerAxis {
+                        self.events.push_back(Event::PointerAxis {
                             surface,
                             x,
                             y,
@@ -204,7 +204,7 @@ impl TouchHandler for LayerState {
         self.latest_input_serial = Some(serial);
         self.note_press(surface);
         self.touch_points.insert(id, (position, surface));
-        self.events.push_back(LayerEvent::TouchDown {
+        self.events.push_back(Event::TouchDown {
             surface,
             id,
             x: position.0,
@@ -223,7 +223,7 @@ impl TouchHandler for LayerState {
     ) {
         if let Some(((x, y), surface)) = self.touch_points.remove(&id) {
             self.events
-                .push_back(LayerEvent::TouchUp { surface, id, x, y });
+                .push_back(Event::TouchUp { surface, id, x, y });
         }
     }
 
@@ -238,7 +238,7 @@ impl TouchHandler for LayerState {
     ) {
         if let Some((point, surface)) = self.touch_points.get_mut(&id) {
             *point = position;
-            self.events.push_back(LayerEvent::TouchMotion {
+            self.events.push_back(Event::TouchMotion {
                 surface: *surface,
                 id,
                 x: position.0,
@@ -275,7 +275,7 @@ impl TouchHandler for LayerState {
         _touch: &wl_touch::WlTouch,
     ) {
         self.touch_points.clear();
-        self.events.push_back(LayerEvent::TouchCancel);
+        self.events.push_back(Event::TouchCancel);
     }
 }
 
@@ -292,14 +292,14 @@ impl KeyboardHandler for LayerState {
     ) {
         self.keyboard_surface = self.surface_role(surface);
         if let Some(role) = self.keyboard_surface {
-            self.events.push_back(LayerEvent::SurfaceKeyboard {
+            self.events.push_back(Event::SurfaceKeyboard {
                 surface: role,
                 focused: true,
             });
         }
-        if self.keyboard_surface == Some(SurfaceRole::Layer(crate::backend::wayland::PRIMARY_LAYER)) {
+        if self.keyboard_surface == Some(WindowId::Layer(crate::backend::wayland::PRIMARY_LAYER)) {
             self.events
-                .push_back(LayerEvent::KeyboardFocus { active: true });
+                .push_back(Event::KeyboardFocus { active: true });
         }
     }
 
@@ -317,14 +317,14 @@ impl KeyboardHandler for LayerState {
             self.keyboard_surface = None;
         }
         if let Some(role) = role {
-            self.events.push_back(LayerEvent::SurfaceKeyboard {
+            self.events.push_back(Event::SurfaceKeyboard {
                 surface: role,
                 focused: false,
             });
         }
-        if role == Some(SurfaceRole::Layer(crate::backend::wayland::PRIMARY_LAYER)) {
+        if role == Some(WindowId::Layer(crate::backend::wayland::PRIMARY_LAYER)) {
             self.events
-                .push_back(LayerEvent::KeyboardFocus { active: false });
+                .push_back(Event::KeyboardFocus { active: false });
         }
     }
 

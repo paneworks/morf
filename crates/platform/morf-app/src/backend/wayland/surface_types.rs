@@ -11,7 +11,7 @@ use crate::backend::wayland::{state_types::*};
 // The neutral types, under the paths the backend has always used them by.
 pub(crate) use crate::{data::*, event::*, input::*, kind::*, output::*, positioner::*, window::*};
 
-impl FloatingResizeEdge {
+impl Edge {
     pub(crate) fn protocol(self) -> xdg_toplevel::ResizeEdge {
         match self {
             Self::Top => xdg_toplevel::ResizeEdge::Top,

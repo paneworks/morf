@@ -13,7 +13,7 @@ use crate::workers::{
 };
 use morf_io::IpcValue as WireValue;
 use morf_lua::{Limits, Runtime};
-use morf_app::ScreenInfo;
+use morf_app::Output;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -76,8 +76,8 @@ fn the_first_output_is_primary_and_stays_while_others_come_and_go() {
         Some("A".into())
     );
     // Announced first wins, not the name: B's global is the lower one.
-    let early_b = ScreenInfo { id: 0, ..b.clone() };
-    let late_a = ScreenInfo {
+    let early_b = Output { id: 0, ..b.clone() };
+    let late_a = Output {
         id: 900,
         ..a.clone()
     };
@@ -177,12 +177,12 @@ fn exactly_one_runtime_is_primary_through_hotplug_and_going_dark() {
 
     // Reordered -- A moved right of B, its global now the later one: every
     // runtime is started again for its new geometry, and A keeps the duty.
-    let moved_a = ScreenInfo {
+    let moved_a = Output {
         id: 1600,
         position: Some((800, 0)),
         ..a.clone()
     };
-    let moved_b = ScreenInfo {
+    let moved_b = Output {
         position: Some((0, 0)),
         ..b.clone()
     };
@@ -203,7 +203,7 @@ fn exactly_one_runtime_is_primary_through_hotplug_and_going_dark() {
 fn logging_spawner<'a>(
     handover: &'a Handover,
     events: &'a Arc<Mutex<Vec<String>>>,
-) -> impl FnMut(&str, &ScreenInfo, Option<Seed>, bool) -> Worker + 'a {
+) -> impl FnMut(&str, &Output, Option<Seed>, bool) -> Worker + 'a {
     move |name, screen, seed, primary| {
         let stop = Arc::new(AtomicBool::new(false));
         let (commands, command_rx) = mpsc::channel();

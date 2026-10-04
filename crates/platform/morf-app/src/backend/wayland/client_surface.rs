@@ -38,9 +38,9 @@ pub(crate) fn next_reposition_token(
 
 impl LayerClient {
     /// Removes the next queued surface event.
-    pub fn next_event(&mut self) -> Option<LayerEvent> {
+    pub fn next_event(&mut self) -> Option<Event> {
         while let Ok(text) = self.state.clipboard_rx.try_recv() {
-            self.state.events.push_back(LayerEvent::Clipboard { text });
+            self.state.events.push_back(Event::Clipboard { text });
         }
         self.state.drain_reads();
         self.state.events.pop_front()
@@ -89,7 +89,7 @@ impl LayerClient {
 
     /// The output this client's surface was opened on, as it is now: its
     /// transform and subpixel layout decide how text may be drawn on it.
-    pub fn own_output(&self) -> Option<ScreenInfo> {
+    pub fn own_output(&self) -> Option<Output> {
         let output = self.state.output_power_target.as_ref()?;
         self.state
             .outputs
@@ -98,7 +98,7 @@ impl LayerClient {
     }
 
     /// Returns the latest compositor output snapshot.
-    pub fn screens(&self) -> &[ScreenInfo] {
+    pub fn screens(&self) -> &[Output] {
         &self.state.screens
     }
 
@@ -131,8 +131,8 @@ impl LayerClient {
     /// `config` with its anchor rectangle moved into the fallback toplevel's
     /// coordinates, when `parent` is a layer surface standing in as a
     /// subsurface of it; unchanged otherwise.
-    fn fallback_anchored(&self, parent: SurfaceRole, mut config: PopupConfig) -> PopupConfig {
-        if let SurfaceRole::Layer(id) = parent
+    fn fallback_anchored(&self, parent: WindowId, mut config: PopupConfig) -> PopupConfig {
+        if let WindowId::Layer(id) = parent
             && let Some((_, (x, y))) = self.state.fallback_popup_parent(id)
         {
             config.anchor.x += x;
@@ -145,7 +145,7 @@ impl LayerClient {
     pub fn open_popup(
         &mut self,
         id: u64,
-        parent: SurfaceRole,
+        parent: WindowId,
         config: PopupConfig,
     ) -> Result<(), WaylandError> {
         self.close_popup(id);
@@ -157,21 +157,21 @@ impl LayerClient {
             // Without layer-shell there is no `get_popup` to attach it with,
             // so it hangs from the fallback toplevel directly, its anchor
             // moved by the subsurface's offset (`fallback_anchored`).
-            SurfaceRole::Layer(id) => self
+            WindowId::Layer(id) => self
                 .state
                 .fallback_popup_parent(id)
                 .map(|(window, _)| window.xdg_surface()),
-            SurfaceRole::Lock(_) => {
+            WindowId::Lock(_) => {
                 return Err(WaylandError("a lock surface cannot parent a popup".into()));
             }
-            SurfaceRole::Popup(parent) => Some(
+            WindowId::Popup(parent) => Some(
                 self.state
                     .popups
                     .get(&parent)
                     .ok_or_else(|| WaylandError("popup parent is not open".into()))?
                     .xdg_surface(),
             ),
-            SurfaceRole::Floating(parent) => Some(
+            WindowId::Toplevel(parent) => Some(
                 self.state
                     .floatings
                     .get(&parent)
@@ -187,7 +187,7 @@ impl LayerClient {
             &self.state.xdg_shell,
         )
         .map_err(|error| WaylandError(format!("could not create popup: {error}")))?;
-        if let SurfaceRole::Layer(id) = parent {
+        if let WindowId::Layer(id) = parent {
             // Only layer-shell has `get_popup`. Under the toplevel fallback the
             // popup is already parented by the xdg positioner it was created
             // with, so there is nothing further to attach it to.
@@ -218,7 +218,7 @@ impl LayerClient {
         // preferred scale with its first configure rather than after it.
         let qh = self.queue.handle();
         self.state
-            .track_aux_scale(SurfaceRole::Popup(id), popup.wl_surface(), &qh);
+            .track_aux_scale(WindowId::Popup(id), popup.wl_surface(), &qh);
         popup.wl_surface().commit();
         self.state.popups.insert(id, popup);
         self.state.popup_parents.insert(id, parent);
@@ -270,9 +270,9 @@ impl LayerClient {
     pub fn close_popup(&mut self, id: u64) {
         self.state.popups.remove(&id);
         self.state.popup_parents.remove(&id);
-        self.state.aux_scales.remove(&SurfaceRole::Popup(id));
+        self.state.aux_scales.remove(&WindowId::Popup(id));
         self.state.popup_repositions.remove(&id);
-        self.forget_surface(SurfaceRole::Popup(id));
+        self.forget_surface(WindowId::Popup(id));
     }
 
     /// Returns the popup surface used to attach buffers.

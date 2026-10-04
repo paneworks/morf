@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use morf_lua::{LogEntry, LogLevel};
 use morf_value::IpcValue;
-use morf_app::{PRIMARY_LAYER, SurfaceRole};
+use morf_app::{PRIMARY_LAYER, WindowId};
 
 use crate::headless::{Headless, LoadOptions};
 use crate::headless_input::{button, keysym, modifiers};
@@ -62,7 +62,7 @@ fn a_surface_is_sized_from_its_settings_on_the_screen() {
 #[test]
 fn a_click_reaches_the_area_under_it_and_nothing_beside_it() {
     let mut headless = load(COUNTER);
-    let surface = SurfaceRole::Layer(PRIMARY_LAYER);
+    let surface = WindowId::Layer(PRIMARY_LAYER);
     headless.click(surface, (20.0, 20.0), 0x110, Default::default()).unwrap();
     headless.click(surface, (150.0, 80.0), 0x110, Default::default()).unwrap();
     assert_eq!(ask(&mut headless, "clicks"), IpcValue::Integer(1));
@@ -71,7 +71,7 @@ fn a_click_reaches_the_area_under_it_and_nothing_beside_it() {
 #[test]
 fn keys_go_to_the_focused_node() {
     let mut headless = load(COUNTER);
-    let surface = SurfaceRole::Layer(PRIMARY_LAYER);
+    let surface = WindowId::Layer(PRIMARY_LAYER);
     for name in ["h", "i"] {
         let (code, text) = keysym(name).unwrap();
         headless

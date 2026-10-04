@@ -10,14 +10,14 @@ use morf_scene::NodeHandle;
 use morf_app::mime::{
     TEXT_MIMES, URI_LIST_MIME, accept_mime, encode_uri_list, path_to_uri, uri_to_path,
 };
-use morf_app::{LayerClient, LayerEvent, OfferInfo, SurfaceRole};
+use morf_app::{LayerClient, Event, OfferInfo, WindowId};
 use std::sync::Arc;
 
 use crate::surfaces::*;
 
 /// A drag from elsewhere, as far as the shell has followed it.
 pub(crate) struct DragFollow {
-    pub(crate) surface: SurfaceRole,
+    pub(crate) surface: WindowId,
     pub(crate) offer: OfferInfo,
     /// The `DropArea` under it, and the type that area accepted.
     pub(crate) target: Option<(NodeHandle, Option<String>)>,
@@ -36,17 +36,17 @@ pub(crate) fn handle_data_event(
     runtime: &mut Runtime,
     client: &mut LayerClient,
     state: &mut SurfaceEventState,
-    event: LayerEvent,
-) -> Result<Result<bool, String>, LayerEvent> {
+    event: Event,
+) -> Result<Result<bool, String>, Event> {
     let repaint = match event {
-        LayerEvent::Selection { primary, offer } => {
+        Event::Selection { primary, offer } => {
             runtime.dispatch_selection(primary, offer.as_ref().map(description))
         }
-        LayerEvent::OfferRead { request_id, result } => {
+        Event::OfferRead { request_id, result } => {
             runtime.dispatch_offer_read(request_id, result)
         }
-        LayerEvent::DragSourceEnded { dropped } => runtime.dispatch_drag_ended(dropped),
-        LayerEvent::DragEnter {
+        Event::DragSourceEnded { dropped } => runtime.dispatch_drag_ended(dropped),
+        Event::DragEnter {
             surface,
             x,
             y,
@@ -64,7 +64,7 @@ pub(crate) fn handle_data_event(
             };
             repaint
         }
-        LayerEvent::DragMotion { surface, x, y } => {
+        Event::DragMotion { surface, x, y } => {
             if state
                 .drag
                 .as_ref()
@@ -77,12 +77,12 @@ pub(crate) fn handle_data_event(
                 Err(error) => return Ok(Err(error)),
             }
         }
-        LayerEvent::DragLeave { .. } => {
+        Event::DragLeave { .. } => {
             let repaint = leave_target(runtime, state);
             state.drag = None;
             repaint
         }
-        LayerEvent::Drop {
+        Event::Drop {
             surface,
             x,
             y,

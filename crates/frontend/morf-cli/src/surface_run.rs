@@ -1,6 +1,6 @@
 use morf_lua::{Limits, Runtime, Screen};
 use morf_render::{RenderEngine, ShaderRegistration, WgpuBackend};
-use morf_app::{LayerClient, LayerEvent, PRIMARY_LAYER, ScreenInfo};
+use morf_app::{LayerClient, Event, PRIMARY_LAYER, Output};
 use std::collections::HashMap;
 use std::os::fd::AsFd;
 use std::path::Path;
@@ -57,7 +57,7 @@ fn capabilities_of(
     list
 }
 
-pub(crate) fn run_surface(start: WorkerStart, screen: ScreenInfo) -> Result<(), String> {
+pub(crate) fn run_surface(start: WorkerStart, screen: Output) -> Result<(), String> {
     let name = screen
         .name
         .clone()
@@ -164,14 +164,14 @@ fn drive_surface(
         client.dispatch().map_err(|error| error.to_string())?;
         while let Some(event) = client.next_event() {
             match event {
-                LayerEvent::Configure { id, .. } if id == PRIMARY_LAYER => break 'configured,
-                LayerEvent::Closed { id } if id == PRIMARY_LAYER => {
+                Event::Configure { id, .. } if id == PRIMARY_LAYER => break 'configured,
+                Event::Closed { id } if id == PRIMARY_LAYER => {
                     return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
                 }
-                LayerEvent::Screencopy { request_id, result } => {
+                Event::Screencopy { request_id, result } => {
                     dispatch_screencopy(runtime, None, request_id, result);
                 }
-                LayerEvent::CaptureOffer {
+                Event::CaptureOffer {
                     request_id,
                     width,
                     height,
@@ -192,53 +192,53 @@ fn drive_surface(
                         },
                     );
                 }
-                LayerEvent::PointerMotion { surface, x, y } => {
+                Event::PointerMotion { surface, x, y } => {
                     early_pointer = Some((surface, x, y));
                 }
-                LayerEvent::PointerLeave { surface } => {
+                Event::PointerLeave { surface } => {
                     if early_pointer.is_some_and(|(role, _, _)| role == surface) {
                         early_pointer = None;
                     }
                 }
-                LayerEvent::Configure { .. }
-                | LayerEvent::Closed { .. }
-                | LayerEvent::Scale { .. }
-                | LayerEvent::AuxScale { .. }
-                | LayerEvent::ShortcutsInhibited { .. }
-                | LayerEvent::Idle { .. }
-                | LayerEvent::Clipboard { .. }
-                | LayerEvent::Selection { .. }
-                | LayerEvent::OfferRead { .. }
-                | LayerEvent::DragEnter { .. }
-                | LayerEvent::DragMotion { .. }
-                | LayerEvent::DragLeave { .. }
-                | LayerEvent::Drop { .. }
-                | LayerEvent::DragSourceEnded { .. }
-                | LayerEvent::KeyboardFocus { .. }
-                | LayerEvent::SurfaceKeyboard { .. }
-                | LayerEvent::SurfacePointer { .. }
-                | LayerEvent::InputMethod(_)
-                | LayerEvent::TextInput(_)
-                | LayerEvent::Frame { .. }
-                | LayerEvent::PointerButton { .. }
-                | LayerEvent::PointerAxis { .. }
-                | LayerEvent::TouchDown { .. }
-                | LayerEvent::TouchMotion { .. }
-                | LayerEvent::TouchUp { .. }
-                | LayerEvent::TouchCancel
-                | LayerEvent::Key { .. }
-                | LayerEvent::Screens(_)
-                | LayerEvent::PopupConfigure { .. }
-                | LayerEvent::PopupFrame { .. }
-                | LayerEvent::PopupDone { .. }
-                | LayerEvent::FloatingConfigure { .. }
-                | LayerEvent::FloatingFrame { .. }
-                | LayerEvent::FloatingClose { .. }
-                | LayerEvent::SessionLocked
-                | LayerEvent::SessionLockFinished
-                | LayerEvent::SessionLockConfigure { .. }
-                | LayerEvent::SessionLockSurfaceRemoved { .. }
-                | LayerEvent::SessionLockFrame { .. } => {}
+                Event::Configure { .. }
+                | Event::Closed { .. }
+                | Event::Scale { .. }
+                | Event::AuxScale { .. }
+                | Event::ShortcutsInhibited { .. }
+                | Event::Idle { .. }
+                | Event::Clipboard { .. }
+                | Event::Selection { .. }
+                | Event::OfferRead { .. }
+                | Event::DragEnter { .. }
+                | Event::DragMotion { .. }
+                | Event::DragLeave { .. }
+                | Event::Drop { .. }
+                | Event::DragSourceEnded { .. }
+                | Event::KeyboardFocus { .. }
+                | Event::SurfaceKeyboard { .. }
+                | Event::SurfacePointer { .. }
+                | Event::InputMethod(_)
+                | Event::TextInput(_)
+                | Event::Frame { .. }
+                | Event::PointerButton { .. }
+                | Event::PointerAxis { .. }
+                | Event::TouchDown { .. }
+                | Event::TouchMotion { .. }
+                | Event::TouchUp { .. }
+                | Event::TouchCancel
+                | Event::Key { .. }
+                | Event::Screens(_)
+                | Event::PopupConfigure { .. }
+                | Event::PopupFrame { .. }
+                | Event::PopupDone { .. }
+                | Event::ToplevelConfigure { .. }
+                | Event::ToplevelFrame { .. }
+                | Event::ToplevelClose { .. }
+                | Event::SessionLocked
+                | Event::SessionLockFinished
+                | Event::SessionLockConfigure { .. }
+                | Event::SessionLockSurfaceRemoved { .. }
+                | Event::SessionLockFrame { .. } => {}
             }
         }
     }
@@ -725,14 +725,14 @@ pub(crate) fn slow(name: &str, what: &str, since: Instant) {
 const PROFILE_LINES: usize = 12;
 
 /// What an event is, for `slow`.
-fn event_kind(event: &LayerEvent) -> &'static str {
+fn event_kind(event: &Event) -> &'static str {
     match event {
-        LayerEvent::PointerMotion { .. } => "pointer motion",
-        LayerEvent::PointerButton { .. } => "a click",
-        LayerEvent::PointerAxis { .. } => "a scroll",
-        LayerEvent::Key { .. } => "a key",
-        LayerEvent::Configure { .. } => "a configure",
-        LayerEvent::Frame { .. } => "a frame callback",
+        Event::PointerMotion { .. } => "pointer motion",
+        Event::PointerButton { .. } => "a click",
+        Event::PointerAxis { .. } => "a scroll",
+        Event::Key { .. } => "a key",
+        Event::Configure { .. } => "a configure",
+        Event::Frame { .. } => "a frame callback",
         _ => "an event",
     }
 }

@@ -26,7 +26,7 @@ use wayland_protocols::ext::image_copy_capture::v1::client::{
 };
 
 use crate::backend::wayland::state_types::LayerState;
-use crate::backend::wayland::surface_types::LayerEvent;
+use crate::backend::wayland::surface_types::Event;
 use crate::backend::wayland::types::{ScreencopyFormat, ScreencopyFrame};
 
 // The factories and the source handle say nothing back.
@@ -232,7 +232,7 @@ impl LayerState {
             })
         })();
         capture.session.destroy();
-        self.events.push_back(LayerEvent::Screencopy {
+        self.events.push_back(Event::Screencopy {
             request_id,
             result: result.map_err(str::to_owned),
         });
@@ -251,7 +251,7 @@ impl LayerState {
             buffer.destroy();
         }
         capture.session.destroy();
-        self.events.push_back(LayerEvent::Screencopy {
+        self.events.push_back(Event::Screencopy {
             request_id: capture.request_id,
             result: Err(error),
         });

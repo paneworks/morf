@@ -80,7 +80,7 @@ impl LayerState {
             uris: drag.uris.clone(),
             text: drag.text.clone(),
         };
-        let event = LayerEvent::Drop {
+        let event = Event::Drop {
             surface: drag.surface,
             x: drag.x,
             y: drag.y,
@@ -132,7 +132,7 @@ impl DataDeviceHandler for LayerState {
         // Refused until a target says otherwise: the host answers this event
         // with `accept_drag` once it has hit-tested the point.
         offer.accept_mime_type(offer.serial, None);
-        self.events.push_back(LayerEvent::DragEnter {
+        self.events.push_back(Event::DragEnter {
             surface: role,
             x,
             y,
@@ -156,7 +156,7 @@ impl DataDeviceHandler for LayerState {
         }
         let surface = drag.surface;
         self.drag = None;
-        self.events.push_back(LayerEvent::DragLeave { surface });
+        self.events.push_back(Event::DragLeave { surface });
     }
 
     fn motion(
@@ -174,7 +174,7 @@ impl DataDeviceHandler for LayerState {
         drag.y = y;
         let surface = drag.surface;
         self.events
-            .push_back(LayerEvent::DragMotion { surface, x, y });
+            .push_back(Event::DragMotion { surface, x, y });
     }
 
     fn selection(
@@ -189,16 +189,16 @@ impl DataDeviceHandler for LayerState {
             .find(|device| device.inner() == data_device)
             .and_then(|device| device.data().selection_offer())
         else {
-            self.events.push_back(LayerEvent::Clipboard { text: None });
+            self.events.push_back(Event::Clipboard { text: None });
             return;
         };
         let mime = offer.with_mime_types(|types| best_text_mime(types).map(str::to_owned));
         let Some(mime) = mime else {
-            self.events.push_back(LayerEvent::Clipboard { text: None });
+            self.events.push_back(Event::Clipboard { text: None });
             return;
         };
         let Ok(pipe) = offer.receive(mime) else {
-            self.events.push_back(LayerEvent::Clipboard { text: None });
+            self.events.push_back(Event::Clipboard { text: None });
             return;
         };
         if !take_slot(&self.clipboard_reads) {
@@ -353,7 +353,7 @@ impl DataSourceHandler for LayerState {
         {
             self.drag_source = None;
             self.events
-                .push_back(LayerEvent::DragSourceEnded { dropped: false });
+                .push_back(Event::DragSourceEnded { dropped: false });
             return;
         }
         if self
@@ -386,7 +386,7 @@ impl DataSourceHandler for LayerState {
         {
             self.drag_source = None;
             self.events
-                .push_back(LayerEvent::DragSourceEnded { dropped: true });
+                .push_back(Event::DragSourceEnded { dropped: true });
         }
     }
 

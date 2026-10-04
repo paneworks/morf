@@ -4,7 +4,7 @@ use morf_lua::{
 };
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_app::{
-    BarConfig, KeyboardFocus, LayerAnchors, LayerClient, PRIMARY_LAYER, ShellLayer, ToplevelAction,
+    LayerConfig, KeyboardFocus, LayerAnchors, LayerClient, PRIMARY_LAYER, ShellLayer, ToplevelAction,
     physical_size,
 };
 use std::collections::{HashMap, HashSet};
@@ -163,8 +163,8 @@ pub(crate) fn window_surface_id(layer: u64) -> Option<u64> {
 /// exclusive zone: a layer surface anchored to exactly one edge leaves the
 /// compositor no doubt about which edge to shrink, which is what keeps tiled
 /// windows out from under a frame drawn on all four edges at once.
-pub(crate) fn reserve_bar_config(edge: &str, thickness: u32, output: &str) -> BarConfig {
-    BarConfig {
+pub(crate) fn reserve_bar_config(edge: &str, thickness: u32, output: &str) -> LayerConfig {
+    LayerConfig {
         namespace: format!("morf-reserve-{edge}"),
         width: 1,
         height: 1,

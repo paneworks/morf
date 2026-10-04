@@ -224,7 +224,7 @@ pub(crate) struct LayerState {
     pub(crate) subsurface_stack: Vec<u64>,
     /// The layer surface each popup was opened against, so a reposition can
     /// add the same subsurface offset its creation did.
-    pub(crate) popup_parents: HashMap<u64, SurfaceRole>,
+    pub(crate) popup_parents: HashMap<u64, WindowId>,
     pub(crate) popups: HashMap<u64, Popup>,
     /// Reposition tokens sent to, and echoed back by, each live popup.
     pub(crate) popup_repositions: HashMap<u64, PopupReposition>,
@@ -232,7 +232,7 @@ pub(crate) struct LayerState {
     pub(crate) floating_sizes: HashMap<u64, (u32, u32)>,
     pub(crate) fractional_manager: Option<WpFractionalScaleManagerV1>,
     pub(crate) viewporter: Option<WpViewporter>,
-    pub(crate) events: VecDeque<LayerEvent>,
+    pub(crate) events: VecDeque<Event>,
     pub(crate) pointer: Option<wl_pointer::WlPointer>,
     pub(crate) pointer_seat: Option<wl_seat::WlSeat>,
     /// The serial of the pointer's latest entry into one of these surfaces,
@@ -244,8 +244,8 @@ pub(crate) struct LayerState {
     pub(crate) cursor_shape_current: Option<String>,
     pub(crate) keyboard: Option<wl_keyboard::WlKeyboard>,
     pub(crate) touch: Option<wl_touch::WlTouch>,
-    pub(crate) touch_points: HashMap<i32, ((f64, f64), SurfaceRole)>,
-    pub(crate) keyboard_surface: Option<SurfaceRole>,
+    pub(crate) touch_points: HashMap<i32, ((f64, f64), WindowId)>,
+    pub(crate) keyboard_surface: Option<WindowId>,
     /// The key being held, repeated by the client (`key_repeat`).
     pub(crate) key_repeat: crate::backend::wayland::key_repeat::KeyRepeat,
     pub(crate) idle_notifier: Option<ExtIdleNotifierV1>,
@@ -263,7 +263,7 @@ pub(crate) struct LayerState {
     /// layer's scale. That is right exactly when a popup is on the same output
     /// as the bar that opened it, and wrong the moment it is not -- which on a
     /// mixed-DPI desk is most of the time.
-    pub(crate) aux_scales: HashMap<SurfaceRole, AuxSurfaceScale>,
+    pub(crate) aux_scales: HashMap<WindowId, AuxSurfaceScale>,
     pub(crate) workspace_manager: Option<ExtWorkspaceManagerV1>,
     /// Every workspace the compositor reports, keyed by its protocol object.
     pub(crate) workspaces: HashMap<ObjectId, WorkspaceInfo>,
@@ -290,7 +290,7 @@ pub(crate) struct LayerState {
     /// and every floating window. Same shape as the idle inhibitor -- each
     /// object's existence is the request -- but per surface, because the
     /// protocol honours an inhibitor only while *its* surface has focus.
-    pub(crate) shortcuts_inhibitors: HashMap<SurfaceRole, ZwpKeyboardShortcutsInhibitorV1>,
+    pub(crate) shortcuts_inhibitors: HashMap<WindowId, ZwpKeyboardShortcutsInhibitorV1>,
     pub(crate) shortcuts_inhibit: crate::backend::wayland::inhibit_handlers::ShortcutsInhibit,
     pub(crate) idle_notifications: Vec<ExtIdleNotificationV1>,
     /// Thresholds, each with whether it should ignore inhibitors.
@@ -357,7 +357,7 @@ pub(crate) struct LayerState {
     /// applying blur even to regions already set.
     pub(crate) blur_capable: bool,
     pub(crate) screencopies: Vec<PendingScreencopy>,
-    pub(crate) screens: Vec<ScreenInfo>,
+    pub(crate) screens: Vec<Output>,
     /// `ext-foreign-toplevel-list-v1`, when the compositor offers it.
     pub(crate) toplevel_list: Option<ExtForeignToplevelListV1>,
     /// Every window the compositor has told us about, keyed by its handle.
@@ -401,7 +401,7 @@ pub(crate) struct LayerState {
 /// A drag from another client, as far as this one has followed it.
 pub(crate) struct DragState {
     pub(crate) id: u64,
-    pub(crate) surface: SurfaceRole,
+    pub(crate) surface: WindowId,
     pub(crate) mime_types: Vec<String>,
     pub(crate) x: f64,
     pub(crate) y: f64,

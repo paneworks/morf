@@ -3,15 +3,15 @@
 
 use crate::lock_outputs::{LockOutput, LockTrees, ensure_lock_tree, release_lock_tree};
 use morf_lua::Runtime;
-use morf_app::{ScreenInfo, SurfaceRole};
+use morf_app::{Output, WindowId};
 
-fn screen(name: &str, width: i32, height: i32) -> ScreenInfo {
-    ScreenInfo {
+fn screen(name: &str, width: i32, height: i32) -> Output {
+    Output {
         id: 1,
         name: Some(name.to_owned()),
         size: Some((width, height)),
         scale: 1,
-        ..ScreenInfo::default()
+        ..Output::default()
     }
 }
 
@@ -82,7 +82,7 @@ fn every_output_gets_a_root_sized_by_its_own_screen() {
     assert_eq!(centred_x(&runtime, second), 1230.0);
     assert_eq!(runtime.scene().number(second, "width").unwrap(), 2560.0);
     // A key on the second surface goes into the second tree.
-    assert_eq!(trees.key_root(&outputs, SurfaceRole::Lock(1)), Some(second));
+    assert_eq!(trees.key_root(&outputs, WindowId::Lock(1)), Some(second));
 
     // The same size again builds nothing; a new size builds afresh.
     assert!(

@@ -13,7 +13,7 @@
 //! runtimes afresh, handing them what it kept with `morf.reloadable`.
 
 use morf_lua::{Limits, Runtime};
-use morf_app::{LayerClient, LayerEvent, ScreenInfo};
+use morf_app::{LayerClient, Event, Output};
 use std::os::fd::AsFd;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -32,10 +32,10 @@ const RECONNECT: Duration = Duration::from_secs(1);
 
 /// The screen the supervisor records for the outputless worker: never equal
 /// to a real one, so a real output replaces it.
-pub(crate) fn outputless_screen() -> ScreenInfo {
-    ScreenInfo {
+pub(crate) fn outputless_screen() -> Output {
+    Output {
         name: Some(OUTPUTLESS.to_owned()),
-        ..ScreenInfo::default()
+        ..Output::default()
     }
 }
 
@@ -210,18 +210,18 @@ fn drive_outputless(
         while let Some(event) = client.next_event() {
             follow_up = true;
             match event {
-                LayerEvent::Screens(screens) => send(WorkerMessage::Screens {
+                Event::Screens(screens) => send(WorkerMessage::Screens {
                     output: OUTPUTLESS.to_owned(),
                     screens,
                 })?,
-                LayerEvent::Idle {
+                Event::Idle {
                     timeout_ms,
                     input_only,
                     idle,
                 } => {
                     runtime.dispatch_idle(timeout_ms, input_only, idle);
                 }
-                LayerEvent::Clipboard { text } => {
+                Event::Clipboard { text } => {
                     runtime.dispatch_clipboard(text);
                 }
                 // Everything else belongs to a surface, and there is none.

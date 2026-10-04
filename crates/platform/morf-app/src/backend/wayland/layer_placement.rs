@@ -12,7 +12,7 @@
 //! surface lands where a wlroots compositor with layer-shell would put it on an
 //! output the size of the primary surface.
 
-use crate::{BarConfig, LayerAnchors, ShellLayer};
+use crate::{LayerConfig, LayerAnchors, ShellLayer};
 
 /// The part of a layer surface's configuration that decides where it goes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,7 +33,7 @@ pub(crate) struct LayerRequest {
 }
 
 impl LayerRequest {
-    pub(crate) fn from_config(config: &BarConfig) -> Self {
+    pub(crate) fn from_config(config: &LayerConfig) -> Self {
         Self {
             anchors: config.anchors,
             width: config.width,

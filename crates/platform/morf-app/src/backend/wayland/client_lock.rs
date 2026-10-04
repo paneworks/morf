@@ -59,7 +59,7 @@ impl LayerClient {
     }
 
     /// The output one lock surface covers, as `screens()` describes it.
-    pub fn lock_screen(&self, index: usize) -> Option<crate::backend::wayland::ScreenInfo> {
+    pub fn lock_screen(&self, index: usize) -> Option<crate::backend::wayland::Output> {
         let surface = self.state.lock_surfaces.get(index)?;
         self.state
             .outputs

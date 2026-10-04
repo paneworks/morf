@@ -2,7 +2,7 @@
 
 use morf_lua::Runtime;
 use morf_scene::NodeHandle;
-use morf_app::{LayerClient, SurfaceRole};
+use morf_app::{LayerClient, WindowId};
 
 /// Whatever takes the pointer's shape: the compositor connection, or in a
 /// test a recorder, so the input path runs without a display.
@@ -20,8 +20,8 @@ impl CursorShapes for LayerClient {
 pub(crate) fn hover_changed(
     runtime: &Runtime,
     client: &mut dyn CursorShapes,
-    entered: Option<(SurfaceRole, NodeHandle)>,
-    left: Option<(SurfaceRole, NodeHandle)>,
+    entered: Option<(WindowId, NodeHandle)>,
+    left: Option<(WindowId, NodeHandle)>,
 ) {
     if entered != left {
         follow_hovered_cursor(runtime, client, entered.map(|(_, node)| node));

@@ -20,7 +20,7 @@ use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
 
 use crate::backend::wayland::{
     state_types::LayerState,
-    surface_types::{LayerEvent, SurfaceRole},
+    surface_types::{Event, WindowId},
 };
 
 // Neither half of idle inhibition says anything back: the manager only makes
@@ -41,7 +41,7 @@ wayland_client::delegate_noop!(LayerState: ignore ZwpKeyboardShortcutsInhibitMan
 pub(crate) struct ShortcutsInhibit {
     /// What the shell asked for.
     pub(crate) wanted: bool,
-    active: HashSet<SurfaceRole>,
+    active: HashSet<WindowId>,
 }
 
 impl ShortcutsInhibit {
@@ -52,7 +52,7 @@ impl ShortcutsInhibit {
 
     /// Notes the compositor's answer for one surface; returns the shell-wide
     /// answer when it changed.
-    pub(crate) fn set(&mut self, role: SurfaceRole, on: bool) -> Option<bool> {
+    pub(crate) fn set(&mut self, role: WindowId, on: bool) -> Option<bool> {
         let before = self.active();
         if on {
             self.active.insert(role);
@@ -90,19 +90,19 @@ impl LayerState {
             }
             if let Some(active) = self.shortcuts_inhibit.clear() {
                 self.events
-                    .push_back(LayerEvent::ShortcutsInhibited { active });
+                    .push_back(Event::ShortcutsInhibited { active });
             }
             return;
         }
-        let mut surfaces: Vec<(SurfaceRole, WlSurface)> = Vec::new();
+        let mut surfaces: Vec<(WindowId, WlSurface)> = Vec::new();
         if let Some(layer) = self.layers.get(&crate::backend::wayland::PRIMARY_LAYER) {
             surfaces.push((
-                SurfaceRole::Layer(crate::backend::wayland::PRIMARY_LAYER),
+                WindowId::Layer(crate::backend::wayland::PRIMARY_LAYER),
                 layer.surface.wl_surface().clone(),
             ));
         }
         for (id, window) in &self.floatings {
-            surfaces.push((SurfaceRole::Floating(*id), window.wl_surface().clone()));
+            surfaces.push((WindowId::Toplevel(*id), window.wl_surface().clone()));
         }
         for (role, surface) in surfaces {
             self.inhibit_surface_shortcuts(role, &surface, qh);
@@ -114,7 +114,7 @@ impl LayerState {
     /// on the same surface is a protocol error, so one that has one is left.
     pub(crate) fn inhibit_surface_shortcuts(
         &mut self,
-        role: SurfaceRole,
+        role: WindowId,
         surface: &WlSurface,
         qh: &QueueHandle<Self>,
     ) {
@@ -132,18 +132,18 @@ impl LayerState {
     }
 
     /// Withdraws one surface's inhibitor, before the surface goes.
-    pub(crate) fn release_surface_shortcuts(&mut self, role: SurfaceRole) {
+    pub(crate) fn release_surface_shortcuts(&mut self, role: WindowId) {
         if let Some(inhibitor) = self.shortcuts_inhibitors.remove(&role) {
             inhibitor.destroy();
         }
         if let Some(active) = self.shortcuts_inhibit.set(role, false) {
             self.events
-                .push_back(LayerEvent::ShortcutsInhibited { active });
+                .push_back(Event::ShortcutsInhibited { active });
         }
     }
 }
 
-impl Dispatch<ZwpKeyboardShortcutsInhibitorV1, SurfaceRole> for LayerState {
+impl Dispatch<ZwpKeyboardShortcutsInhibitorV1, WindowId> for LayerState {
     /// Whether the compositor is actually honouring the request.
     ///
     /// Asking is not getting: a compositor may refuse, or grant and later
@@ -153,7 +153,7 @@ impl Dispatch<ZwpKeyboardShortcutsInhibitorV1, SurfaceRole> for LayerState {
         state: &mut Self,
         _inhibitor: &ZwpKeyboardShortcutsInhibitorV1,
         event: zwp_keyboard_shortcuts_inhibitor_v1::Event,
-        role: &SurfaceRole,
+        role: &WindowId,
         _connection: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
@@ -165,7 +165,7 @@ impl Dispatch<ZwpKeyboardShortcutsInhibitorV1, SurfaceRole> for LayerState {
         if let Some(active) = state.shortcuts_inhibit.set(*role, on) {
             state
                 .events
-                .push_back(LayerEvent::ShortcutsInhibited { active });
+                .push_back(Event::ShortcutsInhibited { active });
         }
     }
 }
@@ -173,27 +173,27 @@ impl Dispatch<ZwpKeyboardShortcutsInhibitorV1, SurfaceRole> for LayerState {
 #[cfg(test)]
 mod tests {
     use super::ShortcutsInhibit;
-    use crate::backend::wayland::surface_types::SurfaceRole;
+    use crate::backend::wayland::surface_types::WindowId;
 
     #[test]
     fn focus_moving_between_the_shells_surfaces_is_not_news() {
         let mut hold = ShortcutsInhibit::default();
-        assert_eq!(hold.set(SurfaceRole::Layer(0), true), Some(true));
+        assert_eq!(hold.set(WindowId::Layer(0), true), Some(true));
         // The settings window takes focus: the layer's inhibitor goes
         // inactive after the window's went active, and the shell still holds.
-        assert_eq!(hold.set(SurfaceRole::Floating(3), true), None);
-        assert_eq!(hold.set(SurfaceRole::Layer(0), false), None);
+        assert_eq!(hold.set(WindowId::Toplevel(3), true), None);
+        assert_eq!(hold.set(WindowId::Layer(0), false), None);
         assert!(hold.active());
         // Focus leaves the shell entirely.
-        assert_eq!(hold.set(SurfaceRole::Floating(3), false), Some(false));
+        assert_eq!(hold.set(WindowId::Toplevel(3), false), Some(false));
         assert!(!hold.active());
     }
 
     #[test]
     fn an_answer_for_a_window_alone_is_the_shells_answer() {
         let mut hold = ShortcutsInhibit::default();
-        assert_eq!(hold.set(SurfaceRole::Floating(7), true), Some(true));
-        assert_eq!(hold.set(SurfaceRole::Floating(7), true), None);
+        assert_eq!(hold.set(WindowId::Toplevel(7), true), Some(true));
+        assert_eq!(hold.set(WindowId::Toplevel(7), true), None);
         assert_eq!(hold.clear(), Some(false));
         assert_eq!(hold.clear(), None);
     }

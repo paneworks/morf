@@ -3,7 +3,7 @@ use morf_lua::{LayerSurfaceConfig, Runtime};
 use morf_value::region::{Rect as RegionRect, Region};
 use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
-use morf_app::{InputRect, LayerClient, PRIMARY_LAYER, SurfaceRole, physical_size};
+use morf_app::{InputRect, LayerClient, PRIMARY_LAYER, WindowId, physical_size};
 
 use crate::{surface_layers::*, surfaces::*};
 
@@ -548,10 +548,10 @@ pub(crate) enum AuxiliaryKind {
 
 impl AuxiliaryKind {
     /// How this surface is addressed, which is what its own scale is keyed on.
-    pub(crate) fn role(self, id: u64) -> SurfaceRole {
+    pub(crate) fn role(self, id: u64) -> WindowId {
         match self {
-            Self::Popup => SurfaceRole::Popup(id),
-            Self::Floating => SurfaceRole::Floating(id),
+            Self::Popup => WindowId::Popup(id),
+            Self::Floating => WindowId::Toplevel(id),
         }
     }
 

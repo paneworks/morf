@@ -7,7 +7,7 @@ use crate::surfaces::primary_surface_root;
 use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
 use morf_lua::Runtime;
-use morf_app::ScreenInfo;
+use morf_app::Output;
 use morf_app::physical_size;
 use std::fs;
 use std::path::PathBuf;
@@ -29,21 +29,21 @@ use std::collections::{HashMap, HashSet};
 #[test]
 fn named_screen_set_tracks_hotplug_identity() {
     let screens = [
-        ScreenInfo {
+        Output {
             id: 7,
             name: Some("eDP-1".to_owned()),
             position: Some((0, 0)),
             size: Some((1920, 1080)),
             scale: 1,
-            ..ScreenInfo::default()
+            ..Output::default()
         },
-        ScreenInfo {
+        Output {
             id: 9,
             name: Some("DP-2".to_owned()),
             position: Some((1920, 0)),
             size: Some((2560, 1440)),
             scale: 2,
-            ..ScreenInfo::default()
+            ..Output::default()
         },
     ];
 

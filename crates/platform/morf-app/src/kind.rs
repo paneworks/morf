@@ -42,7 +42,7 @@ pub enum KeyboardFocus {
 
 /// Configuration for a layer-shell surface.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BarConfig {
+pub struct LayerConfig {
     /// Surface namespace exposed to the compositor.
     pub namespace: String,
     /// Requested logical width, or zero for compositor-selected width.
@@ -69,7 +69,7 @@ pub struct BarConfig {
     pub keyboard_focus: KeyboardFocus,
 }
 
-impl Default for BarConfig {
+impl Default for LayerConfig {
     fn default() -> Self {
         Self {
             namespace: "morf".to_owned(),
@@ -90,7 +90,7 @@ impl Default for BarConfig {
 
 /// Geometry and identity for an xdg toplevel surface.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FloatingConfig {
+pub struct ToplevelConfig {
     /// Initial logical width.
     pub width: u32,
     /// Initial logical height.
@@ -116,7 +116,7 @@ pub struct FloatingConfig {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FloatingResizeEdge {
+pub enum Edge {
     Top,
     Bottom,
     Left,

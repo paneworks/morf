@@ -20,7 +20,7 @@ use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
 use morf_value::IpcValue;
 use morf_lua::{Limits, Runtime, Screen};
-use morf_app::ScreenInfo;
+use morf_app::Output;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
@@ -224,9 +224,9 @@ fn supervisor_dispatches_registered_ipc_handler() {
             stop,
             commands: crate::lock::WorkerSender::new(commands),
             join,
-            screen: ScreenInfo {
+            screen: Output {
                 name: Some("test".to_owned()),
-                ..ScreenInfo::default()
+                ..Output::default()
             },
         },
     )]);

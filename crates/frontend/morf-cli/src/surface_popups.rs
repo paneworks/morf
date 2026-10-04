@@ -1,7 +1,7 @@
 use morf_lua::{PopupSurfaceConfig, WindowSurfaceConfig, WindowSurfaceKind};
 use morf_app::{
     InputRect, LayerClient, PRIMARY_LAYER, PopupAnchor, PopupConfig, PopupConstraints,
-    PopupGravity, SurfaceRole,
+    PopupGravity, WindowId,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -113,17 +113,17 @@ pub(crate) fn popup_change_is_structural(
 pub(crate) fn popup_parent_role(
     config: &PopupSurfaceConfig,
     surfaces_by_id: &HashMap<u64, &WindowSurfaceConfig>,
-) -> Result<SurfaceRole, String> {
+) -> Result<WindowId, String> {
     let Some(parent) = config.parent else {
-        return Ok(SurfaceRole::Layer(PRIMARY_LAYER));
+        return Ok(WindowId::Layer(PRIMARY_LAYER));
     };
     let parent = surfaces_by_id
         .get(&parent)
         .ok_or_else(|| "popup parent is stale".to_owned())?;
     Ok(match parent.kind {
-        WindowSurfaceKind::Popup(_) => SurfaceRole::Popup(parent.id),
-        WindowSurfaceKind::Floating(_) => SurfaceRole::Floating(parent.id),
-        WindowSurfaceKind::Layer(_) => SurfaceRole::Layer(window_layer_id(parent.id)),
+        WindowSurfaceKind::Popup(_) => WindowId::Popup(parent.id),
+        WindowSurfaceKind::Floating(_) => WindowId::Toplevel(parent.id),
+        WindowSurfaceKind::Layer(_) => WindowId::Layer(window_layer_id(parent.id)),
     })
 }
 
@@ -137,7 +137,7 @@ pub(crate) fn open_popup_surface(
     client: &mut LayerClient,
     surface: &WindowSurfaceConfig,
     config: &PopupSurfaceConfig,
-    parent: SurfaceRole,
+    parent: WindowId,
     popups: &mut HashMap<u64, AuxiliarySurface>,
 ) -> Result<(), String> {
     client

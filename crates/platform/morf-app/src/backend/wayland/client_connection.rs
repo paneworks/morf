@@ -43,7 +43,7 @@ use wayland_protocols_wlr::data_control::v1::client::zwlr_data_control_manager_v
 
 impl LayerClient {
     /// Connects to the current Wayland compositor and creates a top layer bar.
-    pub fn connect(config: BarConfig) -> Result<Self, WaylandError> {
+    pub fn connect(config: LayerConfig) -> Result<Self, WaylandError> {
         Self::connect_inner(Some(config))
     }
 
@@ -64,7 +64,7 @@ impl LayerClient {
         Self::connect_inner(None)
     }
 
-    pub(crate) fn connect_inner(config: Option<BarConfig>) -> Result<Self, WaylandError> {
+    pub(crate) fn connect_inner(config: Option<LayerConfig>) -> Result<Self, WaylandError> {
         let connection = Connection::connect_to_env()
             .map_err(|error| WaylandError(format!("could not connect to Wayland: {error}")))?;
         let (globals, queue) = registry_queue_init(&connection)

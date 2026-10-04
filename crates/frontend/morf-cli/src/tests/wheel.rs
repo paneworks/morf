@@ -8,7 +8,7 @@ use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_value::IpcValue;
 use morf_scene::NodeHandle;
-use morf_app::{LayerEvent, SurfaceRole};
+use morf_app::{Event, WindowId};
 
 struct NoText;
 
@@ -34,7 +34,7 @@ impl CursorShapes for Shapes {
 struct One(Layout);
 
 impl SurfaceLayouts for One {
-    fn layout_of(&self, _surface: SurfaceRole) -> Option<&Layout> {
+    fn layout_of(&self, _surface: WindowId) -> Option<&Layout> {
         Some(&self.0)
     }
 }
@@ -61,8 +61,8 @@ fn laid_out(runtime: &Runtime) -> One {
 
 fn wheel(runtime: &mut Runtime, x: f64, y: f64, vertical: f64) -> bool {
     let layouts = laid_out(runtime);
-    let event = LayerEvent::PointerAxis {
-        surface: SurfaceRole::Layer(morf_app::PRIMARY_LAYER),
+    let event = Event::PointerAxis {
+        surface: WindowId::Layer(morf_app::PRIMARY_LAYER),
         x,
         y,
         horizontal: 0.0,

@@ -1,10 +1,10 @@
 use morf_layout::{Geometry, Transform2D};
 use morf_render::{DamageRect, DrawCommand, DrawList, RenderBackend, WgpuBackend};
 use morf_scene::{Color, Element, Scene};
-use morf_app::{BarConfig, InputRect, LayerClient, LayerEvent, PopupConfig};
+use morf_app::{LayerConfig, InputRect, LayerClient, Event, PopupConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = LayerClient::connect(BarConfig::default())?;
+    let mut client = LayerClient::connect(LayerConfig::default())?;
     wait_for_layer(&mut client)?;
     let (bar_width, bar_height) = client.physical_size();
     let mut bar = pollster::block_on(WgpuBackend::new_surface(
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (x, y) = popup_anchor(&mut client)?;
     client.open_popup(
         0,
-        morf_app::SurfaceRole::Layer(0),
+        morf_app::WindowId::Layer(0),
         PopupConfig {
             anchor: InputRect {
                 x: x.floor() as i32,
@@ -93,18 +93,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         client.dispatch()?;
         while let Some(event) = client.next_event() {
             match event {
-                LayerEvent::PopupFrame { time_ms, .. } => {
+                Event::PopupFrame { time_ms, .. } => {
                     // The popup's own scale, which is the point: it used to
                     // be given the primary layer's, and on a mixed-DPI desk
                     // those differ.
-                    let popup_scale = client.surface_scale_120(morf_app::SurfaceRole::Popup(0));
+                    let popup_scale = client.surface_scale_120(morf_app::WindowId::Popup(0));
                     println!(
                         "click-anchored popup {width}x{height} at {popup_scale}/120 \
                          (layer {scale}/120), frame {time_ms} ms"
                     );
                     break 'framed;
                 }
-                LayerEvent::PopupDone { .. } => return Err("popup was dismissed".into()),
+                Event::PopupDone { .. } => return Err("popup was dismissed".into()),
                 _ => {}
             }
         }
@@ -117,8 +117,8 @@ fn wait_for_layer(client: &mut LayerClient) -> Result<(), Box<dyn std::error::Er
         client.dispatch()?;
         while let Some(event) = client.next_event() {
             match event {
-                LayerEvent::Configure { .. } => return Ok(()),
-                LayerEvent::Closed { .. } => return Err("layer surface was closed".into()),
+                Event::Configure { .. } => return Ok(()),
+                Event::Closed { .. } => return Err("layer surface was closed".into()),
                 _ => {}
             }
         }
@@ -133,13 +133,13 @@ fn popup_anchor(client: &mut LayerClient) -> Result<(f64, f64), Box<dyn std::err
         client.dispatch()?;
         while let Some(event) = client.next_event() {
             match event {
-                LayerEvent::PointerButton {
+                Event::PointerButton {
                     pressed: true,
                     x,
                     y,
                     ..
                 } => return Ok((x, y)),
-                LayerEvent::Closed { .. } => return Err("layer surface was closed".into()),
+                Event::Closed { .. } => return Err("layer surface was closed".into()),
                 _ => {}
             }
         }
@@ -151,8 +151,8 @@ fn wait_for_popup(client: &mut LayerClient) -> Result<(u32, u32), Box<dyn std::e
         client.dispatch()?;
         while let Some(event) = client.next_event() {
             match event {
-                LayerEvent::PopupConfigure { width, height, .. } => return Ok((width, height)),
-                LayerEvent::PopupDone { .. } => return Err("popup was dismissed".into()),
+                Event::PopupConfigure { width, height, .. } => return Ok((width, height)),
+                Event::PopupDone { .. } => return Err("popup was dismissed".into()),
                 _ => {}
             }
         }

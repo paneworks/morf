@@ -4,7 +4,7 @@
 //! The shell's loop is a compositor's frame callbacks, its configure events
 //! and its input. Here all three are stood in for: a surface is as big as its
 //! `morf.surface` settings make it on a screen of a given size, a frame is a
-//! call, and a click is a `LayerEvent` handed to the same pointer path the
+//! call, and a click is a `Event` handed to the same pointer path the
 //! shell uses. Nothing connects to Wayland -- there is no client to connect
 //! with -- and time is a virtual clock that moves only when asked, so the
 //! same run fires the same timers every time.
@@ -16,7 +16,7 @@ use morf_layout::{Layout, Size};
 use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
-use morf_app::SurfaceRole;
+use morf_app::WindowId;
 
 use crate::config::LoadPolicy;
 use crate::headless_surfaces::headless_screens;
@@ -78,7 +78,7 @@ pub(crate) struct LoadFailure {
 
 /// One surface the configuration asked for.
 pub(crate) struct Surface {
-    pub(crate) role: SurfaceRole,
+    pub(crate) role: WindowId,
     /// `primary`, `popup`, `floating` or `layer`.
     pub(crate) kind: &'static str,
     /// Its namespace, or a floating window's title.
@@ -150,10 +150,10 @@ pub(crate) struct Headless {
     now: Duration,
     last_frame: Duration,
     /// Where the pointer is, for a wheel or a release with no position.
-    pub(crate) pointer: Option<(SurfaceRole, f64, f64)>,
+    pub(crate) pointer: Option<(WindowId, f64, f64)>,
     /// The surface a button was last pressed on: the one a compositor gives
     /// the keyboard to, and where keys go when a test names no surface.
-    pub(crate) keyboard: Option<SurfaceRole>,
+    pub(crate) keyboard: Option<WindowId>,
     /// Loaded with no screen: nothing it declares is mapped.
     pub(crate) outputless: bool,
 }

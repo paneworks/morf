@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use morf_lua::WindowSurfaceKind;
 use morf_scene::NodeHandle;
-use morf_app::{PRIMARY_LAYER, ScreenInfo, SurfaceRole};
+use morf_app::{PRIMARY_LAYER, Output, WindowId};
 
 use crate::headless::{Headless, Surface};
 use crate::surface_popups::window_surface_effectively_visible;
@@ -16,9 +16,9 @@ use crate::surfaces::primary_surface_root;
 
 /// The screens a headless run has: side by side, all the same size. None at
 /// all is the shell with every output gone.
-pub(crate) fn headless_screens(count: usize, size: (u32, u32), scale: i32) -> Vec<ScreenInfo> {
+pub(crate) fn headless_screens(count: usize, size: (u32, u32), scale: i32) -> Vec<Output> {
     (0..count)
-        .map(|index| ScreenInfo {
+        .map(|index| Output {
             id: index as u32 + 1,
             name: Some(format!("HEADLESS-{}", index + 1)),
             make: "morf".to_owned(),
@@ -69,7 +69,7 @@ impl Headless {
                     ),
                 );
                 surfaces.push(Surface {
-                    role: SurfaceRole::Layer(PRIMARY_LAYER),
+                    role: WindowId::Layer(PRIMARY_LAYER),
                     kind: "primary",
                     name: config.namespace.clone(),
                     id: None,
@@ -107,7 +107,7 @@ impl Headless {
             };
             let (role, kind, name, size, position, blend) = match &surface.kind {
                 WindowSurfaceKind::Popup(config) => (
-                    SurfaceRole::Popup(surface.id),
+                    WindowId::Popup(surface.id),
                     "popup",
                     String::new(),
                     (
@@ -121,7 +121,7 @@ impl Headless {
                     config.blend.clone(),
                 ),
                 WindowSurfaceKind::Floating(config) => (
-                    SurfaceRole::Floating(surface.id),
+                    WindowId::Toplevel(surface.id),
                     "floating",
                     config.title.clone(),
                     (
@@ -150,7 +150,7 @@ impl Headless {
                     );
                     (
                         // The shell numbers its extra layers one past their id.
-                        SurfaceRole::Layer(surface.id + 1),
+                        WindowId::Layer(surface.id + 1),
                         "layer",
                         config.namespace.clone(),
                         size,

@@ -7,7 +7,7 @@ use morf_lua::WindowSurfaceKind;
 use morf_app::PRIMARY_LAYER;
 use morf_app::PopupAnchor;
 use morf_app::PopupGravity;
-use morf_app::SurfaceRole;
+use morf_app::WindowId;
 use std::collections::HashMap;
 
 /// Builds the popup configurations one Lua source registers, in identifier order.
@@ -138,11 +138,11 @@ fn a_parentless_popup_anchors_to_the_shells_own_layer() {
 
     assert_eq!(
         popup_parent_role(configs[0], &by_id).unwrap(),
-        SurfaceRole::Floating(0)
+        WindowId::Toplevel(0)
     );
     assert_eq!(
         popup_parent_role(configs[1], &by_id).unwrap(),
-        SurfaceRole::Layer(PRIMARY_LAYER)
+        WindowId::Layer(PRIMARY_LAYER)
     );
 
     let mut orphan = configs[0].clone();

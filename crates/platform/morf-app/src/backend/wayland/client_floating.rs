@@ -10,7 +10,7 @@ impl LayerClient {
         &mut self,
         id: u64,
         parent: Option<u64>,
-        config: FloatingConfig,
+        config: ToplevelConfig,
     ) -> Result<(), WaylandError> {
         self.close_floating(id);
         let qh = self.queue.handle();
@@ -51,10 +51,10 @@ impl LayerClient {
             .insert(id, (config.width.max(1), config.height.max(1)));
         let qh = self.queue.handle();
         self.state
-            .track_aux_scale(SurfaceRole::Floating(id), window.wl_surface(), &qh);
+            .track_aux_scale(WindowId::Toplevel(id), window.wl_surface(), &qh);
         let surface = window.wl_surface().clone();
         self.state
-            .inhibit_surface_shortcuts(SurfaceRole::Floating(id), &surface, &qh);
+            .inhibit_surface_shortcuts(WindowId::Toplevel(id), &surface, &qh);
         window.wl_surface().commit();
         self.state.floatings.insert(id, window);
         self.connection
@@ -65,11 +65,11 @@ impl LayerClient {
     /// Destroys the current floating window when present.
     pub fn close_floating(&mut self, id: u64) {
         self.state
-            .release_surface_shortcuts(SurfaceRole::Floating(id));
+            .release_surface_shortcuts(WindowId::Toplevel(id));
         self.state.floatings.remove(&id);
-        self.state.aux_scales.remove(&SurfaceRole::Floating(id));
+        self.state.aux_scales.remove(&WindowId::Toplevel(id));
         self.state.floating_sizes.remove(&id);
-        self.forget_surface(SurfaceRole::Floating(id));
+        self.forget_surface(WindowId::Toplevel(id));
     }
 
     pub fn start_floating_move(&self, id: u64) -> bool {
@@ -84,7 +84,7 @@ impl LayerClient {
         self.connection.flush().is_ok()
     }
 
-    pub fn start_floating_resize(&self, id: u64, edge: FloatingResizeEdge) -> bool {
+    pub fn start_floating_resize(&self, id: u64, edge: Edge) -> bool {
         let (Some(window), Some(seat), Some(serial)) = (
             self.state.floatings.get(&id),
             self.state.pointer_seat.as_ref(),

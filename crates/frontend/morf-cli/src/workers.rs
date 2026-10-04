@@ -1,6 +1,6 @@
 use morf_io::{IpcReply, IpcRequest, IpcValue as WireValue};
 use morf_lua::{Limits, LogEntry, Runtime, Screen};
-use morf_app::ScreenInfo;
+use morf_app::Output;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -81,9 +81,9 @@ pub(crate) struct WorkerStart {
 /// output, or -- with none, unless the configuration said it does not want
 /// it -- the one outputless runtime, or nothing at all.
 pub(crate) fn desired_workers(
-    named: BTreeMap<String, ScreenInfo>,
+    named: BTreeMap<String, Output>,
     outputless: Outputless,
-) -> BTreeMap<String, ScreenInfo> {
+) -> BTreeMap<String, Output> {
     if !named.is_empty() || outputless == Outputless::Unwanted {
         return named;
     }
@@ -101,13 +101,13 @@ pub(crate) struct WorkerContext<'a> {
 
 pub(crate) fn reconcile_workers(
     workers: &mut BTreeMap<String, Worker>,
-    desired: &BTreeMap<String, ScreenInfo>,
+    desired: &BTreeMap<String, Output>,
     primary: &mut Option<String>,
     context: &WorkerContext<'_>,
 ) {
     // An application (`morf app`) is one runtime, whatever the outputs: the
     // primary's, its windows opened wherever the compositor puts them.
-    let only: BTreeMap<String, ScreenInfo>;
+    let only: BTreeMap<String, Output>;
     let desired = if crate::app::is_app() {
         let chosen = elect_primary(primary.as_deref(), desired);
         only = desired.iter().filter(|(name, _)| Some(*name) == chosen.as_ref()).map(|(k, v)| (k.clone(), v.clone())).collect();
@@ -158,7 +158,7 @@ pub(crate) fn reconcile_workers(
 /// -- and with no output the outputless runtime, the only one there is.
 pub(crate) fn elect_primary(
     current: Option<&str>,
-    desired: &BTreeMap<String, ScreenInfo>,
+    desired: &BTreeMap<String, Output>,
 ) -> Option<String> {
     if let Some(current) = current
         && desired.contains_key(current)
@@ -202,10 +202,10 @@ pub(crate) fn hand_over_primary(workers: &BTreeMap<String, Worker>, primary: &mu
 /// configuration reads the right answer from its first line.
 pub(crate) fn reconcile_with(
     workers: &mut BTreeMap<String, Worker>,
-    desired: &BTreeMap<String, ScreenInfo>,
+    desired: &BTreeMap<String, Output>,
     handover: &Handover,
     primary: &mut Option<String>,
-    mut spawn: impl FnMut(&str, &ScreenInfo, Option<Seed>, bool) -> Worker,
+    mut spawn: impl FnMut(&str, &Output, Option<Seed>, bool) -> Worker,
 ) {
     let was_outputless = workers.contains_key(OUTPUTLESS);
     let crossing = workers.is_empty() || was_outputless != desired.contains_key(OUTPUTLESS);
@@ -250,7 +250,7 @@ pub(crate) fn reconcile_with(
 }
 
 /// Starts the thread that runs the configuration for one output, or for none.
-fn spawn_worker(name: &str, screen: &ScreenInfo, start: WorkerStart) -> thread::JoinHandle<()> {
+fn spawn_worker(name: &str, screen: &Output, start: WorkerStart) -> thread::JoinHandle<()> {
     let output = name.to_owned();
     let screen = screen.clone();
     // Named after the output it drives, so anything reporting per-thread —
@@ -279,7 +279,7 @@ fn spawn_worker(name: &str, screen: &ScreenInfo, start: WorkerStart) -> thread::
 
 /// Hands every live worker the compositor's new output list, so each runtime's
 /// `morf.screens` follows a monitor being plugged in, moved, or unplugged.
-pub(crate) fn broadcast_screens(workers: &BTreeMap<String, Worker>, screens: &[ScreenInfo]) {
+pub(crate) fn broadcast_screens(workers: &BTreeMap<String, Worker>, screens: &[Output]) {
     for worker in workers.values() {
         let _ = worker
             .commands

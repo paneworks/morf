@@ -22,7 +22,7 @@ use wayland_protocols::wp::linux_dmabuf::zv1::client::{
 
 use crate::backend::wayland::WaylandError;
 use crate::backend::wayland::state_types::LayerState;
-use crate::backend::wayland::surface_types::{LayerClient, LayerEvent};
+use crate::backend::wayland::surface_types::{LayerClient, Event};
 use crate::backend::wayland::types::CaptureBuffer;
 
 /// `DRM_FORMAT_XRGB8888`: the one capture format with nothing in the top byte.
@@ -56,7 +56,7 @@ impl LayerState {
             return false;
         };
         capture.offered = true;
-        self.events.push_back(LayerEvent::CaptureOffer {
+        self.events.push_back(Event::CaptureOffer {
             request_id: capture.request_id,
             width,
             height,

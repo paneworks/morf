@@ -11,7 +11,7 @@ use crate::workers::{
 };
 use morf_io::{IpcReply, IpcRequest, IpcValue as WireValue};
 use morf_lua::{Limits, Runtime, Screen};
-use morf_app::ScreenInfo;
+use morf_app::Output;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,19 +31,19 @@ const SHELL: &str = r#"
     if #morf.screens > 0 then morf.ui.Item {} end
 "#;
 
-pub(super) fn output(name: &str, x: i32) -> ScreenInfo {
-    ScreenInfo {
+pub(super) fn output(name: &str, x: i32) -> Output {
+    Output {
         id: x as u32,
         name: Some(name.to_owned()),
         position: Some((x, 0)),
         size: Some((800, 600)),
         scale: 1,
         transform: "normal",
-        ..ScreenInfo::default()
+        ..Output::default()
     }
 }
 
-pub(super) fn named(outputs: &[ScreenInfo]) -> BTreeMap<String, ScreenInfo> {
+pub(super) fn named(outputs: &[Output]) -> BTreeMap<String, Output> {
     outputs
         .iter()
         .map(|screen| (screen.name.clone().unwrap(), screen.clone()))
@@ -62,7 +62,7 @@ pub(super) fn spawner<'a>(
     handover: &'a Handover,
     tx: &'a mpsc::Sender<SupervisorMessage>,
     started: &'a Started,
-) -> impl FnMut(&str, &ScreenInfo, Option<Seed>, bool) -> Worker + 'a {
+) -> impl FnMut(&str, &Output, Option<Seed>, bool) -> Worker + 'a {
     move |name, screen, seed, primary| {
         started
             .lock()
@@ -162,7 +162,7 @@ fn with_no_output_the_supervisor_wants_the_outputless_runtime() {
     assert!(desired_workers(BTreeMap::new(), Outputless::Unwanted).is_empty());
 }
 
-fn round_trip(outputs: &[ScreenInfo]) {
+fn round_trip(outputs: &[Output]) {
     let handover = Handover::default();
     let (tx, _rx) = mpsc::channel();
     let started = Started::default();

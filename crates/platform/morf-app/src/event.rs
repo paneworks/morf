@@ -1,15 +1,15 @@
 //! Everything a backend tells the host, as one event type.
 use crate::backend::wayland::ScreencopyFrame;
-use crate::{DropInfo, InputMethodState, KeyModifiers, OfferInfo, ScreenInfo, SurfaceRole, TextInputState};
+use crate::{DropInfo, InputMethodState, KeyModifiers, OfferInfo, Output, WindowId, TextInputState};
 
 /// Event produced by the layer-surface connection.
 #[derive(Clone, Debug, PartialEq)]
-pub enum LayerEvent {
+pub enum Event {
     /// A popup or floating window's own scale changed.
     ///
     /// Separate from `Scale`, which is a layer surface's, because the two are
     /// addressed differently and a caller resizes different things for each.
-    AuxScale { role: SurfaceRole, scale_120: u32 },
+    AuxScale { role: WindowId, scale_120: u32 },
     /// The compositor granted, or withdrew, the shell's hold on its shortcuts.
     ShortcutsInhibited { active: bool },
     /// The compositor selected a logical size for one layer surface.
@@ -20,15 +20,15 @@ pub enum LayerEvent {
     Frame { id: u64, time_ms: u32 },
     /// The pointer moved over or entered the surface.
     PointerMotion {
-        surface: SurfaceRole,
+        surface: WindowId,
         x: f64,
         y: f64,
     },
     /// The pointer left the surface.
-    PointerLeave { surface: SurfaceRole },
+    PointerLeave { surface: WindowId },
     /// A pointer button changed state.
     PointerButton {
-        surface: SurfaceRole,
+        surface: WindowId,
         button: u32,
         pressed: bool,
         x: f64,
@@ -38,7 +38,7 @@ pub enum LayerEvent {
     },
     /// A pointer wheel or touchpad axis changed.
     PointerAxis {
-        surface: SurfaceRole,
+        surface: WindowId,
         x: f64,
         y: f64,
         horizontal: f64,
@@ -50,21 +50,21 @@ pub enum LayerEvent {
     },
     /// A touch contact began on the surface.
     TouchDown {
-        surface: SurfaceRole,
+        surface: WindowId,
         id: i32,
         x: f64,
         y: f64,
     },
     /// A touch contact moved on the surface.
     TouchMotion {
-        surface: SurfaceRole,
+        surface: WindowId,
         id: i32,
         x: f64,
         y: f64,
     },
     /// A touch contact ended on the surface.
     TouchUp {
-        surface: SurfaceRole,
+        surface: WindowId,
         id: i32,
         x: f64,
         y: f64,
@@ -73,7 +73,7 @@ pub enum LayerEvent {
     TouchCancel,
     /// A keyboard key changed state.
     Key {
-        surface: SurfaceRole,
+        surface: WindowId,
         keysym: u32,
         text: Option<String>,
         pressed: bool,
@@ -104,22 +104,22 @@ pub enum LayerEvent {
     },
     /// A drag from somewhere came over one of this client's surfaces.
     DragEnter {
-        surface: SurfaceRole,
+        surface: WindowId,
         x: f64,
         y: f64,
         offer: OfferInfo,
     },
     /// The drag moved over the surface it entered.
     DragMotion {
-        surface: SurfaceRole,
+        surface: WindowId,
         x: f64,
         y: f64,
     },
     /// The drag left the surface without dropping, or was cancelled.
-    DragLeave { surface: SurfaceRole },
+    DragLeave { surface: WindowId },
     /// The drag was dropped here, and what it carries has been fetched.
     Drop {
-        surface: SurfaceRole,
+        surface: WindowId,
         x: f64,
         y: f64,
         /// Boxed: the largest payload of any event, and events are moved often.
@@ -135,9 +135,9 @@ pub enum LayerEvent {
     KeyboardFocus { active: bool },
     /// The keyboard came to one of this client's surfaces, or left it: any
     /// surface, the primary one included (which also sends `KeyboardFocus`).
-    SurfaceKeyboard { surface: SurfaceRole, focused: bool },
+    SurfaceKeyboard { surface: WindowId, focused: bool },
     /// The pointer came over one of this client's surfaces, or left it.
-    SurfacePointer { surface: SurfaceRole, inside: bool },
+    SurfacePointer { surface: WindowId, inside: bool },
     /// A capture asked for on the GPU has been described by its session.
     ///
     /// The compositor has said what size it will produce, which device the
@@ -171,7 +171,7 @@ pub enum LayerEvent {
     /// An input method committed edits for this client's text input.
     TextInput(TextInputState),
     /// The compositor output set changed.
-    Screens(Vec<ScreenInfo>),
+    Screens(Vec<Output>),
     /// The compositor positioned and sized the popup.
     PopupConfigure { id: u64, width: u32, height: u32 },
     /// The compositor permits the next popup paint tick.
@@ -179,11 +179,11 @@ pub enum LayerEvent {
     /// The compositor dismissed the popup.
     PopupDone { id: u64 },
     /// The compositor configured the floating window.
-    FloatingConfigure { id: u64, width: u32, height: u32 },
+    ToplevelConfigure { id: u64, width: u32, height: u32 },
     /// The compositor permits the next floating-window paint tick.
-    FloatingFrame { id: u64, time_ms: u32 },
+    ToplevelFrame { id: u64, time_ms: u32 },
     /// The compositor requested that the floating window close.
-    FloatingClose { id: u64 },
+    ToplevelClose { id: u64 },
     /// The compositor accepted exclusive session ownership.
     SessionLocked,
     /// The compositor rejected or ended the session lock.

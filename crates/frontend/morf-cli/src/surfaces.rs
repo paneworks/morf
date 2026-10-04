@@ -5,8 +5,8 @@ use morf_lua::{
 use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
 use morf_app::{
-    BarConfig, FloatingConfig, KeyboardFocus, LayerAnchors, LayerClient, LayerEvent, PRIMARY_LAYER,
-    ShellLayer, SurfaceRole,
+    LayerConfig, ToplevelConfig, KeyboardFocus, LayerAnchors, LayerClient, Event, PRIMARY_LAYER,
+    ShellLayer, WindowId,
 };
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -66,15 +66,15 @@ pub(crate) fn animation_delta(previous: Option<u32>, time_ms: u32) -> Duration {
 pub(crate) struct PointerInput {
     /// Where the pointer is: the surface it is over and its point there,
     /// until it leaves. What `contains_pointer` is worked out against.
-    pub(crate) pointer: Option<(SurfaceRole, f64, f64)>,
-    pub(crate) hovered: Option<(SurfaceRole, Hit)>,
-    pub(crate) pressed: Option<(SurfaceRole, Hit, f64, f64, bool)>,
+    pub(crate) pointer: Option<(WindowId, f64, f64)>,
+    pub(crate) hovered: Option<(WindowId, Hit)>,
+    pub(crate) pressed: Option<(WindowId, Hit, f64, f64, bool)>,
     /// The button behind `pressed`, so its release and click say which.
     pub(crate) pressed_button: u32,
-    pub(crate) focused: HashMap<SurfaceRole, NodeHandle>,
+    pub(crate) focused: HashMap<WindowId, NodeHandle>,
     /// Each finger down: where it landed, where it was last, and how far
     /// it has travelled, which is what tells a tap from a swipe.
-    pub(crate) touches: HashMap<i32, (SurfaceRole, Hit, f64, f64, f64)>,
+    pub(crate) touches: HashMap<i32, (WindowId, Hit, f64, f64, f64)>,
     /// Pinches and edge swipes the touches are making.
     pub(crate) gestures: crate::surface_gesture::TouchGestures,
 }
@@ -103,7 +103,7 @@ impl PointerInput {
 /// How the input path finds the layout a surface was last drawn with, which
 /// is what a point on that surface is hit-tested against.
 pub(crate) trait SurfaceLayouts {
-    fn layout_of(&self, surface: SurfaceRole) -> Option<&Layout>;
+    fn layout_of(&self, surface: WindowId) -> Option<&Layout>;
 }
 
 /// The shell's surfaces: the primary layer and whatever hangs off it.
@@ -115,7 +115,7 @@ pub(crate) struct LayerLayouts<'a> {
 }
 
 impl SurfaceLayouts for LayerLayouts<'_> {
-    fn layout_of(&self, surface: SurfaceRole) -> Option<&Layout> {
+    fn layout_of(&self, surface: WindowId) -> Option<&Layout> {
         surface_layout(
             surface,
             self.layout,
@@ -289,7 +289,7 @@ pub(crate) fn sync_window_surfaces(
                 .open_floating(
                     id,
                     config.parent,
-                    FloatingConfig {
+                    ToplevelConfig {
                         width: config.width,
                         height: config.height,
                         minimum_width: config.minimum_width,
@@ -397,38 +397,38 @@ pub(crate) fn sync_window_surfaces(
 }
 
 pub(crate) fn surface_layout<'a>(
-    surface: SurfaceRole,
+    surface: WindowId,
     layer: &'a Layout,
     popups: &'a HashMap<u64, AuxiliarySurface>,
     floatings: &'a HashMap<u64, AuxiliarySurface>,
     layers: &'a HashMap<u64, AuxiliarySurface>,
 ) -> Option<&'a Layout> {
     match surface {
-        SurfaceRole::Layer(PRIMARY_LAYER) => Some(layer),
-        SurfaceRole::Layer(id) => {
+        WindowId::Layer(PRIMARY_LAYER) => Some(layer),
+        WindowId::Layer(id) => {
             Some(&layers.get(&window_surface_id(id)?)?.layout.as_ref()?.layout)
         }
-        SurfaceRole::Popup(id) => Some(&popups.get(&id)?.layout.as_ref()?.layout),
-        SurfaceRole::Floating(id) => Some(&floatings.get(&id)?.layout.as_ref()?.layout),
-        SurfaceRole::Lock(_) => None,
+        WindowId::Popup(id) => Some(&popups.get(&id)?.layout.as_ref()?.layout),
+        WindowId::Toplevel(id) => Some(&floatings.get(&id)?.layout.as_ref()?.layout),
+        WindowId::Lock(_) => None,
     }
 }
 
 pub(crate) fn surface_root(
-    surface: SurfaceRole,
+    surface: WindowId,
     layer: NodeHandle,
     popups: &HashMap<u64, AuxiliarySurface>,
     floatings: &HashMap<u64, AuxiliarySurface>,
     layers: &HashMap<u64, AuxiliarySurface>,
 ) -> Option<NodeHandle> {
     match surface {
-        SurfaceRole::Layer(PRIMARY_LAYER) => Some(layer),
-        SurfaceRole::Layer(id) => layers
+        WindowId::Layer(PRIMARY_LAYER) => Some(layer),
+        WindowId::Layer(id) => layers
             .get(&window_surface_id(id)?)
             .map(|surface| surface.root),
-        SurfaceRole::Popup(id) => popups.get(&id).map(|surface| surface.root),
-        SurfaceRole::Floating(id) => floatings.get(&id).map(|surface| surface.root),
-        SurfaceRole::Lock(_) => None,
+        WindowId::Popup(id) => popups.get(&id).map(|surface| surface.root),
+        WindowId::Toplevel(id) => floatings.get(&id).map(|surface| surface.root),
+        WindowId::Lock(_) => None,
     }
 }
 
@@ -565,7 +565,7 @@ pub(crate) fn keyboard_focus_of(value: &str) -> Option<KeyboardFocus> {
 pub(crate) fn runtime_bar_config(
     surface: &LayerSurfaceConfig,
     output: &str,
-) -> Result<BarConfig, String> {
+) -> Result<LayerConfig, String> {
     let layer = match surface.layer.as_str() {
         "background" => ShellLayer::Background,
         "bottom" => ShellLayer::Bottom,
@@ -579,7 +579,7 @@ pub(crate) fn runtime_bar_config(
             surface.keyboard_focus
         )
     })?;
-    Ok(BarConfig {
+    Ok(LayerConfig {
         namespace: surface.namespace.clone(),
         width: surface.width,
         height: surface.height,
@@ -617,8 +617,8 @@ pub(crate) fn connect_runtime_surface(
         client.dispatch().map_err(|error| error.to_string())?;
         while let Some(event) = client.next_event() {
             match event {
-                LayerEvent::Configure { id, .. } if id == PRIMARY_LAYER => return Ok(client),
-                LayerEvent::Closed { id } if id == PRIMARY_LAYER => {
+                Event::Configure { id, .. } if id == PRIMARY_LAYER => return Ok(client),
+                Event::Closed { id } if id == PRIMARY_LAYER => {
                     return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
                 }
                 _ => {}

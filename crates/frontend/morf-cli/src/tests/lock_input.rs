@@ -9,7 +9,7 @@ use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_value::IpcValue;
 use morf_scene::NodeHandle;
-use morf_app::{LayerEvent, SurfaceRole};
+use morf_app::{Event, WindowId};
 
 struct NoText;
 
@@ -85,7 +85,7 @@ fn send(
     input: &mut PointerInput,
     outputs: &[LockOutput],
     shapes: &mut Shapes,
-    event: LayerEvent,
+    event: Event,
 ) -> bool {
     match handle_pointer_event(runtime, shapes, input, &LockLayouts(outputs), event) {
         Ok(Ok(repaint)) => repaint,
@@ -103,14 +103,14 @@ fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
     }];
     let mut input = PointerInput::default();
     let mut shapes = Shapes::default();
-    let surface = SurfaceRole::Lock(0);
+    let surface = WindowId::Lock(0);
     for event in [
-        LayerEvent::PointerMotion {
+        Event::PointerMotion {
             surface,
             x: 20.0,
             y: 20.0,
         },
-        LayerEvent::PointerButton {
+        Event::PointerButton {
             surface,
             button: 0x110,
             pressed: true,
@@ -118,7 +118,7 @@ fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
             y: 20.0,
             modifiers: Default::default(),
         },
-        LayerEvent::PointerButton {
+        Event::PointerButton {
             surface,
             button: 0x110,
             pressed: false,
@@ -138,7 +138,7 @@ fn a_click_on_a_lock_surface_reaches_its_mouse_area() {
         &mut input,
         &outputs,
         &mut shapes,
-        LayerEvent::PointerAxis {
+        Event::PointerAxis {
             surface,
             x: 20.0,
             y: 20.0,
@@ -161,13 +161,13 @@ fn a_tap_on_a_lock_surface_is_a_click() {
     }];
     let mut input = PointerInput::default();
     let mut shapes = Shapes::default();
-    let surface = SurfaceRole::Lock(0);
+    let surface = WindowId::Lock(0);
     send(
         &mut runtime,
         &mut input,
         &outputs,
         &mut shapes,
-        LayerEvent::TouchDown {
+        Event::TouchDown {
             surface,
             id: 3,
             x: 30.0,
@@ -179,7 +179,7 @@ fn a_tap_on_a_lock_surface_is_a_click() {
         &mut input,
         &outputs,
         &mut shapes,
-        LayerEvent::TouchUp {
+        Event::TouchUp {
             surface,
             id: 3,
             x: 30.0,
@@ -203,14 +203,14 @@ fn a_lock_surface_is_hit_tested_against_its_own_layout() {
     ];
     let mut input = PointerInput::default();
     let mut shapes = Shapes::default();
-    let surface = SurfaceRole::Lock(1);
+    let surface = WindowId::Lock(1);
     for pressed in [true, false] {
         send(
             &mut runtime,
             &mut input,
             &outputs,
             &mut shapes,
-            LayerEvent::PointerButton {
+            Event::PointerButton {
                 surface,
                 button: 0x110,
                 pressed,
@@ -222,7 +222,7 @@ fn a_lock_surface_is_hit_tested_against_its_own_layout() {
     }
     assert_eq!(count(&mut runtime, "clicks"), IpcValue::Integer(0));
     // A key is not the pointer path's, and comes back untouched.
-    let key = LayerEvent::Key {
+    let key = Event::Key {
         surface,
         keysym: 0x61,
         text: Some("a".to_owned()),
@@ -264,8 +264,8 @@ fn pointer_entry_before_the_first_lock_frame_selects_that_surface_after_layout()
         &mut input,
         &outputs,
         &mut shapes,
-        LayerEvent::PointerMotion {
-            surface: SurfaceRole::Lock(0),
+        Event::PointerMotion {
+            surface: WindowId::Lock(0),
             x: 20.0,
             y: 20.0,
         },
