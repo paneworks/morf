@@ -66,7 +66,7 @@ impl ReactiveState {
             property_signals: HashMap::new(),
             current_property_names: HashMap::new(),
             property_revision: 0,
-            model_revisions: HashMap::new(),
+            model_revisions: Default::default(),
             scene_revision: 0,
             polled_revision: 0,
             service_definitions_revision: u64::MAX,

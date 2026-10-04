@@ -10,32 +10,16 @@
 use luna::Context;
 use morf_scene::ListModel;
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 use crate::{
     reactive_bindings::flush_reactive, scene_bindings::HostError, serialization::scene_to_lua,
-    state::ReactiveState, surface_types::*, types::*,
+    state::ReactiveState, types::*,
 };
-
-/// One model's revision signal.
-pub(crate) struct ModelRevision {
-    /// Held weakly, which also keeps the allocation -- and so the key --
-    /// from being reused by another model while the entry exists.
-    pub(crate) model: Weak<RefCell<ListModel>>,
-    pub(crate) signal: morf_scene::reactive::SignalId,
-    pub(crate) revision: i64,
-}
-
-pub(crate) fn model_key(model: &Rc<RefCell<ListModel>>) -> usize {
-    Rc::as_ptr(model) as usize
-}
 
 /// Notes that the running binding read `model`.
 pub(crate) fn track_model_read(state: &mut ReactiveState, model: &Rc<RefCell<ListModel>>) {
-    let signal = state
-        .model_revisions
-        .get(&model_key(model))
-        .map(|entry| entry.signal);
+    let signal = state.model_revisions.signal(model);
     if let Some(active) = &mut state.active {
         match signal {
             Some(signal) => {
@@ -61,37 +45,14 @@ pub(crate) fn model_read_signals(
     models: Vec<Rc<RefCell<ListModel>>>,
 ) -> Result<Vec<morf_scene::reactive::SignalId>, String> {
     let mut signals = Vec::with_capacity(models.len());
+    let mut state = state.borrow_mut();
+    let state = &mut *state;
     for model in models {
-        let key = model_key(&model);
-        let existing = state
-            .borrow()
-            .model_revisions
-            .get(&key)
-            .map(|entry| entry.signal);
-        let signal = match existing {
-            Some(signal) => signal,
-            None => {
-                let value = IpcValue::Integer(0);
-                let mut state = state.borrow_mut();
-                let signal = state
-                    .reactive
-                    .graph
-                    .as_mut()
-                    .ok_or("reactive graph unavailable")?
-                    .signal(format!("list_model@{key:x}"), value.clone());
-                state.model_revisions.insert(
-                    key,
-                    ModelRevision {
-                        model: Rc::downgrade(&model),
-                        signal,
-                        revision: 0,
-                    },
-                );
-                state.reactive.values.insert(signal, value);
-                signal
-            }
-        };
-        signals.push(signal);
+        signals.push(
+            state
+                .model_revisions
+                .signal_or_make(&mut state.reactive, &model)?,
+        );
     }
     Ok(signals)
 }
@@ -102,11 +63,9 @@ pub(crate) fn bump_model_revision(
     state: &mut ReactiveState,
     model: &Rc<RefCell<ListModel>>,
 ) -> Result<bool, String> {
-    let Some(entry) = state.model_revisions.get_mut(&model_key(model)) else {
+    let Some((signal, value)) = state.model_revisions.bump(model) else {
         return Ok(false);
     };
-    entry.revision = entry.revision.wrapping_add(1);
-    let (signal, value) = (entry.signal, IpcValue::Integer(entry.revision));
     if let Some(active) = &mut state.active {
         active.writes.push((signal, value.clone()));
     } else {
@@ -187,17 +146,6 @@ pub(crate) fn replace_model_rows(
 impl ReactiveState {
     /// Forgets the revision signals of models nothing holds any more.
     pub(crate) fn collect_dead_models(&mut self) {
-        let dead = self
-            .model_revisions
-            .iter()
-            .filter(|(_, entry)| entry.model.strong_count() == 0)
-            .map(|(key, _)| *key)
-            .collect::<Vec<_>>();
-        for key in dead {
-            if let Some(entry) = self.model_revisions.remove(&key) {
-                self.reactive.values.remove(&entry.signal);
-                self.reactive.dead_signals.push(entry.signal);
-            }
-        }
+        self.model_revisions.collect_dead(&mut self.reactive);
     }
 }

@@ -101,7 +101,7 @@ pub(crate) struct ReactiveState {
     pub(crate) property_revision: i64,
     /// Each list model a binding has read, by address, with the revision
     /// signal that binding depends on.
-    pub(crate) model_revisions: HashMap<usize, crate::model_revisions::ModelRevision>,
+    pub(crate) model_revisions: morf_runtime::models::ModelRevisions,
     /// Advances whenever the scene actually changes: a property lands on a new
     /// value, or a node is created, reparented, or removed.
     ///
