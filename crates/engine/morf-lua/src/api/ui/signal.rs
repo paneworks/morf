@@ -274,7 +274,12 @@ pub(crate) fn install_signal_api<'gc>(
         move |ctx, _, mut stack| {
             let (name, initial): (String, LuaValue) = stack.consume(ctx)?;
             let initial = IpcValue::from_lua_deep(ctx, initial).map_err(HostError)?;
-            let id = crate::shared::register(&mut state.borrow_mut(), name, initial)
+            let id = crate::runtime_helpers::validate_scope_part(&name)
+                .and_then(|()| {
+                    let mut state = state.borrow_mut();
+                    let state = &mut *state;
+                    state.shared.register(&mut state.reactive, name, initial)
+                })
                 .map_err(HostError)?;
             let userdata = UserData::new_static(&ctx, SignalToken { id });
             userdata.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
