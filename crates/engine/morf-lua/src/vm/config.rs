@@ -205,7 +205,7 @@ impl Runtime {
 
     /// Drains non-fatal binding diagnostics produced since the previous call.
     pub fn take_logs(&mut self) -> Vec<LogEntry> {
-        std::mem::take(&mut self.reactive.borrow_mut().logs)
+        self.reactive.borrow_mut().logs.take()
     }
 
     /// Returns bindings that currently read frame-varying scene properties.

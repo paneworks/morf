@@ -38,30 +38,7 @@ impl ReactiveState {
     /// thousands, and without either there is no way to ask which are serious
     /// or recent.
     pub(crate) fn log(&mut self, level: LogLevel, message: impl Into<String>) {
-        let at_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|since| since.as_millis() as u64)
-            .unwrap_or(0);
-        // A cap, oldest out first: a shell that logs a warning a second
-        // would otherwise hold a day of them.
-        if self.logs.len() >= MAX_LOG_ENTRIES {
-            let excess = self.logs.len() + 1 - MAX_LOG_ENTRIES;
-            self.logs.drain(..excess);
-        }
-        let mut message = message.into();
-        if message.len() > MAX_LOG_MESSAGE {
-            let mut cut = MAX_LOG_MESSAGE;
-            while !message.is_char_boundary(cut) {
-                cut -= 1;
-            }
-            message.truncate(cut);
-            message.push('…');
-        }
-        self.logs.push(LogEntry {
-            level,
-            at_ms,
-            message,
-        });
+        self.logs.push(level, message);
     }
 
     pub(crate) fn new() -> Self {
@@ -110,7 +87,7 @@ impl ReactiveState {
             active: None,
             handler_depth: 0,
             flush_pending: false,
-            logs: Vec::new(),
+            logs: Default::default(),
             shaders: HashMap::new(),
             scene: Scene::new(),
             editing: Default::default(),

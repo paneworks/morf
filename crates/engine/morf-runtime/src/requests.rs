@@ -200,3 +200,53 @@ pub struct ToplevelRequest {
 mod queue;
 
 pub use queue::Requests;
+
+/// One workspace, as the engine hands it to a configuration.
+///
+/// Mirrors `morf_app::WorkspaceInfo` rather than re-exporting it, so the
+/// Lua runtime does not depend on the Wayland crate — the same separation the
+/// window list beside it keeps.
+#[derive(Clone, Debug, Default)]
+pub struct Workspace {
+    /// The field to act on, and what `morf.workspace.activate` takes.
+    pub key: String,
+    /// The compositor's cross-session id, when it offers one. Often empty --
+    /// the protocol makes it optional and Hyprland sends none.
+    pub id: String,
+    /// What to show a person.
+    pub name: String,
+    /// Where it sits in the compositor's arrangement.
+    pub coordinates: Vec<u32>,
+    /// The output it belongs to, so a per-screen bar can filter to its own.
+    pub output: String,
+    pub active: bool,
+    pub urgent: bool,
+    pub hidden: bool,
+    /// Whether `morf.workspace.activate` will do anything for it.
+    pub activatable: bool,
+    pub removable: bool,
+    pub assignable: bool,
+}
+
+/// One window the compositor reports, as handed to a configuration.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Toplevel {
+    /// Stable for the window's life, and the field to key on.
+    pub identifier: String,
+    /// What the window calls itself.
+    pub title: String,
+    /// Which application it belongs to.
+    pub app_id: String,
+    pub activated: bool,
+    pub maximized: bool,
+    pub minimized: bool,
+    pub fullscreen: bool,
+    /// Whether the window can be acted on. False means the state above is
+    /// unknown rather than false -- the compositor offers no control protocol,
+    /// or this window did not match a handle in it.
+    pub controllable: bool,
+    /// The names of the outputs the window is on.
+    pub outputs: Vec<String>,
+    /// The identifier of the window this one belongs to, if any.
+    pub parent: Option<String>,
+}

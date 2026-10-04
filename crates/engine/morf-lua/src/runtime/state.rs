@@ -15,10 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::{
-    surface_types::*,
-    types::{LogEntry, LogLevel},
-};
+use crate::{surface_types::*, types::LogLevel};
 // Re-exported, because these moved out of this file only to satisfy the line
 // gate: every consumer reaches for them through `state::*` and there is no
 // reason to make them all learn a second module name.
@@ -90,9 +87,8 @@ pub(crate) struct RetainCallbacks {
 
 pub(crate) use morf_runtime::reactive::{EffectSink, PropertySink};
 
-/// The most log entries kept, and the longest one.
-pub(crate) const MAX_LOG_ENTRIES: usize = 2000;
-pub(crate) const MAX_LOG_MESSAGE: usize = 4096;
+#[cfg(test)]
+pub(crate) use morf_runtime::log::MAX_LOG_ENTRIES;
 
 pub(crate) struct ReactiveState {
     /// The runtime's limits, for a binding made where they are not at hand
@@ -156,7 +152,7 @@ pub(crate) struct ReactiveState {
     pub(crate) handler_depth: u32,
     /// Whether something wrote while a handler was running.
     pub(crate) flush_pending: bool,
-    pub(crate) logs: Vec<LogEntry>,
+    pub(crate) logs: morf_runtime::log::Log,
     /// Shaders the configuration registered, by name.
     ///
     /// Compiled once at load. The renderer is handed the generated WGSL when
