@@ -166,6 +166,33 @@ impl DesktopEntries {
                 })
             })
     }
+
+    /// Scans `paths` again, keeping what they hold now; true when it changed.
+    pub fn rescan(&mut self, paths: impl IntoIterator<Item = PathBuf>) -> io::Result<bool> {
+        let next = Self::scan_paths(paths)?;
+        let changed = *self != next;
+        if changed {
+            *self = next;
+        }
+        Ok(changed)
+    }
+
+    /// Starts the entry `id`, or its action `action` when one is named.
+    pub fn launch(&self, id: &str, action: Option<&str>) -> Result<(), String> {
+        let entry = self
+            .by_id(id)
+            .ok_or_else(|| format!("desktop entry `{id}` was not found"))?;
+        match action {
+            None => entry.launch(),
+            Some(action) => entry
+                .actions
+                .iter()
+                .find(|candidate| candidate.id == action)
+                .ok_or_else(|| format!("desktop action `{action}` was not found"))?
+                .launch(&entry.working_directory),
+        }
+        .map_err(|error| error.to_string())
+    }
 }
 
 pub fn desktop_paths() -> Vec<PathBuf> {

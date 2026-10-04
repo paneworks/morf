@@ -1949,6 +1949,7 @@ dependencies = [
  "libloading",
  "morf-image",
  "morf-io",
+ "morf-value",
  "serde_json",
  "xkbcommon",
 ]

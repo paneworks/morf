@@ -131,24 +131,9 @@ pub(crate) struct Prefers {
     pub(crate) scale: SignalId,
     /// The settings portal, followed without ever being waited on; `None`
     /// when there is no session bus to find one on.
-    pub(crate) portal: Option<PortalWatch>,
+    pub(crate) portal: Option<morf_system::prefers::Portal>,
     /// Preferences the host set itself (`set_preference`), which a portal
     /// reading that was already on its way must not overwrite.
     pub(crate) overridden: HashSet<&'static str>,
 }
 
-/// How `morf.prefers` follows the settings portal.
-///
-/// Nothing here blocks: the portal is asked only once it has an owner — a
-/// read of an absent portal would activate it, and activating a portal can
-/// take the whole of a call's timeout — and its answers are collected from a
-/// poll.
-pub(crate) struct PortalWatch {
-    /// `SettingChanged`, from whoever owns the portal's name.
-    pub(crate) changes: DbusSignal,
-    /// The portal's name changing hands: a portal that starts after the
-    /// shell is read when it arrives.
-    pub(crate) owner: DbusSignal,
-    /// Readings asked for and not yet answered: namespace, key, reply.
-    pub(crate) pending: Vec<(&'static str, &'static str, PendingReply)>,
-}

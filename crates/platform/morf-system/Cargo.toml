@@ -11,5 +11,6 @@ libc.workspace = true
 libloading.workspace = true
 morf-io.workspace = true
 morf-image.workspace = true
+morf-value.workspace = true
 serde_json.workspace = true
 xkbcommon.workspace = true
