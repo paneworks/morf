@@ -152,6 +152,12 @@ impl Runtime {
         self.reactive.borrow_mut().windows.set_visible(id, visible)
     }
 
+    /// How big one of morf's pixels is: what the window system converts
+    /// the compositor's pixels by.
+    pub fn density(&self) -> morf_value::density::Density {
+        self.reactive.borrow().density
+    }
+
     /// Records what the compositor and GPU under this output can do.
     ///
     /// Published to the configuration as `morf.capabilities`, a plain table of

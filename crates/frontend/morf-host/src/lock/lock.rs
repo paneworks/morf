@@ -130,8 +130,10 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
     // Before the lock is asked for, so `morf --lock ipc call` reaches it
     // from the first moment; beside the shell's socket, not over it.
     let ipc = crate::lock_ipc::LockIpc::bind(path)?;
-    let mut client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
+    let client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
     let mut desktop = desktop_for(&client)?;
+    // In morf's pixels, as the shell's own surfaces are.
+    let mut client = morf_app::Dense::new(Box::new(client), runtime.density());
     desktop.set_idle_timeouts(&runtime.idle_timeouts());
     client.lock().map_err(|error| error.to_string())?;
     // Asked for, not yet granted: the compositor says `locked` once every
@@ -165,9 +167,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
             &mut pending_streak,
         );
         let slept = Instant::now();
-        let woke = client
-            .wait_for(sleep.timeout(), Some(wake.as_fd()))
-            .map_err(|error| error.to_string())?;
+        let woke = client.wait(sleep.timeout(), Some(wake.as_fd()))?;
         let desktop_repaint = dispatch_desktop(&mut runtime, &mut desktop, None)?;
         wake.drain();
         log_wake("lock", woke, &sleep, slept);
@@ -244,7 +244,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                         trees,
                         &mut outputs,
                         index,
-                        client.lock_screen(index),
+                        client.inner().lock_screen(index),
                         (logical_width, logical_height),
                     )?;
                     let root = trees
@@ -264,7 +264,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                         // so the compositor has a locked frame within
                         // milliseconds rather than after three devices and
                         // three 4K frames.
-                        client.prime_lock(index, root_color_bytes(&runtime, root)?);
+                        client.inner_mut().prime_lock(index, root_color_bytes(&runtime, root)?);
                         let target = client
                             .render_target(WindowId::Lock(index))
                             .ok_or_else(|| "configured lock surface disappeared".to_owned())?;
@@ -415,7 +415,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                 if let Some(renderer) = &mut output.renderer {
                     let layout = paint_lock(&mut runtime, renderer, &client, index, root)?;
                     output.layout = Some(CachedLayout::uncached(layout));
-                    client.release_lock_primer(index);
+                    client.inner_mut().release_lock_primer(index);
                 }
             }
             if answer_new_containment(&mut runtime, &input, &outputs) {

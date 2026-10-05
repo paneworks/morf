@@ -15,6 +15,8 @@ use crate::{
     WindowId,
 };
 
+/// A backend seen in morf's pixels.
+pub mod dense;
 #[cfg(feature = "headless")]
 pub mod headless;
 #[cfg(feature = "wayland")]
@@ -105,6 +107,16 @@ pub trait Backend {
     fn logical_size(&self, id: WindowId) -> Option<(u32, u32)>;
     /// The window's scale, in 120ths.
     fn scale_120(&self, id: WindowId) -> u32;
+    /// The size, in device pixels, of the buffers the window takes: what
+    /// the compositor shows at its logical size, whatever scale it is drawn
+    /// at.
+    fn buffer_size(&self, id: WindowId) -> Option<(u32, u32)> {
+        Some(physical_size(self.logical_size(id)?, self.scale_120(id)))
+    }
+    /// The output the window is on.
+    fn window_output(&self, _id: WindowId) -> Option<Output> {
+        self.own_output()
+    }
     /// Asks for a frame event when the window may draw again.
     fn request_frame(&self, id: WindowId);
     /// Commits the window's pending state.
@@ -192,7 +204,8 @@ pub trait Backend {
     }
     /// The primary layer's buffer size.
     fn physical_size(&self) -> (u32, u32) {
-        physical_size(self.primary_logical_size(), self.primary_scale_120())
+        self.buffer_size(WindowId::Layer(PRIMARY_LAYER))
+            .unwrap_or((1, 1))
     }
     fn layer_logical_size(&self, id: u64) -> Option<(u32, u32)> {
         self.logical_size(WindowId::Layer(id))
@@ -209,10 +222,7 @@ pub trait Backend {
             .then(|| self.scale_120(WindowId::Lock(index)))
     }
     fn lock_physical_size(&self, index: usize) -> Option<(u32, u32)> {
-        Some(physical_size(
-            self.lock_size(index)?,
-            self.lock_scale_120(index)?,
-        ))
+        self.buffer_size(WindowId::Lock(index))
     }
     /// How long the layer's last frame callback has been outstanding.
     fn layer_frame_wait(&self, _id: u64) -> Option<Duration> {

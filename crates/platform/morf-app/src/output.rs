@@ -11,6 +11,9 @@ pub struct Output {
     pub position: Option<(i32, i32)>,
     pub size: Option<(i32, i32)>,
     pub physical_size: Option<(i32, i32)>,
+    /// The current mode in device pixels, turned as the output is shown:
+    /// with `physical_size`, how dense the panel is.
+    pub pixels: Option<(i32, i32)>,
     pub scale: i32,
     pub transform: &'static str,
     /// How the output's subpixels are laid out, as `wl_output.subpixel`

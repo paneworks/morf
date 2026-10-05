@@ -15,6 +15,7 @@ pub fn virtual_outputs(count: usize, size: (u32, u32), scale: i32) -> Vec<Output
             position: Some((size.0 as i32 * index as i32, 0)),
             size: Some((size.0 as i32, size.1 as i32)),
             physical_size: None,
+            pixels: Some((size.0 as i32 * scale.max(1), size.1 as i32 * scale.max(1))),
             scale: scale.max(1),
             transform: "normal",
             subpixel: "unknown",

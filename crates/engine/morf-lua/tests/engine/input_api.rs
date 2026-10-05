@@ -112,6 +112,7 @@ fn variants_builds_the_current_screen_instance() {
             width: Some(1920),
             height: Some(1080),
             physical_size: Some((600, 340)),
+            pixels: None,
             scale: 2,
             transform: "normal".to_owned(),
         },

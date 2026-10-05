@@ -27,6 +27,7 @@ pub fn run_surface(start: WorkerStart, screen: Output) -> Result<(), String> {
         width: screen.size.map(|size| size.0),
         height: screen.size.map(|size| size.1),
         physical_size: screen.physical_size,
+        pixels: screen.pixels,
         scale: screen.scale,
         transform: screen.transform.to_owned(),
     };

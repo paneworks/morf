@@ -37,6 +37,7 @@ impl Runtime {
 
     fn update_screens(&mut self, screens: &[Screen], own_first: bool) {
         let mut own_scale = None;
+        let density = self.reactive.borrow().density;
         self.lua.enter(|ctx| {
             let Ok(morf) = ctx.get_global::<Table>("morf") else {
                 return;
@@ -61,7 +62,7 @@ impl Runtime {
             match own_index {
                 Some(index) => {
                     own_scale = Some(screens[index].scale);
-                    ordered.push(screen_entry(ctx, &screens[index]));
+                    ordered.push(screen_entry(ctx, &screens[index], density));
                 }
                 None if own_name.is_some() => ordered.extend(own),
                 None => {}
@@ -71,7 +72,7 @@ impl Runtime {
                     .iter()
                     .enumerate()
                     .filter(|(index, _)| Some(*index) != own_index)
-                    .map(|(_, screen)| screen_entry(ctx, screen)),
+                    .map(|(_, screen)| screen_entry(ctx, screen, density)),
             );
             for (offset, entry) in ordered.iter().enumerate() {
                 table

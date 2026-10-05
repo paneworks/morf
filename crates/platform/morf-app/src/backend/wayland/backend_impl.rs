@@ -186,6 +186,16 @@ impl Backend for LayerClient {
     fn own_output(&self) -> Option<Output> {
         LayerClient::own_output(self)
     }
+    fn window_output(&self, id: WindowId) -> Option<Output> {
+        match id {
+            WindowId::Lock(index) => self.lock_screen(index),
+            // Before it is known which output the shell is on, the only one.
+            _ => LayerClient::own_output(self).or_else(|| match self.screens() {
+                [only] => Some(only.clone()),
+                _ => None,
+            }),
+        }
+    }
     fn surface_scale_120(&self, id: WindowId) -> u32 {
         LayerClient::surface_scale_120(self, id)
     }

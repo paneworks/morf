@@ -77,6 +77,56 @@ pub(crate) fn install_shell_api<'gc>(
     let surface = Table::new(&ctx);
     surface.set_metatable(ctx, Some(surface_metatable));
     morf.set_field(ctx, "surface", surface);
+    // `morf.density("compositor")`, `morf.density(1.25)` or
+    // `morf.density({ ppi = 160 })`: how big one of morf's pixels is. Read
+    // when the windows open, so a configuration says it while loading; nil
+    // is the default, one device pixel to one of morf's.
+    let density_state = Rc::clone(&state);
+    let density = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        use morf_value::density::{Density, REFERENCE_PPI};
+        let value: LuaValue = stack.consume(ctx)?;
+        let number = |value: LuaValue| match value {
+            LuaValue::Integer(n) => Some(n as f64),
+            LuaValue::Number(n) => Some(n),
+            _ => None,
+        };
+        let parsed = match value {
+            LuaValue::Nil => Density::default(),
+            LuaValue::String(name) if name.as_bytes() == b"compositor" => Density::Compositor,
+            LuaValue::String(name) if name.as_bytes() == b"ppi" => Density::Ppi(REFERENCE_PPI),
+            LuaValue::Table(table) => match number(table.get_value(ctx, "ppi")) {
+                Some(ppi) if (40.0..=600.0).contains(&ppi) => Density::Ppi(ppi),
+                _ => {
+                    return Err(HostError(
+                        "morf.density{ ppi = n } wants n between 40 and 600".into(),
+                    )
+                    .into());
+                }
+            },
+            other => match number(other) {
+                Some(scale) if (0.25..=10.0).contains(&scale) => Density::Scale(scale),
+                _ => {
+                    return Err(HostError(
+                        "morf.density takes \"compositor\", \"ppi\", a scale or { ppi = n }".into(),
+                    )
+                    .into());
+                }
+            },
+        };
+        density_state.borrow_mut().density = parsed;
+        // The screens already described are described again in the new unit.
+        if let Ok(morf) = ctx.get_global::<Table>("morf")
+            && let LuaValue::Table(screens) = morf.get_value(ctx, "screens")
+        {
+            let mut index = 1;
+            while let LuaValue::Table(entry) = screens.get_value(ctx, index) {
+                crate::api::system::host::apply_density(ctx, entry, parsed);
+                index += 1;
+            }
+        }
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "density", density);
     let env = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let name: String = stack.consume(ctx)?;
         if name.is_empty() || name.len() > 256 || name.as_bytes().contains(&0) {

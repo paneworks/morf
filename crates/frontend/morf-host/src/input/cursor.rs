@@ -25,6 +25,12 @@ impl CursorShapes for LayerClient {
     }
 }
 
+impl CursorShapes for morf_app::Dense<LayerClient> {
+    fn set_cursor_shape(&mut self, shape: &str) {
+        self.inner_mut().set_cursor_shape(shape);
+    }
+}
+
 /// Re-asks for the cursor when the pointer moves from one node to another.
 pub fn hover_changed(
     runtime: &Runtime,
