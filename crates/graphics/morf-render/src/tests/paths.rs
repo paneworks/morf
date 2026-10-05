@@ -174,3 +174,30 @@ fn a_path_node_becomes_one_path_command_with_its_numbers() {
             .is_err()
     );
 }
+
+#[test]
+fn a_path_is_drawn_over_its_outline_not_its_whole_node() {
+    // Ruler ticks along the top edge of a fullscreen node: a strip.
+    let mut ticks = paint("M10 10 V5 M90 10 V5 M170 10 V5");
+    ticks.fill_color = Color::rgba8(0, 0, 0, 0);
+    ticks.stroke_color = Color::rgba8(255, 255, 255, 255);
+    ticks.stroke_width = 1.0;
+    let mut outlines = PathOutlines::default();
+    let margin = ticks.margin(3840.0, 2160.0);
+    let extent = drawn_extent(&mut outlines, &ticks, (3840.0, 2160.0), margin).unwrap();
+    assert!(
+        extent.width < 200.0 && extent.height < 20.0,
+        "drawn over {extent:?}"
+    );
+    assert!(
+        extent.x <= 10.0 - 0.5 && extent.y <= 5.0 - 0.5,
+        "the ticks are inside it"
+    );
+    // And a path that fills its node still covers all of it.
+    let square = paint("M0 0 H16 V16 H0 Z");
+    let whole = drawn_extent(&mut outlines, &square, (16.0, 16.0), 1.0).unwrap();
+    assert_eq!(
+        (whole.x, whole.y, whole.width, whole.height),
+        (-1.0, -1.0, 18.0, 18.0)
+    );
+}
