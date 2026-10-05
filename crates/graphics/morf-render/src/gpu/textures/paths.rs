@@ -47,11 +47,18 @@ pub(crate) fn push_path_textures(
             continue;
         }
         let margin = paint.margin(bounds.width, bounds.height);
+        // Only where the outline is: a few ticks along the edge of a
+        // fullscreen node are a strip, not a fullscreen image.
+        let Some(region) =
+            crate::path::drawn_extent(outlines, paint, (bounds.width, bounds.height), margin)
+        else {
+            continue;
+        };
         let covered = Geometry {
-            x: bounds.x - margin,
-            y: bounds.y - margin,
-            width: bounds.width + margin * 2.0,
-            height: bounds.height + margin * 2.0,
+            x: bounds.x + region.x,
+            y: bounds.y + region.y,
+            width: region.width,
+            height: region.height,
         };
         let [a, b, c, d, _, _] = transform.matrix;
         // Capped, so a node scaled up without bound cannot ask for an image
@@ -70,15 +77,17 @@ pub(crate) fn push_path_textures(
         let image = match textures.get(&key) {
             Some(image) => image.clone(),
             None => {
-                let Some(drawn) = crate::path::rasterize(
+                let started = std::time::Instant::now();
+                let Some(drawn) = crate::path::rasterize_region(
                     outlines,
                     paint,
                     (bounds.width, bounds.height),
-                    margin,
+                    region,
                     pixels,
                 ) else {
                     continue;
                 };
+                slow_path(paint, pixels, started);
                 let image = upload_texture(&context, drawn.width, drawn.height, &drawn.rgba, true);
                 textures.insert(key, image.clone());
                 image
@@ -108,4 +117,28 @@ pub(crate) fn push_path_textures(
     if textures.len() > MAX_PATH_TEXTURES {
         textures.retain(|key, _| used.contains(key));
     }
+}
+
+/// `MORF_FRAME_LOG=2`: a path that took 20 ms or more to rasterize, with what
+/// identifies it -- the start of its data -- and whatever makes it change
+/// every frame (a morph, a trim).
+fn slow_path(paint: &crate::path::PathPaint, pixels: (u32, u32), started: std::time::Instant) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var("MORF_FRAME_LOG").is_ok_and(|value| value == "2")) {
+        return;
+    }
+    let took = started.elapsed().as_secs_f64() * 1000.0;
+    if took < 20.0 {
+        return;
+    }
+    let data: String = paint.d.chars().take(48).collect();
+    eprintln!(
+        "slow path {took:.1} ms at {}x{} px (morph {:.2}, trim {:.2}-{:.2}, {} bytes): {data}",
+        pixels.0,
+        pixels.1,
+        paint.morph_progress,
+        paint.trim_start,
+        paint.trim_end,
+        paint.d.len(),
+    );
 }

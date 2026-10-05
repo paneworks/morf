@@ -158,6 +158,8 @@ fn a_theme_rejects_what_it_cannot_derive_from() {
 #[test]
 fn a_theme_with_a_transition_eases_its_colours() {
     let mut runtime = Runtime::default();
+    // A shell on show: before the first tick a colour is simply set.
+    runtime.tick_animations(Duration::ZERO).unwrap();
     runtime
         .execute(
             "fade.lua",
@@ -239,6 +241,8 @@ fn a_theme_fade_asks_for_its_first_frame() {
         .unwrap();
     runtime.poll_services();
     assert!(!runtime.has_pending_work());
+    // A shell on show: before the first tick a colour is simply set.
+    runtime.tick_frame_animations(Duration::ZERO).unwrap();
     runtime.call_ipc("set", &[]).unwrap();
     assert!(
         runtime.has_pending_work(),
@@ -259,4 +263,23 @@ fn a_theme_fade_asks_for_its_first_frame() {
         .tick_frame_animations(Duration::from_millis(16))
         .unwrap();
     assert!(!frame.active, "the fade never ends");
+}
+
+#[test]
+fn a_theme_colour_set_before_anything_is_shown_is_set_at_once() {
+    // A scheme read while the configuration loads: nothing has been drawn
+    // to ease from, and easing would re-run every binding for frames.
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "load.lua",
+            br##"
+                local morf = require("morf")
+                theme = morf.theme({ accent = "#000000" }, { transition = { duration = 400 } })
+                theme.accent = "#ff0000"
+                assert(theme.accent:hex() == "#ff0000", "it eased: " .. theme.accent:hex())
+            "##,
+        )
+        .unwrap();
+    assert!(!runtime.has_motion(), "nothing is fading");
 }

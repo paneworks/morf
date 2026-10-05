@@ -27,6 +27,18 @@ pub struct Color {
 }
 
 impl Color {
+    /// Whether two colours put the same pixel on an 8-bit screen: every
+    /// channel rounds to the same byte. A scheme recomputed in floats and the
+    /// same scheme restored from hex differ in the last bits; easing one into
+    /// the other is work for every binding that reads it, and shows nothing.
+    pub fn looks_same(&self, other: &Self) -> bool {
+        let byte = |channel: f32| (channel.clamp(0.0, 1.0) * 255.0).round() as u8;
+        byte(self.red) == byte(other.red)
+            && byte(self.green) == byte(other.green)
+            && byte(self.blue) == byte(other.blue)
+            && byte(self.alpha) == byte(other.alpha)
+    }
+
     /// Creates a colour from eight-bit channels.
     pub const fn rgba8(red: u8, green: u8, blue: u8, alpha: u8) -> Self {
         Self {
@@ -424,5 +436,17 @@ mod tests {
             HueDirection::Shorter,
         );
         assert!(!close(long, short));
+    }
+
+    #[test]
+    fn colours_that_round_to_the_same_bytes_look_the_same() {
+        let shown = Color::rgba8(0x3d, 0x8b, 0xff, 0xff);
+        let recomputed = Color {
+            red: shown.red + 0.0004,
+            ..shown
+        };
+        assert_ne!(shown, recomputed);
+        assert!(shown.looks_same(&recomputed));
+        assert!(!shown.looks_same(&Color::rgba8(0x3e, 0x8b, 0xff, 0xff)));
     }
 }

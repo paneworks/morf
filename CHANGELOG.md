@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.3] - 2026-10-05
+
+### <!-- 0 -->⛰️  Features
+
+- MORF_PRESENT_MODIFIER picks the layout of presented buffers; MORF_GPU_LOG names them
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Presented buffers are linear whenever the compositor takes linear
+
+### <!-- 4 -->⚡ Performance
+
+- A theme colour set before anything is shown, or to one that looks the same, does not fade
+- A path is rasterized over its outline, not its whole node
+
 ## [0.2.2] - 2026-10-04
 
 ### <!-- 1 -->🐛 Bug Fixes

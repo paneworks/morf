@@ -94,10 +94,31 @@ impl BufferLink {
         }
         let theirs = sink.modifiers(FOURCC_ARGB8888);
         let ours = dmabuf::modifiers_for_purpose(device, FOURCC_ARGB8888, Purpose::PRESENT);
-        let modifiers: Vec<u64> = ours
-            .into_iter()
+        let shared: Vec<u64> = ours
+            .iter()
+            .copied()
             .filter(|modifier| theirs.contains(modifier))
+            .filter(|modifier| dmabuf::modifier_wanted(*modifier))
             .collect();
+        // Linear whenever both sides can: a presented buffer is never drawn
+        // into, only copied to (the frame is drawn in a target of its own),
+        // so tiling it buys nothing, and linear is the one layout every
+        // importer reads the same way. A tiled one, left to the driver to
+        // pick, came out garbled under Hyprland on a Kaby Lake laptop --
+        // blocks of noise, text in pieces -- where a swapchain was fine.
+        let modifiers = if shared.contains(&dmabuf::MODIFIER_LINEAR) {
+            vec![dmabuf::MODIFIER_LINEAR]
+        } else {
+            shared
+        };
+        if std::env::var_os("MORF_GPU_LOG").is_some() {
+            eprintln!(
+                "morf: gpu: present modifiers: ours {}, the compositor's {}, used {}",
+                dmabuf::modifier_names(&ours),
+                dmabuf::modifier_names(&theirs),
+                dmabuf::modifier_names(&modifiers),
+            );
+        }
         if modifiers.is_empty() {
             return Err("the compositor and the GPU agree on no ARGB8888 modifier".to_owned());
         }

@@ -183,9 +183,14 @@ pub(crate) fn install_state_api<'gc>(
                         (fields.transition, &value)
                         && let Some(IpcValue::Color(from)) = state.reactive.values.get(&id).cloned()
                         && !duration.is_zero()
+                        // Nothing shown yet: no fade, the colour is just set.
+                        && state.animation.ticked
                     {
                         state.animation.fades.retain(|fade| fade.signal != id);
-                        if from != *to {
+                        // Only a change that shows: a colour set to one that
+                        // looks the same keeps the one on show, and no frame
+                        // re-runs every binding that reads it.
+                        if !from.looks_same(to) {
                             state.animation.fades.push(crate::state::ThemeFade {
                                 signal: id,
                                 from,

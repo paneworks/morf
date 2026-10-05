@@ -45,6 +45,10 @@ pub struct Animation {
     /// Nodes registered with retention only for their exit, so taking the
     /// exit back unregisters them rather than unlocking someone else's hold.
     pub exit_registered: HashSet<NodeHandle>,
+    /// Whether the clock has moved at all. Before the first tick nothing has
+    /// been shown, so a theme colour set then (a scheme read while the
+    /// configuration loads) has nothing to ease from and is set at once.
+    pub ticked: bool,
 }
 
 /// What a runtime's motion asks of the state it lives in.

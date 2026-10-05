@@ -14,7 +14,8 @@ use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use kurbo::{BezPath, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Point};
+use kurbo::{BezPath, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Point, Shape};
+use morf_layout::Geometry;
 use morf_scene::{Color, FillRule, PathViewBox, StrokeCap, StrokeJoin};
 use resvg::tiny_skia;
 
@@ -352,11 +353,61 @@ pub(crate) struct PathPixels {
 
 /// Draws `paint` into a `pixels`-sized image covering the node's box, grown by
 /// `margin` logical pixels on every side.
+/// Where a path puts pixels, in its node's coordinates: its outline's box
+/// mapped through the view box and grown by `margin` (which holds the stroke's
+/// reach and the antialiased edge), within the node's box grown the same.
+/// `None` when it draws nowhere.
+///
+/// What its texture is sized to. Sized to the node instead, a row of ruler
+/// ticks along the edge of a fullscreen frame was a fullscreen image -- eight
+/// million pixels rasterized on the CPU, 30 to 400 ms each, a dozen of them a
+/// start -- for a strip ten pixels deep.
+pub(crate) fn drawn_extent(
+    outlines: &mut PathOutlines,
+    paint: &PathPaint,
+    logical: (f64, f64),
+    margin: f64,
+) -> Option<Geometry> {
+    let outline = outlines.outline(paint)?;
+    let reach = outline.bounding_box();
+    let ([scale_x, scale_y], [offset_x, offset_y]) = paint.to_node(logical.0, logical.1);
+    let left = (reach.x0 * scale_x + offset_x - margin).max(-margin);
+    let top = (reach.y0 * scale_y + offset_y - margin).max(-margin);
+    let right = (reach.x1 * scale_x + offset_x + margin).min(logical.0 + margin);
+    let bottom = (reach.y1 * scale_y + offset_y + margin).min(logical.1 + margin);
+    (left.is_finite() && top.is_finite() && right > left && bottom > top).then(|| Geometry {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+    })
+}
+
+/// Rasterizes a path over its node's whole box grown by `margin`.
+#[cfg(test)]
 pub(crate) fn rasterize(
     outlines: &mut PathOutlines,
     paint: &PathPaint,
     logical: (f64, f64),
     margin: f64,
+    pixels: (u32, u32),
+) -> Option<PathPixels> {
+    let region = Geometry {
+        x: -margin,
+        y: -margin,
+        width: logical.0 + margin * 2.0,
+        height: logical.1 + margin * 2.0,
+    };
+    rasterize_region(outlines, paint, logical, region, pixels)
+}
+
+/// Rasterizes the part of a path inside `region` (in its node's coordinates)
+/// into an image of `pixels`.
+pub(crate) fn rasterize_region(
+    outlines: &mut PathOutlines,
+    paint: &PathPaint,
+    logical: (f64, f64),
+    region: Geometry,
     pixels: (u32, u32),
 ) -> Option<PathPixels> {
     let outline = outlines.outline(paint)?;
@@ -365,15 +416,15 @@ pub(crate) fn rasterize(
     let ([scale_x, scale_y], [offset_x, offset_y]) = paint.to_node(logical.0, logical.1);
     // Logical to device pixels, exactly: the image is a whole number of pixels
     // and the box it covers is not.
-    let device_x = f64::from(width) / (logical.0 + margin * 2.0);
-    let device_y = f64::from(height) / (logical.1 + margin * 2.0);
+    let device_x = f64::from(width) / region.width;
+    let device_y = f64::from(height) / region.height;
     let transform = tiny_skia::Transform::from_row(
         (scale_x * device_x) as f32,
         0.0,
         0.0,
         (scale_y * device_y) as f32,
-        ((offset_x + margin) * device_x) as f32,
-        ((offset_y + margin) * device_y) as f32,
+        ((offset_x - region.x) * device_x) as f32,
+        ((offset_y - region.y) * device_y) as f32,
     );
     if paint.fill_color.alpha > 0.0
         && let Some(path) = skia_path(&outline)
