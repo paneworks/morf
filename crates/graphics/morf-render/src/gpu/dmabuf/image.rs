@@ -118,7 +118,16 @@ pub(crate) fn export_for(
     let modifier = match unsafe {
         modifier_device.get_image_drm_format_modifier_properties(image, &mut chosen)
     } {
-        Ok(()) => chosen.drm_format_modifier,
+        Ok(()) => {
+            if std::env::var_os("MORF_GPU_LOG").is_some() {
+                eprintln!(
+                    "morf: gpu: {} buffer {width}x{height}: modifier {}",
+                    purpose.label,
+                    super::modifier_names(&[chosen.drm_format_modifier])
+                );
+            }
+            chosen.drm_format_modifier
+        }
         Err(error) => {
             unsafe {
                 raw.free_memory(memory, None);

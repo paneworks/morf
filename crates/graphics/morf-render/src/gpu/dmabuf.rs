@@ -31,6 +31,39 @@ pub const FOURCC_ARGB8888: u32 = 0x3432_5241;
 /// `DRM_FORMAT_MOD_LINEAR`: rows in order, no tiling.
 pub const MODIFIER_LINEAR: u64 = 0;
 
+/// Intel's tilings, as DRM names them (`fourcc_mod_code(INTEL, n)`).
+const INTEL_X_TILED: u64 = (1 << 56) | 1;
+const INTEL_Y_TILED: u64 = (1 << 56) | 2;
+
+/// A modifier's name, for a log line.
+fn modifier_name(modifier: u64) -> String {
+    match modifier {
+        MODIFIER_LINEAR => "linear".to_owned(),
+        INTEL_X_TILED => "intel-x".to_owned(),
+        INTEL_Y_TILED => "intel-y".to_owned(),
+        other => format!("{other:#018x}"),
+    }
+}
+
+pub(crate) fn modifier_names(modifiers: &[u64]) -> String {
+    let names: Vec<String> = modifiers
+        .iter()
+        .map(|modifier| modifier_name(*modifier))
+        .collect();
+    format!("[{}]", names.join(", "))
+}
+
+/// `MORF_PRESENT_MODIFIER=linear|x|y`: present only through buffers of that
+/// layout, for telling a layout the compositor misreads from anything else.
+pub(crate) fn modifier_wanted(modifier: u64) -> bool {
+    match std::env::var("MORF_PRESENT_MODIFIER").as_deref() {
+        Ok("linear") => modifier == MODIFIER_LINEAR,
+        Ok("x") => modifier == INTEL_X_TILED,
+        Ok("y") => modifier == INTEL_Y_TILED,
+        _ => true,
+    }
+}
+
 /// The device extensions dmabuf export needs, and whether each is required.
 ///
 /// The first four are what makes an exportable image possible at all. The

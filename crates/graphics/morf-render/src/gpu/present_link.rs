@@ -95,9 +95,19 @@ impl BufferLink {
         let theirs = sink.modifiers(FOURCC_ARGB8888);
         let ours = dmabuf::modifiers_for_purpose(device, FOURCC_ARGB8888, Purpose::PRESENT);
         let modifiers: Vec<u64> = ours
-            .into_iter()
+            .iter()
+            .copied()
             .filter(|modifier| theirs.contains(modifier))
+            .filter(|modifier| dmabuf::modifier_wanted(*modifier))
             .collect();
+        if std::env::var_os("MORF_GPU_LOG").is_some() {
+            eprintln!(
+                "morf: gpu: present modifiers: ours {}, the compositor's {}, used {}",
+                dmabuf::modifier_names(&ours),
+                dmabuf::modifier_names(&theirs),
+                dmabuf::modifier_names(&modifiers),
+            );
+        }
         if modifiers.is_empty() {
             return Err("the compositor and the GPU agree on no ARGB8888 modifier".to_owned());
         }
