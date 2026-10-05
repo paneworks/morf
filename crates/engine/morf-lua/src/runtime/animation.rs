@@ -66,6 +66,7 @@ impl Runtime {
     }
 
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
+        self.reactive.borrow_mut().animation.ticked = true;
         let fading = self.advance_theme_fades(delta);
         {
             let mut state = self.reactive.borrow_mut();
