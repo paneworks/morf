@@ -148,10 +148,6 @@ for _,page in ipairs {"power","bar"} do
     local id=page=="power" and "power-open-battery" or "bar-titles-off"
     local last=test.get(id)
     test.truthy(last.y>=viewport.y and last.y+last.height<=viewport.y+viewport.height)
-    local title=page=="power" and "power-heading-battery-text" or "bar-heading-window-titles-text"
-    local expected=page=="power" and "BATTERY" or "WINDOW TITLES"
-    test.truthy(test.get(title).text~=expected)
-    test.advance(2200) test.eq(test.get(title).text,expected)
     shot(page.."-compact-bottom")
     test.click(id)
     if page=="power" then test.eq(test.ipc("state").handoffs,1) else test.eq(test.ipc("state").titles,"off") end

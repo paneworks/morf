@@ -2,9 +2,10 @@
 //!
 //! A compositor's scale is a guess (Hyprland's `auto` makes a 14" 1080p panel
 //! 1.5, a 32" 4K one 1.0, and the first comes out a third larger to the eye),
-//! so morf counts in its own unit instead: by default one device pixel,
-//! or, asked for, one [`REFERENCE_PPI`]th of an inch on every panel that
-//! says how big it is, like Android's dp. Everything above the window system -- layout, text,
+//! so morf can count in its own unit instead: asked for, one
+//! [`REFERENCE_PPI`]th of an inch on every panel that says how big it is,
+//! like Android's dp, or a fixed scale. By default it takes the
+//! compositor's. Everything above the window system -- layout, text,
 //! Lua, an app -- counts in that unit; the window system converts at its
 //! edge with a [`Zoom`].
 
@@ -35,14 +36,17 @@ pub enum Density {
     Ppi(f64),
     /// This many device pixels to one of morf's, everywhere.
     Scale(f64),
+    /// The compositor's scale times this (a scale slider: 0.5 half the
+    /// size, 2 twice it, 1 the compositor's own).
+    Relative(f64),
 }
 
-/// One device pixel to one of morf's, whatever the compositor scales by:
-/// a compositor's `auto` scale is a guess, and a shell sized for one pixel
-/// is sized right at one. Measuring by the panel is asked for.
+/// The compositor's scale: a phone's 2 or 3 is right for it, and a
+/// compositor told to scale a desk panel by 1 draws morf at 1. Measuring by
+/// the panel, or a fixed scale, is asked for.
 impl Default for Density {
     fn default() -> Self {
-        Self::Scale(1.0)
+        Self::Compositor
     }
 }
 
@@ -80,6 +84,16 @@ impl Density {
             },
             Self::Scale(scale) if scale > 0.0 => scale,
             Self::Scale(_) => return compositor_120,
+            // Every step of a slider counts, so no snapping back to the
+            // compositor's but at the very middle.
+            Self::Relative(factor) if factor > 0.0 => {
+                if (factor - 1.0).abs() < 1e-3 {
+                    return compositor_120;
+                }
+                let scale = f64::from(compositor_120) / 120.0 * factor;
+                return ((scale * 120.0).round() as u32).clamp(30, 1200);
+            }
+            Self::Relative(_) => return compositor_120,
         };
         let compositor = f64::from(compositor_120) / 120.0;
         if (wanted - compositor).abs() <= compositor * SNAP {
@@ -222,8 +236,8 @@ mod tests {
 
     #[test]
     fn a_pixel_is_the_same_size_on_every_panel() {
-        // By default one, whatever the compositor says.
-        assert_eq!(Density::default().scale_120(None, 180), 120);
+        // By default the compositor's.
+        assert_eq!(Density::default().scale_120(Some(300.0), 180), 180);
         let density = Density::Ppi(REFERENCE_PPI);
         // The desk keeps its scale of one.
         assert_eq!(density.scale_120(ppi((3840, 2160), (700, 400)), 120), 120);
@@ -234,6 +248,10 @@ mod tests {
         assert_eq!(Density::Compositor.scale_120(Some(300.0), 120), 120);
         assert_eq!(Density::Scale(2.0).scale_120(None, 120), 240);
         assert_eq!(Density::Ppi(160.0).scale_120(Some(160.0), 150), 120);
+        // A slider's: the compositor's times its factor, every step.
+        assert_eq!(Density::Relative(1.0).scale_120(None, 180), 180);
+        assert_eq!(Density::Relative(0.5).scale_120(None, 180), 90);
+        assert_eq!(Density::Relative(1.05).scale_120(None, 120), 126);
     }
 
     #[test]

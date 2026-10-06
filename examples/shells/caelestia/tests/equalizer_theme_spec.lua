@@ -12,7 +12,8 @@ local HOST=[[
     return ui.Item {width=w,height=h}
   end
   local W,H=tonumber(morf.env("TEST_WIDTH")),tonumber(morf.env("TEST_HEIGHT"))
-  ui.Item {width=W,height=H,model.page(W,function() return H end)}
+  ui.Item {width=W,height=H,require("themes.layouts.page").frame {id="page-settings",width=W,
+    height=function() return H end,title="Settings",title_id="settings-title",build=model.page}}
   require("presentation").set("sidebar.settings",true)
   local eq=require("equalizer_model")
   morf.ipc.select=model.request

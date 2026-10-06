@@ -158,6 +158,24 @@ impl Session {
     }
 }
 
+impl Session {
+    /// Moves `morf.screens_revision` though the outputs are the same: what is
+    /// read off them changed (their size in morf's pixels, with the density).
+    pub fn touch_screens(&mut self, reactive: &mut Reactive) {
+        let Some((signal, count)) = self.screens_revision else {
+            return;
+        };
+        let count = count + 1;
+        self.screens_revision = Some((signal, count));
+        let value = IpcValue::Integer(count);
+        if let Some(graph) = reactive.graph.as_mut()
+            && graph.write(signal, value.clone()).is_ok()
+        {
+            reactive.values.insert(signal, value);
+        }
+    }
+}
+
 /// What makes two output lists the same for `morf.screens_revision`.
 pub fn screens_signature(screens: &[Screen]) -> String {
     screens

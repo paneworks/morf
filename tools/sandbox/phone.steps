@@ -1,0 +1,34 @@
+# phone.steps -- an interactive bench: nested.sh sources this, and it runs
+# the commands written to $BENCH_CTL (a FIFO), one line at a time, until
+# `quit`. Everything nested.sh defines is at hand (shot, point, click,
+# scroll, k, hc, ipc, wait); this adds
+#   run CONFIG [-- OPERANDS]   swap the morf under test for another config
+#   lock | greet | shell       the caelestia lock (preview), greeter (dry
+#                              run, preview) or shell
+# Output of each command goes to OUT/ctl.log, closed by a "done" line.
+CTL=${BENCH_CTL:?}
+REPO=${BENCH_REPO:?}
+C=examples/shells/caelestia
+run() {
+  # The morf in here, whichever started it (this, or nested.sh at the
+  # start): `morf kill` reaches only the instance in this private runtime
+  # dir, never the person's own shell.
+  "$REPO/target/release/morf" kill > /dev/null 2>&1
+  [ -n "${S:-}" ] && kill "$S" 2>/dev/null
+  sleep 1
+  cd "$REPO"
+  ( env MORF_DENSITY_LOG=1 CAELESTIA_STYLE="${STYLE:-tsugumori}" CAELESTIA_DRY_RUN=1 IMPASTO_DRY_RUN=1 nixVulkanIntel "$REPO/target/release/morf" "$@"
+    echo "morf exited: $?" ) > "$OUT/shell.log" 2>&1 &
+  S=$!
+}
+lock() { run "$C/lock/init.lua" -- window preview; }
+greet() { run "$C/greet/init.lua" -- preview; }
+shell() { run "$C/shell/init.lua"; }
+while :; do
+  if read -r line < "$CTL"; then
+    [ "$line" = quit ] && break
+    echo "> $line" >> "$OUT/ctl.log"
+    eval "$line" >> "$OUT/ctl.log" 2>&1
+    echo "done $line" >> "$OUT/ctl.log"
+  fi
+done

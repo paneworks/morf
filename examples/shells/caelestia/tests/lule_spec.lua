@@ -8,7 +8,7 @@ local HOST = [[
   morf.ipc.studio = function()
     return { selected = s.selected:get(), busy = s.busy:get(), failed = s.failed:get(), message = s.message:get(),
       preview = s.preview:get() ~= "", preview_error = s.preview_error:get(), active = s.active:get(),
-      here = require("services").here(), bottom = require("bottom").drawer.open:get(), tab = require("dashboard").tab:get() == require("dashboard").LULE_TAB, dashboard = require("dashboard").drawer.open:get(),
+      here = require("services").here(), bottom = require("bottom").drawer.open:get(), tab = require("utilities").displayed:get() == "theme/lule", dashboard = require("sidebar").drawer.open:get(),
       copied = copied, mode = s.mode:get(), method = s.method:get(), count = #s.files:get(), keyboard = morf.surface.keyboard_focus,
       folder = s.folder:get(), saved_folder = require("config").get("lule.folder") }
   end
@@ -44,20 +44,19 @@ test.describe("caelestia Lule", function()
     test.falsy(state().active)
     test.eq(#lule_runs(), 0)
     test.ipc("lule", "open") test.settle(800)
-    test.eq(test.get("dashboard-tab-lule-icon").element, "Item")
+    -- Lule is a page of the quick settings: Settings, Theme, Lule.
+    test.truthy(state().tab)
     test.eq(state().count, 2)
     test.truthy(state().dashboard)
     test.falsy(state().bottom)
     test.falsy(test.find { id = "bottom-tab-lule" })
-    local panel = test.get("drawer-dashboard")
-    if morf.env("CAELESTIA_STYLE") ~= "tsugumori" then
-      test.eq(panel.width, 992) test.eq(panel.height, 588)
-    end
-    test.truthy(test.get("lule-wallpaper-card").width > test.get("lule-colors-card").width)
+    local panel = test.get("drawer-sidebar")
+    -- The panel's width is a side panel's: the cards stack, and the page
+    -- scrolls down to the controls.
+    test.truthy(test.get("lule-colors-card").y >= test.get("lule-wallpaper-card").y + test.get("lule-wallpaper-card").height)
     for _, id in ipairs { "lule-preview", "lule-color-15", "lule-cursor", "lule-apply", "lule-random-apply" } do
       local item = test.get(id)
       test.truthy(item.x >= panel.x and item.x + item.width <= panel.x + panel.width, id .. " overflows horizontally")
-      test.truthy(item.y >= panel.y and item.y + item.height <= panel.y + panel.height, id .. " overflows vertically")
     end
     test.eq(state().keyboard, "on_demand")
     test.wait(function() return state().preview end, 5000, "wallpaper preview")
@@ -74,7 +73,7 @@ test.describe("caelestia Lule", function()
     test.falsy(state().busy)
     test.falsy(state().failed, state().message)
     test.eq(lule_runs(), { { "lule", "create", "--image=" .. second, "--theme=light", "--palette=tonal", "--", "set" } })
-    test.click("dashboard-tab-dashboard") test.settle(700)
+    test.click("sidebar-tab-notifications") test.settle(700)
     test.falsy(state().active) test.falsy(state().preview)
     test.eq(state().keyboard, "none")
     test.eq(#test.logs("error"), 0)
@@ -97,9 +96,11 @@ test.describe("caelestia Lule", function()
   test.it("reports failure, permits retry, and cancels invalid selections", function()
     load({ 1920, 1080 })
     test.ipc("lule", "open") test.settle(800)
+    local page = test.get("lule-scroll")
+    test.wheel(0, 3000, { x = page.x + 40, y = page.y + 60 }) test.advance(500)
     local apply = test.get("lule-apply")
-    local panel = test.get("drawer-dashboard")
-    test.truthy(apply.y + apply.height < panel.y + panel.height, "Apply is outside the top panel")
+    local panel = test.get("drawer-sidebar")
+    test.truthy(apply.y + apply.height < panel.y + panel.height, "Apply is outside the panel")
     test.falsy(test.ipc("choose", root .. "/missing.png"))
     test.eq(#lule_runs(), 0)
     test.stub_run("lule", { code = 1, stderr = "Image could not be decoded" })
@@ -114,7 +115,7 @@ test.describe("caelestia Lule", function()
     test.falsy(state().active)
     test.ipc("lule", "open") test.settle(700)
     test.click("lule-folder") test.key("Escape") test.settle(700)
-    test.falsy(state().dashboard, "Escape from the path field did not close the top panel")
+    test.falsy(state().dashboard, "Escape from the path field did not close the panel")
     test.eq(state().keyboard, "none")
     test.eq(#test.logs("error"), 0)
   end)
@@ -140,9 +141,10 @@ test.describe("caelestia Lule", function()
     assert(morf.fs.write(added, png))
     test.click("lule-browse") test.settle(100)
     test.eq(state().count, 3, "Images used the stale file list")
-    test.click("dashboard-tab-dashboard") test.settle(700)
+    test.click("sidebar-tab-notifications") test.settle(700)
     assert(morf.fs.remove(added))
-    test.click("dashboard-tab-lule") test.settle(800)
+    -- Back on the settings the overview shows again; Lule is reopened.
+    test.ipc("lule", "open") test.settle(800)
     test.eq(state().count, 2, "reopening the tab did not refresh the folder")
     test.eq(#lule_runs(), 1, "browsing applied a wallpaper")
     test.eq(#test.logs("error"), 0)

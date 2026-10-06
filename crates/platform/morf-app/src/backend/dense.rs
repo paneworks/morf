@@ -3,17 +3,18 @@
 //! [`Dense`] wraps any backend and converts at its edge: sizes and pointer
 //! positions coming in are divided by each window's [`Zoom`], sizes, margins
 //! and regions going out multiplied, and the scale a window reports is the
-//! one [`Density`] picks for its panel. What is above it (the host, layout,
-//! Lua) never sees a compositor pixel; what is below it never sees one of
-//! morf's. Buffers keep the size the compositor shows, so nothing is
-//! stretched.
+//! one [`Density`] picks for its panel. Windows above it (the host, layout)
+//! never see a compositor pixel; what is below it never sees one of morf's.
+//! Outputs pass as the compositor tells them (a configuration's
+//! `morf.screens` converts them itself). Buffers keep the size the
+//! compositor shows, so nothing is stretched.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::os::fd::BorrowedFd;
 use std::sync::Arc;
 use std::time::Duration;
 
-use morf_value::density::{Density, Zoom, output_units, ppi};
+use morf_value::density::{Density, Zoom, ppi};
 use morf_value::region::{Rect, Region};
 
 use super::{Backend, Capabilities, PRIMARY_LAYER, RenderTarget, WindowKind, Woke};
@@ -25,15 +26,25 @@ use crate::{
 pub struct Dense<B: Backend + ?Sized = dyn Backend> {
     inner: Box<B>,
     density: Density,
-    /// The inner backend's outputs, sized in morf's pixels.
-    outputs: Vec<Output>,
-    screens: Vec<Output>,
     /// How dense the shell's own panel is.
     own_ppi: Option<f64>,
     /// Each layer's geometry in morf's pixels, and the conversion it was
     /// sent with: a layer opened before its scale and output were known is
     /// sent again once they are, and again when they change.
     layers: HashMap<u64, (LayerConfig, Zoom)>,
+    /// What a change of density says to the host before anything else: each
+    /// window's new scale and size, as if the compositor had sent them.
+    pending: VecDeque<Event>,
+}
+
+/// `MORF_DENSITY_LOG=1`: what density each window is seen at, and when it
+/// changes.
+fn log(line: impl FnOnce() -> String) {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("MORF_DENSITY_LOG").is_some_and(|v| v != "0")) {
+        eprintln!("morf: {}", line());
+    }
 }
 
 /// How dense `output`'s panel is.
@@ -50,16 +61,50 @@ fn output_ppi(output: &Output) -> Option<f64> {
 impl<B: Backend + ?Sized> Dense<B> {
     /// `inner`, seen at `density`.
     pub fn new(inner: Box<B>, density: Density) -> Self {
+        log(|| format!("density {density:?} at start"));
         let mut dense = Self {
             inner,
             density,
-            outputs: Vec::new(),
-            screens: Vec::new(),
             own_ppi: None,
             layers: HashMap::new(),
+            pending: VecDeque::new(),
         };
         dense.refresh();
         dense
+    }
+
+    /// The density it is seen at.
+    pub fn density(&self) -> Density {
+        self.density
+    }
+
+    /// Sees the backend at `density` from now on: every layer's geometry is
+    /// sent again in the new pixels, and each window's new scale and size
+    /// are queued for the host as the compositor's events would be.
+    pub fn set_density(&mut self, density: Density) {
+        if density == self.density {
+            return;
+        }
+        log(|| format!("density {:?} -> {density:?}", self.density));
+        self.density = density;
+        self.refresh();
+        self.follow_zoom();
+        let ids: Vec<u64> = self.layers.keys().copied().collect();
+        for id in ids {
+            let window = WindowId::Layer(id);
+            self.pending.push_back(Event::Scale { id, scale_120: self.scale_120(window) });
+            if let Some((width, height)) = self.logical_size(window) {
+                self.pending.push_back(Event::Configure { id, width, height });
+            }
+        }
+    }
+
+    /// Takes a layer the inner backend opened before this one saw it (the
+    /// shell's own, opened as the client connected), with its geometry in
+    /// morf's pixels, so a later change of density sends it again.
+    pub fn adopt_layer(&mut self, id: u64, config: LayerConfig) {
+        let zoom = self.zoom(WindowId::Layer(id));
+        self.layers.insert(id, (config, zoom));
     }
 
     /// The backend underneath, for what only it has.
@@ -71,43 +116,14 @@ impl<B: Backend + ?Sized> Dense<B> {
     }
 
     /// Reads the outputs again: they come and go, and change modes.
+    /// Reads again how dense the shell's own panel is: outputs come and go,
+    /// and change modes.
     fn refresh(&mut self) {
-        self.outputs = self
-            .inner
-            .outputs()
-            .iter()
-            .map(|o| self.output(o))
-            .collect();
-        self.screens = self
-            .inner
-            .screens()
-            .iter()
-            .map(|o| self.output(o))
-            .collect();
         self.own_ppi = self
             .inner
             .window_output(WindowId::Layer(PRIMARY_LAYER))
             .as_ref()
             .and_then(output_ppi);
-    }
-
-    /// `output`, its logical size in morf's pixels.
-    fn output(&self, output: &Output) -> Output {
-        let mut seen = output.clone();
-        let unsigned = |(a, b): (i32, i32)| Some((u32::try_from(a).ok()?, u32::try_from(b).ok()?));
-        if let (Some(pixels), Some(logical)) = (
-            output.pixels.and_then(unsigned),
-            output.size.and_then(unsigned),
-        ) {
-            let ((width, height), _) = output_units(
-                self.density,
-                pixels,
-                logical,
-                output.physical_size.and_then(unsigned),
-            );
-            seen.size = Some((width as i32, height as i32));
-        }
-        seen
     }
 
     /// Sends again the geometry of each layer whose conversion changed.
@@ -170,7 +186,12 @@ impl<B: Backend + ?Sized> Dense<B> {
         LayerConfig {
             width: zoom.size_out(config.width),
             height: zoom.size_out(config.height),
-            exclusive_zone: zoom.length_out(config.exclusive_zone),
+            // Negative zones are words, not lengths: -1 is "over the others'".
+            exclusive_zone: if config.exclusive_zone < 0 {
+                config.exclusive_zone
+            } else {
+                zoom.length_out(config.exclusive_zone)
+            },
             margin_top: zoom.length_out(config.margin_top),
             margin_right: zoom.length_out(config.margin_right),
             margin_bottom: zoom.length_out(config.margin_bottom),
@@ -237,12 +258,11 @@ impl<B: Backend + ?Sized> Dense<B> {
                     height,
                 }
             }
-            Event::Scale { id, scale_120 } => Event::Scale {
-                id,
-                scale_120: self
-                    .density
-                    .scale_120(self.ppi_of(WindowId::Layer(id)), scale_120),
-            },
+            Event::Scale { id, scale_120 } => {
+                let units = self.density.scale_120(self.ppi_of(WindowId::Layer(id)), scale_120);
+                log(|| format!("layer {id}: compositor scale {scale_120}/120, drawn at {units}/120"));
+                Event::Scale { id, scale_120: units }
+            }
             Event::AuxScale { role, scale_120 } => Event::AuxScale {
                 role,
                 scale_120: self.density.scale_120(self.ppi_of(role), scale_120),
@@ -335,9 +355,13 @@ impl<B: Backend + ?Sized> Dense<B> {
                     drop,
                 }
             }
-            Event::Screens(_) => {
+            // Outputs stay the compositor's: what is told of them (to a
+            // configuration, as `morf.screens`) is converted where it is told,
+            // and a size here that changed with the density would read as a
+            // monitor that changed.
+            Event::Screens(screens) => {
                 self.refresh();
-                Event::Screens(self.screens.clone())
+                Event::Screens(screens)
             }
             other => other,
         }
@@ -349,7 +373,7 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
         self.inner.capabilities()
     }
     fn outputs(&self) -> &[Output] {
-        &self.outputs
+        self.inner.outputs()
     }
     fn open(&mut self, id: WindowId, kind: WindowKind) -> Result<(), String> {
         let kind = match kind {
@@ -392,9 +416,7 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
         self.inner.buffer_size(id)
     }
     fn window_output(&self, id: WindowId) -> Option<Output> {
-        self.inner
-            .window_output(id)
-            .map(|output| self.output(&output))
+        self.inner.window_output(id)
     }
     fn request_frame(&self, id: WindowId) {
         self.inner.request_frame(id);
@@ -431,6 +453,9 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
         self.inner.render_target(id)
     }
     fn next_event(&mut self) -> Option<Event> {
+        if let Some(event) = self.pending.pop_front() {
+            return Some(event);
+        }
         let event = self.inner.next_event()?;
         // What a layer's conversion hangs on: its scale, and the output
         // it is on.
@@ -451,6 +476,9 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
         Some(event)
     }
     fn dispatch(&mut self, timeout: Option<Duration>) -> Result<bool, String> {
+        if !self.pending.is_empty() {
+            return Ok(true);
+        }
         self.inner.dispatch(timeout)
     }
 
@@ -478,19 +506,22 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
         timeout: Option<Duration>,
         wake: Option<BorrowedFd<'_>>,
     ) -> Result<Woke, String> {
+        if !self.pending.is_empty() {
+            return Ok(Woke::Queued);
+        }
         self.inner.wait(timeout, wake)
     }
     fn has_queued_events(&self) -> bool {
-        self.inner.has_queued_events()
+        !self.pending.is_empty() || self.inner.has_queued_events()
     }
     fn set_waker(&mut self, waker: fn()) {
         self.inner.set_waker(waker);
     }
     fn screens(&self) -> &[Output] {
-        &self.screens
+        self.inner.screens()
     }
     fn own_output(&self) -> Option<Output> {
-        self.inner.own_output().map(|output| self.output(&output))
+        self.inner.own_output()
     }
     fn physical_size(&self) -> (u32, u32) {
         self.inner.physical_size()

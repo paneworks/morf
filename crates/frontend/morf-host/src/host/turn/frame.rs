@@ -1,5 +1,6 @@
 //! The paint half of a turn: whether this turn paints, and the paint.
 
+use morf_app::Backend;
 use morf_app::{PRIMARY_LAYER, WindowId};
 use morf_lua::Runtime;
 use std::time::Instant;

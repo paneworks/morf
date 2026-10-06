@@ -60,7 +60,8 @@ local HOST=[[
     if index==5 and morf.env("TEST_REAL_WEATHER")=="1" then return require("dashboard_weather") end
     if index==4 and morf.env("TEST_REAL_BATTERY")=="1" then return require("dashboard_battery") end
     if not page_cache[index] then
-      local w,h=table.unpack(page_sizes[index])
+      -- (Every tab the one size: the shared dashboard page.)
+      local w,h=require("responsive").dashboard()
       local ctx=require("dashboard_state").context(index)
       local node=kit.card {id="test-page-"..index,width=w,height=h,
         kit.heading {id="test-title-"..index,x=20,y=20,text=model.tabs[index].name,active=ctx.opened},

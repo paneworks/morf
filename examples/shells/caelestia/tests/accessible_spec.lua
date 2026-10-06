@@ -42,7 +42,7 @@ local OPEN = {
   { "settings", ipc("utilities", "open") },
   { "notifications", ipc("sidebar", "open", "notifications") },
 }
-for _, key in ipairs { "dashboard", "media", "performance", "battery", "weather", "lule" } do
+for _, key in ipairs { "dashboard", "media", "perf", "battery", "weather", "terminal" } do
   OPEN[#OPEN + 1] = { "dashboard " .. key, tab("dashboard", key) }
 end
 for _, page in ipairs { "network", "bluetooth", "sound", "sound/equalizer", "sound/equalizer/audiogram", "microphone",
@@ -80,6 +80,6 @@ for _, style in ipairs { "material", "tsugumori" } do
     -- Headings Orca can walk by, named by their words.
     test.ipc("close") test.settle(500)
     test.ipc("utilities", "open") test.settle(900)
-    test.truthy(#test.accessible { role = "heading", name = "Controls" } > 0, "Settings has no Controls heading")
+    test.truthy(#test.accessible { role = "heading", name = "Settings" } > 0, "Settings has no Settings heading")
   end)
 end

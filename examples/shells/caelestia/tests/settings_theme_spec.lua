@@ -69,7 +69,9 @@ local HOST=[[
   ui.Item {width=W,height=H,
     ui.Rect {anchors={fill=true},color=function() return require("theme").color.surface end},
     ui.Item {x=12,y=12,width=W-24,height=H-24,visible=function() return shown:get() end,
-      model.page(W-24,function() return H-24 end)}}
+      -- (In the panel's frame, as the panel builds it: the title and the way back are the frame's.)
+      require("themes.layouts.page").frame {id="page-settings",width=W-24,height=function() return H-24 end,
+        title="Settings",title_id="settings-title",build=model.page}}}
   morf.ipc.open=function(on) open(on=="yes") end
   morf.ipc.select=function(key)
     if model.request then return model.request(key) end
@@ -227,14 +229,14 @@ test.it("Tsugumori Settings presents details under the cover and cancels interru
   shot("settings-covered-switch")
   test.advance(800)
   test.eq(test.ipc("state").displayed,"network")
-  test.truthy(test.get("settings-detail-heading-text").text~="NETWORK")
+  test.truthy(test.get("settings-title-text").text~="NETWORK")
   test.ipc("open","no") test.advance(100)
-  test.eq(test.get("settings-detail-heading-text").text,"NETWORK")
+  test.eq(test.get("settings-title-text").text,"NETWORK")
   test.eq(test.ipc("state").displayed,"network","closing flashed the overview")
   test.ipc("open","yes") test.advance(2500)
   test.eq(test.ipc("state").displayed,"")
   test.falsy(test.get("settings-page-curtain").visible)
-  test.eq(test.get("settings-title-text").text,"CONTROLS")
+  test.eq(test.get("settings-title-text").text,"SETTINGS")
   test.eq(#test.logs("error"),0)
 end)
 for _,style in ipairs {"material","tsugumori"} do

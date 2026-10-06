@@ -6,8 +6,9 @@ end
 local inspect=[[
   morf.ipc.inspect=function()
     local lule=require("lule_studio")
-    return {theme=require("themes").current.id,opened=require("dashboard").drawer.open:get(),
-      tab=require("dashboard").tab:get(),mode=lule.mode:get(),method=lule.method:get(),
+    -- Lule is a page of the quick settings: Settings, then Theme, then Lule.
+    return {theme=require("themes").current.id,opened=require("sidebar").drawer.open:get(),
+      tab=require("utilities").displayed:get(),mode=lule.mode:get(),method=lule.method:get(),
       folder_draft=lule.folder_draft:get(),busy=require("themes.switcher").busy:get(),
       font=require("theme").font,chosen_font=require("themes").font,
       stored_font=require("themes").preferences.get("font"),font_file=require("theme").font_file,
@@ -25,8 +26,8 @@ for _,pair in ipairs {{"material","tsugumori"},{"tsugumori","material"},{"tsugum
       morf.reload=function() end
       morf.broadcast=function() return false end
       morf.ipc.prepare=function(target)
-        local dashboard=require("dashboard")
-        dashboard.tab:set(6) dashboard.drawer.set(true)
+        local sidebar=require("sidebar")
+        sidebar.select("settings") require("utilities").request("theme/lule") sidebar.drawer.set(true)
         local lule=require("lule_studio")
         lule.mode:set("light") lule.method:set("tonal")
         lule.folder_draft:set("/unfinished folder")
@@ -38,6 +39,9 @@ for _,pair in ipairs {{"material","tsugumori"},{"tsugumori","material"},{"tsugum
     test.advance(400)
     test.truthy(test.ipc("prepare",pair[2]))
     test.advance(1000)
+    -- The theme and font choices are at the foot of the page: scroll there.
+    local page=test.get("lule-scroll")
+    test.wheel(0,3000,{x=page.x+40,y=page.y+60}) test.advance(500)
     if pair[3] then
       test.click("lule-font") test.advance(80)
       test.click("lule-font-search") test.type("goku") test.advance(80)
@@ -70,7 +74,7 @@ for _,pair in ipairs {{"material","tsugumori"},{"tsugumori","material"},{"tsugum
       test.eq(state.stored_font,"Goku") test.eq(state.font_file,"")
       test.truthy(test.find{text="GOKU",visible=true})
     end
-    test.truthy(state.opened) test.eq(state.tab,6) test.falsy(state.busy)
+    test.truthy(state.opened) test.eq(state.tab,"theme/lule") test.falsy(state.busy)
     test.eq(state.mode,"light") test.eq(state.method,"tonal")
     test.eq(state.folder_draft,"/unfinished folder")
     test.eq(test.get("lule-folder").text,"/unfinished folder")

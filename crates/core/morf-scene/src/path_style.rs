@@ -117,7 +117,9 @@ impl PathViewBox {
     }
 }
 
-/// Reads a dash list: lengths, dash then gap, none negative and not all zero.
+/// Reads a dash list: lengths, dash then gap. A negative length is none at
+/// all: a segment worked out from a size too small for it (a gauge on a
+/// narrow screen) draws nothing rather than failing the whole tree.
 pub fn path_dash(value: &Value) -> Result<Vec<f64>, String> {
     let items = match value {
         Value::Nil => return Ok(Vec::new()),
@@ -128,8 +130,8 @@ pub fn path_dash(value: &Value) -> Result<Vec<f64>, String> {
     let mut lengths = Vec::with_capacity(items.len());
     for item in items {
         match item {
-            Value::Number(length) if length.is_finite() && *length >= 0.0 => lengths.push(*length),
-            _ => return Err("dash lengths are non-negative numbers".to_owned()),
+            Value::Number(length) if length.is_finite() => lengths.push(length.max(0.0)),
+            _ => return Err("dash lengths are numbers".to_owned()),
         }
     }
     Ok(lengths)
