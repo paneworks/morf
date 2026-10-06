@@ -91,6 +91,7 @@ pub(crate) enum FieldVariant {
     Boxes,
     BoxesOpaque,
     Quad,
+    BoxesUniform,
 }
 
 impl FieldVariant {
@@ -107,7 +108,14 @@ impl FieldVariant {
                     layer.shape == Shape::Box
                         && (layer.morph <= 0.0 || layer.morph_to == Shape::Box)
                 }) {
-                    return if fading {
+                    return if fading
+                        && crate::field::same_fill(layers)
+                        && layers
+                            .iter()
+                            .all(|layer| layer.opacity <= 0.0 || layer.blend_group == 0)
+                    {
+                        Self::BoxesUniform
+                    } else if fading {
                         Self::Boxes
                     } else {
                         Self::BoxesOpaque
@@ -199,7 +207,10 @@ pub(crate) fn build_field_pipeline(
         "MORF_BOX_ONLY",
         if matches!(
             variant,
-            FieldVariant::Boxes | FieldVariant::BoxesOpaque | FieldVariant::Quad
+            FieldVariant::Boxes
+                | FieldVariant::BoxesOpaque
+                | FieldVariant::Quad
+                | FieldVariant::BoxesUniform
         ) {
             1.0
         } else {
@@ -214,12 +225,28 @@ pub(crate) fn build_field_pipeline(
             0.0
         },
     ));
+    constants.push((
+        "MORF_UNIFORM_COLOR",
+        if variant == FieldVariant::BoxesUniform {
+            1.0
+        } else {
+            0.0
+        },
+    ));
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("morf field pipeline layout"),
         bind_group_layouts: &[Some(layout), Some(shader_layout), textures, data],
         immediate_size: 0,
     });
-    let source = field_shader_source(include_str!("../field.wgsl"), user, owns_coverage, vertex)?;
+    let mut source =
+        field_shader_source(include_str!("../field.wgsl"), user, owns_coverage, vertex)?;
+    if variant == FieldVariant::BoxesUniform && device.features().contains(wgpu::Features::SUBGROUP)
+    {
+        source = source.replace(
+            "fn isolated_group(value: bool) -> bool { return false; }",
+            "fn isolated_group(value: bool) -> bool { return subgroupAll(value); }",
+        );
+    }
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("morf field shader"),
         source: wgpu::ShaderSource::Wgsl(source.into()),
@@ -374,7 +401,7 @@ mod variant_tests {
         let variant = |layer| FieldVariant::for_command(&field_command(node, vec![layer]));
         assert_eq!(variant(layer.clone()), FieldVariant::BoxesOpaque);
         layer.opacity = 0.5;
-        assert_eq!(variant(layer.clone()), FieldVariant::Boxes);
+        assert_eq!(variant(layer.clone()), FieldVariant::BoxesUniform);
         layer.opacity = 0.0;
         assert_eq!(variant(layer.clone()), FieldVariant::BoxesOpaque);
         layer.opacity = 1.0;

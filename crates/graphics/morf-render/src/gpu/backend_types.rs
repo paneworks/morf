@@ -154,6 +154,7 @@ pub struct WgpuBackend {
     pub(crate) field_boxes: wgpu::RenderPipeline,
     pub(crate) field_boxes_opaque: wgpu::RenderPipeline,
     pub(crate) field_quad: wgpu::RenderPipeline,
+    pub(crate) field_boxes_uniform: wgpu::RenderPipeline,
     pub(crate) field_layout: wgpu::BindGroupLayout,
     pub(crate) field_buffer: wgpu::Buffer,
     pub(crate) field_capacity: usize,

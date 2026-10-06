@@ -57,6 +57,53 @@ pub fn opacity_masks(layers: &[SdfLayer]) -> (u32, u32) {
     (absent, fading)
 }
 
+/// Fade weights and omitted-layer masks are uniform across the whole field.
+/// Work them out once per draw instead of finding subsets in every fragment.
+fn fade_combinations(layers: &[SdfLayer], absent: u32, fading: u32) -> ([[f32; 4]; 8], usize) {
+    let which: Vec<_> = (0..layers.len().min(MAX_FIELD_LAYERS))
+        .filter(|index| fading & (1 << index) != 0)
+        .take(3)
+        .collect();
+    let count = 1 << which.len();
+    let mut combinations = [[0.0; 4]; 8];
+    for (subset, part) in combinations.iter_mut().enumerate().take(count) {
+        let mut weight = 1.0;
+        let mut omit = absent;
+        for (slot, &index) in which.iter().enumerate() {
+            // Match the shader's stored fade and subtraction exactly.
+            let opacity = 1.0 - (1.0 - layers[index].opacity.clamp(0.0, 1.0));
+            if subset & (1 << slot) != 0 {
+                weight *= opacity;
+            } else {
+                weight *= 1.0 - opacity;
+                omit |= 1 << index;
+            }
+        }
+        *part = [weight, omit as f32, 0.0, 0.0];
+    }
+    (combinations, count)
+}
+
+/// Invisible layers and cuts bring no colour to the painted surface.
+/// They must not prevent filling solid tiles without evaluating the field.
+pub(crate) fn same_fill(layers: &[SdfLayer]) -> bool {
+    layers.first().is_some_and(|first| {
+        layers
+            .iter()
+            .take(MAX_FIELD_LAYERS)
+            .enumerate()
+            .all(|(index, layer)| {
+                layer.opacity <= 0.0
+                    || layer.color == first.color
+                    || (index > 0
+                        && !matches!(
+                            layer.operation,
+                            Operation::Union | Operation::SmoothUnion | Operation::Xor
+                        ))
+            })
+    })
+}
+
 /// The inverse of a layer's linear map and how much it shrinks a distance.
 ///
 /// A distance measured in the shape's own frame is multiplied by the map's
@@ -120,12 +167,12 @@ impl BorderAlignment {
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug, Default, PartialEq)]
 pub struct SdfFieldMaterial {
-    /// `[alignment, antialiased, unused, unused]`. The width itself rides in
+    /// `[alignment, antialiased, union-only, unused]`. The width itself rides in
     /// the instance's `style.x`, where the host already needs it to size the
     /// quad the field is drawn into.
     pub border: [f32; 4],
     pub border_color: [f32; 4],
-    /// `[offset x, offset y, inner, unused]`.
+    /// `[offset x, offset y, inner, fade combination count]`.
     pub shadow: [f32; 4],
     pub shadow_color: [f32; 4],
     /// `[absent layers, shadow blur, shadow spread, fading layers]`: the
@@ -144,6 +191,8 @@ pub struct SdfFieldMaterial {
     pub color_overlay: [f32; 4],
     /// The rectangle a gradient is measured across, in the field's own space.
     pub shape: [f32; 4],
+    /// Per fade subset: weight then omitted-layer mask.
+    pub fade_combinations: [[f32; 4]; 8],
 }
 
 impl SdfFieldMaterial {
@@ -250,6 +299,7 @@ impl SdfFieldInstance {
         // shader leaves out the first and mixes the field with and without
         // each of the second.
         let (absent, fading) = opacity_masks(sources);
+        let (fade_combinations, fade_count) = fade_combinations(sources, absent, fading);
         for layer in sources.iter().take(MAX_FIELD_LAYERS) {
             let outline = polygon_params(layer, scale, outlines, text, drawings);
             let (frame, distance_scale) = layer_frame(layer.matrix);
@@ -296,13 +346,25 @@ impl SdfFieldInstance {
         // sits inside it, but both are the one outline the shader now has, and
         // either can say which it wants.
         materials.push(SdfFieldMaterial {
-            border: [stroke_alignment.code(), 1.0, 0.0, 0.0],
+            border: [
+                stroke_alignment.code(),
+                1.0,
+                if sources.iter().enumerate().all(|(index, layer)| {
+                    index == 0
+                        || matches!(layer.operation, Operation::Union | Operation::SmoothUnion)
+                }) {
+                    1.0
+                } else {
+                    0.0
+                },
+                0.0,
+            ],
             border_color: color_array(*stroke_color),
             shadow: [
                 (shadow_offset_x * scale) as f32,
                 (shadow_offset_y * scale) as f32,
                 if *shadow_inner { 1.0 } else { 0.0 },
-                0.0,
+                fade_count as f32,
             ],
             shadow_color: color_array(*shadow_color),
             effects: [
@@ -316,6 +378,7 @@ impl SdfFieldInstance {
             gradient_positions,
             gradient_colors,
             color_overlay: color_array(*color_overlay),
+            fade_combinations,
             shape: [
                 0.0,
                 0.0,

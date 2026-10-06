@@ -32,6 +32,12 @@ fs.read = function(filename, limit)
   return morf.fs.read(filename, limit)
 end
 
+-- Long proc tables also cost CPU time. Leave a turn for input between
+-- small groups of rows, just as file reads leave a turn while I/O runs.
+local function yield_sample()
+  if jobs[coroutine.running()] then coroutine.yield(false) end
+end
+
 local function sample_async(sample, done)
   local thread = coroutine.create(function()
     local self = coroutine.running()
@@ -49,6 +55,7 @@ local function sample_async(sample, done)
       done(value.value, value.error, value.pushes)
       return
     end
+    if value == false then morf.timer(1, resume, false) return end
     local submitted, err = morf.fs.read_async({ value }, function(success, contents)
       if success and type(contents[1]) == "string" then resume(contents[1])
       else resume(nil, "cannot read " .. value) end
@@ -891,6 +898,7 @@ end
 
 -- The mapper name of a dm-N device ("sys-arch"), or nil.
 local function dm_name(name)
+  if not name:match("^dm%-%d+$") then return nil end
   return text_at("/sys/block/" .. name .. "/dm/name")
 end
 
@@ -931,18 +939,27 @@ local function sample_drives()
   local now = morf.time.now()
   local dt = last_io_at and now - last_io_at or nil
   local io = {}
-  for name, rd, wr, ticks in text:gmatch(
-    "\n?%s*%d+%s+%d+%s+(%S+)%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+(%d+)") do
-    local now_io = { read = tonumber(rd) * SECTOR, write = tonumber(wr) * SECTOR, ticks = tonumber(ticks) }
-    local before = last_io[name]
-    local rates = { read_total = now_io.read, write_total = now_io.write, read_rate = 0, write_rate = 0, busy = 0 }
-    if before and dt and dt > 0 and now_io.read >= before.read and now_io.write >= before.write then
-      rates.read_rate = (now_io.read - before.read) / dt
-      rates.write_rate = (now_io.write - before.write) / dt
-      rates.busy = math.min(100, 100 * (now_io.ticks - before.ticks) / 1000 / dt)
+  -- Match once from each line's start. Modern kernels append discard/flush
+  -- counters; a global partial match would retry the disk prefix at every
+  -- character of those trailing counters, stalling the UI on partitioned UFS.
+  local rows = 0
+  for line in text:gmatch("[^\n]+") do
+    rows = rows + 1
+    if rows % 8 == 0 then yield_sample() end
+    local name, rd, wr, ticks = line:match(
+      "^%s*%d+%s+%d+%s+(%S+)%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+(%d+)")
+    if name then
+      local now_io = { read = tonumber(rd) * SECTOR, write = tonumber(wr) * SECTOR, ticks = tonumber(ticks) }
+      local before = last_io[name]
+      local rates = { read_total = now_io.read, write_total = now_io.write, read_rate = 0, write_rate = 0, busy = 0 }
+      if before and dt and dt > 0 and now_io.read >= before.read and now_io.write >= before.write then
+        rates.read_rate = (now_io.read - before.read) / dt
+        rates.write_rate = (now_io.write - before.write) / dt
+        rates.busy = math.min(100, 100 * (now_io.ticks - before.ticks) / 1000 / dt)
+      end
+      io[name] = rates
+      last_io[name] = now_io
     end
-    io[name] = rates
-    last_io[name] = now_io
   end
   last_io_at = now
   local mounts, swaps = read_mounts()
@@ -966,7 +983,8 @@ local function sample_drives()
   local names = {}
   for name in pairs(io) do names[#names + 1] = name end
   table.sort(names)
-  for _, name in ipairs(names) do
+  for index, name in ipairs(names) do
+    if index % 8 == 0 then yield_sample() end
     if is_drive(name) and fs.exists(path("/sys/block/" .. name)) then
       local base = "/sys/block/" .. name
       local drive = { name = name, units = {} }

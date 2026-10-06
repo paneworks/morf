@@ -255,7 +255,8 @@ async fn open_device(
             wgpu::Features::DUAL_SOURCE_BLENDING
         } else {
             wgpu::Features::empty()
-        } | super::super::profile::features(&adapter),
+        } | super::super::profile::features(&adapter)
+            | (adapter.features() & wgpu::Features::SUBGROUP),
         required_limits: adapter_limits.clone(),
         ..Default::default()
     };

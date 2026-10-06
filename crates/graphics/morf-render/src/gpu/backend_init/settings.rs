@@ -136,6 +136,7 @@ impl WgpuBackend {
         self.field_boxes = specialised(FieldVariant::Boxes);
         self.field_boxes_opaque = specialised(FieldVariant::BoxesOpaque);
         self.field_quad = specialised(FieldVariant::Quad);
+        self.field_boxes_uniform = specialised(FieldVariant::BoxesUniform);
         self.shaders.clear();
         self.effect_shaders.clear();
         self.shader_instances.clear();

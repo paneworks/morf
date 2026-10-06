@@ -50,10 +50,13 @@ test.it("diskstats inventories disks, partitions and mapper holders without scan
   test.load("sysinfo_poll_spec.lua",{source=[[
     local fs=morf.fs
     local values={
-      ["/proc/diskstats"]=" 8 0 sda 1 0 10 0 1 0 20 0 0 1\n 8 1 sda1 1 0 10 0 1 0 20 0 0 1\n 253 0 dm-0 1 0 10 0 1 0 20 0 0 1\n 179 0 mmcblk0 1 0 10 0 1 0 20 0 0 1\n 179 1 mmcblk0p1 1 0 10 0 1 0 20 0 0 1\n",
+      ["/proc/diskstats"]=" 8 0 sda 1 0 10 0 1 0 20 0 0 1 0 0 0 0 0 0 0\n 8 1 sda1 1 0 10 0 1 0 20 0 0 1 0 0 0 0 0 0 0\n 253 0 dm-0 1 0 10 0 1 0 20 0 0 1 0 0 0 0 0 0 0\n 179 0 mmcblk0 1 0 10 0 1 0 20 0 0 1 0 0 0 0 0 0 0\n 179 1 mmcblk0p1 1 0 10 0 1 0 20 0 0 1 0 0 0 0 0 0 0\n",
       ["/sys/block/dm-0/dm/name"]="cryptroot",
     }
-    fs.read=function(p) return values[p] end
+    fs.read=function(p)
+      assert(not p:match("^/sys/block/[^/]+/dm/name$") or p=="/sys/block/dm-0/dm/name", "mapper lookup on physical disk: "..p)
+      return values[p]
+    end
     fs.exists=function(p) return p=="/sys/block/sda" or p=="/sys/block/mmcblk0"
       or p=="/sys/block/sda/sda1" or p=="/sys/block/mmcblk0/mmcblk0p1" end
     fs.lines=function(p) if p=="/proc/mounts" then return {"/dev/mapper/cryptroot / ext4 rw 0 0"} end return {} end
@@ -71,4 +74,28 @@ test.it("diskstats inventories disks, partitions and mapper holders without scan
   test.eq(drives[2].name,"sda") test.truthy(drives[2].system)
   test.eq(drives[2].units[1].name,"sda1") test.eq(drives[2].units[2].name,"dm-0")
   test.eq(#test.logs("error"),0)
+end)
+
+
+test.it("a large diskstats table leaves input turns while it is parsed",function()
+  test.load("sysinfo_poll_spec.lua",{source=[[
+    local rows={}
+    for i=1,256 do rows[i]=" 7 "..i.." loop"..i.." 1 0 10 0 1 0 20 0 0 1 0 0 0 0 0 0 0" end
+    local fs=morf.fs
+    fs.read_async=function(paths,callback)
+      morf.timer(1,function() callback(true,{table.concat(rows,"\n")}) end,false)
+      return true
+    end
+    fs.lines=function() return {} end
+    fs.exists=function() return false end
+    local sys=require("lib.services.sysinfo")
+    local completed_at_beat
+    sys.sources.drives:refresh()
+    morf.timer(4,function() completed_at_beat=sys.sources.drives.samples > 0 end,false)
+    morf.ipc.state=function() return {early=completed_at_beat,samples=sys.sources.drives.samples,error=sys.sources.drives.error} end
+    require("morf.ui").Item{width=1,height=1}
+  ]]})
+  test.advance(400)
+  local s=test.ipc("state")
+  test.eq(s.early,false) test.eq(s.samples,1) test.falsy(s.error)
 end)

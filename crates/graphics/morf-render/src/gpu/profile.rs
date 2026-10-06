@@ -27,7 +27,15 @@ pub(crate) fn wanted() -> bool {
 pub(crate) fn features(adapter: &wgpu::Adapter) -> wgpu::Features {
     let needed = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
     if wanted() && adapter.features().contains(needed) {
-        needed
+        if std::env::var_os("MORF_GPU_PROFILE_COMMANDS").is_some()
+            && adapter
+                .features()
+                .contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
+        {
+            needed | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES
+        } else {
+            needed
+        }
     } else {
         wgpu::Features::empty()
     }
@@ -39,6 +47,8 @@ pub(crate) struct GpuProfile {
     resolved: wgpu::Buffer,
     readback: wgpu::Buffer,
     period: f32,
+    detailed: bool,
+    draws: std::sync::Mutex<Vec<usize>>,
 }
 
 impl GpuProfile {
@@ -48,7 +58,10 @@ impl GpuProfile {
         if !wanted() || !device.features().contains(needed) {
             return None;
         }
-        let count = MARKS.len() as u32;
+        let detailed = device
+            .features()
+            .contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
+        let count = if detailed { 4096 } else { MARKS.len() as u32 };
         let size = u64::from(count) * 8;
         Some(Self {
             queries: device.create_query_set(&wgpu::QuerySetDescriptor {
@@ -69,18 +82,46 @@ impl GpuProfile {
                 mapped_at_creation: false,
             }),
             period: queue.get_timestamp_period(),
+            detailed,
+            draws: std::sync::Mutex::new(Vec::new()),
         })
     }
 
     /// Writes timestamp `index` (into `MARKS`) where the encoder has got to.
     pub(crate) fn mark(&self, encoder: &mut wgpu::CommandEncoder, index: usize) {
+        if index == 0 {
+            self.draws.lock().unwrap().clear();
+        }
         encoder.write_timestamp(&self.queries, index as u32);
+    }
+
+    pub(crate) fn begin_draw(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        command: usize,
+    ) -> Option<u32> {
+        if !self.detailed {
+            return None;
+        }
+        let mut draws = self.draws.lock().unwrap();
+        let index = MARKS.len() as u32 + draws.len() as u32 * 2;
+        if index + 1 >= 4096 {
+            return None;
+        }
+        draws.push(command);
+        pass.write_timestamp(&self.queries, index);
+        Some(index + 1)
+    }
+
+    pub(crate) fn end_draw(&self, pass: &mut wgpu::RenderPass<'_>, index: u32) {
+        pass.write_timestamp(&self.queries, index);
     }
 
     /// Copies the timestamps out, at the end of the frame's encoder.
     pub(crate) fn resolve(&self, encoder: &mut wgpu::CommandEncoder) {
-        encoder.resolve_query_set(&self.queries, 0..MARKS.len() as u32, &self.resolved, 0);
-        encoder.copy_buffer_to_buffer(&self.resolved, 0, &self.readback, 0, self.resolved.size());
+        let count = MARKS.len() as u32 + self.draws.lock().unwrap().len() as u32 * 2;
+        encoder.resolve_query_set(&self.queries, 0..count, &self.resolved, 0);
+        encoder.copy_buffer_to_buffer(&self.resolved, 0, &self.readback, 0, u64::from(count) * 8);
     }
 
     /// Waits for the frame and prints what each stage took, and what the
@@ -116,15 +157,34 @@ impl GpuProfile {
                 format!("{name} {ms:.2}")
             })
             .collect();
-        let total = stamps.last().unwrap_or(&0).saturating_sub(stamps[0]) as f64
-            * f64::from(self.period)
-            / 1e6;
+        let total =
+            stamps[MARKS.len() - 1].saturating_sub(stamps[0]) as f64 * f64::from(self.period) / 1e6;
         eprintln!(
             "{} gpu profile {total:.2} ms for {pixels} damaged px: {}; {commands} commands shade {shaded} px ({:.1}x), most {heaviest}",
             super::present::stamp(),
             parts.join(", "),
             *shaded as f64 / (*pixels).max(1) as f64,
         );
+        if self.detailed {
+            let mut times = std::collections::BTreeMap::<usize, f64>::new();
+            for (index, command) in self.draws.lock().unwrap().iter().enumerate() {
+                let first = MARKS.len() + index * 2;
+                *times.entry(*command).or_default() +=
+                    stamps[first + 1].saturating_sub(stamps[first]) as f64 * f64::from(self.period)
+                        / 1e6;
+            }
+            let mut times: Vec<_> = times.into_iter().collect();
+            times.sort_by(|a, b| b.1.total_cmp(&a.1));
+            eprintln!(
+                "gpu commands: {}",
+                times
+                    .iter()
+                    .take(8)
+                    .map(|(id, ms)| format!("#{id} {ms:.2} ms"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
     }
 }
 
@@ -181,7 +241,38 @@ impl Shading {
                 let name = format!("{:?}", list.commands[*index]);
                 let kind = name.split([' ', '{', '(']).next().unwrap_or("?");
                 let inside = if layered(*index) { " in a layer" } else { "" };
-                format!("{kind}#{index}{inside} {total}")
+                let detail = match &list.commands[*index] {
+                    crate::DrawCommand::Field {
+                        layers,
+                        gradient,
+                        shadow_color,
+                        ..
+                    } => {
+                        let shapes: Vec<_> = layers
+                            .iter()
+                            .filter(|l| l.opacity > 0.0)
+                            .map(|l| format!("{:?}:{:.2}", l.shape, l.opacity))
+                            .collect();
+                        format!(
+                            "({:?},[{}],gradient={},shadow={})",
+                            super::field_pass::FieldVariant::for_command(&list.commands[*index]),
+                            shapes.join("/"),
+                            gradient.is_some(),
+                            shadow_color.alpha > 0.0
+                        )
+                    }
+                    crate::DrawCommand::Quad {
+                        gradient,
+                        shadow_color,
+                        ..
+                    } => format!(
+                        "(gradient={},shadow={})",
+                        gradient.is_some(),
+                        shadow_color.alpha > 0.0
+                    ),
+                    _ => String::new(),
+                };
+                format!("{kind}#{index}{inside} {total}{detail}")
             })
             .collect::<Vec<_>>()
             .join(", ");
