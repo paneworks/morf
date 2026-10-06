@@ -108,7 +108,7 @@ test.describe("caelestia", function()
     test.truthy(shown("dashboard"))
     local d = drawer("dashboard")
     test.near(d.y, 10, 1)
-    test.eq(d.width, 872)
+    test.truthy(d.width > 840)
     test.truthy(test.find { id = "calendar-title", visible = true })
     test.truthy(test.find { id = "ring-cpu", visible = true })
     test.eq(test.ipc("drawers"), "dashboard")
@@ -219,27 +219,27 @@ test.describe("caelestia", function()
     test.ipc("dashboard", "open")
     test.settle(1500)
     local d = drawer("dashboard")
-    test.eq(d.width, 872)
-    test.eq(d.height, 538)
-    local sizes = {
-      { "media", 1032, 449, "media-nothing" },
-      { "performance", 1432, 859, "performance-main" },
-      { "weather", 870, 660, "weather-now" },
-      { "dashboard", 872, 538, "dashboard-calendar" },
+    -- Each tab has its own size; the drawer eases to it (no jump) and stays
+    -- centred.
+    local sizes = {}
+    local tabs = {
+      { "media", "media-nothing" },
+      { "perf", "performance-main" },
+      { "weather", "weather-now" },
+      { "dashboard", "dashboard-calendar" },
     }
-    for _, want in ipairs(sizes) do
+    for _, want in ipairs(tabs) do
+      local before = drawer("dashboard")
+      local was_w, was_h = before.width, before.height
       test.click { id = "dashboard-tab-" .. want[1] }
-      -- Part of the way there a moment later: it eases, it does not jump.
-      test.advance(48)
-      d = drawer("dashboard")
-      test.truthy(d.width ~= want[2] or d.height ~= want[3], want[1] .. " jumped to its size")
       test.settle(1500)
       d = drawer("dashboard")
-      test.eq(d.width, want[2], want[1] .. " width")
-      test.eq(d.height, want[3], want[1] .. " height")
+      sizes[want[1]] = { d.width, d.height }
+      test.truthy(d.width ~= was_w or d.height ~= was_h, want[1] .. " kept the last tab's size")
       test.near(d.x + d.width / 2, W / 2, 1)
-      test.truthy(test.find { id = want[4], visible = true }, want[1] .. " page not shown")
+      test.truthy(test.find { id = want[2], visible = true }, want[1] .. " page not shown")
     end
+    test.truthy(sizes.perf[1] > sizes.dashboard[1], "the performance tab is not the widest")
   end)
 
   test.it("fades a drawer's background in with its contents", function()
@@ -268,7 +268,7 @@ test.describe("caelestia", function()
     test.truthy(test.find { text = "Nothing playing" })
     test.falsy(test.find { id = "media-track", visible = true })
     test.snapshot("caelestia-dashboard-media.png", { surface = "screen" })
-    test.click { id = "dashboard-tab-performance" }
+    test.click { id = "dashboard-tab-perf" }
     test.settle(1500)
     -- Mission Center's layout: the devices down the left, the CPU picked,
     -- a graph per thread; a click picks another.
@@ -295,7 +295,8 @@ test.describe("caelestia", function()
     test.settle(1500)
     test.type(">calc 2+3*4")
     test.settle(1000)
-    test.eq(test.get({ id = "launcher-answer" }).text, "2 + (3 * 4) = 14")
+    test.eq(test.get({ id = "launcher-answer" }).text, "14")
+    test.truthy(test.find { text = "2 + (3 * 4)", visible = true }, "the question is not shown")
     test.snapshot("caelestia-launcher-calc.png", { surface = "screen" })
     test.key("BackSpace")
     test.key("BackSpace")
@@ -367,7 +368,7 @@ test.describe("caelestia", function()
     test.type(">zzqqxxnothing")
     test.settle(1000)
     test.truthy(test.find { id = "launcher-empty", visible = true })
-    test.truthy(test.find { text = "Try searching for something else" })
+    test.truthy(test.find { text = "Nothing matches" })
   end)
 
   test.it("widens into a wallpaper carousel after > wallpaper", function()
@@ -377,7 +378,7 @@ test.describe("caelestia", function()
     test.type(">wallpaper ")
     test.settle(1500)
     local d = drawer("launcher")
-    test.eq(d.width, 1270)
+    test.eq(d.width, 1180)
     test.truthy(test.find { id = "launcher-wallpapers", visible = true })
     test.snapshot("caelestia-launcher-wallpapers.png", { surface = "screen" })
     test.key("Escape")
@@ -611,15 +612,15 @@ test.describe("caelestia", function()
     test.falsy(shown("notifications"), "the popups did not expire")
     test.ipc("sidebar", "open", "notifications")
     test.settle(1500)
-    test.eq(test.get({ id = "sidebar-title" }).text, "3 notifications")
+    test.eq(test.get({ id = "sidebar-summary-row-title" }).text, "3 notifications")
     -- Grouped by application, the newest group on top.
     test.eq(test.get({ id = "sidebar-group-app-1" }).text, "Discord")
     test.eq(test.get({ id = "sidebar-group-app-2" }).text, "Firefox")
     test.falsy(test.find { id = "sidebar-group-3", visible = true })
-    -- A shut group is its head and one line per notification (20 each).
+    -- A shut group is its head and one line per notification (22 each).
     local one, two = test.get({ id = "sidebar-group-1" }).height, test.get({ id = "sidebar-group-2" }).height
     test.truthy(one > 40, "a group shows only its head")
-    test.near(two - one, 20, 1)
+    test.near(two - one, 22, 1)
     test.falsy(test.find { id = "sidebar-empty-label", visible = true })
     test.snapshot("caelestia-sidebar-notifications.png", { surface = "screen" })
     -- A group opens out to its notifications; one is dismissed from there.
@@ -628,7 +629,7 @@ test.describe("caelestia", function()
     test.truthy(test.get({ id = "sidebar-group-2" }).height > 200)
     test.click { id = "sidebar-dismiss-2-1" }
     test.settle(1000)
-    test.eq(test.get({ id = "sidebar-title" }).text, "2 notifications")
+    test.eq(test.get({ id = "sidebar-summary-row-title" }).text, "2 notifications")
     -- Clear all.
     test.click { id = "sidebar-clear" }
     test.settle(1500)

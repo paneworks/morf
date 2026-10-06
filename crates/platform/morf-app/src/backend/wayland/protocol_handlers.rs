@@ -52,10 +52,28 @@ pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> O
         size,
         physical_size: (info.physical_size.0 > 0 && info.physical_size.1 > 0)
             .then_some(info.physical_size),
+        pixels: mode.filter(|(w, h)| *w > 0 && *h > 0).map(|(w, h)| {
+            if turned(info.transform) {
+                (h, w)
+            } else {
+                (w, h)
+            }
+        }),
         scale: info.scale_factor,
         transform: output_transform_name(info.transform),
         subpixel: output_subpixel_name(info.subpixel),
     }
+}
+
+/// Whether `transform` shows the output on its side.
+fn turned(transform: wl_output::Transform) -> bool {
+    matches!(
+        transform,
+        wl_output::Transform::_90
+            | wl_output::Transform::_270
+            | wl_output::Transform::Flipped90
+            | wl_output::Transform::Flipped270
+    )
 }
 
 /// xdg-output reports dimensions already transformed and scaled. Only use
@@ -70,13 +88,7 @@ pub(crate) fn output_logical_size(
         return Some(size);
     }
     let (mut width, mut height) = mode.filter(|(w, h)| *w > 0 && *h > 0)?;
-    if matches!(
-        transform,
-        wl_output::Transform::_90
-            | wl_output::Transform::_270
-            | wl_output::Transform::Flipped90
-            | wl_output::Transform::Flipped270
-    ) {
+    if turned(transform) {
         std::mem::swap(&mut width, &mut height);
     }
     let scale = i64::from(scale.max(1));

@@ -74,7 +74,7 @@ test.describe("caelestia graph history", function()
     test.advance(800)
     test.eq(points("battery-graph-charge"), #history("bat:BAT0:percent"),
       "opening the battery graph lost the samples collected while hidden")
-    test.click("dashboard-tab-performance")
+    test.click("dashboard-tab-perf")
     test.advance(800)
     test.eq(points("performance-cpu-graph"), #history("cpu"),
       "opening performance lost the samples collected while hidden")

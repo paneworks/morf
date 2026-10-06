@@ -375,7 +375,7 @@ pub(crate) fn drawn_extent(
     let top = (reach.y0 * scale_y + offset_y - margin).max(-margin);
     let right = (reach.x1 * scale_x + offset_x + margin).min(logical.0 + margin);
     let bottom = (reach.y1 * scale_y + offset_y + margin).min(logical.1 + margin);
-    (left.is_finite() && top.is_finite() && right > left && bottom > top).then(|| Geometry {
+    (left.is_finite() && top.is_finite() && right > left && bottom > top).then_some(Geometry {
         x: left,
         y: top,
         width: right - left,

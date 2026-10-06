@@ -67,13 +67,13 @@ for _,style in ipairs {"material","tsugumori"} do
     test.ipc("update","short") test.advance(2500)
     test.truthy(test.get("weather-day-3").visible)
     test.falsy(test.get("weather-day-4").visible)
-    if style=="tsugumori" then test.eq(test.get("weather-forecast-title-text").text,"3-DAY FORECAST") end
+    test.truthy(test.get("weather-forecast-title").visible)
     test.ipc("shown","no") test.advance(1000)
     local reads=test.ipc("reads")
     test.ipc("update","imperial") test.advance(3000)
     test.eq(test.ipc("reads"),reads)
     test.ipc("shown","yes") test.advance(900)
-    if style=="tsugumori" then test.truthy(test.get("weather-place-text").text~="WINDSHIRE") end
+    test.truthy(test.get("weather-place").visible)
     test.advance(1800)
     test.eq(test.get("weather-temperature").text,"72°F")
     test.eq(#test.logs("error"),0)

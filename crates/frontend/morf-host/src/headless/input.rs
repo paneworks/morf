@@ -4,6 +4,7 @@
 //!
 //! Split from `headless` at the line gate.
 
+use morf_app::Backend;
 use std::time::Duration;
 
 use morf_app::backend::headless::VirtualSeat;

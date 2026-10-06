@@ -59,7 +59,9 @@ pub enum Turn {
 /// One output's windows on a backend.
 pub struct Host {
     pub name: String,
-    pub backend: Box<dyn Backend>,
+    /// The window system, seen in morf's pixels (a no-op while the density
+    /// is the compositor's), so a change of density reaches it live.
+    pub backend: Box<morf_app::Dense>,
     /// The desktop protocols, where the backend is a compositor.
     pub desktop: Option<Desktop>,
     pub state: SurfaceEventState,
@@ -210,6 +212,12 @@ impl Host {
             apply_idle_timeouts(runtime, desktop);
         }
         apply_shortcuts_inhibit(runtime, &mut *self.backend);
+        if let Some(density) = runtime.take_density_change() {
+            // A scale slider: every window is told its new scale and size,
+            // and lays itself out again at them.
+            self.backend.set_density(density);
+            repaint = true;
+        }
         if runtime.take_layer_surface_change() {
             self.layer_surface_changed(runtime)?;
             // The mask lives in the same configuration and is re-derived when

@@ -38,7 +38,9 @@
 # AWWW_BIN, INTER_DIR, WTYPE (tools taken from these when not on PATH),
 # CAELESTIA, CAELESTIA_PKG, CAEL_CONFIG (a shell.json to seed), CAEL_SCHEME (a
 # scheme.json to seed; without one caelestia keeps its built-in palette),
-# NIXGL (GL wrapper for the nix-built Quickshell, default nixGLIntel), A11Y
+# NIXGL (GL wrapper for the nix-built Quickshell, default nixGLIntel), NESTED_SCALE
+# (the visible window's output scale), POINTER_SIZE ("W H" of the virtual
+# pointer's area, default "1920 1080"), A11Y
 # (an AT-SPI bus, enabled, on the private session bus).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -127,6 +129,10 @@ fi
 # same compositor effects.
 cat > "$H/hyprland.lua" <<'HYPR'
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
+HYPR
+# NESTED_SCALE: the visible window's scale (a phone's 2 or 3).
+[ -n "${NESTED_SCALE:-}" ] && echo "hl.monitor({ output = \"\", mode = \"preferred\", position = \"auto\", scale = $NESTED_SCALE })" >> "$H/hyprland.lua"
+cat >> "$H/hyprland.lua" <<'HYPR'
 hl.config({
   general = { gaps_in = 5, gaps_out = 10, border_size = 2, layout = "dwindle" },
   decoration = { rounding = 22, shadow = { enabled = false },
@@ -211,7 +217,7 @@ k() { timeout 20 "$WTYPE" "\$@" >> \$OUT/input.log 2>&1; }
 # The pointer is the nested compositor's alone: one virtual pointer on its
 # socket for the whole run (vpointer.py), fed through a FIFO.
 mkfifo \$RUN/pointer
-python3 "$HERE/vpointer.py" \$RUN/pointer 1920 1080 >> \$OUT/input.log 2>&1 &
+python3 "$HERE/vpointer.py" \$RUN/pointer ${POINTER_SIZE:-1920 1080} >> \$OUT/input.log 2>&1 &
 VP=\$!
 pointer() { timeout 5 sh -c 'echo "\$1" > \$2' _ "\$1" \$RUN/pointer; }
 point() { asked point; pointer "to \$1 \$2"; }

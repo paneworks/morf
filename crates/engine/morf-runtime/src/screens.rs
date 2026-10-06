@@ -13,6 +13,8 @@ pub struct Screen {
     pub width: Option<i32>,
     pub height: Option<i32>,
     pub physical_size: Option<(i32, i32)>,
+    /// The current mode in device pixels, as shown.
+    pub pixels: Option<(i32, i32)>,
     pub scale: i32,
     pub transform: String,
 }

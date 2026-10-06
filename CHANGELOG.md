@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.4] - 2026-10-06
+
+### <!-- 0 -->⛰️  Features
+
+- Redesigned launcher
+- One core scale for every window, chosen by the configuration
+
+### <!-- 5 -->🎨 Styling
+
+- Bool::then_some where the value is already made (clippy)
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Theme
+
 ## [0.2.3] - 2026-10-05
 
 ### <!-- 0 -->⛰️  Features

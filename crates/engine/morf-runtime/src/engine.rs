@@ -52,6 +52,11 @@ pub struct Engine {
     pub lint_warned: HashSet<NodeHandle>,
     /// What this output's compositor and GPU can do, as name = value pairs.
     pub capabilities: Vec<(String, String)>,
+    /// How big one of morf's pixels is, as the configuration said
+    /// (`morf.density`).
+    pub density: morf_value::density::Density,
+    /// Whether `density` changed since the host last took it.
+    pub density_changed: bool,
     pub next_effect: u64,
     pub active: Option<crate::states::Capture>,
     /// How many handlers are on the stack. While one runs, a write marks the
@@ -147,6 +152,8 @@ impl Engine {
             lifecycle: Default::default(),
             lint_warned: HashSet::new(),
             capabilities: Vec::new(),
+            density: Default::default(),
+            density_changed: false,
             next_effect: 0,
             active: None,
             handler_depth: 0,

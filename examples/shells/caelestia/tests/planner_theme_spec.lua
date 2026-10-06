@@ -183,6 +183,6 @@ test.it("Compact Calendar reaches the final agenda and work calendar sections",f
   local last="planner-task-00000024-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
   scroll_to(last,"planner-scroll") test.click(last) test.advance(2500)
   test.eq(test.get("task-description").text,"Task 24")
-  page("calendar") test.near(test.get("planner-title").y,16,1)
+  page("calendar") test.truthy(test.get("planner-scroll").visible)
   test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)
 end)

@@ -406,7 +406,9 @@ pub fn paint_auxiliary_surface(
     runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
     runtime.observe_stretch(&layout);
     let scene = runtime.scene();
-    let (width, height) = physical_size((surface.width, surface.height), scale_120);
+    let (width, height) = client
+        .buffer_size(kind.role(surface.id))
+        .unwrap_or_else(|| physical_size((surface.width, surface.height), scale_120));
     if !renderer.backend_mut().declares_damage() {
         kind.damage(client, surface.id, width, height)?;
     }

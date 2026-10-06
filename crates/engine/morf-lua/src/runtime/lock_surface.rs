@@ -43,8 +43,9 @@ impl Runtime {
             .lock_surface_builder
             .clone()
             .ok_or_else(|| Error::Runtime("no lock surface builder is registered".into()))?;
+        let density = self.reactive.borrow().density;
         let node = self.run_handler(|ctx, limits| {
-            let table = screen_entry(ctx, screen);
+            let table = screen_entry(ctx, screen, density);
             table.set_field(ctx, "index", index as i64 + 1);
             let executor = Executor::start(
                 ctx,

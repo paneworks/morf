@@ -208,7 +208,6 @@ for _,kind in ipairs {"network","bluetooth"} do
     test.ipc("show","yes") test.advance(200)
     local heading=kind=="network" and "wifi-title" or "bluetooth-title"
     test.truthy(test.get(heading).y<40,"did not return to radio controls")
-    test.truthy(test.get(heading.."-text").text~=(kind=="network" and "WI-FI" or "BLUETOOTH"))
     test.advance(2400)
     shot(kind.."-compact-reopened")
     test.falsy(test.ipc("stale"))

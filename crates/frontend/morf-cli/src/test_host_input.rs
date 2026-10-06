@@ -4,6 +4,7 @@
 //!
 //! Split from `test_host` at the line gate.
 
+use morf_host::morf_app::Backend;
 use std::sync::Arc;
 
 use morf_host::morf_app::Event;

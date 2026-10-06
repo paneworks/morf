@@ -9,6 +9,9 @@
 /// The accessible tree a screen reader reads.
 pub mod accessible;
 pub mod color;
+/// How big one of morf's pixels is, and the conversion from a
+/// compositor's.
+pub mod density;
 pub mod hct;
 pub mod present;
 /// Input regions: the shapes a surface takes the pointer in, composed into

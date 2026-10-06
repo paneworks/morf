@@ -85,7 +85,7 @@ end
 --- A Tsugumori segmented run: a stroke `thick` wide along `d`, cut into
 --- `n` cells by its dash, drawn up to `trim_end`.
 local function segment_line(props, length, n, thick, gap)
-  local seg = (length - gap * (n - 1)) / n
+  local seg = math.max(0.5, (length - gap * (n - 1)) / n)
   props.fill_color, props.stroke_width, props.dash, props.stroke_cap = "transparent", thick, { seg, gap }, "butt"
   return ui.Path(props)
 end
@@ -496,7 +496,7 @@ function M.vu_meter(spec, style)
       major_r0 = R - 10 }), stroke_width = 1, stroke_color = style.stroke_of("hot", color) }
     local seg = 2 * math.pi * (R + 6) * SWEEP * (1 - red) / 360
     kids[#kids + 1] = path { d = arc(cx, cy, R + 6, FROM + SWEEP * red, SWEEP * (1 - red)), stroke_width = 5,
-      stroke_cap = "butt", dash = { seg / 6 - 2, 2 }, stroke_color = style.alert }
+      stroke_cap = "butt", dash = { math.max(0.5, seg / 6 - 2), 2 }, stroke_color = style.alert }
     kids[#kids + 1] = path { d = arc(cx, cy, R + 6, FROM, SWEEP * red), stroke_width = 5, stroke_cap = "butt",
       dash = { 3, 3 }, stroke_color = U.alpha(color, .25) }
   end

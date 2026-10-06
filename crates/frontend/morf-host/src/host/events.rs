@@ -58,8 +58,14 @@ pub fn handle_surface_event(
                     // and these surfaces would otherwise never be resized at
                     // all. Where it does, `AuxScale` arrives too and corrects
                     // this with the surface's own.
-                    let (width, height) =
-                        physical_size((surface.width, surface.height), client.primary_scale_120());
+                    let role = if surface.popup_config.is_some() {
+                        WindowId::Popup(surface.id)
+                    } else {
+                        WindowId::Toplevel(surface.id)
+                    };
+                    let (width, height) = client.buffer_size(role).unwrap_or_else(|| {
+                        physical_size((surface.width, surface.height), client.primary_scale_120())
+                    });
                     renderer.resize(width, height);
                 }
             }
@@ -153,10 +159,13 @@ pub fn handle_surface_event(
                 // Before the paint, so the bindings that read `win.width` and
                 // `win.height` lay the root out at the size it is drawn at.
                 runtime.set_window_surface_size(surface.id, surface.width, surface.height);
-                let (physical_width, physical_height) = physical_size(
-                    (surface.width, surface.height),
-                    client.surface_scale_120(WindowId::Popup(id)),
-                );
+                let (physical_width, physical_height) =
+                    client.buffer_size(WindowId::Popup(id)).unwrap_or_else(|| {
+                        physical_size(
+                            (surface.width, surface.height),
+                            client.surface_scale_120(WindowId::Popup(id)),
+                        )
+                    });
                 if let Some(renderer) = &mut surface.renderer {
                     renderer.resize(physical_width, physical_height);
                 } else if state.painter.gpu().is_some() {
@@ -186,7 +195,9 @@ pub fn handle_surface_event(
             if let Some(surface) = surface
                 && let Some(renderer) = &mut surface.renderer
             {
-                let (width, height) = physical_size((surface.width, surface.height), scale_120);
+                let (width, height) = client
+                    .buffer_size(role)
+                    .unwrap_or_else(|| physical_size((surface.width, surface.height), scale_120));
                 renderer.resize(width, height);
                 repaint = true;
             }
@@ -214,10 +225,14 @@ pub fn handle_surface_event(
                 // Before the paint, so the bindings that read `win.width` and
                 // `win.height` lay the root out at the size it is drawn at.
                 runtime.set_window_surface_size(surface.id, surface.width, surface.height);
-                let (physical_width, physical_height) = physical_size(
-                    (surface.width, surface.height),
-                    client.surface_scale_120(WindowId::Toplevel(id)),
-                );
+                let (physical_width, physical_height) = client
+                    .buffer_size(WindowId::Toplevel(id))
+                    .unwrap_or_else(|| {
+                        physical_size(
+                            (surface.width, surface.height),
+                            client.surface_scale_120(WindowId::Toplevel(id)),
+                        )
+                    });
                 if let Some(renderer) = &mut surface.renderer {
                     renderer.resize(physical_width, physical_height);
                 } else if state.painter.gpu().is_some() {

@@ -4,6 +4,7 @@
 //! size from its anchors, its margins and the output under it; with no
 //! compositor this file decides the same way.
 
+use morf_app::Backend;
 use std::collections::{HashMap, HashSet};
 
 use morf_app::backend::headless::{self, layer_extent as stretched, layer_position};

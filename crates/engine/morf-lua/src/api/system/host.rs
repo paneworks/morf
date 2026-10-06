@@ -182,7 +182,7 @@ pub(crate) fn install_host_service_api<'gc>(
     // compositor's remaining outputs after it.
     if let Some(screen) = screen {
         screens
-            .set(ctx, 1, screen_entry(ctx, screen))
+            .set(ctx, 1, screen_entry(ctx, screen, state.borrow().density))
             .expect("screen table accepts integer keys");
     }
     morf.set_field(ctx, "screens", screens);
@@ -294,7 +294,11 @@ pub(crate) fn install_host_service_api<'gc>(
 }
 
 /// Builds the Lua table describing one output.
-pub(crate) fn screen_entry<'gc>(ctx: Context<'gc>, screen: &Screen) -> Table<'gc> {
+pub(crate) fn screen_entry<'gc>(
+    ctx: Context<'gc>,
+    screen: &Screen,
+    density: morf_value::density::Density,
+) -> Table<'gc> {
     let value = Table::new(&ctx);
     value.set_field(ctx, "id", screen.id as i64);
     value.set_field(ctx, "name", screen.name.as_str());
@@ -324,19 +328,20 @@ pub(crate) fn screen_entry<'gc>(ctx: Context<'gc>, screen: &Screen) -> Table<'gc
             LuaValue::Integer(position.1 as i64)
         }),
     );
+    // The compositor's size and the panel's pixels; `width` and `height`,
+    // in morf's pixels, follow from them and the density.
+    let integer = |value: Option<i32>| value.map_or(LuaValue::Nil, |v| LuaValue::Integer(v as i64));
+    value.set_field(ctx, "logical_width", integer(screen.width));
+    value.set_field(ctx, "logical_height", integer(screen.height));
     value.set_field(
         ctx,
-        "width",
-        screen
-            .width
-            .map_or(LuaValue::Nil, |value| LuaValue::Integer(value as i64)),
+        "pixel_width",
+        integer(screen.pixels.map(|size| size.0)),
     );
     value.set_field(
         ctx,
-        "height",
-        screen
-            .height
-            .map_or(LuaValue::Nil, |value| LuaValue::Integer(value as i64)),
+        "pixel_height",
+        integer(screen.pixels.map(|size| size.1)),
     );
     value.set_field(ctx, "scale", screen.scale as i64);
     value.set_field(ctx, "device_pixel_ratio", screen.scale as i64);
@@ -373,5 +378,45 @@ pub(crate) fn screen_entry<'gc>(ctx: Context<'gc>, screen: &Screen) -> Table<'gc
         screen_primary_orientation(screen),
     );
     value.set_field(ctx, "serial_number", LuaValue::Nil);
+    apply_density(ctx, value, density);
     value
+}
+
+/// Sets a screen entry's `width`, `height` and `density_scale` (device
+/// pixels to one of morf's) from what it says of the panel, at `density`.
+pub(crate) fn apply_density<'gc>(
+    ctx: Context<'gc>,
+    entry: Table<'gc>,
+    density: morf_value::density::Density,
+) {
+    let read = |key: &'static str| match entry.get_value(ctx, key) {
+        LuaValue::Integer(value) => u32::try_from(value).ok(),
+        _ => None,
+    };
+    let pair = |a, b| read(a).zip(read(b));
+    let logical = pair("logical_width", "logical_height");
+    let (size, scale_120) = match (logical, pair("pixel_width", "pixel_height")) {
+        (Some(logical), Some(pixels)) => morf_value::density::output_units(
+            density,
+            pixels,
+            logical,
+            pair("physical_width_mm", "physical_height_mm"),
+        ),
+        (logical, _) => (logical.unwrap_or_default(), 120),
+    };
+    let known = logical.is_some();
+    let integer = |value: u32| {
+        if known {
+            LuaValue::Integer(i64::from(value))
+        } else {
+            LuaValue::Nil
+        }
+    };
+    entry.set_field(ctx, "width", integer(size.0));
+    entry.set_field(ctx, "height", integer(size.1));
+    entry.set_field(
+        ctx,
+        "density_scale",
+        LuaValue::Number(f64::from(scale_120) / 120.0),
+    );
 }

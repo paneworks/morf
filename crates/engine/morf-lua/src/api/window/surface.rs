@@ -77,6 +77,74 @@ pub(crate) fn install_shell_api<'gc>(
     let surface = Table::new(&ctx);
     surface.set_metatable(ctx, Some(surface_metatable));
     morf.set_field(ctx, "surface", surface);
+    // `morf.density("compositor")`, `morf.density(1.25)`,
+    // `morf.density({ ppi = 160 })` or `morf.density({ zoom = 0.8 })` (the
+    // compositor's scale times 0.8): how big one of morf's pixels is, at any
+    // time (a scale slider); nil is the default, the compositor's.
+    let density_state = Rc::clone(&state);
+    let density = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        use morf_value::density::{Density, REFERENCE_PPI};
+        let value: LuaValue = stack.consume(ctx)?;
+        let number = |value: LuaValue| match value {
+            LuaValue::Integer(n) => Some(n as f64),
+            LuaValue::Number(n) => Some(n),
+            _ => None,
+        };
+        let parsed = match value {
+            LuaValue::Nil => Density::default(),
+            LuaValue::String(name) if name.as_bytes() == b"compositor" => Density::Compositor,
+            LuaValue::String(name) if name.as_bytes() == b"ppi" => Density::Ppi(REFERENCE_PPI),
+            LuaValue::Table(table) => {
+                if let Some(zoom) = number(table.get_value(ctx, "zoom")) {
+                    if !(0.25..=4.0).contains(&zoom) {
+                        return Err(HostError("morf.density{ zoom = f } wants f between 0.25 and 4".into()).into());
+                    }
+                    Density::Relative(zoom)
+                } else {
+                    match number(table.get_value(ctx, "ppi")) {
+                        Some(ppi) if (40.0..=600.0).contains(&ppi) => Density::Ppi(ppi),
+                        _ => {
+                            return Err(HostError(
+                                "morf.density takes { ppi = n } (40 to 600) or { zoom = f } (0.25 to 4)".into(),
+                            )
+                            .into());
+                        }
+                    }
+                }
+            }
+            other => match number(other) {
+                Some(scale) if (0.25..=10.0).contains(&scale) => Density::Scale(scale),
+                _ => {
+                    return Err(HostError(
+                        "morf.density takes \"compositor\", \"ppi\", a scale or { ppi = n }".into(),
+                    )
+                    .into());
+                }
+            },
+        };
+        {
+            let mut state = density_state.borrow_mut();
+            if state.density != parsed {
+                state.density = parsed;
+                state.density_changed = true;
+                // What reads the screens' size reads it again.
+                let state = &mut *state;
+                state.engine.session.touch_screens(&mut state.engine.reactive);
+            }
+        }
+        // The screens already described are described again in the new unit.
+        if let Ok(morf) = ctx.get_global::<Table>("morf")
+            && let LuaValue::Table(screens) = morf.get_value(ctx, "screens")
+        {
+            let mut index = 1;
+            while let LuaValue::Table(entry) = screens.get_value(ctx, index) {
+                crate::api::system::host::apply_density(ctx, entry, parsed);
+                index += 1;
+            }
+        }
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "density", density);
     let env = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let name: String = stack.consume(ctx)?;
         if name.is_empty() || name.len() > 256 || name.as_bytes().contains(&0) {

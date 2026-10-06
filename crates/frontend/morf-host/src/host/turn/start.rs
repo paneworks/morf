@@ -45,11 +45,12 @@ impl Host {
     /// frame and opens the other windows the configuration declared.
     pub fn start(
         runtime: &mut Runtime,
-        mut backend: Box<dyn Backend>,
+        backend: Box<dyn Backend>,
         mut desktop: Option<Desktop>,
         options: StartOptions,
     ) -> Result<Self, String> {
         let name = options.name;
+        let mut backend = dense(runtime, backend);
         let options_report = options.report_slow;
         primary_surface_root(runtime)?;
         let layer_config = runtime.layer_surface_config();
@@ -57,12 +58,19 @@ impl Host {
         // so this one wakes for its answer rather than sleeping past it. Set
         // before the first configure, since a read can start before it.
         backend.set_waker(morf_io::wake_all);
+        let mut config = runtime_bar_config(&layer_config, &name)?;
+        if options.desktop_canvas {
+            config.output = None;
+        }
         if !backend.has_window(WindowId::Layer(PRIMARY_LAYER)) {
-            let mut config = runtime_bar_config(&layer_config, &name)?;
-            if options.desktop_canvas {
-                config.output = None;
-            }
             backend.open(WindowId::Layer(PRIMARY_LAYER), WindowKind::Layer(config))?;
+        } else if runtime.density() != morf_value::density::Density::Compositor {
+            // Opened as the client connected, in morf's pixels taken for the
+            // compositor's: said again, so the density converts it.
+            backend.set_layer_geometry(PRIMARY_LAYER, &config)?;
+        } else {
+            // Kept, so a later change of density can send it again.
+            backend.adopt_layer(PRIMARY_LAYER, config);
         }
         open_reserve_layers(&mut *backend, &layer_config, &name)?;
         open_backdrop_layer(&mut *backend, &layer_config, &name)?;
@@ -179,9 +187,17 @@ impl Host {
     pub fn replace_backend(
         &mut self,
         runtime: &mut Runtime,
-        mut backend: Box<dyn Backend>,
+        backend: Box<dyn Backend>,
         desktop: Option<Desktop>,
     ) -> Result<(), String> {
+        let mut backend = dense(runtime, backend);
+        let config = runtime_bar_config(&runtime.layer_surface_config(), &self.name)?;
+        if runtime.density() != morf_value::density::Density::Compositor {
+            // Opened as the client connected: said again, so it converts.
+            backend.set_layer_geometry(PRIMARY_LAYER, &config)?;
+        } else {
+            backend.adopt_layer(PRIMARY_LAYER, config);
+        }
         if self.state.painter.gpu().is_some() {
             let (width, height) = backend.physical_size();
             let target = backend
@@ -301,4 +317,10 @@ fn capabilities_of(
         list.push((name.to_owned(), supported.to_string()));
     }
     list
+}
+
+/// `backend`, seen in morf's pixels at the density the configuration asked
+/// for (converting nothing while that is the compositor's).
+fn dense(runtime: &Runtime, backend: Box<dyn Backend>) -> Box<morf_app::Dense> {
+    Box::new(morf_app::Dense::new(backend, runtime.density()))
 }

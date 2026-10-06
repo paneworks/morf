@@ -400,7 +400,9 @@ pub fn layer_surface_configure(
     surface.width = width.max(1);
     surface.height = height.max(1);
     let scale = client.layer_scale_120(layer).unwrap_or(120);
-    let (physical_width, physical_height) = physical_size((surface.width, surface.height), scale);
+    let (physical_width, physical_height) = client
+        .buffer_size(WindowId::Layer(layer))
+        .unwrap_or_else(|| physical_size((surface.width, surface.height), scale));
     if let Some(renderer) = &mut surface.renderer {
         renderer.resize(physical_width, physical_height);
     } else if state.painter.gpu().is_some() {
@@ -432,7 +434,9 @@ pub fn layer_surface_scale(
     };
     let scale = client.layer_scale_120(layer).unwrap_or(120);
     if let Some(renderer) = &mut surface.renderer {
-        let (width, height) = physical_size((surface.width, surface.height), scale);
+        let (width, height) = client
+            .buffer_size(WindowId::Layer(layer))
+            .unwrap_or_else(|| physical_size((surface.width, surface.height), scale));
         renderer.resize(width, height);
     }
     // And then draw into it. Resizing the swapchain without repainting leaves
