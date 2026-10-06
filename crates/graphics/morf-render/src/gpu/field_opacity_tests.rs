@@ -123,6 +123,44 @@ pub(crate) fn two_fading_layers_are_each_there_or_not() {
 
 #[test]
 #[ignore = "requires a GPU adapter"]
+pub(crate) fn three_fading_layers_mix_all_eight_compositions() {
+    const SIZE: u32 = 128;
+    let opacities = [0.25, 0.5, 0.75];
+    let picture = |values: [f32; 3]| {
+        frame(
+            SIZE,
+            &[
+                (16.0, 32.0, values[0], WHITE),
+                (48.0, 32.0, values[1], WHITE),
+                (80.0, 32.0, values[2], WHITE),
+            ],
+        )
+    };
+    let mut parts = Vec::new();
+    for subset in 0..8 {
+        let mut weight = 1.0;
+        let values = std::array::from_fn(|index| {
+            if subset & (1 << index) != 0 {
+                weight *= opacities[index];
+                1.0
+            } else {
+                weight *= 1.0 - opacities[index];
+                0.0
+            }
+        });
+        parts.push((weight, render_readback(&picture(values), SIZE)));
+    }
+    let faded = render_readback(&picture(opacities), SIZE);
+    let borrowed: Vec<_> = parts
+        .iter()
+        .map(|(weight, pixels)| (*weight, pixels.as_slice()))
+        .collect();
+    let (off, x, y) = worst_mix(SIZE, &faded, &borrowed);
+    assert!(off <= 2.0, "{off} off the eight-way mix at {x},{y}");
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
 pub(crate) fn a_fading_subtraction_half_fills_its_hole() {
     const SIZE: u32 = 64;
     let mut scene = morf_scene::Scene::new();

@@ -802,7 +802,13 @@ fn gradient_fill(material: u32, local: vec2<f32>, flat_color: vec4<f32>) -> vec4
     return gradient_sample(material, clamp(amount, 0.0, 1.0));
 }
 
+// The fade mask, subset count and weights come from flat instance attributes
+// and their storage records. They are uniform within each primitive's quad,
+// although WGSL's analysis cannot infer that through storage-buffer reads.
+// Keep each subset's derivative beside its composition: carrying eight sets
+// of values across the branch crashes Turnip's IR3 DCE on the Adreno 810.
 @fragment
+@diagnostic(off, derivative_uniformity)
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let first = u32(input.style.z);
     let count = u32(input.style.w);
@@ -874,17 +880,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Several layers fading at once are each there or not independently, so
     // every combination is composed and weighted by how likely it is -- up to
     // three of them; a fourth fading at the same time is drawn whole.
-    //
-    // Two passes, because each combination's edge wants its own derivative
-    // and a derivative cannot be taken in a branch only some fields take:
-    // the combinations are composed in the branch, their derivatives taken
-    // after it, where every pixel is, and they are shaded in a second branch.
-    var part_distance: array<f32, 8>;
-    var part_fill: array<vec4<f32>, 8>;
-    var part_weight: array<f32, 8>;
-    var part_shadow: array<f32, 8>;
-    var subsets = 0u;
     if fading != 0u {
+        coverage = 0.0;
+        filled = 0.0;
+        shadowed = 0.0;
+        var painted = vec3<f32>(0.0);
+        var painted_alpha = 0.0;
         var which: array<u32, 3>;
         var fades = 0u;
         for (var index = 0u; index < count && fades < 3u; index = index + 1u) {
@@ -893,7 +894,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 fades = fades + 1u;
             }
         }
-        subsets = 1u << fades;
+        let subsets = 1u << fades;
         for (var subset = 0u; subset < subsets; subset = subset + 1u) {
             var weight = 1.0;
             var omit = absent;
@@ -906,57 +907,25 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                     omit = omit | (1u << which[slot]);
                 }
             }
-            part_weight[subset] = weight;
-            if weight <= 0.0 {
-                continue;
-            }
             let part = compose(input.local, input.fill, first, count, omit);
-            part_distance[subset] = part.distance;
-            part_fill[subset] = part.fill;
-            if casts {
-                part_shadow[subset] =
-                    compose(offset_point, input.fill, first, count, omit).distance - spread;
-            }
-        }
-    }
-    let part_edge = array<f32, 8>(
-        fwidth(part_distance[0]),
-        fwidth(part_distance[1]),
-        fwidth(part_distance[2]),
-        fwidth(part_distance[3]),
-        fwidth(part_distance[4]),
-        fwidth(part_distance[5]),
-        fwidth(part_distance[6]),
-        fwidth(part_distance[7]),
-    );
-    if fading != 0u {
-        coverage = 0.0;
-        filled = 0.0;
-        shadowed = 0.0;
-        var painted = vec3<f32>(0.0);
-        var painted_alpha = 0.0;
-        for (var subset = 0u; subset < subsets; subset = subset + 1u) {
-            let weight = part_weight[subset];
-            if weight <= 0.0 {
-                continue;
-            }
+            let part_edge = fwidth(part.distance);
             // The same ramp the whole path takes, from this combination's
             // own derivative.
             let part_ramp = select(
                 0.0001,
-                max(input.style.y, max(part_edge[subset], 0.0001) * 0.5),
+                max(input.style.y, max(part_edge, 0.0001) * 0.5),
                 antialiased,
             );
-            let d = part_distance[subset];
+            let d = part.distance;
             let part_coverage = smoothstep(part_ramp, -part_ramp, d - outset);
             let part_filled = smoothstep(part_ramp, -part_ramp, d + inset);
-            let fill = part_fill[subset];
+            let fill = part.fill;
             coverage = coverage + weight * part_coverage;
             filled = filled + weight * part_filled;
             painted = painted + weight * part_filled * fill.a * fill.rgb;
             painted_alpha = painted_alpha + weight * part_filled * fill.a;
             if casts {
-                let shadow_distance = part_shadow[subset];
+                let shadow_distance = compose(offset_point, input.fill, first, count, omit).distance - spread;
                 shadowed = shadowed + weight * select(
                     smoothstep(shadow_softness, -shadow_softness, shadow_distance),
                     part_coverage * smoothstep(-shadow_softness, shadow_softness, shadow_distance),
