@@ -47,6 +47,7 @@ struct Press {
     samples: VecDeque<(Duration, f64, f64)>,
     moved: bool,
     long_fired: bool,
+    touch: bool,
 }
 
 /// What a pointer event completed, to be delivered after it.
@@ -71,6 +72,19 @@ pub struct Gestures {
 }
 
 impl Gestures {
+    /// Touch navigation can complete by distance even without a fast fling.
+    pub fn touch(&mut self) {
+        if let Some(press) = &mut self.press {
+            press.touch = true;
+        }
+    }
+
+    /// A canceled contact must not complete a swipe or a long press.
+    pub fn cancel(&mut self) {
+        self.press = None;
+        self.swallow_click = None;
+    }
+
     /// When the press being held becomes a long press (on the gestures'
     /// clock), if one is held on a node that `wants_long_press`.
     pub fn long_press_due(
@@ -102,6 +116,7 @@ impl Gestures {
                     samples,
                     moved: false,
                     long_fired: false,
+                    touch: false,
                 });
                 self.swallow_click = None;
             }
@@ -165,10 +180,17 @@ impl Gestures {
                 let dt = (last.0 - first.0).as_secs_f64().max(0.008);
                 let (vx, vy) = ((last.1 - first.1) / dt, (last.2 - first.2) / dt);
                 let fresh = now - last.0 <= SWIPE_WINDOW;
-                (fresh && travelled > SWIPE_DISTANCE && vx.hypot(vy) > SWIPE_SPEED).then(|| {
-                    let direction = if vx.abs() >= vy.abs() {
-                        if vx > 0.0 { "right" } else { "left" }
-                    } else if vy > 0.0 {
+                let dx = point.surface_x - press.point.surface_x;
+                let dy = point.surface_y - press.point.surface_y;
+                let pulled = press.touch
+                    && dx.abs().max(dy.abs()) >= 80.0
+                    && dx.abs().max(dy.abs()) >= dx.abs().min(dy.abs()) * 1.25;
+                let flung = fresh && travelled > SWIPE_DISTANCE && vx.hypot(vy) > SWIPE_SPEED;
+                (pulled || flung).then(|| {
+                    let (direction_x, direction_y) = if pulled { (dx, dy) } else { (vx, vy) };
+                    let direction = if direction_x.abs() >= direction_y.abs() {
+                        if direction_x > 0.0 { "right" } else { "left" }
+                    } else if direction_y > 0.0 {
                         "down"
                     } else {
                         "up"

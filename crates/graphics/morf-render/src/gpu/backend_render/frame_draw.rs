@@ -81,7 +81,17 @@ impl FrameDraw<'_> {
                         }
                     }
                     None => {
-                        pass.set_pipeline(&self.backend.field_pipeline);
+                        use super::super::field_pass::FieldVariant;
+                        pass.set_pipeline(
+                            match FieldVariant::for_command(&self.list.commands[command_index]) {
+                                FieldVariant::General => &self.backend.field_pipeline,
+                                FieldVariant::Analytic => &self.backend.field_analytic,
+                                FieldVariant::AnalyticOpaque => &self.backend.field_opaque,
+                                FieldVariant::Boxes => &self.backend.field_boxes,
+                                FieldVariant::BoxesOpaque => &self.backend.field_boxes_opaque,
+                                FieldVariant::Quad => &self.backend.field_quad,
+                            },
+                        );
                         pass.set_bind_group(1, &self.backend.field_shader_default, &[]);
                     }
                 }

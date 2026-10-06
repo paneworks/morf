@@ -74,6 +74,25 @@ pub(crate) fn press(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     Ok(Vec::new())
 }
 
+/// A real touch event through the virtual seat, including capture and gestures.
+pub(crate) fn touch(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
+    let phase = optional_text(arguments.first()).unwrap_or_default();
+    let id = number(arguments.get(1), "contact id")? as i32;
+    let x = number(arguments.get(2), "x")?;
+    let y = number(arguments.get(3), "y")?;
+    let subject = host.subject()?;
+    let surface = role(subject, arguments.get(4))?;
+    let event = match phase.as_str() {
+        "down" => Event::TouchDown { surface, id, x, y },
+        "move" => Event::TouchMotion { surface, id, x, y },
+        "up" => Event::TouchUp { surface, id, x, y },
+        "cancel" => Event::TouchCancel,
+        _ => return Err("touch phase must be down, move, up or cancel".into()),
+    };
+    subject.pointer(event)?;
+    Ok(Vec::new())
+}
+
 pub(crate) fn motion(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
     let x = number(arguments.first(), "x")?;
     let y = number(arguments.get(1), "y")?;

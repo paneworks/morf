@@ -41,6 +41,9 @@ impl Runtime {
         ) {
             return false;
         }
+        if event == UiEvent::TouchPressed {
+            self.reactive.borrow_mut().gestures.touch();
+        }
         self.dispatch_ui_event_with_args(node, event, &args::touch_args(id, point))
     }
 

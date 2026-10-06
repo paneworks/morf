@@ -14,6 +14,11 @@ use morf_scene::NodeHandle;
 use crate::{EventPoint, IpcValue, Runtime, UiEvent};
 
 impl Runtime {
+    /// Forget the gesture when its contact is canceled or claimed elsewhere.
+    pub fn cancel_gesture(&mut self) {
+        self.reactive.borrow_mut().gestures.cancel();
+    }
+
     /// Watches one pointer event. Returns false for a click a long press
     /// took, which is then not delivered.
     pub(crate) fn watch_gesture(
@@ -59,7 +64,26 @@ impl Runtime {
             ),
             None => return false,
         };
-        self.dispatch_ui_event_with_args(node, event, &args)
+        if event != UiEvent::Swiped {
+            return self.dispatch_ui_event_with_args(node, event, &args);
+        }
+        // A panel can own navigation without an input overlay stealing its
+        // buttons. Stop at a child that owns a swipe or a drag (a slider,
+        // selection or notification); otherwise find the nearest container.
+        let mut target = Some(node);
+        while let Some(current) = target {
+            if self.handles(current, UiEvent::Swiped) {
+                return self.dispatch_ui_event_with_args(current, event, &args);
+            }
+            if self.handles(current, UiEvent::Dragged)
+                || self.is_text_input(current)
+                || self.is_terminal(current)
+            {
+                return false;
+            }
+            target = self.scene().parent(current).ok().flatten();
+        }
+        false
     }
 
     /// Fires a long press whose time has come. Returns whether one ran.

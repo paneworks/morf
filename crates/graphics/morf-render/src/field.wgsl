@@ -417,7 +417,16 @@ fn sd_polygon_merged(point: vec2<f32>, first: u32, stride: u32, loops: u32) -> f
     return select(sqrt(nearest), -sqrt(nearest), winding != 0);
 }
 
+// Specialised pipelines keep outline walks and subset composition out of
+// ordinary rectangles/analytic fields. Uniform branches alone still make
+// mobile GPUs reserve registers for the most expensive path.
+override MORF_ANALYTIC: bool = false;
+override MORF_LAYER_FADES: bool = true;
+override MORF_BOX_ONLY: bool = false;
+override MORF_SINGLE_BOX: bool = false;
+
 fn shape_distance(kind: u32, point: vec2<f32>, layer: Layer) -> f32 {
+    if MORF_BOX_ONLY { return sd_box(point, layer.rect.zw, layer.radii); }
     let half = layer.rect.zw;
     let radius = min(half.x, half.y);
     switch kind {
@@ -436,7 +445,10 @@ fn shape_distance(kind: u32, point: vec2<f32>, layer: Layer) -> f32 {
             // match `morf_text::GLYPH_CONTOUR_POINTS`, which a test asserts.
             // `thickness` makes a letter or a drawing heavier: its outline
             // grown by that much, a bold that needs no bold face.
-            return sd_polygon(point, u32(layer.params.x), 96u, u32(layer.extra.w)) - layer.params.w;
+            if !MORF_ANALYTIC {
+                return sd_polygon(point, u32(layer.params.x), 96u, u32(layer.extra.w)) - layer.params.w;
+            }
+            return 1e20;
         }
         default: { return sd_cross(point, half, layer.params.w); }
     }
@@ -546,6 +558,13 @@ struct Composed {
 /// the layer, a subtraction from nothing is nothing).
 fn compose(local: vec2<f32>, base: vec4<f32>, first: u32, count: u32, omit: u32) -> Composed {
     var out: Composed;
+    if MORF_SINGLE_BOX {
+        let layer = layers[first];
+        out.distance = sd_box(local - layer.rect.xy, layer.rect.zw, layer.radii);
+        out.fill = layer.color;
+        out.group = 0u;
+        return out;
+    }
     out.distance = 1e20;
     out.fill = base;
     out.group = 0u;
@@ -880,7 +899,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Several layers fading at once are each there or not independently, so
     // every combination is composed and weighted by how likely it is -- up to
     // three of them; a fourth fading at the same time is drawn whole.
-    if fading != 0u {
+    if MORF_LAYER_FADES && fading != 0u {
         coverage = 0.0;
         filled = 0.0;
         shadowed = 0.0;

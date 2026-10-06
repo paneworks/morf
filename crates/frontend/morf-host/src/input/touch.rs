@@ -129,6 +129,7 @@ pub fn handle_touch_event(
             }
         }
         Event::TouchCancel => {
+            runtime.cancel_gesture();
             repaint |= crate::surface_gesture::finger_up(runtime, input, None);
             for (id, (_, hit, x, y, _)) in input.touches.drain() {
                 let point =

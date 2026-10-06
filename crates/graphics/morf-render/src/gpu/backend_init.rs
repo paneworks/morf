@@ -175,6 +175,7 @@ impl WgpuBackend {
         let field_pipeline = build_field_pipeline(
             &device,
             FieldPipeline {
+                variant: FieldVariant::General,
                 layout: &field_layout,
                 shader_layout: &field_shader_layout,
                 user: None,
@@ -186,6 +187,28 @@ impl WgpuBackend {
             },
         )
         .expect("the field shader carries its own hook");
+        let specialised = |variant| {
+            build_field_pipeline(
+                &device,
+                FieldPipeline {
+                    layout: &field_layout,
+                    shader_layout: &field_shader_layout,
+                    variant,
+                    user: None,
+                    owns_coverage: false,
+                    vertex: None,
+                    textures: None,
+                    data: None,
+                    blend,
+                },
+            )
+            .expect("the field shader carries its own hook")
+        };
+        let field_analytic = specialised(FieldVariant::Analytic);
+        let field_opaque = specialised(FieldVariant::AnalyticOpaque);
+        let field_boxes = specialised(FieldVariant::Boxes);
+        let field_boxes_opaque = specialised(FieldVariant::BoxesOpaque);
+        let field_quad = specialised(FieldVariant::Quad);
         let field_shader_default = create_shader_bind_group(
             &device,
             &field_shader_layout,
@@ -271,6 +294,11 @@ impl WgpuBackend {
             texture_buffer,
             texture_capacity,
             field_pipeline,
+            field_analytic,
+            field_opaque,
+            field_boxes,
+            field_boxes_opaque,
+            field_quad,
             field_layout,
             field_buffer,
             field_capacity,

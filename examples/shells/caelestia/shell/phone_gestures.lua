@@ -42,6 +42,22 @@ function M.swipe(edge)
   end
 end
 
+-- Horizontal navigation belongs to a panel, not a fullscreen gesture
+-- overlay. The runtime bubbles a swipe past passive content, retaining a
+-- slider's drag and a notification's own dismissal.
+function M.panel(spec)
+  return function(direction)
+    if not phone() or blocked() then return end
+    if direction == "left" or direction == "right" then
+      local next_tab = spec.tab:get() + (direction == "left" and 1 or -1)
+      spec.tab:set(math.max(1, math.min(spec.count, next_tab)))
+    elseif direction == spec.dismiss and spec.close and
+        (not spec.can_dismiss or spec.can_dismiss()) then
+      spec.close()
+    end
+  end
+end
+
 function M.attach(root)
   if attached[root] or not phone() then return end
   attached[root] = true

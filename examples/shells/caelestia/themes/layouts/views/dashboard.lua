@@ -119,6 +119,7 @@ local pages = {
   subpages[5],
   subpages[6],
 }
+local scroll_positions = {}
 if COMPACT then
   -- On a phone every page scrolls in the one view the dashboard has; while
   -- it runs on below, a dashed line along the view's foot says so.
@@ -126,6 +127,7 @@ if COMPACT then
     local content_h = (PAGE[i] or PAGE[1])[2]
     local node, _, t = kit.scroll({ id = "dashboard-scroll-" .. i, width = CW, height = VIEW_H, clip = true,
       ui.Item { width = CW, height = content_h, page } })
+    scroll_positions[i] = t
     local more = ui.Path {
       id = "dashboard-more-" .. i, x = 0, y = VIEW_H - 2, width = CW, height = 2, view_box = { 0, 0, CW, 2 },
       d = ("M0 1 H%g"):format(CW), fill_color = "transparent", stroke_width = 2, dash = { 10, 8 },
@@ -225,6 +227,13 @@ local background = ui.MouseArea { anchors = { fill = true }, z = -1 }
 
 local content = ui.Item {
   anchors = { fill = true },
+  on_swiped = require("phone_gestures").panel {
+    tab = M.tab, count = #TABS, dismiss = "down", close = function() require("dashboard").drawer.set(false) end,
+    can_dismiss = function()
+      local position = scroll_positions[M.tab:get()]
+      return not position or (position.position_y or 0) <= 0
+    end,
+  },
   background,
   tabs(),
   strip,

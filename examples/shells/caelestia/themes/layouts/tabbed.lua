@@ -129,6 +129,9 @@ function M.new(spec)
 
   panel.content = ui.Item {
     anchors = { fill = true },
+    on_swiped = require("phone_gestures").panel {
+      tab = tab, count = #tabs, close = spec.close, dismiss = spec.dismiss,
+    },
     -- Behind everything, so the whole panel takes the pointer.
     ui.MouseArea { anchors = { fill = true }, z = -1 },
     -- The tab row is the theme's (every kit has `tabs`, the kit contract).

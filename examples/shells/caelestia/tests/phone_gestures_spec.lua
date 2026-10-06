@@ -7,6 +7,7 @@ local SOURCE = [[
   morf.ipc.gesture_state = function()
     local sidebar = require("sidebar")
     return { dashboard = require("dashboard").drawer.open:get(),
+      dashboard_tab = require("dashboard").tab:get(), sidebar_tab = sidebar.tab:get(),
       sidebar = sidebar.drawer.open:get(), notifications = sidebar.showing("notifications"),
       settings = sidebar.showing("settings"), steps = steps }
   end
@@ -53,3 +54,33 @@ test.it("landscape desktop does not acquire phone gesture regions or actions", f
   test.eq(#test.find_all("phone-gesture-edges"), 0)
   test.eq(#test.logs("error"), 0)
 end)
+
+for _, style in ipairs { "material", "tsugumori" } do
+  test.it(style .. " real touch switches dashboard tabs and pulls the drawer closed", function()
+    load(style)
+    test.swipe({558,2480}, {558,2240}) test.advance(700)
+    test.truthy(state().dashboard)
+    local pages = test.get("dashboard-pages")
+    local x,y=pages.x+pages.width/2,pages.y+4
+    test.swipe({x+180,y}, {x-180,y}, {duration=500}) test.advance(700)
+    test.eq(state().dashboard_tab,2)
+    test.swipe({x-180,y}, {x+180,y}) test.advance(700)
+    test.eq(state().dashboard_tab,1)
+    test.swipe({x,y}, {x,y+240}, {duration=500}) test.advance(700)
+    test.falsy(state().dashboard)
+    test.eq(#test.logs("error"),0)
+  end)
+  test.it(style .. " real touch switches top-panel tabs and pushes it closed", function()
+    load(style)
+    test.swipe({558,4}, {558,240}) test.advance(700)
+    test.truthy(state().sidebar)
+    local pages=test.get("sidebar-pages")
+    local x,y=pages.x+pages.width/2,pages.y+4
+    local before=state().sidebar_tab
+    test.swipe({x-180,y}, {x+180,y}) test.advance(700)
+    test.eq(state().sidebar_tab,math.max(1,before-1))
+    test.swipe({x,y+180}, {x,y-60}) test.advance(700)
+    test.falsy(state().sidebar)
+    test.eq(#test.logs("error"),0)
+  end)
+end

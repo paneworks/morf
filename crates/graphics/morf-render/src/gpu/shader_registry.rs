@@ -40,6 +40,7 @@ impl WgpuBackend {
             build_field_pipeline(
                 &self.device,
                 FieldPipeline {
+                    variant: FieldVariant::General,
                     layout: &self.field_layout,
                     shader_layout: &self.field_shader_layout,
                     user: shader.wgsl,

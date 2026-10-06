@@ -80,6 +80,58 @@ pub(crate) fn create_field_layouts(
     (layout, shader_layout)
 }
 
+/// Compile-time feature sets: ordinary rectangles do not reserve GPU
+/// registers for polygon outlines or independently fading CSG layers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum FieldVariant {
+    #[default]
+    General,
+    Analytic,
+    AnalyticOpaque,
+    Boxes,
+    BoxesOpaque,
+    Quad,
+}
+
+impl FieldVariant {
+    pub(crate) fn for_command(command: &crate::DrawCommand) -> Self {
+        use crate::DrawCommand;
+        use morf_value::region::Shape;
+        match command {
+            DrawCommand::Quad { .. } => Self::Quad,
+            DrawCommand::Field { layers, .. } => {
+                let fading = layers
+                    .iter()
+                    .any(|layer| layer.opacity > 0.0 && layer.opacity < 1.0);
+                if layers.iter().all(|layer| {
+                    layer.shape == Shape::Box
+                        && (layer.morph <= 0.0 || layer.morph_to == Shape::Box)
+                }) {
+                    return if fading {
+                        Self::Boxes
+                    } else {
+                        Self::BoxesOpaque
+                    };
+                }
+                if layers.iter().any(|layer| {
+                    layer.shape == Shape::Polygon
+                        || (layer.morph > 0.0 && layer.morph_to == Shape::Polygon)
+                }) {
+                    Self::General
+                } else if layers
+                    .iter()
+                    .any(|layer| layer.opacity > 0.0 && layer.opacity < 1.0)
+                {
+                    Self::Analytic
+                } else {
+                    Self::AnalyticOpaque
+                }
+            }
+            _ => Self::General,
+        }
+    }
+}
+
 /// Builds one field pipeline, optionally with a configuration's shader in it.
 ///
 /// `None` back means the generated WGSL did not compile, which is a bug in the
@@ -91,6 +143,7 @@ pub(crate) fn create_field_layouts(
 /// layouts and two are booleans, which is a call site nobody can read.
 pub(crate) struct FieldPipeline<'a> {
     pub(crate) layout: &'a wgpu::BindGroupLayout,
+    pub(crate) variant: FieldVariant,
     pub(crate) shader_layout: &'a wgpu::BindGroupLayout,
     /// The fragment shader spliced into the hook, if there is one.
     pub(crate) user: Option<&'a str>,
@@ -117,10 +170,50 @@ pub(crate) fn build_field_pipeline(
         textures,
         data,
         blend,
+        variant,
     } = built;
     // Group two is a shader's own textures and three its data blocks, both
     // present only when it declared any — an empty group is still a group wgpu
     // would want filled.
+    let mut constants = super::blend_constants(blend).to_vec();
+    constants.push((
+        "MORF_ANALYTIC",
+        if variant == FieldVariant::General {
+            0.0
+        } else {
+            1.0
+        },
+    ));
+    constants.push((
+        "MORF_LAYER_FADES",
+        if matches!(
+            variant,
+            FieldVariant::AnalyticOpaque | FieldVariant::BoxesOpaque | FieldVariant::Quad
+        ) {
+            0.0
+        } else {
+            1.0
+        },
+    ));
+    constants.push((
+        "MORF_BOX_ONLY",
+        if matches!(
+            variant,
+            FieldVariant::Boxes | FieldVariant::BoxesOpaque | FieldVariant::Quad
+        ) {
+            1.0
+        } else {
+            0.0
+        },
+    ));
+    constants.push((
+        "MORF_SINGLE_BOX",
+        if variant == FieldVariant::Quad {
+            1.0
+        } else {
+            0.0
+        },
+    ));
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("morf field pipeline layout"),
         bind_group_layouts: &[Some(layout), Some(shader_layout), textures, data],
@@ -169,7 +262,7 @@ pub(crate) fn build_field_pipeline(
                 write_mask: wgpu::ColorWrites::ALL,
             })],
             compilation_options: wgpu::PipelineCompilationOptions {
-                constants: super::blend_constants(blend),
+                constants: &constants,
                 ..Default::default()
             },
         }),
@@ -265,4 +358,31 @@ pub(crate) fn create_shader_bind_group(
             resource: uniforms.as_entire_binding(),
         }],
     })
+}
+
+#[cfg(test)]
+mod variant_tests {
+    use super::FieldVariant;
+    use crate::Shape;
+    use crate::gpu::field_tests::{field_command, field_layer};
+
+    #[test]
+    fn specialisation_preserves_outlines_and_partial_opacity() {
+        let mut scene = morf_scene::Scene::default();
+        let node = scene.create(morf_scene::Element::Sdf);
+        let mut layer = field_layer(0.0, 0.0, 100.0, Shape::Box);
+        let variant = |layer| FieldVariant::for_command(&field_command(node, vec![layer]));
+        assert_eq!(variant(layer.clone()), FieldVariant::BoxesOpaque);
+        layer.opacity = 0.5;
+        assert_eq!(variant(layer.clone()), FieldVariant::Boxes);
+        layer.opacity = 0.0;
+        assert_eq!(variant(layer.clone()), FieldVariant::BoxesOpaque);
+        layer.opacity = 1.0;
+        layer.morph_to = Shape::Polygon;
+        layer.morph = 0.5;
+        assert_eq!(variant(layer.clone()), FieldVariant::General);
+        layer.morph = 0.0;
+        layer.shape = Shape::Polygon;
+        assert_eq!(variant(layer), FieldVariant::General);
+    }
 }

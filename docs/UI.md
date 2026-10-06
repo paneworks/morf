@@ -1631,14 +1631,18 @@ Gestures are events like any other, on any node that takes the pointer:
 |---|---|
 | `on_double_clicked(x, y, local_x, local_y)` | a second click within 400 ms and 8 px of the first, after that click's `on_clicked` |
 | `on_long_pressed(x, y, local_x, local_y)` | a press held within 8 px for half a second; the click its release would make is not delivered |
-| `on_swiped(direction, velocity_x, velocity_y)` | a press moved over 24 px and let go faster than 400 px/s; `direction` is `left`, `right`, `up` or `down` |
+| `on_swiped(direction, velocity_x, velocity_y)` | a press moved over 24 px and let go faster than 400 px/s, or a touch pulled at least 80 px along a dominant axis; `direction` is `left`, `right`, `up` or `down` |
 | `on_pinched(scale, phase, x, y)` | two fingers spreading or closing: `scale` against their first spread, `phase` `update` then `end`, `(x, y)` their midpoint |
 | `on_edge_swiped(edge)` | on a surface's root: a finger landing within 20 px of an edge and moving 48 px in |
 
 Two fingers moving together where nothing takes a pinch scroll what lies
 under them, as a touchpad does. A finger is the left button throughout: it
 presses, drags and clicks as the pointer does, so a swipe and a long press
-work under a finger and a mouse alike.
+work under a finger and a mouse alike. A swipe on passive content goes to
+the nearest ancestor with `on_swiped`. A child with its own swipe/drag
+handler, a text input, or a terminal keeps the gesture; panel navigation
+does not take over sliders or text selection. Canceling a touch does not
+complete a swipe.
 
 ### Overlays
 
