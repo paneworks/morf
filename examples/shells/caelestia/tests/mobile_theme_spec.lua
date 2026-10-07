@@ -27,6 +27,7 @@ local HOST=[[
   local model
   models.new=function(...) model=new(...) return model end
   local W,H=tonumber(morf.env("TEST_WIDTH")),tonumber(morf.env("TEST_HEIGHT"))
+  morf.surface.height=H
   ui.Item {width=W,height=H,visible=function() return shown:get() end,
     require("connectivity").mobile_page(W,function() return H end)}
   morf.ipc.show=function(on)
