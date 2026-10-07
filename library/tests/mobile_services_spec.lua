@@ -16,7 +16,11 @@ local HOST=[[
   local client={}
   client.has_owner=function() return owned end
   client.call1=function(name,path,interface,method)
-    if method=="GetManagedObjects" then return {[MP]={[MM..".Modem"]=modem_props,[MM..".Modem.Modem3gpp"]=gpp}} end
+    if method=="GetManagedObjects" then
+      if morf.env("MOBILE_LEGACY")=="1" then return nil,"D-Bus dictionary keys must be strings" end
+      return {[MP]={[MM..".Modem"]=modem_props,[MM..".Modem.Modem3gpp"]=gpp}}
+    end
+    if method=="Introspect" then return device and '<node><node name="0"/></node>' or '<node/>' end
     if method=="ListConnections" then return saved and {SP} or {} end
     if method=="GetSettings" then return {connection={id="Mobile data",type="gsm",uuid="mobile"},
       gsm={apn="internet.example",["auto-config"]=true}} end
@@ -26,6 +30,9 @@ local HOST=[[
       [DEV]={[NM..".Device"]={Interface="wwan0",DeviceType=8,Managed=true,State=30}}}
   end
   client.get_all=function() return {WwanEnabled=true} end
+  client.get=function(_,_,interface,property)
+    return (interface==MM..".Modem" and modem_props or gpp)[property]
+  end
   client.watch_name=function(name,fn) watches[name]=fn end
   client.on_signal=function() end
   client.on_properties=function(_,path,fn) properties[path]=fn return {close=function() end} end
@@ -46,12 +53,13 @@ local HOST=[[
   morf.ipc.change=function(what)
     if what=="saved" then saved=true net.refresh()
     elseif what=="no-device" then device=false net.refresh()
+    elseif what=="device-back" then device=true net.refresh()
     elseif what=="no-sim" then modem_props.Sim="/" properties[MP](MM..".Modem",{Sim="/"},{})
     elseif what=="manager-gone" then owned=false watches[NM]()
     elseif what=="manager-back" then owned=true watches[NM]() end
   end
   morf.ipc.read=function()
-    return {profile=net.state.known_connections:get(1),sim=modem.state.sim_present,
+    return {available=modem.state.available,profile=net.state.known_connections:get(1),sim=modem.state.sim_present,
       roaming=modem.state.roaming,data=modem.state.data}
   end
 ]]
@@ -73,6 +81,14 @@ test.it("mobile setup types its D-Bus arguments and reuses an existing GSM profi
   result=test.ipc("create")
   test.eq(result.calls[2].method,"ActivateConnection")
   test.eq(result.calls[2].args[1].value,"/org/freedesktop/NetworkManager/Settings/1")
+end)
+test.it("cached engines detect modems despite unsupported UnlockRetries dictionaries",function()
+  test.load("mobile-service-fixture.lua",{source=HOST,size={20,20},env={MOBILE_LEGACY="1"}})
+  test.truthy(test.ipc("read").available) test.truthy(test.ipc("read").sim)
+  test.ipc("change","no-device") test.advance(10001)
+  test.falsy(test.ipc("read").available)
+  test.ipc("change","device-back") test.advance(10001)
+  test.truthy(test.ipc("read").available)
 end)
 test.it("mobile setup refuses absent hardware and modem follows SIM and manager changes",function()
   test.load("mobile-service-fixture.lua",{source=HOST,size={20,20}})

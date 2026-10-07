@@ -128,7 +128,8 @@ do
   local fake = morf.env and morf.env("CAELESTIA_FAKE_MODEM")
   if fake and fake ~= "" and fake ~= "0" and not (M.modem and M.modem.state.available) then
     local state = morf.state { available = true, signal = 72, technology = "5G", operator = "Vodafone NL",
-      registered = true, connected = true, enabled = true, locked = false, data = true, path = "/fake" }
+      registered = true, connected = true, enabled = true, locked = false, data = true,
+      sim_present = true, roaming = false, path = "/fake" }
     M.modem = { state = state, set_data = function(on) state.data = on == true end }
   end
 end
