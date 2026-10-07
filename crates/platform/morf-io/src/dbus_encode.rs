@@ -21,7 +21,7 @@ fn dbus_scalar_value<'a>(value: &'a DbusValue, role: &str) -> Result<Value<'a>, 
         DbusValue::Fd(fd) => Ok(Value::Fd(fd.as_fd().into())),
         DbusValue::Bytes(bytes) => byte_array(bytes),
         DbusValue::Nil => Err(format!("nil cannot be a {role}")),
-        DbusValue::List(_) | DbusValue::Map(_) => {
+        DbusValue::List(_) | DbusValue::Map(_) | DbusValue::Dictionary(_) => {
             Err(format!("a compound {role} needs an explicit signature"))
         }
     }
@@ -135,6 +135,17 @@ fn dbus_value_for_signature<'a>(
             key: key_signature,
             value: value_signature,
         } => {
+            if let DbusValue::Dictionary(entries) = value {
+                let mut dict = Dict::new(key_signature.signature(), value_signature.signature());
+                for (key, value) in entries {
+                    dict.append(
+                        dbus_value_for_signature(key_signature.signature(), key)?,
+                        dbus_value_for_signature(value_signature.signature(), value)?,
+                    )
+                    .map_err(|error| error.to_string())?;
+                }
+                return Ok(Value::Dict(dict));
+            }
             // `{}` reads as an empty list, because Lua cannot say otherwise —
             // and it was refused here as "not a map", which left no way at all
             // to send an empty `a{sv}`. The signature says it is a map; an

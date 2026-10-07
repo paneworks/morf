@@ -20,6 +20,40 @@ fn typed(signature: &str, value: DbusValue) -> DbusValue {
     }
 }
 
+#[test]
+fn modem_manager_unlock_retries_do_not_break_the_object_tree() {
+    let retries = DbusValue::Dictionary(vec![
+        (DbusValue::Unsigned(2), DbusValue::Unsigned(3)),
+        (DbusValue::Unsigned(4), DbusValue::Unsigned(10)),
+    ]);
+    let properties = BTreeMap::from([
+        ("UnlockRetries".to_owned(), typed("a{uu}", retries.clone())),
+        ("State".to_owned(), typed("i", DbusValue::Integer(11))),
+    ]);
+    let interfaces = BTreeMap::from([(
+        "org.freedesktop.ModemManager1.Modem".to_owned(),
+        DbusValue::Map(properties),
+    )]);
+    let objects = BTreeMap::from([(
+        "/org/freedesktop/ModemManager1/Modem/0".to_owned(),
+        DbusValue::Map(interfaces),
+    )]);
+    let tree = DbusValue::Map(objects);
+    let encoded = typed_dbus_value("a{oa{sa{sv}}}", &tree).unwrap();
+    let decoded = crate::dbus_decode::dynamic_value(&encoded).unwrap();
+    let DbusValue::Map(objects) = decoded else {
+        panic!("object tree")
+    };
+    let DbusValue::Map(interfaces) = &objects["/org/freedesktop/ModemManager1/Modem/0"] else {
+        panic!("interfaces")
+    };
+    let DbusValue::Map(properties) = &interfaces["org.freedesktop.ModemManager1.Modem"] else {
+        panic!("properties")
+    };
+    assert_eq!(properties["UnlockRetries"], retries);
+    assert_eq!(properties["State"], DbusValue::Integer(11));
+}
+
 /// A method call whose body is `values`, as a caller would send it.
 fn message_with(values: &[DbusValue]) -> zbus::Message {
     let mut body = zbus::zvariant::StructureBuilder::new();
