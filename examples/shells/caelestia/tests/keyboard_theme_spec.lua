@@ -37,6 +37,29 @@ end
 local function key(name,mode,page) return "caelestia.osk.key."..(mode or "full").."."..(page or "letters").."."..name end
 local function shot(name) if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(name..".png") end end
 for _,style in ipairs {"material","tsugumori"} do
+  test.it(style.." dev keyboard sends Super shortcuts and releases its modifier",function()
+    for _,size in ipairs {{360,800},{744,1656},{1400,800}} do
+      load(style,size[1],size[2]) test.ipc("show","dev") test.advance(2400)
+      local super=key("mod:super","dev")
+      test.truthy(test.get(super).visible)
+      test.click(super) test.click(key("enter","dev"))
+      test.eq(test.ipc("state").events,{{mask=64},{code=28,on=true},{code=28,on=false},{mask=0}})
+      test.ipc("clear") test.click(key("q","dev"))
+      test.eq(test.ipc("state").events,{{code=16,on=true},{code=16,on=false}})
+      test.ipc("ime","yes") test.ipc("clear")
+      test.click(super) test.click(key("mod:alt","dev")) test.click(key("space","dev"))
+      test.eq(test.ipc("state").events,{{mask=72},{code=57,on=true},{code=57,on=false},{mask=0}},
+        "input method swallowed the Super+Alt shortcut")
+      test.ipc("clear") test.click(super) test.click(super)
+      test.click(key("enter","dev")) test.click(key("enter","dev"))
+      test.eq(test.ipc("state").events,{{mask=64},{code=28,on=true},{code=28,on=false},{mask=0},
+        {mask=64},{code=28,on=true},{code=28,on=false},{mask=0}})
+      test.click(super) test.ipc("clear") test.click(key("enter","dev"))
+      test.eq(test.ipc("state").events,{{code=28,on=true},{code=28,on=false}})
+      shot(style.."-keyboard-dev-super-"..size[1])
+      test.eq(test.logs("error"),{})
+    end
+  end)
   test.it(style.." keyboard layouts retain key delivery, shift and symbols",function()
     load(style) test.ipc("show","full") test.advance(2400)
     shot(style.."-keyboard-full")

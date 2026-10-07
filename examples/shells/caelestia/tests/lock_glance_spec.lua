@@ -8,14 +8,18 @@ local SOURCE=[[
   package.loaded["lib.integrations.weather"]={new=function() return {get=function() return weather:get() end} end,
     material_symbol=function() return "sunny" end}
   local ctx
+  local keyboard=require("themes.auth_keyboard") local make=keyboard.new local board,options
+  keyboard.new=function(config) options=config board=make(config) return board end
   local theme=require("themes").current.lock local build=require(theme)
   package.loaded[theme]=function(context) ctx=context return build(context) end
   require("init")
   morf.ipc.audit=function(action)
     if action=="password" then ctx.method:set("password") end
     if action=="no-weather" then weather:set({}) end
+    if action=="hide-keyboard" then board.hide() end
     return {stage=ctx.stage:get(),typed=ctx.typed:get()}
   end
+  morf.ipc.key_id=function(key) return options.prefix..".osk."..options.output..".key.full.letters."..key end
 ]]
 local function load(style,w,h,desktop)
   test.load("../lock/init.lua",{source=SOURCE,size={w,h},args={"window","preview"},
@@ -58,10 +62,16 @@ for _,style in ipairs {"material","tsugumori"} do
   end)
   test.it(style.." laptop lock reveals by upward drag or deliberate upward scroll",function()
     load(style,1920,1080,true)
+    test.click(960,640) test.key("Return") test.type("wake") test.advance(400) at_rest()
     test.drag({960,640},{1120,640},{steps=10}) test.advance(400) at_rest()
     test.drag({960,640},{960,480},{steps=10}) test.advance(700)
     test.eq(test.ipc("audit").stage,"sheet")
-    test.ipc("stage","rest") test.advance(700)
+    test.click("lock-name") test.click("lock-field")
+    local sheet=test.get("lock-sheet")
+    test.click(sheet.x+4,sheet.y+sheet.height-4)
+    test.eq(test.ipc("audit").stage,"sheet","click inside the card dismissed it")
+    test.ipc("audit","password") test.type("private")
+    test.click(960,100) test.advance(700) at_rest()
     test.wheel(0,120,{x=960,y=640}) at_rest()
     test.wheel(120,0,{x=960,y=640}) at_rest()
     test.wheel(0,-10,{x=960,y=640}) at_rest()
@@ -70,6 +80,32 @@ for _,style in ipairs {"material","tsugumori"} do
     test.wheel(0,-80,{x=960,y=640}) test.advance(700)
     test.eq(test.ipc("audit").stage,"sheet")
     test.truthy(test.get("lock-name").visible)
+    test.eq(test.logs("error"),{})
+  end)
+  test.it(style.." lock returns to its clock after an outside tap or hiding the keyboard",function()
+    load(style,406,903,false)
+    local function reveal()
+      test.swipe({203,600},{203,440},{duration=300}) test.advance(700)
+      test.ipc("audit","password") test.advance(100)
+    end
+    local function tap(id)
+      local node=test.get(id) local x,y=node.x+node.width/2,node.y+node.height/2
+      test.touch("down",1,x,y) test.touch("up",1,x,y)
+    end
+    reveal()
+    tap("lock-name") tap("lock-field")
+    tap(test.ipc("key_id","q"))
+    test.eq(test.ipc("audit"),{stage="sheet",typed=1},"typing dismissed the card")
+    test.touch("down",1,203,80) test.touch("up",1,203,80)
+    test.advance(700) at_rest()
+    reveal() tap(test.ipc("key_id","q"))
+    local key=test.get(test.ipc("key_id","q")) local x,y=key.x+10,key.y+10
+    test.touch("down",1,x,y) test.touch("down",2,x+60,y)
+    test.touch("move",1,x,y+100) test.touch("move",2,x+60,y+100)
+    test.touch("up",1,x,y+100) test.touch("up",2,x+60,y+100)
+    test.advance(700) at_rest()
+    reveal() tap(test.ipc("key_id","q"))
+    test.ipc("audit","hide-keyboard") test.advance(700) at_rest()
     test.eq(test.logs("error"),{})
   end)
   test.it(style.." weather is centered above the clock at phone and laptop sizes",function()

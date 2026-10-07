@@ -88,7 +88,7 @@ for _,style in ipairs {"material","tsugumori"} do
       test.eq(state().mode,"full") test.eq(state().typed,0)
       q=test.get(test.ipc("key_id","q"))
       pair(q.x+10,q.y+10,100)
-      test.falsy(state().open) test.eq(state().stage,"sheet")
+      test.falsy(state().open) test.eq(state().stage,role=="lock" and "rest" or "sheet")
       pair(210,700,-100) test.falsy(state().open)
       pair(210,1375,-120) test.truthy(state().open) test.eq(state().mode,"full")
       test.eq(state().typed,0)

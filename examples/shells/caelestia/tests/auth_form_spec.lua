@@ -54,8 +54,15 @@ for _,style in ipairs {"material","tsugumori"} do
         if morf.env("MORF_THEME_SNAPSHOTS")=="1" and (size[1]==744 or size[1]==406) then
           test.snapshot(style.."-"..role.."-"..size[1].."-password.png")
         end
-        test.ipc("form","hide") test.advance(1) separated(role)
-        test.advance(450) separated(role)
+        test.ipc("form","hide")
+        for _,ms in ipairs {1,450} do
+          test.advance(ms)
+          if role=="lock" then
+            test.eq(test.ipc("form").stage,"rest")
+            test.falsy(test.get("lock-sheet").visible)
+            test.falsy(test.get("lock-keyboard").visible)
+          else separated(role) end
+        end
         test.ipc("form","show") test.advance(1) separated(role)
         test.advance(450) separated(role)
         test.eq(#test.logs("error"),0)
