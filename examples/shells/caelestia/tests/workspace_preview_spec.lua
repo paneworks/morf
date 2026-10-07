@@ -8,7 +8,11 @@ local HOST=[[
     {workspace=1.0,class="terminal",title="Current",width=1000,height=2200,x=50,y=100,mapped=true},
     {workspace=2.0,class="editor",title="Next",width=900,height=2100,x=80,y=120,mapped=true}}
   local data=morf.state {clients=clients,workspaces={},monitors={{name="DSI-1",x=0,y=0,width=1116,scale=1}}}
-  package.loaded["lib.integrations.hyprland"]={state=data}
+  package.loaded["lib.integrations.hyprland"]={state=data,options=function(_,callback)
+    callback({["general:border_size"]={int=3},["decoration:rounding"]={int=20},
+      ["general:col.active_border"]={gradient="fff0c5d6 0deg"},
+      ["general:col.inactive_border"]={gradient="ff523843 0deg"}})
+  end}
   local switches,releases,pending={},{},{}
   package.loaded.services={output=function() return "DSI-1" end,workspace={
     active=function() return 1.0 end,go=function(id) switches[#switches+1]=tostring(id) end}}
@@ -33,6 +37,9 @@ test.it("automatic fullscreen dimensions retain window geometry and release capt
   test.ipc("begin")
   local card=test.get("phone-workspace-window-0-1")
   test.near(card.width,1000,1) test.near(card.height,2200,1)
+  local border=test.get("phone-workspace-border-0-1")
+  test.near(border.width,1006,1) test.near(border.height,2206,1)
+  test.near(border.x,card.x-3,1) test.near(border.y,card.y-3,1)
   test.ipc("frame")
   test.ipc("update","-500")
   test.near(test.get("phone-workspace-window-0-1").x,card.x-500,1)
