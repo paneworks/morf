@@ -1,7 +1,9 @@
 local test = morf.test
 local SOURCE = [[
-  local steps = {}
+  local steps, switches = {}, {}
   require("services").workspace.step = function(delta) steps[#steps + 1] = delta end
+  local go=require("services").workspace.go
+  require("services").workspace.go=function(id) switches[#switches+1]=id go(id) end
   require("init")
   morf.surface.width=tonumber(morf.env("TEST_W"))
   morf.surface.height=tonumber(morf.env("TEST_H"))
@@ -13,7 +15,13 @@ local SOURCE = [[
       sidebar_y = sidebar.drawer.panel.translate_y,
       dashboard_tab = require("dashboard").tab:get(), sidebar_tab = sidebar.tab:get(),
       sidebar = sidebar.drawer.open:get(), notifications = sidebar.showing("notifications"),
-      settings = sidebar.showing("settings"), steps = steps }
+      settings = sidebar.showing("settings"), steps = steps, switches=switches,
+      active_workspace=require("services").workspace.active(),
+      preview=require("phone_gestures").workspace_preview and {
+        active=require("phone_gestures").workspace_preview.active,
+        offset=require("phone_gestures").workspace_preview.offset,
+        target=require("phone_gestures").workspace_preview.target,
+      } }
   end
 ]]
 local function load(style, width, height, workspaces)
@@ -23,8 +31,57 @@ local function load(style, width, height, workspaces)
       TEST_W=tostring(width or 1116), TEST_H=tostring(height or 2484), CAELESTIA_WORKSPACE_GESTURES=workspaces or "" } })
   test.advance(500)
 end
-local function swipe(edge) test.ipc("swipe_test", edge) test.advance(600) end
 local function state() return test.ipc("gesture_state") end
+
+for _,style in ipairs {"material","tsugumori"} do
+  test.it(style.." bottom workspace preview follows and reverses without switching until release",function()
+    load(style)
+    test.touch("down",0,900,2480)
+    test.advance(40) test.touch("move",0,400,2480)
+    test.truthy(state().preview.active)
+    test.near(state().preview.offset,-500,1)
+    test.eq(state().active_workspace,1) test.eq(state().switches,{})
+    local x=test.get("phone-workspace-page-0").x
+    test.advance(1200) test.near(test.get("phone-workspace-page-0").x,x,1)
+    test.touch("move",0,820,2480) test.near(state().preview.offset,-80,1)
+    test.touch("up",0,820,2480) test.advance(400)
+    test.eq(state().switches,{}) test.falsy(state().preview.active)
+    test.eq(#test.find_all("phone-workspace-page-0"),0)
+    test.touch("down",0,900,2480) test.touch("move",0,300,2480)
+    test.truthy(state().preview.active)
+    test.eq(state().preview.target,2)
+    test.near(state().preview.offset,-600,1)
+    test.eq(state().switches,{})
+    test.touch("up",0,300,2480) test.advance(400)
+    test.eq(test.logs("error"),{})
+    test.falsy(state().preview.active)
+    test.eq(state().switches,{2}) test.eq(state().active_workspace,2)
+    test.touch("down",0,200,2480) test.touch("move",0,800,2480)
+    test.touch("up",0,800,2480) test.advance(400)
+    test.eq(state().switches,{2,1})
+    test.eq(#test.logs("error"),0)
+  end)
+  test.it(style.." workspace drag cancels on second finger, touch cancel and authentication",function()
+    load(style)
+    test.touch("down",0,900,2480) test.touch("move",0,300,2480)
+    test.touch("down",1,700,2480)
+    test.falsy(state().preview.active)
+    test.touch("up",0,300,2480) test.touch("up",1,700,2480)
+    test.advance(400) test.eq(state().switches,{})
+    test.touch("down",0,900,2480) test.touch("move",0,300,2480)
+    test.touch("cancel",0) test.advance(400)
+    test.falsy(state().preview.active) test.eq(state().switches,{})
+    test.touch("down",0,900,2480) test.touch("move",0,300,2480)
+    test.ipc("session","open")
+    test.touch("up",0,300,2480) test.advance(400)
+    test.falsy(state().preview.active) test.eq(state().switches,{})
+    test.ipc("session","close") test.advance(400)
+    test.swipe({1110,1200},{400,1200}) test.advance(400)
+    test.eq(state().switches,{}) test.falsy(state().preview.active)
+    test.eq(#test.logs("error"),0)
+  end)
+end
+local function swipe(edge) test.ipc("swipe_test", edge) test.advance(600) end
 for _, style in ipairs { "material", "tsugumori" } do
   test.it(style .. " leaves side edges unclaimed", function()
     load(style, nil, nil, "compositor")

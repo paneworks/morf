@@ -241,6 +241,7 @@ PAGES.phone = {
 function osk.new(options)
   -- A shell may supply its themed key target; input semantics stay here.
   local action = options.action or ui.MouseArea
+  local touch = options.touch
   local NAME = options.prefix or "osk"
   local function named(s) return NAME .. "." .. s end
   local W = options.width
@@ -415,18 +416,21 @@ function osk.new(options)
     area = action {
       id = id, x = x, y = body_top + y, width = w, height = KH, cursor = "pointer",
       on_pressed = function()
-        if not enabled() then return end
+        if not enabled() or (touch and touch.blocked()) then return end
         held = true
         down:set(true)
         long = false
         repeated = false
         if spec.kind == "action" then
-          if not touching then act(spec.action) end
+          -- Released engines dispatch Pressed before TouchPressed. A
+          -- gesture-enabled board must defer irreversible actions until
+          -- release even before the raw touch callback arrives.
+          if not touching and not touch then act(spec.action) end
           return
         end
         show_preview()
         if spec.rep then
-          if not touching then commit() repeated = true end
+          if not touching and not touch then commit() repeated = true end
           repeat_timer = morf.timer(420, function()
             commit() repeated = true
             repeat_timer = morf.timer(55, function() commit() end, true)
@@ -461,7 +465,7 @@ function osk.new(options)
         touching = false
         cancel_timers()
         if spec.kind == "action" then
-          if was_touch then act(spec.action) end
+          if was_touch or touch then act(spec.action) end
           return
         end
         if long then
@@ -509,11 +513,19 @@ function osk.new(options)
         },
       },
     }
-    area.on_touch_pressed = function() touching = true end
-    area.on_touch_canceled = function()
+    area.on_touch_pressed = function(id,px,py)
+      touching = true
+      if touch then touch.down(id,px,py) end
+    end
+    if touch then
+      area.on_touch_moved=touch.move
+      area.on_touch_released=touch.up
+    end
+    area.on_touch_canceled = function(id)
       cancel()
       preview.on:set(false)
       alts.list:set({})
+      if touch then touch.cancel(id) end
     end
     -- The long press's first offer, small in the corner.
     local hint = spec.alts and spec.alts[1]
