@@ -209,19 +209,19 @@ M.TOGGLES = {
     id = "mobile", name = "Mobile data",
     icon = function()
       local m = services.modem
-      if not m then return "signal_cellular_nodata" end
+      if not (m and m.state.available) then return "signal_cellular_nodata" end
       return m.state.data and "signal_cellular_alt" or "signal_cellular_off"
     end,
-    on = function() return services.modem ~= nil and services.modem.state.data end,
+    on = function() local m = services.modem return m ~= nil and m.state.available and m.state.data end,
     set = function(now)
       local m = services.modem
-      if not m then return end
+      if not (m and m.state.available) then return end
       if dry_run() then morf.log("info", "caelestia: mobile data " .. tostring(now) .. " (dry run)") return end
       pcall(m.set_data, now)
     end,
     status = function()
       local m = services.modem
-      if not m then return "No modem" end
+      if not (m and m.state.available) then return "No modem" end
       local s = m.state
       if s.locked then return "SIM locked" end
       if not s.data then return "Off" end
