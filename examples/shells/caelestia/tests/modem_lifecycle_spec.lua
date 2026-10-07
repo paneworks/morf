@@ -25,7 +25,7 @@ local HOST = [[
   morf.ipc.read = function()
     return {observed=services.modem==mobile, status=status:get(), on=toggle.on(), icon=toggle.icon(),
       technology=bar.reading:get().technology, bars=bar.reading:get().mobile_icon,
-      calls=calls}
+      calls=calls,detail=toggle.detail,can_open=model.request("mobile")}
   end
 ]]
 
@@ -35,6 +35,8 @@ test.it("mobile settings and bar follow late hardware and removal without reload
   }})
   test.advance(50)
   test.truthy(test.ipc("read").observed)
+  test.eq(test.ipc("read").detail,"mobile")
+  test.truthy(test.ipc("read").can_open)
   test.eq(test.ipc("read").status,"No modem")
   test.falsy(test.ipc("read").on)
   test.eq(test.ipc("read").technology,"")

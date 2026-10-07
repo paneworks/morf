@@ -206,7 +206,7 @@ M.TOGGLES = {
   },
   {
     -- A phone's mobile data. Without a modem it says so, crossed out.
-    id = "mobile", name = "Mobile data",
+    id = "mobile", name = "Mobile data", detail = "mobile",
     icon = function()
       local m = services.modem
       if not (m and m.state.available) then return "signal_cellular_nodata" end
@@ -431,6 +431,7 @@ M.displayed = require("themes.session").keep("caelestia.settings.displayed", "")
 
 M.DETAILS = {
   {key="network",name="Network"}, {key="bluetooth",name="Bluetooth"},
+  {key="mobile",name="Mobile networks"},
   {key="sound",name="Sound"}, {key="microphone",name="Microphone"},
   {key="power",name="Power"}, {key="bar",name="Bar"}, {key="wired",name="Wired"},
   {key="mesh",name="Mesh"}, {key="tunnel",name="Tunnel"}, {key="focus",name="Focus"},

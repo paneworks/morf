@@ -59,7 +59,7 @@ function modem.connect(options)
   local state = morf.state {
     available = false, signal = 0, technology = "", operator = "",
     registered = false, connected = false, enabled = false, locked = false,
-    data = false, path = "",
+    data = false, path = "", sim_present = false, roaming = false,
   }
   local mobile = { state = state }
   local objects = {}
@@ -72,6 +72,9 @@ function modem.connect(options)
     end
     if not chosen then
       state.available = false
+      state.path = ""
+      state.sim_present = false
+      state.roaming = false
       return
     end
     local m = objects[chosen][MODEM] or {}
@@ -86,6 +89,8 @@ function modem.connect(options)
     state.enabled = s >= ENABLED
     state.registered = s >= REGISTERED
     state.connected = s == CONNECTED
+    state.sim_present = type(m.Sim) == "string" and m.Sim ~= "/" and m.Sim ~= ""
+    state.roaming = tonumber(gpp.RegistrationState) == 5
   end
 
   local function watch(path)
@@ -129,6 +134,7 @@ function modem.connect(options)
   end
 
   client.watch_name(MM, read_all)
+  client.watch_name(NM, read_data)
   client.on_signal(MM, ROOT, OBJECT_MANAGER, "InterfacesAdded", function() read_all() end)
   client.on_signal(MM, ROOT, OBJECT_MANAGER, "InterfacesRemoved", function() read_all() end)
   client.on_properties(NM, NM_PATH, function(_, changed)
