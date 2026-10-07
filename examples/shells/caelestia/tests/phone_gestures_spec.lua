@@ -16,16 +16,28 @@ local SOURCE = [[
       settings = sidebar.showing("settings"), steps = steps }
   end
 ]]
-local function load(style, width, height)
+local function load(style, width, height, workspaces)
   test.stub_run("task", { code = 0, stdout = "[]" })
   test.load("../shell/init.lua", { source = SOURCE, size = { width or 1116, height or 2484 },
     env = { CAELESTIA_STYLE = style, CAELESTIA_DRY_RUN = "1", CAELESTIA_WALLPAPER = "",
-      TEST_W=tostring(width or 1116), TEST_H=tostring(height or 2484) } })
+      TEST_W=tostring(width or 1116), TEST_H=tostring(height or 2484), CAELESTIA_WORKSPACE_GESTURES=workspaces or "" } })
   test.advance(500)
 end
 local function swipe(edge) test.ipc("swipe_test", edge) test.advance(600) end
 local function state() return test.ipc("gesture_state") end
 for _, style in ipairs { "material", "tsugumori" } do
+  test.it(style .. " leaves side edges to compositor workspace previews", function()
+    load(style, nil, nil, "compositor")
+    test.eq(#test.find_all("phone-gesture-left"), 0)
+    test.eq(#test.find_all("phone-gesture-right"), 0)
+    swipe("left") swipe("right") test.eq(state().steps, {})
+    test.touch("down", 1, 558, 2480)
+    test.touch("move", 1, 558, 2100) test.advance(500)
+    test.truthy(state().dashboard)
+    test.truthy(state().dashboard_y > 0)
+    test.touch("cancel", 1) test.advance(500)
+    test.eq(#test.logs("error"), 0)
+  end)
   test.it(style .. " phone pulls open dashboard, notifications and quick settings", function()
     load(style)
     swipe("bottom") test.truthy(state().dashboard)
