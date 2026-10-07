@@ -2,6 +2,7 @@
 -- a public, user-owned path so greetd can read the scale without home access.
 local morf = require("morf")
 local M = {}
+M.compositor = morf.env("CAELESTIA_SCALE_MODE") == "compositor"
 M.path = morf.env("CAELESTIA_SCALE_FILE")
   or ((morf.env("XDG_STATE_HOME") or (morf.fs.home() .. "/.local/state")) .. "/caelestia/scale.json")
 local base = tonumber(morf.env("CAELESTIA_SCALE_DEFAULT")) or 1
@@ -18,14 +19,25 @@ local stored = read(M.path)
 local saved = stored and valid(stored.zoom)
 local zoom = morf.signal("caelestia.shared-scale", saved and stored.zoom or default)
 function M.get() return zoom:get() end
-function M.factor() return 2 ^ M.get() end
+function M.factor() return M.compositor and 1 or 2 ^ M.get() end
 function M.set(value)
   value = tonumber(value)
   if not valid(value) then return false, "Scale must be between -1 and 1" end
-  local ok, err = morf.fs.write(M.path, morf.json.encode({ zoom = value }), { mode = 420, atomic = true, parents = true })
+  local preference = { zoom = value }
+  if M.compositor then
+    preference.scale = math.floor(2 ^ value * 20 + .5) / 20
+    preference.output = ((morf.screens or {})[1] or {}).name or ""
+  end
+  local ok, err = morf.fs.write(M.path, morf.json.encode(preference), { mode = 420, atomic = true, parents = true })
   if not ok then return false, err end
   saved = true
   zoom:set(value)
+  if M.compositor then
+    local hypr = require("lib.integrations.hyprland")
+    if hypr.available() then
+      hypr.eval(("bresilla_set_display_scale(%.2f, %q)"):format(preference.scale, preference.output))
+    end
+  end
   return true
 end
 M.watch = morf.fs.watch(M.path, function()
@@ -49,6 +61,6 @@ function M.link(config)
   return config
 end
 function M.apply()
-  if morf.density then morf.density({ zoom = M.factor() }) end
+  if morf.density then morf.density(M.compositor and "compositor" or { zoom = M.factor() }) end
 end
 return M
