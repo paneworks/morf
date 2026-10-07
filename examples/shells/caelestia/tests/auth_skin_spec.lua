@@ -106,7 +106,7 @@ for _,part in ipairs {"lock","greet"} do
         if size[3] then
           local keys=0
           for _,node in ipairs(test.nodes()) do
-            if node.visible and node.id and node.id:find("key.fulln.letters",1,true) then
+            if node.visible and node.id and node.id:find("key.full.letters",1,true) then
               keys=keys+1
               test.truthy(node.x>=0 and node.x+node.width<=size[1]+1,node.id.." outside screen width")
               test.truthy(node.y>=0 and node.y+node.height<=size[2]+1,node.id.." outside screen height")

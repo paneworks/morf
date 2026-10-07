@@ -56,7 +56,6 @@ return function(W, H, NAME)
   local PORTRAIT = H > W
   local SHORT = geometry.short
   -- The on-screen keyboard: on a phone, or wherever no keyboard is attached.
-  local ONSCREEN = PORTRAIT or not ctx.keyboard_attached()
 
   local SW = geometry.sheet_width
   local AV = geometry.avatar
@@ -72,39 +71,31 @@ return function(W, H, NAME)
   }
   local function entry_h() return method:get() == "pattern" and pad.height() or FIELD_H end
   local function chip_h() return has_pattern() and s(44) or 0 end
-  local kb
-  if ONSCREEN then
-    kb = osk.new {
-      action = skin.action,
-      prefix = "lock.osk." .. NAME, width = SW - s(24), mode = "full", numbers = true,
-      metrics = {gap=s(5), key_height=s(54), alternate_cell=s(48)},
-      active = function() return main() and stage:get() == "sheet" and method:get() == "password" and not busy:get() end,
-      look = (skin.keyboard_look or function(v) return v end) {
-        panel = function() return C.surfaceContainer end,
-        key = function() return C.surfaceContainerHighest end,
-        key_dim = function() return C.surfaceContainerHigh end,
-        accent = function() return C.primary end,
-        on_accent = function() return C.onPrimary end,
-        text = function() return C.onSurface end,
-        dim = function() return C.onSurfaceVariant end,
-        press = function() return C.secondaryContainer end,
-        font = FONT, icons = ICONS, radius = skin.key_radius,
-      },
-      send = function(event)
-        if event.text then type_text(event.text)
-        elseif event.key == "backspace" then backspace()
-        elseif event.key == "enter" then submit()
-        elseif event.key == "escape" then escape() end
-      end,
-    }
-  end
-  local function kb_h() return (kb and method:get() == "password") and (kb.height() + s(16)) or 0 end
+  local kb=require("themes.auth_keyboard").new {
+    prefix="lock",output=NAME,width=W,height=H,border=BORDER,embedded_width=SW-s(24),
+    main=main,keyboard_attached=ctx.keyboard_attached,busy=busy,stage=stage,method=method,pull=pull,
+    claim=function() main_output:set(NAME) end,open_sheet=open_sheet,clear=clear,escape=escape,action=skin.action,
+    look=(skin.keyboard_look or function(v) return v end) {
+      panel=function() return C.surfaceContainer end,
+      key=function() return C.surfaceContainerHighest end,key_dim=function() return C.surfaceContainerHigh end,
+      accent=function() return C.primary end,on_accent=function() return C.onPrimary end,
+      text=function() return C.onSurface end,dim=function() return C.onSurfaceVariant end,
+      press=function() return C.secondaryContainer end,font=FONT,icons=ICONS,radius=skin.key_radius,
+    },
+    send=function(event)
+      if event.text then type_text(event.text)
+      elseif event.key=="backspace" then backspace()
+      elseif event.key=="enter" then submit()
+      elseif event.key=="escape" then escape() end
+    end,
+  }
+  local kb_h=kb.reserved
   -- The sheet: the account, the pill, a line for what PAM says; the keyboard
   -- under them on a phone.
   local function content_h()
-    return s(28) + AV + s(12) + s(30) + s(20) + entry_h() + s(10) + s(24) + chip_h() + s(24) + kb_h()
+    return s(28) + AV + s(12) + s(30) + s(20) + entry_h() + s(10) + s(24) + chip_h() + s(24) + kb.inline_height()
   end
-  local function sheet_h() return math.min(content_h(), math.max(1,H-2*BORDER-s(16))) end
+  local function sheet_h() return math.min(content_h(), math.max(1,H-2*BORDER-s(16)-kb_h())) end
 
   -- The swell's height as it stands: a bud at rest, the sheet up, a swipe
   -- in between.
@@ -119,7 +110,7 @@ return function(W, H, NAME)
   local function swell_h()
     local st = stage:get()
     if st == "closed" or st == "opening" or not main() then return BORDER end
-    return BORDER + BUD_H + (sheet_h() - BUD_H) * up()
+    return BORDER + BUD_H + (sheet_h()+kb_h() - BUD_H) * up()
   end
   local function swell_w()
     local st = stage:get()
@@ -155,7 +146,7 @@ return function(W, H, NAME)
   -- The swell has a field of its own, in a band along the bottom edge: the
   -- frame above stays still, and a swell growing redraws the band alone,
   -- not the whole screen every frame (a 4K screen of field was the lag).
-  local function band_h() return math.min(H, sheet_h() + s(90)) end
+  local function band_h() return math.min(H, sheet_h() + kb_h() + s(90)) end
   local band = ui.Item {
     x = 0, width = W,
     y = function() return H - band_h() end,
@@ -300,13 +291,13 @@ return function(W, H, NAME)
     anchors = { horizontal_center = true }, gap = s(6), align = "center",
     y = function()
       if stage:get() == "sheet" and main() then
-        return math.max(s(40), math.floor((H - BORDER - sheet_h()) / 2 - geometry.clock_sheet_offset))
+        return math.max(s(40), math.floor((H - BORDER - kb_h() - sheet_h()) / 2 - geometry.clock_sheet_offset))
       end
       return CLOCK_Y
     end,
     scale = function() return (stage:get() == "sheet" and main()) and 0.72 or 1 end,
     opacity = function()
-      return resting() and (not main() or stage:get() ~= "sheet" or H - sheet_h() > s(220)) and 1 or 0
+      return resting() and (not main() or stage:get() ~= "sheet" or H - sheet_h() - kb_h() > s(220)) and 1 or 0
     end,
     behavior = { y = GROW, scale = GROW, opacity = { duration = 320 } },
     (skin.clock or text) {
@@ -391,6 +382,7 @@ return function(W, H, NAME)
       border_width = function() return bad:get() and s(2) or 0 end,
       border_color = function() return C.error end,
     },
+    ui.MouseArea {id="lock-keyboard-focus",anchors={fill=true},on_clicked=function() kb.show() end},
     icon(function() return busy:get() and "hourglass" or "lock" end, s(22), C.onSurfaceVariant,
       { x = s(20), anchors = { vertical_center = true } }),
     text {
@@ -461,13 +453,8 @@ return function(W, H, NAME)
     },
     ui.Item { width = 1, height = s(24) },
   }
-  if kb then
-    sheet_nodes[#sheet_nodes + 1] = ui.Item {
-      width = SW - s(24),
-      height = function() return method:get() == "password" and kb.height() or 0 end,
-      visible = function() return method:get() == "password" end,
-      kb.node,
-    }
+  if kb.embedded then
+    sheet_nodes[#sheet_nodes+1]=ui.Item {width=SW-s(24),height=kb.inline_height,visible=kb.active,kb.node}
   end
   local viewport_node, viewport, viewport_t, viewport_ctl = require("lib.kit.scroll").make("scroll_view", {id="lock-sheet-scroll",width=SW,height=sheet_h,clip=true,
     ui.Column(sheet_nodes)})
@@ -481,7 +468,7 @@ return function(W, H, NAME)
   local sheet = ui.Item {
     id = "lock-sheet",
     x = math.floor((W - SW) / 2), width = SW,
-    y = function() return H - BORDER - sheet_h() end,
+    y = function() return H - BORDER - kb_h() - sheet_h() end,
     height = sheet_h,
     opacity = function() return stage:get() == "sheet" and 1 or 0 end,
     translate_y = function() return stage:get() == "sheet" and 0 or s(60) end,
@@ -489,6 +476,7 @@ return function(W, H, NAME)
       translate_y = GROW },
     visible = function() return main() and (stage:get() == "sheet" or stage:get() == "opening") end,
     viewport_node,
+    kb.surface {id="lock-sheet-handle",x=0,y=0,width=SW,height=20,z=10},
   }
 
   if skin.sheet then skin.sheet(sheet, {role="lock", width=SW, scale=s,
@@ -508,22 +496,13 @@ return function(W, H, NAME)
     band,
     glance,
     hint,
-    sheet,
+    sheet, not kb.embedded and kb.node or ui.Item {}, kb.edge,
     -- Under everything that can be clicked: a click or a swipe up opens the
     -- sheet, and the keys go where they belong.
-    ui.MouseArea {
+    kb.surface {
       id = "lock-open",
       anchors = { fill = true }, z = -1,
       on_clicked = function() main_output:set(NAME) open_sheet() end,
-      on_dragged = function(_, _, _, dy)
-        main_output:set(NAME)
-        if stage:get() ~= "rest" then return end
-        pull:set(math.max(0, math.min(1, -dy / s(360))))
-      end,
-      on_drag_finished = function()
-        if stage:get() ~= "rest" then return end
-        if pull:get() > 0.3 then open_sheet() else pull:set(0) end
-      end,
       on_key_pressed = key,
     },
   }
