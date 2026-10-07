@@ -17,6 +17,9 @@
 local morf = require("morf")
 
 local lule = {}
+-- Each consumer owns a live watch. Replacing a single module-wide handle
+-- lets Lua collect the wallpaper's watch when the Lule drawer subscribes.
+local watches = {}
 
 --- Where lule keeps its scheme.
 function lule.path()
@@ -53,9 +56,10 @@ end
 --- A signal holding lule's scheme (nil until there is one), kept current
 --- as lule writes; `name` names the signal ("lule").
 function lule.watch(name)
+  name = name or "lule"
   local path = lule.path()
-  local signal = morf.signal(name or "lule", (lule.read(path)))
-  lule._watch = morf.fs.watch(path, function()
+  local signal = morf.signal(name, (lule.read(path)))
+  watches[name] = morf.fs.watch(path, function()
     local scheme = lule.read(path)
     if scheme then signal:set(scheme) end
   end)

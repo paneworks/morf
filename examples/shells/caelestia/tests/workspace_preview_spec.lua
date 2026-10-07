@@ -1,6 +1,12 @@
 local test=morf.test
 local HOST=[[
   local ui=require("morf.ui")
+  local make_image=ui.Image local pictures={}
+  ui.Image=function(props)
+    local node=make_image(props)
+    if props.id and props.id:find("phone-workspace-wallpaper-",1,true)==1 then pictures[props.id]=node end
+    return node
+  end
   -- Match the real fullscreen shell: zero means automatic sizing.
   morf.surface.width,morf.surface.height=0,0
   package.loaded.bar={desk=function() return 0,60,1116,2424 end}
@@ -26,12 +32,39 @@ local HOST=[[
   morf.ipc.update=function(dx) preview.update(tonumber(dx)) end
   morf.ipc.finish=function() preview.finish(false) end
   morf.ipc.cancel=preview.cancel
+  morf.ipc.wallpapers=function()
+    return {pictures["phone-workspace-wallpaper-0"].source,pictures["phone-workspace-wallpaper-1"].source}
+  end
+  morf.ipc.studio=function() require("lule_studio") end
+  morf.ipc.churn=function() for i=1,5000 do local scratch=string.rep(tostring(i),100) end end
   morf.ipc.frame=function()
     local item=table.remove(pending,1)
     if item then item.callback({source="memory:"..item.id}) end
   end
   morf.ipc.state=function() return {releases=releases,switches=switches,pending=#pending} end
 ]]
+test.it("workspace previews follow newly applied Lule images while the studio is loaded",function()
+  local root=morf.env("XDG_CACHE_HOME").."/workspace-wallpaper"
+  local first,second=root.."/first.svg",root.."/second.svg"
+  for path,color in pairs {[first]="#ffaa66",[second]="#6688ff"} do
+    morf.fs.write(path,'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><path fill="'..color..'" d="M0 0h16v16H0z"/></svg>')
+  end
+  local function apply(image)
+    morf.fs.write(root.."/colors.json",morf.json.encode {wallpaper=image,theme="dark",colors={"#111111","#ffaa66"}})
+  end
+  apply(first)
+  test.load("../shell/init.lua",{source=HOST,size={1116,2484},
+    env={CAELESTIA_DRY_RUN="1",CAELESTIA_WALLPAPER="",LULE_A=root}})
+  test.ipc("begin") test.eq(test.ipc("wallpapers"),{first,first})
+  test.ipc("studio")
+  for i=1,4 do test.ipc("churn") test.advance(20) end
+  apply(second)
+  test.wait(function() return test.ipc("wallpapers")[1]==second end,2000)
+  test.eq(test.ipc("wallpapers"),{second,second})
+  test.ipc("cancel") test.ipc("begin")
+  test.eq(test.ipc("wallpapers"),{second,second})
+  test.eq(test.logs("error"),{})
+end)
 test.it("automatic fullscreen dimensions retain window geometry and release captures on cancel",function()
   test.load("../shell/init.lua",{source=HOST,size={1116,2484},env={CAELESTIA_DRY_RUN="1"}})
   test.ipc("begin")
