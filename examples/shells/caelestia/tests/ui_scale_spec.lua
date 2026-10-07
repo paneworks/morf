@@ -12,6 +12,13 @@ local HOST = [[
     return { zoom=config.get("appearance.zoom"), factor=scale.factor(), path=scale.path }
   end
 ]]
+test.it("launcher validation never creates a preference for its synthetic display",function()
+  remove(path)
+  test.load("../shell/init.lua",{source=HOST,size={620,1380},env={
+    CAELESTIA_SCALE_FILE=path,CAELESTIA_SCALE_MODE="compositor",CAELESTIA_DRY_RUN="1"}})
+  test.eq(test.ipc("zoom").factor,1)
+  test.falsy(morf.fs.exists(path))
+end)
 test.it("compositor scaling persists the output scale and sends no additional Morf zoom", function()
   remove(path)
   test.load("../shell/init.lua", {source=[[
@@ -25,7 +32,8 @@ test.it("compositor scaling persists the output scale and sends no additional Mo
   ]],size={620,1380},env={CAELESTIA_SCALE_FILE=path,CAELESTIA_SCALE_MODE="compositor"}})
   local state=test.ipc("set")
   test.eq(state.factor,1)
-  test.truthy(state.calls[1]:find("bresilla_set_display_scale(1.80",1,true))
+  test.truthy(state.calls[1]:find("hl.monitor({output=",1,true))
+  test.truthy(state.calls[1]:find("scale=1.80",1,true))
   local saved=morf.json.decode(morf.fs.read(path))
   test.near(saved.scale,1.8,.001)
   test.near(saved.zoom,.85,.001)
