@@ -47,6 +47,10 @@ pub struct TouchGestures {
     edge: Option<EdgeSwipe>,
 }
 
+pub fn cancel_edge(input: &mut PointerInput) {
+    input.gestures.edge = None;
+}
+
 fn finger(input: &PointerInput, id: i32) -> Option<(WindowId, Hit, f64, f64)> {
     input
         .touches

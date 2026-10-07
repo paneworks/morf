@@ -1634,6 +1634,23 @@ Gestures are events like any other, on any node that takes the pointer:
 | `on_swiped(direction, velocity_x, velocity_y)` | a press moved over 24 px and let go faster than 400 px/s, or a touch pulled at least 80 px along a dominant axis; `direction` is `left`, `right`, `up` or `down` |
 | `on_pinched(scale, phase, x, y)` | two fingers spreading or closing: `scale` against their first spread, `phase` `update` then `end`, `(x, y)` their midpoint |
 | `on_edge_swiped(edge)` | on a surface's root: a finger landing within 20 px of an edge and moving 48 px in |
+| `on_panned(phase, dx, dy, vx, vy, start_x, start_y)` | continuous touch drag on the nearest accepting ancestor |
+| `on_edge_panned(edge, phase, dx, dy, vx, vy, start_x, start_y)` | continuous touch drag starting within 20 px of an edge, offered to the surface root first |
+
+Continuous pans start after 8 logical pixels of movement along a clear axis.
+`phase` is `begin`, `update`, `end`, or `cancel`. Return `false` from `begin`
+to decline ownership. Once accepted, the same handler receives every update
+until release, even outside its bounds. `dx` and `dy` are total displacement
+from the initial touch in surface coordinates, so moving the panel does not
+change the measurement. `vx` and `vy` are recent logical pixels per second;
+holding still before release removes fling velocity. Update geometry directly
+while dragging and animate to a resting position on `end`. Restore the prior
+state on `cancel`, including when a second finger interrupts the pan.
+
+An accepted pan cancels the child's press and suppresses its click and legacy
+swipe. Sliders, text selection and explicit child drag handlers keep ownership.
+A Flickable that can scroll in the movement direction takes the drag; at its
+boundary it can yield to a containing panel. Ordinary taps remain clicks.
 
 Two fingers moving together where nothing takes a pinch scroll what lies
 under them, as a touchpad does. A finger is the left button throughout: it

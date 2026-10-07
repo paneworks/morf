@@ -14,6 +14,23 @@ use morf_scene::NodeHandle;
 use crate::{EventPoint, IpcValue, Runtime, UiEvent};
 
 impl Runtime {
+    /// Offers a continuous gesture to a handler. Only an explicit false
+    /// declines it; failures never capture a contact.
+    pub fn offer_pan(&mut self, node: NodeHandle, event: UiEvent, args: &[IpcValue]) -> bool {
+        use morf_runtime::events::EventHost;
+        let handler = self.reactive.borrow().events.handler(node, event);
+        let Some(handler) = handler else {
+            return false;
+        };
+        match self.run_key_handler(&handler, args) {
+            Ok(values) => values.first() != Some(&IpcValue::Boolean(false)),
+            Err(message) => {
+                self.warn(format!("{node:?}.{}: {message}", event.property()));
+                false
+            }
+        }
+    }
+
     /// Forget the gesture when its contact is canceled or claimed elsewhere.
     pub fn cancel_gesture(&mut self) {
         self.reactive.borrow_mut().gestures.cancel();

@@ -66,6 +66,7 @@ local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scrol
 -- Which take the pointer in surface coordinates: a handle that moves under
 -- the pointer would see its own local ones drift.
 local SURFACE_POINTER = { Drag = true }
+local DRAG = { Range=true, Plane=true, Drag=true, Canvas=true, Transform=true, Sheet=true }
 local WHEEL = { Range = true, Plane = true }
 -- The clock typeahead measures pauses on.
 local clock = morf.elapsed_timer()
@@ -238,11 +239,11 @@ function M.make(archetype, widget, spec, extra)
       else local a, b, w, h = travel(x, y) send("pressed", a, b, w, h, button or "left", modifiers or "") end
       also("on_pressed", sx, sy, x, y, button, modifiers, ...)
     end,
-    on_dragged = function(sx, sy, dx, dy, x, y, modifiers, ...)
+    on_dragged = (DRAG[archetype] or spec.on_dragged) and function(sx, sy, dx, dy, x, y, modifiers, ...)
       if SURFACE_POINTER[archetype] then send("dragged", sx, sy)
       else local a, b, w, h = travel(x, y) send("dragged", a, b, w, h, modifiers or "") end
       also("on_dragged", sx, sy, dx, dy, x, y, modifiers, ...)
-    end,
+    end or nil,
     on_released = function(...) send("released") also("on_released", ...) end,
     on_clicked = function(...)
       click_args = { ... }

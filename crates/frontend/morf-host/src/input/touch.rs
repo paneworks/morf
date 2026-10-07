@@ -31,16 +31,10 @@ pub fn handle_touch_event(
                     runtime.accepts_pointer_button(node, TOUCH_BUTTON)
                 })
                 .map_err(|error| error.to_string())?;
-            for root in runtime.overlay_roots() {
-                if hit_layout.geometry(root).is_some() {
-                    let inside: Vec<NodeHandle> = runtime
-                        .overlay_nodes(root)
-                        .into_iter()
-                        .filter(|node| hit_layout.contains_point(&runtime.scene(), *node, x, y))
-                        .collect();
-                    repaint |= runtime.overlay_press(root, hit.map(|hit| hit.node), &inside);
-                }
-            }
+            // A touch may become an edge pull. Dismissing overlays on down
+            // would close a drawer before the user can catch its animation.
+            // Outside dismissal belongs to a completed tap instead.
+            input.touch_overlay_origins.insert(id, (surface, x, y));
             if let Some(hit) = hit {
                 let point =
                     EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(TOUCH_BUTTON);
@@ -55,9 +49,17 @@ pub fn handle_touch_event(
                 }
                 repaint |= runtime.dispatch_pointer(hit.node, UiEvent::Pressed, point, (0.0, 0.0));
                 repaint |= runtime.dispatch_touch_event(hit.node, UiEvent::TouchPressed, id, point);
+                repaint |= super::pan::down(runtime, input, id);
             }
         }
         Event::TouchMotion { id, x, y, .. } => {
+            if input
+                .touch_overlay_origins
+                .get(&id)
+                .is_some_and(|(_, sx, sy)| (x - sx).hypot(y - sy) > TAP_TRAVEL)
+            {
+                input.touch_overlay_origins.remove(&id);
+            }
             if let Some((touch_surface, hit, last_x, last_y, travel)) = input.touches.get_mut(&id) {
                 let delta = (x - *last_x, y - *last_y);
                 *travel += delta.0.abs() + delta.1.abs();
@@ -65,6 +67,11 @@ pub fn handle_touch_event(
                 *last_y = y;
                 let node = hit.node;
                 let role = *touch_surface;
+                let (claimed, changed) = super::pan::motion(runtime, input, layouts, id, x, y);
+                repaint |= changed;
+                if claimed {
+                    return Ok(repaint);
+                }
                 let local = layouts
                     .layout_of(role)
                     .map(|layout| layout.local_point(&runtime.scene(), node, x, y))
@@ -79,7 +86,44 @@ pub fn handle_touch_event(
             }
         }
         Event::TouchUp { surface, id, x, y } => {
+            let suppress_tap = input.suppressed_taps.remove(&id);
+            if input
+                .touches
+                .get(&id)
+                .is_some_and(|touch| (touch.2, touch.3) != (x, y))
+            {
+                repaint |= super::pan::motion(runtime, input, layouts, id, x, y).1;
+            }
+            let (claimed, changed) = super::pan::up(runtime, input, Some(id));
+            repaint |= changed;
             repaint |= crate::surface_gesture::finger_up(runtime, input, Some(id));
+            if let Some((origin_surface, sx, sy)) = input.touch_overlay_origins.remove(&id)
+                && !claimed
+                && !suppress_tap
+                && origin_surface == surface
+                && (x - sx).hypot(y - sy) <= TAP_TRAVEL
+                && let Some(layout) = layouts.layout_of(surface)
+            {
+                let hit = layout
+                    .hit_test_accepting(&runtime.scene(), x, y, &|node| {
+                        runtime.accepts_pointer_button(node, TOUCH_BUTTON)
+                    })
+                    .map_err(|error| error.to_string())?;
+                for root in runtime.overlay_roots() {
+                    if layout.geometry(root).is_some() {
+                        let inside: Vec<NodeHandle> = runtime
+                            .overlay_nodes(root)
+                            .into_iter()
+                            .filter(|node| layout.contains_point(&runtime.scene(), *node, x, y))
+                            .collect();
+                        repaint |= runtime.overlay_press(root, hit.map(|hit| hit.node), &inside);
+                    }
+                }
+            }
+            if claimed {
+                input.touches.remove(&id);
+                return Ok(repaint);
+            }
             if let Some((touch_surface, pressed_hit, _, _, travel)) = input.touches.remove(&id) {
                 let layout = layouts.layout_of(surface);
                 let local = layout
@@ -118,7 +162,7 @@ pub fn handle_touch_event(
                         point,
                         (0.0, 0.0),
                     );
-                } else if hit.map(|hit| hit.node) == Some(pressed_hit.node) {
+                } else if !suppress_tap && hit.map(|hit| hit.node) == Some(pressed_hit.node) {
                     repaint |= runtime.dispatch_pointer(
                         pressed_hit.node,
                         UiEvent::Clicked,
@@ -129,6 +173,9 @@ pub fn handle_touch_event(
             }
         }
         Event::TouchCancel => {
+            input.touch_overlay_origins.clear();
+            input.suppressed_taps.clear();
+            repaint |= super::pan::up(runtime, input, None).1;
             runtime.cancel_gesture();
             repaint |= crate::surface_gesture::finger_up(runtime, input, None);
             for (id, (_, hit, x, y, _)) in input.touches.drain() {

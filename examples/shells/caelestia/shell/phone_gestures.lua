@@ -58,10 +58,57 @@ function M.panel(spec)
   end
 end
 
+-- Each recognizer owns one contact; its begin can decline to a parent.
+function M.pan(spec)
+  local drawer, pager
+  return function(phase, dx, dy, vx, vy)
+    if phase == "begin" then
+      if not phone() or blocked() then return false end
+      if math.abs(dx) >= math.abs(dy) then
+        pager=spec.pager
+        return pager and pager.begin() or false
+      end
+      if not spec.dismiss or (spec.can_dismiss and not spec.can_dismiss()) then return false end
+      if (spec.dismiss == "down" and dy < 0) or (spec.dismiss == "up" and dy > 0) then return false end
+      drawer = require(spec.drawer).drawer
+      return drawer.begin_drag()
+    elseif pager then
+      if phase=="update" then pager.update(dx)
+      else pager.finish(vx,phase=="cancel") pager=nil end
+    elseif drawer then
+      if phase == "update" then drawer.drag_by(dy)
+      else drawer.end_drag(vy,phase=="cancel") drawer=nil end
+    end
+  end
+end
+
+local edge_drawer
+function M.edge_pan(edge,phase,dx,dy,vx,vy)
+  if phase == "begin" then
+    if not phone() or blocked() then return false end
+    local inward = ({top=dy,bottom=-dy,left=dx,right=-dx})[edge]
+    if not inward or inward <= 0 then return false end
+    if edge == "left" or edge == "right" then return true end
+    if edge == "top" then
+      local sidebar=require("sidebar")
+      local settings=sidebar.drawer.open:get() and sidebar.showing("notifications")
+      sidebar.select(settings and "settings" or "notifications")
+      edge_drawer=sidebar.drawer
+    else edge_drawer=require("dashboard").drawer end
+    close_other_panels(edge_drawer)
+    return edge_drawer.begin_drag()
+  elseif edge == "left" or edge == "right" then
+    if phase == "end" and (edge=="left" and dx or -dx) >= 80 then M.swipe(edge) end
+  elseif edge_drawer then
+    if phase == "update" then edge_drawer.drag_by(dy)
+    else edge_drawer.end_drag(vy,phase=="cancel") edge_drawer=nil end
+  end
+end
+
 function M.attach(root)
   if attached[root] or not phone() then return end
   attached[root] = true
-  root.on_edge_swiped = M.swipe
+  root.on_edge_panned = M.edge_pan
   -- Under the existing controls: tapping the bar/rail still reaches them.
   -- An Item, rather than a fullscreen MouseArea, leaves apps interactive.
   ui.reparent(ui.Item {

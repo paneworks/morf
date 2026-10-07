@@ -86,6 +86,11 @@ pub enum UiEvent {
     Pinched,
     /// A touch began at a surface's edge and moved in (on its root).
     EdgeSwiped,
+    /// An owned touch drag: begin, update, end or cancel, with displacement
+    /// and recent velocity. Returning false from begin declines ownership.
+    Panned,
+    /// A continuous drag beginning at the surface edge (on its root).
+    EdgePanned,
     /// A screen reader asked something of the node (`api_accessible.rs`).
     AccessibleAction,
 }
@@ -125,6 +130,8 @@ pub const EVENT_PROPERTIES: &[(UiEvent, &str)] = &[
     (UiEvent::Swiped, "on_swiped"),
     (UiEvent::Pinched, "on_pinched"),
     (UiEvent::EdgeSwiped, "on_edge_swiped"),
+    (UiEvent::Panned, "on_panned"),
+    (UiEvent::EdgePanned, "on_edge_panned"),
     (UiEvent::AccessibleAction, "on_accessible_action"),
 ];
 
