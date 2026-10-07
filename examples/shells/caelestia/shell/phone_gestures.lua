@@ -3,6 +3,11 @@
 -- the middle of the desktop continues to belong to application windows.
 local ui = require("morf.ui")
 local M = {}
+-- Dotfiles can update before the installed engine. Older Morf releases
+-- keep their completed-swipe handling until continuous pans are available.
+local probe = ui.Item {}
+M.continuous = pcall(function() probe.on_panned = function() end end)
+ui.destroy(probe)
 local attached = {}
 local EDGE = 20 -- Matches the runtime's on_edge_swiped recognition zone.
 
@@ -60,6 +65,7 @@ end
 
 -- Each recognizer owns one contact; its begin can decline to a parent.
 function M.pan(spec)
+  if not M.continuous then return nil end
   local drawer, pager
   return function(phase, dx, dy, vx, vy)
     if phase == "begin" then
@@ -108,7 +114,8 @@ end
 function M.attach(root)
   if attached[root] or not phone() then return end
   attached[root] = true
-  root.on_edge_panned = M.edge_pan
+  if M.continuous then root.on_edge_panned = M.edge_pan
+  else root.on_edge_swiped = M.swipe end
   -- Under the existing controls: tapping the bar/rail still reaches them.
   -- An Item, rather than a fullscreen MouseArea, leaves apps interactive.
   ui.reparent(ui.Item {
