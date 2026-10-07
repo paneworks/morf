@@ -7,3 +7,4 @@ pub mod keys;
 pub mod pan;
 pub mod pointer;
 pub mod touch;
+pub mod two_finger;

@@ -39,6 +39,12 @@ pub fn handle_touch_event(
                 let point =
                     EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(TOUCH_BUTTON);
                 input.touches.insert(id, (surface, hit, x, y, 0.0));
+                input.touch_origins.insert(id, (x, y));
+                let (owned, changed) = super::two_finger::down(runtime, input);
+                repaint |= changed;
+                if owned {
+                    return Ok(repaint);
+                }
                 crate::surface_gesture::finger_down(runtime, input, layouts, id);
                 if let Some(target) = runtime.click_focus_target(hit.node) {
                     input.focused.insert(surface, target);
@@ -47,8 +53,8 @@ pub fn handle_touch_event(
                         repaint |= runtime.set_focus(root, Some(target), FocusReason::Click);
                     }
                 }
-                repaint |= runtime.dispatch_pointer(hit.node, UiEvent::Pressed, point, (0.0, 0.0));
                 repaint |= runtime.dispatch_touch_event(hit.node, UiEvent::TouchPressed, id, point);
+                repaint |= runtime.dispatch_pointer(hit.node, UiEvent::Pressed, point, (0.0, 0.0));
                 repaint |= super::pan::down(runtime, input, id);
             }
         }
@@ -67,6 +73,11 @@ pub fn handle_touch_event(
                 *last_y = y;
                 let node = hit.node;
                 let role = *touch_surface;
+                let (owned, changed) = super::two_finger::motion(runtime, input, id, x, y);
+                repaint |= changed;
+                if owned {
+                    return Ok(repaint);
+                }
                 let (claimed, changed) = super::pan::motion(runtime, input, layouts, id, x, y);
                 repaint |= changed;
                 if claimed {
@@ -86,7 +97,15 @@ pub fn handle_touch_event(
             }
         }
         Event::TouchUp { surface, id, x, y } => {
+            input.touch_origins.remove(&id);
             let suppress_tap = input.suppressed_taps.remove(&id);
+            let (owned, changed) = super::two_finger::up(runtime, input, id, x, y);
+            repaint |= changed;
+            if owned {
+                input.touch_overlay_origins.remove(&id);
+                input.touches.remove(&id);
+                return Ok(repaint);
+            }
             if input
                 .touches
                 .get(&id)
@@ -173,6 +192,8 @@ pub fn handle_touch_event(
             }
         }
         Event::TouchCancel => {
+            input.touch_origins.clear();
+            repaint |= super::two_finger::cancel(runtime, input);
             input.touch_overlay_origins.clear();
             input.suppressed_taps.clear();
             repaint |= super::pan::up(runtime, input, None).1;

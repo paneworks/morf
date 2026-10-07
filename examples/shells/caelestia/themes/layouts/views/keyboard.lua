@@ -25,8 +25,9 @@ function V.build(model)
   -- The theme's own marks round the keys (none in a theme without them).
   local marks = kit.decor("corners", { anchors = { fill = true }, length = 8, inset = 3, color = kit.stroke("mark") })
   local function height() return kb.height() + 2 * PAD end
-  return {width = W, height = height, keys = kb,
-    content = ui.Item {width = W, height = height,
-      ui.Item {x = PAD, y = PAD, width = W - 2 * PAD, height = kb.height, kb.node}, marks}}
+  local content = ui.Item {width = W, height = height,
+    ui.Item {x = PAD, y = PAD, width = W - 2 * PAD, height = kb.height, kb.node}, marks}
+  require("keyboard_gestures").attach(content, "keyboard")
+  return {width = W, height = height, keys = kb, content = content}
 end
 return V

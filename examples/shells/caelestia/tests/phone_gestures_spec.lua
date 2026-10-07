@@ -26,7 +26,7 @@ end
 local function swipe(edge) test.ipc("swipe_test", edge) test.advance(600) end
 local function state() return test.ipc("gesture_state") end
 for _, style in ipairs { "material", "tsugumori" } do
-  test.it(style .. " leaves side edges to compositor workspace previews", function()
+  test.it(style .. " leaves side edges unclaimed", function()
     load(style, nil, nil, "compositor")
     test.eq(#test.find_all("phone-gesture-left"), 0)
     test.eq(#test.find_all("phone-gesture-right"), 0)
@@ -45,22 +45,22 @@ for _, style in ipairs { "material", "tsugumori" } do
     test.falsy(state().dashboard)
     swipe("top") test.truthy(state().settings)
     swipe("bottom") test.truthy(state().dashboard) test.falsy(state().sidebar)
-    for _, edge in ipairs { "top", "bottom", "left", "right" } do
+    for _, edge in ipairs { "top", "bottom" } do
       local strip = test.get("phone-gesture-" .. edge)
       test.truthy(strip.width > 0 and strip.height > 0)
       test.truthy(strip.width == 20 or strip.height == 20)
     end
     test.eq(#test.logs("error"), 0)
   end)
-  test.it(style .. " side swipes close panels and respect authentication dialogs", function()
+  test.it(style .. " side swipes have no action and authentication blocks edge pulls", function()
     load(style)
     swipe("bottom") swipe("right")
-    test.falsy(state().dashboard) test.eq(state().steps, { 1 })
-    swipe("left") test.eq(state().steps, { 1, -1 })
+    test.truthy(state().dashboard) test.eq(state().steps, {})
+    swipe("left") test.eq(state().steps, {})
     test.ipc("session", "open") test.advance(600)
     swipe("right") swipe("top") swipe("bottom")
-    test.eq(state().steps, { 1, -1 })
-    test.falsy(state().sidebar) test.falsy(state().dashboard)
+    test.eq(state().steps, {})
+    test.falsy(state().sidebar) test.truthy(state().dashboard)
     test.eq(#test.logs("error"), 0)
   end)
 end

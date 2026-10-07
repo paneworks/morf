@@ -91,6 +91,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.InsetProps
@@ -186,6 +187,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.RectProps
@@ -291,6 +293,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.ClipRectProps
@@ -400,6 +403,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.TextProps
@@ -518,6 +522,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.TextInputProps
@@ -644,6 +649,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.ImageProps
@@ -750,6 +756,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.IconProps
@@ -849,6 +856,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.SdfProps
@@ -952,6 +960,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.SdfShapeProps
@@ -1064,6 +1073,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.PathProps
@@ -1170,6 +1180,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.MouseAreaProps
@@ -1262,6 +1273,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.DropAreaProps
@@ -1351,6 +1363,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.RowProps
@@ -1442,6 +1455,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.ColumnProps
@@ -1533,6 +1547,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.GridProps
@@ -1629,6 +1644,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.FlickableProps
@@ -1719,6 +1735,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.LoaderProps
@@ -1812,6 +1829,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.TimerProps
@@ -1902,6 +1920,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.FlexProps
@@ -1997,6 +2016,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.LayoutProps
@@ -2085,6 +2105,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui.TerminalProps
@@ -2183,6 +2204,7 @@
 ---@field on_edge_swiped (fun(...): any)?
 ---@field on_panned (fun(...): any)?
 ---@field on_edge_panned (fun(...): any)?
+---@field on_two_finger_panned (fun(...): any)?
 ---@field on_accessible_action (fun(...): any)?
 
 ---@class morf.ui

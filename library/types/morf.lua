@@ -22,6 +22,7 @@
 ---@field data_dir fun(...): any
 ---@field data_path fun(...): any
 ---@field dbus Morf.Dbus
+---@field density fun(...): any
 ---@field desktop_entries fun(...): any
 ---@field drag Morf.Drag
 ---@field easing Morf.Easing

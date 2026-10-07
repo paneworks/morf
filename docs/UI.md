@@ -1636,6 +1636,7 @@ Gestures are events like any other, on any node that takes the pointer:
 | `on_edge_swiped(edge)` | on a surface's root: a finger landing within 20 px of an edge and moving 48 px in |
 | `on_panned(phase, dx, dy, vx, vy, start_x, start_y)` | continuous touch drag on the nearest accepting ancestor |
 | `on_edge_panned(edge, phase, dx, dy, vx, vy, start_x, start_y)` | continuous touch drag starting within 20 px of an edge, offered to the surface root first |
+| `on_two_finger_panned(phase, dx1, dy1, dx2, dy2, start_x1, start_y1, start_x2, start_y2)` | owns two contacts on their nearest accepting common ancestor; `begin` may return false, and a third contact cancels |
 
 Continuous pans start after 8 logical pixels of movement along a clear axis.
 `phase` is `begin`, `update`, `end`, or `cancel`. Return `false` from `begin`

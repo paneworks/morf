@@ -85,6 +85,8 @@ pub struct PointerInput {
     /// Pinches and edge swipes the touches are making.
     pub gestures: crate::surface_gesture::TouchGestures,
     pub pan: Option<crate::input::pan::TouchPan>,
+    pub two_finger: Option<crate::input::two_finger::TwoFingerPan>,
+    pub touch_origins: HashMap<i32, (f64, f64)>,
     pub suppressed_taps: HashSet<i32>,
     pub touch_overlay_origins: HashMap<i32, (WindowId, f64, f64)>,
 }
@@ -99,6 +101,8 @@ impl Default for PointerInput {
             focused: HashMap::new(),
             touches: HashMap::new(),
             pan: None,
+            two_finger: None,
+            touch_origins: HashMap::new(),
             suppressed_taps: HashSet::new(),
             touch_overlay_origins: HashMap::new(),
             gestures: Default::default(),

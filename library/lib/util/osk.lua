@@ -377,6 +377,7 @@ function osk.new(options)
     local id = named("key." .. mode_name .. "." .. page_name .. "." .. what)
     local down = morf.signal(id .. ".down", false)
     local long_timer, repeat_timer, long, held = nil, nil, false, false
+    local touching, repeated = false, false
     local function label()
       if spec.kind == "char" then return shifted(spec.label) end
       if spec.action == "shift" then return shift:get() == "lock" and "⇪" or "⇧" end
@@ -391,11 +392,12 @@ function osk.new(options)
       if long_timer then long_timer:cancel() long_timer = nil end
       if repeat_timer then repeat_timer:cancel() repeat_timer = nil end
     end
-    cancellations[#cancellations + 1] = function()
+    local function cancel()
       cancel_timers()
-      long, held = false, false
+      long, held, touching = false, false, false
       down:set(false)
     end
+    cancellations[#cancellations + 1] = cancel
     local function show_preview()
       if spec.kind ~= "char" then return end
       preview.x:set(x) preview.y:set(y) preview.w:set(w)
@@ -417,11 +419,16 @@ function osk.new(options)
         held = true
         down:set(true)
         long = false
-        if spec.kind == "action" then act(spec.action) return end
+        repeated = false
+        if spec.kind == "action" then
+          if not touching then act(spec.action) end
+          return
+        end
         show_preview()
         if spec.rep then
-          commit()
+          if not touching then commit() repeated = true end
           repeat_timer = morf.timer(420, function()
+            commit() repeated = true
             repeat_timer = morf.timer(55, function() commit() end, true)
           end, false)
           return
@@ -449,9 +456,14 @@ function osk.new(options)
         held = false
         down:set(false)
         preview.on:set(false)
-        local was_repeat = repeat_timer ~= nil or spec.rep
+        local was_repeat = repeated
+        local was_touch = touching
+        touching = false
         cancel_timers()
-        if spec.kind == "action" then return end
+        if spec.kind == "action" then
+          if was_touch then act(spec.action) end
+          return
+        end
         if long then
           local list = alts.list:get()
           local pickd = list[alts.pick:get()]
@@ -497,6 +509,12 @@ function osk.new(options)
         },
       },
     }
+    area.on_touch_pressed = function() touching = true end
+    area.on_touch_canceled = function()
+      cancel()
+      preview.on:set(false)
+      alts.list:set({})
+    end
     -- The long press's first offer, small in the corner.
     local hint = spec.alts and spec.alts[1]
     if hint and not KEY_FACE then

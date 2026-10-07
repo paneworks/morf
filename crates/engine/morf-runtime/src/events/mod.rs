@@ -91,6 +91,9 @@ pub enum UiEvent {
     Panned,
     /// A continuous drag beginning at the surface edge (on its root).
     EdgePanned,
+    /// Two owned contacts. Arguments: phase, dx1, dy1, dx2, dy2,
+    /// start_x1, start_y1, start_x2, start_y2. Begin may decline with false.
+    TwoFingerPanned,
     /// A screen reader asked something of the node (`api_accessible.rs`).
     AccessibleAction,
 }
@@ -132,6 +135,7 @@ pub const EVENT_PROPERTIES: &[(UiEvent, &str)] = &[
     (UiEvent::EdgeSwiped, "on_edge_swiped"),
     (UiEvent::Panned, "on_panned"),
     (UiEvent::EdgePanned, "on_edge_panned"),
+    (UiEvent::TwoFingerPanned, "on_two_finger_panned"),
     (UiEvent::AccessibleAction, "on_accessible_action"),
 ];
 
