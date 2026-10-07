@@ -34,6 +34,19 @@ end
 local function state() return test.ipc("gesture_state") end
 
 for _,style in ipairs {"material","tsugumori"} do
+  test.it(style.." top and bottom sheets keep identical side margins at every phone scale",function()
+    for _,scale in ipairs {.75,1,1.5,1.8,2} do
+      load(style,math.floor(1116/scale+.5),math.floor(2484/scale+.5))
+      local top=test.get("drawer-sidebar")
+      local bottom=test.get("drawer-dashboard")
+      test.near(bottom.width,top.width,.5)
+      test.near(bottom.x,top.x,.5)
+      test.truthy(bottom.x>0)
+    end
+  end)
+end
+
+for _,style in ipairs {"material","tsugumori"} do
   test.it(style.." bottom workspace preview follows and reverses without switching until release",function()
     load(style)
     test.touch("down",0,900,2480)
