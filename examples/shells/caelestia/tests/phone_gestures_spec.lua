@@ -16,6 +16,7 @@ local SOURCE = [[
       dashboard_tab = require("dashboard").tab:get(), sidebar_tab = sidebar.tab:get(),
       sidebar = sidebar.drawer.open:get(), notifications = sidebar.showing("notifications"),
       settings = sidebar.showing("settings"), steps = steps, switches=switches,
+      keyboard=require("keyboard").active(), keyboard_mode=require("keyboard").keys.mode:get(),
       active_workspace=require("services").workspace.active(),
       preview=require("phone_gestures").workspace_preview and {
         active=require("phone_gestures").workspace_preview.active,
@@ -24,14 +25,69 @@ local SOURCE = [[
       } }
   end
 ]]
-local function load(style, width, height, workspaces)
+local function load(style, width, height, workspaces, driver)
   test.stub_run("task", { code = 0, stdout = "[]" })
   test.load("../shell/init.lua", { source = SOURCE, size = { width or 1116, height or 2484 },
     env = { CAELESTIA_STYLE = style, CAELESTIA_DRY_RUN = "1", CAELESTIA_WALLPAPER = "",
-      TEST_W=tostring(width or 1116), TEST_H=tostring(height or 2484), CAELESTIA_WORKSPACE_GESTURES=workspaces or "" } })
+      TEST_W=tostring(width or 1116), TEST_H=tostring(height or 2484),
+      CAELESTIA_WORKSPACE_GESTURES=workspaces or "", CAELESTIA_GESTURE_DRIVER=driver or "" } })
   test.advance(500)
 end
 local function state() return test.ipc("gesture_state") end
+
+for _,style in ipairs {"material","tsugumori"} do
+  test.it(style.." lisgd owns global swipes while Morf selects panels from the starting half",function()
+    load(style,nil,nil,nil,"lisgd")
+    test.falsy(state().preview)
+    test.touch("down",0,850,2480) test.touch("move",0,350,2480) test.touch("up",0,350,2480)
+    test.eq(state().steps,{}) test.eq(state().switches,{})
+    test.truthy(test.ipc("phone-gesture","workspace-next"))
+    test.eq(state().steps,{1}) test.falsy(test.ipc("phone-gesture","workspace-next"))
+    test.swipe({400,2480},{400,2200}) test.advance(100)
+    test.falsy(state().dashboard)
+    test.truthy(test.ipc("phone-gesture","dashboard")) test.advance(600)
+    test.truthy(state().dashboard)
+    for _,x in ipairs {300,800} do
+      test.swipe({x,4},{x,300}) test.advance(100)
+      test.truthy(test.ipc("phone-gesture","top")) test.advance(600)
+      test.truthy(state().sidebar) test.falsy(state().dashboard)
+      test.eq(state().notifications,x<558) test.eq(state().settings,x>=558)
+    end
+    test.eq(test.logs("error"),{})
+  end)
+  test.it(style.." lisgd commands reject missing, stale, cancelled and authentication-blocked origins",function()
+    load(style,nil,nil,nil,"lisgd")
+    test.falsy(test.ipc("phone-gesture","workspace-next"))
+    test.touch("down",0,850,2480) test.touch("move",0,350,2480) test.touch("cancel",0)
+    test.falsy(test.ipc("phone-gesture","workspace-next"))
+    test.swipe({850,2480},{350,2480}) test.advance(2600)
+    test.falsy(test.ipc("phone-gesture","workspace-next"))
+    test.swipe({850,2480},{350,2480}) test.ipc("session","open")
+    test.falsy(test.ipc("phone-gesture","workspace-next"))
+    test.eq(state().steps,{}) test.eq(state().switches,{})
+    test.eq(test.logs("error"),{})
+  end)
+  test.it(style.." lisgd shows the keyboard once while Morf still switches layout and hides it",function()
+    load(style,nil,nil,nil,"lisgd")
+    local function pair(x,y,dy)
+      test.touch("down",0,x,y) test.touch("down",1,x+80,y)
+      test.touch("move",0,x,y+dy) test.touch("move",1,x+80,y+dy)
+      test.touch("up",0,x,y+dy) test.touch("up",1,x+80,y+dy)
+    end
+    pair(400,2480,-200)
+    test.falsy(state().keyboard)
+    test.truthy(test.ipc("phone-gesture","keyboard")) test.advance(600)
+    test.truthy(state().keyboard) test.eq(state().keyboard_mode,"full")
+    test.falsy(test.ipc("phone-gesture","keyboard"))
+    local key=test.get("caelestia.osk.key.full.letters.q")
+    pair(key.x+10,key.y+20,-100) test.advance(600)
+    test.eq(state().keyboard_mode,"dev")
+    key=test.get("caelestia.osk.key.dev.letters.q")
+    pair(key.x+10,key.y+20,100) test.advance(600)
+    test.falsy(state().keyboard) test.eq(state().steps,{})
+    test.eq(test.logs("error"),{})
+  end)
+end
 
 for _,style in ipairs {"material","tsugumori"} do
   test.it(style.." top and bottom sheets keep identical side margins at every phone scale",function()

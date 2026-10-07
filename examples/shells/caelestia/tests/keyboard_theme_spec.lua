@@ -37,6 +37,46 @@ end
 local function key(name,mode,page) return "caelestia.osk.key."..(mode or "full").."."..(page or "letters").."."..name end
 local function shot(name) if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(name..".png") end end
 for _,style in ipairs {"material","tsugumori"} do
+  test.it(style.." dev keyboard offers two symbols per letter with digits as the hold default",function()
+    load(style,360,800) test.ipc("show","dev") test.ipc("ime","yes") test.advance(2400)
+    test.falsy(test.find {id=key("page:symbols","dev"),visible=true})
+    local offered={}
+    for char in ("qwertyuiopasdfghjklzxcvbnm"):gmatch(".") do
+      local id=key(char,"dev")
+      local k=test.get(id)
+      local first=test.get(id..".hint.primary")
+      local second=test.get(id..".hint.secondary")
+      test.truthy(first.visible and second.visible)
+      test.truthy(first.x>=k.x and second.x+second.width<=k.x+k.width,
+        "symbol hints extend outside "..char)
+      test.near(first.y,second.y,1)
+      test.truthy(first.text~=second.text)
+      offered[first.text],offered[second.text]=true,true
+      test.ipc("clear") test.click(id)
+      test.eq(test.ipc("state").events,{{text=char}})
+      local x,y=k.x+k.width/2,k.y+k.height/2
+      test.ipc("clear") test.press(x,y) test.advance(450)
+      local strip=test.get("caelestia.osk.alternates")
+      test.truthy(strip.visible)
+      test.release(x,y)
+      test.eq(test.ipc("state").events,{{text=first.text}},char.." hold must default to its first symbol")
+      test.ipc("clear") test.press(x,y) test.advance(450)
+      strip=test.get("caelestia.osk.alternates")
+      local pick_x=strip.x+4+(strip.width-8)*.75
+      test.move(pick_x,strip.y+strip.height/2)
+      test.release(pick_x,strip.y+strip.height/2)
+      test.eq(test.ipc("state").events,{{text=second.text}},char.." must offer its second symbol")
+    end
+    for i,char in ipairs {"q","w","e","r","t","y","u","i","o","p"} do
+      test.eq(test.get(key(char,"dev")..".hint.primary").text,tostring(i%10))
+    end
+    for code=33,126 do
+      local char=string.char(code)
+      if not char:match("%a") then test.truthy(offered[char],"dev cannot type "..char) end
+    end
+    shot(style.."-keyboard-dev-pairs-360")
+    test.eq(test.logs("error"),{})
+  end)
   test.it(style.." dev keyboard sends Super shortcuts and releases its modifier",function()
     for _,size in ipairs {{360,800},{744,1656},{1400,800}} do
       load(style,size[1],size[2]) test.ipc("show","dev") test.advance(2400)
