@@ -1,5 +1,13 @@
 local test=morf.test
 local SOURCE=[[
+  local keys={}
+  local osk=require("lib.util.osk")
+  local build=osk.new
+  osk.new=function(options)
+    local send=options.send
+    options.send=function(event) keys[#keys+1]=event if send then send(event) end end
+    return build(options)
+  end
   require("init")
   morf.surface.width=tonumber(morf.env("TEST_W"))
   morf.surface.height=tonumber(morf.env("TEST_H"))
@@ -18,6 +26,7 @@ local SOURCE=[[
     studio.set_source("files") studio.folder_draft:set("")
   end
   morf.ipc.draft=function() return require("lule_studio").folder_draft:get() end
+  morf.ipc.keys=function() return keys end
 ]]
 local function load(style,w,h)
   test.stub_run("task",{code=0,stdout="[]"})
@@ -101,6 +110,29 @@ for _,style in ipairs {"material","tsugumori"} do
     test.ipc("keyboard","close") test.advance(700)
     test.type("y") test.eq(test.ipc("draft"),"draftxy")
     test.truthy(state().sidebar)
+    test.eq(test.logs("error"),{})
+  end)
+  test.it(style.." tapping keyboard keys does not dismiss panels or steal their text focus",function()
+    load(style,744,1656)
+    test.ipc("settings","theme/lule") test.ipc("editor") test.advance(900)
+    test.click("lule-folder") test.type("draft")
+    pair(1651,-140)
+    local q=test.get("caelestia.osk.key.full.letters.q")
+    test.touch("down",0,q.x+10,q.y+10) test.touch("up",0,q.x+10,q.y+10)
+    test.advance(200)
+    test.truthy(state().sidebar,"keyboard tap dismissed settings")
+    test.truthy(state().keyboard)
+    test.eq(#test.ipc("keys"),1)
+    test.type("x") test.eq(test.ipc("draft"),"draftx")
+    test.ipc("sidebar","close") test.ipc("terminal") test.advance(900)
+    q=test.get("caelestia.osk.key.full.letters.q")
+    test.touch("down",0,q.x+10,q.y+10) test.touch("up",0,q.x+10,q.y+10)
+    test.advance(200)
+    test.truthy(state().dashboard,"keyboard tap dismissed dashboard")
+    test.eq(state().focus,"on_demand")
+    -- Genuine outside taps still dismiss the panel while the keyboard stays.
+    test.touch("down",0,370,180) test.touch("up",0,370,180) test.advance(900)
+    test.falsy(state().dashboard) test.truthy(state().keyboard)
     test.eq(test.logs("error"),{})
   end)
 end

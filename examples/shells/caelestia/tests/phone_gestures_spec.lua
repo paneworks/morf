@@ -7,7 +7,7 @@ local SOURCE = [[
   require("init")
   morf.surface.width=tonumber(morf.env("TEST_W"))
   morf.surface.height=tonumber(morf.env("TEST_H"))
-  morf.ipc.swipe_test = function(edge) require("phone_gestures").swipe(edge) end
+  morf.ipc.swipe_test = function(edge,x) require("phone_gestures").swipe(edge,tonumber(x)) end
   morf.ipc.gesture_state = function()
     local sidebar = require("sidebar")
     return { dashboard = require("dashboard").drawer.open:get(),
@@ -94,7 +94,7 @@ for _,style in ipairs {"material","tsugumori"} do
     test.eq(#test.logs("error"),0)
   end)
 end
-local function swipe(edge) test.ipc("swipe_test", edge) test.advance(600) end
+local function swipe(edge,x) test.ipc("swipe_test", edge,tostring(x or 0)) test.advance(600) end
 for _, style in ipairs { "material", "tsugumori" } do
   test.it(style .. " leaves side edges unclaimed", function()
     load(style, nil, nil, "compositor")
@@ -113,7 +113,7 @@ for _, style in ipairs { "material", "tsugumori" } do
     swipe("bottom") test.truthy(state().dashboard)
     swipe("top") test.truthy(state().sidebar) test.truthy(state().notifications)
     test.falsy(state().dashboard)
-    swipe("top") test.truthy(state().settings)
+    swipe("top",1000) test.truthy(state().settings)
     swipe("bottom") test.truthy(state().dashboard) test.falsy(state().sidebar)
     for _, edge in ipairs { "top", "bottom" } do
       local strip = test.get("phone-gesture-" .. edge)

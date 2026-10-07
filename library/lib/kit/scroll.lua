@@ -122,6 +122,17 @@ function M.make(widget, spec)
   local root, ctl
   root, t, ctl = control.make("Scroll", widget, settings, { children = { flick }, props = control_props,
     state = { loading = false } })
+  -- A Flickable receives wheel input but is not itself a pointer target.
+  -- Empty space between its controls must still start a touch inside its
+  -- subtree, otherwise the panel behind it receives the drag instead.
+  -- Keep this below the content so buttons, fields and sliders retain
+  -- their own input. Cover the content as well as the viewport so it
+  -- remains hittable after scrolling; exclude it from measured content.
+  ui.reparent(ui.MouseArea {
+    id = spec.id and (spec.id .. "-touch-background"), z = -1,
+    width = function() return math.max(t.content_width or 0, flick.layout_width or 0) end,
+    height = function() return math.max(t.content_height or 0, flick.layout_height or 0) end,
+  }, flick)
   -- Snapping: once the scrolling pauses, the archetype settles it.
   local pause
   local function settle_soon()
