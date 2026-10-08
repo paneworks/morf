@@ -127,6 +127,52 @@ The default kit's named icons require the **Material Symbols Rounded** font on
 the host. CI provisions a checksum-pinned test copy through `tools/test-fonts.sh`
 and `FONTCONFIG_FILE`, without installing fonts into the system.
 
+### NixOS integration
+
+Import `morf.nixosModules.default` to use Caelestia for the desktop, greetd and
+lockscreen. The module lives in [`nix/nixos`](nix/nixos) alongside its screen,
+gesture and wallpaper helpers; their tests live in [`nix/tests`](nix/tests).
+
+```nix
+# Flake inputs (the integration module currently lives on develop):
+inputs.morf.url = "github:paneworks/morf/develop";
+inputs.lule.url = "github:termworks/lule";
+```
+
+Inside a NixOS module, with `inputs` supplied through `specialArgs`:
+
+```nix
+{ inputs, pkgs, ... }: {
+  imports = [ inputs.morf.nixosModules.default ];
+  programs.morf = {
+    enable = true;
+    user = "your-existing-user";
+    lulePackage = inputs.lule.packages.${pkgs.stdenv.hostPlatform.system}.default;
+    # phone.enable = true;
+    # uiScale = 1.8;
+  };
+}
+```
+
+It enables stock Hyprland with a quiet greeter session, shares compositor scaling
+and Lule wallpapers between login and desktop, and manages locking through
+hypridle. `phone.enable` adds lisgd gestures, a hidden pointer and deliberate
+double-tap or power-button wake. `phone.idleTimeout = 0` disables automatic
+locking in the user session; the phone greeter still blanks after one minute.
+
+The launcher first tries the user's `~/.config/morf/default` theme and falls back
+to the complete Caelestia theme under `/etc/xdg/morf/default`. The greeter receives
+read access to the primary user's Morf configuration. Home Manager integration
+is optional. `package` and `libraryPackage` can select existing cached outputs;
+the fallback theme and Lua runtime are copied from this flake's source without
+recompiling the engine. Use an engine that supports the source's native APIs.
+
+Run the integration helpers' tests with:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s nix/tests
+```
+
 ### Cache publishing and retention
 
 Only pushed `v*` tags publish, not ordinary branch pushes or pull requests.

@@ -17,7 +17,7 @@
   };
 
   outputs =
-    { nixpkgs, flake-utils, nixgl, rust-overlay, ... }:
+    { self, nixpkgs, flake-utils, nixgl, rust-overlay, ... }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -270,5 +270,8 @@
         apps.morf = flake-utils.lib.mkApp { drv = morf; };
         checks.morf = morf;
       } else {})
-    );
+    ) // {
+      nixosModules.default = import ./nix/nixos { flake = self; };
+      nixosModules.morf = self.nixosModules.default;
+    };
 }
