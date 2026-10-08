@@ -14,6 +14,9 @@ use crate::test_host::{TestHost, list, map, number, optional_text, string, text}
 use morf_host::headless::Headless;
 use morf_host::headless_input::{button, keysym, modifiers};
 
+mod touch;
+pub(crate) use touch::touch;
+
 /// Where keys go: the surface named, else the one last clicked (a
 /// compositor hands the keyboard to the window pressed on), else the
 /// primary.
@@ -71,25 +74,6 @@ pub(crate) fn press(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
         y,
         modifiers,
     })?;
-    Ok(Vec::new())
-}
-
-/// A real touch event through the virtual seat, including capture and gestures.
-pub(crate) fn touch(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
-    let phase = optional_text(arguments.first()).unwrap_or_default();
-    let id = number(arguments.get(1), "contact id")? as i32;
-    let x = number(arguments.get(2), "x")?;
-    let y = number(arguments.get(3), "y")?;
-    let subject = host.subject()?;
-    let surface = role(subject, arguments.get(4))?;
-    let event = match phase.as_str() {
-        "down" => Event::TouchDown { surface, id, x, y },
-        "move" => Event::TouchMotion { surface, id, x, y },
-        "up" => Event::TouchUp { surface, id, x, y },
-        "cancel" => Event::TouchCancel,
-        _ => return Err("touch phase must be down, move, up or cancel".into()),
-    };
-    subject.pointer(event)?;
     Ok(Vec::new())
 }
 

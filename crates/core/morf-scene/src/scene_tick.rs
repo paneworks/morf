@@ -55,6 +55,10 @@ impl Scene {
             || self.animations.iter().any(|(key, animation)| {
                 !animation.is_paused() && self.change_shows(key.node, key.property, &mut shown)
             })
+            || self.physics.keys().any(|key| {
+                !self.paused_physics.contains(key)
+                    && self.change_shows(key.node, key.property, &mut shown)
+            })
             || self.groups.values().any(|group| !group.paused)
             || self.stretch_moving()
     }

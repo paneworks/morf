@@ -27,9 +27,10 @@ local SOURCE=[[
 local function load()
   test.load {source=SOURCE,size={400,400}} test.advance(100)
 end
-local function drag(x,y,dx,dy)
+local function drag(x,y,dx,dy,fling)
   test.touch("down",0,x,y)
   for i=1,10 do test.advance(20) test.touch("move",0,x+dx*i/10,y+dy*i/10) end
+  if not fling then test.advance(80) end
   test.touch("up",0,x+dx,y+dy) test.advance(100)
 end
 test.it("touch scrolls blank content repeatedly and clamps at both ends",function()
@@ -53,4 +54,57 @@ test.it("a horizontal page swipe passes through while slider drags keep their in
   drag(70,230,120,0)
   test.eq(test.ipc("state").pages,1) test.truthy(test.ipc("state").value>.5)
   test.eq(test.logs("error"),{})
+end)
+
+test.it("a fling coasts and a new finger stops it without clicking the moving content",function()
+  load()
+  drag(25,270,0,-100,true)
+  local moving=test.ipc("state").offset
+  test.truthy(moving>100)
+  test.advance(80)
+  test.truthy(test.ipc("state").offset>moving)
+  test.touch("down",0,25,80)
+  local stopped=test.ipc("state").offset
+  test.advance(400)
+  test.near(test.ipc("state").offset,stopped,.01)
+  test.touch("up",0,25,80)
+  test.eq(test.ipc("state").clicks,0)
+  test.advance(300)
+  test.near(test.ipc("state").offset,stopped,.01)
+end)
+test.it("holding still or cancelling releases a scroll without momentum",function()
+  for _,phase in ipairs {"up","cancel"} do
+    load()
+    test.touch("down",0,25,270)
+    for i=1,5 do test.advance(16) test.touch("move",0,25,270-i*20) end
+    if phase=="up" then test.advance(80) end
+    test.touch(phase,0,25,170)
+    test.advance(500)
+    test.near(test.ipc("state").offset,100,.01)
+  end
+end)
+test.it("a fast fling stops at the content boundary",function()
+  load()
+  drag(25,270,0,-500,true)
+  test.advance(1000)
+  test.near(test.ipc("state").offset,700,.01)
+  test.eq(test.logs("error"),{})
+end)
+
+test.it("the same drag released twice as fast coasts over three times farther",function()
+  local function coast(step)
+    load()
+    test.touch("down",0,25,270)
+    for i=1,10 do
+      test.advance(step)
+      test.touch("move",0,25,270-i*10)
+    end
+    test.touch("up",0,25,170)
+    local released=test.ipc("state").offset
+    test.advance(2000)
+    return test.ipc("state").offset-released
+  end
+  local slow,fast=coast(20),coast(10)
+  test.truthy(slow>50)
+  test.truthy(fast>slow*3.2 and fast<slow*3.5)
 end)

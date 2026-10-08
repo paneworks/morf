@@ -4,6 +4,13 @@ The Caelestia keyring dialog uses GCR's `GcrSystemPrompter` and `GcrPrompt`
 interfaces. GCR implements the encrypted secret exchange with GNOME Keyring.
 This is independent of polkit and does not modify PAM or stored keyrings.
 
+The Nix `morf` package includes this bridge in its runtime closure. The existing
+`morf-x86_64-linux` and `morf-aarch64-linux` Cachix pins therefore distribute it
+alongside the engine; no separate pin or local compilation is needed when the
+release is cached. `programs.morf.enable` keeps GNOME Keyring as secret storage,
+unlocks it through greetd/lock PAM, and adds sudo progress markers. Morf supplies
+the keyring and Polkit dialogs; do not start a second Polkit agent in that session.
+
 Build with `sh tools/keyring/build.sh`. Native development dependencies are
 GCR 4, GLib/GIO (including gio-unix), json-glib and a C compiler. The result
 is `target/dist/morf-keyring`; install it on PATH, for example in

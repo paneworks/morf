@@ -1,40 +1,78 @@
-#!/bin/sh
-# morf-pattern set [USER] | clear [USER] | status [USER]
-#
-# The pattern the lock and the greeter take instead of a password, as its
-# dots in the order drawn, numbered like a phone's keypad:
-#
-#     1 2 3
-#     4 5 6        an L down the left and along the bottom: 14789
-#     7 8 9
-#
-# Four dots at least, each once. Stored as a yescrypt hash in
-# /etc/morf/pattern/USER, owned by root and readable by USER's group only.
-# Needs root (sudo).
-set -eu
-cmd=${1:-status}
-user=${2:-${SUDO_USER:-$(id -un)}}
-dir=/etc/morf/pattern
-file=$dir/$user
-case $cmd in
-  status)
-    [ -e "$file" ] && echo "$user has a pattern" || echo "$user has no pattern" ;;
-  clear)
-    rm -f "$file" && echo "cleared $user's pattern" ;;
-  set)
-    [ "$(id -u)" = 0 ] || { echo "run it with sudo"; exit 1; }
-    id "$user" >/dev/null 2>&1 || { echo "no user $user"; exit 1; }
-    printf 'pattern for %s (dots, e.g. 14789): ' "$user"; stty -echo; read -r a; stty echo; echo
-    printf 'again: '; stty -echo; read -r b; stty echo; echo
-    [ "$a" = "$b" ] || { echo "they differ"; exit 1; }
-    echo "$a" | grep -Eq '^[1-9]{4,9}$' || { echo "four to nine dots, 1-9"; exit 1; }
-    [ "$(echo "$a" | fold -w1 | sort | uniq -d)" = "" ] || { echo "each dot once"; exit 1; }
-    install -d -m 0755 "$dir"
-    umask 077
-    printf %s "$a" | mkpasswd -m yescrypt -s > "$file.new"
-    chown "root:$(id -gn "$user")" "$file.new"
-    chmod 0640 "$file.new"
-    mv "$file.new" "$file"
-    echo "set $user's pattern" ;;
-  *) echo "morf-pattern set|clear|status [USER]"; exit 1 ;;
-esac
+#!/usr/bin/env python3
+"""Enroll a local unlock pattern; secrets are passed only through a pipe."""
+import argparse
+import getpass
+import os
+from pathlib import Path
+import pwd
+import subprocess
+import sys
+
+
+def enroll(user, helper, optional=False, prompt=getpass.getpass):
+    print("Unlock pattern (dots on the screen):\n\n  1 2 3\n  4 5 6\n  7 8 9\n")
+    print("Connect 4–9 different neighbouring dots. Diagonals are allowed.")
+    if optional:
+        print("Press Enter without a pattern to keep password-only unlock.")
+    while True:
+        first = prompt("Pattern: ")
+        if not first and optional:
+            print("Pattern setup skipped.")
+            return False
+        valid = subprocess.run([helper, "--validate"], input=first.encode(), capture_output=True)
+        if valid.returncode:
+            print(valid.stderr.decode().strip() or "Invalid pattern.")
+            continue
+        second = prompt("Confirm pattern: ")
+        if first != second:
+            print("The patterns do not match. Try again.")
+            continue
+        subprocess.run([helper, "--set", user], input=first.encode(), check=True)
+        print("Pattern saved for login and screen unlock. Your password still works.")
+        return True
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=("setup", "set", "clear", "status"))
+    parser.add_argument("user", nargs="?", default=os.environ.get("SUDO_USER") or getpass.getuser())
+    parser.add_argument("--stdin", action="store_true", help="read a new pattern from stdin (set only)")
+    args = parser.parse_args()
+    user = pwd.getpwnam(args.user)
+    if user.pw_uid == 0:
+        parser.error("patterns are for normal user accounts")
+    if args.action != "status" and os.geteuid() != 0:
+        parser.error("run with sudo to manage an unlock pattern")
+    if args.stdin and args.action != "set":
+        parser.error("--stdin is only valid with set")
+    candidates = (Path(__file__).resolve().parent.parent / "libexec/morf-pattern-check",
+                  Path("/run/wrappers/bin/morf-pattern-check"), Path("/usr/local/libexec/morf-pattern-check"))
+    helper = next((str(p) for p in candidates if p.is_file()), None)
+    if not helper:
+        parser.error("morf-pattern-check is not installed")
+    if args.action == "status":
+        present = Path("/etc/morf/pattern", user.pw_name).is_file()
+        print("Pattern enabled." if present else "No pattern enrolled.")
+        return
+    if args.action == "clear":
+        subprocess.run([helper, "--clear", user.pw_name], check=True)
+        print("Pattern removed. Use your password to unlock.")
+    elif args.stdin:
+        subprocess.run([helper, "--set", user.pw_name], stdin=sys.stdin, check=True)
+        print("Pattern saved.")
+    else:
+        if args.action == "setup" and subprocess.run([helper, "--status", user.pw_name]).returncode == 0:
+            print("Keeping the existing unlock pattern.")
+            return
+        enroll(user.pw_name, helper, optional=args.action == "setup")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (EOFError, KeyboardInterrupt):
+        print("\nPattern setup cancelled; no new pattern saved.", file=sys.stderr)
+        sys.exit(130)
+    except (KeyError, subprocess.CalledProcessError):
+        print("Pattern operation failed; check the account and protected storage permissions.", file=sys.stderr)
+        sys.exit(1)

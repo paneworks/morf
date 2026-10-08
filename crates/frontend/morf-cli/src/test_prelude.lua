@@ -287,12 +287,13 @@ function test.move(x, y, options)
 end
 
 function test.touch(phase, id, x, y, options)
-  host.touch(phase, id, x or 0, y or 0, (options or {}).surface)
+  host.touch(phase, id, x or 0, y or 0, (options or {}).surface, (options or {}).time_ms)
 end
 
 function test.swipe(from, to, options)
   options = options or {}
-  local steps, duration, id = options.steps or 8, options.duration or 160, options.id or 0
+  local duration, id = options.duration or 160, options.id or 0
+  local steps = options.steps or math.max(1, math.ceil(duration / 16))
   test.touch("down", id, from[1], from[2], options)
   for step = 1, steps do
     test.advance(duration / steps)

@@ -69,7 +69,7 @@ pub fn down(runtime: &mut Runtime, input: &mut PointerInput) -> (bool, bool) {
             && runtime.offer_pan(n, UiEvent::TwoFingerPanned, &group.args("begin"))
         {
             group.owner = n;
-            let mut changed = super::pan::up(runtime, input, None).1;
+            let mut changed = super::pan::up(runtime, input, None, None).1;
             changed |= crate::surface_gesture::finger_up(runtime, input, None);
             runtime.cancel_gesture();
             for (&id, &(_, hit, x, y, _)) in &input.touches {

@@ -19,6 +19,9 @@ use morf_scene::NodeHandle;
 
 use crate::events::{EventPoint, UiEvent};
 
+mod velocity;
+pub use velocity::VelocityTracker;
+
 const LONG_PRESS: Duration = Duration::from_millis(500);
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 const SLOP: f64 = 8.0;

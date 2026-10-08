@@ -8,6 +8,7 @@ local SOURCE = [[
   morf.surface.width=tonumber(morf.env("TEST_W"))
   morf.surface.height=tonumber(morf.env("TEST_H"))
   morf.ipc.swipe_test = function(edge,x) require("phone_gestures").swipe(edge,tonumber(x)) end
+  morf.ipc.launcher_query_test = function(query) require("launcher").set_query(query) end
   morf.ipc.gesture_state = function()
     local sidebar = require("sidebar")
     return { dashboard = require("dashboard").drawer.open:get(),
@@ -16,6 +17,8 @@ local SOURCE = [[
       dashboard_tab = require("dashboard").tab:get(), sidebar_tab = sidebar.tab:get(),
       sidebar = sidebar.drawer.open:get(), notifications = sidebar.showing("notifications"),
       settings = sidebar.showing("settings"), steps = steps, switches=switches,
+      launcher=require("launcher").drawer.open:get(), menu=require("menus").source:get(),
+      query=require("launcher").query:get(),
       keyboard=require("keyboard").active(), keyboard_mode=require("keyboard").keys.mode:get(),
       active_workspace=require("services").workspace.active(),
       preview=require("phone_gestures").workspace_preview and {
@@ -152,11 +155,23 @@ for _,style in ipairs {"material","tsugumori"} do
 end
 local function swipe(edge,x) test.ipc("swipe_test", edge,tostring(x or 0)) test.advance(600) end
 for _, style in ipairs { "material", "tsugumori" } do
-  test.it(style .. " leaves side edges unclaimed", function()
+  test.it(style .. " side pulls open Apps from the left and Web from the right on release", function()
     load(style, nil, nil, "compositor")
-    test.eq(#test.find_all("phone-gesture-left"), 0)
-    test.eq(#test.find_all("phone-gesture-right"), 0)
-    swipe("left") swipe("right") test.eq(state().steps, {})
+    for _,edge in ipairs {"left","right"} do
+      local strip=test.get("phone-gesture-"..edge)
+      test.eq(strip.width,20) test.eq(strip.y,20)
+      test.eq(strip.height,2444)
+    end
+    test.touch("down",0,4,1200)
+    test.advance(200) test.touch("move",0,204,1200)
+    test.falsy(state().launcher)
+    test.advance(500) test.touch("up",0,204,1200) test.advance(600)
+    test.truthy(state().launcher) test.eq(state().menu,"apps")
+    test.ipc("launcher_query_test","previous query")
+    test.swipe({1112,1200},{912,1200},{duration=500}) test.advance(600)
+    test.truthy(state().launcher) test.eq(state().menu,"web") test.eq(state().query,"")
+    test.eq(state().steps,{}) test.eq(state().switches,{})
+    test.ipc("launcher","close") test.advance(600)
     test.touch("down", 1, 558, 2480)
     test.touch("move", 1, 558, 2100) test.advance(500)
     test.truthy(state().dashboard)
@@ -178,22 +193,51 @@ for _, style in ipairs { "material", "tsugumori" } do
     end
     test.eq(#test.logs("error"), 0)
   end)
-  test.it(style .. " side swipes have no action and authentication blocks edge pulls", function()
+  test.it(style .. " side launchers replace panels and authentication blocks every edge", function()
     load(style)
     swipe("bottom") swipe("right")
-    test.truthy(state().dashboard) test.eq(state().steps, {})
-    swipe("left") test.eq(state().steps, {})
+    test.falsy(state().dashboard) test.truthy(state().launcher) test.eq(state().menu,"web")
+    swipe("left") test.eq(state().menu,"apps") test.eq(state().steps,{})
+    test.ipc("launcher","close") swipe("bottom")
     test.ipc("session", "open") test.advance(600)
-    swipe("right") swipe("top") swipe("bottom")
+    swipe("left") swipe("right") swipe("top") swipe("bottom")
     test.eq(state().steps, {})
+    test.falsy(state().launcher)
     test.falsy(state().sidebar) test.truthy(state().dashboard)
     test.eq(#test.logs("error"), 0)
+  end)
+  test.it(style .. " side pulls ignore taps, vertical motion, short drags and cancellations", function()
+    load(style)
+    test.touch("down",0,4,1200) test.touch("up",0,4,1200)
+    test.swipe({4,1200},{4,1400})
+    test.swipe({4,1200},{34,1200},{duration=500})
+    test.touch("down",0,4,1200) test.touch("move",0,204,1200) test.touch("cancel",0)
+    test.touch("down",0,4,1200) test.touch("move",0,204,1200)
+    test.touch("down",1,400,1200)
+    test.touch("up",0,204,1200) test.touch("up",1,400,1200)
+    test.touch("down",0,4,1200)
+    test.advance(40) test.touch("move",0,204,1200)
+    test.advance(40) test.touch("move",0,24,1200)
+    test.touch("up",0,24,1200) test.advance(600)
+    test.falsy(state().launcher) test.eq(state().switches,{})
+    test.eq(test.logs("error"),{})
+  end)
+  test.it(style .. " a short fast inward fling opens a launcher but authentication cancels a pull", function()
+    load(style)
+    test.swipe({4,1200},{44,1200},{duration=40}) test.advance(600)
+    test.truthy(state().launcher) test.eq(state().menu,"apps")
+    test.ipc("launcher","close") test.advance(600)
+    test.touch("down",0,1112,1200) test.touch("move",0,912,1200)
+    test.ipc("session","open")
+    test.touch("up",0,912,1200) test.advance(600)
+    test.falsy(state().launcher) test.eq(test.logs("error"),{})
   end)
 end
 test.it("landscape desktop does not acquire phone gesture regions or actions", function()
   load("material", 1280, 800)
-  swipe("bottom") swipe("top") swipe("right")
+  swipe("bottom") swipe("top") swipe("left") swipe("right")
   test.falsy(state().dashboard) test.falsy(state().sidebar) test.eq(state().steps, {})
+  test.falsy(state().launcher)
   test.eq(#test.find_all("phone-gesture-edges"), 0)
   test.eq(#test.logs("error"), 0)
 end)

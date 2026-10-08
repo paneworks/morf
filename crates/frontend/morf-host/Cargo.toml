@@ -24,6 +24,7 @@ serde_json.workspace = true
 jiff.workspace = true
 morf-layout.workspace = true
 morf-lua.workspace = true
+morf-runtime.workspace = true
 morf-io.workspace = true
 morf-render.workspace = true
 morf-scene.workspace = true

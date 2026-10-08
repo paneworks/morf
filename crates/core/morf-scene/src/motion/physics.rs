@@ -112,6 +112,11 @@ pub(crate) fn advance_physics(
 ) -> bool {
     let seconds = delta.as_secs_f64();
     match motion {
+        PhysicsAnimation::Scroll(scroll) => {
+            let finished = scroll.advance(delta);
+            *current = scroll.position;
+            finished
+        }
         PhysicsAnimation::Spring {
             target,
             motion: spring,

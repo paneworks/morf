@@ -9,11 +9,12 @@ let
     hl.config({ cursor = { invisible = true } })
   '';
   workspaceConfig = ''
-    -- lisgd recognizes completed edge swipes; Hyprland animates real windows.
+    -- Morf owns bottom-edge contact sequences, including workspace previews.
     hl.config({ gestures = {
       workspace_swipe_touch = false,
     } })
-    hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "default", style = "slide" })
+    -- The native preview has already finished the transition at handoff.
+    hl.animation({ leaf = "workspaces", enabled = ${lib.boolToString (config.programs.morf.phone.gestureDriver == "lisgd")}, speed = 4, bezier = "default", style = "slide" })
   '';
 
   hyprland = config.programs.hyprland.package;
@@ -102,6 +103,14 @@ in
     default = 60;
     description = "Seconds before locking and blanking a phone session; zero disables automatic locking.";
   };
+  options.programs.morf.phone.gestureDriver = lib.mkOption {
+    type = lib.types.enum [ "native" "lisgd" ];
+    default = "native";
+    description = ''
+      Native gestures follow the finger and settle with its release velocity.
+      lisgd is a completed-swipe fallback for older Morf engines.
+    '';
+  };
   config =
     lib.mkIf
       (
@@ -110,10 +119,8 @@ in
       {
         services.logind.settings.Login.HandlePowerKey = "lock";
         users.users.${config.programs.morf.user}.extraGroups = [ "input" ];
-        environment.systemPackages = [
-          screen
-          pkgs.lisgd
-        ];
+        environment.systemPackages = [ screen ]
+          ++ lib.optional (config.programs.morf.phone.gestureDriver == "lisgd") pkgs.lisgd;
         # Shared by the user's lockscreen and the separate greeter process.
         environment.etc."morf/phone-screen.json".text = builtins.toJSON {
           command = "${screen}/bin/phone-screen";
@@ -137,8 +144,8 @@ in
               hl.bind("XF86PowerOff", hl.dsp.exec_cmd("${screen}/bin/phone-screen toggle"), { locked = true })
             '';
         };
-        systemd.user.services.morf.environment.CAELESTIA_GESTURE_DRIVER = "lisgd";
-        systemd.user.services.phone-gestures = {
+        systemd.user.services.morf.environment.CAELESTIA_GESTURE_DRIVER = config.programs.morf.phone.gestureDriver;
+        systemd.user.services.phone-gestures = lib.mkIf (config.programs.morf.phone.gestureDriver == "lisgd") {
           description = "Phone edge swipes through lisgd";
           wantedBy = [ "graphical-session.target" ];
           after = [

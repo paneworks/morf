@@ -156,11 +156,22 @@ Inside a NixOS module, with `inputs` supplied through `specialArgs`:
 
 It enables stock Hyprland with a quiet greeter session, shares compositor scaling
 and Lule wallpapers between login and desktop, and manages locking through
-hypridle. `phone.enable` adds lisgd gestures, a hidden pointer and deliberate
+hypridle. `phone.enable` adds continuous touch gestures, a hidden pointer and deliberate
 double-tap or power-button wake. `phone.idleTimeout = 0` disables automatic
 locking in the user session; the phone greeter still blanks after one minute.
+Panels follow the finger and carry release speed into their settling animation.
+An inward pull from the left edge opens Apps; the right edge opens Web. A short
+fast fling works too, while cancelled pulls and authentication prompts suppress
+launcher gestures. Bottom gestures remain available for workspaces and keyboard.
+Lists use Android's [OverScroller spline physics](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/widget/OverScroller.java):
+faster releases coast farther, touching stops the coast, and slow frames do not
+change the travel distance. Phone scroll indicators fade away when scrolling ends.
+`phone.gestureDriver = "lisgd"`
+selects the completed-swipe fallback for older engines; the default is `"native"`.
 
-The launcher first tries the user's `~/.config/morf/default` theme and falls back
+Set `usePackagedTheme = true` to run the shipped shell, lockscreen and greeter
+while retaining the user's appearance preferences. Otherwise, the launcher first
+tries the user's `~/.config/morf/default` theme and falls back
 to the complete Caelestia theme under `/etc/xdg/morf/default`. The greeter receives
 read access to the primary user's Morf configuration. Home Manager integration
 is optional. `package` and `libraryPackage` can select existing cached outputs;

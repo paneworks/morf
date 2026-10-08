@@ -41,7 +41,13 @@ impl Runtime {
         ) {
             return false;
         }
-        if event == UiEvent::TouchPressed {
+        // Raw DOWN precedes the synthesized pointer press (keyboards use
+        // that order to suppress typing during multi-touch). That press
+        // creates a fresh history, so mark MOVE/UP as touch as well.
+        if matches!(
+            event,
+            UiEvent::TouchPressed | UiEvent::TouchMoved | UiEvent::TouchReleased
+        ) {
             self.reactive.borrow_mut().gestures.touch();
         }
         self.dispatch_ui_event_with_args(node, event, &args::touch_args(id, point))

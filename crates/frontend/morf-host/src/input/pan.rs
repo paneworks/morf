@@ -1,20 +1,19 @@
 //! Continuous, exclusively owned touch drags. Handlers can decline `begin`;
 //! once accepted, motion stays with that owner even as its geometry moves.
 use std::{
-    collections::VecDeque,
     sync::OnceLock,
     time::{Duration, Instant},
 };
 
 use morf_app::WindowId;
 use morf_lua::{EventPoint, IpcValue, Runtime, UiEvent};
+use morf_runtime::gestures::VelocityTracker;
 use morf_scene::{Element, NodeHandle};
 
 use crate::surfaces::{PointerInput, SurfaceLayouts};
 
 const SLOP: f64 = 8.0;
 const EDGE: f64 = 20.0;
-const WINDOW: Duration = Duration::from_millis(100);
 
 enum Owner {
     Handler(NodeHandle, Option<&'static str>),
@@ -27,7 +26,9 @@ pub struct TouchPan {
     node: NodeHandle,
     origin: (f64, f64),
     last: (f64, f64),
-    samples: VecDeque<(Duration, f64, f64)>,
+    velocity: VelocityTracker,
+    time: Duration,
+    timestamp: Option<u32>,
     owner: Option<Owner>,
     decided: bool,
     claimed: bool,
@@ -41,18 +42,19 @@ fn now(runtime: &Runtime) -> Duration {
 }
 
 impl TouchPan {
-    fn args(&self, runtime: &Runtime, phase: &str, edge: Option<&str>) -> Vec<IpcValue> {
-        let velocity =
-            self.samples
-                .front()
-                .zip(self.samples.back())
-                .map_or((0.0, 0.0), |(a, b)| {
-                    if now(runtime).saturating_sub(b.0) >= WINDOW {
-                        return (0.0, 0.0);
-                    }
-                    let dt = now(runtime).saturating_sub(a.0).as_secs_f64().max(0.008);
-                    ((self.last.0 - a.1) / dt, (self.last.1 - a.2) / dt)
-                });
+    fn advance_time(&mut self, runtime: &Runtime, timestamp: Option<u32>) {
+        self.time = match (self.timestamp, timestamp) {
+            // Wayland's millisecond clock wraps roughly every 49 days.
+            (Some(previous), Some(current)) => {
+                self.time + Duration::from_millis(u64::from(current.wrapping_sub(previous)))
+            }
+            _ => now(runtime),
+        };
+        self.timestamp = timestamp;
+    }
+
+    fn args(&self, phase: &str, edge: Option<&str>) -> Vec<IpcValue> {
+        let velocity = self.velocity.velocity(self.time);
         let mut args = Vec::new();
         if let Some(edge) = edge {
             args.push(IpcValue::String(edge.into()));
@@ -80,7 +82,7 @@ impl TouchPan {
                 } else {
                     UiEvent::Panned
                 },
-                &self.args(runtime, phase, edge),
+                &self.args(phase, edge),
             ),
             _ => false,
         }
@@ -108,17 +110,13 @@ impl TouchPan {
             }
         });
         if let Some(edge) = edge
-            && runtime.offer_pan(
-                root,
-                UiEvent::EdgePanned,
-                &self.args(runtime, "begin", Some(edge)),
-            )
+            && runtime.offer_pan(root, UiEvent::EdgePanned, &self.args("begin", Some(edge)))
         {
             return Some(Owner::Handler(root, Some(edge)));
         }
         let mut candidate = Some(self.node);
         while let Some(node) = candidate {
-            if runtime.offer_pan(node, UiEvent::Panned, &self.args(runtime, "begin", None)) {
+            if runtime.offer_pan(node, UiEvent::Panned, &self.args("begin", None)) {
                 return Some(Owner::Handler(node, None));
             }
             // Direct manipulation in a child keeps ownership. A passive button
@@ -153,7 +151,12 @@ impl TouchPan {
     }
 }
 
-pub fn down(runtime: &mut Runtime, input: &mut PointerInput, id: i32) -> bool {
+pub fn down(
+    runtime: &mut Runtime,
+    input: &mut PointerInput,
+    id: i32,
+    time_ms: Option<u32>,
+) -> bool {
     if input.touches.len() != 1 {
         input.suppressed_taps.extend(input.touches.keys().copied());
         // Another finger cancels the pan, never commits it. Keep swallowing
@@ -170,18 +173,39 @@ pub fn down(runtime: &mut Runtime, input: &mut PointerInput, id: i32) -> bool {
     let Some((surface, hit, x, y, _)) = input.touches.get(&id) else {
         return false;
     };
+    // Catch a coasting list on DOWN, before touch slop. A tap stops the
+    // list without activating the button that happened to slide under it.
+    let mut stopped = false;
+    let mut node = Some(hit.node);
+    while let Some(current) = node {
+        let mut scene = runtime.scene_mut();
+        if scene.element(current).ok() == Some(Element::Flickable) {
+            for property in ["content_x", "content_y"] {
+                stopped |= scene.stop_animation(current, property).unwrap_or(false);
+            }
+        }
+        node = scene.parent(current).ok().flatten();
+    }
+    if stopped {
+        input.suppressed_taps.insert(id);
+    }
+    let time = now(runtime);
+    let mut velocity = VelocityTracker::default();
+    velocity.add(time, *x, *y);
     input.pan = Some(TouchPan {
         finger: id,
         surface: *surface,
         node: hit.node,
         origin: (*x, *y),
         last: (*x, *y),
-        samples: VecDeque::from([(now(runtime), *x, *y)]),
+        velocity,
+        time,
+        timestamp: time_ms,
         owner: None,
         decided: false,
         claimed: false,
     });
-    false
+    stopped
 }
 
 /// (contact consumed, repaint). Called before legacy drag/swipe delivery.
@@ -192,6 +216,7 @@ pub fn motion(
     id: i32,
     x: f64,
     y: f64,
+    time_ms: Option<u32>,
 ) -> (bool, bool) {
     let Some(mut pan) = input.pan.take() else {
         return (false, false);
@@ -202,11 +227,8 @@ pub fn motion(
     }
     let delta = (x - pan.last.0, y - pan.last.1);
     pan.last = (x, y);
-    let time = now(runtime);
-    pan.samples.push_back((time, x, y));
-    while pan.samples.len() > 2 && time.saturating_sub(pan.samples[0].0) > WINDOW {
-        pan.samples.pop_front();
-    }
+    pan.advance_time(runtime, time_ms);
+    pan.velocity.add(pan.time, x, y);
     let mut changed = false;
     let mut first = false;
     if !pan.decided && (x - pan.origin.0).hypot(y - pan.origin.1) >= SLOP {
@@ -249,14 +271,36 @@ pub fn motion(
     (claimed, changed)
 }
 
-pub fn up(runtime: &mut Runtime, input: &mut PointerInput, id: Option<i32>) -> (bool, bool) {
-    let Some(pan) = input.pan.take() else {
+pub fn up(
+    runtime: &mut Runtime,
+    input: &mut PointerInput,
+    id: Option<i32>,
+    time_ms: Option<u32>,
+) -> (bool, bool) {
+    let Some(mut pan) = input.pan.take() else {
         return (false, false);
     };
     if id.is_some_and(|id| id != pan.finger) {
         input.pan = Some(pan);
         return (false, false);
     }
-    let changed = pan.send(runtime, if id.is_some() { "end" } else { "cancel" });
+    pan.advance_time(runtime, time_ms);
+    let mut changed = pan.send(runtime, if id.is_some() { "end" } else { "cancel" });
+    if let Some(Owner::Scroll(node, room, horizontal)) = pan.owner
+        && id.is_some()
+    {
+        let (vx, vy) = pan.velocity.velocity(pan.time);
+        let (property, velocity, limit) = if horizontal {
+            ("content_x", -vx, room.0)
+        } else {
+            ("content_y", -vy, room.1)
+        };
+        if velocity.abs() >= 80.0 {
+            changed |= runtime
+                .scene_mut()
+                .fling_scroll(node, property, velocity, (0.0, limit))
+                .is_ok();
+        }
+    }
     (pan.claimed, changed)
 }

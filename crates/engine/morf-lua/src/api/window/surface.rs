@@ -97,7 +97,10 @@ pub(crate) fn install_shell_api<'gc>(
             LuaValue::Table(table) => {
                 if let Some(zoom) = number(table.get_value(ctx, "zoom")) {
                     if !(0.25..=4.0).contains(&zoom) {
-                        return Err(HostError("morf.density{ zoom = f } wants f between 0.25 and 4".into()).into());
+                        return Err(HostError(
+                            "morf.density{ zoom = f } wants f between 0.25 and 4".into(),
+                        )
+                        .into());
                     }
                     Density::Relative(zoom)
                 } else {
@@ -129,7 +132,10 @@ pub(crate) fn install_shell_api<'gc>(
                 state.density_changed = true;
                 // What reads the screens' size reads it again.
                 let state = &mut *state;
-                state.engine.session.touch_screens(&mut state.engine.reactive);
+                state
+                    .engine
+                    .session
+                    .touch_screens(&mut state.engine.reactive);
             }
         }
         // The screens already described are described again in the new unit.

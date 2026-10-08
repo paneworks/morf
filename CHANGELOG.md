@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.5] - 2026-10-09
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Restore velocity-based touch scrolling, preserve fling distance across slow frames, and stop inertia when touched.
+- Make phone panels, pages and workspace previews follow the finger and settle using release velocity.
+- Open Apps from the left edge and Web from the right, with cancellation and authentication guards.
+- Require a deliberate double tap or the power key to wake sleeping phone authentication screens.
+- Validate neighbouring pattern dots and show pattern login only for enrolled accounts.
+- Use a fading phone scrollbar and hide the application list in the phone bar.
+- Correct compact dialog captions, disabled controls, and shared layout spacing.
+
+### <!-- 0 -->⛰️ Features
+
+- Provide upstream NixOS modules for desktop, greeter, lockscreen, phone gestures and protected pattern enrollment.
+- Let NixOS select the packaged UI while preserving appearance preferences.
+- Include the keyring dialog bridge in Nix packages and report PAM authentication progress without handling passwords.
+
 ## [0.2.4] - 2026-10-06
 
 ### <!-- 0 -->⛰️  Features

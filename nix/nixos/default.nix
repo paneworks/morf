@@ -68,6 +68,16 @@ let
     candidate="$root/morf/default/$role/init.lua"
     if [ "$role" = shell ] && [ -r "$root/morf/shell.lua" ]; then candidate="$root/morf/shell.lua"; fi
     fallback="/etc/xdg/morf/default/$role/init.lua"
+    ${lib.optionalString config.programs.morf.usePackagedTheme ''
+      # Keep the shipped UI and engine together while preserving the user's
+      # appearance preferences. Custom CLI paths remain explicit overrides.
+      if [ -z "''${CAELESTIA_APPEARANCE:-}" ] && [ -r "$candidate" ]; then
+        theme=$(${pkgs.coreutils}/bin/dirname "$(${pkgs.coreutils}/bin/dirname "$(${pkgs.coreutils}/bin/readlink -f "$candidate")")")
+        if [ -r "$theme/appearance.json" ]; then export CAELESTIA_APPEARANCE="$theme/appearance.json"; fi
+      fi
+      export XDG_CONFIG_DIRS=/etc/xdg
+      exec ${morf}/bin/morf "$fallback"
+    ''}
     if [ -r "$candidate" ]; then
       if [ "$role" = greet ] && [ -n "''${MORF_GREETER_CONFIG_HOME:-}" ]; then
         theme=$(${pkgs.coreutils}/bin/dirname "$(${pkgs.coreutils}/bin/dirname "$(${pkgs.coreutils}/bin/readlink -f "$candidate")")")
@@ -144,9 +154,11 @@ let
 in
 {
   imports = [
+    ./authentication.nix
     ./compositor.nix
     ./idle.nix
     ./phone.nix
+    ./pattern.nix
   ];
 
   options.programs.morf = {
@@ -166,6 +178,11 @@ in
         config.programs.morf.package.library
           or flake.packages.${pkgs.stdenv.hostPlatform.system}.morf-library;
       description = "Installed Lua library matching the selected executable.";
+    };
+    usePackagedTheme = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Use the shell, lockscreen and greeter shipped with Morf instead of Lua entry points in the user's dotfiles. Appearance preferences remain user-controlled.";
     };
     lulePackage = lib.mkOption {
       type = lib.types.package;
@@ -263,15 +280,6 @@ in
           Restart = "on-failure";
           RestartSec = 2;
         };
-      };
-      security.pam.services.morf-lock.fprintAuth = false;
-      security.pam.services.greetd.fprintAuth = false;
-      security.pam.services.morf-lock-finger = lib.mkIf config.services.fprintd.enable {
-        text = ''
-          auth sufficient ${config.services.fprintd.package}/lib/security/pam_fprintd.so
-          auth required ${pkgs.pam}/lib/security/pam_deny.so
-          account include morf-lock
-        '';
       };
       fonts.packages = greeterFonts;
 
