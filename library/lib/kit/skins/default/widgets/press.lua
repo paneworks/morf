@@ -60,23 +60,25 @@ return function(S, theme, M)
 
   --- The content of a button: a leading icon, the label, a trailing icon,
   --- centred (or from the start with `start`).
-  local function content(spec, ink, o)
+  local function content(t,spec, ink, o)
     o = o or {}
     local size = o.size or theme.size.normal
     local weight = o.weight or 700
-    local lead = o.lead ~= nil and o.lead or spec.icon
+    local lead=o.lead
+    if lead==nil then lead=spec.icon end
     local label = o.label ~= nil and o.label or spec.label
-    local kids = {}
-    if lead then kids[#kids + 1] = M.icon(lead, o.glyph or 18, o.lead_ink or ink, { fill = o.lead_fill }) end
-    if label and label ~= "" then
-      kids[#kids + 1] = M.text { text = label, font_size = size, font_weight = weight, color = ink }
-    end
-    if o.trail then kids[#kids + 1] = M.icon(o.trail, o.trail_size or 16, o.trail_ink or ink) end
-    local props = { gap = o.gap or 6, align = "center" }
-    if o.start then props.anchors = { left = true, left_margin = o.start, vertical_center = true }
-    else props.anchors = { center_in = true } end
-    for i, k in ipairs(kids) do props[i] = k end
-    return ui.Row(props)
+    local before,after={},{}
+    if o.pre then before[#before+1]=o.pre end
+    if lead then before[#before+1]=M.icon(lead,o.glyph or 18,o.lead_ink or ink,{fill=o.lead_fill}) end
+    if o.trail then after[#after+1]=M.icon(o.trail,o.trail_size or 16,o.trail_ink or ink) end
+    if o.post then after[#after+1]=o.post end
+    return require("lib.kit.caption").make {width=spec.width,height=function() return H(t) end,
+      gap=o.gap or 6,left=o.start,align=o.start and "start" or nil,
+      before=before,after=after,measure=M.text {text=label or "",font_size=size,font_weight=weight,opacity=0},
+      label_visible=function() local s=get(label) return s~=nil and s~="" end,
+      label=label and label~="" and function(w)
+        return M.text {text=label,width=w,elide="right",font_size=size,font_weight=weight,color=ink}
+      end or nil}
   end
 
   --- A button: `ground` (fn of the palette), `ink`, `radius`, `border`
@@ -101,7 +103,7 @@ return function(S, theme, M)
         shadow_blur = o.shadow and function() return (t.hovered and not t.down) and o.shadow.blur * 1.5 or o.shadow.blur end or nil,
         shadow_offset_y = o.shadow and function() return t.down and 0 or o.shadow.y end or nil,
         behavior = { color = quick(), shadow_blur = quick(), shadow_offset_y = quick() } },
-      content = (o.content == false) and none or (o.content or content(spec, ink, o)),
+      content = (o.content == false) and none or (o.content or content(t,spec, ink, o)),
       indicator = ring(t, radius),
     }
   end
@@ -270,16 +272,14 @@ return function(S, theme, M)
   --- while open.
   function S.disclosure_button(t, spec)
     local function ink() return P().ink end
-    local kids = { gap = 6, align = "center", anchors = { center_in = true } }
-    if spec.label then kids[#kids + 1] = M.text { text = spec.label, font_weight = 700, color = ink } end
-    kids[#kids + 1] = ui.Item { width = 18, height = 18, rotation = function() return t.checked and 180 or 0 end,
+    local row=content(t,spec,ink,{lead=false,post=ui.Item { width = 18, height = 18, rotation = function() return t.checked and 180 or 0 end,
       behavior = { rotation = slide() },
-      M.icon("expand_more", 18, function() return P().ink_dim end, { anchors = { center_in = true } }) }
+      M.icon("expand_more", 18, function() return P().ink_dim end, { anchors = { center_in = true } }) }})
     return button(t, spec, { ground = function()
       local p = P()
       if t.down then return p.ink:alpha(p.wash.active) end
       return p.ink:alpha(t.hovered and p.wash.hover or 0)
-    end, ink = ink, content = ui.Row(kids) })
+    end, ink = ink, content = row })
   end
 
   --- Copy: a flat button whose icon and label turn to a tick and "Copied"
@@ -287,10 +287,9 @@ return function(S, theme, M)
   function S.copy(t, spec)
     local copied = morf.signal("kit.default.copy." .. tostring({}), false)
     local function ink() return copied:get() and P().success_ink or P().ink end
-    local glyph = M.icon(function() return copied:get() and "check" or (spec.icon or "content_copy") end, 16, ink)
-    local row = ui.Row { anchors = { center_in = true }, gap = 6, align = "center", glyph,
-      spec.label and M.text { text = function() return copied:get() and "Copied" or spec.label end,
-        font_weight = 700, color = ink } or nil }
+    local row=content(t,spec,ink,{glyph=16,
+      lead=function() return copied:get() and "check" or (get(spec.icon) or "content_copy") end,
+      label=spec.label and function() return copied:get() and "Copied" or get(spec.label) end})
     local was, timer = false, nil
     morf.effect("kit.default.copy.watch." .. tostring(row), function()
       local down = t.down
@@ -308,9 +307,7 @@ return function(S, theme, M)
   --- A busy button: grey, the spinner before its label.
   function S.loading(t, spec)
     local function ink() return P().ink end
-    local row = ui.Row { anchors = { center_in = true }, gap = 8, align = "center",
-      M.loading(16, function() return P().ink_dim end),
-      spec.label and M.text { text = spec.label, font_weight = 700, color = ink } or nil }
+    local row=content(t,spec,ink,{lead=false,gap=8,pre=M.loading(16,function() return P().ink_dim end)})
     return button(t, spec, { ground = function() local p = P() return p.ink:alpha(p.wash.button) end, ink = ink,
       content = row })
   end
@@ -346,12 +343,11 @@ return function(S, theme, M)
       content = false,
     })
     local function ink() return t.checked and P().accent_ink or P().ink end
-    slots.content = ui.Row { anchors = { center_in = true }, gap = 4, align = "center",
-      ui.Item { height = 16, width = function() return t.checked and 18 or 0.001 end, clip = true,
+    slots.content=content(t,spec,ink,{lead=false,gap=0,size=theme.size.small,
+      pre=ui.Item { height = 16, width = function() return t.checked and 22 or 0.001 end, clip = true,
         opacity = function() return t.checked and 1 or 0 end,
         behavior = { width = slide(), opacity = quick() },
-        M.icon("check", 16, ink, { font_weight = 700 }) },
-      M.text { text = spec.label or "", font_size = theme.size.small, color = ink } }
+        M.icon("check", 16, ink, { font_weight = 700 }) }})
     return slots
   end
 
@@ -360,13 +356,11 @@ return function(S, theme, M)
     local slots = chip(t, spec, {
       ground = function() local p = P() return p.ink:alpha(t.hovered and p.wash.raised_hover or p.wash.button) end,
       ink = function() return P().ink end, content = false })
-    slots.content = with(ui.Row, { anchors = { center_in = true }, gap = 6, align = "center" },
-      spec.icon and M.icon(spec.icon, 16, function() return P().ink_dim end) or nil,
-      M.text { text = spec.label or "", font_size = theme.size.small, color = function() return P().ink end },
-      ui.Rect { width = 18, height = 18, radius = 9,
+    slots.content=content(t,spec,function() return P().ink end,{glyph=16,size=theme.size.small,
+      lead_ink=function() return P().ink_dim end,post=ui.Rect { width = 18, height = 18, radius = 9,
         color = function() local p = P() return p.ink:alpha(t.down and 0.3 or (t.hovered and 0.2 or 0.12)) end,
         behavior = { color = quick() },
-        M.icon("close", 14, function() return P().ink end, { anchors = { center_in = true }, font_weight = 700 }) })
+        M.icon("close", 14, function() return P().ink end, { anchors = { center_in = true }, font_weight = 700 }) }})
     return slots
   end
 
@@ -512,7 +506,7 @@ return function(S, theme, M)
     local function ink() local p = P() return t.checked and p.ink or p.ink_dim end
     local glyph = spec.icon
     local inner = (glyph and not spec.label) and M.icon(glyph, 18, ink, { anchors = { center_in = true } })
-      or content(spec, ink, { size = theme.size.normal })
+      or content(t,spec, ink, { size = theme.size.normal })
     return full {
       background = ui.Item { anchors = { fill = true }, opacity = dim(t),
         ui.Rect { anchors = { fill = true },
@@ -652,8 +646,7 @@ return function(S, theme, M)
         border_width = function() return P().strong and 1 or 0 end, border_color = function() return P().border end,
         behavior = { color = quick() },
         ui.ClipRect { anchors = { fill = true }, radius = R.small, color = "transparent", sweep } },
-      content = ui.Row { anchors = { center_in = true }, gap = 8, align = "center", dial,
-        spec.label and M.text { text = spec.label, font_weight = 700, color = ink } or nil },
+      content=content(t,spec,ink,{lead=false,gap=8,pre=dial}),
       indicator = ring(t, R.small),
     }
   end

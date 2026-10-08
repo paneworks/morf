@@ -24,6 +24,7 @@ local ui = require("morf.ui")
 local control = require("lib.kit.control")
 
 local M = {}
+local function get(v) if type(v)=="function" then return v() end return v end
 
 -- What each widget is unless its spec says otherwise.
 local DEFAULTS = {
@@ -53,13 +54,24 @@ end
 local function build_content(widget, spec, close)
   if spec.content then return spec.content end
   local kit = require("lib.kit.widgets")
+  -- `width` describes the background, so its padding belongs outside the
+  -- generated rows and dialog body. Keep bindings live when it resizes.
+  local pad=spec.padding or 0
+  local function content_width(fallback)
+    return function()
+      local outer=get(spec.width)
+      return math.max(1,outer and outer-2*pad or get(fallback))
+    end
+  end
   if spec.items then
-    local rows = { gap = 0 }
+    local width=content_width(spec.item_width or 200)
+    local rows = { gap = 0, width=width }
     for i, item in ipairs(spec.items) do
       local entry = {}
       for k, v in pairs(item) do entry[k] = v end
       entry.id = item.id or (spec.id and (spec.id .. "-item-" .. i)) or nil
-      entry.width, entry.height = spec.item_width or spec.width or 200, item.height or spec.item_height or 36
+      entry.width=function() return math.min(width(),get(spec.item_width) or width()) end
+      entry.height=item.height or spec.item_height or 36
       local kind = "menu_item"
       if item.checked ~= nil then kind = item.group and "radio_menu_item" or "check_menu_item" end
       local clicked = item.on_clicked
@@ -73,8 +85,9 @@ local function build_content(widget, spec, close)
     return ui.Column(rows)
   end
   -- A dialog: a title, a body and a row of buttons.
-  local width = spec.width or 360
-  local column = { gap = 12, x = 20, y = 18, width = width - 40 }
+  local width=content_width(360)
+  local function inner() return math.max(1,width()-40) end
+  local column = { gap = 12, x = 20, y = 18, width = inner }
   -- The ink the theme writes in, not a colour of this file's choosing: a
   -- light dialog ground wants dark text.
   local has_kit, theme_kit = pcall(require, "kit")
@@ -91,37 +104,81 @@ local function build_content(widget, spec, close)
   local ink_lo = spec.ink or ink_of("lo") or ink
   -- Words alone (a tooltip, a toast): as wide as they are.
   if spec.text and not spec.title and not spec.body and not spec.buttons then
-    return text { text = spec.text, font_size = 13, color = ink }
+    return text { text = spec.text, font_size = 13, color = ink,
+      width=spec.width and width or nil,wrap=spec.width~=nil }
   end
   if spec.title then
-    column[#column + 1] = text { text = spec.title, font_size = 18, font_weight = 600, width = width - 40,
-      color = ink }
+    column[#column + 1] = text { text = spec.title, font_size = 18, font_weight = 600, width = inner,
+      wrap=true,color = ink }
   end
   if spec.body then
-    column[#column + 1] = text { text = spec.body, font_size = 13, width = width - 40, wrap = true,
+    column[#column + 1] = text { text = spec.body, font_size = 13, width = inner, wrap = true,
       color = ink_lo }
   end
   if spec.text then
-    column[#column + 1] = text { text = spec.text, font_size = 13, color = ink_lo }
+    column[#column + 1] = text { text = spec.text, font_size = 13, color = ink_lo,width=inner,wrap=true }
   end
+  local measures={width=1,height=1,clip=true}
   if spec.buttons then
-    local row = { gap = 8 }
+    local actions={}
+    local has_theme,theme=pcall(require,"theme")
+    theme=(themed and theme_kit.theme) or (has_theme and type(theme)=="table" and theme) or {}
+    local menu=theme.typography and theme.typography.menu
+    local font_size=menu or (theme.size and theme.size.normal) or 14
+    for i,b in ipairs(spec.buttons) do
+      local caption=function() local s=tostring(get(b.label) or "") return menu and s:upper() or s end
+      local measure=text {text=caption,font_size=font_size,font_weight=500,opacity=0}
+      measures[#measures+1]=measure
+      actions[i]={spec=b,measure=measure}
+    end
+    local function visible(action) return get(action.spec.visible)~=false end
+    local function desired(action)
+      return math.max(1,get(action.spec.width) or math.max(96,(action.measure.layout_width or 0)+32+(action.spec.icon and 26 or 0)))
+    end
+    local function height(action) return math.max(1,get(action.spec.height) or 34) end
+    local function total()
+      local n,w,h=0,0,0
+      for _,action in ipairs(actions) do
+        if visible(action) then n,w,h=n+1,w+desired(action),math.max(h,height(action)) end
+      end
+      return w+math.max(0,n-1)*8,h,n
+    end
+    local function stacked() return total()>inner() end
+    local function row_height()
+      local _,h,n=total()
+      if not stacked() then return h end
+      h=math.max(0,n-1)*8
+      for _,action in ipairs(actions) do if visible(action) then h=h+height(action) end end
+      return h
+    end
+    local row={width=inner,height=row_height,visible=function() local _,_,n=total() return n>0 end}
     for i, b in ipairs(spec.buttons) do
+      local action=actions[i]
+      local function offset()
+        local n=0
+        for j=1,i-1 do
+          if visible(actions[j]) then n=n+(stacked() and height(actions[j]) or desired(actions[j]))+8 end
+        end
+        return n
+      end
       local clicked = b.on_clicked
       -- A destructive choice (Discard, Reset) or the suggested one is
       -- drawn as such by the theme.
       local make = (b.destructive and kit.destructive) or (b.suggested and kit.suggested) or kit.push
       row[#row + 1] = make { id = b.id or (spec.id and (spec.id .. "-button-" .. i)) or nil,
-        label = b.label, width = b.width or 96, height = 34,
+        label=b.label,icon=b.icon,enabled=b.enabled,visible=b.visible,accessible_name=b.accessible_name,
+        width=function() return stacked() and inner() or desired(action) end,height=b.height or 34,
+        x=function() return stacked() and 0 or inner()-total()+offset() end,
+        y=function() return stacked() and offset() or (row_height()-height(action))/2 end,
         on_clicked = function() if clicked then clicked() end close("activated") end }
     end
-    -- At the end of the dialog, as the platforms put them.
-    row.anchors = { right = true }
-    column[#column + 1] = ui.Item { width = width - 40, height = 34, ui.Row(row) }
+    -- End-aligned when there is room; full-width rows on narrow dialogs.
+    column[#column + 1] = ui.Item(row)
   end
   -- The column's own margins count in the dialog's size.
   local body = ui.Column(column)
-  return ui.Item { width = width, height = function() return (body.layout_height or 0) + 36 end, body }
+  return ui.Item { width = width, height = function() return (body.layout_height or 0) + 36 end,
+    body,ui.Item(measures) }
 end
 
 --- A popup of `widget`. Returns `{ node, open(anchor), close(reason),

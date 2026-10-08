@@ -306,6 +306,15 @@ function M.make(archetype, widget, spec, extra)
   local function slot_size(name, axis)
     local node = slots and slots[name]
     if not node then return 0 end
+    -- A background stretched to this control follows its size; it must
+    -- not set that size again, or an intrinsic button can grow but never
+    -- shrink when its caption changes.
+    if name=="background" then
+      local anchors=node.anchors
+      if type(anchors)=="table" and (anchors.fill
+        or (axis=="width" and anchors.left and anchors.right)
+        or (axis=="height" and anchors.top and anchors.bottom)) then return 0 end
+    end
     local own = node[axis]
     if type(own) == "number" and own > 0 then return own end
     return node["layout_" .. axis] or 0
