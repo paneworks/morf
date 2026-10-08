@@ -22,6 +22,27 @@ local function inside(node,box,pad)
     "Popup content crosses its vertical bounds")
 end
 for _,style in ipairs {"material","tsugumori","default"} do
+  for _,kind in ipairs {"push","suggested","destructive"} do
+    test.it(style.." dialog measures the entire "..kind.." button",function()
+      load(style,([[
+        local label=morf.signal("popup.caption","Apply these changes")
+        local words=function() return label:get() end
+        ui.reparent(kit.widgets[%q] {id="natural",label=words,icon="settings",height=34},root)
+        local dialog=kit.widgets.dialog {id="dialog",root=root,width=470,padding=10,behavior={},
+          title="Preferences",buttons={{label=words,icon="settings",%s=true}}}
+        morf.ipc.open=dialog.open
+        morf.ipc.label=function(v) label:set(v) end
+      ]]):format(kind,kind))
+      for _,label in ipairs {"Apply these changes","Done","Apply all preferences"} do
+        test.ipc("label",label) test.advance(500)
+        local natural,actual=test.get("natural"),test.get("dialog-button-1")
+        test.truthy(actual.width>=natural.width-.1,("Dialog gives %.2f px for %.2f px caption"):format(actual.width,natural.width))
+        test.near(actual.width,math.max(96,natural.width),.1,"Dialog adds an unexplained caption gap")
+        inside(actual,test.get("dialog"),30)
+      end
+      test.eq(test.logs("error"),{}) test.eq(test.logs("warn"),{})
+    end)
+  end
   test.it(style.." menu rows stay inside the padded background",function()
     load(style,[[
       local menu=kit.widgets.menu {id="menu",root=root,width=220,padding=12,behavior={},items={

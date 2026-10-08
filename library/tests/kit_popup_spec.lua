@@ -88,6 +88,17 @@ test.it("a dialog is modal and its buttons close it", function()
   test.eq(test.ipc("log"), "discard,dialog-closed:closed")
 end)
 
+test.it("dialog captions also fit a skin that draws its own label",function()
+  local words="Apply these preferences"
+  test.load {source=HOST:gsub('label = "Discard"','label = "'..words..'"'),size={800,600}}
+  test.advance(100) test.ipc("dialog") test.advance(300)
+  local button=test.get("dialog-button-2")
+  local label=test.find {text=words,visible=true}
+  test.truthy(label)
+  test.truthy(label.x+label.width<=button.x+button.width,"Custom skin's action caption leaves its button")
+  test.eq(test.logs("error"),{})
+end)
+
 test.it("a toast goes by itself", function()
   load()
   test.ipc("toast") test.settle(50)
