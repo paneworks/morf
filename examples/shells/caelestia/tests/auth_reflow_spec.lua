@@ -48,10 +48,13 @@ for _,style in ipairs {"material","tsugumori"} do
       test.truthy(test.get(role.."-field").y<field_y-30)
       local q=test.get(test.ipc("key_id","q"))
       pair(q.x+10,q.y+10,100)
-      test.eq(test.ipc("board").stage,"sheet")
+      -- Hiding the lock keyboard also dismisses the account card: only
+      -- an intentional upward gesture may reveal it again.
+      test.eq(test.ipc("board").stage,role=="lock" and "rest" or "sheet")
       test.falsy(test.ipc("board").shown)
       test.near(test.get(role.."-content").height,1380,1)
-      test.truthy(test.get(role.."-field").y>field_y)
+      if role=="lock" then test.falsy(test.get("lock-field").visible)
+      else test.truthy(test.get("greet-field").y>field_y) end
       pair(230,1375,-120)
       state=test.ipc("board")
       test.truthy(state.shown)

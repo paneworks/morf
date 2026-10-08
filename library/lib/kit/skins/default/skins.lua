@@ -221,6 +221,8 @@ return function(theme, M)
   --- A menu row: its icon and label on a hover wash, a check or a radio
   --- mark at the right.
   local function menu_item(t, spec)
+    local left=spec.icon and 38 or 12
+    local right=spec.widget=="menu_item" and 12 or 36
     return {
       background = ui.Rect { anchors = { fill = true }, radius = R.small,
         color = function()
@@ -230,7 +232,8 @@ return function(theme, M)
         end, behavior = { color = quick() } },
       icon = spec.icon and M.icon(spec.icon, 16, function() return P().ink end,
         { x = 12, anchors = { vertical_center = true } }) or nil,
-      label = M.text { x = spec.icon and 38 or 12, anchors = { vertical_center = true }, text = spec.label,
+      label = M.text { x = left, anchors = { vertical_center = true }, text = spec.label,
+        width=function() return math.max(1e-3,t.width-left-right) end,elide="right",
         font_size = theme.size.normal, color = function() return P().ink end },
       indicator = (spec.widget ~= "menu_item") and M.icon(function()
         if spec.widget == "radio_menu_item" then return t.checked and "radio_button_checked" or "radio_button_unchecked" end
@@ -455,18 +458,18 @@ return function(theme, M)
   --- An overlay scroll bar: a slim pill the length of the view's share,
   --- wider under the pointer.
   local function scroll_bar(t, spec)
-    local function length()
-      local height=t.height or 0
-      return math.min(height,math.max(24,clamp01(get(spec.size) or 1)*height))
-    end
+    local vertical=spec.orientation=="vertical"
+    local function extent() return math.max(0,vertical and t.height or t.width) end
+    local function length() return math.min(extent(),math.max(24,clamp01(get(spec.size) or 1)*extent())) end
+    local function thickness() return math.min(vertical and t.width or t.height,(t.hovered or t.down) and 8 or 4) end
+    local function offset() return t.visual_position*(extent()-length()) end
     return {
       track = ui.Item { anchors = { fill = true } },
-      handle = ui.Rect { anchors = { right = true }, radius = 4,
-        width = function() return (t.hovered or t.down) and 8 or 4 end,
-        height = length,
-        y = function() return t.visual_position * ((t.height or 0) - length()) end,
+      handle = ui.Rect { anchors = vertical and {right=true} or {bottom=true}, radius = 4,
+        width=vertical and thickness or length,height=vertical and length or thickness,
+        x=not vertical and offset or nil,y=vertical and offset or nil,
         color = function() local p = P() return p.ink:alpha((t.hovered or t.down) and 0.5 or (p.strong and 0.7 or 0.3)) end,
-        behavior = { width = quick() } },
+        behavior = {[vertical and "width" or "height"]=quick()} },
     }
   end
 

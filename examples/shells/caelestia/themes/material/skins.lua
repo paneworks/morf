@@ -141,6 +141,8 @@ return function(theme, M)
   --- A menu row: its icon and label on a hover wash, a check when checked.
   local function menu_item(t, spec)
     local function ink() return C().onSurface end
+    local left=spec.icon and 40 or 14
+    local right=spec.widget=="menu_item" and 14 or 38
     return {
       background = ui.Rect { anchors = { fill = true }, radius = 8,
         color = function()
@@ -149,7 +151,8 @@ return function(theme, M)
         end, behavior = { color = { duration = theme.duration.small } } },
       icon = spec.icon and M.icon(spec.icon, 18, function() return C().onSurfaceVariant end,
         { x = 12, anchors = { vertical_center = true } }) or nil,
-      label = M.text { x = spec.icon and 40 or 14, anchors = { vertical_center = true }, text = spec.label,
+      label = M.text { x = left, anchors = { vertical_center = true }, text = spec.label,
+        width=function() return math.max(1e-3,t.width-left-right) end,elide="right",
         font_size = theme.size.normal, color = ink },
       indicator = (spec.widget ~= "menu_item") and M.icon(function()
         if spec.widget == "radio_menu_item" then return t.checked and "radio_button_checked" or "radio_button_unchecked" end
@@ -261,18 +264,24 @@ return function(theme, M)
   local function slider(t, spec)
     local H = spec.bar_height or 44
     local function W() return math.max(1,get(spec.width) or t.width) end
+    local reading_width=spec.reading and 64 or 40
+    local function label_width() return math.min(reading_width,math.max(1,W()-H-28)) end
+    -- On a short rail the moving reading and icon would meet halfway.
+    -- Reserve a separate readout there; wide sliders keep the embedded one.
+    local function separate() return spec.label~=false and W()<2*reading_width+math.floor(H/2)+72 end
+    local function rail_width() return separate() and W()-label_width()-12 or W() end
     local GAP = 6
-    local function hx() return H / 2 + math.max(0,W() - H) * clamp01(t.visual_position) end
+    local function hx() return H / 2 + math.max(0,rail_width() - H) * clamp01(t.visual_position) end
     local function grip() return t.down and 2 or 4 end
     local function rest_x() return hx()+grip()/2+GAP end
-    local function rest_width() return math.max(0,W()-rest_x()) end
+    local function rest_width() return math.max(0,rail_width()-rest_x()) end
     local function filled_width() return math.max(0,hx()-grip()/2-GAP) end
     local function handle_x() return hx()-grip()/2 end
     local slots = {
       -- The travel the pointer maps onto: the handle's centre keeps the
       -- track's rounded ends clear.
       track = ui.Item { id=spec.id and spec.id.."-track",x = H / 2, y = 4,
-        width = function() return math.max(1,W() - H) end, height = H },
+        width = function() return math.max(1,rail_width() - H) end, height = H },
       background = ui.Rect { y = 4, height = H,
         x = rest_x(), width = rest_width(),
         top_left_radius = 6, bottom_left_radius = 6, top_right_radius = H / 2, bottom_right_radius = H / 2,
@@ -294,22 +303,24 @@ return function(theme, M)
     }
     local size = math.floor(H / 2)
     if spec.icon then
-      local function inside() return hx() - GAP > size + 18 end
+      local function inside() return filled_width()>=size+18 end
       local function icon_x()
         if inside() then return math.floor(H/2-size/2) end
         return math.floor(hx()+grip()/2+GAP+6)
       end
       slots.ticks = M.icon(spec.icon, size, function()
         return inside() and C().onPrimary or C().onSurfaceVariant
-      end, { y = 4 + (H - size) / 2,
+      end, { id=spec.id and spec.id.."-icon",y = 4 + (H - size) / 2,width=size,height=size,
+        visible=function() return inside() or icon_x()+size<=rail_width()-8 end,
         x = icon_x() })
       targets[#targets+1]={node=slots.ticks,values={x=icon_x}}
     end
     if spec.label ~= false then
-      local label_width=spec.reading and 64 or 40
+      local function in_fill() return not separate() and hx()>W()-label_width()-24 end
       local function label_x()
-        if hx()>W()-label_width-24 then return hx()-GAP-10-label_width end
-        return W()-14-label_width
+        if separate() then return W()-label_width() end
+        if in_fill() then return hx()-GAP-10-label_width() end
+        return W()-14-label_width()
       end
       slots.value_label = M.text { id = spec.id and spec.id .. "-value", width = label_width, horizontal_alignment = "right",
         y = 4 + (H - 20) / 2, height = 20,
@@ -320,7 +331,7 @@ return function(theme, M)
           return ("%d"):format(math.floor(clamp01(t.position) * 100 + 0.5))
         end,
         font_size = H >= 40 and theme.size.normal or theme.size.small,
-        color = function() return hx() > W() - label_width - 24 and C().onPrimary or C().onSurfaceVariant end }
+        color = function() return in_fill() and C().onPrimary or C().onSurfaceVariant end }
       targets[#targets+1]={node=slots.value_label,values={x=label_x}}
     end
     require("themes.kit_common").follow_range(t,slots.handle,targets,
@@ -332,7 +343,8 @@ return function(theme, M)
   --- thumb, then the rest of the track and a stop dot. `spec`: `width`,
   --- `active` and `playing` (fns).
   local function seek_bar(t, spec)
-    local W, WAVE = spec.width, 38
+    local WAVE = 38
+    local function W() return math.max(1,get(spec.width) or t.width) end
     local function wave_path(width)
       local d = { "M0 6" }
       for k = 1, math.ceil(width / 2) do
@@ -343,16 +355,17 @@ return function(theme, M)
     end
     local function at() return clamp01(t.visual_position) end
     local function playing() return get(spec.active) ~= false and spec.playing and spec.playing() end
-    local function fill_width() return math.max(1e-3,at()*W-6) end
-    local function rest_x() return math.min(W,at()*W+6) end
-    local function rest_width() return math.max(0,W-rest_x()) end
+    local function fill_width() return math.max(1e-3,at()*W()-6) end
+    local function rest_x() return math.min(W(),at()*W()+6) end
+    local function rest_width() return math.max(0,W()-rest_x()) end
     local function handle_x()
       local width=t.down and 6 or 4
-      return math.max(0,math.min(W-width,at()*W-width/2))
+      return math.max(0,math.min(W()-width,at()*W()-width/2))
     end
     local fill=ui.Item { id = "media-progress-wave", x = 0, y = 0, height = 12, clip = true,
-      width=fill_width(),visible=function() return at()*W>6 end,
-      ui.Path { width = W + WAVE, height = 12, view_box = { 0, 0, W + WAVE, 12 }, d = wave_path(W + WAVE),
+      width=fill_width(),visible=function() return at()*W()>6 end,
+      ui.Path { width = function() return W()+WAVE end, height = 12,
+        view_box = function() return {0,0,W()+WAVE,12} end,d=function() return wave_path(W()+WAVE) end,
         fill_color = "transparent", stroke_width = 5, stroke_cap = "round",
         stroke_color = function() return C().primary end,
         loop = function()
@@ -379,7 +392,7 @@ return function(theme, M)
       track=ui.Item {width=W,height=34},
       fill=ui.Item {y=11,width=W,height=12,fill},
       background=ui.Item {width=W,height=34,rest,
-        M.surface {x=W-6,y=15,width=4,height=4,radius=2,color=function() return C().primary end}},
+        M.surface {x=function() return math.max(0,W()-6) end,y=15,width=4,height=4,radius=2,color=function() return C().primary end}},
       handle=handle,
     }
   end
@@ -387,15 +400,18 @@ return function(theme, M)
   --- A scroll bar: a slim rounded handle the length of the view's share,
   --- wider under the pointer.
   local function scroll_bar(t, spec)
-    local function length() return math.min(t.height,math.max(24,clamp01(get(spec.size) or 1)*t.height)) end
+    local vertical=spec.orientation=="vertical"
+    local function extent() return math.max(0,vertical and t.height or t.width) end
+    local function length() return math.min(extent(),math.max(24,clamp01(get(spec.size) or 1)*extent())) end
+    local function thickness() return math.min(vertical and t.width or t.height,(t.hovered or t.down) and 8 or 4) end
+    local function offset() return t.visual_position*(extent()-length()) end
     return {
       track = ui.Item { anchors = { fill = true } },
-      handle = ui.Rect { anchors = { right = true }, radius = 4,
-        width = function() return (t.hovered or t.down) and 8 or 4 end,
-        height = length,
-        y = function() return t.visual_position * (t.height - length()) end,
+      handle = ui.Rect { anchors = vertical and {right=true} or {bottom=true}, radius = 4,
+        width = vertical and thickness or length,height = vertical and length or thickness,
+        x = not vertical and offset or nil,y = vertical and offset or nil,
         color = function() return C().onSurfaceVariant:alpha((t.hovered or t.down) and .6 or .35) end,
-        behavior = { width = { duration = theme.duration.small } } },
+        behavior = {[vertical and "width" or "height"]={duration=theme.duration.small}} },
     }
   end
 

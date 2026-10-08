@@ -63,13 +63,14 @@ return function(S, theme, M)
   --- holds text -- a move and a scale of one drawing.
   local function title(t, spec, always_up)
     if not spec.label then return nil end
-    local l = sides(spec.inset)
+    local l,_,r = sides(spec.inset)
     local size = theme.size.normal
     local lh = math.ceil(size * 1.3)
     local function box() return math.max(0, (t.height or 0) - foot(spec)) end
     local function rest() return math.floor((box() - lh) / 2) end
     local function up() return always_up or t.focused or not t.empty or (spec.tags ~= nil) end
     return M.text { text = spec.label, x = l, height = lh, font_size = size, vertical_alignment = "center",
+      width=function() return math.max(1e-3,t.width-l-r) end,elide="right",
       transform_origin_x = 0, transform_origin_y = 0, z = 4,
       y = rest,
       translate_y = function() return up() and (6 - rest()) or 0 end,
@@ -102,16 +103,19 @@ return function(S, theme, M)
     local l = sides(spec.inset)
     local function tone() local p = P() return bad(t) and p.error_ink or p.ink_dim end
     local node = ui.Item { anchors = { left = true, right = true, bottom = true }, height = FOOT }
-    if spec.supporting then
-      ui.reparent(M.text { text = spec.supporting, x = l, anchors = { bottom = true }, height = 18,
-        font_size = theme.size.small, color = tone, behavior = { color = quick() } }, node)
-    end
+    local counter
     if spec.max_length then
       -- (Clear of a corner grip when there is no line of its own.)
-      ui.reparent(M.text { anchors = { right = true, bottom = true, right_margin = spec.supporting and 6 or 22,
+      counter=M.text { anchors = { right = true, bottom = true, right_margin = spec.supporting and 6 or 22,
         bottom_margin = spec.supporting and 0 or 2 }, height = 18,
         font_size = theme.size.small, color = tone,
-        text = function() return ("%d / %d"):format(t.length or 0, spec.max_length) end }, node)
+        text = function() return ("%d / %d"):format(t.length or 0, spec.max_length) end }
+      ui.reparent(counter,node)
+    end
+    if spec.supporting then
+      ui.reparent(M.text {text=spec.supporting,x=l,anchors={bottom=true},height=18,
+        width=function() return math.max(1e-3,t.width-l-6-(counter and (counter.layout_width or 0)+8 or 0)) end,
+        elide="right",font_size=theme.size.small,color=tone,behavior={color=quick()}},node)
     end
     return node
   end

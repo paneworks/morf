@@ -193,14 +193,17 @@ return function(theme, M, hud)
   --- A menu row: a mono label, the accent plate under the pointer, a
   --- block when checked.
   local function menu_item(t, spec)
+    local left=spec.icon and 34 or 12
+    local right=spec.widget=="menu_item" and 12 or 28
     return {
       background = ui.Rect { anchors = { fill = true },
         color = function() return C.primary:alpha(t.down and .2 or (t.hovered or t.visual_focus) and .1 or 0) end,
         behavior = { color = quick } },
       icon = spec.icon and M.icon(spec.icon, 16, function() return C.onSurfaceVariant end,
         { x = 10, anchors = { vertical_center = true } }) or nil,
-      label = M.menu_label { x = spec.icon and 34 or 12, anchors = { vertical_center = true },
-        text = tostring(spec.label or ""):upper(), color = function() return C.onSurface end },
+      label = M.menu_label { x = left, anchors = { vertical_center = true },
+        width=function() return math.max(1e-3,t.width-left-right) end,elide="right",
+        text = function() return tostring(get(spec.label) or ""):upper() end,color = function() return C.onSurface end },
       indicator = (spec.widget ~= "menu_item") and ui.Rect { anchors = { right = true, right_margin = 12,
         vertical_center = true }, width = 8, height = 8, color = function() return C.primary end,
         visible = function() return t.checked end } or nil,
@@ -348,12 +351,12 @@ return function(theme, M, hud)
   --- The media position: a hatched run with a block head over a faint band
   --- and a tick ruler; it flows between the player's one-second updates.
   local function seek_bar(t, spec)
-    local W = spec.width
+    local function W() return math.max(1,get(spec.width) or t.width) end
     local previous = clamp01(t.visual_position)
-    local function tip(v) return math.max(0, math.min(W - 4, W * v - 2)) end
+    local function tip(v) return math.max(0, math.min(W() - 4, W() * v - 2)) end
     -- A width of 0 is no width at all -- the clip would take its child's --
     -- so an empty run keeps a sliver.
-    local function run(v) return math.max(1e-3, W * v) end
+    local function run(v) return math.max(1e-3, W() * v) end
     local fill = ui.Item { id = "media-progress-fill", y = 11, height = 10, width = run(previous), clip = true,
       ui.Rect { width = W, height = 10, color = function() return C.primary:alpha(.2) end },
       stripes.box { width = W, height = 10, gap = 6, weight = 2, color = function() return C.primary end } }
@@ -390,14 +393,20 @@ return function(theme, M, hud)
   --- A scroll bar: a hairline rail and a square block the length of the
   --- view's share, lit under the pointer.
   local function scroll_bar(t, spec)
-    local function length() return math.min(t.height,math.max(24,clamp01(get(spec.size) or 1)*t.height)) end
+    local vertical=spec.orientation=="vertical"
+    local function extent() return math.max(0,vertical and t.height or t.width) end
+    local function length() return math.min(extent(),math.max(24,clamp01(get(spec.size) or 1)*extent())) end
+    local function thickness() return math.min(vertical and t.width or t.height,(t.hovered or t.down) and 6 or 3) end
+    local function offset() return t.visual_position*(extent()-length()) end
     return {
-      track = ui.Rect { anchors = { right = true, top = true, bottom = true }, width = 1,
+      track = ui.Rect { anchors = vertical and {right=true,top=true,bottom=true} or {left=true,right=true,bottom=true},
+        width=vertical and 1 or nil,height=not vertical and 1 or nil,
         color = function() return stroke(C, "quiet") end },
-      handle = ui.Rect { anchors = { right = true }, width = function() return (t.hovered or t.down) and 6 or 3 end,
-        height = length, y = function() return t.visual_position * (t.height - length()) end,
+      handle = ui.Rect { anchors = vertical and {right=true} or {bottom=true},
+        width=vertical and thickness or length,height=vertical and length or thickness,
+        x=not vertical and offset or nil,y=vertical and offset or nil,
         color = function() return C.primary:alpha((t.hovered or t.down) and .9 or .5) end,
-        behavior = { width = quick } },
+        behavior = {[vertical and "width" or "height"]=quick} },
     }
   end
 
