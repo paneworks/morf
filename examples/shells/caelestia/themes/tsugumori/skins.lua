@@ -80,8 +80,8 @@ return function(theme, M, hud)
 
   -- A tick ruler along `len`: a short tick every 8 px, a long one every 5th.
   local function ruler(x, y, len, size, color)
-    return ui.Path { x = x, y = y, width = len, height = size, view_box = { 0, 0, len, size },
-      d = morf.geometry.ruler(len, size, { pitch = 8, major = 5, min_count = 4 }),
+    return ui.Path { x = x, y = y, width = len, height = size, view_box = function() return { 0, 0, get(len), size } end,
+      d = function() return morf.geometry.ruler(get(len), size, { pitch = 8, major = 5, min_count = 4 }) end,
       fill_color = "transparent", stroke_color = color, stroke_width = 1 }
   end
 
@@ -93,11 +93,11 @@ return function(theme, M, hud)
     local ink = spec.ink or function() return C.onPrimaryContainer end
     local fill = spec.color or function() return C.primaryContainer end
     local function caption() return tostring(get(spec.label) or ""):upper() end
-    local function width() return t.width > 0 and t.width or (get(spec.width) or 0) end
     local measure = M.menu_label { text = caption, font_size = theme.typography.menu, height = 18, opacity = 0 }
     local function natural_width()
       return math.max(1, measure.layout_width or utf8.len(caption()) * theme.typography.menu * .62)
     end
+    local function width() return get(spec.width) or natural_width()+(spec.icon and 36 or 16) end
     local function available() return math.max(0, width() - (spec.icon and 36 or 16)) end
     local function label_size()
       return math.max(9, math.min(theme.typography.menu, theme.typography.menu * available() / natural_width()))
@@ -127,7 +127,8 @@ return function(theme, M, hud)
         color = function() return t.hovered and fill():mix(ink(), 0.12) or fill() end,
         border_color = function() return t.hovered and stroke(C, "focus") or stroke(C, "idle") end,
         behavior = { color = quick, border_color = quick } },
-      content = ui.Item { anchors = { fill = true }, measure, content },
+      content = ui.Item { anchors = { center_in = true },width=width,height=spec.height or 32,
+        ui.Item {width=1,height=1,clip=true,measure}, content },
       badge = feedback(t, spec.id),
     }
   end
@@ -298,12 +299,12 @@ return function(theme, M, hud)
   --- The slider: a faint band, the hatched run up to the value, a tick
   --- ruler under it, a square block handle and the reading at the end.
   local function slider(t, spec)
-    local W, H = spec.width, spec.bar_height or 44
+    local H = spec.bar_height or 44
+    local function W() return math.max(1,get(spec.width) or t.width) end
     local compact = H < 36
     local isz = compact and 16 or 20
-    local left = spec.icon and (isz + 12) or 0
-    local right = W - (spec.label ~= false and 50 or 0)
-    local span = math.max(1, right - left)
+    local left = spec.icon and (isz + 12) or 3
+    local function span() return math.max(1,W()-(spec.label~=false and 50 or 3)-left) end
     local band = compact and math.max(6, math.floor(H * .42)) or math.floor(H * .42)
     local by = compact and 4 + math.floor((H - band) / 2) or 4 + math.floor(H * .18)
     local function value() return clamp01(t.visual_position) end
@@ -312,22 +313,22 @@ return function(theme, M, hud)
     local tick = compact and 4 or 6
     local ty = by + band + 3
     local id = spec.id or "slider"
-    return {
+    local slots={
       track = ui.Rect { id = id .. "-track", x = left, y = by, width = span, height = band,
         color = function() return C.primary:alpha(engaged() and .1 or .06) end,
         border_width = 1, border_color = function() return C.primary:alpha(.18) end, behavior = { color = quick } },
       fill = ui.Item { id = id .. "-level", x = left, y = by, height = band, clip = true,
-        width = function() return span * value() end, behavior = { width = follow },
+        width = span()*value(),
         visible = function() return value() > .002 end,
         ui.Rect { width = span, height = band, color = function() return C.primary:alpha(.2) end },
         stripes.box { width = span, height = band, gap = 6, weight = 2, color = function() return C.primary end } },
       ticks = ty + tick <= H + 8 and ruler(left, ty, span, tick, function() return C.primary:alpha(.32) end) or nil,
       handle = ui.Rect { id = id .. "-handle", y = by - 4, width = 6, height = band + 8,
-        x = function() return left + span * value() - 3 end, behavior = { x = follow },
+        x = left+span()*value()-3,
         color = function() return C.primary end },
       decrease = spec.icon and M.icon(spec.icon, isz, function() return engaged() and C.primary or C.onSurfaceVariant end,
         { x = 2, y = by + math.floor((band - isz) / 2) }) or nil,
-      value_label = spec.label ~= false and M.text { id = id .. "-value", x = W - 46, y = by + math.floor((band - 18) / 2),
+      value_label = spec.label ~= false and M.text { id = id .. "-value", x = function() return W() - 46 end, y = by + math.floor((band - 18) / 2),
         width = 46, height = 18, horizontal_alignment = "right", font_size = 12,
         color = function() return engaged() and C.primary or C.onSurfaceVariant end,
         -- `spec.reading(position)`: what it says instead of its percent.
@@ -337,6 +338,11 @@ return function(theme, M, hud)
         end } or nil,
       second_handle = feedback(t, spec.id),
     }
+    require("themes.kit_common").follow_range(t,slots.handle,{
+      {node=slots.fill,values={width=function() return span()*value() end}},
+      {node=slots.handle,values={x=function() return left+span()*value()-3 end}},
+    },follow)
+    return slots
   end
 
   --- The media position: a hatched run with a block head over a faint band
@@ -384,7 +390,7 @@ return function(theme, M, hud)
   --- A scroll bar: a hairline rail and a square block the length of the
   --- view's share, lit under the pointer.
   local function scroll_bar(t, spec)
-    local function length() return math.max(24, (get(spec.size) or 1) * t.height) end
+    local function length() return math.min(t.height,math.max(24,clamp01(get(spec.size) or 1)*t.height)) end
     return {
       track = ui.Rect { anchors = { right = true, top = true, bottom = true }, width = 1,
         color = function() return stroke(C, "quiet") end },

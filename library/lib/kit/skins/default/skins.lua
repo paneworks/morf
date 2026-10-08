@@ -455,7 +455,10 @@ return function(theme, M)
   --- An overlay scroll bar: a slim pill the length of the view's share,
   --- wider under the pointer.
   local function scroll_bar(t, spec)
-    local function length() return math.max(24, (get(spec.size) or 1) * (t.height or 0)) end
+    local function length()
+      local height=t.height or 0
+      return math.min(height,math.max(24,clamp01(get(spec.size) or 1)*height))
+    end
     return {
       track = ui.Item { anchors = { fill = true } },
       handle = ui.Rect { anchors = { right = true }, radius = 4,
