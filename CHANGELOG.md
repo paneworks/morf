@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.6] - 2026-10-09
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Remember manually hidden keyboards per application for the current login session; showing the keyboard again restores automatic opening for that application.
+- Restore typing directly into laptop lock screens and configure lock and display idle timeouts independently.
+- Give NixOS authentication prompts access to the graphical session.
+- Keep clipped dashboard pages from intercepting input outside their visible area.
+
+### <!-- 4 -->⚡ Performance
+
+- Process reactive updates in dependency order without repeatedly scanning every pending binding.
+- Keep inactive dashboard pages idle when another page changes.
+- Skip rendering fully clipped pages and restrict text reflow checks to labels that need them.
+- Prepare hidden text in short idle slices so opening a panel does less glyph work.
+
 ## [0.2.5] - 2026-10-09
 
 ### <!-- 1 -->🐛 Bug Fixes
