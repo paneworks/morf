@@ -1,9 +1,9 @@
 //! A backend seen in morf's pixels rather than the compositor's.
 //!
-//! [`Dense`] wraps any backend and converts at its edge: sizes and pointer
-//! positions coming in are divided by each window's [`Zoom`], sizes, margins
+//! [`Dense`](crate::Dense) wraps any backend and converts at its edge: sizes and pointer
+//! positions coming in are divided by each window's [`Zoom`](morf_value::density::Zoom), sizes, margins
 //! and regions going out multiplied, and the scale a window reports is the
-//! one [`Density`] picks for its panel. Windows above it (the host, layout)
+//! one [`Density`](morf_value::density::Density) picks for its panel. Windows above it (the host, layout)
 //! never see a compositor pixel; what is below it never sees one of morf's.
 //! Outputs pass as the compositor tells them (a configuration's
 //! `morf.screens` converts them itself). Buffers keep the size the
