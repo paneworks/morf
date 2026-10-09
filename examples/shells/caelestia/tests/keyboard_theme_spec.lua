@@ -13,6 +13,8 @@ local HOST=[[
   morf.virtual_keyboard={key=function(code,on) events[#events+1]={code=code,on=on} end,
     modifiers=function(mask) events[#events+1]={mask=mask} end}
   require("config").set("keyboard.auto",true)
+  local hyprland=require("lib.integrations.hyprland")
+  hyprland.start {signature=""}
   local keyboard=require("keyboard")
   local C=require("theme").color
   ui.Item {width=W,height=H,
@@ -20,7 +22,12 @@ local HOST=[[
     ui.Item {x=10,y=10,width=W-20,height=H-20,
       ui.Sdf {anchors={fill=true},fill_color=function() return C.surfaceContainer end,keyboard.drawer.shape},keyboard.drawer.panel}}
   morf.ipc.show=keyboard.show
-  morf.ipc.close=function() keyboard.drawer.set(false) end
+  morf.ipc.close=keyboard.close
+  morf.ipc.app=function(class,address)
+    hyprland.state.active_window.class=class
+    hyprland.state.active_window.address=address or "0x1"
+    hyprland.state.active_window.title="A changing title"
+  end
   morf.ipc.manual=function() if keyboard.set then keyboard.set(true) else keyboard.drawer.set(true) end end
   morf.ipc.ime=function(on) ime_callback(on=="yes") end
   morf.ipc.attached=function(on) attached=on=="yes" end
@@ -30,13 +37,62 @@ local HOST=[[
   morf.ipc.state=function() return {open=keyboard.drawer.open:get(),mode=keyboard.keys.mode:get(),
     shift=keyboard.keys.shift:get(),page=keyboard.keys.page:get(),events=events,focus=morf.surface.keyboard_focus} end
 ]]
-local function load(style,w,h,dry)
+local loads=0
+local function load(style,w,h,dry,session)
+  loads=loads+1
   test.load("../shell/init.lua",{source=HOST,size={w or 1400,h or 800},env={CAELESTIA_STYLE=style,
-    CAELESTIA_DRY_RUN=dry and "1" or "0",TEST_WIDTH=tostring(w or 1400),TEST_HEIGHT=tostring(h or 800)}})
+    CAELESTIA_DRY_RUN=dry and "1" or "0",TEST_WIDTH=tostring(w or 1400),TEST_HEIGHT=tostring(h or 800),
+    XDG_RUNTIME_DIR=morf.state_path("keyboard-runtime"),
+    HYPRLAND_INSTANCE_SIGNATURE=session or ("theme-spec-"..loads)}})
 end
 local function key(name,mode,page) return "caelestia.osk.key."..(mode or "full").."."..(page or "letters").."."..name end
 local function shot(name) if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(name..".png") end end
 for _,style in ipairs {"material","tsugumori"} do
+  test.it(style.." keyboard remembers manual hiding per application, not per window",function()
+    load(style)
+    test.ipc("app","kitty","0x1") test.ipc("ime","yes") test.advance(600)
+    test.truthy(test.ipc("state").open)
+    test.ipc("close") test.ipc("ime","no") test.ipc("ime","yes") test.advance(600)
+    test.falsy(test.ipc("state").open,"a new text field reopened the dismissed keyboard")
+    test.ipc("app","kitty","0x2") test.ipc("ime","yes") test.advance(600)
+    test.falsy(test.ipc("state").open,"another Kitty window lost the application preference")
+    test.ipc("app","firefox","0x3") test.advance(600)
+    test.truthy(test.ipc("state").open,"Kitty's preference suppressed Firefox")
+    test.ipc("app","kitty","0x1") test.advance(600)
+    test.falsy(test.ipc("state").open,"returning to Kitty kept Firefox's keyboard visible")
+    test.ipc("show","full") test.advance(600)
+    test.truthy(test.ipc("state").open,"manual show did not override suppression")
+    test.ipc("app","firefox","0x3") test.ipc("close") test.advance(600)
+    test.ipc("app","kitty","0x2") test.advance(600)
+    test.truthy(test.ipc("state").open,"manual show did not restore Kitty auto-show")
+    test.ipc("app","firefox","0x3") test.advance(600)
+    test.falsy(test.ipc("state").open,"changing Kitty cleared Firefox's preference")
+    test.eq(test.logs("error"),{})
+  end)
+  test.it(style.." keyboard keeps dismissal across a shell restart but resets on a new login",function()
+    local session=style.."-keyboard-login-"..loads
+    load(style,nil,nil,false,session)
+    test.ipc("app","kitty") test.ipc("ime","yes") test.advance(600)
+    test.ipc("close") test.advance(600)
+    load(style,nil,nil,false,session)
+    test.ipc("app","kitty") test.ipc("ime","yes") test.advance(600)
+    test.falsy(test.ipc("state").open,"a shell restart forgot manual dismissal")
+    load(style,nil,nil,false,session.."-new")
+    test.ipc("app","kitty") test.ipc("ime","yes") test.advance(600)
+    test.truthy(test.ipc("state").open,"a new login inherited the previous login's preference")
+    test.ipc("ime","no") test.advance(600)
+    test.falsy(test.ipc("state").open)
+    test.ipc("ime","yes") test.advance(600)
+    test.truthy(test.ipc("state").open,"automatic closing was saved as a manual dismissal")
+    test.eq(test.logs("error"),{})
+  end)
+  test.it(style.." hiding a keyboard without an application does not suppress the next app",function()
+    load(style)
+    test.ipc("show","full") test.ipc("close") test.advance(600)
+    test.ipc("app","kitty") test.ipc("ime","yes") test.advance(600)
+    test.truthy(test.ipc("state").open)
+    test.eq(test.logs("error"),{})
+  end)
   test.it(style.." dev keyboard offers two symbols per letter with digits as the hold default",function()
     load(style,360,800) test.ipc("show","dev") test.ipc("ime","yes") test.advance(2400)
     test.falsy(test.find {id=key("page:symbols","dev"),visible=true})
