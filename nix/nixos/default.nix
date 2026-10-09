@@ -58,6 +58,13 @@ let
     if [ "$#" -gt 1 ]; then exec ${morf}/bin/morf "$@"; fi
     role="''${1:-shell}"
     case "$role" in shell|lock|greet) ;; *) exec ${morf}/bin/morf "$@" ;; esac
+    if [ "$role" = shell ] && [ -z "''${XDG_SESSION_ID:-}" ]; then
+      # User services do not inherit UWSM's login session. Polkit needs the
+      # graphical session, rather than the systemd user manager's session.
+      session=$(${pkgs.systemd}/bin/loginctl show-user "$(${pkgs.coreutils}/bin/id -u)" \
+        --property=Display --value 2>/dev/null || true)
+      if [ -n "$session" ]; then export XDG_SESSION_ID="$session"; fi
+    fi
     if [ "$role" = shell ] && [ -n "''${MORF_CONFIG:-}" ]; then
       exec ${morf}/bin/morf "$@"
     fi
