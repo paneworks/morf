@@ -4,6 +4,7 @@
 
 ### <!-- 1 -->🐛 Bug Fixes
 
+- Avoid the Adreno shader compiler crash in phone lockscreen and greeter rendering.
 - Restore velocity-based touch scrolling, preserve fling distance across slow frames, and stop inertia when touched.
 - Make phone panels, pages and workspace previews follow the finger and settle using release velocity.
 - Open Apps from the left edge and Web from the right, with cancellation and authentication guards.
