@@ -6,7 +6,8 @@
 -- upward swipe or drag reveals the unlock sheet -- one
 -- liquid surface with the frame -- carrying the account in its cookie, the
 -- pill for the password and whatever PAM has to say (a face being looked
--- for, a finger). Keys only enter the password after that reveal. Escape on
+-- for, a finger). A physical keyboard can reveal it by typing, keeping the
+-- first character, or with Enter. Escape on
 -- an empty field, or a while with nothing typed, and the sheet sinks back.
 -- On a phone (a screen taller than wide, or no keyboard attached) the sheet
 -- carries the on-screen keyboard. The right password and all of it sinks
@@ -244,15 +245,24 @@ local function pattern(dots)
   password = table.concat(dots)
   submit()
 end
+local function keyboard_attached()
+  local ok, value = pcall(function() return require("lib.services.keyboards").attached() end)
+  return not ok or value
+end
 local function key(keysym, typed_text)
         local RETURN, KP_ENTER, BACKSPACE, ESCAPE = 0xff0d, 0xff8d, 0xff08, 0xff1b
         local st = stage:get()
         if st ~= "rest" and st ~= "sheet" then return end
         if busy:get() then return end
         if keysym == ESCAPE then escape() return end
-        -- Wake keys, lock-chord modifiers and incidental typing must leave
-        -- the clock visible. Only an intentional upward gesture reveals it.
-        if st == "rest" then return end
+        if st == "rest" then
+          -- Touch-only devices still require the upward reveal gesture.
+          -- Modifiers and wake keys carry no text and leave the clock alone.
+          if not keyboard_attached() then return end
+          if keysym == RETURN or keysym == KP_ENTER then open_sheet() return end
+          if not typed_text or typed_text == "" or typed_text:byte(1) < 32 then return end
+          open_sheet()
+        end
         if keysym == RETURN or keysym == KP_ENTER then
           submit()
         elseif keysym == BACKSPACE then
@@ -287,10 +297,7 @@ local context = {
   clock = clock,
   day = day,
   me = me,
-  keyboard_attached = function()
-    local ok, value = pcall(function() return require("lib.services.keyboards").attached() end)
-    return not ok or value
-  end,
+  keyboard_attached = keyboard_attached,
   typed = typed,
   shake = shake,
   MAX_DOTS = MAX_DOTS,

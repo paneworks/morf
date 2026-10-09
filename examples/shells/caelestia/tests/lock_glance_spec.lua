@@ -35,10 +35,10 @@ local function at_rest()
   end
 end
 for _,style in ipairs {"material","tsugumori"} do
-  test.it(style.." lock ignores taps and wake keys until swiped upward",function()
+  test.it(style.." touch-only lock ignores taps and wake keys until swiped upward",function()
     for _,size in ipairs {{406,903},{1920,1080}} do
       local w,h=size[1],size[2]
-      load(style,w,h,w>h) at_rest()
+      load(style,w,h,false) at_rest()
       test.click(w/2,h*.6)
       test.touch("down",1,w/2,h*.6) test.touch("up",1,w/2,h*.6)
       test.key("Super_L") test.key("Return") test.type("wake")
@@ -60,9 +60,23 @@ for _,style in ipairs {"material","tsugumori"} do
       test.eq(test.logs("error"),{})
     end
   end)
+  test.it(style.." laptop typing reveals the password form without losing the first character",function()
+    load(style,1920,1080,true) at_rest()
+    test.key("Super_L") test.key("Shift_L") test.key("BackSpace")
+    test.advance(100) at_rest()
+    test.type("w") test.advance(300)
+    test.eq(test.ipc("audit"),{stage="sheet",typed=1})
+    test.type("rong") test.key("Return") test.advance(900)
+    test.eq(test.ipc("audit"),{stage="sheet",typed=0})
+    test.truthy(test.get("lock-message").text:find("Wrong",1,true),"first character was lost before authentication")
+    test.click(960,100) test.advance(700) at_rest()
+    test.key("Return") test.advance(300)
+    test.eq(test.ipc("audit"),{stage="sheet",typed=0})
+    test.eq(test.logs("error"),{})
+  end)
   test.it(style.." laptop lock reveals by upward drag or deliberate upward scroll",function()
     load(style,1920,1080,true)
-    test.click(960,640) test.key("Return") test.type("wake") test.advance(400) at_rest()
+    test.click(960,640) test.key("Super_L") test.advance(400) at_rest()
     test.drag({960,640},{1120,640},{steps=10}) test.advance(400) at_rest()
     test.drag({960,640},{960,480},{steps=10}) test.advance(700)
     test.eq(test.ipc("audit").stage,"sheet")

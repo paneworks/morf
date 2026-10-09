@@ -4,7 +4,29 @@
   pkgs,
   ...
 }:
+let
+  cfg = config.programs.morf.idle;
+in
 {
+  options.programs.morf.idle = {
+    lockTimeout = lib.mkOption {
+      type = lib.types.ints.unsigned;
+      default = 300;
+      description = "Idle seconds before locking; zero disables automatic locking.";
+    };
+    screenOffTimeout = lib.mkOption {
+      type = lib.types.ints.unsigned;
+      default = cfg.lockTimeout + 30;
+      defaultText = lib.literalExpression "config.programs.morf.idle.lockTimeout + 30";
+      description = "Idle seconds before turning off displays; zero disables idle display power-off.";
+    };
+    suspendTimeout = lib.mkOption {
+      type = lib.types.ints.unsigned;
+      default = 1800;
+      description = "Idle seconds before suspending; zero leaves sleep to explicit actions such as closing the lid.";
+    };
+  };
+
   config = lib.mkIf (config.programs.morf.enable && config.programs.hyprland.enable) {
     services.hypridle.enable = true;
     system.build.hyprlandIdleDpms = pkgs.writeShellScript "hyprland-idle-dpms" ''
@@ -27,21 +49,27 @@
         inhibit_sleep = 3
       }
 
+      ${lib.optionalString (cfg.lockTimeout > 0) ''
       listener {
-        timeout = 300
+        timeout = ${toString cfg.lockTimeout}
         on-timeout = ${pkgs.systemd}/bin/loginctl lock-session
       }
+      ''}
 
+      ${lib.optionalString (cfg.screenOffTimeout > 0) ''
       listener {
-        timeout = 330
+        timeout = ${toString cfg.screenOffTimeout}
         on-timeout = ${config.system.build.hyprlandIdleDpms} off
         on-resume = ${config.system.build.hyprlandIdleDpms} on
       }
+      ''}
 
+      ${lib.optionalString (cfg.suspendTimeout > 0) ''
       listener {
-        timeout = 1800
+        timeout = ${toString cfg.suspendTimeout}
         on-timeout = ${pkgs.systemd}/bin/systemctl suspend
       }
+      ''}
     '';
     systemd.user.services.hypridle = {
       partOf = [ "graphical-session.target" ];
