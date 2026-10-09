@@ -56,18 +56,19 @@ pub fn paint_layer(
         (revision, (width, height), scale_120),
         renderer.backend_mut(),
     )?;
+    split.mark("layout");
     if fresh {
         // Only on a fresh layout: it is the one moment the answer can have
         // changed, and the cached one has already been looked at.
-        split.mark("layout");
         runtime.lint_layout(&layout, root);
         split.mark("lint");
     }
     // Every frame, not only a fresh layout's: a caret that moved without the
     // text changing still has to be scrolled into view.
     runtime.sync_text_inputs(&layout, renderer.backend_mut().text_system());
-    runtime.observe_stretch(&layout);
     split.mark("text inputs");
+    runtime.observe_stretch(&layout);
+    split.mark("stretch");
     let scene = runtime.scene();
     let input = send_input_region(&scene, &layout, client, layer, config, cache.as_deref())?;
     split.mark("input region");
@@ -194,7 +195,9 @@ pub fn paint_layer(
     // After the frame is on its way, and only when nothing moves: text laid
     // out but hidden -- a preloaded panel -- gets its glyphs made now, so
     // the frame that shows it does not spend its time on them.
-    if fresh && !runtime.has_motion() {
+    // The primary surface's host continues this work on quiet turns, outside
+    // the paint cost. Auxiliary layers retain their own preparation here.
+    if layer != morf_app::PRIMARY_LAYER && fresh && !runtime.has_motion() {
         renderer
             .backend_mut()
             .warm_hidden_text(&scene, &layout, root, scale_120);

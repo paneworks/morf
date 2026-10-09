@@ -61,6 +61,56 @@ fn a_wrapping_field_grows_as_tall_as_its_lines() {
 }
 
 #[test]
+fn incremental_text_reflow_tracks_style_and_parent_width_changes() {
+    for element in [Element::Text, Element::TextInput] {
+        let mut scene = Scene::new();
+        let root = scene.create(Element::Item);
+        let column = scene.create(Element::Column);
+        scene.reparent(column, Some(root)).unwrap();
+        scene.assign(column, "width", 50.0).unwrap();
+        scene.assign(column, "align", "stretch").unwrap();
+        let node = scene.create(element);
+        scene.reparent(node, Some(column)).unwrap();
+        scene.assign(node, "text", "01234567890123456789").unwrap();
+        scene.assign(node, "font_size", 10.0).unwrap();
+        scene.assign(node, "wrap", true).unwrap();
+        if element == Element::TextInput {
+            scene.assign(node, "multiline", true).unwrap();
+            scene.assign(node, "caret_width", 0.0).unwrap();
+        }
+        let available = Size {
+            width: 100.0,
+            height: 200.0,
+        };
+        let mut layout = Layout::compute(&scene, root, available, &mut WrapText).unwrap();
+        assert_eq!(layout.geometry(node).unwrap().height, 20.0);
+        let wrapping = if element == Element::TextInput {
+            "multiline"
+        } else {
+            "wrap"
+        };
+        for (changed, property, value) in [
+            (node, "width", Value::Number(40.0)),
+            (node, "width", Value::Number(0.0)),
+            (node, wrapping, Value::Bool(false)),
+            (column, "width", Value::Number(30.0)),
+            (node, wrapping, Value::Bool(true)),
+            (node, "wrap", Value::Bool(false)),
+            (node, "wrap", Value::Bool(true)),
+            (column, "width", Value::Number(80.0)),
+        ] {
+            scene.assign(changed, property, value).unwrap();
+            layout
+                .update(&scene, root, available, &mut WrapText)
+                .unwrap();
+            let fresh = Layout::compute(&scene, root, available, &mut WrapText).unwrap();
+            assert_eq!(layout.difference(&fresh), None, "{element:?}: {property}");
+        }
+        assert_eq!(layout.geometry(node).unwrap().height, 20.0);
+    }
+}
+
+#[test]
 fn the_pointer_hits_a_field_and_its_box_takes_input() {
     let mut scene = Scene::new();
     let root = scene.create(Element::Item);

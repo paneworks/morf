@@ -134,6 +134,40 @@ fn derived_effects_recompute_in_depth_order() {
 }
 
 #[test]
+fn a_diamond_updates_its_consumer_once_after_both_producers() {
+    let effects = Effects::default();
+    let mut graph = Graph::default();
+    let source = graph.signal("source", 1);
+    let left = graph.signal("left", 0);
+    let right = graph.signal("right", 0);
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    // Register the consumer first: ID order alone would run it too early.
+    effects.register(&mut graph, "consumer", {
+        let seen = Rc::clone(&seen);
+        move |ctx| {
+            let read = |ctx: &mut EffectContext<'_, i32>, signal| {
+                ctx.get(signal).map_err(|e| e.to_string())
+            };
+            seen.borrow_mut()
+                .push((read(ctx, source)?, read(ctx, left)?, read(ctx, right)?));
+            Ok(())
+        }
+    });
+    for (name, output, multiplier) in [("left", left, 2), ("right", right, 3)] {
+        effects.register(&mut graph, name, move |ctx| {
+            let value = ctx.get(source).map_err(|e| e.to_string())?;
+            ctx.set(output, value * multiplier)
+                .map_err(|e| e.to_string())
+        });
+    }
+    effects.flush(&mut graph).unwrap();
+    seen.borrow_mut().clear();
+    graph.write(source, 7).unwrap();
+    assert_eq!(effects.flush(&mut graph).unwrap().runs, 3);
+    assert_eq!(*seen.borrow(), [(7, 14, 21)]);
+}
+
+#[test]
 fn a_batch_recomputes_an_effect_once_for_multiple_writes() {
     let effects = Effects::default();
     let mut graph = Graph::default();

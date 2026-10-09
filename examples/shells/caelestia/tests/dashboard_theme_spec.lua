@@ -35,6 +35,14 @@ local HOST=[[
   local kit=require("kit")
   local C=require("theme").color
   local model=require("dashboard_model")
+  local page_wakes={}
+  for index=1,6 do
+    local ctx=require("dashboard_state").context(index)
+    morf.effect("test.page-wakes."..index,function()
+      ctx.opened() ctx.current()
+      page_wakes[index]=(page_wakes[index] or 0)+1
+    end)
+  end
   model.username,model.face="preview",""
   model.clock=function(format) return format=="%H:%M" and "08:24" or format=="%I" and "08" or format=="%M" and "24" or "MONDAY, 28 SEPTEMBER" end
   model.calendar=function() return model.month(model.month_offset:get(),{year=2026,month=9,day=28}) end
@@ -68,7 +76,7 @@ local HOST=[[
   morf.ipc.sample=function(value) sample:set(tonumber(value)) end
   morf.ipc.state=function()
     return {tab=model.tab:get(),displayed=model.displayed:get(),opened=model.opened:get(),reads=reads,actions=actions,
-      month=model.month_offset:get(),lule=require("lule_studio").active:get()}
+      month=model.month_offset:get(),lule=require("lule_studio").active:get(),page_wakes=page_wakes}
   end
 ]]
 local function load(style,w,h,real_weather,real_battery)
@@ -81,6 +89,19 @@ local function shot(name)
   if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(name..".png") end
 end
 for _,style in ipairs {"material","tsugumori"} do
+  test.it(style.." switching tabs leaves unrelated page bindings asleep",function()
+    load(style)
+    test.ipc("show","yes") test.advance(2400)
+    local before=test.ipc("state").page_wakes
+    test.ipc("select","2") test.advance(2400)
+    local after=test.ipc("state").page_wakes
+    test.truthy(after[1]>before[1]) test.truthy(after[2]>before[2])
+    for index=3,6 do test.eq(after[index],before[index]) end
+    test.ipc("show","no") test.advance(2400)
+    local hidden=test.ipc("state").page_wakes
+    test.truthy(hidden[2]>after[2])
+    for _,index in ipairs {1,3,4,5,6} do test.eq(hidden[index],after[index]) end
+  end)
   test.it(style.." dashboard keeps calendar and playback actions and stops hidden readings",function()
     load(style)
     test.eq(test.ipc("state").reads,{})

@@ -237,7 +237,7 @@ impl Layout {
     pub fn input_geometry(&self, scene: &Scene) -> Result<Vec<Geometry>, LayoutError> {
         let mut rectangles = Vec::new();
         for root in scene.roots() {
-            self.collect_input_geometry(scene, root, Transform2D::IDENTITY, &mut rectangles)?;
+            self.collect_input_geometry(scene, root, Transform2D::IDENTITY, None, &mut rectangles)?;
         }
         Ok(rectangles)
     }
@@ -322,6 +322,7 @@ impl Layout {
         scene: &Scene,
         node: NodeHandle,
         inherited: Transform2D,
+        inherited_clip: Option<Geometry>,
         rectangles: &mut Vec<Geometry>,
     ) -> Result<(), LayoutError> {
         // A node on its way out is drawn, and nothing else: no input.
@@ -335,29 +336,40 @@ impl Layout {
             return Ok(());
         };
         let transform = inherited.then(node_transform(scene, node, geometry)?);
+        let clip = if scene.bool_value(node, "clip")? {
+            let bounds = transform.bounds(geometry);
+            Some(inherited_clip.map_or(bounds, |clip| intersect_input(clip, bounds)))
+        } else {
+            inherited_clip
+        };
+        // Clipped-away pages cannot take input; skip their controls as a group.
+        if clip.is_some_and(|clip| clip.width <= 0.0 || clip.height <= 0.0) {
+            return Ok(());
+        }
         // A DropArea takes input too: the compositor sends a drag only to the
         // surface whose input region is under it; and a text input takes the
         // pointer itself.
-        if matches!(
-            scene.element(node)?,
+        let element = scene.element(node)?;
+        let interactive = matches!(
+            element,
             Element::MouseArea | Element::DropArea | Element::TextInput | Element::Terminal
-        ) && let Some(geometry) = self.geometry(node)
-        {
-            rectangles.push(transform.bounds(geometry));
-        }
+        );
         // A link in a label takes the pointer where it is laid out.
-        if scene.element(node)? == Element::Text
-            && let Ok(morf_scene::Value::List(links)) = scene.current(node, "links")
-            && !links.is_empty()
-        {
-            rectangles.push(transform.bounds(geometry));
+        let linked = element == Element::Text
+            && matches!(scene.current(node, "links"), Ok(morf_scene::Value::List(links)) if !links.is_empty());
+        if interactive || linked {
+            let bounds = transform.bounds(geometry);
+            let bounds = clip.map_or(bounds, |clip| intersect_input(clip, bounds));
+            if bounds.width > 0.0 && bounds.height > 0.0 {
+                rectangles.push(bounds);
+            }
         }
         for &child in scene.children(node)? {
             // A mask is drawn only as a mask, and takes no input.
             if scene.is_mask(child) {
                 continue;
             }
-            self.collect_input_geometry(scene, child, transform, rectangles)?;
+            self.collect_input_geometry(scene, child, transform, clip, rectangles)?;
         }
         Ok(())
     }
@@ -411,6 +423,17 @@ impl Layout {
             local_x: local_x - geometry.x,
             local_y: local_y - geometry.y,
         }))
+    }
+}
+
+fn intersect_input(left: Geometry, right: Geometry) -> Geometry {
+    let x = left.x.max(right.x);
+    let y = left.y.max(right.y);
+    Geometry {
+        x,
+        y,
+        width: ((left.x + left.width).min(right.x + right.width) - x).max(0.0),
+        height: ((left.y + left.height).min(right.y + right.height) - y).max(0.0),
     }
 }
 

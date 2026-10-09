@@ -115,6 +115,25 @@ impl Host {
         if self.a11y.turn(runtime, &self.state, &name, repaint) {
             self.follow_up = true;
         }
+        // Prepare unopened pages between events, without asking for frames.
+        // Each slice yields to input and stops while animation is running.
+        // A fresh layout alone is not a scheduler: once it settles, the rest
+        // of a budgeted glyph scan still needs quiet turns to finish.
+        if !repaint
+            && !self.follow_up
+            && !runtime.has_motion()
+            && !self.state.animating_shaders
+            && let Some(renderer) = self.state.painter.gpu()
+        {
+            let backend = renderer.backend_mut();
+            backend.warm_hidden_text(
+                &runtime.scene(),
+                &self.state.layout.layout,
+                self.state.primary_root,
+                self.state.layout.scale_120,
+            );
+            self.follow_up = backend.text_warmup_pending();
+        }
         Ok(Turn::Again)
     }
 

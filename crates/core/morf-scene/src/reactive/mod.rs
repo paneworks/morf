@@ -1,7 +1,7 @@
 //! Reactive signal graph for morf.
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::error::Error as StdError;
 use std::fmt;
 
@@ -166,10 +166,10 @@ impl<T: Clone + PartialEq + 'static> EffectContext<'_, T> {
 pub struct Graph<T> {
     signals: SlotMap<SignalId, Signal<T>>,
     effects: SlotMap<EffectId, Effect>,
-    /// The effects waiting to run. Kept beside each effect's own flag so
-    /// finding the next one to run looks at what is dirty, not at every
-    /// effect the graph holds.
-    dirty: HashSet<EffectId>,
+    /// Pending effects ordered by dependency depth and then their stable ID.
+    /// Scanning an unordered set for every next effect made a panel-wide
+    /// update quadratic in the number of bindings it woke.
+    dirty: BTreeMap<(usize, u64), EffectId>,
     recompute_budget: usize,
 }
 
@@ -185,7 +185,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
         Self {
             signals: SlotMap::with_key(),
             effects: SlotMap::with_key(),
-            dirty: HashSet::new(),
+            dirty: BTreeMap::new(),
             recompute_budget: recompute_budget.max(1),
         }
     }
@@ -209,7 +209,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
             depth: 0,
             dirty: true,
         });
-        self.dirty.insert(id);
+        self.dirty.insert((0, id.data().as_ffi()), id);
         id
     }
 
@@ -221,7 +221,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
         let Some(removed) = self.effects.remove(effect) else {
             return false;
         };
-        self.dirty.remove(&effect);
+        self.dirty.remove(&(removed.depth, effect.data().as_ffi()));
         for signal in removed.dependencies {
             if let Some(slot) = self.signals.get_mut(signal) {
                 slot.subscribers.remove(&effect);
@@ -326,9 +326,11 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
         slot.producer = producer;
         let subscribers: Vec<_> = slot.subscribers.iter().copied().collect();
         for id in subscribers {
-            if let Some(effect) = self.effects.get_mut(id) {
+            if let Some(effect) = self.effects.get_mut(id)
+                && !effect.dirty
+            {
                 effect.dirty = true;
-                self.dirty.insert(id);
+                self.dirty.insert((effect.depth, id.data().as_ffi()), id);
             }
         }
         Ok(true)

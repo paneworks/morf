@@ -5,12 +5,12 @@
 //! `place`, and both then let each leaf place its own children by the
 //! engine's ordinary rules.
 
-use morf_scene::{Element, FastMap, NodeHandle, Scene};
+use morf_scene::{FastMap, NodeHandle, Scene};
 
 use crate::custom::CustomLayout;
 use crate::flex::FlexTree;
 use crate::geometry::{Geometry, Size, TextMeasurer};
-use crate::helpers::{LayoutError, positive};
+use crate::helpers::LayoutError;
 use crate::incremental::Local;
 use crate::layout::Layout;
 
@@ -184,30 +184,18 @@ impl Layout {
 
     /// Text nodes whose resolved width is not the width they were measured
     /// at, and to whom that matters.
-    pub(crate) fn texts_to_remeasure(
-        &self,
-        scene: &Scene,
-    ) -> Result<FastMap<NodeHandle, f64>, LayoutError> {
+    pub(crate) fn texts_to_remeasure(&self) -> FastMap<NodeHandle, f64> {
         let mut widths = FastMap::default();
-        for (node, geometry) in &self.geometry {
-            let element = scene.element(*node)?;
-            if !matches!(element, Element::Text | Element::TextInput) {
+        for node in &self.reflow_text {
+            let Some(geometry) = self.geometry.get(node) else {
                 continue;
-            }
-            if positive(scene.number(*node, "width")?).is_some() {
-                continue;
-            }
-            let wraps = if element == Element::TextInput {
-                scene.bool_value(*node, "multiline")? && scene.bool_value(*node, "wrap")?
-            } else {
-                scene.bool_value(*node, "wrap")? || scene.string_value(*node, "elide")? != "none"
             };
             let measured = self.implicit.get(node).map_or(0.0, |size| size.width);
-            if wraps && geometry.width > 0.0 && (geometry.width - measured).abs() > 0.5 {
+            if geometry.width > 0.0 && (geometry.width - measured).abs() > 0.5 {
                 widths.insert(*node, geometry.width);
             }
         }
-        Ok(widths)
+        widths
     }
 
     /// Returns the resolved geometry for a node in the computed tree.

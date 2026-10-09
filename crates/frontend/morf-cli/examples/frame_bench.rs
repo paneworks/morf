@@ -155,6 +155,19 @@ fn main() {
         eprintln!("{config}: {error}");
         std::process::exit(1);
     }
+    // Open the panel being measured before settling its motion and services.
+    // For example, FRAME_BENCH_IPC="dashboard open" measures the dashboard.
+    if let Ok(command) = std::env::var("FRAME_BENCH_IPC") {
+        let mut words = command.split_whitespace();
+        if let Some(verb) = words.next() {
+            let args = words
+                .map(|word| morf_lua::IpcValue::String(word.to_owned()))
+                .collect::<Vec<_>>();
+            let started = Instant::now();
+            runtime.call_ipc(verb, &args).expect("benchmark IPC");
+            eprintln!("IPC {command:?}: {:?}", started.elapsed());
+        }
+    }
     // Let the services settle so the scene is the one a running shell has.
     // A service on another thread — the sound server, a bus — answers in
     // milliseconds rather than instantly; `FRAME_BENCH_SETTLE_MS` spreads the
@@ -238,9 +251,12 @@ fn main() {
         let roots = runtime.scene().roots().to_vec();
         let index = std::env::var("FRAME_BENCH_ROOT")
             .ok()
-            .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(0);
-        roots[index.min(roots.len() - 1)]
+            .and_then(|value| value.parse::<usize>().ok());
+        match index {
+            Some(index) => *roots.get(index).expect("FRAME_BENCH_ROOT is out of range"),
+            None => morf_host::surfaces::primary_surface_root(&runtime)
+                .expect("configuration has a primary surface"),
+        }
     };
     let size = Size { width, height };
     let computed = settled(&mut runtime, root, size, &mut RuledText, &config);
@@ -287,7 +303,7 @@ fn main() {
     let layout = best(12, 200, || {
         std::hint::black_box(Layout::compute(&scene, root, size, &mut RuledText).expect("layout"));
     });
-    let reuse = best(12, 200, || {
+    let clone = best(12, 200, || {
         std::hint::black_box(computed.clone());
     });
     let mut reused = DrawList::default();
@@ -451,7 +467,7 @@ fn main() {
     );
     println!("  tick_animations    {tick:?}");
     println!("  Layout::compute    {layout:?}");
-    println!("  Layout reuse       {reuse:?}");
+    println!("  Layout clone       {clone:?}");
     println!("  DrawList (reused)  {draw:?}");
     println!("  DrawList (fresh)   {draw_fresh:?}");
     println!("  input_geometry     {region:?}");

@@ -141,6 +141,7 @@ pub struct WgpuBackend {
     /// Hidden text already warmed, by what it looked like then: a node is
     /// warmed again only when its text or style moved (`warm_hidden_text`).
     pub(crate) warmed_text: std::collections::HashMap<morf_scene::NodeHandle, u64>,
+    pub(crate) text_warmup: super::warm::TextWarmup,
     pub(crate) blur_pipeline: wgpu::RenderPipeline,
     pub(crate) blur_layout: wgpu::BindGroupLayout,
     pub(crate) blur_sampler: wgpu::Sampler,
