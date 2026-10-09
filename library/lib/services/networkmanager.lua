@@ -258,6 +258,7 @@ function networkmanager.connect(options)
             vpn = kind == "vpn" or kind == "wireguard",
             apn = (settings.gsm or {}).apn or "",
             auto_apn = (settings.gsm or {})["auto-config"] == true,
+            home_only = (settings.gsm or {})["home-only"] == true,
           }
         end
       end
