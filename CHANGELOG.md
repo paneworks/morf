@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7] - 2026-10-10
+
+### <!-- 0 -->⛰️ Features
+
+- Add a Roaming quick-settings tile that allows or blocks mobile data roaming on every saved mobile profile.
+- Report each saved mobile profile's home-only setting from the NetworkManager service.
+
 ## [0.2.6] - 2026-10-09
 
 ### <!-- 1 -->🐛 Bug Fixes

@@ -1739,7 +1739,7 @@ dependencies = [
 
 [[package]]
 name = "morf-app"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "morf-audio"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "libc",
  "libloading",
@@ -1771,7 +1771,7 @@ dependencies = [
 
 [[package]]
 name = "morf-cli"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "flate2",
  "image",
@@ -1791,7 +1791,7 @@ dependencies = [
 
 [[package]]
 name = "morf-desktop"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "morf-app",
  "morf-layout",
@@ -1807,7 +1807,7 @@ dependencies = [
 
 [[package]]
 name = "morf-host"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "flate2",
  "image",
@@ -1829,7 +1829,7 @@ dependencies = [
 
 [[package]]
 name = "morf-image"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "base64 0.23.1",
  "image",
@@ -1839,7 +1839,7 @@ dependencies = [
 
 [[package]]
 name = "morf-io"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "flate2",
  "libc",
@@ -1854,14 +1854,14 @@ dependencies = [
 
 [[package]]
 name = "morf-kit"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "morf-value",
 ]
 
 [[package]]
 name = "morf-layout"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "morf-scene",
  "taffy",
@@ -1870,7 +1870,7 @@ dependencies = [
 
 [[package]]
 name = "morf-lua"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "image",
  "jiff",
@@ -1895,7 +1895,7 @@ dependencies = [
 
 [[package]]
 name = "morf-render"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "ash",
  "bytemuck",
@@ -1916,7 +1916,7 @@ dependencies = [
 
 [[package]]
 name = "morf-runtime"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "jiff",
  "morf-layout",
@@ -1927,7 +1927,7 @@ dependencies = [
 
 [[package]]
 name = "morf-scene"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "animato",
  "kurbo",
@@ -1938,7 +1938,7 @@ dependencies = [
 
 [[package]]
 name = "morf-shader"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "luna",
  "morf-value",
@@ -1946,7 +1946,7 @@ dependencies = [
 
 [[package]]
 name = "morf-system"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "libc",
  "libloading",
@@ -1959,7 +1959,7 @@ dependencies = [
 
 [[package]]
 name = "morf-terminal"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "alacritty_terminal",
  "libc",
@@ -1971,7 +1971,7 @@ dependencies = [
 
 [[package]]
 name = "morf-text"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "cosmic-text",
  "morf-layout",
@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "morf-value"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "pastel",
  "serde_json",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "morf-vector"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "morf-image",
  "resvg",
