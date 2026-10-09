@@ -85,11 +85,13 @@ fn a_path_refuses_what_it_cannot_draw() {
             "positive width",
         ),
         (
-            "require('morf.ui').Path { dash = { -1, 2 } }",
-            "non-negative",
+            "require('morf.ui').Path { dash = { 'wide', 2 } }",
+            "dash lengths are numbers",
         ),
     ] {
-        let error = runtime.execute("bad.lua", source.as_bytes()).unwrap_err();
+        let error = runtime
+            .execute("bad.lua", source.as_bytes())
+            .expect_err(source);
         assert!(error.to_string().contains(message), "{source}: {error}");
     }
 }
