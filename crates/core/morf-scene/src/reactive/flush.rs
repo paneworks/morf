@@ -160,7 +160,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
         slot.dirty = false;
         let old_dependencies = std::mem::take(&mut slot.dependencies);
         let EffectCallback::External(token) = slot.callback;
-        self.dirty.remove(&effect);
+        self.dirty.remove(&(slot.depth, effect.data().as_ffi()));
         for signal in &old_dependencies {
             if let Some(slot) = self.signals.get_mut(*signal) {
                 slot.subscribers.remove(&effect);
@@ -212,11 +212,7 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
     }
 
     fn next_dirty(&self) -> Option<EffectId> {
-        self.dirty
-            .iter()
-            .filter_map(|id| Some((*id, self.effects.get(*id)?)))
-            .min_by_key(|(id, effect)| (effect.depth, id.data().as_ffi()))
-            .map(|(id, _)| id)
+        self.dirty.first_key_value().map(|(_, id)| *id)
     }
 
     fn settle_effect(
@@ -251,8 +247,13 @@ impl<T: Clone + PartialEq + 'static> Graph<T> {
             .map(|producer| producer.depth.saturating_add(1))
             .max()
             .unwrap_or(0);
-        self.effects[effect].dependencies = dependencies.clone();
-        self.effects[effect].depth = depth;
+        let slot = &mut self.effects[effect];
+        slot.dependencies = dependencies.clone();
+        if slot.dirty && slot.depth != depth {
+            self.dirty.remove(&(slot.depth, effect.data().as_ffi()));
+            self.dirty.insert((depth, effect.data().as_ffi()), effect);
+        }
+        slot.depth = depth;
         for signal in dependencies {
             if let Some(slot) = self.signals.get_mut(signal) {
                 slot.subscribers.insert(effect);

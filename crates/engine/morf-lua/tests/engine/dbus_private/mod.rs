@@ -23,7 +23,7 @@ const INTERFACE: &str = "org.morf.test.V2";
 
 #[test]
 fn dbus_over_a_private_session_bus() {
-    run_under_private_bus("tests::dbus_private::private_bus_");
+    run_under_private_bus("dbus_private::private_bus_");
 }
 
 /// A service played from a thread: `Echo` answers with its arguments,
@@ -59,6 +59,18 @@ impl Server {
                             .reply(call.id, &DbusValue::String(call.signature.clone()))
                             .unwrap(),
                         "Never" => {}
+                        "UnlockRetries" => service
+                            .reply(
+                                call.id,
+                                &DbusValue::Typed {
+                                    signature: "a{uu}".to_owned(),
+                                    value: Box::new(DbusValue::Dictionary(vec![
+                                        (DbusValue::Unsigned(2), DbusValue::Unsigned(3)),
+                                        (DbusValue::Unsigned(4), DbusValue::Unsigned(10)),
+                                    ])),
+                                },
+                            )
+                            .unwrap(),
                         "Emit" => {
                             service.reply(call.id, &DbusValue::Nil).unwrap();
                             let DbusValue::List(values) = &call.arguments else {

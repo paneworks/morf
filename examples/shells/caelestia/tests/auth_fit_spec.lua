@@ -86,7 +86,7 @@ for _,part in ipairs {"lock","greet"} do
           local viewport=test.get(part.."-sheet-scroll")
           local keys=0
           for _,node in ipairs(test.nodes()) do
-            if node.visible and node.id and (node.id:find("key.fulln.letters",1,true) or node.id:match("%.pattern$")) then
+            if node.visible and node.id and (node.id:find("key.full.letters",1,true) or node.id:match("%.pattern$")) then
               keys=keys+1
               test.truthy(node.x>=0 and node.x+node.width<=size[1]+1,node.id.." outside width")
               test.truthy(node.height>=30,node.id.." shrunk below a usable target")
@@ -108,7 +108,7 @@ for _,part in ipairs {"lock","greet"} do
             test.wheel(0,1000,{x=sheet.x+sheet.width/2,y=sheet.y+sheet.height/2}) test.advance(300)
             local enter
             for _,node in ipairs(test.nodes()) do
-              if node.visible and node.id and node.id:find("key.fulln.letters.enter",1,true) then enter=node break end
+              if node.visible and node.id and node.id:find("key.full.letters.enter",1,true) then enter=node break end
             end
             test.truthy(enter,"scrolling never revealed the keyboard's final row")
             test.truthy(enter.y>=viewport.y and enter.y+enter.height<=viewport.y+viewport.height+1,"keyboard's final row cannot be reached")
@@ -147,15 +147,15 @@ for _,part in ipairs {"lock","greet"} do
       test.type("abcdef")
       local back
       for _,node in ipairs(test.nodes()) do
-        if node.visible and node.id and node.id:find("key.fulln.letters.backspace",1,true) then back=node break end
+        if node.visible and node.id and node.id:find("key.full.letters.backspace",1,true) then back=node break end
       end
       test.truthy(back)
       test.press(back.x+back.width/2,back.y+back.height/2) test.advance(100)
-      test.eq(test.ipc("auth_test").typed,5)
+      test.eq(test.ipc("auth_test").typed,6)
       test.ipc("resize_test","800","480") test.advance(1200)
-      test.eq(test.ipc("auth_test").typed,5,"destroyed keyboard kept repeating backspace")
+      test.eq(test.ipc("auth_test").typed,6,"destroyed keyboard kept repeating backspace")
       test.release(300,300) test.advance(100)
-      test.eq(test.ipc("auth_test").typed,5)
+      test.eq(test.ipc("auth_test").typed,6)
       test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)
     end)
   end

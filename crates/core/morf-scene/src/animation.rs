@@ -392,6 +392,7 @@ pub(crate) struct Animation {
 
 #[derive(Clone, Debug)]
 pub(crate) enum PhysicsAnimation {
+    Scroll(crate::scroll_fling::ScrollFling),
     Spring {
         target: f64,
         motion: Spring,
@@ -432,6 +433,7 @@ impl PhysicsAnimation {
             // hands this position, and the velocity below, to whatever takes
             // over — which is how a flick can be caught by a spring.
             Self::Decay { position, .. } => *position,
+            Self::Scroll(motion) => motion.position,
             // A colour has no single number to hand over; a numeric taker of
             // a colour's physics is not a thing that happens.
             Self::Color { .. } => 0.0,
@@ -443,6 +445,7 @@ impl PhysicsAnimation {
             Self::Spring { motion, .. } => f64::from(motion.velocity()),
             Self::Smoothed { velocity, .. } => *velocity,
             Self::Decay { velocity, .. } => *velocity,
+            Self::Scroll(motion) => motion.velocity,
             Self::Color { .. } => 0.0,
         }
     }

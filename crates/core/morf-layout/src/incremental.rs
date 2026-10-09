@@ -364,7 +364,7 @@ impl Layout {
             text,
             host,
         )?;
-        let constrained = first.texts_to_remeasure(scene)?;
+        let constrained = first.texts_to_remeasure();
         if constrained.is_empty() {
             // The text measured at a width last time is not any more. A whole
             // pass would have measured it at its own width last; the text

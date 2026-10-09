@@ -42,6 +42,7 @@ mod scene_revision;
 mod scene_shown;
 mod scene_tick;
 mod schema;
+mod scroll_fling;
 mod spline;
 mod stretch;
 mod terminal;

@@ -3,11 +3,11 @@
 //! A compositor's scale is a guess (Hyprland's `auto` makes a 14" 1080p panel
 //! 1.5, a 32" 4K one 1.0, and the first comes out a third larger to the eye),
 //! so morf can count in its own unit instead: asked for, one
-//! [`REFERENCE_PPI`]th of an inch on every panel that says how big it is,
+//! [`REFERENCE_PPI`](crate::density::REFERENCE_PPI)th of an inch on every panel that says how big it is,
 //! like Android's dp, or a fixed scale. By default it takes the
 //! compositor's. Everything above the window system -- layout, text,
 //! Lua, an app -- counts in that unit; the window system converts at its
-//! edge with a [`Zoom`].
+//! edge with a [`Zoom`](crate::density::Zoom).
 
 /// How many of morf's pixels make an inch when measured by the panel.
 /// A 32" 4K panel (139 per inch) is one device pixel to one of morf's.

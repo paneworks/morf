@@ -76,6 +76,9 @@ pub enum DbusValue {
     Bytes(Vec<u8>),
     List(Vec<DbusValue>),
     Map(BTreeMap<String, DbusValue>),
+    /// Dictionaries with non-string keys, such as ModemManager's `a{uu}`
+    /// UnlockRetries. Preserve the keys rather than rejecting the whole reply.
+    Dictionary(Vec<(DbusValue, DbusValue)>),
     Typed {
         signature: String,
         value: Box<DbusValue>,
@@ -267,7 +270,7 @@ impl DbusProxy {
             // no such guess — the reply carries its own signature — which is
             // why this was asymmetric, and why the answer is to ask rather than
             // to refuse.
-            DbusValue::List(_) | DbusValue::Map(_) => {
+            DbusValue::List(_) | DbusValue::Map(_) | DbusValue::Dictionary(_) => {
                 return Err(
                     "a compound D-Bus property needs its signature stated: pass `{ signature = \"as\", value = ... }` rather than a bare table"
                         .to_owned(),

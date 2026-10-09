@@ -25,12 +25,15 @@ local COMPACT = responsive.compact()
 -- On a phone every tab is the one size, scrolled in it; on a desk each
 -- tab has its own (responsive.dashboard), and the drawer eases between them.
 local CW, VIEW_H = responsive.dashboard()
-local PANEL_W = COMPACT and responsive.desk_width() - 2 * theme.BORDER or nil
+local PANEL_W = COMPACT and (responsive.portrait() and responsive.sheet_width()
+  or responsive.desk_width() - 2 * theme.BORDER) or nil
 -- The tabs by the edge it comes from: the bottom one, on a phone.
 local TABS_BELOW = COMPACT and responsive.portrait()
+local PHONE=responsive.portrait()
 -- Four fifths of the desk: the fifth above it is to tap it shut.
 local TABS_H = 68            -- icons, labels, indicator and hairline
-local PANEL_H = COMPACT and math.floor((responsive.desk_height() - 2 * theme.BORDER) * 0.8) or nil
+local function panel_height() return math.floor((responsive.desk_height() - 2 * theme.BORDER) * 0.8) end
+local function view_height() local _,h=responsive.dashboard() return math.max(1,h) end
 local subpages, PAGE = {}, {{840,439}}
 for i=2,6 do
   kit.collect(LAYERS[i])
@@ -44,7 +47,7 @@ M.tab = model.tab
 
 --- The panel's size on tab `i`.
 function M.size(i)
-  if COMPACT then return PANEL_W, PANEL_H end
+  if COMPACT then return PANEL_W, panel_height() end
   local p = PAGE[i] or PAGE[1]
   return p[1] + 2 * PAD, TABS_H + PAD + p[2] + PAD - 1
 end
@@ -71,7 +74,7 @@ local function tabs()
     width = width, height = TABS_H, pad = PAD, ids = "name", growing = true, reorderable = true,
     icons_only = COMPACT }
   if not TABS_BELOW then return row end
-  return ui.Item { y = PANEL_H - TABS_H, width = PANEL_W, height = TABS_H, row }
+  return ui.Item { y = function() return panel_height()-TABS_H end, width = PANEL_W, height = TABS_H, row }
 end
 
 -- ---------------------------------------------------------------- cards --
@@ -119,26 +122,31 @@ local pages = {
   subpages[5],
   subpages[6],
 }
+local scroll_positions, scroll_viewports = {}, {}
 if COMPACT then
   -- On a phone every page scrolls in the one view the dashboard has; while
   -- it runs on below, a dashed line along the view's foot says so.
   for i, page in ipairs(pages) do
-    local content_h = (PAGE[i] or PAGE[1])[2]
-    local node, _, t = kit.scroll({ id = "dashboard-scroll-" .. i, width = CW, height = VIEW_H, clip = true,
+    local initial_h = (PAGE[i] or PAGE[1])[2]
+    local function content_h() return i==6 and view_height() or initial_h end
+    local node, _, t = kit.scroll({ id = "dashboard-scroll-" .. i, width = CW, height = view_height, clip = true,
       ui.Item { width = CW, height = content_h, page } })
+    scroll_positions[i] = t
     local more = ui.Path {
-      id = "dashboard-more-" .. i, x = 0, y = VIEW_H - 2, width = CW, height = 2, view_box = { 0, 0, CW, 2 },
+      id = "dashboard-more-" .. i, x = 0, y = function() return view_height()-2 end, width = CW, height = 2, view_box = { 0, 0, CW, 2 },
       d = ("M0 1 H%g"):format(CW), fill_color = "transparent", stroke_width = 2, dash = { 10, 8 },
       stroke_color = function() return theme.color.onSurfaceVariant end,
-      opacity = function() return (content_h > VIEW_H + 4 and (t.position_y or 0) < 0.99) and 0.8 or 0 end,
+      opacity = function() return (content_h() > view_height() + 4 and (t.position_y or 0) < 0.99) and 0.8 or 0 end,
       behavior = { opacity = { duration = theme.duration.small } },
     }
     -- A phone's tabs are icons alone: the page says its name.
     local P = require("themes.layouts.page")
-    local top = P.HEADER_H + P.GAP
-    pages[i] = ui.Item { width = CW, height = VIEW_H + top,
+    local top = P.header_height() + P.GAP
+    scroll_viewports[i] = ui.Item { id="dashboard-viewport-"..i,
+      y=top,width=CW,height=view_height,clip=true,node,more }
+    pages[i] = ui.Item { width = CW, height = function() return view_height()+top end,
       P.header { id = "dashboard-head-" .. i, width = CW, title = TABS[i].name },
-      ui.Item { y = top, width = CW, height = VIEW_H, node, more } }
+      scroll_viewports[i] }
     PAGE[i] = { CW, VIEW_H + top }
   end
 end
@@ -170,7 +178,13 @@ for i, list in ipairs(LAYERS) do
       behavior = { blend = { duration = 360, easing = theme.ease.standard } },
     }
     for _, entry in ipairs(list) do field[#field + 1] = entry.shape end
-    cards_fields[#cards_fields + 1] = ui.Sdf(field)
+    local node=ui.Sdf(field)
+    if scroll_viewports[i] then
+      -- Tracked card backgrounds follow the scrolled content too. Clip
+      -- them to its viewport so they cannot paint behind the fixed title.
+      node.z=-1
+      ui.reparent(node,scroll_viewports[i])
+    else cards_fields[#cards_fields + 1]=node end
   end
 end
 
@@ -209,15 +223,27 @@ local strip = ui.Item {
 }
 local displayed = model.displayed
 local track = ui.Row {
+  id="dashboard-page-track",
   gap = PAD * 2,
 
-  translate_x = function() return -offset(displayed:get()) end,
-  behavior = theme.motion.page_wipe and {} or { translate_x = SWITCH },
+  translate_x = PHONE and -offset(M.tab:get()) or function() return -offset(displayed:get()) end,
+  behavior = (theme.motion.page_wipe or PHONE) and {} or { translate_x = SWITCH },
   table.unpack(pages),
 }
 for _, f in ipairs(cards_fields) do ui.reparent(f, strip) end
 ui.reparent(track, strip)
-local page_wipe = theme.motion.page_wipe and theme.motion.page_wipe(strip, function() return width()-PAD*2 end, "dashboard")
+local page_wipe = not PHONE and theme.motion.page_wipe and theme.motion.page_wipe(strip, function() return width()-PAD*2 end, "dashboard")
+local pager=PHONE and require("pager_drag").new {
+  id="dashboard",track=track,tab=M.tab,count=#TABS,offset=offset,
+  prepare=function()
+    for _,handles in pairs(running) do for _,h in ipairs(handles) do h:stop() end end
+    running={}
+    for _,entries in ipairs(LAYERS) do for _,entry in ipairs(entries) do
+      entry.node.opacity,entry.node.scale=1,1
+      if entry.shape then entry.shape.opacity=1 end
+    end end
+  end,
+}
 
 -- Behind everything on the panel, so the panel is in the surface's input
 -- region: the pointer is seen anywhere on it, and `contains_pointer` with it.
@@ -225,6 +251,19 @@ local background = ui.MouseArea { anchors = { fill = true }, z = -1 }
 
 local content = ui.Item {
   anchors = { fill = true },
+  on_panned = require("phone_gestures").pan { drawer="dashboard", dismiss="down", pager=pager,
+    can_dismiss=function()
+      local position=scroll_positions[M.tab:get()]
+      return not position or (position.position_y or 0)<=0
+    end,
+  },
+  on_swiped = require("phone_gestures").panel {
+    tab = M.tab, count = #TABS, dismiss = "down", close = function() require("dashboard").drawer.set(false) end,
+    can_dismiss = function()
+      local position = scroll_positions[M.tab:get()]
+      return not position or (position.position_y or 0) <= 0
+    end,
+  },
   background,
   tabs(),
   strip,

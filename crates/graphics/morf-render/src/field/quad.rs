@@ -85,6 +85,7 @@ impl SdfFieldInstance {
             gradient_colors,
             color_overlay: color_array(*color_overlay),
             shape: [0.0, 0.0, width, height],
+            fade_combinations: [[0.0; 4]; 8],
         });
         // The quad the fragment shader walks has to reach everything the
         // effects do: the blurred edge, and an outer shadow's offset, blur and

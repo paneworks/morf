@@ -423,7 +423,7 @@ return function(theme)
   function M.slider(spec)
     local s = copy(spec)
     s.bar_height = spec.height or 44
-    s.height = s.bar_height + 8
+    s.height = function() return get(s.bar_height) + 8 end
     s.value, s.set = spec.value, nil
     s.on_moved = spec.set
     return widgets.slider(s)

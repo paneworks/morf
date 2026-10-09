@@ -35,10 +35,19 @@ impl RenderSplit {
         self.last = now;
     }
 
-    /// Says where the time went, for a render of 50 ms or more.
+    /// Says where the time went, for a render of 50 ms or more, or the
+    /// threshold in `MORF_RENDER_SPLIT_MS` when measuring shorter frames.
     pub(super) fn finish(self) {
+        static THRESHOLD: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        let threshold = *THRESHOLD.get_or_init(|| {
+            std::env::var("MORF_RENDER_SPLIT_MS")
+                .ok()
+                .and_then(|value| value.parse::<f64>().ok())
+                .filter(|value| value.is_finite() && *value >= 0.0)
+                .unwrap_or(50.0)
+        });
         let total = self.started.elapsed().as_secs_f64() * 1000.0;
-        if !self.on || total < 50.0 {
+        if !self.on || total < threshold {
             return;
         }
         let parts = self

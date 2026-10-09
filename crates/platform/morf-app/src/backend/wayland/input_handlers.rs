@@ -193,7 +193,7 @@ impl TouchHandler for LayerState {
         _qh: &QueueHandle<Self>,
         _touch: &wl_touch::WlTouch,
         serial: u32,
-        _time: u32,
+        time: u32,
         surface: wl_surface::WlSurface,
         id: i32,
         position: (f64, f64),
@@ -209,6 +209,7 @@ impl TouchHandler for LayerState {
             id,
             x: position.0,
             y: position.1,
+            time_ms: Some(time),
         });
     }
 
@@ -218,11 +219,17 @@ impl TouchHandler for LayerState {
         _qh: &QueueHandle<Self>,
         _touch: &wl_touch::WlTouch,
         _serial: u32,
-        _time: u32,
+        time: u32,
         id: i32,
     ) {
         if let Some(((x, y), surface)) = self.touch_points.remove(&id) {
-            self.events.push_back(Event::TouchUp { surface, id, x, y });
+            self.events.push_back(Event::TouchUp {
+                surface,
+                id,
+                x,
+                y,
+                time_ms: Some(time),
+            });
         }
     }
 
@@ -231,7 +238,7 @@ impl TouchHandler for LayerState {
         _connection: &Connection,
         _qh: &QueueHandle<Self>,
         _touch: &wl_touch::WlTouch,
-        _time: u32,
+        time: u32,
         id: i32,
         position: (f64, f64),
     ) {
@@ -242,6 +249,7 @@ impl TouchHandler for LayerState {
                 id,
                 x: position.0,
                 y: position.1,
+                time_ms: Some(time),
             });
         }
     }

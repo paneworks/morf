@@ -38,6 +38,11 @@ fn private_bus_calls_answer_later_and_subscriptions_end() {
                 -- Typed empties.
                 eq(p:call_with("Signature", {{ signature = "a{{sv}}", value = {{}} }}), "a{{sv}}", "an empty map")
                 eq(p:call_with("Signature", {{ signature = "aay", value = {{}} }}), "aay", "an empty list of lists")
+                eq(p:call_with("Signature", {{ signature = "a{{uu}}", value = {{ [2]=3, [4]=10 }} }}),
+                    "a{{uu}}", "sparse numeric dictionary keys")
+                local retries=p:call("UnlockRetries")[1]
+                eq(retries[2],3,"SIM PIN retries retain numeric keys")
+                eq(retries[4],10,"SIM PUK retries retain numeric keys")
                 eq(p:call_with("Signature", "s", {{ signature = "a{{sv}}", value = {{}} }},
                     {{ signature = "u", value = 3 }}), "sa{{sv}}u", "three typed arguments")
                 local ok = pcall(p.call_with, p, "Signature", {{ ssids = {{ signature = "aay", value = {{}} }} }})

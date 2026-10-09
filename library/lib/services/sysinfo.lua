@@ -22,7 +22,48 @@
 local morf = require("morf")
 local poll = require("lib.util.poll")
 
-local fs = morf.fs
+-- Sensor files may block in the driver. A polling sample reads them on
+-- Morf's I/O workers and resumes on completion, keeping input/paint free.
+-- History belongs to the individual coroutine while samples overlap.
+local jobs = setmetatable({}, { __mode = "k" })
+local fs = setmetatable({}, { __index = morf.fs })
+fs.read = function(filename, limit)
+  if jobs[coroutine.running()] then return coroutine.yield(filename, limit) end
+  return morf.fs.read(filename, limit)
+end
+
+-- Long proc tables also cost CPU time. Leave a turn for input between
+-- small groups of rows, just as file reads leave a turn while I/O runs.
+local function yield_sample()
+  if jobs[coroutine.running()] then coroutine.yield(false) end
+end
+
+local function sample_async(sample, done)
+  local thread = coroutine.create(function()
+    local self = coroutine.running()
+    local job = { pushes = {} }
+    jobs[self] = job
+    local ok, value, err = pcall(sample)
+    jobs[self] = nil
+    if not ok then error(value, 0) end
+    return { value = value, error = err, pushes = job.pushes }
+  end)
+  local function resume(...)
+    local ok, value, limit = coroutine.resume(thread, ...)
+    if not ok then jobs[thread] = nil done(nil, tostring(value)) return end
+    if coroutine.status(thread) == "dead" then
+      done(value.value, value.error, value.pushes)
+      return
+    end
+    if value == false then morf.timer(1, resume, false) return end
+    local submitted, err = morf.fs.read_async({ value }, function(success, contents)
+      if success and type(contents[1]) == "string" then resume(contents[1])
+      else resume(nil, "cannot read " .. value) end
+    end, limit)
+    if not submitted then jobs[thread] = nil done(nil, err) end
+  end
+  morf.timer(1, resume, false)
+end
 
 local sysinfo = {
   --- Prefix for every /proc, /sys and /etc path.
@@ -55,7 +96,6 @@ end
 local rings = {}
 -- The pushes a sample makes while it is recorded, for the screens that read
 -- the sample rather than take it (a shared source's `mirrored`).
-local recording
 
 -- Each series is a ring for `history` and a data channel (morf.channel)
 -- for a chart to draw with no Lua: both take every sample.
@@ -68,8 +108,9 @@ local function ring(name)
       push = function(value) kept.push(value) channel:push(tonumber(value) or 0) end }
     rings[name] = found
   end
-  if recording then
-    local log = recording
+  local job = jobs[coroutine.running()]
+  if job then
+    local log = job.pushes
     return { push = function(value) log[#log + 1] = { name, value } found.push(value) end }
   end
   return found
@@ -857,6 +898,7 @@ end
 
 -- The mapper name of a dm-N device ("sys-arch"), or nil.
 local function dm_name(name)
+  if not name:match("^dm%-%d+$") then return nil end
   return text_at("/sys/block/" .. name .. "/dm/name")
 end
 
@@ -897,18 +939,27 @@ local function sample_drives()
   local now = morf.time.now()
   local dt = last_io_at and now - last_io_at or nil
   local io = {}
-  for name, rd, wr, ticks in text:gmatch(
-    "\n?%s*%d+%s+%d+%s+(%S+)%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+(%d+)") do
-    local now_io = { read = tonumber(rd) * SECTOR, write = tonumber(wr) * SECTOR, ticks = tonumber(ticks) }
-    local before = last_io[name]
-    local rates = { read_total = now_io.read, write_total = now_io.write, read_rate = 0, write_rate = 0, busy = 0 }
-    if before and dt and dt > 0 and now_io.read >= before.read and now_io.write >= before.write then
-      rates.read_rate = (now_io.read - before.read) / dt
-      rates.write_rate = (now_io.write - before.write) / dt
-      rates.busy = math.min(100, 100 * (now_io.ticks - before.ticks) / 1000 / dt)
+  -- Match once from each line's start. Modern kernels append discard/flush
+  -- counters; a global partial match would retry the disk prefix at every
+  -- character of those trailing counters, stalling the UI on partitioned UFS.
+  local rows = 0
+  for line in text:gmatch("[^\n]+") do
+    rows = rows + 1
+    if rows % 8 == 0 then yield_sample() end
+    local name, rd, wr, ticks = line:match(
+      "^%s*%d+%s+%d+%s+(%S+)%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+(%d+)")
+    if name then
+      local now_io = { read = tonumber(rd) * SECTOR, write = tonumber(wr) * SECTOR, ticks = tonumber(ticks) }
+      local before = last_io[name]
+      local rates = { read_total = now_io.read, write_total = now_io.write, read_rate = 0, write_rate = 0, busy = 0 }
+      if before and dt and dt > 0 and now_io.read >= before.read and now_io.write >= before.write then
+        rates.read_rate = (now_io.read - before.read) / dt
+        rates.write_rate = (now_io.write - before.write) / dt
+        rates.busy = math.min(100, 100 * (now_io.ticks - before.ticks) / 1000 / dt)
+      end
+      io[name] = rates
+      last_io[name] = now_io
     end
-    io[name] = rates
-    last_io[name] = now_io
   end
   last_io_at = now
   local mounts, swaps = read_mounts()
@@ -927,17 +978,24 @@ local function sample_drives()
   end
   local drives = {}
   local root_disk
-  for _, entry in ipairs(fs.list(path("/sys/block"), { follow = true }) or {}) do
-    local name = entry.name
-    if is_drive(name) and io[name] then
+  -- diskstats already names every disk and partition. Listing sysfs again
+  -- stats dozens of unrelated attributes per drive, blocking the UI on ARM.
+  local names = {}
+  for name in pairs(io) do names[#names + 1] = name end
+  table.sort(names)
+  for index, name in ipairs(names) do
+    if index % 8 == 0 then yield_sample() end
+    if is_drive(name) and fs.exists(path("/sys/block/" .. name)) then
       local base = "/sys/block/" .. name
       local drive = { name = name, units = {} }
       for key, value in pairs(facts(name)) do drive[key] = value end
       for key, value in pairs(io[name]) do drive[key] = value end
       -- Partitions, each followed by what is built on it, depth first.
       local children = {}
-      for _, child in ipairs(fs.list(path(base), { follow = true }) or {}) do
-        if child.name:find(name, 1, true) == 1 and child.name ~= name then children[#children + 1] = child.name end
+      for _, child in ipairs(names) do
+        if child ~= name and child:find(name, 1, true) == 1 and fs.exists(path(base .. "/" .. child)) then
+          children[#children + 1] = child
+        end
       end
       table.sort(children)
       local function holders(of, of_base, depth, seen)
@@ -1106,12 +1164,7 @@ for name, entry in pairs(SAMPLERS) do
     initial = EMPTY[name],
     shared = SHARED[name],
     sample = function(done)
-      recording = {}
-      local ok, value = pcall(sample)
-      local pushes = recording
-      recording = nil
-      if not ok then error(value, 0) end
-      done(value, nil, pushes)
+      sample_async(sample, done)
     end,
     mirrored = function(_, pushes)
       for _, push in ipairs(pushes or {}) do ring(push[1]).push(push[2]) end

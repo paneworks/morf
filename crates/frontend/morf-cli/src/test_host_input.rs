@@ -14,6 +14,9 @@ use crate::test_host::{TestHost, list, map, number, optional_text, string, text}
 use morf_host::headless::Headless;
 use morf_host::headless_input::{button, keysym, modifiers};
 
+mod touch;
+pub(crate) use touch::touch;
+
 /// Where keys go: the surface named, else the one last clicked (a
 /// compositor hands the keyboard to the window pressed on), else the
 /// primary.

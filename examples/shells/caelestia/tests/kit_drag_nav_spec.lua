@@ -43,3 +43,47 @@ for _, style in ipairs { "material", "tsugumori" } do
     test.eq(#test.logs("error"), 0)
   end)
 end
+
+for _,style in ipairs {"material","tsugumori","default"} do
+  test.it(style.." navigation sends clicks only to the incoming page during rapid changes",function()
+    test.load("../shell/init.lua",{size={400,240},env={CAELESTIA_STYLE=style=="default" and "material" or style},
+      source=([[
+        local ui=require("morf.ui")
+        local kit=require("kit")
+        %s
+        local calls={}
+        local allowed=morf.signal("nav.fixture.allowed",true)
+        local function page(name)
+          return function()
+            return ui.Item {id="page-"..name,width=300,height=180,
+              enabled=function() return name~="a" or allowed:get() end,
+              kit.pill {id="action-"..name,width=300,height=180,label=name,
+                on_clicked=function() calls[#calls+1]=name end}}
+          end
+        end
+        local node,nav=require("lib.kit.navigation").make("view_stack",{
+          width=300,height=180,current="a",mode="switcher",order={"a","b","c"},
+          pages={a=page("a"),b=page("b"),c=page("c")}})
+        ui.Item {width=400,height=240,node}
+        morf.ipc.go=function(name) nav.go(name) end
+        morf.ipc.enable=function(on) allowed:set(on=="yes") end
+        morf.ipc.calls=function() local out=calls calls={} return out end
+      ]]):format(style=="default" and 'kit=require("lib.kit.skins.default").make {variant="dark"}' or "")})
+    test.advance(500)
+    for _,name in ipairs {"b","a","c","b","a"} do
+      test.ipc("go",name) test.advance(100)
+      test.click(150,90)
+      test.eq(test.ipc("calls"),{name},"A leaving page intercepted the new page's action")
+    end
+    test.advance(500)
+    test.truthy(test.get("page-a").visible)
+    test.falsy(test.get("page-b").visible) test.falsy(test.get("page-c").visible)
+    test.ipc("enable","no")
+    test.ipc("go","b") test.advance(100)
+    test.ipc("go","a") test.advance(300)
+    test.click(150,90) test.eq(test.ipc("calls"),{},"Returning to a page erased its disabled state")
+    test.ipc("enable","yes") test.advance(100)
+    test.click(150,90) test.eq(test.ipc("calls"),{"a"})
+    test.eq(test.logs("error"),{}) test.eq(test.logs("warn"),{})
+  end)
+end

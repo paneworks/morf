@@ -64,14 +64,25 @@ pub(crate) fn array_value(value: &Array<'_>) -> Result<DbusValue, String> {
 }
 
 fn dict_value(value: &Dict<'_, '_>) -> Result<DbusValue, String> {
-    let mut map = BTreeMap::new();
+    let mut entries = Vec::new();
     for (key, value) in value.iter() {
-        let key = match dynamic_value(key)? {
-            DbusValue::String(key) => key,
-            _ => return Err("D-Bus dictionary keys must be strings".to_owned()),
-        };
-        map.insert(key, dynamic_value(value)?);
+        entries.push((dynamic_value(key)?, dynamic_value(value)?));
     }
+    if entries
+        .iter()
+        .any(|(key, _)| !matches!(key, DbusValue::String(_)))
+    {
+        return Ok(DbusValue::Dictionary(entries));
+    }
+    let map: BTreeMap<_, _> = entries
+        .into_iter()
+        .map(|(key, value)| {
+            let DbusValue::String(key) = key else {
+                unreachable!()
+            };
+            (key, value)
+        })
+        .collect();
     Ok(DbusValue::Map(map))
 }
 

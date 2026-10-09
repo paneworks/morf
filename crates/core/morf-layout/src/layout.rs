@@ -5,7 +5,7 @@ mod children;
 mod exit;
 mod measure;
 
-use morf_scene::{FastMap, NodeHandle, Scene};
+use morf_scene::{FastMap, FastSet, NodeHandle, Scene};
 
 use crate::incremental::{Basis, Dirty, Local};
 
@@ -35,6 +35,10 @@ pub struct Layout {
     /// The first pass records those widths here; the second measures with
     /// them. Two passes, never more.
     pub(crate) text_widths: FastMap<NodeHandle, f64>,
+    /// Text that may need a second pass at its parent's resolved width.
+    /// Updated when measuring changed text, so an animated gauge does not
+    /// make every layout scan every node and reread every text style.
+    pub(crate) reflow_text: FastSet<NodeHandle>,
     /// What this layout was computed from, so the next can start from it.
     pub(crate) basis: Option<Basis>,
     /// The first of the two passes, when a second one ran: an incremental
@@ -87,7 +91,7 @@ impl Layout {
         let revision = scene.layout_revision();
         let mut layout = Self::default();
         layout.pass(scene, root, available, text, host)?;
-        let constrained = layout.texts_to_remeasure(scene)?;
+        let constrained = layout.texts_to_remeasure();
         if !constrained.is_empty() {
             let first = layout.clone();
             layout.text_widths = constrained;
@@ -156,6 +160,7 @@ impl Layout {
         self.implicit.retain(|node, _| in_tree(node));
         self.requested.retain(|node, _| in_tree(node));
         self.text_widths.retain(|node, _| in_tree(node));
+        self.reflow_text.retain(|node| in_tree(node));
         if let Some(first) = self.first.as_mut() {
             first.prune(scene, root);
         }

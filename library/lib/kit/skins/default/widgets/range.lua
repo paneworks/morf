@@ -202,19 +202,22 @@ return function(S, theme, M)
 
   --- An upright scale: the trough runs up from the reading at its foot.
   function S.vertical_slider(t, spec)
-    local W, H = num(spec.width, 48), num(spec.height, 200)
+    local function W() return num(spec.width,48) end
+    local function H() return num(spec.height,200) end
     local K, TR = 20, 4
-    local cx, y0, travel = W / 2, K / 2, H - K - 24
-    local function hy() return y0 + travel * clamp01(t.visual_position) end
+    local y0=K/2
+    local function cx() return W()/2 end
+    local function travel() return math.max(1,H()-K-24) end
+    local function hy() return y0 + travel() * clamp01(t.visual_position) end
     return full {
       track = ui.Item { x = 0, y = y0, width = W, height = travel },
       background = ui.Item { width = W, height = H,
-        ui.Rect { x = cx - TR / 2, y = y0 - TR / 2, width = TR, height = travel + TR, radius = TR / 2,
+        ui.Rect { x = function() return cx()-TR/2 end, y = y0 - TR / 2, width = TR, height = function() return travel()+TR end, radius = TR / 2,
           color = function() return P().track end } },
-      fill = ui.Rect { x = cx - TR / 2, width = TR, radius = TR / 2, y = function() return hy() - TR / 2 end,
-        height = function() return y0 + travel - hy() + TR end, color = function() return P().accent end },
-      handle = knob(t, K, function() return cx end, hy),
-      value_label = readout { x = 0, width = W, y = H - 20, horizontal_alignment = "center",
+      fill = ui.Rect { x = function() return cx()-TR/2 end, width = TR, radius = TR / 2, y = function() return hy() - TR / 2 end,
+        height = function() return y0 + travel() - hy() + TR end, color = function() return P().accent end },
+      handle = knob(t, K, cx, hy),
+      value_label = readout { x = 0, width = W, y = function() return H()-20 end, horizontal_alignment = "center",
         text = function() return ("%d"):format(math.floor(clamp01(t.position) * 100 + 0.5)) end },
       second_handle = ring(t, R.small),
     }

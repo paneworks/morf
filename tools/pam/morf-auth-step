@@ -11,18 +11,33 @@ PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH
 step=${1:-}
 user=${PAM_USER:-}
-[ -n "$step" ] && [ -n "$user" ] || exit 0
+case "$step" in face|finger|password|ok) ;; *) exit 0 ;; esac
+[ -n "$user" ] || exit 0
 uid=$(id -u "$user" 2>/dev/null) || exit 0
+[ "$uid" != 0 ] || exit 0
+service=${PAM_SERVICE:-}
+parent=${MORF_AUTH_PID:-$PPID}
+# Never open a user-controlled path as root. Re-enter as that user before
+# touching their runtime directory, without invoking another PAM stack.
+if [ "$(id -u)" = 0 ]; then
+    gid=$(id -g "$user" 2>/dev/null) || exit 0
+    setpriv --reuid="$uid" --regid="$gid" --clear-groups --no-new-privs \
+        env -i PATH="$PATH" PAM_USER="$user" PAM_SERVICE="$service" \
+        MORF_AUTH_PID="$parent" "$0" "$step" || :
+    exit 0
+fi
+[ "$(id -u)" = "$uid" ] || exit 0
 dir=/run/user/$uid/morf
 [ -d "$dir" ] || exit 0
 # One line in the person's runtime directory, which their shell watches
 # (lib.authsteps). Written aside and moved into place, so it is never read
 # half written; nothing of theirs is run from here, and nothing waits.
-f=$dir/authstep
+umask 077
+temporary=$(mktemp "$dir/.authstep.XXXXXXXX") || exit 0
+trap 'rm -f -- "$temporary"' EXIT HUP INT TERM
 # The last word is the process doing the asking (pam_exec's parent: sudo
 # itself), so two at once -- a prompt checking sudo in another terminal
 # while this one waits at the reader -- are told apart.
-printf '%s %s %s\n' "$step" "${PAM_SERVICE:-}" "$PPID" > "$f.new" || exit 0
-chown "$uid" "$f.new" 2>/dev/null
-mv -f "$f.new" "$f"
+printf '%s %s %s\n' "$step" "$service" "$parent" > "$temporary" || exit 0
+mv -fT -- "$temporary" "$dir/authstep"
 exit 0

@@ -1,12 +1,13 @@
 -- caelestia's lock screen, in two stages -- a phone's, and a desk's too.
 --
 -- At rest it is a thing to look at: the time, large, the date and the
--- weather under it, whatever is playing as a row with its controls, and a
--- small swell on the frame's bottom edge saying where the way in is. A key,
--- a click or a swipe up and that swell rises into the unlock sheet -- one
+-- weather above it, whatever is playing as a row with its controls, and a
+-- small swell on the frame's bottom edge saying where the way in is. An
+-- upward swipe or drag reveals the unlock sheet -- one
 -- liquid surface with the frame -- carrying the account in its cookie, the
 -- pill for the password and whatever PAM has to say (a face being looked
--- for, a finger). The first key typed is already the password's. Escape on
+-- for, a finger). A physical keyboard can reveal it by typing, keeping the
+-- first character, or with Enter. Escape on
 -- an empty field, or a while with nothing typed, and the sheet sinks back.
 -- On a phone (a screen taller than wide, or no keyboard attached) the sheet
 -- carries the on-screen keyboard. The right password and all of it sinks
@@ -22,6 +23,7 @@
 local morf = require("morf")
 local accounts = require("lib.services.accounts")
 local auth = require("lib.util.auth")
+require("themes.ui_scale").apply()
 
 local HELD = morf.operands[1] ~= "window"
 -- A fingerprint stack to listen on (tools/pam/readers.sh), said in the hint.
@@ -36,8 +38,7 @@ local W = (screen and screen.width) or 1920
 local H = (screen and screen.height) or 1080
 -- Everything in proportion to a 1080p screen.
 -- A phone's design is the upright 1080 x 1920 one.
-local S = math.max(0.75, math.min(2.4, H > W and math.min(W / 1080, H / 1920) or math.min(W / 1920, H / 1080)))
-local function s(n) return math.floor(n * S + 0.5) end
+local s = require("themes.auth_metrics")(W, H, true)
 
 morf.surface.width = W
 morf.surface.height = H
@@ -54,9 +55,11 @@ local visual = require("themes").current
 local C, palette = require("themes.auth_palette")("lock")
 local FONT, ICONS = visual.tokens.auth_font or visual.tokens.font, visual.tokens.icon_font
 local text, icon = require("themes.typography")(visual.tokens, C, s)
-local tool = palette:get()
-local WALLPAPER = tool and tool.wallpaper or ""
-if WALLPAPER ~= "" and not morf.fs.exists(WALLPAPER) then WALLPAPER = "" end
+local function WALLPAPER()
+  local tool=palette:get()
+  local path=morf.env("CAELESTIA_WALLPAPER") or (tool and tool.wallpaper) or ""
+  return path~="" and morf.fs.exists(path) and path or ""
+end
 
 -- ------------------------------------------------------------------ state --
 
@@ -237,9 +240,14 @@ end)
 -- What they share -- the password, the stage, the door -- is above.
 local function pattern(dots)
   if busy:get() then return end
-  if #dots < 4 then say("Connect at least four dots", false) return end
+  local valid, reason = require("lib.util.pattern").validate(dots)
+  if not valid then say(reason, false) return end
   password = table.concat(dots)
   submit()
+end
+local function keyboard_attached()
+  local ok, value = pcall(function() return require("lib.services.keyboards").attached() end)
+  return not ok or value
 end
 local function key(keysym, typed_text)
         local RETURN, KP_ENTER, BACKSPACE, ESCAPE = 0xff0d, 0xff8d, 0xff08, 0xff1b
@@ -247,11 +255,13 @@ local function key(keysym, typed_text)
         if st ~= "rest" and st ~= "sheet" then return end
         if busy:get() then return end
         if keysym == ESCAPE then escape() return end
-        -- Any other key at rest opens the way in. A character is the
-        -- password's first; space, Return and the rest only wake it.
         if st == "rest" then
+          -- Touch-only devices still require the upward reveal gesture.
+          -- Modifiers and wake keys carry no text and leave the clock alone.
+          if not keyboard_attached() then return end
+          if keysym == RETURN or keysym == KP_ENTER then open_sheet() return end
+          if not typed_text or typed_text == "" or typed_text:byte(1) < 32 then return end
           open_sheet()
-          if not (typed_text and typed_text ~= "" and typed_text:byte(1) > 32) then return end
         end
         if keysym == RETURN or keysym == KP_ENTER then
           submit()
@@ -287,10 +297,7 @@ local context = {
   clock = clock,
   day = day,
   me = me,
-  keyboard_attached = function()
-    local ok, value = pcall(function() return require("lib.services.keyboards").attached() end)
-    return not ok or value
-  end,
+  keyboard_attached = keyboard_attached,
   typed = typed,
   shake = shake,
   MAX_DOTS = MAX_DOTS,

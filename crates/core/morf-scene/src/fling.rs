@@ -1,6 +1,44 @@
 use crate::{animation::*, motion::*, types::*};
 
 impl Scene {
+    /// Coasts touch-scroll content with Android's spline deceleration.
+    /// Velocity and bounds use logical pixels. Frame cadence does not change
+    /// the trajectory; a new touch can catch it with `stop_animation`.
+    pub fn fling_scroll(
+        &mut self,
+        node: NodeHandle,
+        property: &str,
+        velocity: f64,
+        bounds: (f64, f64),
+    ) -> Result<(), SceneError> {
+        let slot = self.property(node, property)?;
+        let Value::Number(current) = *self.properties.read(slot.current)? else {
+            return Err(SceneError::Reactive(format!(
+                "property `{property}` is not numeric"
+            )));
+        };
+        let motion =
+            crate::scroll_fling::ScrollFling::new(current, velocity, bounds).ok_or_else(|| {
+                SceneError::Reactive("scroll needs finite velocity and ordered bounds".into())
+            })?;
+        let key = PropertyKey {
+            node: self.live(node)?,
+            property: self
+                .node_ref(node)?
+                .properties
+                .get_key_value(property)
+                .map(|(name, _)| *name)
+                .ok_or(SceneError::StaleNode)?,
+        };
+        if self.animations.remove(&key).is_some() {
+            self.push_event(key, AnimationEnd::Canceled);
+        }
+        self.paused_physics.remove(&key);
+        self.physics.insert(key, PhysicsAnimation::Scroll(motion));
+        self.touch_layout(key.node, property);
+        Ok(())
+    }
+
     /// Sets a numeric property coasting from its current value.
     ///
     /// The counterpart to a behavior. A behavior answers "when this is

@@ -182,3 +182,65 @@ fn anchors_cannot_compete_with_a_positioner_axis() {
 
     assert_eq!(error, LayoutError::AxisConflict { axis: "horizontal" });
 }
+
+#[test]
+fn input_regions_follow_transformed_clips_and_keep_unclipped_overflow() {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    let page = scene.create(Element::Item);
+    let button = scene.create(Element::MouseArea);
+    for node in [root, page, button] {
+        scene.assign(node, "width", 100.0).unwrap();
+        scene.assign(node, "height", 100.0).unwrap();
+    }
+    scene.assign(root, "clip", true).unwrap();
+    scene.assign(page, "clip", true).unwrap();
+    scene.assign(page, "translate_x", 100.0).unwrap();
+    scene.reparent(page, Some(root)).unwrap();
+    scene.reparent(button, Some(page)).unwrap();
+    let layout = Layout::compute(
+        &scene,
+        root,
+        Size {
+            width: 100.0,
+            height: 100.0,
+        },
+        &mut FixedText,
+    )
+    .unwrap();
+
+    assert!(layout.input_geometry(&scene).unwrap().is_empty());
+    scene.assign(page, "translate_x", 75.0).unwrap();
+    assert_eq!(
+        layout.input_geometry(&scene).unwrap(),
+        vec![Geometry {
+            x: 75.0,
+            y: 0.0,
+            width: 25.0,
+            height: 100.0,
+        }]
+    );
+    assert_eq!(
+        layout.hit_test(&scene, 80.0, 50.0).unwrap().unwrap().node,
+        button
+    );
+    assert!(layout.hit_test(&scene, 110.0, 50.0).unwrap().is_none());
+
+    scene.assign(page, "translate_x", 200.0).unwrap();
+    scene.assign(button, "translate_x", -200.0).unwrap();
+    assert!(layout.input_geometry(&scene).unwrap().is_empty());
+    scene.assign(page, "clip", false).unwrap();
+    assert_eq!(
+        layout.input_geometry(&scene).unwrap(),
+        vec![Geometry {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        }]
+    );
+    assert_eq!(
+        layout.hit_test(&scene, 50.0, 50.0).unwrap().unwrap().node,
+        button
+    );
+}

@@ -256,6 +256,8 @@ function networkmanager.connect(options)
             autoconnect = connection.autoconnect ~= false,
             timestamp = connection.timestamp or 0,
             vpn = kind == "vpn" or kind == "wireguard",
+            apn = (settings.gsm or {}).apn or "",
+            auto_apn = (settings.gsm or {})["auto-config"] == true,
           }
         end
       end
@@ -665,6 +667,31 @@ function networkmanager.connect(options)
       function(ok, err)
         schedule()
         done(ok and true or nil, err)
+      end)
+  end
+
+  --- Creates a GSM profile using the provider database, then connects it.
+  --- Only for first setup: callers activate an existing profile thereafter.
+  function net.connect_mobile(done)
+    done = done or nothing
+    for _, row in ipairs(snapshot.known) do
+      if row.type == "gsm" then return net.activate(row.path, done) end
+    end
+    local device
+    for _, row in ipairs(snapshot.devices) do
+      if row.type == "modem" and row.managed then device = row break end
+    end
+    if not device then return nil, "no managed modem" end
+    local settings = {
+      connection = { id = "Mobile data", type = "gsm", autoconnect = true },
+      gsm = { ["auto-config"] = true },
+      ipv4 = { method = "auto" }, ipv6 = { method = "auto" },
+    }
+    return call_manager("AddAndActivateConnection",
+      { typed("a{sa{sv}}", settings), o(device.path), o("/") }, function(reply, err)
+        schedule_known()
+        if type(reply) == "table" and type(reply[2]) == "string" then return done(reply[2]) end
+        done(nil, err or "no active connection")
       end)
   end
 

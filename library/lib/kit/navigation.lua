@@ -26,6 +26,7 @@ function M.make(widget, spec)
   table.sort(names)
   local built = {}
   local area = ui.Item { width = W, height = H, clip = true }
+  local active=morf.signal("kit.navigation.active."..tostring(area),"")
   local full = {}
   for k, v in pairs(spec) do full[k] = v end
   full.widget = widget
@@ -37,9 +38,14 @@ function M.make(widget, spec)
       local b = builders[name]
       local node = type(b) == "function" and b() or b
       if not node then return nil end
-      node.visible = false
-      ui.reparent(node, area)
-      built[name] = node
+      -- Outgoing pages still draw during their transition, but must stop
+      -- accepting clicks and focus immediately. Keep this gate on a wrapper
+      -- so the page's own enabled binding remains intact when it returns.
+      local layer=ui.Item {width=W or function() return node.layout_width end,
+        height=H or function() return node.layout_height end,visible=false,
+        enabled=function() return active:get()==name end,node}
+      ui.reparent(layer, area)
+      built[name] = layer
     end
     return built[name]
   end
@@ -48,6 +54,7 @@ function M.make(widget, spec)
     if not next_node or next_node == shown then return end
     local from = shown
     shown = next_node
+    active:set(name)
     next_node.visible = true
     local transition = ctl and ctl.builders().transition
     if transition then

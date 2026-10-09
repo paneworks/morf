@@ -51,6 +51,11 @@ pub(super) fn run_with_fake(name: &str, body: &str) -> String {
             return text;
         }
         runtime.poll_services();
+        // Real bus timeouts run on wall time. Do not race the fixture's
+        // virtual timers past a pending reply before that timeout can elapse.
+        if std::env::var_os(PRIVATE_BUS).is_some() {
+            thread::sleep(Duration::from_millis(1));
+        }
         runtime.advance_virtual_clock(Duration::from_millis(1));
     }
 }

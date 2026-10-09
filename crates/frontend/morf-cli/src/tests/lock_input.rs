@@ -182,6 +182,7 @@ fn a_tap_on_a_lock_surface_is_a_click() {
             id: 3,
             x: 30.0,
             y: 30.0,
+            time_ms: None,
         },
     );
     send(
@@ -194,6 +195,7 @@ fn a_tap_on_a_lock_surface_is_a_click() {
             id: 3,
             x: 30.0,
             y: 30.0,
+            time_ms: None,
         },
     );
     assert_eq!(count(&mut runtime, "clicks"), IpcValue::Integer(1));

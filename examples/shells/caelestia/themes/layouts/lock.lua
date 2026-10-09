@@ -13,7 +13,6 @@ local main_output = ctx.main_output
 local text = ctx.text
 local icon = ctx.icon
 local C = ctx.C
-local WALLPAPER = ctx.WALLPAPER
 local stage = ctx.stage
 local pull = ctx.pull
 local busy = ctx.busy
@@ -53,14 +52,12 @@ return function(W, H, NAME)
   local geometry=require("themes.auth_layout")(W,H,s)
   local BORDER = geometry.border
   local ROUND = geometry.round
-  local PORTRAIT = H > W
   local SHORT = geometry.short
   -- The on-screen keyboard: on a phone, or wherever no keyboard is attached.
-  local ONSCREEN = PORTRAIT or not ctx.keyboard_attached()
 
   local SW = geometry.sheet_width
-  local AV = geometry.avatar
-  local FIELD_W, FIELD_H = geometry.field_width, geometry.field_height
+  local AV = s(52)
+  local FIELD_W, FIELD_H = SW-s(48), geometry.field_height
 
   local PAD_W = math.min(s(300), SW - s(48),math.max(s(96),H-2*BORDER-s(80)))
   local pad = osk.new {
@@ -72,39 +69,33 @@ return function(W, H, NAME)
   }
   local function entry_h() return method:get() == "pattern" and pad.height() or FIELD_H end
   local function chip_h() return has_pattern() and s(44) or 0 end
-  local kb
-  if ONSCREEN then
-    kb = osk.new {
-      action = skin.action,
-      prefix = "lock.osk." .. NAME, width = SW - s(24), mode = "full", numbers = true,
-      metrics = {gap=s(5), key_height=s(54), alternate_cell=s(48)},
-      active = function() return main() and stage:get() == "sheet" and method:get() == "password" and not busy:get() end,
-      look = (skin.keyboard_look or function(v) return v end) {
-        panel = function() return C.surfaceContainer end,
-        key = function() return C.surfaceContainerHighest end,
-        key_dim = function() return C.surfaceContainerHigh end,
-        accent = function() return C.primary end,
-        on_accent = function() return C.onPrimary end,
-        text = function() return C.onSurface end,
-        dim = function() return C.onSurfaceVariant end,
-        press = function() return C.secondaryContainer end,
-        font = FONT, icons = ICONS, radius = skin.key_radius,
-      },
-      send = function(event)
-        if event.text then type_text(event.text)
-        elseif event.key == "backspace" then backspace()
-        elseif event.key == "enter" then submit()
-        elseif event.key == "escape" then escape() end
-      end,
-    }
+  local function dismiss()
+    if not main() or busy:get() or stage:get()~="sheet" then return end
+    clear()
+    escape()
   end
-  local function kb_h() return (kb and method:get() == "password") and (kb.height() + s(16)) or 0 end
-  -- The sheet: the account, the pill, a line for what PAM says; the keyboard
-  -- under them on a phone.
-  local function content_h()
-    return s(28) + AV + s(12) + s(30) + s(20) + entry_h() + s(10) + s(24) + chip_h() + s(24) + kb_h()
-  end
-  local function sheet_h() return math.min(content_h(), math.max(1,H-2*BORDER-s(16))) end
+  local kb=require("themes.auth_keyboard").new {
+    prefix="lock",output=NAME,width=W,height=H,border=BORDER,embedded_width=FIELD_W,
+    main=main,keyboard_attached=ctx.keyboard_attached,busy=busy,stage=stage,method=method,pull=pull,
+    claim=function() main_output:set(NAME) end,open_sheet=open_sheet,clear=clear,escape=escape,action=skin.action,
+    on_hide=dismiss,
+    look=(skin.keyboard_look or function(v) return v end) {
+      panel=function() return C.surfaceContainer end,
+      key=function() return C.surfaceContainerHighest end,key_dim=function() return C.surfaceContainerHigh end,
+      accent=function() return C.primary end,on_accent=function() return C.onPrimary end,
+      text=function() return C.onSurface end,dim=function() return C.onSurfaceVariant end,
+      press=function() return C.secondaryContainer end,font=FONT,icons=ICONS,radius=skin.key_radius,
+    },
+    send=function(event)
+      if event.text then type_text(event.text)
+      elseif event.key=="backspace" then backspace()
+      elseif event.key=="enter" then submit()
+      elseif event.key=="escape" then escape() end
+    end,
+  }
+  local content_height=kb.content_height
+  local form
+  local function sheet_h() return form and form.height() or 1 end
 
   -- The swell's height as it stands: a bud at rest, the sheet up, a swipe
   -- in between.
@@ -138,7 +129,7 @@ return function(W, H, NAME)
   local frame = ui.Sdf {
     anchors = { fill = true },
     ui.SdfShape {
-      shape = "box", x = 0, y = 0, width = W, height = H,
+      shape = "box", x = 0, y = 0, width = W, height = content_height,
       fill_color = function() return C.surface end,
     },
     -- The opening in the frame: shut while the lock comes in and goes.
@@ -147,7 +138,7 @@ return function(W, H, NAME)
       x = function() return stage:get() == "closed" and 0 or BORDER end,
       y = function() return stage:get() == "closed" and 0 or BORDER end,
       width = function() return stage:get() == "closed" and W or W - 2 * BORDER end,
-      height = function() return stage:get() == "closed" and H or H - 2 * BORDER end,
+      height = function() return stage:get() == "closed" and content_height() or content_height() - 2 * BORDER end,
       behavior = { x = SETTLE, y = SETTLE, width = SETTLE, height = SETTLE },
     },
   }
@@ -155,10 +146,11 @@ return function(W, H, NAME)
   -- The swell has a field of its own, in a band along the bottom edge: the
   -- frame above stays still, and a swell growing redraws the band alone,
   -- not the whole screen every frame (a 4K screen of field was the lag).
-  local function band_h() return math.min(H, sheet_h() + s(90)) end
+  local function band_h() return math.min(content_height(), sheet_h() + s(90)) end
   local band = ui.Item {
+    visible=function() return stage:get()=="rest" end,
     x = 0, width = W,
-    y = function() return H - band_h() end,
+    y = function() return content_height() - band_h() end,
     height = band_h,
     ui.Sdf {
       anchors = { fill = true },
@@ -184,22 +176,7 @@ return function(W, H, NAME)
     },
   }
 
-  -- The desk under it: the wallpaper, blurred and dimmed.
-  local backdrop = skin.backdrop and skin.backdrop(W,H,s,"lock") or ui.Item {
-    anchors = { fill = true },
-    opacity = function() return (stage:get() == "rest" or stage:get() == "sheet") and 1 or 0 end,
-    behavior = { opacity = { duration = 420, easing = "out_cubic" } },
-    ui.Rect { anchors = { fill = true }, color = function() return C.surface end },
-    WALLPAPER ~= "" and ui.Image {
-      anchors = { fill = true }, fill_mode = "preserve_aspect_crop", source = WALLPAPER,
-    } or ui.Item {},
-    ui.Rect {
-      anchors = { fill = true }, backdrop_blur = s(28),
-      -- One tint, whatever the stage: a tint that changed with the sheet
-      -- repainted every screen, blur and all.
-      color = function() return C.surface:alpha(skin.wallpaper_tint or 0.4) end,
-    },
-  }
+  local backdrop=require("themes.auth_backdrop")(ctx,s,"lock")
 
   -- ------------------------------------------------------------ at rest --
 
@@ -209,18 +186,19 @@ return function(W, H, NAME)
   end
   local function resting() return stage:get() == "rest" or stage:get() == "sheet" end
 
-  -- The weather, beside the date, where it can be had.
-  local weather = {}
+  -- A compact row above the clock, centered independently from the date.
+  local weather
   do
     if desktop.weather_available() then
       local now_w = desktop.weather
-      weather = {
+      weather = ui.Row {
+        id="lock-weather",gap=s(8),align="center",
+        visible=function() return now_w().temperature~=nil end,
         icon(desktop.weather_symbol, s(26),
-          function() return C.onSurfaceVariant end,
-          { visible = function() return now_w().temperature ~= nil end }),
+          function() return C.onSurfaceVariant end),
         text {
+          id="lock-weather-temperature",
           font_size = s(22), color = function() return C.onSurfaceVariant end,
-          visible = function() return now_w().temperature ~= nil end,
           text = function()
             local n = now_w()
             return n.temperature and ("%d°"):format(math.floor(n.temperature + 0.5)) or ""
@@ -296,29 +274,27 @@ return function(W, H, NAME)
   local CLOCK_Y = geometry.clock_y
   local glance = ui.Column {
     id = "lock-glance",
+    visible=function() return not main() or stage:get()~="sheet" end,
     width = math.max(1,W-s(64)),
     anchors = { horizontal_center = true }, gap = s(6), align = "center",
     y = function()
       if stage:get() == "sheet" and main() then
-        return math.max(s(40), math.floor((H - BORDER - sheet_h()) / 2 - geometry.clock_sheet_offset))
+        return math.max(s(40), math.floor((content_height() - BORDER - sheet_h()) / 2 - geometry.clock_sheet_offset))
       end
       return CLOCK_Y
     end,
     scale = function() return (stage:get() == "sheet" and main()) and 0.72 or 1 end,
     opacity = function()
-      return resting() and (not main() or stage:get() ~= "sheet" or H - sheet_h() > s(220)) and 1 or 0
+      return resting() and (not main() or stage:get() ~= "sheet" or content_height() - sheet_h() > s(220)) and 1 or 0
     end,
     behavior = { y = GROW, scale = GROW, opacity = { duration = 320 } },
+    weather or ui.Item {visible=false},
     (skin.clock or text) {
       id = "lock-clock", text = function() return clock:get() end,
       font_size = geometry.clock_size, font_weight = skin.clock_weight or 600, color = C.primary,
     },
-    ui.Row((function()
-      local row = { gap = s(10), align = "center",
-        text { text = function() return day:get() end, width=math.max(1,W-s(160)),elide="right",horizontal_alignment="center",font_size = s(22), color = C.onSurfaceVariant } }
-      for _, node in ipairs(weather) do row[#row + 1] = node end
-      return row
-    end)()),
+    text {id="lock-date",text=function() return day:get() end,width=math.max(1,W-s(64)),
+      elide="right",horizontal_alignment="center",font_size=s(22),color=C.onSurfaceVariant},
     ui.Item { width = 1, height = s(34) },
     media_row or ui.Item { width = 1, height = 1 },
   }
@@ -326,7 +302,7 @@ return function(W, H, NAME)
   -- Where the way in is: a chevron bobbing over the bud, and what to do.
   local hint = ui.Column {
     anchors = { horizontal_center = true },
-    y = H - BORDER - BUD_H - s(74), gap = s(2), align = "center",
+    y = function() return content_height() - BORDER - BUD_H - s(74) end, gap = s(2), align = "center",
     opacity = function() return (not SHORT and main() and stage:get() == "rest" and pull:get() < 0.1) and 1 or 0 end,
     behavior = { opacity = { duration = 260 } },
     icon("keyboard_arrow_up", s(30), function() return C.onSurfaceVariant end, {
@@ -338,7 +314,7 @@ return function(W, H, NAME)
     }),
     text {
       text = (FINGER and "Touch the sensor, or " or "")
-        .. (ONSCREEN and (FINGER and "swipe up" or "Swipe up") or (FINGER and "type" or "Type or click"))
+        .. (FINGER and "swipe up" or "Swipe up")
         .. " to unlock",
       font_size = s(14), color = function() return C.onSurfaceVariant end,
     },
@@ -363,138 +339,110 @@ return function(W, H, NAME)
       anchors = { fill = true }, fill_mode = "preserve_aspect_crop", source = me.face,
       mask = ui.Path { anchors = { fill = true }, view_box = { 0, 0, 100, 100 }, d = cookie, fill_color = "#ffffff" },
     } or text {
-      anchors = { center_in = true }, text = me.initial or "?", font_size = s(42), font_weight = 600,
+      anchors = { center_in = true }, text = me.initial or "?", font_size = s(22), font_weight = 600,
       color = C.onPrimaryContainer,
     },
   }
 
-  -- The password: a pill, a dot for each character, each popping in.
-  local DOT = math.min(s(12), math.max(1, math.floor((FIELD_W-s(120))/MAX_DOTS*.65)))
-  local dots = {}
-  for i = 1, MAX_DOTS do
-    dots[i] = ui.Rect {
-      width = DOT, height = DOT, radius = DOT / 2,
-      color = function() return C.primary end,
-      visible = function() return typed:get() >= i end,
-      scale = function() return typed:get() >= i and 1 or 0 end,
-      behavior = { scale = { duration = 260, easing = "out_back" } },
-    }
-  end
-  local field = ui.Item {
-    id = "lock-field",
-    width = FIELD_W, height = FIELD_H,
-    translate_x = function() return shake:get() == 1 and s(12) or 0 end,
-    behavior = { translate_x = ui.spring { stiffness = 900, damping = 9 } },
-    ui.Rect {
-      id = "lock-field-surface", anchors = { fill = true }, radius = FIELD_H / 2,
-      color = function() return C.surfaceContainerHighest end,
-      border_width = function() return bad:get() and s(2) or 0 end,
-      border_color = function() return C.error end,
-    },
-    icon(function() return busy:get() and "hourglass" or "lock" end, s(22), C.onSurfaceVariant,
-      { x = s(20), anchors = { vertical_center = true } }),
-    text {
-      anchors = { vertical_center = true }, x = s(56),
-      text = "Password", color = C.onSurfaceVariant, font_size = s(16),
-      visible = function() return typed:get() == 0 end,
-    },
-    ui.Row { x = s(56), anchors = { vertical_center = true }, gap = DOT*.45, table.unpack(dots) },
-    ui.MouseArea {
-      id = "lock-submit",
-      anchors = { right = true, right_margin = s(7), vertical_center = true },
-      width = FIELD_H - s(14), height = FIELD_H - s(14), cursor = "pointer",
-      on_clicked = submit,
-      ui.Rect {
-        id = "lock-submit-surface", anchors = { fill = true }, radius = (FIELD_H - s(14)) / 2,
-        color = function() return typed:get() > 0 and C.primary or C.surfaceContainerHigh end,
-        behavior = { color = { duration = 200 } },
+  local field=require("themes.auth_form").password {
+    prefix="lock",ui=ui,s=s,C=C,width=FIELD_W,height=FIELD_H,text=text,icon=icon,
+    typed=typed,shake=shake,bad=bad,busy=busy,max_dots=MAX_DOTS,
+    submit=submit,focus=function() kb.show() end,
+  }
+
+  form=require("themes.auth_form").sheet {
+    prefix="lock",output=NAME,ui=ui,s=s,C=C,skin=skin,width=SW,screen_width=W,
+    border=BORDER,top=BORDER+s(12),footer=0,keyboard=kb,
+    text=text,heading=ctx.heading,avatar=avatar,name=me.label ~= "" and me.label or me.name,
+    active=function() return main() and stage:get()=="sheet" end,
+    visible=function() return main() and (stage:get()=="sheet" or stage:get()=="opening") end,
+    entry_height=entry_h,
+    entry=ui.Item {width=FIELD_W,height=entry_h,
+      ui.Item {anchors={horizontal_center=true},width=FIELD_W,height=FIELD_H,
+        visible=function() return method:get()=="password" end,field},
+      ui.Item {anchors={horizontal_center=true},width=PAD_W,height=pad.height,
+        visible=function() return method:get()=="pattern" end,pad.node}},
+    message=text {id="lock-message",width=FIELD_W,height=s(24),elide="right",font_size=s(14),
+      text=function()
+        local value=message:get()
+        return busy:get() and value=="" and "Checking password…" or value
+      end,
+      color=function() return bad:get() and C.error or C.onSurfaceVariant end},
+    method_height=chip_h,
+    method=ui.Item {
+        width = FIELD_W, height = chip_h, visible = has_pattern,
+        (function()
+          local area
+          area = ui.MouseArea {
+            id = "lock-method", anchors = { horizontal_center = true, bottom = true },
+            width = s(180), height = s(36), cursor = "pointer",
+            on_clicked = function()
+              method:set(method:get() == "pattern" and "password" or "pattern")
+              clear()
+              say("")
+            end,
+            ui.Rect {
+              id = "lock-method-surface", anchors = { fill = true }, radius = s(18),
+              color = function() return (area and area.hovered) and C.surfaceContainerHighest or C.surfaceContainerHigh end,
+            },
+            ui.Row {
+              anchors = { center_in = true }, gap = s(6), align = "center",
+              icon(function() return method:get() == "pattern" and "password" or "pattern" end, s(18), C.onSurfaceVariant),
+              text { font_size = s(14), color = C.onSurfaceVariant,
+                text = function() return method:get() == "pattern" and "Use password" or "Use pattern" end },
+            },
+          }
+          return area
+        end)(),
       },
-      icon("arrow_forward", s(22), function() return typed:get() > 0 and C.onPrimary or C.onSurfaceVariant end,
-        { anchors = { center_in = true } }),
-    },
   }
-
-  local sheet_nodes = {
-    x = s(12), y = s(28), width = SW - s(24), gap = 0, align = "center",
-    avatar,
-    ui.Item { width = 1, height = s(12) },
-    (ctx.heading or text) { id="lock-name", width=SW-s(48),elide="right",horizontal_alignment="center",active=function() return main() and stage:get()=="sheet" end, text = me.label ~= "" and me.label or me.name, font_size = s(20), font_weight = 600, height = s(30) },
-    ui.Item { width = 1, height = s(20) },
-    ui.Item {
-      width = SW - s(24), height = entry_h,
-      ui.Item { anchors = { horizontal_center = true }, width = FIELD_W, height = FIELD_H,
-        visible = function() return method:get() == "password" end, field },
-      ui.Item { anchors = { horizontal_center = true }, width = PAD_W, height = pad.height,
-        visible = function() return method:get() == "pattern" end, pad.node },
-    },
-    ui.Item { width = 1, height = s(10) },
-    text {
-      id = "lock-message", height = s(24), width = SW - s(48), horizontal_alignment = "center", elide = "right",
-      text = function() return message:get() end, font_size = s(15),
-      color = function() return bad:get() and C.error or C.onSurfaceVariant end,
-    },
-    ui.Item {
-      width = SW - s(24), height = chip_h, visible = has_pattern,
-      (function()
-        local area
-        area = ui.MouseArea {
-          id = "lock-method", anchors = { horizontal_center = true, bottom = true },
-          width = s(180), height = s(36), cursor = "pointer",
-          on_clicked = function()
-            method:set(method:get() == "pattern" and "password" or "pattern")
-            clear()
-            say("")
-          end,
-          ui.Rect {
-            id = "lock-method-surface", anchors = { fill = true }, radius = s(18),
-            color = function() return (area and area.hovered) and C.surfaceContainerHighest or C.surfaceContainerHigh end,
-          },
-          ui.Row {
-            anchors = { center_in = true }, gap = s(6), align = "center",
-            icon(function() return method:get() == "pattern" and "password" or "pattern" end, s(18), C.onSurfaceVariant),
-            text { font_size = s(14), color = C.onSurfaceVariant,
-              text = function() return method:get() == "pattern" and "Use password" or "Use pattern" end },
-          },
-        }
-        return area
-      end)(),
-    },
-    ui.Item { width = 1, height = s(24) },
-  }
-  if kb then
-    sheet_nodes[#sheet_nodes + 1] = ui.Item {
-      width = SW - s(24),
-      height = function() return method:get() == "password" and kb.height() or 0 end,
-      visible = function() return method:get() == "password" end,
-      kb.node,
-    }
-  end
-  local viewport_node, viewport, viewport_t, viewport_ctl = require("lib.kit.scroll").make("scroll_view", {id="lock-sheet-scroll",width=SW,height=sheet_h,clip=true,
-    ui.Column(sheet_nodes)})
-  morf.effect("lock.sheet-scroll."..NAME,function()
-    local st=stage:get()
-    if st~="sheet" then viewport.content_y=0 return end
-    local entry_bottom=s(28)+AV+s(12)+s(30)+s(20)+entry_h()+s(10)+s(24)
-    local entry_top=s(28)+AV+s(12)+s(30)+s(20)
-    viewport.content_y=math.min(entry_top,math.max(0,entry_bottom-sheet_h()+s(12)))
-  end,{owner=viewport})
-  local sheet = ui.Item {
-    id = "lock-sheet",
-    x = math.floor((W - SW) / 2), width = SW,
-    y = function() return H - BORDER - sheet_h() end,
-    height = sheet_h,
-    opacity = function() return stage:get() == "sheet" and 1 or 0 end,
-    translate_y = function() return stage:get() == "sheet" and 0 or s(60) end,
-    behavior = skin.sheet_motion or { opacity = { duration = 260, delay = 120 },
-      translate_y = GROW },
-    visible = function() return main() and (stage:get() == "sheet" or stage:get() == "opening") end,
-    viewport_node,
-  }
-
-  if skin.sheet then skin.sheet(sheet, {role="lock", width=SW, scale=s,
-    active=function() return main() and stage:get()=="sheet" end}) end
+  local sheet=form.node
 
   -- ------------------------------------------------------------ the screen --
+
+  -- Touch uses the shared recognizer. Mouse drags and touchpad scrolling
+  -- offer the same deliberate reveal on a laptop without a touchscreen.
+  local pointer_from_rest=false
+  local scroll_distance,scroll_time=0,0
+  local function contains(node,x,y)
+    return x>=node.layout_x and x<node.layout_x+node.layout_width
+      and y>=node.layout_y and y<node.layout_y+node.layout_height
+  end
+  local reveal=kb.surface {
+    id="lock-open",anchors={fill=true},z=-1,on_key_pressed=key,
+    on_clicked=function(x,y,_,_,button)
+      if button and button~="left" then return end
+      if stage:get()=="sheet" and not contains(sheet,x,y)
+        and not (kb.active() and contains(kb.node,x,y)) then dismiss() end
+    end,
+    on_pressed=function(_,_,_,_,button)
+      pointer_from_rest=button=="left" and stage:get()=="rest" and not busy:get()
+      if pointer_from_rest then main_output:set(NAME) end
+    end,
+    on_drag_finished=function(_,_,dx,dy)
+      if pointer_from_rest and not busy:get() and dy < -48 and -dy > math.abs(dx)*1.2 then open_sheet() end
+      pointer_from_rest=false
+      pull:set(0)
+    end,
+    on_wheel=function(_,_,px,py,sx,sy)
+      if stage:get()~="rest" or busy:get() then scroll_distance=0 return end
+      px,py=px or 0,py or 0
+      if py==0 then px,py=(sx or 0)*40,(sy or 0)*40 end
+      if py>=0 or math.abs(py)<=math.abs(px)*1.2 then scroll_distance=0 return end
+      local now=morf.time.now_ms()
+      if now-scroll_time>400 then scroll_distance=0 end
+      scroll_time=now
+      scroll_distance=scroll_distance-py
+      if scroll_distance>=48 then
+        scroll_distance=0 main_output:set(NAME) open_sheet()
+      end
+    end,
+  }
+  reveal.on_dragged=function(_,_,dx,dy)
+    if pointer_from_rest and stage:get()=="rest" then
+      pull:set(math.abs(dy)>math.abs(dx)*1.2 and math.min(1,math.max(0,-dy)/360) or 0)
+    end
+  end
 
   -- Opaque from the first frame: a lock that let the desk show through for
   -- a moment would not be a lock, and morf will not hold one that could.
@@ -502,31 +450,16 @@ return function(W, H, NAME)
     anchors = { fill = true },
     clip=true,
     color = C.surface:alpha(1),
-    backdrop,
-    skin.chrome and skin.chrome(W, H, s, "lock") or ui.Item {},
-    frame,
-    band,
-    glance,
-    hint,
-    sheet,
-    -- Under everything that can be clicked: a click or a swipe up opens the
-    -- sheet, and the keys go where they belong.
-    ui.MouseArea {
-      id = "lock-open",
-      anchors = { fill = true }, z = -1,
-      on_clicked = function() main_output:set(NAME) open_sheet() end,
-      on_dragged = function(_, _, _, dy)
-        main_output:set(NAME)
-        if stage:get() ~= "rest" then return end
-        pull:set(math.max(0, math.min(1, -dy / s(360))))
-      end,
-      on_drag_finished = function()
-        if stage:get() ~= "rest" then return end
-        if pull:get() > 0.3 then open_sheet() else pull:set(0) end
-      end,
-      on_key_pressed = key,
+    kb.content {
+      backdrop,
+      skin.chrome and skin.chrome(W, H, s, "lock") or ui.Item {},
+      frame,band,glance,hint,sheet,
     },
+    not kb.embedded and kb.node or ui.Item {}, kb.edge,
+    reveal,
   }
+  require("themes.phone_wake").attach(root,{prefix="lock",output=NAME,width=W,height=H,
+    rest=function() clear() if stage:get()=="sheet" then escape() end pull:set(0) end})
 
   -- contains_pointer includes the password field, keyboard and other children;
   -- hovering a child must not be mistaken for leaving this monitor.

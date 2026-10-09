@@ -135,7 +135,21 @@ impl Layout {
             self.implicit.insert(node, size);
             return Ok(size);
         }
-        if scene.element(node)? == Element::Text {
+        let element = scene.element(node)?;
+        if matches!(element, Element::Text | Element::TextInput) {
+            let reflows = positive(scene.number(node, "width")?).is_none()
+                && if element == Element::TextInput {
+                    scene.bool_value(node, "multiline")? && scene.bool_value(node, "wrap")?
+                } else {
+                    scene.bool_value(node, "wrap")? || scene.string_value(node, "elide")? != "none"
+                };
+            if reflows {
+                self.reflow_text.insert(node);
+            } else {
+                self.reflow_text.remove(&node);
+            }
+        }
+        if element == Element::Text {
             let wrap = scene.bool_value(node, "wrap")?;
             if !wrap && scene.number(node, "max_lines")? > 0.0 {
                 return Err(LayoutError::Scene(
@@ -149,7 +163,7 @@ impl Layout {
                 ));
             }
         }
-        let size = match scene.element(node)? {
+        let size = match element {
             Element::Text => text.measure(
                 node,
                 scene.string_value(node, "text")?,

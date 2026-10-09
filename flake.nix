@@ -17,7 +17,7 @@
   };
 
   outputs =
-    { nixpkgs, flake-utils, nixgl, rust-overlay, ... }:
+    { self, nixpkgs, flake-utils, nixgl, rust-overlay, ... }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -128,6 +128,32 @@
           rustc = pkgs.rust-bin.stable.latest.minimal;
         };
 
+        morfKeyring = pkgs.stdenv.mkDerivation {
+          pname = "morf-keyring";
+          version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
+          src = ./tools/keyring;
+          nativeBuildInputs = [ pkgs.pkg-config ];
+          buildInputs = with pkgs; [ gcr_4 glib json-glib ];
+          strictDeps = true;
+          buildPhase = ''
+            runHook preBuild
+            $CC -std=gnu11 -O2 -Wall -Wextra -Werror morf-keyring.c \
+              $(pkg-config --cflags --libs gcr-4 gio-unix-2.0 json-glib-1.0) \
+              -o morf-keyring
+            runHook postBuild
+          '';
+          installPhase = ''
+            runHook preInstall
+            install -Dm755 morf-keyring "$out/bin/morf-keyring"
+            runHook postInstall
+          '';
+          meta = {
+            description = "Morf dialog bridge for GNOME Keyring";
+            license = pkgs.lib.licenses.mit;
+            platforms = pkgs.lib.platforms.linux;
+          };
+        };
+
         # `nix build` -- the `morf` binary, and the Lua library it ships with
         # under share/morf/library, where morf finds it through XDG_DATA_DIRS
         # (a NixOS system profile and a user profile both put their share/
@@ -159,7 +185,9 @@
               --replace-fail '~/.local/share/morf/library' "$library/share/morf/library"
             $out/bin/morf types $library/share/morf/library/types
             ln -s $library/share/morf/library $out/share/morf/library
+            ln -s ${morfKeyring}/bin/morf-keyring $out/bin/morf-keyring
             wrapProgram $out/bin/morf \
+              --set-default MORF_KEYRING_HELPER $out/bin/morf-keyring \
               --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeLibs} \
               --suffix XDG_DATA_DIRS : $out/share
           '';
@@ -265,10 +293,14 @@
           default = morf;
           inherit morf;
           morf-library = morf.library;
+          morf-keyring = morfKeyring;
         };
         apps.default = flake-utils.lib.mkApp { drv = morf; };
         apps.morf = flake-utils.lib.mkApp { drv = morf; };
         checks.morf = morf;
       } else {})
-    );
+    ) // {
+      nixosModules.default = import ./nix/nixos { flake = self; };
+      nixosModules.morf = self.nixosModules.default;
+    };
 }

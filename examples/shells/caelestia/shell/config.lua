@@ -13,7 +13,7 @@ end
 
 local path = (morf.env and morf.env("CAELESTIA_SETTINGS")) or morf.state_path("caelestia.json")
 
-return settings.open {
+local config = settings.open {
   path = path,
   defaults = {
     theme = {
@@ -62,7 +62,7 @@ return settings.open {
     panels = {
       right = { "settings", "notifications" },
       left = { "tasks", "calendar" },
-      top = { "settings", "notifications", "tasks", "calendar", "assistant", "drop" },
+      top = { "notifications", "tasks", "calendar", "assistant", "drop", "settings" },
     },
     leftbar = {
       -- Opens when the pointer reaches the left edge above the rail.
@@ -75,6 +75,9 @@ return settings.open {
     lule = {
       -- Empty follows LULE_W, then the current wallpaper's directory.
       folder = "",
+      source = "files",
+      logo = "",
+      logo_size = 40,
     },
     capture = {
       -- Where screenshots and recordings go, both.
@@ -110,8 +113,8 @@ return settings.open {
     },
     -- The bar along an edge (bar.lua) -- not `bar`, the reference's settings.
     edgebar = {
-      -- "on", "off", or "auto": up on a narrow screen (a phone), down on a
-      -- desk. The quick settings' Bar tile sets it.
+      -- "on", "off", or "auto": up on narrow or portrait screens (a phone),
+      -- down on a wide desk. The quick settings' Bar tile sets it.
       enabled = "auto",
       -- top, bottom, left or right.
       side = "top",
@@ -158,3 +161,4 @@ return settings.open {
     },
   },
 }
+return require("themes.ui_scale").link(config)

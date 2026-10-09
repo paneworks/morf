@@ -38,6 +38,19 @@ pub(crate) fn dbus_value_to_lua(
             }
             LuaValue::Table(table)
         }
+        DbusValue::Dictionary(values) => {
+            let table = Table::new(&ctx);
+            for (key, value) in values {
+                table
+                    .set(
+                        ctx,
+                        dbus_value_to_lua(ctx, key)?,
+                        dbus_value_to_lua(ctx, value)?,
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+            LuaValue::Table(table)
+        }
         DbusValue::Typed { signature, value } => {
             let table = Table::new(&ctx);
             table.set_field(ctx, "signature", signature.as_str());
@@ -105,9 +118,34 @@ pub(crate) fn lua_to_dbus<'gc>(
         LuaValue::Table(table) => {
             if let LuaValue::String(signature) = table.get_value(ctx, "signature") {
                 let value = table.get_value(ctx, "value");
+                // A numeric-keyed dictionary can be sparse; it is not a Lua
+                // sequence. Its explicit wire signature disambiguates it.
+                let decoded = if signature.as_bytes().starts_with(b"a{") {
+                    if let LuaValue::Table(entries) = value {
+                        let entries = entries.iter(ctx).collect::<Vec<_>>();
+                        if entries.len() > 256 {
+                            return Err("D-Bus table exceeds 256 entries".to_owned());
+                        }
+                        DbusValue::Dictionary(
+                            entries
+                                .into_iter()
+                                .map(|(key, value)| {
+                                    Ok((
+                                        lua_to_dbus(ctx, key, depth + 1)?,
+                                        lua_to_dbus(ctx, value, depth + 1)?,
+                                    ))
+                                })
+                                .collect::<Result<Vec<_>, String>>()?,
+                        )
+                    } else {
+                        lua_to_dbus(ctx, value, depth + 1)?
+                    }
+                } else {
+                    lua_to_dbus(ctx, value, depth + 1)?
+                };
                 return Ok(DbusValue::Typed {
                     signature: signature.display_lossy().to_string(),
-                    value: Box::new(lua_to_dbus(ctx, value, depth + 1)?),
+                    value: Box::new(decoded),
                 });
             }
             let entries = table.iter(ctx).collect::<Vec<_>>();

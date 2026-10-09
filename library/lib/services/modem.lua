@@ -59,11 +59,12 @@ function modem.connect(options)
   local state = morf.state {
     available = false, signal = 0, technology = "", operator = "",
     registered = false, connected = false, enabled = false, locked = false,
-    data = false, path = "",
+    data = false, path = "", sim_present = false, roaming = false,
   }
   local mobile = { state = state }
   local objects = {}
   local watching = {}
+  local legacy_dictionary = false
 
   local function publish()
     local chosen
@@ -72,6 +73,9 @@ function modem.connect(options)
     end
     if not chosen then
       state.available = false
+      state.path = ""
+      state.sim_present = false
+      state.roaming = false
       return
     end
     local m = objects[chosen][MODEM] or {}
@@ -86,6 +90,8 @@ function modem.connect(options)
     state.enabled = s >= ENABLED
     state.registered = s >= REGISTERED
     state.connected = s == CONNECTED
+    state.sim_present = type(m.Sim) == "string" and m.Sim ~= "/" and m.Sim ~= ""
+    state.roaming = tonumber(gpp.RegistrationState) == 5
   end
 
   local function watch(path)
@@ -105,7 +111,27 @@ function modem.connect(options)
       publish()
       return
     end
-    local tree = client.call1(MM, ROOT, OBJECT_MANAGER, "GetManagedObjects")
+    local tree, err = client.call1(MM, ROOT, OBJECT_MANAGER, "GetManagedObjects")
+    legacy_dictionary = tree == nil and tostring(err):find("dictionary keys must be strings", 1, true) ~= nil
+    if legacy_dictionary then
+      -- Cached engines before numeric D-Bus dictionary support cannot decode
+      -- UnlockRetries (a{uu}), so the entire ObjectManager reply fails. Read
+      -- only this service's properties until those engines are upgraded.
+      tree = {}
+      local folder = ROOT .. "/Modem"
+      local xml = client.call1(MM, folder, "org.freedesktop.DBus.Introspectable", "Introspect")
+      for id in (type(xml) == "string" and xml or ""):gmatch([[<node%s+name=["'](%d+)["']%s*/>]]) do
+        local path = folder .. "/" .. id
+        local m, gpp = {}, {}
+        for _, property in ipairs {"State", "Sim", "SignalQuality", "AccessTechnologies"} do
+          m[property] = client.get(MM, path, MODEM, property)
+        end
+        for _, property in ipairs {"OperatorName", "RegistrationState"} do
+          gpp[property] = client.get(MM, path, GPP, property)
+        end
+        if m.State ~= nil then tree[path] = {[MODEM] = m, [GPP] = gpp} end
+      end
+    end
     for path, interfaces in pairs(type(tree) == "table" and tree or {}) do
       if type(interfaces) == "table" and interfaces[MODEM] then
         objects[path] = interfaces
@@ -129,6 +155,7 @@ function modem.connect(options)
   end
 
   client.watch_name(MM, read_all)
+  client.watch_name(NM, read_data)
   client.on_signal(MM, ROOT, OBJECT_MANAGER, "InterfacesAdded", function() read_all() end)
   client.on_signal(MM, ROOT, OBJECT_MANAGER, "InterfacesRemoved", function() read_all() end)
   client.on_properties(NM, NM_PATH, function(_, changed)
@@ -136,6 +163,10 @@ function modem.connect(options)
   end)
   read_all()
   read_data()
+  -- InterfacesAdded also contains UnlockRetries on older engines. Keep
+  -- discovery live there when that signal cannot be decoded. New engines
+  -- use the ObjectManager signals and do no periodic bus reads.
+  morf.timer(10000, function() if legacy_dictionary then read_all() end end, true)
   return mobile
 end
 

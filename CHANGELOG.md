@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.2.6] - 2026-10-09
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Remember manually hidden keyboards per application for the current login session; showing the keyboard again restores automatic opening for that application.
+- Restore typing directly into laptop lock screens and configure lock and display idle timeouts independently.
+- Give NixOS authentication prompts access to the graphical session.
+- Keep clipped dashboard pages from intercepting input outside their visible area.
+
+### <!-- 4 -->⚡ Performance
+
+- Process reactive updates in dependency order without repeatedly scanning every pending binding.
+- Keep inactive dashboard pages idle when another page changes.
+- Skip rendering fully clipped pages and restrict text reflow checks to labels that need them.
+- Prepare hidden text in short idle slices so opening a panel does less glyph work.
+
+## [0.2.5] - 2026-10-09
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Avoid the Adreno shader compiler crash in phone lockscreen and greeter rendering.
+- Restore velocity-based touch scrolling, preserve fling distance across slow frames, and stop inertia when touched.
+- Make phone panels, pages and workspace previews follow the finger and settle using release velocity.
+- Open Apps from the left edge and Web from the right, with cancellation and authentication guards.
+- Require a deliberate double tap or the power key to wake sleeping phone authentication screens.
+- Validate neighbouring pattern dots and show pattern login only for enrolled accounts.
+- Use a fading phone scrollbar and hide the application list in the phone bar.
+- Correct compact dialog captions, disabled controls, and shared layout spacing.
+
+### <!-- 0 -->⛰️ Features
+
+- Provide upstream NixOS modules for desktop, greeter, lockscreen, phone gestures and protected pattern enrollment.
+- Let NixOS select the packaged UI while preserving appearance preferences.
+- Include the keyring dialog bridge in Nix packages and report PAM authentication progress without handling passwords.
+
 ## [0.2.4] - 2026-10-06
 
 ### <!-- 0 -->⛰️  Features

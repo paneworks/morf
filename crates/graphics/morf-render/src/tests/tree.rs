@@ -1,6 +1,90 @@
 use std::collections::BTreeMap;
 
 use super::*;
+
+#[test]
+fn an_offscreen_clipped_page_emits_no_commands_or_layers() {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    let page = scene.create(Element::ClipRect);
+    let child = scene.create(Element::Text);
+    for node in [root, page] {
+        scene.assign(node, "width", 100.0).unwrap();
+        scene.assign(node, "height", 100.0).unwrap();
+        scene.assign(node, "clip", true).unwrap();
+    }
+    scene.assign(page, "translate_x", 100.0).unwrap();
+    scene.assign(page, "radius", 12.0).unwrap();
+    scene.assign(page, "opacity", 0.5).unwrap();
+    scene.assign(page, "border_width", 2.0).unwrap();
+    scene.assign(child, "text", "A hidden page").unwrap();
+    scene.reparent(page, Some(root)).unwrap();
+    scene.reparent(child, Some(page)).unwrap();
+    let layout = Layout::compute(
+        &scene,
+        root,
+        Size {
+            width: 100.0,
+            height: 100.0,
+        },
+        &mut NoText,
+    )
+    .unwrap();
+
+    let hidden = DrawList::from_scene(&scene, &layout).unwrap();
+    assert!(hidden.commands.is_empty());
+    assert!(hidden.layers.is_empty());
+
+    // A transform changes paint without requiring a fresh layout. As soon
+    // as any part enters the viewport the whole page is available again.
+    scene.assign(page, "translate_x", 97.0).unwrap();
+    let visible = DrawList::from_scene(&scene, &layout).unwrap();
+    assert!(
+        visible
+            .commands
+            .iter()
+            .any(|command| command.node() == child)
+    );
+    assert!(!visible.layers.is_empty());
+    let text = visible
+        .commands
+        .iter()
+        .find(|command| command.node() == child)
+        .unwrap();
+    assert_eq!(text.clip().unwrap().width, 1.0); // The page's two-pixel border clips its contents.
+}
+
+#[test]
+fn an_unclipped_offscreen_parent_can_have_visible_children() {
+    let mut scene = Scene::new();
+    let root = scene.create(Element::Item);
+    let parent = scene.create(Element::Item);
+    let child = scene.create(Element::Rect);
+    for node in [root, parent, child] {
+        scene.assign(node, "width", 100.0).unwrap();
+        scene.assign(node, "height", 100.0).unwrap();
+    }
+    scene.assign(root, "clip", true).unwrap();
+    scene.assign(parent, "translate_x", 200.0).unwrap();
+    scene.assign(child, "translate_x", -200.0).unwrap();
+    scene.reparent(parent, Some(root)).unwrap();
+    scene.reparent(child, Some(parent)).unwrap();
+    let layout = Layout::compute(
+        &scene,
+        root,
+        Size {
+            width: 100.0,
+            height: 100.0,
+        },
+        &mut NoText,
+    )
+    .unwrap();
+    let list = DrawList::from_scene(&scene, &layout).unwrap();
+    assert_eq!(list.commands.len(), 1);
+    assert_eq!(list.commands[0].node(), child);
+    assert_eq!(list.commands[0].bounds().x, 0.0);
+}
+
 #[test]
 fn draw_list_preserves_tree_paint_order() {
     let mut scene = Scene::new();

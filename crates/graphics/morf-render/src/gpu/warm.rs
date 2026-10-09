@@ -17,6 +17,14 @@ use morf_text::RasterGlyph;
 use super::backend_types::*;
 use super::glyphs::{GlyphAtlas, GlyphKey, glyph_pixels, outside_byte, upload_glyph};
 
+/// Discovery resumes where the last quiet turn exhausted its budget.
+/// Restarting at the root each time can leave a large tree's last pages cold.
+#[derive(Default)]
+pub(crate) struct TextWarmup {
+    basis: Option<(NodeHandle, u32, u64)>,
+    pending: Vec<NodeHandle>,
+}
+
 impl GlyphAtlas {
     /// Puts glyphs in the atlas without drawing them, while there is room.
     ///
@@ -58,13 +66,12 @@ impl GlyphAtlas {
 }
 
 impl WgpuBackend {
-    /// Prepares the glyphs of text under `root` that is laid out but hidden,
-    /// at `scale_120`, so the frame that shows it does not have to.
+    /// Prepares laid-out text under `root` at `scale_120` before it is shown.
     ///
-    /// Hidden means an ancestor, or the node itself, has `visible` false;
-    /// text that is shown is drawn, and so prepared, by the frame anyway.
-    /// Returns how many glyphs went into the atlas. Cheap to repeat: a text
-    /// whose glyphs are all there already costs a lookup a glyph.
+    /// Includes pages hidden by clipping, opacity or translation. Visible
+    /// text is already cached, so visiting it adds no glyphs. Returns how
+    /// many glyphs went into the atlas; `text_warmup_pending` says whether
+    /// another quiet turn is needed to finish discovery.
     pub fn warm_hidden_text(
         &mut self,
         scene: &Scene,
@@ -77,19 +84,41 @@ impl WgpuBackend {
         // budget is done on the next quiet turn.
         const BUDGET: std::time::Duration = std::time::Duration::from_millis(3);
         let started = std::time::Instant::now();
+        self.warm_text_while(scene, layout, root, scale_120, || {
+            started.elapsed() < BUDGET
+        })
+    }
+
+    /// Whether the current prewarm scan needs another bounded quiet turn.
+    pub fn text_warmup_pending(&self) -> bool {
+        !self.text_warmup.pending.is_empty()
+    }
+
+    fn warm_text_while(
+        &mut self,
+        scene: &Scene,
+        layout: &Layout,
+        root: NodeHandle,
+        scale_120: u32,
+        mut within_budget: impl FnMut() -> bool,
+    ) -> usize {
+        let basis = (root, scale_120, scene.layout_revision_of(root));
+        let scan = &mut self.text_warmup;
+        let same_tree = scan
+            .basis
+            .is_some_and(|(r, s, _)| (r, s) == (root, scale_120));
+        if !same_tree || (scan.pending.is_empty() && scan.basis != Some(basis)) {
+            scan.pending.clear();
+            scan.pending.push(root);
+            scan.basis = Some(basis);
+        }
         let scale = scale_120.max(1) as f32 / 120.0;
         let mut added = 0;
-        let mut pending = vec![(root, false)];
-        while let Some((node, hidden)) = pending.pop() {
-            // Discovery and style lookups are part of the budget too. First
-            // collecting every hidden label could exhaust it before warming
-            // any glyph, and still scan the whole tree on each quiet frame.
-            if started.elapsed() > BUDGET {
+        while within_budget() {
+            let Some(node) = self.text_warmup.pending.pop() else {
                 break;
-            }
-            let hidden = hidden || !scene.bool_value(node, "visible").unwrap_or(true);
-            if hidden && scene.element(node) == Ok(Element::Text) && layout.geometry(node).is_some()
-            {
+            };
+            if scene.element(node) == Ok(Element::Text) && layout.geometry(node).is_some() {
                 // Warmed already, looking as it does now: nothing to do.
                 let look = text_look(scene, node, scale_120);
                 if self.warmed_text.get(&node) != Some(&look) {
@@ -100,7 +129,7 @@ impl WgpuBackend {
                 }
             }
             if let Ok(children) = scene.children(node) {
-                pending.extend(children.iter().map(|&child| (child, hidden)));
+                self.text_warmup.pending.extend(children.iter().copied());
             }
         }
         // Nodes gone from the scene are forgotten.
@@ -117,7 +146,7 @@ fn text_look(scene: &Scene, node: NodeHandle, scale_120: u32) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     scale_120.hash(&mut hasher);
-    for property in ["text", "font_family", "font_style"] {
+    for property in ["text", "font_family", "font_source", "font_style"] {
         scene
             .string_value(node, property)
             .unwrap_or("")

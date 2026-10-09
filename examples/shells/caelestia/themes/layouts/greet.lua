@@ -55,12 +55,11 @@ local ROUND = geometry.round
 local PORTRAIT = H > W
 local SHORT = geometry.short
 -- The on-screen keyboard: on a phone, or wherever no keyboard is attached.
-local ONSCREEN = PORTRAIT or not ctx.keyboard_attached()
 local FOOTER = SHORT and s(60) or 0
 
 local SW = geometry.sheet_width
-local AV = geometry.avatar
-local FIELD_W, FIELD_H = geometry.field_width, geometry.field_height
+local AV = s(52)
+local FIELD_W, FIELD_H = SW-s(48), geometry.field_height
 
 -- The pattern (tools/pattern): offered where the stack takes one and one
 -- is set for this account. Anywhere else a drawn pattern would only be a
@@ -88,37 +87,27 @@ local pad = osk.new {
 }
 local function entry_h() return method:get() == "pattern" and pad.height() or FIELD_H end
 local function chip_h() return has_pattern() and s(44) or 0 end
-local kb
-if ONSCREEN then
-  kb = osk.new {
-    active = function() return main() and stage:get() == "sheet" and method:get() == "password" and not busy:get() end,
-    action = skin.action,
-      prefix = "greet.osk."..OUTPUT, width = SW - s(24), mode = "full", numbers = true,
-    metrics = {gap=s(5), key_height=s(54), alternate_cell=s(48)},
-    look = (skin.keyboard_look or function(v) return v end) {
-      panel = function() return C.surfaceContainer end,
-      key = function() return C.surfaceContainerHighest end,
-      key_dim = function() return C.surfaceContainerHigh end,
-      accent = function() return C.primary end,
-      on_accent = function() return C.onPrimary end,
-      text = function() return C.onSurface end,
-      dim = function() return C.onSurfaceVariant end,
-      press = function() return C.secondaryContainer end,
-      font = FONT, icons = ICONS, radius = skin.key_radius,
-    },
-    send = function(event)
-      if event.text then type_text(event.text)
-      elseif event.key == "backspace" then backspace()
-      elseif event.key == "enter" then submit()
-      elseif event.key == "escape" then escape() end
-    end,
-  }
-end
-local function kb_h() return (kb and method:get() == "password") and (kb.height() + s(16)) or 0 end
-local function content_h()
-  return s(28) + AV + s(12) + s(30) + s(20) + entry_h() + s(14) + s(40) + s(10) + s(24) + chip_h() + s(24) + kb_h()
-end
-local function sheet_h() return math.min(content_h(),math.max(1,H-2*BORDER-s(16)-FOOTER)) end
+local kb=require("themes.auth_keyboard").new {
+  prefix="greet",output=OUTPUT,width=W,height=H,border=BORDER,embedded_width=FIELD_W,
+  main=main,keyboard_attached=ctx.keyboard_attached,busy=busy,stage=stage,method=method,pull=pull,
+  claim=function() if ctx.claim then ctx.claim() end end,open_sheet=open_sheet,clear=clear,escape=escape,action=skin.action,
+  look=(skin.keyboard_look or function(v) return v end) {
+    panel=function() return C.surfaceContainer end,
+    key=function() return C.surfaceContainerHighest end,key_dim=function() return C.surfaceContainerHigh end,
+    accent=function() return C.primary end,on_accent=function() return C.onPrimary end,
+    text=function() return C.onSurface end,dim=function() return C.onSurfaceVariant end,
+    press=function() return C.secondaryContainer end,font=FONT,icons=ICONS,radius=skin.key_radius,
+  },
+  send=function(event)
+    if event.text then type_text(event.text)
+    elseif event.key=="backspace" then backspace()
+    elseif event.key=="enter" then submit()
+    elseif event.key=="escape" then escape() end
+  end,
+}
+local content_height=kb.content_height
+local form
+local function sheet_h() return form and form.height() or 1 end
 
 local BUD_W, BUD_H = s(132), s(16)
 local function up()
@@ -147,7 +136,7 @@ local function showing() return stage:get() == "rest" or stage:get() == "sheet" 
 local frame = ui.Sdf {
   anchors = { fill = true },
   ui.SdfShape {
-    shape = "box", x = 0, y = 0, width = W, height = H,
+    shape = "box", x = 0, y = 0, width = W, height = content_height,
     fill_color = function() return C.surface end,
   },
   ui.SdfShape {
@@ -155,7 +144,7 @@ local frame = ui.Sdf {
     x = function() return stage:get() == "closed" and 0 or BORDER end,
     y = function() return stage:get() == "closed" and 0 or BORDER end,
     width = function() return stage:get() == "closed" and W or W - 2 * BORDER end,
-    height = function() return stage:get() == "closed" and H or H - 2 * BORDER end,
+    height = function() return stage:get() == "closed" and content_height() or content_height() - 2 * BORDER end,
     behavior = { x = SETTLE, y = SETTLE, width = SETTLE, height = SETTLE },
   },
 }
@@ -163,10 +152,11 @@ local frame = ui.Sdf {
 -- The swell has a field of its own, in a band along the bottom edge: the
 -- frame above stays still, and a swell growing redraws the band alone,
 -- not the whole screen every frame (a 4K screen of field was the lag).
-local function band_h() return math.min(H, sheet_h() + s(90)) end
+local function band_h() return math.min(content_height(), sheet_h() + s(90)) end
 local band = ui.Item {
+  visible=function() return stage:get()=="rest" end,
   x = 0, width = W,
-  y = function() return H - band_h() end,
+  y = function() return content_height() - band_h() end,
   height = band_h,
   ui.Sdf {
     anchors = { fill = true },
@@ -192,36 +182,7 @@ local band = ui.Item {
   },
 }
 
--- No wallpaper for the greeter's user: the screen behind the frame is a
--- deep surface with caelestia's shapes drifting across it.
-local backdrop
-if skin.backdrop then
-  backdrop = skin.backdrop(W, H, s,"greet")
-else
-  local DRIFT = {
-    { "cookie9", 0.08, 0.14, 180, 0 }, { "clover4", 0.82, 0.12, 150, 30 }, { "pentagon", 0.14, 0.74, 200, 8 },
-    { "cookie12", 0.86, 0.72, 220, 0 }, { "gem", 0.30, 0.40, 110, -12 }, { "flower", 0.68, 0.44, 130, 0 },
-    { "sunny", 0.50, 0.86, 120, 0 }, { "pill", 0.44, 0.10, 140, 25 },
-  }
-  local drift = { anchors = { fill = true } }
-  for i, d in ipairs(DRIFT) do
-    local size = s(d[4])
-    drift[#drift + 1] = ui.Path {
-      x = math.floor(W * d[2] - size / 2), y = math.floor(H * d[3] - size / 2),
-      width = size, height = size, view_box = { 0, 0, 100, 100 },
-      d = shapes.path(d[1], { segments = false }), rotation = d[5],
-      fill_color = function() return C.primary:alpha(0.05) end,
-      loop = { rotation = { from = d[5], to = d[5] + (i % 2 == 0 and 360 or -360), duration = 90000 + i * 9000,
-        loops = 1, hold = true } },
-    }
-  end
-  backdrop = ui.Item {
-    anchors = { fill = true },
-    ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainerLowest end },
-    ui.Item(drift),
-  }
-
-end
+local backdrop=require("themes.auth_backdrop")(ctx,s,"greet")
 
 -- ---------------------------------------------------------------- pieces --
 
@@ -330,16 +291,17 @@ end
 local CLOCK_Y = geometry.clock_y
 local glance = ui.Column {
   id = "greet-glance",
+  visible=function() return not main() or stage:get()~="sheet" end,
   width=math.max(1,W-s(64)),
   anchors = { horizontal_center = true }, gap = s(6), align = "center",
   y = function()
     if main() and stage:get() == "sheet" then
-      return math.max(s(40), math.floor((H - BORDER - sheet_h()) / 2 - geometry.clock_sheet_offset))
+      return math.max(s(40), math.floor((content_height() - BORDER - sheet_h()) / 2 - geometry.clock_sheet_offset))
     end
     return CLOCK_Y
   end,
   scale = function() return main() and stage:get() == "sheet" and 0.72 or 1 end,
-  opacity = function() return showing() and (not main() or stage:get()~="sheet" or H-sheet_h()>s(220)) and 1 or 0 end,
+  opacity = function() return showing() and (not main() or stage:get()~="sheet" or content_height()-sheet_h()>s(220)) and 1 or 0 end,
   behavior = { y = GROW, scale = GROW, opacity = { duration = 320 } },
   (skin.clock or text) { id = "greet-clock", text = function() return clock:get() end,
     font_size = geometry.clock_size, font_weight = skin.clock_weight or 600, color = C.primary },
@@ -353,12 +315,12 @@ local choosing = ui.Item {
   width = math.min(W-s(64), #people*(PEOPLE_AV+s(40))+(#people-1)*s(28)),
   clip = true,
   height = PEOPLE_AV + s(44),
-  y = math.max(s(12),math.min(
-    SHORT and H-BORDER-s(64)-PEOPLE_AV-s(44) or CLOCK_Y + (PORTRAIT and s(210) or s(250)),
-    H-BORDER-s(64)-PEOPLE_AV-s(44))),
+  y = function() return math.max(s(12),math.min(
+    SHORT and content_height()-BORDER-s(64)-PEOPLE_AV-s(44) or CLOCK_Y + (PORTRAIT and s(210) or s(250)),
+    content_height()-BORDER-s(64)-PEOPLE_AV-s(44))) end,
   -- Account selection and login share the monitor currently under the pointer.
   opacity = function() return main() and stage:get() == "rest" and 1 or 0 end,
-  visible = main,
+  visible = function() return main() and stage:get()=="rest" end,
   translate_y = function() return main() and stage:get() ~= "rest" and s(40) or 0 end,
   behavior = { opacity = { duration = 260 }, translate_y = GROW },
   chooser,
@@ -374,7 +336,7 @@ end
 local hint = ui.Column {
   visible = main,
   anchors = { horizontal_center = true },
-  y = H - BORDER - BUD_H - s(74), gap = s(2), align = "center",
+  y = function() return content_height() - BORDER - BUD_H - s(74) end, gap = s(2), align = "center",
   opacity = function() return (not SHORT and stage:get() == "rest" and pull:get() < 0.1) and 1 or 0 end,
   behavior = { opacity = { duration = 260 } },
   icon("keyboard_arrow_up", s(30), function() return C.onSurfaceVariant end, {
@@ -384,7 +346,7 @@ local hint = ui.Column {
     end,
   }),
   text {
-    text = ONSCREEN and "Swipe up to log in" or "Press Enter to log in",
+    text = (PORTRAIT or not ctx.keyboard_attached()) and "Swipe up to log in" or "Press Enter to log in",
     font_size = s(14), color = function() return C.onSurfaceVariant end,
   },
 }
@@ -414,49 +376,10 @@ local host_label = ui.Row {
 
 -- -------------------------------------------------------------- the sheet --
 
-local DOT = math.min(s(12),math.max(1,math.floor((FIELD_W-s(120))/MAX_DOTS*.65)))
-local dots = {}
-for i = 1, MAX_DOTS do
-  dots[i] = ui.Rect {
-    width = DOT, height = DOT, radius = DOT / 2,
-    color = function() return C.primary end,
-    visible = function() return typed:get() >= i end,
-    scale = function() return typed:get() >= i and 1 or 0 end,
-    behavior = { scale = { duration = 260, easing = "out_back" } },
-  }
-end
-local field = ui.Item {
-  id = "greet-field",
-  width = FIELD_W, height = FIELD_H,
-  translate_x = function() return shake:get() == 1 and s(12) or 0 end,
-  behavior = { translate_x = ui.spring { stiffness = 900, damping = 9 } },
-  ui.Rect {
-    id = "greet-field-surface", anchors = { fill = true }, radius = FIELD_H / 2,
-    color = function() return C.surfaceContainerHighest end,
-    border_width = function() return bad:get() and s(2) or 0 end,
-    border_color = function() return C.error end,
-  },
-  icon(function() return busy:get() and "hourglass" or "key" end, s(22), C.onSurfaceVariant,
-    { x = s(20), anchors = { vertical_center = true } }),
-  text {
-    anchors = { vertical_center = true }, x = s(56),
-    text = "Password", color = C.onSurfaceVariant, font_size = s(16),
-    visible = function() return typed:get() == 0 end,
-  },
-  ui.Row { x = s(56), anchors = { vertical_center = true }, gap = DOT*.45, table.unpack(dots) },
-  ui.MouseArea {
-    id = "greet-submit",
-    anchors = { right = true, right_margin = s(7), vertical_center = true },
-    width = FIELD_H - s(14), height = FIELD_H - s(14), cursor = "pointer",
-    on_clicked = submit,
-    ui.Rect {
-      id = "greet-submit-surface", anchors = { fill = true }, radius = (FIELD_H - s(14)) / 2,
-      color = function() return typed:get() > 0 and C.primary or C.surfaceContainerHigh end,
-      behavior = { color = { duration = 200 } },
-    },
-    icon("arrow_forward", s(22), function() return typed:get() > 0 and C.onPrimary or C.onSurfaceVariant end,
-      { anchors = { center_in = true } }),
-  },
+local field=require("themes.auth_form").password {
+  prefix="greet",ui=ui,s=s,C=C,width=FIELD_W,height=FIELD_H,text=text,icon=icon,
+  typed=typed,shake=shake,bad=bad,busy=busy,max_dots=MAX_DOTS,
+  submit=submit,focus=function() kb.show() end,
 }
 
 -- The session to start: a chip; a click (or F2) moves to the next.
@@ -489,33 +412,28 @@ for index, p in ipairs(people) do
 end
 local sheet_avatar = ui.Item(sheet_faces)
 
-local sheet_nodes = {
-  x = s(12), y = s(28), width = SW - s(24), gap = 0, align = "center",
-  sheet_avatar,
-  ui.Item { width = 1, height = s(12) },
-  (ctx.heading or text) { id = "greet-name",width=SW-s(48),elide="right",horizontal_alignment="center",active=function() return main() and stage:get()=="sheet" end, font_size = s(20), font_weight = 600, height = s(30),
-    text = function() local p = person() return p.label ~= "" and p.label or p.name end },
-  ui.Item { width = 1, height = s(20) },
-  ui.Item {
-    width = SW - s(24), height = entry_h,
-    ui.Item { anchors = { horizontal_center = true }, width = FIELD_W, height = FIELD_H,
-      visible = function() return method:get() == "password" end, field },
-    ui.Item { anchors = { horizontal_center = true }, width = PAD_W, height = pad.height,
-      visible = function() return method:get() == "pattern" end, pad.node },
-  },
-  ui.Item { width = 1, height = s(14) },
-  session_chip,
-  ui.Item { width = 1, height = s(10) },
-  text {
-    id = "greet-message", height = s(24), width = SW - s(48), horizontal_alignment = "center", elide = "right",
-    text = function()
+form=require("themes.auth_form").sheet {
+  prefix="greet",output=OUTPUT,ui=ui,s=s,C=C,skin=skin,width=SW,screen_width=W,
+  border=BORDER,top=SHORT and BORDER+s(12) or BORDER+s(82),footer=FOOTER,keyboard=kb,
+  text=text,heading=ctx.heading,avatar=sheet_avatar,name=function() local p=person() return p.label ~= "" and p.label or p.name end,
+  active=function() return main() and stage:get()=="sheet" end,
+  visible=function() return main() and (stage:get()=="sheet" or stage:get()=="leaving") end,
+  entry_height=entry_h,
+  entry=ui.Item {width=FIELD_W,height=entry_h,
+    ui.Item {anchors={horizontal_center=true},width=FIELD_W,height=FIELD_H,
+      visible=function() return method:get()=="password" end,field},
+    ui.Item {anchors={horizontal_center=true},width=PAD_W,height=pad.height,
+      visible=function() return method:get()=="pattern" end,pad.node}},
+  message=text {id="greet-message",width=FIELD_W,height=s(24),elide="right",font_size=s(14),
+    text=function()
       local value=message:get()
-      return busy:get() and value=="" and "Checking login…" or value
-    end, font_size = s(15),
-    color = function() return bad:get() and C.error or C.onSurfaceVariant end,
-  },
-  ui.Item {
-    width = SW - s(24), height = chip_h, visible = has_pattern,
+      return busy:get() and value=="" and "Checking password…" or value
+    end,
+    color=function() return bad:get() and C.error or C.onSurfaceVariant end},
+  session=session_chip,
+  method_height=chip_h,
+  method=ui.Item {
+    width = FIELD_W, height = chip_h, visible = has_pattern,
     (function()
       local area
       area = ui.MouseArea {
@@ -540,71 +458,27 @@ local sheet_nodes = {
       return area
     end)(),
   },
-  ui.Item { width = 1, height = s(24) },
 }
-if kb then
-  sheet_nodes[#sheet_nodes + 1] = ui.Item {
-    width = SW - s(24),
-    height = function() return method:get() == "password" and kb.height() or 0 end,
-    visible = function() return method:get() == "password" end,
-    kb.node,
-  }
-end
-local viewport_node, viewport, viewport_t, viewport_ctl = require("lib.kit.scroll").make("scroll_view", {id="greet-sheet-scroll",width=SW,height=sheet_h,clip=true,
-  ui.Column(sheet_nodes)})
-morf.effect("greet.sheet-scroll."..OUTPUT,function()
-  local st=stage:get()
-  if st~="sheet" then viewport.content_y=0 return end
-  local entry_bottom=s(28)+AV+s(12)+s(30)+s(20)+entry_h()+s(14)+s(40)+s(10)+s(24)
-  local entry_top=s(28)+AV+s(12)+s(30)+s(20)
-  viewport.content_y=math.min(entry_top,math.max(0,entry_bottom-sheet_h()+s(12)))
-end,{owner=viewport})
-local sheet = ui.Item {
-  id = "greet-sheet",
-  x = math.floor((W - SW) / 2), width = SW,
-  y = function() return H - BORDER - FOOTER - sheet_h() end,
-  height = sheet_h,
-  opacity = function() return stage:get() == "sheet" and 1 or 0 end,
-  translate_y = function() return stage:get() == "sheet" and 0 or s(60) end,
-  behavior = skin.sheet_motion or { opacity = { duration = 260, delay = 120 }, translate_y = GROW },
-  visible = function() return main() and (stage:get() == "sheet" or stage:get() == "leaving") end,
-  viewport_node,
-}
-
-if skin.sheet then skin.sheet(sheet, {role="greet", width=SW, scale=s,
-  active=function() return main() and stage:get()=="sheet" end}) end
-
--- ------------------------------------------------------------ the screen --
+local sheet=form.node
 
 local root = ui.Item {
   anchors = { fill = true },
   clip=true,
-  backdrop,
-  skin.chrome and skin.chrome(W, H, s, "greet") or ui.Item {},
-  frame,
-  band,
-  glance,
-  choosing,
-  hint,
-  sheet,
-  power_row,
-  host_label,
-  ui.MouseArea {
+  kb.content {
+    backdrop,
+    skin.chrome and skin.chrome(W, H, s, "greet") or ui.Item {},
+    frame,band,glance,choosing,hint,sheet,power_row,host_label,
+  },
+  not kb.embedded and kb.node or ui.Item {}, kb.edge,
+  kb.surface {
     id = "greet-open",
     anchors = { fill = true }, z = -1,
     on_clicked = function() if ctx.claim then ctx.claim() end open_sheet() end,
-    on_dragged = function(_, _, _, dy)
-      if ctx.claim then ctx.claim() end
-      if stage:get() ~= "rest" then return end
-      pull:set(math.max(0, math.min(1, -dy / s(360))))
-    end,
-    on_drag_finished = function()
-      if stage:get() ~= "rest" then return end
-      if pull:get() > 0.3 then open_sheet() else pull:set(0) end
-    end,
     on_key_pressed = key,
   },
 }
+require("themes.phone_wake").attach(root,{prefix="greet",output=OUTPUT,width=W,height=H,
+  rest=function() clear() if stage:get()=="sheet" then escape() end pull:set(0) end})
 if ctx.claim then
   morf.effect("greet.pointer."..OUTPUT,function() if root.contains_pointer then ctx.claim() end end,{owner=root})
 end

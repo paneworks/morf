@@ -26,6 +26,7 @@ local morf = require("morf")
 local accounts = require("lib.services.accounts")
 local sessions = require("lib.services.sessions")
 local auth = require("lib.util.auth")
+require("themes.ui_scale").apply()
 
 -- `-- preview`: as if a pattern were set, for pictures and tests.
 local PREVIEW = morf.operands[1] == "preview"
@@ -53,9 +54,11 @@ local visual = require("themes").current
 local C, palette = require("themes.auth_palette")("greet")
 local FONT, ICONS = visual.tokens.auth_font or visual.tokens.font, visual.tokens.icon_font
 local text, icon = require("themes.typography")(visual.tokens, C, s)
-local tool = palette:get()
-local WALLPAPER = tool and tool.wallpaper or ""
-if WALLPAPER ~= "" and not morf.fs.exists(WALLPAPER) then WALLPAPER = "" end
+local function WALLPAPER()
+  local tool=palette:get()
+  local path=morf.env("CAELESTIA_WALLPAPER") or (tool and tool.wallpaper) or ""
+  return path~="" and morf.fs.exists(path) and path or ""
+end
 
 -- ------------------------------------------------------------------ state --
 
@@ -115,6 +118,7 @@ local function choose(index)
   if busy:get() then return end
   if index == who:get() or not people[index] then return end
   who:set(index)
+  method:set(has_pattern() and "pattern" or "password")
   clear()
   say("")
   door:switch(person().name)
@@ -213,7 +217,8 @@ function has_pattern()
 end
 local function pattern(dots)
   if busy:get() then return end
-  if #dots < 4 then say("Connect at least four dots", false) return end
+  local valid, reason = require("lib.util.pattern").validate(dots)
+  if not valid then say(reason, false) return end
   password = table.concat(dots)
   submit()
 end
@@ -264,6 +269,7 @@ local context = {
   H = H,
   s = s,
   C = C,
+  WALLPAPER = WALLPAPER,
   FONT = FONT,
   ICONS = ICONS,
   text = text,

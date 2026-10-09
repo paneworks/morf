@@ -41,12 +41,12 @@ struct Layer {
 /// storage buffer rather than in attributes because the quad pipeline this
 /// pass absorbed already used sixteen of them, and sixteen is the limit.
 struct Material {
-    // [alignment, antialiased, unused, unused]. Alignment is 0 inside, 1
+    // [alignment, antialiased, union-only composition, unused]. Alignment is 0 inside, 1
     // centred, 2 outside; the width itself rides in `style.x`, where the host
     // already needs it to size the quad.
     border: vec4<f32>,
     border_color: vec4<f32>,
-    // [offset x, offset y, inner, unused]
+    // [offset x, offset y, inner, fade combination count]
     shadow: vec4<f32>,
     shadow_color: vec4<f32>,
     // [absent layers, shadow blur, shadow spread, fading layers]. The two
@@ -67,6 +67,8 @@ struct Material {
     // The rectangle a gradient is measured across, in the field's own space:
     // origin then size.
     shape: vec4<f32>,
+    // Precomputed per draw: [weight, omitted-layer mask, unused, unused].
+    fade_combinations: array<vec4<f32>, 8>,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -417,7 +419,17 @@ fn sd_polygon_merged(point: vec2<f32>, first: u32, stride: u32, loops: u32) -> f
     return select(sqrt(nearest), -sqrt(nearest), winding != 0);
 }
 
+// Specialised pipelines keep outline walks and subset composition out of
+// ordinary rectangles/analytic fields. Uniform branches alone still make
+// mobile GPUs reserve registers for the most expensive path.
+override MORF_ANALYTIC: bool = false;
+override MORF_LAYER_FADES: bool = true;
+override MORF_BOX_ONLY: bool = false;
+override MORF_SINGLE_BOX: bool = false;
+override MORF_UNIFORM_COLOR: bool = false;
+
 fn shape_distance(kind: u32, point: vec2<f32>, layer: Layer) -> f32 {
+    if MORF_BOX_ONLY { return sd_box(point, layer.rect.zw, layer.radii); }
     let half = layer.rect.zw;
     let radius = min(half.x, half.y);
     switch kind {
@@ -436,7 +448,10 @@ fn shape_distance(kind: u32, point: vec2<f32>, layer: Layer) -> f32 {
             // match `morf_text::GLYPH_CONTOUR_POINTS`, which a test asserts.
             // `thickness` makes a letter or a drawing heavier: its outline
             // grown by that much, a bold that needs no bold face.
-            return sd_polygon(point, u32(layer.params.x), 96u, u32(layer.extra.w)) - layer.params.w;
+            if !MORF_ANALYTIC {
+                return sd_polygon(point, u32(layer.params.x), 96u, u32(layer.extra.w)) - layer.params.w;
+            }
+            return 1e20;
         }
         default: { return sd_cross(point, half, layer.params.w); }
     }
@@ -536,6 +551,35 @@ struct Composed {
     group: u32,
 };
 
+fn layer_distance(local: vec2<f32>, layer: Layer) -> f32 {
+    let turned = rotate(local - layer.rect.xy, layer.extra.y);
+    // Into the shape's own frame through the inverse of its matrix, and
+    // the distance scaled back by the map's smallest stretch so it never
+    // overstates the distance on the surface.
+    let centred = vec2<f32>(
+        layer.frame.x * turned.x + layer.frame.z * turned.y,
+        layer.frame.y * turned.x + layer.frame.w * turned.y,
+    );
+    let scale = layer.extras.y;
+    let start = shape_distance(u32(layer.kinds.x), centred, layer) * scale;
+    // The morph is a straight interpolation of the two distance fields.
+    // Where the fields disagree about which side of the edge a point is on,
+    // the crossing moves continuously between them, so the outline can
+    // split or merge without any correspondence between the two shapes.
+    //
+    // A layer that is not morphing — the common case, and every layer of a
+    // composition that only moves — evaluates one shape rather than two.
+    var value = start;
+    if layer.kinds.z > 0.0 && u32(layer.kinds.y) != u32(layer.kinds.x) {
+        value = mix(
+            start,
+            shape_distance(u32(layer.kinds.y), centred, layer) * scale,
+            layer.kinds.z,
+        );
+    }
+    return value;
+}
+
 /// Walks the field's layers and resolves them into one surface.
 ///
 /// Factored out because a shadow is the same composition sampled at an offset
@@ -546,39 +590,23 @@ struct Composed {
 /// the layer, a subtraction from nothing is nothing).
 fn compose(local: vec2<f32>, base: vec4<f32>, first: u32, count: u32, omit: u32) -> Composed {
     var out: Composed;
+    if MORF_SINGLE_BOX {
+        let layer = layers[first];
+        out.distance = sd_box(local - layer.rect.xy, layer.rect.zw, layer.radii);
+        out.fill = layer.color;
+        out.group = 0u;
+        return out;
+    }
     out.distance = 1e20;
     out.fill = base;
+    if MORF_UNIFORM_COLOR { out.fill = layers[first].color; }
     out.group = 0u;
     for (var index = 0u; index < count; index = index + 1u) {
         if ((omit >> index) & 1u) != 0u {
             continue;
         }
         let layer = layers[first + index];
-        let turned = rotate(local - layer.rect.xy, layer.extra.y);
-        // Into the shape's own frame through the inverse of its matrix, and
-        // the distance scaled back by the map's smallest stretch so it never
-        // overstates the distance on the surface.
-        let centred = vec2<f32>(
-            layer.frame.x * turned.x + layer.frame.z * turned.y,
-            layer.frame.y * turned.x + layer.frame.w * turned.y,
-        );
-        let scale = layer.extras.y;
-        let start = shape_distance(u32(layer.kinds.x), centred, layer) * scale;
-        // The morph is a straight interpolation of the two distance fields.
-        // Where the fields disagree about which side of the edge a point is on,
-        // the crossing moves continuously between them, so the outline can
-        // split or merge without any correspondence between the two shapes.
-        //
-        // A layer that is not morphing — the common case, and every layer of a
-        // composition that only moves — evaluates one shape rather than two.
-        var value = start;
-        if layer.kinds.z > 0.0 && u32(layer.kinds.y) != u32(layer.kinds.x) {
-            value = mix(
-                start,
-                shape_distance(u32(layer.kinds.y), centred, layer) * scale,
-                layer.kinds.z,
-            );
-        }
+        let value = layer_distance(local, layer);
         let group = u32(layer.extras.x);
         if index == 0u {
             out.distance = value;
@@ -588,22 +616,105 @@ fn compose(local: vec2<f32>, base: vec4<f32>, first: u32, count: u32, omit: u32)
             var operation = u32(layer.kinds.w);
             // Two different non-zero groups do not blend: the smooth operator
             // becomes its hard one where the surface here is the other's.
-            if operation >= 3u && operation <= 5u && group != 0u && out.group != 0u
+            if !MORF_UNIFORM_COLOR && operation >= 3u && operation <= 5u && group != 0u && out.group != 0u
                 && group != out.group {
                 operation = operation - 3u;
             }
-            let weight = combine_color_weight(out.distance, value, operation, layer.extra.z);
-            out.fill = mix(out.fill, layer.color, weight);
+            if !MORF_UNIFORM_COLOR {
+                let weight = combine_color_weight(out.distance, value, operation, layer.extra.z);
+                out.fill = mix(out.fill, layer.color, weight);
+            }
             let before = out.distance;
             out.distance = combine(before, value, operation, layer.extra.z, u32(layer.extras.z));
             // Only an operator that adds surface can make it this layer's.
             let adds = operation == 0u || operation == 3u || operation == 6u;
-            if adds && value < before {
+            if !MORF_UNIFORM_COLOR && adds && value < before {
                 out.group = group;
             }
         }
     }
     return out;
+}
+
+// Replaced with a subgroup vote when the GPU supports it. An early exit
+// must take the whole fragment group so the slow path keeps valid derivatives.
+fn isolated_group(value: bool) -> bool { return false; }
+
+// For a union, a layer farther outside than every seam radius cannot
+// influence a nearby layer's painted edge. Most pixels in a row of cards
+// belong to exactly one card, including while the others fade.
+fn nearest_union(local: vec2<f32>, first: u32, count: u32, absent: u32) -> vec4<f32> {
+    var nearest = 1e20;
+    var second = 1e20;
+    var which = 0u;
+    var seam = 0.0;
+    for (var index=0u; index<count; index++) {
+        if ((absent >> index) & 1u) != 0u { continue; }
+        let layer = layers[first+index];
+        let distance = layer_distance(local,layer);
+        if distance < nearest { second = nearest; nearest = distance; which = index; }
+        else { second = min(second,distance); }
+        if u32(layer.kinds.w) == 3u { seam = max(seam,max(layer.extra.z,0.0001)); }
+    }
+    return vec4<f32>(nearest,second,f32(which),seam);
+}
+
+// A field of one colour and no blend groups only needs the distances of
+// its fade subsets. Advance all eight together, loading/measuring each layer
+// once. Fixed vectors avoid per-fragment arrays and nested composition loops.
+struct FadeDistances { lo: vec4<f32>, hi: vec4<f32> };
+
+fn combine4(a: vec4<f32>, b: f32, operation: u32, blend: f32, profile: u32) -> vec4<f32> {
+    let v = vec4<f32>(b);
+    let k = max(blend, 0.0001);
+    if profile == 1u && operation >= 3u && operation <= 5u {
+        if operation == 3u {
+            let x = max(vec4<f32>(k) - a, vec4<f32>(0.0));
+            let y = max(k - b, 0.0);
+            return max(vec4<f32>(k), min(a, v)) - sqrt(x*x + vec4<f32>(y*y));
+        }
+        let signed_b = select(b, -b, operation == 4u);
+        let x = max(vec4<f32>(k) + a, vec4<f32>(0.0));
+        let y = max(k + signed_b, 0.0);
+        return min(vec4<f32>(-k), max(a, vec4<f32>(signed_b))) + sqrt(x*x + vec4<f32>(y*y));
+    }
+    switch operation {
+        case 0u: { return min(a, v); }
+        case 1u: { return max(a, -v); }
+        case 2u: { return max(a, v); }
+        case 3u: {
+            let h = clamp(vec4<f32>(0.5) + 0.5 * (v-a) / k, vec4<f32>(0.0), vec4<f32>(1.0));
+            return mix(v,a,h) - k*h*(vec4<f32>(1.0)-h);
+        }
+        case 4u: {
+            let h = clamp(vec4<f32>(0.5) - 0.5 * (a+v) / k, vec4<f32>(0.0), vec4<f32>(1.0));
+            return mix(a,-v,h) + k*h*(vec4<f32>(1.0)-h);
+        }
+        case 5u: {
+            let h = clamp(vec4<f32>(0.5) - 0.5 * (v-a) / k, vec4<f32>(0.0), vec4<f32>(1.0));
+            return mix(v,a,h) + k*h*(vec4<f32>(1.0)-h);
+        }
+        default: { return max(min(a,v), -max(a,v)); }
+    }
+}
+
+fn compose_fades(local: vec2<f32>, first: u32, count: u32,
+    omit_lo: vec4<u32>, omit_hi: vec4<u32>) -> FadeDistances {
+    var distances = FadeDistances(vec4<f32>(1e20), vec4<f32>(1e20));
+    for (var index=0u; index<count; index++) {
+        let layer = layers[first+index];
+        let value = layer_distance(local,layer);
+        var lo = vec4<f32>(value);
+        var hi = lo;
+        if index != 0u {
+            lo = combine4(distances.lo,value,u32(layer.kinds.w),layer.extra.z,u32(layer.extras.z));
+            hi = combine4(distances.hi,value,u32(layer.kinds.w),layer.extra.z,u32(layer.extras.z));
+        }
+        let bit = vec4<u32>(1u << index);
+        distances.lo = select(lo,distances.lo,(omit_lo & bit) != vec4<u32>(0u));
+        distances.hi = select(hi,distances.hi,(omit_hi & bit) != vec4<u32>(0u));
+    }
+    return distances;
 }
 
 /// Where a configuration's own shader gets to decide the colour.
@@ -802,7 +913,13 @@ fn gradient_fill(material: u32, local: vec2<f32>, flat_color: vec4<f32>) -> vec4
     return gradient_sample(material, clamp(amount, 0.0, 1.0));
 }
 
+// The fade mask, subset count and weights come from flat instance attributes
+// and their storage records. They are uniform within each primitive's quad,
+// although WGSL's analysis cannot infer that through storage-buffer reads.
+// Keep each subset's derivative beside its composition: carrying eight sets
+// of values across the branch crashes Turnip's IR3 DCE on the Adreno 810.
 @fragment
+@diagnostic(off, derivative_uniformity)
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let first = u32(input.style.z);
     let count = u32(input.style.w);
@@ -815,6 +932,29 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // further down. Both masks are empty for almost every field.
     let absent = u32(material.effects.x + 0.5);
     let fading = select(u32(material.effects.w + 0.5), 0u, solid);
+    if MORF_UNIFORM_COLOR && fading != 0u && material.border.z > 0.5 && material.shadow_color.a == 0.0 {
+        let nearby = nearest_union(input.local,first,count,absent);
+        let antialiased = material.border.y > 0.5;
+        let ramp = select(0.0001,max(input.style.y,max(fwidth(nearby.x),0.0001)*0.5),antialiased);
+        let width = max(input.style.x,0.0);
+        let alignment = material.border.x;
+        let outset = select(select(0.0,width,alignment>=1.5),width*0.5,alignment==1.0);
+        if isolated_group(nearby.y > nearby.w + ramp + outset) {
+            let index = u32(nearby.z);
+            // The general path mixes its first three fading layers; later
+            // ones are whole. Keep that policy exactly in this fast path.
+            let mixes = ((fading >> index) & 1u) != 0u && countOneBits(fading & ((1u << index)-1u)) < 3u;
+            let opacity = select(1.0,1.0-layers[first+index].extras.w,mixes);
+            let coverage = smoothstep(ramp,-ramp,nearby.x-outset)*opacity;
+            let filled = smoothstep(ramp,-ramp,nearby.x+width-outset)*opacity;
+            let fill = gradient_fill(material_index,input.local,layers[first].color);
+            let fill_alpha = fill.a*filled;
+            let outline_alpha = input.outline.a*max(coverage-filled,0.0);
+            let alpha = fill_alpha+outline_alpha;
+            let rgb = fill.rgb*fill_alpha+input.outline.rgb*outline_alpha;
+            return morf_blend_output(vec4<f32>(mix(rgb,material.color_overlay.rgb*alpha,material.color_overlay.a),alpha));
+        }
+    }
     var surface: Composed;
     if solid {
         surface.distance = -1.0e4;
@@ -858,7 +998,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let offset_point = input.local - material.shadow.xy;
     var shadowed = 0.0;
     if casts && fading == 0u {
-        let shadow_distance = compose(offset_point, input.fill, first, count, absent).distance - spread;
+        // A centred shadow has the same distance field as the surface.
+        // Reuse it instead of walking every layer again for every pixel.
+        var shadow_distance = distance - spread;
+        if any(material.shadow.xy != vec2<f32>(0.0)) {
+            shadow_distance = compose(offset_point, input.fill, first, count, absent).distance - spread;
+        }
         shadowed = select(
             smoothstep(shadow_softness, -shadow_softness, shadow_distance),
             coverage * smoothstep(-shadow_softness, shadow_softness, shadow_distance),
@@ -874,89 +1019,72 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Several layers fading at once are each there or not independently, so
     // every combination is composed and weighted by how likely it is -- up to
     // three of them; a fourth fading at the same time is drawn whole.
-    //
-    // Two passes, because each combination's edge wants its own derivative
-    // and a derivative cannot be taken in a branch only some fields take:
-    // the combinations are composed in the branch, their derivatives taken
-    // after it, where every pixel is, and they are shaded in a second branch.
-    var part_distance: array<f32, 8>;
-    var part_fill: array<vec4<f32>, 8>;
-    var part_weight: array<f32, 8>;
-    var part_shadow: array<f32, 8>;
-    var subsets = 0u;
-    if fading != 0u {
-        var which: array<u32, 3>;
-        var fades = 0u;
-        for (var index = 0u; index < count && fades < 3u; index = index + 1u) {
-            if ((fading >> index) & 1u) != 0u {
-                which[fades] = index;
-                fades = fades + 1u;
+    if MORF_UNIFORM_COLOR && fading != 0u {
+        let c0 = materials[material_index].fade_combinations[0];
+        let c1 = materials[material_index].fade_combinations[1];
+        let c2 = materials[material_index].fade_combinations[2];
+        let c3 = materials[material_index].fade_combinations[3];
+        let c4 = materials[material_index].fade_combinations[4];
+        let c5 = materials[material_index].fade_combinations[5];
+        let c6 = materials[material_index].fade_combinations[6];
+        let c7 = materials[material_index].fade_combinations[7];
+        let omit_lo = vec4<u32>(vec4<f32>(c0.y,c1.y,c2.y,c3.y));
+        let omit_hi = vec4<u32>(vec4<f32>(c4.y,c5.y,c6.y,c7.y));
+        let weights_lo = vec4<f32>(c0.x,c1.x,c2.x,c3.x);
+        let weights_hi = vec4<f32>(c4.x,c5.x,c6.x,c7.x);
+        let parts = compose_fades(input.local,first,count,omit_lo,omit_hi);
+        let ramps_lo = select(vec4<f32>(0.0001),max(vec4<f32>(input.style.y),max(fwidth(parts.lo),vec4<f32>(0.0001))*0.5),antialiased);
+        let ramps_hi = select(vec4<f32>(0.0001),max(vec4<f32>(input.style.y),max(fwidth(parts.hi),vec4<f32>(0.0001))*0.5),antialiased);
+        let covers_lo = smoothstep(ramps_lo,-ramps_lo,parts.lo-vec4<f32>(outset));
+        let covers_hi = smoothstep(ramps_hi,-ramps_hi,parts.hi-vec4<f32>(outset));
+        coverage = dot(weights_lo,covers_lo)+dot(weights_hi,covers_hi);
+        filled = dot(weights_lo,smoothstep(ramps_lo,-ramps_lo,parts.lo+vec4<f32>(inset)))
+            +dot(weights_hi,smoothstep(ramps_hi,-ramps_hi,parts.hi+vec4<f32>(inset)));
+        flat_fill = layers[first].color;
+        if casts {
+            var shadows = parts;
+            if any(material.shadow.xy != vec2<f32>(0.0)) {
+                shadows = compose_fades(offset_point,first,count,omit_lo,omit_hi);
             }
+            let wide = vec4<f32>(shadow_softness);
+            let shadow_lo = shadows.lo - vec4<f32>(spread);
+            let shadow_hi = shadows.hi - vec4<f32>(spread);
+            shadowed = dot(weights_lo,select(smoothstep(wide,-wide,shadow_lo),covers_lo*smoothstep(-wide,wide,shadow_lo),inner))
+                +dot(weights_hi,select(smoothstep(wide,-wide,shadow_hi),covers_hi*smoothstep(-wide,wide,shadow_hi),inner));
         }
-        subsets = 1u << fades;
-        for (var subset = 0u; subset < subsets; subset = subset + 1u) {
-            var weight = 1.0;
-            var omit = absent;
-            for (var slot = 0u; slot < fades; slot = slot + 1u) {
-                let opacity = 1.0 - layers[first + which[slot]].extras.w;
-                if ((subset >> slot) & 1u) != 0u {
-                    weight = weight * opacity;
-                } else {
-                    weight = weight * (1.0 - opacity);
-                    omit = omit | (1u << which[slot]);
-                }
-            }
-            part_weight[subset] = weight;
-            if weight <= 0.0 {
-                continue;
-            }
-            let part = compose(input.local, input.fill, first, count, omit);
-            part_distance[subset] = part.distance;
-            part_fill[subset] = part.fill;
-            if casts {
-                part_shadow[subset] =
-                    compose(offset_point, input.fill, first, count, omit).distance - spread;
-            }
-        }
-    }
-    let part_edge = array<f32, 8>(
-        fwidth(part_distance[0]),
-        fwidth(part_distance[1]),
-        fwidth(part_distance[2]),
-        fwidth(part_distance[3]),
-        fwidth(part_distance[4]),
-        fwidth(part_distance[5]),
-        fwidth(part_distance[6]),
-        fwidth(part_distance[7]),
-    );
-    if fading != 0u {
+    } else if !MORF_UNIFORM_COLOR && MORF_LAYER_FADES && fading != 0u {
         coverage = 0.0;
         filled = 0.0;
         shadowed = 0.0;
         var painted = vec3<f32>(0.0);
         var painted_alpha = 0.0;
+        let subsets = u32(material.shadow.w);
         for (var subset = 0u; subset < subsets; subset = subset + 1u) {
-            let weight = part_weight[subset];
-            if weight <= 0.0 {
-                continue;
-            }
+            let combination = materials[material_index].fade_combinations[subset];
+            let weight = combination.x;
+            let omit = u32(combination.y);
+            let part = compose(input.local, input.fill, first, count, omit);
+            let part_edge = fwidth(part.distance);
             // The same ramp the whole path takes, from this combination's
             // own derivative.
             let part_ramp = select(
                 0.0001,
-                max(input.style.y, max(part_edge[subset], 0.0001) * 0.5),
+                max(input.style.y, max(part_edge, 0.0001) * 0.5),
                 antialiased,
             );
-            let d = part_distance[subset];
+            let d = part.distance;
             let part_coverage = smoothstep(part_ramp, -part_ramp, d - outset);
             let part_filled = smoothstep(part_ramp, -part_ramp, d + inset);
-            let fill = part_fill[subset];
+            let fill = part.fill;
             coverage = coverage + weight * part_coverage;
             filled = filled + weight * part_filled;
             painted = painted + weight * part_filled * fill.a * fill.rgb;
             painted_alpha = painted_alpha + weight * part_filled * fill.a;
             if casts {
-                let shadow_distance = part_shadow[subset];
+                var shadow_distance = part.distance - spread;
+                if any(material.shadow.xy != vec2<f32>(0.0)) {
+                    shadow_distance = compose(offset_point, input.fill, first, count, omit).distance - spread;
+                }
                 shadowed = shadowed + weight * select(
                     smoothstep(shadow_softness, -shadow_softness, shadow_distance),
                     part_coverage * smoothstep(-shadow_softness, shadow_softness, shadow_distance),

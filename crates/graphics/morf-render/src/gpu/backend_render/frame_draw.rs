@@ -52,6 +52,11 @@ impl FrameDraw<'_> {
             && let Some((x, y, width, height)) = placed_scissor(command_damage, frame)
         {
             pass.set_scissor_rect(x, y, width, height);
+            let measured = self
+                .backend
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.begin_draw(pass, command_index));
             if let Some(instances) = self.field_indices[command_index].clone() {
                 // A shader replaces the pipeline rather than switching
                 // inside it: WGSL cannot swap a function at run time,
@@ -81,7 +86,18 @@ impl FrameDraw<'_> {
                         }
                     }
                     None => {
-                        pass.set_pipeline(&self.backend.field_pipeline);
+                        use super::super::field_pass::FieldVariant;
+                        pass.set_pipeline(
+                            match FieldVariant::for_command(&self.list.commands[command_index]) {
+                                FieldVariant::General => &self.backend.field_pipeline,
+                                FieldVariant::Analytic => &self.backend.field_analytic,
+                                FieldVariant::AnalyticOpaque => &self.backend.field_opaque,
+                                FieldVariant::Boxes => &self.backend.field_boxes,
+                                FieldVariant::BoxesOpaque => &self.backend.field_boxes_opaque,
+                                FieldVariant::Quad => &self.backend.field_quad,
+                                FieldVariant::BoxesUniform => &self.backend.field_boxes_uniform,
+                            },
+                        );
                         pass.set_bind_group(1, &self.backend.field_shader_default, &[]);
                     }
                 }
@@ -125,6 +141,9 @@ impl FrameDraw<'_> {
                     pass.set_vertex_buffer(0, self.backend.glyph_buffer.slice(..));
                     pass.draw(0..6, span.range.clone());
                 }
+            }
+            if let Some(end) = measured {
+                self.backend.profile.as_ref().unwrap().end_draw(pass, end);
             }
         }
     }

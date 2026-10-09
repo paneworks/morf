@@ -51,12 +51,25 @@ end
 --- tab chosen -- the pages read their services only then; graph history
 --- continues collecting above), whether its tab
 --- is chosen, and `area`.
+local contexts = {}
 function M.context(i)
-  return {
-    opened = function() return M.opened:get() and M.displayed:get() == i end,
-    current = function() return M.displayed:get() == i end,
+  if contexts[i] then return contexts[i] end
+  local prefix = "caelestia.dashboard.page." .. i
+  local opened = morf.signal(prefix .. ".opened", false)
+  local current = morf.signal(prefix .. ".current", false)
+  -- A tab change should wake the pages entering and leaving. Bindings on
+  -- every other page keep the same boolean and need no reevaluation.
+  morf.effect(prefix .. ".visibility", function()
+    local selected = M.displayed:get() == i
+    current:set(selected)
+    opened:set(M.opened:get() and selected)
+  end)
+  contexts[i] = {
+    opened = function() return opened:get() end,
+    current = function() return current:get() end,
     area = M.area,
   }
+  return contexts[i]
 end
 
 return M

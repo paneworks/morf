@@ -390,8 +390,15 @@ fn a_named_shell_has_parts() {
     let root = std::env::temp_dir().join(format!("morf-parts-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
-    // SAFETY: the tests that read XDG_CONFIG_HOME are this one alone.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", &root) };
+    let previous_home = std::env::var_os("XDG_CONFIG_HOME");
+    let previous_dirs = std::env::var_os("XDG_CONFIG_DIRS");
+    let system = root.join("system");
+    // SAFETY: this is the only test that reads the XDG config directories.
+    // Keep an installed system theme from becoming part of this fixture.
+    unsafe {
+        std::env::set_var("XDG_CONFIG_HOME", &root);
+        std::env::set_var("XDG_CONFIG_DIRS", &system);
+    }
     let morf = root.join("morf");
     let named = |name: &str| crate::config::named_config_path(name);
     assert_eq!(
@@ -442,8 +449,6 @@ fn a_named_shell_has_parts() {
     );
     // A greeter with an empty home uses system configuration; user parts
     // still override it. Relative XDG search entries are never loaded.
-    let previous_dirs = std::env::var_os("XDG_CONFIG_DIRS");
-    let system = root.join("system");
     fs::create_dir_all(system.join("morf/caelestia/greet")).unwrap();
     fs::write(system.join("morf/caelestia/greet/init.lua"), "").unwrap();
     unsafe { std::env::set_var("XDG_CONFIG_DIRS", format!("relative:{}", system.display())) };
@@ -462,7 +467,10 @@ fn a_named_shell_has_parts() {
             Some(value) => std::env::set_var("XDG_CONFIG_DIRS", value),
             None => std::env::remove_var("XDG_CONFIG_DIRS"),
         }
+        match previous_home {
+            Some(value) => std::env::set_var("XDG_CONFIG_HOME", value),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
     }
-    unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
     let _ = fs::remove_dir_all(&root);
 }

@@ -28,7 +28,6 @@ return function(S, theme, M, hud)
   end
   local function H(t) return (t.height and t.height > 0) and t.height or 32 end
   local function W(t) return (t.width and t.width > 0) and t.width or 32 end
-  local function dim(t) return function() return t.enabled == false and 0.4 or 1 end end
   local function alert() return M.signal("alert")() end
   local function with(kind, props, ...)
     for i = 1, select("#", ...) do
@@ -119,16 +118,17 @@ return function(S, theme, M, hud)
 
   --- A caption in caps that rolls up through a strip of marks when the
   --- pointer arrives (the theme's button label). `text` a string or fn.
-  local function caption(t, text, ink, size)
+  local function caption(t, text, ink, size, available)
     size = size or FS
     local function words() return tostring(get(text) or ""):upper() end
-    local measure = M.menu_label { text = words, font_size = size, height = 18, opacity = 0 }
-    local function width() return math.max(1, (measure.layout_width or 0) + 2) end
+    local measure=not available and M.menu_label {text=words,font_size=size,height=18,opacity=0} or nil
+    local function width() return available and available() or math.max(1,(measure.layout_width or 0)+2) end
     local strip = ui.Column { y = -36, gap = 0,
-      M.menu_label { text = "/ / / / / / / /", font_size = size, height = 18, color = ink },
-      M.menu_label { text = "+ | + | + | + |", font_size = size, height = 18, color = ink },
-      M.menu_label { text = words, font_size = size, height = 18, color = ink } }
-    local node = ui.Item { width = width, height = 18, clip = true, measure, strip }
+      M.menu_label { text = "/ / / / / / / /",width=width,elide="right",font_size = size, height = 18, color = ink },
+      M.menu_label { text = "+ | + | + | + |",width=width,elide="right",font_size = size, height = 18, color = ink },
+      M.menu_label { text = words,width=width,elide="right",font_size = size, height = 18, color = ink } }
+    local node = ui.Item { width = width, height = 18, clip = true, strip,
+      measure and ui.Item {width=1,height=1,clip=true,measure} or nil }
     local was, running = false, nil
     morf.effect("tsugumori.press.caption." .. tostring(strip), function()
       local now = t.hovered
@@ -146,16 +146,20 @@ return function(S, theme, M, hud)
   --- An icon and a rolling caption in a row, centred (or from `start`).
   local function legend(t, spec, ink, o)
     o = o or {}
-    local glyph = o.icon ~= nil and o.icon or spec.icon
+    local glyph=o.icon
+    if glyph==nil then glyph=spec.icon end
     local text = o.label ~= nil and o.label or spec.label
-    local props = { gap = o.gap or 8, align = "center" }
-    if o.start then props.anchors = { left = true, left_margin = o.start, vertical_center = true }
-    else props.anchors = { center_in = true } end
-    return with(ui.Row, props,
-      o.pre,
-      glyph and M.icon(glyph, o.glyph or 17, o.icon_ink or ink) or nil,
-      (text and text ~= "") and caption(t, text, ink, o.size) or nil,
-      o.post)
+    local before,after={},{}
+    if o.pre then before[#before+1]=o.pre end
+    if glyph then before[#before+1]=M.icon(glyph,o.glyph or 17,o.icon_ink or ink) end
+    if o.post then after[#after+1]=o.post end
+    local measure=M.menu_label {text=function() return tostring(get(text) or ""):upper() end,
+      font_size=o.size or FS,height=18,opacity=0}
+    return require("lib.kit.caption").make {width=spec.width,height=function() return H(t) end,
+      gap=o.gap or 8,left=o.start,right=o.end_space,align=o.start and "start" or nil,
+      before=before,after=after,measure=measure,
+      label_visible=function() local s=get(text) return s~=nil and s~="" end,
+      label=text and text~="" and function(w) return caption(t,text,ink,o.size,w) end or nil}
   end
 
   --- A framed button: `fill`, `edge` (colour fns), `ink`, `under` (nodes
@@ -168,7 +172,7 @@ return function(S, theme, M, hud)
       translate_x = o.sink and function() return t.down and o.sink or 0 end or nil,
       translate_y = o.sink and function() return t.down and o.sink or 0 end or nil,
       behavior = { color = quick, border_color = quick, translate_x = quick, translate_y = quick } }
-    local ground = { anchors = { fill = true }, opacity = dim(t) }
+    local ground = { anchors = { fill = true } }
     for _, node in ipairs(o.under or {}) do ground[#ground + 1] = node end
     ground[#ground + 1] = plate
     for _, node in ipairs(o.over or {}) do ground[#ground + 1] = node end
@@ -271,7 +275,7 @@ return function(S, theme, M, hud)
     local function ink() return C.primary end
     local text = M.text { text = spec.label or "", font_size = FS, color = ink }
     return full {
-      background = ui.Item { anchors = { fill = true }, opacity = dim(t) },
+      background = ui.Item { anchors = { fill = true } },
       content = ui.Row { anchors = { center_in = true }, gap = 4, align = "center",
         ui.Item { width = function() return text.layout_width or 0 end, height = 20, text,
           ui.Path { anchors = { left = true, right = true, bottom = true }, height = 2, view_box = { 0, 0, w, 2 },
@@ -399,9 +403,9 @@ return function(S, theme, M, hud)
   function S.copy(t, spec)
     local copied = morf.signal("tsugumori.copy." .. tostring({}), false)
     local function ink() return copied:get() and C.primary or C.onSurface end
-    local glyph = M.icon(function() return copied:get() and "check" or (spec.icon or "content_copy") end, 17, ink)
-    local row = with(ui.Row, { anchors = { center_in = true }, gap = 8, align = "center" }, glyph,
-      spec.label and caption(t, function() return copied:get() and "Copied" or spec.label end, ink) or nil)
+    local row=legend(t,spec,ink,{
+      icon=function() return copied:get() and "check" or (get(spec.icon) or "content_copy") end,
+      label=spec.label and function() return copied:get() and "Copied" or get(spec.label) end})
     local was, timer = false, nil
     morf.effect("tsugumori.copy.watch." .. tostring(row), function()
       local down = t.down
@@ -426,9 +430,7 @@ return function(S, theme, M, hud)
     return framed(t, spec, { fill = function() return C.surfaceContainerHigh end, edge = idle,
       over = { hatch({ anchors = { left = true, right = true, bottom = true, margins = 1 }, height = 3 }, w, 3,
         function() return C.primary:alpha(.6) end, 4, 1.5) },
-      content = with(ui.Row, { anchors = { center_in = true }, gap = 10, align = "center" },
-        M.loading(20, function() return C.primary end),
-        spec.label and caption(t, spec.label, ink) or nil) })
+      content=legend(t,spec,ink,{icon=false,gap=10,pre=M.loading(20,function() return C.primary end)}) })
   end
 
   -- ------------------------------------------------------------ toggles --
@@ -455,7 +457,6 @@ return function(S, theme, M, hud)
       or legend(t, spec, ink)
     return full {
       background = ui.Item { anchors = { fill = true, left_margin = (pos == "middle" or pos == "last") and -1 or 0 },
-        opacity = dim(t),
         ui.Rect { anchors = { fill = true },
           color = function() return t.checked and C.primary:alpha(.16) or C.surfaceContainerHigh end,
           border_width = 1, border_color = function() return t.checked and stroke(C, "focus") or stroke(C, "idle") end,
@@ -477,7 +478,6 @@ return function(S, theme, M, hud)
     local function ink() return t.checked and C.onPrimary or C.onSurface end
     return full {
       background = ui.Item { anchors = { fill = true, left_margin = (pos == "middle" or pos == "last") and -1 or 0 },
-        opacity = dim(t),
         ui.Rect { anchors = { fill = true }, color = function() return t.checked and C.primary or C.surfaceContainerHigh end,
           border_width = 1, border_color = function() return t.checked and C.primary or stroke(C, "idle") end,
           behavior = { color = quick } } },
@@ -534,9 +534,7 @@ return function(S, theme, M, hud)
         ui.Rect { anchors = { left = true, top = true, bottom = true }, width = 1, color = idle },
         M.icon("close", 16, function() return t.hovered and alert() or C.onSurfaceVariant end,
           { anchors = { center_in = true } }) } },
-      content = with(ui.Row, { anchors = { left = true, left_margin = 10, vertical_center = true }, gap = 6, align = "center" },
-        spec.icon and M.icon(spec.icon, 16, function() return C.primary end) or nil,
-        caption(t, spec.label or "", ink)) })
+      content=legend(t,spec,ink,{glyph=16,gap=6,start=10,end_space=38,icon_ink=function() return C.primary end}) })
   end
 
   --- A suggestion chip: no frame -- registration marks at two corners
@@ -549,12 +547,11 @@ return function(S, theme, M, hud)
   --- A tag: a small lit block with its caption in caps and a notch.
   function S.tag(t, spec)
     return full {
-      background = ui.Item { anchors = { fill = true }, opacity = dim(t),
+      background = ui.Item { anchors = { fill = true },
         ui.Rect { anchors = { fill = true }, color = function() return C.primary end },
         ui.Rect { anchors = { left = true, vertical_center = true, left_margin = 4 }, width = 3, height = 8,
           color = function() return C.onPrimary end } },
-      content = M.menu_label { anchors = { center_in = true, horizontal_center_offset = 3 },
-        text = tostring(spec.label or ""):upper(), font_size = FS, color = function() return C.onPrimary end },
+      content=legend(t,spec,function() return C.onPrimary end,{icon=false,start=15,end_space=9}),
       badge = feedback(t, spec.id),
     }
   end
@@ -639,7 +636,7 @@ return function(S, theme, M, hud)
   --- presses down onto.
   function S.keycap(t, spec)
     return full {
-      background = ui.Item { anchors = { fill = true }, opacity = dim(t),
+      background = ui.Item { anchors = { fill = true },
         ui.Rect { anchors = { fill = true }, color = function() return C.outline end },
         ui.Rect { anchors = { left = true, right = true, top = true },
           height = function() return math.max(0, H(t) - (t.down and 1 or 3)) end,
@@ -662,7 +659,7 @@ return function(S, theme, M, hud)
   function S.fab(t, spec)
     local function ink() return C.onPrimary end
     return full {
-      background = ui.Item { anchors = { fill = true }, opacity = dim(t),
+      background = ui.Item { anchors = { fill = true },
         scale = function() return t.down and .94 or 1 end, behavior = { scale = quick },
         ui.Rect { anchors = { fill = true }, translate_x = 3, translate_y = 3,
           color = function() return C.primary:alpha(.3) end },
@@ -695,7 +692,7 @@ return function(S, theme, M, hud)
   function S.speed_dial_item(t, spec)
     local function d() return math.min(H(t), 48) - 4 end
     return full {
-      background = ui.Item { anchors = { fill = true }, opacity = dim(t),
+      background = ui.Item { anchors = { fill = true },
         ui.Rect { anchors = { right = true, vertical_center = true }, width = d, height = d,
           color = function() return t.down and C.primary:mix(C.onPrimary, .15) or C.primaryContainer end,
           border_width = 1, border_color = function() return t.hovered and C.primary or stroke(C, "hover") end,
@@ -781,15 +778,13 @@ return function(S, theme, M, hud)
       was = holding
     end, { owner = dial })
     return full {
-      background = ui.Item { anchors = { fill = true }, opacity = dim(t),
+      background = ui.Item { anchors = { fill = true },
         ui.Rect { anchors = { fill = true }, color = function() return C.surfaceContainer end },
         ui.Item { anchors = { fill = true }, clip = true, mover },
         ui.Rect { anchors = { fill = true }, color = "transparent", border_width = 1,
           border_color = function() return t.holding and tone() or stroke(C, t.hovered and "hover" or "idle") end,
           behavior = { border_color = quick } } },
-      content = ui.Row { anchors = { center_in = true }, gap = 10, align = "center", dial,
-        spec.label and M.text { text = tostring(spec.label):upper(), font_size = theme.typography.menu, font_weight = 500,
-          color = function() return C.onSurface end } or nil },
+      content=legend(t,spec,function() return C.onSurface end,{icon=false,gap=10,pre=dial,size=theme.typography.menu}),
       badge = feedback(t, spec.id),
     }
   end

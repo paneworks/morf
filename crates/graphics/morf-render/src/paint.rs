@@ -46,6 +46,32 @@ pub(crate) fn append_node(
     if !scene.bool_value(node, "visible")? {
         return Ok(());
     }
+    let Some(bounds) = layout.geometry(node) else {
+        return Ok(());
+    };
+    let transform = inherited.transform.then(
+        node_transform(scene, node, bounds)
+            .map_err(|error| RenderError::Scene(error.to_string()))?,
+    );
+    let clips = scene.bool_value(node, "clip")?;
+    let clip = if clips {
+        let bounds = transform.bounds(bounds);
+        Some(
+            inherited
+                .clip
+                .map_or(bounds, |inherited| intersect_geometry(inherited, bounds)),
+        )
+    } else {
+        inherited.clip
+    };
+    // Nothing below an empty clip can reach the surface. In a scrolling
+    // dashboard this discards whole offscreen pages before reading their
+    // paint properties, building paths, or allocating compositing layers.
+    // An unclipped parent outside the viewport must still be traversed:
+    // its children may overflow back into view.
+    if clip.is_some_and(|clip| clip.width <= 0.0 || clip.height <= 0.0) {
+        return Ok(());
+    }
     let node_opacity = scene.number(node, "opacity")?.clamp(0.0, 1.0);
     let rotation = scene.number(node, "rotation")?;
     let layer_config = layer_config(scene, node)?;
@@ -58,7 +84,6 @@ pub(crate) fn append_node(
     let layer_blur = layer_config.blur.max(rect_blur);
     // Both are asked for more than once further down, and each `rect_radii` is
     // five property reads of its own.
-    let clips = scene.bool_value(node, "clip")?;
     let radii = if matches!(element, Element::Rect | Element::ClipRect) {
         rect_radii(scene, node)?
     } else {
@@ -147,13 +172,6 @@ pub(crate) fn append_node(
     });
     let color_overlay =
         compose_overlay(inherited.overlay, scene.color_value(node, "color_overlay")?);
-    let Some(bounds) = layout.geometry(node) else {
-        return Ok(());
-    };
-    let transform = inherited.transform.then(
-        node_transform(scene, node, bounds)
-            .map_err(|error| RenderError::Scene(error.to_string()))?,
-    );
     if let Some(layer) = layer
         && rounded_clip
     {
@@ -163,16 +181,6 @@ pub(crate) fn append_node(
             radii,
         });
     }
-    let clip = if clips {
-        let bounds = transform.bounds(bounds);
-        Some(
-            inherited
-                .clip
-                .map_or(bounds, |inherited| intersect_geometry(inherited, bounds)),
-        )
-    } else {
-        inherited.clip
-    };
     // A shape an enclosing field composed is drawn by that field, not again on
     // its own. Everything else — text, images, anything without a field —
     // paints normally over the composition.

@@ -426,7 +426,9 @@ fn positional_arguments(value: &DbusValue) -> Result<Option<Structure<'_>>, Stri
         DbusValue::Nil => return Ok(None),
         DbusValue::List(values) if values.is_empty() => return Ok(None),
         DbusValue::List(values) => values.as_slice(),
-        DbusValue::Map(_) => return Err("D-Bus maps need an explicit signature".to_owned()),
+        DbusValue::Map(_) | DbusValue::Dictionary(_) => {
+            return Err("D-Bus maps need an explicit signature".to_owned());
+        }
         other => std::slice::from_ref(other),
     };
     let mut body = StructureBuilder::new();

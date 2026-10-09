@@ -78,7 +78,8 @@ end
 local zoom_first, zoom_settle = true, nil
 morf.effect("caelestia.scale", function()
   local v = zoom()
-  if morf.density then morf.density(v ~= 0 and { zoom = 2 ^ v } or nil) end
+  if require("themes.ui_scale").compositor then require("themes.ui_scale").apply()
+  elseif morf.density then morf.density(v ~= 0 and { zoom = 2 ^ v } or nil) end
   if zoom_first then zoom_first = false return end
   if zoom_settle then zoom_settle:cancel() end
   zoom_settle = morf.timer(300, function() zoom_settle = nil morf.reload() end, false)
@@ -181,6 +182,7 @@ local frame_view=require("themes").view("frame")
 local frame_root=frame_view.build {desk=bar.desk,bar=bar.build(),drawers=drawer.all,
   rail={node=rail_node,shape=rail.shape},levels={node=levels_node,shape=levels.shape},
   overlays=overlays,triggers=triggers}
+require("phone_gestures").attach(frame_root)
 -- The shell's window, to a screen reader.
 frame_root.accessible_name = "Caelestia"
 ui.reparent(capture.editor.node,frame_root)

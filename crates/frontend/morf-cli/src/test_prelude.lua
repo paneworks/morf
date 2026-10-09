@@ -286,6 +286,23 @@ function test.move(x, y, options)
   host.move(px, py, opts.surface or surface)
 end
 
+function test.touch(phase, id, x, y, options)
+  host.touch(phase, id, x or 0, y or 0, (options or {}).surface, (options or {}).time_ms)
+end
+
+function test.swipe(from, to, options)
+  options = options or {}
+  local duration, id = options.duration or 160, options.id or 0
+  local steps = options.steps or math.max(1, math.ceil(duration / 16))
+  test.touch("down", id, from[1], from[2], options)
+  for step = 1, steps do
+    test.advance(duration / steps)
+    test.touch("move", id, from[1] + (to[1] - from[1]) * step / steps,
+      from[2] + (to[2] - from[2]) * step / steps, options)
+  end
+  test.touch("up", id, to[1], to[2], options)
+end
+
 function test.leave(options)
   host.leave((options or {}).surface)
 end

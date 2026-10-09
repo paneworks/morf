@@ -123,6 +123,44 @@ pub(crate) fn two_fading_layers_are_each_there_or_not() {
 
 #[test]
 #[ignore = "requires a GPU adapter"]
+pub(crate) fn three_fading_layers_mix_all_eight_compositions() {
+    const SIZE: u32 = 128;
+    let opacities = [0.25, 0.5, 0.75];
+    let picture = |values: [f32; 3]| {
+        frame(
+            SIZE,
+            &[
+                (16.0, 32.0, values[0], WHITE),
+                (48.0, 32.0, values[1], WHITE),
+                (80.0, 32.0, values[2], WHITE),
+            ],
+        )
+    };
+    let mut parts = Vec::new();
+    for subset in 0..8 {
+        let mut weight = 1.0;
+        let values = std::array::from_fn(|index| {
+            if subset & (1 << index) != 0 {
+                weight *= opacities[index];
+                1.0
+            } else {
+                weight *= 1.0 - opacities[index];
+                0.0
+            }
+        });
+        parts.push((weight, render_readback(&picture(values), SIZE)));
+    }
+    let faded = render_readback(&picture(opacities), SIZE);
+    let borrowed: Vec<_> = parts
+        .iter()
+        .map(|(weight, pixels)| (*weight, pixels.as_slice()))
+        .collect();
+    let (off, x, y) = worst_mix(SIZE, &faded, &borrowed);
+    assert!(off <= 2.0, "{off} off the eight-way mix at {x},{y}");
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
 pub(crate) fn a_fading_subtraction_half_fills_its_hole() {
     const SIZE: u32 = 64;
     let mut scene = morf_scene::Scene::new();
@@ -199,4 +237,125 @@ pub(crate) fn a_large_frame_fading_a_panel_is_tiled_without_losing_the_fade() {
     let (off, x, y) = worst_mix(SIZE, &half, &[(0.5, &none), (0.5, &whole)]);
     assert!(off <= 2.0, "{off} off the mix at {x},{y}");
     assert!(alpha_at(&half, SIZE, 255, 30).abs_diff(128) <= 2);
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn uniform_fades_match_the_general_path_with_borders_and_shadows() {
+    // One non-zero blend group is equivalent to no groups, but selects the
+    // general composition shader. Compare whole images, including the seam,
+    // partially transparent paint, inside/outside borders and moved shadows.
+    const SIZE: u32 = 128;
+    let tint = Color::rgba8(90, 160, 220, 180);
+    for (offset, inner) in [(0.0, false), (5.0, false), (5.0, true)] {
+        let mut picture = frame(SIZE, &[(20.0, 40.0, 0.3, tint), (66.0, 40.0, 0.7, tint)]);
+        if let DrawCommand::Field {
+            layers,
+            shadow_color,
+            shadow_blur,
+            shadow_offset_x,
+            shadow_offset_y,
+            shadow_inner,
+            stroke_color,
+            stroke_width,
+            ..
+        } = &mut picture.commands[0]
+        {
+            for (index, layer) in layers.iter_mut().enumerate() {
+                layer.color = if index == 1 { WHITE } else { tint };
+            }
+            *shadow_color = Color::rgba8(10, 15, 25, 150);
+            *shadow_blur = 6.0;
+            *shadow_offset_x = offset;
+            *shadow_offset_y = offset;
+            *shadow_inner = inner;
+            *stroke_color = WHITE;
+            *stroke_width = 2.0;
+        }
+        let uniform = render_readback(&picture, SIZE);
+        if let DrawCommand::Field { layers, .. } = &mut picture.commands[0] {
+            for layer in layers {
+                layer.blend_group = 1;
+            }
+        }
+        let general = render_readback(&picture, SIZE);
+        let worst = uniform
+            .iter()
+            .zip(&general)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap();
+        assert!(
+            worst <= 2,
+            "uniform fade differs by {worst}, offset={offset}, inner={inner}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn separated_fading_cards_match_full_composition_at_edges_and_seams() {
+    const SIZE: u32 = 128;
+    let mut scene = morf_scene::Scene::new();
+    let node = scene.create(morf_scene::Element::Sdf);
+    for profile in [BlendProfile::Quadratic, BlendProfile::Circular] {
+        let layers = (0..6)
+            .map(|index| {
+                let mut layer = field_layer(
+                    8.0 + (index % 2) as f64 * 56.0,
+                    8.0 + (index / 2) as f64 * 38.0,
+                    51.0,
+                    Shape::Box,
+                );
+                layer.bounds.height = 34.0;
+                layer.radii = [9.0; 4];
+                layer.opacity = [0.2, 0.5, 0.8, 0.4, 0.0, 1.0][index];
+                layer.operation = Operation::SmoothUnion;
+                layer.blend = 8.0;
+                layer.profile = profile;
+                layer.color = Color::rgba8(90, 160, 220, 180);
+                layer
+            })
+            .collect();
+        let mut picture = DrawList {
+            commands: vec![field_command(node, layers)],
+            layers: Vec::new(),
+        };
+        if let DrawCommand::Field {
+            bounds,
+            stroke_width,
+            stroke_color,
+            ..
+        } = &mut picture.commands[0]
+        {
+            bounds.width = f64::from(SIZE);
+            bounds.height = f64::from(SIZE);
+            *stroke_width = 2.0;
+            *stroke_color = WHITE;
+        }
+        let fast = render_readback(&picture, SIZE);
+        if let DrawCommand::Field { layers, .. } = &mut picture.commands[0] {
+            for layer in layers {
+                layer.blend_group = 1;
+            }
+        }
+        let general = render_readback(&picture, SIZE);
+        let (at, worst) = fast
+            .iter()
+            .zip(&general)
+            .enumerate()
+            .map(|(i, (a, b))| (i, a.abs_diff(*b)))
+            .max_by_key(|(_, difference)| *difference)
+            .unwrap();
+        let pixel = at / 4;
+        let offset = pixel * 4;
+        assert!(
+            worst <= 2,
+            "isolated card differs by {worst} for {profile:?} at {},{}: {:?} != {:?}",
+            pixel % SIZE as usize,
+            pixel / SIZE as usize,
+            &fast[offset..offset + 4],
+            &general[offset..offset + 4]
+        );
+    }
 }

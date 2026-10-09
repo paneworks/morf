@@ -51,6 +51,8 @@ pub enum Event {
         id: i32,
         x: f64,
         y: f64,
+        /// Compositor event time in milliseconds (wrapping u32). None for synthetic input.
+        time_ms: Option<u32>,
     },
     /// A touch contact moved on the surface.
     TouchMotion {
@@ -58,6 +60,8 @@ pub enum Event {
         id: i32,
         x: f64,
         y: f64,
+        /// Compositor event time in milliseconds (wrapping u32). None for synthetic input.
+        time_ms: Option<u32>,
     },
     /// A touch contact ended on the surface.
     TouchUp {
@@ -65,6 +69,8 @@ pub enum Event {
         id: i32,
         x: f64,
         y: f64,
+        /// Compositor event time in milliseconds (wrapping u32). None for synthetic input.
+        time_ms: Option<u32>,
     },
     /// The compositor cancelled every active touch contact.
     TouchCancel,
