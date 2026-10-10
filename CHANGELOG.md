@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.8] - 2026-10-10
+
+### <!-- 0 -->⛰️ Features
+
+- Edit a mobile profile's APN, user, password, IP type and roaming from the Mobile networks page.
+- Explain failed mobile connections in plain words, such as IPv4-only roaming, throttling or a rejected APN, with a one-tap fix and a radio restart.
+- Choose the network mode, scan nearby operators and register manually or automatically.
+- Show SIM details and unlock, change or turn off the SIM PIN.
+- Send USSD codes and read, delete and send SMS.
+- Add a 5G quick-settings tile.
+
 ## [0.2.7] - 2026-10-10
 
 ### <!-- 0 -->⛰️ Features
