@@ -131,6 +131,36 @@ function M.set_roaming(allow)
   end
 end
 
+--- The modem's network-mode choices, read when Settings opens.
+M.mobile_mode = morf.signal("caelestia.settings.mobile-mode", {})
+local function read_mobile_mode()
+  local m = services.modem
+  if not (m and m.state.available) then M.mobile_mode:set({}) return end
+  local cli = require("mobile_cli")
+  cli.run({ "mmcli", "-J", "-m", "any" }, function(ok, out)
+    local modem = ok and cli.modem(cli.json(out))
+    M.mobile_mode:set(modem and { modes = modem.modes, current = modem.mode } or {})
+  end)
+end
+
+--- 5G on picks the best mode with 5G; off the best without it.
+function M.set_5g(on)
+  local want = on and "5g" or "4g"
+  if dry_run() then morf.log("info", "caelestia: mobile mode " .. want .. " (dry run)") return end
+  local cli = require("mobile_cli")
+  for _, choice in ipairs(M.mobile_mode:get().modes or {}) do
+    if choice.id == want then
+      local argv = { "mmcli", "-m", "any" }
+      for _, a in ipairs(cli.mode_args(choice)) do argv[#argv + 1] = a end
+      cli.run(argv, function(ok, _, err)
+        if not ok then morf.log("warn", "caelestia: mobile mode " .. want .. ": " .. tostring(err)) end
+        read_mobile_mode()
+      end)
+      return
+    end
+  end
+end
+
 --- Airplane mode on: what was on is remembered, then every radio is shut;
 --- off, what was on comes back.
 function M.set_airplane(on)
@@ -283,6 +313,20 @@ M.TOGGLES = {
         if row.home_only then return "Home network only" end
       end
       return m.state.roaming and "Allowed · Roaming now" or "Allowed"
+    end,
+  },
+  {
+    -- 5G: whether the modem may use 5G; off keeps it on 4G.
+    id = "5g", icon = "5g", name = "5G", detail = "mobile",
+    on = function() return M.mobile_mode:get().current == "5g" end,
+    set = function(now) M.set_5g(now) end,
+    status = function()
+      local mode = M.mobile_mode:get()
+      if not mode.modes then return "No modem" end
+      local has5g = false
+      for _, choice in ipairs(mode.modes) do if choice.id == "5g" then has5g = true end end
+      if not has5g then return "Not supported" end
+      return mode.current == "5g" and "On" or "Off · 4G"
     end,
   },
   {
@@ -484,6 +528,7 @@ do
 end
 
 M.opened = morf.signal("caelestia.settings.opened", false)
+morf.effect("caelestia.settings.mobile-mode", function() if M.opened:get() then read_mobile_mode() end end)
 M.displayed = require("themes.session").keep("caelestia.settings.displayed", "")
 
 M.DETAILS = {
