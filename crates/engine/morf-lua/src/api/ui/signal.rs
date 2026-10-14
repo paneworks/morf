@@ -256,7 +256,11 @@ pub(crate) fn install_signal_api<'gc>(
             let (name, initial): (String, LuaValue) = stack.consume(ctx)?;
             let initial = IpcValue::from_lua_deep(ctx, initial).map_err(HostError)?;
             let id = crate::runtime::helpers::validate_scope_part(&name)
-                .and_then(|()| state.borrow_mut().shared_signal(name, initial))
+                .and_then(|()| {
+                    let waker = morf_io::waker();
+                    let ring: morf_runtime::shared::Ring = std::sync::Arc::new(move || waker.wake());
+                    state.borrow_mut().shared_signal(name, initial, ring)
+                })
                 .map_err(HostError)?;
             let userdata = UserData::new_static(&ctx, SignalToken { id });
             userdata.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));

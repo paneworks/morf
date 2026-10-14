@@ -130,7 +130,7 @@ pub(crate) struct ClipboardState {
     read_tx: mpsc::Sender<ReadDone<u64>>,
     read_rx: mpsc::Receiver<ReadDone<u64>>,
     /// Rung when a read finishes on its thread, so the loop wakes for it.
-    waker: Option<fn()>,
+    waker: Option<morf_app::transfer::Wakeup>,
 }
 
 impl ClipboardState {
@@ -186,7 +186,7 @@ impl ClipboardState {
 
 impl WaylandDesktop {
     /// Rings `waker` whenever a read finishes on its thread.
-    pub fn set_waker(&mut self, waker: fn()) {
+    pub fn set_waker(&mut self, waker: morf_app::transfer::Wakeup) {
         self.state.clipboard.waker = Some(waker);
     }
 
@@ -278,7 +278,7 @@ impl WaylandDesktop {
             reader,
             request_id,
             clipboard.read_tx.clone(),
-            clipboard.waker,
+            clipboard.waker.clone(),
             Arc::clone(&clipboard.reads),
         );
         let _ = self.connection.flush();

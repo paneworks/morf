@@ -6,11 +6,8 @@ use crate::vm::types::Runtime;
 impl Runtime {
     /// [`SharedValues::sync`], then the bindings that read what came in.
     pub(crate) fn poll_shared(&mut self) -> bool {
-        let (changed, published) = self.reactive.borrow_mut().sync_shared();
-        if published {
-            // The other copies sleep until something wakes them.
-            morf_io::wake_all();
-        }
+        // Publishing wakes the other copies that hold what was written.
+        let (changed, _) = self.reactive.borrow_mut().sync_shared();
         if !changed {
             return false;
         }

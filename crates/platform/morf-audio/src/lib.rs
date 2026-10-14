@@ -26,8 +26,9 @@
 //!
 //! The server runs on its own thread with its own loop. Commands go to it
 //! over a channel and an event on its loop; what it sees comes back over a
-//! channel, and each report pokes morf's loop awake ([`morf_io::wake_all`]),
-//! so a volume key's change reaches an on-screen display within a frame.
+//! channel, and each report pokes awake the loop that connected
+//! ([`morf_io::Waker`]), so a volume key's change reaches an on-screen
+//! display within a frame and no other output's loop is disturbed.
 
 pub mod beat;
 pub mod dsp;
@@ -99,10 +100,12 @@ pub enum Command {
     },
 }
 
-/// Where a backend sends what it sees. Each report wakes morf's loop.
+/// Where a backend sends what it sees. Each report wakes the loop that
+/// connected.
 #[derive(Clone)]
 pub struct Events {
     sender: mpsc::Sender<Update>,
+    waker: morf_io::Waker,
 }
 
 impl Events {
@@ -110,7 +113,7 @@ impl Events {
     /// backend's cue to stop.
     pub fn send(&self, update: Update) -> bool {
         let sent = self.sender.send(update).is_ok();
-        morf_io::wake_all();
+        self.waker.wake();
         sent
     }
 }
@@ -181,7 +184,10 @@ impl Audio {
     pub fn with_backend(backend: impl Backend) -> Self {
         let (sender, receiver) = mpsc::channel();
         let name = backend.name();
-        let control = Box::new(backend).start(Events { sender });
+        let control = Box::new(backend).start(Events {
+            sender,
+            waker: morf_io::waker(),
+        });
         Self {
             backend: name,
             state: AudioState::default(),

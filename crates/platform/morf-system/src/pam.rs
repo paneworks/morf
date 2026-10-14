@@ -122,6 +122,7 @@ impl PamSession {
         password: Option<Secret>,
     ) -> Self {
         let (events, receiver) = mpsc::channel();
+        let waker = morf_io::waker();
         let cancelled = Arc::new(AtomicBool::new(false));
         let mut session = Self {
             events: receiver,
@@ -156,10 +157,11 @@ impl PamSession {
                     events: events.clone(),
                     answers,
                     cancelled,
+                    waker: waker.clone(),
                 };
                 thread::spawn(move || {
                     // The verdict, and the thread's end, ring the loop.
-                    let _wake = morf_io::WakeOnDrop;
+                    let _wake = morf_io::WakeOnDropOf(waker);
                     let outcome =
                         transaction::transact(&service, &user, confdir.as_deref(), bridge);
                     let _ = events.send(PamEvent::Finished(outcome));
@@ -169,7 +171,7 @@ impl PamSession {
             // owed it through the same channel it will be reading.
             Err(error) => {
                 let _ = events.send(PamEvent::Finished(Err(error)));
-                morf_io::wake_all();
+                waker.wake();
             }
         }
         session

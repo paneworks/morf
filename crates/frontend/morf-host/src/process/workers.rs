@@ -75,6 +75,8 @@ pub struct WorkerStart {
     pub handover: Handover,
     /// Whether its runtime starts as the primary one (`morf.primary()`).
     pub primary: bool,
+    /// What its commands ring, claimed by the thread that runs it.
+    pub alarm: crate::lock::WorkerAlarm,
 }
 
 /// The workers the supervisor wants for an output list: one per named
@@ -127,6 +129,7 @@ pub fn reconcile_workers(
         |name, screen, seed, is_primary| {
             let (commands, command_rx) = mpsc::channel();
             let stop = Arc::new(AtomicBool::new(false));
+            let alarm = crate::lock::WorkerAlarm::default();
             let join = spawn_worker(
                 name,
                 screen,
@@ -140,11 +143,12 @@ pub fn reconcile_workers(
                     seed,
                     handover: context.handover.clone(),
                     primary: is_primary,
+                    alarm: alarm.clone(),
                 },
             );
             Worker {
                 stop,
-                commands: WorkerSender::new(commands),
+                commands: WorkerSender::new(commands, alarm),
                 join,
                 screen: screen.clone(),
             }
@@ -265,6 +269,7 @@ fn spawn_worker(name: &str, screen: &Output, start: WorkerStart) -> thread::Join
             // This thread's alarm, before the configuration runs: what it
             // asks for rings this output's loop and no other.
             let _alarm = morf_io::Wake::new();
+            start.alarm.claim();
             let outputless = output == OUTPUTLESS;
             let run = panic::catch_unwind(AssertUnwindSafe(move || {
                 if outputless {

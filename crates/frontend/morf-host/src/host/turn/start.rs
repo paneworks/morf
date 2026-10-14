@@ -57,10 +57,10 @@ impl Host {
         let options_report = options.report_slow;
         primary_surface_root(runtime)?;
         let layer_config = runtime.layer_surface_config();
-        // A clipboard or drop read finishing on its thread rings every loop,
-        // so this one wakes for its answer rather than sleeping past it. Set
+        // A clipboard or drop read finishing on its thread rings this loop,
+        // so it wakes for its answer rather than sleeping past it. Set
         // before the first configure, since a read can start before it.
-        backend.set_waker(morf_io::wake_all);
+        backend.set_waker(crate::host::desktop::loop_wakeup());
         let mut config = runtime_bar_config(&layer_config, &name)?;
         if options.desktop_canvas {
             config.output = None;
@@ -213,7 +213,7 @@ impl Host {
             }
         }
         self.state.windows.clear();
-        backend.set_waker(morf_io::wake_all);
+        backend.set_waker(crate::host::desktop::loop_wakeup());
         self.backend = backend;
         self.desktop = desktop;
         refresh_idle_timeouts(runtime, &mut *self.desktop);

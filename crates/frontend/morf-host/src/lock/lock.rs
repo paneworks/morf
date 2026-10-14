@@ -31,16 +31,38 @@ pub struct Worker {
 /// loop's alarm, because the thread sleeps until something does -- a command
 /// that only sat in the channel waited for the next unrelated wake, and its
 /// sender, blocked on the answer, timed out first.
-pub struct WorkerSender(mpsc::Sender<WorkerCommand>);
+pub struct WorkerSender {
+    sender: mpsc::Sender<WorkerCommand>,
+    alarm: WorkerAlarm,
+}
+
+/// One output thread's alarm, claimed by the thread as it starts: until
+/// then it has no loop to ring, and reads its channel before it first waits.
+#[derive(Clone, Default)]
+pub struct WorkerAlarm(Arc<std::sync::OnceLock<morf_io::Waker>>);
+
+impl WorkerAlarm {
+    /// Makes this thread's loop the one rung.
+    pub fn claim(&self) {
+        let _ = self.0.set(morf_io::waker());
+    }
+
+    /// Rings that thread's loop and no other.
+    pub fn ring(&self) {
+        if let Some(waker) = self.0.get() {
+            waker.wake();
+        }
+    }
+}
 
 impl WorkerSender {
-    pub fn new(sender: mpsc::Sender<WorkerCommand>) -> Self {
-        Self(sender)
+    pub fn new(sender: mpsc::Sender<WorkerCommand>, alarm: WorkerAlarm) -> Self {
+        Self { sender, alarm }
     }
 
     pub fn send(&self, command: WorkerCommand) -> Result<(), mpsc::SendError<WorkerCommand>> {
-        let sent = self.0.send(command);
-        morf_io::wake_all();
+        let sent = self.sender.send(command);
+        self.alarm.ring();
         sent
     }
 }
@@ -49,7 +71,7 @@ impl Worker {
     /// Tells the output thread to stop, and wakes it to hear it.
     pub fn request_stop(&self) {
         self.stop.store(true, std::sync::atomic::Ordering::Release);
-        morf_io::wake_all();
+        self.commands.alarm.ring();
     }
 }
 
@@ -154,7 +176,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
         .update_clock(&clock)
         .map_err(|error| error.to_string())?;
     let wake = morf_io::Wake::new().map_err(|error| error.to_string())?;
-    client.set_waker(morf_io::wake_all);
+    client.set_waker(crate::host::desktop::loop_wakeup());
     // As on an output: one more turn at once after a turn that handled
     // events, for what their handlers left behind.
     let mut follow_up = false;

@@ -148,7 +148,7 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
     fn has_queued_events(&self) -> bool {
         !self.pending.is_empty() || self.inner.has_queued_events()
     }
-    fn set_waker(&mut self, waker: fn()) {
+    fn set_waker(&mut self, waker: crate::transfer::Wakeup) {
         self.inner.set_waker(waker);
     }
     fn screens(&self) -> &[Output] {

@@ -222,7 +222,7 @@ fn supervisor_dispatches_registered_ipc_handler() {
         "test".to_owned(),
         Worker {
             stop,
-            commands: morf_host::lock::WorkerSender::new(commands),
+            commands: morf_host::lock::WorkerSender::new(commands, Default::default()),
             join,
             screen: Output {
                 name: Some("test".to_owned()),

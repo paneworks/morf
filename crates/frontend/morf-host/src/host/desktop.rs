@@ -14,10 +14,17 @@ pub fn desktop_for(client: &dyn Backend) -> Result<Box<dyn Desktop>, String> {
         .desktop_link()
         .ok_or_else(|| "the desktop protocols need a compositor".to_owned())?;
     let mut desktop = morf_desktop::connect(link)?;
-    // A selection read finishing on its thread rings every loop, so the
-    // loop wakes for its answer rather than sleeping past it.
-    desktop.set_waker(morf_io::wake_all);
+    // A selection read finishing on its thread rings this loop, so it wakes
+    // for its answer rather than sleeping past it.
+    desktop.set_waker(loop_wakeup());
     Ok(desktop)
+}
+
+/// Rings the loop on this thread, and no other: what a backend hands the
+/// threads its transfers finish on.
+pub fn loop_wakeup() -> morf_app::transfer::Wakeup {
+    let waker = morf_io::waker();
+    std::sync::Arc::new(move || waker.wake())
 }
 
 /// Hears what the compositor sent the desktop protocols and hands it to the

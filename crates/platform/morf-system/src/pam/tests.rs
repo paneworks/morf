@@ -100,6 +100,7 @@ fn a_failed_start_still_ends_the_handle_it_got() {
             password: Zeroizing::new(b"secret".to_vec()),
         }),
         cancelled: Arc::new(AtomicBool::new(false)),
+        waker: morf_io::waker(),
     };
     let api = stub::failing_api();
     let error = unsafe { transaction::run(&api, c"stub", c"nobody", None, bridge) }.unwrap_err();

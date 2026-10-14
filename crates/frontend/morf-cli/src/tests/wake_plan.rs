@@ -95,14 +95,20 @@ fn a_command_for_an_output_rings_its_loop() {
     // out first.
     let wake = morf_io::Wake::new().unwrap();
     wake.drain();
+    let alarm = morf_host::lock::WorkerAlarm::default();
+    alarm.claim();
+    let other = std::thread::spawn(morf_io::Wake::new).join().unwrap().unwrap();
+    let before = other.rings();
     let (sender, receiver) = mpsc::channel();
-    let sender = WorkerSender::new(sender);
+    let sender = WorkerSender::new(sender, alarm);
     let (reply, _answer) = mpsc::sync_channel(1);
     sender.send(WorkerCommand::Logs(reply)).unwrap();
     assert!(
         wake.wait(Duration::from_secs(1)),
         "the command rang the loop"
     );
+    assert_eq!(wake.rings(), 1, "once");
+    assert_eq!(other.rings(), before, "and no other output's");
     assert!(receiver.try_recv().is_ok());
 }
 

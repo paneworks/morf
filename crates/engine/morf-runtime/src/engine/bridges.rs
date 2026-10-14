@@ -23,13 +23,15 @@ impl Engine {
         self.shared.sync(&mut self.reactive)
     }
 
-    /// This copy's signal for `morf.shared` value `name`, made on first ask.
+    /// This copy's signal for `morf.shared` value `name`, made on first ask;
+    /// `ring` wakes this copy's loop when another copy writes it.
     pub fn shared_signal(
         &mut self,
         name: String,
         initial: morf_value::IpcValue,
+        ring: crate::shared::Ring,
     ) -> Result<SignalId, String> {
-        self.shared.register(&mut self.reactive, name, initial)
+        self.shared.register(&mut self.reactive, name, initial, ring)
     }
 
     /// Writes the time ("HH:MM:SS") to the clocks whose grain turned over.

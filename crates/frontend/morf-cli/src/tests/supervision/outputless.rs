@@ -4,7 +4,9 @@
 
 use crate::config::LoadPolicy;
 use morf_app::Output;
-use morf_host::lock::{SupervisorMessage, Worker, WorkerCommand, WorkerMessage, WorkerSender};
+use morf_host::lock::{
+    SupervisorMessage, Worker, WorkerAlarm, WorkerCommand, WorkerMessage, WorkerSender,
+};
 use morf_host::paint::outputless::{OUTPUTLESS, Outputless, outputless_screen, run_outputless};
 use morf_host::process::services::stop_workers;
 use morf_host::process::workers::{
@@ -70,6 +72,7 @@ pub(super) fn spawner<'a>(
             .push((name.to_owned(), seed.clone()));
         let stop = Arc::new(AtomicBool::new(false));
         let (commands, command_rx) = mpsc::channel();
+        let alarm = WorkerAlarm::default();
         let start = WorkerStart {
             path: Arc::new(PathBuf::from("shell.lua")),
             source: Arc::from(source.as_bytes()),
@@ -80,6 +83,7 @@ pub(super) fn spawner<'a>(
             seed,
             handover: handover.clone(),
             primary,
+            alarm: alarm.clone(),
         };
         let join = if name == OUTPUTLESS {
             thread::spawn(move || {
@@ -91,7 +95,7 @@ pub(super) fn spawner<'a>(
         };
         Worker {
             stop,
-            commands: WorkerSender::new(commands),
+            commands: WorkerSender::new(commands, alarm),
             join,
             screen: screen.clone(),
         }
@@ -336,6 +340,7 @@ fn a_configuration_that_needs_a_screen_is_not_a_failed_shell() {
         seed: None,
         handover,
         primary: true,
+        alarm: WorkerAlarm::default(),
     };
     assert_eq!(run_outputless(start, false), Ok(()));
     assert!(matches!(

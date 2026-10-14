@@ -44,7 +44,7 @@ impl Desktop for WaylandDesktop {
         WaylandDesktop::next_event(self)
     }
 
-    fn set_waker(&mut self, waker: fn()) {
+    fn set_waker(&mut self, waker: morf_app::transfer::Wakeup) {
         WaylandDesktop::set_waker(self, waker);
     }
 

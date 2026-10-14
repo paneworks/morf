@@ -172,7 +172,7 @@ impl Backend for LayerClient {
     fn has_queued_events(&self) -> bool {
         LayerClient::has_queued_events(self)
     }
-    fn set_waker(&mut self, waker: fn()) {
+    fn set_waker(&mut self, waker: crate::transfer::Wakeup) {
         LayerClient::set_waker(self, waker)
     }
 

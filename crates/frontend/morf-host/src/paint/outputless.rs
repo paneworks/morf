@@ -63,6 +63,7 @@ impl Outputless {
 /// hear outputs arrive and to reach the compositor's services; a test runs
 /// without one.
 pub fn run_outputless(start: WorkerStart, connect: bool) -> Result<(), String> {
+    start.alarm.claim();
     let (limits, warnings) = Limits::from_env();
     for warning in warnings {
         eprintln!("morf: {warning}");
@@ -248,7 +249,7 @@ fn connect_client(
     let Ok(mut client) = LayerClient::probe() else {
         return Ok(None);
     };
-    client.set_waker(morf_io::wake_all);
+    client.set_waker(crate::host::desktop::loop_wakeup());
     // An output may have come in the moment before this connection did.
     send(WorkerMessage::Screens {
         output: OUTPUTLESS.to_owned(),

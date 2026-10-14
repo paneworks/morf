@@ -81,6 +81,8 @@ pub(crate) struct Bridge {
     /// Set by `cancel`. Checked before every prompt, so a transaction that is
     /// asked to stop fails at the next question rather than the one after.
     pub(crate) cancelled: Arc<AtomicBool>,
+    /// The loop that started the transaction, rung at each event.
+    pub(crate) waker: morf_io::Waker,
 }
 
 impl Bridge {
@@ -141,19 +143,19 @@ pub(crate) unsafe extern "C" fn conversation(
                 let _ = bridge
                     .events
                     .send(PamEvent::Message(PamPrompt::Prompt { text, echo }));
-                morf_io::wake_all();
+                bridge.waker.wake();
                 bridge.answer(style)
             }
             PAM_TEXT_INFO => {
                 let _ = bridge.events.send(PamEvent::Message(PamPrompt::Info(text)));
-                morf_io::wake_all();
+                bridge.waker.wake();
                 None
             }
             PAM_ERROR_MSG => {
                 let _ = bridge
                     .events
                     .send(PamEvent::Message(PamPrompt::Error(text)));
-                morf_io::wake_all();
+                bridge.waker.wake();
                 None
             }
             _ => {

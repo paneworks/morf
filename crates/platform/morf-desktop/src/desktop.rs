@@ -94,7 +94,7 @@ pub trait Desktop {
     /// The next thing the desktop protocols have to tell.
     fn next_event(&mut self) -> Option<DesktopEvent>;
     /// Rings `waker` whenever work finishing on a thread has news.
-    fn set_waker(&mut self, waker: fn());
+    fn set_waker(&mut self, waker: morf_app::transfer::Wakeup);
 
     // The clipboard, over data control.
 

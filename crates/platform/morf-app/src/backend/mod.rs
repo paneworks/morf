@@ -184,7 +184,7 @@ pub trait Backend {
     }
     /// Called from any thread that finishes something the loop must hear
     /// (a clipboard read, a drop), so the loop wakes for it.
-    fn set_waker(&mut self, _waker: fn()) {}
+    fn set_waker(&mut self, _waker: crate::transfer::Wakeup) {}
 
     fn screens(&self) -> &[Output] {
         self.outputs()

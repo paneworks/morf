@@ -25,6 +25,9 @@ pub const READ_DEADLINE: Duration = Duration::from_secs(10);
 /// How many transfers may be in flight at once, each way.
 pub const MAX_TRANSFERS: usize = 8;
 
+/// Wakes the loop that registered it, from whichever thread finished.
+pub type Wakeup = Arc<dyn Fn() + Send + Sync>;
+
 /// One finished read, and `tag`: what it was for.
 pub struct ReadDone<T> {
     pub tag: T,
@@ -52,7 +55,7 @@ pub fn spawn_read<T: Send + 'static>(
     fd: OwnedFd,
     tag: T,
     tx: mpsc::Sender<ReadDone<T>>,
-    waker: Option<fn()>,
+    waker: Option<Wakeup>,
     active: Arc<AtomicUsize>,
 ) {
     thread::spawn(move || {

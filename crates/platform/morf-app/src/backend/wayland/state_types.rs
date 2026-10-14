@@ -251,7 +251,7 @@ pub(crate) struct LayerState {
     pub(crate) read_tx: mpsc::Sender<ReadDone<ReadTag>>,
     pub(crate) read_rx: mpsc::Receiver<ReadDone<ReadTag>>,
     /// Rung by a transfer thread when it finishes, so the loop wakes for it.
-    pub(crate) waker: Option<fn()>,
+    pub(crate) waker: Option<crate::transfer::Wakeup>,
     /// A drag from elsewhere currently over one of these surfaces, or dropped
     /// on one and not yet finished.
     pub(crate) drag: Option<DragState>,

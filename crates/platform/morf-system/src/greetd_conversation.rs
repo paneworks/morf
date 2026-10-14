@@ -57,11 +57,12 @@ impl GreetdConversation {
     pub fn begin(path: Option<PathBuf>, username: String) -> Self {
         let (event_sender, events) = mpsc::channel();
         let (command_sender, commands) = mpsc::channel::<Command>();
+        let waker = morf_io::waker();
         thread::spawn(move || {
             // Every event is sent from here and the thread ends with the
             // conversation, so ringing the loop at each send and at the end
             // covers all of it.
-            let _wake = morf_io::WakeOnDrop;
+            let _wake = morf_io::WakeOnDropOf(waker.clone());
             let connected = match path {
                 Some(path) => GreetdClient::connect(path, PATIENCE),
                 None => GreetdClient::connect_environment(PATIENCE),
@@ -81,7 +82,7 @@ impl GreetdConversation {
                         false
                     }
                 };
-                morf_io::wake_all();
+                waker.wake();
                 delivered
             };
             if !deliver(client.create_session(&username)) {

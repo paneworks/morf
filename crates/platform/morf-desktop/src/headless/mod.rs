@@ -196,7 +196,7 @@ impl Desktop for HeadlessDesktop {
         self.events.pop_front()
     }
 
-    fn set_waker(&mut self, _waker: fn()) {}
+    fn set_waker(&mut self, _waker: morf_app::transfer::Wakeup) {}
 
     fn set_selection(&mut self, data: Vec<(String, Arc<Vec<u8>>)>, primary: bool) -> bool {
         let mime_types: Vec<String> = data.iter().map(|(mime, _)| mime.clone()).collect();

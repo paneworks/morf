@@ -5,7 +5,7 @@
 use super::outputless::{Started, call, named, output, spawner};
 use crate::config::LoadPolicy;
 use morf_app::Output;
-use morf_host::lock::{Worker, WorkerCommand, WorkerSender};
+use morf_host::lock::{Worker, WorkerAlarm, WorkerCommand, WorkerSender};
 use morf_host::paint::outputless::{OUTPUTLESS, Outputless, outputless_screen};
 use morf_host::process::services::stop_workers;
 use morf_host::process::workers::{
@@ -218,6 +218,7 @@ fn logging_spawner<'a>(
             seed,
             handover: handover.clone(),
             primary,
+            alarm: WorkerAlarm::default(),
         };
         let (name, events) = (name.to_owned(), Arc::clone(events));
         let screen_for_lua = morf_host::process::supervisor::lua_screen(screen);
@@ -249,7 +250,7 @@ fn logging_spawner<'a>(
         });
         Worker {
             stop,
-            commands: WorkerSender::new(commands),
+            commands: WorkerSender::new(commands, WorkerAlarm::default()),
             join,
             screen: screen.clone(),
         }
