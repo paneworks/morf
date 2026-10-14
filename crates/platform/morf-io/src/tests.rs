@@ -397,7 +397,10 @@ fn children_do_not_inherit_the_wrappers_library_path() {
 
 #[test]
 fn a_worker_that_ends_rings_only_its_asker() {
-    let (asker, other) = (crate::wake_tests::Loop::start(), crate::wake_tests::Loop::start());
+    let (asker, other) = (
+        crate::wake_tests::Loop::start(),
+        crate::wake_tests::Loop::start(),
+    );
     let waker = asker.waker.clone();
     std::thread::spawn(move || {
         let _ending = WakeOnDropOf(waker);

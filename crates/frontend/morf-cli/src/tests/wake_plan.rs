@@ -97,7 +97,10 @@ fn a_command_for_an_output_rings_its_loop() {
     wake.drain();
     let alarm = morf_host::lock::WorkerAlarm::default();
     alarm.claim();
-    let other = std::thread::spawn(morf_io::Wake::new).join().unwrap().unwrap();
+    let other = std::thread::spawn(morf_io::Wake::new)
+        .join()
+        .unwrap()
+        .unwrap();
     let before = other.rings();
     let (sender, receiver) = mpsc::channel();
     let sender = WorkerSender::new(sender, alarm);

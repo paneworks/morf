@@ -265,9 +265,7 @@ mod tests {
         a_reactive.mirror(a_signal, IpcValue::Integer(1));
         a.note_write(a_signal);
         a.sync(&mut a_reactive);
-        let counts = || {
-            [&a_count, &b_count, &c_count].map(|count| count.load(Ordering::Relaxed))
-        };
+        let counts = || [&a_count, &b_count, &c_count].map(|count| count.load(Ordering::Relaxed));
         assert_eq!(counts(), [0, 1, 0], "the writer and the stranger slept");
         drop(b);
         a_reactive.mirror(a_signal, IpcValue::Integer(2));

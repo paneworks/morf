@@ -21,6 +21,14 @@ pub fn handle_ipc(
             // (`morf.screens[1]` names the one each instance draws). The
             // reply is the first output's that answered with something, so
             // an instance that stayed quiet does not hide the one that spoke.
+            if target == TEST_WAKES && std::env::var_os("MORF_TEST_HOOKS").is_some() {
+                return IpcReply::success(
+                    morf_io::wake_counts()
+                        .into_iter()
+                        .map(|(thread, rings)| WireValue::String(format!("{thread}={rings}")))
+                        .collect(),
+                );
+            }
             if workers.is_empty() {
                 return IpcReply::refused("shell has no active output");
             }
@@ -138,6 +146,10 @@ const TEST_PANIC: &str = "@panic";
 /// [`TEST_PANIC`]; the devices are the process's, so one output asking loses
 /// them for every output.
 const TEST_DEVICE_LOST: &str = "@device-lost";
+
+/// A hidden verb answered by the supervisor without waking any output: each
+/// loop's thread and how often its alarm was rung. Gated like [`TEST_PANIC`].
+const TEST_WAKES: &str = "@wakes";
 
 fn test_panic_here(screen: Option<&Screen>, args: &[morf_lua::IpcValue]) -> bool {
     if std::env::var_os("MORF_TEST_HOOKS").is_none() {

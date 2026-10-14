@@ -31,7 +31,8 @@ impl Engine {
         initial: morf_value::IpcValue,
         ring: crate::shared::Ring,
     ) -> Result<SignalId, String> {
-        self.shared.register(&mut self.reactive, name, initial, ring)
+        self.shared
+            .register(&mut self.reactive, name, initial, ring)
     }
 
     /// Writes the time ("HH:MM:SS") to the clocks whose grain turned over.
