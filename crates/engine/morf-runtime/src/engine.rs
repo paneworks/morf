@@ -16,6 +16,7 @@ use morf_scene::reactive::{Graph, SignalId};
 use morf_value::IpcValue;
 
 mod access;
+mod bridges;
 mod queries;
 mod scene;
 mod services;
@@ -32,7 +33,7 @@ pub struct Engine {
     pub revisions: crate::revisions::Revisions,
     /// Each list model a binding has read, by address, with the revision
     /// signal that binding depends on.
-    pub model_revisions: crate::models::ModelRevisions,
+    model_revisions: crate::models::ModelRevisions,
     /// `morf.shared` values: this copy's signals for them, and what to publish.
     pub shared: crate::shared::SharedValues,
     /// A reload, file watching, quitting and unlocking, as asked, and the

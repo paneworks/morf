@@ -28,4 +28,6 @@ subsystems! {
     ipc, ipc_mut: crate::ipc::IpcVerbs;
     /// Each `ui.Layout` container's functions, and the linked texts.
     layout_hooks, layout_hooks_mut: crate::layout::LayoutHooks;
+    /// Each list model a binding has read, with its revision signal.
+    model_revisions, model_revisions_mut: crate::models::ModelRevisions;
 }

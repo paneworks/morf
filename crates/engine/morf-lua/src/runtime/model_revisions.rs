@@ -20,7 +20,7 @@ use crate::{
 
 /// Notes that the running binding read `model`.
 pub(crate) fn track_model_read(state: &mut ReactiveState, model: &Rc<RefCell<ListModel>>) {
-    let signal = state.model_revisions.signal(model);
+    let signal = state.model_revisions().signal(model);
     if let Some(active) = state.tracking.capture() {
         match signal {
             Some(signal) => {
@@ -47,14 +47,8 @@ pub(crate) fn model_read_signals(
 ) -> Result<Vec<morf_scene::reactive::SignalId>, String> {
     let mut signals = Vec::with_capacity(models.len());
     let mut state = state.borrow_mut();
-    let state = &mut *state;
     for model in models {
-        signals.push(
-            state
-                .engine
-                .model_revisions
-                .signal_or_make(&mut state.engine.reactive, &model)?,
-        );
+        signals.push(state.model_signal(&model)?);
     }
     Ok(signals)
 }
@@ -65,7 +59,7 @@ pub(crate) fn bump_model_revision(
     state: &mut ReactiveState,
     model: &Rc<RefCell<ListModel>>,
 ) -> Result<bool, String> {
-    let Some((signal, value)) = state.model_revisions.bump(model) else {
+    let Some((signal, value)) = state.model_revisions_mut().bump(model) else {
         return Ok(false);
     };
     if let Some(active) = state.tracking.capture() {
