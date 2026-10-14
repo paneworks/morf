@@ -311,31 +311,30 @@ pub(crate) fn install_shell_api<'gc>(
     let reload_state = Rc::clone(&state);
     let reload = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let hard: Option<bool> = stack.consume(ctx)?;
-        let mut state = reload_state.borrow_mut();
-        state.lifecycle.reload_request =
-            Some(state.lifecycle.reload_request.unwrap_or(false) || hard.unwrap_or(false));
+        reload_state
+            .borrow_mut()
+            .lifecycle
+            .ask_reload(hard.unwrap_or(false));
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "reload", reload);
     let completed_state = Rc::clone(&state);
     let on_reload_completed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
-        completed_state
-            .borrow_mut()
-            .lifecycle
-            .reload_completed_callbacks
-            .push(crate::vm::handler_store::register(ctx.stash(callback)));
+        completed_state.borrow_mut().lifecycle.on_reload(
+            true,
+            crate::vm::handler_store::register(ctx.stash(callback)),
+        );
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_reload_completed", on_reload_completed);
     let failed_state = Rc::clone(&state);
     let on_reload_failed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
-        failed_state
-            .borrow_mut()
-            .lifecycle
-            .reload_failed_callbacks
-            .push(crate::vm::handler_store::register(ctx.stash(callback)));
+        failed_state.borrow_mut().lifecycle.on_reload(
+            false,
+            crate::vm::handler_store::register(ctx.stash(callback)),
+        );
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_reload_failed", on_reload_failed);
@@ -343,13 +342,10 @@ pub(crate) fn install_shell_api<'gc>(
     let watch_files = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let value: Option<bool> = stack.consume(ctx)?;
         let mut state = watch_state.borrow_mut();
-        if let Some(value) = value
-            && state.lifecycle.watch_files != value
-        {
-            state.lifecycle.watch_files = value;
-            state.lifecycle.watch_files_changed = true;
+        if let Some(value) = value {
+            state.lifecycle.set_watch_files(value);
         }
-        stack.replace(ctx, state.lifecycle.watch_files);
+        stack.replace(ctx, state.lifecycle.watch_files());
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "watch_files", watch_files);
@@ -400,7 +396,7 @@ pub(crate) fn install_shell_api<'gc>(
     // Exiting from inside a Lua callback would unwind the runtime that is
     // running the callback.
     let quit = Callback::from_fn(&ctx, move |_, _, _| {
-        quit_state.borrow_mut().lifecycle.quit_requested = true;
+        quit_state.borrow_mut().lifecycle.quit();
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "quit", quit);

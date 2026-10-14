@@ -260,41 +260,38 @@ impl Runtime {
     pub fn reloadable_state(&self) -> BTreeMap<String, IpcValue> {
         let state = self.reactive.borrow();
         state
-            .reloadable
-            .iter()
+            .lifecycle
+            .reloadables()
             .filter_map(|(name, signal)| {
                 state
                     .reactive
                     .values
-                    .get(signal)
-                    .map(|value| (name.clone(), value.clone()))
+                    .get(&signal)
+                    .map(|value| (name.to_owned(), value.clone()))
             })
             .collect()
     }
 
     /// Seeds reloadable values before executing replacement configuration code.
     pub fn restore_reloadable_state(&mut self, values: BTreeMap<String, IpcValue>) {
-        // One value type across the boundary now, so this only changes the map
-        // kind — the values pass straight through.
-        self.reactive.borrow_mut().reload_seed = values.into_iter().collect();
+        self.reactive.borrow_mut().lifecycle.seed(values);
     }
 
     /// Takes a reload request raised by Lua configuration.
     pub fn take_reload_request(&mut self) -> Option<bool> {
-        self.reactive.borrow_mut().lifecycle.reload_request.take()
+        self.reactive.borrow_mut().lifecycle.take_reload_request()
     }
 
     pub fn take_watch_files_change(&mut self) -> Option<bool> {
-        let mut state = self.reactive.borrow_mut();
-        state.lifecycle.watch_files_changed.then(|| {
-            state.lifecycle.watch_files_changed = false;
-            state.lifecycle.watch_files
-        })
+        self.reactive
+            .borrow_mut()
+            .lifecycle
+            .take_watch_files_change()
     }
 
     /// Whether the configuration has asked the shell to stop.
     pub fn quit_requested(&self) -> bool {
-        self.reactive.borrow().lifecycle.quit_requested
+        self.reactive.borrow().lifecycle.quit_requested()
     }
 
     pub fn dispatch_reload_completed(&mut self) -> bool {
@@ -310,14 +307,7 @@ impl Runtime {
         completed: bool,
         error: Option<String>,
     ) -> bool {
-        let callbacks = {
-            let state = self.reactive.borrow();
-            if completed {
-                state.lifecycle.reload_completed_callbacks.clone()
-            } else {
-                state.lifecycle.reload_failed_callbacks.clone()
-            }
-        };
+        let callbacks = self.reactive.borrow().lifecycle.reload_callbacks(completed);
         let args = error.map(IpcValue::String).into_iter().collect::<Vec<_>>();
         for callback in &callbacks {
             if let Err(message) =

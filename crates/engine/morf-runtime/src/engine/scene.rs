@@ -141,11 +141,11 @@ impl Engine {
         // One rule for every way in: what counts as a legal name used to
         // depend on which door you came through.
         validate_scope_part(&name)?;
-        if self.reloadable.contains_key(&name) {
+        if self.lifecycle.is_reloadable(&name) {
             return Err(format!("reloadable id `{name}` is already registered"));
         }
         let mut restored = false;
-        let value = match self.reload_seed.remove(&name) {
+        let value = match self.lifecycle.take_seed(&name) {
             Some(value) if std::mem::discriminant(&value) == std::mem::discriminant(&initial) => {
                 restored = true;
                 value
@@ -167,7 +167,7 @@ impl Engine {
             .signal(format!("reloadable.{name}"), value.clone());
         self.reactive.values.insert(id, value);
         self.reactive.signals.push(id);
-        self.reloadable.insert(name, id);
+        self.lifecycle.keep(name, id);
         Ok((id, restored))
     }
 }
@@ -207,8 +207,8 @@ mod tests {
     fn a_reloadable_value_comes_back_only_as_the_same_kind() {
         let mut engine = Engine::new();
         engine
-            .reload_seed
-            .insert("a.b".into(), IpcValue::Integer(7));
+            .lifecycle
+            .seed([("a.b".into(), IpcValue::Integer(7))]);
         let (_, restored) = engine
             .register_reloadable("a.b".into(), IpcValue::Integer(1))
             .unwrap();
@@ -219,8 +219,8 @@ mod tests {
                 .is_err()
         );
         engine
-            .reload_seed
-            .insert("c".into(), IpcValue::Boolean(true));
+            .lifecycle
+            .seed([("c".into(), IpcValue::Boolean(true))]);
         let (_, restored) = engine
             .register_reloadable("c".into(), IpcValue::Integer(1))
             .unwrap();

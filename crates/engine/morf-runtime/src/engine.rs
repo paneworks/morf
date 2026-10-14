@@ -44,9 +44,8 @@ pub struct Engine {
     pub model_revisions: crate::models::ModelRevisions,
     /// `morf.shared` values: this copy's signals for them, and what to publish.
     pub shared: crate::shared::SharedValues,
-    pub reload_seed: HashMap<String, IpcValue>,
-    pub reloadable: HashMap<String, SignalId>,
-    /// A reload, file watching, quitting and unlocking, as asked.
+    /// A reload, file watching, quitting and unlocking, as asked, and the
+    /// values kept across a reload.
     pub lifecycle: crate::requests::Lifecycle,
     /// Nodes the lint has already complained about, so a bar that paints
     /// sixty times a second says it once.
@@ -134,8 +133,6 @@ impl Engine {
             revisions: Default::default(),
             model_revisions: Default::default(),
             shared: Default::default(),
-            reload_seed: HashMap::new(),
-            reloadable: HashMap::new(),
             lifecycle: Default::default(),
             lint_warned: HashSet::new(),
             capabilities: Vec::new(),
