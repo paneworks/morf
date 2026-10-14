@@ -7,6 +7,7 @@
 //! whether asked or not, so merely asking for nothing would spin) and put
 //! back when credited.
 
+mod flow;
 mod process;
 mod socket;
 
@@ -24,10 +25,10 @@ use rustix::event::{Timespec, epoll};
 use rustix::io::Errno;
 
 use crate::reactor::{
-    CloseReason, ConnectOptions, HIGH_WATER, Inbox, IoEvent, IoId, LOW_WATER, LineSplitter, Order,
-    Shared,
+    CloseReason, ConnectOptions, Inbox, IoEvent, IoId, LineSplitter, Order, Shared,
 };
 
+use flow::{Outbox, Pending, over_high_water};
 use process::{close_stdin, end_stream};
 use socket::update_interest;
 
@@ -54,94 +55,10 @@ fn token(id: IoId, slot: u64) -> epoll::EventData {
     epoll::EventData::new_u64((id << 3) | slot)
 }
 
-/// Where events go, and whether any went since the loop last rang.
-struct Outbox {
-    sender: mpsc::Sender<IoEvent>,
-    sent: bool,
-}
-
-impl Outbox {
-    fn emit(&mut self, shared: &Shared, event: IoEvent) {
-        shared
-            .undelivered
-            .fetch_add(event.weight(), Ordering::SeqCst);
-        let _ = self.sender.send(event);
-        self.sent = true;
-    }
-}
-
-/// Whether reads on this handle should stop until it is credited.
-fn over_high_water(shared: &Shared) -> bool {
-    if shared.undelivered.load(Ordering::SeqCst) < HIGH_WATER {
-        return false;
-    }
-    shared.paused.store(true, Ordering::SeqCst);
-    // Credited between the check and the flag: take it back, since the
-    // consumer saw no flag and will not send a resume.
-    !(shared.undelivered.load(Ordering::SeqCst) < LOW_WATER
-        && shared.paused.swap(false, Ordering::SeqCst))
-}
-
 struct Stream {
     fd: OwnedFd,
     splitter: Option<LineSplitter>,
     registered: bool,
-}
-
-/// Bytes on their way into a pipe or a socket.
-#[derive(Default)]
-struct Pending {
-    bytes: Vec<u8>,
-    offset: usize,
-}
-
-impl Pending {
-    fn is_empty(&self) -> bool {
-        self.offset >= self.bytes.len()
-    }
-
-    fn push(&mut self, bytes: Vec<u8>) {
-        if self.is_empty() {
-            self.bytes = bytes;
-            self.offset = 0;
-        } else {
-            if self.offset > self.bytes.len() / 2 {
-                self.bytes.drain(..self.offset);
-                self.offset = 0;
-            }
-            self.bytes.extend_from_slice(&bytes);
-        }
-    }
-
-    /// Writes what it can. `Ok(true)` when everything is out, `Ok(false)`
-    /// when the fd is full.
-    fn flush(
-        &mut self,
-        shared: &Shared,
-        mut write: impl FnMut(&[u8]) -> rustix::io::Result<usize>,
-    ) -> io::Result<bool> {
-        while !self.is_empty() {
-            match write(&self.bytes[self.offset..]) {
-                Ok(written) => {
-                    self.offset += written;
-                    shared.outgoing.fetch_sub(written, Ordering::SeqCst);
-                }
-                Err(Errno::INTR) => {}
-                Err(Errno::AGAIN) => return Ok(false),
-                Err(error) => return Err(error.into()),
-            }
-        }
-        self.bytes = Vec::new();
-        self.offset = 0;
-        Ok(true)
-    }
-
-    fn discard(&mut self, shared: &Shared) {
-        let left = self.bytes.len().saturating_sub(self.offset);
-        shared.outgoing.fetch_sub(left, Ordering::SeqCst);
-        self.bytes = Vec::new();
-        self.offset = 0;
-    }
 }
 
 struct Proc {
