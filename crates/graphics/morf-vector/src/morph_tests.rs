@@ -3,7 +3,7 @@
 use super::*;
 
 fn square(x: f32, y: f32, side: f32, clockwise: bool) -> Vec<Step> {
-    let mut corners = vec![(x, y), (x + side, y), (x + side, y + side), (x, y + side)];
+    let mut corners = [(x, y), (x + side, y), (x + side, y + side), (x, y + side)];
     if clockwise {
         corners.reverse();
     }

@@ -423,15 +423,6 @@ fn wait_signalled(fence: &OwnedFd, milliseconds: i32) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn the_sync_file_ioctls_encode_as_the_kernel_defines_them() {
-        assert_eq!(super::DMA_BUF_IOCTL_EXPORT_SYNC_FILE as u64, 0xC008_6202);
-        assert_eq!(super::DMA_BUF_IOCTL_IMPORT_SYNC_FILE as u64, 0x4008_6203);
-    }
-}
-
 /// A sync file polls readable once its fence has signalled.
 fn poll_fence(fence: &OwnedFd, milliseconds: i32) -> bool {
     let mut poll = [libc::pollfd {
@@ -440,4 +431,15 @@ fn poll_fence(fence: &OwnedFd, milliseconds: i32) -> bool {
         revents: 0,
     }];
     unsafe { libc::poll(poll.as_mut_ptr(), 1, milliseconds) > 0 }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_sync_file_ioctls_encode_as_the_kernel_defines_them() {
+        // `Ioctl` is unsigned on glibc and signed on musl.
+        let bits = |ioctl: libc::Ioctl| ioctl as u32;
+        assert_eq!(bits(super::DMA_BUF_IOCTL_EXPORT_SYNC_FILE), 0xC008_6202);
+        assert_eq!(bits(super::DMA_BUF_IOCTL_IMPORT_SYNC_FILE), 0x4008_6203);
+    }
 }
