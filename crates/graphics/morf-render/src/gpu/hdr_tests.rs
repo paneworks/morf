@@ -129,6 +129,7 @@ fn without_hdr_the_frame_stays_srgb() {
     backend.hdr = hdr::HdrRequest {
         enabled: true,
         reference_white: 300,
+        prefer_pq: false,
     };
     // No window to describe it to: deep, but sRGB.
     backend.set_output_depth(OutputDepth::Eight);

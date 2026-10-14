@@ -10,9 +10,12 @@
 //! - scRGB, for a half-float buffer, where the compositor takes extended
 //!   linear: linear sRGB light as it is, 1.0 being SDR white.
 //!
-//! What the compositor cannot describe falls back: scRGB to PQ, PQ to
-//! plain sRGB, the frame as without the setting. A buffer of eight bits is
-//! always sRGB.
+//! scRGB is preferred wherever the compositor takes it, opaque surfaces
+//! included: a compositor anchors its 1.0 at SDR white, where Hyprland, for
+//! one, tone-maps PQ on an SDR output and SDR content comes out changed.
+//! `MORF_HDR=pq` keeps opaque surfaces on ten-bit PQ. What the compositor
+//! cannot describe falls back: scRGB to PQ, PQ to plain sRGB, the frame as
+//! without the setting. A buffer of eight bits is always sRGB.
 
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
@@ -30,6 +33,9 @@ pub struct HdrRequest {
     pub enabled: bool,
     /// SDR white under PQ, in cd/m².
     pub reference_white: u32,
+    /// `MORF_HDR=pq`: an opaque surface presents ten-bit PQ even where the
+    /// compositor takes scRGB.
+    pub prefer_pq: bool,
 }
 
 impl Default for HdrRequest {
@@ -37,12 +43,13 @@ impl Default for HdrRequest {
         Self {
             enabled: false,
             reference_white: DEFAULT_REFERENCE_WHITE,
+            prefer_pq: false,
         }
     }
 }
 
 impl HdrRequest {
-    /// `MORF_HDR=1` asks; `MORF_HDR_WHITE=N` puts SDR white at N cd/m²
+    /// `MORF_HDR=1` (or `pq`) asks; `MORF_HDR_WHITE=N` puts SDR white at N cd/m²
     /// (80 to 1000).
     pub fn from_env() -> Self {
         let read = |name| std::env::var(name).ok();
@@ -53,8 +60,10 @@ impl HdrRequest {
     }
 
     pub fn parse(hdr: Option<&str>, white: Option<&str>) -> Self {
+        let hdr = hdr.map(str::trim);
         Self {
-            enabled: matches!(hdr.map(str::trim), Some("1" | "true" | "on")),
+            enabled: matches!(hdr, Some("1" | "true" | "on" | "pq")),
+            prefer_pq: hdr == Some("pq"),
             reference_white: white
                 .and_then(|white| white.trim().parse::<u32>().ok())
                 .map_or(DEFAULT_REFERENCE_WHITE, |white| white.clamp(80, 1000)),
@@ -256,6 +265,9 @@ mod tests {
         assert!(!HdrRequest::parse(None, None).enabled);
         assert!(HdrRequest::parse(Some("1"), None).enabled);
         assert!(!HdrRequest::parse(Some("0"), None).enabled);
+        assert!(!HdrRequest::parse(Some("1"), None).prefer_pq);
+        let pq = HdrRequest::parse(Some("pq"), None);
+        assert!(pq.enabled && pq.prefer_pq);
         assert_eq!(
             HdrRequest::parse(Some("1"), Some("300")).reference_white,
             300
@@ -269,6 +281,7 @@ mod tests {
         let on = HdrRequest {
             enabled: true,
             reference_white: 250,
+            prefer_pq: false,
         };
         let all = ColorSupport {
             parametric: true,

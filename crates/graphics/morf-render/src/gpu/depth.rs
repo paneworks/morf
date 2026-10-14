@@ -238,7 +238,10 @@ impl WgpuBackend {
         if let Some(surface) = &mut self.surface {
             surface.hdr = self.hdr.enabled;
         }
-        let chosen = choose_present(depth, self.opaque_surface, |format| {
+        // scRGB, where it can be had, even for an opaque surface: a compositor
+        // anchors its 1.0 at SDR white, where it may tone-map PQ.
+        let opaque = self.opaque_surface && !self.scrgb_preferred();
+        let chosen = choose_present(depth, opaque, |format| {
             match (&self.buffers, &self.surface) {
                 (Some(ring), _) => ring.takes(format),
                 (None, Some(surface)) => surface.takes(format),
@@ -263,6 +266,23 @@ impl WgpuBackend {
             self.say_depth();
         }
         true
+    }
+
+    /// Whether HDR is asked for without `pq`, and the window can take scRGB.
+    fn scrgb_preferred(&self) -> bool {
+        if !self.hdr.enabled || self.hdr.prefer_pq {
+            return false;
+        }
+        match (&self.buffers, &self.surface) {
+            (Some(ring), _) => ring
+                .link
+                .as_ref()
+                .is_some_and(|link| link.color_support().can_scrgb()),
+            (None, Some(surface)) => {
+                surface.hdr_encoding(PresentFormat::Half) == Encoding::ExtLinear
+            }
+            (None, None) => false,
+        }
     }
 
     /// Tells the window how frames presented as `format` are encoded, when
