@@ -194,8 +194,9 @@ fn a_kept_flex_tree_matches_one_built_afresh() {
                 .chance(50)
                 .then(|| (100.0 + rng.below(300) as f64, 200.0));
             let mut fresh = FlexTree::build(&scene, root, &requested).unwrap();
-            let mut fresh_text = Recording::default();
-            fresh_text.last = kept_text.last.clone();
+            let mut fresh_text = Recording {
+                last: kept_text.last.clone(),
+            };
             let expected = run(&mut fresh, &scene, size, &mut fresh_text);
             kept.sync(&scene, &requested).unwrap();
             let got = run(&mut kept, &scene, size, &mut kept_text);

@@ -477,7 +477,7 @@ pub(crate) fn paint_node(
                     ..inherited
                 },
                 list,
-                reuse.as_deref_mut(),
+                reuse,
             )?,
         }
         list.layers[index].commands.end = list.commands.len();
