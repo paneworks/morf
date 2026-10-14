@@ -384,7 +384,7 @@ end
 ui.Text { text = function() return ("%d%%"):format(load:get()) end }
 ```
 
-`lib.poll` sources take `shared = true` for this (`lib.sysinfo` uses it):
+`lib.util.poll` sources take `shared = true` for this (`lib.services.sysinfo` uses it):
 the primary samples, the others read its samples, and a read on any screen
 keeps the primary sampling.
 
@@ -1349,7 +1349,7 @@ screen. `examples/demos/sdf/path.lua` has one of each.
 {size=100, segments=72})` supplies the named expressive shapes;
 `shape_curves(shape, segments)` returns normalized cubic coordinates.
 `polygon(vertices, opts)`, `regular(sides, opts)`, `star(points, inner, opts)`
-and `lobes(count, inner, opts)` build custom outlines. `lib.m3shapes` wraps these
+and `lobes(count, inner, opts)` build custom outlines. `lib.util.m3shapes` wraps these
 operations with the existing `Shape` node and morph animation controls.
 
 `graph_series(values, {width, height, samples, bottom=0, top, closed=false})`
@@ -1420,11 +1420,11 @@ A table property holding bindings among its fields -- `accessible`,
 `plot`, `view_box` -- is bound as a whole: `plot = { kind = "bars", top =
 function() return peak:get() end }`.
 
-`lib.channel.from(values)` gives a channel for a channel, a list or a
+`lib.util.channel.from(values)` gives a channel for a channel, a list or a
 function returning one -- copied in by an effect owned by the drawing
 node -- so a component can draw whatever it is handed through a channel.
 `morf.audio.monitor { channel = bars, spectrum = { bars = 56 } }` writes
-filtered bars with no Lua per frame, and `lib.sysinfo.channel(name)` is
+filtered bars with no Lua per frame, and `lib.services.sysinfo.channel(name)` is
 a history as a channel.
 
 ### Fields

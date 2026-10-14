@@ -373,7 +373,7 @@ may read at half the tempo a dancer would clap.
 
 A `channel` (`morf.channel`, see UI.md) takes every reading's bands
 instead, written in Rust as they come -- through the filter
-`spectrum = { bars = 56, ... }` describes (`lib.spectrum.options`), when
+`spectrum = { bars = 56, ... }` describes (`lib.util.spectrum.options`), when
 there is one -- so a spectrum drawn from the channel runs no Lua per frame;
 `on_level` may then be left out:
 
@@ -387,7 +387,7 @@ ui.Path { series = bars.id, plot = { kind = "bars", gap = 2 } }
 `morf.audio.spectrum_filter(options)` returns `step(bands, dt)` and `gain()`.
 It performs noise filtering, automatic sensitivity, smoothing, gravity and
 neighbour spread without depending on an audio service or distribution.
-Options and defaults follow `lib.spectrum`; subscriptions remain in that wrapper.
+Options and defaults follow `lib.util.spectrum`; subscriptions remain in that wrapper.
 
 ## A program on a terminal: `ui.Terminal`
 
