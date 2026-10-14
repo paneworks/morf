@@ -330,6 +330,11 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
         }
         errors += found.errors.len();
         warnings += found.warnings.len();
+        let failed_effects = headless.runtime.effect_errors();
+        if args.strict && failed_effects > 0 {
+            println!("  error: effects raised {failed_effects} error(s)");
+            errors += 1;
+        }
         if args.kit {
             errors += check_kit(&mut headless);
         }

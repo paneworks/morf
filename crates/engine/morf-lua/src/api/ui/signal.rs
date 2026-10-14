@@ -65,7 +65,7 @@ pub(crate) fn install_signal_api<'gc>(
                     return Ok(CallbackReturn::Return);
                 }
             }
-            replace_status(ctx, &mut stack, flush_reactive(&state, ctx, limits));
+            replace_status(ctx, &mut stack, flush_status(&state, ctx, limits));
             Ok(CallbackReturn::Return)
         }
     });
@@ -194,7 +194,7 @@ pub(crate) fn install_signal_api<'gc>(
                     .map_err(|error| HostError(error.to_string()))?;
                 state.reactive.values.insert(id, value);
             }
-            replace_status(ctx, &mut stack, flush_reactive(&state, ctx, limits));
+            replace_status(ctx, &mut stack, flush_status(&state, ctx, limits));
             Ok(CallbackReturn::Return)
         }
     });

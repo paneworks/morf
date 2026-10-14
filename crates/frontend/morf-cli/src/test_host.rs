@@ -41,6 +41,8 @@ pub(crate) struct TestHost {
     logs_cleared: usize,
     /// Where the current test's log lines begin.
     test_logs: usize,
+    /// The subject's effect errors when the current test began.
+    test_effect_errors: u64,
     /// Why there is no GPU, once that is known, so a spec full of
     /// snapshots asks the driver once.
     no_gpu: Option<String>,
@@ -61,6 +63,7 @@ impl TestHost {
             notes: Vec::new(),
             logs_cleared: 0,
             test_logs: 0,
+            test_effect_errors: 0,
             no_gpu: None,
             started: Instant::now(),
         }
@@ -97,6 +100,20 @@ impl TestHost {
             .subject
             .as_ref()
             .map_or(0, |subject| subject.logs.len());
+        self.test_effect_errors = self
+            .subject
+            .as_ref()
+            .map_or(0, |subject| subject.runtime.effect_errors());
+    }
+
+    /// How many errors the subject's effects raised during the current test.
+    pub(crate) fn effect_errors(&self) -> u64 {
+        self.subject.as_ref().map_or(0, |subject| {
+            subject
+                .runtime
+                .effect_errors()
+                .saturating_sub(self.test_effect_errors)
+        })
     }
 
     /// The subject's error and warning lines, for a failed test's report.
@@ -235,6 +252,7 @@ fn load(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, St
     host.numbers.clear();
     host.logs_cleared = 0;
     host.test_logs = 0;
+    host.test_effect_errors = 0;
     let subject = Headless::load(&options).map_err(|failure| {
         let mut message = format!("{} did not load: {}", path.display(), failure.error);
         for entry in failure
@@ -421,6 +439,8 @@ pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
         ("logs", logs),
         ("clear_logs", |host, _| {
             host.logs_cleared = host.subject()?.logs.len();
+            // A spec that clears the log has read what it expected there.
+            host.test_effect_errors = host.subject()?.runtime.effect_errors();
             Ok(Vec::new())
         }),
         ("stub_run", stub_run),

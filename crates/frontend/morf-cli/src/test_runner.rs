@@ -155,6 +155,15 @@ pub(crate) fn run_spec(
             },
             Err(error) => (false, error.to_string()),
         };
+        let failed_effects = host.borrow().effect_errors();
+        let (passed, message) = if passed && failed_effects > 0 {
+            (
+                false,
+                format!("the configuration's effects raised {failed_effects} error(s)"),
+            )
+        } else {
+            (passed, message)
+        };
         if passed {
             tally.passed += 1;
             println!("ok {number} - {} ({took:.0} ms)", case.name);

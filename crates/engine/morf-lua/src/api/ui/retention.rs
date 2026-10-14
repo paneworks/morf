@@ -319,7 +319,7 @@ pub(crate) fn install_retention_api<'gc>(
             handle.set_metatable(ctx, Some(ctx.fetch(&effect_metatable)));
             // The handle on success, so `assert(morf.effect(...))` still
             // reads; `false, message, handle` when the first run failed.
-            match flush_reactive(&state, ctx, limits) {
+            match flush_status(&state, ctx, limits) {
                 Ok(()) => stack.replace(ctx, handle),
                 Err(message) => stack.replace(ctx, (false, message, handle)),
             }

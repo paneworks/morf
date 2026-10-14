@@ -31,6 +31,11 @@ impl Runtime {
         self.reactive.borrow().effect_runs
     }
 
+    /// How many errors this runtime's effects have raised, repeats included.
+    pub fn effect_errors(&self) -> u64 {
+        self.reactive.borrow().reactive.errors.total()
+    }
+
     /// Runs one bounded Lua UI handler and retains failures as runtime logs.
     pub fn dispatch_ui_event(&mut self, node: NodeHandle, event: UiEvent) -> bool {
         self.dispatch_ui_event_with_args(node, event, &[])

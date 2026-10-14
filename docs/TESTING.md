@@ -95,7 +95,7 @@ or plays a role read by name (a button, switch, slider, tab, field, ...)
 -- that has no name. It prints `a11y N accessible nodes, M unnamed`.
 
 The exit status is 1 when there are errors, and with `--strict` when there
-are warnings too. `--wait MS` spreads that much real time over the run, for
+are warnings too, or when any binding or effect raised an error. `--wait MS` spreads that much real time over the run, for
 a configuration whose first screen depends on a process or a bus answering.
 
 ```
@@ -192,8 +192,10 @@ not ok 2 - counter is ready after a second of its own time (104 ms)
 ```
 
 A failure prints the assertion with its `file:line` and the warnings and
-errors the configuration logged during that test. The exit status is 1 when
-any test failed. `--filter PATTERN` runs only tests whose full name (the
+errors the configuration logged during that test. A test also fails when
+one of the configuration's bindings or effects raised an error during it,
+unless the spec read past it with `test.clear_logs()`. The exit status is 1
+when any test failed. `--filter PATTERN` runs only tests whose full name (the
 `describe` names and the test's, joined by spaces) contains `PATTERN`.
 
 ### Structure

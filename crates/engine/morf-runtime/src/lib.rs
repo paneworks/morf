@@ -12,6 +12,7 @@
 
 pub mod animation;
 pub mod editing;
+pub mod effect_errors;
 pub mod engine;
 pub mod events;
 pub mod focus;

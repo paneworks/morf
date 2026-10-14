@@ -74,6 +74,8 @@ pub struct Reactive {
     /// A flush is under way.
     pub flushing: bool,
     pub effects: HashMap<u64, Effect>,
+    /// What the effects raised, counted per effect.
+    pub errors: crate::effect_errors::EffectErrors,
 }
 
 /// A flush under way.
@@ -187,12 +189,13 @@ impl Reactive {
 
     /// Ends a flush: brings the mirror in line with the graph and hands the
     /// graph its garbage. `stepped` is how stepping through the effects
-    /// ended. Returns the errors the effects raised, as one message.
+    /// ended. Returns the errors the effects raised, each as the effect's
+    /// name and its message; an error of the flush itself is `Err`.
     pub fn finish_flush(
         &mut self,
         run: FlushRun,
         stepped: Result<(), String>,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<(String, String)>, String> {
         let result = stepped.map(|()| run.flush.finish());
         self.flushing = false;
         let Some(graph) = self.graph.take() else {
@@ -219,16 +222,13 @@ impl Reactive {
             }
         }
         self.graph = Some(graph);
-        match result {
-            Ok(report) if report.errors.is_empty() => Ok(()),
-            Ok(report) => Err(report
+        result.map(|report| {
+            report
                 .errors
                 .into_iter()
-                .map(|error| format!("{}: {}", error.effect, error.message))
-                .collect::<Vec<_>>()
-                .join("; ")),
-            Err(error) => Err(error),
-        }
+                .map(|error| (error.effect, error.message))
+                .collect()
+        })
     }
 }
 

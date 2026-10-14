@@ -226,7 +226,7 @@ pub(crate) fn install_state_api<'gc>(
                         return Ok(CallbackReturn::Return);
                     }
                 }
-                flush_reactive(&state, ctx, limits).map_err(HostError)?;
+                flush_status(&state, ctx, limits).map_err(HostError)?;
                 return Ok(CallbackReturn::Return);
             }
             if let Some((_, model)) = fields.lists.get(&key) {
