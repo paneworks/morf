@@ -358,7 +358,10 @@ pub(crate) fn install_shell_api<'gc>(
     let builder_state = Rc::clone(&state);
     let lock_surface = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let builder: Option<Closure> = stack.consume(ctx)?;
-        builder_state.borrow_mut().session_mut().lock_surface_builder =
+        builder_state
+            .borrow_mut()
+            .session_mut()
+            .lock_surface_builder =
             builder.map(|builder| crate::vm::handler_store::register(ctx.stash(builder)));
         Ok(CallbackReturn::Return)
     });

@@ -45,23 +45,26 @@ impl EditHost for ReactiveState {
     }
 
     fn clipboard_text(&self) -> Option<String> {
-        self.requests.clipboard_text.clone()
+        self.engine.requests().clipboard_text.clone()
     }
 
     fn copy(&mut self, text: String) {
-        self.requests.clipboard_text = Some(text.clone());
-        self.requests.clipboard_requests.push(ClipboardRequest {
-            data: text.into_bytes(),
-            mime: None,
-            primary: false,
-        });
+        self.engine.requests_mut().clipboard_text = Some(text.clone());
+        self.engine
+            .requests_mut()
+            .clipboard_requests
+            .push(ClipboardRequest {
+                data: text.into_bytes(),
+                mime: None,
+                primary: false,
+            });
     }
 
     fn text_input(&mut self, request: TextInputRequest) {
-        self.requests.text_input_requests.push(request);
+        self.engine.requests_mut().text_input_requests.push(request);
     }
 
     fn enable_text_input(&mut self) {
-        self.requests.text_input_enable_requested = true;
+        self.engine.requests_mut().text_input_enable_requested = true;
     }
 }

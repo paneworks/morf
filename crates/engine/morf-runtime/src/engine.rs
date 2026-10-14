@@ -28,9 +28,9 @@ pub struct Engine {
     pub reactive: crate::reactive::Reactive,
     /// The handlers on the stack, the effect being captured, and the signals
     /// standing for node properties.
-    tracking:crate::tracking::Tracking,
+    tracking: crate::tracking::Tracking,
     /// How far the scene has moved, and how far each reader of it has seen.
-    revisions:crate::revisions::Revisions,
+    revisions: crate::revisions::Revisions,
     /// Each list model a binding has read, by address, with the revision
     /// signal that binding depends on.
     model_revisions: crate::models::ModelRevisions,
@@ -38,24 +38,24 @@ pub struct Engine {
     shared: crate::shared::SharedValues,
     /// A reload, file watching, quitting and unlocking, as asked, and the
     /// values kept across a reload.
-    lifecycle:crate::requests::Lifecycle,
+    lifecycle: crate::requests::Lifecycle,
     /// What this output can do, and how big one of morf's pixels is on it.
-    display:crate::display::Display,
+    display: crate::display::Display,
     /// The shell's log lines.
     logs: crate::log::Log,
     /// The session lock, the primary duty and the output list's revision.
-    session:crate::session::Session,
+    session: crate::session::Session,
     /// `morf.clock` and its coarser grains.
     clocks: crate::wake::Clocks,
     pub scene: Scene,
     /// Every text input's editing, and which has the keyboard.
-    editing:crate::editing::Editing,
+    editing: crate::editing::Editing,
     /// Which node of each surface has focus.
-    focus:crate::focus::FocusState,
+    focus: crate::focus::FocusState,
     /// Each node's `shortcuts`, a sequence half typed, a modifier's tap.
-    shortcuts:crate::shortcuts::Shortcuts,
+    shortcuts: crate::shortcuts::Shortcuts,
     /// Presses under way that may become gestures.
-    gestures:crate::gestures::Gestures,
+    gestures: crate::gestures::Gestures,
     /// Each node's handler for each event, and the `contains_pointer` watches.
     pub events: crate::events::Events,
     /// Each node's declared states.
@@ -65,21 +65,21 @@ pub struct Engine {
     /// Each virtualised view, by the node that shows it.
     views: crate::views::Views,
     /// Every timer and `Timer` node, and the clock they run on.
-    timers:crate::timers::Timers,
+    timers: crate::timers::Timers,
     /// Motion beside the scene's own: `on_finished` handlers, loops,
     /// follows, theme fades and exits.
-    animation:crate::animation::Animation,
+    animation: crate::animation::Animation,
     /// Each node's `on_destroyed`, and those of removed nodes waiting to run.
     destroy_hooks: crate::destroy::DestroyHooks,
     /// Loaders' items and retained nodes, and the handlers told as they go.
-    retained:crate::retention::Retained,
+    retained: crate::retention::Retained,
     /// Each `ui.Layout` container's functions, and the texts whose links
     /// the layout places.
     layout_hooks: crate::layout::LayoutHooks,
     /// Where each node was laid out, and how it is transformed.
     transform_tracker: TransformTracker,
     /// What handlers asked of the platform, queued for the host.
-    pub requests: crate::requests::Requests,
+    requests: crate::requests::Requests,
     /// The windows the configuration declared, as the host reads them.
     pub windows: crate::windows::Declarations,
 }

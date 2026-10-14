@@ -68,4 +68,6 @@ subsystems! {
     /// Motion beside the scene's own: `on_finished` handlers, loops,
     /// follows, theme fades and exits.
     animation, animation_mut: crate::animation::Animation;
+    /// What handlers asked of the platform, queued for the host.
+    requests, requests_mut: crate::requests::Requests;
 }

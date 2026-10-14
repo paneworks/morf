@@ -21,7 +21,10 @@ fn push_workspace_request(
     request: WorkspaceRequest,
 ) -> Result<(), HostError> {
     let mut state = state.borrow_mut();
-    state.requests.queue_workspace(request).map_err(HostError)?;
+    state
+        .requests_mut()
+        .queue_workspace(request)
+        .map_err(HostError)?;
     Ok(())
 }
 
@@ -77,7 +80,7 @@ pub(crate) fn install_compositor_api<'gc>(
             let (identifier, value): (String, Option<bool>) = stack.consume(ctx)?;
             let mut state = request_state.borrow_mut();
             state
-                .requests
+                .requests_mut()
                 .queue_toplevel(ToplevelRequest {
                     identifier,
                     action: action.clone(),
@@ -106,7 +109,7 @@ pub(crate) fn install_compositor_api<'gc>(
         };
         let mut state = target_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_toplevel(ToplevelRequest {
                 identifier,
                 action: "set_minimize_target".to_owned(),
@@ -126,7 +129,7 @@ pub(crate) fn install_compositor_api<'gc>(
         let inhibited: bool = stack.consume(ctx)?;
         shortcuts_state
             .borrow_mut()
-            .requests
+            .requests_mut()
             .set_shortcuts_inhibited(inhibited);
         Ok(CallbackReturn::Return)
     });
@@ -136,11 +139,11 @@ pub(crate) fn install_compositor_api<'gc>(
     let shortcuts_subscribe = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
         let mut state = subscribe_state.borrow_mut();
-        if state.requests.shortcuts_callbacks.len() >= 64 {
+        if state.requests().shortcuts_callbacks.len() >= 64 {
             return Err(HostError("shortcuts callback limit reached".into()).into());
         }
         state
-            .requests
+            .requests_mut()
             .shortcuts_callbacks
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)

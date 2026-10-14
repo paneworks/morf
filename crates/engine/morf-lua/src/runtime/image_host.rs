@@ -64,7 +64,7 @@ impl Runtime {
         let callback = self
             .reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .screencopy_callbacks
             .remove(&request_id);
         let failure = match result {

@@ -195,16 +195,19 @@ pub(crate) fn install_ui_json_api<'gc>(
             LuaValue::String(name) => name.to_str().unwrap_or(&property).to_owned(),
             _ => property.clone(),
         };
-        state.animation_mut().follows.push(crate::runtime::state::Follow {
-            target: target.handle,
-            property,
-            source: source.handle,
-            source_property,
-            scale: number("scale", 1.0),
-            offset: number("offset", 0.0),
-            min: number("min", f64::NEG_INFINITY),
-            max: number("max", f64::INFINITY),
-        });
+        state
+            .animation_mut()
+            .follows
+            .push(crate::runtime::state::Follow {
+                target: target.handle,
+                property,
+                source: source.handle,
+                source_property,
+                scale: number("scale", 1.0),
+                offset: number("offset", 0.0),
+                min: number("min", f64::NEG_INFINITY),
+                max: number("max", f64::INFINITY),
+            });
         crate::runtime::state::apply_follows(&mut state);
         Ok(CallbackReturn::Return)
     });

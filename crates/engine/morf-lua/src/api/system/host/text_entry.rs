@@ -16,7 +16,7 @@ pub(super) fn install_text_entry<'gc>(
             .map_err(|_| HostError("virtual keycode must fit an unsigned 32-bit value".into()))?;
         let mut state = virtual_key_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_virtual_keyboard(VirtualKeyboardRequest::Key { keycode, pressed })
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -36,7 +36,7 @@ pub(super) fn install_text_entry<'gc>(
         };
         let mut state = virtual_modifiers_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_virtual_keyboard(request)
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -51,7 +51,7 @@ pub(super) fn install_text_entry<'gc>(
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
         input_method_subscribe_state
             .borrow_mut()
-            .requests
+            .requests_mut()
             .subscribe_input_method(callback)
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -64,7 +64,7 @@ pub(super) fn install_text_entry<'gc>(
         }
         let mut state = input_method_commit_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_input_method(InputMethodRequest::Commit(text))
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -81,7 +81,7 @@ pub(super) fn install_text_entry<'gc>(
             i32::try_from(end).map_err(|_| HostError("preedit cursor end must fit i32".into()))?;
         let mut state = input_method_preedit_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_input_method(InputMethodRequest::Preedit { text, begin, end })
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -95,7 +95,7 @@ pub(super) fn install_text_entry<'gc>(
             .map_err(|_| HostError("delete after length must fit u32".into()))?;
         let mut state = input_method_delete_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_input_method(InputMethodRequest::Delete { before, after })
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -112,7 +112,7 @@ pub(super) fn install_text_entry<'gc>(
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
         text_input_subscribe_state
             .borrow_mut()
-            .requests
+            .requests_mut()
             .subscribe_text_input(callback)
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -121,7 +121,7 @@ pub(super) fn install_text_entry<'gc>(
     let text_input_disable = Callback::from_fn(&ctx, move |_, _, _| {
         let mut state = text_input_disable_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_text_input(TextInputRequest::Disable)
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -138,7 +138,7 @@ pub(super) fn install_text_entry<'gc>(
             .map_err(|_| HostError("text input anchor must fit i32".into()))?;
         let mut state = text_input_surrounding_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_text_input(TextInputRequest::Surrounding {
                 text,
                 cursor,
@@ -156,7 +156,7 @@ pub(super) fn install_text_entry<'gc>(
             .map_err(|_| HostError("text input purpose must fit u32".into()))?;
         let mut state = text_input_content_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_text_input(TextInputRequest::ContentType { hints, purpose })
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -174,7 +174,7 @@ pub(super) fn install_text_entry<'gc>(
         };
         let mut state = text_input_rect_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_text_input(request)
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)

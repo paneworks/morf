@@ -122,9 +122,11 @@ impl Runtime {
                 if state.scene.contains(old)
                     && state.scene.element(old).ok() != Some(Element::TextInput)
                 {
-                    state
-                        .editing_mut()
-                        .owe(old, UiEvent::FocusChanged, vec![IpcValue::Boolean(false)]);
+                    state.editing_mut().owe(
+                        old,
+                        UiEvent::FocusChanged,
+                        vec![IpcValue::Boolean(false)],
+                    );
                 }
             }
             match node {
@@ -297,7 +299,10 @@ impl Runtime {
                     (root, None, FocusReason::Program)
                 }
                 FocusRequest::Step(backwards) => {
-                    let Some(root) = state.focus().last_root().filter(|r| state.scene.contains(*r))
+                    let Some(root) = state
+                        .focus()
+                        .last_root()
+                        .filter(|r| state.scene.contains(*r))
                     else {
                         return false;
                     };

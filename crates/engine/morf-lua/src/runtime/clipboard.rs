@@ -34,7 +34,7 @@ impl Runtime {
     pub fn take_clipboard_requests(&mut self) -> Vec<ClipboardRequest> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_clipboard_requests()
     }
 
@@ -43,7 +43,7 @@ impl Runtime {
         !self
             .reactive
             .borrow()
-            .requests
+            .requests()
             .clipboard_watchers
             .is_empty()
     }
@@ -55,7 +55,7 @@ impl Runtime {
         let watchers = self
             .reactive
             .borrow()
-            .requests
+            .requests()
             .clipboard_watchers
             .iter()
             .filter(|(_, wants_primary)| !primary || *wants_primary)
@@ -80,7 +80,7 @@ impl Runtime {
 
     /// Takes the offer reads the configuration asked for.
     pub fn take_offer_reads(&mut self) -> Vec<OfferReadRequest> {
-        self.reactive.borrow_mut().requests.take_offer_reads()
+        self.reactive.borrow_mut().requests_mut().take_offer_reads()
     }
 
     /// Hands a finished read to its callback as `(bytes, nil)` or `(nil, error)`.
@@ -92,7 +92,7 @@ impl Runtime {
         let Some(callback) = self
             .reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .offer_read_callbacks
             .remove(&request_id)
         else {
@@ -118,12 +118,16 @@ impl Runtime {
 
     /// Takes the drags out the configuration asked to start.
     pub fn take_drag_requests(&mut self) -> Vec<DragRequest> {
-        self.reactive.borrow_mut().requests.take_drag_requests()
+        self.reactive
+            .borrow_mut()
+            .requests_mut()
+            .take_drag_requests()
     }
 
     /// Tells whoever started a drag out how it ended.
     pub fn dispatch_drag_ended(&mut self, dropped: bool) -> bool {
-        let callbacks = std::mem::take(&mut self.reactive.borrow_mut().requests.drag_end_callbacks);
+        let callbacks =
+            std::mem::take(&mut self.reactive.borrow_mut().requests_mut().drag_end_callbacks);
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_with(ctx, callback, vec![LuaValue::Boolean(dropped)], limits)

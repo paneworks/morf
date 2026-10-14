@@ -20,7 +20,8 @@ pub(super) fn reconcile_loaders(
     loader_drops: &mut Vec<NodeHandle>,
 ) -> bool {
     let mut service_changed = false;
-    let loader_definitions = if definitions_changed || !state.retained().preload_pending.is_empty() {
+    let loader_definitions = if definitions_changed || !state.retained().preload_pending.is_empty()
+    {
         state
             .retained()
             .loader_factories
@@ -120,7 +121,11 @@ pub(super) fn reconcile_loaders(
             loader_drops.extend_from_slice(state.scene.children(node).unwrap_or_default());
             service_changed = true;
         } else if !requested && preload && !state.retained().loaded_loaders.contains(&node) {
-            let since = *state.retained_mut().preload_pending.entry(node).or_insert(now);
+            let since = *state
+                .retained_mut()
+                .preload_pending
+                .entry(node)
+                .or_insert(now);
             let waited = now.duration_since(since) >= PRELOAD_PATIENCE;
             if (still || waited) && preloads.is_empty() {
                 state.retained_mut().preload_pending.remove(&node);

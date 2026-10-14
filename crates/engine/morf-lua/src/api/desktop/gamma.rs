@@ -53,7 +53,7 @@ fn output_name(value: LuaValue<'_>) -> Result<Option<String>, HostError> {
 fn push(state: &Rc<StateCell<ReactiveState>>, request: GammaRequest) -> Result<(), HostError> {
     state
         .borrow_mut()
-        .requests
+        .requests_mut()
         .queue_gamma(request)
         .map_err(HostError)
 }

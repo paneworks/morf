@@ -342,7 +342,10 @@ pub(crate) fn install_view_api<'gc>(
             .remove(&node.handle)
             .ok_or_else(|| HostError("node is not a ListView".to_owned()))?;
         let result = reconcile_lua_view(&sync_state, ctx, limits, node.handle, offset, &mut view);
-        sync_state.borrow_mut().views_mut().insert(node.handle, view);
+        sync_state
+            .borrow_mut()
+            .views_mut()
+            .insert(node.handle, view);
         let transitions = result.map_err(HostError)?;
         let values = Table::new(&ctx);
         for (index, transition) in transitions.into_iter().enumerate() {

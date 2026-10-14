@@ -119,7 +119,10 @@ impl Runtime {
 
     /// Sets the root directory used by native shell path helpers.
     pub fn set_shell_root(&mut self, root: PathBuf) {
-        self.reactive.borrow_mut().lifecycle_mut().set_shell_root(root);
+        self.reactive
+            .borrow_mut()
+            .lifecycle_mut()
+            .set_shell_root(root);
     }
 
     /// Returns the native layer-surface settings assigned by the configuration.
@@ -161,7 +164,10 @@ impl Runtime {
     /// The density, when the configuration changed it since this was last
     /// asked (a scale slider): the window system converts by it from now.
     pub fn take_density_change(&mut self) -> Option<morf_value::density::Density> {
-        self.reactive.borrow_mut().display_mut().take_density_change()
+        self.reactive
+            .borrow_mut()
+            .display_mut()
+            .take_density_change()
     }
 
     /// Records what the compositor and GPU under this output can do.
@@ -281,7 +287,10 @@ impl Runtime {
 
     /// Takes a reload request raised by Lua configuration.
     pub fn take_reload_request(&mut self) -> Option<bool> {
-        self.reactive.borrow_mut().lifecycle_mut().take_reload_request()
+        self.reactive
+            .borrow_mut()
+            .lifecycle_mut()
+            .take_reload_request()
     }
 
     pub fn take_watch_files_change(&mut self) -> Option<bool> {
@@ -309,7 +318,11 @@ impl Runtime {
         completed: bool,
         error: Option<String>,
     ) -> bool {
-        let callbacks = self.reactive.borrow().lifecycle().reload_callbacks(completed);
+        let callbacks = self
+            .reactive
+            .borrow()
+            .lifecycle()
+            .reload_callbacks(completed);
         let args = error.map(IpcValue::String).into_iter().collect::<Vec<_>>();
         for callback in &callbacks {
             if let Err(message) =

@@ -123,7 +123,11 @@ pub(crate) fn loader_constructor<'gc>(
                 .scene
                 .reparent(child, Some(node))
                 .map_err(|error| HostError(error.to_string()))?;
-            state.borrow_mut().retained_mut().loaded_loaders.insert(node);
+            state
+                .borrow_mut()
+                .retained_mut()
+                .loaded_loaders
+                .insert(node);
         }
         stack.replace(ctx, node_userdata(ctx, Rc::clone(&state), node));
         Ok(CallbackReturn::Return)

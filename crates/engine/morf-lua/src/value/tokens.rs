@@ -88,7 +88,10 @@ impl Drop for RetainLockToken {
                 .should_destroy(self.node)
                 .unwrap_or(false)
         {
-            state.retained_mut().retained_destroy_queue.insert(self.node);
+            state
+                .retained_mut()
+                .retained_destroy_queue
+                .insert(self.node);
         }
     }
 }

@@ -44,7 +44,7 @@ impl Runtime {
     /// Returns compositor idle thresholds requested by Lua callbacks, each
     /// with whether it should ignore idle inhibitors.
     pub fn idle_timeouts(&self) -> Vec<(u32, bool)> {
-        self.reactive.borrow().requests.idle_timeouts()
+        self.reactive.borrow().requests().idle_timeouts()
     }
 
     /// The thresholds, when they changed since this was last asked: a
@@ -53,7 +53,7 @@ impl Runtime {
     pub fn take_idle_timeouts_change(&mut self) -> Option<Vec<(u32, bool)>> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_idle_timeouts_change()
     }
 
@@ -62,7 +62,7 @@ impl Runtime {
         let callbacks = self
             .reactive
             .borrow()
-            .requests
+            .requests()
             .idle_subscribers(timeout_ms, input_only);
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
@@ -79,13 +79,16 @@ impl Runtime {
     /// Takes pending compositor output power requests.
     /// Takes the `morf.gamma` requests made since the last call, in order.
     pub fn take_gamma_requests(&mut self) -> Vec<crate::GammaRequest> {
-        self.reactive.borrow_mut().requests.take_gamma_requests()
+        self.reactive
+            .borrow_mut()
+            .requests_mut()
+            .take_gamma_requests()
     }
 
     pub fn take_output_power_requests(&mut self) -> Vec<bool> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_output_power_requests()
     }
 
@@ -93,7 +96,7 @@ impl Runtime {
     pub fn take_idle_inhibit_change(&mut self) -> Option<bool> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_idle_inhibit_change()
     }
 
@@ -102,19 +105,24 @@ impl Runtime {
     pub fn take_shortcuts_inhibit_change(&mut self) -> Option<bool> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_shortcuts_inhibit_change()
     }
 
     /// Whether the shell currently asks for the compositor's shortcuts to be
     /// held off it (what `morf.shortcuts.inhibit` last said).
     pub fn shortcuts_inhibited(&self) -> bool {
-        self.reactive.borrow().requests.shortcuts_inhibited
+        self.reactive.borrow().requests().shortcuts_inhibited
     }
 
     /// Delivers the compositor's answer to that request.
     pub fn dispatch_shortcuts_inhibited(&mut self, active: bool) -> bool {
-        let callbacks = self.reactive.borrow().requests.shortcuts_callbacks.clone();
+        let callbacks = self
+            .reactive
+            .borrow()
+            .requests()
+            .shortcuts_callbacks
+            .clone();
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_handler_args(ctx, callback, &[IpcValue::Boolean(active)], limits)
@@ -130,8 +138,13 @@ impl Runtime {
     /// Dispatches a compositor clipboard selection to registered Lua callbacks.
     pub fn dispatch_clipboard(&mut self, text: Option<String>) -> bool {
         // Kept for a text input to paste, whether or not anybody subscribed.
-        self.reactive.borrow_mut().requests.clipboard_text = text.clone();
-        let callbacks = self.reactive.borrow().requests.clipboard_callbacks.clone();
+        self.reactive.borrow_mut().requests_mut().clipboard_text = text.clone();
+        let callbacks = self
+            .reactive
+            .borrow()
+            .requests()
+            .clipboard_callbacks
+            .clone();
         let value = text.map_or(IpcValue::Nil, IpcValue::String);
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
@@ -150,7 +163,7 @@ impl Runtime {
         let callbacks = self
             .reactive
             .borrow()
-            .requests
+            .requests()
             .keyboard_focus_callbacks
             .clone();
         let value = IpcValue::Boolean(active);
@@ -169,7 +182,7 @@ impl Runtime {
 
     /// Tells the configuration the backdrop was clicked: somewhere else.
     pub fn dispatch_backdrop_click(&mut self) -> bool {
-        let callbacks = self.reactive.borrow().requests.backdrop_callbacks.clone();
+        let callbacks = self.reactive.borrow().requests().backdrop_callbacks.clone();
         for callback in &callbacks {
             if let Err(message) =
                 self.run_handler(|ctx, limits| execute_handler_args(ctx, callback, &[], limits))
@@ -186,7 +199,7 @@ impl Runtime {
     pub fn take_screencopy_requests(&mut self) -> Vec<ScreencopyRequest> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_screencopy_requests()
     }
 
@@ -194,7 +207,7 @@ impl Runtime {
     pub fn take_screencopy_name(&mut self, request_id: u64) -> Option<String> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_screencopy_name(request_id)
     }
 
@@ -204,7 +217,7 @@ impl Runtime {
     pub fn take_screencopy_releases(&mut self) -> Vec<String> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_screencopy_releases()
     }
 
@@ -221,7 +234,7 @@ impl Runtime {
         let Some(callback) = self
             .reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .screencopy_callbacks
             .remove(&request_id)
         else {
@@ -241,7 +254,7 @@ impl Runtime {
     pub fn take_virtual_keyboard_requests(&mut self) -> Vec<VirtualKeyboardRequest> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_virtual_keyboard_requests()
     }
 
@@ -249,7 +262,7 @@ impl Runtime {
     pub fn take_input_method_enable_request(&mut self) -> bool {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_input_method_enable_request()
     }
 
@@ -257,7 +270,7 @@ impl Runtime {
     pub fn take_input_method_requests(&mut self) -> Vec<InputMethodRequest> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_input_method_requests()
     }
 
@@ -273,7 +286,7 @@ impl Runtime {
         let callbacks = self
             .reactive
             .borrow()
-            .requests
+            .requests()
             .input_method_callbacks
             .clone();
         let args = [
@@ -299,7 +312,7 @@ impl Runtime {
     pub fn take_text_input_enable_request(&mut self) -> bool {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_text_input_enable_request()
     }
 
@@ -307,7 +320,7 @@ impl Runtime {
     pub fn take_text_input_requests(&mut self) -> Vec<TextInputRequest> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_text_input_requests()
     }
 
@@ -328,7 +341,12 @@ impl Runtime {
         // before the configuration's own subscribers hear of it.
         let edited = (commit.is_some() || delete_before > 0 || delete_after > 0)
             && self.commit_text_input(commit.as_deref(), delete_before, delete_after);
-        let callbacks = self.reactive.borrow().requests.text_input_callbacks.clone();
+        let callbacks = self
+            .reactive
+            .borrow()
+            .requests()
+            .text_input_callbacks
+            .clone();
         let args = [
             IpcValue::Boolean(focused),
             preedit.map_or(IpcValue::Nil, IpcValue::String),

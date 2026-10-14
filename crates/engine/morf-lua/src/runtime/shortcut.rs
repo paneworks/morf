@@ -145,7 +145,10 @@ impl crate::Runtime {
             }
         }
         if prefix {
-            self.reactive.borrow_mut().shortcuts_mut().hold(root, sequence);
+            self.reactive
+                .borrow_mut()
+                .shortcuts_mut()
+                .hold(root, sequence);
             return true;
         }
         false

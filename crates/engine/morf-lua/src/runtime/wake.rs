@@ -34,7 +34,12 @@ impl Runtime {
                 .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
                 .map_err(Error::Runtime)?;
         }
-        Ok(self.reactive.borrow().engine.revisions().shown_since(before))
+        Ok(self
+            .reactive
+            .borrow()
+            .engine
+            .revisions()
+            .shown_since(before))
     }
 
     /// The finest clock anything currently reads, or nothing when no binding
