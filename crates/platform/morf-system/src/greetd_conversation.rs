@@ -17,6 +17,8 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
+use zeroize::Zeroizing;
+
 use crate::greetd::{GreetdClient, GreetdError, GreetdResponse};
 
 /// How long one reply may take. A PAM module waiting on a person is the
@@ -34,7 +36,7 @@ pub enum GreetdEvent {
 }
 
 enum Command {
-    Respond(Option<String>),
+    Respond(Option<Zeroizing<String>>),
     Start(Vec<String>, Vec<String>),
     Cancel,
 }
@@ -89,7 +91,10 @@ impl GreetdConversation {
             // was let go of, and there is nobody left to hear an answer.
             for command in commands {
                 let (result, last) = match command {
-                    Command::Respond(answer) => (client.respond(answer.as_deref()), false),
+                    Command::Respond(answer) => (
+                        client.respond(answer.as_ref().map(|text| text.as_str())),
+                        false,
+                    ),
                     Command::Start(command, environment) => {
                         (client.start_session(&command, &environment), true)
                     }
@@ -139,7 +144,7 @@ impl GreetdConversation {
     /// Answers the last question. `None` is the answer to a message that
     /// asked nothing — an `info` or an `error` — which greetd still wants
     /// acknowledged before it goes on.
-    pub fn respond(&self, answer: Option<String>) -> bool {
+    pub fn respond(&self, answer: Option<Zeroizing<String>>) -> bool {
         self.send(Command::Respond(answer))
     }
 

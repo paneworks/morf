@@ -165,7 +165,9 @@ local function submit_owned()
   end
   door.session = session()
   say("")
-  door:submit(password)
+  local secret = password
+  password = ""
+  door:submit(secret)
 end
 local function submit()
   if busy:get() or stage:get() ~= "sheet" or password=="" then return end

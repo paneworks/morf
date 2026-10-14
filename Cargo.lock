@@ -1955,6 +1955,7 @@ dependencies = [
  "morf-value",
  "serde_json",
  "xkbcommon",
+ "zeroize",
 ]
 
 [[package]]

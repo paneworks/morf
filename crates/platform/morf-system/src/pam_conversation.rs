@@ -19,7 +19,9 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 
-use crate::pam::{Credentials, PamError};
+use zeroize::{Zeroize, Zeroizing};
+
+use crate::pam::{Credentials, PamError, Secret};
 
 pub(crate) const PAM_SUCCESS: c_int = 0;
 const PAM_PROMPT_ECHO_OFF: c_int = 1;
@@ -64,7 +66,7 @@ pub enum PamEvent {
 /// How prompts get answered.
 pub(crate) enum Answers {
     /// One at a time, from whoever is watching the events.
-    Interactive(mpsc::Receiver<String>),
+    Interactive(mpsc::Receiver<Secret>),
     /// From credentials handed in up front — the password case. Prompts are
     /// answered without leaving this thread; informational messages still go
     /// out, because there is no reason to hide "your password expires
@@ -83,20 +85,20 @@ pub(crate) struct Bridge {
 
 impl Bridge {
     /// The answer to one prompt, or `None` when there will not be one.
-    fn answer(&self, style: c_int) -> Option<Vec<u8>> {
+    fn answer(&self, style: c_int) -> Option<Secret> {
         if self.cancelled.load(Ordering::SeqCst) {
             return None;
         }
         match &self.answers {
-            Answers::Fixed(credentials) => Some(match style {
-                PAM_PROMPT_ECHO_OFF => credentials.password.as_bytes().to_vec(),
+            Answers::Fixed(credentials) => Some(Zeroizing::new(match style {
+                PAM_PROMPT_ECHO_OFF => credentials.password.to_vec(),
                 _ => credentials.username.as_bytes().to_vec(),
-            }),
+            })),
             // Blocks the transaction thread, which is the point: PAM is
             // synchronous and the person is not. A dropped sender -- the
             // session went away -- is a `None` here and a conversation error to
             // the module, which ends the transaction cleanly.
-            Answers::Interactive(receiver) => receiver.recv().ok().map(String::into_bytes),
+            Answers::Interactive(receiver) => receiver.recv().ok(),
         }
     }
 }
@@ -212,9 +214,37 @@ unsafe fn duplicate(bytes: &[u8]) -> Option<*mut c_char> {
     Some(copy.cast())
 }
 
+/// Wipes every answer in place, leaving the allocations to free.
+unsafe fn wipe_responses(responses: *mut PamResponse, count: usize) {
+    for index in 0..count {
+        let response = unsafe { (*responses.add(index)).response };
+        if !response.is_null() {
+            let length = unsafe { libc::strlen(response) };
+            unsafe { std::slice::from_raw_parts_mut(response.cast::<u8>(), length) }.zeroize();
+        }
+    }
+}
+
 pub(crate) unsafe fn free_responses(responses: *mut PamResponse, count: usize) {
+    unsafe { wipe_responses(responses, count) };
     for index in 0..count {
         unsafe { libc::free((*responses.add(index)).response.cast()) };
     }
     unsafe { libc::free(responses.cast()) };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn responses_are_wiped_before_they_are_freed() {
+        let responses = unsafe { libc::calloc(2, size_of::<PamResponse>()) }.cast::<PamResponse>();
+        let answer = unsafe { duplicate(b"hunter2") }.unwrap();
+        unsafe { (*responses).response = answer };
+        unsafe { wipe_responses(responses, 2) };
+        let wiped = unsafe { std::slice::from_raw_parts(answer.cast::<u8>(), 8) };
+        assert_eq!(wiped, [0; 8]);
+        unsafe { free_responses(responses, 2) };
+    }
 }

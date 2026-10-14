@@ -2,6 +2,7 @@
 //! conversation off the drawing thread.
 
 use super::*;
+use morf_system::Zeroizing;
 
 /// Installs `morf.greetd`.
 pub(super) fn install_greetd<'gc>(
@@ -20,11 +21,13 @@ pub(super) fn install_greetd<'gc>(
         Ok(CallbackReturn::Return)
     });
     let greetd_respond = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (greetd, response): (UserRef<GreetdToken>, Option<String>) = stack.consume(ctx)?;
+        let (greetd, response): (UserRef<GreetdToken>, Option<luna::String>) =
+            stack.consume(ctx)?;
+        let response = response.map(greetd_secret).transpose()?;
         let response = greetd
             .client
             .borrow_mut()
-            .respond(response.as_deref())
+            .respond(response.as_ref().map(|text| text.as_str()))
             .map_err(|error| HostError(error.to_string()))?;
         stack.replace(ctx, greetd_response(ctx, response));
         Ok(CallbackReturn::Return)
@@ -102,8 +105,9 @@ pub(super) fn install_greetd<'gc>(
         Ok(CallbackReturn::Return)
     });
     let greetd_session_respond = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (session, answer): (UserRef<GreetdSessionToken>, Option<String>) =
+        let (session, answer): (UserRef<GreetdSessionToken>, Option<luna::String>) =
             stack.consume(ctx)?;
+        let answer = answer.map(greetd_secret).transpose()?;
         let sent = session.conversation.borrow().respond(answer);
         stack.replace(ctx, sent);
         Ok(CallbackReturn::Return)
@@ -151,4 +155,11 @@ pub(super) fn install_greetd<'gc>(
     greetd.set_field(ctx, "connect", greetd_connect);
     greetd.set_field(ctx, "converse", greetd_converse);
     morf.set_field(ctx, "greetd", greetd);
+}
+
+/// Copies a Lua answer straight into a buffer that is wiped when dropped.
+fn greetd_secret(text: luna::String<'_>) -> Result<Zeroizing<String>, HostError> {
+    std::str::from_utf8(text.as_bytes())
+        .map(|text| Zeroizing::new(text.to_owned()))
+        .map_err(|_| HostError("greetd answers must be UTF-8".into()))
 }
