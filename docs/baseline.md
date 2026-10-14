@@ -96,3 +96,18 @@ damage diff, 921 nodes         1.04 ms      -> 0.058 ms     (copied runs)
 backend frame, 921 nodes       1.11 ms      -> 0.59-0.72 ms (kept text, quads, fields)
 box + shadow field             5.41/6.87 ms -> 5.25/6.60 ms (min/median, one-box pipeline)
 ```
+
+Wakes per output loop at the desk layout (`tools/sandbox/wakes.steps`,
+`MORF_TEST_HOOKS=1`, the `@wakes` counts): news one output asked for rings
+that output's loop only. HEADLESS-A is the output the OSD and dashboard
+open on; B and C keep their own rest rate (their clocks) throughout.
+
+```
+                          A            B            C
+rest, 20 s                +1331        +113         +113
+osd on A, 3 s             +211         +20          +20
+dashboard on A, 5 s       +363         +29          +29
+```
+
+Before PLAN 4.5 every completion rang every loop, so B and C took A's
+~66 wakes a second as well.

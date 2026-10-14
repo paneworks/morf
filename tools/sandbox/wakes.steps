@@ -1,0 +1,15 @@
+# wakes.steps: each output loop's alarm count (MORF_TEST_HOOKS=1 in MORF_ENV)
+# at rest, then around news one output asked for. OUT/hc.log has the
+# `@wakes` answers; an output that asked for nothing should barely move.
+wait 8
+ipc @wakes
+wait 20
+ipc @wakes
+ipc osd
+wait 3
+ipc @wakes
+ipc dashboard open
+wait 3
+ipc dashboard close
+wait 2
+ipc @wakes
