@@ -330,3 +330,20 @@ fn an_output_going_away_does_not_stop_the_shell() {
     );
     assert_eq!(closures.len(), 1);
 }
+
+#[test]
+fn a_panicked_worker_is_restarted_a_few_times_a_minute() {
+    use morf_host::supervisor::{FailureStep, PANICKED, failure_step};
+    use std::collections::VecDeque;
+    use std::time::Instant;
+    let mut crashes = VecDeque::new();
+    let now = Instant::now();
+    let error = format!("{PANICKED}: index out of bounds");
+    for _ in 0..5 {
+        assert_eq!(
+            failure_step(&error, &mut crashes, now),
+            FailureStep::Restart
+        );
+    }
+    assert_eq!(failure_step(&error, &mut crashes, now), FailureStep::Stop);
+}

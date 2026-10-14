@@ -128,6 +128,21 @@ pub fn handle_ipc(
     }
 }
 
+/// A hidden verb that panics the worker it reaches, for testing recovery.
+/// Answered only with `MORF_TEST_HOOKS` set; its one optional argument
+/// names the output whose worker panics.
+const TEST_PANIC: &str = "@panic";
+
+fn test_panic_here(screen: Option<&Screen>, args: &[morf_lua::IpcValue]) -> bool {
+    if std::env::var_os("MORF_TEST_HOOKS").is_none() {
+        return false;
+    }
+    match args.first() {
+        Some(morf_lua::IpcValue::String(name)) => screen.is_some_and(|screen| screen.name == *name),
+        _ => true,
+    }
+}
+
 #[derive(Clone, Copy, Default)]
 pub struct WorkerUpdate {
     pub repaint: bool,
@@ -151,6 +166,9 @@ pub fn handle_worker_command(
             args,
             reply,
         } => {
+            if target == TEST_PANIC && test_panic_here(screen, &args) {
+                panic!("{TEST_PANIC} asked for by IPC");
+            }
             let result = runtime
                 .call_ipc(&target, &args)
                 .map_err(|error| error.to_string());

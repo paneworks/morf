@@ -12,12 +12,39 @@
 //! prints one line.
 
 use std::backtrace::Backtrace;
+use std::cell::Cell;
 use std::fs;
 use std::io::Write;
 use std::panic;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Where the last report went, until the worker that caught it takes it.
+static LAST_REPORT: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+thread_local! {
+    /// Set on a thread whose panics are caught and recovered from: no crash
+    /// screen is started for them, since the shell keeps running.
+    static RECOVERABLE: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Marks the current thread's panics as recovered by its caller.
+pub fn mark_recoverable() {
+    RECOVERABLE.with(|flag| flag.set(true));
+}
+
+/// Takes the path of the report the last panic wrote, and lets the next
+/// panic write one of its own.
+pub fn take_report() -> Option<PathBuf> {
+    let path = LAST_REPORT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
+    REPORTED.store(false, Ordering::SeqCst);
+    path
+}
 
 /// Whether a report has already been written this run.
 ///
@@ -52,7 +79,12 @@ pub fn install() {
                     "morf: crash report written to {}",
                     path.display()
                 );
-                show_screen(&path);
+                if !RECOVERABLE.with(Cell::get) {
+                    show_screen(&path);
+                }
+                if let Ok(mut last) = LAST_REPORT.try_lock() {
+                    *last = Some(path);
+                }
             }
             None => {
                 // Nowhere to write is not a reason to lose the backtrace; it is

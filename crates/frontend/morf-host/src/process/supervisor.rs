@@ -1,4 +1,5 @@
 mod config;
+mod failure;
 mod follow;
 mod outputs;
 
@@ -18,6 +19,7 @@ use crate::socket_path::socket_path;
 use crate::{lock::*, outputless::*, services::*, workers::*};
 
 pub use config::{collect_lua_scripts, execute_config, execute_config_on, runtime_scripts};
+pub use failure::{FailureStep, PANICKED, SURFACE_CLOSED, failure_step, is_panic};
 pub use follow::{RELOAD_SETTLE, follow_lua_files, lua_snapshot};
 pub use outputs::{OUTPUTS, known_outputs, lua_screen, lua_screens, named_screens, store_outputs};
 
@@ -36,49 +38,9 @@ impl Default for LoadPolicy {
     }
 }
 
-/// What a worker ends with when the compositor closes its surface -- which is
-/// what a compositor does to every surface on an output it switches off or
-/// loses, often before it says the output is gone.
-pub const SURFACE_CLOSED: &str = "layer surface was closed";
-
 /// Cage presents one fullscreen view across its output layout. A greeter
 /// there needs one controller/canvas, rather than overlapping output workers.
 pub const DESKTOP_CANVAS: &str = "@desktop-canvas";
-
-/// Closed surfaces taken in a minute before the shell stops: one closed on
-/// every output the shell is given would otherwise be asked for forever.
-const CLOSURES_PER_MINUTE: usize = 5;
-
-/// What the supervisor does when a worker fails.
-#[derive(Debug, PartialEq, Eq)]
-pub enum FailureStep {
-    /// Something is wrong with the shell: stop it.
-    Stop,
-    /// Its output went away: let that worker go and ask for the outputs again.
-    Probe,
-}
-
-/// Decides a worker's failure. A closed surface is an output switched off
-/// or unplugged -- the shell's last one included, when Hyprland switches to
-/// its fallback output -- and the shell stopping for it left the machine
-/// with no shell at all, and nothing to light a screen again.
-pub fn failure_step(error: &str, closures: &mut VecDeque<Instant>, now: Instant) -> FailureStep {
-    if error != SURFACE_CLOSED {
-        return FailureStep::Stop;
-    }
-    while closures
-        .front()
-        .is_some_and(|at| now.duration_since(*at) >= Duration::from_secs(60))
-    {
-        closures.pop_front();
-    }
-    closures.push_back(now);
-    if closures.len() > CLOSURES_PER_MINUTE {
-        FailureStep::Stop
-    } else {
-        FailureStep::Probe
-    }
-}
 
 /// Sends `Probe` after `delay`, from a thread of its own.
 fn probe_later(tx: &mpsc::Sender<SupervisorMessage>, delay: Duration) {
@@ -168,6 +130,7 @@ pub fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> Result<(
     let mut primary: Option<String> = None;
     let mut daemon_logs = Vec::new();
     let mut closures = VecDeque::new();
+    let mut crashes = VecDeque::new();
     // Brings the workers to the output list and what the configuration said
     // it wants with none; with no worker at all, the compositor is asked
     // again until an output comes.
@@ -274,9 +237,27 @@ pub fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> Result<(
                 }
             },
             Ok(SupervisorMessage::Worker(WorkerMessage::Failed { output, error })) => {
-                if failure_step(&error, &mut closures, Instant::now()) == FailureStep::Stop {
+                let window = if is_panic(&error) {
+                    &mut crashes
+                } else {
+                    &mut closures
+                };
+                let step = failure_step(&error, window, Instant::now());
+                if step == FailureStep::Stop {
                     stop_workers(workers);
                     return Err(format!("output {output}: {error}"));
+                }
+                if step == FailureStep::Restart {
+                    // Only that output's runtime ended; it starts over with
+                    // the primary duty it held, the others never stop.
+                    if let Some(worker) = workers.remove(&output) {
+                        let _ = worker.join.join();
+                    }
+                    daemon_logs.push(daemon_log(format!(
+                        "output {output}: {error}; restarting it"
+                    )));
+                    settle!();
+                    continue;
                 }
                 // That output is going away; the others are not. Asked again
                 // shortly, once the compositor has said what is left.

@@ -3,6 +3,7 @@ mod commands;
 use morf_app::Output;
 use morf_lua::{LogEntry, Runtime};
 use std::collections::BTreeMap;
+use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -260,11 +261,16 @@ fn spawn_worker(name: &str, screen: &Output, start: WorkerStart) -> thread::Join
         .spawn(move || {
             let tx = start.tx.clone();
             let stop = Arc::clone(&start.stop);
-            let result = if output == OUTPUTLESS {
-                run_outputless(start, true)
-            } else {
-                run_surface(start, screen)
-            };
+            crate::crash::mark_recoverable();
+            let outputless = output == OUTPUTLESS;
+            let run = panic::catch_unwind(AssertUnwindSafe(move || {
+                if outputless {
+                    run_outputless(start, true)
+                } else {
+                    run_surface(start, screen)
+                }
+            }));
+            let result = run.unwrap_or_else(|payload| Err(panicked(payload.as_ref())));
             if let Err(error) = result
                 && !stop.load(Ordering::Acquire)
             {
@@ -275,6 +281,20 @@ fn spawn_worker(name: &str, screen: &Output, start: WorkerStart) -> thread::Join
             }
         })
         .expect("worker thread")
+}
+
+/// What a worker that panicked fails with: [`PANICKED`], the message, and
+/// where its crash report went.
+fn panicked(payload: &(dyn std::any::Any + Send)) -> String {
+    let what = payload
+        .downcast_ref::<&str>()
+        .map(|text| (*text).to_owned())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "a payload of an unknown type".to_owned());
+    match crate::crash::take_report() {
+        Some(report) => format!("{PANICKED}: {what} (report {})", report.display()),
+        None => format!("{PANICKED}: {what}"),
+    }
 }
 
 /// Hands every live worker the compositor's new output list, so each runtime's
