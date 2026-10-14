@@ -93,6 +93,12 @@ impl BufferKey {
     }
 }
 
+/// How many glyph fields are kept: plain glyphs plus the variable-font steps
+/// `variations::FIELD_CAPACITY` already bounds.
+const FIELD_CAPACITY: usize = 4096;
+/// How many measured morphs between two glyphs are kept.
+const FIELD_PAIR_CAPACITY: usize = 512;
+
 /// Shared font database, per-node shaped buffers, and glyph image cache.
 pub struct TextSystem {
     fonts: FontSystem,
@@ -102,7 +108,7 @@ pub struct TextSystem {
     ///
     /// Separate from `fields` because the box depends on both glyphs, so the
     /// same letter measured against two different partners is two entries.
-    field_pairs: FastMap<(u64, u64), Option<MeasuredPair>>,
+    field_pairs: lru::Lru<(u64, u64), Option<MeasuredPair>>,
     /// Shaped keys for characters used as shapes rather than as text, by face.
     ///
     /// Nested rather than keyed by a `(face, character)` pair, because the pair
@@ -115,8 +121,9 @@ pub struct TextSystem {
     /// The distance transform is far too slow to run per frame, and it does not
     /// have to be: a glyph's shape does not change, so this is filled once the
     /// first time a letter is drawn and read from thereafter however many sizes
-    /// it is later drawn at.
-    fields: FastMap<u64, Option<Rc<FieldImage>>>,
+    /// it is later drawn at. Capped, least recently used first, so a session
+    /// that has drawn every glyph of a CJK font does not keep them all.
+    fields: lru::Lru<u64, Option<Rc<FieldImage>>>,
     /// Cell metrics, shaped characters and drawn cells for terminals.
     terminal: terminal::TerminalCache,
     /// Glyphs at a point in a variable font's design space.
@@ -221,10 +228,10 @@ impl TextSystem {
             fonts,
             glyphs: SwashCache::new(),
             buffers: FastMap::default(),
-            field_pairs: FastMap::default(),
+            field_pairs: lru::Lru::new(FIELD_PAIR_CAPACITY),
             outline_keys: FastMap::default(),
             font_sources: HashSet::new(),
-            fields: FastMap::default(),
+            fields: lru::Lru::new(FIELD_CAPACITY),
             terminal: terminal::TerminalCache::default(),
             variations: variations::Variations::default(),
             varied_field_keys: HashSet::new(),
@@ -328,6 +335,7 @@ pub use morf_vector::Contour;
 mod glyph_runs;
 mod measure;
 pub(crate) use elide::elided_text;
+mod lru;
 mod raster_glyph;
 mod rich;
 pub use rich::{LinkRect, SpanBand, SpanLine};

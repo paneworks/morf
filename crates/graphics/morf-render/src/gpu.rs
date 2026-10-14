@@ -39,7 +39,10 @@ mod dmabuf_acquire;
 #[cfg(test)]
 mod dmabuf_ring_tests;
 mod field_pass;
+#[cfg(test)]
+mod glyph_atlas_tests;
 mod glyph_batch;
+mod glyph_upload;
 mod glyphs;
 mod layer_pool;
 #[cfg(test)]

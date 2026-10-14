@@ -333,6 +333,7 @@ pub(crate) fn create_glyph_batch(
         let entry = atlas.entries.get(&key).ok_or_else(|| {
             GpuError("prepared glyph is missing from the persistent atlas".to_owned())
         })?;
+        let atlas_height = atlas.height() as f32;
         let tint = match glyph.content {
             RasterContent::Mask | RasterContent::Field => color_array(prepared.color),
             RasterContent::Color => [1.0, 1.0, 1.0, prepared.color.alpha],
@@ -360,9 +361,9 @@ pub(crate) fn create_glyph_batch(
                 let entry = atlas.entries.get(&GlyphKey::from_glyph(partner))?;
                 Some([
                     entry.x as f32 / GLYPH_ATLAS_SIZE as f32,
-                    entry.y as f32 / GLYPH_ATLAS_SIZE as f32,
+                    entry.y as f32 / atlas_height,
                     partner.width as f32 / GLYPH_ATLAS_SIZE as f32,
-                    partner.height as f32 / GLYPH_ATLAS_SIZE as f32,
+                    partner.height as f32 / atlas_height,
                 ])
             })
             .unwrap_or_default();
@@ -392,9 +393,9 @@ pub(crate) fn create_glyph_batch(
             axes,
             uv: [
                 entry.x as f32 / GLYPH_ATLAS_SIZE as f32,
-                entry.y as f32 / GLYPH_ATLAS_SIZE as f32,
+                entry.y as f32 / atlas_height,
                 glyph.width as f32 / GLYPH_ATLAS_SIZE as f32,
-                glyph.height as f32 / GLYPH_ATLAS_SIZE as f32,
+                glyph.height as f32 / atlas_height,
             ],
             color: tint,
             color_overlay: color_array(prepared.color_overlay),

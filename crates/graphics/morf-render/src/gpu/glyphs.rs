@@ -6,6 +6,8 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use super::backend_types::*;
+use super::glyph_upload::{atlas_format, atlas_texture};
+pub(crate) use super::glyph_upload::{glyph_pixels, upload_glyph};
 
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Default)]
@@ -203,12 +205,15 @@ pub(crate) struct ShelfAllocator {
     pub(crate) x: u32,
     pub(crate) y: u32,
     pub(crate) row_height: u32,
+    /// How many atlas pages tall the space is; none counts as one.
+    pub(crate) pages: u32,
 }
 
 impl ShelfAllocator {
     pub(crate) fn allocate(&mut self, width: u32, height: u32) -> Option<(u32, u32)> {
         let width = width.checked_add(2)?;
         let height = height.checked_add(2)?;
+        let bottom = GLYPH_ATLAS_SIZE * self.pages.max(1);
         if width > GLYPH_ATLAS_SIZE || height > GLYPH_ATLAS_SIZE {
             return None;
         }
@@ -217,7 +222,7 @@ impl ShelfAllocator {
             self.y = self.y.checked_add(self.row_height)?;
             self.row_height = 0;
         }
-        if self.y + height > GLYPH_ATLAS_SIZE {
+        if self.y + height > bottom {
             return None;
         }
         let placement = (self.x + 1, self.y + 1);
@@ -235,7 +240,15 @@ pub(crate) struct GlyphAtlas {
     pub(crate) entries: HashMap<GlyphKey, GlyphAtlasEntry>,
     pub(crate) allocator: ShelfAllocator,
     pub(crate) clock: u64,
+    /// How many pages tall the texture is: one, or two once the first filled.
+    pub(crate) pages: u32,
+    device: wgpu::Device,
+    layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
 }
+
+/// The most pages an atlas grows to before it is rebuilt instead.
+const GLYPH_ATLAS_PAGES: u32 = 2;
 
 impl GlyphAtlas {
     /// Whether this atlas is the one a glyph of that kind belongs in.
@@ -258,56 +271,69 @@ impl GlyphAtlas {
         sampler: &wgpu::Sampler,
         content: RasterContent,
     ) -> Self {
-        let (format, bytes_per_pixel, label) = match content {
-            RasterContent::Mask | RasterContent::Field => {
-                (wgpu::TextureFormat::R8Unorm, 1, "morf glyph mask atlas")
-            }
-            RasterContent::Color => (
-                wgpu::TextureFormat::Rgba8UnormSrgb,
-                4,
-                "morf color glyph atlas",
-            ),
-        };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(label),
-            size: wgpu::Extent3d {
-                width: GLYPH_ATLAS_SIZE,
-                height: GLYPH_ATLAS_SIZE,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(label),
-            layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                },
-            ],
-        });
+        let (texture, bind_group) = atlas_texture(device, layout, sampler, content, 1);
         Self {
             texture,
             bind_group,
             content,
-            bytes_per_pixel,
+            bytes_per_pixel: atlas_format(content).1,
             entries: HashMap::new(),
             allocator: ShelfAllocator::default(),
             clock: 0,
+            pages: 1,
+            device: device.clone(),
+            layout: layout.clone(),
+            sampler: sampler.clone(),
         }
     }
 
+    /// The texture's height in texels, which atlas coordinates are read over.
+    pub(crate) fn height(&self) -> u32 {
+        GLYPH_ATLAS_SIZE * self.pages
+    }
+
+    /// Adds a second page below the first, keeping every entry where it is.
+    ///
+    /// CJK or emoji text can want more glyphs at once than one page holds;
+    /// rebuilding then evicts and re-uploads on every frame. Growing once is
+    /// cheaper, and every entry keeps its pixels to upload again.
+    fn grow(&mut self, queue: &wgpu::Queue) -> bool {
+        let pages = self.pages + 1;
+        if pages > GLYPH_ATLAS_PAGES
+            || GLYPH_ATLAS_SIZE * pages > self.device.limits().max_texture_dimension_2d
+        {
+            return false;
+        }
+        let (texture, bind_group) = atlas_texture(
+            &self.device,
+            &self.layout,
+            &self.sampler,
+            self.content,
+            pages,
+        );
+        for entry in self.entries.values() {
+            upload_glyph(queue, &texture, entry, self.bytes_per_pixel);
+        }
+        self.texture = texture;
+        self.bind_group = bind_group;
+        self.pages = pages;
+        self.allocator.pages = pages;
+        true
+    }
+
+    /// Places every missing glyph, or none of them.
+    fn place(&mut self, missing: &[(GlyphKey, Vec<u8>, u8)]) -> Option<Vec<(u32, u32)>> {
+        let mut allocator = self.allocator;
+        let placements = missing
+            .iter()
+            .map(|(key, _, _)| allocator.allocate(key.width, key.height))
+            .collect::<Option<Vec<_>>>()?;
+        self.allocator = allocator;
+        Some(placements)
+    }
+}
+
+impl GlyphAtlas {
     pub(crate) fn prepare(
         &mut self,
         queue: &wgpu::Queue,
@@ -330,15 +356,13 @@ impl GlyphAtlas {
                 missing.push((key, glyph_pixels(glyph), outside_byte(glyph.content)));
             }
         }
-        let mut allocator = self.allocator;
-        let mut placements = Vec::with_capacity(missing.len());
-        for (key, _, _) in &missing {
-            let Some(placement) = allocator.allocate(key.width, key.height) else {
-                return self.rebuild(queue, glyphs, &requested);
-            };
-            placements.push(placement);
-        }
-        self.allocator = allocator;
+        let placements = match self.place(&missing) {
+            Some(placements) => placements,
+            None => match self.grow(queue).then(|| self.place(&missing)).flatten() {
+                Some(placements) => placements,
+                None => return self.rebuild(queue, glyphs, &requested),
+            },
+        };
         for ((key, pixels, outside), (x, y)) in missing.into_iter().zip(placements) {
             let entry = GlyphAtlasEntry {
                 x,
@@ -382,7 +406,10 @@ impl GlyphAtlas {
             .filter(|(key, _)| !requested.contains(key))
             .collect();
         retained.sort_by_key(|(_, entry)| std::cmp::Reverse(entry.last_used));
-        self.allocator = ShelfAllocator::default();
+        self.allocator = ShelfAllocator {
+            pages: self.pages,
+            ..ShelfAllocator::default()
+        };
         for (key, pixels, outside) in requested_entries {
             let Some((x, y)) = self.allocator.allocate(key.width, key.height) else {
                 return Err(GpuError(
@@ -412,65 +439,4 @@ impl GlyphAtlas {
         }
         Ok(())
     }
-}
-
-pub(crate) fn glyph_pixels(glyph: &RasterGlyph) -> Vec<u8> {
-    let pixel_count = glyph.width as usize * glyph.height as usize;
-    match glyph.content {
-        RasterContent::Mask if glyph.data.len() >= pixel_count * 3 => {
-            let mut pixels = Vec::with_capacity(pixel_count);
-            for index in 0..pixel_count {
-                let at = index * 3;
-                pixels.push(glyph.data[at..at + 3].iter().copied().max().unwrap_or(0));
-            }
-            pixels
-        }
-        // One byte a pixel either way: coverage for a mask, distance from the
-        // glyph edge for a field.
-        RasterContent::Mask | RasterContent::Field => glyph.data[..pixel_count].to_vec(),
-        RasterContent::Color => glyph.data[..pixel_count * 4].to_vec(),
-    }
-}
-
-pub(crate) fn upload_glyph(
-    queue: &wgpu::Queue,
-    texture: &wgpu::Texture,
-    entry: &GlyphAtlasEntry,
-    bytes_per_pixel: u32,
-) {
-    let padded_width = entry.width + 2;
-    let padded_height = entry.height + 2;
-    let bytes_per_pixel = bytes_per_pixel as usize;
-    let mut padded =
-        vec![entry.outside; padded_width as usize * padded_height as usize * bytes_per_pixel];
-    for row in 0..entry.height as usize {
-        let source = row * entry.width as usize * bytes_per_pixel;
-        let destination = ((row + 1) * padded_width as usize + 1) * bytes_per_pixel;
-        let row_bytes = entry.width as usize * bytes_per_pixel;
-        padded[destination..destination + row_bytes]
-            .copy_from_slice(&entry.pixels[source..source + row_bytes]);
-    }
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d {
-                x: entry.x - 1,
-                y: entry.y - 1,
-                z: 0,
-            },
-            aspect: wgpu::TextureAspect::All,
-        },
-        &padded,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(padded_width * bytes_per_pixel as u32),
-            rows_per_image: Some(padded_height),
-        },
-        wgpu::Extent3d {
-            width: padded_width,
-            height: padded_height,
-            depth_or_array_layers: 1,
-        },
-    );
 }
