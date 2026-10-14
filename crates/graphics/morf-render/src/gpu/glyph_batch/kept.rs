@@ -119,8 +119,11 @@ impl Copier<'_> {
         };
         // A text input's buffer is the one its caret is read from: it is
         // shaped every frame it is drawn.
-        if matches!(command, DrawCommand::Text { edit: Some(_), .. }) {
-            return false;
+        match command {
+            DrawCommand::Text { edit: Some(_), .. } => return false,
+            DrawCommand::Text { .. } | DrawCommand::Terminal { .. } => {}
+            // Nothing else lays out text.
+            _ => return true,
         }
         let kept = self.kept;
         let glyphs = of_command(&kept.glyphs, source, |glyph| glyph.command_index);
