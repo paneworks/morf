@@ -427,6 +427,9 @@ override MORF_LAYER_FADES: bool = true;
 override MORF_BOX_ONLY: bool = false;
 override MORF_SINGLE_BOX: bool = false;
 override MORF_UNIFORM_COLOR: bool = false;
+// One box layer and nothing to walk: a composition is that layer alone, and a
+// shadow is the same box once more at its offset.
+override MORF_ONE_BOX: bool = false;
 
 fn shape_distance(kind: u32, point: vec2<f32>, layer: Layer) -> f32 {
     if MORF_BOX_ONLY { return sd_box(point, layer.rect.zw, layer.radii); }
@@ -595,6 +598,14 @@ fn compose(local: vec2<f32>, base: vec4<f32>, first: u32, count: u32, omit: u32)
         out.distance = sd_box(local - layer.rect.xy, layer.rect.zw, layer.radii);
         out.fill = layer.color;
         out.group = 0u;
+        return out;
+    }
+    if MORF_ONE_BOX {
+        let layer = layers[first];
+        let left_out = (omit & 1u) != 0u;
+        out.distance = select(layer_distance(local, layer), 1e20, left_out);
+        out.fill = select(layer.color, base, left_out);
+        out.group = select(u32(layer.extras.x), 0u, left_out);
         return out;
     }
     out.distance = 1e20;

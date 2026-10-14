@@ -249,6 +249,7 @@ impl WgpuBackend {
         let field_boxes_opaque = specialised(FieldVariant::BoxesOpaque);
         let field_quad = specialised(FieldVariant::Quad);
         let field_boxes_uniform = specialised(FieldVariant::BoxesUniform);
+        let field_one_box = specialised(FieldVariant::OneBox);
         let field_shader_default = create_shader_bind_group(
             &device,
             &field_shader_layout,
@@ -329,6 +330,7 @@ impl WgpuBackend {
             field_boxes_opaque,
             field_quad,
             field_boxes_uniform,
+            field_one_box,
             field_layout,
             field_buffer,
             field_capacity,

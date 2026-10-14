@@ -96,6 +96,7 @@ impl FrameDraw<'_> {
                                 FieldVariant::BoxesOpaque => &self.backend.field_boxes_opaque,
                                 FieldVariant::Quad => &self.backend.field_quad,
                                 FieldVariant::BoxesUniform => &self.backend.field_boxes_uniform,
+                                FieldVariant::OneBox => &self.backend.field_one_box,
                             },
                         );
                         pass.set_bind_group(1, &self.backend.field_shader_default, &[]);

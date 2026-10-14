@@ -79,6 +79,8 @@ mod lcd_spans;
 mod lcd_spans_tests;
 #[cfg(test)]
 mod lcd_tests;
+#[cfg(test)]
+mod one_box_tests;
 mod pipelines;
 mod present;
 mod present_link;

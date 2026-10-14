@@ -143,6 +143,7 @@ impl WgpuBackend {
         self.field_boxes_opaque = specialised(FieldVariant::BoxesOpaque);
         self.field_quad = specialised(FieldVariant::Quad);
         self.field_boxes_uniform = specialised(FieldVariant::BoxesUniform);
+        self.field_one_box = specialised(FieldVariant::OneBox);
         self.resize_target(self.width, self.height);
         self.rebuild_presentation();
         self.rebuild_shaders();

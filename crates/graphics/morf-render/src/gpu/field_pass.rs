@@ -92,6 +92,8 @@ pub(crate) enum FieldVariant {
     BoxesOpaque,
     Quad,
     BoxesUniform,
+    /// One whole box layer, with or without a shadow.
+    OneBox,
 }
 
 impl FieldVariant {
@@ -101,6 +103,13 @@ impl FieldVariant {
         match command {
             DrawCommand::Quad { .. } => Self::Quad,
             DrawCommand::Field { layers, .. } => {
+                if let [layer] = layers.as_slice()
+                    && layer.shape == Shape::Box
+                    && (layer.morph <= 0.0 || layer.morph_to == Shape::Box)
+                    && layer.opacity >= 1.0
+                {
+                    return Self::OneBox;
+                }
                 let fading = layers
                     .iter()
                     .any(|layer| layer.opacity > 0.0 && layer.opacity < 1.0);
@@ -196,7 +205,10 @@ pub(crate) fn build_field_pipeline(
         "MORF_LAYER_FADES",
         if matches!(
             variant,
-            FieldVariant::AnalyticOpaque | FieldVariant::BoxesOpaque | FieldVariant::Quad
+            FieldVariant::AnalyticOpaque
+                | FieldVariant::BoxesOpaque
+                | FieldVariant::Quad
+                | FieldVariant::OneBox
         ) {
             0.0
         } else {
@@ -211,6 +223,7 @@ pub(crate) fn build_field_pipeline(
                 | FieldVariant::BoxesOpaque
                 | FieldVariant::Quad
                 | FieldVariant::BoxesUniform
+                | FieldVariant::OneBox
         ) {
             1.0
         } else {
@@ -228,6 +241,14 @@ pub(crate) fn build_field_pipeline(
     constants.push((
         "MORF_UNIFORM_COLOR",
         if variant == FieldVariant::BoxesUniform {
+            1.0
+        } else {
+            0.0
+        },
+    ));
+    constants.push((
+        "MORF_ONE_BOX",
+        if variant == FieldVariant::OneBox {
             1.0
         } else {
             0.0
@@ -399,7 +420,7 @@ mod variant_tests {
         let node = scene.create(morf_scene::Element::Sdf);
         let mut layer = field_layer(0.0, 0.0, 100.0, Shape::Box);
         let variant = |layer| FieldVariant::for_command(&field_command(node, vec![layer]));
-        assert_eq!(variant(layer.clone()), FieldVariant::BoxesOpaque);
+        assert_eq!(variant(layer.clone()), FieldVariant::OneBox);
         layer.opacity = 0.5;
         assert_eq!(variant(layer.clone()), FieldVariant::BoxesUniform);
         layer.opacity = 0.0;
