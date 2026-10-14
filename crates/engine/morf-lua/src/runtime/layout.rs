@@ -107,11 +107,9 @@ impl Runtime {
         ) {
             state.engine.windows.window_surfaces_changed = true;
         }
-        let (changed, errors) = morf_runtime::layout::observe_transform_watches(
-            &mut state.transform_watchers,
-            &state.engine.scene,
-            &state.engine.transform_tracker,
-        );
+        let (changed, errors) = state
+            .transform_watchers
+            .observe(&state.engine.scene, &state.engine.transform_tracker);
         for error in errors {
             state.log(LogLevel::Warn, error);
         }

@@ -29,9 +29,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
         state.terminals.remove(*node);
         state.images.remove(*node);
     }
-    state
-        .transform_watchers
-        .retain(|_, watcher| !removed.contains(&watcher.a) && !removed.contains(&watcher.b));
+    state.transform_watchers.forget_nodes(&removed);
 }
 
 pub(crate) fn finish_retained_destroy(

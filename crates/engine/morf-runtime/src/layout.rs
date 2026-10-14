@@ -4,11 +4,13 @@
 
 use std::collections::HashMap;
 
-use morf_layout::{Geometry, Layout, TransformTracker, TransformWatcher};
-use morf_scene::{NodeHandle, Scene};
+use morf_layout::{Geometry, Layout, TransformTracker};
+use morf_scene::NodeHandle;
 
-use crate::Handler;
 use crate::windows::{PopupNodeAnchor, WindowSurfaceConfig, WindowSurfaceKind};
+
+mod watches;
+pub use watches::TransformWatches;
 
 /// The pseudo-property a binding depends on when it reads `layout_x` or
 /// `layout_y`.
@@ -122,42 +124,6 @@ pub fn place_popup_anchors(
         }
     }
     changed
-}
-
-/// `ui.watch_transform(a, b, fn)`: two nodes whose relative transform is
-/// watched, and who is told when it changes.
-pub struct TransformWatch {
-    pub a: NodeHandle,
-    pub b: NodeHandle,
-    pub watcher: TransformWatcher,
-    pub callback: Option<Handler>,
-    /// Moves on with every change.
-    pub revision: u64,
-    /// A change the callback has not heard yet.
-    pub pending: bool,
-}
-
-/// Observes every watch against a frame. Returns whether any changed, and
-/// what could not be observed.
-pub fn observe_transform_watches(
-    watches: &mut HashMap<u64, TransformWatch>,
-    scene: &Scene,
-    tracker: &TransformTracker,
-) -> (bool, Vec<String>) {
-    let mut changed = false;
-    let mut errors = Vec::new();
-    for watch in watches.values_mut() {
-        match watch.watcher.observe(scene, tracker) {
-            Ok(true) => {
-                watch.revision = watch.revision.wrapping_add(1);
-                watch.pending = true;
-                changed = true;
-            }
-            Ok(false) => {}
-            Err(error) => errors.push(format!("transform watcher: {error}")),
-        }
-    }
-    (changed, errors)
 }
 
 /// Forgets the windows rooted in removed nodes, and the anchors of popups

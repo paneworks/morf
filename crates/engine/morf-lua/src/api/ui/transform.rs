@@ -3,8 +3,6 @@ use luna::{
 };
 use std::rc::Rc;
 
-use morf_layout::TransformWatcher as NativeTransformWatcher;
-
 use crate::{runtime_helpers::*, scene_bindings::*, state::*};
 
 pub(crate) fn install_transform_api<'gc>(
@@ -19,8 +17,7 @@ pub(crate) fn install_transform_api<'gc>(
             let revision = state
                 .borrow()
                 .transform_watchers
-                .get(&watcher.id)
-                .map(|watcher| watcher.revision)
+                .revision(watcher.id)
                 .ok_or_else(|| HostError("transform watcher is stale".into()))?;
             stack.replace(ctx, revision as i64);
             Ok(CallbackReturn::Return)
@@ -75,7 +72,7 @@ pub(crate) fn install_transform_api<'gc>(
             };
             let id = {
                 let mut state = state.borrow_mut();
-                if state.transform_watchers.len() >= 1_024 {
+                if state.transform_watchers.len() >= morf_runtime::layout::TransformWatches::LIMIT {
                     return Err(HostError("transform watcher limit reached".into()).into());
                 }
                 state
@@ -97,20 +94,12 @@ pub(crate) fn install_transform_api<'gc>(
                         .into());
                     }
                 }
-                let id = state.next_transform_watcher;
-                state.next_transform_watcher = id.wrapping_add(1);
-                state.transform_watchers.insert(
-                    id,
-                    LuaTransformWatcher {
-                        a,
-                        b,
-                        watcher: NativeTransformWatcher::new(a, b, common_parent),
-                        callback: callback.map(crate::vm::handler_store::register),
-                        revision: 0,
-                        pending: false,
-                    },
-                );
-                id
+                state.transform_watchers.add(
+                    a,
+                    b,
+                    common_parent,
+                    callback.map(crate::vm::handler_store::register),
+                )
             };
             let value = UserData::new_static(&ctx, TransformWatcherToken { id });
             value.set_metatable(ctx, Some(ctx.fetch(&transform_metatable)));

@@ -57,7 +57,6 @@ pub(crate) enum ViewKind {
     Grid,
 }
 
-pub(crate) use morf_runtime::layout::TransformWatch as LuaTransformWatcher;
 pub(crate) use morf_runtime::windows::PopupNodeAnchor;
 
 pub(crate) use morf_runtime::reactive::Effect as LuaEffect;
@@ -102,8 +101,8 @@ pub(crate) struct ReactiveState {
     /// a thousand-node tree allocated three thousand objects that were all the
     /// same. Every other userdata type in this crate already shares one.
     pub(crate) node_metatable: Option<StashedTable>,
-    pub(crate) transform_watchers: HashMap<u64, LuaTransformWatcher>,
-    pub(crate) next_transform_watcher: u64,
+    /// `ui.watch_transform` watches.
+    pub(crate) transform_watchers: morf_runtime::layout::TransformWatches,
     pub(crate) dbus_signals: Vec<PendingDbusSignal>,
     /// Hands out the ids subscription handles close by.
     pub(crate) next_dbus_signal_id: u64,

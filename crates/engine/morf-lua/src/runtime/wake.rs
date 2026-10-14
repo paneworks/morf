@@ -89,10 +89,6 @@ impl Runtime {
     /// the shell.
     pub fn has_pending_work(&self) -> bool {
         let state = self.reactive.borrow();
-        state.engine.has_pending_work()
-            || state
-                .transform_watchers
-                .values()
-                .any(|watcher| watcher.pending && watcher.callback.is_some())
+        state.engine.has_pending_work() || state.transform_watchers.has_pending_callback()
     }
 }
