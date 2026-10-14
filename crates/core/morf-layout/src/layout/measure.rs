@@ -5,7 +5,7 @@ use morf_scene::{Element, NodeHandle, Scene};
 
 use crate::attached::Attached;
 use crate::custom::CustomLayout;
-use crate::flex::FlexTree;
+use crate::flex::Purpose;
 use crate::flex_style::is_flex_root;
 use crate::geometry::{Size, TextMeasurer, TextOptions};
 use crate::helpers::{
@@ -121,7 +121,10 @@ impl Layout {
             // Taffy sizes the whole subtree at once: unconstrained here, for
             // the implicit size, and again at the resolved size when the
             // node is placed.
-            let mut flex = FlexTree::build(scene, node)?;
+            let flex = self
+                .flex
+                .get(scene, node, Purpose::Measure, &self.requested)?;
+            flex.set_root_size(None)?;
             flex.compute(
                 scene,
                 taffy::prelude::Size {
@@ -131,7 +134,7 @@ impl Layout {
                 &self.requested,
                 text,
             )?;
-            let size = flex.size();
+            let size = flex.size()?;
             self.implicit.insert(node, size);
             return Ok(size);
         }
