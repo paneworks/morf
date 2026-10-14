@@ -152,7 +152,7 @@ fn host(state: &mut ReactiveState) -> &mut ToplevelHost {
 /// Marks the running binding, if any, as following the window list.
 fn follow(state: &mut ReactiveState) {
     let revision = host(state).revision;
-    if let Some(active) = state.tracking.capture() {
+    if let Some(active) = state.tracking_mut().capture() {
         active.reads.insert(revision);
     }
 }

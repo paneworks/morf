@@ -17,7 +17,7 @@ pub(crate) fn install_signal_api<'gc>(
         move |ctx, _, mut stack| {
             let signal: UserRef<SignalToken> = stack.consume(ctx)?;
             let mut state = state.borrow_mut();
-            let value = if let Some(active) = state.tracking.capture() {
+            let value = if let Some(active) = state.tracking_mut().capture() {
                 active.reads.insert(signal.id);
                 active
                     .writes
@@ -42,7 +42,7 @@ pub(crate) fn install_signal_api<'gc>(
             let value = IpcValue::from_lua_deep(ctx, value).map_err(HostError)?;
             {
                 let mut state = state.borrow_mut();
-                if let Some(active) = state.tracking.capture() {
+                if let Some(active) = state.tracking_mut().capture() {
                     active.writes.push((signal.id, value));
                     stack.replace(ctx, true);
                     return Ok(CallbackReturn::Return);
@@ -51,8 +51,8 @@ pub(crate) fn install_signal_api<'gc>(
                 state.shared_mut().note_write(signal.id);
                 // Inside a handler the write is enough: the graph is flushed
                 // once, when the handler returns, however many writes it made.
-                if state.tracking.in_handler() {
-                    state.tracking.defer_flush();
+                if state.tracking().in_handler() {
+                    state.tracking_mut().defer_flush();
                     stack.replace(ctx, true);
                     return Ok(CallbackReturn::Return);
                 }
@@ -123,7 +123,7 @@ pub(crate) fn install_signal_api<'gc>(
                 .ok_or_else(|| HostError(format!("unknown persistent property `{key}`")))?;
             let value = {
                 let mut state = state.borrow_mut();
-                if let Some(active) = state.tracking.capture() {
+                if let Some(active) = state.tracking_mut().capture() {
                     active.reads.insert(id);
                     active
                         .writes
@@ -167,7 +167,7 @@ pub(crate) fn install_signal_api<'gc>(
                     ))
                     .into());
                 }
-                if let Some(active) = state.tracking.capture() {
+                if let Some(active) = state.tracking_mut().capture() {
                     active.writes.push((id, value));
                     return Ok(CallbackReturn::Return);
                 }

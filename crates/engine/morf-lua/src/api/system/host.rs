@@ -213,7 +213,7 @@ pub(crate) fn install_host_service_api<'gc>(
                 stack.replace(ctx, 0);
                 return Ok(CallbackReturn::Return);
             };
-            if let Some(active) = state.tracking.capture() {
+            if let Some(active) = state.tracking_mut().capture() {
                 active.reads.insert(signal);
             }
             stack.replace(ctx, count);
@@ -243,7 +243,7 @@ pub(crate) fn install_host_service_api<'gc>(
                 stack.replace(ctx, true);
                 return Ok(CallbackReturn::Return);
             };
-            if let Some(active) = state.tracking.capture() {
+            if let Some(active) = state.tracking_mut().capture() {
                 active.reads.insert(signal);
             }
             stack.replace(ctx, primary);

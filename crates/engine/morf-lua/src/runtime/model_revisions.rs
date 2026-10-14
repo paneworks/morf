@@ -21,7 +21,7 @@ use crate::{
 /// Notes that the running binding read `model`.
 pub(crate) fn track_model_read(state: &mut ReactiveState, model: &Rc<RefCell<ListModel>>) {
     let signal = state.model_revisions().signal(model);
-    if let Some(active) = state.tracking.capture() {
+    if let Some(active) = state.tracking_mut().capture() {
         match signal {
             Some(signal) => {
                 active.reads.insert(signal);
@@ -62,12 +62,12 @@ pub(crate) fn bump_model_revision(
     let Some((signal, value)) = state.model_revisions_mut().bump(model) else {
         return Ok(false);
     };
-    if let Some(active) = state.tracking.capture() {
+    if let Some(active) = state.tracking_mut().capture() {
         active.writes.push((signal, value.clone()));
         state.reactive.mirror(signal, value);
     } else {
         state.reactive.write(signal, value)?;
-        state.tracking.defer_flush();
+        state.tracking_mut().defer_flush();
     }
     Ok(true)
 }
@@ -84,10 +84,10 @@ pub(crate) fn model_changed(
     let flush = {
         let mut state = state.borrow_mut();
         let bumped = bump_model_revision(&mut state, model)?;
-        bumped && !state.tracking.capturing() && !state.tracking.in_handler()
+        bumped && !state.tracking().capturing() && !state.tracking().in_handler()
     };
     if flush {
-        state.borrow_mut().tracking.cancel_flush();
+        state.borrow_mut().tracking_mut().cancel_flush();
         flush_reactive(state, ctx, limits)?;
     }
     Ok(())

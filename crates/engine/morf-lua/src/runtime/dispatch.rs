@@ -28,7 +28,7 @@ impl Runtime {
 
     /// Returns the number of Lua effect evaluations performed by this runtime.
     pub fn effect_runs(&self) -> u64 {
-        self.reactive.borrow().tracking.effect_runs()
+        self.reactive.borrow().tracking().effect_runs()
     }
 
     /// How many errors this runtime's effects have raised, repeats included.
@@ -404,7 +404,7 @@ impl Runtime {
             let mut state = self.reactive.borrow_mut();
             for node in state.events.pointer_watch.answer(answers) {
                 changed = true;
-                state.tracking.defer_flush();
+                state.tracking_mut().defer_flush();
                 let _ = bump_property_signal(&mut state, node, CONTAINS_POINTER, false);
             }
         }
@@ -414,7 +414,7 @@ impl Runtime {
     /// Runs the bindings a host-side write made stale, when no handler
     /// will: the flush a handler's return would otherwise have been.
     pub fn flush_after_event(&mut self) {
-        let flush = self.reactive.borrow_mut().tracking.take_flush();
+        let flush = self.reactive.borrow_mut().tracking_mut().take_flush();
         if flush
             && let Err(message) = self
                 .lua

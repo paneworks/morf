@@ -28,7 +28,7 @@ pub struct Engine {
     pub reactive: crate::reactive::Reactive,
     /// The handlers on the stack, the effect being captured, and the signals
     /// standing for node properties.
-    pub tracking: crate::tracking::Tracking,
+    tracking:crate::tracking::Tracking,
     /// How far the scene has moved, and how far each reader of it has seen.
     revisions:crate::revisions::Revisions,
     /// Each list model a binding has read, by address, with the revision

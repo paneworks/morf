@@ -55,7 +55,7 @@ pub(crate) fn run_destroyed_hooks(
         if state.reactive.is_flushing() || !state.destroy_hooks_mut().begin() {
             return;
         }
-        state.tracking.enter_handler();
+        state.tracking_mut().enter_handler();
     }
     loop {
         let hooks = state.borrow_mut().destroy_hooks_mut().take_pending();
@@ -73,7 +73,7 @@ pub(crate) fn run_destroyed_hooks(
     let flush = {
         let mut state = state.borrow_mut();
         state.destroy_hooks_mut().end();
-        state.tracking.leave_handler()
+        state.tracking_mut().leave_handler()
     };
     if flush {
         let _ = flush_reactive(state, ctx, limits);

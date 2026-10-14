@@ -75,10 +75,10 @@ pub(super) fn window_metatable<'gc>(
             );
             crate::api::ui::bindings::run_destroyed_hooks(&state, ctx, limits);
             if let Some(callback) = on_closed {
-                state.borrow_mut().tracking.enter_handler();
+                state.borrow_mut().tracking_mut().enter_handler();
                 let result = crate::vm::execute::execute_handler_args(ctx, &callback, &[], limits);
                 let mut guard = state.borrow_mut();
-                let flush = guard.tracking.leave_handler();
+                let flush = guard.tracking_mut().leave_handler();
                 if let Err(message) = result {
                     guard.log(
                         LogLevel::Warn,

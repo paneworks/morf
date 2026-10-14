@@ -129,7 +129,7 @@ pub(crate) fn install_state_api<'gc>(
             }
             if let Some(&id) = fields.scalars.get(&key) {
                 let mut state = state.borrow_mut();
-                let value = if let Some(active) = state.tracking.capture() {
+                let value = if let Some(active) = state.tracking_mut().capture() {
                     active.reads.insert(id);
                     active
                         .writes
@@ -204,13 +204,13 @@ pub(crate) fn install_state_api<'gc>(
                         }
                         return Ok(CallbackReturn::Return);
                     }
-                    if let Some(active) = state.tracking.capture() {
+                    if let Some(active) = state.tracking_mut().capture() {
                         active.writes.push((id, value));
                         return Ok(CallbackReturn::Return);
                     }
                     state.reactive.write(id, value).map_err(HostError)?;
-                    if state.tracking.in_handler() {
-                        state.tracking.defer_flush();
+                    if state.tracking().in_handler() {
+                        state.tracking_mut().defer_flush();
                         return Ok(CallbackReturn::Return);
                     }
                 }

@@ -274,7 +274,7 @@ impl Runtime {
 
     /// Flushes what editing wrote, then runs the callbacks it owes.
     pub(crate) fn finish_text_input_work(&mut self) {
-        let flush = self.reactive.borrow_mut().tracking.take_flush();
+        let flush = self.reactive.borrow_mut().tracking_mut().take_flush();
         if flush
             && let Err(message) = self
                 .lua
@@ -293,7 +293,7 @@ impl Runtime {
     pub(crate) fn drain_input_events(&mut self) {
         {
             let mut state = self.reactive.borrow_mut();
-            let in_handler = state.tracking.in_handler();
+            let in_handler = state.tracking().in_handler();
             if !state.editing_mut().start_draining(in_handler) {
                 return;
             }

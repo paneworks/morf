@@ -344,7 +344,7 @@ pub(crate) fn assign_engine_relation<'gc>(
         }
     }
     state.revisions_mut().bump_scene();
-    state.tracking.defer_flush();
+    state.tracking_mut().defer_flush();
     Ok(())
 }
 

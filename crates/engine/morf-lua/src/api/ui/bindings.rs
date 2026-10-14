@@ -21,7 +21,7 @@ pub(crate) fn register_property_binding<'gc>(
     let name = format!("{node:?}.{property}");
     {
         let mut state = state.borrow_mut();
-        let token = state.tracking.next_effect_token();
+        let token = state.tracking_mut().next_effect_token();
         state.reactive.add_effect(
             token,
             LuaEffect {
@@ -112,7 +112,7 @@ fn register_node_binding<'gc>(
 ) {
     {
         let mut state = state.borrow_mut();
-        let token = state.tracking.next_effect_token();
+        let token = state.tracking_mut().next_effect_token();
         state.reactive.add_effect(
             token,
             LuaEffect {

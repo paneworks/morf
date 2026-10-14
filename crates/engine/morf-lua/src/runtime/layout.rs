@@ -73,7 +73,7 @@ impl Runtime {
         let moved = if geometry_changed {
             let state = self.reactive.borrow();
             morf_runtime::layout::moved_nodes(
-                state.tracking.tracked_properties(),
+                state.tracking().tracked_properties(),
                 layout,
                 state.transform_tracker(),
             )

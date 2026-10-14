@@ -44,13 +44,13 @@ pub(crate) fn bump_property_signal(
     target: bool,
 ) -> Result<(), String> {
     let Some(signal) = state
-        .tracking
+        .tracking()
         .property_signal(&(node, property.to_owned(), target))
     else {
         return Ok(());
     };
     let value = IpcValue::Integer(state.revisions_mut().bump_property());
-    if let Some(active) = state.tracking.capture() {
+    if let Some(active) = state.tracking_mut().capture() {
         active.writes.push((signal, value.clone()));
         state.reactive.mirror(signal, value);
         Ok(())
@@ -102,7 +102,7 @@ pub(crate) fn assign_scene_property(
         // A binding that reads this property is now stale. Inside a handler
         // the flush comes when the handler returns; outside one, at the next
         // signal write or clock tick, as it always did.
-        state.tracking.defer_flush();
+        state.tracking_mut().defer_flush();
     }
     if current_changed {
         bump_property_signal(state, node, property, false)?;

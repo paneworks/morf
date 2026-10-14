@@ -18,10 +18,10 @@ impl Runtime {
         &mut self,
         body: impl for<'gc> FnOnce(Context<'gc>, Limits) -> T,
     ) -> T {
-        self.reactive.borrow_mut().tracking.enter_handler();
+        self.reactive.borrow_mut().tracking_mut().enter_handler();
         let limits = self.limits;
         let result = self.lua.enter(|ctx| body(ctx, limits));
-        let flush = self.reactive.borrow_mut().tracking.leave_handler();
+        let flush = self.reactive.borrow_mut().tracking_mut().leave_handler();
         let _span =
             flush.then(|| crate::profile::span(|| "engine: flush after a handler".to_owned()));
         if flush

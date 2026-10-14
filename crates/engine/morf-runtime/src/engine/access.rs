@@ -56,4 +56,7 @@ subsystems! {
     editing, editing_mut: crate::editing::Editing;
     /// Which node of each surface has focus.
     focus, focus_mut: crate::focus::FocusState;
+    /// The handlers on the stack, the effect being captured, and the
+    /// signals standing for node properties.
+    tracking, tracking_mut: crate::tracking::Tracking;
 }

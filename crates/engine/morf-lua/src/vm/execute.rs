@@ -94,7 +94,7 @@ pub(crate) fn evaluate_effect(
 ) -> Result<(), String> {
     let lua_effect = {
         let mut state = state.borrow_mut();
-        if state.tracking.capturing() {
+        if state.tracking().capturing() {
             return Err("reactive effects cannot run recursively".to_owned());
         }
         // A binding whose node was removed during this flush: its effect
@@ -102,7 +102,7 @@ pub(crate) fn evaluate_effect(
         let Some(effect) = state.reactive.effect(token).cloned() else {
             return Ok(());
         };
-        state.tracking.begin_capture();
+        state.tracking_mut().begin_capture();
         effect
     };
     let result = execute_effect(
@@ -147,10 +147,10 @@ pub(crate) fn evaluate_effect(
             Ok(())
         }
     });
-    let capture = state.borrow_mut().tracking.end_capture();
+    let capture = state.borrow_mut().tracking_mut().end_capture();
     for key in capture.property_reads {
         let (node, property, target) = (key.0, &key.1, key.2);
-        let signal = if let Some(signal) = state.borrow().tracking.property_signal(&key) {
+        let signal = if let Some(signal) = state.borrow().tracking().property_signal(&key) {
             signal
         } else {
             let name = format!("{node:?}.{property}{}", if target { "_target" } else { "" });
@@ -160,7 +160,7 @@ pub(crate) fn evaluate_effect(
                 .reactive
                 .signal(name.clone(), value)
                 .ok_or("reactive graph unavailable")?;
-            state.tracking.track_property(key, signal, name);
+            state.tracking_mut().track_property(key, signal, name);
             signal
         };
         read_signal(state, effect, signal)?;
