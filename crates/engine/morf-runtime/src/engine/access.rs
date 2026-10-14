@@ -65,4 +65,7 @@ subsystems! {
     session, session_mut: crate::session::Session;
     /// Loaders' items and retained nodes, and the handlers told as they go.
     retained, retained_mut: crate::retention::Retained;
+    /// Motion beside the scene's own: `on_finished` handlers, loops,
+    /// follows, theme fades and exits.
+    animation, animation_mut: crate::animation::Animation;
 }

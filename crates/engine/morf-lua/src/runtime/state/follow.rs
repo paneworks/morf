@@ -5,7 +5,7 @@ use super::*;
 
 impl morf_runtime::animation::AnimationHost for ReactiveState {
     fn animation(&mut self) -> &mut morf_runtime::animation::Animation {
-        &mut self.animation
+        self.engine.animation_mut()
     }
 
     fn scene(&mut self) -> &mut Scene {

@@ -112,7 +112,7 @@ pub(crate) fn drop_retainable(
     let registered = {
         let state = state.borrow();
         state.retained().retention.state(node).is_some()
-            && !state.animation.exit_registered.contains(&node)
+            && !state.engine.animation().exit_registered.contains(&node)
     };
     let exiting = begin_node_exit(&mut state.borrow_mut(), node);
     if !registered {

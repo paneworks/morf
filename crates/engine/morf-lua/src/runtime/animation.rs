@@ -66,7 +66,7 @@ impl Runtime {
     }
 
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
-        self.reactive.borrow_mut().animation.ticked = true;
+        self.reactive.borrow_mut().animation_mut().ticked = true;
         let fading = self.advance_theme_fades(delta);
         {
             let mut state = self.reactive.borrow_mut();
@@ -105,7 +105,7 @@ impl Runtime {
         }
         // A group callback is registered once and fires once, so it is taken
         // out as it is collected rather than left to leak.
-        let finished = self.reactive.borrow_mut().animation.finished(&frame);
+        let finished = self.reactive.borrow_mut().animation_mut().finished(&frame);
         for warning in morf_runtime::animation::report_finished(self, finished) {
             self.reactive.borrow_mut().log(LogLevel::Warn, warning);
         }

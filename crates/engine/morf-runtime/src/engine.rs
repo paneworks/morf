@@ -68,7 +68,7 @@ pub struct Engine {
     timers:crate::timers::Timers,
     /// Motion beside the scene's own: `on_finished` handlers, loops,
     /// follows, theme fades and exits.
-    pub animation: crate::animation::Animation,
+    animation:crate::animation::Animation,
     /// Each node's `on_destroyed`, and those of removed nodes waiting to run.
     destroy_hooks: crate::destroy::DestroyHooks,
     /// Loaders' items and retained nodes, and the handlers told as they go.

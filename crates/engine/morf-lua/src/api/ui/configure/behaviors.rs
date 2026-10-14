@@ -28,13 +28,13 @@ pub(crate) fn configure_behaviors<'gc>(
             LuaValue::Nil => {
                 state
                     .borrow_mut()
-                    .animation
+                    .animation_mut()
                     .callbacks
                     .remove(&(node, property.clone()));
             }
             LuaValue::Function(Function::Closure(callback)) => {
                 let callback = ctx.stash(callback);
-                state.borrow_mut().animation.callbacks.insert(
+                state.borrow_mut().animation_mut().callbacks.insert(
                     (node, property.clone()),
                     crate::vm::handler_store::register(callback),
                 );
