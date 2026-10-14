@@ -127,7 +127,7 @@ fn axes_parse_from_a_map_of_tags_and_refuse_anything_else() {
 
 #[test]
 fn a_wght_axis_is_the_weight_shaping_uses() {
-    let Some((family, path)) = font_with(b"wght") else {
+    let Some((family, path)) = text_font_with(b"wght") else {
         eprintln!("no variable font with a wght axis here; skipped");
         return;
     };
