@@ -4,8 +4,9 @@
 --
 -- A desktop entry with `Terminal=true` is written into the run's scratch
 -- data folder, found through the launcher and started: a floating window
--- with the program on a `ui.Terminal`. The program is real (`true`, `false`)
--- and ends on the wall clock, so its end is waited for with `test.wait`.
+-- with the program on a `ui.Terminal`. The program is real (`sleep 0.5`,
+-- `false`) and ends on the wall clock, so its end is waited for with
+-- `test.wait`; a clean one lives long enough for its window to be seen.
 
 local test = morf.test
 
@@ -47,7 +48,7 @@ end
 
 test.describe("impasto terminal", function()
   test.it("opens a window for a program and destroys it when it exits", function()
-    entry("MorfProbeDone", "true")
+    entry("MorfProbeDone", "sleep 0.5")
     load()
     test.eq(floating(), 0)
     launch("MorfProbeDone")
@@ -66,7 +67,7 @@ test.describe("impasto terminal", function()
   end)
 
   test.it("gives back its place: more programs than places, one after another", function()
-    entry("MorfProbeDone", "true")
+    entry("MorfProbeDone", "sleep 0.5")
     load()
     for round = 1, 10 do
       launch("MorfProbeDone")
