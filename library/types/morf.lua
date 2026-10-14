@@ -713,6 +713,7 @@
 
 ---@class Morf.Xkb
 ---@field compile fun(...): any
+---@field include_paths fun(...): any
 
 ---@class morf.Color
 ---@field r number
