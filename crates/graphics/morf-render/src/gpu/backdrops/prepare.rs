@@ -2,6 +2,7 @@
 //! again, and the textures and passes each one keeps.
 
 use morf_layout::{Geometry, Transform2D};
+use morf_scene::NodeHandle;
 
 use super::super::backend_types::WgpuBackend;
 use super::super::glyphs::{GlyphInstance, layer_mask_data, transformed_quad};
@@ -66,14 +67,16 @@ impl WgpuBackend {
             };
             let plan = backdrop_plan(radius * scale);
             let ops = beneath_ops(list, command_layers, child_layers, index, reach);
-            let beneath = self.beneath_of(list, texture_batch, &ops);
             let stale = match self.backdrops.entries.get(node) {
                 Some(entry) => {
-                    entry.region != region || entry.plan != plan || entry.beneath != beneath
+                    entry.region != region
+                        || entry.plan != plan
+                        || !self.beneath_matches(list, texture_batch, &ops, &entry.beneath)
                 }
                 None => true,
             };
             if stale {
+                let beneath = self.beneath_of(list, texture_batch, &ops);
                 let reuse = self
                     .backdrops
                     .entries
@@ -149,7 +152,61 @@ impl WgpuBackend {
         draws
     }
 
-    /// Everything a backdrop drawn from `ops` depends on.
+    /// Everything a backdrop drawn from `ops` depends on, in order, until
+    /// `visit` says stop; false when it did.
+    fn walk_beneath<'a>(
+        &self,
+        list: &'a DrawList,
+        texture_batch: &TextureBatch,
+        ops: &[BeneathOp],
+        mut visit: impl FnMut(Seen<'a>) -> bool,
+    ) -> bool {
+        let command = |index: usize, visit: &mut dyn FnMut(Seen<'a>) -> bool| {
+            let command = &list.commands[index];
+            let drawn = match command {
+                DrawCommand::Texture { .. } => texture_batch.command_instances[index].is_some(),
+                _ => true,
+            };
+            if !visit(Seen::Command(command, drawn)) {
+                return false;
+            }
+            match command {
+                DrawCommand::Backdrop { node, .. } => {
+                    let generation = self
+                        .backdrops
+                        .entries
+                        .get(node)
+                        .map_or(u64::MAX, |entry| entry.generation);
+                    visit(Seen::Backdrop(*node, generation))
+                }
+                _ => true,
+            }
+        };
+        for op in ops {
+            match *op {
+                BeneathOp::Command(index) => {
+                    if !command(index, &mut visit) {
+                        return false;
+                    }
+                }
+                BeneathOp::Layer(layer) => {
+                    let layer = &list.layers[layer];
+                    if !visit(Seen::Layer(layer))
+                        || !layer
+                            .commands
+                            .clone()
+                            .all(|index| command(index, &mut visit))
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    /// Everything a backdrop drawn from `ops` depends on, kept to compare
+    /// later frames against.
     fn beneath_of(
         &self,
         list: &DrawList,
@@ -157,41 +214,44 @@ impl WgpuBackend {
         ops: &[BeneathOp],
     ) -> Vec<Beneath> {
         let mut beneath = Vec::new();
-        let command = |index: usize, beneath: &mut Vec<Beneath>| {
-            let command = &list.commands[index];
-            let drawn = match command {
-                DrawCommand::Texture { .. } => texture_batch.command_instances[index].is_some(),
-                _ => true,
-            };
-            beneath.push(Beneath::Command(command.clone(), drawn));
-            if let DrawCommand::Backdrop { node, .. } = command {
-                let generation = self
-                    .backdrops
-                    .entries
-                    .get(node)
-                    .map_or(u64::MAX, |entry| entry.generation);
-                beneath.push(Beneath::Backdrop(*node, generation));
-            }
-        };
-        for op in ops {
-            match *op {
-                BeneathOp::Command(index) => command(index, &mut beneath),
-                BeneathOp::Layer(layer) => {
-                    let layer = &list.layers[layer];
-                    // Where the layer sits in the list is not part of how it
-                    // looks: a line of text added elsewhere shifts every range.
-                    beneath.push(Beneath::Layer(Layer {
-                        commands: 0..0,
-                        parent: None,
-                        ..layer.clone()
-                    }));
-                    for index in layer.commands.clone() {
-                        command(index, &mut beneath);
-                    }
-                }
-            }
-        }
+        self.walk_beneath(list, texture_batch, ops, |seen| {
+            beneath.push(match seen {
+                Seen::Command(command, drawn) => Beneath::Command(command.clone(), drawn),
+                // Where the layer sits in the list is not part of how it
+                // looks: a line of text added elsewhere shifts every range.
+                Seen::Layer(layer) => Beneath::Layer(Layer {
+                    commands: 0..0,
+                    parent: None,
+                    ..layer.clone()
+                }),
+                Seen::Backdrop(node, generation) => Beneath::Backdrop(node, generation),
+            });
+            true
+        });
         beneath
+    }
+
+    /// Whether what lies beneath is still `kept`, compared in place rather
+    /// than copied first: on most frames nothing beneath a backdrop moved.
+    fn beneath_matches(
+        &self,
+        list: &DrawList,
+        texture_batch: &TextureBatch,
+        ops: &[BeneathOp],
+        kept: &[Beneath],
+    ) -> bool {
+        let mut kept = kept.iter();
+        let same = self.walk_beneath(list, texture_batch, ops, |seen| match (seen, kept.next()) {
+            (Seen::Command(command, drawn), Some(Beneath::Command(old, old_drawn))) => {
+                drawn == *old_drawn && command == old
+            }
+            (Seen::Layer(layer), Some(Beneath::Layer(old))) => looks_same(layer, old),
+            (Seen::Backdrop(node, generation), Some(Beneath::Backdrop(old, old_generation))) => {
+                node == *old && generation == *old_generation
+            }
+            _ => false,
+        });
+        same && kept.next().is_none()
     }
 
     /// Textures and passes for a backdrop over `region`.
@@ -317,4 +377,41 @@ impl WgpuBackend {
     pub fn backdrop_blurs(&self) -> u64 {
         self.backdrops.blurs
     }
+}
+
+/// One thing a backdrop's picture depends on, as it stands in the list.
+enum Seen<'a> {
+    Command(&'a DrawCommand, bool),
+    Layer(&'a Layer),
+    Backdrop(NodeHandle, u64),
+}
+
+/// Whether `layer` composites as `kept` did, wherever each sits in its list.
+fn looks_same(layer: &Layer, kept: &Layer) -> bool {
+    let Layer {
+        node,
+        commands: _,
+        parent: _,
+        opacity,
+        blur,
+        shadow_color,
+        shadow_blur,
+        shadow_offset,
+        mask,
+        shader,
+        bounds,
+        alpha_mask,
+        mask_for,
+    } = layer;
+    *node == kept.node
+        && *opacity == kept.opacity
+        && *blur == kept.blur
+        && *shadow_color == kept.shadow_color
+        && *shadow_blur == kept.shadow_blur
+        && *shadow_offset == kept.shadow_offset
+        && *mask == kept.mask
+        && *shader == kept.shader
+        && *bounds == kept.bounds
+        && *alpha_mask == kept.alpha_mask
+        && *mask_for == kept.mask_for
 }
