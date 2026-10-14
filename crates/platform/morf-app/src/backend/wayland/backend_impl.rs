@@ -22,6 +22,7 @@ impl Backend for LayerClient {
             text_input: self.supports_text_input(),
             input_method: self.supports_input_method(),
             backdrop_blur: self.supports_backdrop_blur(),
+            color: self.state.color.support,
         }
     }
 

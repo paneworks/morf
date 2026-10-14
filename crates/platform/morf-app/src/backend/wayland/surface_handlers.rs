@@ -222,6 +222,7 @@ impl OutputHandler for LayerState {
         output: wl_output::WlOutput,
     ) {
         self.refresh_screens(None);
+        self.watch_output_color(&output, qh);
         self.create_lock_surface(output, qh);
     }
 
@@ -266,6 +267,7 @@ impl OutputHandler for LayerState {
         // Told before the toolkit forgets it: the list must leave it out here,
         // or an output going away never changed the list at all.
         self.refresh_screens(Some(&output));
+        self.forget_output_color(&output);
         if let Some(index) = self
             .lock_surfaces
             .iter()

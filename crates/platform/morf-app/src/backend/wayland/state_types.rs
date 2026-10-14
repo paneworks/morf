@@ -290,6 +290,8 @@ pub(crate) struct LayerState {
     /// compositor may withdraw it at run time — at which point it stops
     /// applying blur even to regions already set.
     pub(crate) blur_capable: bool,
+    /// What the compositor says about colour (`color.rs`).
+    pub(crate) color: crate::backend::wayland::color::ColorState,
     pub(crate) screens: Vec<Output>,
     pub(crate) session_locks: SessionLockState,
     /// Whether the compositor offers `ext-session-lock`.

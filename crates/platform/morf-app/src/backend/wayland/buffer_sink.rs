@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use morf_value::present::{BufferSink, Damage, DmabufPlane, SinkBuffer};
+use morf_value::present::{BufferSink, ColorSupport, Damage, DmabufPlane, Encoding, SinkBuffer};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
 use wayland_client::protocol::{
@@ -20,6 +20,10 @@ use wayland_client::protocol::{
     wl_surface::WlSurface,
 };
 use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle};
+use wayland_protocols::wp::color_management::v1::client::{
+    wp_color_management_surface_v1::WpColorManagementSurfaceV1,
+    wp_color_manager_v1::WpColorManagerV1,
+};
 use wayland_protocols::wp::linux_dmabuf::zv1::client::{
     zwp_linux_buffer_params_v1::{self, ZwpLinuxBufferParamsV1},
     zwp_linux_dmabuf_v1::{self, ZwpLinuxDmabufV1},
@@ -29,9 +33,13 @@ use crate::backend::wayland::WaylandWindowTarget;
 
 /// What the compositor said on the sink's queue.
 #[derive(Default)]
-struct SinkState {
+pub(super) struct SinkState {
     /// Every (format, modifier) it takes.
     formats: Vec<(u32, u64)>,
+    /// What it can be told about colour.
+    pub(super) color: ColorSupport,
+    /// Its answer to the last image description made.
+    pub(super) described: Option<Result<(), String>>,
 }
 
 impl Dispatch<WlRegistry, GlobalListContents> for SinkState {
@@ -119,11 +127,14 @@ impl Drop for WaylandBuffer {
 
 /// A `wl_surface` showing dmabufs.
 pub struct WaylandBufferSink {
-    connection: Connection,
-    queue: EventQueue<SinkState>,
-    state: SinkState,
-    surface: WlSurface,
+    pub(super) connection: Connection,
+    pub(super) queue: EventQueue<SinkState>,
+    pub(super) state: SinkState,
+    pub(super) surface: WlSurface,
     dmabuf: ZwpLinuxDmabufV1,
+    pub(super) color_manager: Option<WpColorManagerV1>,
+    /// Made the first time a description is set: one per surface.
+    pub(super) color_surface: Option<WpColorManagementSurfaceV1>,
 }
 
 impl WaylandWindowTarget {
@@ -138,6 +149,9 @@ impl WaylandWindowTarget {
         let dmabuf: ZwpLinuxDmabufV1 = globals
             .bind(&qh, 3..=3, ())
             .map_err(|error| format!("no zwp_linux_dmabuf_v1 v3: {error}"))?;
+        let color_manager = globals
+            .bind(&qh, 1..=super::color::MANAGER_VERSION, ())
+            .ok();
         let mut state = SinkState::default();
         queue
             .roundtrip(&mut state)
@@ -148,6 +162,8 @@ impl WaylandWindowTarget {
             state,
             surface: self.surface.clone(),
             dmabuf,
+            color_manager,
+            color_surface: None,
         }))
     }
 }
@@ -246,10 +262,19 @@ impl BufferSink for WaylandBufferSink {
         }
         false
     }
+
+    fn color_support(&self) -> ColorSupport {
+        self.state.color
+    }
+
+    fn set_encoding(&mut self, encoding: Encoding) -> Result<(), String> {
+        self.describe(encoding)
+    }
 }
 
 impl Drop for WaylandBufferSink {
     fn drop(&mut self) {
+        self.drop_color();
         self.dmabuf.destroy();
         let _ = self.connection.flush();
     }

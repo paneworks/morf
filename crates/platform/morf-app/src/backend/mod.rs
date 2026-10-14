@@ -82,6 +82,9 @@ pub struct Capabilities {
     pub input_method: bool,
     /// The compositor blurs what is behind a window.
     pub backdrop_blur: bool,
+    /// What the compositor can be told about a surface's colours: whether
+    /// an HDR frame can be described (`color.hdr()`), and how.
+    pub color: morf_value::present::ColorSupport,
 }
 
 /// Where a window's frames go.
@@ -241,6 +244,9 @@ pub trait Backend {
     }
     fn supports_backdrop_blur(&self) -> bool {
         self.capabilities().backdrop_blur
+    }
+    fn color_support(&self) -> morf_value::present::ColorSupport {
+        self.capabilities().color
     }
     fn supports_drag_and_drop(&self) -> bool {
         self.capabilities().drag_and_drop

@@ -20,4 +20,32 @@ pub struct Output {
     /// says: `unknown`, `none`, `horizontal_rgb`, `horizontal_bgr`,
     /// `vertical_rgb` or `vertical_bgr`.
     pub subpixel: &'static str,
+    /// What the compositor says the output prefers, under colour
+    /// management; `None` where it says nothing.
+    pub color: Option<OutputColor>,
+}
+
+/// What an output prefers its pictures described as (its preferred image
+/// description under `wp_color_management_output_v1`).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct OutputColor {
+    /// `pq`, `ext_linear`, `gamma22`, `srgb`, `hlg`, ... or `power` for a
+    /// plain exponent; empty when it was not said.
+    pub transfer: &'static str,
+    /// `srgb`, `bt2020`, `display_p3`, ... or `custom` for chromaticities.
+    pub primaries: &'static str,
+    /// The darkest it shows, in 1/10000 cd/m².
+    pub min_luminance: u32,
+    /// The brightest it shows, in cd/m².
+    pub max_luminance: u32,
+    /// Where SDR white sits, in cd/m².
+    pub reference_luminance: u32,
+}
+
+impl OutputColor {
+    /// Whether the output shows more than SDR white: a PQ or HLG signal, or
+    /// a peak above the reference.
+    pub fn hdr(&self) -> bool {
+        matches!(self.transfer, "pq" | "hlg") || self.max_luminance > self.reference_luminance
+    }
 }
