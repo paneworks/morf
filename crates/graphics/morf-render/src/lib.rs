@@ -65,6 +65,7 @@ pub use lcd::{
 };
 pub use morf_text::{FontSubpixel, LcdFilter, SubpixelOrder, font_subpixel};
 pub use paint::{CopiedRun, Copies};
+pub(crate) use paint::{RunCursor, extend_runs};
 pub use path::PathPaint;
 pub use sdf::*;
 #[cfg(test)]

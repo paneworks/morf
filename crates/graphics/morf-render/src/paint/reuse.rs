@@ -101,6 +101,49 @@ pub struct Copies<'a> {
     pub runs: &'a [CopiedRun],
 }
 
+/// Walks a list's copied runs in command order.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RunCursor<'a> {
+    runs: &'a [CopiedRun],
+    run: usize,
+}
+
+impl<'a> RunCursor<'a> {
+    pub(crate) fn new(runs: &'a [CopiedRun]) -> Self {
+        Self { runs, run: 0 }
+    }
+
+    /// The command of the last list that command `index` was copied from,
+    /// if it was; asked in ascending order.
+    pub(crate) fn source(&mut self, index: usize) -> Option<usize> {
+        while self
+            .runs
+            .get(self.run)
+            .is_some_and(|run| run.to + run.len <= index)
+        {
+            self.run += 1;
+        }
+        let run = self.runs.get(self.run).filter(|run| run.to <= index)?;
+        Some(run.from + index - run.to)
+    }
+}
+
+/// Appends one copied item to runs of items, joining it to the last run
+/// where it follows on in both lists.
+pub(crate) fn extend_runs(runs: &mut Vec<CopiedRun>, to: usize, from: usize, len: usize) {
+    if len == 0 {
+        return;
+    }
+    if let Some(last) = runs.last_mut()
+        && last.to + last.len == to
+        && last.from + last.len == from
+    {
+        last.len += len;
+    } else {
+        runs.push(CopiedRun { to, from, len });
+    }
+}
+
 /// What a surface remembers of its last draw list, to copy from it.
 #[derive(Debug, Default)]
 pub struct PaintCache {

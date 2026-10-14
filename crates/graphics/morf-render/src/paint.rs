@@ -9,7 +9,7 @@ mod properties;
 mod reuse;
 
 pub use reuse::{CopiedRun, Copies};
-pub(crate) use reuse::{PaintCache, Reuse, SpanBase, append_node};
+pub(crate) use reuse::{PaintCache, Reuse, RunCursor, SpanBase, append_node, extend_runs};
 
 use element_commands::*;
 use path_paint::path_paint;

@@ -312,6 +312,7 @@ impl WgpuBackend {
             glyph_mask_atlas,
             glyph_color_atlas,
             kept_text: Default::default(),
+            kept_fields: Default::default(),
             warmed_text: std::collections::HashMap::new(),
             text_warmup: super::warm::TextWarmup::default(),
             blur_pipeline,

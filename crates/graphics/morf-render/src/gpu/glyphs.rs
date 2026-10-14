@@ -114,6 +114,8 @@ pub(crate) struct GlyphBatch {
     /// Per instance: a plain glyph from a field -- not colour, not a band,
     /// only moved, not morphing, no outline -- which subpixel text may draw.
     pub(crate) plain: Vec<bool>,
+    /// The generations of the mask and colour atlases the quads were read from.
+    pub(crate) atlases: [u64; 2],
 }
 
 pub(crate) struct GlyphSpan {
@@ -243,9 +245,18 @@ pub(crate) struct GlyphAtlas {
     pub(crate) clock: u64,
     /// How many pages tall the texture is: one, or two once the first filled.
     pub(crate) pages: u32,
+    /// Changes whenever entries move or the texture changes height: a quad
+    /// made at another generation may read the wrong place.
+    pub(crate) generation: u64,
     device: wgpu::Device,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+}
+
+/// A generation no atlas has had: unique across atlases and devices.
+fn next_generation() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// The most pages an atlas grows to before it is rebuilt instead.
@@ -282,6 +293,7 @@ impl GlyphAtlas {
             allocator: ShelfAllocator::default(),
             clock: 0,
             pages: 1,
+            generation: next_generation(),
             device: device.clone(),
             layout: layout.clone(),
             sampler: sampler.clone(),
@@ -291,6 +303,14 @@ impl GlyphAtlas {
     /// The texture's height in texels, which atlas coordinates are read over.
     pub(crate) fn height(&self) -> u32 {
         GLYPH_ATLAS_SIZE * self.pages
+    }
+
+    /// Where each glyph sits, as a quad reads it.
+    pub(crate) fn view(&self) -> super::glyph_batch::AtlasView<'_> {
+        super::glyph_batch::AtlasView {
+            entries: &self.entries,
+            height: self.height(),
+        }
     }
 
     /// Adds a second page below the first, keeping every entry where it is.
@@ -318,6 +338,7 @@ impl GlyphAtlas {
         self.texture = texture;
         self.bind_group = bind_group;
         self.pages = pages;
+        self.generation = next_generation();
         self.allocator.pages = pages;
         true
     }
@@ -386,6 +407,7 @@ impl GlyphAtlas {
         glyphs: &[PreparedGlyph],
         requested: &HashSet<GlyphKey>,
     ) -> Result<(), GpuError> {
+        self.generation = next_generation();
         let old = std::mem::take(&mut self.entries);
         let mut requested_entries = Vec::new();
         let mut seen = HashSet::new();

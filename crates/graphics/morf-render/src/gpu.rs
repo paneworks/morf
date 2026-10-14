@@ -68,6 +68,8 @@ mod glyph_batch;
 mod glyph_reuse_tests;
 mod glyph_upload;
 mod glyphs;
+#[cfg(test)]
+mod kept_tests;
 mod layer_pool;
 #[cfg(test)]
 mod layer_pool_tests;

@@ -74,21 +74,19 @@ impl RenderBackend for WgpuBackend {
             return Err(GpuError::DeviceLost("the GPU device was lost".to_owned()));
         }
         let mut split = split::RenderSplit::start();
-        let FieldBatch {
-            indices: field_indices,
-            instances: field_instances,
-            layers: field_layers,
-            materials: field_materials,
-            outlines: field_outlines,
-            shaders: field_shaders,
-        } = collect_field_instances(list, scale_120, &mut self.text, &mut self.drawings);
+        let fonts = font_count(&mut self.text);
+        let copier = self.kept_fields.copier(copies, scale_120, &mut self.text);
+        let fields =
+            collect_field_instances(list, scale_120, &mut self.text, &mut self.drawings, copier);
+        let fonts = (fonts, font_count(&mut self.text));
         split.mark("fields");
+        let glyph_target = (self.width, self.height);
         let mut glyph_batch = create_glyph_batch(
             GlyphBatchContext {
                 queue: &self.queue,
                 mask_atlas: &mut self.glyph_mask_atlas,
                 color_atlas: &mut self.glyph_color_atlas,
-                target_size: (self.width, self.height),
+                target_size: glyph_target,
                 kept: &mut self.kept_text,
                 copies,
             },
@@ -229,10 +227,10 @@ impl RenderBackend for WgpuBackend {
             list,
             scale_120,
             (
-                &field_instances,
-                &field_layers,
-                &field_materials,
-                &field_outlines,
+                &fields.instances,
+                &fields.layers,
+                &fields.materials,
+                &fields.outlines,
             ),
             glyph_batch.as_ref(),
             &texture_batch,
@@ -247,7 +245,7 @@ impl RenderBackend for WgpuBackend {
             self,
             list,
             scale_120,
-            (&field_indices, &field_shaders),
+            (&fields.indices, &fields.shaders),
             &texture_batch,
             &backdrop_draws,
             glyph_batch.as_ref(),
@@ -266,8 +264,8 @@ impl RenderBackend for WgpuBackend {
             list,
             scale_120,
             reach: &reach,
-            field_indices: &field_indices,
-            field_shaders: &field_shaders,
+            field_indices: &fields.indices,
+            field_shaders: &fields.shaders,
             texture_batch: &texture_batch,
             backdrop_draws: &backdrop_draws,
             glyph_batch: glyph_batch.as_ref(),
@@ -291,6 +289,12 @@ impl RenderBackend for WgpuBackend {
         let finished = self.finish_frame(encoder, list, damage, &reach, &command_layers, scale_120);
         split.mark("acquire, submit, present");
         split.finish();
+        // What this frame gathered and drew, for the commands the next copies.
+        self.kept_fields
+            .keep(fields, copies.frame, scale_120, fonts);
+        if let Some(batch) = glyph_batch {
+            self.kept_text.keep_quads(batch, glyph_target);
+        }
         finished
     }
 }

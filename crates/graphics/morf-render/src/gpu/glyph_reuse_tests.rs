@@ -45,13 +45,13 @@ fn text_kept_from_the_last_frame_matches_text_laid_out_afresh() {
             let copies = engine.copies();
             let fonts = font_count(&mut text);
             let (mut glyphs, mut under, mut over) = Default::default();
-            let copier = kept.copier(copies, 120, &mut text);
+            let mut copier = kept.copier(copies, 120, &mut text);
             read += usize::from(copier.is_some() && !copies.runs.is_empty());
             lay_out_text(
                 &mut text,
                 list,
                 1.0,
-                copier,
+                copier.as_mut(),
                 (&mut glyphs, &mut under, &mut over),
             );
             let (mut fresh_glyphs, mut fresh_under, mut fresh_over) = Default::default();
