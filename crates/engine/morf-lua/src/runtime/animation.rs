@@ -76,8 +76,7 @@ impl Runtime {
             {
                 // Check before the tick removes a completed animation: the
                 // final interval also has to reach the native timer.
-                state.revisions.service_definitions_revision =
-                    state.revisions.scene_revision.wrapping_sub(1);
+                state.revisions.unsettle_services();
             }
         }
         let mut frame = self

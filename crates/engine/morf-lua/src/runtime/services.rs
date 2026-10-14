@@ -96,9 +96,7 @@ impl Runtime {
             // a scene write. Native timers still fire and buses still drain
             // below on every poll. Animated Timer intervals invalidate this
             // checkpoint in tick_animations, including their final tick.
-            let definitions_changed =
-                state.revisions.scene_revision != state.revisions.service_definitions_revision;
-            state.revisions.service_definitions_revision = state.revisions.scene_revision;
+            let definitions_changed = state.revisions.settle_services();
             service_changed |= reconcile_timers(&mut state, definitions_changed);
             service_changed |= reconcile_loaders(
                 &mut state,
@@ -130,16 +128,10 @@ impl Runtime {
         // firing is not a reason to render: a 16ms timer that polls a file and
         // finds it unchanged would otherwise force a full render of every
         // output sixty times a second, forever.
-        let (revision_before, hidden_before) = {
-            let state = self.reactive.borrow();
-            (
-                state.revisions.scene_revision,
-                state.revisions.hidden_revisions,
-            )
-        };
+        let before = self.reactive.borrow().revisions.mark();
         // Timers, loaders and views are in step with the scene as it is now;
         // what the callbacks below change is for the next turn to pick up.
-        self.reactive.borrow_mut().revisions.polled_revision = revision_before;
+        self.reactive.borrow_mut().revisions.polled_at(before);
         let service_changed = service_changed
             || appearance_changed
             || audio_changed
@@ -161,10 +153,7 @@ impl Runtime {
         // Changes to nodes nothing shows are not painted: a hidden panel's
         // chart that follows a counter every second would otherwise draw
         // every output every second for a picture nobody sees.
-        let state = self.reactive.borrow();
-        let bumps = state.revisions.scene_revision.wrapping_sub(revision_before);
-        let hidden = state.revisions.hidden_revisions.wrapping_sub(hidden_before);
-        service_changed || bumps > hidden
+        service_changed || self.reactive.borrow().revisions.shown_since(before)
     }
 }
 

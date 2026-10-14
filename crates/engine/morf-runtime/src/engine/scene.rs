@@ -56,7 +56,7 @@ impl Engine {
             nodes.extend_from_slice(children);
             index += 1;
         }
-        self.revisions.scene_revision = self.revisions.scene_revision.wrapping_add(1);
+        self.revisions.bump_scene();
         if self.scene.remove(node).is_err() {
             return None;
         }
@@ -112,7 +112,7 @@ impl Engine {
             node,
         );
         if start == crate::animation::exits::ExitStart::Started {
-            self.revisions.scene_revision = self.revisions.scene_revision.wrapping_add(1);
+            self.revisions.bump_scene();
         }
         start.leaving()
     }
@@ -128,7 +128,7 @@ impl Engine {
         ) {
             return false;
         }
-        self.revisions.scene_revision = self.revisions.scene_revision.wrapping_add(1);
+        self.revisions.bump_scene();
         true
     }
 

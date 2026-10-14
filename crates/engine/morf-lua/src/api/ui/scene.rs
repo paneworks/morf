@@ -18,16 +18,16 @@ use methods::{terminal_method, text_input_method};
 
 pub(crate) fn create_node(state: &Rc<StateCell<ReactiveState>>, element: Element) -> NodeHandle {
     let mut state = state.borrow_mut();
-    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
+    state.revisions.bump_scene();
     state.scene.create(element)
 }
 
 /// A property of `node` changed: the scene moved on, and -- unless nothing
 /// shows the node -- owes a paint.
 fn bump_revision(state: &mut ReactiveState, node: NodeHandle, property: &str) {
-    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
+    state.revisions.bump_scene();
     if !state.scene.change_is_shown(node, property) {
-        state.revisions.hidden_revisions = state.revisions.hidden_revisions.wrapping_add(1);
+        state.revisions.bump_hidden();
     }
 }
 
@@ -49,8 +49,7 @@ pub(crate) fn bump_property_signal(
     else {
         return Ok(());
     };
-    state.revisions.property_revision = state.revisions.property_revision.wrapping_add(1);
-    let value = IpcValue::Integer(state.revisions.property_revision);
+    let value = IpcValue::Integer(state.revisions.bump_property());
     if let Some(active) = state.tracking.capture() {
         active.writes.push((signal, value.clone()));
     } else {

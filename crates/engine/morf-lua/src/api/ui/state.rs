@@ -204,8 +204,7 @@ pub(crate) fn install_state_api<'gc>(
                             // asks for the frame that starts the fade: a
                             // colour set from a tool's terminal or file would
                             // wait for the clock to tick before it began.
-                            state.revisions.scene_revision =
-                                state.revisions.scene_revision.wrapping_add(1);
+                            state.revisions.bump_scene();
                         }
                         return Ok(CallbackReturn::Return);
                     }
@@ -244,7 +243,7 @@ pub(crate) fn install_state_api<'gc>(
                 drop(fields);
                 {
                     let mut state = state.borrow_mut();
-                    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
+                    state.revisions.bump_scene();
                 }
                 crate::model_revisions::replace_model_rows(
                     &state, ctx, limits, &model, values, None,

@@ -102,8 +102,7 @@ impl Engine {
     /// the scene changed since the services last ran, a node waits to be torn
     /// down, a model a view follows changed.
     pub fn has_pending_work(&self) -> bool {
-        self.revisions.scene_revision != self.revisions.polled_revision
-            || self.revisions.scene_revision != self.revisions.service_definitions_revision
+        self.revisions.unseen()
             || !self.retained.retained_destroy_queue.is_empty()
             || self
                 .views

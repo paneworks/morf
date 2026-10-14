@@ -153,7 +153,7 @@ pub(crate) fn evaluate_effect(
             signal
         } else {
             let name = format!("{node:?}.{property}{}", if target { "_target" } else { "" });
-            let value = IpcValue::Integer(state.borrow().revisions.property_revision);
+            let value = IpcValue::Integer(state.borrow().revisions.property());
             let mut state = state.borrow_mut();
             let signal = state
                 .reactive

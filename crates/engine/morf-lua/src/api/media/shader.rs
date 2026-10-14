@@ -103,7 +103,7 @@ fn set_data<'gc>(
     state.scene.set_shader_data(node, index, &values);
     // New numbers are a new picture: the frame that draws them is asked for
     // here, as any property write asks for one.
-    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
+    state.revisions.bump_scene();
     Ok(())
 }
 
