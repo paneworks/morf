@@ -23,7 +23,7 @@ impl Runtime {
     /// whether the scene actually changed: a repaint of a shell that shows
     /// no time is pure cost.
     pub fn update_clock(&mut self, value: impl Into<String>) -> Result<bool, Error> {
-        let before = self.reactive.borrow().engine.revisions.mark();
+        let before = self.reactive.borrow().engine.revisions().mark();
         let changed = self
             .reactive
             .borrow_mut()
@@ -34,7 +34,7 @@ impl Runtime {
                 .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
                 .map_err(Error::Runtime)?;
         }
-        Ok(self.reactive.borrow().engine.revisions.shown_since(before))
+        Ok(self.reactive.borrow().engine.revisions().shown_since(before))
     }
 
     /// The finest clock anything currently reads, or nothing when no binding

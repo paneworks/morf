@@ -30,7 +30,7 @@ pub struct Engine {
     /// standing for node properties.
     pub tracking: crate::tracking::Tracking,
     /// How far the scene has moved, and how far each reader of it has seen.
-    pub revisions: crate::revisions::Revisions,
+    revisions:crate::revisions::Revisions,
     /// Each list model a binding has read, by address, with the revision
     /// signal that binding depends on.
     model_revisions: crate::models::ModelRevisions,

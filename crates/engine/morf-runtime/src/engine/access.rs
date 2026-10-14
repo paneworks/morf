@@ -50,4 +50,6 @@ subsystems! {
     lifecycle, lifecycle_mut: crate::requests::Lifecycle;
     /// What this output can do, and how big one of morf's pixels is on it.
     display, display_mut: crate::display::Display;
+    /// How far the scene has moved, and how far each reader has seen.
+    revisions, revisions_mut: crate::revisions::Revisions;
 }

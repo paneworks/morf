@@ -26,7 +26,7 @@ impl Runtime {
     /// The scene's revision: it moves whenever a property is written, so
     /// a backend knows when a tree it built may be stale.
     pub fn scene_revision(&self) -> u64 {
-        self.reactive.borrow().revisions.scene()
+        self.reactive.borrow().revisions().scene()
     }
 
     /// Carries out a screen reader's `action` on `node`, under the surface

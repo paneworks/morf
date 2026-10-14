@@ -343,7 +343,7 @@ pub(crate) fn assign_engine_relation<'gc>(
                 .map_err(|error| error.to_string())?;
         }
     }
-    state.revisions.bump_scene();
+    state.revisions_mut().bump_scene();
     state.tracking.defer_flush();
     Ok(())
 }

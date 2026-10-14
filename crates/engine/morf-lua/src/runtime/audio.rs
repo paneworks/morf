@@ -28,7 +28,7 @@ impl Runtime {
     /// True when visible scene content changed. Signals and callbacks still
     /// advance when hidden, without making an idle output render again.
     pub(crate) fn poll_audio(&mut self) -> bool {
-        let before = self.reactive.borrow().revisions.mark();
+        let before = self.reactive.borrow().revisions().mark();
         let mut moved = false;
         let handlers: Vec<(Handler, Vec<SceneValue>)>;
         {
@@ -105,6 +105,6 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("audio handler: {message}"));
             }
         }
-        self.reactive.borrow().revisions.shown_since(before)
+        self.reactive.borrow().revisions().shown_since(before)
     }
 }

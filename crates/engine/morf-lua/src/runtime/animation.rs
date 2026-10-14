@@ -76,7 +76,7 @@ impl Runtime {
             {
                 // Check before the tick removes a completed animation: the
                 // final interval also has to reach the native timer.
-                state.revisions.unsettle_services();
+                state.revisions_mut().unsettle_services();
             }
         }
         let mut frame = self

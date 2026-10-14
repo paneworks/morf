@@ -69,9 +69,9 @@ impl Runtime {
             if state.images.is_empty() {
                 return false;
             }
-            let revision = state.revisions.scene();
+            let revision = state.revisions().scene();
             let calls = crate::runtime::images::sync(&mut state, layout, cache);
-            if calls.is_empty() && state.revisions.scene() == revision {
+            if calls.is_empty() && state.revisions().scene() == revision {
                 return false;
             }
             calls

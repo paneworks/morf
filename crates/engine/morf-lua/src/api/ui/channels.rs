@@ -99,7 +99,7 @@ impl Runtime {
                 true
             });
             if shown {
-                state.revisions.bump_scene();
+                state.revisions_mut().bump_scene();
             }
             (flush, shown)
         };
