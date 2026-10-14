@@ -1,4 +1,4 @@
--- Material 3 schemes from lib/material.lua: one colour, every variant, in
+-- Material 3 schemes from lib/util/material.lua: one colour, every variant, in
 -- dark and light. A swatch per role that a shell draws with most.
 --
 --   morf render examples/demos/render/material.lua -o material.png --size 1200x900

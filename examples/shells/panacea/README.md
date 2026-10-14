@@ -187,7 +187,7 @@ so cards appear on one output.
 Shared with the ChillPill example: `system.lua` (battery, sound,
 backlight, network, Bluetooth), `hypr.lua` (workspaces and the keyboard
 layout from Hyprland's sockets), `proc.lua`, `media.lua`, `field.lua`,
-`weather.lua`, `lib/notifications.lua`.
+`weather.lua`, `lib/services/notifications.lua`.
 
 Not here: the file manager, the media viewer, the password vault, the
 agents panel and the lock screen. The login

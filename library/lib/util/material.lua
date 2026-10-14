@@ -18,7 +18,7 @@
 --
 -- The role names are Material's (primaryContainer, onSurfaceVariant, ...),
 -- which is what configurations written for M3 shells expect. The terminal
--- set and file writers are lib/palette.lua's; `material.terminal(s)` makes
+-- set and file writers are lib/util/palette.lua's; `material.terminal(s)` makes
 -- the sixteen colours from a scheme for them.
 --
 -- The palette rules and the source colour score follow Material Color
@@ -284,7 +284,7 @@ end
 local TERMINAL_HUES = { nil, 25, 145, 95, 265, 330, 200, nil }
 
 --- Sixteen terminal colours and the usual extras from a scheme, in
---- lib/palette.lua's `terminal` shape: `color0`..`color15`, `foreground`,
+--- lib/util/palette.lua's `terminal` shape: `color0`..`color15`, `foreground`,
 --- `background`, `cursor`, `cursor_text`, `selection`,
 --- `selection_foreground`. The hues are the usual ones, tinted a little
 --- towards the scheme's primary, with the scheme's chroma.

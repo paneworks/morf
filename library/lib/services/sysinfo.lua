@@ -8,7 +8,7 @@
 --
 -- Each reader (`sysinfo.cpu()`, `sysinfo.memory()`, ...) is tracked: a binding
 -- that calls it re-runs on each new sample. A section is only sampled while
--- something reads it (see lib/poll.lua), so a panel that shows the clock and
+-- something reads it (see lib/util/poll.lua), so a panel that shows the clock and
 -- nothing else costs nothing here. The tables handed out are shared and
 -- replaced whole on each sample: read them, do not change them.
 --

@@ -1,5 +1,5 @@
 -- Every emoji this list knows, with its Unicode name: { char, name }.
--- Generated from Python's unicodedata; see lib/emoji.lua.
+-- Generated from Python's unicodedata; see lib/util/emoji.lua.
 return {
   { "🌀", "cyclone" },
   { "🌁", "foggy" },

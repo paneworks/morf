@@ -1,6 +1,6 @@
 -- A tray that brings its own watcher.
 --
--- The watcher is `library/lib/tray_watcher.lua`, served from this process;
+-- The watcher is `library/lib/services/tray_watcher.lua`, served from this process;
 -- the host is the engine's own `morf.status_notifier`, which then finds the
 -- watcher beside it. Two halves that used to need two programs -- on a bare
 -- session the host had nothing to register with and the tray stayed empty.
@@ -70,7 +70,7 @@ morf.ipc.click = function(id)
 end
 
 -- The watcher's state at the left, the count at the right, the clock in
--- the middle: the bar layout, from `lib/align.lua`, filling the surface.
+-- the middle: the bar layout, from `lib/util/align.lua`, filling the surface.
 ui.Rect {
   color = "#101418",
   align.bar {

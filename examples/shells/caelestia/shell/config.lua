@@ -1,5 +1,5 @@
 -- The shell's settings: defaults here, what differs in a JSON file under the
--- state directory, every value a signal (lib/settings.lua).
+-- state directory, every value a signal (lib/util/settings.lua).
 --
 -- CAELESTIA_SETTINGS names another file (the tests point it at a scratch
 -- one).
@@ -124,7 +124,7 @@ local config = settings.open {
     },
     -- Airplane mode, and what was on before it (to bring back).
     airplane = { on = false, was = { wifi = false, bluetooth = false, mobile = false } },
-    -- sound, vibrate or silent (lib/ringer.lua; vibrate where feedbackd is).
+    -- sound, vibrate or silent (lib/util/ringer.lua; vibrate where feedbackd is).
     ringer = { mode = "sound" },
     -- The shell as the session's polkit agent (polkit.lua): "on", or "off"
     -- to leave the job to another (hyprpolkitagent, polkit-gnome).

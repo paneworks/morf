@@ -6,7 +6,7 @@
 -- database as last synced. The AUR needs no helper: the foreign packages
 -- (`pacman -Qm`) are looked up over the AUR's RPC with `morf.http`, in
 -- batches, and compared the way pacman compares versions
--- (lib/packages.lua `vercmp`); offline, the AUR part is left out. All of
+-- (lib/integrations/packages.lua `vercmp`); offline, the AUR part is left out. All of
 -- this only reads. Nothing is installed from here: the packages panel runs
 -- pacman in a terminal window for that.
 --

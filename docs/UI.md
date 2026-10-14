@@ -216,7 +216,7 @@ ui.Layout {
 }
 ```
 
-`library/lib/align.lua` is exactly that bar.
+`library/lib/util/align.lua` is exactly that bar.
 
 ## 4. Lists
 
@@ -478,7 +478,7 @@ flushes on each write, as it always did.
 
 ### Components
 
-`library/lib/component.lua` gives Elm's shape on these pieces: `init(args)`
+`library/lib/util/component.lua` gives Elm's shape on these pieces: `init(args)`
 returns the model's table, `view(model, send)` runs once and returns a
 tree of bindings on the model, and `update(model, msg, send)` is the one
 place the model changes. `send(msg)` returns a handler; `send_with(fn)`

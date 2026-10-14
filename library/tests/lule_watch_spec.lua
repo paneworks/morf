@@ -5,7 +5,7 @@ local function palette(image)
 end
 test.it("all Lule subscribers keep receiving wallpapers after another subscriber opens",function()
   morf.fs.write(root.."/colors.json",palette("first.png"))
-  test.load("../lib/lule.lua",{env={LULE_A=root},source=[[
+  test.load("../lib/integrations/lule.lua",{env={LULE_A=root},source=[[
     local lule=require("lib.integrations.lule")
     local wallpaper=lule.watch("wallpaper")
     local studio=lule.watch("studio")

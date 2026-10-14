@@ -1,4 +1,4 @@
--- `library/lib/lyrics.lua`: LRC read, the line for a moment, and lyrics
+-- `library/lib/integrations/lyrics.lua`: LRC read, the line for a moment, and lyrics
 -- found beside the file, in the cache, or from lrclib (a stand-in served
 -- by `python3 -m http.server` on this machine: nothing reaches the net).
 --

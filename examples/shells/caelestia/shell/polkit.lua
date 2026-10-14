@@ -1,7 +1,7 @@
 -- The polkit dialog: when a program asks for something only root may do
 -- (starting a service, mounting a disk, pkexec), a panel drops out of the
 -- frame's top edge asking for the password, and goes back up with the
--- verdict. The shell is the session's polkit agent (lib/polkit_agent.lua);
+-- verdict. The shell is the session's polkit agent (lib/services/polkit_agent.lua);
 -- this is what it draws.
 --
 -- A session has one agent. While another holds the job (hyprpolkitagent,

@@ -1,4 +1,4 @@
--- Material 3's expressive shapes from lib/m3shapes.lua: every one, and one
+-- Material 3's expressive shapes from lib/util/m3shapes.lua: every one, and one
 -- that morphs through them all.
 --
 --   morf render examples/demos/sdf/m3shapes.lua -o shapes.png

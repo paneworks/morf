@@ -1,5 +1,5 @@
 -- What the bar and the dashboard read, each as a function a binding can
--- call: the compositor's workspaces and window (lib/hyprland.lua, Hyprland
+-- call: the compositor's workspaces and window (lib/integrations/hyprland.lua, Hyprland
 -- only; elsewhere one workspace and "Desktop"), the network, Bluetooth and
 -- power (NetworkManager, BlueZ, UPower over D-Bus; absent services read as
 -- off, never started).
@@ -118,7 +118,7 @@ local power = quiet_connect("upower")
 M.net, M.bt, M.upower = net, bt, power
 
 -- Keep the modem observer even before ModemManager or its hardware appears.
--- The ring mode (lib/ringer.lua): feedbackd's profile on a phone, the shell's own
+-- The ring mode (lib/util/ringer.lua): feedbackd's profile on a phone, the shell's own
 -- setting elsewhere.
 do
   local ok, modem = pcall(require, "lib.services.modem")
@@ -146,7 +146,7 @@ do
   end
 end
 
--- Tor (lib/tor.lua), where it is installed: the system's tor service,
+-- Tor (lib/integrations/tor.lua), where it is installed: the system's tor service,
 -- started and stopped from the quick settings and never enabled, so every
 -- boot starts without it. Up is told by its SOCKS port listening -- a look
 -- at /proc every few seconds, no command.
@@ -258,7 +258,7 @@ end
 
 -- ----------------------------------------------------------------- media --
 
--- MPRIS players on the session bus (lib/mpris.lua), or nil without one.
+-- MPRIS players on the session bus (lib/services/mpris.lua), or nil without one.
 do
   local ok, mpris = pcall(require, "lib.services.mpris")
   if ok then
@@ -293,7 +293,7 @@ end
 local weather
 
 --- The weather where the settings say (or where the address says), read
---- through lib/weather.lua: `{ available, ... }`.
+--- through lib/integrations/weather.lua: `{ available, ... }`.
 function M.weather()
   if not weather then
     local config = require("config")

@@ -140,7 +140,7 @@ See [system installation](../../../docs/INSTALL.md) for the full workflow.
 
 The left panel has **Tasks** and **Calendar** tabs. Tasks uses the installed
 `task` executable and the user's normal Taskwarrior configuration, including
-`TASKRC` and `TASKDATA`. Its reusable client is `library/lib/taskwarrior.lua`.
+`TASKRC` and `TASKDATA`. Its reusable client is `library/lib/integrations/taskwarrior.lua`.
 No second task database or sync service is created. Tasks refresh when the
 panel opens, every ten seconds while open, and after a successful change.
 

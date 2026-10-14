@@ -1,4 +1,4 @@
--- `library/lib/settings.lua`: nested defaults, a sparse JSON file, every
+-- `library/lib/util/settings.lua`: nested defaults, a sparse JSON file, every
 -- value a signal, and the file watched.
 --
 --     morf test library/tests/settings_spec.lua
