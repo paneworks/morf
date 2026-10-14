@@ -40,7 +40,8 @@
 # scheme.json to seed; without one caelestia keeps its built-in palette),
 # NIXGL (GL wrapper for the nix-built Quickshell, default nixGLIntel), NESTED_SCALE
 # (the visible window's output scale), POINTER_SIZE ("W H" of the virtual
-# pointer's area, default "1920 1080"), A11Y
+# pointer's area, default "1920 1080"), HYPR_EXTRA (Lua appended to the
+# nested Hyprland's config), A11Y
 # (an AT-SPI bus, enabled, on the private session bus).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -145,6 +146,8 @@ hl.config({
 hl.layer_rule({ name = "impasto-desktop-blur", match = { namespace = "^(impasto-desktop)$" },
   blur = true, ignore_alpha = 0.15 })
 HYPR
+# HYPR_EXTRA: more of the nested config, as Lua (colour management, say).
+[ -n "${HYPR_EXTRA:-}" ] && printf '%s\n' "$HYPR_EXTRA" >> "$H/hyprland.lua"
 # MONITORS: the headless outputs, left to right, as WxH[@scale] each
 # ("3840x2160 3840x2160 3456x2160" for a desk of three 4K screens); one
 # 1920x1080 by default.

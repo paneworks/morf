@@ -2218,6 +2218,7 @@ swapchain as before.
 | `MORF_PRESENT_BUFFERS=N` | how many buffers of its own a surface uses at most (default 4) |
 | `MORF_PRESENT_WAIT_MS=N` | how long a frame waits for the compositor to give a buffer back before it is skipped (default 250); a skipped frame's changes go with the next one |
 | `MORF_DEPTH=10` | presents deeper than eight bits a channel where the compositor and the GPU both can (see below) |
+| `MORF_HDR=1` | presents HDR (PQ or scRGB, described with `wp_color_manager_v1`) where the compositor can; implies `MORF_DEPTH=10`; `MORF_HDR_WHITE=N` sets SDR white in cd/m² (see below) |
 
 #### Ten-bit output
 
@@ -2230,9 +2231,57 @@ translucent surface's edges and shadows would come out in four steps.
 Where neither is taken it falls back to eight bits, `ARGB8888`, as without
 the setting; the log says which was chosen (and `MORF_GPU_LOG=1` what
 the compositor advertised). Gradients stop
-banding; nothing else changes. This is precision only, not HDR: colours
-are still sRGB, presented as sRGB, with no PQ or scRGB output and no
-colour-management protocol.
+banding; nothing else changes. Alone this is precision only: colours are
+still sRGB, presented as sRGB. HDR, below, builds on it.
+
+#### HDR output
+
+`MORF_HDR=1` asks for HDR: it implies `MORF_DEPTH=10`, and each surface
+presented through morf's own buffers is described to the compositor with
+`wp_color_manager_v1` (a parametric image description on the surface's
+`wp_color_management_surface_v1`):
+
+| Buffer | Described as | 1.0 of SDR white lands at |
+|---|---|---|
+| `XBGR2101010` (opaque surface) | PQ (ST 2084) over BT.2020 | the reference white, 203 cd/m² by default |
+| `ABGR16161616F` (any surface) | extended linear over sRGB primaries (scRGB) where the compositor takes `ext_linear`, else PQ as above | 1.0 |
+
+Content is authored as before -- sRGB colours, blended as `morf.surface.blend`
+says -- and only the composite at the end of the frame changes: linear
+light is taken to BT.2020 primaries, scaled so SDR white sits at the
+reference white, and PQ-encoded; or, for scRGB, written as linear light.
+SDR content therefore looks as it did. `MORF_HDR_WHITE=N` puts SDR white at
+N cd/m² (80 to 1000) where the compositor takes `set_luminances`; without
+it, at the 203 cd/m² PQ implies.
+
+What cannot be had falls back, surface by surface, to the plain sRGB
+frame: a compositor without colour management (or without PQ and BT.2020),
+the swapchain (`MORF_PRESENT=swapchain`), an eight-bit buffer. The log says
+once per encoding what the compositor advertised and what each surface
+was described as:
+
+```
+morf: gpu: hdr asked; wp_color_manager_v1: parametric true, luminances true, pq true, ext_linear true, bt2020 true, srgb true; surface described as PQ over BT.2020, SDR white at 203 cd/m²
+```
+
+`morf.capabilities.hdr` says whether the compositor can describe either
+encoding, `morf.capabilities.hdr_transfer` which (`"pq"`, `"ext_linear"`,
+`"pq,ext_linear"` or `"none"`). Each output's preferred description --
+transfer function, primaries, luminances -- is read too (`Backend::output_color` in
+`morf-app`).
+
+Brighter than SDR white is asked for per node, with `hdr`: how many times
+SDR white the node's `color` shines at its brightest (1 to 100, default 1),
+multiplied in linear light. It applies to the node's own `color` -- a
+rectangle's fill, a text's glyphs -- once some surface presents HDR, and
+is ignored otherwise, so an SDR frame looks as it was written:
+
+```lua
+ui.Rect { color = "#ffd27f", hdr = 3 }  -- a highlight three times SDR white
+```
+
+It needs linear blending (the default) to keep its headroom: blending in
+sRGB clamps each colour to SDR white first.
 
 ## 8. Idioms to prefer
 

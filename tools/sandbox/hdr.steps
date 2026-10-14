@@ -1,0 +1,15 @@
+# hdr.steps: the shell with HDR asked for (MORF_HDR=1 in MORF_ENV;
+# MORF_GPU_LOG=1 too, for what the compositor advertised). OUT/shell.log
+# says what the compositor offered and what each surface was described as;
+# the shots, the compositor's own SDR view, must look as they do without it.
+wait 6
+hc -j monitors > $OUT/monitors.json
+shot bar
+open launcher
+wait 4
+shot launcher
+close
+open controls
+wait 4
+shot controls
+close
