@@ -51,8 +51,8 @@ pub(crate) fn build<'gc>(
                 let model = Rc::new(RefCell::new(ListModel::new(values)));
                 let model_metatable = state
                     .borrow()
-                    .model_metatable
-                    .clone()
+                    .metatables
+                    .model()
                     .ok_or("list models are not installed")?;
                 let userdata = UserData::new_static(
                     &ctx,
@@ -253,7 +253,7 @@ pub(crate) fn install_state_api<'gc>(
     metatable.set_field(ctx, "__index", index);
     metatable.set_field(ctx, "__newindex", new_index);
     let metatable = ctx.stash(metatable);
-    state.borrow_mut().state_metatable = Some(metatable.clone());
+    state.borrow_mut().metatables.set_state(metatable.clone());
 
     let create = Callback::from_fn(&ctx, {
         let state = Rc::clone(&state);

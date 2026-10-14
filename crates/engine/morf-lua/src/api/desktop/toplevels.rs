@@ -287,8 +287,8 @@ pub(crate) fn install_toplevels_api<'gc>(
             let mut state = state.borrow_mut();
             let model = Rc::clone(&host(&mut state).model);
             let metatable = state
-                .model_metatable
-                .clone()
+                .metatables
+                .model()
                 .ok_or_else(|| HostError("list models are not installed".into()))?;
             let userdata = UserData::new_static(&ctx, ListModelToken { model });
             userdata.set_metatable(ctx, Some(ctx.fetch(&metatable)));

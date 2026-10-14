@@ -195,8 +195,8 @@ pub(crate) fn install_theme_api<'gc>(
             }
             let metatable = state
                 .borrow()
-                .state_metatable
-                .clone()
+                .metatables
+                .state()
                 .ok_or_else(|| HostError("states are not installed".to_owned()))?;
             let userdata = build(
                 ctx,

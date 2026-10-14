@@ -158,8 +158,8 @@ fn list_model_userdata<'gc>(
     model: &Rc<RefCell<ListModel>>,
 ) -> Result<UserData<'gc>, HostError> {
     let metatable = state
-        .model_metatable
-        .clone()
+        .metatables
+        .model()
         .ok_or_else(|| HostError("list models are not installed".into()))?;
     let userdata = UserData::new_static(
         &ctx,

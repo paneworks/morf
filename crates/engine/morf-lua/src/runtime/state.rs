@@ -2,7 +2,6 @@
 //! types its fields are made of.
 
 pub(crate) use crate::api::media::shader::RegisteredShader;
-use luna::StashedTable;
 
 use morf_runtime::Handler;
 use morf_scene::reactive::SignalId;
@@ -21,10 +20,12 @@ pub(crate) use crate::vm::state_cell::{StateCell, StateRef, StateRefMut};
 mod auth;
 mod dbus;
 mod follow;
+mod metatables;
 mod methods;
 
 pub(crate) use auth::Auth;
 pub(crate) use dbus::DbusState;
+pub(crate) use metatables::Metatables;
 
 pub(crate) use follow::apply_follows;
 pub(crate) use morf_runtime::animation::Follow;
@@ -92,17 +93,8 @@ pub(crate) struct ReactiveState {
     pub(crate) image_jobs: crate::runtime::image_jobs::ImageJobs,
     /// `morf.pam` checks and conversations, and greetd logins.
     pub(crate) auth: Auth,
-    /// The list model's metatable, kept so a list inside `morf.state` is
-    /// the same kind of object as `morf.list_model` makes.
-    pub(crate) model_metatable: Option<luna::StashedTable>,
-    /// The one metatable every scene-node handle shares.
-    ///
-    /// Built on first use rather than at install time, because it needs the
-    /// arena. Every node used to get its own — a fresh table and two fresh
-    /// closures per node, neither of which captured anything node-specific, so
-    /// a thousand-node tree allocated three thousand objects that were all the
-    /// same. Every other userdata type in this crate already shares one.
-    pub(crate) node_metatable: Option<StashedTable>,
+    /// The metatables list models, scene nodes and state proxies share.
+    pub(crate) metatables: Metatables,
     /// `ui.watch_transform` watches.
     pub(crate) transform_watchers: morf_runtime::layout::TransformWatches,
     /// What extensions want told when nodes are removed.
@@ -110,8 +102,6 @@ pub(crate) struct ReactiveState {
     /// `morf.dbus`: subscriptions, calls waiting on an answer, and the
     /// names and services this runtime serves.
     pub(crate) dbus: DbusState,
-    /// The metatable every state proxy shares, so a theme can be one.
-    pub(crate) state_metatable: Option<StashedTable>,
     /// Theme token files being watched.
     pub(crate) theme_sources: Vec<ThemeSource>,
     /// `morf.terminal.listen`: terminals of our own hearing colour sequences.

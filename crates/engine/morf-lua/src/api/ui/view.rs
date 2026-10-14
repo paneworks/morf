@@ -243,7 +243,10 @@ pub(crate) fn install_view_api<'gc>(
     model_metatable.set_field(ctx, "__index", model_index);
     model_metatable.set_field(ctx, "__len", model_len);
     let model_metatable = ctx.stash(model_metatable);
-    state.borrow_mut().model_metatable = Some(model_metatable.clone());
+    state
+        .borrow_mut()
+        .metatables
+        .set_model(model_metatable.clone());
     let list_model = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let items: Table = stack.consume(ctx)?;
         let value = lua_to_scene(ctx, LuaValue::Table(items), 0).map_err(HostError)?;

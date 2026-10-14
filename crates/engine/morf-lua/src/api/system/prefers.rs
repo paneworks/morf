@@ -29,8 +29,8 @@ pub(crate) fn install_prefers_api<'gc>(
     seed.set_field(ctx, "scale", screen.map_or(1, |screen| screen.scale) as i64);
     let metatable = state
         .borrow()
-        .state_metatable
-        .clone()
+        .metatables
+        .state()
         .expect("states are installed before preferences");
     let userdata = build(ctx, &state, &metatable, "prefers", None, seed)
         .expect("the preference seed is plain scalars");

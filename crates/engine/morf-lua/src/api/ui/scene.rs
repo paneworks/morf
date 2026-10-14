@@ -172,12 +172,12 @@ pub(crate) fn node_userdata<'gc>(
     state: Rc<StateCell<ReactiveState>>,
     handle: NodeHandle,
 ) -> UserData<'gc> {
-    let existing = state.borrow().node_metatable.clone();
+    let existing = state.borrow().metatables.node();
     let metatable = match existing {
         Some(stashed) => ctx.fetch(&stashed),
         None => {
             let built = node_metatable(ctx, Rc::clone(&state));
-            state.borrow_mut().node_metatable = Some(ctx.stash(built));
+            state.borrow_mut().metatables.set_node(ctx.stash(built));
             built
         }
     };
