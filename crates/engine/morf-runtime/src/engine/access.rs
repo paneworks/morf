@@ -30,4 +30,6 @@ subsystems! {
     layout_hooks, layout_hooks_mut: crate::layout::LayoutHooks;
     /// Each list model a binding has read, with its revision signal.
     model_revisions, model_revisions_mut: crate::models::ModelRevisions;
+    /// The shell's log lines.
+    logs, logs_mut: crate::log::Log;
 }

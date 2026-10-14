@@ -41,7 +41,8 @@ pub struct Engine {
     pub lifecycle: crate::requests::Lifecycle,
     /// What this output can do, and how big one of morf's pixels is on it.
     pub display: crate::display::Display,
-    pub logs: crate::log::Log,
+    /// The shell's log lines.
+    logs: crate::log::Log,
     /// The session lock, the primary duty and the output list's revision.
     pub session: crate::session::Session,
     /// `morf.clock` and its coarser grains.
