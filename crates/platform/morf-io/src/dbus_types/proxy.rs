@@ -194,9 +194,10 @@ impl DbusProxy {
         let proxy = self.clone();
         let property = property.to_owned();
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let waker = crate::waker();
         std::thread::spawn(move || {
             let _ = tx.send(proxy.get_value(&property));
-            crate::wake_all();
+            waker.wake();
         });
         PendingReply { rx, deadline: None }
     }
@@ -206,9 +207,10 @@ impl DbusProxy {
         let proxy = self.clone();
         let method = method.to_owned();
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let waker = crate::waker();
         std::thread::spawn(move || {
             let _ = tx.send(proxy.call_value_with(&method, &value));
-            crate::wake_all();
+            waker.wake();
         });
         PendingReply { rx, deadline: None }
     }

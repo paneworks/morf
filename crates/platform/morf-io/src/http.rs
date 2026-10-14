@@ -1,7 +1,7 @@
 //! HTTP(S) requests, run where a slow server cannot stall a frame.
 //!
 //! A request is handed to a small pool of worker threads and answered through
-//! a channel, with [`crate::wake_all`] poking the loop when the answer lands,
+//! a channel, with the asking loop's [`crate::Waker`] poking it when the answer lands,
 //! the same way a child's output or a D-Bus signal arrives. Nothing here
 //! blocks the caller: [`HttpTask::start`] queues and returns, and
 //! [`HttpTask::poll`] only looks.
@@ -78,6 +78,8 @@ struct Job {
     request: HttpRequest,
     cancelled: Arc<AtomicBool>,
     reply: mpsc::Sender<Outcome>,
+    /// The loop that asked.
+    waker: crate::Waker,
 }
 
 struct Pool {
@@ -109,6 +111,7 @@ impl HttpTask {
             request,
             cancelled: Arc::clone(&cancelled),
             reply,
+            waker: crate::waker(),
         };
         let spawn = {
             let mut pool = POOL.lock().unwrap_or_else(|error| error.into_inner());
@@ -210,7 +213,7 @@ fn worker() {
         // Rings the loop when this job is done with, answered or not: a
         // request that panicked leaves its reply channel hung up, and the
         // runtime should see that now rather than at some later wake.
-        let _answered = crate::WakeOnDrop;
+        let _answered = crate::WakeOnDropOf(job.waker.clone());
         // Rebound after the guard, so its reply channel is dropped first and
         // the ring comes after the hang-up.
         let job = job;

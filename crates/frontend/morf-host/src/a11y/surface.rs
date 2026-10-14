@@ -62,7 +62,10 @@ mod live {
             let mut acted = false;
             for root in &roots {
                 let adapter = self.adapters.entry(*root).or_insert_with(|| Adapter {
-                    accessibility: Accessibility::new(Arc::new(morf_io::wake_all)),
+                    accessibility: Accessibility::new({
+                        let waker = morf_io::waker();
+                        Arc::new(move || waker.wake())
+                    }),
                     built_revision: None,
                     built_at: None,
                 });

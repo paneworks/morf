@@ -4,9 +4,9 @@
 //! whether it has anything, on a timer, with a timeout. A shell with a dozen
 //! of them spent its idle time asking. Here one thread per [`Reactor`] waits
 //! in `epoll` on every pipe, socket and pidfd it owns, reads what arrives,
-//! and hands it over as [`IoEvent`]s on a channel, ringing
-//! [`crate::wake_all`] once per batch so the main loop drains it at once
-//! and otherwise sleeps.
+//! and hands it over as [`IoEvent`]s on a channel, ringing the
+//! [`crate::Waker`] of the loop that made it once per batch so that loop
+//! drains it at once and otherwise sleeps.
 //!
 //! One thread rather than a reader per pipe: a child with stdout, stderr,
 //! stdin and an exit to watch would be three or four threads, and a

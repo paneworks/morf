@@ -197,6 +197,8 @@ pub(crate) struct Core {
     procs: HashMap<IoId, Proc>,
     socks: HashMap<IoId, Sock>,
     buffer: Vec<u8>,
+    /// The loop of the thread that made the reactor.
+    waker: crate::Waker,
 }
 
 fn unregister(epoll: &OwnedFd, fd: impl AsFd) {
@@ -231,6 +233,7 @@ impl Core {
             procs: HashMap::new(),
             socks: HashMap::new(),
             buffer: vec![0; READ_CHUNK],
+            waker: crate::waker(),
         })
     }
 
@@ -279,7 +282,7 @@ impl Core {
             }
             self.deadlines(Instant::now());
             if std::mem::take(&mut self.out.sent) {
-                crate::wake_all();
+                self.waker.wake();
             }
         }
     }

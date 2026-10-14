@@ -5,7 +5,7 @@
 //! producing the frames. So `morf.image` hands the work to a small pool of
 //! threads and the answer comes back the way every other service's does:
 //! through a channel the runtime drains in `poll_services`, with a poke at
-//! the loop's [`morf_io::wake_all`] so it is collected at once rather than
+//! the runtime's own loop ([`morf_io::Waker`]) so it is collected at once rather than
 //! at the next unrelated wake-up.
 //!
 //! Bounded twice. Two workers, because this is a shell and not a batch
@@ -167,12 +167,14 @@ impl ImageJobs {
     fn start(&self) -> Result<Sender<(u64, ImageJob)>, String> {
         let (sender, receiver) = mpsc::channel::<(u64, ImageJob)>();
         let receiver = Arc::new(Mutex::new(receiver));
+        let waker = morf_io::waker();
         for index in 0..WORKERS {
             let receiver = Arc::clone(&receiver);
             let results = self.results_sender.clone();
+            let waker = waker.clone();
             std::thread::Builder::new()
                 .name(format!("morf-image-{index}"))
-                .spawn(move || work(&receiver, &results))
+                .spawn(move || work(&receiver, &results, &waker))
                 .map_err(|error| format!("cannot start an image worker: {error}"))?;
         }
         Ok(sender)
@@ -196,7 +198,11 @@ impl ImageJobs {
     }
 }
 
-fn work(jobs: &Mutex<Receiver<(u64, ImageJob)>>, results: &Sender<Finished>) {
+fn work(
+    jobs: &Mutex<Receiver<(u64, ImageJob)>>,
+    results: &Sender<Finished>,
+    waker: &morf_io::Waker,
+) {
     loop {
         // The lock is held only while waiting, never while working, so the
         // other worker can take the next job meanwhile.
@@ -214,7 +220,7 @@ fn work(jobs: &Mutex<Receiver<(u64, ImageJob)>>, results: &Sender<Finished>) {
         if results.send((id, result)).is_err() {
             return;
         }
-        morf_io::wake_all();
+        waker.wake();
     }
 }
 

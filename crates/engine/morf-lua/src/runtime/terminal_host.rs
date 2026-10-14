@@ -37,7 +37,7 @@ impl Runtime {
         if more {
             // This turn's share is fed; the rest is for the next turn, which
             // this makes come at once rather than at the next event.
-            morf_io::wake_all();
+            morf_io::waker().wake();
         }
         self.flush_after_event();
         changed || !calls.is_empty()

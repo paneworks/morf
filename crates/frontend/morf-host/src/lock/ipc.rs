@@ -47,12 +47,13 @@ impl LockIpc {
             .map_err(|error| format!("could not inspect lock IPC socket: {error}"))?
             .uid();
         let (ring, requests) = mpsc::channel();
+        let waker = morf_io::waker();
         std::thread::spawn(move || {
             while let Ok(request) = forwarded.recv() {
                 if ring.send(request).is_err() {
                     break;
                 }
-                morf_io::wake_all();
+                waker.wake();
             }
         });
         Ok(Self {

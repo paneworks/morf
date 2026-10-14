@@ -306,7 +306,7 @@ impl<C> IoHub<C> {
                             ..RunResult::default()
                         }),
                     });
-                    crate::wake_all();
+                    crate::waker().wake();
                 }
                 return Ok(Err(message));
             }

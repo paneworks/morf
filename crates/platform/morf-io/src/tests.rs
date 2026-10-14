@@ -409,3 +409,19 @@ fn a_worker_that_ends_rings_every_loop() {
     assert!(wake.wait(Duration::from_secs(1)));
     assert!(other.wait(Duration::from_secs(1)));
 }
+
+#[test]
+fn news_asked_for_on_a_loop_rings_that_loop() {
+    // Every `Wake` on one thread is that thread's one alarm.
+    let own = Wake::new().unwrap();
+    let again = Wake::new().unwrap();
+    own.drain();
+    let waker = crate::waker();
+    std::thread::spawn(move || waker.wake()).join().unwrap();
+    assert!(again.wait(Duration::from_secs(1)));
+    // A thread with no loop of its own rings every loop.
+    let elsewhere = std::thread::spawn(|| Wake::new().unwrap()).join().unwrap();
+    elsewhere.drain();
+    std::thread::spawn(|| crate::waker().wake()).join().unwrap();
+    assert!(elsewhere.wait(Duration::from_secs(1)));
+}

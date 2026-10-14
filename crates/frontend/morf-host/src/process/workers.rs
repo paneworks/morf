@@ -262,6 +262,9 @@ fn spawn_worker(name: &str, screen: &Output, start: WorkerStart) -> thread::Join
             let tx = start.tx.clone();
             let stop = Arc::clone(&start.stop);
             crate::crash::mark_recoverable();
+            // This thread's alarm, before the configuration runs: what it
+            // asks for rings this output's loop and no other.
+            let _alarm = morf_io::Wake::new();
             let outputless = output == OUTPUTLESS;
             let run = panic::catch_unwind(AssertUnwindSafe(move || {
                 if outputless {

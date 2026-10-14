@@ -84,7 +84,7 @@ impl Runtime {
         if io_more || watch_more {
             // One turn's share is spent; the rest is for the next turn,
             // which this makes come at once rather than at the next event.
-            morf_io::wake_all();
+            morf_io::waker().wake();
         }
         for DueTimer {
             origin,

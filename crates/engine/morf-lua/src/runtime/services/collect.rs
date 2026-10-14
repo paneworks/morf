@@ -138,7 +138,7 @@ pub(super) fn drain(state: &mut ReactiveState, collected: &mut Collected) {
         // again once a drain finds the socket empty, so the rest is
         // asked for now.
         if !drained {
-            morf_io::wake_all();
+            morf_io::waker().wake();
         }
     }
     for error in udev_errors {

@@ -125,6 +125,7 @@ impl DbusService {
             .build();
         let iterator = MessageIterator::for_match_rule(rule, &connection, Some(64))?;
         let (tx, calls) = mpsc::channel();
+        let waker = crate::waker();
         let join = thread::spawn(move || {
             let mut id = 0u64;
             for message in iterator {
@@ -133,7 +134,7 @@ impl DbusService {
                 if tx.send((id, message)).is_err() {
                     break;
                 }
-                crate::wake_all();
+                waker.wake();
             }
         });
         let name = if name.is_empty() {

@@ -262,6 +262,7 @@ fn spawn_call(
         ));
     }
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    let waker = crate::waker();
     let spawned = thread::Builder::new()
         .name("morf-dbus-call".to_owned())
         .spawn(move || {
@@ -269,7 +270,7 @@ fn spawn_call(
             // and dropping the answer is exactly right.
             let _ = tx.send(work());
             CALLS_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
-            crate::wake_all();
+            waker.wake();
         });
     if let Err(error) = spawned {
         CALLS_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
