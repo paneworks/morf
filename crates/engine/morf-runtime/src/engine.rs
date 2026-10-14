@@ -69,7 +69,7 @@ pub struct Engine {
     /// follows, theme fades and exits.
     pub animation: crate::animation::Animation,
     /// Each node's `on_destroyed`, and those of removed nodes waiting to run.
-    pub destroy_hooks: crate::destroy::DestroyHooks,
+    destroy_hooks: crate::destroy::DestroyHooks,
     /// Loaders' items and retained nodes, and the handlers told as they go.
     pub retained: crate::retention::Retained,
     /// Each `ui.Layout` container's functions, and the texts whose links

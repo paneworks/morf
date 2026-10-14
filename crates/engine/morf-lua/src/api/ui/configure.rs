@@ -123,7 +123,7 @@ pub(crate) fn configure_element<'gc>(
             };
             state
                 .borrow_mut()
-                .destroy_hooks
+                .destroy_hooks_mut()
                 .set(node, crate::vm::handler_store::register(ctx.stash(closure)));
             continue;
         }

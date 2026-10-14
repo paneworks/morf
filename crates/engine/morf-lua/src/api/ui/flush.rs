@@ -52,13 +52,13 @@ pub(crate) fn run_destroyed_hooks(
 ) {
     {
         let mut state = state.borrow_mut();
-        if state.reactive.is_flushing() || !state.destroy_hooks.begin() {
+        if state.reactive.is_flushing() || !state.destroy_hooks_mut().begin() {
             return;
         }
         state.tracking.enter_handler();
     }
     loop {
-        let hooks = state.borrow_mut().destroy_hooks.take_pending();
+        let hooks = state.borrow_mut().destroy_hooks_mut().take_pending();
         if hooks.is_empty() {
             break;
         }
@@ -72,7 +72,7 @@ pub(crate) fn run_destroyed_hooks(
     }
     let flush = {
         let mut state = state.borrow_mut();
-        state.destroy_hooks.end();
+        state.destroy_hooks_mut().end();
         state.tracking.leave_handler()
     };
     if flush {

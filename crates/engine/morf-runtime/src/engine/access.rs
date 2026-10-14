@@ -36,4 +36,6 @@ subsystems! {
     clocks, clocks_mut: crate::wake::Clocks;
     /// `morf.shared` values: this copy's signals, and what to publish.
     shared, shared_mut: crate::shared::SharedValues;
+    /// Each node's `on_destroyed`, and those of removed nodes waiting to run.
+    destroy_hooks, destroy_hooks_mut: crate::destroy::DestroyHooks;
 }
