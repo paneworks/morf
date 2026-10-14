@@ -77,9 +77,12 @@ for _, style in ipairs { "material", "tsugumori" } do
     test.eq(panel.role, "region") test.eq(panel.name, "Dashboard")
     test.ipc("session", "open") test.settle(900)
     test.eq(test.accessible({ id = "drawer-session" })[1].role, "dialog")
-    -- Headings Orca can walk by, named by their words.
+    -- Headings Orca can walk by, named by their words. (On a desk the
+    -- panel's tabs name its pages; a page one level in has its heading.)
     test.ipc("close") test.settle(500)
     test.ipc("utilities", "open") test.settle(900)
-    test.truthy(#test.accessible { role = "heading", name = "Settings" } > 0, "Settings has no Settings heading")
+    test.truthy(#test.accessible { role = "tab", name = "Settings" } > 0, "Settings has no Settings tab")
+    test.ipc("settings", "sound") test.settle(900)
+    test.truthy(#test.accessible { role = "heading", name = "Sound" } > 0, "Sound has no Sound heading")
   end)
 end
