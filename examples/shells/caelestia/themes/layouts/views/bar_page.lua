@@ -21,7 +21,7 @@ local function choices(w, spec)
 end
 
 function M.build(model, w, h)
-  return P.page { id = "bar-scroll", width = w, height = h,
+  return P.page { id = "bar-scroll", width = w, height = h, active = model.active,
     choices(w, { group = "bar-show", caption_id = "bar-heading-show-the-bar", title = "Show the bar",
       items = model.shows, now = model.mode, pick = model.set_mode }),
     choices(w, { group = "bar-side", caption_id = "bar-heading-position", title = "Position",

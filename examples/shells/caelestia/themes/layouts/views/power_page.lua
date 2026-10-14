@@ -87,7 +87,7 @@ function M.build(model, w, h)
         on_clicked = model.open_battery } },
   }
 
-  return P.page { id = "power-scroll", width = w, height = h, summary, profile, health }
+  return P.page { id = "power-scroll", width = w, height = h, active = model.active, summary, profile, health }
 end
 
 return M
