@@ -38,6 +38,40 @@ impl Engine {
         self.clocks.update(&mut self.reactive, time)
     }
 
+    /// Where the session lock stands, as last recorded.
+    pub fn session_lock_state(&self) -> crate::session::SessionLockState {
+        self.session.lock_state(&self.reactive)
+    }
+
+    /// Records the session lock's new state: the value written, or `None`
+    /// when nothing changed.
+    pub fn set_session_lock_state(
+        &mut self,
+        next: crate::session::SessionLockState,
+    ) -> Option<(morf_value::IpcValue, Result<(), String>)> {
+        self.session.set_lock_state(&mut self.reactive, next)
+    }
+
+    /// Makes this runtime primary, or not: the value written, or `None`
+    /// when nothing changed.
+    pub fn set_primary(
+        &mut self,
+        primary: bool,
+    ) -> Option<(morf_value::IpcValue, Result<(), String>)> {
+        self.session.set_primary(&mut self.reactive, primary)
+    }
+
+    /// The output list is now `screens`. Returns whether the screens'
+    /// revision moved.
+    pub fn screens_changed(&mut self, screens: &[crate::screens::Screen]) -> bool {
+        self.session.screens_changed(&mut self.reactive, screens)
+    }
+
+    /// Moves the screens' revision though the outputs are the same.
+    pub fn touch_screens(&mut self) {
+        self.session.touch_screens(&mut self.reactive);
+    }
+
     /// The long press whose time came by `now`, on a node with a
     /// `LongPressed` handler: its node and where it was pressed.
     pub fn take_long_press(

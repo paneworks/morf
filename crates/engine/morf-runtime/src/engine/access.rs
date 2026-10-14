@@ -61,4 +61,6 @@ subsystems! {
     tracking, tracking_mut: crate::tracking::Tracking;
     /// Every timer and `Timer` node, and the clock they run on.
     timers, timers_mut: crate::timers::Timers;
+    /// The session lock, the primary duty and the output list's revision.
+    session, session_mut: crate::session::Session;
 }

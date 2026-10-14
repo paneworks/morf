@@ -21,7 +21,7 @@ impl Runtime {
     pub fn has_lock_surface_builder(&self) -> bool {
         self.reactive
             .borrow()
-            .session
+            .session()
             .lock_surface_builder
             .is_some()
     }
@@ -39,7 +39,7 @@ impl Runtime {
         let builder = self
             .reactive
             .borrow()
-            .session
+            .session()
             .lock_surface_builder
             .clone()
             .ok_or_else(|| Error::Runtime("no lock surface builder is registered".into()))?;

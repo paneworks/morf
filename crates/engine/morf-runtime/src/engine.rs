@@ -44,7 +44,7 @@ pub struct Engine {
     /// The shell's log lines.
     logs: crate::log::Log,
     /// The session lock, the primary duty and the output list's revision.
-    pub session: crate::session::Session,
+    session:crate::session::Session,
     /// `morf.clock` and its coarser grains.
     clocks: crate::wake::Clocks,
     pub scene: Scene,

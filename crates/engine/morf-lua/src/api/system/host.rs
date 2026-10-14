@@ -198,8 +198,8 @@ pub(crate) fn install_host_service_api<'gc>(
             .reactive
             .signal("screens.revision", IpcValue::Integer(0))
             .expect("the graph is not running at install");
-        state.session.screens_revision = Some((revision, 0));
-        state.session.screens_signature = screen
+        state.session_mut().screens_revision = Some((revision, 0));
+        state.session_mut().screens_signature = screen
             .map(morf_runtime::session::screen_signature)
             .unwrap_or_default();
     }
@@ -209,7 +209,7 @@ pub(crate) fn install_host_service_api<'gc>(
         "screens_revision",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let mut state = revision_state.borrow_mut();
-            let Some((signal, count)) = state.session.screens_revision else {
+            let Some((signal, count)) = state.session().screens_revision else {
                 stack.replace(ctx, 0);
                 return Ok(CallbackReturn::Return);
             };
@@ -231,7 +231,7 @@ pub(crate) fn install_host_service_api<'gc>(
             .reactive
             .signal("primary", IpcValue::Boolean(true))
             .expect("the graph is not running at install");
-        state.session.primary = Some((signal, true));
+        state.session_mut().primary = Some((signal, true));
     }
     let primary_state = Rc::clone(&state);
     morf.set_field(
@@ -239,7 +239,7 @@ pub(crate) fn install_host_service_api<'gc>(
         "primary",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let mut state = primary_state.borrow_mut();
-            let Some((signal, primary)) = state.session.primary else {
+            let Some((signal, primary)) = state.session().primary else {
                 stack.replace(ctx, true);
                 return Ok(CallbackReturn::Return);
             };
@@ -257,11 +257,11 @@ pub(crate) fn install_host_service_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let callback: Closure = stack.consume(ctx)?;
             let mut state = on_primary_state.borrow_mut();
-            if state.session.primary_callbacks.len() >= 64 {
+            if state.session().primary_callbacks.len() >= 64 {
                 return Err(HostError("primary callback limit reached".into()).into());
             }
             state
-                .session
+                .session_mut()
                 .primary_callbacks
                 .push(crate::vm::handler_store::register(ctx.stash(callback)));
             Ok(CallbackReturn::Return)

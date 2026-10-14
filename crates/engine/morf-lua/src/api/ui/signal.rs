@@ -289,7 +289,7 @@ pub(crate) fn install_signal_api<'gc>(
     let session_lock = UserData::new_static(
         &ctx,
         SignalToken {
-            id: state.borrow().session.lock,
+            id: state.borrow().session().lock,
         },
     );
     session_lock.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));

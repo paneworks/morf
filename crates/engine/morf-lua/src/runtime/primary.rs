@@ -19,7 +19,7 @@ impl Runtime {
     /// Whether this runtime is the primary one. A runtime nobody told
     /// otherwise is.
     pub fn is_primary(&self) -> bool {
-        self.reactive.borrow().session.is_primary()
+        self.reactive.borrow().session().is_primary()
     }
 
     /// Makes this runtime the primary one, or not: `morf.primary()` follows
@@ -31,12 +31,7 @@ impl Runtime {
     pub fn set_primary(&mut self, primary: bool) -> bool {
         let value = {
             let mut state = self.reactive.borrow_mut();
-            let state = &mut *state;
-            let Some((value, written)) = state
-                .engine
-                .session
-                .set_primary(&mut state.engine.reactive, primary)
-            else {
+            let Some((value, written)) = state.engine.set_primary(primary) else {
                 return false;
             };
             if let Err(error) = written {
@@ -52,7 +47,7 @@ impl Runtime {
                 .borrow_mut()
                 .log(LogLevel::Warn, format!("primary binding: {message}"));
         }
-        let callbacks = self.reactive.borrow().session.primary_callbacks.clone();
+        let callbacks = self.reactive.borrow().session().primary_callbacks.clone();
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_handler_args(ctx, callback, std::slice::from_ref(&value), limits)
