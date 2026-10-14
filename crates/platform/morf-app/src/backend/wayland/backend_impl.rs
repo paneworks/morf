@@ -30,6 +30,10 @@ impl Backend for LayerClient {
         self.screens()
     }
 
+    fn output_color(&self, id: u32) -> Option<crate::OutputColor> {
+        self.state.color.outputs.get(&id).cloned()
+    }
+
     fn open(&mut self, id: WindowId, kind: WindowKind) -> Result<(), String> {
         let opened = match (id, kind) {
             (WindowId::Layer(id), WindowKind::Layer(config)) => self.open_layer(id, config),

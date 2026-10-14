@@ -20,13 +20,13 @@ pub struct Output {
     /// says: `unknown`, `none`, `horizontal_rgb`, `horizontal_bgr`,
     /// `vertical_rgb` or `vertical_bgr`.
     pub subpixel: &'static str,
-    /// What the compositor says the output prefers, under colour
-    /// management; `None` where it says nothing.
-    pub color: Option<OutputColor>,
 }
 
 /// What an output prefers its pictures described as (its preferred image
-/// description under `wp_color_management_output_v1`).
+/// description under `wp_color_management_output_v1`), asked of a backend
+/// with [`crate::Backend::output_color`]. Kept apart from [`Output`]: it
+/// arrives later and changes on its own, and an output whose description
+/// changes has not moved.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OutputColor {
     /// `pq`, `ext_linear`, `gamma22`, `srgb`, `hlg`, ... or `power` for a

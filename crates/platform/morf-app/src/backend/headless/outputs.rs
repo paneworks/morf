@@ -19,7 +19,6 @@ pub fn virtual_outputs(count: usize, size: (u32, u32), scale: i32) -> Vec<Output
             scale: scale.max(1),
             transform: "normal",
             subpixel: "unknown",
-            color: None,
         })
         .collect()
 }

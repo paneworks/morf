@@ -189,8 +189,17 @@ impl Dispatch<WpImageDescriptionInfoV1, u32> for LayerState {
         use wp_image_description_info_v1::Event;
         if let Event::Done = event {
             if let Some(color) = state.color.pending.remove(id) {
+                if std::env::var_os("MORF_HDR").is_some() {
+                    eprintln!(
+                        "morf: color: output {id} prefers {} over {}, {}-{} cd/m², SDR white {} cd/m²",
+                        color.transfer,
+                        color.primaries,
+                        f64::from(color.min_luminance) / 10_000.0,
+                        color.max_luminance,
+                        color.reference_luminance
+                    );
+                }
                 state.color.outputs.insert(*id, color);
-                state.refresh_screens(None);
             }
             return;
         }

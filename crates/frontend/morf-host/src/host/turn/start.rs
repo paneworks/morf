@@ -300,6 +300,17 @@ fn capabilities_of(
     ] {
         list.push((name.to_owned(), supported.to_string()));
     }
+    // HDR: whether the compositor can be told a frame is PQ or scRGB, and
+    // which of the two (`MORF_HDR=1` uses them).
+    let color = client.color_support();
+    list.push(("hdr".to_owned(), color.hdr().to_string()));
+    let transfers = color.transfer_names().join(",");
+    let transfers = if transfers.is_empty() {
+        "none".to_owned()
+    } else {
+        transfers
+    };
+    list.push(("hdr_transfer".to_owned(), transfers));
     // A dmabuf capture needs the GPU's half too.
     let gpu_dmabuf = info.as_ref().is_some_and(|info| info.dmabuf);
     for (name, supported) in can.named() {

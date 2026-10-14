@@ -62,7 +62,6 @@ pub(crate) fn screen_info(info: smithay_client_toolkit::output::OutputInfo) -> O
         scale: info.scale_factor,
         transform: output_transform_name(info.transform),
         subpixel: output_subpixel_name(info.subpixel),
-        color: None,
     }
 }
 
@@ -124,10 +123,6 @@ impl LayerState {
             .filter(|output| Some(output) != gone)
             .filter_map(|output| self.outputs.info(&output))
             .map(screen_info)
-            .map(|screen| Output {
-                color: self.color.outputs.get(&screen.id).cloned(),
-                ..screen
-            })
             .collect::<Vec<_>>();
         if screens != self.screens {
             self.screens = screens.clone();

@@ -9,6 +9,9 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
     fn outputs(&self) -> &[Output] {
         self.inner.outputs()
     }
+    fn output_color(&self, id: u32) -> Option<crate::OutputColor> {
+        self.inner.output_color(id)
+    }
     fn open(&mut self, id: WindowId, kind: WindowKind) -> Result<(), String> {
         let kind = match kind {
             WindowKind::Layer(config) => {

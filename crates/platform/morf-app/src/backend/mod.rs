@@ -248,6 +248,11 @@ pub trait Backend {
     fn color_support(&self) -> morf_value::present::ColorSupport {
         self.capabilities().color
     }
+    /// What output `id` prefers its pictures described as, once the
+    /// compositor has said.
+    fn output_color(&self, _id: u32) -> Option<crate::OutputColor> {
+        None
+    }
     fn supports_drag_and_drop(&self) -> bool {
         self.capabilities().drag_and_drop
     }
