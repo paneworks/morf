@@ -18,8 +18,11 @@ pub(crate) use crate::runtime::pending::*;
 pub(crate) use crate::value::tokens::*;
 pub(crate) use crate::vm::state_cell::{StateCell, StateRef, StateRefMut};
 
+mod dbus;
 mod follow;
 mod methods;
+
+pub(crate) use dbus::DbusState;
 
 pub(crate) use follow::apply_follows;
 pub(crate) use morf_runtime::animation::Follow;
@@ -103,11 +106,9 @@ pub(crate) struct ReactiveState {
     pub(crate) transform_watchers: morf_runtime::layout::TransformWatches,
     /// What extensions want told when nodes are removed.
     pub(crate) removal_listeners: Vec<crate::vm::extensions::NodesRemoved>,
-    pub(crate) dbus_signals: Vec<PendingDbusSignal>,
-    /// Hands out the ids subscription handles close by.
-    pub(crate) next_dbus_signal_id: u64,
-    /// `call_async` calls waiting for their answer.
-    pub(crate) dbus_replies: Vec<PendingDbusReply>,
+    /// `morf.dbus`: subscriptions, calls waiting on an answer, and the
+    /// names and services this runtime serves.
+    pub(crate) dbus: DbusState,
     /// The metatable every state proxy shares, so a theme can be one.
     pub(crate) state_metatable: Option<StashedTable>,
     /// Theme token files being watched.
@@ -122,10 +123,6 @@ pub(crate) struct ReactiveState {
     /// `morf.toplevels`, installed with the runtime and fed by
     /// `Runtime::set_windows`.
     pub(crate) toplevels: Option<crate::api::desktop::toplevels::ToplevelHost>,
-    /// Every bus name `morf.dbus.serve` took, so a runtime that ends or
-    /// hands its duties over gives them back first.
-    pub(crate) owned_bus_names: Vec<std::rc::Weak<std::cell::RefCell<morf_io::DbusService>>>,
-    pub(crate) dbus_services: morf_io::DbusHandlers<morf_runtime::Handler>,
     pub(crate) udev_monitors: Vec<PendingUdev>,
     pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
     /// `morf.http` requests in flight.

@@ -14,7 +14,7 @@
 use luna::{
     Callback, CallbackReturn, Closure, Context, Table, UserData, UserRef, Value as LuaValue,
 };
-use morf_io::{DbusService, bus_named, call_id, remember_name};
+use morf_io::{DbusService, bus_named, call_id};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -110,8 +110,8 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         // One handler per service; a second replaces the first.
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
         state
-            .dbus_services
-            .set(&service.service, callback)
+            .dbus
+            .serve(&service.service, callback)
             .map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
@@ -122,10 +122,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         // Dropping the registration is what releases the name: the entry here
         // and the token hold the only two references, and `DbusService::drop`
         // hands the name to whoever is queued behind us.
-        close_state
-            .borrow_mut()
-            .dbus_services
-            .remove(&service.service);
+        close_state.borrow_mut().dbus.stop_serving(&service.service);
         Ok(CallbackReturn::Return)
     });
 
@@ -156,7 +153,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         // (`Runtime::release_bus_names`), not whenever the collector gets to
         // the handle -- which is what makes a handover of the primary
         // runtime's duties clean.
-        remember_name(&mut serve_state.borrow_mut().owned_bus_names, &service);
+        serve_state.borrow_mut().dbus.remember_name(&service);
         let userdata = UserData::new_static(&ctx, DbusServiceToken { service });
         userdata.set_metatable(ctx, Some(ctx.fetch(&service_metatable)));
         // Two values, and the second is the one that matters. Taking a name is

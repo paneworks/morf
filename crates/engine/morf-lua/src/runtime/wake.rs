@@ -59,10 +59,8 @@ impl Runtime {
             crate::runtime::text_inputs::next_blink(&*state).map(|at| (at, DeadlineCause::Caret));
         let image = state.images.due().map(|at| (at, DeadlineCause::Image));
         let dbus = state
-            .dbus_replies
-            .iter()
-            .filter_map(|entry| entry.reply.deadline())
-            .min()
+            .dbus
+            .next_reply_deadline()
             .map(|at| (at, DeadlineCause::DbusTimeout));
         let terminal = state
             .terminals

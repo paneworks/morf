@@ -53,20 +53,13 @@ fn register_subscription<'gc>(
     kind: DbusSignalKind,
 ) -> Result<u64, HostError> {
     let mut state = state.borrow_mut();
-    if state.dbus_signals.len() >= MAX_DBUS_SUBSCRIPTIONS {
+    if state.dbus.subscription_count() >= MAX_DBUS_SUBSCRIPTIONS {
         return Err(HostError(format!(
             "D-Bus subscription limit reached ({MAX_DBUS_SUBSCRIPTIONS}); close the ones no longer needed"
         )));
     }
-    state.next_dbus_signal_id += 1;
-    let id = state.next_dbus_signal_id;
-    state.dbus_signals.push(PendingDbusSignal {
-        id,
-        signal,
-        callback: crate::vm::handler_store::register(ctx.stash(callback)),
-        kind,
-    });
-    Ok(id)
+    let callback = crate::vm::handler_store::register(ctx.stash(callback));
+    Ok(state.dbus.subscribe(signal, callback, kind))
 }
 
 /// `"session"` or `"system"`.
@@ -137,23 +130,14 @@ pub(crate) fn install_system_service_api<'gc>(
     let close_state = Rc::clone(&state);
     let subscription_close = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let handle: UserRef<DbusSubscriptionToken> = stack.consume(ctx)?;
-        let closed = {
-            let mut state = close_state.borrow_mut();
-            let before = state.dbus_signals.len();
-            state.dbus_signals.retain(|entry| entry.id != handle.id);
-            before != state.dbus_signals.len()
-        };
+        let closed = close_state.borrow_mut().dbus.unsubscribe(handle.id);
         stack.replace(ctx, closed);
         Ok(CallbackReturn::Return)
     });
     let active_state = Rc::clone(&state);
     let subscription_active = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let handle: UserRef<DbusSubscriptionToken> = stack.consume(ctx)?;
-        let active = active_state
-            .borrow()
-            .dbus_signals
-            .iter()
-            .any(|entry| entry.id == handle.id);
+        let active = active_state.borrow().dbus.is_subscribed(handle.id);
         stack.replace(ctx, active);
         Ok(CallbackReturn::Return)
     });
@@ -202,7 +186,7 @@ pub(crate) fn install_system_service_api<'gc>(
         };
         let argument = positional_from_lua(ctx, arguments.0).map_err(HostError::from)?;
         let mut state = proxy_async_state.borrow_mut();
-        if state.dbus_replies.len() >= MAX_DBUS_REPLIES {
+        if state.dbus.reply_count() >= MAX_DBUS_REPLIES {
             return Err(HostError(format!(
                 "too many D-Bus calls waiting for an answer (the limit is {MAX_DBUS_REPLIES})"
             ))
@@ -212,10 +196,8 @@ pub(crate) fn install_system_service_api<'gc>(
             .proxy
             .call_async(&method, argument)
             .map_err(HostError::from)?;
-        state.dbus_replies.push(PendingDbusReply {
-            reply,
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
-        });
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        state.dbus.await_reply(reply, callback);
         stack.replace(ctx, true);
         Ok(CallbackReturn::Return)
     });
@@ -334,7 +316,7 @@ pub(crate) fn install_system_service_api<'gc>(
         };
         let argument = lua_to_dbus(ctx, argument, 0).map_err(HostError::from)?;
         let mut state = module_async_state.borrow_mut();
-        if state.dbus_replies.len() >= MAX_DBUS_REPLIES {
+        if state.dbus.reply_count() >= MAX_DBUS_REPLIES {
             return Err(HostError(format!(
                 "too many D-Bus calls waiting for an answer (the limit is {MAX_DBUS_REPLIES})"
             ))
@@ -350,10 +332,8 @@ pub(crate) fn install_system_service_api<'gc>(
             timeout,
         )
         .map_err(HostError::from)?;
-        state.dbus_replies.push(PendingDbusReply {
-            reply,
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
-        });
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        state.dbus.await_reply(reply, callback);
         stack.replace(ctx, true);
         Ok(CallbackReturn::Return)
     });

@@ -57,27 +57,8 @@ pub(super) fn drain(state: &mut ReactiveState, collected: &mut Collected) {
         }
         timers.push(timer);
     }
-    for subscription in &state.dbus_signals {
-        while let Some(event) = subscription.signal.next_event(Duration::ZERO) {
-            dbus_signals.push((
-                subscription.id,
-                subscription.callback.clone(),
-                subscription.kind,
-                event,
-            ));
-        }
-    }
-    // An answer leaves the list as it is delivered, and so does one
-    // that missed its deadline; the rest wait for a later turn.
-    state
-        .dbus_replies
-        .retain(|entry| match entry.reply.try_take() {
-            Some(reply) => {
-                dbus_replies.push((entry.callback.clone(), reply));
-                false
-            }
-            None => true,
-        });
+    dbus_signals.extend(state.dbus.take_signals());
+    dbus_replies.extend(state.dbus.take_replies());
     // A conversation says a few things per turn and then waits on a
     // person, so this never runs long. A finished session leaves the
     // list after its verdict is delivered, which is why the verdict is
@@ -114,7 +95,7 @@ pub(super) fn drain(state: &mut ReactiveState, collected: &mut Collected) {
     });
     // Bounded per frame (`morf_io::MAX_CALLS_PER_FRAME`): the caller is
     // blocked until we answer.
-    dbus_calls.extend(state.dbus_services.drain_calls());
+    dbus_calls.extend(state.dbus.drain_calls());
     let mut udev_errors = Vec::new();
     for subscription in &mut state.udev_monitors {
         let mut drained = false;

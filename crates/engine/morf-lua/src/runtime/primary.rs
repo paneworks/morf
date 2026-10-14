@@ -65,7 +65,7 @@ impl Runtime {
     /// answers, so once this returns the names are free for another
     /// connection to take. The services stay open, answering nothing new.
     pub fn release_bus_names(&mut self) {
-        let names = std::mem::take(&mut self.reactive.borrow_mut().owned_bus_names);
+        let names = self.reactive.borrow_mut().dbus.take_names();
         for service in names.iter().filter_map(std::rc::Weak::upgrade) {
             service.borrow_mut().release();
         }
