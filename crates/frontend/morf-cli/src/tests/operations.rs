@@ -1,9 +1,8 @@
 //! How the binary is operated: its options, its instances, its log, and
 //! what it leaves behind when it dies.
-//!
-//! Split from `tests/mod.rs` at the line gate.
 
-use super::*;
+use crate::*;
+use morf_io::IpcRequest;
 
 #[test]
 fn log_levels_order_and_survive_the_wire() {

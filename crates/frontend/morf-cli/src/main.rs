@@ -10,7 +10,6 @@ mod config;
 mod runner_args;
 mod runners;
 mod test_host;
-mod test_host_input;
 mod test_runner;
 
 use config::*;

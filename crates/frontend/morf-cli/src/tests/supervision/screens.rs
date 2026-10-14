@@ -3,11 +3,39 @@ use morf_app::Output;
 use morf_host::lock::WorkerCommand;
 use morf_host::process::supervisor::known_outputs;
 use morf_host::process::supervisor::lua_screen;
+use morf_host::process::supervisor::named_screens;
 use morf_host::process::supervisor::store_outputs;
 use morf_host::process::workers::handle_worker_command;
 use morf_lua::{Limits, Runtime};
 
 // The compositor's output list reaching every worker's `morf.screens`.
+
+#[test]
+fn named_screen_set_tracks_hotplug_identity() {
+    let screens = [
+        Output {
+            id: 7,
+            name: Some("eDP-1".to_owned()),
+            position: Some((0, 0)),
+            size: Some((1920, 1080)),
+            scale: 1,
+            ..Output::default()
+        },
+        Output {
+            id: 9,
+            name: Some("DP-2".to_owned()),
+            position: Some((1920, 0)),
+            size: Some((2560, 1440)),
+            scale: 2,
+            ..Output::default()
+        },
+    ];
+
+    let names = named_screens(&screens).unwrap();
+
+    assert_eq!(names.keys().cloned().collect::<Vec<_>>(), ["DP-2", "eDP-1"]);
+    assert_eq!(names["DP-2"].id, 9);
+}
 
 #[test]
 fn a_hotplug_reaches_every_worker_runtime() {
