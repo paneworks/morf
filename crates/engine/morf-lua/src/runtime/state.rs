@@ -103,6 +103,8 @@ pub(crate) struct ReactiveState {
     pub(crate) node_metatable: Option<StashedTable>,
     /// `ui.watch_transform` watches.
     pub(crate) transform_watchers: morf_runtime::layout::TransformWatches,
+    /// What extensions want told when nodes are removed.
+    pub(crate) removal_listeners: Vec<crate::extensions::NodesRemoved>,
     pub(crate) dbus_signals: Vec<PendingDbusSignal>,
     /// Hands out the ids subscription handles close by.
     pub(crate) next_dbus_signal_id: u64,

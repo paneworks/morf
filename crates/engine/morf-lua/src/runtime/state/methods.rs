@@ -19,6 +19,7 @@ impl ReactiveState {
             model_metatable: None,
             node_metatable: None,
             transform_watchers: Default::default(),
+            removal_listeners: Vec::new(),
             state_metatable: None,
             theme_sources: Vec::new(),
             palette_listeners: Vec::new(),

@@ -63,6 +63,7 @@ mod image_ops;
 mod image_preview;
 mod images;
 mod input_api;
+mod kit_lifetime;
 mod layer_surfaces;
 mod lib_dbus_services;
 mod lib_hyprland;

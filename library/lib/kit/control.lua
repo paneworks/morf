@@ -328,6 +328,8 @@ function M.make(archetype, widget, spec, extra)
   if props.width == nil then props.width = spec.width or function() return implicit("width") end end
   if props.height == nil then props.height = spec.height or function() return implicit("height") end end
   root = ui.MouseArea(props)
+  -- The behaviour goes with its node, however the node goes.
+  if native.own then native.own(id, root) end
   -- What a screen reader is told: the role the archetype and widget give,
   -- unless the configuration names one; a name from the label or title it
   -- was given; and the live states (`speak`).
@@ -409,7 +411,8 @@ end
 --- An archetype with no node: its state and keys for a view that draws its
 --- own items -- a launcher's list, until a Collection draws it. `spec`
 --- holds settings (values or bindings) and signal handlers, as for `make`;
---- `spec.owner`, a node, ends its bindings with it. Returns `{ t, key,
+--- `spec.owner`, a node, ends its bindings and the behaviour with it
+--- (`drop` ends the behaviour sooner). Returns `{ t, key,
 --- send, drop }`: `key(name, modifiers, text)` answers whether the key was
 --- used.
 function M.headless(archetype, spec)
@@ -423,6 +426,7 @@ function M.headless(archetype, spec)
     if v ~= nil and type(v) ~= "function" then settings[field] = v end
   end
   local id, state, made = native.new(archetype, settings)
+  if spec.owner and native.own then native.own(id, spec.owner) end
   for field, v in pairs(state) do state[field] = encode(v) end
   local t = morf.state(state)
   local function apply(effects)

@@ -119,7 +119,7 @@ pub use api_broadcast::set_shell_socket;
 pub use api_focus::FocusReason;
 pub use api_gamma::GammaRequest;
 pub use events::*;
-pub use extensions::{Extension, register_extension};
+pub use extensions::{Extension, NodesRemoved, register_extension};
 pub use morf_value::IpcValue;
 pub use runtime_harness::HostFunction;
 pub use runtime_layout::SettledLayout;

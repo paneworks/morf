@@ -6,18 +6,25 @@
 //! it adds its modules with [`Runtime::add_native_module`]: tables of host
 //! functions that a configuration reaches with `require(name)`. A
 //! configuration that never requires one pays nothing for it beyond the
-//! table.
+//! table. What it keeps per node it lets go of with
+//! [`Runtime::on_nodes_removed`].
 
 use crate::ipc_table::{IpcFromLua, IpcToLua};
+use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::Mutex;
 
 use luna::{Callback, CallbackReturn, Table, Value as LuaValue, Variadic};
+use morf_scene::NodeHandle;
 
 use crate::scene_bindings::HostError;
 use crate::{HostFunction, IpcValue, Runtime};
 
 /// What an extension does to each new runtime.
 pub type Extension = fn(&mut Runtime);
+
+/// Told the nodes a removal took, as it happens.
+pub type NodesRemoved = Rc<dyn Fn(&HashSet<NodeHandle>)>;
 
 static EXTENSIONS: Mutex<Vec<Extension>> = Mutex::new(Vec::new());
 
@@ -46,6 +53,12 @@ pub(crate) fn apply_extensions(runtime: &mut Runtime) {
 }
 
 impl Runtime {
+    /// Tells `listener` the nodes each removal takes, while the removal
+    /// happens. It must not reach back into the runtime.
+    pub fn on_nodes_removed(&mut self, listener: NodesRemoved) {
+        self.reactive.borrow_mut().removal_listeners.push(listener);
+    }
+
     /// Makes `require(name)` return a table of `functions`, each called with
     /// its arguments as values and returning values.
     pub fn add_native_module(&mut self, name: &str, functions: Vec<(&'static str, HostFunction)>) {
