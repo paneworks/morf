@@ -88,7 +88,7 @@ impl BufferRing {
         target: &wgpu::Texture,
         limit: usize,
         link: Option<super::present_link::BufferLink>,
-        (format, transfer): (PresentFormat, f64),
+        (format, transfer): (PresentFormat, super::depth::Transfer),
     ) -> Self {
         let composite = create_composite_pipeline(device, format.texture_format(), transfer);
         let bind_group = create_composite_bind_group(
@@ -148,7 +148,7 @@ impl BufferRing {
         device: &wgpu::Device,
         target: &wgpu::Texture,
         format: PresentFormat,
-        transfer: f64,
+        transfer: super::depth::Transfer,
     ) {
         if format != self.format {
             self.format = format;

@@ -175,6 +175,23 @@ impl BufferLink {
         heard
     }
 
+    /// What the window system can be told about the buffers' colours.
+    pub(crate) fn color_support(&self) -> morf_value::present::ColorSupport {
+        self.sink
+            .as_ref()
+            .map(|sink| sink.color_support())
+            .unwrap_or_default()
+    }
+
+    /// Says how the buffers presented from the next commit on are encoded.
+    pub(crate) fn set_encoding(
+        &mut self,
+        encoding: morf_value::present::Encoding,
+    ) -> Result<(), String> {
+        let sink = self.sink.as_mut().ok_or("the link has no window")?;
+        sink.set_encoding(encoding)
+    }
+
     /// Whether the window and the device agree on a modifier for `format`.
     pub(crate) fn takes(&self, format: PresentFormat) -> bool {
         self.modifiers_of(format).is_some()

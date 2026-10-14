@@ -68,6 +68,9 @@ mod glyph_batch;
 mod glyph_reuse_tests;
 mod glyph_upload;
 mod glyphs;
+pub mod hdr;
+#[cfg(test)]
+mod hdr_tests;
 #[cfg(test)]
 mod kept_tests;
 mod layer_pool;
@@ -98,6 +101,7 @@ mod warm;
 pub use backend_init::{lose_devices, opened_device_count};
 pub use backend_types::*;
 pub use depth::OutputDepth;
+pub use hdr::HdrRequest;
 pub use present_stalls::{PresentStalls, present_stalls};
 #[cfg(test)]
 mod backdrop_tests;

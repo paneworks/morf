@@ -144,6 +144,10 @@ pub struct WgpuBackend {
     /// What the frames are presented as: the swapchain's or the ring's
     /// buffers' format.
     pub(crate) present: super::depth::PresentFormat,
+    /// Whether HDR is asked for (`hdr`), and how the frames are encoded
+    /// for it now: sRGB wherever it could not be had.
+    pub(crate) hdr: super::hdr::HdrRequest,
+    pub(crate) encoding: morf_value::present::Encoding,
     /// Every shader registered, kept to build its pipeline again when the
     /// space changes.
     pub(crate) registered: Vec<super::shader_registry::KeptShader>,

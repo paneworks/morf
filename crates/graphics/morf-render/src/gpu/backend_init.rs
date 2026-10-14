@@ -60,6 +60,7 @@ impl WgpuBackend {
         let linked: Result<(), String> = match sink {
             Ok(sink) if wanted => {
                 let mut backend = Self::initialize(instance.clone(), None, width, height).await?;
+                backend.hdr = super::hdr::HdrRequest::from_env();
                 match backend.attach_sink(sink) {
                     Ok(()) => {
                         // The sink holds the window's connection and
@@ -83,6 +84,7 @@ impl WgpuBackend {
             .create_surface(window)
             .map_err(|error| GpuError::Surface(format!("could not create GPU surface: {error}")))?;
         let mut backend = Self::initialize(instance, Some(surface), width, height).await?;
+        backend.hdr = super::hdr::HdrRequest::from_env();
         backend.set_output_depth(super::depth::OutputDepth::from_env());
         Ok(backend)
     }
@@ -295,6 +297,8 @@ impl WgpuBackend {
             space,
             depth: super::depth::OutputDepth::Eight,
             present: super::depth::PresentFormat::Eight,
+            hdr: super::hdr::HdrRequest::default(),
+            encoding: morf_value::present::Encoding::Srgb,
             registered: Vec::new(),
             clear_pipeline,
             clear_layout: pipeline_layout,

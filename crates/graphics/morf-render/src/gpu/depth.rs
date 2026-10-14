@@ -1,9 +1,9 @@
 //! Presenting deeper than eight bits a channel (`MORF_DEPTH=10`).
 //!
-//! Only precision: what is drawn is still sRGB, presented as sRGB, so a
-//! gradient no longer bands but no colour gets brighter or wider than it
-//! was. HDR -- PQ or scRGB output and the colour-management protocol that
-//! tells a compositor so -- is not done here.
+//! Alone it is only precision: what is drawn is still sRGB, presented as
+//! sRGB, so a gradient no longer bands but no colour gets brighter or wider
+//! than it was. HDR (`hdr`, `MORF_HDR=1`) builds on it: the same deep
+//! buffers, described to the compositor as PQ or scRGB.
 //!
 //! A deep surface draws into half-float targets (`target_format`) and
 //! presents as whichever deep format the window takes:
@@ -18,7 +18,9 @@
 //! the DRM `ABGR2101010` family. An `ARGB2101010` buffer would need a view
 //! of another channel order, which an exported image cannot be given.
 
-use super::{Space, backend_types::WgpuBackend};
+use morf_value::present::Encoding;
+
+use super::{Space, backend_types::WgpuBackend, hdr};
 use crate::BlendSpace;
 
 /// How many bits a channel a surface asks to be presented with.
@@ -106,19 +108,73 @@ pub(crate) fn choose_present(
         .unwrap_or(PresentFormat::Eight)
 }
 
-/// What the composite does to the target's values on their way to `output`:
-/// `0` copies them, `1` encodes linear light as sRGB, `2` decodes sRGB.
+/// What the composite does to the target's values on their way out.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Transfer {
+    /// `0` copies them, `1` encodes linear light as sRGB, `2` decodes sRGB,
+    /// `3` encodes PQ over BT.2020, `4` writes scRGB.
+    pub(crate) mode: f64,
+    /// The target holds sRGB-encoded values, not linear light.
+    pub(crate) source_srgb: bool,
+    /// SDR white under PQ, in units of 10000 cd/m².
+    pub(crate) white: f64,
+}
+
+impl Transfer {
+    pub(crate) const COPY: Self = Self {
+        mode: 0.0,
+        source_srgb: false,
+        white: 0.0203,
+    };
+
+    /// Brings the composite up for `encoding` on the ring it presents into,
+    /// whatever window there is: for the tests of what lands in a buffer.
+    #[cfg(test)]
+    pub(crate) fn force_encoding(backend: &mut WgpuBackend, encoding: Encoding) {
+        backend.encoding = encoding;
+        backend.rebuild_presentation();
+    }
+
+    pub(crate) fn constants(&self) -> [(&'static str, f64); 3] {
+        [
+            ("MORF_TRANSFER", self.mode),
+            ("MORF_SOURCE_SRGB", f64::from(u8::from(self.source_srgb))),
+            ("MORF_WHITE", self.white),
+        ]
+    }
+}
+
+impl Default for Transfer {
+    fn default() -> Self {
+        Self::COPY
+    }
+}
+
+/// The composite's transfer for a target of `space` written to `output`
+/// in `encoding`.
 ///
 /// An eight-bit target is read through a view that already matches the
 /// output. A deep target holds what its space writes -- linear light, or
 /// encoded values -- with no sRGB view to read it through, so the
-/// composite converts whenever that differs from what the output stores.
-pub(crate) fn transfer(space: Space, output: wgpu::TextureFormat) -> f64 {
-    match (space.deep, output.is_srgb(), space.blend) {
-        (false, _, _) => 0.0,
-        (true, false, BlendSpace::Linear) => 1.0,
-        (true, true, BlendSpace::Srgb) => 2.0,
-        (true, _, _) => 0.0,
+/// composite converts whenever that differs from what the output stores,
+/// and always for an HDR encoding.
+pub(crate) fn transfer(space: Space, output: wgpu::TextureFormat, encoding: Encoding) -> Transfer {
+    let mode = match (encoding, space.deep, output.is_srgb(), space.blend) {
+        (Encoding::Pq { .. }, true, _, _) => 3.0,
+        (Encoding::ExtLinear, true, _, _) => 4.0,
+        (_, false, _, _) => 0.0,
+        (_, true, false, BlendSpace::Linear) => 1.0,
+        (_, true, true, BlendSpace::Srgb) => 2.0,
+        (_, true, _, _) => 0.0,
+    };
+    let white = match encoding {
+        Encoding::Pq { reference_white } => f64::from(reference_white) / 10_000.0,
+        _ => Transfer::COPY.white,
+    };
+    Transfer {
+        mode,
+        source_srgb: space.blend == BlendSpace::Srgb,
+        white,
     }
 }
 
@@ -163,29 +219,36 @@ impl WgpuBackend {
     }
 
     /// The composite's transfer for this space and presentation.
-    pub(crate) fn transfer(&self) -> f64 {
+    pub(crate) fn transfer(&self) -> Transfer {
         let output = match &self.surface {
             Some(surface) => surface.config.format,
             None => self.present.texture_format(),
         };
-        transfer(self.space, output)
+        transfer(self.space, output, self.encoding)
     }
 
     /// Chooses what to present as from what is asked, what the surface is,
     /// and what the window takes, and rebuilds for it when that changed.
     pub(crate) fn select_depth(&mut self) -> bool {
-        let chosen = choose_present(self.depth, self.opaque_surface, |format| {
+        let depth = if self.hdr.enabled {
+            OutputDepth::Ten
+        } else {
+            self.depth
+        };
+        let chosen = choose_present(depth, self.opaque_surface, |format| {
             match (&self.buffers, &self.surface) {
                 (Some(ring), _) => ring.takes(format),
                 (None, Some(surface)) => surface.takes(format),
                 (None, None) => true,
             }
         });
+        let encoding = self.describe(chosen);
         let deep = chosen.deep();
-        if chosen == self.present && deep == self.space.deep {
+        if chosen == self.present && deep == self.space.deep && encoding == self.encoding {
             return false;
         }
         self.present = chosen;
+        self.encoding = encoding;
         let space = Space {
             blend: self.space.blend,
             deep,
@@ -193,28 +256,59 @@ impl WgpuBackend {
         if !self.set_space(space) {
             self.rebuild_presentation();
         }
-        if self.depth == OutputDepth::Ten {
+        if depth == OutputDepth::Ten {
             self.say_depth();
         }
         true
     }
 
+    /// Tells the window how frames presented as `format` are encoded, when
+    /// HDR is asked for; returns the encoding in force after.
+    fn describe(&mut self, format: PresentFormat) -> Encoding {
+        if !self.hdr.enabled {
+            return Encoding::Srgb;
+        }
+        let Some(link) = self.buffers.as_mut().and_then(|ring| ring.link.as_mut()) else {
+            let why = "presenting through the swapchain or offscreen";
+            hdr::say(Encoding::Srgb, Default::default(), Some(why));
+            return Encoding::Srgb;
+        };
+        let support = link.color_support();
+        let wanted = hdr::choose_encoding(format, support, self.hdr);
+        if wanted == self.encoding {
+            return wanted;
+        }
+        match link.set_encoding(wanted) {
+            Ok(()) => {
+                hdr::say(wanted, support, None);
+                hdr::mark_presenting(wanted);
+                wanted
+            }
+            Err(why) => {
+                let _ = link.set_encoding(Encoding::Srgb);
+                hdr::say(Encoding::Srgb, support, Some(&why));
+                Encoding::Srgb
+            }
+        }
+    }
+
     /// Builds what presents the target again for the format and space in
     /// force: the ring's buffers and composite, or the swapchain's.
     pub(crate) fn rebuild_presentation(&mut self) {
-        let transfer_for = |output| transfer(self.space, output);
+        let space = self.space;
         if let Some(ring) = &mut self.buffers {
             let output = self.present.texture_format();
             ring.set_format(
                 &self.device,
                 &self.texture,
                 self.present,
-                transfer_for(output),
+                transfer(space, output, self.encoding),
             );
         }
         if let Some(surface) = &mut self.surface {
             let format = surface.format_for(self.present);
-            surface.reformat(&self.device, &self.texture, format, transfer_for(format));
+            let transfer = transfer(space, format, Encoding::Srgb);
+            surface.reformat(&self.device, &self.texture, format, transfer);
         }
     }
 }
@@ -285,11 +379,38 @@ mod tests {
             blend: BlendSpace::Srgb,
             deep: true,
         };
-        assert_eq!(transfer(linear, Rgb10a2Unorm), 1.0);
-        assert_eq!(transfer(gamma, Rgb10a2Unorm), 0.0);
-        assert_eq!(transfer(linear, Bgra8UnormSrgb), 0.0);
-        assert_eq!(transfer(gamma, Bgra8UnormSrgb), 2.0);
-        assert_eq!(transfer(Space::default(), Rgb10a2Unorm), 0.0);
+        let mode = |space, output| transfer(space, output, Encoding::Srgb).mode;
+        assert_eq!(mode(linear, Rgb10a2Unorm), 1.0);
+        assert_eq!(mode(gamma, Rgb10a2Unorm), 0.0);
+        assert_eq!(mode(linear, Bgra8UnormSrgb), 0.0);
+        assert_eq!(mode(gamma, Bgra8UnormSrgb), 2.0);
+        assert_eq!(mode(Space::default(), Rgb10a2Unorm), 0.0);
+    }
+
+    #[test]
+    fn an_hdr_encoding_always_converts_and_carries_its_white() {
+        use wgpu::TextureFormat::{Rgb10a2Unorm, Rgba16Float};
+        let gamma = Space {
+            blend: BlendSpace::Srgb,
+            deep: true,
+        };
+        let pq = Encoding::Pq {
+            reference_white: 250,
+        };
+        let to_pq = transfer(gamma, Rgb10a2Unorm, pq);
+        assert_eq!((to_pq.mode, to_pq.source_srgb), (3.0, true));
+        assert!((to_pq.white - 0.025).abs() < 1e-12);
+        let scrgb = transfer(
+            Space {
+                deep: true,
+                ..gamma
+            },
+            Rgba16Float,
+            Encoding::ExtLinear,
+        );
+        assert_eq!(scrgb.mode, 4.0);
+        // Eight bits are never HDR, whatever is asked.
+        assert_eq!(transfer(Space::default(), Rgb10a2Unorm, pq).mode, 0.0);
     }
 
     #[test]

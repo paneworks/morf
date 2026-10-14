@@ -26,6 +26,7 @@ impl WgpuBackend {
             self.width,
             self.height,
         ))?;
+        fresh.hdr = self.hdr;
         if let Some(sink) = sink {
             fresh.attach_sink(sink).map_err(GpuError::Surface)?;
         }

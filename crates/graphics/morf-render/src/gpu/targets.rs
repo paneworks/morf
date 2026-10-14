@@ -162,7 +162,7 @@ impl SurfaceState {
         device: &wgpu::Device,
         target: &wgpu::Texture,
         format: wgpu::TextureFormat,
-        transfer: f64,
+        transfer: super::depth::Transfer,
     ) {
         if self.config.format != format {
             self.config.format = format;
@@ -248,7 +248,7 @@ pub(crate) fn create_surface_state(
         pipeline,
         layout: texture_layout,
         sampler,
-    } = create_composite_pipeline(device, format, 0.0);
+    } = create_composite_pipeline(device, format, super::depth::Transfer::COPY);
     let bind_group = create_composite_bind_group(device, &texture_layout, target_view, &sampler);
     Ok(SurfaceState {
         stale: false,
@@ -276,7 +276,7 @@ pub(crate) struct CompositePipeline {
 pub(crate) fn create_composite_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
-    transfer: f64,
+    transfer: super::depth::Transfer,
 ) -> CompositePipeline {
     let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("morf composite texture layout"),
@@ -337,7 +337,7 @@ pub(crate) fn create_composite_pipeline(
                 write_mask: wgpu::ColorWrites::ALL,
             })],
             compilation_options: wgpu::PipelineCompilationOptions {
-                constants: &[("MORF_TRANSFER", transfer)],
+                constants: &transfer.constants(),
                 ..Default::default()
             },
         }),
