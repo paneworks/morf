@@ -20,7 +20,7 @@ local HOST = [[
     write("/sys/class/power_supply/BAT0/temp", "300")
   end
   inputs(0)
-  sysinfo.configure { root = root }
+  sysinfo.configure { root = root, blocking = true }
   -- Keep what each chart the integration test reads is drawn from (the
   -- series its line is evaluated over), not just the collector behind it.
   local kit = require("kit")
