@@ -37,4 +37,28 @@ impl Engine {
     pub fn update_clocks(&mut self, time: String) -> Result<bool, String> {
         self.clocks.update(&mut self.reactive, time)
     }
+
+    /// Takes the nodes destroyed since the last frame, and drops their
+    /// transforms.
+    pub fn take_removed_nodes(&mut self) -> Vec<morf_scene::NodeHandle> {
+        let removed = self.scene.take_removed_nodes();
+        if !removed.is_empty() {
+            self.transform_tracker.retain_scene(&self.scene);
+        }
+        removed
+    }
+
+    /// Moves each popup anchored to a node to where that node was laid
+    /// out, and marks the window surfaces changed when one moved.
+    pub fn place_popup_anchors(&mut self) -> bool {
+        let moved = crate::layout::place_popup_anchors(
+            &self.windows.popup_node_anchors,
+            &self.transform_tracker,
+            &mut self.windows.window_surfaces,
+        );
+        if moved {
+            self.windows.window_surfaces_changed = true;
+        }
+        moved
+    }
 }

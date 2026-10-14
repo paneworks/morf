@@ -165,17 +165,7 @@ impl Runtime {
     /// backend are not, so the list is handed back for the caller to finish
     /// the job. Nobody else has both the scene and those caches in scope.
     pub fn take_removed_nodes(&self) -> Vec<NodeHandle> {
-        let mut state = self.reactive.borrow_mut();
-        let removed = state.scene.take_removed_nodes();
-        if !removed.is_empty() {
-            let morf_runtime::Engine {
-                scene,
-                transform_tracker,
-                ..
-            } = &mut state.engine;
-            transform_tracker.retain_scene(&*scene);
-        }
-        removed
+        self.reactive.borrow_mut().engine.take_removed_nodes()
     }
 }
 

@@ -75,7 +75,8 @@ pub struct Engine {
     /// Each `ui.Layout` container's functions, and the texts whose links
     /// the layout places.
     layout_hooks: crate::layout::LayoutHooks,
-    pub transform_tracker: TransformTracker,
+    /// Where each node was laid out, and how it is transformed.
+    transform_tracker: TransformTracker,
     /// What handlers asked of the platform, queued for the host.
     pub requests: crate::requests::Requests,
     /// The windows the configuration declared, as the host reads them.

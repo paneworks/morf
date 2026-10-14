@@ -42,7 +42,7 @@ impl Runtime {
                 continue;
             };
             let anchor = anchor.and_then(|anchor| {
-                let g = state.transform_tracker.geometry(anchor)?;
+                let g = state.transform_tracker().geometry(anchor)?;
                 let rect = Geometry {
                     x: 0.0,
                     y: 0.0,
@@ -50,7 +50,7 @@ impl Runtime {
                     height: g.height,
                 };
                 state
-                    .transform_tracker
+                    .transform_tracker()
                     .map_rect_from_node(&state.scene, anchor, rect)
                     .ok()
                     .flatten()

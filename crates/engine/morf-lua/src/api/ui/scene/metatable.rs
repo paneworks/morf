@@ -133,7 +133,7 @@ pub(crate) fn node_metatable<'gc>(
             }
             let value =
                 state
-                    .transform_tracker
+                    .transform_tracker()
                     .geometry(node.handle)
                     .map_or(LuaValue::Nil, |geometry| {
                         LuaValue::Number(match axis {

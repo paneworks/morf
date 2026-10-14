@@ -48,7 +48,7 @@ pub(crate) fn window_item_position_method<'gc>(
         let state = state.borrow();
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let point = state
-            .transform_tracker
+            .transform_tracker()
             .map_from_node(&state.scene, node, 0.0, 0.0)
             .map_err(|error| HostError(error.to_string()))?
             .ok_or_else(|| HostError("item has not been laid out".into()))?;
@@ -67,11 +67,11 @@ pub(crate) fn window_item_rect_method<'gc>(
         let state = state.borrow();
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let size = state
-            .transform_tracker
+            .transform_tracker()
             .geometry(node)
             .ok_or_else(|| HostError("item has not been laid out".into()))?;
         let geometry = state
-            .transform_tracker
+            .transform_tracker()
             .map_rect_from_node(
                 &state.scene,
                 node,
@@ -102,7 +102,7 @@ pub(crate) fn window_map_from_item_method<'gc>(
         let state = state.borrow();
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let point = state
-            .transform_tracker
+            .transform_tracker()
             .map_from_node(&state.scene, node, x, y)
             .map_err(|error| HostError(error.to_string()))?
             .ok_or_else(|| HostError("item has not been laid out".into()))?;
@@ -129,7 +129,7 @@ pub(crate) fn window_map_rect_from_item_method<'gc>(
         let state = state.borrow();
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let geometry = state
-            .transform_tracker
+            .transform_tracker()
             .map_rect_from_node(
                 &state.scene,
                 node,

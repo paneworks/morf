@@ -40,4 +40,6 @@ subsystems! {
     destroy_hooks, destroy_hooks_mut: crate::destroy::DestroyHooks;
     /// Each node's `shortcuts`, a sequence half typed, a modifier's tap.
     shortcuts, shortcuts_mut: crate::shortcuts::Shortcuts;
+    /// Where each node was laid out, and how it is transformed.
+    transform_tracker, transform_tracker_mut: morf_layout::TransformTracker;
 }
