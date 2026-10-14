@@ -88,7 +88,16 @@ pub(super) fn install_xkb<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         stack.replace(ctx, xkb_keymap_to_lua(ctx, &keymap));
         Ok(CallbackReturn::Return)
     });
+    let xkb_include_paths = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let paths = Table::new(&ctx);
+        for (index, path) in morf_system::xkb_include_paths().into_iter().enumerate() {
+            paths.set(ctx, index as i64 + 1, ctx.intern(path.as_bytes()))?;
+        }
+        stack.replace(ctx, paths);
+        Ok(CallbackReturn::Return)
+    });
     let xkb = Table::new(&ctx);
     xkb.set_field(ctx, "compile", xkb_compile);
+    xkb.set_field(ctx, "include_paths", xkb_include_paths);
     morf.set_field(ctx, "xkb", xkb);
 }
