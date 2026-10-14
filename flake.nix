@@ -40,12 +40,26 @@
           };
         };
 
-        # Mesa wrappers only: evaluation stays pure. NVIDIA hosts run
-        # nixGL's own nixGLNvidia/nixVulkanNvidia (they need --impure).
-        nixglPkgs = import "${nixgl}/default.nix" { inherit pkgs; };
+        # NVIDIA wrappers only under `--impure` with NVIDIA_VERSION set; a pure
+        # evaluation reads "" and gets the Mesa ones.
+        nvidiaVersion = builtins.getEnv "NVIDIA_VERSION";
+        hasNvidia = nvidiaVersion != "";
 
-        nixGLTarget = "${nixglPkgs.nixGLIntel}/bin/nixGLIntel";
-        nixVulkanTarget = "${nixglPkgs.nixVulkanIntel}/bin/nixVulkanIntel";
+        nixglPkgs = import "${nixgl}/default.nix" ({
+          inherit pkgs;
+        } // pkgs.lib.optionalAttrs hasNvidia {
+          inherit nvidiaVersion;
+          nvidiaHash = null;
+        });
+
+        nixGLTarget =
+          if hasNvidia
+          then "${nixglPkgs.nixGLNvidia}/bin/nixGLNvidia-${nvidiaVersion}"
+          else "${nixglPkgs.nixGLIntel}/bin/nixGLIntel";
+        nixVulkanTarget =
+          if hasNvidia
+          then "${nixglPkgs.nixVulkanNvidia}/bin/nixVulkanNvidia-${nvidiaVersion}"
+          else "${nixglPkgs.nixVulkanIntel}/bin/nixVulkanIntel";
 
         nixGLAlias = pkgs.runCommand "nixGL" { } ''
           mkdir -p $out/bin
@@ -265,6 +279,9 @@
             nixVulkanAlias
             nixglPkgs.nixGLIntel
             nixglPkgs.nixVulkanIntel
+          ] ++ pkgs.lib.optionals hasNvidia [
+            nixglPkgs.nixGLNvidia
+            nixglPkgs.nixVulkanNvidia
           ] ++ guiLibs;
 
           # A musl toolchain for the static build, handed over as a path rather than a package.
