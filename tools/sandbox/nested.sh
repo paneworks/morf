@@ -165,7 +165,9 @@ if [ -z "${RENDER_NODE:-}" ]; then
     RENDER_NODE=/dev/dri/$(basename "$d"); break
   done
 fi
-RUN=$(mktemp -d "${TMPDIR:-/tmp}/msXXXX"); chmod 700 "$RUN"
+# Always /tmp: a long TMPDIR (nix develop's) pushes Hyprland's socket path
+# past the unix limit.
+RUN=$(mktemp -d /tmp/msXXXX); chmod 700 "$RUN"
 # VISIBLE=1: the nested Hyprland opens as a window on the person's own
 # compositor, so they can watch -- and use -- the session under test.
 # (Under cage it would draw only headless: aquamarine brings up no windowed

@@ -1,0 +1,11 @@
+# worker-panic.steps: a worker panics on purpose (MORF_TEST_HOOKS=1 in
+# MORF_ENV); its output comes back, the shell stays up. OUT/hc.log, shots.
+wait 6
+shot before
+ipc @panic
+wait 5
+shot after-first
+ipc @panic
+wait 5
+shot after-second
+ipc close
