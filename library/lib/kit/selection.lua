@@ -21,7 +21,8 @@
 -- entry's area; `spec.delegate(index, value, s)`, when given, draws the
 -- entries instead of the skin (a layout's own swatches); and
 -- `spec.press_activates` makes one press activate an entry, not only
--- choose it. The live state adds `current_x`, `current_y`,
+-- choose it. A table entry's `accessible_role` overrides the role its
+-- area takes (a padding cell's "generic"). The live state adds `current_x`, `current_y`,
 -- `current_width`, `current_height`: the current entry's box within the
 -- control.
 --
@@ -140,7 +141,7 @@ function M.make(widget, spec)
         on_dragged = dragging and function(sx, sy) dragging.send("dragged", sx, sy) end or nil,
         on_released = dragging and function() dragging.send("released", 0, 0) end or nil,
         on_double_clicked = function() deliver("item_activated", index) end,
-        accessible_role = item_role or "list_box_option",
+        accessible_role = (type(value) == "table" and value.accessible_role) or item_role or "list_box_option",
         accessible_name = label_of(value),
         accessible = function() return { selected = s.current() or s.selected() } end,
         -- A screen reader's press is the pointer's.
