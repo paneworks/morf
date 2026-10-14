@@ -63,16 +63,13 @@ impl Engine {
         // Deepest first, so a child lets go of what it holds before the
         // parent that may have lent it.
         for removed in nodes.iter().rev() {
-            if let Some(hook) = self.destroy_hooks.remove(removed) {
-                self.pending_destroyed.push(hook);
-            }
+            self.destroy_hooks.removed(removed);
         }
         let removed = nodes.into_iter().collect::<HashSet<_>>();
         for node in &removed {
             self.retained.forget(node);
             self.states.remove(node);
             self.views.remove(node);
-            self.timer_callbacks.remove(node);
             self.linked_texts.remove(node);
             self.shortcuts.forget(node);
         }
@@ -195,11 +192,11 @@ mod tests {
         engine.scene.reparent(child, Some(root)).unwrap();
         engine.linked_texts.insert(child);
         let hook = crate::Handler::new(HandlerId(1), std::rc::Rc::new(Nowhere));
-        engine.destroy_hooks.insert(child, hook);
+        engine.destroy_hooks.set(child, hook);
         let removed = engine.remove_subtree(root).expect("it was there");
         assert_eq!(removed.len(), 2);
         assert!(engine.linked_texts.is_empty());
-        assert_eq!(engine.pending_destroyed.len(), 1);
+        assert_eq!(engine.destroy_hooks.pending(), 1);
         assert!(engine.remove_subtree(root).is_none());
     }
 

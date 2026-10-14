@@ -52,15 +52,13 @@ pub(crate) fn run_destroyed_hooks(
 ) {
     {
         let mut state = state.borrow_mut();
-        if state.reactive.flushing || state.running_destroyed || state.pending_destroyed.is_empty()
-        {
+        if state.reactive.flushing || !state.destroy_hooks.begin() {
             return;
         }
-        state.running_destroyed = true;
         state.tracking.enter_handler();
     }
     loop {
-        let hooks = std::mem::take(&mut state.borrow_mut().pending_destroyed);
+        let hooks = state.borrow_mut().destroy_hooks.take_pending();
         if hooks.is_empty() {
             break;
         }
@@ -74,7 +72,7 @@ pub(crate) fn run_destroyed_hooks(
     }
     let flush = {
         let mut state = state.borrow_mut();
-        state.running_destroyed = false;
+        state.destroy_hooks.end();
         state.tracking.leave_handler()
     };
     if flush {

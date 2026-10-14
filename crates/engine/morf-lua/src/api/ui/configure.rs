@@ -124,7 +124,7 @@ pub(crate) fn configure_element<'gc>(
             state
                 .borrow_mut()
                 .destroy_hooks
-                .insert(node, crate::vm::handler_store::register(ctx.stash(closure)));
+                .set(node, crate::vm::handler_store::register(ctx.stash(closure)));
             continue;
         }
         if matches!(property.as_str(), "stretch" | "track" | "shortcuts")

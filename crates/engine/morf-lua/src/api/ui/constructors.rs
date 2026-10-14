@@ -176,8 +176,8 @@ pub(crate) fn timer_constructor<'gc>(
         };
         state
             .borrow_mut()
-            .timer_origins
-            .insert(node, std::rc::Rc::clone(&origin));
+            .timers
+            .set_origin(node, std::rc::Rc::clone(&origin));
         if running {
             if !interval.is_finite() || interval <= 0.0 {
                 return Err(HostError("Timer interval must be finite and positive".into()).into());
@@ -202,12 +202,12 @@ pub(crate) fn timer_constructor<'gc>(
                 node: Some(node),
                 origin,
             });
-            state.timer_callbacks.insert(node, handler);
+            state.timers.set_node_handler(node, handler);
         } else if let Some(callback) = callback {
             state
                 .borrow_mut()
-                .timer_callbacks
-                .insert(node, crate::vm::handler_store::register(callback));
+                .timers
+                .set_node_handler(node, crate::vm::handler_store::register(callback));
         }
         stack.replace(ctx, node_userdata(ctx, Rc::clone(&state), node));
         Ok(CallbackReturn::Return)

@@ -9,7 +9,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use morf_layout::TransformTracker;
 use morf_scene::reactive::{Graph, SignalId};
@@ -73,19 +72,11 @@ pub struct Engine {
     pub views: crate::views::Views,
     /// Every timer and `Timer` node, and the clock they run on.
     pub timers: crate::timers::Timers,
-    pub timer_callbacks: HashMap<NodeHandle, Handler>,
-    /// Where each `ui.Timer` was built, for `MORF_WAKE_LOG`.
-    pub timer_origins: HashMap<NodeHandle, Rc<str>>,
     /// Motion beside the scene's own: `on_finished` handlers, loops,
     /// follows, theme fades and exits.
     pub animation: crate::animation::Animation,
-    /// Each node's `on_destroyed`, until the node goes.
-    pub destroy_hooks: HashMap<NodeHandle, Handler>,
-    /// Hooks of nodes already removed, waiting for a moment handlers can run:
-    /// removal happens with the state borrowed, often inside a flush.
-    pub pending_destroyed: Vec<Handler>,
-    /// The pending hooks are being run; removals they cause join the queue.
-    pub running_destroyed: bool,
+    /// Each node's `on_destroyed`, and those of removed nodes waiting to run.
+    pub destroy_hooks: crate::destroy::DestroyHooks,
     /// Loaders' items and retained nodes, and the handlers told as they go.
     pub retained: crate::retention::Retained,
     /// The `measure` and `place` functions of every `ui.Layout` container.
@@ -144,12 +135,8 @@ impl Engine {
             ipc_handlers: HashMap::new(),
             views: HashMap::new(),
             timers: Default::default(),
-            timer_callbacks: HashMap::new(),
-            timer_origins: HashMap::new(),
             animation: Default::default(),
-            destroy_hooks: HashMap::new(),
-            pending_destroyed: Vec::new(),
-            running_destroyed: false,
+            destroy_hooks: Default::default(),
             retained: Default::default(),
             custom_layouts: HashMap::new(),
             transform_tracker: TransformTracker::default(),

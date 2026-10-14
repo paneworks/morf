@@ -11,6 +11,7 @@
 //! (animation) so far.
 
 pub mod animation;
+pub mod destroy;
 pub mod display;
 pub mod editing;
 pub mod effect_errors;

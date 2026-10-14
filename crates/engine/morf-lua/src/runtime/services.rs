@@ -194,7 +194,7 @@ fn timer_still_due(
 ) -> bool {
     let settled = state.timers.settle(id, repeat);
     if let Some(node) = node {
-        if !state.timer_callbacks.contains_key(&node) {
+        if !state.timers.has_node_handler(node) {
             return false;
         }
         let Ok(running) = state.scene.bool_value(node, "running") else {
