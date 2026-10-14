@@ -10,7 +10,7 @@ impl ReactiveState {
             channels: crate::api::ui::channels::Channels::default(),
             shaders: HashMap::new(),
             overlays: Default::default(),
-            screencopy_saves: HashMap::new(),
+            capture_saves: Default::default(),
             image_jobs: crate::runtime::image_jobs::ImageJobs::default(),
             auth: Default::default(),
             images: Default::default(),

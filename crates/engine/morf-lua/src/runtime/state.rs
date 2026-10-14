@@ -88,7 +88,7 @@ pub(crate) struct ReactiveState {
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
     pub(crate) overlays: crate::api::input::overlay::OverlayState,
     /// Captures to be written to a file rather than handed to Lua, by request.
-    pub(crate) screencopy_saves: HashMap<u64, crate::runtime::image_jobs::CaptureSave>,
+    pub(crate) capture_saves: crate::runtime::image_jobs::CaptureSaves,
     /// `morf.image` work on its way through the worker pool.
     pub(crate) image_jobs: crate::runtime::image_jobs::ImageJobs,
     /// `morf.pam` checks and conversations, and greetd logins.

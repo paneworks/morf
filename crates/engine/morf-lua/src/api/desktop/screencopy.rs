@@ -19,8 +19,8 @@ const MAX_PENDING: usize = 4;
 fn pending(state: &ReactiveState) -> usize {
     state.requests().screencopy_callbacks.len()
         + state
-            .screencopy_saves
-            .keys()
+            .capture_saves
+            .ids()
             .filter(|id| !state.requests().screencopy_callbacks.contains_key(id))
             .count()
 }
@@ -161,7 +161,7 @@ pub(crate) fn install_screencopy_api<'gc>(
                 name: None,
                 output,
             });
-        state.screencopy_saves.insert(
+        state.capture_saves.save(
             id,
             CaptureSave {
                 path,

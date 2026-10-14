@@ -66,6 +66,34 @@ pub(crate) struct CaptureSave {
     pub(crate) quality: u8,
 }
 
+/// Captures to be written to a file rather than handed to Lua, by request.
+#[derive(Default)]
+pub(crate) struct CaptureSaves {
+    saves: std::collections::HashMap<u64, CaptureSave>,
+}
+
+impl CaptureSaves {
+    /// Writes capture `id` to a file when it comes.
+    pub(crate) fn save(&mut self, id: u64, save: CaptureSave) {
+        self.saves.insert(id, save);
+    }
+
+    /// Whether capture `id` goes to a file.
+    pub(crate) fn is_saving(&self, id: u64) -> bool {
+        self.saves.contains_key(&id)
+    }
+
+    /// Where capture `id` goes, once it came.
+    pub(crate) fn take(&mut self, id: u64) -> Option<CaptureSave> {
+        self.saves.remove(&id)
+    }
+
+    /// The captures waiting to be written.
+    pub(crate) fn ids(&self) -> impl Iterator<Item = u64> + '_ {
+        self.saves.keys().copied()
+    }
+}
+
 pub(crate) enum ImageJob {
     Process(ProcessRequest),
     Compose(morf_image::canvas::Request),
