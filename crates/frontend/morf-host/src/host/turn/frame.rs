@@ -5,10 +5,10 @@ use morf_app::{PRIMARY_LAYER, WindowId};
 use morf_lua::Runtime;
 use std::time::Instant;
 
+use crate::host::actions::apply_parent_transitions;
 use crate::host::windows::Kind;
-use crate::painter::Painter;
-use crate::surface_actions::apply_parent_transitions;
-use crate::{paint::*, surface_pointer::answer_new_containment, surfaces::*};
+use crate::paint::painter::Painter;
+use crate::{host::surfaces::*, input::pointer::answer_new_containment, paint::*};
 
 use super::{Host, Turn, complain_layout, is_layout_error, slow};
 

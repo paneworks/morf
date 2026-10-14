@@ -12,8 +12,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use morf_host::morf_lua::{LogLevel, Runtime};
-use morf_host::morf_scene::NodeHandle;
+use morf_lua::{LogLevel, Runtime};
+use morf_scene::NodeHandle;
 use morf_value::{IpcTable, IpcValue};
 
 use crate::runner_args::RunnerArgs;
@@ -362,7 +362,7 @@ fn snapshot(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>
     let scale = host.defaults.scale;
     let wanted = optional_text(arguments.get(1));
     let subject = host.subject()?;
-    match morf_host::headless_render::render_to(subject, wanted.as_deref(), scale, &path) {
+    match morf_host::headless::render::render_to(subject, wanted.as_deref(), scale, &path) {
         Ok(_) => Ok(vec![
             IpcValue::Boolean(true),
             string(path.display().to_string()),

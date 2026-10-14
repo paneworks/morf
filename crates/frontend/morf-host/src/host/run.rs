@@ -6,8 +6,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use crate::desktop::desktop_for;
-use crate::{lock::*, supervisor::*, surfaces::*, wake_plan::*, workers::*};
+use crate::host::desktop::desktop_for;
+use crate::{
+    host::surfaces::*, lock::*, paint::wake_plan::*, process::supervisor::*, process::workers::*,
+};
 
 use crate::host::turn::{Host, Links, StartOptions, Turn};
 use std::os::fd::AsFd;

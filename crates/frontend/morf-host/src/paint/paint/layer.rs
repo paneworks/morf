@@ -8,7 +8,7 @@ use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
 use morf_value::region::{Rect as RegionRect, Region};
 
-use crate::{surface_layers::*, surfaces::*};
+use crate::host::{layers::*, surfaces::*};
 
 use super::{
     CachedLayout, FrameSplit, MASK_SENTINEL, apply_blend, apply_subpixel, frame_log_wanted,
@@ -31,7 +31,7 @@ pub fn paint_layer(
     // change it at any time; the renderer rebuilds only when it moved, and
     // its pipelines — the configuration's shaders among them — with it.
     if apply_blend(renderer, &config.blend) {
-        crate::surface_run::register_shaders(runtime, renderer)?;
+        crate::host::run::register_shaders(runtime, renderer)?;
     }
     let scale_120 = client.layer_scale_120(layer).unwrap_or(120);
     apply_subpixel(renderer, &config.subpixel_text, client, config.opaque);
@@ -185,7 +185,7 @@ pub fn paint_layer(
         };
         eprintln!(
             "{} layer {layer} damaged {area} px in {} rect(s){rects}",
-            crate::wake_plan::stamp(),
+            crate::paint::wake_plan::stamp(),
             damage.len()
         );
     }

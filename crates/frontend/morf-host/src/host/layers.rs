@@ -11,8 +11,8 @@ use morf_render::RenderEngine;
 use std::collections::HashSet;
 
 use crate::host::windows::{Kind, Windows};
-use crate::render_target::surface_backend;
-use crate::{capture::*, paint::*, services::*, surfaces::*};
+use crate::paint::render_target::surface_backend;
+use crate::{capture::*, host::surfaces::*, paint::*, process::services::*};
 use morf_app::WindowId;
 use morf_app::WindowKind;
 
@@ -31,8 +31,8 @@ pub fn apply_service_requests(
     mut desktop: Option<&mut morf_desktop::Desktop>,
 ) {
     apply_clipboard_requests(runtime, client, desktop.as_deref_mut());
-    crate::surface_drag::apply_offer_reads(runtime, client, desktop.as_deref_mut());
-    crate::surface_drag::apply_drag_requests(runtime, client);
+    crate::input::drag::apply_offer_reads(runtime, client, desktop.as_deref_mut());
+    crate::input::drag::apply_drag_requests(runtime, client);
     apply_virtual_keyboard_requests(runtime, client);
     apply_input_method_requests(runtime, client);
     apply_text_input_requests(runtime, client);
@@ -42,7 +42,7 @@ pub fn apply_service_requests(
         return;
     };
     apply_output_power_requests(runtime, desktop);
-    crate::services::apply_gamma_requests(runtime, desktop);
+    crate::process::services::apply_gamma_requests(runtime, desktop);
     apply_screencopy_requests(runtime, desktop);
     publish_windows(runtime, desktop);
     publish_workspaces(runtime, desktop);
@@ -168,7 +168,7 @@ pub fn window_layer_id(id: u64) -> u64 {
 
 /// Inverse of [`window_layer_id`], or `None` for engine-owned surfaces.
 pub fn window_surface_id(layer: u64) -> Option<u64> {
-    (layer != PRIMARY_LAYER && layer < crate::backdrop::BACKDROP_LAYER).then(|| layer - 1)
+    (layer != PRIMARY_LAYER && layer < crate::paint::backdrop::BACKDROP_LAYER).then(|| layer - 1)
 }
 
 /// Builds the configuration for one single-edge reserver surface.

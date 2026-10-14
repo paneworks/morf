@@ -68,7 +68,7 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
     engine
         .backend_mut()
         .set_blend(BlendSpace::parse(&blend).unwrap_or_default());
-    crate::surface_run::register_shaders(&headless.runtime, &mut engine)?;
+    crate::host::run::register_shaders(&headless.runtime, &mut engine)?;
     // Settled against the renderer's own faces, since that is what shapes
     // what is drawn.
     let available = Size {

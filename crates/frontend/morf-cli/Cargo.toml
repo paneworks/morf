@@ -21,6 +21,11 @@ kit = ["morf-host/kit"]
 
 [dependencies]
 morf-host.workspace = true
+morf-app.workspace = true
+morf-io.workspace = true
+morf-lua.workspace = true
+morf-scene.workspace = true
+morf-text.workspace = true
 morf-value.workspace = true
 libc = "0.2"
 flate2.workspace = true
@@ -28,14 +33,7 @@ serde_json.workspace = true
 image.workspace = true
 
 [dev-dependencies]
-# The tests and benchmarks reach into the engine directly; the command line
-# itself goes through morf-host.
 morf-layout.workspace = true
-morf-lua.workspace = true
-morf-io.workspace = true
-morf-scene.workspace = true
-morf-text.workspace = true
-morf-app.workspace = true
 # The frame benchmarks draw with the renderer directly.
 morf-render.workspace = true
 pollster.workspace = true

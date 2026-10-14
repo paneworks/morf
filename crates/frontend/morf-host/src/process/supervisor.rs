@@ -15,8 +15,8 @@ use std::sync::{Arc, mpsc};
 use std::thread::{self};
 use std::time::{Duration, Instant};
 
-use crate::socket_path::socket_path;
-use crate::{lock::*, outputless::*, services::*, workers::*};
+use crate::process::socket_path::socket_path;
+use crate::{lock::*, paint::outputless::*, process::services::*, process::workers::*};
 
 pub use config::{collect_lua_scripts, execute_config, execute_config_on, runtime_scripts};
 pub use failure::{FailureStep, PANICKED, SURFACE_CLOSED, failure_step, is_panic};

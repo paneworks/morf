@@ -101,7 +101,7 @@ pub fn apply_clipboard_requests(
     {
         for request in runtime.take_clipboard_requests() {
             let primary = request.primary;
-            desktop.set_selection(crate::surface_drag::clipboard_payload(request), primary);
+            desktop.set_selection(crate::input::drag::clipboard_payload(request), primary);
         }
         return;
     }

@@ -10,7 +10,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Instant;
 
-use morf_host::morf_lua::{Limits, Runtime};
+use morf_lua::{Limits, Runtime};
 use morf_value::{IpcTable, IpcValue};
 
 use crate::runner_args::RunnerArgs;
@@ -113,7 +113,7 @@ pub(crate) fn run_spec(
     // The spec's own folder, and its project's library: a spec of a library
     // module requires it as a shell would.
     let mut roots = vec![spec_dir.clone()];
-    roots.extend(morf_host::morf_lua::project_library(path));
+    roots.extend(morf_lua::project_library(path));
     runtime.set_module_roots(roots);
     runtime.set_shell_root(spec_dir);
     install(&mut runtime, &host);
@@ -198,7 +198,7 @@ pub(crate) fn run(args: &RunnerArgs) -> Result<bool, String> {
     for path in &args.files {
         // Each spec file starts from an empty home, as it would alone.
         if args.isolate {
-            morf_host::headless_env::empty_home(&morf_host::headless_env::scratch_dir());
+            morf_host::headless::env::empty_home(&morf_host::headless::env::scratch_dir());
         }
         if let Err(error) = run_spec(path, args, &mut number, &mut tally) {
             number += 1;

@@ -254,7 +254,7 @@ fn main() {
             .and_then(|value| value.parse::<usize>().ok());
         match index {
             Some(index) => *roots.get(index).expect("FRAME_BENCH_ROOT is out of range"),
-            None => morf_host::surfaces::primary_surface_root(&runtime)
+            None => morf_host::host::surfaces::primary_surface_root(&runtime)
                 .expect("configuration has a primary surface"),
         }
     };

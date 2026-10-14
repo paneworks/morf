@@ -9,9 +9,12 @@ use morf_text::TextSystem;
 use std::time::{Duration, Instant};
 
 use crate::host::windows::Windows;
-use crate::painter::Painter;
-use crate::render_target::surface_backend;
-use crate::{backdrop::*, pacing::*, paint::*, surface_actions::*, surface_layers::*, surfaces::*};
+use crate::paint::painter::Painter;
+use crate::paint::render_target::surface_backend;
+use crate::{
+    host::actions::*, host::layers::*, host::surfaces::*, paint::backdrop::*, paint::pacing::*,
+    paint::*,
+};
 
 use super::{Host, slow};
 
@@ -115,7 +118,7 @@ impl Host {
         slow(options_report, &name, "starting the GPU", gpu);
         if let Some(renderer) = painter.gpu() {
             let shaders = Instant::now();
-            crate::surface_run::register_shaders(runtime, renderer)?;
+            crate::host::run::register_shaders(runtime, renderer)?;
             slow(options_report, &name, "building shaders", shaders);
         }
         let animating_shaders = runtime.shaders_animate();
@@ -171,7 +174,7 @@ impl Host {
             reserve: layer_config.reserve,
             clock,
             started,
-            a11y: crate::surface_a11y::A11ySurfaces::default(),
+            a11y: crate::a11y::surface::A11ySurfaces::default(),
             layout_complaint: None,
             motion_reported: None,
             jit_logged: None,
@@ -208,7 +211,7 @@ impl Host {
             self.state.painter = Painter::Gpu(Box::new(RenderEngine::new(renderer)));
             // The adapter is new, so every pipeline it held is gone with it.
             if let Some(renderer) = self.state.painter.gpu() {
-                crate::surface_run::register_shaders(runtime, renderer)?;
+                crate::host::run::register_shaders(runtime, renderer)?;
             }
         }
         self.state.windows.clear();
@@ -237,7 +240,7 @@ fn wait_for_configure(backend: &mut dyn Backend) -> Result<FirstFrame, String> {
                     return Ok(FirstFrame { early_pointer });
                 }
                 Event::Closed { id } if id == PRIMARY_LAYER => {
-                    return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
+                    return Err(crate::process::supervisor::SURFACE_CLOSED.to_owned());
                 }
                 Event::PointerMotion { surface, x, y } => {
                     early_pointer = Some((surface, x, y));

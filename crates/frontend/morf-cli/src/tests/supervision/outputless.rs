@@ -5,9 +5,9 @@
 use crate::config::LoadPolicy;
 use morf_app::Output;
 use morf_host::lock::{SupervisorMessage, Worker, WorkerCommand, WorkerMessage, WorkerSender};
-use morf_host::outputless::{OUTPUTLESS, Outputless, outputless_screen, run_outputless};
-use morf_host::services::stop_workers;
-use morf_host::workers::{
+use morf_host::paint::outputless::{OUTPUTLESS, Outputless, outputless_screen, run_outputless};
+use morf_host::process::services::stop_workers;
+use morf_host::process::workers::{
     Handover, Seed, WorkerStart, desired_workers, handle_ipc, handle_worker_command, reconcile_with,
 };
 use morf_io::{IpcReply, IpcRequest, IpcValue as WireValue};
@@ -86,7 +86,7 @@ pub(super) fn spawner<'a>(
                 run_outputless(start, false).unwrap();
             })
         } else {
-            let screen = morf_host::supervisor::lua_screen(screen);
+            let screen = morf_host::process::supervisor::lua_screen(screen);
             thread::spawn(move || stand_in(start, screen))
         };
         Worker {
@@ -104,8 +104,13 @@ pub(super) fn stand_in(start: WorkerStart, screen: Screen) {
         runtime.restore_reloadable_state(seed);
     }
     runtime.set_primary(start.primary);
-    morf_host::supervisor::execute_config(&mut runtime, &start.path, &start.source, start.policy)
-        .unwrap();
+    morf_host::process::supervisor::execute_config(
+        &mut runtime,
+        &start.path,
+        &start.source,
+        start.policy,
+    )
+    .unwrap();
     while !start.stop.load(Ordering::Acquire) {
         if let Ok(command) = start.commands.recv_timeout(Duration::from_millis(5)) {
             handle_worker_command(&mut runtime, Some(&screen), start.policy, command);

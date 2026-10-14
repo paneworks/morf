@@ -1,11 +1,11 @@
 //! `morf check` and `morf render`: a configuration run once, headless, and
 //! either reported on or drawn. `morf test` is in `test_runner`.
 
-use morf_host::morf_lua::{LogEntry, LogLevel};
+use morf_lua::{LogEntry, LogLevel};
 
 use crate::runner_args::{Runner, RunnerArgs};
+use morf_host::headless::env::{PrivateBus, isolate_from_session, isolate_home, scratch_dir};
 use morf_host::headless::{Headless, LoadOptions};
-use morf_host::headless_env::{PrivateBus, isolate_from_session, isolate_home, scratch_dir};
 
 /// Runs whichever runner was asked for. Isolation first, before anything
 /// starts a thread: the environment is only safely changed until then.
@@ -244,7 +244,7 @@ fn check_kit(headless: &mut Headless) -> usize {
 }
 
 /// Counts the nodes under a root, itself included.
-fn node_count(headless: &Headless, root: morf_host::morf_scene::NodeHandle) -> usize {
+fn node_count(headless: &Headless, root: morf_scene::NodeHandle) -> usize {
     let scene = headless.runtime.scene();
     let mut count = 0;
     let mut pending = vec![root];
@@ -365,7 +365,7 @@ fn render(args: &RunnerArgs) -> Result<bool, String> {
     call_ipc(&mut headless, args)?;
     headless.advance(args.after, args.wait);
     let output = args.output.clone().expect("render has an output");
-    let (width, height, what) = morf_host::headless_render::render_to(
+    let (width, height, what) = morf_host::headless::render::render_to(
         &mut headless,
         args.surface.as_deref(),
         args.scale,

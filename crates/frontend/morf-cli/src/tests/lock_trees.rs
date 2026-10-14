@@ -3,7 +3,7 @@
 
 use morf_app::{Output, WindowId};
 use morf_host::host::windows::{Kind, Windows};
-use morf_host::lock_outputs::{LockTrees, ensure_lock_tree, release_lock_tree};
+use morf_host::lock::outputs::{LockTrees, ensure_lock_tree, release_lock_tree};
 use morf_lua::Runtime;
 
 fn screen(name: &str, width: i32, height: i32) -> Output {

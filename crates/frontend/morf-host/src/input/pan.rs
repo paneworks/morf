@@ -10,7 +10,7 @@ use morf_lua::{EventPoint, IpcValue, Runtime, UiEvent};
 use morf_runtime::gestures::VelocityTracker;
 use morf_scene::{Element, NodeHandle};
 
-use crate::surfaces::{PointerInput, SurfaceLayouts};
+use crate::host::surfaces::{PointerInput, SurfaceLayouts};
 
 const SLOP: f64 = 8.0;
 const EDGE: f64 = 20.0;
@@ -242,7 +242,7 @@ pub fn motion(
             first = pan.claimed;
             if first {
                 runtime.cancel_gesture();
-                crate::surface_gesture::cancel_edge(input);
+                crate::input::gesture::cancel_edge(input);
                 let point = EventPoint::new((x, y), (0.0, 0.0)).with_button(0x110);
                 changed |=
                     runtime.dispatch_touch_event(pan.node, UiEvent::TouchCanceled, id, point);

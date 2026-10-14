@@ -6,8 +6,8 @@ use std::collections::HashMap;
 
 use morf_app::WindowId;
 
-use crate::surface_layers::{window_layer_id, window_surface_id};
-use crate::surfaces::Window;
+use crate::host::layers::{window_layer_id, window_surface_id};
+use crate::host::surfaces::Window;
 
 /// Which kind of declared window.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -140,7 +140,7 @@ impl Windows {
     }
 }
 
-impl crate::surfaces::SurfaceLayouts for Windows {
+impl crate::host::surfaces::SurfaceLayouts for Windows {
     fn layout_of(&self, surface: WindowId) -> Option<&morf_layout::Layout> {
         Some(&self.by_window(surface)?.layout.as_ref()?.layout)
     }
@@ -159,7 +159,7 @@ mod tests {
             windows.insert(
                 Kind::Lock,
                 index,
-                crate::lock_outputs::lock_window(index as usize, root),
+                crate::lock::outputs::lock_window(index as usize, root),
             );
         }
         assert!(windows.remove_lock(1).is_some());

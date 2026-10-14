@@ -15,7 +15,7 @@ use morf_lua::{ClipboardRequest, EventPoint, OfferDescription, Runtime};
 use morf_scene::NodeHandle;
 use std::sync::Arc;
 
-use crate::surfaces::*;
+use crate::host::surfaces::*;
 
 /// A drag from elsewhere, as far as the shell has followed it.
 pub struct DragFollow {

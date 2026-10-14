@@ -17,18 +17,18 @@ use std::os::fd::BorrowedFd;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use crate::desktop::dispatch_desktop;
-use crate::supervisor::LoadPolicy;
+use crate::host::desktop::dispatch_desktop;
+use crate::process::supervisor::LoadPolicy;
 use crate::{
-    backdrop::*,
+    host::events::*,
+    host::layers::*,
+    host::surfaces::*,
     lock::{SupervisorMessage, WorkerCommand, WorkerMessage},
+    paint::backdrop::*,
+    paint::wake_plan::*,
     paint::*,
-    services::*,
-    surface_events::*,
-    surface_layers::*,
-    surfaces::*,
-    wake_plan::*,
-    workers::*,
+    process::services::*,
+    process::workers::*,
 };
 
 pub(crate) use stall::{advance_without_callbacks, motion_deadline};
@@ -69,7 +69,7 @@ pub struct Host {
     pub reserve: SurfaceReserve,
     clock: String,
     started: Instant,
-    a11y: crate::surface_a11y::A11ySurfaces,
+    a11y: crate::a11y::surface::A11ySurfaces,
     layout_complaint: Option<Instant>,
     motion_reported: Option<Instant>,
     jit_logged: Option<Instant>,
@@ -229,7 +229,7 @@ impl Host {
             // The only thing that can move the primary root.
             self.state.primary_root =
                 primary_surface_root_keeping(runtime, self.state.primary_root)?;
-            repaint |= crate::surfaces::sync_window_surfaces(
+            repaint |= crate::host::surfaces::sync_window_surfaces(
                 runtime,
                 &mut *self.backend,
                 &mut self.state.windows,
@@ -245,7 +245,7 @@ impl Host {
         if let Some(renderer) = self.state.painter.gpu() {
             crate::capture::apply_capture_releases(runtime, renderer);
         }
-        crate::surface_actions::apply_window_surface_actions(
+        crate::host::actions::apply_window_surface_actions(
             runtime,
             &*self.backend,
             &self.state.windows,
@@ -297,7 +297,7 @@ impl Host {
         self.state.layout.invalidate_scene();
         self.state.animating_shaders = runtime.shaders_animate();
         if let Some(renderer) = self.state.painter.gpu() {
-            crate::surface_run::register_shaders(runtime, renderer)?;
+            crate::host::run::register_shaders(runtime, renderer)?;
         }
         for surface in self.state.windows.values_mut() {
             surface.layout = None;
@@ -392,12 +392,12 @@ fn jit_log_wanted() -> bool {
     })
 }
 
-/// [`crate::surface_run::slow`], when the host reports slow stages: a host
+/// [`crate::host::run::slow`], when the host reports slow stages: a host
 /// that only lays out (a test) has frames far slower than a person notices
 /// as a matter of course, and says nothing of them.
 pub(crate) fn slow(report: bool, name: &str, what: &str, since: Instant) {
     if report {
-        crate::surface_run::slow(name, what, since);
+        crate::host::run::slow(name, what, since);
     } else {
         morf_lua::profile::clear();
     }

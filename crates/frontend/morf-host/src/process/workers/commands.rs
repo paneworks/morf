@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::{lock::*, paint::*, services::*, supervisor::*, surfaces::*};
+use crate::{host::surfaces::*, lock::*, paint::*, process::services::*, process::supervisor::*};
 
 pub fn handle_ipc(
     workers: &BTreeMap<String, Worker>,

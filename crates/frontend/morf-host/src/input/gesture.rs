@@ -19,7 +19,7 @@ use morf_lua::{Runtime, UiEvent};
 use morf_scene::NodeHandle;
 use morf_value::IpcValue;
 
-use crate::surfaces::{PointerInput, SurfaceLayouts};
+use crate::host::surfaces::{PointerInput, SurfaceLayouts};
 
 const EDGE: f64 = 20.0;
 const EDGE_TRAVEL: f64 = 48.0;
@@ -202,7 +202,7 @@ pub fn finger_moved(
         None => {
             // Content follows the fingers: moving up scrolls down.
             if let Some(layout) = layouts.layout_of(pinch.surface) {
-                changed |= crate::surface_pointer::wheel_at(
+                changed |= crate::input::pointer::wheel_at(
                     runtime,
                     layout,
                     mid,

@@ -27,7 +27,7 @@ use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::{Element, NodeHandle};
 
 use crate::host::windows::{Kind, Windows};
-use crate::{supervisor::lua_screen, surfaces::*};
+use crate::{host::surfaces::*, process::supervisor::lua_screen};
 
 /// The lock surface of output `index`, drawing `root`: a window like any
 /// other, keyed `WindowId::Lock(index)` in the lock's `Windows`.

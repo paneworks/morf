@@ -4,15 +4,15 @@
 //!
 //! Split from `test_host` at the line gate.
 
-use morf_host::morf_app::Backend;
+use morf_app::Backend;
 use std::sync::Arc;
 
-use morf_host::morf_app::Event;
+use morf_app::Event;
 use morf_value::{IpcTable, IpcValue};
 
 use crate::test_host::{TestHost, list, map, number, optional_text, string, text};
 use morf_host::headless::Headless;
-use morf_host::headless_input::{button, keysym, modifiers};
+use morf_host::headless::input::{button, keysym, modifiers};
 
 mod touch;
 pub(crate) use touch::touch;
@@ -20,10 +20,7 @@ pub(crate) use touch::touch;
 /// Where keys go: the surface named, else the one last clicked (a
 /// compositor hands the keyboard to the window pressed on), else the
 /// primary.
-fn key_role(
-    subject: &Headless,
-    surface: Option<&IpcValue>,
-) -> Result<morf_host::morf_app::WindowId, String> {
+fn key_role(subject: &Headless, surface: Option<&IpcValue>) -> Result<morf_app::WindowId, String> {
     if optional_text(surface).is_none()
         && let Some(clicked) = subject.seat().keyboard
         && subject
@@ -36,10 +33,7 @@ fn key_role(
     role(subject, surface)
 }
 
-fn role(
-    subject: &Headless,
-    surface: Option<&IpcValue>,
-) -> Result<morf_host::morf_app::WindowId, String> {
+fn role(subject: &Headless, surface: Option<&IpcValue>) -> Result<morf_app::WindowId, String> {
     let wanted = optional_text(surface);
     let index = subject.surface_index(wanted.as_deref())?;
     Ok(subject.surfaces[index].role)
@@ -52,7 +46,7 @@ pub(crate) fn click(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     let subject = host.subject()?;
     let surface = role(subject, arguments.get(3))?;
     let held =
-        morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(4)).as_deref())?;
+        morf_host::headless::input::pointer_modifiers(optional_text(arguments.get(4)).as_deref())?;
     subject.click(surface, (x, y), pressed, held)?;
     Ok(Vec::new())
 }
@@ -65,7 +59,7 @@ pub(crate) fn press(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
     let subject = host.subject()?;
     let surface = role(subject, arguments.get(4))?;
     let modifiers =
-        morf_host::headless_input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?;
+        morf_host::headless::input::pointer_modifiers(optional_text(arguments.get(5)).as_deref())?;
     subject.pointer(Event::PointerButton {
         surface,
         button: code,
@@ -117,7 +111,7 @@ pub(crate) fn wheel(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
         vertical,
         horizontal_steps: steps(horizontal),
         vertical_steps: steps(vertical),
-        modifiers: morf_host::headless_input::pointer_modifiers(
+        modifiers: morf_host::headless::input::pointer_modifiers(
             optional_text(arguments.get(5)).as_deref(),
         )?,
     })?;
@@ -293,10 +287,7 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
 /// A glyph shape's text: the glyph its morph is nearer (`glyph`, or
 /// `glyph_morph_to` past halfway), so a number drawn as morphing glyphs reads
 /// as text does.
-fn shown_glyph(
-    scene: &morf_host::morf_scene::Scene,
-    node: morf_host::morf_scene::NodeHandle,
-) -> Option<String> {
+fn shown_glyph(scene: &morf_scene::Scene, node: morf_scene::NodeHandle) -> Option<String> {
     if scene.string_value(node, "shape").ok()? != "glyph" {
         return None;
     }
@@ -331,10 +322,10 @@ pub(crate) fn text_of(
 }
 
 /// Every visible surface's accessible tree, as a screen reader would be
-/// given it (`morf_host::morf_scene::Scene::accessible_tree`): rows root first, each
+/// given it (`morf_scene::Scene::accessible_tree`): rows root first, each
 /// with its role, name, value and states, and its accessible parent.
 pub(crate) fn accessible(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
-    use morf_host::morf_scene::{AccessibleValue, Checked};
+    use morf_scene::{AccessibleValue, Checked};
     let subject = host.subject()?;
     let mut found = Vec::new();
     {

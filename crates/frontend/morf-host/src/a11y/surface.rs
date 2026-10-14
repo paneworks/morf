@@ -9,7 +9,7 @@
 //! as the node's own keys would.
 
 #[cfg(not(feature = "a11y"))]
-use {crate::surfaces::SurfaceEventState, morf_lua::Runtime, morf_scene::NodeHandle};
+use {crate::host::surfaces::SurfaceEventState, morf_lua::Runtime, morf_scene::NodeHandle};
 
 #[cfg(feature = "a11y")]
 mod live {
@@ -22,7 +22,7 @@ mod live {
     use morf_scene::NodeHandle;
     use morf_value::IpcValue;
 
-    use crate::surfaces::SurfaceEventState;
+    use crate::host::surfaces::SurfaceEventState;
 
     /// How stale a tree may get on layout alone (things moving with no
     /// property written): bounds a screen reader reads are this fresh.

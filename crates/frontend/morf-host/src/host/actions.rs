@@ -3,8 +3,8 @@ use morf_app::Edge;
 use morf_layout::{Layout, ReparentTransition, Size};
 use morf_lua::{Runtime, WindowSurfaceAction};
 
+use crate::host::surfaces::*;
 use crate::host::windows::{Kind, Windows};
-use crate::surfaces::*;
 
 use morf_app::WindowId;
 
@@ -39,7 +39,7 @@ pub fn apply_window_surface_actions(
 
 pub fn apply_parent_transitions(
     runtime: &mut Runtime,
-    painter: &mut crate::painter::Painter,
+    painter: &mut crate::paint::painter::Painter,
     client: &dyn Backend,
 ) -> Result<(), String> {
     let transitions = runtime.take_parent_transitions();

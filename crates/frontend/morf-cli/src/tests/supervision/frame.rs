@@ -1,5 +1,5 @@
-use morf_host::surfaces::MAX_FRAME_DELTA_MS;
-use morf_host::surfaces::animation_delta;
+use morf_host::host::surfaces::MAX_FRAME_DELTA_MS;
+use morf_host::host::surfaces::animation_delta;
 use std::time::Duration;
 
 // The frame clock that decides how far a tick advances animations.

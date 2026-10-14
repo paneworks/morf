@@ -7,7 +7,7 @@ use morf_lua::Runtime;
 use std::time::{Duration, Instant};
 
 use crate::host::windows::Kind;
-use crate::{paint::*, surfaces::*};
+use crate::{host::surfaces::*, paint::*};
 
 /// Advances motion from the wall clock while the shell's own surface gets no
 /// frame callbacks.

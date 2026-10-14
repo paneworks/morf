@@ -67,7 +67,7 @@ fn a_change_on_one_surface_keeps_another_surfaces_layout() {
             "#,
         )
         .unwrap();
-    let bar = morf_host::surfaces::primary_surface_root(&runtime).unwrap();
+    let bar = morf_host::host::surfaces::primary_surface_root(&runtime).unwrap();
     let settings = runtime.window_surface_configs()[0].root;
     let bar_cache = cached(&runtime, bar);
     let settings_cache = cached(&runtime, settings);

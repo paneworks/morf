@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Instant;
 
-use crate::services::{lua_ipc_value, wire_ipc_value};
+use crate::process::services::{lua_ipc_value, wire_ipc_value};
 
 /// The lock's socket, and what reaches it.
 pub struct LockIpc {
@@ -29,7 +29,7 @@ impl LockIpc {
     /// Binds the lock's socket. Its requests ring the loop's wake, so a call
     /// is answered at once rather than at the next fallback tick.
     pub fn bind(config: &Path) -> Result<Self, String> {
-        let socket = crate::socket_path::lock_socket_path()?;
+        let socket = crate::process::socket_path::lock_socket_path()?;
         let (tx, forwarded) = mpsc::channel();
         let server = IpcServer::bind(&socket, tx).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AddrInUse {

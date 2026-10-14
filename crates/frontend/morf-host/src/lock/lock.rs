@@ -11,12 +11,12 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-use crate::desktop::{desktop_for, dispatch_desktop};
+use crate::host::desktop::{desktop_for, dispatch_desktop};
 use crate::host::windows::{Kind, Windows};
-use crate::render_target::surface_backend;
+use crate::paint::render_target::surface_backend;
 use crate::{
-    lock_outputs::*, paint::*, services::apply_idle_timeouts, surface_keys::*, surface_layers::*,
-    surface_pointer::*, surfaces::*, wake_plan::*,
+    host::layers::*, host::surfaces::*, input::keys::*, input::pointer::*, lock::outputs::*,
+    paint::wake_plan::*, paint::*, process::services::apply_idle_timeouts,
 };
 
 pub struct Worker {
@@ -129,7 +129,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
     let trees = LockTrees::of(&runtime)?;
     // Before the lock is asked for, so `morf --lock ipc call` reaches it
     // from the first moment; beside the shell's socket, not over it.
-    let ipc = crate::lock_ipc::LockIpc::bind(path)?;
+    let ipc = crate::lock::ipc::LockIpc::bind(path)?;
     let client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
     let mut desktop = desktop_for(&client)?;
     // In morf's pixels, as the shell's own surfaces are.
@@ -230,7 +230,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                     // Locks have one runtime, outside the normal output-worker
                     // supervisor. Keep its tracked screen list current too, so
                     // Lua can move controls off an unplugged monitor.
-                    runtime.replace_screens(&crate::supervisor::lua_screens(&screens));
+                    runtime.replace_screens(&crate::process::supervisor::lua_screens(&screens));
                     repaint = true;
                 }
                 Event::SessionLockConfigure {

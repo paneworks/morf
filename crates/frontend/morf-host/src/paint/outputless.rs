@@ -18,10 +18,11 @@ use std::os::fd::AsFd;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use crate::desktop::{desktop_for, dispatch_desktop};
+use crate::host::desktop::{desktop_for, dispatch_desktop};
 use crate::{
-    lock::*, paint::clock_text, services::apply_idle_timeouts, supervisor::execute_config_on,
-    surface_layers::apply_service_requests, wake_plan::*, workers::*,
+    host::layers::apply_service_requests, lock::*, paint::clock_text, paint::wake_plan::*,
+    process::services::apply_idle_timeouts, process::supervisor::execute_config_on,
+    process::workers::*,
 };
 
 /// The name the outputless runtime goes by among the workers, in logs and in
@@ -110,7 +111,7 @@ fn drive_outputless(
         outputless: config.outputless,
     })?;
     if config.session_lock {
-        return crate::surface_run::await_lock(
+        return crate::host::run::await_lock(
             std::mem::take(runtime),
             &start.path,
             &start.stop,

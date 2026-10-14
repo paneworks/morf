@@ -14,8 +14,8 @@ use morf_lua::WindowSurfaceKind;
 use morf_scene::NodeHandle;
 
 use crate::headless::{Headless, SETTLE_PASSES, Surface};
-use crate::surface_popups::window_surface_effectively_visible;
-use crate::surfaces::primary_surface_root;
+use crate::host::popups::window_surface_effectively_visible;
+use crate::host::surfaces::primary_surface_root;
 
 impl Headless {
     /// Works out the surfaces the configuration has asked for, and their

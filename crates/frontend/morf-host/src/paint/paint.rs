@@ -9,12 +9,12 @@ use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
 use morf_value::region::Region;
 
-use crate::surfaces::*;
+use crate::host::surfaces::*;
 
 pub use layer::{paint_layer, paint_layer_surface, send_input_region};
 pub use layout_only::{lay_out_auxiliary, lay_out_layer, lay_out_layer_surface};
 
-use crate::painter::Painter;
+use crate::paint::painter::Painter;
 use morf_text::TextSystem;
 
 pub fn paint(
@@ -46,7 +46,7 @@ pub fn paint(
     if let Some(started) = started {
         eprintln!(
             "{} frame on {} took {:.2} ms",
-            crate::wake_plan::stamp(),
+            crate::paint::wake_plan::stamp(),
             std::thread::current().name().unwrap_or("?"),
             started.elapsed().as_secs_f64() * 1000.0
         );
@@ -257,7 +257,7 @@ impl FrameSplit {
             .join(", ");
         eprintln!(
             "{} frame split {total:.1} ms: {parts}",
-            crate::wake_plan::stamp()
+            crate::paint::wake_plan::stamp()
         );
     }
 }

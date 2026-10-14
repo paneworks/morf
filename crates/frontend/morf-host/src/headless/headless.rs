@@ -18,10 +18,10 @@ use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
 
+use crate::host::surfaces::PointerInput;
 use crate::host::turn::{Host, StartOptions, Turn};
-use crate::supervisor::LoadPolicy;
-use crate::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};
-use crate::surfaces::PointerInput;
+use crate::process::supervisor::LoadPolicy;
+use crate::process::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};
 
 /// One frame of a 60 Hz output, which is what time advances by between
 /// animation ticks.
@@ -245,7 +245,7 @@ impl Headless {
         let _ = runtime.update_clock(crate::paint::clock_text());
         let mut problems = Vec::new();
         let host = match &own {
-            Some(own) if crate::surfaces::primary_surface_root(&runtime).is_ok() => {
+            Some(own) if crate::host::surfaces::primary_surface_root(&runtime).is_ok() => {
                 // The output this runtime draws to, first: where its windows go.
                 let mut ordered = vec![own.clone()];
                 ordered.extend(screens.iter().filter(|screen| screen.id != own.id).cloned());
@@ -272,7 +272,7 @@ impl Headless {
                 }
             }
             Some(_) => {
-                if let Err(error) = crate::surfaces::primary_surface_root(&runtime) {
+                if let Err(error) = crate::host::surfaces::primary_surface_root(&runtime) {
                     problems.push(error);
                 }
                 None

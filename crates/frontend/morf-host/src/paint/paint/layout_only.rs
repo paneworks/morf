@@ -8,8 +8,8 @@ use morf_lua::{LayerSurfaceConfig, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
 
-use crate::surface_layers::window_layer_id;
-use crate::surfaces::{Window, keyboard_focus_of};
+use crate::host::layers::window_layer_id;
+use crate::host::surfaces::{Window, keyboard_focus_of};
 
 use super::layer::send_input_region;
 use super::{AuxiliaryKind, CachedLayout, layout_for};

@@ -12,10 +12,10 @@ mod screens;
 use morf_app::Output;
 use morf_host::lock::Worker;
 use morf_host::lock::WorkerCommand;
-use morf_host::services::stop_workers;
-use morf_host::supervisor::runtime_scripts;
-use morf_host::workers::handle_ipc;
-use morf_host::workers::handle_worker_command;
+use morf_host::process::services::stop_workers;
+use morf_host::process::supervisor::runtime_scripts;
+use morf_host::process::workers::handle_ipc;
+use morf_host::process::workers::handle_worker_command;
 use morf_io::IpcReply;
 use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
@@ -286,7 +286,7 @@ fn supervisor_dispatches_registered_ipc_handler() {
 // stops, and a lock is a lock whether or not a shell holds the socket.
 #[test]
 fn a_loaded_configuration_decides_what_the_supervisor_does() {
-    use morf_host::supervisor::{LoadedStep, loaded_step};
+    use morf_host::process::supervisor::{LoadedStep, loaded_step};
     assert_eq!(loaded_step(false, false), LoadedStep::Run);
     assert_eq!(loaded_step(false, true), LoadedStep::Refuse);
     assert_eq!(loaded_step(true, false), LoadedStep::Lock);
@@ -295,7 +295,7 @@ fn a_loaded_configuration_decides_what_the_supervisor_does() {
 
 #[test]
 fn an_output_going_away_does_not_stop_the_shell() {
-    use morf_host::supervisor::{FailureStep, SURFACE_CLOSED, failure_step};
+    use morf_host::process::supervisor::{FailureStep, SURFACE_CLOSED, failure_step};
     use std::collections::VecDeque;
     use std::time::{Duration, Instant};
     let mut closures = VecDeque::new();
@@ -333,7 +333,7 @@ fn an_output_going_away_does_not_stop_the_shell() {
 
 #[test]
 fn a_panicked_worker_is_restarted_a_few_times_a_minute() {
-    use morf_host::supervisor::{FailureStep, PANICKED, failure_step};
+    use morf_host::process::supervisor::{FailureStep, PANICKED, failure_step};
     use std::collections::VecDeque;
     use std::time::Instant;
     let mut crashes = VecDeque::new();

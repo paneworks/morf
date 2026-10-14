@@ -17,7 +17,7 @@ use morf_app::Backend;
 use morf_app::{InputRect, KeyboardFocus, LayerAnchors};
 use morf_lua::LayerSurfaceConfig;
 
-use crate::surfaces::*;
+use crate::host::surfaces::*;
 use morf_app::WindowId;
 use morf_app::WindowKind;
 

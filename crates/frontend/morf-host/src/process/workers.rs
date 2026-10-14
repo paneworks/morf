@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self};
 
-use crate::{lock::*, outputless::*, supervisor::*, surface_run::*};
+use crate::{host::run::*, lock::*, paint::outputless::*, process::supervisor::*};
 
 pub use commands::{WorkerUpdate, handle_ipc, handle_worker_command};
 
@@ -261,7 +261,7 @@ fn spawn_worker(name: &str, screen: &Output, start: WorkerStart) -> thread::Join
         .spawn(move || {
             let tx = start.tx.clone();
             let stop = Arc::clone(&start.stop);
-            crate::crash::mark_recoverable();
+            crate::process::crash::mark_recoverable();
             // This thread's alarm, before the configuration runs: what it
             // asks for rings this output's loop and no other.
             let _alarm = morf_io::Wake::new();
@@ -294,7 +294,7 @@ fn panicked(payload: &(dyn std::any::Any + Send)) -> String {
         .map(|text| (*text).to_owned())
         .or_else(|| payload.downcast_ref::<String>().cloned())
         .unwrap_or_else(|| "a payload of an unknown type".to_owned());
-    match crate::crash::take_report() {
+    match crate::process::crash::take_report() {
         Some(report) => format!("{PANICKED}: {what} (report {})", report.display()),
         None => format!("{PANICKED}: {what}"),
     }
