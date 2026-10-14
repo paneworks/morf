@@ -61,9 +61,14 @@ Per spec file:
 
 Taken on `develop`, 2026-10-14, against v0.2.8 (36f881f8).
 
-Lua specs: 151 files (101 caelestia, 38 library, 12 demos), 1053 passed, 0
-failed, 1 skipped; caelestia_spec runs with `--no-dbus`, lyrics needs
-python3 on PATH.
+```
+cargo test --workspace --no-fail-fast   1611 passed, 0 failed
+Lua specs                               157 files, 1096 passed, 0 failed
+```
+
+The specs run on a private bus (`dbus-run-session` with
+`tools/sandbox/dbus-session.conf`), caelestia_spec with `--no-dbus`, and
+lyrics with python3 on PATH.
 
 Desk layout in the sandbox, caelestia, `MONITORS="3840x2160 3840x2160
 3456x2160"`, `tools/sandbox/cpu-idle.steps` and `cpu-active.steps`, two
