@@ -1,4 +1,3 @@
-use crate::states::Capture;
 use luna::{Context, Executor, Fuel, Table, Value as LuaValue, Variadic};
 
 use crate::vm::handler_store::stashed;
@@ -94,7 +93,7 @@ pub(crate) fn evaluate_effect(
 ) -> Result<(), String> {
     let lua_effect = {
         let mut state = state.borrow_mut();
-        if state.active.is_some() {
+        if state.tracking.capturing() {
             return Err("reactive effects cannot run recursively".to_owned());
         }
         // A binding whose node was removed during this flush: its effect
@@ -102,8 +101,7 @@ pub(crate) fn evaluate_effect(
         let Some(effect) = state.reactive.effects.get(&token).cloned() else {
             return Ok(());
         };
-        state.active = Some(Capture::default());
-        state.effect_runs = state.effect_runs.saturating_add(1);
+        state.tracking.begin_capture();
         effect
     };
     let result = execute_effect(
@@ -148,10 +146,10 @@ pub(crate) fn evaluate_effect(
             Ok(())
         }
     });
-    let capture = state.borrow_mut().active.take().unwrap_or_default();
-    for (node, property, target) in capture.property_reads {
-        let key = (node, property.clone(), target);
-        let signal = if let Some(signal) = state.borrow().property_signals.get(&key).copied() {
+    let capture = state.borrow_mut().tracking.end_capture();
+    for key in capture.property_reads {
+        let (node, property, target) = (key.0, &key.1, key.2);
+        let signal = if let Some(signal) = state.borrow().tracking.property_signal(&key) {
             signal
         } else {
             let name = format!("{node:?}.{property}{}", if target { "_target" } else { "" });
@@ -163,10 +161,7 @@ pub(crate) fn evaluate_effect(
                 .as_mut()
                 .ok_or("reactive graph unavailable")?
                 .signal(name.clone(), value.clone());
-            state.property_signals.insert(key, signal);
-            if !target {
-                state.current_property_names.insert(name, (node, property));
-            }
+            state.tracking.track_property(key, signal, name);
             state.reactive.values.insert(signal, value);
             state.reactive.signals.push(signal);
             signal

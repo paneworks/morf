@@ -300,8 +300,7 @@ pub(crate) fn install_retention_api<'gc>(
                 {
                     return Err(HostError("effect owner is a removed node".to_owned()).into());
                 }
-                let token = state.next_effect;
-                state.next_effect = state.next_effect.wrapping_add(1);
+                let token = state.tracking.next_effect_token();
                 state.reactive.effects.insert(
                     token,
                     LuaEffect {

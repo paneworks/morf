@@ -57,7 +57,7 @@ pub(crate) fn run_destroyed_hooks(
             return;
         }
         state.running_destroyed = true;
-        state.handler_depth += 1;
+        state.tracking.enter_handler();
     }
     loop {
         let hooks = std::mem::take(&mut state.borrow_mut().pending_destroyed);
@@ -75,8 +75,7 @@ pub(crate) fn run_destroyed_hooks(
     let flush = {
         let mut state = state.borrow_mut();
         state.running_destroyed = false;
-        state.handler_depth = state.handler_depth.saturating_sub(1);
-        state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)
+        state.tracking.leave_handler()
     };
     if flush {
         let _ = flush_reactive(state, ctx, limits);

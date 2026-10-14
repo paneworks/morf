@@ -32,6 +32,7 @@ pub mod shared;
 pub mod shortcuts;
 pub mod states;
 pub mod timers;
+pub mod tracking;
 pub mod views;
 pub mod wake;
 pub mod windows;

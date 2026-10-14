@@ -89,18 +89,9 @@ impl Engine {
         // its properties' reads: the graph forgets both, or every one of them
         // keeps re-running and growing for the life of the shell.
         self.reactive.forget_effects_of(&removed);
-        let dead_signals = self
-            .property_signals
-            .iter()
-            .filter(|((node, _, _), _)| removed.contains(node))
-            .map(|(_, signal)| *signal)
-            .collect::<HashSet<_>>();
+        let dead_signals = self.tracking.forget_nodes(&removed);
         self.reactive.forget_signals(dead_signals);
         self.collect_graph_garbage();
-        self.property_signals
-            .retain(|(node, _, _), _| !removed.contains(node));
-        self.current_property_names
-            .retain(|_, (node, _)| !removed.contains(node));
         let windows = &mut self.windows;
         windows.window_surfaces_changed |= crate::layout::forget_windows_of(
             &removed,

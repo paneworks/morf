@@ -21,7 +21,7 @@ use crate::{
 /// Notes that the running binding read `model`.
 pub(crate) fn track_model_read(state: &mut ReactiveState, model: &Rc<RefCell<ListModel>>) {
     let signal = state.model_revisions.signal(model);
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking.capture() {
         match signal {
             Some(signal) => {
                 active.reads.insert(signal);
@@ -68,7 +68,7 @@ pub(crate) fn bump_model_revision(
     let Some((signal, value)) = state.model_revisions.bump(model) else {
         return Ok(false);
     };
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking.capture() {
         active.writes.push((signal, value.clone()));
     } else {
         state
@@ -78,7 +78,7 @@ pub(crate) fn bump_model_revision(
             .ok_or_else(|| "reactive graph is already running".to_owned())?
             .write(signal, value.clone())
             .map_err(|error| error.to_string())?;
-        state.flush_pending = true;
+        state.tracking.defer_flush();
     }
     state.reactive.values.insert(signal, value);
     Ok(true)
@@ -96,10 +96,10 @@ pub(crate) fn model_changed(
     let flush = {
         let mut state = state.borrow_mut();
         let bumped = bump_model_revision(&mut state, model)?;
-        bumped && state.active.is_none() && state.handler_depth == 0
+        bumped && !state.tracking.capturing() && !state.tracking.in_handler()
     };
     if flush {
-        state.borrow_mut().flush_pending = false;
+        state.borrow_mut().tracking.cancel_flush();
         flush_reactive(state, ctx, limits)?;
     }
     Ok(())

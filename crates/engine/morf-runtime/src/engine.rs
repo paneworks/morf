@@ -34,8 +34,9 @@ pub struct CustomLayoutFns {
 pub struct Engine {
     /// The graph, the signal mirror, the declared effects and the flush.
     pub reactive: crate::reactive::Reactive,
-    pub property_signals: HashMap<(NodeHandle, String, bool), SignalId>,
-    pub current_property_names: HashMap<String, (NodeHandle, String)>,
+    /// The handlers on the stack, the effect being captured, and the signals
+    /// standing for node properties.
+    pub tracking: crate::tracking::Tracking,
     /// How far the scene has moved, and how far each reader of it has seen.
     pub revisions: crate::reactive::Revisions,
     /// Each list model a binding has read, by address, with the revision
@@ -57,14 +58,6 @@ pub struct Engine {
     pub density: morf_value::density::Density,
     /// Whether `density` changed since the host last took it.
     pub density_changed: bool,
-    pub next_effect: u64,
-    pub active: Option<crate::states::Capture>,
-    /// How many handlers are on the stack. While one runs, a write marks the
-    /// graph dirty and nothing more; the one flush happens when the outermost
-    /// handler returns.
-    pub handler_depth: u32,
-    /// Whether something wrote while a handler was running.
-    pub flush_pending: bool,
     pub logs: crate::log::Log,
     /// The session lock, the primary duty and the output list's revision.
     pub session: crate::session::Session,
@@ -83,7 +76,6 @@ pub struct Engine {
     pub modifier_tap: Option<u32>,
     /// Presses under way that may become gestures.
     pub gestures: crate::gestures::Gestures,
-    pub effect_runs: u64,
     /// Each node's handler for each event, and the `contains_pointer` watches.
     pub events: crate::events::Events,
     pub states: HashMap<NodeHandle, crate::states::StateSet>,
@@ -142,8 +134,7 @@ impl Engine {
                 signals: vec![clocks.seconds, clocks.minutes, clocks.hours, session_lock],
                 ..crate::reactive::Reactive::new(graph)
             },
-            property_signals: HashMap::new(),
-            current_property_names: HashMap::new(),
+            tracking: Default::default(),
             revisions: Default::default(),
             model_revisions: Default::default(),
             shared: Default::default(),
@@ -154,10 +145,6 @@ impl Engine {
             capabilities: Vec::new(),
             density: Default::default(),
             density_changed: false,
-            next_effect: 0,
-            active: None,
-            handler_depth: 0,
-            flush_pending: false,
             logs: Default::default(),
             session: crate::session::Session::new(session_lock),
             clocks,
@@ -168,7 +155,6 @@ impl Engine {
             shortcut_pending: Default::default(),
             modifier_tap: None,
             gestures: Default::default(),
-            effect_runs: 0,
             events: Default::default(),
             states: HashMap::new(),
             ipc_handlers: HashMap::new(),
@@ -217,8 +203,8 @@ mod tests {
         assert_eq!(engine.reactive.signals.len(), 4);
         assert!(engine.reactive.values.contains_key(&engine.session.lock));
         assert!(engine.scene.roots().is_empty());
-        assert_eq!(engine.handler_depth, 0);
-        assert!(!engine.flush_pending);
+        assert!(!engine.tracking.in_handler());
+        assert!(!engine.tracking.flush_pending());
     }
 
     #[test]

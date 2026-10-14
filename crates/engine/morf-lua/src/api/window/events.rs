@@ -108,7 +108,7 @@ pub(crate) fn window_size_field<'gc>(
     } else {
         (size.height, size.size.1)
     };
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking.capture() {
         active.reads.insert(signal);
     }
     Some(LuaValue::Integer(i64::from(value)))

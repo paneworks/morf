@@ -348,7 +348,7 @@ pub(crate) fn assign_engine_relation<'gc>(
         }
     }
     state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
-    state.flush_pending = true;
+    state.tracking.defer_flush();
     Ok(())
 }
 

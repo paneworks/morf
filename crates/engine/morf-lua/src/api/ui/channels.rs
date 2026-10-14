@@ -149,7 +149,7 @@ fn watch(state: &mut ReactiveState, channel: &Arc<Channel>) -> Result<SignalId, 
 }
 
 fn track(state: &Rc<StateCell<ReactiveState>>, signal: SignalId) {
-    if let Some(active) = &mut state.borrow_mut().active {
+    if let Some(active) = state.borrow_mut().tracking.capture() {
         active.reads.insert(signal);
     }
 }

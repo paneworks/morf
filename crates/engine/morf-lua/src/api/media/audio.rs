@@ -129,7 +129,7 @@ fn object_id(value: LuaValue<'_>, what: &str) -> Result<u32, HostError> {
 
 /// Reads a signal, telling a running binding it depends on it.
 fn track(state: &mut ReactiveState, id: SignalId) -> Option<IpcValue> {
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking.capture() {
         active.reads.insert(id);
     }
     state.reactive.values.get(&id).cloned()

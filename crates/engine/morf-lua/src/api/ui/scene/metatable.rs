@@ -65,7 +65,7 @@ pub(crate) fn node_metatable<'gc>(
         // about, each time the pointer moves; asking enrols the node.
         if key == CONTAINS_POINTER {
             let mut state = read_state.borrow_mut();
-            if let Some(active) = &mut state.active {
+            if let Some(active) = state.tracking.capture() {
                 active
                     .property_reads
                     .insert((node.handle, CONTAINS_POINTER.to_owned(), false));
@@ -104,7 +104,7 @@ pub(crate) fn node_metatable<'gc>(
         // the node had a parent settles once it has.
         if key == "effective_direction" {
             let mut state = read_state.borrow_mut();
-            if let Some(active) = &mut state.active {
+            if let Some(active) = state.tracking.capture() {
                 active
                     .property_reads
                     .insert((node.handle, LAYOUT_SIZE.to_owned(), false));
@@ -121,7 +121,7 @@ pub(crate) fn node_metatable<'gc>(
             && matches!(axis, "x" | "y" | "width" | "height")
         {
             let mut state = read_state.borrow_mut();
-            if let Some(active) = &mut state.active {
+            if let Some(active) = state.tracking.capture() {
                 let which = if matches!(axis, "x" | "y") {
                     LAYOUT_POSITION
                 } else {
@@ -159,8 +159,8 @@ pub(crate) fn node_metatable<'gc>(
                 return Err(HostError(format!("unknown node property `{key}`")).into());
             }
             let property_key = (node.handle, property.to_owned(), target);
-            let signal = state.property_signals.get(&property_key).copied();
-            if let Some(active) = &mut state.active {
+            let signal = state.tracking.property_signal(&property_key);
+            if let Some(active) = state.tracking.capture() {
                 if let Some(signal) = signal {
                     active.reads.insert(signal);
                 } else {

@@ -106,7 +106,7 @@ pub(crate) fn track_clock_dependency(
     }
     let mut state = state.borrow_mut();
     let clock = state.clock_signal(precision);
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking.capture() {
         active.reads.insert(clock);
     }
 }

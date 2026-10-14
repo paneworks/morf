@@ -73,18 +73,17 @@ pub(super) fn window_metatable<'gc>(
                 crate::window_events::destroy_window_surface(&mut state.borrow_mut(), surface.id);
             crate::reactive_bindings::run_destroyed_hooks(&state, ctx, limits);
             if let Some(callback) = on_closed {
-                state.borrow_mut().handler_depth += 1;
+                state.borrow_mut().tracking.enter_handler();
                 let result =
                     crate::reactive_execute::execute_handler_args(ctx, &callback, &[], limits);
                 let mut guard = state.borrow_mut();
-                guard.handler_depth = guard.handler_depth.saturating_sub(1);
+                let flush = guard.tracking.leave_handler();
                 if let Err(message) = result {
                     guard.log(
                         LogLevel::Warn,
                         format!("window {} on_closed: {message}", surface.id),
                     );
                 }
-                let flush = guard.handler_depth == 0 && std::mem::take(&mut guard.flush_pending);
                 drop(guard);
                 if flush {
                     let _ = crate::reactive_bindings::flush_reactive(&state, ctx, limits);
