@@ -138,8 +138,8 @@ pub(crate) fn apply_state(
     let (definition, old, transition) = {
         let state = state.borrow();
         let set = state
-            .states
-            .get(&node)
+            .states()
+            .get(node)
             .ok_or_else(|| format!("node has no states for `{name}`"))?;
         let definition = set
             .definitions
@@ -217,11 +217,9 @@ pub(crate) fn apply_state(
         }
     }
     // A binding above may have removed the node, and its states with it.
-    let set = state
-        .states
-        .get_mut(&node)
-        .ok_or_else(|| format!("node lost its states while entering `{name}`"))?;
-    set.current = Some(name.to_owned());
+    if !state.states_mut().enter(node, name) {
+        return Err(format!("node lost its states while entering `{name}`"));
+    }
     Ok(())
 }
 

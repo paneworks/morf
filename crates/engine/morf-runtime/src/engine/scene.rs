@@ -68,7 +68,7 @@ impl Engine {
         let removed = nodes.into_iter().collect::<HashSet<_>>();
         for node in &removed {
             self.retained.forget(node);
-            self.states.remove(node);
+            self.states.forget(node);
             self.views.remove(node);
             self.linked_texts.remove(node);
             self.shortcuts.forget(node);

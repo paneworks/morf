@@ -17,6 +17,7 @@ use morf_value::IpcValue;
 
 use crate::Handler;
 
+mod access;
 mod queries;
 mod scene;
 mod services;
@@ -67,7 +68,8 @@ pub struct Engine {
     pub gestures: crate::gestures::Gestures,
     /// Each node's handler for each event, and the `contains_pointer` watches.
     pub events: crate::events::Events,
-    pub states: HashMap<NodeHandle, crate::states::StateSet>,
+    /// Each node's declared states.
+    states: crate::states::States,
     pub ipc_handlers: HashMap<String, Handler>,
     pub views: crate::views::Views,
     /// Every timer and `Timer` node, and the clock they run on.
@@ -131,7 +133,7 @@ impl Engine {
             shortcuts: Default::default(),
             gestures: Default::default(),
             events: Default::default(),
-            states: HashMap::new(),
+            states: Default::default(),
             ipc_handlers: HashMap::new(),
             views: HashMap::new(),
             timers: Default::default(),

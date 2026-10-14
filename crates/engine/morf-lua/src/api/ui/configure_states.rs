@@ -153,7 +153,7 @@ pub(crate) fn configure_states<'gc>(
     } else if !matches!(transitions, LuaValue::Nil) {
         return Err("transitions must be an array table".into());
     }
-    state.borrow_mut().states.insert(
+    state.borrow_mut().states_mut().declare(
         node,
         StateSet {
             definitions,
