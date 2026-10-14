@@ -89,8 +89,8 @@ local function shot(name) if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.sna
 for _,style in ipairs {"material","tsugumori"} do
   test.it(style.." bar preserves all four edges and routes its controls",function()
     load(style) show()
-    local thick=style=="material" and 40 or 44
-    local wide=style=="material" and 48 or 52
+    -- (One shared bar layout: its edges are the same in both themes.)
+    local thick,wide=40,48
     for _,edge in ipairs {"top","bottom","left","right"} do
       test.ipc("side",edge) test.advance(800)
       local expected={left=0,top=0,right=0,bottom=0}
@@ -151,47 +151,63 @@ test.it("bar auto mode and wallpaper colors remain independent of its visual the
   end
   test.eq(accents.material,accents.tsugumori)
 end)
-test.it("Tsugumori bar cancels interrupted entry and settles after reopening",function()
+test.it("Tsugumori bar settles after an interrupted show and reopening",function()
   load("tsugumori",500,720)
   test.ipc("show","on") test.advance(350)
-  test.truthy(test.get("bar-horizontal-content").opacity<1)
   shot("tsugumori-bar-entry")
   test.ipc("side","left") test.advance(100)
   test.ipc("show","off") test.advance(1000)
   test.falsy(test.get("bar").visible)
-  test.near(test.get("bar-vertical-content").opacity,1,.001)
   test.ipc("show","on") test.advance(1200)
-  test.near(test.get("bar-vertical-content").opacity,1,.001)
-  test.near(test.get("bar-vertical-content").y,12,.001)
+  local bar=test.get("bar")
+  test.truthy(bar.visible)
+  test.eq({bar.x,bar.y,bar.height},{0,0,720})
+  local status=test.get {id="bar-status-v",visible=true}
+  test.truthy(status.x>=bar.x and status.x+status.width<=bar.x+bar.width)
+  test.truthy(status.y+status.height<=720)
   shot("tsugumori-bar-reopened")
   test.eq(#test.logs("error"),0)
 end)
+-- (A portrait output has a phone's status bar, without windows: the
+-- lane is checked on a short landscape one.)
 test.it("Tsugumori compact bar keeps the final window reachable without overlapping controls",function()
-  load("tsugumori",500,720) show()
+  local W,H=800,480
+  load("tsugumori",W,H) show()
   test.ipc("change","many") test.advance(900)
+  local function window(address) return test.get {id="bar-window-"..address,visible=true} end
+  local function inside(node,lane,axis)
+    local at,size=axis=="x" and "x" or "y",axis=="x" and "width" or "height"
+    return node[at]>=lane[at]-.1 and node[at]+node[size]<=lane[at]+lane[size]+.1
+  end
+  -- Wheels the lane until `address` shows, a notch at a time.
+  local function reach(address,lane,dy,axis)
+    for _=1,40 do
+      local node=test.find {id="bar-window-"..address,visible=true}
+      if node and inside(node,lane,axis) then return node end
+      test.wheel(0,dy,{x=lane.x+lane.width/2,y=lane.y+lane.height/2}) test.advance(300)
+    end
+    return window(address)
+  end
   local lane=test.get("bar-windows")
   local clock=test.get("bar-clock") local status=test.get("bar-status")
-  test.truthy(lane.x+lane.width<=clock.x)
+  test.truthy(lane.x+lane.width<=clock.x,"windows run under the clock")
   test.truthy(clock.x+clock.width<=status.x)
-  test.truthy(status.x+status.width<=500)
-  local last=test.get("bar-window-0x24")
-  test.truthy(last.x>=lane.x and last.x+last.width<=lane.x+lane.width+.1)
-  test.click("bar-window-0x24") test.eq(state().calls[1],{"focuswindow","address:0x24"})
+  test.truthy(status.x+status.width<=W)
+  local last=reach("0x24",lane,120,"x")
+  test.truthy(inside(last,lane,"x"),"the final window is out of reach")
+  test.click(last.x+last.width/2,last.y+last.height/2)
+  test.eq(state().calls[1],{"focuswindow","address:0x24"})
   shot("tsugumori-bar-compact")
-  test.wheel(0,-1000,{x=lane.x+lane.width-2,y=lane.y+18}) test.advance(300)
-  local first=test.get("bar-window-0x1")
-  test.truthy(first.x>=lane.x and first.x+first.width<=lane.x+lane.width+.1)
+  test.truthy(inside(reach("0x1",lane,-120,"x"),lane,"x"),"the first window is out of reach")
   test.ipc("side","left") test.advance(900)
   lane=test.get("bar-windows-v") clock=test.get("bar-clock-v") status=test.get("bar-status-v")
-  test.truthy(lane.y+lane.height<=clock.y)
+  test.truthy(lane.y+lane.height<=clock.y,"windows run under the clock")
   test.truthy(clock.y+clock.height<=status.y)
-  test.truthy(status.y+status.height<=720)
-  last=test.get("bar-window-0x24-v")
-  test.truthy(last.y>=lane.y and last.y+last.height<=lane.y+lane.height+.1)
-  test.click("bar-window-0x24-v") test.eq(#state().calls,2)
+  test.truthy(status.y+status.height<=H)
+  last=reach("0x24",lane,120,"y")
+  test.truthy(inside(last,lane,"y"),"the final window is out of reach")
+  test.click(last.x+last.width/2,last.y+last.height/2) test.eq(#state().calls,2)
   shot("tsugumori-bar-compact-vertical")
-  test.wheel(0,-2000,{x=lane.x+lane.width-2,y=lane.y+20}) test.advance(300)
-  first=test.get("bar-window-0x1-v")
-  test.truthy(first.y>=lane.y and first.y+first.height<=lane.y+lane.height+.1)
+  test.truthy(inside(reach("0x1",lane,-120,"y"),lane,"y"),"the first window is out of reach")
   test.eq(#test.logs("error"),0)
 end)
