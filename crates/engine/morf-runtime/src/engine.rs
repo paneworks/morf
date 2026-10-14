@@ -46,7 +46,7 @@ pub struct Engine {
     /// The session lock, the primary duty and the output list's revision.
     pub session: crate::session::Session,
     /// `morf.clock` and its coarser grains.
-    pub clocks: crate::wake::Clocks,
+    clocks: crate::wake::Clocks,
     pub scene: Scene,
     /// Every text input's editing, and which has the keyboard.
     pub editing: crate::editing::Editing,

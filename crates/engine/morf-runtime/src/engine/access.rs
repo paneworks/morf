@@ -32,4 +32,6 @@ subsystems! {
     model_revisions, model_revisions_mut: crate::models::ModelRevisions;
     /// The shell's log lines.
     logs, logs_mut: crate::log::Log;
+    /// `morf.clock` and its coarser grains.
+    clocks, clocks_mut: crate::wake::Clocks;
 }

@@ -24,15 +24,11 @@ impl Runtime {
     /// no time is pure cost.
     pub fn update_clock(&mut self, value: impl Into<String>) -> Result<bool, Error> {
         let before = self.reactive.borrow().engine.revisions.mark();
-        let changed = {
-            let mut state = self.reactive.borrow_mut();
-            let state = &mut *state;
-            state
-                .engine
-                .clocks
-                .update(&mut state.engine.reactive, value.into())
-                .map_err(Error::Runtime)?
-        };
+        let changed = self
+            .reactive
+            .borrow_mut()
+            .update_clocks(value.into())
+            .map_err(Error::Runtime)?;
         if changed {
             self.lua
                 .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))

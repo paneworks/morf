@@ -16,4 +16,10 @@ impl Engine {
         self.model_revisions
             .signal_or_make(&mut self.reactive, model)
     }
+
+    /// Writes the time ("HH:MM:SS") to the clocks whose grain turned over.
+    /// Returns whether any did.
+    pub fn update_clocks(&mut self, time: String) -> Result<bool, String> {
+        self.clocks.update(&mut self.reactive, time)
+    }
 }
