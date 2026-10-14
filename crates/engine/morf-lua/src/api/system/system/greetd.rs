@@ -90,18 +90,8 @@ pub(super) fn install_greetd<'gc>(
     let greetd_on_message = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (session, callback): (UserRef<GreetdSessionToken>, Closure) = stack.consume(ctx)?;
         let mut state = converse_state.borrow_mut();
-        let entry = PendingGreetdSession {
-            conversation: Rc::clone(&session.conversation),
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
-        };
-        let existing = state
-            .greetd_sessions
-            .iter()
-            .position(|entry| Rc::ptr_eq(&entry.conversation, &session.conversation));
-        match existing {
-            Some(index) => state.greetd_sessions[index] = entry,
-            None => state.greetd_sessions.push(entry),
-        }
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        state.auth.listen_to_greetd(&session.conversation, callback);
         Ok(CallbackReturn::Return)
     });
     let greetd_session_respond = Callback::from_fn(&ctx, |ctx, _, mut stack| {

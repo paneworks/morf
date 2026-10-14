@@ -18,10 +18,12 @@ pub(crate) use crate::runtime::pending::*;
 pub(crate) use crate::value::tokens::*;
 pub(crate) use crate::vm::state_cell::{StateCell, StateRef, StateRefMut};
 
+mod auth;
 mod dbus;
 mod follow;
 mod methods;
 
+pub(crate) use auth::Auth;
 pub(crate) use dbus::DbusState;
 
 pub(crate) use follow::apply_follows;
@@ -88,9 +90,8 @@ pub(crate) struct ReactiveState {
     pub(crate) screencopy_saves: HashMap<u64, crate::runtime::image_jobs::CaptureSave>,
     /// `morf.image` work on its way through the worker pool.
     pub(crate) image_jobs: crate::runtime::image_jobs::ImageJobs,
-    pub(crate) pam_tasks: Vec<PendingPam>,
-    pub(crate) pam_sessions: Vec<PendingPamSession>,
-    pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
+    /// `morf.pam` checks and conversations, and greetd logins.
+    pub(crate) auth: Auth,
     /// The list model's metatable, kept so a list inside `morf.state` is
     /// the same kind of object as `morf.list_model` makes.
     pub(crate) model_metatable: Option<luna::StashedTable>,

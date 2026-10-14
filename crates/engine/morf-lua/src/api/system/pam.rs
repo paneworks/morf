@@ -44,16 +44,17 @@ pub(crate) fn install_pam_api<'gc>(
                 Closure,
                 Option<String>,
             ) = stack.consume(ctx)?;
-            pam_state.borrow_mut().pam_tasks.push(PendingPam {
-                task: PamAuthenticator::authenticate_async(
-                    &service,
-                    &username,
-                    secret(password),
-                    confdir.as_deref(),
-                ),
-                callback: crate::vm::handler_store::register(ctx.stash(callback)),
-                unlock_on_success,
-            });
+            let task = PamAuthenticator::authenticate_async(
+                &service,
+                &username,
+                secret(password),
+                confdir.as_deref(),
+            );
+            let callback = crate::vm::handler_store::register(ctx.stash(callback));
+            pam_state
+                .borrow_mut()
+                .auth
+                .check(task, callback, unlock_on_success);
             Ok(CallbackReturn::Return)
         });
         pam.set_field(ctx, name, entry);
@@ -64,23 +65,13 @@ pub(crate) fn install_pam_api<'gc>(
     let session_on_message = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (session, callback): (UserRef<PamSessionToken>, Closure) = stack.consume(ctx)?;
         let mut state = on_message_state.borrow_mut();
-        if state.pam_sessions.len() >= MAX_PAM_SESSIONS {
+        if state.auth.session_count() >= MAX_PAM_SESSIONS {
             return Err(HostError("PAM session limit reached".into()).into());
         }
         // One listener per session, replacing rather than adding: two
         // listeners answering one prompt is one answer thrown away.
-        let existing = state
-            .pam_sessions
-            .iter()
-            .position(|entry| Rc::ptr_eq(&entry.session, &session.session));
-        let entry = PendingPamSession {
-            session: Rc::clone(&session.session),
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
-        };
-        match existing {
-            Some(index) => state.pam_sessions[index] = entry,
-            None => state.pam_sessions.push(entry),
-        }
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        state.auth.listen_to_session(&session.session, callback);
         Ok(CallbackReturn::Return)
     });
     let session_respond = Callback::from_fn(&ctx, |ctx, _, mut stack| {

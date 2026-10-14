@@ -6,17 +6,7 @@ use super::*;
 
 /// Takes the PAM authentications that have finished.
 pub(super) fn collect_pam_results(state: &mut ReactiveState, collected: &mut Collected) {
-    let ready = &mut collected.ready;
-    let mut index = 0;
-    while index < state.pam_tasks.len() {
-        let result = state.pam_tasks[index].task.wait(Duration::ZERO);
-        if let Some(result) = result {
-            let task = state.pam_tasks.swap_remove(index);
-            ready.push((task.callback, task.unlock_on_success, result));
-        } else {
-            index += 1;
-        }
-    }
+    collected.ready.extend(state.auth.take_verdicts());
 }
 
 /// Takes what every other source has for this turn.
@@ -60,39 +50,9 @@ pub(super) fn drain(state: &mut ReactiveState, collected: &mut Collected) {
     dbus_signals.extend(state.dbus.take_signals());
     dbus_replies.extend(state.dbus.take_replies());
     // A conversation says a few things per turn and then waits on a
-    // person, so this never runs long. A finished session leaves the
-    // list after its verdict is delivered, which is why the verdict is
-    // collected first and the removal follows it.
-    state.pam_sessions.retain(|entry| {
-        let mut finished = false;
-        for _ in 0..8 {
-            let Some(event) = entry.session.borrow_mut().next(Duration::ZERO) else {
-                break;
-            };
-            finished |= matches!(event, PamEvent::Finished(_));
-            pam_messages.push((entry.callback.clone(), event));
-            if finished {
-                break;
-            }
-        }
-        !finished
-    });
-    // The same for a greetd login: a few replies per turn, then a
-    // wait on greetd, or on a person greetd is waiting on.
-    state.greetd_sessions.retain(|entry| {
-        let mut conversation = entry.conversation.borrow_mut();
-        for _ in 0..8 {
-            let Some(event) = conversation.next(Duration::ZERO) else {
-                break;
-            };
-            let last = matches!(event, GreetdEvent::Failed(_));
-            greetd_messages.push((entry.callback.clone(), event));
-            if last {
-                break;
-            }
-        }
-        !conversation.ended()
-    });
+    // person, so this never runs long.
+    pam_messages.extend(state.auth.take_session_messages());
+    greetd_messages.extend(state.auth.take_greetd_messages());
     // Bounded per frame (`morf_io::MAX_CALLS_PER_FRAME`): the caller is
     // blocked until we answer.
     dbus_calls.extend(state.dbus.drain_calls());
