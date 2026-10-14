@@ -36,6 +36,8 @@ mod capture;
 mod clear_pipeline;
 pub mod dmabuf;
 mod dmabuf_acquire;
+#[cfg(test)]
+mod dmabuf_ring_tests;
 mod field_pass;
 mod glyph_batch;
 mod glyphs;
@@ -51,6 +53,7 @@ mod lcd_tests;
 mod pipelines;
 mod present;
 mod present_link;
+mod present_stalls;
 #[cfg(test)]
 mod present_tests;
 mod profile;
@@ -63,6 +66,7 @@ mod warm;
 
 pub use backend_init::opened_device_count;
 pub use backend_types::*;
+pub use present_stalls::{PresentStalls, present_stalls};
 #[cfg(test)]
 mod backdrop_tests;
 #[cfg(test)]

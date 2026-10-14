@@ -264,10 +264,13 @@ impl BufferLink {
                     None,
                     vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                 ),
-                Err(_) => {
+                Err(error) => {
                     // Waited for here instead; it is almost always done.
+                    fallback_once(&SEMAPHORE_FALLBACK, || {
+                        format!("the driver would not import a fence ({error})")
+                    });
                     let fence = unsafe { OwnedFd::from_raw_fd(fd) };
-                    wait_signalled(&fence, 1000);
+                    wait_signalled(&fence, FENCE_WAIT_MS);
                 }
             }
         }
@@ -294,12 +297,25 @@ impl BufferLink {
                 if !import_sync_file(link.image.plane.fd.as_raw_fd(), &fence) {
                     // A kernel without the import: the compositor would read
                     // a frame half drawn, so it is waited for here instead.
-                    wait_signalled(&fence, 1000);
+                    fallback_once(&IMPORT_FALLBACK, || {
+                        format!(
+                            "the kernel refused DMA_BUF_IOCTL_IMPORT_SYNC_FILE ({})",
+                            std::io::Error::last_os_error()
+                        )
+                    });
+                    wait_signalled(&fence, FENCE_WAIT_MS);
                 }
             }
             Ok(_) => {}
             Err(_) => {
-                let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+                super::present_stalls::count(&super::present_stalls::FENCE_WAITS);
+                let waited = self.device.poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: Some(std::time::Duration::from_millis(FENCE_WAIT_MS as u64)),
+                });
+                if waited.is_err() {
+                    super::present_stalls::count(&super::present_stalls::FENCE_TIMEOUTS);
+                }
             }
         }
         if super::present::log_wanted() {
@@ -337,10 +353,26 @@ impl Drop for BufferLink {
 }
 
 const DMA_BUF_SYNC_WRITE: u32 = 2;
-/// `_IOWR('b', 2, struct dma_buf_export_sync_file)`.
-const DMA_BUF_IOCTL_EXPORT_SYNC_FILE: u64 = 0xC008_6202;
+/// The longest a fence is waited for on the CPU before the frame goes out.
+const FENCE_WAIT_MS: i32 = 1000;
+/// `_IOWR('b', 2, struct dma_buf_export_sync_file)`. Neither libc nor rustix
+/// names the sync-file ioctls, so they are encoded with libc's own macros.
+const DMA_BUF_IOCTL_EXPORT_SYNC_FILE: libc::Ioctl = libc::_IOWR::<SyncFileArgument>(b'b' as u32, 2);
 /// `_IOW('b', 3, struct dma_buf_import_sync_file)`.
-const DMA_BUF_IOCTL_IMPORT_SYNC_FILE: u64 = 0x4008_6203;
+const DMA_BUF_IOCTL_IMPORT_SYNC_FILE: libc::Ioctl = libc::_IOW::<SyncFileArgument>(b'b' as u32, 3);
+
+static SEMAPHORE_FALLBACK: std::sync::Once = std::sync::Once::new();
+static IMPORT_FALLBACK: std::sync::Once = std::sync::Once::new();
+
+/// Says once per process that a fence is being waited for on the CPU.
+fn fallback_once(said: &std::sync::Once, why: impl FnOnce() -> String) {
+    said.call_once(|| {
+        eprintln!(
+            "morf: gpu: {}; waiting for frames on the CPU instead",
+            why()
+        )
+    });
+}
 
 #[repr(C)]
 struct SyncFileArgument {
@@ -355,7 +387,7 @@ fn export_sync_file(dmabuf: RawFd, flags: u32) -> Option<OwnedFd> {
     let status = unsafe {
         libc::ioctl(
             dmabuf,
-            DMA_BUF_IOCTL_EXPORT_SYNC_FILE as _,
+            DMA_BUF_IOCTL_EXPORT_SYNC_FILE,
             &mut argument as *mut SyncFileArgument,
         )
     };
@@ -372,7 +404,7 @@ fn import_sync_file(dmabuf: RawFd, fence: &OwnedFd) -> bool {
     let status = unsafe {
         libc::ioctl(
             dmabuf,
-            DMA_BUF_IOCTL_IMPORT_SYNC_FILE as _,
+            DMA_BUF_IOCTL_IMPORT_SYNC_FILE,
             &mut argument as *mut SyncFileArgument,
         )
     };
@@ -384,7 +416,20 @@ fn signalled(fence: &OwnedFd) -> bool {
 }
 
 fn wait_signalled(fence: &OwnedFd, milliseconds: i32) {
-    poll_fence(fence, milliseconds);
+    use super::present_stalls::{FENCE_TIMEOUTS, FENCE_WAITS, count};
+    count(&FENCE_WAITS);
+    if !poll_fence(fence, milliseconds) {
+        count(&FENCE_TIMEOUTS);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_sync_file_ioctls_encode_as_the_kernel_defines_them() {
+        assert_eq!(super::DMA_BUF_IOCTL_EXPORT_SYNC_FILE as u64, 0xC008_6202);
+        assert_eq!(super::DMA_BUF_IOCTL_IMPORT_SYNC_FILE as u64, 0x4008_6203);
+    }
 }
 
 /// A sync file polls readable once its fence has signalled.

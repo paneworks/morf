@@ -210,11 +210,13 @@ impl BufferRing {
             // handed over half as many. Not a quarter of a second either: a
             // compositor on a busy GPU held all four that long several times
             // a minute, and each time the output froze, input and all.
+            super::present_stalls::count(&super::present_stalls::RING_WAITS);
             let waited = self
                 .link
                 .as_mut()
                 .is_some_and(|link| link.wait_release(deadline));
             if !waited {
+                super::present_stalls::count(&super::present_stalls::RING_SKIPS);
                 return None;
             }
         }

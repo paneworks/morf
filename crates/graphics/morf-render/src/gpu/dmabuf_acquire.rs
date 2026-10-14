@@ -9,6 +9,10 @@ use wgpu::hal::api::Vulkan;
 
 use super::dmabuf::DmabufImage;
 
+/// How long the acquire barrier may take before the capture is dropped: a
+/// stuck compositor fence must not hold the output's loop forever.
+const ACQUIRE_TIMEOUT_NS: u64 = 100_000_000;
+
 /// Takes the image back from whoever wrote it.
 ///
 /// Memory shared across processes belongs, in Vulkan's terms, to a foreign
@@ -38,6 +42,9 @@ pub fn acquire(
         )
     }
     .map_err(|error| format!("could not create a command pool: {error}"))?;
+    // Set when the barrier is still running at the deadline: its fence and
+    // pool cannot be freed under it, so they are left to the driver.
+    let mut in_flight = false;
     let result = (|| {
         let buffer = unsafe {
             raw.allocate_command_buffers(
@@ -94,11 +101,18 @@ pub fn acquire(
             )
         };
         drop(held);
-        let waited =
-            submitted.and_then(|()| unsafe { raw.wait_for_fences(&[fence], true, u64::MAX) });
+        let waited = submitted
+            .and_then(|()| unsafe { raw.wait_for_fences(&[fence], true, ACQUIRE_TIMEOUT_NS) });
+        if waited == Err(vk::Result::TIMEOUT) {
+            in_flight = true;
+            super::present_stalls::count(&super::present_stalls::ACQUIRE_TIMEOUTS);
+            return Err("the capture was not acquired in time; frame dropped".to_owned());
+        }
         unsafe { raw.destroy_fence(fence, None) };
         waited.map_err(|error| format!("could not acquire the capture: {error}"))
     })();
-    unsafe { raw.destroy_command_pool(pool, None) };
+    if !in_flight {
+        unsafe { raw.destroy_command_pool(pool, None) };
+    }
     result
 }
