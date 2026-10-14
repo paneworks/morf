@@ -30,6 +30,36 @@ fn runaway_lua_effect_exhausts_its_own_fuel() {
 }
 
 #[test]
+fn a_failed_effect_charges_the_frame_only_what_it_ran() {
+    let mut runtime = Runtime::new(Limits {
+        effect_fuel: 1_000,
+        frame_fuel: 2_500,
+        slice_fuel: 64,
+        ..Limits::default()
+    });
+    runtime
+        .execute(
+            "effect-charge.lua",
+            br#"
+                local morf = require("morf")
+                local tick = morf.signal("tick", 0)
+                local ran = 0
+                for i = 1, 3 do
+                    morf.effect("failing" .. i, function()
+                        if tick:get() > 0 then error("nope") end
+                    end)
+                end
+                morf.effect("last", function()
+                    if tick:get() > 0 then ran = ran + 1 end
+                end)
+                tick:set(1)
+                assert(ran == 1, "the effect after three failures still ran")
+            "#,
+        )
+        .unwrap();
+}
+
+#[test]
 fn lua_builds_a_scene_tree_with_bound_properties() {
     let mut runtime = Runtime::default();
     runtime

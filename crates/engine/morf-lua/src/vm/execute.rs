@@ -44,26 +44,42 @@ pub(crate) fn drive_executor<'gc>(
     budget: u64,
     what: &str,
 ) -> Result<u64, String> {
+    let (result, spent) = drive_counted(ctx, executor, limits, budget, what);
+    result.map(|()| spent)
+}
+
+/// As [`drive_executor`], with the fuel spent whether or not the run
+/// finished: a run that failed part way used only what it ran.
+pub(crate) fn drive_counted<'gc>(
+    ctx: Context<'gc>,
+    executor: Executor<'gc>,
+    limits: Limits,
+    budget: u64,
+    what: &str,
+) -> (Result<(), String>, u64) {
     if budget == 0 {
-        return Err(format!("Lua {what} fuel exhausted"));
+        return (Err(format!("Lua {what} fuel exhausted")), 0);
     }
     let mut remaining = budget;
     loop {
         if remaining == 0 {
             executor.stop(&ctx);
-            return Err(format!(
-                "Lua {what} fuel exhausted after {budget} instructions"
-            ));
+            return (
+                Err(format!(
+                    "Lua {what} fuel exhausted after {budget} instructions"
+                )),
+                budget,
+            );
         }
         let allowance = remaining.min(limits.slice_fuel.max(1) as u64) as i32;
         let mut fuel = Fuel::with(allowance);
-        let finished = executor
-            .step(ctx, &mut fuel)
-            .map_err(|error| error.to_string())?;
+        let stepped = executor.step(ctx, &mut fuel);
         let consumed = allowance.saturating_sub(fuel.remaining()).max(0) as u64;
         remaining = remaining.saturating_sub(consumed.max(1));
-        if finished {
-            return Ok(budget - remaining);
+        match stepped {
+            Ok(true) => return (Ok(()), budget - remaining),
+            Ok(false) => {}
+            Err(error) => return (Err(error.to_string()), budget - remaining),
         }
     }
 }
@@ -216,28 +232,22 @@ pub(crate) fn execute_effect(
         return Err("Lua frame fuel exhausted".to_owned());
     }
     let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)?).into(), ());
-    match drive_executor(ctx, executor, limits, budget, "effect") {
-        Err(error) => {
-            *frame_remaining = frame_remaining.saturating_sub(budget);
-            Err(error)
+    let (driven, spent) = drive_counted(ctx, executor, limits, budget, "effect");
+    *frame_remaining = frame_remaining.saturating_sub(spent);
+    driven?;
+    if capture_value {
+        // Whatever a binding hands back goes to the property as it is: a
+        // table is a gradient, a decoration, an anchor set.
+        match executor.take_result::<LuaValue>(ctx) {
+            Ok(Ok(value)) => lua_to_scene(ctx, value, 0).map(Some),
+            Ok(Err(error)) => Err(error.to_string()),
+            Err(error) => Err(error.to_string()),
         }
-        Ok(spent) => {
-            *frame_remaining = frame_remaining.saturating_sub(spent);
-            if capture_value {
-                // Whatever a binding hands back goes to the property as it
-                // is: a table is a gradient, a decoration, an anchor set.
-                match executor.take_result::<LuaValue>(ctx) {
-                    Ok(Ok(value)) => lua_to_scene(ctx, value, 0).map(Some),
-                    Ok(Err(error)) => Err(error.to_string()),
-                    Err(error) => Err(error.to_string()),
-                }
-            } else {
-                match executor.take_result::<()>(ctx) {
-                    Ok(Ok(())) => Ok(None),
-                    Ok(Err(error)) => Err(error.to_string()),
-                    Err(error) => Err(error.to_string()),
-                }
-            }
+    } else {
+        match executor.take_result::<()>(ctx) {
+            Ok(Ok(())) => Ok(None),
+            Ok(Err(error)) => Err(error.to_string()),
+            Err(error) => Err(error.to_string()),
         }
     }
 }

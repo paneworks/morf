@@ -38,6 +38,13 @@ pub struct Limits {
     /// Maximum VM fuel granted to loading one module (`require`). A module
     /// builds what it defines -- a whole panel's nodes, a table of
     /// outlines -- which is loading's kind of work, not a handler's.
+    ///
+    /// A `require` made from a handler or an effect runs on this budget and
+    /// is not charged to the caller's: a module that loads runs once and is
+    /// cached, so what goes uncharged is bounded by this budget per module
+    /// (one that fails is run again only by the next `require` of it), and
+    /// a binding's first `require` of a real module would otherwise exhaust
+    /// an effect's budget on loading's work.
     pub module_fuel: u64,
     /// Most `ui.Terminal` nodes that may exist at once: each is a program
     /// on a pseudo-terminal and a screen with its history.
