@@ -72,7 +72,7 @@ pub struct Engine {
     /// Each node's `on_destroyed`, and those of removed nodes waiting to run.
     destroy_hooks: crate::destroy::DestroyHooks,
     /// Loaders' items and retained nodes, and the handlers told as they go.
-    pub retained: crate::retention::Retained,
+    retained:crate::retention::Retained,
     /// Each `ui.Layout` container's functions, and the texts whose links
     /// the layout places.
     layout_hooks: crate::layout::LayoutHooks,

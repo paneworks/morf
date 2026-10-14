@@ -63,4 +63,6 @@ subsystems! {
     timers, timers_mut: crate::timers::Timers;
     /// The session lock, the primary duty and the output list's revision.
     session, session_mut: crate::session::Session;
+    /// Loaders' items and retained nodes, and the handlers told as they go.
+    retained, retained_mut: crate::retention::Retained;
 }

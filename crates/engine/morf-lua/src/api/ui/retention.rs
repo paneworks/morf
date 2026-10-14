@@ -21,7 +21,7 @@ pub(crate) fn install_retention_api<'gc>(
             let retainable: UserRef<RetainableToken> = stack.consume(ctx)?;
             let locks = state
                 .borrow_mut()
-                .retained
+                .retained_mut()
                 .retention
                 .lock(retainable.node)
                 .map_err(|error| HostError(error.to_string()))?;
@@ -36,12 +36,12 @@ pub(crate) fn install_retention_api<'gc>(
             let (locks, destroy) = {
                 let mut state = state.borrow_mut();
                 let locks = state
-                    .retained
+                    .retained_mut()
                     .retention
                     .unlock(retainable.node)
                     .map_err(|error| HostError(error.to_string()))?;
                 let destroy = state
-                    .retained
+                    .retained_mut()
                     .retention
                     .should_destroy(retainable.node)
                     .unwrap_or(false);
@@ -61,12 +61,12 @@ pub(crate) fn install_retention_api<'gc>(
             let destroy = {
                 let mut state = state.borrow_mut();
                 state
-                    .retained
+                    .retained_mut()
                     .retention
                     .force_unlock(retainable.node)
                     .map_err(|error| HostError(error.to_string()))?;
                 state
-                    .retained
+                    .retained_mut()
                     .retention
                     .should_destroy(retainable.node)
                     .unwrap_or(false)
@@ -83,7 +83,7 @@ pub(crate) fn install_retention_api<'gc>(
             let retainable: UserRef<RetainableToken> = stack.consume(ctx)?;
             let retained = state
                 .borrow()
-                .retained
+                .retained()
                 .retention
                 .state(retainable.node)
                 .is_some_and(|state| state.dropped);
@@ -97,7 +97,7 @@ pub(crate) fn install_retention_api<'gc>(
             let retainable: UserRef<RetainableToken> = stack.consume(ctx)?;
             let locks = state
                 .borrow()
-                .retained
+                .retained()
                 .retention
                 .state(retainable.node)
                 .map_or(0, |state| state.locks);
@@ -143,16 +143,16 @@ pub(crate) fn install_retention_api<'gc>(
             }
             {
                 let mut state = state.borrow_mut();
-                state.retained.retention.register(node.handle);
+                state.retained_mut().retention.register(node.handle);
                 if locked {
                     state
-                        .retained
+                        .retained_mut()
                         .retention
                         .lock(node.handle)
                         .map_err(|error| HostError(error.to_string()))?;
                 }
                 state
-                    .retained
+                    .retained_mut()
                     .retain_callbacks
                     .insert(node.handle, callbacks);
             }
@@ -178,19 +178,19 @@ pub(crate) fn install_retention_api<'gc>(
                 let mut state = lock.state.borrow_mut();
                 if locked {
                     state
-                        .retained
+                        .retained_mut()
                         .retention
                         .lock(lock.node)
                         .map_err(|error| HostError(error.to_string()))?;
                     false
                 } else {
                     state
-                        .retained
+                        .retained_mut()
                         .retention
                         .unlock(lock.node)
                         .map_err(|error| HostError(error.to_string()))?;
                     state
-                        .retained
+                        .retained_mut()
                         .retention
                         .should_destroy(lock.node)
                         .unwrap_or(false)
@@ -208,7 +208,7 @@ pub(crate) fn install_retention_api<'gc>(
         let retained = lock
             .state
             .borrow()
-            .retained
+            .retained()
             .retention
             .state(lock.node)
             .is_some_and(|state| state.dropped);
@@ -234,7 +234,7 @@ pub(crate) fn install_retention_api<'gc>(
             if locked {
                 state
                     .borrow_mut()
-                    .retained
+                    .retained_mut()
                     .retention
                     .lock(retainable.node)
                     .map_err(|error| HostError(error.to_string()))?;

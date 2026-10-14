@@ -41,7 +41,7 @@ pub(crate) fn finish_retained_destroy(
     limits: Limits,
     node: NodeHandle,
 ) {
-    let callback = state.borrow().retained.about_to_destroy(node);
+    let callback = state.borrow().retained().about_to_destroy(node);
     if let Some(callback) = callback
         && let Err(error) = execute_handler_args(ctx, &callback, &[], limits)
     {
@@ -76,13 +76,7 @@ pub(crate) fn finish_node_exit(
     node: NodeHandle,
 ) {
     let destroy = {
-        let mut state = state.borrow_mut();
-        let state = &mut *state;
-        match morf_runtime::animation::exits::finish_exit(
-            &state.engine.scene,
-            &mut state.engine.retained.retention,
-            node,
-        ) {
+        match state.borrow_mut().engine.finish_exit(node) {
             Some(destroy) => destroy,
             None => return,
         }
@@ -117,7 +111,7 @@ pub(crate) fn drop_retainable(
     // exit plays first, and holds it as a lock of its own.
     let registered = {
         let state = state.borrow();
-        state.retained.retention.state(node).is_some()
+        state.retained().retention.state(node).is_some()
             && !state.animation.exit_registered.contains(&node)
     };
     let exiting = begin_node_exit(&mut state.borrow_mut(), node);
@@ -128,7 +122,7 @@ pub(crate) fn drop_retainable(
         }
         return;
     }
-    let callback = state.borrow_mut().retained.begin_drop(node);
+    let callback = state.borrow_mut().retained_mut().begin_drop(node);
     if let Some(callback) = callback
         && let Err(error) = execute_handler_args(ctx, &callback, &[], limits)
     {
@@ -136,7 +130,7 @@ pub(crate) fn drop_retainable(
             .borrow_mut()
             .log(LogLevel::Warn, format!("Retainable dropped: {error}"));
     }
-    if state.borrow().retained.should_destroy(node) {
+    if state.borrow().retained().should_destroy(node) {
         finish_retained_destroy(state, ctx, limits, node);
     }
 }

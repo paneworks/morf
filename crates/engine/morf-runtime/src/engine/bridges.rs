@@ -38,6 +38,12 @@ impl Engine {
         self.clocks.update(&mut self.reactive, time)
     }
 
+    /// Ends `node`'s exit and releases the lock it held: whether the node
+    /// is now to be destroyed, or `None` when it was not exiting.
+    pub fn finish_exit(&mut self, node: morf_scene::NodeHandle) -> Option<bool> {
+        crate::animation::exits::finish_exit(&self.scene, &mut self.retained.retention, node)
+    }
+
     /// Where the session lock stands, as last recorded.
     pub fn session_lock_state(&self) -> crate::session::SessionLockState {
         self.session.lock_state(&self.reactive)
