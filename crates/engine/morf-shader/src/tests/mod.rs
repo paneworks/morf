@@ -1,9 +1,12 @@
 mod caps;
-mod coverage;
 mod coverage_arrays;
+mod coverage_builtins;
+mod coverage_control;
+mod coverage_derivatives;
 mod coverage_host;
-mod coverage_rest;
-mod coverage_types;
+mod coverage_integers;
+mod coverage_matrices;
+mod coverage_records;
 mod diagnostics;
 mod golden;
 mod ports;
@@ -68,6 +71,15 @@ pub(crate) fn wgsl(body: &str) -> String {
             "expected this to compile:\n{}",
             report("test", &diagnostics)
         ),
+    }
+}
+
+/// The WGSL for a body expected to compile, with the shader's own name in the
+/// panic when it does not.
+pub(crate) fn emitted(name: &str, body: &str) -> String {
+    match compile_material(body) {
+        Ok(compiled) => compiled.wgsl,
+        Err(errors) => panic!("{name}:\n{}", report(name, &errors)),
     }
 }
 

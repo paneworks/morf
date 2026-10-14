@@ -1,18 +1,7 @@
 use super::*;
 
-// Arrays and indexing. Split out when `coverage_types` crossed the line gate;
-// these are the one W step whose subject is a container rather than a number.
-
-/// The WGSL for a body expected to compile, with the shader's own name in the
-/// panic when it does not.
-fn emitted(name: &str, body: &str) -> String {
-    match compile_material(body) {
-        Ok(compiled) => compiled.wgsl,
-        Err(errors) => panic!("{name}:\n{}", report(name, &errors)),
-    }
-}
-
-// W5 — arrays and indexing.
+// W5 — arrays and indexing: the one W step whose subject is a container
+// rather than a number.
 
 #[test]
 fn a_lua_list_becomes_a_fixed_length_array() {
