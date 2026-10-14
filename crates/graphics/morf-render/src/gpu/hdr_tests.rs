@@ -136,3 +136,76 @@ fn without_hdr_the_frame_stays_srgb() {
     assert_eq!(backend.encoding, Encoding::Srgb);
     assert_eq!(backend.transfer().mode, 1.0);
 }
+
+/// The swapchain's composite for `encoding` into a fresh `format` texture,
+/// read back: what a frame presented through the swapchain holds.
+fn swapchain_bytes(backend: &WgpuBackend, format: PresentFormat, encoding: Encoding) -> Vec<u8> {
+    use super::targets::{composite_view, create_composite_bind_group, create_composite_pipeline};
+    let output = format.texture_format();
+    let transfer = super::depth::transfer(backend.space, output, encoding);
+    let composite = create_composite_pipeline(&backend.device, output, transfer);
+    let source = composite_view(&backend.texture);
+    let bind_group = create_composite_bind_group(
+        &backend.device,
+        &composite.layout,
+        &source,
+        &composite.sampler,
+    );
+    let frame = backend.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("swapchain stand-in"),
+        size: backend.texture.size(),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: output,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = frame.create_view(&Default::default());
+    let mut encoder = backend.device.create_command_encoder(&Default::default());
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            ..Default::default()
+        });
+        pass.set_pipeline(&composite.pipeline);
+        pass.set_bind_group(0, &bind_group, &[]);
+        pass.draw(0..3, 0..1);
+    }
+    backend.queue.submit([encoder.finish()]);
+    backend.read_texture(&frame)
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn the_swapchain_encodes_as_the_buffers_do() {
+    use wgpu::{SurfaceColorSpaces, TextureFormat};
+    require_gpu!();
+    let offered = [
+        (TextureFormat::Rgb10a2Unorm, SurfaceColorSpaces::BT2100_PQ),
+        (
+            TextureFormat::Rgba16Float,
+            SurfaceColorSpaces::EXTENDED_SRGB_LINEAR,
+        ),
+    ];
+    for (opaque, format) in [(true, PresentFormat::Ten), (false, PresentFormat::Half)] {
+        let encoding = super::swapchain_hdr::choose(format, &offered);
+        assert!(encoding.hdr(), "{format:?}");
+        let mut backend = hdr_backend(opaque, encoding);
+        assert_eq!(backend.present, format);
+        let mut scene = morf_scene::Scene::new();
+        backend.render(&columns(&mut scene), &whole(), 120).unwrap();
+        let index = backend.ring_presented().expect("a buffer was drawn");
+        let buffer = backend.ring_bytes(index);
+        let swapchain = swapchain_bytes(&backend, format, encoding);
+        assert_eq!(buffer, swapchain, "{format:?} {encoding:?}");
+    }
+}
