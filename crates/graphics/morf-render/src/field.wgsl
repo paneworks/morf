@@ -105,7 +105,7 @@ struct VertexOutput {
 /// stage still walks the field in the node's own space, so a displaced node
 /// keeps its geometry and takes it somewhere else.
 fn morf_vertex_hook(corner: vec2<f32>, size: vec2<f32>, time: f32) -> vec2<f32> {
-    return corner;
+    return corner; // morf-hook: vertex
 }
 
 @vertex
@@ -734,7 +734,7 @@ fn morf_shader_hook(
     coverage: f32,
     base: vec4<f32>,
 ) -> vec4<f32> {
-    return base;
+    return base; // morf-hook: fill
 }
 
 /// Who decides how much of this pixel the node covers.
@@ -745,7 +745,7 @@ fn morf_shader_hook(
 /// geometry and shader stop composing there, which is inherent to the mode
 /// rather than a gap in it.
 fn morf_coverage_hook(shader_alpha: f32, filled: f32) -> f32 {
-    return filled;
+    return filled; // morf-hook: coverage
 }
 
 const TAU: f32 = 6.28318530718;

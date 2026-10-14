@@ -106,7 +106,7 @@ fn morf_sample(uv: vec2<f32>) -> vec4<f32> {
 /// costs nothing. Attaching an effect shader replaces this body with a call
 /// into the compiled one.
 fn morf_effect_hook(uv: vec2<f32>, sampled: vec4<f32>) -> vec4<f32> {
-    return sampled;
+    return sampled; // morf-hook: effect
 }
 
 @fragment

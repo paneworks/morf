@@ -23,9 +23,27 @@ pub(crate) fn shader_source(body: &str) -> String {
 pub(crate) const SHARED_SHAPES: &str = include_str!("../shape.wgsl");
 
 /// The default hook bodies, replaced when a configuration attaches a shader.
-const FILL_HOOK: &str = "    return base;";
-const COVERAGE_HOOK: &str = "    return filled;";
-const VERTEX_HOOK: &str = "    return corner;";
+///
+/// Each is a whole line carrying an explicit marker, so an edit to the WGSL
+/// around it cannot make a splice silently match nothing or the wrong line.
+pub(crate) const FILL_HOOK: &str = "    return base; // morf-hook: fill";
+pub(crate) const COVERAGE_HOOK: &str = "    return filled; // morf-hook: coverage";
+pub(crate) const VERTEX_HOOK: &str = "    return corner; // morf-hook: vertex";
+pub(crate) const EFFECT_HOOK: &str = "    return sampled; // morf-hook: effect";
+
+/// The hooks `field.wgsl` and `glyph.wgsl` must each hold exactly once.
+pub(crate) const FIELD_HOOKS: [&str; 3] = [FILL_HOOK, COVERAGE_HOOK, VERTEX_HOOK];
+pub(crate) const GLYPH_HOOKS: [&str; 1] = [EFFECT_HOOK];
+
+/// Whether every hook appears in `source` exactly once.
+pub(crate) fn hooks_intact(source: &str, hooks: &[&str]) -> bool {
+    hooks.iter().all(|hook| source.matches(hook).count() == 1)
+}
+
+/// Replaces a hook line, or `None` when the source does not hold it once.
+fn splice(source: &str, hook: &str, with: &str) -> Option<String> {
+    (source.matches(hook).count() == 1).then(|| source.replacen(hook, with, 1))
+}
 
 /// Builds the field shader with a configuration's own shader spliced in.
 ///
@@ -44,44 +62,42 @@ pub(crate) fn field_shader_source(
     vertex: Option<&str>,
 ) -> Option<String> {
     let base = shader_source(body);
+    debug_assert!(
+        hooks_intact(&base, &FIELD_HOOKS),
+        "field.wgsl must hold each hook marker exactly once"
+    );
     // A vertex displacement is spliced whether or not there is also a fragment
     // shader: moving a node and colouring it are separate things a
     // configuration may want either of.
     let base = match vertex {
         None => base,
         Some(vertex) => {
-            if !base.contains(VERTEX_HOOK) {
-                return None;
-            }
             // Both stages compile to a function called `morf_shader_main`, and
             // a module cannot hold two. The vertex one is renamed on the way
             // in, which is cheaper than teaching the compiler which stage it is
             // emitting for a second time.
             let vertex = vertex.replace("morf_shader_main", "morf_vertex_main");
-            let hooked = base.replacen(
+            let hooked = splice(
+                &base,
                 VERTEX_HOOK,
                 "    return morf_vertex_main(corner, size, time);",
-                1,
-            );
+            )?;
             format!("{vertex}\n{hooked}")
         }
     };
     let Some(shader) = shader else {
         return Some(base);
     };
-    if !base.contains(FILL_HOOK) || !base.contains(COVERAGE_HOOK) {
-        return None;
-    }
-    let mut hooked = base.replacen(
+    let mut hooked = splice(
+        &base,
         FILL_HOOK,
         "    return morf_shader_main(uv, local, coverage, base);",
-        1,
-    );
+    )?;
     if owns_coverage {
         // A surface shader decides its own alpha, so the field's coverage is
         // not consulted at all — which is what stops a shaped node and a
         // surface shader from each half-deciding what is drawn.
-        hooked = hooked.replacen(COVERAGE_HOOK, "    return shader_alpha;", 1);
+        hooked = splice(&hooked, COVERAGE_HOOK, "    return shader_alpha;")?;
     }
     Some(format!("{shader}\n{hooked}"))
 }
@@ -274,9 +290,6 @@ pub(crate) fn command_shader(command: &crate::DrawCommand) -> Option<&ShaderBind
     }
 }
 
-/// The default effect hook body, replaced when a layer carries a shader.
-const EFFECT_HOOK: &str = "    return sampled;";
-
 /// Builds the glyph shader with a configuration's effect shader spliced in.
 ///
 /// The effect shader sees what the layer already rendered and returns what
@@ -284,16 +297,54 @@ const EFFECT_HOOK: &str = "    return sampled;";
 /// was asked about rather than only at it.
 pub(crate) fn effect_shader_source(body: &str, shader: Option<&str>) -> Option<String> {
     let base = shader_source(body);
+    debug_assert!(
+        hooks_intact(&base, &GLYPH_HOOKS),
+        "glyph.wgsl must hold its hook marker exactly once"
+    );
     let Some(shader) = shader else {
         return Some(base);
     };
-    if !base.contains(EFFECT_HOOK) {
-        return None;
-    }
-    let hooked = base.replacen(
+    let hooked = splice(
+        &base,
         EFFECT_HOOK,
         "    return morf_shader_main(uv, uv, sampled.a, sampled);",
-        1,
-    );
+    )?;
     Some(format!("{shader}\n{hooked}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FIELD: &str = include_str!("../field.wgsl");
+    const GLYPH: &str = include_str!("../glyph.wgsl");
+
+    #[test]
+    fn every_hook_marker_appears_exactly_once() {
+        for hook in FIELD_HOOKS {
+            assert_eq!(FIELD.matches(hook).count(), 1, "field.wgsl: {hook}");
+        }
+        for hook in GLYPH_HOOKS {
+            assert_eq!(GLYPH.matches(hook).count(), 1, "glyph.wgsl: {hook}");
+        }
+        assert_eq!(FIELD.matches("morf-hook:").count(), FIELD_HOOKS.len());
+        assert_eq!(GLYPH.matches("morf-hook:").count(), GLYPH_HOOKS.len());
+    }
+
+    #[test]
+    fn every_hook_is_replaced_when_a_shader_is_spliced() {
+        let field = field_shader_source(FIELD, Some("// user"), true, Some("// vertex"))
+            .expect("the field hooks splice");
+        assert!(!field.contains("morf-hook:"), "{field}");
+        let glyph = effect_shader_source(GLYPH, Some("// user")).expect("the glyph hook splices");
+        assert!(!glyph.contains("morf-hook:"));
+    }
+
+    #[test]
+    fn a_missing_or_doubled_marker_refuses_to_splice() {
+        assert_eq!(splice("nothing here", FILL_HOOK, "x"), None);
+        let doubled = format!("{FILL_HOOK}\n{FILL_HOOK}");
+        assert_eq!(splice(&doubled, FILL_HOOK, "x"), None);
+        assert!(!hooks_intact(&doubled, &[FILL_HOOK]));
+    }
 }
