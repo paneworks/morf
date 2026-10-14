@@ -46,7 +46,7 @@ fn positional_from_lua<'gc>(
 
 /// Keeps a subscription for the runtime to poll, and names it for its handle.
 fn register_subscription<'gc>(
-    state: &RefCell<ReactiveState>,
+    state: &StateCell<ReactiveState>,
     ctx: Context<'gc>,
     signal: DbusSignal,
     callback: Closure<'gc>,
@@ -80,7 +80,7 @@ fn parse_bus(bus: &str) -> Result<Bus, HostError> {
 
 pub(crate) fn install_system_service_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let dbus_get = Callback::from_fn(&ctx, |ctx, _, mut stack| {

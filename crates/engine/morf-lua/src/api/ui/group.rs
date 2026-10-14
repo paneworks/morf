@@ -1,7 +1,6 @@
 use luna::{
     Callback, CallbackReturn, Context, Function, Table, UserData, UserRef, Value as LuaValue,
 };
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -23,7 +22,7 @@ pub(crate) const MAX_GROUP_DEPTH: usize = 8;
 /// the whole schedule instead of naming every property it touches.
 pub(crate) fn install_group_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let methods = Table::new(&ctx);

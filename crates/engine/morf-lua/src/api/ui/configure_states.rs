@@ -5,7 +5,6 @@
 
 use luna::{Closure, Context, Executor, Function, Table, Value as LuaValue, Variadic};
 use morf_scene::{Behavior, NodeHandle, Value as SceneValue};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
@@ -22,7 +21,7 @@ use crate::{lua_values::*, reactive_bindings::*, state::*, table_menu::*, types:
 /// state named `default`, else nothing -- in which case the node keeps the
 /// state it has.
 pub(crate) fn configure_states<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,

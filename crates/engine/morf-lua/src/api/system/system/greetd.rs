@@ -7,7 +7,7 @@ use morf_system::Zeroizing;
 /// Installs `morf.greetd`.
 pub(super) fn install_greetd<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let greetd_create = Callback::from_fn(&ctx, |ctx, _, mut stack| {

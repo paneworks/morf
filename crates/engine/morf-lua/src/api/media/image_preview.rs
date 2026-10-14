@@ -1,4 +1,5 @@
 //! Resident, asynchronous previews with explicit close and teardown cleanup.
+use crate::state::StateCell;
 use crate::{
     api_image_ops::{parse_ops, queue, source_of},
     image_jobs::ImageJob,
@@ -14,7 +15,7 @@ use std::sync::{Arc, Weak};
 pub(crate) fn install<'gc>(
     ctx: Context<'gc>,
     image: Table<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
 ) {
     let state = Rc::clone(state);
     let held = Rc::new(RefCell::new(Vec::<Weak<Preview>>::new()));

@@ -59,7 +59,6 @@ use morf_io::{
     REQUEST_DEFAULT_MAX, REQUEST_DEFAULT_TIMEOUT, REQUEST_MAX_LIMIT, RUN_DEFAULT_MAX_OUTPUT,
     SpawnOptions, StdinMode,
 };
-use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
@@ -86,7 +85,7 @@ struct IoToken(IoLink);
 /// `morf.request_socket`.
 pub(crate) fn install_io_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let write = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -305,7 +304,7 @@ pub(crate) fn install_io_api<'gc>(
 }
 
 struct Starter {
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     process_metatable: StashedTable,
     connection_metatable: StashedTable,
 }

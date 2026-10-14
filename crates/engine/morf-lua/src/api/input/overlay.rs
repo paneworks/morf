@@ -31,7 +31,7 @@
 //! `morf.overlay.close(content)` closes one, `morf.overlay.is_open(content)`
 //! asks.
 
-use std::cell::RefCell;
+use crate::state::StateCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -86,7 +86,7 @@ fn fill() -> SceneValue {
 }
 
 /// The surface's overlay layer, made the first time it is wanted.
-fn layer_of(state: &Rc<RefCell<ReactiveState>>, root: NodeHandle) -> Result<NodeHandle, String> {
+fn layer_of(state: &Rc<StateCell<ReactiveState>>, root: NodeHandle) -> Result<NodeHandle, String> {
     if let Some(layer) = state.borrow().overlays.layers.get(&root).copied()
         && state.borrow().scene.contains(layer)
     {
@@ -111,7 +111,7 @@ fn layer_of(state: &Rc<RefCell<ReactiveState>>, root: NodeHandle) -> Result<Node
 
 fn open<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     content: NodeHandle,
     options: Option<Table<'gc>>,
 ) -> Result<(), String> {
@@ -263,7 +263,7 @@ fn open<'gc>(
 /// and back. `options` as `open`'s, less the placement.
 fn track<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     content: NodeHandle,
     options: Option<Table<'gc>>,
 ) -> Result<(), String> {
@@ -347,7 +347,7 @@ fn track<'gc>(
 /// `is_open(content)`.
 pub(crate) fn install_overlay_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let overlay = Table::new(&ctx);

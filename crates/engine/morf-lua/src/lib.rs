@@ -109,6 +109,7 @@ use self::vm::harness as runtime_harness;
 use self::vm::jit as runtime_jit;
 use self::vm::loader as serialization;
 pub use self::vm::profile;
+pub use self::vm::state_cell::{StateRef, StateRefMut};
 use self::vm::types;
 use self::vm::types_gen;
 

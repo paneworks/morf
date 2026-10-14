@@ -6,7 +6,7 @@ use super::*;
 /// Installs `monitor` on `audio`.
 pub(super) fn install_monitor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     audio: Table<'gc>,
 ) {
     let function =

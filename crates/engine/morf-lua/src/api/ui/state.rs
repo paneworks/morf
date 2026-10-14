@@ -28,7 +28,7 @@ fn is_array<'gc>(ctx: Context<'gc>, table: Table<'gc>) -> bool {
 
 pub(crate) fn build<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     metatable: &luna::StashedTable,
     path: &str,
     reloadable: Option<&str>,
@@ -110,7 +110,7 @@ pub(crate) fn build<'gc>(
 
 pub(crate) fn install_state_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) {

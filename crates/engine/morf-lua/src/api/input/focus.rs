@@ -18,7 +18,7 @@
 //! `morf.focus.previous()`. Those are queued and settled at the next turn of
 //! the loop, outside whatever handler asked.
 
-use std::cell::RefCell;
+use crate::state::StateCell;
 
 use std::rc::Rc;
 
@@ -329,7 +329,7 @@ impl Runtime {
 /// `previous()`.
 pub(crate) fn install_focus_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let focus = Table::new(&ctx);

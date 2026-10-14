@@ -6,7 +6,7 @@ use super::*;
 /// Installs `morf.udev`.
 pub(super) fn install_udev<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let udev_state = Rc::clone(&state);
@@ -27,7 +27,7 @@ pub(super) fn install_udev<'gc>(
 /// Installs `morf.status_notifier`.
 pub(super) fn install_status_notifier<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let status_notifier_state = Rc::clone(&state);

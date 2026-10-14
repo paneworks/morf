@@ -17,7 +17,6 @@
 //! dismissed — `on_closed` hears it once it is gone.
 
 use luna::{Callback, CallbackReturn, Closure, Context, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
@@ -150,7 +149,7 @@ pub(crate) fn destroy_window_surface(state: &mut ReactiveState, id: u64) -> Opti
 /// sets the callback, or clears it given `nil`.
 pub(crate) fn window_handler_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     event: WindowEvent,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {

@@ -1,5 +1,4 @@
 use luna::{Context, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -36,7 +35,7 @@ pub(crate) fn remove_scene_subtree(state: &mut ReactiveState, node: NodeHandle) 
 }
 
 pub(crate) fn finish_retained_destroy(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     node: NodeHandle,
@@ -70,7 +69,7 @@ pub(crate) fn cancel_node_exit(state: &mut ReactiveState, node: NodeHandle) -> b
 /// A node whose exit has ended: its hold on it goes, and unless something
 /// else still holds it, it is removed as it would have been at once.
 pub(crate) fn finish_node_exit(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     node: NodeHandle,
@@ -95,7 +94,7 @@ pub(crate) fn finish_node_exit(
 /// Lets go of a node the way a `Loader` or a list does: through its exit,
 /// if it has one, else at once.
 pub(crate) fn let_go_of_node(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     node: NodeHandle,
@@ -108,7 +107,7 @@ pub(crate) fn let_go_of_node(
 }
 
 pub(crate) fn drop_retainable(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     node: NodeHandle,
@@ -151,7 +150,7 @@ pub(crate) fn register_reloadable_value(
 
 pub(crate) fn create_persistent_token<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     name: &str,
     defaults: Table<'gc>,
 ) -> Result<PersistentToken, String> {

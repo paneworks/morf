@@ -16,7 +16,7 @@ use crate::{
 
 pub(crate) fn install_view_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) {

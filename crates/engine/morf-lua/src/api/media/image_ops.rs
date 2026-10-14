@@ -14,9 +14,9 @@
 //! Sources are what `ui.Image` takes: a path, a `file://` URI, or the picture
 //! written inline as SVG text or a `data:` URI.
 
+use crate::state::StateCell;
 use luna::{Callback, CallbackReturn, Closure, Context, Function, Table, Value as LuaValue};
 use morf_image::ops::{self, ImageOp, OutputFormat, ProcessRequest, RegionEffect, ResizeMode};
-use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
@@ -283,7 +283,7 @@ pub(crate) fn parse_ops<'gc>(
 /// Queues a job, answering the call with `true` or `nil, message`.
 pub(crate) fn queue<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     job: ImageJob,
     callback: Option<Closure<'gc>>,
 ) -> (LuaValue<'gc>, LuaValue<'gc>) {
@@ -303,7 +303,7 @@ pub(crate) fn queue<'gc>(
 
 pub(crate) fn install_image_ops_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let image = Table::new(&ctx);

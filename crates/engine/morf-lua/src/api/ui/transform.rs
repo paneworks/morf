@@ -1,7 +1,6 @@
 use luna::{
     Callback, CallbackReturn, Context, Function, Table, UserData, UserRef, Value as LuaValue,
 };
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_layout::TransformWatcher as NativeTransformWatcher;
@@ -10,7 +9,7 @@ use crate::{runtime_helpers::*, scene_bindings::*, state::*};
 
 pub(crate) fn install_transform_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let transform_revision = Callback::from_fn(&ctx, {

@@ -11,5 +11,6 @@ pub(crate) mod harness;
 pub(crate) mod jit;
 pub(crate) mod loader;
 pub mod profile;
+pub(crate) mod state_cell;
 pub(crate) mod types;
 pub(crate) mod types_gen;

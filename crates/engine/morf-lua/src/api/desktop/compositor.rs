@@ -6,7 +6,6 @@
 //! configuration reads and requests it makes back.
 
 use luna::{Callback, CallbackReturn, Closure, Context, Table};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
@@ -18,7 +17,7 @@ use crate::{
 /// Queues one workspace request, refusing a configuration that queues
 /// hundreds in a frame: that is a loop, not a shell.
 fn push_workspace_request(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     request: WorkspaceRequest,
 ) -> Result<(), HostError> {
     let mut state = state.borrow_mut();
@@ -29,7 +28,7 @@ fn push_workspace_request(
 /// Installs `morf.workspaces`, `morf.workspace` and `morf.toplevel`.
 pub(crate) fn install_compositor_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let workspaces = Table::new(&ctx);

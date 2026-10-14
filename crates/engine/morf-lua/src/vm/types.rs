@@ -152,7 +152,7 @@ impl StdError for Error {}
 pub struct Runtime {
     pub(crate) lua: Lua,
     pub(crate) limits: Limits,
-    pub(crate) reactive: Rc<RefCell<ReactiveState>>,
+    pub(crate) reactive: Rc<StateCell<ReactiveState>>,
     pub(crate) module_roots: Rc<RefCell<Vec<PathBuf>>>,
     /// Lint findings waiting to be logged.
     ///

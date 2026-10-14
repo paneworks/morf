@@ -2,7 +2,6 @@
 //! properties, the signals bindings follow, and the handle a node is.
 
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::error::Error as StdError;
 use std::fmt;
 use std::rc::Rc;
@@ -17,7 +16,7 @@ mod methods;
 pub(crate) use metatable::{node_metatable, refuse_runtime_owned};
 use methods::{terminal_method, text_input_method};
 
-pub(crate) fn create_node(state: &Rc<RefCell<ReactiveState>>, element: Element) -> NodeHandle {
+pub(crate) fn create_node(state: &Rc<StateCell<ReactiveState>>, element: Element) -> NodeHandle {
     let mut state = state.borrow_mut();
     state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
     state.scene.create(element)
@@ -178,7 +177,7 @@ pub(crate) fn animate_scene_property(
 /// per node allocated three objects per node that were all identical.
 pub(crate) fn node_userdata<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     handle: NodeHandle,
 ) -> UserData<'gc> {
     let existing = state.borrow().node_metatable.clone();

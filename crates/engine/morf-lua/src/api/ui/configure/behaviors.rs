@@ -6,7 +6,7 @@ use morf_runtime::animation::behaviors;
 use super::*;
 
 pub(crate) fn configure_behaviors<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: NodeHandle,
     value: LuaValue<'gc>,

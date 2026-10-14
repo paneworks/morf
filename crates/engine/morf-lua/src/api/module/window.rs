@@ -7,7 +7,7 @@ use super::*;
 /// The metatable every window handle shares.
 pub(super) fn window_metatable<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     limits: crate::Limits,
 ) -> luna::StashedTable {
     let window_visible = Callback::from_fn(&ctx, {

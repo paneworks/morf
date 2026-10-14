@@ -2,7 +2,6 @@
 //! configuration requires, and the window constructors.
 
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
@@ -14,7 +13,7 @@ mod window;
 
 pub(crate) fn install_module_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: crate::Limits,
 ) -> (Table<'gc>, Table<'gc>, Table<'gc>) {

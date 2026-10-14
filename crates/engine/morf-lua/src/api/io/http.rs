@@ -45,7 +45,6 @@ use luna::{
     Table, UserData, UserRef, Value as LuaValue, Variadic,
 };
 use morf_io::{HttpRequest, HttpResponse, HttpTask};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
@@ -80,7 +79,7 @@ struct HttpHandleToken {
 /// Installs `morf.http`.
 pub(crate) fn install_http_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     json: JsonKinds,
 ) {
@@ -179,7 +178,7 @@ pub(crate) fn install_http_api<'gc>(
 /// Every entry point ends here: the request is queued, the callback kept
 /// alongside it, and the caller gets a handle.
 struct Starter {
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     json: JsonKinds,
     metatable: StashedTable,
 }

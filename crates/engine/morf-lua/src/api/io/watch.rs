@@ -23,7 +23,6 @@ use luna::{
     Value as LuaValue, Variadic,
 };
 use morf_io::{Watch, WatchHandle, WatchOptions};
-use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
@@ -43,7 +42,7 @@ struct WatchToken(WatchHandle);
 /// Adds `watch` to `morf.fs`.
 pub(crate) fn install_watch_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) {

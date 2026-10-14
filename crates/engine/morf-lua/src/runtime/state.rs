@@ -16,6 +16,7 @@ use std::rc::Rc;
 // reason to make them all learn a second module name.
 pub(crate) use crate::state_pending::*;
 pub(crate) use crate::state_tokens::*;
+pub(crate) use crate::vm::state_cell::{StateCell, StateRef, StateRefMut};
 
 mod follow;
 mod methods;

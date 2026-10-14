@@ -159,7 +159,7 @@ fn follow(state: &mut ReactiveState) {
 
 pub(crate) fn install_toplevels_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     {

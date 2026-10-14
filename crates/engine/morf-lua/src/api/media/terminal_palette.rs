@@ -98,7 +98,7 @@ pub(crate) fn changed_value(changes: &[ColorChange]) -> IpcValue {
 
 pub(crate) fn install_palette_api<'gc>(
     ctx: Context<'gc>,
-    state: std::rc::Rc<std::cell::RefCell<ReactiveState>>,
+    state: std::rc::Rc<crate::state::StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let terminal = Table::new(&ctx);

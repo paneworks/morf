@@ -173,7 +173,7 @@ fn list_model_userdata<'gc>(
 
 pub(crate) fn install_audio_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     {

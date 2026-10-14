@@ -11,14 +11,13 @@
 
 use luna::{Callback, CallbackReturn, Context, Function, Table, Value as LuaValue};
 use morf_scene::Element;
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{configure::*, scene_bindings::*, state::*, types::*};
 
 pub(crate) fn layout_constructor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     limits: Limits,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {

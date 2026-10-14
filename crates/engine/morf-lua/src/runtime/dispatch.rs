@@ -1,7 +1,6 @@
-use std::cell::{Ref, RefMut};
-
 use morf_scene::{NodeHandle, Scene};
 
+use crate::state::{StateRef, StateRefMut};
 use crate::{
     events::*, reactive_bindings::*, reactive_execute::*, scene_bindings::*, surface_types::*,
     types::*,
@@ -9,17 +8,17 @@ use crate::{
 
 impl Runtime {
     /// Borrows the scene produced by executed configuration code.
-    pub fn scene(&self) -> Ref<'_, Scene> {
-        Ref::map(self.reactive.borrow(), |state| &state.scene)
+    pub fn scene(&self) -> StateRef<'_, Scene> {
+        StateRef::map(self.reactive.borrow(), |state| &state.scene)
     }
 
     /// Mutably borrows the scene for frame-pipeline structural operations.
-    pub fn scene_mut(&mut self) -> RefMut<'_, Scene> {
+    pub fn scene_mut(&mut self) -> StateRefMut<'_, Scene> {
         let mut state = self.reactive.borrow_mut();
         // Native writes must invalidate the same service definitions as Lua
         // writes (for example, a Timer started through the Scene API).
         state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
-        RefMut::map(state, |state| &mut state.scene)
+        StateRefMut::map(state, |state| &mut state.scene)
     }
 
     /// Drains parent transitions queued by Lua handlers.

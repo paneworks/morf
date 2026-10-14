@@ -113,7 +113,7 @@ mod paths;
 pub(crate) fn install_fs_api<'gc>(
     ctx: Context<'gc>,
     morf: Table<'gc>,
-    state: std::rc::Rc<std::cell::RefCell<crate::state::ReactiveState>>,
+    state: std::rc::Rc<crate::state::StateCell<crate::state::ReactiveState>>,
 ) {
     let fs = Table::new(&ctx);
 

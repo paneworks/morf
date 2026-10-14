@@ -6,7 +6,6 @@
 //! one way to put a picture straight into a file.
 
 use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::api_image_ops::{callback_of, format_of, quality_of, region_of, source_of};
@@ -28,7 +27,7 @@ fn pending(state: &ReactiveState) -> usize {
 
 pub(crate) fn install_screencopy_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let screencopy_state = Rc::clone(&state);

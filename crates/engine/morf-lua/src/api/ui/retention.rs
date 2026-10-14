@@ -1,7 +1,7 @@
 use luna::{
     Callback, CallbackReturn, Closure, Context, Table, UserData, UserRef, Value as LuaValue,
 };
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
 
 pub(crate) fn install_retention_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) {

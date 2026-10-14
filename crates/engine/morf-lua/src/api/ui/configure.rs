@@ -4,7 +4,6 @@
 use crate::api_shader::attach_shader;
 use crate::configure_states::configure_states;
 use luna::{Context, Function, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -24,7 +23,7 @@ pub(crate) use behaviors::{
 use entrance::{configure_exit, enter_values};
 
 pub(crate) fn configure_element<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,

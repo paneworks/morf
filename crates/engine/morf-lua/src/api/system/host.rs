@@ -2,7 +2,6 @@
 //! focus, the backdrop, IPC handlers, the screens and the primary runtime.
 
 use luna::{Callback, CallbackReturn, Closure, Context, Function, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{scene_bindings::*, state::*, surface_types::*, types::*};
@@ -11,7 +10,7 @@ mod text_entry;
 
 pub(crate) fn install_host_service_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     screen: Option<&Screen>,
 ) {

@@ -60,7 +60,7 @@ pub(crate) fn set_window_layer_setting<'gc>(
 /// validated before any lands so a bad one leaves the surface untouched.
 pub(crate) fn window_configure_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, settings): (UserRef<WindowSurfaceToken>, Table) = stack.consume(ctx)?;

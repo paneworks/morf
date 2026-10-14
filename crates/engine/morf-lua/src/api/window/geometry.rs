@@ -1,5 +1,4 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserRef};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_layout::Geometry;
@@ -41,7 +40,7 @@ pub(crate) fn geometry_table(ctx: Context<'_>, geometry: Geometry) -> Table<'_> 
 
 pub(crate) fn window_item_position_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, node): (UserRef<WindowSurfaceToken>, UserRef<NodeToken>) =
@@ -60,7 +59,7 @@ pub(crate) fn window_item_position_method<'gc>(
 
 pub(crate) fn window_item_rect_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, node): (UserRef<WindowSurfaceToken>, UserRef<NodeToken>) =
@@ -92,7 +91,7 @@ pub(crate) fn window_item_rect_method<'gc>(
 
 pub(crate) fn window_map_from_item_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, node, x, y): (UserRef<WindowSurfaceToken>, UserRef<NodeToken>, f64, f64) =
@@ -114,7 +113,7 @@ pub(crate) fn window_map_from_item_method<'gc>(
 
 pub(crate) fn window_map_rect_from_item_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, node, x, y, width, height): WindowMapRectArgs<'gc> = stack.consume(ctx)?;
@@ -150,7 +149,7 @@ pub(crate) fn window_map_rect_from_item_method<'gc>(
 
 pub(crate) fn floating_state_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -187,7 +186,7 @@ pub(crate) fn floating_state_method<'gc>(
 
 pub(crate) fn floating_string_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -227,7 +226,7 @@ pub(crate) fn floating_string_method<'gc>(
 
 pub(crate) fn floating_size_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {

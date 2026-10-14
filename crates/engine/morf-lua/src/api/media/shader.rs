@@ -1,6 +1,5 @@
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_shader::{Binding, ShaderKind, ShaderSpec, Type};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{scene_bindings::*, state::*};
@@ -30,7 +29,7 @@ pub(crate) struct RegisteredShader {
 pub(crate) fn install_shader_api<'gc>(
     ctx: Context<'gc>,
     morf: Table<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) {
     let state_for_api = Rc::clone(&state);
     let shader = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -57,7 +56,7 @@ pub(crate) fn install_shader_api<'gc>(
 
 /// Fills one data block of the shader attached to a node.
 fn set_data<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: morf_scene::NodeHandle,
     block: &str,
@@ -109,7 +108,7 @@ fn set_data<'gc>(
 }
 
 fn register<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     name: &str,
     spec: Table<'gc>,
@@ -299,7 +298,7 @@ fn parse_data<'gc>(
 /// rather than on every paint, and a name that does not resolve is reported
 /// where the author wrote it.
 pub(crate) fn attach_shader<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: morf_scene::NodeHandle,
     name: &str,

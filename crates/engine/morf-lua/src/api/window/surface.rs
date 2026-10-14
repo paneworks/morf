@@ -1,5 +1,4 @@
 use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{layer_parse::*, scene_bindings::*, state::*, table_menu::*, types::*};
@@ -16,7 +15,7 @@ fn surface_event(key: &str) -> Option<crate::window_events::WindowEvent> {
 
 pub(crate) fn install_shell_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let surface_read_state = Rc::clone(&state);

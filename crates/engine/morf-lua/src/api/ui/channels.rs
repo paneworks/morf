@@ -7,7 +7,7 @@
 //! no Lua at all; the loop repaints only when a channel such a path shows
 //! has moved.
 
-use std::cell::RefCell;
+use crate::state::StateCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -148,7 +148,7 @@ fn watch(state: &mut ReactiveState, channel: &Arc<Channel>) -> Result<SignalId, 
     Ok(signal)
 }
 
-fn track(state: &Rc<RefCell<ReactiveState>>, signal: SignalId) {
+fn track(state: &Rc<StateCell<ReactiveState>>, signal: SignalId) {
     if let Some(active) = &mut state.borrow_mut().active {
         active.reads.insert(signal);
     }
@@ -163,7 +163,11 @@ fn number(value: LuaValue<'_>) -> f32 {
 }
 
 /// Installs `morf.channel { name, size = 60, mode = "ring" | "frame" }`.
-pub(crate) fn install<'gc>(ctx: Context<'gc>, state: Rc<RefCell<ReactiveState>>, morf: Table<'gc>) {
+pub(crate) fn install<'gc>(
+    ctx: Context<'gc>,
+    state: Rc<StateCell<ReactiveState>>,
+    morf: Table<'gc>,
+) {
     let make = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let options: Option<Table> = stack.consume(ctx)?;
         let field = |key: &str| options.map_or(LuaValue::Nil, |o| o.get_value(ctx, key));

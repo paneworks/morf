@@ -1,7 +1,6 @@
 //! Window handle methods: updates, size, the popup settings, and parents.
 
 use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{layer_parse::*, scene_bindings::*, state::*, surface_types::*, window_parse::*};
@@ -12,7 +11,7 @@ pub(crate) use layer::{set_window_layer_setting, window_configure_method};
 
 pub(crate) fn window_updates_enabled_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, value): (UserRef<WindowSurfaceToken>, Option<bool>) = stack.consume(ctx)?;
@@ -37,7 +36,7 @@ pub(crate) fn window_updates_enabled_method<'gc>(
 
 pub(crate) fn window_size_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, width, height): (UserRef<WindowSurfaceToken>, Option<i64>, Option<i64>) =
@@ -88,7 +87,7 @@ pub(crate) fn window_size_method<'gc>(
 
 pub(crate) fn popup_bool_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -121,7 +120,7 @@ pub(crate) fn popup_bool_method<'gc>(
 
 pub(crate) fn popup_string_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -158,7 +157,7 @@ pub(crate) fn popup_string_method<'gc>(
 
 pub(crate) fn popup_anchor_rect_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, x, y, width, height): PopupAnchorArgs<'gc> = stack.consume(ctx)?;
@@ -244,7 +243,7 @@ pub(crate) fn popup_anchor_rect_method<'gc>(
 
 pub(crate) fn popup_offset_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, x, y): (UserRef<WindowSurfaceToken>, Option<i64>, Option<i64>) =
@@ -289,7 +288,7 @@ pub(crate) fn popup_offset_method<'gc>(
 
 pub(crate) fn popup_constraints_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, values): (UserRef<WindowSurfaceToken>, Option<Table>) = stack.consume(ctx)?;
@@ -342,7 +341,7 @@ pub(crate) fn popup_constraints_method<'gc>(
 
 pub(crate) fn window_parent_id_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
@@ -367,7 +366,7 @@ pub(crate) fn window_parent_id_method<'gc>(
 
 pub(crate) fn window_set_parent_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, parent): (

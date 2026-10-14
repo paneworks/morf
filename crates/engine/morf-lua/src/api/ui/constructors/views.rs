@@ -5,7 +5,7 @@ use super::*;
 
 pub(crate) fn view_constructor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     limits: Limits,
     kind: ViewKind,
 ) -> Callback<'gc> {
@@ -21,7 +21,7 @@ pub(crate) fn view_constructor<'gc>(
 /// `ui.ListView`, `ui.GridView` and `ui.each`.
 pub(crate) fn construct_view<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     limits: Limits,
     kind: ViewKind,
     properties: Table<'gc>,

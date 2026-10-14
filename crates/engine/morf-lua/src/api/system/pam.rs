@@ -25,7 +25,7 @@ const MAX_PAM_SESSIONS: usize = 8;
 /// Installs `morf.pam`.
 pub(crate) fn install_pam_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let pam = Table::new(&ctx);

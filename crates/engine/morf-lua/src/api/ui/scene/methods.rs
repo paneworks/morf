@@ -6,7 +6,7 @@ use super::*;
 /// A terminal's methods, called as `term:write("ls\r")`.
 pub(super) fn terminal_method<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     name: &str,
 ) -> Option<Callback<'gc>> {
     use crate::terminals;
@@ -100,7 +100,7 @@ pub(super) fn terminal_method<'gc>(
 /// place meant, so `text:sub(1, n)` is what lies before offset `n`.
 pub(super) fn text_input_method<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     name: &str,
 ) -> Option<Callback<'gc>> {
     use crate::text_inputs;

@@ -7,6 +7,7 @@
 //! The signal is made the first time a binding reads the model, so a model
 //! nothing computes from costs the graph nothing.
 
+use crate::state::StateCell;
 use luna::Context;
 use morf_scene::ListModel;
 use std::cell::RefCell;
@@ -41,7 +42,7 @@ pub(crate) fn track_model_read(state: &mut ReactiveState, model: &Rc<RefCell<Lis
 /// The revision signal of each model the finished binding read, made now
 /// if this is the first binding to read it, for the binding to depend on.
 pub(crate) fn model_read_signals(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     models: Vec<Rc<RefCell<ListModel>>>,
 ) -> Result<Vec<morf_scene::reactive::SignalId>, String> {
     let mut signals = Vec::with_capacity(models.len());
@@ -87,7 +88,7 @@ pub(crate) fn bump_model_revision(
 /// binding is running, which flush on their own -- the same rule a signal
 /// write follows.
 pub(crate) fn model_changed(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     model: &Rc<RefCell<ListModel>>,
@@ -122,7 +123,7 @@ pub(crate) fn model_row<'gc>(
 /// Replaces a model's rows, matched by `key` or by value, and bumps its
 /// revision when that changed anything.
 pub(crate) fn replace_model_rows(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     model: &Rc<RefCell<ListModel>>,

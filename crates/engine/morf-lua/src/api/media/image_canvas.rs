@@ -1,4 +1,5 @@
 //! Native canvases share the bounded asynchronous image queue.
+use crate::state::StateCell;
 use crate::{
     api_color::color_of,
     api_image_ops::{callback_of, format_of, parse_ops, quality_of, queue, source_of, uint},
@@ -7,12 +8,12 @@ use crate::{
     state::ReactiveState,
 };
 use luna::{Callback, CallbackReturn, Context, Table, Value};
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 pub(crate) fn install<'gc>(
     ctx: Context<'gc>,
     image: Table<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
 ) {
     let state = Rc::clone(state);
     image.set_field(

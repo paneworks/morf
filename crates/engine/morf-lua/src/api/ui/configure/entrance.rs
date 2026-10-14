@@ -40,7 +40,7 @@ fn entrance_timing<'gc>(
 /// `exit = { opacity = 0, scale = 0.9, duration = 200, easing = "in_cubic" }`:
 /// how the node leaves when whatever holds it lets it go.
 pub(super) fn configure_exit<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: NodeHandle,
     value: LuaValue<'gc>,
@@ -79,7 +79,7 @@ pub(super) fn configure_exit<'gc>(
 type Entrance = (Vec<(String, morf_scene::Value)>, Option<Behavior>);
 
 pub(super) fn enter_values<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: NodeHandle,
     value: LuaValue<'gc>,

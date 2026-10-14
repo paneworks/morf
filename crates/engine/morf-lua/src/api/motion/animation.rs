@@ -1,5 +1,4 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_scene::{Color, NodeHandle, Scene, SceneError, Value as SceneValue};
@@ -14,7 +13,7 @@ use crate::{lua_values::*, scene_bindings::*, serialization::*, state::*};
 /// to act on, so Lua can branch without first asking whether one is running.
 pub(crate) fn install_animation_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let animation = Table::new(&ctx);

@@ -1,5 +1,4 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_scene::Element;
@@ -8,7 +7,7 @@ use crate::{constructors::*, scene_bindings::*, serialization::*, state::*, type
 
 pub(crate) fn install_ui_json_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) -> (Table<'gc>, Table<'gc>, crate::api_http::JsonKinds) {

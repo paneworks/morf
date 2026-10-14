@@ -6,7 +6,7 @@ use super::*;
 /// Installs the virtual keyboard, the input method and the text input.
 pub(super) fn install_text_entry<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let virtual_key_state = Rc::clone(&state);

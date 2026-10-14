@@ -6,7 +6,6 @@ use morf_io::{DbusCall, DbusValue};
 use morf_runtime::Handler;
 use morf_scene::Value as SceneValue;
 use morf_scene::reactive::EffectCapture;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -70,7 +69,7 @@ pub(crate) fn drive_executor<'gc>(
 }
 
 pub(crate) fn evaluate_effect(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     frame_remaining: &mut u64,
@@ -189,7 +188,7 @@ pub(crate) fn evaluate_effect(
 
 /// Records that the effect being evaluated read `signal`.
 fn read_signal(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     effect: &mut EffectCapture<IpcValue>,
     signal: morf_scene::reactive::SignalId,
 ) -> Result<(), String> {

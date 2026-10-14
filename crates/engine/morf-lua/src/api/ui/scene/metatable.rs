@@ -5,7 +5,7 @@ use super::*;
 
 pub(crate) fn node_metatable<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Table<'gc> {
     let read_state = Rc::clone(&state);
     let index = Callback::from_fn(&ctx, move |ctx, _, mut stack| {

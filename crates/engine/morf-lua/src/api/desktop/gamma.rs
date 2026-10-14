@@ -8,7 +8,7 @@
 //! shell's connection; the compositor restores every output when the shell
 //! exits, however it exits, and a reload resets them too.
 
-use std::cell::RefCell;
+use crate::state::StateCell;
 use std::rc::Rc;
 
 use luna::{Callback, CallbackReturn, Table, Value as LuaValue};
@@ -50,7 +50,7 @@ fn output_name(value: LuaValue<'_>) -> Result<Option<String>, HostError> {
     }
 }
 
-fn push(state: &Rc<RefCell<ReactiveState>>, request: GammaRequest) -> Result<(), HostError> {
+fn push(state: &Rc<StateCell<ReactiveState>>, request: GammaRequest) -> Result<(), HostError> {
     state
         .borrow_mut()
         .requests
@@ -60,7 +60,7 @@ fn push(state: &Rc<RefCell<ReactiveState>>, request: GammaRequest) -> Result<(),
 
 pub(crate) fn install_gamma_api<'gc>(
     ctx: luna::Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let gamma = Table::new(&ctx);

@@ -3,7 +3,6 @@
 //! them is `morf_runtime::views`'.
 
 use luna::{Context, Executor, Function, UserRef, Value as LuaValue, Variadic};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_scene::{Element, NodeHandle, Scene, Value as SceneValue, ViewTransition};
@@ -115,7 +114,7 @@ pub(crate) fn execute_node_factory(
 
 /// What a view asks of Lua and the scene, from inside a turn.
 struct LuaViewHost<'a, 'gc> {
-    state: &'a Rc<RefCell<ReactiveState>>,
+    state: &'a Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
 }
@@ -159,7 +158,7 @@ impl ViewHost for LuaViewHost<'_, '_> {
 /// Brings `view`, filling `parent`, up to its model, scrolled `offset`
 /// along, building and rebinding its delegates in Lua.
 pub(crate) fn reconcile_lua_view(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     parent: NodeHandle,

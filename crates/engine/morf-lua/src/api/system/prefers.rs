@@ -9,7 +9,6 @@
 
 use luna::{Context, Table};
 use morf_system::prefers::Portal;
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{api_state::build, state::*, surface_types::*, types::*};
@@ -18,7 +17,7 @@ pub(crate) use morf_system::prefers::PREFERENCES;
 
 pub(crate) fn install_prefers_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     screen: Option<&Screen>,
 ) {

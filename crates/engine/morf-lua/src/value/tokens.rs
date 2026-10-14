@@ -10,6 +10,7 @@ use morf_image::ImageRect as QuantizeRect;
 use morf_system::desktop_entries::DesktopEntries;
 
 use crate::state::ReactiveState;
+use crate::state::StateCell;
 use morf_io::{
     DbusProxy, DbusService, FileDocument, FileView, FileWatcher, Process, ServerView, SocketView,
     SplitParser, StreamCollector,
@@ -71,7 +72,7 @@ pub(crate) struct TransformWatcherToken {
 pub(crate) struct RetainLockToken {
     pub(crate) node: NodeHandle,
     pub(crate) locked: Cell<bool>,
-    pub(crate) state: Rc<RefCell<ReactiveState>>,
+    pub(crate) state: Rc<StateCell<ReactiveState>>,
 }
 
 impl Drop for RetainLockToken {

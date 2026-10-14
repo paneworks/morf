@@ -12,7 +12,6 @@
 use luna::{Callback, CallbackReturn, Context, Function, Table, Value as LuaValue};
 use morf_io::FileView;
 use morf_scene::reactive::SignalId;
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -94,7 +93,7 @@ pub(crate) fn read_tokens(path: &Path) -> Result<BTreeMap<String, IpcValue>, Str
 
 pub(crate) fn install_theme_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     _limits: Limits,
 ) {

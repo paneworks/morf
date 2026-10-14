@@ -104,7 +104,7 @@ pub(crate) fn finish_reactive_api<'gc>(
 }
 pub(crate) fn install_reactive_api(
     lua: &mut Lua,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     module_roots: Rc<RefCell<Vec<PathBuf>>>,
     limits: Limits,
     screen: Option<&Screen>,

@@ -1,5 +1,4 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
@@ -9,7 +8,7 @@ use crate::{
 
 pub(crate) fn install_signal_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) {

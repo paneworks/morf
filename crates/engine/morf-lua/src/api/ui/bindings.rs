@@ -1,6 +1,5 @@
 use crate::states::StateValue;
 use luna::{Closure, Context, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_scene::{NodeHandle, Value as SceneValue};
@@ -8,7 +7,7 @@ use morf_scene::{NodeHandle, Value as SceneValue};
 use crate::{reactive_execute::*, scene_bindings::*, state::*, surface_types::*, types::*};
 
 pub(crate) fn register_property_binding<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -37,7 +36,7 @@ pub(crate) fn register_property_binding<'gc>(
 /// A binding given after construction (`node.width = function() ... end`):
 /// it takes the place of any the property had, and runs at once.
 pub(crate) fn rebind_property<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: NodeHandle,
     property: String,
@@ -64,7 +63,7 @@ pub(crate) fn rebind_property<'gc>(
 }
 
 pub(crate) fn register_state_binding<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -83,7 +82,7 @@ pub(crate) fn register_state_binding<'gc>(
 
 /// A `loop` given as a function: each value it returns is the node's loops.
 pub(crate) fn register_loop_binding<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -101,7 +100,7 @@ pub(crate) fn register_loop_binding<'gc>(
 }
 
 fn register_node_binding<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -127,7 +126,7 @@ fn register_node_binding<'gc>(
 }
 
 pub(crate) fn apply_state(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     frame_remaining: &mut u64,
@@ -304,7 +303,7 @@ pub(crate) fn replace_status<'gc>(
 const MAX_NESTED_FLUSHES: usize = 32;
 
 pub(crate) fn flush_reactive(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
@@ -335,7 +334,7 @@ pub(crate) fn flush_reactive(
 /// flushed once when the last of them returns — and a node its hook removes
 /// has its own hook queued and run in the same drain.
 pub(crate) fn run_destroyed_hooks(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
 ) {
@@ -373,7 +372,7 @@ pub(crate) fn run_destroyed_hooks(
 }
 
 fn flush_graph(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
@@ -427,7 +426,7 @@ fn flush_graph(
 /// property it drives, anything else by the name it was registered under,
 /// and either by where its function was written.
 fn effect_label(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     pending: &morf_scene::reactive::PendingEffect,
 ) -> String {

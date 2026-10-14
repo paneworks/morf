@@ -4,7 +4,6 @@
 use luna::{Callback, CallbackReturn, Context, Function, Table, Value as LuaValue};
 use morf_runtime::timers::Timer;
 use morf_scene::{Element, VirtualList};
-use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::time::Duration;
@@ -17,7 +16,7 @@ pub(crate) use views::{construct_view, view_constructor};
 
 pub(crate) fn element_constructor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     limits: Limits,
     element: Element,
 ) -> Callback<'gc> {
@@ -81,7 +80,7 @@ pub(crate) fn element_constructor<'gc>(
 
 pub(crate) fn loader_constructor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     limits: Limits,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -130,7 +129,7 @@ pub(crate) fn loader_constructor<'gc>(
 
 pub(crate) fn timer_constructor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     limits: Limits,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, exec, mut stack| {
@@ -220,7 +219,7 @@ pub(crate) fn timer_constructor<'gc>(
 /// taken off here; everything else is the node's own properties.
 pub(crate) fn terminal_constructor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     limits: Limits,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {

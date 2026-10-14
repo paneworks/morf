@@ -30,7 +30,7 @@ use crate::{
 /// standing beside it: one table, both halves.
 pub(crate) fn install_dbus_serve_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     dbus: Table<'gc>,
 ) {
     let service_name = Callback::from_fn(&ctx, |ctx, _, mut stack| {

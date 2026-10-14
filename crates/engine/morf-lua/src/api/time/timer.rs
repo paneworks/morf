@@ -10,7 +10,7 @@ use crate::{lua_values::*, scene_bindings::*, state::*, table_menu::*};
 
 pub(crate) fn install_time_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let elapsed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -260,7 +260,7 @@ pub(crate) fn install_time_api<'gc>(
 /// after the helper was gone.
 pub(crate) fn install_timer_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let cancel_state = Rc::clone(&state);

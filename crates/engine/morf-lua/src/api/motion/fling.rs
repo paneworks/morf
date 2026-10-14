@@ -1,5 +1,4 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_runtime::animation::fling;
@@ -20,7 +19,7 @@ use crate::{scene_bindings::*, state::*};
 /// to.
 pub(crate) fn install_fling_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let pushes = Rc::clone(&state);
@@ -91,7 +90,10 @@ pub(crate) fn install_fling_api<'gc>(
 /// owning the motion. It computes the push at whatever rate suits it and the
 /// engine keeps integrating every frame in between; writing positions instead
 /// would make the configuration the clock.
-pub(crate) fn impulse<'gc>(ctx: Context<'gc>, state: Rc<RefCell<ReactiveState>>) -> Callback<'gc> {
+pub(crate) fn impulse<'gc>(
+    ctx: Context<'gc>,
+    state: Rc<StateCell<ReactiveState>>,
+) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (node, property, delta): (UserRef<NodeToken>, String, f64) = stack.consume(ctx)?;
         let pushed = state

@@ -1,6 +1,5 @@
 use luna::{Context, Table, Value as LuaValue};
 use morf_system::desktop_entries::DesktopEntry;
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -98,7 +97,7 @@ pub(crate) fn greetd_response<'gc>(ctx: Context<'gc>, response: GreetdResponse) 
 }
 
 pub(crate) fn track_clock_dependency(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     enabled: bool,
     precision: crate::ClockPrecision,
 ) {

@@ -9,7 +9,6 @@
 //! loop, and calls back with the bytes.
 
 use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::events::EventPoint;
@@ -24,7 +23,7 @@ const MAX_DRAG_TYPES: usize = 16;
 
 pub(crate) fn install_clipboard_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let set_state = Rc::clone(&state);
@@ -239,7 +238,7 @@ fn drag_request<'gc>(ctx: Context<'gc>, payload: Table<'gc>) -> Result<DragReque
 /// from the table but its method.
 pub(crate) fn offer_table<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     offer: &OfferDescription,
     primary: Option<bool>,
     point: Option<EventPoint>,
