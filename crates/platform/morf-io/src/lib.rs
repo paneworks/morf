@@ -66,4 +66,6 @@ mod reactor_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod wake_tests;
+#[cfg(test)]
 mod watch_tests;

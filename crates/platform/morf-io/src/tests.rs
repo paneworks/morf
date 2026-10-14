@@ -396,18 +396,15 @@ fn children_do_not_inherit_the_wrappers_library_path() {
 }
 
 #[test]
-fn a_worker_that_ends_rings_every_loop() {
-    let wake = Wake::new().unwrap();
-    let other = Wake::new().unwrap();
-    wake.drain();
-    other.drain();
-    std::thread::spawn(|| {
-        let _ending = WakeOnDrop;
+fn a_worker_that_ends_rings_only_its_asker() {
+    let (asker, other) = (crate::wake_tests::Loop::start(), crate::wake_tests::Loop::start());
+    let waker = asker.waker.clone();
+    std::thread::spawn(move || {
+        let _ending = WakeOnDropOf(waker);
     })
     .join()
     .unwrap();
-    assert!(wake.wait(Duration::from_secs(1)));
-    assert!(other.wait(Duration::from_secs(1)));
+    assert_eq!((asker.rings(), other.rings()), (1, 0));
 }
 
 #[test]
@@ -419,9 +416,28 @@ fn news_asked_for_on_a_loop_rings_that_loop() {
     let waker = crate::waker();
     std::thread::spawn(move || waker.wake()).join().unwrap();
     assert!(again.wait(Duration::from_secs(1)));
-    // A thread with no loop of its own rings every loop.
+    // A thread with no loop rings its own alarm, never another's.
     let elsewhere = std::thread::spawn(|| Wake::new().unwrap()).join().unwrap();
     elsewhere.drain();
+    let before = elsewhere.rings();
     std::thread::spawn(|| crate::waker().wake()).join().unwrap();
-    assert!(elsewhere.wait(Duration::from_secs(1)));
+    assert!(!elsewhere.wait(Duration::from_millis(50)));
+    assert_eq!(elsewhere.rings(), before);
+}
+
+#[test]
+fn an_ipc_request_rings_no_loop() {
+    let path = std::env::temp_dir().join(format!("morf-ipc-quiet-{}", std::process::id()));
+    let _ = fs::remove_file(&path);
+    let idle = crate::wake_tests::Loop::start();
+    let (tx, rx) = mpsc::channel();
+    let server = IpcServer::bind(&path, tx).unwrap();
+    let responder = thread::spawn(move || {
+        let incoming = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        incoming.reply(IpcReply::success(Vec::new()));
+    });
+    assert!(ipc_call(&path, &IpcRequest::Verbs).unwrap().ok);
+    responder.join().unwrap();
+    drop(server);
+    assert_eq!(idle.rings(), 0);
 }

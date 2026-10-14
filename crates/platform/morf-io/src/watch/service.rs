@@ -93,9 +93,9 @@ impl Service {
                         });
                     }
                 }
+                ring_fresh(&mut inner);
                 drop(inner);
                 self.ready.notify_all();
-                crate::wake_all();
             }
             raw.clear();
             let mut reader = inotify::Reader::new(&self.inotify, &mut buffer);
@@ -117,8 +117,8 @@ impl Service {
             }
             let queued = self.dispatch(&raw);
             if queued {
+                ring_fresh(&mut lock(&self.inner));
                 self.ready.notify_all();
-                crate::wake_all();
             }
         }
     }
@@ -134,6 +134,7 @@ impl Service {
                 // The kernel lost events: everyone looks again.
                 for subscription in inner.subscriptions.values_mut() {
                     subscription.pending.overflowed = true;
+                    subscription.pending.fresh = true;
                     queued = true;
                 }
                 continue;
@@ -284,6 +285,7 @@ impl Service {
                 recursive: options.recursive,
                 armed: HashMap::new(),
                 pending: Pending::default(),
+                waker: crate::waker(),
             },
         );
         let target = inner.subscriptions[&id].target.clone();
@@ -337,6 +339,22 @@ impl Service {
         {
             let _ = join.join();
         }
+    }
+}
+
+/// Rings the loop of every subscription with news since it was last rung,
+/// once per loop, and no other.
+fn ring_fresh(inner: &mut Inner) {
+    let mut woken: Vec<crate::Waker> = Vec::new();
+    for subscription in inner.subscriptions.values_mut() {
+        if std::mem::take(&mut subscription.pending.fresh)
+            && !woken.iter().any(|held| held.same_loop(&subscription.waker))
+        {
+            woken.push(subscription.waker.clone());
+        }
+    }
+    for waker in woken {
+        waker.wake();
     }
 }
 

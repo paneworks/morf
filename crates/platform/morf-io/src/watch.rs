@@ -5,8 +5,8 @@
 //! (rung only to stop it), so a process watching twenty files costs nothing
 //! until one of them changes: no thread per file, no timeout, no sleep loop.
 //! When something does change, the thread files it with the watches it
-//! concerns and rings [`crate::wake_all`], so a loop waiting in its own poll
-//! collects it at once.
+//! concerns and rings the loop that made each of them, so that loop collects
+//! it at once and no other is disturbed.
 //!
 //! What a watch reports:
 //!
@@ -113,10 +113,13 @@ struct Pending {
     order: VecDeque<PathBuf>,
     changes: HashMap<PathBuf, (PathBuf, ChangeKind)>,
     overflowed: bool,
+    /// Pushed to since the watcher last rang the subscriber.
+    fresh: bool,
 }
 
 impl Pending {
     fn push(&mut self, change: FsChange) {
+        self.fresh = true;
         if let Some((_, kind)) = self.changes.get_mut(&change.path) {
             match kind.then(change.kind) {
                 Some(next) => *kind = next,
@@ -163,6 +166,8 @@ struct Subscription {
     /// The directories watched for it, by watch descriptor.
     armed: HashMap<i32, PathBuf>,
     pending: Pending,
+    /// The loop that made the watch, the only one its changes wake.
+    waker: crate::Waker,
 }
 
 #[derive(Default)]

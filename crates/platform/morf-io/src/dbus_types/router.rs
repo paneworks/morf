@@ -108,10 +108,14 @@ struct Tracked {
     owner: Option<String>,
 }
 
+type RouteEntry = (u64, Route, mpsc::Sender<zbus::Message>, crate::Waker);
+
 /// One reader per bus, dealing signals to whoever asked for them.
 pub(crate) struct SignalRouter {
     pub(super) connection: DbusConnection,
-    routes: Mutex<Vec<(u64, Route, mpsc::Sender<zbus::Message>)>>,
+    /// Each route with its channel and the loop that subscribed, the only
+    /// one its signals wake.
+    routes: Mutex<Vec<RouteEntry>>,
     /// The owners of the well-known names routes are about.
     ///
     /// Kept current from `NameOwnerChanged`, which this reader hears for each
@@ -233,7 +237,7 @@ impl SignalRouter {
         self.routes
             .lock()
             .unwrap_or_else(|error| error.into_inner())
-            .push((id, route.clone(), tx));
+            .push((id, route.clone(), tx, crate::waker()));
         // Rules are reference counted by the bus, so two subscriptions to the
         // same signal add it twice and it survives until both have gone.
         let added = rule.and_then(|rule| {
@@ -245,7 +249,7 @@ impl SignalRouter {
             self.routes
                 .lock()
                 .unwrap_or_else(|error| error.into_inner())
-                .retain(|(held, _, _)| *held != id);
+                .retain(|(held, _, _, _)| *held != id);
             if route.resolves_sender() {
                 self.untrack(&route.sender);
             }
@@ -264,10 +268,10 @@ impl SignalRouter {
             .routes
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        let Some(index) = routes.iter().position(|(held, _, _)| *held == id) else {
+        let Some(index) = routes.iter().position(|(held, _, _, _)| *held == id) else {
             return;
         };
-        let (_, route, _) = routes.remove(index);
+        let (_, route, _, _) = routes.remove(index);
         drop(routes);
         if let Ok(rule) = route.rule()
             && let Ok(proxy) = zbus::blocking::fdo::DBusProxy::new(&self.connection)
@@ -325,13 +329,13 @@ impl SignalRouter {
         // A receiver that has gone is a subscription whose owner dropped it
         // without the route being removed — possible if a `DbusSignal` leaked.
         // Clearing them here keeps the list from growing forever.
-        let mut delivered = false;
+        let mut woken: Vec<crate::Waker> = Vec::new();
         let arg0 = routes
             .iter()
-            .any(|(_, route, _)| route.arg0.is_some())
+            .any(|(_, route, _, _)| route.arg0.is_some())
             .then(|| first_string_argument(message))
             .flatten();
-        routes.retain(|(_, route, tx)| {
+        routes.retain(|(_, route, tx, waker)| {
             let owner = owners
                 .get(&route.sender)
                 .filter(|entry| entry.known)
@@ -339,13 +343,17 @@ impl SignalRouter {
             if !route.matches(&header, owner, arg0.as_deref()) {
                 return true;
             }
-            delivered = true;
-            tx.send(message.clone()).is_ok()
+            let sent = tx.send(message.clone()).is_ok();
+            if sent && !woken.iter().any(|held| held.same_loop(waker)) {
+                woken.push(waker.clone());
+            }
+            sent
         });
         drop(routes);
         drop(owners);
-        if delivered {
-            crate::wake_all();
+        // Only the loops whose routes took the signal.
+        for waker in woken {
+            waker.wake();
         }
     }
 }
