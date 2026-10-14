@@ -24,7 +24,7 @@ impl Runtime {
 
     /// Takes a successful native authentication request to release a session lock.
     pub fn take_session_unlock_request(&mut self) -> bool {
-        self.reactive.borrow_mut().lifecycle.take_unlock_request()
+        self.reactive.borrow_mut().lifecycle_mut().take_unlock_request()
     }
 
     /// Returns registered IPC verb names in lexical order.

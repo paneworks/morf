@@ -38,7 +38,7 @@ pub struct Engine {
     shared: crate::shared::SharedValues,
     /// A reload, file watching, quitting and unlocking, as asked, and the
     /// values kept across a reload.
-    pub lifecycle: crate::requests::Lifecycle,
+    lifecycle:crate::requests::Lifecycle,
     /// What this output can do, and how big one of morf's pixels is on it.
     pub display: crate::display::Display,
     /// The shell's log lines.

@@ -46,4 +46,6 @@ subsystems! {
     gestures, gestures_mut: crate::gestures::Gestures;
     /// Each virtualised view, by the node that shows it.
     views, views_mut: crate::views::Views;
+    /// A reload, file watching, quitting and unlocking, as asked.
+    lifecycle, lifecycle_mut: crate::requests::Lifecycle;
 }

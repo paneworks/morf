@@ -313,7 +313,7 @@ pub(crate) fn install_shell_api<'gc>(
         let hard: Option<bool> = stack.consume(ctx)?;
         reload_state
             .borrow_mut()
-            .lifecycle
+            .lifecycle_mut()
             .ask_reload(hard.unwrap_or(false));
         Ok(CallbackReturn::Return)
     });
@@ -321,7 +321,7 @@ pub(crate) fn install_shell_api<'gc>(
     let completed_state = Rc::clone(&state);
     let on_reload_completed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
-        completed_state.borrow_mut().lifecycle.on_reload(
+        completed_state.borrow_mut().lifecycle_mut().on_reload(
             true,
             crate::vm::handler_store::register(ctx.stash(callback)),
         );
@@ -331,7 +331,7 @@ pub(crate) fn install_shell_api<'gc>(
     let failed_state = Rc::clone(&state);
     let on_reload_failed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
-        failed_state.borrow_mut().lifecycle.on_reload(
+        failed_state.borrow_mut().lifecycle_mut().on_reload(
             false,
             crate::vm::handler_store::register(ctx.stash(callback)),
         );
@@ -343,9 +343,9 @@ pub(crate) fn install_shell_api<'gc>(
         let value: Option<bool> = stack.consume(ctx)?;
         let mut state = watch_state.borrow_mut();
         if let Some(value) = value {
-            state.lifecycle.set_watch_files(value);
+            state.lifecycle_mut().set_watch_files(value);
         }
-        stack.replace(ctx, state.lifecycle.watch_files());
+        stack.replace(ctx, state.lifecycle().watch_files());
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "watch_files", watch_files);
@@ -396,7 +396,7 @@ pub(crate) fn install_shell_api<'gc>(
     // Exiting from inside a Lua callback would unwind the runtime that is
     // running the callback.
     let quit = Callback::from_fn(&ctx, move |_, _, _| {
-        quit_state.borrow_mut().lifecycle.quit();
+        quit_state.borrow_mut().lifecycle_mut().quit();
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "quit", quit);
