@@ -65,6 +65,16 @@ pub(crate) fn emit(program: &Program, slots: &[ParamSlot], size: u32) -> String 
         }
         out.push_str("};\n\n");
     }
+    // One loop budget per invocation, shared by every loop and helper, so a
+    // nest cannot multiply its guards into a GPU timeout. Named per stage
+    // because both stages can be spliced into one module.
+    let work = if vertex { "morf_vwork" } else { "morf_work" };
+    let looping = program.helpers.iter().any(|helper| has_loop(&helper.body))
+        || has_loop(&program.entry.body);
+    if looping {
+        let _ = writeln!(out, "var<private> {work}: u32 = 0u;\n");
+    }
+    let work = looping.then_some(work);
     for helper in &program.helpers {
         let signature = helper
             .params
@@ -82,6 +92,7 @@ pub(crate) fn emit(program: &Program, slots: &[ParamSlot], size: u32) -> String 
             out,
             depth: 1,
             loops: 0,
+            work,
         };
         state.block(&helper.body);
         out = state.out;
@@ -132,10 +143,14 @@ pub(crate) fn emit(program: &Program, slots: &[ParamSlot], size: u32) -> String 
             input.ty.wgsl_owned()
         );
     }
+    if let Some(work) = work {
+        let _ = writeln!(out, "    {work} = 0u;");
+    }
     let mut state = Emitter {
         out,
         depth: 1,
         loops: 0,
+        work,
     };
     state.block(&program.entry.body);
     state.out.push_str("}\n");
@@ -194,6 +209,18 @@ pub(crate) struct Emitter {
     pub(crate) out: String,
     pub(crate) depth: usize,
     pub(crate) loops: u32,
+    /// The per-invocation loop budget, when the program has a loop.
+    pub(crate) work: Option<&'static str>,
+}
+
+fn has_loop(block: &Block) -> bool {
+    block.0.iter().any(|statement| match statement {
+        Stmt::Loop { .. } => true,
+        Stmt::If { arms, otherwise } => {
+            arms.iter().any(|(_, body)| has_loop(body)) || otherwise.as_ref().is_some_and(has_loop)
+        }
+        _ => false,
+    })
 }
 
 impl Emitter {
@@ -243,6 +270,7 @@ impl Emitter {
                 guard,
                 body,
                 continuing,
+                ..
             } => self.loop_(*guard, body, continuing),
             Stmt::Break => {
                 self.indent();
@@ -262,6 +290,7 @@ impl Emitter {
                 self.expression(value, value.ty());
                 self.out.push_str(";\n");
             }
+            Stmt::Line(_) => {}
         }
     }
 
@@ -281,6 +310,16 @@ impl Emitter {
         let _ = writeln!(self.out, "if ({counter} >= {guard}u) {{ break; }}");
         self.indent();
         let _ = writeln!(self.out, "{counter} = {counter} + 1u;");
+        if let Some(work) = self.work {
+            self.indent();
+            let _ = writeln!(
+                self.out,
+                "if ({work} >= {}u) {{ break; }}",
+                crate::limits::MAX_LOOP_WORK
+            );
+            self.indent();
+            let _ = writeln!(self.out, "{work} = {work} + 1u;");
+        }
         self.block(body);
         // Whatever has to happen on the way round, including after a
         // `continue`. A counting loop's increment lives here or it is skipped.
@@ -404,7 +443,7 @@ fn collect_records(block: &Block, out: &mut Vec<&'static StructType>) {
                 collect_records(body, out);
                 collect_records(continuing, out);
             }
-            Stmt::Break | Stmt::Continue | Stmt::Discard => {}
+            Stmt::Break | Stmt::Continue | Stmt::Discard | Stmt::Line(_) => {}
         }
     }
 }

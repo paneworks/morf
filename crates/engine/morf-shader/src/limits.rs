@@ -14,10 +14,17 @@
 pub const MAX_ITERATIONS: u32 = 4096;
 
 /// How deeply loops may nest.
-///
-/// Past this the product of the per-loop guards stops meaning anything: four
-/// levels at the ceiling is already far more work than a frame can afford.
 pub const MAX_LOOP_NESTING: u32 = 4;
+
+/// How many iterations a nest of loops may run per invocation, all levels
+/// multiplied together.
+///
+/// The per-loop guard alone does not bound the work: four nested loops at
+/// [`MAX_ITERATIONS`] come to about 2.8e14 turns, which is a GPU timeout and a
+/// lost device. Every emitted loop also counts into one per-invocation budget
+/// and stops when it runs out; nests whose constant trip counts already
+/// multiply past it are refused at compile time.
+pub const MAX_LOOP_WORK: u64 = 65_536;
 
 /// How many operations one shader may hold.
 ///

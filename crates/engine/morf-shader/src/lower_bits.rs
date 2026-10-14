@@ -131,7 +131,7 @@ impl Lowerer<'_> {
     }
 }
 
-fn fold(expression: &Expr) -> Option<f32> {
+pub(crate) fn fold(expression: &Expr) -> Option<f32> {
     match expression {
         Expr::Literal(Value::F32(value)) => Some(*value),
         Expr::Literal(Value::Int(value)) => Some(*value as f32),
@@ -303,7 +303,8 @@ fn walk_returns(block: &Block, found: &mut Option<Type>) {
             | Stmt::Assign { .. }
             | Stmt::Break
             | Stmt::Continue
-            | Stmt::Discard => {}
+            | Stmt::Discard
+            | Stmt::Line(_) => {}
         }
     }
 }

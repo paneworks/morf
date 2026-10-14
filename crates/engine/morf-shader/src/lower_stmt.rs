@@ -10,7 +10,22 @@ use luna::compiler::parser::{Block as AstBlock, Expression, ForStatement, Statem
 use crate::ir::*;
 use crate::limits::*;
 use crate::lower::{Lowerer, Name, line_of, text};
+use crate::lower_bits::fold;
 use crate::types::*;
+
+/// The guard for a numeric `for` with constant bounds: its real trip count
+/// plus one turn of slack for float rounding.
+fn trips(initial: Option<f32>, limit: Option<f32>, step: f32) -> Option<u32> {
+    let turns = ((limit? - initial?) / step).floor();
+    if !turns.is_finite() || turns >= MAX_ITERATIONS as f32 {
+        return None;
+    }
+    Some(
+        (turns.max(0.0) as u32)
+            .saturating_add(2)
+            .min(MAX_ITERATIONS),
+    )
+}
 
 impl Lowerer<'_> {
     /// Lowers a block, opening a scope for it.
@@ -25,10 +40,12 @@ impl Lowerer<'_> {
         let mut out = Vec::new();
         for statement in &block.statements {
             let line = line_of(statement.line_number);
+            out.push(Stmt::Line(line));
             self.statement(&statement.inner, line, &mut out);
         }
         if let Some(returned) = &block.return_statement {
             let line = line_of(returned.line_number);
+            out.push(Stmt::Line(line));
             match returned.returns.len() {
                 1 => {
                     let value = self.expression(&returned.returns[0], line);
@@ -254,7 +271,7 @@ impl Lowerer<'_> {
         }];
         body.extend(self.block(&loop_.block).0);
         self.loop_depth -= 1;
-        self.push_loop(out, MAX_ITERATIONS, Block(body), Block::default(), line);
+        self.push_loop(out, None, Block(body), Block::default(), line);
     }
 
     fn repeat_loop(
@@ -275,7 +292,7 @@ impl Lowerer<'_> {
             arms: vec![(condition, Block(vec![Stmt::Break]))],
             otherwise: None,
         });
-        self.push_loop(out, MAX_ITERATIONS, Block(body), Block::default(), line);
+        self.push_loop(out, None, Block(body), Block::default(), line);
     }
 
     fn for_loop(&mut self, loop_: &ForStatement<Name>, line: u32, out: &mut Vec<Stmt>) {
@@ -299,10 +316,10 @@ impl Lowerer<'_> {
         // Lua evaluates the step once and its sign decides the comparison.
         // Reproducing that faithfully needs a runtime branch; requiring a
         // constant keeps the emitted loop honest and the surface small.
-        let (increment, descending) = match step {
-            None => (Expr::Literal(Value::F32(1.0)), false),
+        let step = match step {
+            None => 1.0,
             Some(expression) => match self.constant(expression, line) {
-                Some(value) if value != 0.0 => (Expr::Literal(Value::F32(value)), value < 0.0),
+                Some(value) if value != 0.0 => value,
                 Some(_) => {
                     self.error(line, "a loop step cannot be zero");
                     return;
@@ -317,10 +334,15 @@ impl Lowerer<'_> {
                 }
             },
         };
+        let (increment, descending) = (Expr::Literal(Value::F32(step)), step < 0.0);
+        let guard = trips(fold(&initial), fold(&limit), step);
         self.push_scope();
         let counter = self.declare(name, Type::F32);
         self.loop_depth += 1;
         let inner = self.block(body);
+        let mut assigned = Vec::new();
+        collect_assigned(&inner, &mut assigned);
+        let guard = guard.filter(|_| !assigned.contains(&counter));
         self.loop_depth -= 1;
         self.pop_scope();
         let test = Expr::Binary {
@@ -362,14 +384,17 @@ impl Lowerer<'_> {
             value: initial,
             mutable: true,
         });
-        self.push_loop(out, MAX_ITERATIONS, Block(statements), advance, line);
+        self.push_loop(out, guard, Block(statements), advance, line);
     }
 
     /// Emits a loop, rejecting a nest deeper than the guard can bound.
+    ///
+    /// `trips` is the real trip count when the bounds are constant; any other
+    /// loop is guarded at the ceiling.
     fn push_loop(
         &mut self,
         out: &mut Vec<Stmt>,
-        guard: u32,
+        trips: Option<u32>,
         body: Block,
         continuing: Block,
         line: u32,
@@ -379,7 +404,8 @@ impl Lowerer<'_> {
             return;
         }
         out.push(Stmt::Loop {
-            guard,
+            guard: trips.unwrap_or(MAX_ITERATIONS),
+            counted: trips.is_some(),
             body,
             continuing,
         });

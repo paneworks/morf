@@ -7,6 +7,7 @@ mod coverage_types;
 mod diagnostics;
 mod golden;
 mod ports;
+mod spans;
 
 use crate::*;
 
