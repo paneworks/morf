@@ -8,6 +8,8 @@
 
 use std::io::Read;
 
+use crate::Error;
+
 /// A compression format [`decompress`] understands.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Compression {
@@ -82,19 +84,21 @@ pub const MAX_ENTRIES: usize = 1_000_000;
 
 /// Inflates `bytes` as the format `name` spells (`None` or `"auto"`
 /// detects it from the magic number).
-pub fn inflate(bytes: &[u8], name: Option<&str>, max_output: usize) -> Result<Vec<u8>, String> {
+pub fn inflate(bytes: &[u8], name: Option<&str>, max_output: usize) -> Result<Vec<u8>, Error> {
     let format = match name {
         None | Some("auto") => detect(bytes).ok_or_else(|| {
-            "unknown compression format (give one: gzip, zlib, deflate, zstd, xz, lzma)".to_string()
+            Error::invalid(
+                "unknown compression format (give one: gzip, zlib, deflate, zstd, xz, lzma)",
+            )
         })?,
         Some(name) => Compression::parse(name)
-            .ok_or_else(|| format!("unknown compression format {name:?}"))?,
+            .ok_or_else(|| Error::Invalid(format!("unknown compression format {name:?}")))?,
     };
     decompress(bytes, format, max_output)
 }
 
 /// A tar archive's bytes: inflated first when a magic number says so.
-pub fn tar_bytes(bytes: &[u8], max_output: usize) -> Result<std::borrow::Cow<'_, [u8]>, String> {
+pub fn tar_bytes(bytes: &[u8], max_output: usize) -> Result<std::borrow::Cow<'_, [u8]>, Error> {
     match detect(bytes) {
         Some(format) => decompress(bytes, format, max_output).map(std::borrow::Cow::Owned),
         None => Ok(std::borrow::Cow::Borrowed(bytes)),
@@ -102,7 +106,15 @@ pub fn tar_bytes(bytes: &[u8], max_output: usize) -> Result<std::borrow::Cow<'_,
 }
 
 /// Inflates `bytes` as `format`, refusing an output longer than `max_output`.
-pub fn decompress(bytes: &[u8], format: Compression, max_output: usize) -> Result<Vec<u8>, String> {
+pub fn decompress(bytes: &[u8], format: Compression, max_output: usize) -> Result<Vec<u8>, Error> {
+    decompress_stream(bytes, format, max_output).map_err(Error::Invalid)
+}
+
+fn decompress_stream(
+    bytes: &[u8],
+    format: Compression,
+    max_output: usize,
+) -> Result<Vec<u8>, String> {
     let too_big = || format!("{} output exceeds {max_output} bytes", format.name());
     match format {
         Compression::Gzip => {
@@ -232,7 +244,11 @@ const BLOCK: usize = 512;
 
 /// Lists a tar archive (ustar, GNU long names, pax paths), at most
 /// `max_entries` members. Global pax headers are skipped.
-pub fn tar_entries(bytes: &[u8], max_entries: usize) -> Result<Vec<TarEntry>, String> {
+pub fn tar_entries(bytes: &[u8], max_entries: usize) -> Result<Vec<TarEntry>, Error> {
+    list_tar(bytes, max_entries).map_err(Error::Invalid)
+}
+
+fn list_tar(bytes: &[u8], max_entries: usize) -> Result<Vec<TarEntry>, String> {
     let mut entries = Vec::new();
     let mut at = 0usize;
     let mut long_name: Option<String> = None;

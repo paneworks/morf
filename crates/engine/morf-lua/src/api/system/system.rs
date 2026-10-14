@@ -86,8 +86,8 @@ pub(crate) fn install_system_service_api<'gc>(
     let dbus_get = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (proxy, property): (UserRef<DbusToken>, String) = stack.consume(ctx)?;
         let _span = crate::profile::span(|| format!("blocking D-Bus get {property}"));
-        let value = proxy.proxy.get_value(&property).map_err(HostError)?;
-        stack.replace(ctx, dbus_value_to_lua(ctx, value).map_err(HostError)?);
+        let value = proxy.proxy.get_value(&property).map_err(HostError::from)?;
+        stack.replace(ctx, dbus_value_to_lua(ctx, value).map_err(HostError::from)?);
         Ok(CallbackReturn::Return)
     });
     // `proxy:call(method)` with no arguments, as it always was; given any, it
@@ -95,13 +95,13 @@ pub(crate) fn install_system_service_api<'gc>(
     let dbus_call = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (proxy, method, arguments): (UserRef<DbusToken>, String, Variadic<Vec<LuaValue>>) =
             stack.consume(ctx)?;
-        let argument = positional_from_lua(ctx, arguments.0).map_err(HostError)?;
+        let argument = positional_from_lua(ctx, arguments.0).map_err(HostError::from)?;
         let _span = crate::profile::span(|| format!("blocking D-Bus call {method}"));
         let value = proxy
             .proxy
             .call_value_with(&method, &argument)
-            .map_err(HostError)?;
-        stack.replace(ctx, dbus_value_to_lua(ctx, value).map_err(HostError)?);
+            .map_err(HostError::from)?;
+        stack.replace(ctx, dbus_value_to_lua(ctx, value).map_err(HostError::from)?);
         Ok(CallbackReturn::Return)
     });
     // `proxy:call_with(method, a, b, c)` sends three arguments;
@@ -110,24 +110,24 @@ pub(crate) fn install_system_service_api<'gc>(
     let dbus_call_with = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (proxy, method, arguments): (UserRef<DbusToken>, String, Variadic<Vec<LuaValue>>) =
             stack.consume(ctx)?;
-        let argument = positional_from_lua(ctx, arguments.0).map_err(HostError)?;
+        let argument = positional_from_lua(ctx, arguments.0).map_err(HostError::from)?;
         let _span = crate::profile::span(|| format!("blocking D-Bus call {method}"));
         let value = proxy
             .proxy
             .call_value_with(&method, &argument)
-            .map_err(HostError)?;
-        stack.replace(ctx, dbus_value_to_lua(ctx, value).map_err(HostError)?);
+            .map_err(HostError::from)?;
+        stack.replace(ctx, dbus_value_to_lua(ctx, value).map_err(HostError::from)?);
         Ok(CallbackReturn::Return)
     });
     let dbus_set = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (proxy, property, value): (UserRef<DbusToken>, String, LuaValue) =
             stack.consume(ctx)?;
-        let value = lua_to_dbus(ctx, value, 0).map_err(HostError)?;
+        let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
         let _span = crate::profile::span(|| format!("blocking D-Bus set {property}"));
         proxy
             .proxy
             .set_value(&property, &value)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     // What `subscribe` and `on_name_owner_changed` hand back. Closing it
@@ -200,7 +200,7 @@ pub(crate) fn install_system_service_api<'gc>(
             )
             .into());
         };
-        let argument = positional_from_lua(ctx, arguments.0).map_err(HostError)?;
+        let argument = positional_from_lua(ctx, arguments.0).map_err(HostError::from)?;
         let mut state = proxy_async_state.borrow_mut();
         if state.dbus_replies.len() >= MAX_DBUS_REPLIES {
             return Err(HostError(format!(
@@ -211,7 +211,7 @@ pub(crate) fn install_system_service_api<'gc>(
         let reply = proxy
             .proxy
             .call_async(&method, argument)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         state.dbus_replies.push(PendingDbusReply {
             reply,
             callback: crate::vm::handler_store::register(ctx.stash(callback)),
@@ -332,7 +332,7 @@ pub(crate) fn install_system_service_api<'gc>(
                 .into());
             }
         };
-        let argument = lua_to_dbus(ctx, argument, 0).map_err(HostError)?;
+        let argument = lua_to_dbus(ctx, argument, 0).map_err(HostError::from)?;
         let mut state = module_async_state.borrow_mut();
         if state.dbus_replies.len() >= MAX_DBUS_REPLIES {
             return Err(HostError(format!(
@@ -349,7 +349,7 @@ pub(crate) fn install_system_service_api<'gc>(
             argument,
             timeout,
         )
-        .map_err(HostError)?;
+        .map_err(HostError::from)?;
         state.dbus_replies.push(PendingDbusReply {
             reply,
             callback: crate::vm::handler_store::register(ctx.stash(callback)),
@@ -362,13 +362,13 @@ pub(crate) fn install_system_service_api<'gc>(
     // one is running before it reads anything from it.
     let name_has_owner = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (bus, name): (String, String) = stack.consume(ctx)?;
-        let owned = morf_io::name_has_owner(parse_bus(&bus)?, &name).map_err(HostError)?;
+        let owned = morf_io::name_has_owner(parse_bus(&bus)?, &name).map_err(HostError::from)?;
         stack.replace(ctx, owned);
         Ok(CallbackReturn::Return)
     });
     let name_owner = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (bus, name): (String, String) = stack.consume(ctx)?;
-        let owner = morf_io::name_owner(parse_bus(&bus)?, &name).map_err(HostError)?;
+        let owner = morf_io::name_owner(parse_bus(&bus)?, &name).map_err(HostError::from)?;
         match owner {
             Some(owner) => stack.replace(ctx, owner),
             None => stack.replace(ctx, LuaValue::Nil),
@@ -377,7 +377,7 @@ pub(crate) fn install_system_service_api<'gc>(
     });
     let list_names = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let bus: String = stack.consume(ctx)?;
-        let names = morf_io::list_names(parse_bus(&bus)?).map_err(HostError)?;
+        let names = morf_io::list_names(parse_bus(&bus)?).map_err(HostError::from)?;
         let table = Table::new(&ctx);
         for (index, name) in names.into_iter().enumerate() {
             table

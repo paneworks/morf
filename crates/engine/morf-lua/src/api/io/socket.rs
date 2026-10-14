@@ -11,12 +11,12 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             .state
             .borrow_mut()
             .send(bytes.as_bytes())
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     let socket_flush = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let socket: UserRef<SocketToken> = stack.consume(ctx)?;
-        socket.state.borrow_mut().flush().map_err(HostError)?;
+        socket.state.borrow_mut().flush().map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     let socket_connected = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -30,7 +30,7 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             .state
             .borrow_mut()
             .set_connected(connected)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         stack.replace(ctx, connected);
         Ok(CallbackReturn::Return)
     });
@@ -52,13 +52,13 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     });
     let socket_receive = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (socket, maximum, timeout_ms): (UserRef<SocketToken>, i64, i64) = stack.consume(ctx)?;
-        let maximum = morf_io::receive_limit(maximum).map_err(HostError)?;
-        let timeout = bounded_timeout(timeout_ms).map_err(HostError)?;
+        let maximum = morf_io::receive_limit(maximum).map_err(HostError::from)?;
+        let timeout = bounded_timeout(timeout_ms).map_err(HostError::from)?;
         let received = socket
             .state
             .borrow_mut()
             .receive(maximum, timeout)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         match received {
             Some(bytes) => stack.replace(ctx, String::from_utf8_lossy(&bytes).as_ref()),
             None => stack.replace(ctx, LuaValue::Nil),
@@ -80,7 +80,7 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let accepted_socket_metatable = socket_metatable.clone();
     let server_accept = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let server: UserRef<SocketServerToken> = stack.consume(ctx)?;
-        let Some(socket) = server.state.borrow().accept().map_err(HostError)? else {
+        let Some(socket) = server.state.borrow().accept().map_err(HostError::from)? else {
             stack.replace(ctx, LuaValue::Nil);
             return Ok(CallbackReturn::Return);
         };
@@ -105,7 +105,7 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             .state
             .borrow_mut()
             .set_active(active)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         stack.replace(ctx, active);
         Ok(CallbackReturn::Return)
     });
@@ -137,7 +137,7 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let server_metatable = ctx.stash(server_metatable);
     let socket_server = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let path: String = stack.consume(ctx)?;
-        let server = ServerView::bind(path).map_err(HostError)?;
+        let server = ServerView::bind(path).map_err(HostError::from)?;
         let userdata = UserData::new_static(
             &ctx,
             SocketServerToken {
@@ -151,7 +151,7 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     morf.set_field(ctx, "socket_server", socket_server);
     let socket = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let path: String = stack.consume(ctx)?;
-        let socket = SocketView::connect(path).map_err(HostError)?;
+        let socket = SocketView::connect(path).map_err(HostError::from)?;
         let userdata = UserData::new_static(
             &ctx,
             SocketToken {
@@ -287,7 +287,7 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         let maximum = match options.get_value(ctx, "maximum_bytes") {
             LuaValue::Nil => morf_io::DEFAULT_BUFFER,
             LuaValue::Integer(value) => {
-                morf_io::buffer_limit(value, "stream collector").map_err(HostError)?
+                morf_io::buffer_limit(value, "stream collector").map_err(HostError::from)?
             }
             _ => {
                 return Err(
@@ -295,7 +295,8 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                 );
             }
         };
-        let wait_for_end = table_bool(ctx, options, "wait_for_end", true).map_err(HostError)?;
+        let wait_for_end =
+            table_bool(ctx, options, "wait_for_end", true).map_err(HostError::from)?;
         let collector = StreamCollector::new(maximum, wait_for_end)
             .map_err(|error| HostError(error.to_string()))?;
         let userdata = UserData::new_static(

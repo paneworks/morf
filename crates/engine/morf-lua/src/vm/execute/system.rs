@@ -82,14 +82,14 @@ pub(crate) fn execute_dbus_signal_handler(
 pub(crate) fn execute_dbus_reply_handler(
     ctx: Context<'_>,
     closure: &Handler,
-    reply: Result<DbusValue, String>,
+    reply: Result<DbusValue, morf_io::Error>,
     limits: Limits,
 ) -> Result<(), String> {
     let args = match reply {
         Ok(value) => vec![LuaValue::Boolean(true), dbus_value_to_lua(ctx, value)?],
         Err(error) => vec![
             LuaValue::Boolean(false),
-            LuaValue::String(ctx.intern(error.as_bytes())),
+            LuaValue::String(ctx.intern(error.message().as_bytes())),
         ],
     };
     let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)?).into(), Variadic(args));

@@ -42,10 +42,11 @@ pub(crate) fn install_broadcast_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             LuaValue::String(text) => text.display_lossy().to_string(),
             _ => return Err(HostError("broadcast needs a verb".into()).into()),
         };
-        morf_io::check_broadcast_arguments(stack.len().saturating_sub(1)).map_err(HostError)?;
+        morf_io::check_broadcast_arguments(stack.len().saturating_sub(1))
+            .map_err(HostError::from)?;
         let mut args = Vec::with_capacity(stack.len().saturating_sub(1));
         for index in 1..stack.len() {
-            args.push(wire_value(stack.get(index)).map_err(HostError)?);
+            args.push(wire_value(stack.get(index)).map_err(HostError::from)?);
         }
         stack.replace(ctx, morf_io::broadcast(target, args));
         Ok(CallbackReturn::Return)

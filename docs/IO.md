@@ -20,7 +20,7 @@ morf.run({ "git", "status", "--short" }, { cwd = repo }, function(result)
 end)
 ```
 
-`result` is `{ ok, code, signal, stdout, stderr, timed_out, truncated, error }`:
+`result` is `{ ok, code, signal, stdout, stderr, timed_out, truncated, error, error_kind }`:
 
 - `ok` — exited with 0, in time.
 - `code` — the exit status, `nil` when a signal ended it; `signal` the signal number.
@@ -29,7 +29,8 @@ end)
 - `timed_out` — `timeout_ms` passed: the child got `TERM`, then `KILL`
   two seconds later.
 - `error` — only when the program would not start at all (not found, not
-  executable, bad `cwd`); `code` is `nil` then.
+  executable, bad `cwd`); `code` is `nil` then. `error_kind` names it:
+  `not_found`, `permission_denied` or `process`.
 
 Options (all optional): `env`, `clear_env`, `cwd`, `stdin` (a string written
 and then closed), `timeout_ms`, `max_output`. The callback may also be given

@@ -92,9 +92,9 @@ pub(crate) fn install_io_api<'gc>(
 ) {
     let write = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (token, data): (UserRef<IoToken>, luna::String) = stack.consume(ctx)?;
-        match token.0.write(data.as_bytes()).map_err(HostError)? {
+        match token.0.write(data.as_bytes()).map_err(HostError::from)? {
             Ok(()) => stack.replace(ctx, true),
-            Err(error) => stack.replace(ctx, (false, error.as_str())),
+            Err(error) => stack.replace(ctx, (false, error.message())),
         }
         Ok(CallbackReturn::Return)
     });
@@ -163,16 +163,16 @@ pub(crate) fn install_io_api<'gc>(
             _ => return Err(HostError("spawn needs command = { argv... }".into()).into()),
         };
         let mut spawn = spawn_options(ctx, command, Some(options))?;
-        let on_stdout = optional_closure(ctx, options, "on_stdout").map_err(HostError)?;
-        let on_stderr = optional_closure(ctx, options, "on_stderr").map_err(HostError)?;
-        let on_exit = optional_closure(ctx, options, "on_exit").map_err(HostError)?;
+        let on_stdout = optional_closure(ctx, options, "on_stdout").map_err(HostError::from)?;
+        let on_stderr = optional_closure(ctx, options, "on_stderr").map_err(HostError::from)?;
+        let on_exit = optional_closure(ctx, options, "on_exit").map_err(HostError::from)?;
         if on_stdout.is_none() {
             spawn.stdout = OutputMode::Null;
         }
         if on_stderr.is_none() {
             spawn.stderr = OutputMode::Inherit;
         }
-        spawn.lines = table_bool(ctx, options, "lines", true).map_err(HostError)?;
+        spawn.lines = table_bool(ctx, options, "lines", true).map_err(HostError::from)?;
         spawn.max_output = positive(ctx, options, "max_output")?
             .map(|bytes| (bytes as usize).min(MAX_OUTPUT_LIMIT));
         let kind = Kind::Spawn {
@@ -232,7 +232,7 @@ pub(crate) fn install_io_api<'gc>(
     // are refused. Returns true, or false and the reason.
     let kill_pid = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (pid, signal): (i64, LuaValue) = stack.consume(ctx)?;
-        let pid = morf_io::signalable_pid(pid).map_err(HostError)?;
+        let pid = morf_io::signalable_pid(pid).map_err(HostError::from)?;
         let signal = signal_of(signal)?;
         match morf_io::signal_process(pid, signal) {
             Ok(()) => stack.replace(ctx, true),
@@ -246,8 +246,8 @@ pub(crate) fn install_io_api<'gc>(
     let connect = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let options: Table = stack.consume(ctx)?;
         let endpoint = endpoint_of(ctx, options)?;
-        let on_line = optional_closure(ctx, options, "on_line").map_err(HostError)?;
-        let on_data = optional_closure(ctx, options, "on_data").map_err(HostError)?;
+        let on_line = optional_closure(ctx, options, "on_line").map_err(HostError::from)?;
+        let on_data = optional_closure(ctx, options, "on_data").map_err(HostError::from)?;
         if on_line.is_some() && on_data.is_some() {
             return Err(HostError("connect takes on_line or on_data, not both".into()).into());
         }
@@ -261,8 +261,8 @@ pub(crate) fn install_io_api<'gc>(
         }
         let kind = Kind::Connect {
             on_data: on_line.or(on_data),
-            on_connect: optional_closure(ctx, options, "on_connect").map_err(HostError)?,
-            on_close: optional_closure(ctx, options, "on_close").map_err(HostError)?,
+            on_connect: optional_closure(ctx, options, "on_connect").map_err(HostError::from)?,
+            on_close: optional_closure(ctx, options, "on_close").map_err(HostError::from)?,
         };
         stack.replace(ctx, connect_starter.connect(ctx, connect, kind)?);
         Ok(CallbackReturn::Return)

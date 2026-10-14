@@ -120,6 +120,7 @@ fn run_collects_output_codes_and_failures() {
         assert(not r.fail.ok and r.fail.code == 1 and r.fail.stdout == "")
         assert(r.cat.stdout == "from stdin")
         assert(not r.missing.ok and r.missing.code == nil and r.missing.error:find("nonexistent"))
+        assert(r.missing.error_kind == "not_found", r.missing.error_kind)
         assert(r.nested.stdout == "outer+inner")
         "#,
     );

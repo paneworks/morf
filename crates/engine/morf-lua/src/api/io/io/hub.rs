@@ -41,7 +41,8 @@ pub(crate) fn execute_io_call(
             table.set_field(ctx, "timed_out", result.timed_out);
             table.set_field(ctx, "truncated", result.truncated);
             if let Some(error) = &result.error {
-                table.set_field(ctx, "error", error.as_str());
+                table.set_field(ctx, "error", error.message());
+                table.set_field(ctx, "error_kind", error.kind().name());
             }
             vec![LuaValue::Table(table)]
         }

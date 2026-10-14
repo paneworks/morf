@@ -206,3 +206,15 @@ impl fmt::Display for HostError {
 }
 
 impl StdError for HostError {}
+
+impl From<String> for HostError {
+    fn from(message: String) -> Self {
+        Self(message)
+    }
+}
+
+impl From<morf_io::Error> for HostError {
+    fn from(error: morf_io::Error) -> Self {
+        Self(error.into_message())
+    }
+}

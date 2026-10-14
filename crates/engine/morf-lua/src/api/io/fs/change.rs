@@ -11,12 +11,12 @@ pub(super) fn install_changes<'gc>(ctx: Context<'gc>, fs: Table<'gc>) {
             let what = if append { "fs.append" } else { "fs.write" };
             let path = path_of(path, what)?;
             let data = bytes_of(data, what)?;
-            ops::check_write(data, what).map_err(HostError)?;
+            ops::check_write(data, what).map_err(HostError::from)?;
             let opts = options(opts, what)?;
             let mode = integer(ctx, opts, "mode")?
                 .map(ops::file_mode)
                 .transpose()
-                .map_err(HostError)?;
+                .map_err(HostError::from)?;
             let write_options = ops::WriteOptions {
                 append: append || flag(ctx, opts, "append", false)?,
                 atomic: flag(ctx, opts, "atomic", !append)?,

@@ -29,7 +29,7 @@ pub(crate) use morf_runtime::engine::PRELOAD_PATIENCE;
 /// A finished HTTP request, with what its handler is called with.
 type HttpAnswer = (
     Handler,
-    Result<morf_io::HttpResponse, String>,
+    Result<morf_io::HttpResponse, morf_io::Error>,
     String,
     crate::api::io::http::JsonKinds,
     std::rc::Rc<crate::api::io::http::HttpHandleState>,
@@ -47,7 +47,7 @@ struct Collected {
         crate::runtime::pending::DbusSignalKind,
         morf_io::DbusSignalEvent,
     )>,
-    dbus_replies: Vec<(Handler, Result<morf_io::DbusValue, String>)>,
+    dbus_replies: Vec<(Handler, Result<morf_io::DbusValue, morf_io::Error>)>,
     dbus_calls: Vec<(Handler, morf_io::DbusCall)>,
     pam_messages: Vec<(Handler, PamEvent)>,
     greetd_messages: Vec<(Handler, GreetdEvent)>,

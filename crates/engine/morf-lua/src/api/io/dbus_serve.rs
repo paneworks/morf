@@ -47,12 +47,12 @@ pub(crate) fn install_dbus_serve_api<'gc>(
     let service_reply = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (service, id, value): (UserRef<DbusServiceToken>, i64, LuaValue) =
             stack.consume(ctx)?;
-        let value = lua_to_dbus(ctx, value, 0).map_err(HostError)?;
+        let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
         service
             .service
             .borrow_mut()
-            .reply(call_id(id).map_err(HostError)?, &value)
-            .map_err(HostError)?;
+            .reply(call_id(id).map_err(HostError::from)?, &value)
+            .map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     let service_reply_error = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -61,8 +61,8 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         service
             .service
             .borrow_mut()
-            .reply_error(call_id(id).map_err(HostError)?, &name, &message)
-            .map_err(HostError)?;
+            .reply_error(call_id(id).map_err(HostError::from)?, &name, &message)
+            .map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     let service_emit = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -73,12 +73,12 @@ pub(crate) fn install_dbus_serve_api<'gc>(
             String,
             LuaValue,
         ) = stack.consume(ctx)?;
-        let value = lua_to_dbus(ctx, value, 0).map_err(HostError)?;
+        let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
         service
             .service
             .borrow()
             .emit(&path, &interface, &member, &value)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     // `service:call(destination, path, interface, member, args)`: a call
@@ -93,13 +93,13 @@ pub(crate) fn install_dbus_serve_api<'gc>(
             String,
             LuaValue,
         ) = stack.consume(ctx)?;
-        let value = lua_to_dbus(ctx, value, 0).map_err(HostError)?;
+        let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
         let reply = service
             .service
             .borrow()
             .call(&destination, &path, &interface, &member, &value)
-            .map_err(HostError)?;
-        let reply = dbus_value_to_lua(ctx, reply).map_err(HostError)?;
+            .map_err(HostError::from)?;
+        let reply = dbus_value_to_lua(ctx, reply).map_err(HostError::from)?;
         stack.replace(ctx, reply);
         Ok(CallbackReturn::Return)
     });
@@ -112,7 +112,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
         state
             .dbus_services
             .set(&service.service, callback)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     let close_state = Rc::clone(&state);
@@ -145,7 +145,7 @@ pub(crate) fn install_dbus_serve_api<'gc>(
     let serve = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (bus, name, path, replace): (String, String, String, Option<bool>) =
             stack.consume(ctx)?;
-        let bus = bus_named(&bus).map_err(HostError)?;
+        let bus = bus_named(&bus).map_err(HostError::from)?;
         // Replacing by default. A shell that cannot be restarted without the
         // user first killing whatever holds its name is a shell nobody
         // restarts, and every one of these names is held by a shell.

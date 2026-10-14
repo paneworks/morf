@@ -50,6 +50,12 @@ impl fmt::Display for StatusNotifierError {
 
 impl StdError for StatusNotifierError {}
 
+impl From<morf_io::Error> for StatusNotifierError {
+    fn from(error: morf_io::Error) -> Self {
+        Self(error.into_message())
+    }
+}
+
 /// Registered host and nonblocking watcher event streams.
 pub struct StatusNotifierHost {
     watcher: DbusProxy,
@@ -226,14 +232,14 @@ impl StatusNotifierHost {
             let Some(value) = self.registered.next_value(Duration::ZERO) else {
                 break;
             };
-            let item = signal_address(value.map_err(StatusNotifierError)?)?;
+            let item = signal_address(value.map_err(StatusNotifierError::from)?)?;
             changed |= self.items.insert(item.key(), item).is_none();
         }
         for _ in 0..64 {
             let Some(value) = self.unregistered.next_value(Duration::ZERO) else {
                 break;
             };
-            let item = signal_address(value.map_err(StatusNotifierError)?)?;
+            let item = signal_address(value.map_err(StatusNotifierError::from)?)?;
             changed |= self.items.remove(&item.key()).is_some();
         }
         Ok(changed.then(|| self.items.values().cloned().collect()))

@@ -87,7 +87,7 @@ fn answer(stream: TcpStream) -> std::io::Result<()> {
     stream.flush()
 }
 
-fn run(request: HttpRequest) -> Result<HttpResponse, String> {
+fn run(request: HttpRequest) -> Result<HttpResponse, crate::Error> {
     HttpTask::start(request)
         .wait(Duration::from_secs(10))
         .expect("the request finished in time")
@@ -149,7 +149,8 @@ fn a_slow_server_times_out() {
     let mut request = HttpRequest::get(format!("{base}/slow"));
     request.timeout = Duration::from_millis(200);
     let error = run(request).unwrap_err();
-    assert!(error.contains("timed out"), "{error}");
+    assert_eq!(error.kind(), crate::ErrorKind::TimedOut, "{error}");
+    assert!(error.message().contains("timed out"), "{error}");
 }
 
 #[test]
@@ -158,7 +159,7 @@ fn a_body_over_the_limit_is_refused() {
     let mut request = HttpRequest::get(format!("{base}/big"));
     request.max_bytes = 1024;
     let error = run(request).unwrap_err();
-    assert!(error.contains("exceeds"), "{error}");
+    assert!(error.message().contains("exceeds"), "{error}");
     let mut request = HttpRequest::get(format!("{base}/big"));
     request.max_bytes = 256 * 1024;
     assert_eq!(run(request).unwrap().body.len(), 256 * 1024);
@@ -168,10 +169,10 @@ fn a_body_over_the_limit_is_refused() {
 fn a_bad_url_is_an_error_not_a_panic() {
     for url in ["not a url", "ftp://example.com/x", "http://", ""] {
         let error = run(HttpRequest::get(url)).unwrap_err();
-        assert!(!error.is_empty(), "{url}");
+        assert!(!error.message().is_empty(), "{url}");
     }
     let refused = run(HttpRequest::get("http://127.0.0.1:1/")).unwrap_err();
-    assert!(!refused.is_empty());
+    assert!(!refused.message().is_empty());
 }
 
 #[test]

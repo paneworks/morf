@@ -93,7 +93,7 @@ pub(crate) fn install_watch_api<'gc>(
         state
             .watches
             .check_room(limits.watches)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         let watch = match Watch::new(&path, WatchOptions { recursive }) {
             Ok(watch) => watch,
             Err(error) => {

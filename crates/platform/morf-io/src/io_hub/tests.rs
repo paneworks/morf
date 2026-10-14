@@ -45,14 +45,15 @@ fn a_run_that_cannot_start_is_answered_later() {
         .unwrap()
         .err()
         .unwrap();
-    assert!(error.starts_with("/no/such/program: "));
+    assert!(error.message().starts_with("/no/such/program: "));
+    assert_eq!(error.kind(), crate::ErrorKind::NotFound);
     let (calls, more) = hub.collect();
     assert!(!more);
     let CallArgs::Run(result) = &calls[0].args else {
         panic!("a run result");
     };
     assert!(!result.ok());
-    assert_eq!(result.error.as_deref(), Some(error.as_str()));
+    assert_eq!(result.error.as_ref(), Some(&error));
 }
 
 #[test]
@@ -63,7 +64,7 @@ fn a_closed_link_writes_nothing_and_pids_are_checked() {
     let link = hub.spawn(options, IoKind::run(None)).unwrap().unwrap();
     assert!(link.write(&vec![0; MAX_WRITE + 1]).is_err());
     link.close();
-    assert_eq!(link.write(b"x").unwrap(), Err("closed".to_string()));
+    assert_eq!(link.write(b"x").unwrap(), Err(Error::other("closed")));
     assert!(!link.kill(15));
     assert!(signalable_pid(1).is_err());
     assert!(signalable_pid(-5).is_err());

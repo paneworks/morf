@@ -10,6 +10,7 @@
 use std::path::Path;
 
 use super::{Entry, EntryKind, MAX_DEPTH};
+use crate::Error;
 
 /// The most a single read or write moves, in bytes.
 pub const MAX_BYTES: u64 = 64 * 1024 * 1024;
@@ -21,39 +22,39 @@ pub const MAX_ASYNC_FILES: usize = 256;
 pub const MAX_PATTERN: usize = 4096;
 
 /// A read's byte limit, 0..=[`MAX_BYTES`]; `what` names the call.
-pub fn read_limit(limit: i64, what: &str) -> Result<u64, String> {
+pub fn read_limit(limit: i64, what: &str) -> Result<u64, Error> {
     u64::try_from(limit)
         .ok()
         .filter(|limit| *limit <= MAX_BYTES)
-        .ok_or_else(|| format!("{what} limit must be 0..{MAX_BYTES}"))
+        .ok_or_else(|| Error::Invalid(format!("{what} limit must be 0..{MAX_BYTES}")))
 }
 
 /// A window `{ offset, length }` of a file; `length` defaults to
 /// [`DEFAULT_READ`].
-pub fn read_window(offset: Option<i64>, length: Option<i64>) -> Result<(u64, u64), String> {
+pub fn read_window(offset: Option<i64>, length: Option<i64>) -> Result<(u64, u64), Error> {
     let offset = u64::try_from(offset.unwrap_or(0))
-        .map_err(|_| "fs.read offset must not be negative".to_owned())?;
+        .map_err(|_| Error::invalid("fs.read offset must not be negative"))?;
     let length = u64::try_from(length.unwrap_or(DEFAULT_READ as i64))
         .ok()
         .filter(|length| *length <= MAX_BYTES)
-        .ok_or_else(|| format!("fs.read length must be 0..{MAX_BYTES}"))?;
+        .ok_or_else(|| Error::Invalid(format!("fs.read length must be 0..{MAX_BYTES}")))?;
     Ok((offset, length))
 }
 
 /// Refuses a write larger than [`MAX_BYTES`].
-pub fn check_write(bytes: &[u8], what: &str) -> Result<(), String> {
+pub fn check_write(bytes: &[u8], what: &str) -> Result<(), Error> {
     if bytes.len() as u64 > MAX_BYTES {
-        return Err(format!("{what} exceeds {MAX_BYTES} bytes"));
+        return Err(Error::Invalid(format!("{what} exceeds {MAX_BYTES} bytes")));
     }
     Ok(())
 }
 
 /// A permission mode, 0..=`0o7777`.
-pub fn file_mode(mode: i64) -> Result<u32, String> {
+pub fn file_mode(mode: i64) -> Result<u32, Error> {
     u32::try_from(mode)
         .ok()
         .filter(|mode| *mode <= 0o7777)
-        .ok_or_else(|| "fs mode must be 0..0o7777".into())
+        .ok_or_else(|| Error::invalid("fs mode must be 0..0o7777"))
 }
 
 /// A listing's depth, clamped to 0..=[`MAX_DEPTH`].
@@ -62,9 +63,11 @@ pub fn list_depth(depth: i64) -> usize {
 }
 
 /// Refuses an empty glob pattern or one longer than [`MAX_PATTERN`].
-pub fn check_pattern(pattern: &str) -> Result<(), String> {
+pub fn check_pattern(pattern: &str) -> Result<(), Error> {
     if pattern.is_empty() || pattern.len() > MAX_PATTERN {
-        return Err(format!("fs.glob pattern must be 1..{MAX_PATTERN} bytes"));
+        return Err(Error::Invalid(format!(
+            "fs.glob pattern must be 1..{MAX_PATTERN} bytes"
+        )));
     }
     Ok(())
 }
@@ -160,6 +163,7 @@ mod tests {
         assert!(
             read_limit(-1, "fs.read")
                 .unwrap_err()
+                .message()
                 .starts_with("fs.read limit")
         );
         assert!(read_limit(MAX_BYTES as i64 + 1, "x").is_err());

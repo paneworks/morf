@@ -11,7 +11,7 @@
 use std::cell::Cell;
 use std::time::Duration;
 
-use crate::{HttpRequest, MAX_BODY_LIMIT, MAX_TIMEOUT};
+use crate::{Error, HttpRequest, MAX_BODY_LIMIT, MAX_TIMEOUT};
 
 /// Requests one configuration may have outstanding. The pool puts at most
 /// sixteen on the wire at once; this caps the queue behind them, so a loop
@@ -21,11 +21,11 @@ pub const MAX_HTTP_PENDING: usize = 64;
 pub const MAX_HEADERS: usize = 64;
 
 /// Refuses one more request when `in_flight` already fill the queue.
-pub fn check_pending(in_flight: usize) -> Result<(), String> {
+pub fn check_pending(in_flight: usize) -> Result<(), Error> {
     if in_flight >= MAX_HTTP_PENDING {
-        return Err(format!(
+        return Err(Error::Invalid(format!(
             "more than {MAX_HTTP_PENDING} HTTP requests in flight"
-        ));
+        )));
     }
     Ok(())
 }
@@ -51,12 +51,14 @@ impl HttpHandle {
 impl HttpRequest {
     /// Sets a header, replacing one of the same name (any case) that the
     /// call itself set, content-type after `json` in particular.
-    pub fn set_header(&mut self, name: String, value: String) -> Result<(), String> {
+    pub fn set_header(&mut self, name: String, value: String) -> Result<(), Error> {
         self.headers
             .retain(|(known, _)| !known.eq_ignore_ascii_case(&name));
         self.headers.push((name, value));
         if self.headers.len() > MAX_HEADERS {
-            return Err(format!("more than {MAX_HEADERS} http headers"));
+            return Err(Error::Invalid(format!(
+                "more than {MAX_HEADERS} http headers"
+            )));
         }
         Ok(())
     }
@@ -72,7 +74,7 @@ impl HttpRequest {
 
     /// The method as given (upper-cased), or POST when none is given and a
     /// body is.
-    pub fn set_method(&mut self, method: Option<&str>) -> Result<(), String> {
+    pub fn set_method(&mut self, method: Option<&str>) -> Result<(), Error> {
         match method {
             None => {
                 if self.body.is_some() && self.method == "GET" {
@@ -82,7 +84,9 @@ impl HttpRequest {
             Some(method) => {
                 let method = method.to_ascii_uppercase();
                 if method.is_empty() || !method.bytes().all(|byte| byte.is_ascii_alphabetic()) {
-                    return Err(format!("http method {method:?} is not valid"));
+                    return Err(Error::Invalid(format!(
+                        "http method {method:?} is not valid"
+                    )));
                 }
                 self.method = method;
             }

@@ -23,14 +23,15 @@
 //! morf.http.query { q = "x y", n = 2 } --> "n=2&q=x%20y"
 //! ```
 //!
-//! A response is `{ ok, status, headers, body, url, error, json }`: `ok` is a
+//! A response is `{ ok, status, headers, body, url, error, error_kind, json }`: `ok` is a
 //! 2xx status; `headers` has lowercased names, a repeated one joined by `, `; `url` is where the answer came
 //! from after redirects; `json()` decodes the body and returns `nil, message`
 //! when it is not JSON. Any status is a response — a 404 is `ok = false` with
 //! its `status` and `body`. A request that got no response at all (bad URL,
 //! refused, timed out, too large, cancelled) is `ok = false`, `status = 0` and
 //! `error` saying why (`cancelled` is never seen: a cancelled request does
-//! not call back). Those are the failures a configuration should expect,
+//! not call back), with `error_kind` one of `timed_out`, `invalid`, `http`
+//! or `other`. Those are the failures a configuration should expect,
 //! so they arrive in the callback; only a malformed call raises.
 //!
 //! The request runs on a worker thread and `on_done` runs on the main loop,
@@ -194,7 +195,7 @@ impl Starter {
         reactive
             .http_requests
             .retain(|entry| !entry.handle.cancelled.get());
-        morf_io::check_pending(reactive.http_requests.len()).map_err(HostError)?;
+        morf_io::check_pending(reactive.http_requests.len()).map_err(HostError::from)?;
         let handle = Rc::new(HttpHandleState::default());
         reactive.http_requests.push(PendingHttp {
             url: request.url.clone(),
@@ -267,7 +268,7 @@ fn apply_options<'gc>(
                 };
                 request
                     .set_header(name.display_lossy().to_string(), value)
-                    .map_err(HostError)?;
+                    .map_err(HostError::from)?;
             }
         }
         _ => return Err(HostError("http headers must be a table".into())),
@@ -292,7 +293,9 @@ fn apply_options<'gc>(
         LuaValue::String(method) => Some(method.display_lossy().to_string()),
         _ => return Err(HostError("http method must be a string".into())),
     };
-    request.set_method(method.as_deref()).map_err(HostError)?;
+    request
+        .set_method(method.as_deref())
+        .map_err(HostError::from)?;
     if let Some(timeout) = positive(ctx, options, "timeout_ms")? {
         request.set_timeout_ms(timeout);
     }
@@ -321,7 +324,7 @@ fn set_json_body<'gc>(
     value: LuaValue<'gc>,
 ) -> Result<(), HostError> {
     let mut entries = 0;
-    let value = lua_to_json(ctx, value, 0, &mut entries).map_err(HostError)?;
+    let value = lua_to_json(ctx, value, 0, &mut entries).map_err(HostError::from)?;
     let body = serde_json::to_vec(&value).map_err(|error| HostError(error.to_string()))?;
     request.set_json_body(body);
     Ok(())
@@ -362,7 +365,7 @@ fn encode_query<'gc>(ctx: Context<'gc>, values: Table<'gc>) -> Result<String, Ho
 pub(crate) fn execute_http_handler(
     ctx: Context<'_>,
     closure: &Handler,
-    outcome: Result<HttpResponse, String>,
+    outcome: Result<HttpResponse, morf_io::Error>,
     url: &str,
     json: &JsonKinds,
     limits: Limits,
@@ -389,7 +392,8 @@ pub(crate) fn execute_http_handler(
             response.set_field(ctx, "ok", false);
             response.set_field(ctx, "status", 0i64);
             response.set_field(ctx, "url", url);
-            response.set_field(ctx, "error", error.as_str());
+            response.set_field(ctx, "error", error.message());
+            response.set_field(ctx, "error_kind", error.kind().name());
             ctx.intern(b"")
         }
     };

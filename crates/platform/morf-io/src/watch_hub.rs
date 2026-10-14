@@ -98,11 +98,11 @@ impl<C: Clone> WatchHub<C> {
     }
 
     /// Refuses one more watch past `limit` open ones.
-    pub fn check_room(&self, limit: usize) -> Result<(), String> {
+    pub fn check_room(&self, limit: usize) -> Result<(), crate::Error> {
         if self.len() >= limit {
-            return Err(format!(
+            return Err(crate::Error::Invalid(format!(
                 "more than {limit} watches open (MORF_LIMITS=watches=N)"
-            ));
+            )));
         }
         Ok(())
     }

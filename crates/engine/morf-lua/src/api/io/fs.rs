@@ -150,7 +150,7 @@ pub(crate) fn install_fs_api<'gc>(
             let limit = match limit {
                 LuaValue::Nil => DEFAULT_READ,
                 LuaValue::Integer(limit) => {
-                    ops::read_limit(limit, "fs.read_async").map_err(HostError)?
+                    ops::read_limit(limit, "fs.read_async").map_err(HostError::from)?
                 }
                 _ => return Err(HostError("fs.read_async limit must be an integer".into()).into()),
             };
@@ -238,7 +238,7 @@ pub(crate) fn install_fs_api<'gc>(
             if let LuaValue::Table(window) = limit {
                 let offset = integer(ctx, Some(window), "offset")?;
                 let length = integer(ctx, Some(window), "length")?;
-                let (offset, length) = ops::read_window(offset, length).map_err(HostError)?;
+                let (offset, length) = ops::read_window(offset, length).map_err(HostError::from)?;
                 match ops::read_range(&path, offset, length) {
                     Ok(bytes) => stack.replace(ctx, luna::String::from_slice(&ctx, bytes)),
                     Err(error) => fail!(stack, ctx, error),
@@ -247,7 +247,9 @@ pub(crate) fn install_fs_api<'gc>(
             }
             let limit = match limit {
                 LuaValue::Nil => DEFAULT_READ,
-                LuaValue::Integer(limit) => ops::read_limit(limit, "fs.read").map_err(HostError)?,
+                LuaValue::Integer(limit) => {
+                    ops::read_limit(limit, "fs.read").map_err(HostError::from)?
+                }
                 _ => {
                     return Err(HostError(
                         "fs.read takes a byte limit or { offset, length }".into(),
