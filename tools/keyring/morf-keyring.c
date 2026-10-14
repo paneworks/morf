@@ -158,7 +158,9 @@ static gboolean boolean_member(JsonObject *object,const char *name) {
     JsonNode *n=json_object_get_member(object,name);
     return n && JSON_NODE_HOLDS_VALUE(n) && json_node_get_value_type(n)==G_TYPE_BOOLEAN && json_node_get_boolean(n);
 }
-static gboolean handle_line(const char *line,gsize length) {
+/* Answers carry secrets only from the private socket or a stdin pipe, so a
+ * terminal or file on stdin can cancel prompts but never fill a password. */
+static gboolean handle_line(const char *line,gsize length,gboolean secrets) {
     JsonParser *parser=json_parser_new();
     /* Do not log parse errors; malformed input could contain a secret. */
     if (!json_parser_load_from_data(parser,line,length,NULL)) goto invalid;
@@ -171,41 +173,50 @@ static gboolean handle_line(const char *line,gsize length) {
     if (value<=0 || value>G_MAXUINT) goto invalid;
     MorfPrompt *prompt=g_hash_table_lookup(pending,GUINT_TO_POINTER((guint)value));
     const char *action=string_member(object,"action"), *secret=string_member(object,"password");
-    if (!action || (strcmp(action,"continue") && strcmp(action,"cancel"))) goto invalid;
-    if (prompt) {
-        gboolean accepted=action && !strcmp(action,"continue");
+    gboolean valid=action && (!strcmp(action,"continue") || !strcmp(action,"cancel")) && (!secret || secrets);
+    if (valid && prompt) {
+        gboolean accepted=!strcmp(action,"continue");
         if (prompt->password && accepted && (!secret || strlen(secret)>16384)) accepted=FALSE;
         complete(prompt,accepted,secret,boolean_member(object,"choice"));
     }
     if (secret) explicit_bzero((char *)secret,strlen(secret));
-    g_object_unref(parser); return prompt!=NULL;
+    g_object_unref(parser); return valid && prompt!=NULL;
 invalid:
     g_object_unref(parser); return FALSE;
 }
-static GByteArray *input;
+/* Input lands in fixed buffers read in place: nothing reallocates or is freed
+ * unwiped, and consumed lines are zeroed before the remainder moves down. */
+#define LINE_LIMIT 65536
+static guint8 input[LINE_LIMIT];
+static gsize input_len;
+static gboolean stdin_secrets;
 static void read_done(GObject *stream,GAsyncResult *result,gpointer data) {
     (void)data;
-    GError *error=NULL;
-    GBytes *bytes=g_input_stream_read_bytes_finish(G_INPUT_STREAM(stream),result,&error);
-    gsize length=0; const guint8 *chunk=bytes ? g_bytes_get_data(bytes,&length) : NULL;
-    if (!chunk || !length || input->len+length>65536) { g_clear_error(&error); if (bytes) g_bytes_unref(bytes); g_main_loop_quit(loop); return; }
-    g_byte_array_append(input,chunk,length); g_bytes_unref(bytes);
+    gssize got=g_input_stream_read_finish(G_INPUT_STREAM(stream),result,NULL);
+    if (got<=0) { g_main_loop_quit(loop); return; }
+    input_len+=(gsize)got;
     guint8 *newline;
-    while ((newline=memchr(input->data,'\n',input->len))) {
-        guint consumed=(guint)(newline-input->data)+1;
-        handle_line((char *)input->data,consumed-1);
-        explicit_bzero(input->data,consumed); g_byte_array_remove_range(input,0,consumed);
+    while ((newline=memchr(input,'\n',input_len))) {
+        gsize consumed=(gsize)(newline-input)+1;
+        handle_line((char *)input,consumed-1,stdin_secrets);
+        memmove(input,input+consumed,input_len-consumed);
+        input_len-=consumed;
+        explicit_bzero(input+input_len,consumed);
     }
-    g_input_stream_read_bytes_async(G_INPUT_STREAM(stream),4096,G_PRIORITY_DEFAULT,NULL,read_done,NULL);
+    if (input_len==sizeof(input)) { g_main_loop_quit(loop); return; }
+    g_input_stream_read_async(G_INPUT_STREAM(stream),input+input_len,sizeof(input)-input_len,
+        G_PRIORITY_DEFAULT,NULL,read_done,NULL);
 }
 /* Only answers cross this socket. Its random parent directory is private to
- * this user; the listener also checks the peer UID. Metadata stays on stdout.
+ * this user; the listener also checks the peer UID. Metadata stays on stdout;
+ * the parent's stdin pipe may also answer, for the output that spawned us.
  * Each connection has a byte limit and deadline, and answers are never logged. */
 typedef struct {
     GSocketConnection *connection;
     GCancellable *cancel;
-    GByteArray *bytes;
     guint timeout;
+    gsize len;
+    guint8 data[LINE_LIMIT];
 } Answer;
 static guint answer_count;
 static gboolean answer_timeout(gpointer data) {
@@ -215,21 +226,17 @@ static void answer_free(Answer *a) {
     answer_count--;
     if (a->timeout) g_source_remove(a->timeout);
     g_io_stream_close(G_IO_STREAM(a->connection),NULL,NULL);
-    explicit_bzero(a->bytes->data,a->bytes->len); g_byte_array_unref(a->bytes);
+    explicit_bzero(a->data,sizeof(a->data));
     g_object_unref(a->cancel); g_object_unref(a->connection); g_free(a);
 }
 static void answer_read(GObject *stream,GAsyncResult *result,gpointer data) {
     Answer *a=data;
-    GBytes *bytes=g_input_stream_read_bytes_finish(G_INPUT_STREAM(stream),result,NULL);
-    gsize length=0; const guint8 *chunk=bytes ? g_bytes_get_data(bytes,&length) : NULL;
-    if (!length || a->bytes->len+length>65536) {
-        if (bytes) g_bytes_unref(bytes);
-        answer_free(a); return;
-    }
-    g_byte_array_append(a->bytes,chunk,length); g_bytes_unref(bytes);
-    guint8 *newline=memchr(a->bytes->data,'\n',a->bytes->len);
+    gssize got=g_input_stream_read_finish(G_INPUT_STREAM(stream),result,NULL);
+    if (got<=0) { answer_free(a); return; }
+    a->len+=(gsize)got;
+    guint8 *newline=memchr(a->data,'\n',a->len);
     if (newline) {
-        gboolean ok=handle_line((char *)a->bytes->data,newline-a->bytes->data);
+        gboolean ok=handle_line((char *)a->data,newline-a->data,TRUE);
         /* Tiny reply; nonblocking so a non-reading client cannot stall GCR. */
         GSocket *socket=g_socket_connection_get_socket(a->connection);
         g_socket_set_blocking(socket,FALSE);
@@ -237,7 +244,9 @@ static void answer_read(GObject *stream,GAsyncResult *result,gpointer data) {
         g_socket_send(socket,reply,strlen(reply),NULL,NULL);
         answer_free(a); return;
     }
-    g_input_stream_read_bytes_async(G_INPUT_STREAM(stream),4096,G_PRIORITY_DEFAULT,a->cancel,answer_read,a);
+    if (a->len==sizeof(a->data)) { answer_free(a); return; }
+    g_input_stream_read_async(G_INPUT_STREAM(stream),a->data+a->len,sizeof(a->data)-a->len,
+        G_PRIORITY_DEFAULT,a->cancel,answer_read,a);
 }
 static gboolean answer_incoming(GSocketService *service,GSocketConnection *connection,GObject *source,gpointer data) {
     (void)service; (void)source; (void)data;
@@ -247,9 +256,9 @@ static gboolean answer_incoming(GSocketService *service,GSocketConnection *conne
     if (!allowed || answer_count>=16) return FALSE;
     answer_count++;
     Answer *a=g_new0(Answer,1);
-    a->connection=g_object_ref(connection); a->cancel=g_cancellable_new(); a->bytes=g_byte_array_new();
+    a->connection=g_object_ref(connection); a->cancel=g_cancellable_new();
     a->timeout=g_timeout_add_seconds(5,answer_timeout,a);
-    g_input_stream_read_bytes_async(g_io_stream_get_input_stream(G_IO_STREAM(connection)),4096,
+    g_input_stream_read_async(g_io_stream_get_input_stream(G_IO_STREAM(connection)),a->data,sizeof(a->data),
         G_PRIORITY_DEFAULT,a->cancel,answer_read,a);
     return TRUE;
 }
@@ -282,7 +291,8 @@ int main(void) {
     struct rlimit limit={0,0}; setrlimit(RLIMIT_CORE,&limit); prctl(PR_SET_DUMPABLE,0);
     signal(SIGPIPE,SIG_IGN);
     loop=g_main_loop_new(NULL,FALSE); pending=g_hash_table_new(g_direct_hash,g_direct_equal);
-    input=g_byte_array_new();
+    struct stat in;
+    stdin_secrets=fstat(STDIN_FILENO,&in)==0 && S_ISFIFO(in.st_mode);
     GError *error=NULL; GDBusConnection *connection=g_bus_get_sync(G_BUS_TYPE_SESSION,NULL,&error);
     if (!connection) { fputs("morf-keyring: session bus unavailable\n",stderr); g_clear_error(&error); return 1; }
     char *answer_directory=NULL;
@@ -294,13 +304,13 @@ int main(void) {
     const char *bus_names[]={"org.gnome.keyring.SystemPrompter","org.gnome.keyring.PrivatePrompter"};
     for (guint i=0;i<2;i++) owners[i]=g_bus_own_name_on_connection(connection,bus_names[i],G_BUS_NAME_OWNER_FLAGS_NONE,acquired,lost,GUINT_TO_POINTER(i),NULL);
     GInputStream *stream=g_unix_input_stream_new(0,FALSE);
-    g_input_stream_read_bytes_async(stream,4096,G_PRIORITY_DEFAULT,NULL,read_done,NULL);
+    g_input_stream_read_async(stream,input,sizeof(input),G_PRIORITY_DEFAULT,NULL,read_done,NULL);
     g_unix_signal_add(SIGTERM,stop,NULL); g_unix_signal_add(SIGINT,stop,NULL);
     g_main_loop_run(loop);
     disconnected=TRUE;
     gcr_system_prompter_unregister(prompter,FALSE);
     for (guint i=0;i<2;i++) g_bus_unown_name(owners[i]);
-    explicit_bzero(input->data,input->len); g_byte_array_unref(input);
+    explicit_bzero(input,sizeof(input));
     g_object_unref(stream); g_object_unref(prompter); g_object_unref(connection);
     g_socket_service_stop(answers); g_object_unref(answers);
     g_unlink(answer_path); g_rmdir(answer_directory); g_free(answer_path); g_free(answer_directory);
