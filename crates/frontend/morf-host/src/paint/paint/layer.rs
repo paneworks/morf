@@ -10,11 +10,15 @@ use morf_value::region::{Rect as RegionRect, Region};
 
 use crate::host::{layers::*, surfaces::*};
 
-use super::{
-    CachedLayout, FrameSplit, MASK_SENTINEL, apply_blend, apply_subpixel, frame_log_wanted,
-    layout_for,
-};
+use super::cache::{CachedLayout, layout_for};
+use super::frame_log::{FrameSplit, frame_log_wanted};
+use super::renderer_settings::{apply_blend, apply_subpixel};
 
+/// Lays out, masks, and renders the scene subtree of one layer surface.
+///
+/// Every layer surface derives its input region the same way: an explicit mask
+/// when the configuration supplies one, and otherwise the live geometry of the
+/// interactive items, recomputed here so it tracks the surface as it changes.
 pub fn paint_layer(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
@@ -289,6 +293,19 @@ pub fn paint_layer_surface(
     surface.layout = Some(painted);
     Ok(())
 }
+
+/// Stands in the input cache for "the configured mask, already sent".
+///
+/// A configured mask is not built from layout, so there is no rectangle list to
+/// compare; what the cache needs is only something that is equal to itself and
+/// unequal to any real region. The negative extent cannot arise from geometry,
+/// which is floored and ceiled from a non-negative rectangle.
+pub const MASK_SENTINEL: InputRect = InputRect {
+    x: i32::MIN,
+    y: i32::MIN,
+    width: -1,
+    height: -1,
+};
 
 /// Hands the compositor where the layer takes the pointer: the configured
 /// mask, or the live geometry of its interactive items. Sent only when it

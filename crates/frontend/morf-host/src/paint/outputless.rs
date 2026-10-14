@@ -18,11 +18,11 @@ use std::os::fd::AsFd;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use crate::host::desktop::{desktop_for, dispatch_desktop};
+use crate::host::desktop::{apply_service_requests, desktop_for, dispatch_desktop};
 use crate::{
-    host::layers::apply_service_requests, lock::*, paint::clock_text, paint::wake_plan::*,
-    process::services::apply_idle_timeouts, process::services::refresh_idle_timeouts,
-    process::supervisor::execute_config_on, process::workers::*,
+    lock::*, paint::clock_text, paint::wake_plan::*, process::services::apply_idle_timeouts,
+    process::services::refresh_idle_timeouts, process::supervisor::execute_config_on,
+    process::workers::*,
 };
 
 /// The name the outputless runtime goes by among the workers, in logs and in

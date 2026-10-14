@@ -1,11 +1,18 @@
-//! The desktop protocols, beside a window client on its connection.
+//! The desktop protocols, beside a window client on its connection: what
+//! they send the configuration, and what it queued for them.
 
 use morf_app::Backend;
-use morf_desktop::{Desktop, DesktopEvent};
-use morf_lua::Runtime;
+use morf_desktop::{Desktop, DesktopEvent, ToplevelAction};
+use morf_lua::{Runtime, Toplevel, Workspace, WorkspaceRequest};
 use morf_render::{RenderEngine, WgpuBackend};
 
-use crate::capture::{OfferedCapture, answer_capture_offer, dispatch_screencopy};
+use crate::capture::{
+    OfferedCapture, answer_capture_offer, apply_screencopy_requests, dispatch_screencopy,
+};
+use crate::process::services::{
+    apply_clipboard_requests, apply_gamma_requests, apply_input_method_requests,
+    apply_output_power_requests, apply_text_input_requests, apply_virtual_keyboard_requests,
+};
 
 /// The desktop protocols on `client`'s connection; a request naming no
 /// output is for the one `client`'s surface sits on.
@@ -81,4 +88,135 @@ pub fn dispatch_desktop(
         }
     }
     Ok(repaint)
+}
+
+/// Hands every request a configuration has queued to the compositor.
+///
+/// One list, called at each of the three points that need it. It used to be
+/// written out six times in three different subsets, and the subsets did not
+/// agree: the startup copies left out clipboard requests, and the copies that
+/// run *after* the event loop — the ones that exist so a request made by an
+/// input handler reaches the compositor in the same frame — left out output
+/// power. So a key handler that turned a display off was a frame late, every
+/// time, for no reason anybody chose.
+pub fn apply_service_requests(
+    runtime: &mut Runtime,
+    client: &mut dyn Backend,
+    desktop: &mut dyn Desktop,
+) {
+    apply_clipboard_requests(runtime, client, desktop);
+    crate::input::drag::apply_offer_reads(runtime, client, desktop);
+    crate::input::drag::apply_drag_requests(runtime, client);
+    apply_virtual_keyboard_requests(runtime, client);
+    apply_input_method_requests(runtime, client);
+    apply_text_input_requests(runtime, client);
+    // The rest is the desktop protocols'. Each is taken from the queue
+    // whatever the desktop can do, and handed on only where it can.
+    apply_output_power_requests(runtime, desktop);
+    apply_gamma_requests(runtime, desktop);
+    apply_screencopy_requests(runtime, desktop);
+    publish_windows(runtime, desktop);
+    publish_workspaces(runtime, desktop);
+    apply_workspace_requests(runtime, desktop);
+    apply_toplevel_requests(runtime, desktop);
+}
+
+/// Hands the compositor's window list to the configuration, when it changed.
+///
+/// Only when it changed. The list is rebuilt from scratch each time — cheap for
+/// a dozen windows, and cheaper than a diff that would have to decide what
+/// identity means for a renamed window — but doing it every frame would rebuild
+/// a dozen Lua tables sixty times a second to say nothing new.
+fn publish_windows(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    if !desktop.capabilities().toplevels || !desktop.take_toplevels_changed() {
+        return;
+    }
+    let windows: Vec<Toplevel> = desktop
+        .toplevels()
+        .into_iter()
+        .map(|window| Toplevel {
+            identifier: window.identifier,
+            title: window.title,
+            app_id: window.app_id,
+            activated: window.activated,
+            maximized: window.maximized,
+            minimized: window.minimized,
+            fullscreen: window.fullscreen,
+            controllable: window.controllable,
+            outputs: window.outputs,
+            parent: window.parent,
+        })
+        .collect();
+    runtime.set_windows(&windows);
+}
+
+/// Hands the compositor's workspace list to the configuration, when it changed.
+///
+/// The same contract as the window list above, and rebuilt the same way for the
+/// same reason.
+fn publish_workspaces(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    if !desktop.capabilities().workspaces || !desktop.take_workspaces_changed() {
+        return;
+    }
+    let workspaces: Vec<Workspace> = desktop
+        .workspaces()
+        .into_iter()
+        .map(|workspace| Workspace {
+            key: workspace.key,
+            id: workspace.id,
+            name: workspace.name,
+            coordinates: workspace.coordinates,
+            output: workspace.output,
+            active: workspace.active,
+            urgent: workspace.urgent,
+            hidden: workspace.hidden,
+            activatable: workspace.activatable,
+            removable: workspace.removable,
+            assignable: workspace.assignable,
+        })
+        .collect();
+    runtime.set_workspaces(&workspaces);
+}
+
+/// Acts on other windows, if the configuration asked.
+fn apply_toplevel_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    let requests = runtime.take_toplevel_requests();
+    if !desktop.capabilities().toplevel_control {
+        return;
+    }
+    for request in requests {
+        let action = match request.action.as_str() {
+            "activate" => ToplevelAction::Activate,
+            "close" => ToplevelAction::Close,
+            "set_maximized" => ToplevelAction::Maximized(request.value),
+            "set_minimized" => ToplevelAction::Minimized(request.value),
+            "set_fullscreen" => ToplevelAction::Fullscreen(request.value),
+            "set_minimize_target" => match request.rect {
+                Some((x, y, width, height)) => ToplevelAction::MinimizeTarget {
+                    x,
+                    y,
+                    width,
+                    height,
+                },
+                None => continue,
+            },
+            _ => continue,
+        };
+        desktop.control_toplevel(&request.identifier, action);
+    }
+}
+
+/// Acts on workspaces, if the configuration asked.
+fn apply_workspace_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    let requests = runtime.take_workspace_requests();
+    if !desktop.capabilities().workspaces {
+        return;
+    }
+    for request in requests {
+        match request {
+            WorkspaceRequest::Activate(key) => desktop.activate_workspace(&key),
+            WorkspaceRequest::Remove(key) => desktop.remove_workspace(&key),
+            WorkspaceRequest::Assign { key, output } => desktop.assign_workspace(&key, &output),
+        };
+    }
 }

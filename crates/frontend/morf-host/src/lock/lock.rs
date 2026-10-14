@@ -11,13 +11,13 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use crate::host::desktop::apply_service_requests;
 use crate::host::desktop::{desktop_for, dispatch_desktop};
 use crate::host::windows::{Kind, Windows};
 use crate::paint::render_target::surface_backend;
 use crate::{
-    host::layers::*, host::surfaces::*, input::keys::*, input::pointer::*, lock::outputs::*,
-    paint::wake_plan::*, paint::*, process::services::apply_idle_timeouts,
-    process::services::refresh_idle_timeouts,
+    host::surfaces::*, input::keys::*, input::pointer::*, lock::outputs::*, paint::wake_plan::*,
+    paint::*, process::services::apply_idle_timeouts, process::services::refresh_idle_timeouts,
 };
 
 pub struct Worker {

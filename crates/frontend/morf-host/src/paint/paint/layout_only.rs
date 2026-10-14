@@ -11,8 +11,9 @@ use morf_text::TextSystem;
 use crate::host::layers::window_layer_id;
 use crate::host::surfaces::{Window, keyboard_focus_of};
 
+use super::auxiliary::AuxiliaryKind;
+use super::cache::{CachedLayout, layout_for};
 use super::layer::send_input_region;
-use super::{AuxiliaryKind, CachedLayout, layout_for};
 
 /// Lays out one layer as [`super::layer::paint_layer`] paints it.
 pub fn lay_out_layer(

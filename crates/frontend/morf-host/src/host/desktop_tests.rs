@@ -6,7 +6,7 @@ use morf_desktop::{
 use morf_lua::Runtime;
 use morf_value::IpcValue;
 
-use crate::host::layers::apply_service_requests;
+use crate::host::desktop::apply_service_requests;
 
 fn asking() -> Runtime {
     let mut runtime = Runtime::default();

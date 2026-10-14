@@ -8,6 +8,7 @@ use morf_render::RenderEngine;
 use morf_text::TextSystem;
 use std::time::{Duration, Instant};
 
+use crate::host::desktop::apply_service_requests;
 use crate::host::windows::Windows;
 use crate::paint::painter::Painter;
 use crate::paint::render_target::surface_backend;

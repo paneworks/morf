@@ -17,7 +17,7 @@ use std::os::fd::BorrowedFd;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use crate::host::desktop::dispatch_desktop;
+use crate::host::desktop::{apply_service_requests, dispatch_desktop};
 use crate::process::supervisor::LoadPolicy;
 use crate::{
     host::events::*,
