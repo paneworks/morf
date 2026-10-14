@@ -48,7 +48,7 @@ impl Runtime {
             event,
             UiEvent::TouchPressed | UiEvent::TouchMoved | UiEvent::TouchReleased
         ) {
-            self.reactive.borrow_mut().gestures.touch();
+            self.reactive.borrow_mut().gestures_mut().touch();
         }
         self.dispatch_ui_event_with_args(node, event, &args::touch_args(id, point))
     }

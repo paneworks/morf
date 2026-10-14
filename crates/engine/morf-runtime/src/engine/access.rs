@@ -42,4 +42,6 @@ subsystems! {
     shortcuts, shortcuts_mut: crate::shortcuts::Shortcuts;
     /// Where each node was laid out, and how it is transformed.
     transform_tracker, transform_tracker_mut: morf_layout::TransformTracker;
+    /// Presses under way that may become gestures.
+    gestures, gestures_mut: crate::gestures::Gestures;
 }

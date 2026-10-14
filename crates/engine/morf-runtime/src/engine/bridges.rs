@@ -38,6 +38,18 @@ impl Engine {
         self.clocks.update(&mut self.reactive, time)
     }
 
+    /// The long press whose time came by `now`, on a node with a
+    /// `LongPressed` handler: its node and where it was pressed.
+    pub fn take_long_press(
+        &mut self,
+        now: std::time::Duration,
+    ) -> Option<(morf_scene::NodeHandle, crate::events::EventPoint)> {
+        let events = &self.events;
+        self.gestures.take_long_press(now, |node| {
+            events.has(node, crate::events::UiEvent::LongPressed)
+        })
+    }
+
     /// Takes the nodes destroyed since the last frame, and drops their
     /// transforms.
     pub fn take_removed_nodes(&mut self) -> Vec<morf_scene::NodeHandle> {

@@ -33,7 +33,7 @@ impl Runtime {
 
     /// Forget the gesture when its contact is canceled or claimed elsewhere.
     pub fn cancel_gesture(&mut self) {
-        self.reactive.borrow_mut().gestures.cancel();
+        self.reactive.borrow_mut().gestures_mut().cancel();
     }
 
     /// Watches one pointer event. Returns false for a click a long press
@@ -46,7 +46,7 @@ impl Runtime {
     ) -> bool {
         let mut state = self.reactive.borrow_mut();
         let now = clock(state.timers.virtual_now());
-        state.gestures.watch(now, node, event, point)
+        state.gestures_mut().watch(now, node, event, point)
     }
 
     /// The events a pointer event completes, delivered after it: a double
@@ -60,7 +60,7 @@ impl Runtime {
         let completed = {
             let mut state = self.reactive.borrow_mut();
             let now = clock(state.timers.virtual_now());
-            state.gestures.finish(now, node, event, point)
+            state.gestures_mut().finish(now, node, event, point)
         };
         let (event, args) = match completed {
             Some(Completed::DoubleClicked(point)) => (
@@ -108,10 +108,7 @@ impl Runtime {
         let due = {
             let mut state = self.reactive.borrow_mut();
             let now = clock(state.timers.virtual_now());
-            let morf_runtime::Engine {
-                gestures, events, ..
-            } = &mut state.engine;
-            gestures.take_long_press(now, |node| events.has(node, UiEvent::LongPressed))
+            state.engine.take_long_press(now)
         };
         match due {
             Some((node, point)) => self.dispatch_ui_event_with_args(

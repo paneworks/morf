@@ -55,7 +55,7 @@ pub struct Engine {
     /// Each node's `shortcuts`, a sequence half typed, a modifier's tap.
     shortcuts:crate::shortcuts::Shortcuts,
     /// Presses under way that may become gestures.
-    pub gestures: crate::gestures::Gestures,
+    gestures:crate::gestures::Gestures,
     /// Each node's handler for each event, and the `contains_pointer` watches.
     pub events: crate::events::Events,
     /// Each node's declared states.
