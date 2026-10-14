@@ -227,14 +227,14 @@ pub(crate) fn install_shell_api<'gc>(
     );
     let shell_id_state = Rc::clone(&state);
     let shell_id = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let id = shell_storage_key(&shell_id_state.borrow().shell_root);
+        let id = shell_storage_key(shell_id_state.borrow().shell_root());
         stack.replace(ctx, id);
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "shell_id", shell_id);
     let shell_dir_state = Rc::clone(&state);
     let shell_dir = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let root = shell_dir_state.borrow().shell_root.clone();
+        let root = shell_dir_state.borrow().shell_root().to_path_buf();
         stack.replace(ctx, root.to_string_lossy().as_ref());
         Ok(CallbackReturn::Return)
     });
@@ -243,7 +243,7 @@ pub(crate) fn install_shell_api<'gc>(
     let shell_path = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let relative: String = stack.consume(ctx)?;
         let path =
-            rooted_path(&shell_root_state.borrow().shell_root, &relative).map_err(HostError)?;
+            rooted_path(shell_root_state.borrow().shell_root(), &relative).map_err(HostError)?;
         stack.replace(ctx, path.to_string_lossy().as_ref());
         Ok(CallbackReturn::Return)
     });
@@ -257,7 +257,7 @@ pub(crate) fn install_shell_api<'gc>(
         let directory_state = Rc::clone(&state);
         let directory = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let root =
-                shell_storage_dir(&directory_state.borrow().shell_root, kind).map_err(HostError)?;
+                shell_storage_dir(directory_state.borrow().shell_root(), kind).map_err(HostError)?;
             stack.replace(ctx, root.to_string_lossy().as_ref());
             Ok(CallbackReturn::Return)
         });
@@ -267,7 +267,7 @@ pub(crate) fn install_shell_api<'gc>(
         let path = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let relative: String = stack.consume(ctx)?;
             let root =
-                shell_storage_dir(&path_state.borrow().shell_root, kind).map_err(HostError)?;
+                shell_storage_dir(path_state.borrow().shell_root(), kind).map_err(HostError)?;
             let path = rooted_path(&root, &relative).map_err(HostError)?;
             stack.replace(ctx, path.to_string_lossy().as_ref());
             Ok(CallbackReturn::Return)

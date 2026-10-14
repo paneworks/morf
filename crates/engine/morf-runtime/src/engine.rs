@@ -8,7 +8,7 @@
 //! ([`crate::views::ViewHost`], [`crate::editing::EditHost`], ...).
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 
 use morf_layout::TransformTracker;
 use morf_scene::Scene;
@@ -74,8 +74,6 @@ pub struct Engine {
     /// the layout places.
     layout_hooks: crate::layout::LayoutHooks,
     pub transform_tracker: TransformTracker,
-    /// Where the configuration's own files are.
-    pub shell_root: PathBuf,
     /// What handlers asked of the platform, queued for the host.
     pub requests: crate::requests::Requests,
     /// The windows the configuration declared, as the host reads them.
@@ -129,7 +127,6 @@ impl Engine {
             retained: Default::default(),
             layout_hooks: Default::default(),
             transform_tracker: TransformTracker::default(),
-            shell_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             requests: Default::default(),
             windows: Default::default(),
         }
@@ -138,6 +135,11 @@ impl Engine {
     /// The clock signal a reader at `precision` depends on.
     pub fn clock_signal(&self, precision: crate::wake::ClockPrecision) -> SignalId {
         self.clocks.signal(precision)
+    }
+
+    /// Where the configuration's own files are.
+    pub fn shell_root(&self) -> &Path {
+        self.lifecycle.shell_root()
     }
 
     /// Records one log line, stamped with when it happened.

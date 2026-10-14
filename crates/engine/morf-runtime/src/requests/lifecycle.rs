@@ -3,6 +3,7 @@
 //! across one.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use morf_scene::reactive::SignalId;
 use morf_value::IpcValue;
@@ -32,6 +33,8 @@ pub struct Lifecycle {
     reload_seed: HashMap<String, IpcValue>,
     /// Each `morf.reloadable` value, by name.
     reloadable: HashMap<String, SignalId>,
+    /// Where the configuration's own files are.
+    shell_root: PathBuf,
 }
 
 impl Default for Lifecycle {
@@ -46,11 +49,22 @@ impl Default for Lifecycle {
             reload_failed_callbacks: Vec::new(),
             reload_seed: HashMap::new(),
             reloadable: HashMap::new(),
+            shell_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
         }
     }
 }
 
 impl Lifecycle {
+    /// Where the configuration's own files are.
+    pub fn shell_root(&self) -> &Path {
+        &self.shell_root
+    }
+
+    /// Roots the configuration at `root`.
+    pub fn set_shell_root(&mut self, root: PathBuf) {
+        self.shell_root = root;
+    }
+
     /// Asks for a reload; a hard one wins over a soft one.
     pub fn ask_reload(&mut self, hard: bool) {
         self.reload_request = Some(self.reload_request.unwrap_or(false) || hard);

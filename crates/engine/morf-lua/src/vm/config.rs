@@ -119,7 +119,7 @@ impl Runtime {
 
     /// Sets the root directory used by native shell path helpers.
     pub fn set_shell_root(&mut self, root: PathBuf) {
-        self.reactive.borrow_mut().shell_root = root;
+        self.reactive.borrow_mut().lifecycle.set_shell_root(root);
     }
 
     /// Returns the native layer-surface settings assigned by the configuration.
