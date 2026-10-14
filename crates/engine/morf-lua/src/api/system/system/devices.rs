@@ -13,10 +13,11 @@ pub(super) fn install_udev<'gc>(
     let udev_subscribe = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (subsystem, callback): (Option<String>, Closure) = stack.consume(ctx)?;
         let monitor = UdevMonitor::new(subsystem).map_err(|error| HostError(error.to_string()))?;
-        udev_state.borrow_mut().udev_monitors.push(PendingUdev {
-            monitor,
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
-        });
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        udev_state
+            .borrow_mut()
+            .feeds
+            .watch_devices(monitor, callback);
         Ok(CallbackReturn::Return)
     });
     let udev = Table::new(&ctx);
@@ -57,13 +58,11 @@ pub(super) fn install_status_notifier<'gc>(
         let host = StatusNotifierHost::connect_to(&borrowed)
             .map_err(|error| HostError(error.to_string()))?;
         let mut state = status_notifier_state.borrow_mut();
-        if state.status_notifiers.len() >= 4 {
+        if state.feeds.trays_full() {
             return Err(HostError("status notifier subscription limit reached".into()).into());
         }
-        state.status_notifiers.push(PendingStatusNotifier {
-            host,
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
-        });
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        state.feeds.watch_tray(host, callback);
         Ok(CallbackReturn::Return)
     });
     let status_notifier = Table::new(&ctx);

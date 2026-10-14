@@ -19,12 +19,14 @@ pub(crate) use crate::vm::state_cell::{StateCell, StateRef, StateRefMut};
 
 mod auth;
 mod dbus;
+mod feeds;
 mod follow;
 mod metatables;
 mod methods;
 
 pub(crate) use auth::Auth;
 pub(crate) use dbus::DbusState;
+pub(crate) use feeds::Feeds;
 pub(crate) use metatables::Metatables;
 
 pub(crate) use follow::apply_follows;
@@ -113,10 +115,8 @@ pub(crate) struct ReactiveState {
     /// `morf.toplevels`, installed with the runtime and fed by
     /// `Runtime::set_windows`.
     pub(crate) toplevels: Option<crate::api::desktop::toplevels::ToplevelHost>,
-    pub(crate) udev_monitors: Vec<PendingUdev>,
-    pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
-    /// `morf.http` requests in flight.
-    pub(crate) http_requests: Vec<crate::api::io::http::PendingHttp>,
+    /// udev monitors, tray hosts and `morf.http` requests in flight.
+    pub(crate) feeds: Feeds,
     /// `morf.spawn` children and `morf.connect` connections.
     pub(crate) io: crate::api::io::io::IoHub,
     /// `morf.fs.watch` watches.

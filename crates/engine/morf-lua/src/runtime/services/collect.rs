@@ -56,69 +56,18 @@ pub(super) fn drain(state: &mut ReactiveState, collected: &mut Collected) {
     // Bounded per frame (`morf_io::MAX_CALLS_PER_FRAME`): the caller is
     // blocked until we answer.
     dbus_calls.extend(state.dbus.drain_calls());
-    let mut udev_errors = Vec::new();
-    for subscription in &mut state.udev_monitors {
-        let mut drained = false;
-        for _ in 0..32 {
-            match subscription.monitor.next_event(Duration::ZERO) {
-                Ok(Some(event)) => {
-                    udev_events.push((subscription.callback.clone(), event));
-                }
-                Ok(None) => {
-                    drained = true;
-                    break;
-                }
-                Err(error) => {
-                    udev_errors.push(error.to_string());
-                    drained = true;
-                    break;
-                }
-            }
-        }
-        // This turn's share is taken; the monitor's alarm only rings
-        // again once a drain finds the socket empty, so the rest is
-        // asked for now.
-        if !drained {
-            morf_io::waker().wake();
-        }
-    }
+    let (events, udev_errors) = state.feeds.take_device_events();
+    udev_events.extend(events);
     for error in udev_errors {
         state.log(LogLevel::Warn, format!("udev: {error}"));
     }
-    let mut status_errors = Vec::new();
-    for subscription in &mut state.status_notifiers {
-        match subscription.host.poll_changed() {
-            Ok(Some(items)) => status_updates.push((subscription.callback.clone(), items)),
-            Ok(None) => {}
-            Err(error) => status_errors.push(error.to_string()),
-        }
-    }
+    let (updates, status_errors) = state.feeds.take_tray_updates();
+    status_updates.extend(updates);
     for error in status_errors {
         state.log(LogLevel::Warn, format!("status notifier: {error}"));
     }
-    // A cancelled request leaves here without a word, and dropping
-    // its task stops the worker; a finished one leaves with its
-    // answer, which is delivered below once the state is released.
-    state.http_requests.retain_mut(|entry| {
-        if entry.handle.cancelled.get() {
-            return false;
-        }
-        let Some(outcome) = entry.task.poll() else {
-            return true;
-        };
-        if let Some(callback) = entry.callback.take() {
-            http_answers.push((
-                callback,
-                outcome,
-                std::mem::take(&mut entry.url),
-                entry.json.clone(),
-                std::rc::Rc::clone(&entry.handle),
-            ));
-        } else {
-            entry.handle.done.set(true);
-        }
-        false
-    });
+    // A finished request's answer is delivered once the state is released.
+    http_answers.extend(state.feeds.take_http_answers());
     (*io_calls, *io_more) = state.io.collect();
     (*watch_calls, *watch_more) = state.watches.collect();
     retained_destroys.extend(state.retained_mut().retained_destroy_queue.drain());

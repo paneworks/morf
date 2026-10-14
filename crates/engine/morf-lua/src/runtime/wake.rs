@@ -67,10 +67,8 @@ impl Runtime {
             .next_deadline()
             .map(|at| (at, DeadlineCause::Terminal));
         let tray = state
-            .status_notifiers
-            .iter()
-            .filter_map(|subscription| subscription.host.next_deadline())
-            .min()
+            .feeds
+            .next_tray_deadline()
             .map(|at| (at, DeadlineCause::TrayRetry));
         morf_runtime::wake::earliest([
             state.engine.next_deadline(),

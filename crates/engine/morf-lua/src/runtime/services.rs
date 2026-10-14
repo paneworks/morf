@@ -3,7 +3,6 @@
 //! callbacks.
 
 use morf_system::{GreetdEvent, PamEvent};
-use std::time::Duration;
 
 use morf_scene::{NodeHandle, Value as SceneValue};
 
@@ -27,7 +26,7 @@ use definitions::{reconcile_loaders, reconcile_timers};
 pub(crate) use morf_runtime::engine::PRELOAD_PATIENCE;
 
 /// A finished HTTP request, with what its handler is called with.
-type HttpAnswer = (
+pub(crate) type HttpAnswer = (
     Handler,
     Result<morf_io::HttpResponse, morf_io::Error>,
     String,

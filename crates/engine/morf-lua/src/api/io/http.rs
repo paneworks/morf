@@ -192,19 +192,10 @@ impl Starter {
         callback: Option<Closure<'gc>>,
     ) -> Result<UserData<'gc>, HostError> {
         let mut reactive = self.state.borrow_mut();
-        reactive
-            .http_requests
-            .retain(|entry| !entry.handle.cancelled.get());
-        morf_io::check_pending(reactive.http_requests.len()).map_err(HostError::from)?;
-        let handle = Rc::new(HttpHandleState::default());
-        reactive.http_requests.push(PendingHttp {
-            url: request.url.clone(),
-            task: HttpTask::start(request),
-            callback: callback
-                .map(|callback| crate::vm::handler_store::register(ctx.stash(callback))),
-            handle: Rc::clone(&handle),
-            json: self.json.clone(),
-        });
+        reactive.feeds.make_room().map_err(HostError::from)?;
+        let callback =
+            callback.map(|callback| crate::vm::handler_store::register(ctx.stash(callback)));
+        let handle = reactive.feeds.request(request, callback, self.json.clone());
         let userdata = UserData::new_static(&ctx, HttpHandleToken { state: handle });
         userdata.set_metatable(ctx, Some(ctx.fetch(&self.metatable)));
         Ok(userdata)
