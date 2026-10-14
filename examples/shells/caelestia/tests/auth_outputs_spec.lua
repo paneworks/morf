@@ -5,7 +5,7 @@ test.it("one lock conversation follows the pointer between differently sized out
     morf.screens={{name="laptop",width=800,height=650},{name="external",width=500,height=720}}
     package.loaded["lib.services.accounts"]={me=function() return {name="fixture",label="Fixture",initial="F"} end}
     package.loaded["lib.services.keyboards"]={attached=function() return true end}
-    package.loaded["lib.integrations.lule"]={watch=function() return {get=function() return nil end} end}
+    package.loaded["lib.integrations.lule"]={watch=function() return {get=function() return nil end} end,read=function() return nil end}
     package.loaded["lib.integrations.hyprland"]={json=function(_,done) done({{name="laptop",focused=true}}) end}
     local submits=0
     package.loaded["lib.util.auth"]={lock_readers=function() return {} end,

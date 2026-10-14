@@ -10,7 +10,7 @@ local source=[[
   package.loaded["lib.services.sessions"]={list=function() return {
     {name="Hyprland",command={"false"}},{name="Plasma",command={"false"}}} end,default_index=function() return 1 end}
   package.loaded["lib.services.keyboards"]={attached=function() return morf.env("AUTH_TOUCH")~="1" end}
-  package.loaded["lib.integrations.lule"]={watch=function() return {get=function() return nil end} end}
+  package.loaded["lib.integrations.lule"]={watch=function() return {get=function() return nil end} end,read=function() return nil end}
   package.loaded["lib.integrations.weather"]={new=function() return {get=function() return {} end} end,material_symbol=function() return "cloud" end}
   package.loaded["lib.services.mpris"]={connect=function() return {state={active={}}} end}
   local part=morf.env("AUTH_PART")
