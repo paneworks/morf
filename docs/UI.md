@@ -2218,7 +2218,7 @@ swapchain as before.
 | `MORF_PRESENT_BUFFERS=N` | how many buffers of its own a surface uses at most (default 4) |
 | `MORF_PRESENT_WAIT_MS=N` | how long a frame waits for the compositor to give a buffer back before it is skipped (default 250); a skipped frame's changes go with the next one |
 | `MORF_DEPTH=10` | presents deeper than eight bits a channel where the compositor and the GPU both can (see below) |
-| `MORF_HDR=1` | presents HDR (PQ or scRGB, described with `wp_color_manager_v1`) where the compositor can; implies `MORF_DEPTH=10`; `MORF_HDR_WHITE=N` sets SDR white in cd/m² (see below) |
+| `MORF_HDR=1` | presents HDR (scRGB, or PQ; `MORF_HDR=pq` prefers PQ for opaque surfaces) where the compositor can; implies `MORF_DEPTH=10`; `MORF_HDR_WHITE=N` sets SDR white in cd/m² (see below) |
 
 #### Ten-bit output
 
@@ -2243,8 +2243,22 @@ presented through morf's own buffers is described to the compositor with
 
 | Buffer | Described as | 1.0 of SDR white lands at |
 |---|---|---|
-| `XBGR2101010` (opaque surface) | PQ (ST 2084) over BT.2020 | the reference white, 203 cd/m² by default |
-| `ABGR16161616F` (any surface) | extended linear over sRGB primaries (scRGB) where the compositor takes `ext_linear`, else PQ as above | 1.0 |
+| `ABGR16161616F` (any surface, where the compositor takes `ext_linear`) | extended linear over sRGB primaries (scRGB) | 1.0 |
+| `XBGR2101010` (opaque surface, without `ext_linear` or with `MORF_HDR=pq`) | PQ (ST 2084) over BT.2020 | the reference white, 203 cd/m² by default |
+| `ABGR16161616F` (translucent surface, without `ext_linear`) | PQ as above | the reference white |
+
+scRGB comes first because a compositor anchors its 1.0 at SDR white: the
+SDR parts of a frame look exactly as without HDR. PQ is absolute
+luminance, and what a compositor makes of it on an SDR output is its own
+affair -- Hyprland 0.55 tone-maps it, so SDR white shows at about 220 of
+255 and mid-grey at 160 rather than 128, in its screenshots as on screen.
+`MORF_HDR=pq` asks for PQ on opaque surfaces anyway.
+
+Through the swapchain (`MORF_PRESENT=swapchain`) the driver owns the
+surface's description, so HDR is a colour space the swapchain offers for
+the deep format -- `ExtendedSrgbLinear` or `Bt2100Pq` -- chosen the same
+way and encoded by the same composite; Mesa's WSI then describes the
+surface to the compositor. A swapchain offering neither stays sRGB.
 
 Content is authored as before -- sRGB colours, blended as `morf.surface.blend`
 says -- and only the composite at the end of the frame changes: linear
@@ -2256,7 +2270,7 @@ it, at the 203 cd/m² PQ implies.
 
 What cannot be had falls back, surface by surface, to the plain sRGB
 frame: a compositor without colour management (or without PQ and BT.2020),
-the swapchain (`MORF_PRESENT=swapchain`), an eight-bit buffer. The log says
+a swapchain without an HDR colour space, an eight-bit buffer. The log says
 once per encoding what the compositor advertised and what each surface
 was described as:
 
