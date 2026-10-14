@@ -279,14 +279,10 @@ pub(crate) fn assign_engine_relation<'gc>(
     value: LuaValue<'gc>,
 ) -> Result<(), String> {
     match property {
-        "shortcuts" => match crate::shortcut::read_table(ctx, value)? {
-            Some(shortcuts) => {
-                state.shortcuts.insert(node, shortcuts);
-            }
-            None => {
-                state.shortcuts.remove(&node);
-            }
-        },
+        "shortcuts" => {
+            let shortcuts = crate::shortcut::read_table(ctx, value)?;
+            state.shortcuts.set(node, shortcuts);
+        }
         "stretch" => {
             if matches!(value, LuaValue::Function(_)) {
                 return Err("stretch is a setting, not a binding: give it a table or true".into());

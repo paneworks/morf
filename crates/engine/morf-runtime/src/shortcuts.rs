@@ -143,10 +143,82 @@ pub struct NodeShortcuts {
 
 /// The first chords of a sequence, held on one surface.
 #[derive(Default)]
-pub struct Pending {
-    pub root: Option<NodeHandle>,
-    pub chords: Vec<Chord>,
-    pub since: Option<Instant>,
+struct Pending {
+    root: Option<NodeHandle>,
+    chords: Vec<Chord>,
+    since: Option<Instant>,
+}
+
+/// Every node's shortcuts, a sequence half typed, and a modifier's tap
+/// under way.
+#[derive(Default)]
+pub struct Shortcuts {
+    nodes: HashMap<NodeHandle, NodeShortcuts>,
+    pending: Pending,
+    /// A modifier pressed on its own, while nothing else has been: a tap of
+    /// it if it is let go next.
+    modifier_tap: Option<u32>,
+}
+
+impl Shortcuts {
+    /// Gives `node` its shortcuts, or takes them away.
+    pub fn set(&mut self, node: NodeHandle, shortcuts: Option<NodeShortcuts>) {
+        match shortcuts {
+            Some(shortcuts) => self.nodes.insert(node, shortcuts),
+            None => self.nodes.remove(&node),
+        };
+    }
+
+    /// Forgets a removed node's shortcuts.
+    pub fn forget(&mut self, node: &NodeHandle) {
+        self.nodes.remove(node);
+    }
+
+    /// The shortcuts `sequence` runs on the surface whose tree is `root`,
+    /// with `target` the node keys go to there, and whether it begins a
+    /// longer one.
+    pub fn matching(
+        &self,
+        scene: &Scene,
+        root: NodeHandle,
+        target: Option<NodeHandle>,
+        sequence: &[Chord],
+    ) -> (Vec<(NodeHandle, String, Handler)>, bool) {
+        if self.nodes.is_empty() {
+            return (Vec::new(), false);
+        }
+        matching(scene, &self.nodes, root, target, sequence)
+    }
+
+    /// Takes the chords held for `root`, if they are still waiting.
+    pub fn take_held(&mut self, root: NodeHandle) -> Vec<Chord> {
+        std::mem::take(&mut self.pending).held_for(root)
+    }
+
+    /// Drops a sequence half typed.
+    pub fn clear_held(&mut self) {
+        self.pending = Pending::default();
+    }
+
+    /// Holds `sequence` on `root`, waiting for its next chord.
+    pub fn hold(&mut self, root: NodeHandle, sequence: &[Chord]) {
+        self.pending = Pending::holding(root, sequence);
+    }
+
+    /// A key went down: the tap it starts, if it is a modifier alone.
+    pub fn start_tap(&mut self, tap: Option<u32>) {
+        self.modifier_tap = tap;
+    }
+
+    /// A key came up: the tap under way, ended.
+    pub fn take_tap(&mut self) -> Option<u32> {
+        self.modifier_tap.take()
+    }
+
+    /// Something other than the modifier happened: no tap.
+    pub fn break_tap(&mut self) {
+        self.modifier_tap = None;
+    }
 }
 
 /// Whether a node is a place keys type into.
@@ -224,7 +296,7 @@ pub fn tap_chord(key: u32) -> Chord {
 
 impl Pending {
     /// The chords held for `root`, if they are still waiting.
-    pub fn held_for(self, root: NodeHandle) -> Vec<Chord> {
+    fn held_for(self, root: NodeHandle) -> Vec<Chord> {
         let fresh = self.root == Some(root)
             && self
                 .since
@@ -233,7 +305,7 @@ impl Pending {
     }
 
     /// `sequence` held on `root`, waiting for its next chord.
-    pub fn holding(root: NodeHandle, sequence: &[Chord]) -> Self {
+    fn holding(root: NodeHandle, sequence: &[Chord]) -> Self {
         Self {
             root: Some(root),
             chords: sequence.to_vec(),
@@ -247,7 +319,7 @@ impl Pending {
 /// ancestors, nearest first, then those of any node on the surface whose
 /// table says `scope = "surface"`, in tree order. Also whether `sequence`
 /// begins a longer one there.
-pub fn matching(
+fn matching(
     scene: &Scene,
     shortcuts: &HashMap<NodeHandle, NodeShortcuts>,
     root: NodeHandle,

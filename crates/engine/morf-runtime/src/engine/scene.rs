@@ -74,7 +74,7 @@ impl Engine {
             self.views.remove(node);
             self.timer_callbacks.remove(node);
             self.linked_texts.remove(node);
-            self.shortcuts.remove(node);
+            self.shortcuts.forget(node);
         }
         // A removed field cannot keep the keyboard. The node that had focus
         // is handed on by the focus check, which still needs to know it went.

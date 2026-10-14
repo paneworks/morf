@@ -74,10 +74,10 @@ impl crate::Runtime {
     ) -> bool {
         let tap = tap_of(keysym);
         if pressed {
-            self.reactive.borrow_mut().modifier_tap = tap;
+            self.reactive.borrow_mut().shortcuts.start_tap(tap);
             return false;
         }
-        let started = self.reactive.borrow_mut().modifier_tap.take();
+        let started = self.reactive.borrow_mut().shortcuts.take_tap();
         match (started, tap) {
             (Some(a), Some(b)) if a == b => self.run_sequence(root, target, &[tap_chord(a)]),
             _ => false,
@@ -87,7 +87,7 @@ impl crate::Runtime {
     /// A pointer press while a modifier is down is not a tap of it (Alt and
     /// a drag moves a window).
     pub fn break_modifier_tap(&mut self) {
-        self.reactive.borrow_mut().modifier_tap = None;
+        self.reactive.borrow_mut().shortcuts.break_tap();
     }
 
     pub fn dispatch_shortcut(
@@ -103,10 +103,10 @@ impl crate::Runtime {
         let chord = Chord::pressed(keysym, modifiers);
         let element = target.and_then(|node| self.reactive.borrow().scene.element(node).ok());
         if !reaches_shortcuts(element, chord) {
-            self.reactive.borrow_mut().shortcut_pending = Pending::default();
+            self.reactive.borrow_mut().shortcuts.clear_held();
             return false;
         }
-        let held = std::mem::take(&mut self.reactive.borrow_mut().shortcut_pending).held_for(root);
+        let held = self.reactive.borrow_mut().shortcuts.take_held(root);
         let had_prefix = !held.is_empty();
         let mut sequence = held;
         sequence.push(chord);
@@ -125,10 +125,9 @@ impl crate::Runtime {
     ) -> bool {
         let (exact, prefix) = {
             let state = self.reactive.borrow();
-            if state.shortcuts.is_empty() {
-                return false;
-            }
-            matching(&state.scene, &state.shortcuts, root, target, sequence)
+            state
+                .shortcuts
+                .matching(&state.scene, root, target, sequence)
         };
         for (node, name, closure) in exact {
             let args = [IpcValue::String(name.clone())];
@@ -146,7 +145,7 @@ impl crate::Runtime {
             }
         }
         if prefix {
-            self.reactive.borrow_mut().shortcut_pending = Pending::holding(root, sequence);
+            self.reactive.borrow_mut().shortcuts.hold(root, sequence);
             return true;
         }
         false

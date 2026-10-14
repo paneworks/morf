@@ -68,12 +68,8 @@ pub struct Engine {
     pub editing: crate::editing::Editing,
     /// Which node of each surface has focus.
     pub focus: crate::focus::FocusState,
-    /// Each node's `shortcuts`, and a sequence half typed.
-    pub shortcuts: HashMap<NodeHandle, crate::shortcuts::NodeShortcuts>,
-    pub shortcut_pending: crate::shortcuts::Pending,
-    /// A modifier pressed on its own, while nothing else has been: a tap of
-    /// it if it is let go next.
-    pub modifier_tap: Option<u32>,
+    /// Each node's `shortcuts`, a sequence half typed, a modifier's tap.
+    pub shortcuts: crate::shortcuts::Shortcuts,
     /// Presses under way that may become gestures.
     pub gestures: crate::gestures::Gestures,
     /// Each node's handler for each event, and the `contains_pointer` watches.
@@ -151,9 +147,7 @@ impl Engine {
             scene: Scene::new(),
             editing: Default::default(),
             focus: Default::default(),
-            shortcuts: HashMap::new(),
-            shortcut_pending: Default::default(),
-            modifier_tap: None,
+            shortcuts: Default::default(),
             gestures: Default::default(),
             events: Default::default(),
             states: HashMap::new(),
