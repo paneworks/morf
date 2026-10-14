@@ -12,6 +12,7 @@ serde.workspace = true
 serde_json.workspace = true
 libc.workspace = true
 zbus.workspace = true
+async-executor.workspace = true
 ureq.workspace = true
 flate2.workspace = true
 lzma-rs.workspace = true

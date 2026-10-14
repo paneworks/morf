@@ -1842,6 +1842,7 @@ dependencies = [
 name = "morf-io"
 version = "0.2.8"
 dependencies = [
+ "async-executor",
  "flate2",
  "libc",
  "lzma-rs",

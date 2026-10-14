@@ -87,7 +87,7 @@ impl DbusService {
         path: &str,
         replace: bool,
     ) -> zbus::Result<(Self, NameOutcome)> {
-        let connection = bus.builder()?.build()?;
+        let connection = crate::dbus_types::driver::build(bus.builder()?)?;
         // `AllowReplacement` either way: a shell that cannot be restarted
         // without first being killed is a shell nobody restarts.
         //

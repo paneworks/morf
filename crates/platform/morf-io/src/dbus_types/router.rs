@@ -372,10 +372,7 @@ pub(super) fn router(bus: Bus) -> zbus::Result<Arc<SignalRouter>> {
     }
     // The asynchronous calls ride this connection too, and each carries its
     // own deadline; the connection's bound is only the ceiling under them.
-    let connection = bus
-        .builder()?
-        .method_timeout(MAX_ASYNC_CALL_TIMEOUT)
-        .build()?;
+    let connection = super::driver::build(bus.builder()?.method_timeout(MAX_ASYNC_CALL_TIMEOUT))?;
     let router = Arc::new(SignalRouter {
         connection: connection.clone(),
         routes: Mutex::new(Vec::new()),

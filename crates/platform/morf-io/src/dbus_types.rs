@@ -20,6 +20,7 @@
 //! alive" to it, which is the one thing every fd-returning service on a
 //! desktop (inhibitors, leases, portals' handles) actually asks of a client.
 
+pub(crate) mod driver;
 mod proxy;
 mod router;
 
@@ -57,7 +58,7 @@ impl Bus {
     /// is done on the calling thread and zbus is handed the stream. An
     /// address this does not understand -- TCP, `unixexec`, a launchd one --
     /// goes to zbus as before.
-    pub(crate) fn builder(self) -> zbus::Result<zbus::blocking::connection::Builder<'static>> {
+    pub(crate) fn builder(self) -> zbus::Result<zbus::connection::Builder<'static>> {
         let address = match self {
             Self::Session => std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().or_else(|| {
                 std::env::var("XDG_RUNTIME_DIR")
@@ -70,13 +71,11 @@ impl Bus {
             ),
         };
         if let Some(stream) = address.as_deref().and_then(connect_local) {
-            return Ok(zbus::blocking::connection::Builder::async_io_unix_stream(
-                stream,
-            ));
+            return Ok(zbus::connection::Builder::async_io_unix_stream(stream));
         }
         match self {
-            Self::Session => zbus::blocking::connection::Builder::session(),
-            Self::System => zbus::blocking::connection::Builder::system(),
+            Self::Session => zbus::connection::Builder::session(),
+            Self::System => zbus::connection::Builder::system(),
         }
     }
 }
@@ -104,7 +103,7 @@ fn shared_connection(bus: Bus, timeout: Duration) -> zbus::Result<zbus::blocking
         }
         let _gone = shared.swap_remove(index);
     }
-    let connection = bus.builder()?.method_timeout(timeout).build()?;
+    let connection = driver::build(bus.builder()?.method_timeout(timeout))?;
     shared.push((bus, timeout, connection.clone()));
     Ok(connection)
 }
