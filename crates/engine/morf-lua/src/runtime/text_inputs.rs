@@ -24,11 +24,11 @@ impl EditHost for ReactiveState {
     }
 
     fn editing(&self) -> &Editing {
-        &self.editing
+        self.engine.editing()
     }
 
     fn editing_mut(&mut self) -> &mut Editing {
-        &mut self.editing
+        self.engine.editing_mut()
     }
 
     fn assign(

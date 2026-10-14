@@ -22,7 +22,7 @@ impl Runtime {
     pub fn focused_text_input_in(&mut self, root: NodeHandle) -> Option<NodeHandle> {
         self.settle_text_inputs();
         let state = self.reactive.borrow();
-        state.editing.focused().filter(|node| {
+        state.editing().focused().filter(|node| {
             scene_node_in_subtree(&state.scene, root, *node)
                 && state.scene.bool_value(*node, "enabled").unwrap_or(false)
                 && state.scene.bool_value(*node, "visible").unwrap_or(false)
@@ -42,18 +42,18 @@ impl Runtime {
         };
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            let before = state.editing.focused();
+            let before = state.editing().focused();
             match node {
                 Some(node) if state.scene.element(node).ok() == Some(Element::TextInput) => {
                     text_inputs::set_focus(&mut *state, node, true);
                 }
                 _ => {
-                    if let Some(focused) = state.editing.focused() {
+                    if let Some(focused) = state.editing().focused() {
                         text_inputs::set_focus(&mut *state, focused, false);
                     }
                 }
             }
-            state.editing.focused() != before
+            state.editing().focused() != before
         };
         self.finish_text_input_work();
         changed || terminal_moved
@@ -153,7 +153,7 @@ impl Runtime {
         {
             let mut state = self.reactive.borrow_mut();
             text_inputs::reconcile_focus(&mut *state);
-            for node in text_inputs::tracked(&state.editing) {
+            for node in text_inputs::tracked(state.engine.editing()) {
                 let Some(geometry) = layout.geometry(node) else {
                     continue;
                 };
@@ -294,12 +294,12 @@ impl Runtime {
         {
             let mut state = self.reactive.borrow_mut();
             let in_handler = state.tracking.in_handler();
-            if !state.editing.start_draining(in_handler) {
+            if !state.editing_mut().start_draining(in_handler) {
                 return;
             }
         }
         for _ in 0..CALLBACK_ROUNDS {
-            let events = self.reactive.borrow_mut().editing.take_owed();
+            let events = self.reactive.borrow_mut().editing_mut().take_owed();
             if events.is_empty() {
                 break;
             }
@@ -309,7 +309,7 @@ impl Runtime {
             text_inputs::reconcile_focus(&mut *self.reactive.borrow_mut());
         }
         let mut state = self.reactive.borrow_mut();
-        if state.editing.finish_draining() {
+        if state.editing_mut().finish_draining() {
             state.log(
                 LogLevel::Warn,
                 "text input callbacks kept editing their own fields; the rest were dropped",

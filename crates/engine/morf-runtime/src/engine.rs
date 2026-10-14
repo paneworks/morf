@@ -49,7 +49,7 @@ pub struct Engine {
     clocks: crate::wake::Clocks,
     pub scene: Scene,
     /// Every text input's editing, and which has the keyboard.
-    pub editing: crate::editing::Editing,
+    editing:crate::editing::Editing,
     /// Which node of each surface has focus.
     pub focus: crate::focus::FocusState,
     /// Each node's `shortcuts`, a sequence half typed, a modifier's tap.

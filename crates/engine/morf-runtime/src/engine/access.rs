@@ -52,4 +52,6 @@ subsystems! {
     display, display_mut: crate::display::Display;
     /// How far the scene has moved, and how far each reader has seen.
     revisions, revisions_mut: crate::revisions::Revisions;
+    /// Every text input's editing, and which has the keyboard.
+    editing, editing_mut: crate::editing::Editing;
 }
