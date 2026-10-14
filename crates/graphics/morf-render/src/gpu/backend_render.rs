@@ -1,4 +1,4 @@
-use crate::{DamageRect, DrawList, RenderBackend};
+use crate::{Copies, DamageRect, DrawList, RenderBackend};
 use morf_layout::{Size, TextMeasurer, TextOptions};
 use morf_scene::{Element, NodeHandle};
 use std::collections::HashMap;
@@ -60,6 +60,16 @@ impl RenderBackend for WgpuBackend {
         damage: &[DamageRect],
         scale_120: u32,
     ) -> Result<(), Self::Error> {
+        self.render_copied(list, Copies::default(), damage, scale_120)
+    }
+
+    fn render_copied(
+        &mut self,
+        list: &DrawList,
+        copies: Copies<'_>,
+        damage: &[DamageRect],
+        scale_120: u32,
+    ) -> Result<(), Self::Error> {
         if self.device_lost() {
             return Err(GpuError::DeviceLost("the GPU device was lost".to_owned()));
         }
@@ -79,6 +89,8 @@ impl RenderBackend for WgpuBackend {
                 mask_atlas: &mut self.glyph_mask_atlas,
                 color_atlas: &mut self.glyph_color_atlas,
                 target_size: (self.width, self.height),
+                kept: &mut self.kept_text,
+                copies,
             },
             &mut self.text,
             list,

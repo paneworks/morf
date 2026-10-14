@@ -288,6 +288,7 @@ impl WgpuBackend {
             nearest_sampler,
             glyph_mask_atlas,
             glyph_color_atlas,
+            kept_text: Default::default(),
             warmed_text: std::collections::HashMap::new(),
             text_warmup: super::warm::TextWarmup::default(),
             blur_pipeline,

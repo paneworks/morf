@@ -7,9 +7,11 @@ use morf_text::{RasterContent, RasterGlyph, TextSystem};
 use super::{backend_types::*, glyphs::*, textures::*};
 
 mod bands;
+mod kept;
 
 pub(crate) use bands::PreparedBand;
 use bands::{decoration_bands, edit_bands, push_band};
+pub(crate) use kept::{Copier, KeptText, Laid, font_count};
 
 // Shaped text on its way to the screen: one batch of glyph quads per frame,
 // drawn from the atlas the glyphs were measured into.
@@ -19,6 +21,9 @@ pub(crate) struct GlyphBatchContext<'a> {
     pub(crate) mask_atlas: &'a mut GlyphAtlas,
     pub(crate) color_atlas: &'a mut GlyphAtlas,
     pub(crate) target_size: (u32, u32),
+    /// The last frame's text, and what this list copied from that frame's.
+    pub(crate) kept: &'a mut KeptText,
+    pub(crate) copies: crate::Copies<'a>,
 }
 
 pub(crate) fn create_glyph_batch(
@@ -32,13 +37,190 @@ pub(crate) fn create_glyph_batch(
         mask_atlas,
         color_atlas,
         target_size: (target_width, target_height),
+        kept,
+        copies,
     } = context;
     let scale = scale_120.max(1) as f32 / 120.0;
     let mut glyphs = Vec::new();
     let mut bands: Vec<PreparedBand> = Vec::new();
     // Drawn before any glyph, so a selection lies under the text it selects.
     let mut under: Vec<PreparedBand> = Vec::new();
+    let fonts = font_count(text_system);
+    let copier = kept.copier(copies, scale_120, text_system);
+    lay_out_text(
+        text_system,
+        list,
+        scale,
+        copier,
+        (&mut glyphs, &mut under, &mut bands),
+    );
+    let fonts = (fonts, font_count(text_system));
+    if glyphs.is_empty() && bands.is_empty() && under.is_empty() {
+        kept.keep(
+            (&mut glyphs, &mut under, &mut bands),
+            copies.frame,
+            scale_120,
+            fonts,
+        );
+        return Ok(None);
+    }
+    mask_atlas.prepare(queue, &glyphs)?;
+    color_atlas.prepare(queue, &glyphs)?;
+    let mut instances = Vec::with_capacity(glyphs.len());
+    let mut plain = Vec::with_capacity(glyphs.len());
+    let mut command_spans: Vec<Vec<GlyphSpan>> =
+        (0..list.commands.len()).map(|_| Vec::new()).collect();
+    for band in &under {
+        push_band(
+            &mut instances,
+            &mut command_spans,
+            *band,
+            scale,
+            (target_width, target_height),
+        );
+        plain.push(false);
+    }
+    for prepared in &glyphs {
+        let glyph = &prepared.glyph;
+        let key = GlyphKey::from_glyph(glyph);
+        let color_glyph = glyph.content == RasterContent::Color;
+        let atlas = if color_glyph {
+            &*color_atlas
+        } else {
+            &*mask_atlas
+        };
+        let entry = atlas.entries.get(&key).ok_or_else(|| {
+            GpuError::Other("prepared glyph is missing from the persistent atlas".to_owned())
+        })?;
+        let atlas_height = atlas.height() as f32;
+        let tint = match glyph.content {
+            RasterContent::Mask | RasterContent::Field => color_array(prepared.color),
+            RasterContent::Color => [1.0, 1.0, 1.0, prepared.color.alpha],
+        };
+        let (origin, axes) = transformed_quad(
+            prepared.transform,
+            Geometry {
+                x: f64::from(glyph.x) / f64::from(scale),
+                y: f64::from(glyph.y) / f64::from(scale),
+                // The quad, not the bitmap: a distance field is measured once
+                // and drawn at any size, so these are the only two of the four
+                // that follow the font size rather than the atlas.
+                width: f64::from(glyph.draw_width) / f64::from(scale),
+                height: f64::from(glyph.draw_height) / f64::from(scale),
+            },
+            f64::from(scale),
+            (target_width, target_height),
+        );
+        // Where the partner sits in the atlas, or nothing — which the shader
+        // reads as empty space so an unpaired letter dissolves.
+        let morph_uv = prepared
+            .morph
+            .as_ref()
+            .and_then(|partner| {
+                let entry = atlas.entries.get(&GlyphKey::from_glyph(partner))?;
+                Some([
+                    entry.x as f32 / GLYPH_ATLAS_SIZE as f32,
+                    entry.y as f32 / atlas_height,
+                    partner.width as f32 / GLYPH_ATLAS_SIZE as f32,
+                    partner.height as f32 / atlas_height,
+                ])
+            })
+            .unwrap_or_default();
+        let instance = instances.len() as u32;
+        let spans = &mut command_spans[prepared.command_index];
+        if let Some(span) = spans.last_mut()
+            && span.color == color_glyph
+            && span.range.end == instance
+        {
+            span.range.end = instance + 1;
+        } else {
+            spans.push(GlyphSpan {
+                range: instance..instance + 1,
+                color: color_glyph,
+                lcd: false,
+            });
+        }
+        plain.push(
+            glyph.content == RasterContent::Field
+                && super::lcd_spans::only_moves(prepared.transform)
+                && prepared.morph.is_none()
+                && prepared.morph_progress == 0.0
+                && (prepared.field[2] <= 0.0 || prepared.outline_color[3] <= 0.0),
+        );
+        instances.push(GlyphInstance {
+            origin,
+            axes,
+            uv: [
+                entry.x as f32 / GLYPH_ATLAS_SIZE as f32,
+                entry.y as f32 / atlas_height,
+                glyph.width as f32 / GLYPH_ATLAS_SIZE as f32,
+                glyph.height as f32 / atlas_height,
+            ],
+            color: tint,
+            color_overlay: color_array(prepared.color_overlay),
+            mode: [
+                0.0,
+                0.0,
+                if color_glyph { 0.0 } else { 1.0 },
+                f32::from(glyph.content == RasterContent::Field),
+            ],
+            field: [
+                prepared.field[0],
+                prepared.field[1],
+                prepared.field[2],
+                prepared.morph_progress,
+            ],
+            outline_color: prepared.outline_color,
+            morph_uv,
+            ramp: prepared.ramp,
+            ..GlyphInstance::default()
+        });
+    }
+    // A decoration is a solid quad through the glyph pipeline, after the
+    // letters of every command so it lies over them, clipped and masked the
+    // same way.
+    for band in &bands {
+        push_band(
+            &mut instances,
+            &mut command_spans,
+            *band,
+            scale,
+            (target_width, target_height),
+        );
+        plain.push(false);
+    }
+    kept.keep(
+        (&mut glyphs, &mut under, &mut bands),
+        copies.frame,
+        scale_120,
+        fonts,
+    );
+    Ok(Some(GlyphBatch {
+        instances,
+        command_spans,
+        plain,
+    }))
+}
+
+/// Every command's glyphs and bands, in command order: read through
+/// `copier` where it can, laid out again where it cannot.
+pub(crate) fn lay_out_text(
+    text_system: &mut TextSystem,
+    list: &DrawList,
+    scale: f32,
+    mut copier: Option<Copier<'_>>,
+    (glyphs, under, bands): Laid<'_>,
+) {
     for (command_index, command) in list.commands.iter().enumerate() {
+        if let Some(copier) = &mut copier
+            && copier.copy(
+                command_index,
+                command,
+                (&mut *glyphs, &mut *under, &mut *bands),
+            )
+        {
+            continue;
+        }
         if let DrawCommand::Terminal {
             bounds,
             transform,
@@ -56,9 +238,9 @@ pub(crate) fn create_glyph_batch(
                 command_index,
                 scale,
                 super::terminal_batch::TerminalOut {
-                    glyphs: &mut glyphs,
-                    under: &mut under,
-                    over: &mut bands,
+                    glyphs,
+                    under,
+                    over: bands,
                 },
             );
             continue;
@@ -302,137 +484,4 @@ pub(crate) fn create_glyph_batch(
             ));
         }
     }
-    if glyphs.is_empty() && bands.is_empty() && under.is_empty() {
-        return Ok(None);
-    }
-    mask_atlas.prepare(queue, &glyphs)?;
-    color_atlas.prepare(queue, &glyphs)?;
-    let mut instances = Vec::with_capacity(glyphs.len());
-    let mut plain = Vec::with_capacity(glyphs.len());
-    let mut command_spans: Vec<Vec<GlyphSpan>> =
-        (0..list.commands.len()).map(|_| Vec::new()).collect();
-    for band in under {
-        push_band(
-            &mut instances,
-            &mut command_spans,
-            band,
-            scale,
-            (target_width, target_height),
-        );
-        plain.push(false);
-    }
-    for prepared in glyphs {
-        let glyph = prepared.glyph;
-        let key = GlyphKey::from_glyph(&glyph);
-        let color_glyph = glyph.content == RasterContent::Color;
-        let atlas = if color_glyph {
-            &*color_atlas
-        } else {
-            &*mask_atlas
-        };
-        let entry = atlas.entries.get(&key).ok_or_else(|| {
-            GpuError::Other("prepared glyph is missing from the persistent atlas".to_owned())
-        })?;
-        let atlas_height = atlas.height() as f32;
-        let tint = match glyph.content {
-            RasterContent::Mask | RasterContent::Field => color_array(prepared.color),
-            RasterContent::Color => [1.0, 1.0, 1.0, prepared.color.alpha],
-        };
-        let (origin, axes) = transformed_quad(
-            prepared.transform,
-            Geometry {
-                x: f64::from(glyph.x) / f64::from(scale),
-                y: f64::from(glyph.y) / f64::from(scale),
-                // The quad, not the bitmap: a distance field is measured once
-                // and drawn at any size, so these are the only two of the four
-                // that follow the font size rather than the atlas.
-                width: f64::from(glyph.draw_width) / f64::from(scale),
-                height: f64::from(glyph.draw_height) / f64::from(scale),
-            },
-            f64::from(scale),
-            (target_width, target_height),
-        );
-        // Where the partner sits in the atlas, or nothing — which the shader
-        // reads as empty space so an unpaired letter dissolves.
-        let morph_uv = prepared
-            .morph
-            .as_ref()
-            .and_then(|partner| {
-                let entry = atlas.entries.get(&GlyphKey::from_glyph(partner))?;
-                Some([
-                    entry.x as f32 / GLYPH_ATLAS_SIZE as f32,
-                    entry.y as f32 / atlas_height,
-                    partner.width as f32 / GLYPH_ATLAS_SIZE as f32,
-                    partner.height as f32 / atlas_height,
-                ])
-            })
-            .unwrap_or_default();
-        let instance = instances.len() as u32;
-        let spans = &mut command_spans[prepared.command_index];
-        if let Some(span) = spans.last_mut()
-            && span.color == color_glyph
-            && span.range.end == instance
-        {
-            span.range.end = instance + 1;
-        } else {
-            spans.push(GlyphSpan {
-                range: instance..instance + 1,
-                color: color_glyph,
-                lcd: false,
-            });
-        }
-        plain.push(
-            glyph.content == RasterContent::Field
-                && super::lcd_spans::only_moves(prepared.transform)
-                && prepared.morph.is_none()
-                && prepared.morph_progress == 0.0
-                && (prepared.field[2] <= 0.0 || prepared.outline_color[3] <= 0.0),
-        );
-        instances.push(GlyphInstance {
-            origin,
-            axes,
-            uv: [
-                entry.x as f32 / GLYPH_ATLAS_SIZE as f32,
-                entry.y as f32 / atlas_height,
-                glyph.width as f32 / GLYPH_ATLAS_SIZE as f32,
-                glyph.height as f32 / atlas_height,
-            ],
-            color: tint,
-            color_overlay: color_array(prepared.color_overlay),
-            mode: [
-                0.0,
-                0.0,
-                if color_glyph { 0.0 } else { 1.0 },
-                f32::from(glyph.content == RasterContent::Field),
-            ],
-            field: [
-                prepared.field[0],
-                prepared.field[1],
-                prepared.field[2],
-                prepared.morph_progress,
-            ],
-            outline_color: prepared.outline_color,
-            morph_uv,
-            ramp: prepared.ramp,
-            ..GlyphInstance::default()
-        });
-    }
-    // A decoration is a solid quad through the glyph pipeline, after the
-    // letters of every command so it lies over them, clipped and masked the
-    // same way.
-    for band in bands {
-        push_band(
-            &mut instances,
-            &mut command_spans,
-            band,
-            scale,
-            (target_width, target_height),
-        );
-        plain.push(false);
-    }
-    Ok(Some(GlyphBatch {
-        instances,
-        command_spans,
-        plain,
-    }))
 }

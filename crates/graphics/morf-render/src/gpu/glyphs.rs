@@ -178,6 +178,7 @@ pub(crate) fn outside_byte(content: RasterContent) -> u8 {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PreparedGlyph {
     pub(crate) glyph: RasterGlyph,
     /// The glyph this one is turning into, when it has a partner.

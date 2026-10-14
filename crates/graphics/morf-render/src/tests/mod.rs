@@ -76,7 +76,7 @@ impl TextMeasurer for NoText {
 }
 
 #[derive(Default)]
-struct RecordingBackend {
+pub(crate) struct RecordingBackend {
     frames: usize,
     damage: Vec<DamageRect>,
     size: (u32, u32),
@@ -111,7 +111,7 @@ mod fields;
 mod masks;
 mod outline_boxes;
 mod paths;
-mod reuse;
+pub(crate) mod reuse;
 mod text_input;
 mod transform_text;
 mod tree;

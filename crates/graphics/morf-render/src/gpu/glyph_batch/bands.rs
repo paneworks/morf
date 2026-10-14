@@ -111,6 +111,7 @@ pub(super) fn edit_bands(
 }
 
 /// One decoration line, positioned, waiting to become an instance.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct PreparedBand {
     pub(crate) rect: Geometry,
     pub(crate) color: Color,

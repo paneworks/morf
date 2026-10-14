@@ -11,6 +11,10 @@ use crate::commands::*;
 /// A command's node and which of that node's commands it is.
 pub(super) type Key = (NodeHandle, u32);
 
+/// A list's command keys, and every area that changed with the paint order
+/// it was drawn at.
+pub(crate) type Changes = (Vec<Key>, Vec<(Geometry, usize)>);
+
 /// A command by its key, with where it is in paint order.
 pub(super) type Keyed<'a> = HashMap<Key, (usize, &'a DrawCommand)>;
 

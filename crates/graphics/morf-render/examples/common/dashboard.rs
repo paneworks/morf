@@ -68,7 +68,7 @@ pub fn dashboard(panels: usize) -> Dashboard {
 
 /// Changes one badge's colour on even frames and one label's text on odd.
 pub fn change(dashboard: &mut Dashboard, frame: usize) {
-    if frame % 2 == 0 {
+    if frame.is_multiple_of(2) {
         let badge = dashboard.badges[frame * 7 % dashboard.badges.len()];
         let shade = (frame % 200) as u8;
         dashboard

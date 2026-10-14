@@ -42,6 +42,8 @@ mod field_pass;
 #[cfg(test)]
 mod glyph_atlas_tests;
 mod glyph_batch;
+#[cfg(test)]
+mod glyph_reuse_tests;
 mod glyph_upload;
 mod glyphs;
 mod layer_pool;

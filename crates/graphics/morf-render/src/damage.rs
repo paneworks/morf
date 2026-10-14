@@ -9,7 +9,9 @@ mod keys;
 
 pub use engine::{RenderBackend, RenderEngine};
 use explain::damage_log_wanted;
-use keys::{Key, command_changes, command_keys, keyed_commands, layer_changes, moved_commands};
+use keys::{
+    Changes, Key, command_changes, command_keys, keyed_commands, layer_changes, moved_commands,
+};
 
 /// Physical damage rectangle with an exclusive lower-right edge.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132,7 +134,7 @@ impl DamageTracker {
     /// The keys of `next`, and every area that changed from the retained
     /// list, with the paint order it was drawn at, so a frosted panel can
     /// tell a change beneath it from one on top of it.
-    fn changes(&self, next: &DrawList) -> (Vec<Key>, Vec<(Geometry, usize)>) {
+    fn changes(&self, next: &DrawList) -> Changes {
         let current_keys = command_keys(&next.commands);
         let previous = keyed_commands(&self.previous.commands, &self.keys);
         let current = keyed_commands(&next.commands, &current_keys);
@@ -168,10 +170,6 @@ impl DamageTracker {
         )
     }
 }
-
-/// A list's command keys and the areas that changed, with their paint order.
-#[cfg(test)]
-pub(crate) type Changes = (Vec<(morf_scene::NodeHandle, u32)>, Vec<(Geometry, usize)>);
 
 fn overlaps(left: Geometry, right: Geometry) -> bool {
     left.width > 0.0

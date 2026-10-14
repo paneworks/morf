@@ -8,11 +8,10 @@
 //! not all keep their old order, this gives up and the whole lists are
 //! compared.
 
-use morf_layout::Geometry;
 use morf_scene::NodeHandle;
 use std::collections::{HashMap, HashSet};
 
-use super::keys::{Key, Keyed, command_changes, layer_changes, next_key};
+use super::keys::{Changes, Key, Keyed, command_changes, layer_changes, next_key};
 use crate::{CopiedRun, DrawList};
 
 /// The keys of `next` and every area that changed from `previous`, with its
@@ -22,7 +21,7 @@ pub(super) fn copied_changes(
     (previous, previous_keys): (&DrawList, &[Key]),
     next: &DrawList,
     runs: &[CopiedRun],
-) -> Option<(Vec<Key>, Vec<(Geometry, usize)>)> {
+) -> Option<Changes> {
     if runs.is_empty() || previous_keys.len() != previous.commands.len() {
         return None;
     }
@@ -51,8 +50,9 @@ pub(super) fn copied_changes(
         .iter()
         .chain(std::iter::once(&(previous.commands.len(), 0)))
     {
-        for order in at..start {
-            previous_loose.insert(previous_keys[order], (order, &previous.commands[order]));
+        let between = previous_keys.iter().zip(&previous.commands).enumerate();
+        for (order, (key, command)) in between.take(start).skip(at) {
+            previous_loose.insert(*key, (order, command));
         }
         at = end;
     }

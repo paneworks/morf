@@ -4,7 +4,7 @@
 
 use super::*;
 
-struct Rng(u64);
+pub(crate) struct Rng(pub(crate) u64);
 
 impl Rng {
     fn next(&mut self) -> u64 {
@@ -14,11 +14,11 @@ impl Rng {
         self.0
     }
 
-    fn below(&mut self, n: usize) -> usize {
+    pub(crate) fn below(&mut self, n: usize) -> usize {
         (self.next() % n.max(1) as u64) as usize
     }
 
-    fn chance(&mut self, percent: u64) -> bool {
+    pub(crate) fn chance(&mut self, percent: u64) -> bool {
         self.next() % 100 < percent
     }
 }
@@ -37,7 +37,16 @@ const KINDS: [Element; 9] = [
 
 const COLORS: [&str; 4] = ["#ff0000ff", "#00ff0080", "#0000ffff", "#ffffff40"];
 
-fn make(scene: &mut Scene, rng: &mut Rng, depth: usize) -> NodeHandle {
+/// A line under the text.
+pub(crate) fn underline() -> Value {
+    Value::Map(
+        [("line".to_owned(), Value::String("under".to_owned()))]
+            .into_iter()
+            .collect(),
+    )
+}
+
+pub(crate) fn make(scene: &mut Scene, rng: &mut Rng, depth: usize) -> NodeHandle {
     let element = KINDS[rng.below(KINDS.len())];
     let node = scene.create(element);
     let _ = scene.assign(node, "x", rng.below(40) as f64);
@@ -48,6 +57,9 @@ fn make(scene: &mut Scene, rng: &mut Rng, depth: usize) -> NodeHandle {
     if element == Element::Text {
         let _ = scene.assign(node, "text", ["a", "bc", "def"][rng.below(3)]);
         let _ = scene.assign(node, "horizontal_alignment", "left");
+        if rng.chance(30) {
+            scene.assign(node, "decoration", underline()).unwrap();
+        }
     }
     if element == Element::ClipRect && rng.chance(50) {
         let _ = scene.assign(node, "border_width", 2.0);
@@ -74,7 +86,7 @@ fn nodes(scene: &Scene, root: NodeHandle) -> Vec<NodeHandle> {
     out
 }
 
-fn mutate(scene: &mut Scene, rng: &mut Rng, root: NodeHandle) {
+pub(crate) fn mutate(scene: &mut Scene, rng: &mut Rng, root: NodeHandle) {
     let all = nodes(scene, root);
     let node = all[rng.below(all.len())];
     match rng.below(14) {
