@@ -93,13 +93,13 @@ impl KeptText {
     /// Keeps the quads the text just kept was drawn as, into `target`.
     pub(crate) fn keep_quads(&mut self, batch: GlyphBatch, target: (u32, u32)) {
         let count = self.glyphs.len() + self.under.len() + self.over.len();
-        self.quads =
-            (batch.instances.len() == count && batch.plain.len() == count).then(|| Quads {
-                atlases: batch.atlases,
-                target,
-                instances: batch.instances,
-                plain: batch.plain,
-            });
+        let whole = batch.instances.len() == count && batch.plain.len() == count;
+        self.quads = whole.then_some(Quads {
+            atlases: batch.atlases,
+            target,
+            instances: batch.instances,
+            plain: batch.plain,
+        });
     }
 }
 
