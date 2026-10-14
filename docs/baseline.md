@@ -56,3 +56,38 @@ Per spec file:
  # 4 passed, 0 failed, 0 skipped in 1.36 s  examples/apps/editor/tests/editor_app_spec.lua
  # 6 passed, 0 failed, 0 skipped in 1.67 s  examples/apps/settings/tests/settings_app_spec.lua
 ```
+
+# After the hardening pass (PLAN.md sections 1-6)
+
+Taken on `develop`, 2026-10-14, against v0.2.8 (36f881f8).
+
+Lua specs: 151 files (101 caelestia, 38 library, 12 demos), 1053 passed, 0
+failed, 1 skipped; caelestia_spec runs with `--no-dbus`, lyrics needs
+python3 on PATH.
+
+Desk layout in the sandbox, caelestia, `MONITORS="3840x2160 3840x2160
+3456x2160"`, `tools/sandbox/cpu-idle.steps` and `cpu-active.steps`, two
+alternating rounds each (v0.2.8 / develop):
+
+```
+                          v0.2.8          develop
+rest                      4-6%            3-5%
+threads                   42              37-38
+rss                       941-952 MB      936-943 MB
+sidebar in and out x4     4%              3-4%
+workspace switch x4       4-8%            4%
+osd x4                    11-12%          10-13%
+dashboard x3              39-40%          36-39%
+```
+
+The shell's own CPU at this size is dominated by work these changes do not
+touch; the per-frame savings show in the CPU benches
+(`crates/graphics/morf-render/examples/`, `crates/core/morf-layout/examples/`):
+
+```
+layout update, 1041 nodes      28 ms        -> 1.9-3.9 ms   (kept Taffy trees)
+draw list + damage, 921 nodes  3.0-4.0 ms   -> 0.49 ms      (copied subtrees)
+damage diff, 921 nodes         1.04 ms      -> 0.058 ms     (copied runs)
+backend frame, 921 nodes       1.11 ms      -> 0.59-0.72 ms (kept text, quads, fields)
+box + shadow field             5.41/6.87 ms -> 5.25/6.60 ms (min/median, one-box pipeline)
+```
