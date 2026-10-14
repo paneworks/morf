@@ -91,7 +91,7 @@ pub(crate) fn assign_scene_property(
     }
     // Text set in runs may hold links, which the layout places.
     if matches!(property, "spans" | "markup") {
-        state.linked_texts.insert(node);
+        state.layout_hooks_mut().link_text(node);
     }
     let current_changed = state
         .scene

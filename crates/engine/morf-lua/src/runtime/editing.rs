@@ -194,10 +194,10 @@ impl Runtime {
     /// space, from the buffer this frame is painted from.
     fn sync_links(&mut self, layout: &Layout, text: &mut TextSystem) {
         let mut state = self.reactive.borrow_mut();
-        let nodes: Vec<NodeHandle> = state.linked_texts.iter().copied().collect();
+        let nodes = state.layout_hooks().linked_texts();
         for node in nodes {
             if !state.scene.contains(node) {
-                state.linked_texts.remove(&node);
+                state.layout_hooks_mut().unlink_text(node);
                 continue;
             }
             let Some(geometry) = layout.geometry(node) else {

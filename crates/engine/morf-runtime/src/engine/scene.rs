@@ -70,7 +70,7 @@ impl Engine {
             self.retained.forget(node);
             self.states.forget(node);
             self.views.remove(node);
-            self.linked_texts.remove(node);
+            self.layout_hooks.forget(node);
             self.shortcuts.forget(node);
         }
         // A removed field cannot keep the keyboard. The node that had focus
@@ -190,12 +190,12 @@ mod tests {
         let root = engine.scene.create(Element::Item);
         let child = engine.scene.create(Element::Rect);
         engine.scene.reparent(child, Some(root)).unwrap();
-        engine.linked_texts.insert(child);
+        engine.layout_hooks.link_text(child);
         let hook = crate::Handler::new(HandlerId(1), std::rc::Rc::new(Nowhere));
         engine.destroy_hooks.set(child, hook);
         let removed = engine.remove_subtree(root).expect("it was there");
         assert_eq!(removed.len(), 2);
-        assert!(engine.linked_texts.is_empty());
+        assert!(engine.layout_hooks.linked_texts().is_empty());
         assert_eq!(engine.destroy_hooks.pending(), 1);
         assert!(engine.remove_subtree(root).is_none());
     }

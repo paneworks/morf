@@ -48,7 +48,7 @@ pub(crate) struct StateFields {
     pub(crate) lists: HashMap<String, (luna::StashedUserData, Rc<RefCell<ListModel>>)>,
 }
 
-pub(crate) use morf_runtime::engine::CustomLayoutFns;
+pub(crate) use morf_runtime::layout::CustomLayoutFns;
 
 #[derive(Clone, Copy)]
 pub(crate) enum ViewKind {

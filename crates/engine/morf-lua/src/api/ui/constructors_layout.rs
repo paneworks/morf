@@ -54,7 +54,7 @@ pub(crate) fn layout_constructor<'gc>(
         };
         let node = create_node(&state, Element::Custom);
         configure_element(&state, ctx, limits, node, clean).map_err(HostError)?;
-        state.borrow_mut().custom_layouts.insert(
+        state.borrow_mut().layout_hooks_mut().set_custom(
             node,
             CustomLayoutFns {
                 measure: crate::vm::handler_store::register(measure),

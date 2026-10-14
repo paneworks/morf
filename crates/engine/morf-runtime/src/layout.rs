@@ -9,7 +9,9 @@ use morf_scene::NodeHandle;
 
 use crate::windows::{PopupNodeAnchor, WindowSurfaceConfig, WindowSurfaceKind};
 
+mod hooks;
 mod watches;
+pub use hooks::{CustomLayoutFns, LayoutHooks};
 pub use watches::TransformWatches;
 
 /// The pseudo-property a binding depends on when it reads `layout_x` or

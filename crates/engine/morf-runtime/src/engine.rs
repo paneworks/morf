@@ -15,21 +15,12 @@ use morf_scene::reactive::{Graph, SignalId};
 use morf_scene::{NodeHandle, Scene};
 use morf_value::IpcValue;
 
-use crate::Handler;
-
 mod access;
 mod queries;
 mod scene;
 mod services;
 pub use queries::{PRELOAD_PATIENCE, node_path};
 pub use scene::{scoped_id, validate_scope_part};
-
-/// A `ui.Layout` container's `measure` and `place` functions.
-#[derive(Clone)]
-pub struct CustomLayoutFns {
-    pub measure: Handler,
-    pub place: Handler,
-}
 
 pub struct Engine {
     /// The graph, the signal mirror, the declared effects and the flush.
@@ -82,11 +73,10 @@ pub struct Engine {
     pub destroy_hooks: crate::destroy::DestroyHooks,
     /// Loaders' items and retained nodes, and the handlers told as they go.
     pub retained: crate::retention::Retained,
-    /// The `measure` and `place` functions of every `ui.Layout` container.
-    pub custom_layouts: HashMap<NodeHandle, CustomLayoutFns>,
+    /// Each `ui.Layout` container's functions, and the texts whose links
+    /// the layout places.
+    layout_hooks: crate::layout::LayoutHooks,
     pub transform_tracker: TransformTracker,
-    /// Text nodes set in runs, whose links the layout places.
-    pub linked_texts: HashSet<NodeHandle>,
     /// Where the configuration's own files are.
     pub shell_root: PathBuf,
     /// What handlers asked of the platform, queued for the host.
@@ -141,9 +131,8 @@ impl Engine {
             animation: Default::default(),
             destroy_hooks: Default::default(),
             retained: Default::default(),
-            custom_layouts: HashMap::new(),
+            layout_hooks: Default::default(),
             transform_tracker: TransformTracker::default(),
-            linked_texts: HashSet::new(),
             shell_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             requests: Default::default(),
             windows: Default::default(),

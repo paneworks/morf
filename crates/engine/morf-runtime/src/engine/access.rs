@@ -26,4 +26,6 @@ subsystems! {
     states, states_mut: crate::states::States;
     /// The verbs answered over IPC.
     ipc, ipc_mut: crate::ipc::IpcVerbs;
+    /// Each `ui.Layout` container's functions, and the linked texts.
+    layout_hooks, layout_hooks_mut: crate::layout::LayoutHooks;
 }

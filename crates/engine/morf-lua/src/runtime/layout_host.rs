@@ -5,18 +5,16 @@
 //! not write to nodes or signals -- a write from inside layout is refused
 //! with a message rather than allowed to corrupt the pass it is part of.
 
-use std::collections::HashMap;
-
 use luna::{Context, Executor, Lua, Table, Value as LuaValue, Variadic};
 use morf_layout::{CustomLayout, Geometry, Layout, Size, TextMeasurer};
 use morf_scene::NodeHandle;
 
-use crate::{runtime::state::*, vm::execute::*, vm::types::*};
+use crate::{vm::execute::*, vm::types::*};
 use morf_runtime::Handler;
 
 pub(crate) struct LuaLayoutHost<'a> {
     pub(crate) lua: &'a mut Lua,
-    pub(crate) layouts: &'a HashMap<NodeHandle, CustomLayoutFns>,
+    pub(crate) layouts: &'a morf_runtime::layout::LayoutHooks,
     pub(crate) limits: Limits,
 }
 
@@ -75,7 +73,7 @@ impl CustomLayout for LuaLayoutHost<'_> {
     ) -> Result<Size, String> {
         let functions = self
             .layouts
-            .get(&node)
+            .custom(node)
             .ok_or("Layout node has no functions")?
             .clone();
         let limits = self.limits;
@@ -105,7 +103,7 @@ impl CustomLayout for LuaLayoutHost<'_> {
     ) -> Result<Vec<Geometry>, String> {
         let functions = self
             .layouts
-            .get(&node)
+            .custom(node)
             .ok_or("Layout node has no functions")?
             .clone();
         let limits = self.limits;
@@ -162,7 +160,7 @@ impl Runtime {
         let reactive = self.reactive.borrow();
         let mut host = LuaLayoutHost {
             lua: &mut self.lua,
-            layouts: &reactive.custom_layouts,
+            layouts: reactive.layout_hooks(),
             limits: self.limits,
         };
         Layout::compute_with(&reactive.scene, root, available, text, &mut host)
@@ -182,7 +180,7 @@ impl Runtime {
         let reactive = self.reactive.borrow();
         let mut host = LuaLayoutHost {
             lua: &mut self.lua,
-            layouts: &reactive.custom_layouts,
+            layouts: reactive.layout_hooks(),
             limits: self.limits,
         };
         layout
