@@ -9,7 +9,7 @@ pub(super) fn terminal_method<'gc>(
     state: &Rc<StateCell<ReactiveState>>,
     name: &str,
 ) -> Option<Callback<'gc>> {
-    use crate::terminals;
+    use crate::runtime::terminals;
     let state = Rc::clone(state);
     let busy = || HostError("terminals cannot be used from inside a layout function".to_owned());
     Some(match name {
@@ -103,7 +103,7 @@ pub(super) fn text_input_method<'gc>(
     state: &Rc<StateCell<ReactiveState>>,
     name: &str,
 ) -> Option<Callback<'gc>> {
-    use crate::text_inputs;
+    use crate::runtime::text_inputs;
     let state = Rc::clone(state);
     let offset = |value: i64| value.max(0) as usize;
     Some(match name {

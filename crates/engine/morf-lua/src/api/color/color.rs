@@ -13,7 +13,7 @@ use luna::{
 use morf_scene::Color as SceneColor;
 use pastel::Color;
 
-use crate::{api_color_ops::install_color_methods, scene_bindings::*};
+use crate::{api::color::ops::install_color_methods, api::ui::scene::*};
 
 /// The colour value a configuration holds.
 pub(crate) struct ColorToken {
@@ -105,7 +105,7 @@ fn color_from_table<'gc>(ctx: Context<'gc>, table: Table<'gc>) -> Result<Color, 
         "xyz" => Color::from_xyz(need("x")?, need("y")?, need("z")?, alpha),
         "lms" => Color::from_lms(need("l")?, need("m")?, need("s")?, alpha),
         "cmyk" => from_cmyk(need("c")?, need("m")?, need("y")?, need("k")?),
-        "hct" => crate::api_color_hct::from_hct(need("h")?, need("c")?, need("t")?, alpha),
+        "hct" => crate::api::color::hct::from_hct(need("h")?, need("c")?, need("t")?, alpha),
         other => return Err(format!("unknown colour space `{other}`")),
     })
 }
@@ -146,8 +146,8 @@ fn channels<'gc>(
 pub(crate) fn install_color_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let methods = Table::new(&ctx);
     install_color_methods(ctx, methods);
-    crate::api_color_palette::install_palette_methods(ctx, methods);
-    crate::api_color_hct::install_hct_methods(ctx, methods);
+    crate::api::color::palette::install_palette_methods(ctx, methods);
+    crate::api::color::hct::install_hct_methods(ctx, methods);
     let methods = ctx.stash(methods);
 
     // Fields first -- `c.r`, `c.h` -- then the method table.
@@ -298,13 +298,14 @@ pub(crate) fn install_color_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             stack.consume(ctx)?;
         let a = color_of(ctx, a).map_err(HostError)?;
         let b = color_of(ctx, b).map_err(HostError)?;
-        let mixed = crate::api_color_ops::mix_in(&a, &b, fraction.unwrap_or(0.5), space.as_deref())
-            .map_err(HostError)?;
+        let mixed =
+            crate::api::color::ops::mix_in(&a, &b, fraction.unwrap_or(0.5), space.as_deref())
+                .map_err(HostError)?;
         stack.replace(ctx, color_userdata(ctx, mixed));
         Ok(CallbackReturn::Return)
     });
     color.set_field(ctx, "mix", mix);
-    crate::api_color_palette::install_palette_constructors(ctx, color);
-    crate::api_color_hct::install_hct_constructors(ctx, color);
+    crate::api::color::palette::install_palette_constructors(ctx, color);
+    crate::api::color::hct::install_hct_constructors(ctx, color);
     morf.set_field(ctx, "color", color);
 }

@@ -6,8 +6,8 @@ use std::time::Duration;
 use morf_scene::Easing;
 use morf_system::{AuthMessageType, GreetdResponse};
 
-use crate::reactive_bindings::lua_to_scene;
-use crate::state::*;
+use crate::api::ui::bindings::lua_to_scene;
+use crate::runtime::state::*;
 
 pub(crate) fn string_table<'gc>(
     ctx: Context<'gc>,
@@ -161,7 +161,7 @@ pub(crate) fn parse_easing<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Resu
         // so the points are read out of that model.
         LuaValue::UserData(userdata) => {
             let token = userdata
-                .downcast_static::<crate::state::StateToken>()
+                .downcast_static::<crate::runtime::state::StateToken>()
                 .map_err(
                     |_| "easing must be a string, a cubic Bezier table or { spline = { ... } }",
                 )?;

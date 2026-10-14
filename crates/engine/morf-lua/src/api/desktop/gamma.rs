@@ -8,13 +8,13 @@
 //! shell's connection; the compositor restores every output when the shell
 //! exits, however it exits, and a reload resets them too.
 
-use crate::state::StateCell;
+use crate::runtime::state::StateCell;
 use std::rc::Rc;
 
 use luna::{Callback, CallbackReturn, Table, Value as LuaValue};
 
-use crate::scene_bindings::HostError;
-use crate::state::ReactiveState;
+use crate::api::ui::scene::HostError;
+use crate::runtime::state::ReactiveState;
 
 pub use morf_runtime::requests::GammaRequest;
 

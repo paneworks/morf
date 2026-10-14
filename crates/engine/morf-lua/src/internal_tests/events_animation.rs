@@ -3,7 +3,7 @@
 #![allow(unused_imports)]
 
 use super::*;
-use crate::serialization::lua_to_dbus;
+use crate::vm::loader::lua_to_dbus;
 use luna::Table;
 use luna::Value as LuaValue;
 use morf_io::DbusValue;

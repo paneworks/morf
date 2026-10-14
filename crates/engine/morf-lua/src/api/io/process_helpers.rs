@@ -3,7 +3,7 @@ use morf_image::{ImageRect as QuantizeRect, quantize_colors};
 use morf_scene::NodeHandle;
 use std::path::PathBuf;
 
-use crate::{state::*, surface_types::*};
+use crate::{runtime::host_types::*, runtime::state::*};
 
 pub(crate) fn parse_quantizer_options<'gc>(
     ctx: Context<'gc>,

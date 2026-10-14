@@ -6,12 +6,12 @@
 //! compositor and no frame callbacks. Nothing here changes how a shell runs:
 //! each is off until a runner asks for it.
 
-use crate::ipc_table::{IpcFromLua, IpcToLua};
+use crate::value::ipc::{IpcFromLua, IpcToLua};
 use luna::{Callback, CallbackReturn, Table, Value as LuaValue, Variadic};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::{scene_bindings::HostError, surface_types::IpcValue, types::Runtime};
+use crate::{IpcValue, api::ui::scene::HostError, vm::types::Runtime};
 
 /// A function a runner hands to Lua: primitive values and JSON-like tables
 /// in, the same out, and an error raised in Lua as one.
@@ -55,7 +55,7 @@ impl Runtime {
             let Ok(morf) = ctx.get_global::<Table>("morf") else {
                 return;
             };
-            crate::api_shell::set_argument_fields(ctx, morf, &arguments);
+            crate::api::window::surface::set_argument_fields(ctx, morf, &arguments);
         });
     }
 

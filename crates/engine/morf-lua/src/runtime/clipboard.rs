@@ -3,9 +3,9 @@
 use luna::{Context, Executor, Value as LuaValue, Variadic};
 use morf_scene::{NodeHandle, Value as SceneValue};
 
-use crate::api_clipboard::offer_table;
-use crate::reactive_execute::drive_executor;
-use crate::{events::*, surface_types::*, types::*};
+use crate::api::desktop::clipboard::offer_table;
+use crate::vm::execute::drive_executor;
+use crate::{runtime::events::*, runtime::host_types::*, vm::types::*};
 use morf_runtime::Handler;
 
 /// Runs one callback with arguments built inside the Lua context.

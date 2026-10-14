@@ -85,7 +85,7 @@ pub(super) fn reconcile_loaders(
                 .copied()
                 .find(|child| state.scene.is_exiting(*child));
             if let Some(child) = leaving
-                && crate::runtime_helpers::cancel_node_exit(state, child)
+                && crate::runtime::helpers::cancel_node_exit(state, child)
             {
                 for (property, value) in [
                     ("loading", false),
@@ -165,7 +165,7 @@ impl Runtime {
                 let state = self.reactive.borrow();
                 format!(
                     "loader build {} ({origin})",
-                    crate::runtime_config::lint_path(&state.scene, node)
+                    crate::vm::config::lint_path(&state.scene, node)
                 )
             });
             let result = self

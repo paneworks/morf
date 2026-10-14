@@ -22,7 +22,8 @@ pub(crate) use system::{
 };
 
 use crate::{
-    reactive_bindings::*, scene_bindings::*, serialization::*, state::*, surface_types::*, types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::host_types::*, runtime::state::*,
+    vm::loader::*, vm::types::*,
 };
 
 /// Runs one Lua executor to completion, or stops it when its fuel runs out.
@@ -168,7 +169,7 @@ pub(crate) fn evaluate_effect(
         };
         read_signal(state, effect, signal)?;
     }
-    for signal in crate::model_revisions::model_read_signals(state, capture.model_reads)? {
+    for signal in crate::runtime::model_revisions::model_read_signals(state, capture.model_reads)? {
         read_signal(state, effect, signal)?;
     }
     for signal in capture.reads {

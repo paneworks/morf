@@ -28,7 +28,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::{Limits, reactive_execute::drive_executor, scene_bindings::*, state::*};
+use crate::{Limits, api::ui::scene::*, runtime::state::*, vm::execute::drive_executor};
 use morf_runtime::Handler;
 
 /// The runtime's watches, each owing a Lua callback.

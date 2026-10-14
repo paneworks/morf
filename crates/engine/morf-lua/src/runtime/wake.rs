@@ -10,7 +10,7 @@
 
 use std::time::Instant;
 
-use crate::{Error, reactive_bindings::flush_reactive, types::Runtime};
+use crate::{Error, api::ui::bindings::flush_reactive, vm::types::Runtime};
 
 pub use morf_runtime::wake::{ClockPrecision, DeadlineCause};
 
@@ -54,7 +54,8 @@ impl Runtime {
     /// grain it is read at, and the loop owns the wall-clock text.
     pub fn next_deadline(&self) -> Option<(Instant, DeadlineCause)> {
         let state = self.reactive.borrow();
-        let caret = crate::text_inputs::next_blink(&*state).map(|at| (at, DeadlineCause::Caret));
+        let caret =
+            crate::runtime::text_inputs::next_blink(&*state).map(|at| (at, DeadlineCause::Caret));
         let image = state.images.due().map(|at| (at, DeadlineCause::Image));
         let dbus = state
             .dbus_replies

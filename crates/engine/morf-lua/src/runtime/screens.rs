@@ -1,6 +1,6 @@
 use luna::{Table, Value as LuaValue};
 
-use crate::{api_host::*, types::*};
+use crate::{api::system::host::*, vm::types::*};
 
 impl Runtime {
     /// Replaces `morf.screens` with the compositor's current output list.
@@ -112,7 +112,7 @@ impl Runtime {
         }
         if let Err(message) = self
             .lua
-            .enter(|ctx| crate::reactive_bindings::flush_reactive(&self.reactive, ctx, self.limits))
+            .enter(|ctx| crate::api::ui::bindings::flush_reactive(&self.reactive, ctx, self.limits))
         {
             self.reactive
                 .borrow_mut()

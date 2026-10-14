@@ -13,7 +13,7 @@
 //! runtime also does when it is dropped), so the new primary finds the names
 //! free.
 
-use crate::{reactive_bindings::*, reactive_execute::*, types::*};
+use crate::{api::ui::bindings::*, vm::execute::*, vm::types::*};
 
 impl Runtime {
     /// Whether this runtime is the primary one. A runtime nobody told

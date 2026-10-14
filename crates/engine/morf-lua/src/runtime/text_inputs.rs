@@ -7,9 +7,9 @@
 use morf_runtime::editing::{EditHost, Editing};
 use morf_scene::{NodeHandle, Scene, Value as SceneValue};
 
-use crate::scene_bindings::assign_scene_property;
-use crate::state::ReactiveState;
-use crate::{surface_types::*, types::LogLevel};
+use crate::api::ui::scene::assign_scene_property;
+use crate::runtime::state::ReactiveState;
+use crate::{runtime::host_types::*, vm::types::LogLevel};
 
 pub(crate) use morf_runtime::editing::{
     KeyOutcome, blink, drag, history, input_method_commit, insert, key, next_blink, observe_shaped,

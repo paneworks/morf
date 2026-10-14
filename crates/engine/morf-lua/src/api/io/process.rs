@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::{lua_values::*, scene_bindings::*, state::*, table_menu::*};
+use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*};
 
 pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let process_write = Callback::from_fn(&ctx, |ctx, _, mut stack| {

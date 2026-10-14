@@ -5,8 +5,8 @@ use std::time::Duration;
 use morf_scene::reactive::SignalId;
 
 use crate::{
-    api_prefers::*, api_theme::read_tokens, reactive_bindings::*, state::*, surface_types::*,
-    types::*,
+    api::color::theme::read_tokens, api::system::prefers::*, api::ui::bindings::*,
+    runtime::host_types::*, runtime::state::*, vm::types::*,
 };
 
 /// Writes one signal from the host side; the caller flushes.

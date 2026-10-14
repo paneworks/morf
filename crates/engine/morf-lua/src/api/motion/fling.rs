@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use morf_runtime::animation::fling;
 
-use crate::{scene_bindings::*, state::*};
+use crate::{api::ui::scene::*, runtime::state::*};
 
 /// Installs `morf.animation.fling`, which sets a property coasting.
 ///

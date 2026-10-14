@@ -42,13 +42,13 @@ use morf_scene::{ListModel, Value as SceneValue};
 use morf_value::IpcTable;
 
 use crate::{
-    reactive_execute::drive_executor,
-    scene_bindings::*,
-    serialization::scene_to_lua,
-    state::*,
-    surface_types::*,
-    table_menu::{optional_closure, table_bool, table_number},
-    types::*,
+    api::ui::scene::*,
+    runtime::host_types::*,
+    runtime::state::*,
+    value::table::{optional_closure, table_bool, table_number},
+    vm::execute::drive_executor,
+    vm::loader::scene_to_lua,
+    vm::types::*,
 };
 use morf_runtime::Handler;
 
@@ -338,8 +338,8 @@ pub(crate) fn install_audio_api<'gc>(
     let metatable = Table::new(&ctx);
     metatable.set_field(ctx, "__index", index);
     audio.set_metatable(ctx, Some(metatable));
-    crate::api_audio_spectrum::install(ctx, audio);
-    crate::api_audio_equalizer::install(ctx, audio);
+    crate::api::media::audio_spectrum::install(ctx, audio);
+    crate::api::media::audio_equalizer::install(ctx, audio);
     morf.set_field(ctx, "audio", audio);
 }
 

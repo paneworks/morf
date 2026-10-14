@@ -5,8 +5,9 @@ use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as
 use std::rc::Rc;
 
 use crate::{
-    LogLevel, layer_parse::*, process_helpers::*, runtime_helpers::*, scene_bindings::*, state::*,
-    surface_types::*, table_menu::*, window_geometry::*, window_methods::*, window_parse::*,
+    LogLevel, api::io::process_helpers::*, api::ui::scene::*, api::window::geometry::*,
+    api::window::layer::*, api::window::methods::*, api::window::parse::*, runtime::helpers::*,
+    runtime::host_types::*, runtime::state::*, value::table::*,
 };
 
 mod window;
@@ -160,8 +161,10 @@ pub(crate) fn install_module_api<'gc>(
                         .map_err(|error| HostError(error.to_string()))?;
                     state.windows.popup_node_anchors.insert(id, anchor);
                 }
-                crate::window_events::register_window_size(&mut state, id);
-                crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
+                crate::api::window::events::register_window_size(&mut state, id);
+                crate::api::window::events::window_handlers_from_options(
+                    ctx, &mut state, id, options,
+                )?;
                 id
             };
             let userdata = UserData::new_static(&ctx, WindowSurfaceToken { id });
@@ -205,8 +208,10 @@ pub(crate) fn install_module_api<'gc>(
                     updates_enabled,
                     WindowSurfaceKind::Toplevel(config),
                 );
-                crate::window_events::register_window_size(&mut state, id);
-                crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
+                crate::api::window::events::register_window_size(&mut state, id);
+                crate::api::window::events::window_handlers_from_options(
+                    ctx, &mut state, id, options,
+                )?;
                 id
             };
             let userdata = UserData::new_static(&ctx, WindowSurfaceToken { id });
@@ -239,7 +244,9 @@ pub(crate) fn install_module_api<'gc>(
                     updates_enabled,
                     WindowSurfaceKind::Layer(config),
                 );
-                crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
+                crate::api::window::events::window_handlers_from_options(
+                    ctx, &mut state, id, options,
+                )?;
                 id
             };
             let userdata = UserData::new_static(&ctx, WindowSurfaceToken { id });

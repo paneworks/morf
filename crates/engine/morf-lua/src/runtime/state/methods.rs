@@ -7,11 +7,11 @@ impl ReactiveState {
         Self {
             engine: morf_runtime::Engine::new(),
             limits: crate::Limits::default(),
-            channels: crate::channels::Channels::default(),
+            channels: crate::api::ui::channels::Channels::default(),
             shaders: HashMap::new(),
             overlays: Default::default(),
             screencopy_saves: HashMap::new(),
-            image_jobs: crate::image_jobs::ImageJobs::default(),
+            image_jobs: crate::runtime::image_jobs::ImageJobs::default(),
             pam_tasks: Vec::new(),
             pam_sessions: Vec::new(),
             greetd_sessions: Vec::new(),

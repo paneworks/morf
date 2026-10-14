@@ -46,7 +46,7 @@ impl IpcToLua for IpcValue {
             Self::Integer(value) => LuaValue::Integer(*value),
             Self::Number(value) => LuaValue::Number(*value),
             Self::String(value) => LuaValue::String(ctx.intern(value.as_bytes())),
-            Self::Color(color) => crate::api_color::scene_color_userdata(ctx, *color),
+            Self::Color(color) => crate::api::color::color::scene_color_userdata(ctx, *color),
             // A fresh copy each time: what a reader does to it stays with
             // the reader.
             Self::Table(table) => table.to_lua(ctx),
@@ -64,11 +64,11 @@ impl IpcFromLua for IpcValue {
             LuaValue::String(value) => Ok(Self::String(value.display_lossy().to_string())),
             LuaValue::UserData(userdata)
                 if userdata
-                    .downcast_static::<crate::api_color::ColorToken>()
+                    .downcast_static::<crate::api::color::color::ColorToken>()
                     .is_ok() =>
             {
                 let token = userdata
-                    .downcast_static::<crate::api_color::ColorToken>()
+                    .downcast_static::<crate::api::color::color::ColorToken>()
                     .expect("checked above");
                 Ok(Self::Color(morf_scene::Color::from_pastel(&token.color)))
             }

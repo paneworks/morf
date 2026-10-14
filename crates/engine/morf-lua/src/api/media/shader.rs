@@ -2,7 +2,7 @@ use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_shader::{Binding, ShaderKind, ShaderSpec, Type};
 use std::rc::Rc;
 
-use crate::{scene_bindings::*, state::*};
+use crate::{api::ui::scene::*, runtime::state::*};
 
 /// A shader a configuration registered, ready for the renderer.
 pub(crate) struct RegisteredShader {

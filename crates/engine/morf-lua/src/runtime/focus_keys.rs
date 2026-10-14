@@ -9,7 +9,7 @@
 
 use morf_scene::NodeHandle;
 
-use crate::events::{press_key_bubbling, routing};
+use crate::runtime::events::{press_key_bubbling, routing};
 use crate::{EventPoint, KeyModifiers, Runtime, UiEvent};
 
 /// BTN_LEFT, which a click by key stands in for.

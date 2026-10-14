@@ -14,7 +14,7 @@
 //! Sources are what `ui.Image` takes: a path, a `file://` URI, or the picture
 //! written inline as SVG text or a `data:` URI.
 
-use crate::state::StateCell;
+use crate::runtime::state::StateCell;
 use luna::{Callback, CallbackReturn, Closure, Context, Function, Table, Value as LuaValue};
 use morf_image::ops::{self, ImageOp, OutputFormat, ProcessRequest, RegionEffect, ResizeMode};
 use std::ffi::OsStr;
@@ -22,9 +22,9 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::api_color::color_userdata;
-use crate::image_jobs::{ImageJob, Region};
-use crate::{scene_bindings::HostError, state::ReactiveState};
+use crate::api::color::color::color_userdata;
+use crate::runtime::image_jobs::{ImageJob, Region};
+use crate::{api::ui::scene::HostError, runtime::state::ReactiveState};
 
 /// The largest picture `pixel` decodes on the Lua thread, in pixels.
 ///
@@ -200,7 +200,7 @@ fn parse_op<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<ImageOp, Hos
             ImageOp::Blur(sigma as f32)
         }
         "grayscale" | "greyscale" => ImageOp::Grayscale,
-        "annotations" => ImageOp::Annotations(crate::api_image_annotation::parse(
+        "annotations" => ImageOp::Annotations(crate::api::media::image_annotation::parse(
             ctx,
             arg(2),
             arg(3),
@@ -419,14 +419,14 @@ pub(crate) fn install_image_ops_api<'gc>(
     limits.set_field(
         ctx,
         "max_in_flight",
-        crate::image_jobs::MAX_IN_FLIGHT as i64,
+        crate::runtime::image_jobs::MAX_IN_FLIGHT as i64,
     );
     image.set_field(ctx, "limits", limits);
-    crate::api_image_raw::install_raw_image_api(ctx, image);
-    crate::api_image_annotation::install(ctx, image);
-    crate::api_image_geometry::install(ctx, image);
-    crate::api_image_preview::install(ctx, image, &state);
-    crate::api_image_canvas::install(ctx, image, &state);
+    crate::api::media::image_raw::install_raw_image_api(ctx, image);
+    crate::api::media::image_annotation::install(ctx, image);
+    crate::api::media::image_geometry::install(ctx, image);
+    crate::api::media::image_preview::install(ctx, image, &state);
+    crate::api::media::image_canvas::install(ctx, image, &state);
 
     morf.set_field(ctx, "image", image);
 }

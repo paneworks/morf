@@ -63,7 +63,9 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::{Limits, reactive_execute::drive_executor, scene_bindings::*, state::*, table_menu::*};
+use crate::{
+    Limits, api::ui::scene::*, runtime::state::*, value::table::*, vm::execute::drive_executor,
+};
 use morf_runtime::Handler;
 
 mod hub;

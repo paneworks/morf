@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use morf_scene::{Color, NodeHandle, Scene, SceneError, Value as SceneValue};
 
-use crate::{lua_values::*, scene_bindings::*, serialization::*, state::*};
+use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, vm::loader::*};
 
 /// Installs `morf.animation`, the imperative control surface over motion that
 /// a `behavior` table has already declared.
@@ -214,8 +214,8 @@ pub(crate) fn install_easing_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         // behavior; OkLab, the shorter way, otherwise.
         let (space, hue) = match options {
             Some(options) => (
-                crate::configure::parse_color_space(ctx, options).map_err(HostError)?,
-                crate::configure::parse_hue(ctx, options).map_err(HostError)?,
+                crate::api::ui::configure::parse_color_space(ctx, options).map_err(HostError)?,
+                crate::api::ui::configure::parse_hue(ctx, options).map_err(HostError)?,
             ),
             None => Default::default(),
         };
@@ -223,7 +223,7 @@ pub(crate) fn install_easing_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         // Accepts anything a colour property does: a value, a string, a
         // table naming a space.
         let read = |value| {
-            crate::api_color::color_of(ctx, value)
+            crate::api::color::color::color_of(ctx, value)
                 .map(|color| Color::from_pastel(&color))
                 .map_err(HostError)
         };

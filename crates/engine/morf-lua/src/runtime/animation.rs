@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use morf_scene::AnimationFrame;
 
-use crate::types::*;
+use crate::vm::types::*;
 
 // The animation frame tick and the Lua handlers it reports completions to.
 
@@ -47,7 +47,7 @@ impl Runtime {
         let limits = self.limits;
         let reactive = std::rc::Rc::clone(&self.reactive);
         self.lua.enter(|ctx| {
-            if let Err(message) = crate::reactive_bindings::flush_reactive(&reactive, ctx, limits) {
+            if let Err(message) = crate::api::ui::bindings::flush_reactive(&reactive, ctx, limits) {
                 reactive
                     .borrow_mut()
                     .log(LogLevel::Warn, format!("theme transition: {message}"));
@@ -93,11 +93,11 @@ impl Runtime {
             frame.changed += fading;
         }
         // Whatever follows a node that just moved moves with it, this tick.
-        frame.changed += crate::state::apply_follows(&mut self.reactive.borrow_mut());
+        frame.changed += crate::runtime::state::apply_follows(&mut self.reactive.borrow_mut());
         // Nodes whose exit has ended go now, with their `on_destroyed` hooks.
         for &node in &frame.exited {
             self.lua.enter(|ctx| {
-                crate::runtime_helpers::finish_node_exit(&self.reactive, ctx, self.limits, node);
+                crate::runtime::helpers::finish_node_exit(&self.reactive, ctx, self.limits, node);
             });
         }
         if frame.events.is_empty() && frame.groups.is_empty() {

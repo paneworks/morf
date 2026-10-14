@@ -9,7 +9,7 @@
 //! table. What it keeps per node it lets go of with
 //! [`Runtime::on_nodes_removed`].
 
-use crate::ipc_table::{IpcFromLua, IpcToLua};
+use crate::value::ipc::{IpcFromLua, IpcToLua};
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Mutex;
@@ -17,7 +17,7 @@ use std::sync::Mutex;
 use luna::{Callback, CallbackReturn, Table, Value as LuaValue, Variadic};
 use morf_scene::NodeHandle;
 
-use crate::scene_bindings::HostError;
+use crate::api::ui::scene::HostError;
 use crate::{HostFunction, IpcValue, Runtime};
 
 /// What an extension does to each new runtime.

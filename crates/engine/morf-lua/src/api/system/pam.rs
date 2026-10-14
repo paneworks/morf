@@ -14,7 +14,7 @@ use morf_system::{PamAuthenticator, PamSession, Secret, Zeroizing};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{scene_bindings::HostError, state::*};
+use crate::{api::ui::scene::HostError, runtime::state::*};
 
 /// How many conversations one configuration may hold open.
 ///

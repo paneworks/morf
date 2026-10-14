@@ -19,9 +19,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
-    scene_bindings::HostError,
-    serialization::{dbus_value_to_lua, lua_to_dbus},
-    state::*,
+    api::ui::scene::HostError,
+    runtime::state::*,
+    vm::loader::{dbus_value_to_lua, lua_to_dbus},
 };
 
 /// Installs `morf.dbus.serve` and the methods on what it returns.

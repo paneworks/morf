@@ -7,7 +7,10 @@
 
 use luna::{Table, Value as LuaValue};
 
-use crate::{api_toplevels::*, reactive_bindings::flush_reactive, surface_types::*, types::*};
+use crate::{
+    api::desktop::toplevels::*, api::ui::bindings::flush_reactive, runtime::host_types::*,
+    vm::types::*,
+};
 
 impl Runtime {
     /// Replaces `morf.windows` with the compositor's current window list.

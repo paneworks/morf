@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use morf_scene::{Behavior, Element, NodeHandle, Value as SceneValue};
 
-use crate::{reactive_bindings::*, serialization::*, state::*, surface_types::*};
+use crate::{api::ui::bindings::*, runtime::host_types::*, runtime::state::*, vm::loader::*};
 
 mod metatable;
 mod methods;
@@ -116,7 +116,7 @@ pub(crate) fn assign_scene_property(
         // own claims are settled by the text inputs, which focus follows.
         if property == "focus" && state.scene.element(node).ok() != Some(Element::TextInput) {
             let on = state.scene.bool_value(node, "focus").unwrap_or(false);
-            crate::api_focus::request_by_property(state, node, on);
+            crate::api::input::focus::request_by_property(state, node, on);
         }
     }
     if target_changed {

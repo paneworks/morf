@@ -7,7 +7,7 @@
 //! no Lua at all; the loop repaints only when a channel such a path shows
 //! has moved.
 
-use crate::state::StateCell;
+use crate::runtime::state::StateCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -16,10 +16,10 @@ use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_scene::reactive::SignalId;
 use morf_scene::{Channel, NodeHandle, Value as SceneValue};
 
-use crate::scene_bindings::HostError;
-use crate::state::ReactiveState;
-use crate::surface_types::IpcValue;
-use crate::types::Runtime;
+use crate::api::ui::scene::HostError;
+use crate::runtime::host_types::IpcValue;
+use crate::runtime::state::ReactiveState;
+use crate::vm::types::Runtime;
 
 /// One runtime's view of the channels.
 #[derive(Default)]
@@ -114,7 +114,7 @@ impl Runtime {
             let reactive = Rc::clone(&self.reactive);
             self.lua.enter(|ctx| {
                 if let Err(message) =
-                    crate::reactive_bindings::flush_reactive(&reactive, ctx, limits)
+                    crate::api::ui::bindings::flush_reactive(&reactive, ctx, limits)
                 {
                     reactive
                         .borrow_mut()

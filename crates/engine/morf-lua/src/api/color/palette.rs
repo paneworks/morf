@@ -9,9 +9,9 @@ use pastel::distinct::{
 use pastel::random::{RandomizationStrategy, strategies};
 use pastel::{Color, ColorScale, Fraction};
 
-use crate::api_color::{ColorToken, color_of, color_userdata};
-use crate::api_color_ops::mix_in;
-use crate::scene_bindings::*;
+use crate::api::color::color::{ColorToken, color_of, color_userdata};
+use crate::api::color::ops::mix_in;
+use crate::api::ui::scene::*;
 
 /// A ramp of colours a fraction is read from.
 pub(crate) struct ScaleToken {

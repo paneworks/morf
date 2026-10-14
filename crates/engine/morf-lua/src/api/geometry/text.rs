@@ -18,7 +18,7 @@ use std::borrow::Cow;
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_text::fuzzy::{FuzzyMatcher, rank};
 
-use crate::scene_bindings::*;
+use crate::api::ui::scene::*;
 
 /// The most items one call ranks.
 const MAX_ITEMS: usize = 1_000_000;

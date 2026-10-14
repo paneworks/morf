@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{reactive_execute::*, scene_bindings::*, state::*, types::*};
+use crate::{api::ui::scene::*, runtime::state::*, vm::execute::*, vm::types::*};
 
 mod dbus;
 mod json;
@@ -136,7 +136,7 @@ pub(crate) fn scene_to_lua<'gc>(
         SceneValue::Bool(value) => LuaValue::Boolean(*value),
         SceneValue::Number(value) => LuaValue::Number(*value),
         SceneValue::String(value) => LuaValue::String(ctx.intern(value.as_bytes())),
-        SceneValue::Color(color) => crate::api_color::scene_color_userdata(ctx, *color),
+        SceneValue::Color(color) => crate::api::color::color::scene_color_userdata(ctx, *color),
         SceneValue::List(values) => {
             let table = Table::new(&ctx);
             for (index, value) in values.iter().enumerate() {

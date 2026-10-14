@@ -11,8 +11,8 @@
 use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue};
 use std::rc::Rc;
 
-use crate::events::EventPoint;
-use crate::{scene_bindings::*, state::*, surface_types::*};
+use crate::runtime::events::EventPoint;
+use crate::{api::ui::scene::*, runtime::host_types::*, runtime::state::*};
 
 /// The most bytes one `set` may hand the compositor.
 const MAX_SET_BYTES: usize = 32 * 1024 * 1024;

@@ -1,6 +1,6 @@
 //! Views that follow their models, once a frame.
 
-use crate::{types::*, views::*};
+use crate::{runtime::views::*, vm::types::*};
 
 impl Runtime {
     /// Reconciles every view whose model changed since the last frame.
@@ -41,7 +41,7 @@ impl Runtime {
         }
         // The rows that went, and whatever was inside them.
         self.lua.enter(|ctx| {
-            crate::reactive_bindings::run_destroyed_hooks(&self.reactive, ctx, self.limits)
+            crate::api::ui::bindings::run_destroyed_hooks(&self.reactive, ctx, self.limits)
         });
         changed
     }

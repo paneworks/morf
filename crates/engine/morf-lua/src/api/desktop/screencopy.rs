@@ -8,9 +8,9 @@
 use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue};
 use std::rc::Rc;
 
-use crate::api_image_ops::{callback_of, format_of, quality_of, region_of, source_of};
-use crate::image_jobs::CaptureSave;
-use crate::{scene_bindings::HostError, state::*, surface_types::*};
+use crate::api::media::image_ops::{callback_of, format_of, quality_of, region_of, source_of};
+use crate::runtime::image_jobs::CaptureSave;
+use crate::{api::ui::scene::HostError, runtime::host_types::*, runtime::state::*};
 
 /// How many captures may be waiting on the compositor at once.
 const MAX_PENDING: usize = 4;

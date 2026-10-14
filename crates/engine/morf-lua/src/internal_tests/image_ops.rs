@@ -88,7 +88,7 @@ fn a_full_queue_is_refused_and_a_dropped_runtime_is_left_alone() {
     runtime.execute("queue.lua", source.as_bytes()).unwrap();
     assert_eq!(
         runtime.reactive.borrow().image_jobs.in_flight(),
-        crate::image_jobs::MAX_IN_FLIGHT
+        crate::runtime::image_jobs::MAX_IN_FLIGHT
     );
     // Gone with work still queued: the workers finish or stop on their own,
     // and no callback runs against a Lua state that no longer exists.

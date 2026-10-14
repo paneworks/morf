@@ -7,7 +7,7 @@
 use morf_layout::{Layout, Size, TextMeasurer};
 use morf_scene::NodeHandle;
 
-use crate::{reactive_bindings::*, scene_bindings::*, types::*};
+use crate::{api::ui::bindings::*, api::ui::scene::*, vm::types::*};
 
 pub use morf_runtime::layout::SettledLayout;
 

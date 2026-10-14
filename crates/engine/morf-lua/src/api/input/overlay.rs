@@ -31,7 +31,7 @@
 //! `morf.overlay.close(content)` closes one, `morf.overlay.is_open(content)`
 //! asks.
 
-use crate::state::StateCell;
+use crate::runtime::state::StateCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -40,11 +40,11 @@ use morf_scene::overlay::Placement;
 use morf_scene::{Element, NodeHandle, Value as SceneValue};
 
 use crate::Runtime;
-use crate::api_focus::FocusRequest;
-use crate::scene_bindings::{assign_scene_property, create_node};
-use crate::state::ReactiveState;
-use crate::state_tokens::NodeToken;
-use crate::types::LogLevel;
+use crate::api::input::focus::FocusRequest;
+use crate::api::ui::scene::{assign_scene_property, create_node};
+use crate::runtime::state::ReactiveState;
+use crate::value::tokens::NodeToken;
+use crate::vm::types::LogLevel;
 use morf_runtime::overlays::{DIM, Overlay, Overlays};
 
 mod runtime;
@@ -164,7 +164,7 @@ fn open<'gc>(
     let dim = match get("dim") {
         LuaValue::Nil | LuaValue::Boolean(false) => None,
         LuaValue::Boolean(true) => Some(SceneValue::String(DIM.to_owned())),
-        value => Some(crate::reactive_bindings::lua_to_scene(ctx, value, 0)?),
+        value => Some(crate::api::ui::bindings::lua_to_scene(ctx, value, 0)?),
     };
     let modal = flag("modal", dim.is_some());
     let on_close = match get("on_close") {
@@ -185,7 +185,7 @@ fn open<'gc>(
                 .to_vec();
             let mut s = state.borrow_mut();
             for child in children.into_iter().filter(|c| *c != content) {
-                crate::runtime_helpers::remove_scene_subtree(&mut s, child);
+                crate::runtime::helpers::remove_scene_subtree(&mut s, child);
             }
             wrapper
         }
@@ -220,7 +220,7 @@ fn open<'gc>(
             }
         }
     }
-    crate::runtime_helpers::cancel_node_exit(&mut s, content);
+    crate::runtime::helpers::cancel_node_exit(&mut s, content);
     s.scene
         .reparent(content, Some(wrapper))
         .map_err(|error| error.to_string())?;
@@ -356,7 +356,7 @@ pub(crate) fn install_overlay_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (content, options): (UserRef<NodeToken>, Option<Table>) = stack.consume(ctx)?;
             open(ctx, &opener, content.handle, options)
-                .map_err(crate::scene_bindings::HostError)?;
+                .map_err(crate::api::ui::scene::HostError)?;
             Ok(CallbackReturn::Return)
         }),
     );
@@ -367,7 +367,7 @@ pub(crate) fn install_overlay_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (content, options): (UserRef<NodeToken>, Option<Table>) = stack.consume(ctx)?;
             track(ctx, &tracker, content.handle, options)
-                .map_err(crate::scene_bindings::HostError)?;
+                .map_err(crate::api::ui::scene::HostError)?;
             Ok(CallbackReturn::Return)
         }),
     );

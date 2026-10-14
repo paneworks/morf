@@ -4,7 +4,7 @@
 use luna::{Callback, CallbackReturn, Closure, Context, Function, Table, Value as LuaValue};
 use std::rc::Rc;
 
-use crate::{scene_bindings::*, state::*, surface_types::*, types::*};
+use crate::{api::ui::scene::*, runtime::host_types::*, runtime::state::*, vm::types::*};
 
 mod text_entry;
 
@@ -109,8 +109,8 @@ pub(crate) fn install_host_service_api<'gc>(
     let output_power = Table::new(&ctx);
     output_power.set_field(ctx, "set", output_power_set);
     morf.set_field(ctx, "output_power", output_power);
-    crate::api_gamma::install_gamma_api(ctx, Rc::clone(&state), morf);
-    crate::api_clipboard::install_clipboard_api(ctx, Rc::clone(&state), morf);
+    crate::api::desktop::gamma::install_gamma_api(ctx, Rc::clone(&state), morf);
+    crate::api::desktop::clipboard::install_clipboard_api(ctx, Rc::clone(&state), morf);
     // `morf.on_keyboard_focus(function(active) end)`: the keyboard came to
     // the shell's surface, or left it. With `keyboard_focus = "on_demand"`
     // a click anywhere else is what takes it away.
@@ -144,9 +144,9 @@ pub(crate) fn install_host_service_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_backdrop_click", on_backdrop_click);
-    crate::api_screencopy::install_screencopy_api(ctx, Rc::clone(&state), morf);
+    crate::api::desktop::screencopy::install_screencopy_api(ctx, Rc::clone(&state), morf);
     text_entry::install_text_entry(ctx, Rc::clone(&state), morf);
-    crate::api_time::install_timer_api(ctx, Rc::clone(&state), morf);
+    crate::api::time::timer::install_timer_api(ctx, Rc::clone(&state), morf);
     let ipc_register = Callback::from_fn(&ctx, {
         let state = Rc::clone(&state);
         move |ctx, _, mut stack| {
@@ -289,7 +289,7 @@ pub(crate) fn install_host_service_api<'gc>(
     // Filled once the compositor connection is up; empty rather than absent so
     // a configuration can index it from its first line.
     morf.set_field(ctx, "capabilities", Table::new(&ctx));
-    crate::api_compositor::install_compositor_api(ctx, Rc::clone(&state), morf);
+    crate::api::desktop::compositor::install_compositor_api(ctx, Rc::clone(&state), morf);
 
     // Empty rather than absent, so a configuration can hold it and watch it
     // from its first line — and so `#morf.workspaces` is a number rather than

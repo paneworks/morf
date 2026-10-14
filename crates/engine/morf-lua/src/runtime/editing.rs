@@ -9,8 +9,8 @@ use morf_text::TextSystem;
 use morf_runtime::editing::CALLBACK_ROUNDS;
 pub(crate) use morf_runtime::editing::key_args;
 
-use crate::text_inputs::{self, KeyModifiers, KeyOutcome};
-use crate::{events::*, reactive_bindings::*, runtime_helpers::*, types::*};
+use crate::runtime::text_inputs::{self, KeyModifiers, KeyOutcome};
+use crate::{api::ui::bindings::*, runtime::events::*, runtime::helpers::*, vm::types::*};
 
 impl Runtime {
     /// Whether a node is a text input.
@@ -38,7 +38,7 @@ impl Runtime {
         let terminal_moved = {
             let mut state = self.reactive.borrow_mut();
             let terminal = node.filter(|node| state.terminals.contains(*node));
-            crate::terminals::set_focus(&mut state, terminal)
+            crate::runtime::terminals::set_focus(&mut state, terminal)
         };
         let changed = {
             let mut state = self.reactive.borrow_mut();
@@ -234,7 +234,7 @@ impl Runtime {
             );
             if state.scene.current(node, "links").ok() != Some(&links) {
                 let _ =
-                    crate::scene_bindings::assign_scene_property(&mut state, node, "links", links);
+                    crate::api::ui::scene::assign_scene_property(&mut state, node, "links", links);
             }
         }
     }

@@ -1,10 +1,10 @@
 //! Resident, asynchronous previews with explicit close and teardown cleanup.
-use crate::state::StateCell;
+use crate::runtime::state::StateCell;
 use crate::{
-    api_image_ops::{parse_ops, queue, source_of},
-    image_jobs::ImageJob,
-    scene_bindings::HostError,
-    state::ReactiveState,
+    api::media::image_ops::{parse_ops, queue, source_of},
+    api::ui::scene::HostError,
+    runtime::image_jobs::ImageJob,
+    runtime::state::ReactiveState,
 };
 use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue};
 use morf_image::preview::Preview;

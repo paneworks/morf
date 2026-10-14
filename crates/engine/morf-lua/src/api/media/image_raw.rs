@@ -18,8 +18,8 @@ use morf_image::ImageData;
 use morf_image::ops::{self, OutputFormat};
 use morf_image::published::{self, PixelFormat};
 
-use crate::api_image_ops::{source_of, uint};
-use crate::scene_bindings::HostError;
+use crate::api::media::image_ops::{source_of, uint};
+use crate::api::ui::scene::HostError;
 
 /// The most pixel bytes one configuration may hold published at once.
 pub(crate) const MAX_PUBLISHED_BYTES: usize = 256 * 1024 * 1024;

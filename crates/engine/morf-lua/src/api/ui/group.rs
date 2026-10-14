@@ -7,7 +7,8 @@ use std::time::Duration;
 use morf_scene::{AnimationStep, Behavior, Easing, GroupId, Keyframe, Scene, keyframe_steps};
 
 use crate::{
-    configure::*, lua_values::*, reactive_bindings::*, scene_bindings::*, state::*, table_menu::*,
+    api::ui::bindings::*, api::ui::configure::*, api::ui::scene::*, runtime::state::*,
+    value::lua::*, value::table::*,
 };
 
 /// Deepest nesting a group specification may reach.

@@ -9,9 +9,9 @@ use luna::{Callback, CallbackReturn, Closure, Context, Table};
 use std::rc::Rc;
 
 use crate::{
-    scene_bindings::HostError,
-    state::*,
-    types::{ToplevelRequest, WorkspaceRequest},
+    api::ui::scene::HostError,
+    runtime::state::*,
+    vm::types::{ToplevelRequest, WorkspaceRequest},
 };
 
 /// Queues one workspace request, refusing a configuration that queues

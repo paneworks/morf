@@ -5,7 +5,7 @@ use morf_io::{
 };
 use std::cell::RefCell;
 
-use crate::{lua_values::*, scene_bindings::*, state::*};
+use crate::{api::ui::scene::*, runtime::state::*, value::lua::*};
 
 pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let file_read = Callback::from_fn(&ctx, |ctx, _, mut stack| {

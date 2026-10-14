@@ -129,7 +129,7 @@ impl Runtime {
             let mut state = self.reactive.borrow_mut();
             if overlay.tracked {
                 // The catcher goes; the node stays, its owner shuts it.
-                crate::runtime_helpers::remove_scene_subtree(&mut state, overlay.wrapper);
+                crate::runtime::helpers::remove_scene_subtree(&mut state, overlay.wrapper);
             } else if state.scene.contains(overlay.wrapper) {
                 set(
                     &mut state,

@@ -1,6 +1,6 @@
 use morf_scene::{NodeHandle, Value as SceneValue};
 
-use crate::{events::*, surface_types::*, types::*};
+use crate::{runtime::events::*, runtime::host_types::*, vm::types::*};
 
 /// The held modifiers as a pointer handler is told them: `"ctrl+shift"`.
 pub(crate) use morf_runtime::events::held;
@@ -109,12 +109,14 @@ impl Runtime {
             {
                 let mut state = self.reactive.borrow_mut();
                 match event {
-                    UiEvent::Pressed => crate::text_inputs::press(&mut *state, node, local),
+                    UiEvent::Pressed => {
+                        crate::runtime::text_inputs::press(&mut *state, node, local)
+                    }
                     UiEvent::PointerMoved | UiEvent::Dragged | UiEvent::DragStarted => {
-                        crate::text_inputs::drag(&mut *state, node, local);
+                        crate::runtime::text_inputs::drag(&mut *state, node, local);
                     }
                     UiEvent::Released | UiEvent::DragFinished => {
-                        crate::text_inputs::release(&mut *state, node);
+                        crate::runtime::text_inputs::release(&mut *state, node);
                     }
                     _ => {}
                 }
@@ -251,7 +253,7 @@ impl Runtime {
         {
             let mut state = self.reactive.borrow_mut();
             for (property, next) in routing::flickable_scroll(&state.scene, node, pixels, max) {
-                if crate::scene_bindings::assign_scene_property(
+                if crate::api::ui::scene::assign_scene_property(
                     &mut state,
                     node,
                     property,

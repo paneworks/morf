@@ -1,8 +1,8 @@
 //! A node configured from its constructor table: its properties, handlers,
 //! engine relations, `enter`, `exit` and `behaviors`.
 
-use crate::api_shader::attach_shader;
-use crate::configure_states::configure_states;
+use crate::api::media::shader::attach_shader;
+use crate::api::ui::configure_states::configure_states;
 use luna::{Context, Function, Table, Value as LuaValue};
 use std::rc::Rc;
 use std::time::Duration;
@@ -10,8 +10,8 @@ use std::time::Duration;
 use morf_scene::{Behavior, NodeHandle, Repeat, RotationDirection};
 
 use crate::{
-    events::*, lua_values::*, reactive_bindings::*, scene_bindings::*, state::*, table_menu::*,
-    types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::events::*, runtime::state::*, value::lua::*,
+    value::table::*, vm::types::*,
 };
 
 mod behaviors;
@@ -147,8 +147,8 @@ pub(crate) fn configure_element<'gc>(
         }
         // A table holding bindings among its fields is bound as a whole.
         let value = match value {
-            LuaValue::Table(table) if crate::configure_states::binds_inside(&property) => {
-                match crate::configure_states::table_binding(ctx, table, limits)? {
+            LuaValue::Table(table) if crate::api::ui::configure_states::binds_inside(&property) => {
+                match crate::api::ui::configure_states::table_binding(ctx, table, limits)? {
                     Some(closure) => LuaValue::Function(Function::Closure(closure)),
                     None => value,
                 }
@@ -219,7 +219,7 @@ pub(crate) fn configure_element<'gc>(
     if let Some(value) = named_loop {
         match value {
             LuaValue::Function(Function::Closure(closure)) => {
-                crate::reactive_bindings::register_loop_binding(state, ctx, limits, node, closure);
+                crate::api::ui::bindings::register_loop_binding(state, ctx, limits, node, closure);
             }
             value => {
                 let value = lua_to_scene(ctx, value, 0)?;
@@ -280,7 +280,7 @@ pub(crate) fn assign_engine_relation<'gc>(
 ) -> Result<(), String> {
     match property {
         "shortcuts" => {
-            let shortcuts = crate::shortcut::read_table(ctx, value)?;
+            let shortcuts = crate::runtime::shortcut::read_table(ctx, value)?;
             state.shortcuts.set(node, shortcuts);
         }
         "stretch" => {
@@ -315,7 +315,7 @@ pub(crate) fn assign_engine_relation<'gc>(
                     LuaValue::Table(_) => lua_to_scene(ctx, value, 0)?,
                     _ => morf_scene::Value::Nil,
                 };
-                crate::scene_bindings::assign_scene_property(state, node, "mask", value)?;
+                crate::api::ui::scene::assign_scene_property(state, node, "mask", value)?;
             }
             _ => return Err("mask must be a morf node, a table or nil".to_owned()),
         },

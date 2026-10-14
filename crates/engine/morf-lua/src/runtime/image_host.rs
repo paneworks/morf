@@ -6,9 +6,9 @@
 
 use luna::{Context, Executor, Table, Value as LuaValue, Variadic};
 
-use crate::api_image_ops::rgba_color;
-use crate::image_jobs::{CaptureSave, ImageJob, ImageOutcome, RawCapture};
-use crate::{reactive_execute::drive_executor, surface_types::Screencopy, types::*};
+use crate::api::media::image_ops::rgba_color;
+use crate::runtime::image_jobs::{CaptureSave, ImageJob, ImageOutcome, RawCapture};
+use crate::{runtime::host_types::Screencopy, vm::execute::drive_executor, vm::types::*};
 use morf_runtime::Handler;
 
 impl Runtime {

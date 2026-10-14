@@ -8,13 +8,13 @@ use std::rc::Rc;
 use morf_scene::{Element, NodeHandle, Scene, Value as SceneValue, ViewTransition};
 
 use crate::{
-    reactive_bindings::*,
-    reactive_execute::*,
-    runtime_helpers::{begin_node_exit, cancel_node_exit, remove_scene_subtree},
-    scene_bindings::*,
-    serialization::*,
-    state::*,
-    types::*,
+    api::ui::bindings::*,
+    api::ui::scene::*,
+    runtime::helpers::{begin_node_exit, cancel_node_exit, remove_scene_subtree},
+    runtime::state::*,
+    vm::execute::*,
+    vm::loader::*,
+    vm::types::*,
 };
 use morf_runtime::Handler;
 use morf_runtime::views::ViewHost;

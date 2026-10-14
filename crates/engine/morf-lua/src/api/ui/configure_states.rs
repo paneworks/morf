@@ -9,10 +9,12 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::configure::parse_rotation_direction;
-use crate::reactive_execute::drive_executor;
-use crate::states::*;
-use crate::{lua_values::*, reactive_bindings::*, state::*, table_menu::*, types::*};
+use crate::api::ui::configure::parse_rotation_direction;
+use crate::runtime::states::*;
+use crate::vm::execute::drive_executor;
+use crate::{
+    api::ui::bindings::*, runtime::state::*, value::lua::*, value::table::*, vm::types::*,
+};
 
 /// Parses `states` and `transitions`.
 ///

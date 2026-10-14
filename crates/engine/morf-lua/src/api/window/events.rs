@@ -20,8 +20,8 @@ use luna::{Callback, CallbackReturn, Closure, Context, UserRef, Value as LuaValu
 use std::rc::Rc;
 
 use crate::{
-    reactive_bindings::*, reactive_execute::*, scene_bindings::*, state::*, surface_types::*,
-    types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::host_types::*, runtime::state::*,
+    vm::execute::*, vm::types::*,
 };
 use morf_runtime::Handler;
 
@@ -141,7 +141,7 @@ pub(crate) fn destroy_window_surface(state: &mut ReactiveState, id: u64) -> Opti
             state.reactive.dead_signals.push(signal);
         }
     }
-    crate::runtime_helpers::remove_scene_subtree(state, window.root);
+    crate::runtime::helpers::remove_scene_subtree(state, window.root);
     on_closed.filter(|_| window.visible)
 }
 

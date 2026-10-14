@@ -18,7 +18,7 @@
 //! `morf.focus.previous()`. Those are queued and settled at the next turn of
 //! the loop, outside whatever handler asked.
 
-use crate::state::StateCell;
+use crate::runtime::state::StateCell;
 
 use std::rc::Rc;
 
@@ -27,11 +27,11 @@ use morf_scene::{Element, NodeHandle, Value as SceneValue};
 
 use crate::IpcValue;
 use crate::Runtime;
-use crate::events::UiEvent;
-use crate::runtime_helpers::takes_keys;
-use crate::scene_bindings::{assign_scene_property, node_userdata};
-use crate::state::ReactiveState;
-use crate::state_tokens::NodeToken;
+use crate::api::ui::scene::{assign_scene_property, node_userdata};
+use crate::runtime::events::UiEvent;
+use crate::runtime::helpers::takes_keys;
+use crate::runtime::state::ReactiveState;
+use crate::value::tokens::NodeToken;
 
 pub use morf_runtime::focus::FocusReason;
 pub(crate) use morf_runtime::focus::FocusRequest;
@@ -48,7 +48,7 @@ fn chain(state: &ReactiveState, root: NodeHandle) -> Vec<NodeHandle> {
 }
 
 fn within(state: &ReactiveState, scope: NodeHandle, node: NodeHandle) -> bool {
-    crate::runtime_helpers::scene_node_in_subtree(&state.scene, scope, node)
+    crate::runtime::helpers::scene_node_in_subtree(&state.scene, scope, node)
 }
 
 fn write(state: &mut ReactiveState, node: NodeHandle, property: &str, on: bool) {

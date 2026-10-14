@@ -8,8 +8,8 @@ use std::time::Duration;
 use morf_scene::{NodeHandle, Value as SceneValue};
 
 use crate::{
-    reactive_execute::*, runtime_helpers::*, scene_bindings::*, state::*, surface_types::*,
-    types::*, views::*,
+    api::ui::scene::*, runtime::helpers::*, runtime::host_types::*, runtime::state::*,
+    runtime::views::*, vm::execute::*, vm::types::*,
 };
 use morf_runtime::Handler;
 use morf_runtime::timers::DueTimer;
@@ -31,8 +31,8 @@ type HttpAnswer = (
     Handler,
     Result<morf_io::HttpResponse, String>,
     String,
-    crate::api_http::JsonKinds,
-    std::rc::Rc<crate::api_http::HttpHandleState>,
+    crate::api::io::http::JsonKinds,
+    std::rc::Rc<crate::api::io::http::HttpHandleState>,
 );
 
 /// What one turn collects while the state is borrowed, to be run once it is
@@ -44,7 +44,7 @@ struct Collected {
     dbus_signals: Vec<(
         u64,
         Handler,
-        crate::state_pending::DbusSignalKind,
+        crate::runtime::pending::DbusSignalKind,
         morf_io::DbusSignalEvent,
     )>,
     dbus_replies: Vec<(Handler, Result<morf_io::DbusValue, String>)>,
@@ -54,9 +54,9 @@ struct Collected {
     udev_events: Vec<(Handler, morf_system::UdevEvent)>,
     status_updates: Vec<(Handler, Vec<morf_system::StatusNotifierAddress>)>,
     http_answers: Vec<HttpAnswer>,
-    io_calls: Vec<crate::api_io::IoCall>,
+    io_calls: Vec<crate::api::io::io::IoCall>,
     io_more: bool,
-    watch_calls: Vec<crate::api_watch::WatchCall>,
+    watch_calls: Vec<crate::api::io::watch::WatchCall>,
     watch_more: bool,
     retained_destroys: Vec<NodeHandle>,
     transform_callbacks: Vec<(Handler, u64)>,
@@ -149,7 +149,7 @@ impl Runtime {
             self.poll_image_jobs();
         }
         // A source set outright, not animated, is followed at once too.
-        crate::state::apply_follows(&mut self.reactive.borrow_mut());
+        crate::runtime::state::apply_follows(&mut self.reactive.borrow_mut());
         // Changes to nodes nothing shows are not painted: a hidden panel's
         // chart that follows a counter every second would otherwise draw
         // every output every second for a picture nobody sees.

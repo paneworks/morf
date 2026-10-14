@@ -28,8 +28,8 @@ use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
 
 use crate::{
-    reactive_execute::drive_executor, scene_bindings::*, serialization::scene_to_lua, state::*,
-    state_tokens::*, surface_types::*, types::*,
+    api::ui::scene::*, runtime::host_types::*, runtime::state::*, value::tokens::*,
+    vm::execute::drive_executor, vm::loader::scene_to_lua, vm::types::*,
 };
 use morf_runtime::Handler;
 

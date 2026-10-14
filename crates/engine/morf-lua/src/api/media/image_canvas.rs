@@ -1,11 +1,13 @@
 //! Native canvases share the bounded asynchronous image queue.
-use crate::state::StateCell;
+use crate::runtime::state::StateCell;
 use crate::{
-    api_color::color_of,
-    api_image_ops::{callback_of, format_of, parse_ops, quality_of, queue, source_of, uint},
-    image_jobs::ImageJob,
-    scene_bindings::HostError,
-    state::ReactiveState,
+    api::color::color::color_of,
+    api::media::image_ops::{
+        callback_of, format_of, parse_ops, quality_of, queue, source_of, uint,
+    },
+    api::ui::scene::HostError,
+    runtime::image_jobs::ImageJob,
+    runtime::state::ReactiveState,
 };
 use luna::{Callback, CallbackReturn, Context, Table, Value};
 use std::rc::Rc;

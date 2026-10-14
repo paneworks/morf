@@ -1,10 +1,12 @@
-use crate::states::StateValue;
+use crate::runtime::states::StateValue;
 use luna::{Closure, Context, Value as LuaValue};
 use std::rc::Rc;
 
 use morf_scene::{NodeHandle, Value as SceneValue};
 
-use crate::{reactive_execute::*, scene_bindings::*, state::*, surface_types::*, types::*};
+use crate::{
+    api::ui::scene::*, runtime::host_types::*, runtime::state::*, vm::execute::*, vm::types::*,
+};
 
 pub(crate) use super::flush::{flush_reactive, flush_status, run_destroyed_hooks};
 
@@ -56,7 +58,7 @@ pub(crate) fn rebind_property<'gc>(
             .map(|(token, _)| *token)
             .collect::<Vec<_>>();
         for token in old {
-            crate::api_retention::dispose_effect(&mut state, token);
+            crate::api::ui::retention::dispose_effect(&mut state, token);
         }
         state.limits
     };
@@ -238,7 +240,7 @@ pub(crate) fn lua_to_scene<'gc>(
         LuaValue::Number(value) if value.is_finite() => Ok(SceneValue::Number(value)),
         LuaValue::String(value) => Ok(SceneValue::String(value.display_lossy().to_string())),
         LuaValue::UserData(userdata) => {
-            match userdata.downcast_static::<crate::api_color::ColorToken>() {
+            match userdata.downcast_static::<crate::api::color::color::ColorToken>() {
                 Ok(token) => Ok(SceneValue::Color(morf_scene::Color::from_pastel(
                     &token.color,
                 ))),

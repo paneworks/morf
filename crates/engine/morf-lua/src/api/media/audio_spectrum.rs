@@ -1,5 +1,5 @@
 //! Numeric filtering is native; audio subscription and display stay in Lua.
-use crate::{api_geometry::number, scene_bindings::HostError};
+use crate::{api::geometry::geometry::number, api::ui::scene::HostError};
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_audio::spectrum::{self, Filter, Options};
 use std::cell::RefCell;

@@ -1,7 +1,7 @@
 //! `ReactiveState`, everything one runtime holds between turns, and the
 //! types its fields are made of.
 
-pub(crate) use crate::api_shader::RegisteredShader;
+pub(crate) use crate::api::media::shader::RegisteredShader;
 use luna::StashedTable;
 
 use morf_runtime::Handler;
@@ -14,8 +14,8 @@ use std::rc::Rc;
 // Re-exported, because these moved out of this file only to satisfy the line
 // gate: every consumer reaches for them through `state::*` and there is no
 // reason to make them all learn a second module name.
-pub(crate) use crate::state_pending::*;
-pub(crate) use crate::state_tokens::*;
+pub(crate) use crate::runtime::pending::*;
+pub(crate) use crate::value::tokens::*;
 pub(crate) use crate::vm::state_cell::{StateCell, StateRef, StateRefMut};
 
 mod follow;
@@ -57,7 +57,6 @@ pub(crate) enum ViewKind {
     Grid,
 }
 
-pub(crate) use morf_runtime::windows::PopupNodeAnchor;
 
 pub(crate) use morf_runtime::reactive::Effect as LuaEffect;
 
@@ -75,18 +74,18 @@ pub(crate) struct ReactiveState {
     /// The runtime's limits, for a binding made where they are not at hand
     /// (a function assigned to a node's property).
     pub(crate) limits: crate::Limits,
-    pub(crate) channels: crate::channels::Channels,
+    pub(crate) channels: crate::api::ui::channels::Channels,
     /// Shaders the configuration registered, by name.
     ///
     /// Compiled once at load. The renderer is handed the generated WGSL when
     /// the host starts up, and a node only ever carries the program's hash.
     pub(crate) shaders: HashMap<String, RegisteredShader>,
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
-    pub(crate) overlays: crate::api_overlay::OverlayState,
+    pub(crate) overlays: crate::api::input::overlay::OverlayState,
     /// Captures to be written to a file rather than handed to Lua, by request.
-    pub(crate) screencopy_saves: HashMap<u64, crate::image_jobs::CaptureSave>,
+    pub(crate) screencopy_saves: HashMap<u64, crate::runtime::image_jobs::CaptureSave>,
     /// `morf.image` work on its way through the worker pool.
-    pub(crate) image_jobs: crate::image_jobs::ImageJobs,
+    pub(crate) image_jobs: crate::runtime::image_jobs::ImageJobs,
     pub(crate) pam_tasks: Vec<PendingPam>,
     pub(crate) pam_sessions: Vec<PendingPamSession>,
     pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
@@ -104,7 +103,7 @@ pub(crate) struct ReactiveState {
     /// `ui.watch_transform` watches.
     pub(crate) transform_watchers: morf_runtime::layout::TransformWatches,
     /// What extensions want told when nodes are removed.
-    pub(crate) removal_listeners: Vec<crate::extensions::NodesRemoved>,
+    pub(crate) removal_listeners: Vec<crate::vm::extensions::NodesRemoved>,
     pub(crate) dbus_signals: Vec<PendingDbusSignal>,
     /// Hands out the ids subscription handles close by.
     pub(crate) next_dbus_signal_id: u64,
@@ -115,15 +114,15 @@ pub(crate) struct ReactiveState {
     /// Theme token files being watched.
     pub(crate) theme_sources: Vec<ThemeSource>,
     /// `morf.terminal.listen`: terminals of our own hearing colour sequences.
-    pub(crate) palette_listeners: Vec<crate::api_palette::PaletteListener>,
+    pub(crate) palette_listeners: Vec<crate::api::media::terminal_palette::PaletteListener>,
     pub(crate) next_palette_listener: u64,
     /// `morf.prefers` and where its answers come from.
     pub(crate) prefers: Option<Prefers>,
     /// `morf.audio`, installed with the runtime and started on first use.
-    pub(crate) audio: Option<crate::api_audio::AudioHost>,
+    pub(crate) audio: Option<crate::api::media::audio::AudioHost>,
     /// `morf.toplevels`, installed with the runtime and fed by
     /// `Runtime::set_windows`.
-    pub(crate) toplevels: Option<crate::api_toplevels::ToplevelHost>,
+    pub(crate) toplevels: Option<crate::api::desktop::toplevels::ToplevelHost>,
     /// Every bus name `morf.dbus.serve` took, so a runtime that ends or
     /// hands its duties over gives them back first.
     pub(crate) owned_bus_names: Vec<std::rc::Weak<std::cell::RefCell<morf_io::DbusService>>>,
@@ -131,15 +130,15 @@ pub(crate) struct ReactiveState {
     pub(crate) udev_monitors: Vec<PendingUdev>,
     pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
     /// `morf.http` requests in flight.
-    pub(crate) http_requests: Vec<crate::api_http::PendingHttp>,
+    pub(crate) http_requests: Vec<crate::api::io::http::PendingHttp>,
     /// `morf.spawn` children and `morf.connect` connections.
-    pub(crate) io: crate::api_io::IoHub,
+    pub(crate) io: crate::api::io::io::IoHub,
     /// `morf.fs.watch` watches.
-    pub(crate) watches: crate::api_watch::WatchHub,
+    pub(crate) watches: crate::api::io::watch::WatchHub,
     /// `ui.Terminal` nodes: their emulators and their programs.
-    pub(crate) terminals: crate::terminals::TerminalHub,
+    pub(crate) terminals: crate::runtime::terminals::TerminalHub,
     /// Every `ui.Image`: what became of its source, and its playback.
-    pub(crate) images: crate::images::ImageNodes,
+    pub(crate) images: crate::runtime::images::ImageNodes,
 }
 
 impl std::ops::Deref for ReactiveState {

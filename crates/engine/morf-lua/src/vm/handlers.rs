@@ -10,7 +10,7 @@
 
 use luna::Context;
 
-use crate::{reactive_bindings::*, types::*};
+use crate::{api::ui::bindings::*, vm::types::*};
 
 impl Runtime {
     /// Runs `body` in Lua as a handler, and flushes afterwards if it wrote.
@@ -53,7 +53,7 @@ impl morf_runtime::Handlers for Runtime {
         args: &[crate::IpcValue],
     ) -> Result<Vec<crate::IpcValue>, String> {
         self.run_handler(|ctx, limits| {
-            crate::reactive_execute::execute_ipc_handler(ctx, handler, args, limits)
+            crate::vm::execute::execute_ipc_handler(ctx, handler, args, limits)
         })
     }
 
@@ -64,7 +64,7 @@ impl morf_runtime::Handlers for Runtime {
         args: &[crate::IpcValue],
     ) -> Result<(), String> {
         self.run_handler(|ctx, limits| {
-            crate::reactive_execute::execute_handler_args(ctx, handler, args, limits)
+            crate::vm::execute::execute_handler_args(ctx, handler, args, limits)
         })
     }
 }

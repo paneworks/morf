@@ -9,9 +9,9 @@ use std::time::Duration;
 use morf_scene::{Behavior, ListModel, Value as SceneValue, VirtualList};
 
 use crate::{
-    lua_values::*, model_revisions::*, reactive_bindings::*, reactive_execute::*,
-    scene_bindings::*, serialization::*, state::*, surface_types::*, table_menu::*, types::*,
-    views::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::host_types::*, runtime::model_revisions::*,
+    runtime::state::*, runtime::views::*, value::lua::*, value::table::*, vm::execute::*,
+    vm::loader::*, vm::types::*,
 };
 
 pub(crate) fn install_view_api<'gc>(

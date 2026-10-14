@@ -5,7 +5,9 @@ use std::rc::Rc;
 use morf_audio::{Audio, Backend};
 use morf_scene::Value as SceneValue;
 
-use crate::{api_audio::*, reactive_bindings::flush_reactive, surface_types::*, types::*};
+use crate::{
+    api::media::audio::*, api::ui::bindings::flush_reactive, runtime::host_types::*, vm::types::*,
+};
 use morf_runtime::Handler;
 
 impl Runtime {
@@ -82,7 +84,9 @@ impl Runtime {
                 }
                 // A binding that counts the devices follows them.
                 for model in changed_models {
-                    if crate::model_revisions::bump_model_revision(state, &model).unwrap_or(false) {
+                    if crate::runtime::model_revisions::bump_model_revision(state, &model)
+                        .unwrap_or(false)
+                    {
                         moved = true;
                     }
                 }

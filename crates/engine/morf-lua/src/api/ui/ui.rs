@@ -3,14 +3,16 @@ use std::rc::Rc;
 
 use morf_scene::Element;
 
-use crate::{constructors::*, scene_bindings::*, serialization::*, state::*, types::*};
+use crate::{
+    api::ui::constructors::*, api::ui::scene::*, runtime::state::*, vm::loader::*, vm::types::*,
+};
 
 pub(crate) fn install_ui_json_api<'gc>(
     ctx: Context<'gc>,
     state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
-) -> (Table<'gc>, Table<'gc>, crate::api_http::JsonKinds) {
+) -> (Table<'gc>, Table<'gc>, crate::api::io::http::JsonKinds) {
     let ui = Table::new(&ctx);
     for (name, element) in [
         ("Item", Element::Item),
@@ -51,7 +53,7 @@ pub(crate) fn install_ui_json_api<'gc>(
         }
         properties.set_field(ctx, "model", model);
         properties.set_field(ctx, "delegate", delegate);
-        let node = crate::constructors::construct_view(
+        let node = crate::api::ui::constructors::construct_view(
             ctx,
             &each_state,
             limits,
@@ -80,7 +82,7 @@ pub(crate) fn install_ui_json_api<'gc>(
     ui.set_field(
         ctx,
         "Layout",
-        crate::constructors_layout::layout_constructor(ctx, Rc::clone(&state), limits),
+        crate::api::ui::constructors_layout::layout_constructor(ctx, Rc::clone(&state), limits),
     );
     ui.set_field(
         ctx,
@@ -132,7 +134,7 @@ pub(crate) fn install_ui_json_api<'gc>(
         };
         let mut state = reparent_state.borrow_mut();
         // Put somewhere while it was leaving: it is wanted after all.
-        crate::runtime_helpers::cancel_node_exit(&mut state, child.handle);
+        crate::runtime::helpers::cancel_node_exit(&mut state, child.handle);
         state
             .scene
             .reparent(child.handle, parent)
@@ -149,13 +151,13 @@ pub(crate) fn install_ui_json_api<'gc>(
     let destroy = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (node, now): (UserRef<NodeToken>, Option<bool>) = stack.consume(ctx)?;
         if now == Some(true) {
-            crate::runtime_helpers::remove_scene_subtree(
+            crate::runtime::helpers::remove_scene_subtree(
                 &mut destroy_state.borrow_mut(),
                 node.handle,
             );
-            crate::reactive_bindings::run_destroyed_hooks(&destroy_state, ctx, limits);
+            crate::api::ui::bindings::run_destroyed_hooks(&destroy_state, ctx, limits);
         } else {
-            crate::runtime_helpers::let_go_of_node(&destroy_state, ctx, limits, node.handle);
+            crate::runtime::helpers::let_go_of_node(&destroy_state, ctx, limits, node.handle);
         }
         Ok(CallbackReturn::Return)
     });
@@ -193,7 +195,7 @@ pub(crate) fn install_ui_json_api<'gc>(
             LuaValue::String(name) => name.to_str().unwrap_or(&property).to_owned(),
             _ => property.clone(),
         };
-        state.animation.follows.push(crate::state::Follow {
+        state.animation.follows.push(crate::runtime::state::Follow {
             target: target.handle,
             property,
             source: source.handle,
@@ -203,7 +205,7 @@ pub(crate) fn install_ui_json_api<'gc>(
             min: number("min", f64::NEG_INFINITY),
             max: number("max", f64::INFINITY),
         });
-        crate::state::apply_follows(&mut state);
+        crate::runtime::state::apply_follows(&mut state);
         Ok(CallbackReturn::Return)
     });
     ui.set_field(ctx, "follow", follow);
@@ -365,7 +367,7 @@ pub(crate) fn install_ui_json_api<'gc>(
     json.set_field(ctx, "read_file", json_file_read);
     json.set_field(ctx, "write_file", json_file_write);
     morf.set_field(ctx, "json", json);
-    let kinds = crate::api_http::JsonKinds {
+    let kinds = crate::api::io::http::JsonKinds {
         array: array_metatable,
         object: object_metatable,
         null,

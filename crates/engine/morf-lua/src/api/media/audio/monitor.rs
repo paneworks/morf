@@ -44,7 +44,7 @@ pub(super) fn install_monitor<'gc>(
                                 LuaValue::Nil => None,
                                 LuaValue::Table(o) => Some(
                                     morf_audio::spectrum::Filter::new(
-                                        crate::api_audio_spectrum::options(ctx, Some(o))?,
+                                        crate::api::media::audio_spectrum::options(ctx, Some(o))?,
                                     )
                                     .map_err(HostError)?,
                                 ),

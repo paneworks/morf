@@ -13,7 +13,7 @@ use luna::{Callback, CallbackReturn, Context, Function, Table, Value as LuaValue
 use morf_scene::Element;
 use std::rc::Rc;
 
-use crate::{configure::*, scene_bindings::*, state::*, types::*};
+use crate::{api::ui::configure::*, api::ui::scene::*, runtime::state::*, vm::types::*};
 
 pub(crate) fn layout_constructor<'gc>(
     ctx: Context<'gc>,

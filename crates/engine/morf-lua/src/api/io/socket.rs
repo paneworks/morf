@@ -2,7 +2,7 @@ use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as
 use morf_io::{ServerView, SocketView, SplitParser, StreamCollector};
 use std::cell::RefCell;
 
-use crate::{lua_values::*, scene_bindings::*, state::*, table_menu::*};
+use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*};
 
 pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let socket_send = Callback::from_fn(&ctx, |ctx, _, mut stack| {

@@ -69,13 +69,14 @@ pub(super) fn window_metatable<'gc>(
         let state = Rc::clone(state);
         move |ctx, _, mut stack| {
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
-            let on_closed =
-                crate::window_events::destroy_window_surface(&mut state.borrow_mut(), surface.id);
-            crate::reactive_bindings::run_destroyed_hooks(&state, ctx, limits);
+            let on_closed = crate::api::window::events::destroy_window_surface(
+                &mut state.borrow_mut(),
+                surface.id,
+            );
+            crate::api::ui::bindings::run_destroyed_hooks(&state, ctx, limits);
             if let Some(callback) = on_closed {
                 state.borrow_mut().tracking.enter_handler();
-                let result =
-                    crate::reactive_execute::execute_handler_args(ctx, &callback, &[], limits);
+                let result = crate::vm::execute::execute_handler_args(ctx, &callback, &[], limits);
                 let mut guard = state.borrow_mut();
                 let flush = guard.tracking.leave_handler();
                 if let Err(message) = result {
@@ -86,7 +87,7 @@ pub(super) fn window_metatable<'gc>(
                 }
                 drop(guard);
                 if flush {
-                    let _ = crate::reactive_bindings::flush_reactive(&state, ctx, limits);
+                    let _ = crate::api::ui::bindings::flush_reactive(&state, ctx, limits);
                 }
             }
             Ok(CallbackReturn::Return)
@@ -263,11 +264,11 @@ pub(super) fn window_metatable<'gc>(
         "configure",
         window_configure_method(ctx, Rc::clone(state)),
     );
-    for event in crate::window_events::WindowEvent::ALL {
+    for event in crate::api::window::events::WindowEvent::ALL {
         window_methods.set_field(
             ctx,
             event.method(),
-            crate::window_events::window_handler_method(ctx, Rc::clone(state), event),
+            crate::api::window::events::window_handler_method(ctx, Rc::clone(state), event),
         );
     }
     // Methods first; on a layer surface any other name reads that layer
@@ -292,7 +293,7 @@ pub(super) fn window_metatable<'gc>(
             // A popup's or floating window's `width`/`height` is the size the
             // compositor configured it to, tracked by the binding reading it.
             if let Some(value) =
-                crate::window_events::window_size_field(&mut state, surface.id, &key)
+                crate::api::window::events::window_size_field(&mut state, surface.id, &key)
             {
                 stack.replace(ctx, value);
                 return Ok(CallbackReturn::Return);

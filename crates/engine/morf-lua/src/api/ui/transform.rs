@@ -3,7 +3,7 @@ use luna::{
 };
 use std::rc::Rc;
 
-use crate::{runtime_helpers::*, scene_bindings::*, state::*};
+use crate::{api::ui::scene::*, runtime::helpers::*, runtime::state::*};
 
 pub(crate) fn install_transform_api<'gc>(
     ctx: Context<'gc>,

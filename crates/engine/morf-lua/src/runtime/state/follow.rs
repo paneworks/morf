@@ -18,7 +18,7 @@ impl morf_runtime::animation::AnimationHost for ReactiveState {
         property: &str,
         value: morf_scene::Value,
     ) -> Result<(), String> {
-        crate::scene_bindings::assign_scene_property(self, node, property, value)
+        crate::api::ui::scene::assign_scene_property(self, node, property, value)
     }
 }
 

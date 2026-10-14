@@ -12,7 +12,7 @@ use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use crate::scene_bindings::*;
+use crate::api::ui::scene::*;
 
 use ops::{DEFAULT_READ, MAX_ASYNC_FILES};
 
@@ -113,7 +113,7 @@ mod paths;
 pub(crate) fn install_fs_api<'gc>(
     ctx: Context<'gc>,
     morf: Table<'gc>,
-    state: std::rc::Rc<crate::state::StateCell<crate::state::ReactiveState>>,
+    state: std::rc::Rc<crate::runtime::state::StateCell<crate::runtime::state::ReactiveState>>,
 ) {
     let fs = Table::new(&ctx);
 
@@ -154,7 +154,7 @@ pub(crate) fn install_fs_api<'gc>(
                 }
                 _ => return Err(HostError("fs.read_async limit must be an integer".into()).into()),
             };
-            let job = crate::image_jobs::ImageJob::ReadFiles { paths, limit };
+            let job = crate::runtime::image_jobs::ImageJob::ReadFiles { paths, limit };
             let submitted = state.borrow_mut().image_jobs.submit(
                 job,
                 Some(crate::vm::handler_store::register(ctx.stash(callback))),

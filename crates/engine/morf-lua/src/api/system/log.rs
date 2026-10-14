@@ -8,7 +8,7 @@
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use std::rc::Rc;
 
-use crate::{scene_bindings::*, state::*, types::*};
+use crate::{api::ui::scene::*, runtime::state::*, vm::types::*};
 
 fn level_of(name: &[u8]) -> Option<LogLevel> {
     match name {

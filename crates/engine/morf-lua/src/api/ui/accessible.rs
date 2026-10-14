@@ -11,9 +11,9 @@
 
 use morf_scene::NodeHandle;
 
-use crate::api_focus::FocusReason;
-use crate::reactive_execute::execute_ipc_handler;
-use crate::types::LogLevel;
+use crate::api::input::focus::FocusReason;
+use crate::vm::execute::execute_ipc_handler;
+use crate::vm::types::LogLevel;
 use crate::{IpcValue, KeyModifiers, Runtime, UiEvent};
 
 const SPACE: u32 = 0x20;

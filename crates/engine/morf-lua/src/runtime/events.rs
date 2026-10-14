@@ -6,9 +6,9 @@ pub use morf_runtime::events::*;
 
 use morf_scene::{NodeHandle, Scene};
 
-use crate::reactive_execute::{execute_handler_args, execute_ipc_handler};
-use crate::scene_bindings::assign_scene_property;
-use crate::types::LogLevel;
+use crate::api::ui::scene::assign_scene_property;
+use crate::vm::execute::{execute_handler_args, execute_ipc_handler};
+use crate::vm::types::LogLevel;
 use crate::{IpcValue, Runtime};
 
 impl EventHost for Runtime {

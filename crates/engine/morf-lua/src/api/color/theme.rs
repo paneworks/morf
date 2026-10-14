@@ -16,7 +16,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::{api_state::build, scene_bindings::*, state::*, surface_types::*, types::*};
+use crate::{
+    api::ui::scene::*, api::ui::state::build, runtime::host_types::*, runtime::state::*,
+    vm::types::*,
+};
 
 /// Whether text is written the way a colour is: `#` or `0x` hex, a
 /// functional form, or a bare name. Digits alone are a number someone
@@ -123,7 +126,7 @@ pub(crate) fn install_theme_api<'gc>(
                         }
                     };
                     let easing =
-                        crate::lua_values::parse_easing(ctx, spec.get_value(ctx, "easing"))
+                        crate::value::lua::parse_easing(ctx, spec.get_value(ctx, "easing"))
                             .map_err(HostError)?;
                     Some((
                         std::time::Duration::from_secs_f64(duration / 1000.0),

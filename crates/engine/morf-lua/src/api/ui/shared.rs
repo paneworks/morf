@@ -1,7 +1,7 @@
 //! `morf.shared(name, initial)`: one value every screen's shell sees
 //! (morf-runtime's `shared` keeps the values; this is the flush after a sync).
 
-use crate::types::Runtime;
+use crate::vm::types::Runtime;
 
 impl Runtime {
     /// [`SharedValues::sync`], then the bindings that read what came in.
@@ -21,7 +21,7 @@ impl Runtime {
         let limits = self.limits;
         let reactive = std::rc::Rc::clone(&self.reactive);
         self.lua.enter(|ctx| {
-            if let Err(message) = crate::reactive_bindings::flush_reactive(&reactive, ctx, limits) {
+            if let Err(message) = crate::api::ui::bindings::flush_reactive(&reactive, ctx, limits) {
                 reactive
                     .borrow_mut()
                     .log(crate::LogLevel::Warn, format!("shared value: {message}"));

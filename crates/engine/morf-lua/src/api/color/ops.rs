@@ -7,8 +7,8 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue};
 use pastel::{Color, Format, Fraction, HSLA, HSVA, LCh, Lab, OkLCh, OkLab, RGBA};
 
-use crate::api_color::{ColorToken, color_of, color_userdata};
-use crate::scene_bindings::*;
+use crate::api::color::color::{ColorToken, color_of, color_userdata};
+use crate::api::ui::scene::*;
 
 /// Mixes two colours in the named space; `oklab` when none is named.
 pub(crate) fn mix_in(
@@ -139,8 +139,8 @@ fn with_channels<'gc>(
             )
         }
         "hct" => {
-            let [h, c, t] = crate::api_color_hct::to_hct(color);
-            crate::api_color_hct::from_hct(
+            let [h, c, t] = crate::api::color::hct::to_hct(color);
+            crate::api::color::hct::from_hct(
                 number("h").unwrap_or(h),
                 number("c").unwrap_or(c),
                 number("t").unwrap_or(t),

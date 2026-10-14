@@ -4,7 +4,10 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::process::{Command as StdCommand, Stdio};
 
-use crate::{process_helpers::*, scene_bindings::*, state::*, table_menu::*, types::*};
+use crate::{
+    api::io::process_helpers::*, api::ui::scene::*, runtime::state::*, value::table::*,
+    vm::types::*,
+};
 
 pub(crate) fn install_image_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let quantizer_colors = Callback::from_fn(&ctx, |ctx, _, mut stack| {

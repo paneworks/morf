@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use crate::{
-    api_finish::*, reactive_bindings::run_destroyed_hooks, reactive_execute::*, serialization::*,
-    state::*, surface_types::*, types::*,
+    api::install::*, api::ui::bindings::run_destroyed_hooks, runtime::host_types::*,
+    runtime::state::*, vm::execute::*, vm::loader::*, vm::types::*,
 };
 
 mod lint;
@@ -28,7 +28,7 @@ impl Runtime {
     pub(crate) fn with_screen(limits: Limits, screen: Option<Screen>) -> Self {
         let mut lua = Lua::core();
         lua.set_memory_limit(Some(limits.memory));
-        crate::runtime_jit::configure(&mut lua);
+        crate::vm::jit::configure(&mut lua);
         let reactive = Rc::new(StateCell::new(ReactiveState::new()));
         reactive.borrow_mut().limits = limits;
         let module_roots = Rc::new(RefCell::new(default_module_roots()));
@@ -46,7 +46,7 @@ impl Runtime {
             module_roots,
             lint_queue: RefCell::new(Vec::new()),
         };
-        crate::extensions::apply_extensions(&mut runtime);
+        crate::vm::extensions::apply_extensions(&mut runtime);
         runtime
     }
 

@@ -8,7 +8,7 @@ use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_io::archive::{self, DEFAULT_MAX_ENTRIES, DEFAULT_MAX_OUTPUT, MAX_ENTRIES, MAX_OUTPUT};
 use morf_io::codec;
 
-use crate::scene_bindings::*;
+use crate::api::ui::scene::*;
 
 const MAX_INPUT: usize = 64 * 1024 * 1024;
 

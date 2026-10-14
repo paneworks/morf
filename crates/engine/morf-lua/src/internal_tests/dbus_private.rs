@@ -45,7 +45,7 @@ fn give_fd(runtime: &mut Runtime, name: &str) -> UnixStream {
     let (ours, peer) = UnixStream::pair().unwrap();
     let fd = DbusValue::Fd(DbusFd::new(ours.into()));
     runtime.lua.enter(|ctx| {
-        let value = crate::serialization::dbus_value_to_lua(ctx, fd).unwrap();
+        let value = crate::vm::loader::dbus_value_to_lua(ctx, fd).unwrap();
         ctx.globals().set(ctx, name, value).unwrap();
     });
     peer

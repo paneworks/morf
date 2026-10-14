@@ -2,8 +2,8 @@ use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as
 use std::rc::Rc;
 
 use crate::{
-    reactive_bindings::*, runtime_helpers::*, scene_bindings::*, state::*, surface_types::*,
-    types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::helpers::*, runtime::host_types::*,
+    runtime::state::*, vm::types::*,
 };
 
 pub(crate) fn install_signal_api<'gc>(
@@ -273,7 +273,7 @@ pub(crate) fn install_signal_api<'gc>(
         move |ctx, _, mut stack| {
             let (name, initial): (String, LuaValue) = stack.consume(ctx)?;
             let initial = IpcValue::from_lua_deep(ctx, initial).map_err(HostError)?;
-            let id = crate::runtime_helpers::validate_scope_part(&name)
+            let id = crate::runtime::helpers::validate_scope_part(&name)
                 .and_then(|()| {
                     let mut state = state.borrow_mut();
                     let state = &mut *state;
@@ -290,7 +290,7 @@ pub(crate) fn install_signal_api<'gc>(
         }
     });
     morf.set_field(ctx, "shared", shared);
-    crate::channels::install(ctx, Rc::clone(&state), morf);
+    crate::api::ui::channels::install(ctx, Rc::clone(&state), morf);
     morf.set_field(ctx, "persistent", persistent);
     morf.set_field(ctx, "scope", scope);
     let clock = UserData::new_static(

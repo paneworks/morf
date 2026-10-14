@@ -8,7 +8,10 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::{configure::*, scene_bindings::*, state::*, table_menu::*, types::*, views::*};
+use crate::{
+    api::ui::configure::*, api::ui::scene::*, runtime::state::*, runtime::views::*,
+    value::table::*, vm::types::*,
+};
 
 mod views;
 
@@ -46,7 +49,7 @@ pub(crate) fn element_constructor<'gc>(
                 .string_value(node, "source")
                 .is_ok_and(|source| !source.is_empty())
             {
-                crate::scene_bindings::assign_scene_property(
+                crate::api::ui::scene::assign_scene_property(
                     &mut state,
                     node,
                     "status",
@@ -56,7 +59,7 @@ pub(crate) fn element_constructor<'gc>(
             }
         }
         if element == Element::TextInput {
-            crate::text_inputs::register(&mut *state.borrow_mut(), node);
+            crate::runtime::text_inputs::register(&mut *state.borrow_mut(), node);
         }
         if element == Element::Inset && {
             let state = state.borrow();
@@ -275,7 +278,7 @@ pub(crate) fn terminal_constructor<'gc>(
             _ => return Err(HostError("Terminal cwd must be a string".into()).into()),
         };
         let scrollback = match properties.get_value(ctx, "scrollback") {
-            LuaValue::Nil => crate::terminals::DEFAULT_SCROLLBACK,
+            LuaValue::Nil => crate::runtime::terminals::DEFAULT_SCROLLBACK,
             LuaValue::Integer(lines) if lines >= 0 => lines as usize,
             LuaValue::Number(lines) if lines.is_finite() && lines >= 0.0 => lines as usize,
             _ => {
@@ -285,7 +288,7 @@ pub(crate) fn terminal_constructor<'gc>(
             }
         }
         .min(morf_terminal::MAX_SCROLLBACK);
-        let callbacks = crate::terminals::TerminalCallbacks {
+        let callbacks = crate::runtime::terminals::TerminalCallbacks {
             on_exit: optional_closure(ctx, properties, "on_exit").map_err(HostError)?,
             on_title: optional_closure(ctx, properties, "on_title").map_err(HostError)?,
             on_bell: optional_closure(ctx, properties, "on_bell").map_err(HostError)?,
@@ -304,7 +307,7 @@ pub(crate) fn terminal_constructor<'gc>(
         configure_element(&state, ctx, limits, node, clean).map_err(HostError)?;
         state.borrow_mut().terminals.register(
             node,
-            crate::terminals::TerminalSpec {
+            crate::runtime::terminals::TerminalSpec {
                 command,
                 environment,
                 working_directory,

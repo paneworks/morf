@@ -6,8 +6,8 @@ use morf_scene::reactive::SignalId;
 use morf_scene::{NodeHandle, Scene};
 
 use crate::{
-    reactive_bindings::run_destroyed_hooks, reactive_execute::*, state::*, surface_types::*,
-    types::*,
+    api::ui::bindings::run_destroyed_hooks, runtime::host_types::*, runtime::state::*,
+    vm::execute::*, vm::types::*,
 };
 
 pub(crate) fn scene_node_in_subtree(scene: &Scene, root: NodeHandle, node: NodeHandle) -> bool {

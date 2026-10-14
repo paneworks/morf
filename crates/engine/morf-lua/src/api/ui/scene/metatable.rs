@@ -182,7 +182,7 @@ pub(crate) fn node_metatable<'gc>(
         let (node, property, value): (UserRef<NodeToken>, String, LuaValue) = stack.consume(ctx)?;
         // A handler set or taken away after the node was made: `node.on_pressed
         // = fn` hears presses from now on, `= nil` stops.
-        if let Some(event) = crate::configure::handler_event(&property) {
+        if let Some(event) = crate::api::ui::configure::handler_event(&property) {
             let mut state = state.try_borrow_mut().map_err(|_| {
                 HostError("nodes cannot be written to from inside a layout function".to_owned())
             })?;
@@ -208,7 +208,7 @@ pub(crate) fn node_metatable<'gc>(
             let mut state = state.try_borrow_mut().map_err(|_| {
                 HostError("nodes cannot be written to from inside a layout function".to_owned())
             })?;
-            crate::configure::assign_engine_relation(
+            crate::api::ui::configure::assign_engine_relation(
                 &mut state,
                 ctx,
                 node.handle,
@@ -220,11 +220,11 @@ pub(crate) fn node_metatable<'gc>(
         }
         // A table holding bindings among its fields is bound as a whole.
         let value = match value {
-            LuaValue::Table(table) if crate::configure_states::binds_inside(&property) => {
+            LuaValue::Table(table) if crate::api::ui::configure_states::binds_inside(&property) => {
                 let limits = state.try_borrow().map(|s| s.limits).map_err(|_| {
                     HostError("nodes cannot be written to from inside a layout function".to_owned())
                 })?;
-                match crate::configure_states::table_binding(ctx, table, limits)
+                match crate::api::ui::configure_states::table_binding(ctx, table, limits)
                     .map_err(HostError)?
                 {
                     Some(closure) => LuaValue::Function(luna::Function::Closure(closure)),
@@ -264,7 +264,7 @@ pub(crate) fn node_metatable<'gc>(
                     );
                 }
             }
-            crate::reactive_bindings::rebind_property(&state, ctx, node.handle, property, closure);
+            crate::api::ui::bindings::rebind_property(&state, ctx, node.handle, property, closure);
             return Ok(CallbackReturn::Return);
         }
         let value = lua_to_scene(ctx, value, 0).map_err(HostError)?;
@@ -279,9 +279,9 @@ pub(crate) fn node_metatable<'gc>(
         // A text input takes a write in at once, so the caret a handler
         // reads back after setting `text` is already the one that text has.
         if state.scene.element(node.handle).ok() == Some(Element::TextInput) {
-            crate::text_inputs::pull(&mut *state, node.handle);
+            crate::runtime::text_inputs::pull(&mut *state, node.handle);
             if property == "focus" {
-                crate::text_inputs::reconcile_focus(&mut *state);
+                crate::runtime::text_inputs::reconcile_focus(&mut *state);
             }
         }
         Ok(CallbackReturn::Return)

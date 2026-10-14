@@ -1,5 +1,5 @@
 //! Typed annotation input, shared by image workers and live Path nodes.
-use crate::scene_bindings::HostError;
+use crate::api::ui::scene::HostError;
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_image::annotation::{Annotation, Kind, Point};
 
@@ -77,7 +77,7 @@ pub(crate) fn annotation<'gc>(
     let number = if matches!(n, LuaValue::Nil) {
         1
     } else {
-        crate::api_image_ops::uint(n, "step number")?
+        crate::api::media::image_ops::uint(n, "step number")?
     };
     Ok(Annotation {
         kind,

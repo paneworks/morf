@@ -6,7 +6,7 @@
 //! `morf.session_lock` (a signal), `morf.session_lock_state()`, and the
 //! `morf.on_session_lock_state` / `morf.on_session_locked` callbacks.
 
-use crate::{reactive_bindings::*, reactive_execute::*, state::*, types::*};
+use crate::{api::ui::bindings::*, runtime::state::*, vm::execute::*, vm::types::*};
 
 pub use morf_runtime::session::SessionLockState;
 

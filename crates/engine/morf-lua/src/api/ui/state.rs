@@ -15,8 +15,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
-    reactive_bindings::*, runtime_helpers::*, scene_bindings::*, state::*, surface_types::*,
-    types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::helpers::*, runtime::host_types::*,
+    runtime::state::*, vm::types::*,
 };
 
 /// Whether a Lua table is an array: every key a positive integer, or none.
@@ -172,7 +172,7 @@ pub(crate) fn install_state_api<'gc>(
             if let Some(&id) = fields.scalars.get(&key) {
                 let value = IpcValue::from_lua(value).map_err(HostError)?;
                 let value = if fields.theme {
-                    crate::api_theme::token_value(value)
+                    crate::api::color::theme::token_value(value)
                 } else {
                     value
                 };
@@ -192,14 +192,17 @@ pub(crate) fn install_state_api<'gc>(
                         // looks the same keeps the one on show, and no frame
                         // re-runs every binding that reads it.
                         if !from.looks_same(to) {
-                            state.animation.fades.push(crate::state::ThemeFade {
-                                signal: id,
-                                from,
-                                to: *to,
-                                elapsed: std::time::Duration::ZERO,
-                                duration,
-                                easing,
-                            });
+                            state
+                                .animation
+                                .fades
+                                .push(crate::runtime::state::ThemeFade {
+                                    signal: id,
+                                    from,
+                                    to: *to,
+                                    elapsed: std::time::Duration::ZERO,
+                                    duration,
+                                    easing,
+                                });
                             // Nothing on screen changed yet, so nothing else
                             // asks for the frame that starts the fade: a
                             // colour set from a tool's terminal or file would
@@ -245,7 +248,7 @@ pub(crate) fn install_state_api<'gc>(
                     let mut state = state.borrow_mut();
                     state.revisions.bump_scene();
                 }
-                crate::model_revisions::replace_model_rows(
+                crate::runtime::model_revisions::replace_model_rows(
                     &state, ctx, limits, &model, values, None,
                 )
                 .map_err(HostError)?;

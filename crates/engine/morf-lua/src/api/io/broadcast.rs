@@ -21,7 +21,7 @@
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_io::IpcValue as WireValue;
 
-use crate::scene_bindings::HostError;
+use crate::api::ui::scene::HostError;
 
 pub use morf_io::set_shell_socket;
 

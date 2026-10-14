@@ -1,11 +1,13 @@
 use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue};
 use std::rc::Rc;
 
-use crate::{layer_parse::*, scene_bindings::*, state::*, table_menu::*, types::*};
+use crate::{
+    api::ui::scene::*, api::window::layer::*, runtime::state::*, value::table::*, vm::types::*,
+};
 
 /// The callbacks `morf.surface` holds rather than layer settings.
-fn surface_event(key: &str) -> Option<crate::window_events::WindowEvent> {
-    use crate::window_events::WindowEvent;
+fn surface_event(key: &str) -> Option<crate::api::window::events::WindowEvent> {
+    use crate::api::window::events::WindowEvent;
     match key {
         "on_focus_changed" => Some(WindowEvent::FocusChanged),
         "on_pointer_changed" => Some(WindowEvent::PointerChanged),
@@ -349,7 +351,7 @@ pub(crate) fn install_shell_api<'gc>(
     morf.set_field(ctx, "watch_files", watch_files);
     let lock_state_state = Rc::clone(&state);
     let session_lock_state = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let name = crate::runtime_session_lock::current(&lock_state_state.borrow()).name();
+        let name = crate::runtime::session_lock::current(&lock_state_state.borrow()).name();
         stack.replace(ctx, name);
         Ok(CallbackReturn::Return)
     });

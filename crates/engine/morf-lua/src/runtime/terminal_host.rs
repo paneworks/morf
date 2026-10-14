@@ -1,16 +1,16 @@
 //! The runtime's side of `ui.Terminal`: turns of the loop, frames, keys
-//! and the pointer, each handed to [`crate::terminals`].
+//! and the pointer, each handed to [`crate::runtime::terminals`].
 
 use morf_layout::Layout;
 use morf_scene::{Element, NodeHandle};
 use morf_terminal::{Modifiers, MouseAction};
 use morf_text::TextSystem;
 
-use crate::events::UiEvent;
-use crate::reactive_execute::{execute_handler_args, execute_ipc_handler};
-use crate::surface_types::IpcValue;
-use crate::text_inputs::KeyModifiers;
-use crate::types::*;
+use crate::runtime::events::UiEvent;
+use crate::runtime::host_types::IpcValue;
+use crate::runtime::text_inputs::KeyModifiers;
+use crate::vm::execute::{execute_handler_args, execute_ipc_handler};
+use crate::vm::types::*;
 
 impl Runtime {
     /// Whether a node is a terminal.
@@ -23,7 +23,7 @@ impl Runtime {
     pub(crate) fn poll_terminals(&mut self) -> bool {
         let (calls, changed, more) = {
             let mut state = self.reactive.borrow_mut();
-            crate::terminals::pump(&mut state)
+            crate::runtime::terminals::pump(&mut state)
         };
         for call in &calls {
             if let Err(message) = self.run_handler(|ctx, limits| {
@@ -53,7 +53,7 @@ impl Runtime {
             if state.terminals.is_empty() {
                 return false;
             }
-            crate::terminals::sync(&mut state, layout, text)
+            crate::runtime::terminals::sync(&mut state, layout, text)
         };
         self.flush_after_event();
         changed
@@ -70,7 +70,7 @@ impl Runtime {
                 return false;
             }
             let revision = state.revisions.scene();
-            let calls = crate::images::sync(&mut state, layout, cache);
+            let calls = crate::runtime::images::sync(&mut state, layout, cache);
             if calls.is_empty() && state.revisions.scene() == revision {
                 return false;
             }
@@ -93,7 +93,7 @@ impl Runtime {
     pub(crate) fn poll_images(&mut self) -> bool {
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            crate::images::advance(&mut state, std::time::Instant::now())
+            crate::runtime::images::advance(&mut state, std::time::Instant::now())
         };
         if changed {
             self.flush_after_event();
@@ -115,7 +115,7 @@ impl Runtime {
             logo: modifiers.logo,
         };
         let mut state = self.reactive.borrow_mut();
-        crate::terminals::key(&mut state, node, keysym, text, modifiers)
+        crate::runtime::terminals::key(&mut state, node, keysym, text, modifiers)
     }
 
     /// Whether the terminal's `on_key_pressed` took the key (returned
@@ -149,7 +149,7 @@ impl Runtime {
         local: (f64, f64),
     ) -> bool {
         let mut state = self.reactive.borrow_mut();
-        crate::terminals::pointer(&mut state, node, action, button, local)
+        crate::runtime::terminals::pointer(&mut state, node, action, button, local)
     }
 
     pub(crate) fn terminal_wheel(
@@ -160,6 +160,6 @@ impl Runtime {
         steps: i32,
     ) -> bool {
         let mut state = self.reactive.borrow_mut();
-        crate::terminals::wheel(&mut state, node, local, pixels, steps)
+        crate::runtime::terminals::wheel(&mut state, node, local, pixels, steps)
     }
 }

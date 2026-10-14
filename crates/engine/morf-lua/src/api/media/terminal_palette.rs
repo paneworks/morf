@@ -15,17 +15,17 @@
 //! heard, so each call has the whole of it; `changed` lists what moved in
 //! that burst (0-255, "foreground", "background", "cursor").
 
-use crate::ipc_table::IpcToLua;
+use crate::value::ipc::IpcToLua;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use luna::{Callback, CallbackReturn, Context, Table};
 use morf_terminal::palette::{BACKGROUND, CURSOR, ColorChange, FOREGROUND, PaletteTty};
 
-use crate::ipc_table::IpcTable;
-use crate::scene_bindings::HostError;
-use crate::state::ReactiveState;
-use crate::surface_types::IpcValue;
+use crate::api::ui::scene::HostError;
+use crate::runtime::host_types::IpcValue;
+use crate::runtime::state::ReactiveState;
+use crate::value::ipc::IpcTable;
 use morf_runtime::Handler;
 
 /// The most listeners a runtime keeps: each is a terminal and a thread.
@@ -98,7 +98,7 @@ pub(crate) fn changed_value(changes: &[ColorChange]) -> IpcValue {
 
 pub(crate) fn install_palette_api<'gc>(
     ctx: Context<'gc>,
-    state: std::rc::Rc<crate::state::StateCell<ReactiveState>>,
+    state: std::rc::Rc<crate::runtime::state::StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let terminal = Table::new(&ctx);
@@ -199,7 +199,7 @@ impl crate::Runtime {
         let any = !calls.is_empty();
         for (callback, args) in calls {
             if let Err(message) = self.run_handler(|ctx, limits| {
-                crate::reactive_execute::execute_handler_args(ctx, &callback, &args, limits)
+                crate::vm::execute::execute_handler_args(ctx, &callback, &args, limits)
             }) {
                 self.reactive.borrow_mut().log(
                     crate::LogLevel::Warn,

@@ -5,7 +5,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::{
-    reactive_bindings::*, runtime_helpers::*, scene_bindings::*, state::*, table_menu::*, types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::helpers::*, runtime::state::*,
+    value::table::*, vm::types::*,
 };
 
 pub(crate) fn install_retention_api<'gc>(

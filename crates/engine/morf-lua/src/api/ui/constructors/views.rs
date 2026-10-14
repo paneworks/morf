@@ -117,7 +117,11 @@ pub(crate) fn construct_view<'gc>(
                 view.set_offset(offset);
                 if let LuaValue::String(field) = properties.get_value(ctx, "size_field") {
                     let field = field.display_lossy().to_string();
-                    view.set_extents(&crate::views::row_extents(&model, &field, item_extent));
+                    view.set_extents(&crate::runtime::views::row_extents(
+                        &model,
+                        &field,
+                        item_extent,
+                    ));
                 }
                 let range = view.visible_range(model.len());
                 configured_view = Some(view);

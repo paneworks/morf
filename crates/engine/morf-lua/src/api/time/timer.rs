@@ -6,7 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use crate::{lua_values::*, scene_bindings::*, state::*, table_menu::*};
+use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*};
 
 pub(crate) fn install_time_api<'gc>(
     ctx: Context<'gc>,

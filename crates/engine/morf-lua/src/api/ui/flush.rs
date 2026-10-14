@@ -6,7 +6,7 @@ use luna::Context;
 use morf_scene::NodeHandle;
 use std::rc::Rc;
 
-use crate::{reactive_execute::*, state::*, types::*};
+use crate::{runtime::state::*, vm::execute::*, vm::types::*};
 
 /// How many times one flush re-runs to take in effects registered by the
 /// flush before it -- an effect that builds a node with a binding whose
@@ -180,10 +180,7 @@ fn effect_label(
             .filter(|id| !id.is_empty())
             .map(|id| format!(" #{id}"))
             .unwrap_or_default();
-        format!(
-            "{}{id}",
-            crate::runtime_config::lint_path(&state.scene, node)
-        )
+        format!("{}{id}", crate::vm::config::lint_path(&state.scene, node))
     };
     match &effect.sink {
         Some(EffectSink::Property(sink)) => {

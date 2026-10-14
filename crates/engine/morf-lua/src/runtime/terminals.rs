@@ -12,8 +12,8 @@ use morf_terminal::hub::{Call, Callbacks, Hub, Spec};
 use morf_terminal::{Modifiers, MouseAction};
 use morf_text::TextSystem;
 
-use crate::scene_bindings::assign_scene_property;
-use crate::state::ReactiveState;
+use crate::api::ui::scene::assign_scene_property;
+use crate::runtime::state::ReactiveState;
 use morf_runtime::Handler;
 
 pub(crate) use morf_terminal::hub::DEFAULT_SCROLLBACK;

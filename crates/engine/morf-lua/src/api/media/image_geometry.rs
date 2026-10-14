@@ -1,4 +1,7 @@
-use crate::{api_geometry::number, api_image_annotation::annotation, scene_bindings::HostError};
+use crate::{
+    api::geometry::geometry::number, api::media::image_annotation::annotation,
+    api::ui::scene::HostError,
+};
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 fn tolerance(value: LuaValue<'_>) -> Result<f32, HostError> {
     if matches!(value, LuaValue::Nil) {

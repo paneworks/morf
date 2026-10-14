@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use morf_system::menu::Menu;
 
 use crate::{
-    lua_values::*, reactive_execute::*, scene_bindings::*, state::*, table_menu::*, types::*,
+    api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*, vm::execute::*,
+    vm::types::*,
 };
 
 pub(crate) fn install_menu_desktop_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>, limits: Limits) {

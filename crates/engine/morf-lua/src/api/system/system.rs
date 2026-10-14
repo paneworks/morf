@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use morf_system::{GreetdClient, GreetdConversation, StatusNotifierHost, UdevMonitor, XkbKeymap};
 
-use crate::{lua_values::*, scene_bindings::*, serialization::*, state::*, table_menu::*};
+use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*, vm::loader::*};
 
 mod devices;
 mod greetd;
@@ -415,14 +415,14 @@ pub(crate) fn install_system_service_api<'gc>(
     dbus.set_field(ctx, "name_owner", name_owner);
     dbus.set_field(ctx, "list_names", list_names);
     dbus.set_field(ctx, "on_name_owner_changed", on_name_owner_changed);
-    crate::api_dbus_serve::install_dbus_serve_api(ctx, Rc::clone(&state), dbus);
+    crate::api::io::dbus_serve::install_dbus_serve_api(ctx, Rc::clone(&state), dbus);
     morf.set_field(ctx, "dbus", dbus);
 
     devices::install_udev(ctx, Rc::clone(&state), morf);
     devices::install_status_notifier(ctx, Rc::clone(&state), morf);
     greetd::install_greetd(ctx, Rc::clone(&state), morf);
 
-    crate::api_pam::install_pam_api(ctx, Rc::clone(&state), morf);
+    crate::api::system::pam::install_pam_api(ctx, Rc::clone(&state), morf);
 
     devices::install_xkb(ctx, morf);
 }

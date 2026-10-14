@@ -1,4 +1,4 @@
-use crate::types::*;
+use crate::vm::types::*;
 
 impl Default for Runtime {
     fn default() -> Self {

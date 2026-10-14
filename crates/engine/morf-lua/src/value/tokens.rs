@@ -9,8 +9,8 @@ use luna::UserRef;
 use morf_image::ImageRect as QuantizeRect;
 use morf_system::desktop_entries::DesktopEntries;
 
-use crate::state::ReactiveState;
-use crate::state::StateCell;
+use crate::runtime::state::ReactiveState;
+use crate::vm::state_cell::StateCell;
 use morf_io::{
     DbusProxy, DbusService, FileDocument, FileView, FileWatcher, Process, ServerView, SocketView,
     SplitParser, StreamCollector,

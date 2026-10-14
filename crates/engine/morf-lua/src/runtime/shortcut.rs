@@ -5,9 +5,9 @@
 use morf_scene::NodeHandle;
 
 use crate::IpcValue;
-use crate::reactive_execute::execute_ipc_handler;
-use crate::text_inputs::KeyModifiers;
-use crate::types::LogLevel;
+use crate::runtime::text_inputs::KeyModifiers;
+use crate::vm::execute::execute_ipc_handler;
+use crate::vm::types::LogLevel;
 
 pub(crate) use morf_runtime::shortcuts::*;
 

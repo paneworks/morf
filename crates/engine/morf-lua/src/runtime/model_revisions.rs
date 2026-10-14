@@ -7,15 +7,15 @@
 //! The signal is made the first time a binding reads the model, so a model
 //! nothing computes from costs the graph nothing.
 
-use crate::state::StateCell;
+use crate::runtime::state::StateCell;
 use luna::Context;
 use morf_scene::ListModel;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
-    reactive_bindings::flush_reactive, scene_bindings::HostError, serialization::scene_to_lua,
-    state::ReactiveState, types::*,
+    api::ui::bindings::flush_reactive, api::ui::scene::HostError, runtime::state::ReactiveState,
+    vm::loader::scene_to_lua, vm::types::*,
 };
 
 /// Notes that the running binding read `model`.
