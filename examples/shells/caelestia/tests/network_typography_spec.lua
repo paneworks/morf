@@ -1,6 +1,6 @@
 local test=morf.test
 for _,style in ipairs {"material","tsugumori"} do
-  test.it(style.." VPN section titles reveal when scrolled into view",function()
+  test.it(style.." VPN section titles stay reachable and reopen at the top",function()
     test.load("../shell/init.lua",{size={430,360},env={CAELESTIA_STYLE=style,CAELESTIA_DRY_RUN="1"},source=[[
       local ui=require("morf.ui")
       morf.surface.height=360
@@ -23,24 +23,19 @@ for _,style in ipairs {"material","tsugumori"} do
       end
     ]]})
     test.advance(2400)
-    local suffix=style=="tsugumori" and "-text" or ""
-    test.eq(test.get("vpn-tunnel-network-title"..suffix).text,style=="tsugumori" and "NETWORKMANAGER" or "NetworkManager")
+    -- (Section captions are the style kit's static caption rows.)
+    local function word(text) return style=="tsugumori" and text:upper() or text end
+    test.truthy(test.find {text=word("NetworkManager"),visible=true})
     local viewport=test.get("vpn-tunnel-scroll")
+    local top=test.get("vpn-tunnel-network-title").y
     test.wheel(0,test.get("vpn-tunnel-apps-title").y-viewport.y-60,
       {x=viewport.x+viewport.width-2,y=viewport.y+200}) test.advance(200)
-    if style=="tsugumori" then
-      test.truthy(test.get("vpn-tunnel-apps-title-text").text~="APPS","offscreen section missed its reveal")
-      test.advance(2200)
-      test.eq(test.get("vpn-tunnel-apps-title-text").text,"APPS")
-    end
     local title=test.get("vpn-tunnel-apps-title")
     test.truthy(title.y>=viewport.y and title.y+title.height<=viewport.y+viewport.height)
+    test.truthy(test.find {text=word("Apps"),visible=true})
     test.ipc("show","no") test.advance(100)
     test.ipc("show","yes") test.advance(200)
-    if style=="tsugumori" then
-      test.eq(test.get("vpn-tunnel-apps-title-text").text,"APPS")
-      test.truthy(test.get("vpn-tunnel-network-title-text").text~="NETWORKMANAGER","reopened register should begin at the top")
-    end
+    test.near(test.get("vpn-tunnel-network-title").y,top,1,"reopened register should begin at the top")
     test.advance(2200)
     if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(style.."-vpn-section.png") end
     test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)
