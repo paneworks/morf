@@ -4,6 +4,7 @@
 pub(crate) mod animation;
 pub(crate) mod audio;
 pub(crate) mod clipboard;
+pub(crate) mod compositor_requests;
 pub(crate) mod dispatch;
 pub(crate) mod editing;
 pub(crate) mod events;
@@ -15,6 +16,7 @@ pub(crate) mod image_host;
 pub(crate) mod image_jobs;
 pub(crate) mod images;
 pub(crate) mod input;
+pub(crate) mod input_protocols;
 pub(crate) mod ipc;
 pub use morf_runtime::keys;
 pub(crate) mod layout;
