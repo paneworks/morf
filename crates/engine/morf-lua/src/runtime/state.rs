@@ -57,7 +57,6 @@ pub(crate) enum ViewKind {
     Grid,
 }
 
-
 pub(crate) use morf_runtime::reactive::Effect as LuaEffect;
 
 pub(crate) use morf_runtime::retention::RetainCallbacks;
