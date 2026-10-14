@@ -20,6 +20,7 @@ pub mod events;
 pub mod focus;
 pub mod gestures;
 pub mod handler;
+pub mod ipc;
 pub mod keys;
 pub mod layout;
 pub mod log;

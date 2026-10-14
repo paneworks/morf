@@ -70,7 +70,8 @@ pub struct Engine {
     pub events: crate::events::Events,
     /// Each node's declared states.
     states: crate::states::States,
-    pub ipc_handlers: HashMap<String, Handler>,
+    /// The verbs answered over IPC.
+    ipc: crate::ipc::IpcVerbs,
     pub views: crate::views::Views,
     /// Every timer and `Timer` node, and the clock they run on.
     pub timers: crate::timers::Timers,
@@ -134,7 +135,7 @@ impl Engine {
             gestures: Default::default(),
             events: Default::default(),
             states: Default::default(),
-            ipc_handlers: HashMap::new(),
+            ipc: Default::default(),
             views: HashMap::new(),
             timers: Default::default(),
             animation: Default::default(),

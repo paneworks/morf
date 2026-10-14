@@ -30,15 +30,7 @@ impl Runtime {
 
     /// Returns registered IPC verb names in lexical order.
     pub fn ipc_verbs(&self) -> Vec<String> {
-        let mut verbs = self
-            .reactive
-            .borrow()
-            .ipc_handlers
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        verbs.sort();
-        verbs
+        self.reactive.borrow().ipc().names()
     }
 
     /// Calls one registered IPC handler with bounded primitive arguments.
@@ -46,7 +38,7 @@ impl Runtime {
         let handler = self
             .reactive
             .borrow()
-            .ipc_handlers
+            .ipc()
             .get(verb)
             .cloned()
             .ok_or_else(|| Error::Runtime(format!("unknown IPC verb `{verb}`")))?;

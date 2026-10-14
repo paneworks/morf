@@ -24,4 +24,6 @@ macro_rules! subsystems {
 subsystems! {
     /// Each node's declared states.
     states, states_mut: crate::states::States;
+    /// The verbs answered over IPC.
+    ipc, ipc_mut: crate::ipc::IpcVerbs;
 }

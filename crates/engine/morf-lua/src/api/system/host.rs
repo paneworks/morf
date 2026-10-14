@@ -155,11 +155,11 @@ pub(crate) fn install_host_service_api<'gc>(
                 LuaValue::Function(Function::Closure(closure)) => {
                     state
                         .borrow_mut()
-                        .ipc_handlers
-                        .insert(name, crate::vm::handler_store::register(ctx.stash(closure)));
+                        .ipc_mut()
+                        .set(name,crate::vm::handler_store::register(ctx.stash(closure)));
                 }
                 LuaValue::Nil => {
-                    state.borrow_mut().ipc_handlers.remove(&name);
+                    state.borrow_mut().ipc_mut().remove(&name);
                 }
                 _ => {
                     return Err(
