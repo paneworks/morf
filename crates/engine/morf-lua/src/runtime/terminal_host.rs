@@ -124,7 +124,7 @@ impl Runtime {
         let handler = self
             .reactive
             .borrow()
-            .events
+            .events()
             .handler(node, UiEvent::KeyPressed);
         let Some(handler) = handler else {
             return false;

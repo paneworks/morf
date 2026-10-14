@@ -70,7 +70,7 @@ pub(crate) fn node_metatable<'gc>(
                     .property_reads
                     .insert((node.handle, CONTAINS_POINTER.to_owned(), false));
             }
-            let value = state.events.pointer_watch.read(node.handle);
+            let value = state.events_mut().pointer_watch.read(node.handle);
             stack.replace(ctx, LuaValue::Boolean(value));
             return Ok(CallbackReturn::Return);
         }
@@ -188,14 +188,14 @@ pub(crate) fn node_metatable<'gc>(
             })?;
             match value {
                 LuaValue::Function(luna::Function::Closure(closure)) => {
-                    state.events.set(
+                    state.events_mut().set(
                         node.handle,
                         event,
                         Some(crate::vm::handler_store::register(ctx.stash(closure))),
                     );
                 }
                 LuaValue::Nil => {
-                    state.events.set(node.handle, event, None);
+                    state.events_mut().set(node.handle, event, None);
                 }
                 _ => return Err(HostError(format!("{property} must be a function or nil")).into()),
             }

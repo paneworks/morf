@@ -138,7 +138,7 @@ pub(crate) fn configure_element<'gc>(
             let LuaValue::Function(Function::Closure(closure)) = value else {
                 return Err(format!("{property} must be a function"));
             };
-            state.borrow_mut().events.set(
+            state.borrow_mut().events_mut().set(
                 node,
                 event,
                 Some(crate::vm::handler_store::register(ctx.stash(closure))),

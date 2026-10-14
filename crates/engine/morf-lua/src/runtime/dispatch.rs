@@ -375,20 +375,20 @@ impl Runtime {
     /// Returns the first key handler within one scene root.
     pub fn first_key_target_in(&self, root: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        routing::first_key_target(&state.scene, &state.events, root)
+        routing::first_key_target(&state.scene, state.events(), root)
     }
 
     /// Every node on a surface that takes keys, in the order they are
     /// offered a key nothing has focus for (one with `focus` set first).
     pub fn key_targets_in_root(&self, root: NodeHandle) -> Vec<NodeHandle> {
         let state = self.reactive.borrow();
-        routing::key_offer_order(&state.scene, &state.events, root)
+        routing::key_offer_order(&state.scene, state.events(), root)
     }
 
     /// Returns the nearest key-handling ancestor of a hit-tested node.
     pub fn key_target_for_node(&self, node: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        routing::key_target_for_node(&state.scene, &state.events, node)
+        routing::key_target_for_node(&state.scene, state.events(), node)
     }
 
     /// Returns whether a node belongs to the subtree rooted at `root`.
@@ -400,19 +400,23 @@ impl Runtime {
     /// Whether anything has read a node's `contains_pointer`: when nothing
     /// has, a pointer event has no containment to work out.
     pub fn has_pointer_watchers(&self) -> bool {
-        !self.reactive.borrow().events.pointer_watch.is_empty()
+        !self.reactive.borrow().events().pointer_watch.is_empty()
     }
 
     /// Every node something has read `contains_pointer` of: the ones the
     /// host tests against the pointer when it moves.
     pub fn pointer_watchers(&self) -> Vec<NodeHandle> {
-        self.reactive.borrow().events.pointer_watch.watched()
+        self.reactive.borrow().events().pointer_watch.watched()
     }
 
     /// The nodes first read since this was last asked, for the host to
     /// answer where the pointer is now rather than at its next motion.
     pub fn take_fresh_pointer_watchers(&mut self) -> Vec<NodeHandle> {
-        self.reactive.borrow_mut().events.pointer_watch.take_fresh()
+        self.reactive
+            .borrow_mut()
+            .events_mut()
+            .pointer_watch
+            .take_fresh()
     }
 
     /// Records whether the pointer is inside each node, as the host worked
@@ -423,7 +427,7 @@ impl Runtime {
         let mut changed = false;
         {
             let mut state = self.reactive.borrow_mut();
-            for node in state.events.pointer_watch.answer(answers) {
+            for node in state.events_mut().pointer_watch.answer(answers) {
                 changed = true;
                 state.tracking_mut().defer_flush();
                 let _ = bump_property_signal(&mut state, node, CONTAINS_POINTER, false);
@@ -465,7 +469,7 @@ impl Runtime {
         current: Option<NodeHandle>,
     ) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        routing::next_key_target(&state.scene, &state.events, root, current)
+        routing::next_key_target(&state.scene, state.events(), root, current)
     }
 
     /// Tells `node`'s handler for `event`; see [`morf_runtime::events::deliver`].

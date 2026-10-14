@@ -57,7 +57,7 @@ pub struct Engine {
     /// Presses under way that may become gestures.
     gestures: crate::gestures::Gestures,
     /// Each node's handler for each event, and the `contains_pointer` watches.
-    pub events: crate::events::Events,
+    events: crate::events::Events,
     /// Each node's declared states.
     states: crate::states::States,
     /// The verbs answered over IPC.

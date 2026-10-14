@@ -14,7 +14,7 @@ use crate::{IpcValue, Runtime};
 impl EventHost for Runtime {
     fn with_events<R>(&self, read: impl FnOnce(&Scene, &Events) -> R) -> R {
         let state = self.reactive.borrow();
-        read(&state.scene, &state.events)
+        read(&state.scene, state.events())
     }
 
     fn assign_pointer_state(&mut self, node: NodeHandle, property: &str, value: bool) -> bool {

@@ -18,7 +18,7 @@ impl Runtime {
     /// declines it; failures never capture a contact.
     pub fn offer_pan(&mut self, node: NodeHandle, event: UiEvent, args: &[IpcValue]) -> bool {
         use morf_runtime::events::EventHost;
-        let handler = self.reactive.borrow().events.handler(node, event);
+        let handler = self.reactive.borrow().events().handler(node, event);
         let Some(handler) = handler else {
             return false;
         };
@@ -124,7 +124,7 @@ impl Runtime {
 impl Runtime {
     /// Whether `node` has a handler for `event`.
     pub fn handles(&self, node: NodeHandle, event: UiEvent) -> bool {
-        self.reactive.borrow().engine.events.has(node, event)
+        self.reactive.borrow().engine.events().has(node, event)
     }
 
     /// Calls `node`'s handler for a gesture the host recognised (a pinch, an

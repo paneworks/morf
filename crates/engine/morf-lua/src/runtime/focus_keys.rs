@@ -33,7 +33,7 @@ impl Runtime {
     ) -> bool {
         let activates = {
             let state = self.reactive.borrow();
-            routing::activates_by_key(&state.scene, &state.events, node, keysym, modifiers)
+            routing::activates_by_key(&state.scene, state.events(), node, keysym, modifiers)
         };
         if !activates {
             return false;

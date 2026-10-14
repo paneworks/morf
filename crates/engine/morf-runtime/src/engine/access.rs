@@ -72,4 +72,7 @@ subsystems! {
     requests, requests_mut: crate::requests::Requests;
     /// The windows the configuration declared, as the host reads them.
     windows, windows_mut: crate::windows::Declarations;
+    /// Each node's handler for each event, and the `contains_pointer`
+    /// watches.
+    events, events_mut: crate::events::Events;
 }

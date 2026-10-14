@@ -44,7 +44,7 @@ impl Runtime {
         let handler = self
             .reactive
             .borrow()
-            .events
+            .events()
             .handler(node, UiEvent::AccessibleAction);
         if let Some(handler) = handler {
             let args = vec![
