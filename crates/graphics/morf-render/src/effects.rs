@@ -271,6 +271,30 @@ pub(crate) fn color_array(color: Color) -> [f32; 4] {
     ]
 }
 
+/// `color` with its light multiplied by `factor` (1 to 100), encoded on the
+/// sRGB curve carried past 1.0, as `color_array` reads it back: a node's
+/// `hdr` brightness.
+pub(crate) fn brighter(color: Color, factor: f64) -> Color {
+    if factor.is_nan() || factor <= 1.0 {
+        return color;
+    }
+    let scale = |channel: f32| {
+        let linear = f64::from(srgb_channel_to_linear(channel)) * factor.min(100.0);
+        let encoded = if linear <= 0.003_130_8 {
+            linear * 12.92
+        } else {
+            1.055 * linear.powf(1.0 / 2.4) - 0.055
+        };
+        encoded as f32
+    };
+    Color {
+        red: scale(color.red),
+        green: scale(color.green),
+        blue: scale(color.blue),
+        alpha: color.alpha,
+    }
+}
+
 pub(crate) fn srgb_channel_to_linear(channel: f32) -> f32 {
     if channel <= 0.04045 {
         channel / 12.92

@@ -25,6 +25,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         // Whether the mask keeps what it covers (false) or cuts it out.
         boolean("mask_invert", false),
         color("color_overlay", Color::rgba8(0, 0, 0, 0)),
+        // How many times SDR white the node's `color` shines at its
+        // brightest on an HDR output (`MORF_HDR=1`); ignored on SDR.
+        number("hdr", 1.0),
         number("z", 0.0),
         boolean("clip", element == Element::ClipRect),
         // `true` asks the compositor to blur what is behind this node.

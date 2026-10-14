@@ -38,10 +38,14 @@ pub(crate) fn resolved_color(
     node: NodeHandle,
     inherited: &PaintContext,
 ) -> Result<Color, RenderError> {
-    Ok(match scene.current(node, "color")? {
+    let color = match scene.current(node, "color")? {
         morf_scene::Value::Color(color) => *color,
         _ => inherited.color.unwrap_or(Color::rgba8(0, 0, 0, 255)),
-    })
+    };
+    if !crate::gpu::hdr::presenting_hdr() {
+        return Ok(color);
+    }
+    Ok(brighter(color, scene.number(node, "hdr")?))
 }
 
 pub(crate) fn paint_node(

@@ -21,6 +21,19 @@ fn scene_srgb_colors_are_linearized_for_gpu_output() {
     assert_eq!(srgb_channel_to_linear(1.0), 1.0);
 }
 
+#[test]
+fn an_hdr_brightness_multiplies_the_light_and_nothing_else() {
+    let grey = Color::rgba8(0x80, 0x80, 0x80, 0x40);
+    let twice = color_array(brighter(grey, 2.0));
+    let once = color_array(grey);
+    assert!((twice[0] - 2.0 * once[0]).abs() < 1e-5);
+    assert_eq!(twice[3], once[3]);
+    let white = color_array(brighter(Color::rgba8(255, 255, 255, 255), 3.0));
+    assert!((white[1] - 3.0).abs() < 1e-4);
+    assert_eq!(brighter(grey, 0.5), grey);
+    assert_eq!(brighter(grey, f64::NAN), grey);
+}
+
 /// A 64-square surface with a 32-square bordered ClipRect inside an ancestor
 /// moved down by `translate_y = 32` (and scaled by `scale`), holding a green
 /// bar that runs past its right edge: the layer a bordered clip composites

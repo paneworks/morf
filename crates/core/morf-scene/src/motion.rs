@@ -234,6 +234,7 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "opacity"
             | "color"
             | "color_overlay"
+            | "hdr"
             | "layer"
             | "radius"
             | "top_left_radius"
