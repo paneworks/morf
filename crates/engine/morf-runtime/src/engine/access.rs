@@ -48,4 +48,6 @@ subsystems! {
     views, views_mut: crate::views::Views;
     /// A reload, file watching, quitting and unlocking, as asked.
     lifecycle, lifecycle_mut: crate::requests::Lifecycle;
+    /// What this output can do, and how big one of morf's pixels is on it.
+    display, display_mut: crate::display::Display;
 }

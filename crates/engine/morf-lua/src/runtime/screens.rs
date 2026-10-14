@@ -37,7 +37,7 @@ impl Runtime {
 
     fn update_screens(&mut self, screens: &[Screen], own_first: bool) {
         let mut own_scale = None;
-        let density = self.reactive.borrow().display.density();
+        let density = self.reactive.borrow().display().density();
         self.lua.enter(|ctx| {
             let Ok(morf) = ctx.get_global::<Table>("morf") else {
                 return;

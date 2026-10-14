@@ -184,7 +184,7 @@ pub(crate) fn install_host_service_api<'gc>(
             .set(
                 ctx,
                 1,
-                screen_entry(ctx, screen, state.borrow().display.density()),
+                screen_entry(ctx, screen, state.borrow().display().density()),
             )
             .expect("screen table accepts integer keys");
     }

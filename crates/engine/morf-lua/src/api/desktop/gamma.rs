@@ -125,7 +125,7 @@ pub(crate) fn install_gamma_api<'gc>(
         ctx,
         "supported",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-            let supported = supported_state.borrow().display.capable("gamma_control");
+            let supported = supported_state.borrow().display().capable("gamma_control");
             stack.replace(ctx, supported);
             Ok(CallbackReturn::Return)
         }),

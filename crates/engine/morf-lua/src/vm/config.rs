@@ -155,13 +155,13 @@ impl Runtime {
     /// How big one of morf's pixels is: what the window system converts
     /// the compositor's pixels by.
     pub fn density(&self) -> morf_value::density::Density {
-        self.reactive.borrow().display.density()
+        self.reactive.borrow().display().density()
     }
 
     /// The density, when the configuration changed it since this was last
     /// asked (a scale slider): the window system converts by it from now.
     pub fn take_density_change(&mut self) -> Option<morf_value::density::Density> {
-        self.reactive.borrow_mut().display.take_density_change()
+        self.reactive.borrow_mut().display_mut().take_density_change()
     }
 
     /// Records what the compositor and GPU under this output can do.
@@ -173,7 +173,7 @@ impl Runtime {
     pub fn set_capabilities(&mut self, capabilities: &[(String, String)]) {
         self.reactive
             .borrow_mut()
-            .display
+            .display_mut()
             .set_capabilities(capabilities.to_vec());
         self.lua.enter(|ctx| {
             let Ok(morf) = ctx.get_global::<luna::Table>("morf") else {
@@ -199,14 +199,14 @@ impl Runtime {
 
     /// The list as it was recorded, for a runtime that replaces this one.
     pub fn capability_pairs(&self) -> Vec<(String, String)> {
-        self.reactive.borrow().display.capabilities().to_vec()
+        self.reactive.borrow().display().capabilities().to_vec()
     }
 
     /// The same list, as `name=value` lines for the wire.
     pub fn capabilities(&self) -> Vec<String> {
         self.reactive
             .borrow()
-            .display
+            .display()
             .capabilities()
             .iter()
             .map(|(name, value)| format!("{name}={value}"))

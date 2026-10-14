@@ -40,7 +40,7 @@ pub struct Engine {
     /// values kept across a reload.
     lifecycle:crate::requests::Lifecycle,
     /// What this output can do, and how big one of morf's pixels is on it.
-    pub display: crate::display::Display,
+    display:crate::display::Display,
     /// The shell's log lines.
     logs: crate::log::Log,
     /// The session lock, the primary duty and the output list's revision.
