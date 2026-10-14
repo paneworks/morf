@@ -63,6 +63,7 @@ pub(super) fn surface(body: &str) -> Vec<u8> {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_surface_shader_decides_its_own_coverage() {
+    require_gpu!();
     // The difference between the two modes, in one test. The node's own shape
     // is a plain box; the shader carves a disc out of it by returning alpha,
     // and the corners the box would have filled are clear.
@@ -88,6 +89,7 @@ pub(crate) fn a_surface_shader_decides_its_own_coverage() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_material_shader_cannot_paint_outside_the_shape_but_a_surface_one_can() {
+    require_gpu!();
     // The same body under both modes. A material shader is multiplied by the
     // field's coverage, so its alpha of one is still nothing outside the box; a
     // surface shader's is not, so it fills its whole rectangle.
@@ -191,6 +193,7 @@ fn through_effect(body: &str, params: &[(&str, f32)], colour: Color) -> Vec<u8> 
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn an_effect_shader_reads_what_is_underneath_it() {
+    require_gpu!();
     // The mode that needs a layer: until the subtree has been rendered into its
     // own target there is nothing to sample. A red square is drawn, and the
     // effect swaps its channels — so what comes back is blue, which it could
@@ -215,6 +218,7 @@ pub(crate) fn an_effect_shader_reads_what_is_underneath_it() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn an_effect_shaders_parameters_reach_it() {
+    require_gpu!();
     // Effect shaders are registered in their own table, because they splice
     // into a different pipeline, and their parameters live on the layer rather
     // than on any command. Miss either of those and the shader still runs and
@@ -238,6 +242,7 @@ pub(crate) fn an_effect_shaders_parameters_reach_it() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_ported_shadertoy_shader_compiles_and_paints() {
+    require_gpu!();
     // Compiling is not the same as being WGSL a driver accepts. This is the
     // Plasma port from `morf-shader`'s port suite, taken all the way to an
     // adapter: vector division, a `tanh` tonemap, swizzled feedback through a
@@ -291,6 +296,7 @@ pub(crate) fn a_ported_shadertoy_shader_compiles_and_paints() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_helper_function_survives_to_the_gpu() {
+    require_gpu!();
     // iq's palette, the most-copied helper in shader writing. Emitted as a real
     // WGSL function ahead of the entry point, with its parameter type taken
     // from the call because Lua had nowhere to declare one.
@@ -315,6 +321,7 @@ pub(crate) fn a_helper_function_survives_to_the_gpu() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_crt_effect_compiles_and_reworks_what_it_samples() {
+    require_gpu!();
     // The shader from `examples/demos/render/crt-terminal.lua`, which is the most demanding
     // thing the language has been asked to emit in anger: six parameters, a
     // helper taking and returning a vector, five texture taps at computed
@@ -405,6 +412,7 @@ pub(crate) fn a_crt_effect_compiles_and_reworks_what_it_samples() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_chromatic_effect_pulls_the_channels_apart() {
+    require_gpu!();
     // The shader from `examples/demos/sdf/sdf-blobs-chroma.lua`: a 32-bit hash for the
     // tear, three texture taps at different offsets, and an alpha taken from
     // whichever channel found something. A white square in, and the fringe on

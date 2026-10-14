@@ -45,6 +45,7 @@ pub(crate) fn test_quad(
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn srgb_target_preserves_hex_colors_and_blends_borders() {
+    require_gpu!();
     let mut backend = pollster::block_on(WgpuBackend::new(4, 4)).unwrap();
     let mut scene = morf_scene::Scene::new();
     let background = scene.create(morf_scene::Element::Rect);
@@ -295,6 +296,7 @@ fn close_to(pixel: [u8; 4], expected: [u8; 4]) -> bool {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn srgb_blending_mixes_encoded_values_as_browsers_do() {
+    require_gpu!();
     let mut scene = morf_scene::Scene::new();
     let ground = scene.create(morf_scene::Element::Rect);
     let veil = scene.create(morf_scene::Element::Rect);
@@ -371,6 +373,7 @@ pub(crate) fn glyph_shelves_reserve_padding_and_wrap_rows() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn backends_share_one_device_and_draw_side_by_side() {
+    require_gpu!();
     // Opened once for the process: every backend after the first, on any
     // thread, draws with the device the first one opened.
     let first = pollster::block_on(WgpuBackend::new(8, 8)).unwrap();

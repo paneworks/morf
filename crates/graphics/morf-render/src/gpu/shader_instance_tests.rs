@@ -120,6 +120,7 @@ const MATERIAL: &str = "function fragment(uv, time, resolution, coverage, level)
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn two_nodes_sharing_a_shader_each_draw_with_their_own_values() {
+    require_gpu!();
     let mut backend = pollster::block_on(WgpuBackend::new(SIZE, SIZE)).unwrap();
     let program = register(&mut backend, ShaderKind::Material, MATERIAL);
     let mut scene = morf_scene::Scene::new();
@@ -172,6 +173,7 @@ pub(crate) fn two_nodes_sharing_a_shader_each_draw_with_their_own_values() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_frame_drawn_through_damage_keeps_each_nodes_values() {
+    require_gpu!();
     // The shaded node is redrawn wherever there is damage, so a small frame
     // that changes only one of two nodes must still draw that one with its
     // own values — and leave the other as it was.
@@ -220,6 +222,7 @@ pub(crate) fn a_frame_drawn_through_damage_keeps_each_nodes_values() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn two_layers_sharing_an_effect_each_composite_with_their_own_values() {
+    require_gpu!();
     let mut backend = pollster::block_on(WgpuBackend::new(SIZE, SIZE)).unwrap();
     let program = register(
         &mut backend,

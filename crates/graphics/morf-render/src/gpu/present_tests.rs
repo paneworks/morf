@@ -44,6 +44,7 @@ fn compositor_keeps(
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn buffers_in_rotation_show_every_frame_exactly() {
+    require_gpu!();
     // How many buffers the compositor holds after each frame: one on screen
     // usually, sometimes one it has not let go of, and sometimes all three,
     // so the frame after has none to go to and is skipped.
@@ -100,6 +101,7 @@ fn buffers_in_rotation_show_every_frame_exactly() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_frame_with_no_buffer_reaches_the_next_one() {
+    require_gpu!();
     let mut desk = desk();
     let physical = LOGICAL as u32;
     let mut engine =
@@ -127,6 +129,7 @@ fn a_frame_with_no_buffer_reaches_the_next_one() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_resize_repaints_every_buffer_whole() {
+    require_gpu!();
     let desk = desk();
     let mut engine = RenderEngine::new(pollster::block_on(WgpuBackend::new(96, 96)).unwrap());
     engine.backend_mut().present_into_ring(2);
@@ -182,6 +185,7 @@ fn full_hd() -> (Scene, NodeHandle, NodeHandle) {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_full_hd_surface_through_small_damage() {
+    require_gpu!();
     let (mut scene, root, dot) = full_hd();
     let mut engine = RenderEngine::new(pollster::block_on(WgpuBackend::new(1920, 1080)).unwrap());
     engine.backend_mut().present_into_ring(3);

@@ -126,6 +126,7 @@ fn encode(linear: f32) -> f32 {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn glass_blurs_the_stripes_beneath_it_and_nothing_else() {
+    require_gpu!();
     let desk = desk(4.0, None);
     let pixels = read_frame(&mut backend(), &list(&desk), SIZE);
     // Inside, the stripes have run together into a grey.
@@ -149,6 +150,7 @@ fn glass_blurs_the_stripes_beneath_it_and_nothing_else() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn glass_matches_the_cpu_reference_of_the_chain() {
+    require_gpu!();
     let radius = 6.0;
     let desk = desk(radius, None);
     let pixels = read_frame(&mut backend(), &list(&desk), SIZE);
@@ -186,6 +188,7 @@ fn glass_matches_the_cpu_reference_of_the_chain() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn glass_inside_a_layer_still_sees_the_surface_beneath() {
+    require_gpu!();
     for wrap in ["clip", "fade"] {
         let desk = desk(4.0, Some(wrap));
         let pixels = read_frame(&mut backend(), &list(&desk), SIZE);
@@ -200,6 +203,7 @@ fn glass_inside_a_layer_still_sees_the_surface_beneath() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn glass_blurs_again_only_when_what_is_beneath_changes() {
+    require_gpu!();
     let mut desk = desk(4.0, None);
     let mut backend = backend();
     read_frame(&mut backend, &list(&desk), SIZE);
@@ -244,6 +248,7 @@ fn glass_blurs_again_only_when_what_is_beneath_changes() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn saturation_greys_the_backdrop() {
+    require_gpu!();
     let mut desk = desk(2.0, None);
     for (index, stripe) in desk.stripes.iter().enumerate() {
         let color = if index % 2 == 0 {

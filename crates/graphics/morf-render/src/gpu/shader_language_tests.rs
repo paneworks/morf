@@ -16,6 +16,7 @@ use morf_shader::{ShaderKind, ShaderSpec};
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn the_new_builtins_are_accepted_by_a_driver() {
+    require_gpu!();
     // A builtin that compiles here and is refused by naga is worse than a
     // missing one: the configuration author gets a validation error with no
     // line number instead of a diagnostic. Every W1 addition goes through an
@@ -49,6 +50,7 @@ pub(crate) fn the_new_builtins_are_accepted_by_a_driver() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_rotation_matrix_paints_a_turned_shape() {
+    require_gpu!();
     // W2 against an adapter. A matrix that compiles and is laid out wrongly is
     // the failure worth catching here: the uniform block's alignment rules are
     // where matrices actually go wrong, and a wrong layout reads back as a
@@ -80,6 +82,7 @@ pub(crate) fn a_rotation_matrix_paints_a_turned_shape() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_matrix_parameter_arrives_with_its_columns_intact() {
+    require_gpu!();
     // The uniform layout rule: a `mat3x3` is three sixteen-byte columns, not
     // nine floats. If the host and the shader disagree, the columns arrive
     // shuffled — which looks like a shear rather than an error.
@@ -131,6 +134,7 @@ pub(crate) fn a_matrix_parameter_arrives_with_its_columns_intact() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn integer_hash_noise_paints() {
+    require_gpu!();
     // W3 against an adapter. Integer arithmetic is where a compiler most easily
     // emits something plausible that a driver refuses — a mixed-width shift, a
     // literal that went through a float on the way — so the hash goes through a
@@ -167,6 +171,7 @@ pub(crate) fn integer_hash_noise_paints() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_shader_antialiases_its_own_edge_with_fwidth() {
+    require_gpu!();
     // W4 against an adapter. A derivative is the one builtin whose *value*
     // depends on neighbouring pixels, so it cannot be checked by reading the
     // generated WGSL — only by rendering and seeing a soft edge where a hard
@@ -197,6 +202,7 @@ pub(crate) fn a_shader_antialiases_its_own_edge_with_fwidth() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn an_array_palette_paints_its_bands() {
+    require_gpu!();
     // W5 against an adapter. In the uniform address space an array's stride is
     // a multiple of sixteen whatever the element is, and a shader that indexes
     // one the host laid out differently reads the wrong band — which looks like
@@ -241,6 +247,7 @@ pub(crate) fn an_array_palette_paints_its_bands() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_continue_in_a_counting_loop_reaches_every_turn() {
+    require_gpu!();
     // W6 against an adapter, and the one thing a compiler test cannot settle:
     // that the counter really does advance past a `continue`. If the increment
     // had stayed at the tail of the body this loop would spin against its
@@ -271,6 +278,7 @@ pub(crate) fn a_continue_in_a_counting_loop_reaches_every_turn() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn discard_removes_the_fragment_entirely() {
+    require_gpu!();
     // `discard` is only meaningful where the shader owns its coverage, so this
     // is a surface shader. What it throws away has to be *gone*, not merely
     // transparent — those look the same in a screenshot and different in a
@@ -298,6 +306,7 @@ pub(crate) fn discard_removes_the_fragment_entirely() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn the_whole_remaining_surface_is_accepted_by_a_driver() {
+    require_gpu!();
     // Everything PLAN_WGSL_COVERAGE.md had left unchecked, in one shader,
     // through a real adapter. Three of the six W steps had a bug that only a
     // driver could find, and this is the largest batch of new emission yet:
@@ -347,6 +356,7 @@ pub(crate) fn the_whole_remaining_surface_is_accepted_by_a_driver() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn records_and_helpers_reach_the_driver_together() {
+    require_gpu!();
     // Records had a bug a compiler test could not see: the interner is
     // process-wide, so emitting from it put every record any shader had ever
     // used into every shader after it. Collected from the program instead, and

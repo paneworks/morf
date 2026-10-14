@@ -172,6 +172,7 @@ mod tests {
     #[test]
     #[ignore = "requires a GPU adapter"]
     fn hidden_text_is_ready_before_it_is_shown() {
+        require_gpu!();
         let mut scene = Scene::new();
         let root = scene.create(Element::Item);
         let panel = scene.create(Element::Item);

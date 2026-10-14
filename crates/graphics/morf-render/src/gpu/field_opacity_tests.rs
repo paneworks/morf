@@ -64,6 +64,7 @@ fn worst_mix(size: u32, picture: &[u8], parts: &[(f32, &[u8])]) -> (f32, u32, u3
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_fading_layer_is_mixed_between_absent_and_whole() {
+    require_gpu!();
     const SIZE: u32 = 128;
     let panel = |opacity| frame(SIZE, &[(40.0, 48.0, opacity, WHITE)]);
     let without = render_readback(&frame(SIZE, &[]), SIZE);
@@ -89,6 +90,7 @@ pub(crate) fn a_fading_layer_is_mixed_between_absent_and_whole() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn two_fading_layers_are_each_there_or_not() {
+    require_gpu!();
     // Two panels close enough for their seams to bridge when both are whole.
     // Fading both to 0.4 and 0.7 is the four combinations weighted by how
     // likely each is.
@@ -124,6 +126,7 @@ pub(crate) fn two_fading_layers_are_each_there_or_not() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn three_fading_layers_mix_all_eight_compositions() {
+    require_gpu!();
     const SIZE: u32 = 128;
     let opacities = [0.25, 0.5, 0.75];
     let picture = |values: [f32; 3]| {
@@ -162,6 +165,7 @@ pub(crate) fn three_fading_layers_mix_all_eight_compositions() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_fading_subtraction_half_fills_its_hole() {
+    require_gpu!();
     const SIZE: u32 = 64;
     let mut scene = morf_scene::Scene::new();
     let node = scene.create(morf_scene::Element::Sdf);
@@ -187,6 +191,7 @@ pub(crate) fn a_fading_subtraction_half_fills_its_hole() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_fading_layer_brings_its_colour_in_with_it() {
+    require_gpu!();
     const SIZE: u32 = 128;
     let red = Color::rgba8(255, 0, 0, 255);
     let pixels = render_readback(&frame(SIZE, &[(40.0, 48.0, 0.5, red)]), SIZE);
@@ -210,6 +215,7 @@ pub(crate) fn a_fading_layer_brings_its_colour_in_with_it() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_large_frame_fading_a_panel_is_tiled_without_losing_the_fade() {
+    require_gpu!();
     // Large enough to be drawn as tiles: the tiles a fading panel may reach,
     // and the ones filled without walking the layers, must both allow for
     // every combination.
@@ -242,6 +248,7 @@ pub(crate) fn a_large_frame_fading_a_panel_is_tiled_without_losing_the_fade() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn uniform_fades_match_the_general_path_with_borders_and_shadows() {
+    require_gpu!();
     // One non-zero blend group is equivalent to no groups, but selects the
     // general composition shader. Compare whole images, including the seam,
     // partially transparent paint, inside/outside borders and moved shadows.
@@ -295,6 +302,7 @@ fn uniform_fades_match_the_general_path_with_borders_and_shadows() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn separated_fading_cards_match_full_composition_at_edges_and_seams() {
+    require_gpu!();
     const SIZE: u32 = 128;
     let mut scene = morf_scene::Scene::new();
     let node = scene.create(morf_scene::Element::Sdf);

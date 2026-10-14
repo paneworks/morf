@@ -55,6 +55,7 @@ pub(crate) fn ink(pixels: &[u8], size: u32) -> f64 {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_glyph_drawn_larger_covers_more_without_being_rasterized_again() {
+    require_gpu!();
     // The reason glyphs are stored as fields at all. One atlas entry, measured
     // once at a reference size, and the letter is drawn at whatever size is
     // asked for by scaling the quad. If this failed by drawing the same number
@@ -82,6 +83,7 @@ pub(crate) fn a_glyph_drawn_larger_covers_more_without_being_rasterized_again() 
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn thickness_moves_the_edge_and_an_outline_adds_a_band_around_it() {
+    require_gpu!();
     // What a threshold buys that a coverage bitmap cannot: the edge is a number
     // rather than a set of pixels, so weight is that number moved and an
     // outline is a second one further out. Both are animatable, and neither
@@ -124,6 +126,7 @@ pub(crate) fn thickness_moves_the_edge_and_an_outline_adds_a_band_around_it() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_decoration_is_a_band_under_the_line() {
+    require_gpu!();
     // A line under the text is drawn from the face's own metrics: below the
     // baseline, as wide as the line, in the decoration's colour — and not
     // there at all when nothing asked for it.
@@ -190,6 +193,7 @@ fn icon_font() -> Option<std::path::PathBuf> {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_fill_axis_fills_an_icon_on_screen() {
+    require_gpu!();
     // The icon font's FILL axis, through the whole path: the style carries
     // the axes, the text system draws the glyph's field at that point of the
     // design space, and the atlas holds the two as two pictures -- rendered
@@ -265,6 +269,7 @@ fn ink_right(pixels: &[u8], size: u32) -> u32 {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_wdth_axis_is_drawn_as_wide_as_it_measures() {
+    require_gpu!();
     // An axis that changes advances, through the whole path: the text is
     // shaped at the axis, laid out by that width, and drawn with its glyphs
     // where the shaper put them -- so the ink ends where the measured width

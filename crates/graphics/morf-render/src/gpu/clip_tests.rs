@@ -17,6 +17,7 @@ fn green(pixel: [u8; 4]) -> bool {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_bordered_clip_under_a_translated_ancestor_keeps_its_contents() {
+    require_gpu!();
     for radius in [0.0, 6.0] {
         let (scene, layout, _) = translated_bordered_clip(radius, 1.0);
         let list = DrawList::from_scene(&scene, &layout).unwrap();

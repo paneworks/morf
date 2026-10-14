@@ -154,6 +154,7 @@ pub(super) fn alpha_at(pixels: &[u8], size: u32, x: u32, y: u32) -> u8 {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_field_paints_its_shape_and_leaves_the_outside_clear() {
+    require_gpu!();
     // The shader compiles, the storage buffer binds, and the zero crossing
     // lands where the layer says it does.
     let mut scene = morf_scene::Scene::new();
@@ -177,6 +178,7 @@ pub(crate) fn a_field_paints_its_shape_and_leaves_the_outside_clear() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_smooth_union_fills_the_gap_that_a_hard_union_leaves_open() {
+    require_gpu!();
     // The one thing a tessellated outline cannot do. Two circles with a gap
     // between them: a hard union leaves the midpoint empty, a smooth union with
     // a blend radius wide enough to bridge it fills it in.
@@ -215,6 +217,7 @@ pub(crate) fn a_smooth_union_fills_the_gap_that_a_hard_union_leaves_open() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn subtracting_a_layer_opens_a_hole_through_the_one_before_it() {
+    require_gpu!();
     let mut scene = morf_scene::Scene::new();
     let node = scene.create(morf_scene::Element::Sdf);
     let mut hole = field_layer(24.0, 24.0, 16.0, Shape::Circle);
@@ -236,6 +239,7 @@ pub(crate) fn subtracting_a_layer_opens_a_hole_through_the_one_before_it() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_morph_at_its_ends_matches_the_shape_at_each_end() {
+    require_gpu!();
     // A field morph is only trustworthy if it is an identity at zero and one.
     let mut scene = morf_scene::Scene::new();
     let node = scene.create(morf_scene::Element::Sdf);
@@ -270,6 +274,7 @@ pub(crate) fn a_morph_at_its_ends_matches_the_shape_at_each_end() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_morph_between_one_shape_and_two_passes_through_a_split() {
+    require_gpu!();
     // The reason for interpolating fields rather than outlines: halfway between
     // one blob and two, the field describes a shape that is neither, and the
     // count of separate pieces changes without any correspondence between the
@@ -302,6 +307,7 @@ pub(crate) fn a_morph_between_one_shape_and_two_passes_through_a_split() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn every_shape_family_paints_something_and_stays_inside_its_layer() {
+    require_gpu!();
     // A shape whose distance function has the sign inverted, or whose scale is
     // wrong, shows up here as an empty layer or as one that floods the target.
     let mut scene = morf_scene::Scene::new();
@@ -345,6 +351,7 @@ pub(crate) fn every_shape_family_paints_something_and_stays_inside_its_layer() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_fractional_point_count_grows_a_star_point_instead_of_popping_it_in() {
+    require_gpu!();
     // A star is only defined for a whole number of points. Rounding the count
     // makes a new spike appear at full size between two frames; blending the
     // neighbouring stars as fields grows it out of the edge instead.
@@ -394,6 +401,7 @@ pub(crate) fn a_fractional_point_count_grows_a_star_point_instead_of_popping_it_
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_layer_reaching_outside_its_node_is_drawn_whole() {
+    require_gpu!();
     // A layer is free to sit outside the node that composes it — a selection
     // that overhangs its bar, a badge growing past an edge. The quad the field
     // draws into has to cover that, and covering the node alone slices the

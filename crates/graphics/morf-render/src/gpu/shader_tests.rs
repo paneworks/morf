@@ -70,6 +70,7 @@ pub(super) fn channel(pixels: &[u8], x: u32, y: u32, index: usize) -> u8 {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_shader_paints_inside_the_shape_and_nowhere_else() {
+    require_gpu!();
     // The seam: the field still decides coverage, the shader only decides
     // colour. A shader that painted outside its node would mean the geometry
     // path had been bypassed, which is the whole thing this mode promises not
@@ -95,6 +96,7 @@ pub(crate) fn a_shader_paints_inside_the_shape_and_nowhere_else() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn uv_runs_left_to_right_and_top_to_bottom() {
+    require_gpu!();
     // The orientation test. A flipped `uv` is the failure that looks almost
     // right and is silently upside-down in every shader anyone writes.
     let pixels = shaded(
@@ -119,6 +121,7 @@ pub(crate) fn uv_runs_left_to_right_and_top_to_bottom() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_loop_with_no_exit_still_finishes_the_frame() {
+    require_gpu!();
     // The most important test in the crate. `while true do end` is what takes a
     // compositor down — the device is lost, and with it the bar, the lock
     // screen and the session. The emitted guard is the only reason this
@@ -143,6 +146,7 @@ pub(crate) fn a_loop_with_no_exit_still_finishes_the_frame() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn arithmetic_and_builtins_produce_the_values_they_should() {
+    require_gpu!();
     // A shader that computes something checkable by hand, so a wrong operator
     // or a mis-emitted builtin shows up as a number rather than as "looks odd".
     let pixels = shaded(
@@ -171,6 +175,7 @@ pub(crate) fn arithmetic_and_builtins_produce_the_values_they_should() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_branch_picks_different_colours_across_the_node() {
+    require_gpu!();
     let pixels = shaded(
         "function fragment(uv)
            if uv.x > 0.5 then
@@ -187,6 +192,7 @@ pub(crate) fn a_branch_picks_different_colours_across_the_node() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_parameter_reaches_the_shader() {
+    require_gpu!();
     let spec = ShaderSpec {
         kind: ShaderKind::Material,
         inputs: ShaderSpec::default_inputs(ShaderKind::Material),

@@ -99,6 +99,7 @@ fn painted(backend: &mut WgpuBackend, program: u64, wrapping: bool) -> Vec<u8> {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn an_effect_wrapping_its_content_reworks_it() {
+    require_gpu!();
     let mut backend = pollster::block_on(WgpuBackend::new(SIZE, SIZE)).unwrap();
     let program = swapper(&mut backend);
     let pixels = painted(&mut backend, program, true);
@@ -113,6 +114,7 @@ fn an_effect_wrapping_its_content_reworks_it() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn an_effect_beside_its_content_leaves_it_alone() {
+    require_gpu!();
     // Stated as a test because it is the mistake anyone writes first, and
     // because it fails silently: the shader is correct, the pipeline runs, and
     // the picture comes out exactly as though no shader had been asked for.
@@ -130,6 +132,7 @@ fn an_effect_beside_its_content_leaves_it_alone() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_material_shader_on_a_field_sizes_itself_from_its_own_derivatives() {
+    require_gpu!();
     // What `examples/demos/sdf/sdf-blobs-crt.lua` relies on. A material shader is not
     // told how large the node it is colouring is — `resolution` is the surface,
     // not the node — so the per-blob tube takes its own width in pixels from
@@ -223,6 +226,7 @@ fn a_material_shader_on_a_field_sizes_itself_from_its_own_derivatives() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn an_effect_shader_can_carry_a_data_block() {
+    require_gpu!();
     // What `examples/demos/sdf/sdf-blobs-chroma.lua` needs: an effect that is told where
     // the blobs are, so it can pick its axis per pixel.
     //
@@ -315,6 +319,7 @@ fn an_effect_shader_can_carry_a_data_block() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_shift_stated_in_pixels_moves_by_that_many_pixels() {
+    require_gpu!();
     // `examples/demos/sdf/sdf-blobs-chroma.lua` states its aberration in pixels, because
     // a fringe written as a fraction of the surface is far too easy to ask for
     // an enormous amount of by accident — and once the shift is wide enough to

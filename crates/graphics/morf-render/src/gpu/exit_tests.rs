@@ -122,6 +122,7 @@ fn draw(
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_leaving_node_is_drawn_while_it_leaves_and_leaves_nothing_behind() {
+    require_gpu!();
     let Stack {
         mut scene,
         root,

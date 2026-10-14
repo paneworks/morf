@@ -45,6 +45,7 @@ fn frame_with(panels: &[(f64, f64, u32)], profile: BlendProfile, blend: f32) -> 
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_panel_merges_into_the_frame_through_a_quarter_circle() {
+    require_gpu!();
     // The panel's left side meets the frame's inner edge at (40, 8). A
     // circular seam of 12 fills that inside corner up to the arc centred at
     // (28, 20): just inside the arc is filled, just outside it is not.
@@ -85,6 +86,7 @@ pub(crate) fn a_panel_merges_into_the_frame_through_a_quarter_circle() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn panels_in_different_blend_groups_do_not_bridge() {
+    require_gpu!();
     // Two panels six pixels apart with a seam of twelve: in one group the gap
     // fills; in two groups it stays open, while both still merge with the
     // frame they hang from.
@@ -114,6 +116,7 @@ pub(crate) fn panels_in_different_blend_groups_do_not_bridge() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_layer_matrix_shears_its_shape() {
+    require_gpu!();
     let mut scene = morf_scene::Scene::new();
     let node = scene.create(morf_scene::Element::Sdf);
     // A 40 by 20 box centred at (64, 64), sheared so each pixel down moves it
@@ -148,6 +151,7 @@ pub(crate) fn a_layer_matrix_shears_its_shape() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_frame_and_a_tracked_sliding_panel_render_from_the_scene() {
+    require_gpu!();
     use morf_scene::{Element, Scene, Value};
     let mut scene = Scene::new();
     let root = scene.create(Element::Item);
@@ -263,6 +267,7 @@ fn large_frame() -> (DrawList, Vec<SdfLayer>) {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_tiled_frame_paints_exactly_where_its_cpu_twin_says() {
+    require_gpu!();
     let (list, layers) = large_frame();
     // It is tiled: most of the inside is not drawn at all.
     let tiles = crate::field_tiles(
