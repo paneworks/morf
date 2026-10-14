@@ -49,7 +49,7 @@ impl Runtime {
             table.set_field(ctx, "index", index as i64 + 1);
             let executor = Executor::start(
                 ctx,
-                ctx.fetch(&crate::vm::handler_store::stashed(&builder))
+                ctx.fetch(&crate::vm::handler_store::stashed(&builder)?)
                     .into(),
                 Variadic(vec![LuaValue::Table(table)]),
             );

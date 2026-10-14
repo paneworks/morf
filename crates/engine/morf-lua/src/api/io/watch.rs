@@ -145,7 +145,7 @@ pub(crate) fn execute_watch_call(
     );
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(&call.callback))
+        ctx.fetch(&crate::vm::handler_store::stashed(&call.callback)?)
             .into(),
         Variadic(vec![LuaValue::Table(event)]),
     );

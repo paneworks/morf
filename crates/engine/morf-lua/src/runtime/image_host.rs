@@ -182,7 +182,7 @@ fn execute_image_handler(
     };
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         args,
     );

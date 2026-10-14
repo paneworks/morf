@@ -316,7 +316,7 @@ pub(crate) fn execute_toplevel_handler(
     let change = scene_to_lua(ctx, change)?;
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         Variadic(vec![change]),
     );

@@ -121,10 +121,9 @@ impl Scene {
         let mut shown = std::collections::HashMap::new();
         let mut seen_moving = false;
         for key in keys {
-            let animation = self
-                .animations
-                .get_mut(&key)
-                .expect("animation key vanished");
+            let Some(animation) = self.animations.get_mut(&key) else {
+                continue;
+            };
             let paused = animation.is_paused();
             let delayed = animation.is_delayed();
             let fresh = std::mem::take(&mut animation.fresh);
@@ -210,7 +209,9 @@ impl Scene {
                 physics_finished.push(key);
                 continue;
             }
-            let motion = self.physics.get_mut(&key).expect("physics key vanished");
+            let Some(motion) = self.physics.get_mut(&key) else {
+                continue;
+            };
             if let PhysicsAnimation::Color { channels } = motion {
                 let Value::Color(mut current) = *self.properties.read(slot.current)? else {
                     physics_finished.push(key);

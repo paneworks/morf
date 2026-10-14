@@ -356,7 +356,7 @@ pub(crate) fn execute_audio_handler(
         .collect::<Result<Vec<_>, _>>()?;
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         Variadic(args),
     );

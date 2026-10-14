@@ -30,9 +30,10 @@ pub(crate) fn install_shell_api<'gc>(
                 .get(&event)
                 .cloned();
             match handler {
-                Some(handler) => {
-                    stack.replace(ctx, ctx.fetch(&crate::vm::handler_store::stashed(&handler)))
-                }
+                Some(handler) => stack.replace(
+                    ctx,
+                    ctx.fetch(&crate::vm::handler_store::stashed(&handler).map_err(HostError)?),
+                ),
                 None => stack.replace(ctx, LuaValue::Nil),
             }
             return Ok(CallbackReturn::Return);

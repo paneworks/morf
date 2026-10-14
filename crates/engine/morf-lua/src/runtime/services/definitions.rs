@@ -156,12 +156,13 @@ impl Runtime {
             // left as it is.
             let preloaded = index >= asked_for;
             let _span = crate::profile::span(|| {
+                let origin =
+                    self.lua
+                        .enter(|ctx| match crate::vm::handler_store::stashed(&factory) {
+                            Ok(closure) => crate::profile::closure_origin(ctx.fetch(&closure)),
+                            Err(error) => error,
+                        });
                 let state = self.reactive.borrow();
-                let origin = self.lua.enter(|ctx| {
-                    crate::profile::closure_origin(
-                        ctx.fetch(&crate::vm::handler_store::stashed(&factory)),
-                    )
-                });
                 format!(
                     "loader build {} ({origin})",
                     crate::runtime_config::lint_path(&state.scene, node)

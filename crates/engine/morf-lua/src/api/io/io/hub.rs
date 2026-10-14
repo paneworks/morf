@@ -48,7 +48,7 @@ pub(crate) fn execute_io_call(
     };
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(&call.callback))
+        ctx.fetch(&crate::vm::handler_store::stashed(&call.callback)?)
             .into(),
         Variadic(args),
     );

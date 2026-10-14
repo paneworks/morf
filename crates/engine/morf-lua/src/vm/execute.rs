@@ -216,7 +216,7 @@ pub(crate) fn execute_effect(
     if budget == 0 {
         return Err("Lua frame fuel exhausted".to_owned());
     }
-    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)).into(), ());
+    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)?).into(), ());
     match drive_executor(ctx, executor, limits, budget, "effect") {
         Err(error) => {
             *frame_remaining = frame_remaining.saturating_sub(budget);
@@ -254,7 +254,7 @@ pub(crate) fn execute_handler_args(
             .map(|value| value.to_lua(ctx))
             .collect::<Vec<_>>(),
     );
-    let function = ctx.fetch(&stashed(closure));
+    let function = ctx.fetch(&stashed(closure)?);
     let _span =
         crate::profile::span(|| format!("handler {}", crate::profile::closure_origin(function)));
     let executor = Executor::start(ctx, function.into(), args);
@@ -290,7 +290,7 @@ pub(crate) fn execute_screencopy_handler(
             LuaValue::String(ctx.intern(error.as_bytes())),
         ]),
     };
-    let function = ctx.fetch(&stashed(closure));
+    let function = ctx.fetch(&stashed(closure)?);
     let _span =
         crate::profile::span(|| format!("handler {}", crate::profile::closure_origin(function)));
     let executor = Executor::start(ctx, function.into(), args);
@@ -313,7 +313,7 @@ pub(crate) fn execute_ipc_handler(
             .map(|value| value.to_lua(ctx))
             .collect::<Vec<_>>(),
     );
-    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)).into(), args);
+    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)?).into(), args);
     drive_executor(ctx, executor, limits, limits.effect_fuel, "IPC handler")?;
     let values = match executor.take_result::<Variadic<Vec<LuaValue>>>(ctx) {
         Ok(Ok(values)) => values,

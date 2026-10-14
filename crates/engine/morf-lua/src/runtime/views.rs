@@ -34,7 +34,7 @@ pub(crate) fn execute_delegate(
     ]);
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(delegate))
+        ctx.fetch(&crate::vm::handler_store::stashed(delegate)?)
             .into(),
         args,
     );
@@ -76,7 +76,7 @@ pub(crate) fn execute_delegate_updater(
     ]);
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(updater))
+        ctx.fetch(&crate::vm::handler_store::stashed(updater)?)
             .into(),
         args,
     );
@@ -101,7 +101,7 @@ pub(crate) fn execute_node_factory(
 ) -> Result<NodeHandle, String> {
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(factory))
+        ctx.fetch(&crate::vm::handler_store::stashed(factory)?)
             .into(),
         (),
     );

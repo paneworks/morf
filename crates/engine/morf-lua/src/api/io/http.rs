@@ -422,7 +422,7 @@ pub(crate) fn execute_http_handler(
     response.set_field(ctx, "json", decode);
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         Variadic(vec![LuaValue::Table(response)]),
     );

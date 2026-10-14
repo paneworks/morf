@@ -170,26 +170,20 @@ pub(crate) fn apply_state(
     }
     let mut state = state.borrow_mut();
     for (property, value) in properties {
-        let animated = transition.is_some()
-            && matches!(value, SceneValue::Number(_) | SceneValue::Color(_))
-            && matches!(
-                state.scene.current(node, &property),
-                Ok(SceneValue::Number(_) | SceneValue::Color(_))
-            );
-        if animated {
+        let animated = transition.filter(|_| {
+            matches!(value, SceneValue::Number(_) | SceneValue::Color(_))
+                && matches!(
+                    state.scene.current(node, &property),
+                    Ok(SceneValue::Number(_) | SceneValue::Color(_))
+                )
+        });
+        if let Some(transition) = animated {
             let from = state
                 .scene
                 .current(node, &property)
                 .map_err(|error| error.to_string())?
                 .clone();
-            animate_scene_property(
-                &mut state,
-                node,
-                &property,
-                from,
-                value,
-                transition.unwrap(),
-            )?;
+            animate_scene_property(&mut state, node, &property, from, value, transition)?;
         } else {
             assign_scene_property(&mut state, node, &property, value)?;
         }
@@ -221,7 +215,12 @@ pub(crate) fn apply_state(
             }
         }
     }
-    state.states.get_mut(&node).unwrap().current = Some(name.to_owned());
+    // A binding above may have removed the node, and its states with it.
+    let set = state
+        .states
+        .get_mut(&node)
+        .ok_or_else(|| format!("node lost its states while entering `{name}`"))?;
+    set.current = Some(name.to_owned());
     Ok(())
 }
 
@@ -404,10 +403,13 @@ fn flush_graph(
             pending.token(),
             &mut capture,
         );
-        state
+        let completed = state
             .borrow_mut()
             .reactive
             .complete_effect(&mut run, pending, capture, outcome);
+        if let Err(error) = completed {
+            break Err(error);
+        }
     };
 
     let _span =
@@ -433,9 +435,10 @@ fn effect_label(
     let Some(effect) = state.reactive.effects.get(&pending.token()) else {
         return format!("effect {}", pending.name());
     };
-    let origin = crate::profile::closure_origin(
-        ctx.fetch(&crate::vm::handler_store::stashed(&effect.handler)),
-    );
+    let origin = match crate::vm::handler_store::stashed(&effect.handler) {
+        Ok(closure) => crate::profile::closure_origin(ctx.fetch(&closure)),
+        Err(error) => error,
+    };
     let node_path = |node: NodeHandle| {
         let id = state
             .scene

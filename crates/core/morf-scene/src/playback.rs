@@ -146,11 +146,10 @@ impl Scene {
             return Ok(false);
         };
         let target = motion.target();
-        let spec = self
-            .physics_specs
-            .get(&key)
-            .copied()
-            .expect("physics motion without an installed spec");
+        // Motion without its spec has nothing to restart from.
+        let Some(spec) = self.physics_specs.get(&key).copied() else {
+            return Ok(false);
+        };
         let Value::Number(current) = *self.properties.read(slot.current)? else {
             return Ok(false);
         };

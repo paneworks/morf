@@ -18,6 +18,9 @@ use morf_value::IpcValue;
 
 use crate::Handler;
 
+/// What a flush step fails with when the graph is not where it belongs.
+const GRAPH_AWAY: &str = "reactive graph left its place during a flush";
+
 /// A node property an effect drives.
 #[derive(Clone)]
 pub struct PropertySink {
@@ -160,7 +163,7 @@ impl Reactive {
     pub fn next_effect(&mut self, run: &mut FlushRun) -> Result<Option<PendingEffect>, String> {
         self.graph
             .as_mut()
-            .expect("the graph stays in place during a flush")
+            .ok_or(GRAPH_AWAY)?
             .next_effect(&mut run.flush)
             .map_err(|error| error.to_string())
     }
@@ -172,11 +175,14 @@ impl Reactive {
         pending: PendingEffect,
         capture: EffectCapture<IpcValue>,
         outcome: Result<(), String>,
-    ) {
-        self.graph
-            .as_mut()
-            .expect("the graph stays in place during a flush")
-            .complete_effect(&mut run.flush, pending, capture, outcome);
+    ) -> Result<(), String> {
+        self.graph.as_mut().ok_or(GRAPH_AWAY)?.complete_effect(
+            &mut run.flush,
+            pending,
+            capture,
+            outcome,
+        );
+        Ok(())
     }
 
     /// Ends a flush: brings the mirror in line with the graph and hands the
@@ -189,10 +195,9 @@ impl Reactive {
     ) -> Result<(), String> {
         let result = stepped.map(|()| run.flush.finish());
         self.flushing = false;
-        let graph = self
-            .graph
-            .take()
-            .expect("the graph stays in place during a flush");
+        let Some(graph) = self.graph.take() else {
+            return Err(GRAPH_AWAY.to_owned());
+        };
         // Every write mirrors itself as it is made, so a clean flush only
         // has to confirm what its effects wrote -- the graph may still have
         // refused a write the effect already mirrored. A flush that failed

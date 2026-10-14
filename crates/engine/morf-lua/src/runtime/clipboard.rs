@@ -17,7 +17,7 @@ fn execute_with<'gc>(
 ) -> Result<(), String> {
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         Variadic(args),
     );

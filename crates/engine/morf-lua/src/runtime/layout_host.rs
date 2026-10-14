@@ -54,7 +54,7 @@ fn call<'gc>(
 ) -> Result<Vec<LuaValue<'gc>>, String> {
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(function))
+        ctx.fetch(&crate::vm::handler_store::stashed(function)?)
             .into(),
         Variadic(args),
     );
