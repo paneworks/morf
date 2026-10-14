@@ -99,7 +99,7 @@ pub(crate) fn evaluate_effect(
         }
         // A binding whose node was removed during this flush: its effect
         // is waiting to be forgotten and has nothing left to drive.
-        let Some(effect) = state.reactive.effects.get(&token).cloned() else {
+        let Some(effect) = state.reactive.effect(token).cloned() else {
             return Ok(());
         };
         state.tracking.begin_capture();
@@ -158,13 +158,9 @@ pub(crate) fn evaluate_effect(
             let mut state = state.borrow_mut();
             let signal = state
                 .reactive
-                .graph
-                .as_mut()
-                .ok_or("reactive graph unavailable")?
-                .signal(name.clone(), value.clone());
+                .signal(name.clone(), value)
+                .ok_or("reactive graph unavailable")?;
             state.tracking.track_property(key, signal, name);
-            state.reactive.values.insert(signal, value);
-            state.reactive.signals.push(signal);
             signal
         };
         read_signal(state, effect, signal)?;
@@ -180,18 +176,13 @@ pub(crate) fn evaluate_effect(
             let mut state = state.borrow_mut();
             effect
                 .set(
-                    state
-                        .reactive
-                        .graph
-                        .as_ref()
-                        .ok_or("reactive graph unavailable")?,
+                    state.reactive.graph().ok_or("reactive graph unavailable")?,
                     signal,
                     value.clone(),
                 )
                 .map_err(|error| error.to_string())?;
-            state.reactive.values.insert(signal, value);
+            state.reactive.mirror_flush_write(signal, value);
             state.shared.note_write(signal);
-            state.reactive.flush_writes.push(signal);
         }
     }
     state_result?;
@@ -205,11 +196,7 @@ fn read_signal(
     signal: morf_scene::reactive::SignalId,
 ) -> Result<(), String> {
     let state = state.borrow();
-    let graph = state
-        .reactive
-        .graph
-        .as_ref()
-        .ok_or("reactive graph unavailable")?;
+    let graph = state.reactive.graph().ok_or("reactive graph unavailable")?;
     effect
         .get(graph, signal)
         .map(|_| ())

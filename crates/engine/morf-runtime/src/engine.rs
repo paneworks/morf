@@ -95,14 +95,13 @@ impl Engine {
         let initial_lock =
             IpcValue::String(crate::session::SessionLockState::Unlocked.name().to_owned());
         let session_lock = graph.signal("morf.session_lock", initial_lock.clone());
-        let mut values: HashMap<_, _> = clock_values.into_iter().collect();
-        values.insert(session_lock, initial_lock);
+        let mut reactive = crate::reactive::Reactive::new(graph);
+        for (signal, value) in clock_values {
+            reactive.adopt(signal, value);
+        }
+        reactive.adopt(session_lock, initial_lock);
         Self {
-            reactive: crate::reactive::Reactive {
-                values,
-                signals: vec![clocks.seconds, clocks.minutes, clocks.hours, session_lock],
-                ..crate::reactive::Reactive::new(graph)
-            },
+            reactive,
             tracking: Default::default(),
             revisions: Default::default(),
             model_revisions: Default::default(),
@@ -161,8 +160,8 @@ mod tests {
     #[test]
     fn a_fresh_engine_has_its_clocks_and_lock_in_the_graph() {
         let engine = Engine::new();
-        assert_eq!(engine.reactive.signals.len(), 4);
-        assert!(engine.reactive.values.contains_key(&engine.session.lock));
+        assert_eq!(engine.reactive.signal_count(), 4);
+        assert!(engine.reactive.value(engine.session.lock).is_some());
         assert!(engine.scene.roots().is_empty());
         assert!(!engine.tracking.in_handler());
         assert!(!engine.tracking.flush_pending());

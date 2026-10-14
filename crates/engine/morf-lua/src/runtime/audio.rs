@@ -72,15 +72,7 @@ impl Runtime {
                     (host.revision, IpcValue::Integer(rows.revision)),
                 ];
                 for (id, value) in writes {
-                    if state.reactive.values.get(&id) == Some(&value) {
-                        continue;
-                    }
-                    if let Some(graph) = state.reactive.graph.as_mut()
-                        && graph.write(id, value.clone()).is_ok()
-                    {
-                        state.reactive.values.insert(id, value);
-                        moved = true;
-                    }
+                    moved |= state.reactive.update(id, value);
                 }
                 // A binding that counts the devices follows them.
                 for model in changed_models {

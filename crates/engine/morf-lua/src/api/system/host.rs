@@ -156,7 +156,7 @@ pub(crate) fn install_host_service_api<'gc>(
                     state
                         .borrow_mut()
                         .ipc_mut()
-                        .set(name,crate::vm::handler_store::register(ctx.stash(closure)));
+                        .set(name, crate::vm::handler_store::register(ctx.stash(closure)));
                 }
                 LuaValue::Nil => {
                     state.borrow_mut().ipc_mut().remove(&name);
@@ -196,12 +196,8 @@ pub(crate) fn install_host_service_api<'gc>(
         let mut state = state.borrow_mut();
         let revision = state
             .reactive
-            .graph
-            .as_mut()
-            .expect("the graph is not running at install")
-            .signal("screens.revision", IpcValue::Integer(0));
-        state.reactive.values.insert(revision, IpcValue::Integer(0));
-        state.reactive.signals.push(revision);
+            .signal("screens.revision", IpcValue::Integer(0))
+            .expect("the graph is not running at install");
         state.session.screens_revision = Some((revision, 0));
         state.session.screens_signature = screen
             .map(morf_runtime::session::screen_signature)
@@ -233,15 +229,8 @@ pub(crate) fn install_host_service_api<'gc>(
         let mut state = state.borrow_mut();
         let signal = state
             .reactive
-            .graph
-            .as_mut()
-            .expect("the graph is not running at install")
-            .signal("primary", IpcValue::Boolean(true));
-        state
-            .reactive
-            .values
-            .insert(signal, IpcValue::Boolean(true));
-        state.reactive.signals.push(signal);
+            .signal("primary", IpcValue::Boolean(true))
+            .expect("the graph is not running at install");
         state.session.primary = Some((signal, true));
     }
     let primary_state = Rc::clone(&state);

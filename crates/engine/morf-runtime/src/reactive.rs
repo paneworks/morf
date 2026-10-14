@@ -18,6 +18,9 @@ use morf_value::IpcValue;
 
 use crate::Handler;
 
+mod access;
+pub use access::GRAPH_RUNNING;
+
 /// What a flush step fails with when the graph is not where it belongs.
 const GRAPH_AWAY: &str = "reactive graph left its place during a flush";
 
@@ -52,30 +55,30 @@ pub struct Effect {
 pub struct Reactive {
     /// The graph. It stays in place through a flush; only its end takes it
     /// out for a moment.
-    pub graph: Option<Graph<IpcValue>>,
+    graph: Option<Graph<IpcValue>>,
     /// The mirror handlers read signals from.
-    pub values: HashMap<SignalId, IpcValue>,
-    pub signals: Vec<SignalId>,
+    values: HashMap<SignalId, IpcValue>,
+    signals: Vec<SignalId>,
     /// Signals the effects of the flush under way wrote, for the flush to
     /// confirm against the graph when it ends.
-    pub flush_writes: Vec<SignalId>,
+    flush_writes: Vec<SignalId>,
     /// The graph's handle for each effect token, so an effect can be
     /// forgotten when the node it drives is removed.
-    pub effect_ids: HashMap<u64, EffectId>,
+    effect_ids: HashMap<u64, EffectId>,
     /// Effects and signals whose owners are gone, waiting for the graph: a
     /// node removed while a flush runs is forgotten after it.
-    pub dead_effects: Vec<EffectId>,
-    pub dead_signals: Vec<SignalId>,
+    dead_effects: Vec<EffectId>,
+    dead_signals: Vec<SignalId>,
     /// Effects registered while a flush held the graph -- a binding on a
     /// node built inside an effect, or an effect made by a binding. Each is
     /// `(token, name)`, handed to the graph when the flush ends and run by
     /// the flush that follows.
-    pub pending_effects: Vec<(u64, String)>,
+    pending_effects: Vec<(u64, String)>,
     /// A flush is under way.
-    pub flushing: bool,
-    pub effects: HashMap<u64, Effect>,
+    flushing: bool,
+    effects: HashMap<u64, Effect>,
     /// What the effects raised, counted per effect.
-    pub errors: crate::effect_errors::EffectErrors,
+    errors: crate::effect_errors::EffectErrors,
 }
 
 /// A flush under way.

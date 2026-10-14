@@ -166,12 +166,8 @@ pub(crate) fn install_toplevels_api<'gc>(
         let mut state = state.borrow_mut();
         let revision = state
             .reactive
-            .graph
-            .as_mut()
-            .expect("the graph is not running at install")
-            .signal("toplevels.revision", IpcValue::Integer(0));
-        state.reactive.values.insert(revision, IpcValue::Integer(0));
-        state.reactive.signals.push(revision);
+            .signal("toplevels.revision", IpcValue::Integer(0))
+            .expect("the graph is not running at install");
         state.toplevels = Some(ToplevelHost {
             windows: Vec::new(),
             model: Rc::new(RefCell::new(ListModel::default())),

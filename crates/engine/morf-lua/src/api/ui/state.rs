@@ -82,17 +82,10 @@ pub(crate) fn build<'gc>(
                     Some(prefix) => {
                         register_reloadable_value(&mut state, format!("{prefix}.{key}"), value)?.0
                     }
-                    None => {
-                        let id = state
-                            .reactive
-                            .graph
-                            .as_mut()
-                            .ok_or("reactive graph is already running")?
-                            .signal(name, value.clone());
-                        state.reactive.values.insert(id, value);
-                        state.reactive.signals.push(id);
-                        id
-                    }
+                    None => state
+                        .reactive
+                        .signal(name, value)
+                        .ok_or(morf_runtime::reactive::GRAPH_RUNNING)?,
                 };
                 fields.scalars.insert(key, id);
             }
@@ -144,9 +137,9 @@ pub(crate) fn install_state_api<'gc>(
                         .rev()
                         .find(|(signal, _)| *signal == id)
                         .map(|(_, value)| value.clone())
-                        .or_else(|| state.reactive.values.get(&id).cloned())
+                        .or_else(|| state.reactive.value(id).cloned())
                 } else {
-                    state.reactive.values.get(&id).cloned()
+                    state.reactive.value(id).cloned()
                 }
                 .ok_or_else(|| HostError("stale state field".to_owned()))?;
                 stack.replace(ctx, value.to_lua(ctx));
@@ -182,7 +175,7 @@ pub(crate) fn install_state_api<'gc>(
                     // one on show; the frames carry it (`advance_theme_fades`).
                     if let (Some((duration, easing)), IpcValue::Color(to)) =
                         (fields.transition, &value)
-                        && let Some(IpcValue::Color(from)) = state.reactive.values.get(&id).cloned()
+                        && let Some(IpcValue::Color(from)) = state.reactive.value(id).cloned()
                         && !duration.is_zero()
                         // Nothing shown yet: no fade, the colour is just set.
                         && state.animation.ticked
@@ -215,14 +208,7 @@ pub(crate) fn install_state_api<'gc>(
                         active.writes.push((id, value));
                         return Ok(CallbackReturn::Return);
                     }
-                    state
-                        .reactive
-                        .graph
-                        .as_mut()
-                        .ok_or_else(|| HostError("reactive graph is already running".into()))?
-                        .write(id, value.clone())
-                        .map_err(|error| HostError(error.to_string()))?;
-                    state.reactive.values.insert(id, value);
+                    state.reactive.write(id, value).map_err(HostError)?;
                     if state.tracking.in_handler() {
                         state.tracking.defer_flush();
                         return Ok(CallbackReturn::Return);

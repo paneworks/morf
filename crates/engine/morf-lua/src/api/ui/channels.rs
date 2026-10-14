@@ -73,13 +73,8 @@ impl Runtime {
                     writes.push((*signal, IpcValue::Integer(revision as i64)));
                 }
             }
-            if let Some(graph) = state.engine.reactive.graph.as_mut() {
-                for (signal, value) in writes {
-                    if graph.write(signal, value.clone()).is_ok() {
-                        state.engine.reactive.values.insert(signal, value);
-                        flush = true;
-                    }
-                }
+            for (signal, value) in writes {
+                flush |= state.engine.reactive.try_write(signal, value);
             }
             // A path on show whose channel moved: a frame.
             let mut shown = false;
@@ -132,15 +127,13 @@ fn watch(state: &mut ReactiveState, channel: &Arc<Channel>) -> Result<SignalId, 
         return Ok(*signal);
     }
     let revision = channel.revision();
-    let value = IpcValue::Integer(revision as i64);
     let signal = state
         .reactive
-        .graph
-        .as_mut()
-        .ok_or_else(|| HostError("reactive graph is already running".to_owned()))?
-        .signal(format!("channel.{}", channel.id()), value.clone());
-    state.reactive.values.insert(signal, value);
-    state.reactive.signals.push(signal);
+        .signal(
+            format!("channel.{}", channel.id()),
+            IpcValue::Integer(revision as i64),
+        )
+        .ok_or_else(|| HostError(morf_runtime::reactive::GRAPH_RUNNING.to_owned()))?;
     state
         .channels
         .watched

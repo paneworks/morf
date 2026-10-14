@@ -44,12 +44,8 @@ pub(crate) fn install_prefers_api<'gc>(
         let mut state = state.borrow_mut();
         let id = state
             .reactive
-            .graph
-            .as_mut()
-            .expect("the graph is not running at install")
-            .signal("prefers.accent_color", IpcValue::Nil);
-        state.reactive.values.insert(id, IpcValue::Nil);
-        state.reactive.signals.push(id);
+            .signal("prefers.accent_color", IpcValue::Nil)
+            .expect("the graph is not running at install");
         fields.scalars.insert("accent_color".to_owned(), id);
     }
     let id = |name: &str| fields.scalars[name];
@@ -63,7 +59,7 @@ pub(crate) fn install_prefers_api<'gc>(
         overridden: std::collections::HashSet::new(),
     };
     let reduced = matches!(
-        state.borrow().reactive.values.get(&prefers.reduced_motion),
+        state.borrow().reactive.value(prefers.reduced_motion),
         Some(IpcValue::Boolean(true))
     );
     let mut state = state.borrow_mut();

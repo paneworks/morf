@@ -52,7 +52,7 @@ pub(crate) fn run_destroyed_hooks(
 ) {
     {
         let mut state = state.borrow_mut();
-        if state.reactive.flushing || !state.destroy_hooks.begin() {
+        if state.reactive.is_flushing() || !state.destroy_hooks.begin() {
             return;
         }
         state.tracking.enter_handler();
@@ -129,7 +129,7 @@ fn flush_graph(
     // repeats counted, so the callers of a flush do not log them again.
     match result {
         Ok(errors) => {
-            for line in state.reactive.errors.note(&errors) {
+            for line in state.reactive.errors_mut().note(&errors) {
                 state.log(LogLevel::Warn, line);
             }
             Ok(())
@@ -148,9 +148,9 @@ pub(crate) fn flush_status(
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
-    state.borrow_mut().reactive.errors.take_last();
+    state.borrow_mut().reactive.errors_mut().take_last();
     flush_reactive(state, ctx, limits)?;
-    match state.borrow_mut().reactive.errors.take_last() {
+    match state.borrow_mut().reactive.errors_mut().take_last() {
         Some(message) => Err(message),
         None => Ok(()),
     }
@@ -165,7 +165,7 @@ fn effect_label(
     pending: &morf_scene::reactive::PendingEffect,
 ) -> String {
     let state = state.borrow();
-    let Some(effect) = state.reactive.effects.get(&pending.token()) else {
+    let Some(effect) = state.reactive.effect(pending.token()) else {
         return format!("effect {}", pending.name());
     };
     let origin = match crate::vm::handler_store::stashed(&effect.handler) {

@@ -67,12 +67,8 @@ impl SharedValues {
             None => (initial, 0),
         };
         let signal = reactive
-            .graph
-            .as_mut()
-            .ok_or_else(|| "reactive graph is already running".to_owned())?
-            .signal(format!("shared.{name}"), value.clone());
-        reactive.values.insert(signal, value);
-        reactive.signals.push(signal);
+            .signal(format!("shared.{name}"), value)
+            .ok_or(crate::reactive::GRAPH_RUNNING)?;
         self.by_name.insert(name.clone(), (signal, seen));
         self.by_signal.insert(signal, name);
         Ok(signal)
@@ -89,7 +85,7 @@ impl SharedValues {
             let mut values = lock();
             for signal in dirty {
                 let (Some(name), Some(value)) =
-                    (self.by_signal.get(&signal), reactive.values.get(&signal))
+                    (self.by_signal.get(&signal), reactive.value(signal))
                 else {
                     continue;
                 };
@@ -120,15 +116,7 @@ impl SharedValues {
         };
         let mut changed = false;
         for (signal, value) in incoming {
-            if reactive.values.get(&signal) == Some(&value) {
-                continue;
-            }
-            if let Some(graph) = reactive.graph.as_mut()
-                && graph.write(signal, value.clone()).is_ok()
-            {
-                reactive.values.insert(signal, value);
-                changed = true;
-            }
+            changed |= reactive.update(signal, value);
         }
         (changed, published)
     }
@@ -146,10 +134,7 @@ mod tests {
     use morf_scene::reactive::Graph;
 
     fn copy() -> (Reactive, SharedValues) {
-        let reactive = Reactive {
-            graph: Some(Graph::default()),
-            ..Reactive::default()
-        };
+        let reactive = Reactive::new(Graph::default());
         (reactive, SharedValues::default())
     }
 
@@ -169,12 +154,12 @@ mod tests {
                 .unwrap(),
             a_signal
         );
-        a_reactive.values.insert(a_signal, IpcValue::Integer(7));
+        a_reactive.mirror(a_signal, IpcValue::Integer(7));
         a.note_write(a_signal);
         assert!(a.sync(&mut a_reactive).1, "a published");
         let (changed, published) = b.sync(&mut b_reactive);
         assert!(changed && !published);
-        assert_eq!(b_reactive.values[&b_signal], IpcValue::Integer(7));
+        assert_eq!(b_reactive.value(b_signal), Some(&IpcValue::Integer(7)));
         assert_eq!(b.sync(&mut b_reactive), (false, false));
     }
 }

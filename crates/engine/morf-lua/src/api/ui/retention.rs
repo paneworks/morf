@@ -270,7 +270,7 @@ pub(crate) fn install_retention_api<'gc>(
         let state = Rc::clone(&state);
         move |ctx, _, mut stack| {
             let handle: UserRef<EffectHandleToken> = stack.consume(ctx)?;
-            let alive = state.borrow().reactive.effects.contains_key(&handle.token);
+            let alive = state.borrow().reactive.effect(handle.token).is_some();
             stack.replace(ctx, alive);
             Ok(CallbackReturn::Return)
         }
@@ -302,7 +302,7 @@ pub(crate) fn install_retention_api<'gc>(
                     return Err(HostError("effect owner is a removed node".to_owned()).into());
                 }
                 let token = state.tracking.next_effect_token();
-                state.reactive.effects.insert(
+                state.reactive.add_effect(
                     token,
                     LuaEffect {
                         handler: crate::vm::handler_store::register(ctx.stash(closure)),

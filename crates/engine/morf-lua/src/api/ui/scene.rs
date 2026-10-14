@@ -52,17 +52,11 @@ pub(crate) fn bump_property_signal(
     let value = IpcValue::Integer(state.revisions.bump_property());
     if let Some(active) = state.tracking.capture() {
         active.writes.push((signal, value.clone()));
+        state.reactive.mirror(signal, value);
+        Ok(())
     } else {
-        state
-            .reactive
-            .graph
-            .as_mut()
-            .ok_or_else(|| "reactive graph is already running".to_owned())?
-            .write(signal, value.clone())
-            .map_err(|error| error.to_string())?;
+        state.reactive.write(signal, value)
     }
-    state.reactive.values.insert(signal, value);
-    Ok(())
 }
 
 pub(crate) fn assign_scene_property(

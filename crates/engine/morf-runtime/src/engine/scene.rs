@@ -36,7 +36,7 @@ impl Engine {
     /// Hands the graph what removed nodes left behind, when it is here to
     /// take them; while a flush holds it they wait for the next call.
     pub fn collect_graph_garbage(&mut self) {
-        if self.reactive.flushing {
+        if self.reactive.is_flushing() {
             return;
         }
         self.model_revisions.collect_dead(&mut self.reactive);
@@ -158,12 +158,8 @@ impl Engine {
         };
         let id = self
             .reactive
-            .graph
-            .as_mut()
-            .ok_or_else(|| "reactive graph is already running".to_owned())?
-            .signal(format!("reloadable.{name}"), value.clone());
-        self.reactive.values.insert(id, value);
-        self.reactive.signals.push(id);
+            .signal(format!("reloadable.{name}"), value)
+            .ok_or(crate::reactive::GRAPH_RUNNING)?;
         self.lifecycle.keep(name, id);
         Ok((id, restored))
     }

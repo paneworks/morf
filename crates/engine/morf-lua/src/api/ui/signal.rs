@@ -25,9 +25,9 @@ pub(crate) fn install_signal_api<'gc>(
                     .rev()
                     .find(|(id, _)| *id == signal.id)
                     .map(|(_, value)| value.clone())
-                    .or_else(|| state.reactive.values.get(&signal.id).cloned())
+                    .or_else(|| state.reactive.value(signal.id).cloned())
             } else {
-                state.reactive.values.get(&signal.id).cloned()
+                state.reactive.value(signal.id).cloned()
             }
             .ok_or_else(|| HostError("stale reactive signal".to_owned()))?;
             stack.replace(ctx, value.to_lua(ctx));
@@ -47,15 +47,7 @@ pub(crate) fn install_signal_api<'gc>(
                     stack.replace(ctx, true);
                     return Ok(CallbackReturn::Return);
                 }
-                let graph = state
-                    .reactive
-                    .graph
-                    .as_mut()
-                    .ok_or_else(|| HostError("reactive graph is already running".to_owned()))?;
-                graph
-                    .write(signal.id, value.clone())
-                    .map_err(|error| HostError(error.to_string()))?;
-                state.reactive.values.insert(signal.id, value);
+                state.reactive.write(signal.id, value).map_err(HostError)?;
                 state.shared.note_write(signal.id);
                 // Inside a handler the write is enough: the graph is flushed
                 // once, when the handler returns, however many writes it made.
@@ -85,15 +77,10 @@ pub(crate) fn install_signal_api<'gc>(
             let value = IpcValue::from_lua_deep(ctx, value).map_err(HostError)?;
             let id = {
                 let mut state = state.borrow_mut();
-                let id = state
+                state
                     .reactive
-                    .graph
-                    .as_mut()
-                    .ok_or_else(|| HostError("reactive graph is already running".to_owned()))?
-                    .signal(name, value.clone());
-                state.reactive.values.insert(id, value);
-                state.reactive.signals.push(id);
-                id
+                    .signal(name, value)
+                    .ok_or_else(|| HostError(morf_runtime::reactive::GRAPH_RUNNING.to_owned()))?
             };
             let userdata = UserData::new_static(&ctx, SignalToken { id });
             userdata.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));
@@ -144,9 +131,9 @@ pub(crate) fn install_signal_api<'gc>(
                         .rev()
                         .find(|(signal, _)| *signal == id)
                         .map(|(_, value)| value.clone())
-                        .or_else(|| state.reactive.values.get(&id).cloned())
+                        .or_else(|| state.reactive.value(id).cloned())
                 } else {
-                    state.reactive.values.get(&id).cloned()
+                    state.reactive.value(id).cloned()
                 }
                 .ok_or_else(|| HostError("stale persistent property".into()))?
             };
@@ -172,8 +159,7 @@ pub(crate) fn install_signal_api<'gc>(
                 let mut state = state.borrow_mut();
                 let current = state
                     .reactive
-                    .values
-                    .get(&id)
+                    .value(id)
                     .ok_or_else(|| HostError("stale persistent property".into()))?;
                 if std::mem::discriminant(current) != std::mem::discriminant(&value) {
                     return Err(HostError(format!(
@@ -185,14 +171,7 @@ pub(crate) fn install_signal_api<'gc>(
                     active.writes.push((id, value));
                     return Ok(CallbackReturn::Return);
                 }
-                state
-                    .reactive
-                    .graph
-                    .as_mut()
-                    .ok_or_else(|| HostError("reactive graph is already running".into()))?
-                    .write(id, value.clone())
-                    .map_err(|error| HostError(error.to_string()))?;
-                state.reactive.values.insert(id, value);
+                state.reactive.write(id, value).map_err(HostError)?;
             }
             replace_status(ctx, &mut stack, flush_status(&state, ctx, limits));
             Ok(CallbackReturn::Return)

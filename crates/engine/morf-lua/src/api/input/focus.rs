@@ -122,11 +122,9 @@ impl Runtime {
                 if state.scene.contains(old)
                     && state.scene.element(old).ok() != Some(Element::TextInput)
                 {
-                    state.editing.owe(
-                        old,
-                        UiEvent::FocusChanged,
-                        vec![IpcValue::Boolean(false)],
-                    );
+                    state
+                        .editing
+                        .owe(old, UiEvent::FocusChanged, vec![IpcValue::Boolean(false)]);
                 }
             }
             match node {

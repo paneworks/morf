@@ -256,8 +256,8 @@ pub(crate) fn install_shell_api<'gc>(
     ] {
         let directory_state = Rc::clone(&state);
         let directory = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-            let root =
-                shell_storage_dir(directory_state.borrow().shell_root(), kind).map_err(HostError)?;
+            let root = shell_storage_dir(directory_state.borrow().shell_root(), kind)
+                .map_err(HostError)?;
             stack.replace(ctx, root.to_string_lossy().as_ref());
             Ok(CallbackReturn::Return)
         });

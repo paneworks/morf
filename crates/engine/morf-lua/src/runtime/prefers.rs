@@ -11,18 +11,10 @@ use crate::{
 
 /// Writes one signal from the host side; the caller flushes.
 fn write_signal(state: &mut ReactiveState, id: SignalId, value: IpcValue) -> Result<(), String> {
-    if state.reactive.values.get(&id) == Some(&value) {
+    if state.reactive.value(id) == Some(&value) {
         return Ok(());
     }
-    state
-        .reactive
-        .graph
-        .as_mut()
-        .ok_or_else(|| "reactive graph is already running".to_owned())?
-        .write(id, value.clone())
-        .map_err(|error| error.to_string())?;
-    state.reactive.values.insert(id, value);
-    Ok(())
+    state.reactive.write(id, value)
 }
 
 impl Runtime {

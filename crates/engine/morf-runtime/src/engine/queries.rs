@@ -120,12 +120,7 @@ impl Engine {
         let writes = crate::animation::fades::advance(&mut self.animation.fades, delta);
         let moved = writes.len();
         for (signal, colour) in writes {
-            let value = IpcValue::Color(colour);
-            if let Some(graph) = self.reactive.graph.as_mut()
-                && graph.write(signal, value.clone()).is_ok()
-            {
-                self.reactive.values.insert(signal, value);
-            }
+            self.reactive.try_write(signal, IpcValue::Color(colour));
         }
         moved
     }

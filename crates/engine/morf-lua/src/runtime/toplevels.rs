@@ -70,11 +70,7 @@ impl Runtime {
                     .map(|(_, callback)| callback.clone())
                     .collect::<Vec<_>>()
             };
-            if let Some(graph) = state.reactive.graph.as_mut()
-                && graph.write(revision, value.clone()).is_ok()
-            {
-                state.reactive.values.insert(revision, value);
-            }
+            state.reactive.try_write(revision, value);
             (change.to_scene(), listeners)
         };
         if let Err(message) = self

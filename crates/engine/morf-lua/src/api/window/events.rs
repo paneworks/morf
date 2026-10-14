@@ -50,26 +50,18 @@ pub(crate) fn register_window_size(state: &mut ReactiveState, id: u64) {
     else {
         return;
     };
-    let Some(graph) = state.reactive.graph.as_mut() else {
-        return;
-    };
-    let width = graph.signal(
+    let Some(width) = state.reactive.signal(
         format!("window.{id}.width"),
         IpcValue::Integer(i64::from(size.0)),
-    );
-    let height = graph.signal(
+    ) else {
+        return;
+    };
+    let Some(height) = state.reactive.signal(
         format!("window.{id}.height"),
         IpcValue::Integer(i64::from(size.1)),
-    );
-    state
-        .reactive
-        .values
-        .insert(width, IpcValue::Integer(i64::from(size.0)));
-    state
-        .reactive
-        .values
-        .insert(height, IpcValue::Integer(i64::from(size.1)));
-    state.reactive.signals.extend([width, height]);
+    ) else {
+        return;
+    };
     state.windows.window_sizes.insert(
         id,
         WindowSize {
@@ -135,11 +127,9 @@ pub(crate) fn destroy_window_surface(state: &mut ReactiveState, id: u64) -> Opti
         .retain(|(window, _), _| *window != id);
     state.windows.popup_node_anchors.remove(&id);
     if let Some(size) = state.windows.window_sizes.remove(&id) {
-        for signal in [size.width, size.height] {
-            state.reactive.values.remove(&signal);
-            state.reactive.signals.retain(|other| *other != signal);
-            state.reactive.dead_signals.push(signal);
-        }
+        state
+            .reactive
+            .forget_signals([size.width, size.height].into_iter().collect());
     }
     crate::runtime::helpers::remove_scene_subtree(state, window.root);
     on_closed.filter(|_| window.visible)
@@ -253,17 +243,9 @@ impl Runtime {
             let size = *size;
             let mut changed = false;
             for (signal, value) in [(size.width, width), (size.height, height)] {
-                let value = IpcValue::Integer(i64::from(value));
-                if state.reactive.values.get(&signal) == Some(&value) {
-                    continue;
-                }
-                let Some(graph) = state.reactive.graph.as_mut() else {
-                    continue;
-                };
-                if graph.write(signal, value.clone()).is_ok() {
-                    state.reactive.values.insert(signal, value);
-                    changed = true;
-                }
+                changed |= state
+                    .reactive
+                    .update(signal, IpcValue::Integer(i64::from(value)));
             }
             changed
         };

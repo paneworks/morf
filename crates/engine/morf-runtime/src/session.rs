@@ -60,19 +60,6 @@ pub struct Session {
     pub primary_callbacks: Vec<Handler>,
 }
 
-/// Writes a signal the host set, through the graph when it is in place.
-fn write(reactive: &mut Reactive, signal: SignalId, value: IpcValue) -> Result<(), String> {
-    let written = match reactive.graph.as_mut() {
-        Some(graph) => graph
-            .write(signal, value.clone())
-            .map(|_| ())
-            .map_err(|error| error.to_string()),
-        None => Ok(()),
-    };
-    reactive.values.insert(signal, value);
-    written
-}
-
 impl Session {
     pub fn new(lock: SignalId) -> Self {
         Self {
@@ -88,7 +75,7 @@ impl Session {
 
     /// Where the lock stands, as last recorded.
     pub fn lock_state(&self, reactive: &Reactive) -> SessionLockState {
-        match reactive.values.get(&self.lock) {
+        match reactive.value(self.lock) {
             Some(IpcValue::String(name)) => {
                 SessionLockState::parse(name).unwrap_or(SessionLockState::Unlocked)
             }
@@ -108,7 +95,7 @@ impl Session {
             return None;
         }
         let value = IpcValue::String(next.name().to_owned());
-        let written = write(reactive, self.lock, value.clone());
+        let written = reactive.force(self.lock, value.clone());
         Some((value, written))
     }
 
@@ -131,7 +118,7 @@ impl Session {
         let (signal, _) = self.primary?;
         self.primary = Some((signal, primary));
         let value = IpcValue::Boolean(primary);
-        let written = write(reactive, signal, value.clone());
+        let written = reactive.force(signal, value.clone());
         Some((value, written))
     }
 
@@ -148,12 +135,7 @@ impl Session {
         };
         let count = count + 1;
         self.screens_revision = Some((signal, count));
-        let value = IpcValue::Integer(count);
-        if let Some(graph) = reactive.graph.as_mut()
-            && graph.write(signal, value.clone()).is_ok()
-        {
-            reactive.values.insert(signal, value);
-        }
+        reactive.try_write(signal, IpcValue::Integer(count));
         true
     }
 }
@@ -167,12 +149,7 @@ impl Session {
         };
         let count = count + 1;
         self.screens_revision = Some((signal, count));
-        let value = IpcValue::Integer(count);
-        if let Some(graph) = reactive.graph.as_mut()
-            && graph.write(signal, value.clone()).is_ok()
-        {
-            reactive.values.insert(signal, value);
-        }
+        reactive.try_write(signal, IpcValue::Integer(count));
     }
 }
 
@@ -206,11 +183,7 @@ mod tests {
         let mut session = Session::new(lock);
         session.primary = Some((primary, true));
         session.screens_revision = Some((screens, 0));
-        let reactive = Reactive {
-            graph: Some(graph),
-            ..Reactive::default()
-        };
-        (reactive, session)
+        (Reactive::new(graph), session)
     }
 
     #[test]

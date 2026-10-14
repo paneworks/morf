@@ -22,7 +22,7 @@ pub(crate) fn register_property_binding<'gc>(
     {
         let mut state = state.borrow_mut();
         let token = state.tracking.next_effect_token();
-        state.reactive.effects.insert(
+        state.reactive.add_effect(
             token,
             LuaEffect {
                 handler: crate::vm::handler_store::register(ctx.stash(closure)),
@@ -49,13 +49,12 @@ pub(crate) fn rebind_property<'gc>(
         let mut state = state.borrow_mut();
         let old = state
             .reactive
-            .effects
-            .iter()
+            .effects()
             .filter(|(_, effect)| {
                 matches!(&effect.sink, Some(EffectSink::Property(sink))
                     if sink.node == node && sink.property == property)
             })
-            .map(|(token, _)| *token)
+            .map(|(token, _)| token)
             .collect::<Vec<_>>();
         for token in old {
             crate::api::ui::retention::dispose_effect(&mut state, token);
@@ -114,7 +113,7 @@ fn register_node_binding<'gc>(
     {
         let mut state = state.borrow_mut();
         let token = state.tracking.next_effect_token();
-        state.reactive.effects.insert(
+        state.reactive.add_effect(
             token,
             LuaEffect {
                 handler: crate::vm::handler_store::register(ctx.stash(closure)),
