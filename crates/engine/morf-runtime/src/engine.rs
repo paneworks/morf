@@ -65,7 +65,7 @@ pub struct Engine {
     /// Each virtualised view, by the node that shows it.
     views: crate::views::Views,
     /// Every timer and `Timer` node, and the clock they run on.
-    pub timers: crate::timers::Timers,
+    timers:crate::timers::Timers,
     /// Motion beside the scene's own: `on_finished` handlers, loops,
     /// follows, theme fades and exits.
     pub animation: crate::animation::Animation,

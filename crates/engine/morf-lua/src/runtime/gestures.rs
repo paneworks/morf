@@ -45,7 +45,7 @@ impl Runtime {
         point: EventPoint,
     ) -> bool {
         let mut state = self.reactive.borrow_mut();
-        let now = clock(state.timers.virtual_now());
+        let now = clock(state.timers().virtual_now());
         state.gestures_mut().watch(now, node, event, point)
     }
 
@@ -59,7 +59,7 @@ impl Runtime {
     ) -> bool {
         let completed = {
             let mut state = self.reactive.borrow_mut();
-            let now = clock(state.timers.virtual_now());
+            let now = clock(state.timers().virtual_now());
             state.gestures_mut().finish(now, node, event, point)
         };
         let (event, args) = match completed {
@@ -107,7 +107,7 @@ impl Runtime {
     pub(crate) fn poll_gestures(&mut self) -> bool {
         let due = {
             let mut state = self.reactive.borrow_mut();
-            let now = clock(state.timers.virtual_now());
+            let now = clock(state.timers().virtual_now());
             state.engine.take_long_press(now)
         };
         match due {

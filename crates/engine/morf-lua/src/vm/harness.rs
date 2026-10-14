@@ -25,25 +25,25 @@ impl Runtime {
     /// `ui.Timer` it makes is on that clock. Animations need nothing: they
     /// already advance by the delta [`Runtime::tick_animations`] is given.
     pub fn use_virtual_clock(&mut self) {
-        self.reactive.borrow_mut().timers.use_virtual_clock();
+        self.reactive.borrow_mut().timers_mut().use_virtual_clock();
     }
 
     /// The virtual clock's reading, or nothing when timers run off the wall.
     pub fn virtual_clock(&self) -> Option<Duration> {
-        self.reactive.borrow().timers.virtual_now()
+        self.reactive.borrow().timers().virtual_now()
     }
 
     /// Moves the virtual clock forward. Timers that came due fire on the
     /// next [`Runtime::poll_services`], exactly as a wall timer's tick waits
     /// for the loop to come round.
     pub fn advance_virtual_clock(&mut self, by: Duration) {
-        self.reactive.borrow_mut().timers.advance(by);
+        self.reactive.borrow_mut().timers_mut().advance(by);
     }
 
     /// When the earliest virtual timer comes due, so a runner advancing a
     /// long way can stop at each one rather than stepping past it.
     pub fn next_virtual_deadline(&self) -> Option<Duration> {
-        self.reactive.borrow().timers.next_virtual_deadline()
+        self.reactive.borrow().timers().next_virtual_deadline()
     }
 
     /// Replaces `morf.args`, `morf.options` and `morf.operands` with another

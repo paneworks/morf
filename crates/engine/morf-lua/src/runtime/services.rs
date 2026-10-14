@@ -182,9 +182,9 @@ fn timer_still_due(
     node: Option<NodeHandle>,
     repeat: bool,
 ) -> bool {
-    let settled = state.timers.settle(id, repeat);
+    let settled = state.timers_mut().settle(id, repeat);
     if let Some(node) = node {
-        if !state.timers.has_node_handler(node) {
+        if !state.timers().has_node_handler(node) {
             return false;
         }
         let Ok(running) = state.scene.bool_value(node, "running") else {

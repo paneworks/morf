@@ -268,14 +268,14 @@ pub(crate) fn install_timer_api<'gc>(
         let token: UserRef<TimerToken> = stack.consume(ctx)?;
         // Whether there was anything to stop: a second cancel, or a cancel of
         // a one-shot that already fired, is not an error but is worth knowing.
-        let stopped = cancel_state.borrow_mut().timers.cancel(token.id);
+        let stopped = cancel_state.borrow_mut().timers_mut().cancel(token.id);
         stack.replace(ctx, stopped);
         Ok(CallbackReturn::Return)
     });
     let active_state = Rc::clone(&state);
     let timer_active = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let token: UserRef<TimerToken> = stack.consume(ctx)?;
-        let active = active_state.borrow().timers.is_active(token.id);
+        let active = active_state.borrow().timers().is_active(token.id);
         stack.replace(ctx, active);
         Ok(CallbackReturn::Return)
     });
@@ -309,11 +309,11 @@ pub(crate) fn install_timer_api<'gc>(
         let interval = Duration::from_secs_f64(milliseconds / 1_000.0);
         let mut state = timer_state.borrow_mut();
         let source = state
-            .timers
+            .timers()
             .source(interval)
             .map_err(|error| HostError(error.to_string()))?;
-        let id = state.timers.next_id();
-        state.timers.add(Timer {
+        let id = state.timers_mut().next_id();
+        state.timers_mut().add(Timer {
             id,
             source,
             handler: crate::vm::handler_store::register(ctx.stash(callback)),

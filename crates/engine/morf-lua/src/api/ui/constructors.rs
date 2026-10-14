@@ -179,7 +179,7 @@ pub(crate) fn timer_constructor<'gc>(
         };
         state
             .borrow_mut()
-            .timers
+            .timers_mut()
             .set_origin(node, std::rc::Rc::clone(&origin));
         if running {
             if !interval.is_finite() || interval <= 0.0 {
@@ -190,13 +190,13 @@ pub(crate) fn timer_constructor<'gc>(
             let interval = Duration::from_secs_f64(interval / 1_000.0);
             let source = state
                 .borrow()
-                .timers
+                .timers()
                 .source(interval)
                 .map_err(|error| HostError(error.to_string()))?;
             let handler = crate::vm::handler_store::register(callback);
             let mut state = state.borrow_mut();
-            let id = state.timers.next_id();
-            state.timers.add(Timer {
+            let id = state.timers_mut().next_id();
+            state.timers_mut().add(Timer {
                 id,
                 source,
                 handler: handler.clone(),
@@ -205,11 +205,11 @@ pub(crate) fn timer_constructor<'gc>(
                 node: Some(node),
                 origin,
             });
-            state.timers.set_node_handler(node, handler);
+            state.timers_mut().set_node_handler(node, handler);
         } else if let Some(callback) = callback {
             state
                 .borrow_mut()
-                .timers
+                .timers_mut()
                 .set_node_handler(node, crate::vm::handler_store::register(callback));
         }
         stack.replace(ctx, node_userdata(ctx, Rc::clone(&state), node));

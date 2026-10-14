@@ -39,7 +39,7 @@ pub(super) fn drain(state: &mut ReactiveState, collected: &mut Collected) {
         transform_callbacks,
         ..
     } = collected;
-    for timer in state.timers.collect_due() {
+    for timer in state.timers_mut().collect_due() {
         if wake_log_wanted() {
             eprintln!(
                 "{} morf: timer {} fired ({:.0} ms{})",
