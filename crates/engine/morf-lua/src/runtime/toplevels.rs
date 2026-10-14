@@ -54,7 +54,7 @@ impl Runtime {
             // one a view follows is drained by the view.
             let followed = state
                 .engine
-                .views
+                .views()
                 .values()
                 .any(|view| std::rc::Rc::ptr_eq(&view.model, &host.model));
             if !followed {

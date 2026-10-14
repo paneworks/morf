@@ -62,7 +62,8 @@ pub struct Engine {
     states: crate::states::States,
     /// The verbs answered over IPC.
     ipc: crate::ipc::IpcVerbs,
-    pub views: crate::views::Views,
+    /// Each virtualised view, by the node that shows it.
+    views: crate::views::Views,
     /// Every timer and `Timer` node, and the clock they run on.
     pub timers: crate::timers::Timers,
     /// Motion beside the scene's own: `on_finished` handlers, loops,

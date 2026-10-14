@@ -191,7 +191,7 @@ pub(crate) fn construct_view<'gc>(
         drop(model);
         if let Some(mut view) = configured_view {
             let _ = view.sync(&model_handle.borrow(), &[]);
-            state.borrow_mut().views.insert(
+            state.borrow_mut().views_mut().insert(
                 node,
                 VirtualView {
                     model: model_handle,

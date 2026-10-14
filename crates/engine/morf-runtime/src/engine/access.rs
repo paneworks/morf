@@ -44,4 +44,6 @@ subsystems! {
     transform_tracker, transform_tracker_mut: morf_layout::TransformTracker;
     /// Presses under way that may become gestures.
     gestures, gestures_mut: crate::gestures::Gestures;
+    /// Each virtualised view, by the node that shows it.
+    views, views_mut: crate::views::Views;
 }

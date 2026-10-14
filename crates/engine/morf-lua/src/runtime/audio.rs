@@ -60,7 +60,7 @@ impl Runtime {
                     // forever; one a view follows is drained by the view.
                     let followed = state
                         .engine
-                        .views
+                        .views()
                         .values()
                         .any(|view| Rc::ptr_eq(&view.model, model));
                     if !followed {
