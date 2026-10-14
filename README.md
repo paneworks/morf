@@ -70,6 +70,16 @@ nixVulkanIntel morf render shell.lua -o shell.png --surface screen
 morf test examples/demos/tests/counter_spec.lua
 ```
 
+## Release tarballs
+
+The `morf-linux-*.tar.gz` assets on a GitHub release hold only the `morf`
+executable and its Lua library. They do not include the `morf-keyring` helper
+or the libraries morf opens at run time (Vulkan loader, PipeWire, PAM, udev);
+those come from the host distribution, and `tools/keyring/build.sh` builds the
+helper against the host's GCR. For a complete, self-contained install on any
+distribution, use the Nix packages below: `.#morf` wraps the engine with the
+keyring helper and every runtime library.
+
 ## Nix packages and binary cache
 
 The flake provides Linux x86-64 and ARM64 packages:
