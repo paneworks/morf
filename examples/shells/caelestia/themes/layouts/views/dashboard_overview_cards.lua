@@ -288,8 +288,8 @@ return function(model, ROW1, ROW2, GAP)
         return last
       end
     end)()
-    local function button(icon, action, id, wide)
-      return P.button { id = id, icon = icon, label = "", width = wide and 64 or 44, height = 34,
+    local function button(icon, action, id, name, wide)
+      return P.button { id = id, icon = icon, label = "", accessible_name = name, width = wide and 64 or 44, height = 34,
         on_clicked = function() model.media_control(action) end }
     end
     -- What sits under (or beside) the cover: ~250 high.
@@ -325,9 +325,10 @@ return function(model, ROW1, ROW2, GAP)
       line { text = field("album", "") },
       line { text = field("artist", ""), color = kit.ink("hi") },
       ui.Row { gap = 6, align = "center",
-        button("skip_previous", "previous", "media-previous"),
-        button(function() return active().playing and "pause" or "play_arrow" end, "play_pause", "media-play", true),
-        button("skip_next", "next", "media-next"),
+        button("skip_previous", "previous", "media-previous", "Previous"),
+        button(function() return active().playing and "pause" or "play_arrow" end, "play_pause", "media-play",
+          function() return active().playing and "Pause" or "Play" end, true),
+        button("skip_next", "next", "media-next", "Next"),
       },
       L.item { width = IW, height = 8 + L.lh(S.micro),
         kit.decor("ticks", { width = IW, length = IW, count = 34, major = 5, size = 6, color = kit.stroke("idle") }),
