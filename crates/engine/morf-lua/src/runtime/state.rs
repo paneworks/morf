@@ -114,8 +114,7 @@ pub(crate) struct ReactiveState {
     /// Theme token files being watched.
     pub(crate) theme_sources: Vec<ThemeSource>,
     /// `morf.terminal.listen`: terminals of our own hearing colour sequences.
-    pub(crate) palette_listeners: Vec<crate::api::media::terminal_palette::PaletteListener>,
-    pub(crate) next_palette_listener: u64,
+    pub(crate) palettes: crate::api::media::terminal_palette::PaletteListeners,
     /// `morf.prefers` and where its answers come from.
     pub(crate) prefers: Option<Prefers>,
     /// `morf.audio`, installed with the runtime and started on first use.
