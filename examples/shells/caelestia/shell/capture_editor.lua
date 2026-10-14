@@ -445,7 +445,7 @@ function M.export(action)
       local function save(target,then_copy)
         if not target then M.busy:set(false) M.status:set("Save cancelled") owned.remove(path) M.redraw() return end
         target=backend.expand(target)
-        local folder=target:match("^(.*)/[^/]+$") if folder then morf.fs.mkdir(folder) end
+        local folder=target:match("^(.*)/[^/]+$") if folder and folder~="" then morf.fs.mkdir(folder) end
         backend.save(path,target,function(good,message)
           if current~=generation then return end
           if good and then_copy then backend.copy(path,copy_done) else complete(good,message) end
