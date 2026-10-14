@@ -48,7 +48,7 @@ ALLOWED = {
                  "morf-image", "morf-render", "morf-shader", "morf-app", "morf-desktop", "morf-io", "morf-audio",
                  "morf-terminal", "morf-system", "morf-value"},
     "morf-host": None,  # everything above
-    "morf-cli": {"morf-host", "morf-value"},
+    "morf-cli": {"morf-host", "morf-app", "morf-io", "morf-lua", "morf-scene", "morf-text", "morf-value"},
 }
 # morf-shader reads Lua-syntax shaders with luna's parser: the Lua layer.
 # What still breaks the rules, and the phase of PLAN.md that ends it: nothing.

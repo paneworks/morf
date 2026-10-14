@@ -38,7 +38,8 @@ engine     morf-lua       the Lua bindings (the morf.* tables) and the VM   ever
 frontend   morf-host      running a configuration: live windows, the loop,  everything above
                           the lock screen, the supervisor and workers,
                           capture, a11y, the app mode, the headless runner
-frontend   morf-cli       the command line, the runners, the test host      host value
+frontend   morf-cli       the command line, the runners, the test host      host app io lua scene
+                                                                            text value
 ```
 
 Three more rules hold everywhere: nothing below morf-lua names `luna`;
