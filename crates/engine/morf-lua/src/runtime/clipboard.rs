@@ -144,7 +144,7 @@ impl Runtime {
     /// or nothing for anything at all.
     pub fn drop_area_keys(&self, node: NodeHandle) -> Vec<String> {
         let state = self.reactive.borrow();
-        match state.scene.current(node, "keys") {
+        match state.scene().current(node, "keys") {
             Ok(SceneValue::List(values)) => values
                 .iter()
                 .filter_map(|value| match value {

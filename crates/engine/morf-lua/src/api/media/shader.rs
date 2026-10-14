@@ -67,7 +67,7 @@ fn set_data<'gc>(
     // on every frame.
     let index = {
         let borrowed = state.borrow();
-        let Some(shader) = borrowed.scene.node_shader(node) else {
+        let Some(shader) = borrowed.scene().node_shader(node) else {
             return Err("this node has no shader".into());
         };
         let program = shader.program;
@@ -100,7 +100,7 @@ fn set_data<'gc>(
     numbers.sort_by_key(|(slot, _)| *slot);
     let values: Vec<f32> = numbers.into_iter().map(|(_, value)| value).collect();
     let mut state = state.borrow_mut();
-    state.scene.set_shader_data(node, index, &values);
+    state.scene_mut().set_shader_data(node, index, &values);
     // New numbers are a new picture: the frame that draws them is asked for
     // here, as any property write asks for one.
     state.revisions_mut().bump_scene();
@@ -305,7 +305,7 @@ pub(crate) fn attach_shader<'gc>(
     overrides: Option<Table<'gc>>,
 ) -> Result<(), String> {
     if name.is_empty() {
-        state.borrow_mut().scene.detach_shader(node);
+        state.borrow_mut().scene_mut().detach_shader(node);
         return Ok(());
     }
     let borrowed = state.borrow();
@@ -346,7 +346,7 @@ pub(crate) fn attach_shader<'gc>(
             };
         }
     }
-    state.borrow_mut().scene.attach_shader(
+    state.borrow_mut().scene_mut().attach_shader(
         node,
         morf_scene::NodeShader {
             program,

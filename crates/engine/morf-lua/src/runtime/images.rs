@@ -130,10 +130,14 @@ pub(crate) fn sync(
         let Some(geometry) = layout.geometry(node) else {
             continue;
         };
-        let Ok(source) = state.scene.string_value(node, "source").map(str::to_owned) else {
+        let Ok(source) = state
+            .scene()
+            .string_value(node, "source")
+            .map(str::to_owned)
+        else {
             continue;
         };
-        let visible = geometry.width > 0.0 && geometry.height > 0.0 && shown(&state.scene, node);
+        let visible = geometry.width > 0.0 && geometry.height > 0.0 && shown(state.scene(), node);
         let entry = state.images.entries.get_mut(&node).expect("listed above");
         entry.visible = visible;
         entry.seen = Some(now);
@@ -238,7 +242,7 @@ pub(crate) fn advance(state: &mut ReactiveState, now: Instant) -> bool {
     let mut quickest: Option<Duration> = None;
     let nodes: Vec<NodeHandle> = state.images.entries.keys().copied().collect();
     for node in nodes {
-        let scene = &state.scene;
+        let scene = state.scene();
         let Ok(playing) = scene.bool_value(node, "playing") else {
             continue;
         };

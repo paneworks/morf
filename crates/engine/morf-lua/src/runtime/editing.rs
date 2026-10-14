@@ -15,7 +15,7 @@ use crate::{api::ui::bindings::*, runtime::events::*, runtime::helpers::*, vm::t
 impl Runtime {
     /// Whether a node is a text input.
     pub fn is_text_input(&self, node: NodeHandle) -> bool {
-        self.reactive.borrow().scene.element(node).ok() == Some(Element::TextInput)
+        self.reactive.borrow().scene().element(node).ok() == Some(Element::TextInput)
     }
 
     /// The text input that has the keyboard within one scene root, if any.
@@ -23,9 +23,9 @@ impl Runtime {
         self.settle_text_inputs();
         let state = self.reactive.borrow();
         state.editing().focused().filter(|node| {
-            scene_node_in_subtree(&state.scene, root, *node)
-                && state.scene.bool_value(*node, "enabled").unwrap_or(false)
-                && state.scene.bool_value(*node, "visible").unwrap_or(false)
+            scene_node_in_subtree(state.scene(), root, *node)
+                && state.scene().bool_value(*node, "enabled").unwrap_or(false)
+                && state.scene().bool_value(*node, "visible").unwrap_or(false)
         })
     }
 
@@ -44,7 +44,7 @@ impl Runtime {
             let mut state = self.reactive.borrow_mut();
             let before = state.editing().focused();
             match node {
-                Some(node) if state.scene.element(node).ok() == Some(Element::TextInput) => {
+                Some(node) if state.scene().element(node).ok() == Some(Element::TextInput) => {
                     text_inputs::set_focus(&mut *state, node, true);
                 }
                 _ => {
@@ -157,7 +157,7 @@ impl Runtime {
                 let Some(geometry) = layout.geometry(node) else {
                     continue;
                 };
-                let Ok(shape) = InputShape::read(&state.scene, node, Some(geometry.width)) else {
+                let Ok(shape) = InputShape::read(state.scene(), node, Some(geometry.width)) else {
                     continue;
                 };
                 // The same string at the same width paint will shape, so this
@@ -196,7 +196,7 @@ impl Runtime {
         let mut state = self.reactive.borrow_mut();
         let nodes = state.layout_hooks().linked_texts();
         for node in nodes {
-            if !state.scene.contains(node) {
+            if !state.scene().contains(node) {
                 state.layout_hooks_mut().unlink_text(node);
                 continue;
             }
@@ -204,7 +204,7 @@ impl Runtime {
                 continue;
             };
             let spare = (geometry.height - f64::from(text.shaped_height(node))).max(0.0);
-            let offset = match state.scene.string_value(node, "vertical_alignment") {
+            let offset = match state.scene().string_value(node, "vertical_alignment") {
                 Ok("center") => spare / 2.0,
                 Ok("bottom") => spare,
                 _ => 0.0,
@@ -232,7 +232,7 @@ impl Runtime {
                     })
                     .collect(),
             );
-            if state.scene.current(node, "links").ok() != Some(&links) {
+            if state.scene().current(node, "links").ok() != Some(&links) {
                 let _ =
                     crate::api::ui::scene::assign_scene_property(&mut state, node, "links", links);
             }

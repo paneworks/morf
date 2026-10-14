@@ -62,7 +62,7 @@ pub(crate) fn configure_states<'gc>(
                         let property = property.display_lossy().to_string();
                         if !state
                             .borrow()
-                            .scene
+                            .scene()
                             .has_property(node, &property)
                             .map_err(|error| error.to_string())?
                         {

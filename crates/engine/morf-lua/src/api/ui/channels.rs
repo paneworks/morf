@@ -78,7 +78,7 @@ impl Runtime {
             }
             // A path on show whose channel moved: a frame.
             let mut shown = false;
-            let scene = &state.engine.scene;
+            let scene = state.engine.scene();
             state.channels.series_nodes.retain(|node, drawn| {
                 if !scene.contains(*node) {
                     return false;

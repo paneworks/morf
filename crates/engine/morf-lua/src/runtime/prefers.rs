@@ -49,7 +49,7 @@ impl Runtime {
         if name == "reduced_motion" {
             let reduced = matches!(value, IpcValue::Boolean(true));
             state
-                .scene
+                .scene_mut()
                 .set_motion_scale(if reduced { 0.0 } else { 1.0 });
         }
         write_signal(&mut state, id, value)

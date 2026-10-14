@@ -16,7 +16,7 @@ pub(crate) fn scene_node_in_subtree(scene: &Scene, root: NodeHandle, node: NodeH
 
 /// Whether keys can go to a node; see [`morf_runtime::events::routing::takes_keys`].
 pub(crate) fn takes_keys(state: &ReactiveState, node: NodeHandle) -> bool {
-    morf_runtime::events::routing::takes_keys(&state.scene, state.events(), node)
+    morf_runtime::events::routing::takes_keys(state.scene(), state.events(), node)
 }
 
 /// Removes `node` and its subtree: from the engine (`Engine::remove_subtree`)

@@ -32,7 +32,7 @@ fn with_hub<R>(
     state: &mut ReactiveState,
     work: impl FnOnce(&mut TerminalHub, &mut Scene) -> R,
 ) -> R {
-    let result = work(&mut state.terminals, &mut state.engine.scene);
+    let result = work(&mut state.terminals, state.engine.scene_mut());
     let effects = state.terminals.take_effects();
     state.engine.revisions_mut().advance_scene(effects.screens);
     for (node, property, value) in effects.properties {
@@ -61,11 +61,11 @@ pub(crate) fn sync(state: &mut ReactiveState, layout: &Layout, text: &mut TextSy
         };
         let (Ok(family), Ok(size), Ok(_)) = (
             state
-                .scene
+                .scene()
                 .string_value(node, "font_family")
                 .map(str::to_owned),
-            state.scene.number(node, "font_size"),
-            state.scene.number(node, "padding"),
+            state.scene().number(node, "font_size"),
+            state.scene().number(node, "padding"),
         ) else {
             continue;
         };

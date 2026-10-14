@@ -103,7 +103,7 @@ impl Runtime {
         state.engine.place_popup_anchors();
         let (changed, errors) = state
             .transform_watchers
-            .observe(&state.engine.scene, state.engine.transform_tracker());
+            .observe(state.engine.scene(), state.engine.transform_tracker());
         for error in errors {
             state.log(LogLevel::Warn, error);
         }

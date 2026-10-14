@@ -67,7 +67,7 @@ pub(crate) fn install_fling_api<'gc>(
 
         state
             .borrow_mut()
-            .scene
+            .scene_mut()
             .fling(node, &property, velocity, physics)
             .map_err(|error| HostError(error.to_string()))?;
         stack.replace(ctx, true);
@@ -98,7 +98,7 @@ pub(crate) fn impulse<'gc>(
         let (node, property, delta): (UserRef<NodeToken>, String, f64) = stack.consume(ctx)?;
         let pushed = state
             .borrow_mut()
-            .scene
+            .scene_mut()
             .impulse(node.handle, &property, delta)
             .map_err(|error| HostError(error.to_string()))?;
         stack.replace(ctx, pushed);

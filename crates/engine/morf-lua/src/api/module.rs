@@ -123,7 +123,7 @@ pub(crate) fn install_module_api<'gc>(
             {
                 let state = state.borrow();
                 state
-                    .scene
+                    .scene()
                     .element(root)
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(parent) = config.parent {
@@ -136,7 +136,7 @@ pub(crate) fn install_module_api<'gc>(
                         return Err(HostError("popup parent must be a toplevel".into()).into());
                     }
                     if let Some(anchor) = &node_anchor
-                        && !scene_node_in_subtree(&state.scene, parent.root, anchor.node)
+                        && !scene_node_in_subtree(state.scene(), parent.root, anchor.node)
                     {
                         return Err(HostError(
                             "popup anchor node must belong to its parent surface".into(),
@@ -156,7 +156,7 @@ pub(crate) fn install_module_api<'gc>(
                 );
                 if let Some(anchor) = node_anchor {
                     state
-                        .scene
+                        .scene()
                         .element(anchor.node)
                         .map_err(|error| HostError(error.to_string()))?;
                     state.windows_mut().popup_node_anchors.insert(id, anchor);
@@ -185,7 +185,7 @@ pub(crate) fn install_module_api<'gc>(
             {
                 let state = state.borrow();
                 state
-                    .scene
+                    .scene()
                     .element(root)
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(parent) = config.parent {
@@ -231,7 +231,7 @@ pub(crate) fn install_module_api<'gc>(
             {
                 let state = state.borrow();
                 state
-                    .scene
+                    .scene()
                     .element(root)
                     .map_err(|error| HostError(error.to_string()))?;
             }

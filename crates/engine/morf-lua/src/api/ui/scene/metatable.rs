@@ -12,13 +12,13 @@ pub(crate) fn node_metatable<'gc>(
         let (node, key): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
         let element = read_state
             .borrow()
-            .scene
+            .scene()
             .element(node.handle)
             .map_err(|error| HostError(error.to_string()))?;
         if key == "item" && element == Element::Loader {
             let child = read_state
                 .borrow()
-                .scene
+                .scene()
                 .children(node.handle)
                 .map_err(|error| HostError(error.to_string()))?
                 .first()
@@ -44,7 +44,7 @@ pub(crate) fn node_metatable<'gc>(
             return Ok(CallbackReturn::Return);
         }
         if key == "track" && element == Element::SdfShape {
-            let target = read_state.borrow().scene.track(node.handle);
+            let target = read_state.borrow().scene().track(node.handle);
             match target {
                 Some(target) => {
                     stack.replace(ctx, node_userdata(ctx, Rc::clone(&read_state), target))
@@ -54,7 +54,7 @@ pub(crate) fn node_metatable<'gc>(
             return Ok(CallbackReturn::Return);
         }
         if key == "mask" {
-            let mask = read_state.borrow().scene.mask(node.handle);
+            let mask = read_state.borrow().scene().mask(node.handle);
             if let Some(mask) = mask {
                 stack.replace(ctx, node_userdata(ctx, Rc::clone(&read_state), mask));
                 return Ok(CallbackReturn::Return);
@@ -75,7 +75,7 @@ pub(crate) fn node_metatable<'gc>(
             return Ok(CallbackReturn::Return);
         }
         if key == "stretch" {
-            let stretch = read_state.borrow().scene.stretch(node.handle);
+            let stretch = read_state.borrow().scene().stretch(node.handle);
             let value = match stretch {
                 Some(stretch) => SceneValue::Map(
                     [
@@ -109,7 +109,7 @@ pub(crate) fn node_metatable<'gc>(
                     .property_reads
                     .insert((node.handle, LAYOUT_SIZE.to_owned(), false));
             }
-            let rtl = state.scene.is_rtl(node.handle);
+            let rtl = state.scene().is_rtl(node.handle);
             stack.replace(ctx, if rtl { "rtl" } else { "ltr" });
             return Ok(CallbackReturn::Return);
         }
@@ -152,7 +152,7 @@ pub(crate) fn node_metatable<'gc>(
         let value = {
             let mut state = read_state.borrow_mut();
             if !state
-                .scene
+                .scene()
                 .has_property(node.handle, property)
                 .map_err(|error| HostError(error.to_string()))?
             {
@@ -168,9 +168,9 @@ pub(crate) fn node_metatable<'gc>(
                 }
             }
             if target {
-                state.scene.target(node.handle, property)
+                state.scene().target(node.handle, property)
             } else {
-                state.scene.current(node.handle, property)
+                state.scene().current(node.handle, property)
             }
             .map_err(|error| HostError(error.to_string()))?
             .clone()
@@ -251,12 +251,12 @@ pub(crate) fn node_metatable<'gc>(
                 })?;
                 refuse_runtime_owned(&state, node.handle, &property).map_err(HostError)?;
                 if !state
-                    .scene
+                    .scene()
                     .has_property(node.handle, &property)
                     .map_err(|error| HostError(error.to_string()))?
                 {
                     let element = state
-                        .scene
+                        .scene()
                         .element(node.handle)
                         .map_err(|error| HostError(error.to_string()))?;
                     return Err(
@@ -278,7 +278,7 @@ pub(crate) fn node_metatable<'gc>(
         assign_scene_property(&mut state, node.handle, &property, value).map_err(HostError)?;
         // A text input takes a write in at once, so the caret a handler
         // reads back after setting `text` is already the one that text has.
-        if state.scene.element(node.handle).ok() == Some(Element::TextInput) {
+        if state.scene().element(node.handle).ok() == Some(Element::TextInput) {
             crate::runtime::text_inputs::pull(&mut *state, node.handle);
             if property == "focus" {
                 crate::runtime::text_inputs::reconcile_focus(&mut *state);
@@ -309,17 +309,17 @@ pub(crate) fn refuse_runtime_owned(
         return Err("`contains_pointer` is read-only: the pointer sets it".to_owned());
     }
     if matches!(property, "hovered" | "pressed")
-        && state.scene.element(node).ok() == Some(Element::MouseArea)
+        && state.scene().element(node).ok() == Some(Element::MouseArea)
     {
         return Err(format!(
             "MouseArea `{property}` is read-only: the pointer sets it"
         ));
     }
-    if property == "links" && state.scene.element(node).ok() == Some(Element::Text) {
+    if property == "links" && state.scene().element(node).ok() == Some(Element::Text) {
         return Err("Text `links` is read-only: the layout says where they are".to_owned());
     }
     if matches!(property, "status" | "error" | "frame_count")
-        && state.scene.element(node).ok() == Some(Element::Image)
+        && state.scene().element(node).ok() == Some(Element::Image)
     {
         return Err(format!(
             "Image `{property}` is read-only: the runtime says what became of the source"
@@ -328,7 +328,7 @@ pub(crate) fn refuse_runtime_owned(
     if matches!(
         property,
         "columns" | "rows" | "title" | "running" | "exit_code"
-    ) && state.scene.element(node).ok() == Some(Element::Terminal)
+    ) && state.scene().element(node).ok() == Some(Element::Terminal)
     {
         return Err(format!(
             "Terminal `{property}` is read-only: the terminal and its program set it"

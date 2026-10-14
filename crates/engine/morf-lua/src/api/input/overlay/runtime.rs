@@ -25,7 +25,7 @@ impl Runtime {
         for (root, layer) in layers {
             if let Some(g) = layout.geometry(root) {
                 for (property, value) in [("width", g.width), ("height", g.height)] {
-                    if state.scene.number(layer, property).ok() != Some(value) {
+                    if state.scene().number(layer, property).ok() != Some(value) {
                         set(&mut state, layer, property, SceneValue::Number(value));
                     }
                 }
@@ -51,7 +51,7 @@ impl Runtime {
                 };
                 state
                     .transform_tracker()
-                    .map_rect_from_node(&state.scene, anchor, rect)
+                    .map_rect_from_node(state.scene(), anchor, rect)
                     .ok()
                     .flatten()
             });
@@ -109,7 +109,9 @@ impl Runtime {
         let closed = {
             let mut state = self.reactive.borrow_mut();
             let state = &mut *state;
-            state.overlays.press(&state.engine.scene, root, hit, inside)
+            state
+                .overlays
+                .press(state.engine.scene(), root, hit, inside)
         };
         closed
             .map(|overlay| self.close_overlay(overlay, "outside"))
@@ -130,7 +132,7 @@ impl Runtime {
             if overlay.tracked {
                 // The catcher goes; the node stays, its owner shuts it.
                 crate::runtime::helpers::remove_scene_subtree(&mut state, overlay.wrapper);
-            } else if state.scene.contains(overlay.wrapper) {
+            } else if state.scene().contains(overlay.wrapper) {
                 set(
                     &mut state,
                     overlay.wrapper,
@@ -139,7 +141,9 @@ impl Runtime {
                 );
             }
             let owner = state.focus().owner(overlay.root);
-            overlay.give_focus_back(&state.scene, owner, |node| state.scene.can_hold_focus(node))
+            overlay.give_focus_back(state.scene(), owner, |node| {
+                state.scene().can_hold_focus(node)
+            })
         };
         if let Some((node, reason)) = back {
             self.set_focus(overlay.root, node, reason);
@@ -159,7 +163,7 @@ impl Runtime {
             let state = &mut *state;
             state
                 .overlays
-                .take_closing(|content| state.engine.scene.contains(content))
+                .take_closing(|content| state.engine.scene().contains(content))
         };
         let mut closed = false;
         for (content, reason) in closing {

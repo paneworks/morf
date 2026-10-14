@@ -38,7 +38,7 @@ impl Runtime {
         action: &str,
         value: Option<IpcValue>,
     ) -> bool {
-        if !self.reactive.borrow().scene.contains(node) {
+        if !self.reactive.borrow().scene().contains(node) {
             return false;
         }
         let handler = self

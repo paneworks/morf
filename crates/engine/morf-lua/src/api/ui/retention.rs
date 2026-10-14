@@ -121,7 +121,7 @@ pub(crate) fn install_retention_api<'gc>(
             let (node, options): (UserRef<NodeToken>, LuaValue) = stack.consume(ctx)?;
             state
                 .borrow()
-                .scene
+                .scene()
                 .element(node.handle)
                 .map_err(|error| HostError(error.to_string()))?;
             let mut callbacks = RetainCallbacks::default();
@@ -297,7 +297,7 @@ pub(crate) fn install_retention_api<'gc>(
             let token = {
                 let mut state = state.borrow_mut();
                 if let Some(owner) = owner
-                    && !state.scene.contains(owner)
+                    && !state.scene().contains(owner)
                 {
                     return Err(HostError("effect owner is a removed node".to_owned()).into());
                 }

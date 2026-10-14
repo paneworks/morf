@@ -32,7 +32,7 @@ pub(crate) fn install_group_api<'gc>(
         let state = Rc::clone(&state);
         let callback = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let handle: UserRef<GroupToken> = stack.consume(ctx)?;
-            let acted = control(&mut state.borrow_mut().scene, handle.id);
+            let acted = control(state.borrow_mut().scene_mut(), handle.id);
             stack.replace(ctx, acted);
             Ok(CallbackReturn::Return)
         });
@@ -51,7 +51,7 @@ pub(crate) fn install_group_api<'gc>(
             let handle: UserRef<GroupToken> = stack.consume(ctx)?;
             let finished = state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .finish_group(handle.id)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, finished);
@@ -98,7 +98,7 @@ pub(crate) fn install_group_api<'gc>(
             let id = {
                 let mut state = state.borrow_mut();
                 let id = state
-                    .scene
+                    .scene_mut()
                     .start_group_after(step, repeat, delay)
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(callback) = callback {

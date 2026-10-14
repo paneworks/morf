@@ -136,7 +136,7 @@ pub(crate) fn install_ui_json_api<'gc>(
         // Put somewhere while it was leaving: it is wanted after all.
         crate::runtime::helpers::cancel_node_exit(&mut state, child.handle);
         state
-            .scene
+            .scene_mut()
             .reparent(child.handle, parent)
             .map_err(|error| HostError(error.to_string()))?;
         Ok(CallbackReturn::Return)

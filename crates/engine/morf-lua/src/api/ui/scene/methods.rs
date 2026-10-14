@@ -123,7 +123,7 @@ pub(super) fn text_input_method<'gc>(
             let node: UserRef<NodeToken> = stack.consume(ctx)?;
             let mut state = state.try_borrow_mut().map_err(|_| busy())?;
             let cursor = state
-                .scene
+                .scene()
                 .number(node.handle, "cursor_position")
                 .unwrap_or(0.0);
             text_inputs::select(&mut *state, node.handle, cursor as usize, cursor as usize);

@@ -172,7 +172,7 @@ pub(crate) fn construct_view<'gc>(
                     .as_ref()
                     .expect("a virtual view has its list");
                 position_view_child(
-                    &mut state.borrow_mut().scene,
+                    state.borrow_mut().scene_mut(),
                     child.node,
                     index,
                     placing,
@@ -183,7 +183,7 @@ pub(crate) fn construct_view<'gc>(
             }
             state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .reparent(child.node, Some(node))
                 .map_err(|error| HostError(error.to_string()))?;
             active.insert(id, child);

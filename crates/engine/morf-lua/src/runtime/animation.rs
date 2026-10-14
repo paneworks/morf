@@ -61,7 +61,10 @@ impl Runtime {
     /// first frame drawn at its start however long the gap before it was
     /// (see `Scene::set_start_on_tick`).
     pub fn tick_frame_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
-        self.reactive.borrow_mut().scene.set_start_on_tick(true);
+        self.reactive
+            .borrow_mut()
+            .scene_mut()
+            .set_start_on_tick(true);
         self.tick_animations(delta)
     }
 
@@ -71,7 +74,7 @@ impl Runtime {
         {
             let mut state = self.reactive.borrow_mut();
             if state
-                .scene
+                .scene_mut()
                 .has_running_animation(morf_scene::Element::Timer, "interval")
             {
                 // Check before the tick removes a completed animation: the
@@ -82,7 +85,7 @@ impl Runtime {
         let mut frame = self
             .reactive
             .borrow_mut()
-            .scene
+            .scene_mut()
             .tick_animations(delta)
             .map_err(|error| Error::Runtime(error.to_string()))?;
         // A theme fade is motion the scene does not know of: the loop reads

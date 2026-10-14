@@ -36,16 +36,16 @@ pub(super) fn reconcile_loaders(
     // turn, and none while anything animates -- the frame a build
     // costs is exactly the frame a motion cannot spare. Something
     // that never stops (a spinner) holds a preload back only so long.
-    let still = !loader_definitions.is_empty() && !state.scene.has_motion();
+    let still = !loader_definitions.is_empty() && !state.scene().has_motion();
     let now = std::time::Instant::now();
     for (node, factory) in loader_definitions {
-        let Ok(active) = state.scene.bool_value(node, "active") else {
+        let Ok(active) = state.scene().bool_value(node, "active") else {
             stale_loaders.push(node);
             continue;
         };
-        let loading = state.scene.bool_value(node, "loading").unwrap_or(false);
+        let loading = state.scene().bool_value(node, "loading").unwrap_or(false);
         let active_async = state
-            .scene
+            .scene()
             .bool_value(node, "active_async")
             .unwrap_or(false);
         let requested = active || loading || active_async;
@@ -57,14 +57,14 @@ pub(super) fn reconcile_loaders(
         } else if state.retained().failed_loaders.contains(&node) {
             continue;
         }
-        let keep = state.scene.bool_value(node, "keep").unwrap_or(false);
-        let preload = state.scene.bool_value(node, "preload").unwrap_or(false);
+        let keep = state.scene().bool_value(node, "keep").unwrap_or(false);
+        let preload = state.scene().bool_value(node, "preload").unwrap_or(false);
         // A hidden item stays while the Loader holds it for a reason:
         // kept, or built ahead of being asked for.
         let preloaded_and_waiting = preload && state.retained().dormant_loaders.contains(&node);
         if requested && state.retained_mut().dormant_loaders.remove(&node) {
             // Built already: shown, not built again.
-            let children = state.scene.children(node).unwrap_or_default().to_vec();
+            let children = state.scene().children(node).unwrap_or_default().to_vec();
             for child in children {
                 let _ = assign_scene_property(state, child, "visible", SceneValue::Bool(true));
             }
@@ -79,12 +79,12 @@ pub(super) fn reconcile_loaders(
             // Let go and asked for again before its item had finished
             // leaving: that item is taken back rather than built anew.
             let leaving = state
-                .scene
+                .scene()
                 .children(node)
                 .unwrap_or_default()
                 .iter()
                 .copied()
-                .find(|child| state.scene.is_exiting(*child));
+                .find(|child| state.scene().is_exiting(*child));
             if let Some(child) = leaving
                 && crate::runtime::helpers::cancel_node_exit(state, child)
             {
@@ -105,7 +105,7 @@ pub(super) fn reconcile_loaders(
             && !state.retained().dormant_loaders.contains(&node)
         {
             // Let go, but kept: hidden until it is asked for again.
-            let children = state.scene.children(node).unwrap_or_default().to_vec();
+            let children = state.scene().children(node).unwrap_or_default().to_vec();
             for child in children {
                 let _ = assign_scene_property(state, child, "visible", SceneValue::Bool(false));
             }
@@ -118,7 +118,7 @@ pub(super) fn reconcile_loaders(
         {
             state.retained_mut().loaded_loaders.remove(&node);
             state.retained_mut().dormant_loaders.remove(&node);
-            loader_drops.extend_from_slice(state.scene.children(node).unwrap_or_default());
+            loader_drops.extend_from_slice(state.scene().children(node).unwrap_or_default());
             service_changed = true;
         } else if !requested && preload && !state.retained().loaded_loaders.contains(&node) {
             let since = *state
@@ -170,7 +170,7 @@ impl Runtime {
                 let state = self.reactive.borrow();
                 format!(
                     "loader build {} ({origin})",
-                    crate::vm::config::lint_path(&state.scene, node)
+                    crate::vm::config::lint_path(state.scene(), node)
                 )
             });
             let result = self
@@ -179,7 +179,7 @@ impl Runtime {
             match result {
                 Ok(child) => {
                     let mut state = self.reactive.borrow_mut();
-                    if preloaded && state.scene.reparent(child, Some(node)).is_ok() {
+                    if preloaded && state.scene_mut().reparent(child, Some(node)).is_ok() {
                         let _ = assign_scene_property(
                             &mut state,
                             child,
@@ -188,7 +188,7 @@ impl Runtime {
                         );
                         state.retained_mut().dormant_loaders.insert(node);
                         service_changed = true;
-                    } else if !preloaded && state.scene.reparent(child, Some(node)).is_ok() {
+                    } else if !preloaded && state.scene_mut().reparent(child, Some(node)).is_ok() {
                         let _ = assign_scene_property(
                             &mut state,
                             node,

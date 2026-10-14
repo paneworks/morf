@@ -251,7 +251,7 @@ impl Runtime {
                             .tracking()
                             .property_named(signal)
                             .is_some_and(|(node, property)| {
-                                state.scene.is_animating(*node, property).unwrap_or(false)
+                                state.scene().is_animating(*node, property).unwrap_or(false)
                             })
                     })
                     .collect::<Vec<_>>();

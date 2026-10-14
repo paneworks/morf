@@ -55,7 +55,7 @@ pub(crate) fn configure_behaviors<'gc>(
             );
             state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .set_physics(node, &property, Some(physics))
                 .map_err(|error| error.to_string())?;
             continue;
@@ -64,7 +64,7 @@ pub(crate) fn configure_behaviors<'gc>(
             let physics = behaviors::smoothed(table_number(ctx, behavior, "velocity", 1_000.0)?);
             state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .set_physics(node, &property, Some(physics))
                 .map_err(|error| error.to_string())?;
             continue;
@@ -84,7 +84,7 @@ pub(crate) fn configure_behaviors<'gc>(
         let time_scale = behaviors::time_scale(table_number(ctx, behavior, "time_scale", 1.0)?)?;
         state
             .borrow_mut()
-            .scene
+            .scene_mut()
             .set_behavior(
                 node,
                 &property,

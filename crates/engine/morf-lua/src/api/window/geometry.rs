@@ -16,7 +16,7 @@ pub(crate) fn checked_window_node(
         .window_surfaces
         .get(&surface)
         .ok_or_else(|| HostError("window destroyed".into()))?;
-    if !scene_node_in_subtree(&state.scene, surface.root, node) {
+    if !scene_node_in_subtree(state.scene(), surface.root, node) {
         return Err(HostError(
             "item does not belong to the window surface".into(),
         ));
@@ -49,7 +49,7 @@ pub(crate) fn window_item_position_method<'gc>(
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let point = state
             .transform_tracker()
-            .map_from_node(&state.scene, node, 0.0, 0.0)
+            .map_from_node(state.scene(), node, 0.0, 0.0)
             .map_err(|error| HostError(error.to_string()))?
             .ok_or_else(|| HostError("item has not been laid out".into()))?;
         stack.replace(ctx, point_table(ctx, point));
@@ -73,7 +73,7 @@ pub(crate) fn window_item_rect_method<'gc>(
         let geometry = state
             .transform_tracker()
             .map_rect_from_node(
-                &state.scene,
+                state.scene(),
                 node,
                 Geometry {
                     x: 0.0,
@@ -103,7 +103,7 @@ pub(crate) fn window_map_from_item_method<'gc>(
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let point = state
             .transform_tracker()
-            .map_from_node(&state.scene, node, x, y)
+            .map_from_node(state.scene(), node, x, y)
             .map_err(|error| HostError(error.to_string()))?
             .ok_or_else(|| HostError("item has not been laid out".into()))?;
         stack.replace(ctx, point_table(ctx, point));
@@ -131,7 +131,7 @@ pub(crate) fn window_map_rect_from_item_method<'gc>(
         let geometry = state
             .transform_tracker()
             .map_rect_from_node(
-                &state.scene,
+                state.scene(),
                 node,
                 Geometry {
                     x,

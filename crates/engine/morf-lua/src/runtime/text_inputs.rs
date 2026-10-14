@@ -20,7 +20,7 @@ pub use morf_runtime::events::KeyModifiers;
 
 impl EditHost for ReactiveState {
     fn scene(&self) -> &Scene {
-        &self.scene
+        self.engine.scene()
     }
 
     fn editing(&self) -> &Editing {

@@ -76,17 +76,17 @@ pub(crate) fn install_transform_api<'gc>(
                     return Err(HostError("transform watcher limit reached".into()).into());
                 }
                 state
-                    .scene
+                    .scene()
                     .element(a)
-                    .and_then(|_| state.scene.element(b))
+                    .and_then(|_| state.scene().element(b))
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(common) = common_parent {
                     state
-                        .scene
+                        .scene()
                         .element(common)
                         .map_err(|error| HostError(error.to_string()))?;
-                    if !scene_node_in_subtree(&state.scene, common, a)
-                        || !scene_node_in_subtree(&state.scene, common, b)
+                    if !scene_node_in_subtree(state.scene(), common, a)
+                        || !scene_node_in_subtree(state.scene(), common, b)
                     {
                         return Err(HostError(
                             "transform watcher common_parent must contain both nodes".into(),

@@ -65,7 +65,7 @@ pub(crate) fn install_prefers_api<'gc>(
     let mut state = state.borrow_mut();
     state.prefers = Some(prefers);
     state
-        .scene
+        .scene_mut()
         .set_motion_scale(if reduced { 0.0 } else { 1.0 });
     drop(fields);
     morf.set_field(ctx, "prefers", userdata);

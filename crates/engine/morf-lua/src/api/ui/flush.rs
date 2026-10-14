@@ -174,13 +174,13 @@ fn effect_label(
     };
     let node_path = |node: NodeHandle| {
         let id = state
-            .scene
+            .scene()
             .string_value(node, "id")
             .ok()
             .filter(|id| !id.is_empty())
             .map(|id| format!(" #{id}"))
             .unwrap_or_default();
-        format!("{}{id}", crate::vm::config::lint_path(&state.scene, node))
+        format!("{}{id}", crate::vm::config::lint_path(state.scene(), node))
     };
     match &effect.sink {
         Some(EffectSink::Property(sink)) => {

@@ -88,14 +88,14 @@ fn fill() -> SceneValue {
 /// The surface's overlay layer, made the first time it is wanted.
 fn layer_of(state: &Rc<StateCell<ReactiveState>>, root: NodeHandle) -> Result<NodeHandle, String> {
     if let Some(layer) = state.borrow().overlays.layers.get(&root).copied()
-        && state.borrow().scene.contains(layer)
+        && state.borrow().scene().contains(layer)
     {
         return Ok(layer);
     }
     let layer = create_node(state, Element::Item);
     let mut state = state.borrow_mut();
     state
-        .scene
+        .scene_mut()
         .reparent(layer, Some(root))
         .map_err(|error| error.to_string())?;
     set(
@@ -146,8 +146,8 @@ fn open<'gc>(
     }
     let anchor = node("anchor")?;
     let root = match (node("root")?, anchor) {
-        (Some(root), _) => state.borrow().scene.root_of(root),
-        (None, Some(anchor)) => state.borrow().scene.root_of(anchor),
+        (Some(root), _) => state.borrow().scene().root_of(root),
+        (None, Some(anchor)) => state.borrow().scene().root_of(anchor),
         (None, None) => None,
     }
     .ok_or("morf.overlay.open: give it an anchor or a root on a surface")?;
@@ -174,12 +174,12 @@ fn open<'gc>(
     };
     let layer = layer_of(state, root)?;
     let existing = state.borrow().overlays.wrappers.get(&content).copied();
-    let wrapper = match existing.filter(|w| state.borrow().scene.contains(*w)) {
+    let wrapper = match existing.filter(|w| state.borrow().scene().contains(*w)) {
         Some(wrapper) => {
             // Its scrim and blocker are rebuilt for these options.
             let children = state
                 .borrow()
-                .scene
+                .scene()
                 .children(wrapper)
                 .unwrap_or_default()
                 .to_vec();
@@ -202,7 +202,7 @@ fn open<'gc>(
     let blocker = modal.then(|| create_node(state, Element::MouseArea));
     let scrim = dim.as_ref().map(|_| create_node(state, Element::Rect));
     let mut s = state.borrow_mut();
-    s.scene
+    s.scene_mut()
         .reparent(wrapper, Some(layer))
         .map_err(|error| error.to_string())?;
     set(&mut s, wrapper, "anchors", fill());
@@ -211,7 +211,7 @@ fn open<'gc>(
     set(&mut s, wrapper, "opacity", SceneValue::Number(0.0));
     for (extra, color) in [(scrim, dim.clone()), (blocker, None)] {
         if let Some(extra) = extra {
-            s.scene
+            s.scene_mut()
                 .reparent(extra, Some(wrapper))
                 .map_err(|error| error.to_string())?;
             set(&mut s, extra, "anchors", fill());
@@ -221,13 +221,13 @@ fn open<'gc>(
         }
     }
     crate::runtime::helpers::cancel_node_exit(&mut s, content);
-    s.scene
+    s.scene_mut()
         .reparent(content, Some(wrapper))
         .map_err(|error| error.to_string())?;
     let restore = s.focus().owner(root).map(|node| {
         (
             node,
-            s.scene.bool_value(node, "visual_focus").unwrap_or(false),
+            s.scene().bool_value(node, "visual_focus").unwrap_or(false),
         )
     });
     if flag("focus", true) {
@@ -285,7 +285,7 @@ fn track<'gc>(
     };
     let root = state
         .borrow()
-        .scene
+        .scene()
         .root_of(content)
         .ok_or("morf.overlay.track: the node is on no surface")?;
     let on_close = match get("on_close") {
@@ -296,7 +296,7 @@ fn track<'gc>(
     let outside = flag("outside", true);
     let catcher = create_node(state, Element::MouseArea);
     let mut s = state.borrow_mut();
-    s.scene
+    s.scene_mut()
         .reparent(catcher, Some(root))
         .map_err(|error| error.to_string())?;
     set(&mut s, catcher, "anchors", fill());
@@ -313,7 +313,7 @@ fn track<'gc>(
     let restore = s.focus().owner(root).map(|node| {
         (
             node,
-            s.scene.bool_value(node, "visual_focus").unwrap_or(false),
+            s.scene().bool_value(node, "visual_focus").unwrap_or(false),
         )
     });
     if flag("focus", false) {

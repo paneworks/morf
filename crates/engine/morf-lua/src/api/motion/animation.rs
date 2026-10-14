@@ -26,7 +26,7 @@ pub(crate) fn install_animation_api<'gc>(
             let state = Rc::clone(&state);
             let callback = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
                 let (node, property): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
-                let found = control(&mut state.borrow_mut().scene, node.handle, &property)
+                let found = control(state.borrow_mut().scene_mut(), node.handle, &property)
                     .map_err(|error| HostError(error.to_string()))?;
                 stack.replace(ctx, found);
                 Ok(CallbackReturn::Return)
@@ -50,7 +50,7 @@ pub(crate) fn install_animation_api<'gc>(
             let (node, property): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
             let active = state
                 .borrow()
-                .scene
+                .scene()
                 .is_animating(node.handle, &property)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, active);
@@ -65,7 +65,7 @@ pub(crate) fn install_animation_api<'gc>(
             let (node, property): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
             let paused = state
                 .borrow()
-                .scene
+                .scene()
                 .is_animation_paused(node.handle, &property)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, paused);
@@ -82,7 +82,7 @@ pub(crate) fn install_animation_api<'gc>(
             let (node, property): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
             let progress = state
                 .borrow()
-                .scene
+                .scene()
                 .animation_progress(node.handle, &property)
                 .map_err(|error| HostError(error.to_string()))?;
             match progress {
@@ -104,7 +104,7 @@ pub(crate) fn install_animation_api<'gc>(
             }
             let found = state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .seek_animation(node.handle, &property, progress)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, found);
@@ -122,7 +122,7 @@ pub(crate) fn install_animation_api<'gc>(
                 stack.consume(ctx)?;
             let found = state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .set_behavior_enabled(node.handle, &property, enabled)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, found);

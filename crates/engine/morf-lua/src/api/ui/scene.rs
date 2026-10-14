@@ -19,14 +19,14 @@ use methods::{terminal_method, text_input_method};
 pub(crate) fn create_node(state: &Rc<StateCell<ReactiveState>>, element: Element) -> NodeHandle {
     let mut state = state.borrow_mut();
     state.revisions_mut().bump_scene();
-    state.scene.create(element)
+    state.scene_mut().create(element)
 }
 
 /// A property of `node` changed: the scene moved on, and -- unless nothing
 /// shows the node -- owes a paint.
 fn bump_revision(state: &mut ReactiveState, node: NodeHandle, property: &str) {
     state.revisions_mut().bump_scene();
-    if !state.scene.change_is_shown(node, property) {
+    if !state.scene().change_is_shown(node, property) {
         state.revisions_mut().bump_hidden();
     }
 }
@@ -66,17 +66,17 @@ pub(crate) fn assign_scene_property(
     value: SceneValue,
 ) -> Result<(), String> {
     let old_current = state
-        .scene
+        .scene()
         .current(node, property)
         .map_err(|error| error.to_string())?
         .clone();
     let old_target = state
-        .scene
+        .scene()
         .target(node, property)
         .map_err(|error| error.to_string())?
         .clone();
     state
-        .scene
+        .scene_mut()
         .assign(node, property, value)
         .map_err(|error| error.to_string())?;
     // A path that draws a channel: watched for the channel's writes.
@@ -88,12 +88,12 @@ pub(crate) fn assign_scene_property(
         state.layout_hooks_mut().link_text(node);
     }
     let current_changed = state
-        .scene
+        .scene()
         .current(node, property)
         .map_err(|error| error.to_string())?
         != &old_current;
     let target_changed = state
-        .scene
+        .scene()
         .target(node, property)
         .map_err(|error| error.to_string())?
         != &old_target;
@@ -108,8 +108,8 @@ pub(crate) fn assign_scene_property(
         bump_property_signal(state, node, property, false)?;
         // `focus = true` asks for focus; false gives it back. A text input's
         // own claims are settled by the text inputs, which focus follows.
-        if property == "focus" && state.scene.element(node).ok() != Some(Element::TextInput) {
-            let on = state.scene.bool_value(node, "focus").unwrap_or(false);
+        if property == "focus" && state.scene().element(node).ok() != Some(Element::TextInput) {
+            let on = state.scene().bool_value(node, "focus").unwrap_or(false);
             crate::api::input::focus::request_by_property(state, node, on);
         }
     }
@@ -128,21 +128,21 @@ pub(crate) fn animate_scene_property(
     behavior: Behavior,
 ) -> Result<(), String> {
     let old_current = state
-        .scene
+        .scene()
         .current(node, property)
         .map_err(|error| error.to_string())?
         .clone();
     let old_target = state
-        .scene
+        .scene()
         .target(node, property)
         .map_err(|error| error.to_string())?
         .clone();
     state
-        .scene
+        .scene_mut()
         .animate_from(node, property, from, to, behavior)
         .map_err(|error| error.to_string())?;
     if state
-        .scene
+        .scene()
         .current(node, property)
         .map_err(|error| error.to_string())?
         != &old_current
@@ -151,7 +151,7 @@ pub(crate) fn animate_scene_property(
         bump_property_signal(state, node, property, false)?;
     }
     if state
-        .scene
+        .scene()
         .target(node, property)
         .map_err(|error| error.to_string())?
         != &old_target

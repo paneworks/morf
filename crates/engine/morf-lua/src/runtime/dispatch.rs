@@ -9,7 +9,7 @@ use crate::{
 impl Runtime {
     /// Borrows the scene produced by executed configuration code.
     pub fn scene(&self) -> StateRef<'_, Scene> {
-        StateRef::map(self.reactive.borrow(), |state| &state.scene)
+        StateRef::map(self.reactive.borrow(), |state| state.engine.scene())
     }
 
     /// Mutably borrows the scene for frame-pipeline structural operations.
@@ -18,7 +18,7 @@ impl Runtime {
         // Native writes must invalidate the same service definitions as Lua
         // writes (for example, a Timer started through the Scene API).
         state.revisions_mut().bump_scene();
-        StateRefMut::map(state, |state| &mut state.scene)
+        StateRefMut::map(state, |state| state.engine.scene_mut())
     }
 
     /// Drains parent transitions queued by Lua handlers.
@@ -375,26 +375,26 @@ impl Runtime {
     /// Returns the first key handler within one scene root.
     pub fn first_key_target_in(&self, root: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        routing::first_key_target(&state.scene, state.events(), root)
+        routing::first_key_target(state.scene(), state.events(), root)
     }
 
     /// Every node on a surface that takes keys, in the order they are
     /// offered a key nothing has focus for (one with `focus` set first).
     pub fn key_targets_in_root(&self, root: NodeHandle) -> Vec<NodeHandle> {
         let state = self.reactive.borrow();
-        routing::key_offer_order(&state.scene, state.events(), root)
+        routing::key_offer_order(state.scene(), state.events(), root)
     }
 
     /// Returns the nearest key-handling ancestor of a hit-tested node.
     pub fn key_target_for_node(&self, node: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        routing::key_target_for_node(&state.scene, state.events(), node)
+        routing::key_target_for_node(state.scene(), state.events(), node)
     }
 
     /// Returns whether a node belongs to the subtree rooted at `root`.
     pub fn node_in_subtree(&self, root: NodeHandle, node: NodeHandle) -> bool {
         let state = self.reactive.borrow();
-        routing::node_in_subtree(&state.scene, root, node)
+        routing::node_in_subtree(state.scene(), root, node)
     }
 
     /// Whether anything has read a node's `contains_pointer`: when nothing
@@ -457,7 +457,7 @@ impl Runtime {
     pub fn tab_navigates(&self, node: NodeHandle) -> bool {
         self.reactive
             .borrow()
-            .scene
+            .scene()
             .bool_value(node, "tab_navigation")
             .unwrap_or(true)
     }
@@ -469,7 +469,7 @@ impl Runtime {
         current: Option<NodeHandle>,
     ) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        routing::next_key_target(&state.scene, state.events(), root, current)
+        routing::next_key_target(state.scene(), state.events(), root, current)
     }
 
     /// Tells `node`'s handler for `event`; see [`morf_runtime::events::deliver`].

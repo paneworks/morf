@@ -45,7 +45,7 @@ pub(crate) fn element_constructor<'gc>(
             state.images.register(node, on_status);
             // Until a paint has looked at it, a source is loading.
             if state
-                .scene
+                .scene()
                 .string_value(node, "source")
                 .is_ok_and(|source| !source.is_empty())
             {
@@ -64,13 +64,13 @@ pub(crate) fn element_constructor<'gc>(
         if element == Element::Inset && {
             let state = state.borrow();
             let children = state
-                .scene
+                .scene()
                 .children(node)
                 .map_err(|error| HostError(error.to_string()))?;
             // A mask is not the child an Inset insets.
             children
                 .iter()
-                .filter(|child| !state.scene.is_mask(**child))
+                .filter(|child| !state.scene().is_mask(**child))
                 .count()
                 > 1
         } {
@@ -112,7 +112,7 @@ pub(crate) fn loader_constructor<'gc>(
         }
         if state
             .borrow()
-            .scene
+            .scene()
             .bool_value(node, "active")
             .map_err(|error| HostError(error.to_string()))?
             && let Some(source) = source
@@ -120,7 +120,7 @@ pub(crate) fn loader_constructor<'gc>(
             let child = execute_node_factory(ctx, &source, limits).map_err(HostError)?;
             state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .reparent(child, Some(node))
                 .map_err(|error| HostError(error.to_string()))?;
             state
@@ -159,15 +159,15 @@ pub(crate) fn timer_constructor<'gc>(
         let (interval, repeat, running) = {
             let state = state.borrow();
             let interval = state
-                .scene
+                .scene()
                 .number(node, "interval")
                 .map_err(|error| HostError(error.to_string()))?;
             let repeat = state
-                .scene
+                .scene()
                 .bool_value(node, "repeat")
                 .map_err(|error| HostError(error.to_string()))?;
             let running = state
-                .scene
+                .scene()
                 .bool_value(node, "running")
                 .map_err(|error| HostError(error.to_string()))?;
             (interval, repeat, running)

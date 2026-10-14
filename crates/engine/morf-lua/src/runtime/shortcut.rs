@@ -101,7 +101,7 @@ impl crate::Runtime {
             return false;
         }
         let chord = Chord::pressed(keysym, modifiers);
-        let element = target.and_then(|node| self.reactive.borrow().scene.element(node).ok());
+        let element = target.and_then(|node| self.reactive.borrow().scene().element(node).ok());
         if !reaches_shortcuts(element, chord) {
             self.reactive.borrow_mut().shortcuts_mut().clear_held();
             return false;
@@ -127,7 +127,7 @@ impl crate::Runtime {
             let state = self.reactive.borrow();
             state
                 .shortcuts()
-                .matching(&state.scene, root, target, sequence)
+                .matching(state.scene(), root, target, sequence)
         };
         for (node, name, closure) in exact {
             let args = [IpcValue::String(name.clone())];

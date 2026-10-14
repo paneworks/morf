@@ -43,16 +43,16 @@ pub(crate) fn request_by_property(state: &mut ReactiveState, node: NodeHandle, o
 
 fn chain(state: &ReactiveState, root: NodeHandle) -> Vec<NodeHandle> {
     state
-        .scene
+        .scene()
         .focus_chain(root, |node| takes_keys(state, node))
 }
 
 fn within(state: &ReactiveState, scope: NodeHandle, node: NodeHandle) -> bool {
-    crate::runtime::helpers::scene_node_in_subtree(&state.scene, scope, node)
+    crate::runtime::helpers::scene_node_in_subtree(state.scene(), scope, node)
 }
 
 fn write(state: &mut ReactiveState, node: NodeHandle, property: &str, on: bool) {
-    if state.scene.contains(node) && state.scene.bool_value(node, property).ok() != Some(on) {
+    if state.scene().contains(node) && state.scene().bool_value(node, property).ok() != Some(on) {
         let _ = assign_scene_property(state, node, property, SceneValue::Bool(on));
     }
 }
@@ -64,7 +64,7 @@ impl Runtime {
         state
             .focus()
             .owner(root)
-            .filter(|node| state.scene.contains(*node))
+            .filter(|node| state.scene().contains(*node))
     }
 
     /// The node Tab (or, `backwards`, Shift+Tab) goes to from `current`
@@ -78,7 +78,7 @@ impl Runtime {
         let state = self.reactive.borrow();
         let chain = chain(&state, root);
         morf_runtime::focus::next_in(
-            &state.scene,
+            state.scene(),
             &chain,
             state.focus().memory(),
             current,
@@ -90,7 +90,7 @@ impl Runtime {
     /// click, itself or an ancestor.
     pub fn click_focus_target(&self, node: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
-        morf_runtime::focus::click_target(&state.scene, node, |node| takes_keys(&state, node))
+        morf_runtime::focus::click_target(state.scene(), node, |node| takes_keys(&state, node))
     }
 
     /// Gives focus under `root` to `node`, or to nothing. Writes `focused`
@@ -109,7 +109,7 @@ impl Runtime {
             state.focus_mut().note_root(root);
             let old = state.focus().owner(root);
             let old_visual =
-                old.is_some_and(|o| state.scene.bool_value(o, "visual_focus").unwrap_or(false));
+                old.is_some_and(|o| state.scene().bool_value(o, "visual_focus").unwrap_or(false));
             let visual = match reason {
                 FocusReason::Keyboard => true,
                 FocusReason::Click | FocusReason::Program => false,
@@ -119,8 +119,8 @@ impl Runtime {
             if let Some(old) = old.filter(|o| Some(*o) != node) {
                 write(&mut state, old, "focused", false);
                 write(&mut state, old, "visual_focus", false);
-                if state.scene.contains(old)
-                    && state.scene.element(old).ok() != Some(Element::TextInput)
+                if state.scene().contains(old)
+                    && state.scene().element(old).ok() != Some(Element::TextInput)
                 {
                     state.editing_mut().owe(
                         old,
@@ -132,16 +132,16 @@ impl Runtime {
             match node {
                 Some(node) => {
                     let mut scopes = Vec::new();
-                    let mut scope = state.scene.focus_scope_of(node);
+                    let mut scope = state.scene().focus_scope_of(node);
                     while let Some(s) = scope {
                         scopes.push(s);
-                        scope = state.scene.focus_scope_of(s);
+                        scope = state.scene().focus_scope_of(s);
                     }
                     state.focus_mut().give(root, node, scopes);
                     write(&mut state, node, "focused", active);
                     write(&mut state, node, "visual_focus", active && visual);
                     if old != Some(node)
-                        && state.scene.element(node).ok() != Some(Element::TextInput)
+                        && state.scene().element(node).ok() != Some(Element::TextInput)
                     {
                         state.editing_mut().owe(
                             node,
@@ -191,7 +191,8 @@ impl Runtime {
         let requests = {
             let state = self.reactive.borrow();
             for (root, owner) in state.focus().owners() {
-                if state.scene.can_hold_focus(owner) && state.scene.root_of(owner) == Some(root) {
+                if state.scene().can_hold_focus(owner) && state.scene().root_of(owner) == Some(root)
+                {
                     continue;
                 }
                 let next = state
@@ -199,7 +200,7 @@ impl Runtime {
                     .scopes(root)
                     .iter()
                     .copied()
-                    .filter(|scope| state.scene.can_hold_focus(*scope))
+                    .filter(|scope| state.scene().can_hold_focus(*scope))
                     .find_map(|scope| {
                         let found = chain(&state, scope);
                         state
@@ -215,7 +216,7 @@ impl Runtime {
             // A field the configuration focused by writing `focus` has the
             // keyboard: it has focus too.
             if let Some(input) = state.editing().focused()
-                && let Some(root) = state.scene.root_of(input)
+                && let Some(root) = state.scene().root_of(input)
                 && state.focus().owner(root) != Some(input)
                 && !moves.iter().any(|(r, _, _)| *r == root)
             {
@@ -243,10 +244,10 @@ impl Runtime {
             let state = self.reactive.borrow();
             match request {
                 FocusRequest::Set(node, keyboard) => {
-                    let Some(root) = state.scene.root_of(node) else {
+                    let Some(root) = state.scene().root_of(node) else {
                         return false;
                     };
-                    if !state.scene.can_hold_focus(node) {
+                    if !state.scene().can_hold_focus(node) {
                         return false;
                     }
                     let reason = if keyboard {
@@ -257,7 +258,7 @@ impl Runtime {
                     (root, Some(node), reason)
                 }
                 FocusRequest::Into(node, visual) => {
-                    let Some(root) = state.scene.root_of(node) else {
+                    let Some(root) = state.scene().root_of(node) else {
                         return false;
                     };
                     // Already inside it -- what opened it focused a part of
@@ -280,17 +281,17 @@ impl Runtime {
                     (root, Some(first), reason)
                 }
                 FocusRequest::Claim(node) => {
-                    let Some(root) = state.scene.root_of(node) else {
+                    let Some(root) = state.scene().root_of(node) else {
                         return false;
                     };
-                    let still = state.scene.bool_value(node, "focus").unwrap_or(false);
-                    if !still || !state.scene.can_hold_focus(node) {
+                    let still = state.scene().bool_value(node, "focus").unwrap_or(false);
+                    if !still || !state.scene().can_hold_focus(node) {
                         return false;
                     }
                     (root, Some(node), FocusReason::Program)
                 }
                 FocusRequest::Release(node) | FocusRequest::Clear(node) => {
-                    let Some(root) = state.scene.root_of(node) else {
+                    let Some(root) = state.scene().root_of(node) else {
                         return false;
                     };
                     if state.focus().owner(root) != Some(node) {
@@ -302,7 +303,7 @@ impl Runtime {
                     let Some(root) = state
                         .focus()
                         .last_root()
-                        .filter(|r| state.scene.contains(*r))
+                        .filter(|r| state.scene().contains(*r))
                     else {
                         return false;
                     };
@@ -374,7 +375,7 @@ pub(crate) fn install_focus_api<'gc>(
                     .focus()
                     .last_root()
                     .and_then(|root| state.focus().owner(root))
-                    .filter(|node| state.scene.contains(*node))
+                    .filter(|node| state.scene().contains(*node))
             };
             stack.clear();
             if let Some(node) = owner {

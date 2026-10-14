@@ -49,7 +49,7 @@ pub(super) fn configure_exit<'gc>(
         LuaValue::Nil | LuaValue::Boolean(false) => {
             return state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .set_exit(node, None)
                 .map_err(|error| error.to_string());
         }
@@ -71,7 +71,7 @@ pub(super) fn configure_exit<'gc>(
     values.sort_by(|a, b| a.0.cmp(&b.0));
     state
         .borrow_mut()
-        .scene
+        .scene_mut()
         .set_exit(node, Some(morf_scene::ExitSpec { values, behavior }))
         .map_err(|error| format!("exit: {error}"))
 }
@@ -103,7 +103,7 @@ pub(super) fn enter_values<'gc>(
         let start = lua_to_scene(ctx, start, 0)?;
         let settled = state
             .borrow()
-            .scene
+            .scene()
             .current(node, &property)
             .map_err(|error| error.to_string())?
             .clone();

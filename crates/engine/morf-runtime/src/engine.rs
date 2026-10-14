@@ -47,7 +47,8 @@ pub struct Engine {
     session: crate::session::Session,
     /// `morf.clock` and its coarser grains.
     clocks: crate::wake::Clocks,
-    pub scene: Scene,
+    /// The node tree the configuration built.
+    scene: Scene,
     /// Every text input's editing, and which has the keyboard.
     editing: crate::editing::Editing,
     /// Which node of each surface has focus.

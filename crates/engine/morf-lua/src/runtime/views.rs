@@ -151,7 +151,7 @@ impl ViewHost for LuaViewHost<'_, '_> {
     }
 
     fn with_scene<R>(&mut self, f: impl FnOnce(&mut Scene) -> R) -> R {
-        f(&mut self.state.borrow_mut().scene)
+        f(self.state.borrow_mut().scene_mut())
     }
 }
 

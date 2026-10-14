@@ -15,7 +15,7 @@ use crate::vm::types::*;
 impl Runtime {
     /// Whether a node is a terminal.
     pub fn is_terminal(&self, node: NodeHandle) -> bool {
-        self.reactive.borrow().scene.element(node).ok() == Some(Element::Terminal)
+        self.reactive.borrow().scene().element(node).ok() == Some(Element::Terminal)
     }
 
     /// Feeds every terminal what its program wrote, and runs the callbacks

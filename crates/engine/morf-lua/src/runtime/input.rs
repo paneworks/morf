@@ -129,10 +129,10 @@ impl Runtime {
         };
         // A click on a link in a text's runs is the link's.
         if event == UiEvent::Clicked
-            && self.reactive.borrow().scene.element(node).ok() == Some(morf_scene::Element::Text)
+            && self.reactive.borrow().scene().element(node).ok() == Some(morf_scene::Element::Text)
         {
             let href = morf_layout::link_at(
-                &self.reactive.borrow().scene,
+                self.reactive.borrow().scene(),
                 node,
                 point.local_x,
                 point.local_y,
@@ -252,7 +252,7 @@ impl Runtime {
         let mut moved = false;
         {
             let mut state = self.reactive.borrow_mut();
-            for (property, next) in routing::flickable_scroll(&state.scene, node, pixels, max) {
+            for (property, next) in routing::flickable_scroll(state.scene(), node, pixels, max) {
                 if crate::api::ui::scene::assign_scene_property(
                     &mut state,
                     node,

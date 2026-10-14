@@ -163,7 +163,7 @@ impl Runtime {
             layouts: reactive.layout_hooks(),
             limits: self.limits,
         };
-        Layout::compute_with(&reactive.scene, root, available, text, &mut host)
+        Layout::compute_with(reactive.scene(), root, available, text, &mut host)
             .map_err(|error| error.to_string())
     }
 
@@ -184,7 +184,7 @@ impl Runtime {
             limits: self.limits,
         };
         layout
-            .update_with(&reactive.scene, root, available, text, &mut host)
+            .update_with(reactive.scene(), root, available, text, &mut host)
             .map_err(|error| error.to_string())
     }
 }

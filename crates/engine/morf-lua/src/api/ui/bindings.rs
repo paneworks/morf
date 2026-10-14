@@ -173,13 +173,13 @@ pub(crate) fn apply_state(
         let animated = transition.filter(|_| {
             matches!(value, SceneValue::Number(_) | SceneValue::Color(_))
                 && matches!(
-                    state.scene.current(node, &property),
+                    state.scene().current(node, &property),
                     Ok(SceneValue::Number(_) | SceneValue::Color(_))
                 )
         });
         if let Some(transition) = animated {
             let from = state
-                .scene
+                .scene()
                 .current(node, &property)
                 .map_err(|error| error.to_string())?
                 .clone();
@@ -190,7 +190,7 @@ pub(crate) fn apply_state(
     }
     if old != name && (definition.parent.is_some() || definition.anchors.is_some()) {
         let parent = definition.parent.or(state
-            .scene
+            .scene()
             .parent(node)
             .map_err(|error| error.to_string())?);
         if let Some(parent) = parent {
@@ -199,7 +199,7 @@ pub(crate) fn apply_state(
                     assign_scene_property(&mut state, node, "anchors", SceneValue::Map(anchors))?;
                 }
                 state
-                    .scene
+                    .scene_mut()
                     .reparent(node, Some(parent))
                     .map_err(|error| error.to_string())?;
             } else {

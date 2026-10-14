@@ -158,13 +158,13 @@ pub(crate) fn configure_element<'gc>(
         if let LuaValue::Function(Function::Closure(closure)) = value {
             if !state
                 .borrow()
-                .scene
+                .scene()
                 .has_property(node, &property)
                 .map_err(|error| error.to_string())?
             {
                 let element = state
                     .borrow()
-                    .scene
+                    .scene()
                     .element(node)
                     .map_err(|error| error.to_string())?;
                 return Err(format!("unknown {element:?} property `{property}`"));
@@ -199,12 +199,12 @@ pub(crate) fn configure_element<'gc>(
             Some(timing) => {
                 let mut state = state.borrow_mut();
                 let start = state
-                    .scene
+                    .scene()
                     .current(node, &property)
                     .map_err(|error| error.to_string())?
                     .clone();
                 state
-                    .scene
+                    .scene_mut()
                     .animate_from(node, &property, start, settled, timing)
                     .map_err(|error| error.to_string())?;
             }
@@ -235,7 +235,7 @@ pub(crate) fn configure_element<'gc>(
     for (_, child) in children {
         state
             .borrow_mut()
-            .scene
+            .scene_mut()
             .reparent(child, Some(node))
             .map_err(|error| error.to_string())?;
     }
@@ -289,7 +289,7 @@ pub(crate) fn assign_engine_relation<'gc>(
             }
             let spec = morf_scene::Stretch::from_value(&lua_to_scene(ctx, value, 0)?)?;
             state
-                .scene
+                .scene_mut()
                 .set_stretch(node, spec)
                 .map_err(|error| error.to_string())?;
         }
@@ -302,13 +302,13 @@ pub(crate) fn assign_engine_relation<'gc>(
                     .map_err(|_| "mask must be a morf node, a table or nil".to_owned())?
                     .handle;
                 state
-                    .scene
+                    .scene_mut()
                     .set_mask(node, Some(mask))
                     .map_err(|error| error.to_string())?;
             }
             LuaValue::Nil | LuaValue::Boolean(false) | LuaValue::Table(_) => {
                 state
-                    .scene
+                    .scene_mut()
                     .set_mask(node, None)
                     .map_err(|error| error.to_string())?;
                 let value = match value {
@@ -321,7 +321,7 @@ pub(crate) fn assign_engine_relation<'gc>(
         },
         _ => {
             let element = state
-                .scene
+                .scene()
                 .element(node)
                 .map_err(|error| error.to_string())?;
             if element != morf_scene::Element::SdfShape {
@@ -338,7 +338,7 @@ pub(crate) fn assign_engine_relation<'gc>(
                 _ => return Err("track must be a morf node or nil".to_owned()),
             };
             state
-                .scene
+                .scene_mut()
                 .set_track(node, target)
                 .map_err(|error| error.to_string())?;
         }

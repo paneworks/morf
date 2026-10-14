@@ -9,7 +9,7 @@ impl morf_runtime::animation::AnimationHost for ReactiveState {
     }
 
     fn scene(&mut self) -> &mut Scene {
-        &mut self.scene
+        self.engine.scene_mut()
     }
 
     fn assign(

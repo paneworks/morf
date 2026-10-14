@@ -75,4 +75,6 @@ subsystems! {
     /// Each node's handler for each event, and the `contains_pointer`
     /// watches.
     events, events_mut: crate::events::Events;
+    /// The node tree the configuration built.
+    scene, scene_mut: morf_scene::Scene;
 }

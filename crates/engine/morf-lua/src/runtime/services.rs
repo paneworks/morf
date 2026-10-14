@@ -187,7 +187,7 @@ fn timer_still_due(
         if !state.timers().has_node_handler(node) {
             return false;
         }
-        let Ok(running) = state.scene.bool_value(node, "running") else {
+        let Ok(running) = state.scene().bool_value(node, "running") else {
             return false;
         };
         if repeat && !running {

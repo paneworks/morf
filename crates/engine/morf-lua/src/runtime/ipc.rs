@@ -12,8 +12,8 @@ impl Runtime {
             .graph()
             .map_or((0, 0), |graph| (graph.signal_count(), graph.effect_count()));
         ResourceStats {
-            nodes: state.scene.node_count(),
-            scene_signals: state.scene.property_signal_count(),
+            nodes: state.scene().node_count(),
+            scene_signals: state.scene().property_signal_count(),
             graph_signals,
             graph_effects,
             bindings: state.reactive.effect_count(),
