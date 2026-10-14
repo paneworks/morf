@@ -166,3 +166,43 @@ fn a_clip_that_cannot_be_taken_exactly_is_refused_by_name() {
         other => panic!("a concave clip must be refused, not guessed at: {other:?}"),
     }
 }
+
+/// Input that is not a usable document is an error naming why, never a panic
+/// and never an empty outline passed off as a shape.
+#[test]
+fn bad_input_is_refused_with_a_reason() {
+    let parse = |bytes: &[u8]| outline_from_bytes(bytes);
+    for broken in [
+        b"".as_slice(),
+        b"not xml at all",
+        b"<svg xmlns=\"http://www.w3.org/2000/svg\"",
+        b"<html><body/></html>",
+        &[0xff, 0xfe, 0x00, 0x3c],
+    ] {
+        match parse(broken) {
+            Err(SvgError::Parse(message)) => assert!(!message.is_empty()),
+            other => panic!(
+                "{:?} must not parse: {other:?}",
+                String::from_utf8_lossy(broken)
+            ),
+        }
+    }
+    const NOTHING: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+      <rect width="10" height="10" fill="none"/>
+    </svg>"#;
+    assert!(matches!(parse(NOTHING.as_bytes()), Err(SvgError::Empty)));
+    const BAD_PATH: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+      <path d="M 1 1 L nonsense"/>
+    </svg>"#;
+    assert!(parse(BAD_PATH.as_bytes()).is_err());
+}
+
+#[test]
+fn a_missing_file_and_a_raster_are_refused() {
+    assert!(matches!(
+        outline_of("/nonexistent/morf/icon.svg"),
+        Err(SvgError::Read(_))
+    ));
+    let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    assert!(matches!(outline_of_source(png), Err(SvgError::Parse(_))));
+}

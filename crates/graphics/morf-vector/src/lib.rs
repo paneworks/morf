@@ -32,4 +32,6 @@ pub use morph::{Paired, between, contour_points, pair_up, walk};
 pub use step::Step;
 
 #[cfg(test)]
+mod morph_tests;
+#[cfg(test)]
 mod tests;
