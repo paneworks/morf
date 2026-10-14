@@ -29,13 +29,40 @@ pub struct GpuInfo {
     pub dmabuf: bool,
 }
 
-/// wgpu initialization or submission failure.
+/// wgpu initialization or submission failure, each kind with its message.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GpuError(pub(crate) String);
+pub enum GpuError {
+    /// The driver lost the device; the backend has to be opened again.
+    DeviceLost(String),
+    /// A shader or pipeline was refused or could not be built.
+    Pipeline(String),
+    /// The window surface could not be made or would not hand out a frame.
+    Surface(String),
+    /// No adapter, format or mode this renderer can use.
+    Unsupported(String),
+    /// Anything else.
+    Other(String),
+}
+
+impl GpuError {
+    pub fn message(&self) -> &str {
+        match self {
+            Self::DeviceLost(message)
+            | Self::Pipeline(message)
+            | Self::Surface(message)
+            | Self::Unsupported(message)
+            | Self::Other(message) => message,
+        }
+    }
+
+    pub fn is_device_lost(&self) -> bool {
+        matches!(self, Self::DeviceLost(_))
+    }
+}
 
 impl fmt::Display for GpuError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.message())
     }
 }
 

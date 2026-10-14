@@ -89,7 +89,7 @@ impl WgpuBackend {
         }
         let surface = instance
             .create_surface(window)
-            .map_err(|error| GpuError(format!("could not create GPU surface: {error}")))?;
+            .map_err(|error| GpuError::Surface(format!("could not create GPU surface: {error}")))?;
         Self::initialize(instance, Some(surface), width, height).await
     }
 

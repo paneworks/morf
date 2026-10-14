@@ -412,7 +412,7 @@ impl GlyphAtlas {
         };
         for (key, pixels, outside) in requested_entries {
             let Some((x, y)) = self.allocator.allocate(key.width, key.height) else {
-                return Err(GpuError(
+                return Err(GpuError::Other(
                     "visible glyphs exceed the persistent atlas capacity".to_owned(),
                 ));
             };

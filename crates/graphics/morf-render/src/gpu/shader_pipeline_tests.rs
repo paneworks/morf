@@ -43,8 +43,9 @@ fn a_pipeline_the_gpu_rejects_is_an_error_not_a_dead_pipeline() {
     let error = backend
         .register_shader(registration(compiled.hash, &broken, compiled.uniform_size))
         .expect_err("the GPU refuses the module");
-    assert!(error.0.contains("rejected the shader"), "{error}");
-    assert!(error.0.contains("morf_undeclared"), "{error}");
+    assert!(matches!(error, GpuError::Pipeline(_)), "{error:?}");
+    assert!(error.message().contains("rejected the shader"), "{error}");
+    assert!(error.message().contains("morf_undeclared"), "{error}");
     // Nothing was left registered under that program, so a fixed shader
     // takes its place rather than being skipped as already known.
     backend

@@ -151,7 +151,7 @@ pub(crate) fn create_surface_state(
         .copied()
         .find(wgpu::TextureFormat::is_srgb)
         .or_else(|| capabilities.formats.first().copied())
-        .ok_or_else(|| GpuError("GPU surface exposes no texture format".to_owned()))?;
+        .ok_or_else(|| GpuError::Unsupported("GPU surface exposes no texture format".to_owned()))?;
     // Mailbox, then immediate, then whatever there is: never FIFO by
     // choice. The shell already paces itself on the compositor's frame
     // callbacks, so FIFO buys nothing -- and on Wayland Mesa implements it
@@ -177,14 +177,16 @@ pub(crate) fn create_surface_state(
         .chain(preferred.iter().copied())
         .find(|mode| capabilities.present_modes.contains(mode))
         .or_else(|| capabilities.present_modes.first().copied())
-        .ok_or_else(|| GpuError("GPU surface exposes no presentation mode".to_owned()))?;
+        .ok_or_else(|| {
+            GpuError::Unsupported("GPU surface exposes no presentation mode".to_owned())
+        })?;
     let alpha_mode = capabilities
         .alpha_modes
         .iter()
         .copied()
         .find(|mode| *mode == wgpu::CompositeAlphaMode::PreMultiplied)
         .or_else(|| capabilities.alpha_modes.first().copied())
-        .ok_or_else(|| GpuError("GPU surface exposes no alpha mode".to_owned()))?;
+        .ok_or_else(|| GpuError::Unsupported("GPU surface exposes no alpha mode".to_owned()))?;
     let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format,
@@ -393,12 +395,12 @@ pub(crate) fn acquire_frame(
                 wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
                     Ok(None)
                 }
-                after => Err(GpuError(format!(
+                after => Err(GpuError::Surface(format!(
                     "could not acquire GPU surface after {status:?}: {after:?}"
                 ))),
             }
         }
-        status => Err(GpuError(format!(
+        status => Err(GpuError::Surface(format!(
             "could not acquire GPU surface: {status:?}"
         ))),
     }

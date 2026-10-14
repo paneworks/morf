@@ -37,7 +37,9 @@ impl WgpuBackend {
                 self.blend,
             )
             .ok_or_else(|| {
-                GpuError("the glyph shader has no hook to splice an effect into".to_owned())
+                GpuError::Pipeline(
+                    "the glyph shader has no hook to splice an effect into".to_owned(),
+                )
             })?
         } else {
             build_field_pipeline(
@@ -55,11 +57,15 @@ impl WgpuBackend {
                 },
             )
             .ok_or_else(|| {
-                GpuError("the field shader has no hook to splice a shader into".to_owned())
+                GpuError::Pipeline(
+                    "the field shader has no hook to splice a shader into".to_owned(),
+                )
             })?
         };
         if let Some(error) = super::backend_init::ready(scope.pop()) {
-            return Err(GpuError(format!("the GPU rejected the shader: {error}")));
+            return Err(GpuError::Pipeline(format!(
+                "the GPU rejected the shader: {error}"
+            )));
         }
         let registry = if shader.effect {
             &mut self.effect_shaders
@@ -120,7 +126,7 @@ impl WgpuBackend {
             let image = self
                 .images
                 .load(path, 0, 0, 120)
-                .map_err(|error| GpuError(format!("shader texture `{path}`: {error}")))?;
+                .map_err(|error| GpuError::Other(format!("shader texture `{path}`: {error}")))?;
             views.push(self.upload_shader_texture(&image));
         }
         let mut bindings = Vec::with_capacity(views.len() * 2);

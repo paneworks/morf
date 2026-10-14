@@ -250,7 +250,7 @@ async fn open_device(
             apply_limit_buckets: false,
         })
         .await
-        .map_err(|error| GpuError(format!("no compatible GPU adapter: {error}")))?;
+        .map_err(|error| GpuError::Unsupported(format!("no compatible GPU adapter: {error}")))?;
     warn_if_not_vulkan(&adapter.get_info());
     let adapter_limits = adapter.limits();
     // Subpixel text blends each channel by its own coverage, which takes
@@ -277,10 +277,9 @@ async fn open_device(
     let (device, queue, dmabuf) = match open_with_dmabuf(instance, &adapter, &descriptor) {
         Some((device, queue, support)) => (device, queue, Some(support)),
         None => {
-            let (device, queue) = adapter
-                .request_device(&descriptor)
-                .await
-                .map_err(|error| GpuError(format!("could not create GPU device: {error}")))?;
+            let (device, queue) = adapter.request_device(&descriptor).await.map_err(|error| {
+                GpuError::Other(format!("could not create GPU device: {error}"))
+            })?;
             (device, queue, None)
         }
     };

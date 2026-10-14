@@ -331,7 +331,7 @@ pub(crate) fn create_glyph_batch(
             &*mask_atlas
         };
         let entry = atlas.entries.get(&key).ok_or_else(|| {
-            GpuError("prepared glyph is missing from the persistent atlas".to_owned())
+            GpuError::Other("prepared glyph is missing from the persistent atlas".to_owned())
         })?;
         let atlas_height = atlas.height() as f32;
         let tint = match glyph.content {
