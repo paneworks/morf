@@ -6,7 +6,7 @@ use super::*;
 /// Brings the native timers in line with the `Timer` nodes, when the scene
 /// changed (`Engine::reconcile_timers`). Returns whether anything did.
 pub(super) fn reconcile_timers(state: &mut ReactiveState, definitions_changed: bool) -> bool {
-    state.engine.reconcile_timers(definitions_changed)
+    state.reconcile_timers(definitions_changed)
 }
 
 /// Brings each `Loader` node's item in line with what the node asks for:

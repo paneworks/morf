@@ -164,7 +164,7 @@ pub(crate) fn install_palette_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let callback: luna::Closure = stack.consume(ctx)?;
             let mut state = listen_state.borrow_mut();
-            if state.palettes.len() >= MAX_LISTENERS {
+            if state.palettes().len() >= MAX_LISTENERS {
                 return Err(HostError(format!(
                     "morf.terminal.listen keeps at most {MAX_LISTENERS} terminals"
                 ))
@@ -179,13 +179,13 @@ pub(crate) fn install_palette_api<'gc>(
                 ctx.intern(tty.path().to_string_lossy().as_bytes()),
             );
             let callback = crate::vm::handler_store::register(ctx.stash(callback));
-            let id = state.palettes.listen(tty, callback);
+            let id = state.palettes_mut().listen(tty, callback);
             let stop_state = std::rc::Rc::clone(&listen_state);
             handle.set_field(
                 ctx,
                 "stop",
                 Callback::from_fn(&ctx, move |_, _, _| {
-                    stop_state.borrow_mut().palettes.stop(id);
+                    stop_state.borrow_mut().palettes_mut().stop(id);
                     Ok(CallbackReturn::Return)
                 }),
             );
@@ -219,7 +219,7 @@ impl crate::Runtime {
     /// Hands each `morf.terminal.listen` callback the colours its terminal
     /// heard since the last turn. True when any did.
     pub(crate) fn poll_palette_listeners(&mut self) -> bool {
-        let calls = self.reactive.borrow_mut().palettes.heard();
+        let calls = self.reactive.borrow_mut().palettes_mut().heard();
         let any = !calls.is_empty();
         for (callback, args) in calls {
             if let Err(message) = self.run_handler(|ctx, limits| {

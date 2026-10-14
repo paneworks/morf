@@ -81,7 +81,7 @@ pub(crate) fn assign_scene_property(
         .map_err(|error| error.to_string())?;
     // A path that draws a channel: watched for the channel's writes.
     if property == "series" {
-        state.channels.note_series(node);
+        state.channels_mut().note_series(node);
     }
     // Text set in runs may hold links, which the layout places.
     if matches!(property, "spans" | "markup") {
@@ -172,12 +172,15 @@ pub(crate) fn node_userdata<'gc>(
     state: Rc<StateCell<ReactiveState>>,
     handle: NodeHandle,
 ) -> UserData<'gc> {
-    let existing = state.borrow().metatables.node();
+    let existing = state.borrow().metatables().node();
     let metatable = match existing {
         Some(stashed) => ctx.fetch(&stashed),
         None => {
             let built = node_metatable(ctx, Rc::clone(&state));
-            state.borrow_mut().metatables.set_node(ctx.stash(built));
+            state
+                .borrow_mut()
+                .metatables_mut()
+                .set_node(ctx.stash(built));
             built
         }
     };

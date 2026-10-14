@@ -195,7 +195,7 @@ pub(crate) fn install_theme_api<'gc>(
             }
             let metatable = state
                 .borrow()
-                .metatables
+                .metatables()
                 .state()
                 .ok_or_else(|| HostError("states are not installed".to_owned()))?;
             let userdata = build(
@@ -222,7 +222,7 @@ pub(crate) fn install_theme_api<'gc>(
                 let watcher = FileView::new(&path).watch().ok();
                 state
                     .borrow_mut()
-                    .theme_sources
+                    .theme_sources_mut()
                     .watch(path, watcher, watched);
             }
             drop(fields);

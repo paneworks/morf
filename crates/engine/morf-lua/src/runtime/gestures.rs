@@ -108,7 +108,7 @@ impl Runtime {
         let due = {
             let mut state = self.reactive.borrow_mut();
             let now = clock(state.timers().virtual_now());
-            state.engine.take_long_press(now)
+            state.take_long_press(now)
         };
         match due {
             Some((node, point)) => self.dispatch_ui_event_with_args(
@@ -124,7 +124,7 @@ impl Runtime {
 impl Runtime {
     /// Whether `node` has a handler for `event`.
     pub fn handles(&self, node: NodeHandle, event: UiEvent) -> bool {
-        self.reactive.borrow().engine.events().has(node, event)
+        self.reactive.borrow().events().has(node, event)
     }
 
     /// Calls `node`'s handler for a gesture the host recognised (a pinch, an

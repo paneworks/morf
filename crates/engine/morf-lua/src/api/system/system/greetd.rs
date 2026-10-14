@@ -91,7 +91,9 @@ pub(super) fn install_greetd<'gc>(
         let (session, callback): (UserRef<GreetdSessionToken>, Closure) = stack.consume(ctx)?;
         let mut state = converse_state.borrow_mut();
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
-        state.auth.listen_to_greetd(&session.conversation, callback);
+        state
+            .auth_mut()
+            .listen_to_greetd(&session.conversation, callback);
         Ok(CallbackReturn::Return)
     });
     let greetd_session_respond = Callback::from_fn(&ctx, |ctx, _, mut stack| {

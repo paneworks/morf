@@ -53,7 +53,7 @@ pub(crate) fn install_pam_api<'gc>(
             let callback = crate::vm::handler_store::register(ctx.stash(callback));
             pam_state
                 .borrow_mut()
-                .auth
+                .auth_mut()
                 .check(task, callback, unlock_on_success);
             Ok(CallbackReturn::Return)
         });
@@ -65,13 +65,15 @@ pub(crate) fn install_pam_api<'gc>(
     let session_on_message = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (session, callback): (UserRef<PamSessionToken>, Closure) = stack.consume(ctx)?;
         let mut state = on_message_state.borrow_mut();
-        if state.auth.session_count() >= MAX_PAM_SESSIONS {
+        if state.auth().session_count() >= MAX_PAM_SESSIONS {
             return Err(HostError("PAM session limit reached".into()).into());
         }
         // One listener per session, replacing rather than adding: two
         // listeners answering one prompt is one answer thrown away.
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
-        state.auth.listen_to_session(&session.session, callback);
+        state
+            .auth_mut()
+            .listen_to_session(&session.session, callback);
         Ok(CallbackReturn::Return)
     });
     let session_respond = Callback::from_fn(&ctx, |ctx, _, mut stack| {

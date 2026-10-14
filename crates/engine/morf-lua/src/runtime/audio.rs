@@ -16,7 +16,7 @@ impl Runtime {
     /// configuration has not touched `morf.audio` yet.
     pub fn set_audio_backend(&mut self, backend: impl Backend) {
         let mut state = self.reactive.borrow_mut();
-        if let Some(host) = &mut state.audio
+        if let Some(host) = state.audio_mut()
             && host.session.audio.is_none()
         {
             host.session.factory = Some(Box::new(move || Audio::with_backend(backend)));
@@ -34,7 +34,7 @@ impl Runtime {
         {
             let mut guard = self.reactive.borrow_mut();
             let state = &mut *guard;
-            let Some(host) = state.audio.as_mut() else {
+            let (Some(host), engine) = state.audio_and_engine() else {
                 return false;
             };
             // A channel takes the bands in Rust: filtered, written, drawn.
@@ -58,8 +58,7 @@ impl Runtime {
                     changed_models.push(Rc::clone(model));
                     // A list nothing draws would keep its change journal
                     // forever; one a view follows is drained by the view.
-                    let followed = state
-                        .engine
+                    let followed = engine
                         .views()
                         .values()
                         .any(|view| Rc::ptr_eq(&view.model, model));
@@ -72,7 +71,7 @@ impl Runtime {
                     (host.revision, IpcValue::Integer(rows.revision)),
                 ];
                 for (id, value) in writes {
-                    moved |= state.reactive_mut().update(id, value);
+                    moved |= engine.reactive_mut().update(id, value);
                 }
                 // A binding that counts the devices follows them.
                 for model in changed_models {

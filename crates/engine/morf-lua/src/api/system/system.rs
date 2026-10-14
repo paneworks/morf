@@ -53,13 +53,13 @@ fn register_subscription<'gc>(
     kind: DbusSignalKind,
 ) -> Result<u64, HostError> {
     let mut state = state.borrow_mut();
-    if state.dbus.subscription_count() >= MAX_DBUS_SUBSCRIPTIONS {
+    if state.dbus().subscription_count() >= MAX_DBUS_SUBSCRIPTIONS {
         return Err(HostError(format!(
             "D-Bus subscription limit reached ({MAX_DBUS_SUBSCRIPTIONS}); close the ones no longer needed"
         )));
     }
     let callback = crate::vm::handler_store::register(ctx.stash(callback));
-    Ok(state.dbus.subscribe(signal, callback, kind))
+    Ok(state.dbus_mut().subscribe(signal, callback, kind))
 }
 
 /// `"session"` or `"system"`.
@@ -130,14 +130,14 @@ pub(crate) fn install_system_service_api<'gc>(
     let close_state = Rc::clone(&state);
     let subscription_close = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let handle: UserRef<DbusSubscriptionToken> = stack.consume(ctx)?;
-        let closed = close_state.borrow_mut().dbus.unsubscribe(handle.id);
+        let closed = close_state.borrow_mut().dbus_mut().unsubscribe(handle.id);
         stack.replace(ctx, closed);
         Ok(CallbackReturn::Return)
     });
     let active_state = Rc::clone(&state);
     let subscription_active = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let handle: UserRef<DbusSubscriptionToken> = stack.consume(ctx)?;
-        let active = active_state.borrow().dbus.is_subscribed(handle.id);
+        let active = active_state.borrow().dbus().is_subscribed(handle.id);
         stack.replace(ctx, active);
         Ok(CallbackReturn::Return)
     });
@@ -186,7 +186,7 @@ pub(crate) fn install_system_service_api<'gc>(
         };
         let argument = positional_from_lua(ctx, arguments.0).map_err(HostError::from)?;
         let mut state = proxy_async_state.borrow_mut();
-        if state.dbus.reply_count() >= MAX_DBUS_REPLIES {
+        if state.dbus().reply_count() >= MAX_DBUS_REPLIES {
             return Err(HostError(format!(
                 "too many D-Bus calls waiting for an answer (the limit is {MAX_DBUS_REPLIES})"
             ))
@@ -197,7 +197,7 @@ pub(crate) fn install_system_service_api<'gc>(
             .call_async(&method, argument)
             .map_err(HostError::from)?;
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
-        state.dbus.await_reply(reply, callback);
+        state.dbus_mut().await_reply(reply, callback);
         stack.replace(ctx, true);
         Ok(CallbackReturn::Return)
     });
@@ -316,7 +316,7 @@ pub(crate) fn install_system_service_api<'gc>(
         };
         let argument = lua_to_dbus(ctx, argument, 0).map_err(HostError::from)?;
         let mut state = module_async_state.borrow_mut();
-        if state.dbus.reply_count() >= MAX_DBUS_REPLIES {
+        if state.dbus().reply_count() >= MAX_DBUS_REPLIES {
             return Err(HostError(format!(
                 "too many D-Bus calls waiting for an answer (the limit is {MAX_DBUS_REPLIES})"
             ))
@@ -333,7 +333,7 @@ pub(crate) fn install_system_service_api<'gc>(
         )
         .map_err(HostError::from)?;
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
-        state.dbus.await_reply(reply, callback);
+        state.dbus_mut().await_reply(reply, callback);
         stack.replace(ctx, true);
         Ok(CallbackReturn::Return)
     });

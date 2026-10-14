@@ -36,8 +36,7 @@ impl Runtime {
     fn follow_toplevels(&mut self, windows: &[Toplevel]) {
         let (change, listeners) = {
             let mut guard = self.reactive.borrow_mut();
-            let state = &mut *guard;
-            let Some(host) = state.toplevels.as_mut() else {
+            let (Some(host), engine) = guard.toplevels_and_engine() else {
                 return;
             };
             let change = ToplevelChange::between(&host.windows, windows);
@@ -52,8 +51,7 @@ impl Runtime {
             );
             // A list nothing draws would keep its change journal forever;
             // one a view follows is drained by the view.
-            let followed = state
-                .engine
+            let followed = engine
                 .views()
                 .values()
                 .any(|view| std::rc::Rc::ptr_eq(&view.model, &host.model));
@@ -70,7 +68,7 @@ impl Runtime {
                     .map(|(_, callback)| callback.clone())
                     .collect::<Vec<_>>()
             };
-            state.reactive_mut().try_write(revision, value);
+            engine.reactive_mut().try_write(revision, value);
             (change.to_scene(), listeners)
         };
         if let Err(message) = self

@@ -24,7 +24,7 @@ impl Runtime {
         let Some(&name) = PREFERENCES.iter().find(|each| **each == name) else {
             return Err(format!("`{name}` is not a preference"));
         };
-        if let Some(prefers) = &mut self.reactive.borrow_mut().prefers {
+        if let Some(prefers) = self.reactive.borrow_mut().prefers_mut() {
             prefers.overridden.insert(name);
         }
         self.write_preference(name, value)?;
@@ -34,7 +34,7 @@ impl Runtime {
 
     fn write_preference(&mut self, name: &str, value: IpcValue) -> Result<(), String> {
         let mut state = self.reactive.borrow_mut();
-        let Some(prefers) = &state.prefers else {
+        let Some(prefers) = state.prefers() else {
             return Ok(());
         };
         let id = match name {
@@ -73,11 +73,11 @@ impl Runtime {
                 portal: Some(portal),
                 overridden,
                 ..
-            }) = &mut state.prefers
+            }) = state.prefers_mut()
             {
                 changes = portal.poll(overridden);
             }
-            rewritten = state.theme_sources.rewritten();
+            rewritten = state.theme_sources().rewritten();
         }
         let mut moved = false;
         for (name, value) in changes {

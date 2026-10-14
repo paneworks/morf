@@ -16,7 +16,7 @@ pub(super) fn install_udev<'gc>(
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
         udev_state
             .borrow_mut()
-            .feeds
+            .feeds_mut()
             .watch_devices(monitor, callback);
         Ok(CallbackReturn::Return)
     });
@@ -58,11 +58,11 @@ pub(super) fn install_status_notifier<'gc>(
         let host = StatusNotifierHost::connect_to(&borrowed)
             .map_err(|error| HostError(error.to_string()))?;
         let mut state = status_notifier_state.borrow_mut();
-        if state.feeds.trays_full() {
+        if state.feeds().trays_full() {
             return Err(HostError("status notifier subscription limit reached".into()).into());
         }
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
-        state.feeds.watch_tray(host, callback);
+        state.feeds_mut().watch_tray(host, callback);
         Ok(CallbackReturn::Return)
     });
     let status_notifier = Table::new(&ctx);

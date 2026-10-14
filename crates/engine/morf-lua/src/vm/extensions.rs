@@ -56,7 +56,10 @@ impl Runtime {
     /// Tells `listener` the nodes each removal takes, while the removal
     /// happens. It must not reach back into the runtime.
     pub fn on_nodes_removed(&mut self, listener: NodesRemoved) {
-        self.reactive.borrow_mut().removal_listeners.push(listener);
+        self.reactive
+            .borrow_mut()
+            .removal_listeners_mut()
+            .push(listener);
     }
 
     /// Makes `require(name)` return a table of `functions`, each called with

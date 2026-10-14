@@ -13,7 +13,7 @@ impl Starter {
         options: SpawnOptions,
         kind: Kind,
     ) -> Result<Result<UserData<'gc>, String>, HostError> {
-        let spawned = self.state.borrow_mut().io.spawn(options, kind);
+        let spawned = self.state.borrow_mut().io_mut().spawn(options, kind);
         let link = match spawned.map_err(HostError::from)? {
             Ok(link) => link,
             Err(error) => return Ok(Err(error.into_message())),
@@ -32,7 +32,7 @@ impl Starter {
         let link = self
             .state
             .borrow_mut()
-            .io
+            .io_mut()
             .connect(options, kind)
             .map_err(HostError::from)?;
         let userdata = UserData::new_static(&ctx, IoToken(link));

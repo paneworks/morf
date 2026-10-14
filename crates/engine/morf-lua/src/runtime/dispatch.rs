@@ -9,7 +9,7 @@ use crate::{
 impl Runtime {
     /// Borrows the scene produced by executed configuration code.
     pub fn scene(&self) -> StateRef<'_, Scene> {
-        StateRef::map(self.reactive.borrow(), |state| state.engine.scene())
+        StateRef::map(self.reactive.borrow(), |state| state.engine().scene())
     }
 
     /// Mutably borrows the scene for frame-pipeline structural operations.
@@ -18,7 +18,7 @@ impl Runtime {
         // Native writes must invalidate the same service definitions as Lua
         // writes (for example, a Timer started through the Scene API).
         state.revisions_mut().bump_scene();
-        StateRefMut::map(state, |state| state.engine.scene_mut())
+        StateRefMut::map(state, |state| state.engine_mut().scene_mut())
     }
 
     /// Drains parent transitions queued by Lua handlers.

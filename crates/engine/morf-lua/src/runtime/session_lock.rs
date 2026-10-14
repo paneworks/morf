@@ -12,7 +12,7 @@ pub use morf_runtime::session::SessionLockState;
 
 /// The state as last recorded.
 pub(crate) fn current(state: &ReactiveState) -> SessionLockState {
-    state.engine.session_lock_state()
+    state.session_lock_state()
 }
 
 impl Runtime {
@@ -26,7 +26,7 @@ impl Runtime {
     pub fn set_session_lock_state(&mut self, next: SessionLockState) -> bool {
         let value = {
             let mut state = self.reactive.borrow_mut();
-            let Some((value, written)) = state.engine.set_session_lock_state(next) else {
+            let Some((value, written)) = state.set_session_lock_state(next) else {
                 return false;
             };
             if let Err(error) = written {

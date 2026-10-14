@@ -19,28 +19,25 @@ impl Runtime {
     /// when it loops forever), at most `max`: for `MORF_WAKE_LOG`, which asks
     /// what keeps an otherwise idle shell drawing frames.
     pub fn motion_report(&self, max: usize) -> Vec<String> {
-        self.reactive.borrow().engine.motion_report(max)
+        self.reactive.borrow().motion_report(max)
     }
 
     /// What changed for layout under `root` since the layout at revision
     /// `since`: the nodes stamped since, one line each, at most `max`, and
     /// how many there were. For `MORF_FRAME_LOG=2`, when a layout is slow.
     pub fn layout_report(&self, root: NodeHandle, since: u64, max: usize) -> (usize, Vec<String>) {
-        self.reactive
-            .borrow()
-            .engine
-            .layout_report(root, since, max)
+        self.reactive.borrow().layout_report(root, since, max)
     }
 
     pub fn has_motion(&self) -> bool {
-        self.reactive.borrow().engine.has_motion()
+        self.reactive.borrow().has_motion()
     }
 
     /// Moves every theme colour easing to a new value on by `delta`, and
     /// hands each reader the colour on show.
     /// Returns how many colours moved.
     fn advance_theme_fades(&mut self, delta: Duration) -> usize {
-        let moved = self.reactive.borrow_mut().engine.advance_theme_fades(delta);
+        let moved = self.reactive.borrow_mut().advance_theme_fades(delta);
         if moved == 0 {
             return 0;
         }

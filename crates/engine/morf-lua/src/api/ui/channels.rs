@@ -59,14 +59,14 @@ impl Runtime {
         let generation = morf_scene::channels_generation();
         let flush = {
             let mut guard = self.reactive.borrow_mut();
-            let state = &mut *guard;
-            if generation == state.channels.seen {
+            let (channels, engine) = guard.channels_and_engine();
+            if generation == channels.seen {
                 return false;
             }
-            state.channels.seen = generation;
+            channels.seen = generation;
             let mut flush = false;
             let mut writes = Vec::new();
-            for (channel, signal, last) in state.channels.watched.values_mut() {
+            for (channel, signal, last) in channels.watched.values_mut() {
                 let revision = channel.revision();
                 if revision != *last {
                     *last = revision;
@@ -74,12 +74,12 @@ impl Runtime {
                 }
             }
             for (signal, value) in writes {
-                flush |= state.engine.reactive_mut().try_write(signal, value);
+                flush |= engine.reactive_mut().try_write(signal, value);
             }
             // A path on show whose channel moved: a frame.
             let mut shown = false;
-            let scene = state.engine.scene();
-            state.channels.series_nodes.retain(|node, drawn| {
+            let scene = engine.scene();
+            channels.series_nodes.retain(|node, drawn| {
                 if !scene.contains(*node) {
                     return false;
                 }
@@ -99,7 +99,7 @@ impl Runtime {
                 true
             });
             if shown {
-                state.revisions_mut().bump_scene();
+                engine.revisions_mut().bump_scene();
             }
             (flush, shown)
         };
@@ -123,7 +123,7 @@ impl Runtime {
 
 /// The signal reads of `channel` depend on, made on first use.
 fn watch(state: &mut ReactiveState, channel: &Arc<Channel>) -> Result<SignalId, HostError> {
-    if let Some((_, signal, _)) = state.channels.watched.get(&channel.id()) {
+    if let Some((_, signal, _)) = state.channels().watched.get(&channel.id()) {
         return Ok(*signal);
     }
     let revision = channel.revision();
@@ -135,7 +135,7 @@ fn watch(state: &mut ReactiveState, channel: &Arc<Channel>) -> Result<SignalId, 
         )
         .ok_or_else(|| HostError(morf_runtime::reactive::GRAPH_RUNNING.to_owned()))?;
     state
-        .channels
+        .channels_mut()
         .watched
         .insert(channel.id(), (Arc::clone(channel), signal, revision));
     Ok(signal)

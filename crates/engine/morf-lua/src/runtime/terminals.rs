@@ -32,9 +32,10 @@ fn with_hub<R>(
     state: &mut ReactiveState,
     work: impl FnOnce(&mut TerminalHub, &mut Scene) -> R,
 ) -> R {
-    let result = work(&mut state.terminals, state.engine.scene_mut());
-    let effects = state.terminals.take_effects();
-    state.engine.revisions_mut().advance_scene(effects.screens);
+    let (hub, scene) = state.terminals_and_scene();
+    let result = work(hub, scene);
+    let effects = state.terminals_mut().take_effects();
+    state.revisions_mut().advance_scene(effects.screens);
     for (node, property, value) in effects.properties {
         let _ = assign_scene_property(state, node, property, value);
     }
@@ -55,7 +56,7 @@ pub(crate) fn pump(state: &mut ReactiveState) -> (Vec<TerminalCall>, bool, bool)
 /// changed.
 pub(crate) fn sync(state: &mut ReactiveState, layout: &Layout, text: &mut TextSystem) -> bool {
     let mut changed = false;
-    for node in state.terminals.nodes() {
+    for node in state.terminals().nodes() {
         let Some(geometry) = layout.geometry(node) else {
             continue;
         };
@@ -121,15 +122,15 @@ pub(crate) fn write(
     node: NodeHandle,
     bytes: Vec<u8>,
 ) -> Result<(), String> {
-    state.terminals.write(node, bytes)
+    state.terminals_mut().write(node, bytes)
 }
 
 pub(crate) fn paste(state: &mut ReactiveState, node: NodeHandle, text: &str) -> Result<(), String> {
-    state.terminals.paste(node, text)
+    state.terminals_mut().paste(node, text)
 }
 
 pub(crate) fn kill(state: &mut ReactiveState, node: NodeHandle, signal: i32) -> bool {
-    state.terminals.kill(node, signal)
+    state.terminals_mut().kill(node, signal)
 }
 
 pub(crate) fn scroll(state: &mut ReactiveState, node: NodeHandle, lines: i32) -> bool {
@@ -137,11 +138,11 @@ pub(crate) fn scroll(state: &mut ReactiveState, node: NodeHandle, lines: i32) ->
 }
 
 pub(crate) fn text(state: &ReactiveState, node: NodeHandle) -> Option<String> {
-    state.terminals.text(node)
+    state.terminals().text(node)
 }
 
 pub(crate) fn selection(state: &ReactiveState, node: NodeHandle) -> Option<String> {
-    state.terminals.selection(node)
+    state.terminals().selection(node)
 }
 
 pub(crate) fn clear_selection(state: &mut ReactiveState, node: NodeHandle) -> bool {
@@ -149,5 +150,5 @@ pub(crate) fn clear_selection(state: &mut ReactiveState, node: NodeHandle) -> bo
 }
 
 pub(crate) fn pid(state: &ReactiveState, node: NodeHandle) -> Option<u32> {
-    state.terminals.pid(node)
+    state.terminals().pid(node)
 }

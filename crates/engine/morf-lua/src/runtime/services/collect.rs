@@ -6,7 +6,7 @@ use super::*;
 
 /// Takes the PAM authentications that have finished.
 pub(super) fn collect_pam_results(state: &mut ReactiveState, collected: &mut Collected) {
-    collected.ready.extend(state.auth.take_verdicts());
+    collected.ready.extend(state.auth_mut().take_verdicts());
 }
 
 /// Takes what every other source has for this turn.
@@ -47,29 +47,29 @@ pub(super) fn drain(state: &mut ReactiveState, collected: &mut Collected) {
         }
         timers.push(timer);
     }
-    dbus_signals.extend(state.dbus.take_signals());
-    dbus_replies.extend(state.dbus.take_replies());
+    dbus_signals.extend(state.dbus().take_signals());
+    dbus_replies.extend(state.dbus_mut().take_replies());
     // A conversation says a few things per turn and then waits on a
     // person, so this never runs long.
-    pam_messages.extend(state.auth.take_session_messages());
-    greetd_messages.extend(state.auth.take_greetd_messages());
+    pam_messages.extend(state.auth_mut().take_session_messages());
+    greetd_messages.extend(state.auth_mut().take_greetd_messages());
     // Bounded per frame (`morf_io::MAX_CALLS_PER_FRAME`): the caller is
     // blocked until we answer.
-    dbus_calls.extend(state.dbus.drain_calls());
-    let (events, udev_errors) = state.feeds.take_device_events();
+    dbus_calls.extend(state.dbus().drain_calls());
+    let (events, udev_errors) = state.feeds_mut().take_device_events();
     udev_events.extend(events);
     for error in udev_errors {
         state.log(LogLevel::Warn, format!("udev: {error}"));
     }
-    let (updates, status_errors) = state.feeds.take_tray_updates();
+    let (updates, status_errors) = state.feeds_mut().take_tray_updates();
     status_updates.extend(updates);
     for error in status_errors {
         state.log(LogLevel::Warn, format!("status notifier: {error}"));
     }
     // A finished request's answer is delivered once the state is released.
-    http_answers.extend(state.feeds.take_http_answers());
-    (*io_calls, *io_more) = state.io.collect();
-    (*watch_calls, *watch_more) = state.watches.collect();
+    http_answers.extend(state.feeds_mut().take_http_answers());
+    (*io_calls, *io_more) = state.io_mut().collect();
+    (*watch_calls, *watch_more) = state.watches_mut().collect();
     retained_destroys.extend(state.retained_mut().retained_destroy_queue.drain());
-    transform_callbacks.extend(state.transform_watchers.take_pending());
+    transform_callbacks.extend(state.transform_watchers_mut().take_pending());
 }

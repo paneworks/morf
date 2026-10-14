@@ -16,7 +16,7 @@ pub(crate) fn install_transform_api<'gc>(
             let watcher: UserRef<TransformWatcherToken> = stack.consume(ctx)?;
             let revision = state
                 .borrow()
-                .transform_watchers
+                .transform_watchers()
                 .revision(watcher.id)
                 .ok_or_else(|| HostError("transform watcher is stale".into()))?;
             stack.replace(ctx, revision as i64);
@@ -72,7 +72,8 @@ pub(crate) fn install_transform_api<'gc>(
             };
             let id = {
                 let mut state = state.borrow_mut();
-                if state.transform_watchers.len() >= morf_runtime::layout::TransformWatches::LIMIT {
+                if state.transform_watchers().len() >= morf_runtime::layout::TransformWatches::LIMIT
+                {
                     return Err(HostError("transform watcher limit reached".into()).into());
                 }
                 state
@@ -94,7 +95,7 @@ pub(crate) fn install_transform_api<'gc>(
                         .into());
                     }
                 }
-                state.transform_watchers.add(
+                state.transform_watchers_mut().add(
                     a,
                     b,
                     common_parent,

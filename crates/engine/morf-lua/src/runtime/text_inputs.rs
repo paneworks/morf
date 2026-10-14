@@ -20,15 +20,15 @@ pub use morf_runtime::events::KeyModifiers;
 
 impl EditHost for ReactiveState {
     fn scene(&self) -> &Scene {
-        self.engine.scene()
+        self.engine().scene()
     }
 
     fn editing(&self) -> &Editing {
-        self.engine.editing()
+        self.engine().editing()
     }
 
     fn editing_mut(&mut self) -> &mut Editing {
-        self.engine.editing_mut()
+        self.engine_mut().editing_mut()
     }
 
     fn assign(
@@ -45,13 +45,12 @@ impl EditHost for ReactiveState {
     }
 
     fn clipboard_text(&self) -> Option<String> {
-        self.engine.requests().clipboard_text.clone()
+        self.requests().clipboard_text.clone()
     }
 
     fn copy(&mut self, text: String) {
-        self.engine.requests_mut().clipboard_text = Some(text.clone());
-        self.engine
-            .requests_mut()
+        self.requests_mut().clipboard_text = Some(text.clone());
+        self.requests_mut()
             .clipboard_requests
             .push(ClipboardRequest {
                 data: text.into_bytes(),
@@ -61,10 +60,10 @@ impl EditHost for ReactiveState {
     }
 
     fn text_input(&mut self, request: TextInputRequest) {
-        self.engine.requests_mut().text_input_requests.push(request);
+        self.requests_mut().text_input_requests.push(request);
     }
 
     fn enable_text_input(&mut self) {
-        self.engine.requests_mut().text_input_enable_requested = true;
+        self.requests_mut().text_input_enable_requested = true;
     }
 }

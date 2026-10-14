@@ -23,7 +23,7 @@ impl Runtime {
     /// whether the scene actually changed: a repaint of a shell that shows
     /// no time is pure cost.
     pub fn update_clock(&mut self, value: impl Into<String>) -> Result<bool, Error> {
-        let before = self.reactive.borrow().engine.revisions().mark();
+        let before = self.reactive.borrow().revisions().mark();
         let changed = self
             .reactive
             .borrow_mut()
@@ -34,18 +34,13 @@ impl Runtime {
                 .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
                 .map_err(Error::Runtime)?;
         }
-        Ok(self
-            .reactive
-            .borrow()
-            .engine
-            .revisions()
-            .shown_since(before))
+        Ok(self.reactive.borrow().revisions().shown_since(before))
     }
 
     /// The finest clock anything currently reads, or nothing when no binding
     /// shows the time: the grain the loop has to wake at for the clock.
     pub fn clock_precision(&self) -> Option<ClockPrecision> {
-        self.reactive.borrow().engine.clock_precision()
+        self.reactive.borrow().clock_precision()
     }
 
     /// The earliest moment something in this runtime comes due on the wall
@@ -57,21 +52,21 @@ impl Runtime {
         let state = self.reactive.borrow();
         let caret =
             crate::runtime::text_inputs::next_blink(&*state).map(|at| (at, DeadlineCause::Caret));
-        let image = state.images.due().map(|at| (at, DeadlineCause::Image));
+        let image = state.images().due().map(|at| (at, DeadlineCause::Image));
         let dbus = state
-            .dbus
+            .dbus()
             .next_reply_deadline()
             .map(|at| (at, DeadlineCause::DbusTimeout));
         let terminal = state
-            .terminals
+            .terminals()
             .next_deadline()
             .map(|at| (at, DeadlineCause::Terminal));
         let tray = state
-            .feeds
+            .feeds()
             .next_tray_deadline()
             .map(|at| (at, DeadlineCause::TrayRetry));
         morf_runtime::wake::earliest([
-            state.engine.next_deadline(),
+            state.engine().next_deadline(),
             caret,
             image,
             dbus,
@@ -87,6 +82,6 @@ impl Runtime {
     /// the shell.
     pub fn has_pending_work(&self) -> bool {
         let state = self.reactive.borrow();
-        state.engine.has_pending_work() || state.transform_watchers.has_pending_callback()
+        state.engine().has_pending_work() || state.transform_watchers().has_pending_callback()
     }
 }

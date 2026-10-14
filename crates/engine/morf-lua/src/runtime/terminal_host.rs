@@ -50,7 +50,7 @@ impl Runtime {
     pub fn sync_terminals(&mut self, layout: &Layout, text: &mut TextSystem) -> bool {
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            if state.terminals.is_empty() {
+            if state.terminals().is_empty() {
                 return false;
             }
             crate::runtime::terminals::sync(&mut state, layout, text)
@@ -66,7 +66,7 @@ impl Runtime {
     pub fn sync_images(&mut self, layout: &Layout, cache: &mut morf_image::ImageCache) -> bool {
         let calls = {
             let mut state = self.reactive.borrow_mut();
-            if state.images.is_empty() {
+            if state.images().is_empty() {
                 return false;
             }
             let revision = state.revisions().scene();

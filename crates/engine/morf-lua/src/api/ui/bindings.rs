@@ -59,7 +59,7 @@ pub(crate) fn rebind_property<'gc>(
         for token in old {
             crate::api::ui::retention::dispose_effect(&mut state, token);
         }
-        state.limits
+        *state.limits()
     };
     register_property_binding(state, ctx, limits, node, property, closure);
 }

@@ -19,7 +19,7 @@ impl Runtime {
     /// The node a key pressed while `node` has focus goes to: itself when it
     /// takes keys, else its nearest ancestor that does.
     pub fn key_route(&self, node: NodeHandle) -> Option<NodeHandle> {
-        self.reactive.borrow().engine.key_route(node)
+        self.reactive.borrow().key_route(node)
     }
 
     /// Clicks `node` for Return, Enter or Space with nothing else held, when

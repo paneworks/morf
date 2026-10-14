@@ -17,7 +17,9 @@ pub(crate) use crate::runtime::pending::*;
 pub(crate) use crate::value::tokens::*;
 pub(crate) use crate::vm::state_cell::{StateCell, StateRef, StateRefMut};
 
+mod access;
 mod auth;
+mod bridges;
 mod dbus;
 mod feeds;
 mod follow;
@@ -77,54 +79,55 @@ pub(crate) use morf_runtime::log::MAX_LOG_ENTRIES;
 pub(crate) struct ReactiveState {
     /// Every subsystem the engine runs (`morf_runtime::Engine`); what
     /// follows is what only the Lua layer can hold.
-    pub(crate) engine: morf_runtime::Engine,
+    engine: morf_runtime::Engine,
     /// The runtime's limits, for a binding made where they are not at hand
     /// (a function assigned to a node's property).
-    pub(crate) limits: crate::Limits,
-    pub(crate) channels: crate::api::ui::channels::Channels,
+    limits: crate::Limits,
+    /// The channels the configuration made, and the nodes drawing them.
+    channels: crate::api::ui::channels::Channels,
     /// Shaders the configuration registered, by name.
     ///
     /// Compiled once at load. The renderer is handed the generated WGSL when
     /// the host starts up, and a node only ever carries the program's hash.
-    pub(crate) shaders: HashMap<String, RegisteredShader>,
+    shaders: HashMap<String, RegisteredShader>,
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
-    pub(crate) overlays: crate::api::input::overlay::OverlayState,
+    overlays: crate::api::input::overlay::OverlayState,
     /// Captures to be written to a file rather than handed to Lua, by request.
-    pub(crate) capture_saves: crate::runtime::image_jobs::CaptureSaves,
+    capture_saves: crate::runtime::image_jobs::CaptureSaves,
     /// `morf.image` work on its way through the worker pool.
-    pub(crate) image_jobs: crate::runtime::image_jobs::ImageJobs,
+    image_jobs: crate::runtime::image_jobs::ImageJobs,
     /// `morf.pam` checks and conversations, and greetd logins.
-    pub(crate) auth: Auth,
+    auth: Auth,
     /// The metatables list models, scene nodes and state proxies share.
-    pub(crate) metatables: Metatables,
+    metatables: Metatables,
     /// `ui.watch_transform` watches.
-    pub(crate) transform_watchers: morf_runtime::layout::TransformWatches,
+    transform_watchers: morf_runtime::layout::TransformWatches,
     /// What extensions want told when nodes are removed.
-    pub(crate) removal_listeners: Vec<crate::vm::extensions::NodesRemoved>,
+    removal_listeners: Vec<crate::vm::extensions::NodesRemoved>,
     /// `morf.dbus`: subscriptions, calls waiting on an answer, and the
     /// names and services this runtime serves.
-    pub(crate) dbus: DbusState,
+    dbus: DbusState,
     /// Theme token files being watched.
-    pub(crate) theme_sources: ThemeSources,
+    theme_sources: ThemeSources,
     /// `morf.terminal.listen`: terminals of our own hearing colour sequences.
-    pub(crate) palettes: crate::api::media::terminal_palette::PaletteListeners,
+    palettes: crate::api::media::terminal_palette::PaletteListeners,
     /// `morf.prefers` and where its answers come from.
-    pub(crate) prefers: Option<Prefers>,
+    prefers: Option<Prefers>,
     /// `morf.audio`, installed with the runtime and started on first use.
-    pub(crate) audio: Option<crate::api::media::audio::AudioHost>,
+    audio: Option<crate::api::media::audio::AudioHost>,
     /// `morf.toplevels`, installed with the runtime and fed by
     /// `Runtime::set_windows`.
-    pub(crate) toplevels: Option<crate::api::desktop::toplevels::ToplevelHost>,
+    toplevels: Option<crate::api::desktop::toplevels::ToplevelHost>,
     /// udev monitors, tray hosts and `morf.http` requests in flight.
-    pub(crate) feeds: Feeds,
+    feeds: Feeds,
     /// `morf.spawn` children and `morf.connect` connections.
-    pub(crate) io: crate::api::io::io::IoHub,
+    io: crate::api::io::io::IoHub,
     /// `morf.fs.watch` watches.
-    pub(crate) watches: crate::api::io::watch::WatchHub,
+    watches: crate::api::io::watch::WatchHub,
     /// `ui.Terminal` nodes: their emulators and their programs.
-    pub(crate) terminals: crate::runtime::terminals::TerminalHub,
+    terminals: crate::runtime::terminals::TerminalHub,
     /// Every `ui.Image`: what became of its source, and its playback.
-    pub(crate) images: crate::runtime::images::ImageNodes,
+    images: crate::runtime::images::ImageNodes,
 }
 
 impl std::ops::Deref for ReactiveState {

@@ -29,7 +29,7 @@ pub(crate) fn install_prefers_api<'gc>(
     seed.set_field(ctx, "scale", screen.map_or(1, |screen| screen.scale) as i64);
     let metatable = state
         .borrow()
-        .metatables
+        .metatables()
         .state()
         .expect("states are installed before preferences");
     let userdata = build(ctx, &state, &metatable, "prefers", None, seed)
@@ -63,7 +63,7 @@ pub(crate) fn install_prefers_api<'gc>(
         Some(IpcValue::Boolean(true))
     );
     let mut state = state.borrow_mut();
-    state.prefers = Some(prefers);
+    *state.prefers_mut() = Some(prefers);
     state
         .scene_mut()
         .set_motion_scale(if reduced { 0.0 } else { 1.0 });

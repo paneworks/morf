@@ -245,7 +245,7 @@ pub(crate) fn install_view_api<'gc>(
     let model_metatable = ctx.stash(model_metatable);
     state
         .borrow_mut()
-        .metatables
+        .metatables_mut()
         .set_model(model_metatable.clone());
     let list_model = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let items: Table = stack.consume(ctx)?;

@@ -137,7 +137,7 @@ fn track(state: &mut ReactiveState, id: SignalId) -> Option<IpcValue> {
 
 fn host(state: &mut ReactiveState) -> &mut AudioHost {
     state
-        .audio
+        .audio_mut()
         .as_mut()
         .expect("morf.audio is installed with the runtime")
 }
@@ -158,7 +158,7 @@ fn list_model_userdata<'gc>(
     model: &Rc<RefCell<ListModel>>,
 ) -> Result<UserData<'gc>, HostError> {
     let metatable = state
-        .metatables
+        .metatables()
         .model()
         .ok_or_else(|| HostError("list models are not installed".into()))?;
     let userdata = UserData::new_static(
@@ -187,7 +187,7 @@ pub(crate) fn install_audio_api<'gc>(
             .reactive_mut()
             .signal("audio.revision", IpcValue::Integer(0))
             .expect(RUNNING);
-        state.audio = Some(AudioHost {
+        *state.audio_mut() = Some(AudioHost {
             session: Session::default(),
             sinks: Rc::new(RefCell::new(ListModel::default())),
             sources: Rc::new(RefCell::new(ListModel::default())),

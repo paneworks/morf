@@ -31,7 +31,7 @@ impl Runtime {
     pub fn set_primary(&mut self, primary: bool) -> bool {
         let value = {
             let mut state = self.reactive.borrow_mut();
-            let Some((value, written)) = state.engine.set_primary(primary) else {
+            let Some((value, written)) = state.set_primary(primary) else {
                 return false;
             };
             if let Err(error) = written {
@@ -65,7 +65,7 @@ impl Runtime {
     /// answers, so once this returns the names are free for another
     /// connection to take. The services stay open, answering nothing new.
     pub fn release_bus_names(&mut self) {
-        let names = self.reactive.borrow_mut().dbus.take_names();
+        let names = self.reactive.borrow_mut().dbus_mut().take_names();
         for service in names.iter().filter_map(std::rc::Weak::upgrade) {
             service.borrow_mut().release();
         }

@@ -72,7 +72,7 @@ fn set_data<'gc>(
         };
         let program = shader.program;
         let Some(registered) = borrowed
-            .shaders
+            .shaders()
             .values()
             .find(|candidate| candidate.compiled.hash == program)
         else {
@@ -172,7 +172,7 @@ fn register<'gc>(
         _ => return Err(format!("shader {name}: `vertex` must be a string")),
     };
 
-    state.borrow_mut().shaders.insert(
+    state.borrow_mut().shaders_mut().insert(
         name.to_owned(),
         RegisteredShader {
             compiled,
@@ -309,7 +309,7 @@ pub(crate) fn attach_shader<'gc>(
         return Ok(());
     }
     let borrowed = state.borrow();
-    let Some(shader) = borrowed.shaders.get(name) else {
+    let Some(shader) = borrowed.shaders().get(name) else {
         return Err(format!(
             "shader `{name}` was never registered; call morf.shader(\"{name}\", …) first"
         ));

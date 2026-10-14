@@ -30,7 +30,7 @@ impl Runtime {
         lua.set_memory_limit(Some(limits.memory));
         crate::vm::jit::configure(&mut lua);
         let reactive = Rc::new(StateCell::new(ReactiveState::new()));
-        reactive.borrow_mut().limits = limits;
+        *reactive.borrow_mut().limits_mut() = limits;
         let module_roots = Rc::new(RefCell::new(default_module_roots()));
         install_reactive_api(
             &mut lua,
@@ -372,7 +372,7 @@ impl Runtime {
     pub fn shaders(&self) -> Vec<ShaderProgram> {
         self.reactive
             .borrow()
-            .shaders
+            .shaders()
             .values()
             .map(|shader| ShaderProgram {
                 program: shader.compiled.hash,
@@ -400,7 +400,7 @@ impl Runtime {
     /// not costs nothing after the first. Derived from the compiler rather than
     /// declared, so it cannot be forgotten.
     pub fn shaders_animate(&self) -> bool {
-        self.reactive.borrow().shaders.values().any(|shader| {
+        self.reactive.borrow().shaders().values().any(|shader| {
             shader.compiled.reads_time
                 || shader
                     .vertex

@@ -51,7 +51,7 @@ pub(crate) fn build<'gc>(
                 let model = Rc::new(RefCell::new(ListModel::new(values)));
                 let model_metatable = state
                     .borrow()
-                    .metatables
+                    .metatables()
                     .model()
                     .ok_or("list models are not installed")?;
                 let userdata = UserData::new_static(
@@ -178,7 +178,7 @@ pub(crate) fn install_state_api<'gc>(
                         && let Some(IpcValue::Color(from)) = state.reactive().value(id).cloned()
                         && !duration.is_zero()
                         // Nothing shown yet: no fade, the colour is just set.
-                        && state.engine.animation().ticked
+                        && state.engine().animation().ticked
                     {
                         state.animation_mut().fades.retain(|fade| fade.signal != id);
                         // Only a change that shows: a colour set to one that
@@ -253,7 +253,10 @@ pub(crate) fn install_state_api<'gc>(
     metatable.set_field(ctx, "__index", index);
     metatable.set_field(ctx, "__newindex", new_index);
     let metatable = ctx.stash(metatable);
-    state.borrow_mut().metatables.set_state(metatable.clone());
+    state
+        .borrow_mut()
+        .metatables_mut()
+        .set_state(metatable.clone());
 
     let create = Callback::from_fn(&ctx, {
         let state = Rc::clone(&state);

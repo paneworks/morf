@@ -192,10 +192,12 @@ impl Starter {
         callback: Option<Closure<'gc>>,
     ) -> Result<UserData<'gc>, HostError> {
         let mut reactive = self.state.borrow_mut();
-        reactive.feeds.make_room().map_err(HostError::from)?;
+        reactive.feeds_mut().make_room().map_err(HostError::from)?;
         let callback =
             callback.map(|callback| crate::vm::handler_store::register(ctx.stash(callback)));
-        let handle = reactive.feeds.request(request, callback, self.json.clone());
+        let handle = reactive
+            .feeds_mut()
+            .request(request, callback, self.json.clone());
         let userdata = UserData::new_static(&ctx, HttpHandleToken { state: handle });
         userdata.set_metatable(ctx, Some(ctx.fetch(&self.metatable)));
         Ok(userdata)

@@ -144,7 +144,7 @@ pub(crate) fn toplevel_row(window: &Toplevel) -> SceneValue {
 
 fn host(state: &mut ReactiveState) -> &mut ToplevelHost {
     state
-        .toplevels
+        .toplevels_mut()
         .as_mut()
         .expect("morf.toplevels is installed with the runtime")
 }
@@ -168,7 +168,7 @@ pub(crate) fn install_toplevels_api<'gc>(
             .reactive_mut()
             .signal("toplevels.revision", IpcValue::Integer(0))
             .expect("the graph is not running at install");
-        state.toplevels = Some(ToplevelHost {
+        *state.toplevels_mut() = Some(ToplevelHost {
             windows: Vec::new(),
             model: Rc::new(RefCell::new(ListModel::default())),
             revision,
@@ -287,7 +287,7 @@ pub(crate) fn install_toplevels_api<'gc>(
             let mut state = state.borrow_mut();
             let model = Rc::clone(&host(&mut state).model);
             let metatable = state
-                .metatables
+                .metatables()
                 .model()
                 .ok_or_else(|| HostError("list models are not installed".into()))?;
             let userdata = UserData::new_static(&ctx, ListModelToken { model });

@@ -221,7 +221,7 @@ pub(crate) fn node_metatable<'gc>(
         // A table holding bindings among its fields is bound as a whole.
         let value = match value {
             LuaValue::Table(table) if crate::api::ui::configure_states::binds_inside(&property) => {
-                let limits = state.try_borrow().map(|s| s.limits).map_err(|_| {
+                let limits = state.try_borrow().map(|s| *s.limits()).map_err(|_| {
                     HostError("nodes cannot be written to from inside a layout function".to_owned())
                 })?;
                 match crate::api::ui::configure_states::table_binding(ctx, table, limits)

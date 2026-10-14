@@ -37,7 +37,7 @@ impl Runtime {
     pub fn set_key_focus(&mut self, node: Option<NodeHandle>) -> bool {
         let terminal_moved = {
             let mut state = self.reactive.borrow_mut();
-            let terminal = node.filter(|node| state.terminals.contains(*node));
+            let terminal = node.filter(|node| state.terminals().contains(*node));
             crate::runtime::terminals::set_focus(&mut state, terminal)
         };
         let changed = {
@@ -153,7 +153,7 @@ impl Runtime {
         {
             let mut state = self.reactive.borrow_mut();
             text_inputs::reconcile_focus(&mut *state);
-            for node in text_inputs::tracked(state.engine.editing()) {
+            for node in text_inputs::tracked(state.engine().editing()) {
                 let Some(geometry) = layout.geometry(node) else {
                     continue;
                 };

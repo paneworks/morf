@@ -42,7 +42,7 @@ pub(crate) fn element_constructor<'gc>(
         configure_element(&state, ctx, limits, node, properties).map_err(HostError)?;
         if element == Element::Image {
             let mut state = state.borrow_mut();
-            state.images.register(node, on_status);
+            state.images_mut().register(node, on_status);
             // Until a paint has looked at it, a source is loading.
             if state
                 .scene()
@@ -299,7 +299,7 @@ pub(crate) fn terminal_constructor<'gc>(
             on_clipboard: optional_closure(ctx, properties, "on_clipboard").map_err(HostError)?,
             on_selection: optional_closure(ctx, properties, "on_selection").map_err(HostError)?,
         };
-        if state.borrow().terminals.len() >= limits.terminals {
+        if state.borrow().terminals().len() >= limits.terminals {
             return Err(HostError(format!(
                 "more than {} terminals: each is a program and a screen of its own \
                  (MORF_LIMITS terminals=N)",
@@ -309,7 +309,7 @@ pub(crate) fn terminal_constructor<'gc>(
         }
         let node = create_node(&state, Element::Terminal);
         configure_element(&state, ctx, limits, node, clean).map_err(HostError)?;
-        state.borrow_mut().terminals.register(
+        state.borrow_mut().terminals_mut().register(
             node,
             crate::runtime::terminals::TerminalSpec {
                 command,

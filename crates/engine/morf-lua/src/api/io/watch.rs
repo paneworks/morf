@@ -91,7 +91,7 @@ pub(crate) fn install_watch_api<'gc>(
         };
         let mut state = state.borrow_mut();
         state
-            .watches
+            .watches()
             .check_room(limits.watches)
             .map_err(HostError::from)?;
         let watch = match Watch::new(&path, WatchOptions { recursive }) {
@@ -102,7 +102,7 @@ pub(crate) fn install_watch_api<'gc>(
             }
         };
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
-        let token = WatchToken(state.watches.add(watch, callback));
+        let token = WatchToken(state.watches_mut().add(watch, callback));
         let userdata = UserData::new_static(&ctx, token);
         userdata.set_metatable(ctx, Some(ctx.fetch(&metatable)));
         stack.replace(ctx, userdata);

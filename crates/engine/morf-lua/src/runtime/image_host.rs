@@ -17,7 +17,7 @@ impl Runtime {
     /// Returns how many ran. Whether the scene changed is for the caller to
     /// ask the scene, as it does for every other service.
     pub(crate) fn poll_image_jobs(&mut self) -> usize {
-        let done = self.reactive.borrow_mut().image_jobs.drain();
+        let done = self.reactive.borrow_mut().image_jobs_mut().drain();
         let count = done.len();
         for (callback, result) in done {
             if let Err(message) = self
@@ -37,7 +37,7 @@ impl Runtime {
     /// screenshot bound for disk has no business holding a screen's worth of
     /// memory in the renderer as well.
     pub fn screencopy_publishes(&self, request_id: u64) -> bool {
-        !self.reactive.borrow().capture_saves.is_saving(request_id)
+        !self.reactive.borrow().capture_saves().is_saving(request_id)
     }
 
     /// Sends a capture meant for a file to the image workers.
@@ -49,7 +49,12 @@ impl Runtime {
         request_id: u64,
         result: Result<Screencopy, String>,
     ) -> Result<bool, Result<Screencopy, String>> {
-        let Some(save) = self.reactive.borrow_mut().capture_saves.take(request_id) else {
+        let Some(save) = self
+            .reactive
+            .borrow_mut()
+            .capture_saves_mut()
+            .take(request_id)
+        else {
             return Err(result);
         };
         let callback = self
@@ -86,7 +91,7 @@ impl Runtime {
                 };
                 self.reactive
                     .borrow_mut()
-                    .image_jobs
+                    .image_jobs_mut()
                     .submit(job, callback.clone())
                     .err()
             }

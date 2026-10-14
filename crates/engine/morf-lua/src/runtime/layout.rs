@@ -53,7 +53,7 @@ impl Runtime {
     /// a node sliding on `translate_x` moves without its layout changing.
     /// Free when nothing in the scene stretches.
     pub fn observe_stretch(&mut self, layout: &Layout) {
-        self.reactive.borrow_mut().engine.observe_stretch(layout);
+        self.reactive.borrow_mut().observe_stretch(layout);
     }
 
     /// Updates native transform watchers from one rendered surface layout.
@@ -99,11 +99,9 @@ impl Runtime {
         }
         self.place_overlays(layout);
         let mut state = self.reactive.borrow_mut();
-        let state = &mut *state;
-        state.engine.place_popup_anchors();
-        let (changed, errors) = state
-            .transform_watchers
-            .observe(state.engine.scene(), state.engine.transform_tracker());
+        state.place_popup_anchors();
+        let (watchers, engine) = state.transform_watchers_and_engine();
+        let (changed, errors) = watchers.observe(engine.scene(), engine.transform_tracker());
         for error in errors {
             state.log(LogLevel::Warn, error);
         }

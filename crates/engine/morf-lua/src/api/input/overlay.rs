@@ -87,7 +87,7 @@ fn fill() -> SceneValue {
 
 /// The surface's overlay layer, made the first time it is wanted.
 fn layer_of(state: &Rc<StateCell<ReactiveState>>, root: NodeHandle) -> Result<NodeHandle, String> {
-    if let Some(layer) = state.borrow().overlays.layers.get(&root).copied()
+    if let Some(layer) = state.borrow().overlays().layers.get(&root).copied()
         && state.borrow().scene().contains(layer)
     {
         return Ok(layer);
@@ -105,7 +105,7 @@ fn layer_of(state: &Rc<StateCell<ReactiveState>>, root: NodeHandle) -> Result<No
         SceneValue::String("morf-overlay".to_owned()),
     );
     set(&mut state, layer, "z", SceneValue::Number(1.0e6));
-    state.overlays.layers.insert(root, layer);
+    state.overlays_mut().layers.insert(root, layer);
     Ok(layer)
 }
 
@@ -137,10 +137,10 @@ fn open<'gc>(
         LuaValue::Number(n) => n,
         _ => default,
     };
-    if state.borrow().overlays.contains(content) {
+    if state.borrow().overlays().contains(content) {
         state
             .borrow_mut()
-            .overlays
+            .overlays_mut()
             .open_again(content, || options.map(|t| ctx.stash(t)));
         return Ok(());
     }
@@ -173,7 +173,7 @@ fn open<'gc>(
         _ => return Err("overlay on_close must be a function".to_owned()),
     };
     let layer = layer_of(state, root)?;
-    let existing = state.borrow().overlays.wrappers.get(&content).copied();
+    let existing = state.borrow().overlays().wrappers.get(&content).copied();
     let wrapper = match existing.filter(|w| state.borrow().scene().contains(*w)) {
         Some(wrapper) => {
             // Its scrim and blocker are rebuilt for these options.
@@ -193,7 +193,7 @@ fn open<'gc>(
             let wrapper = create_node(state, Element::Item);
             state
                 .borrow_mut()
-                .overlays
+                .overlays_mut()
                 .wrappers
                 .insert(content, wrapper);
             wrapper
@@ -234,7 +234,7 @@ fn open<'gc>(
         s.focus_mut()
             .request(FocusRequest::Into(content, restore.is_some_and(|(_, v)| v)));
     }
-    s.overlays.stack.push(Overlay {
+    s.overlays_mut().stack.push(Overlay {
         root,
         wrapper,
         content,
@@ -272,7 +272,7 @@ fn track<'gc>(
         LuaValue::Boolean(on) => on,
         _ => true,
     };
-    if state.borrow().overlays.contains(content) {
+    if state.borrow().overlays().contains(content) {
         return Ok(());
     }
     let anchor = match get("anchor") {
@@ -320,7 +320,7 @@ fn track<'gc>(
         s.focus_mut()
             .request(FocusRequest::Into(content, restore.is_some_and(|(_, v)| v)));
     }
-    s.overlays.stack.push(Overlay {
+    s.overlays_mut().stack.push(Overlay {
         root,
         wrapper: catcher,
         content,
@@ -379,7 +379,7 @@ pub(crate) fn install_overlay_api<'gc>(
             let content: UserRef<NodeToken> = stack.consume(ctx)?;
             closer
                 .borrow_mut()
-                .overlays
+                .overlays_mut()
                 .request_close(content.handle, "closed");
             Ok(CallbackReturn::Return)
         }),
@@ -390,7 +390,7 @@ pub(crate) fn install_overlay_api<'gc>(
         "is_open",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let content: UserRef<NodeToken> = stack.consume(ctx)?;
-            let open = asker.borrow().overlays.is_open(content.handle);
+            let open = asker.borrow().overlays().is_open(content.handle);
             stack.replace(ctx, open);
             Ok(CallbackReturn::Return)
         }),

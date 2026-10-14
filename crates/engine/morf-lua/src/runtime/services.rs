@@ -164,7 +164,7 @@ impl Runtime {
     /// backend are not, so the list is handed back for the caller to finish
     /// the job. Nobody else has both the scene and those caches in scope.
     pub fn take_removed_nodes(&self) -> Vec<NodeHandle> {
-        self.reactive.borrow_mut().engine.take_removed_nodes()
+        self.reactive.borrow_mut().take_removed_nodes()
     }
 }
 

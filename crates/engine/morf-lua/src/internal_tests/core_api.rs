@@ -16,6 +16,6 @@ fn transform_example_uses_the_native_watcher() {
         .unwrap();
 
     assert_eq!(runtime.scene().roots().len(), 2);
-    assert_eq!(runtime.reactive.borrow().transform_watchers.len(), 1);
+    assert_eq!(runtime.reactive.borrow().transform_watchers().len(), 1);
     assert_eq!(runtime.window_surface_configs().len(), 1);
 }

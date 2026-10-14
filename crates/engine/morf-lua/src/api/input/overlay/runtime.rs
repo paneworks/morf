@@ -13,11 +13,11 @@ impl Runtime {
     /// sized to their surfaces, each overlay beside its anchor.
     pub(crate) fn place_overlays(&mut self, layout: &Layout) {
         let mut state = self.reactive.borrow_mut();
-        if state.overlays.stack.is_empty() {
+        if state.overlays().stack.is_empty() {
             return;
         }
         let layers: Vec<(NodeHandle, NodeHandle)> = state
-            .overlays
+            .overlays()
             .layers
             .iter()
             .map(|(r, l)| (*r, *l))
@@ -31,8 +31,8 @@ impl Runtime {
                 }
             }
         }
-        for index in 0..state.overlays.stack.len() {
-            let overlay = &state.overlays.stack[index];
+        for index in 0..state.overlays().stack.len() {
+            let overlay = &state.overlays().stack[index];
             if overlay.tracked {
                 continue;
             }
@@ -55,7 +55,7 @@ impl Runtime {
                     .ok()
                     .flatten()
             });
-            let overlay = &mut state.overlays.stack[index];
+            let overlay = &mut state.overlays_mut().stack[index];
             let moved = overlay.place(
                 (surface.width, surface.height),
                 (size.width, size.height),
@@ -78,19 +78,19 @@ impl Runtime {
     /// The roots of the surfaces something is open over, for a host to match
     /// a press against the surface it landed on.
     pub fn overlay_roots(&self) -> Vec<NodeHandle> {
-        self.reactive.borrow().overlays.roots()
+        self.reactive.borrow().overlays().roots()
     }
 
     /// The nodes whose boxes decide whether a press on `root` is outside its
     /// overlays: their contents and anchors.
     pub fn overlay_nodes(&self, root: NodeHandle) -> Vec<NodeHandle> {
-        self.reactive.borrow().overlays.nodes(root)
+        self.reactive.borrow().overlays().nodes(root)
     }
 
     /// Escape on a surface: closes its top overlay if Escape may. Returns
     /// whether it did.
     pub fn overlay_escape(&mut self, root: NodeHandle) -> bool {
-        let closed = self.reactive.borrow_mut().overlays.escape(root);
+        let closed = self.reactive.borrow_mut().overlays_mut().escape(root);
         closed
             .map(|overlay| self.close_overlay(overlay, "escape"))
             .is_some()
@@ -108,10 +108,8 @@ impl Runtime {
     ) -> bool {
         let closed = {
             let mut state = self.reactive.borrow_mut();
-            let state = &mut *state;
-            state
-                .overlays
-                .press(state.engine.scene(), root, hit, inside)
+            let (overlays, scene) = state.overlays_and_scene();
+            overlays.press(scene, root, hit, inside)
         };
         closed
             .map(|overlay| self.close_overlay(overlay, "outside"))
@@ -121,7 +119,7 @@ impl Runtime {
     /// What Tab walks on a surface: inside a modal overlay while one is
     /// open, the whole tree otherwise.
     pub fn focus_root(&self, root: NodeHandle) -> NodeHandle {
-        self.reactive.borrow().overlays.focus_root(root)
+        self.reactive.borrow().overlays().focus_root(root)
     }
 
     /// Does to the scene what closing `overlay`, already off the stack,
@@ -160,20 +158,18 @@ impl Runtime {
     pub(crate) fn poll_overlays(&mut self) -> bool {
         let closing = {
             let mut state = self.reactive.borrow_mut();
-            let state = &mut *state;
-            state
-                .overlays
-                .take_closing(|content| state.engine.scene().contains(content))
+            let (overlays, scene) = state.overlays_and_scene();
+            overlays.take_closing(|content| scene.contains(content))
         };
         let mut closed = false;
         for (content, reason) in closing {
-            let overlay = self.reactive.borrow_mut().overlays.remove(content);
+            let overlay = self.reactive.borrow_mut().overlays_mut().remove(content);
             if let Some(overlay) = overlay {
                 self.close_overlay(overlay, reason);
                 closed = true;
             }
         }
-        let reopening = std::mem::take(&mut self.reactive.borrow_mut().overlays.reopening);
+        let reopening = std::mem::take(&mut self.reactive.borrow_mut().overlays_mut().reopening);
         for (content, options) in reopening {
             let state = Rc::clone(&self.reactive);
             let result = self.lua.enter(|ctx| {

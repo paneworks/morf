@@ -168,7 +168,7 @@ impl Runtime {
             // Closed by an earlier callback in this same batch: what was
             // already read for it is not delivered, because "after close,
             // nothing" is the promise `close` makes.
-            if !self.reactive.borrow().dbus.is_subscribed(id) {
+            if !self.reactive.borrow().dbus().is_subscribed(id) {
                 continue;
             }
             if let Err(message) = self.run_handler(|ctx, limits| {

@@ -131,7 +131,7 @@ pub(crate) fn install_shell_api<'gc>(
             let mut state = density_state.borrow_mut();
             if state.display_mut().set_density(parsed) {
                 // What reads the screens' size reads it again.
-                state.engine.touch_screens();
+                state.touch_screens();
             }
         }
         // The screens already described are described again in the new unit.
