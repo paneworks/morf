@@ -10,15 +10,15 @@ use crate::capture::{OfferedCapture, answer_capture_offer, dispatch_screencopy};
 /// The desktop protocols on `client`'s connection; a request naming no
 /// output is for the one `client`'s surface sits on.
 pub fn desktop_for(client: &dyn Backend) -> Result<Desktop, String> {
-    let client = client
-        .as_wayland()
+    let link = client
+        .desktop_link()
         .ok_or_else(|| "the desktop protocols need a compositor".to_owned())?;
-    let mut desktop = Desktop::new(client.connection())?;
+    let mut desktop = Desktop::new(link.connection)?;
     // A selection read finishing on its thread rings every loop, so the
     // loop wakes for its answer rather than sleeping past it.
     desktop.set_waker(morf_io::wake_all);
-    desktop.set_own_output(client.own_output().and_then(|output| output.name));
-    desktop.set_shell_surface(client.primary_surface());
+    desktop.set_own_output(link.own_output);
+    desktop.set_shell_surface(link.shell_surface);
     Ok(desktop)
 }
 

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::backend::wayland::LayerClient;
+use crate::backend::wayland::{DesktopLink, LayerClient};
 use crate::backend::{Backend, Capabilities, RenderTarget, WindowKind, Woke};
 use crate::{Edge, Event, InputRect, KeyboardFocus, LayerConfig, Output, PopupConfig, WindowId};
 
@@ -176,8 +176,8 @@ impl Backend for LayerClient {
         LayerClient::set_waker(self, waker)
     }
 
-    fn as_wayland(&self) -> Option<&LayerClient> {
-        Some(self)
+    fn desktop_link(&self) -> Option<DesktopLink> {
+        Some(LayerClient::desktop_link(self))
     }
 
     fn screens(&self) -> &[Output] {

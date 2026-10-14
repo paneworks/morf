@@ -31,6 +31,7 @@ mod types;
 pub use buffer_sink::WaylandBufferSink;
 pub use client_layer::*;
 pub use client_services::Woke;
+pub use client_surface::DesktopLink;
 pub use cursor::cursor_shape;
 pub use helpers::*;
 pub use state_types::*;

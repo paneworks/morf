@@ -124,8 +124,8 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
         self.inner.damage(id, x, y, width, height);
     }
     #[cfg(feature = "wayland")]
-    fn as_wayland(&self) -> Option<&crate::backend::wayland::LayerClient> {
-        self.inner.as_wayland()
+    fn desktop_link(&self) -> Option<crate::backend::wayland::DesktopLink> {
+        self.inner.desktop_link()
     }
     #[cfg(feature = "headless")]
     fn as_headless(&self) -> Option<&crate::backend::headless::HeadlessBackend> {

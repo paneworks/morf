@@ -150,10 +150,11 @@ pub trait Backend {
     /// Declares a rectangle of the window's next buffer changed, in buffer
     /// pixels.
     fn damage(&self, _id: WindowId, _x: i32, _y: i32, _width: i32, _height: i32) {}
-    /// The Wayland client underneath, for what only a compositor has (the
-    /// desktop protocols on a queue of their own).
+    /// What the desktop protocols need of this backend's compositor, for
+    /// them to run on a queue of their own; `None` from a backend with no
+    /// compositor, which has no desktop protocols.
     #[cfg(feature = "wayland")]
-    fn as_wayland(&self) -> Option<&wayland::LayerClient> {
+    fn desktop_link(&self) -> Option<wayland::DesktopLink> {
         None
     }
     /// The headless backend underneath, for a runner that moves its clock
