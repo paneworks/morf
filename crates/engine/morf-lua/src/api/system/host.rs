@@ -181,7 +181,11 @@ pub(crate) fn install_host_service_api<'gc>(
     // compositor's remaining outputs after it.
     if let Some(screen) = screen {
         screens
-            .set(ctx, 1, screen_entry(ctx, screen, state.borrow().density))
+            .set(
+                ctx,
+                1,
+                screen_entry(ctx, screen, state.borrow().display.density()),
+            )
             .expect("screen table accepts integer keys");
     }
     morf.set_field(ctx, "screens", screens);

@@ -161,10 +161,7 @@ pub(crate) fn install_clipboard_api<'gc>(
 }
 
 fn capability(state: &ReactiveState, name: &str) -> bool {
-    state
-        .capabilities
-        .iter()
-        .any(|(key, value)| key == name && value == "true")
+    state.display.capable(name)
 }
 
 fn string_list<'gc>(

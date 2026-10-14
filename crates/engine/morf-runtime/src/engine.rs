@@ -50,13 +50,8 @@ pub struct Engine {
     /// Nodes the lint has already complained about, so a bar that paints
     /// sixty times a second says it once.
     pub lint_warned: HashSet<NodeHandle>,
-    /// What this output's compositor and GPU can do, as name = value pairs.
-    pub capabilities: Vec<(String, String)>,
-    /// How big one of morf's pixels is, as the configuration said
-    /// (`morf.density`).
-    pub density: morf_value::density::Density,
-    /// Whether `density` changed since the host last took it.
-    pub density_changed: bool,
+    /// What this output can do, and how big one of morf's pixels is on it.
+    pub display: crate::display::Display,
     pub logs: crate::log::Log,
     /// The session lock, the primary duty and the output list's revision.
     pub session: crate::session::Session,
@@ -135,9 +130,7 @@ impl Engine {
             shared: Default::default(),
             lifecycle: Default::default(),
             lint_warned: HashSet::new(),
-            capabilities: Vec::new(),
-            density: Default::default(),
-            density_changed: false,
+            display: Default::default(),
             logs: Default::default(),
             session: crate::session::Session::new(session_lock),
             clocks,

@@ -127,9 +127,7 @@ pub(crate) fn install_shell_api<'gc>(
         };
         {
             let mut state = density_state.borrow_mut();
-            if state.density != parsed {
-                state.density = parsed;
-                state.density_changed = true;
+            if state.display.set_density(parsed) {
                 // What reads the screens' size reads it again.
                 let state = &mut *state;
                 state
