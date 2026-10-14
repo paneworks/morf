@@ -7,12 +7,12 @@
 //! back through [`crate::Handlers`] or a host trait of their own
 //! ([`crate::views::ViewHost`], [`crate::editing::EditHost`], ...).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use morf_layout::TransformTracker;
+use morf_scene::Scene;
 use morf_scene::reactive::{Graph, SignalId};
-use morf_scene::{NodeHandle, Scene};
 use morf_value::IpcValue;
 
 mod access;
@@ -38,9 +38,6 @@ pub struct Engine {
     /// A reload, file watching, quitting and unlocking, as asked, and the
     /// values kept across a reload.
     pub lifecycle: crate::requests::Lifecycle,
-    /// Nodes the lint has already complained about, so a bar that paints
-    /// sixty times a second says it once.
-    pub lint_warned: HashSet<NodeHandle>,
     /// What this output can do, and how big one of morf's pixels is on it.
     pub display: crate::display::Display,
     pub logs: crate::log::Log,
@@ -113,7 +110,6 @@ impl Engine {
             model_revisions: Default::default(),
             shared: Default::default(),
             lifecycle: Default::default(),
-            lint_warned: HashSet::new(),
             display: Default::default(),
             logs: Default::default(),
             session: crate::session::Session::new(session_lock),
