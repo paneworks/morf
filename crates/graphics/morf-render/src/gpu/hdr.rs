@@ -153,7 +153,7 @@ pub fn presenting_hdr() -> bool {
 static SAID: AtomicU8 = AtomicU8::new(0);
 
 /// Says, once per encoding, what a surface is described as.
-pub(crate) fn say(encoding: Encoding, support: ColorSupport, why: Option<&str>) {
+pub(crate) fn say(encoding: Encoding, advertised: &str, why: Option<&str>) {
     let bit = match encoding {
         Encoding::Srgb => 1,
         Encoding::Pq { .. } => 2,
@@ -169,7 +169,13 @@ pub(crate) fn say(encoding: Encoding, support: ColorSupport, why: Option<&str>) 
         }
         Encoding::ExtLinear => "extended linear sRGB (scRGB, 1.0 = SDR white)".to_owned(),
     };
-    let advertised = if support == ColorSupport::default() {
+    let why = why.map(|why| format!(" ({why})")).unwrap_or_default();
+    eprintln!("morf: gpu: hdr asked; {advertised}; surface described as {described}{why}");
+}
+
+/// What a compositor's colour manager offers, for the log.
+pub(crate) fn advertised(support: ColorSupport) -> String {
+    if support == ColorSupport::default() {
         "no wp_color_manager_v1 colour support".to_owned()
     } else {
         format!(
@@ -181,9 +187,7 @@ pub(crate) fn say(encoding: Encoding, support: ColorSupport, why: Option<&str>) 
             support.bt2020,
             support.srgb_primaries
         )
-    };
-    let why = why.map(|why| format!(" ({why})")).unwrap_or_default();
-    eprintln!("morf: gpu: hdr asked; {advertised}; surface described as {described}{why}");
+    }
 }
 
 #[cfg(test)]

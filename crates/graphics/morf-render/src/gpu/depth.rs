@@ -235,6 +235,9 @@ impl WgpuBackend {
         } else {
             self.depth
         };
+        if let Some(surface) = &mut self.surface {
+            surface.hdr = self.hdr.enabled;
+        }
         let chosen = choose_present(depth, self.opaque_surface, |format| {
             match (&self.buffers, &self.surface) {
                 (Some(ring), _) => ring.takes(format),
@@ -269,24 +272,31 @@ impl WgpuBackend {
             return Encoding::Srgb;
         }
         let Some(link) = self.buffers.as_mut().and_then(|ring| ring.link.as_mut()) else {
-            let why = "presenting through the swapchain or offscreen";
-            hdr::say(Encoding::Srgb, Default::default(), Some(why));
-            return Encoding::Srgb;
+            // The swapchain's colour space, which its driver describes.
+            let Some(surface) = &self.surface else {
+                hdr::say(Encoding::Srgb, "offscreen", None);
+                return Encoding::Srgb;
+            };
+            let wanted = surface.hdr_encoding(format);
+            hdr::say(wanted, &surface.offered(), Some("through the swapchain"));
+            hdr::mark_presenting(wanted);
+            return wanted;
         };
         let support = link.color_support();
         let wanted = hdr::choose_encoding(format, support, self.hdr);
         if wanted == self.encoding {
             return wanted;
         }
+        let advertised = hdr::advertised(support);
         match link.set_encoding(wanted) {
             Ok(()) => {
-                hdr::say(wanted, support, None);
+                hdr::say(wanted, &advertised, None);
                 hdr::mark_presenting(wanted);
                 wanted
             }
             Err(why) => {
                 let _ = link.set_encoding(Encoding::Srgb);
-                hdr::say(Encoding::Srgb, support, Some(&why));
+                hdr::say(Encoding::Srgb, &advertised, Some(&why));
                 Encoding::Srgb
             }
         }
@@ -307,8 +317,9 @@ impl WgpuBackend {
         }
         if let Some(surface) = &mut self.surface {
             let format = surface.format_for(self.present);
-            let transfer = transfer(space, format, Encoding::Srgb);
-            surface.reformat(&self.device, &self.texture, format, transfer);
+            let transfer = transfer(space, format, self.encoding);
+            let color_space = super::swapchain_hdr::color_space(self.encoding);
+            surface.reformat(&self.device, &self.texture, (format, color_space), transfer);
         }
     }
 }

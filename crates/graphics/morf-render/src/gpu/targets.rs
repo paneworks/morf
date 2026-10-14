@@ -139,12 +139,19 @@ pub(crate) struct SurfaceState {
     /// Every format the surface offered, and the eight-bit one chosen first.
     pub(crate) formats: Vec<wgpu::TextureFormat>,
     pub(crate) eight: wgpu::TextureFormat,
+    /// The colour spaces each format can be configured in (`swapchain_hdr`),
+    /// and whether HDR is asked for, which lets a format offered only in
+    /// HDR spaces count.
+    pub(crate) spaces: Vec<(wgpu::TextureFormat, wgpu::SurfaceColorSpaces)>,
+    pub(crate) hdr: bool,
 }
 
 impl SurfaceState {
     /// Whether the swapchain can present as `format`.
     pub(crate) fn takes(&self, format: super::depth::PresentFormat) -> bool {
-        !format.deep() || self.formats.contains(&format.texture_format())
+        !format.deep()
+            || self.formats.contains(&format.texture_format())
+            || (self.hdr && self.hdr_encoding(format).hdr())
     }
 
     /// The swapchain format that presents as `format`.
@@ -161,11 +168,12 @@ impl SurfaceState {
         &mut self,
         device: &wgpu::Device,
         target: &wgpu::Texture,
-        format: wgpu::TextureFormat,
+        (format, color_space): (wgpu::TextureFormat, wgpu::SurfaceColorSpace),
         transfer: super::depth::Transfer,
     ) {
-        if self.config.format != format {
+        if self.config.format != format || self.config.color_space != color_space {
             self.config.format = format;
+            self.config.color_space = color_space;
             self.stale = true;
         }
         let CompositePipeline {
@@ -254,6 +262,12 @@ pub(crate) fn create_surface_state(
         stale: false,
         formats: capabilities.formats.clone(),
         eight: format,
+        spaces: capabilities
+            .format_capabilities
+            .iter()
+            .map(|offered| (offered.format, offered.color_spaces))
+            .collect(),
+        hdr: false,
         surface,
         config,
         pipeline,
