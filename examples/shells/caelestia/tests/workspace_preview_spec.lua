@@ -14,7 +14,7 @@ local HOST=[[
     {workspace=1.0,class="terminal",title="Current",width=1000,height=2200,x=50,y=100,mapped=true},
     {workspace=2.0,class="editor",title="Next",width=900,height=2100,x=80,y=120,mapped=true}}
   local data=morf.state {clients=clients,workspaces={},monitors={{name="DSI-1",x=0,y=0,width=1116,scale=1}}}
-  package.loaded["lib.integrations.hyprland"]={state=data,options=function(_,callback)
+  package.loaded["lib.integrations.hyprland"]={state=data,available=function() return false end,options=function(_,callback)
     callback({["general:border_size"]={int=3},["decoration:rounding"]={int=20},
       ["general:col.active_border"]={gradient="fff0c5d6 0deg"},
       ["general:col.inactive_border"]={gradient="ff523843 0deg"}})
