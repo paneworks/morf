@@ -8,7 +8,7 @@
 
 use crate::gpu::backend_types::ShaderRegistration;
 use crate::gpu::field_tests::alpha_at;
-use crate::gpu::shader_mode_tests::surface;
+use crate::gpu::shader_surface_tests::surface;
 use crate::gpu::shader_tests::{SIZE, channel, shaded};
 use crate::*;
 use morf_shader::{ShaderKind, ShaderSpec};
@@ -391,4 +391,83 @@ pub(crate) fn records_and_helpers_reach_the_driver_together() {
         channel(&pixels, 20, 32, 0) > channel(&pixels, 20, 32, 2),
         "the left side is warmer than it is cool",
     );
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+pub(crate) fn a_ported_shadertoy_shader_compiles_and_paints() {
+    require_gpu!();
+    // Compiling is not the same as being WGSL a driver accepts. This is the
+    // Plasma port from `morf-shader`'s port suite, taken all the way to an
+    // adapter: vector division, a `tanh` tonemap, swizzled feedback through a
+    // loop, and a shape that came from somebody else's shader rather than from
+    // what happened to be convenient to emit.
+    let pixels = shaded(
+        "function fragment(uv, time, resolution)
+           local I = uv * resolution
+           local r = resolution
+           local p = (I + I - r) / r.y
+           local O = vec3(0.0, 0.0, 0.0)
+           local f = p * (4.0 - 4.0 * abs(0.7 - dot(p, p)))
+           local i = 0.0
+           while i < 8.0 do
+             i = i + 1.0
+             local s = sin(f) + vec2(1.0, 1.0)
+             O = O + vec3(s.x, s.y, s.y) * abs(f.x - f.y)
+             f = f + cos(f.yx * i + vec2(i, i) + vec2(time, time)) / i + vec2(0.7, 0.7)
+           end
+           O = tanh(7.0 * exp(0.0 - p.y * vec3(-1.0, 1.0, 2.0)) / O)
+           return vec4(O, 1.0)
+         end",
+    );
+    assert_eq!(
+        alpha_at(&pixels, SIZE, 32, 32),
+        255,
+        "the ported shader painted the node",
+    );
+    // Not a flat fill: a plasma that came out one colour everywhere would pass
+    // an alpha check and mean nothing.
+    let samples: Vec<[u8; 3]> = [(14, 20), (24, 30), (32, 32), (40, 42), (50, 46)]
+        .into_iter()
+        .map(|(x, y)| {
+            [
+                channel(&pixels, x, y, 0),
+                channel(&pixels, x, y, 1),
+                channel(&pixels, x, y, 2),
+            ]
+        })
+        .collect();
+    let distinct = samples
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    assert!(
+        distinct > 1,
+        "and it varies across the surface: {samples:?}"
+    );
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+pub(crate) fn a_helper_function_survives_to_the_gpu() {
+    require_gpu!();
+    // iq's palette, the most-copied helper in shader writing. Emitted as a real
+    // WGSL function ahead of the entry point, with its parameter type taken
+    // from the call because Lua had nowhere to declare one.
+    let pixels = shaded(
+        "function palette(t)
+           local a = vec3(0.5, 0.5, 0.5)
+           local d = vec3(0.263, 0.416, 0.557)
+           return a + a * cos(6.28318 * (t + d))
+         end
+
+         function fragment(uv, time, resolution)
+           return vec4(palette(uv.x), 1.0)
+         end",
+    );
+    assert_eq!(alpha_at(&pixels, SIZE, 32, 32), 255, "the node is painted");
+    // A palette sweeps: two points across it cannot be the same colour.
+    let left = channel(&pixels, 14, 32, 0);
+    let right = channel(&pixels, 50, 32, 0);
+    assert_ne!(left, right, "and the helper's gradient came through");
 }
