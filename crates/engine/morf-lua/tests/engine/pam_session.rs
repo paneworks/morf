@@ -18,7 +18,12 @@ fn pam_service_dir(name: &str) -> std::path::PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let check = dir.join("check.sh");
-    std::fs::write(&check, "#!/bin/sh\ntest \"$(cat)\" = hunter2\n").unwrap();
+    // Builtins only: pam_exec gives the script no PATH.
+    std::fs::write(
+        &check,
+        "#!/bin/sh\nIFS= read -r answer\ntest \"$answer\" = hunter2\n",
+    )
+    .unwrap();
     std::fs::set_permissions(&check, std::fs::Permissions::from_mode(0o755)).unwrap();
     std::fs::write(
         dir.join(name),

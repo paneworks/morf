@@ -21,7 +21,13 @@ fn service_dir(name: &str, lines: &str) -> PathBuf {
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let check = dir.join("check.sh");
-    fs::write(&check, "#!/bin/sh\ntest \"$(cat)\" = hunter2\n").unwrap();
+    // Builtins only: pam_exec gives the script no PATH, and a system without
+    // /bin/cat (NixOS) would fail it as a system error.
+    fs::write(
+        &check,
+        "#!/bin/sh\nIFS= read -r answer\ntest \"$answer\" = hunter2\n",
+    )
+    .unwrap();
     fs::set_permissions(&check, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(dir.join("notice.txt"), "touch the sensor\n").unwrap();
     let service = lines
