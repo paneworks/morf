@@ -10,6 +10,7 @@ import pwd
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 HERE = Path(__file__).resolve().parent
@@ -81,10 +82,33 @@ class Pattern(unittest.TestCase):
     def test_cooldown_survives_new_processes_and_recovers(self):
         for _ in range(5): self.assertNotEqual(self.run_helper("--check", b"14785").returncode, 0)
         self.assertNotEqual(self.run_helper("--check", b"123654").returncode, 0)
-        self.assertEqual(self.rate.read_text().split()[0], "5")
-        self.rate.write_text("5 1\n")  # expire in the isolated test store
+        failures, until, strikes = self.rate.read_text().split()
+        self.assertEqual((failures, strikes), ("5", "1"))
+        self.rate.write_text(f"5 {int(until) - 30} 1\n")  # expire in the isolated test store
         self.assertEqual(self.run_helper("--check", b"123654").returncode, 0)
-        self.assertEqual(self.rate.read_text(), "0 0\n")
+        self.assertEqual(self.rate.read_text(), "0 0 0\n")
+
+    def test_cooldown_grows_then_requires_password_until_root_reset(self):
+        cooldowns = []
+        for strike in range(1, 5):
+            for _ in range(5): self.assertNotEqual(self.run_helper("--check", b"14785").returncode, 0)
+            failures, until, strikes = self.rate.read_text().split()
+            self.assertEqual((failures, strikes), ("5", str(strike)))
+            now = int(time.time())
+            cooldowns.append(int(until) - now)
+            self.rate.write_text(f"5 {now} {strikes}\n")
+        self.assertTrue(cooldowns[0] < cooldowns[1] < cooldowns[2] < cooldowns[3], cooldowns)
+        for _ in range(5): self.assertNotEqual(self.run_helper("--check", b"14785").returncode, 0)
+        self.assertEqual(self.rate.read_text().split()[2], "5")
+        self.rate.write_text("5 1 5\n")
+        self.assertNotEqual(self.run_helper("--check", b"123654").returncode, 0)
+        self.assertEqual(self.run_helper("--reset").returncode, 0)
+        self.assertEqual(self.run_helper("--check", b"123654").returncode, 0)
+
+    def test_strikes_fade_after_a_quiet_window(self):
+        self.rate.write_text("5 1 3\n")
+        self.assertNotEqual(self.run_helper("--check", b"14785").returncode, 0)
+        self.assertEqual(self.rate.read_text().split()[::2], ["1", "0"])
 
     def test_insecure_files_and_symlinks_fail_closed(self):
         self.hash.chmod(0o644)
@@ -132,6 +156,9 @@ class Pattern(unittest.TestCase):
         self.assertLess(updated.index(install.END), updated.index("auth include system-login"))
         self.assertEqual(install.pam_with_pattern(updated), updated)
         self.assertTrue(updated.endswith(original[original.index("auth include"):]))
+        greet = install.pam_with_pattern(original, reset=True)
+        self.assertTrue(greet.endswith(f"--reset\n{install.END}\n"))
+        self.assertEqual(install.pam_with_pattern(greet, reset=True), greet)
         with self.assertRaises(ValueError): install.pam_with_pattern("auth required custom-module.so\n")
 
     def test_real_pam_conversation_and_password_fallback(self):

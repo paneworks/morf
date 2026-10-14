@@ -34,7 +34,7 @@ def enroll(user, helper, optional=False, prompt=getpass.getpass):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("setup", "set", "clear", "status"))
+    parser.add_argument("action", choices=("setup", "set", "clear", "reset", "status"))
     parser.add_argument("user", nargs="?", default=os.environ.get("SUDO_USER") or getpass.getuser())
     parser.add_argument("--stdin", action="store_true", help="read a new pattern from stdin (set only)")
     args = parser.parse_args()
@@ -57,6 +57,9 @@ def main():
     if args.action == "clear":
         subprocess.run([helper, "--clear", user.pw_name], check=True)
         print("Pattern removed. Use your password to unlock.")
+    elif args.action == "reset":
+        subprocess.run([helper, "--reset", user.pw_name], check=True)
+        print("Pattern attempts reset.")
     elif args.stdin:
         subprocess.run([helper, "--set", user.pw_name], stdin=sys.stdin, check=True)
         print("Pattern saved.")

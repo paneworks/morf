@@ -65,8 +65,10 @@ shell, lockscreen and greeter shipped with Morf. This keeps UI fixes from being
 shadowed by older Lua entry points in dotfiles, while retaining saved appearance
 preferences. Explicit configuration paths and `MORF_CONFIG` still take precedence.
 
-The NixOS module installs `morf-pattern` and enables pattern authentication for
-greetd and `morf-lock`. Enroll locally with `sudo morf-pattern setup USER` (Enter
+Pattern authentication is off by default. Setting
+`programs.morf.pattern.enable = true` installs `morf-pattern` and enables it for
+greetd and `morf-lock`. A pattern has far less entropy than a password; enable
+it only where that trade-off is acceptable. Enroll locally with `sudo morf-pattern setup USER` (Enter
 skips), or use `set` to replace a pattern and `clear` to remove it. An existing
 pattern is preserved by `setup`. The OS installer can invoke `setup` immediately
 after `passwd`; no secret belongs in a Nix option or installation manifest.
@@ -80,12 +82,15 @@ Only a randomly salted yescrypt hash is stored, under `/var/lib/morf/pattern`
 (root-only directory and files). `/etc/morf/pattern/USER` is an empty, public
 enrollment marker so both screens know when to offer patterns. The compiled
 setuid verifier accepts an unprivileged caller only for their own account;
-enrollment/removal require root. Five failed pattern attempts trigger a
-30-second cooldown, shared by login and lock. The account password remains in
+enrollment/removal require root. Every five failed pattern attempts trigger a
+cooldown that grows each time (30 s, 1 min, 5 min, 15 min), shared by login and
+lock. After twenty-five failures patterns stay disabled until a password login
+through greetd (or `sudo morf-pattern reset USER`); strikes fade after a day
+without new ones. The account password remains in
 the system password store; it is never copied or recovered from the pattern.
 
 On non-NixOS systems, `sudo tools/pattern/install.sh USER` builds the helper,
 preserves the existing PAM password/account checks, and starts enrollment.
 It requires a C compiler, libxcrypt headers and Python 3. NixOS uses the module
-instead of this imperative installer. `programs.morf.pattern.enable = false`
-disables the integration without changing the account password.
+instead of this imperative installer. Leaving `programs.morf.pattern.enable`
+false keeps the integration off without changing the account password.
