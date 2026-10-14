@@ -1,23 +1,42 @@
 use crate::BlendSpace;
 
-/// The format every target and pipeline of one blend space agrees on.
+/// What a surface's targets hold: the space it blends in, and whether they
+/// are deeper than eight bits a channel (see `depth`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
+pub(crate) struct Space {
+    pub(crate) blend: BlendSpace,
+    pub(crate) deep: bool,
+}
+
+/// The format every target and pipeline of one space agrees on.
 ///
 /// Linear blending renders into an sRGB target: shaders write linear light
 /// and the hardware encodes on store and decodes on blend, so the blend
 /// happens in linear light. Gamma blending renders into a plain target and
 /// the shaders encode themselves, so what the blend unit sees -- and mixes --
 /// are the sRGB-encoded values, as a browser or Qt mixes them.
-pub(crate) fn target_format(blend: BlendSpace) -> wgpu::TextureFormat {
-    match blend {
-        BlendSpace::Linear => wgpu::TextureFormat::Rgba8UnormSrgb,
-        BlendSpace::Srgb => wgpu::TextureFormat::Rgba8Unorm,
+///
+/// A deep space holds either in half floats: there is no ten-bit sRGB
+/// format, and linear light in ten bits bands in the shadows. Its full alpha
+/// is what translucent surfaces need.
+pub(crate) fn target_format(space: Space) -> wgpu::TextureFormat {
+    match space {
+        Space { deep: true, .. } => wgpu::TextureFormat::Rgba16Float,
+        Space {
+            blend: BlendSpace::Linear,
+            ..
+        } => wgpu::TextureFormat::Rgba8UnormSrgb,
+        Space {
+            blend: BlendSpace::Srgb,
+            ..
+        } => wgpu::TextureFormat::Rgba8Unorm,
     }
 }
 
 /// The pipeline constants telling the field and glyph shaders which space
 /// they write in.
-pub(crate) fn blend_constants(blend: BlendSpace) -> &'static [(&'static str, f64)] {
-    match blend {
+pub(crate) fn blend_constants(space: Space) -> &'static [(&'static str, f64)] {
+    match space.blend {
         BlendSpace::Linear => &[("MORF_GAMMA_BLEND", 0.0)],
         BlendSpace::Srgb => &[("MORF_GAMMA_BLEND", 1.0)],
     }
@@ -34,6 +53,9 @@ mod backend_types;
 mod batches;
 mod capture;
 mod clear_pipeline;
+mod depth;
+#[cfg(test)]
+mod depth_tests;
 pub mod dmabuf;
 mod dmabuf_acquire;
 #[cfg(test)]
@@ -71,6 +93,7 @@ mod warm;
 
 pub use backend_init::{lose_devices, opened_device_count};
 pub use backend_types::*;
+pub use depth::OutputDepth;
 pub use present_stalls::{PresentStalls, present_stalls};
 #[cfg(test)]
 mod backdrop_tests;

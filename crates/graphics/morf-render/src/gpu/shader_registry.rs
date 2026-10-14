@@ -34,7 +34,7 @@ impl WgpuBackend {
                 shader.wgsl,
                 textures.as_ref().map(|(_, layout)| layout),
                 data.as_ref(),
-                self.blend,
+                self.space,
             )
             .ok_or_else(|| {
                 GpuError::Pipeline(
@@ -53,7 +53,7 @@ impl WgpuBackend {
                     vertex: shader.vertex,
                     textures: textures.as_ref().map(|(_, layout)| layout),
                     data: data.as_ref(),
-                    blend: self.blend,
+                    space: self.space,
                 },
             )
             .ok_or_else(|| {
@@ -82,7 +82,26 @@ impl WgpuBackend {
                 data: data.map(|layout| (layout, shader.data.to_vec())),
             },
         );
+        if !self
+            .registered
+            .iter()
+            .any(|kept| kept.program == shader.program && kept.effect == shader.effect)
+        {
+            self.registered.push(KeptShader::of(&shader));
+        }
         Ok(())
+    }
+
+    /// Builds every registered shader's pipeline again, for a new space.
+    pub(crate) fn rebuild_shaders(&mut self) {
+        self.shaders.clear();
+        self.effect_shaders.clear();
+        self.shader_instances.clear();
+        for kept in std::mem::take(&mut self.registered) {
+            if let Err(error) = self.register_shader(kept.registration()) {
+                eprintln!("morf: gpu: shader {:#x} not rebuilt: {error}", kept.program);
+            }
+        }
     }
 
     /// Decodes and uploads a shader's declared textures.
@@ -226,5 +245,48 @@ pub(crate) fn create_shader_instance(
         bind_group,
         data,
         frame,
+    }
+}
+
+/// A registration as owned data, so it can be made again.
+pub(crate) struct KeptShader {
+    program: u64,
+    wgsl: Option<String>,
+    vertex: Option<String>,
+    offsets: Vec<u32>,
+    uniform_size: u32,
+    owns_coverage: bool,
+    effect: bool,
+    textures: Vec<String>,
+    data: Vec<(String, u32)>,
+}
+
+impl KeptShader {
+    fn of(shader: &ShaderRegistration<'_>) -> Self {
+        Self {
+            program: shader.program,
+            wgsl: shader.wgsl.map(str::to_owned),
+            vertex: shader.vertex.map(str::to_owned),
+            offsets: shader.offsets.to_vec(),
+            uniform_size: shader.uniform_size,
+            owns_coverage: shader.owns_coverage,
+            effect: shader.effect,
+            textures: shader.textures.to_vec(),
+            data: shader.data.to_vec(),
+        }
+    }
+
+    fn registration(&self) -> ShaderRegistration<'_> {
+        ShaderRegistration {
+            program: self.program,
+            wgsl: self.wgsl.as_deref(),
+            vertex: self.vertex.as_deref(),
+            offsets: &self.offsets,
+            uniform_size: self.uniform_size,
+            owns_coverage: self.owns_coverage,
+            effect: self.effect,
+            textures: &self.textures,
+            data: &self.data,
+        }
     }
 }

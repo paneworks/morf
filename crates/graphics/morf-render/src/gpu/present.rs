@@ -32,8 +32,7 @@ use super::targets::{
     plain_view,
 };
 
-/// The buffer format: `B8G8R8A8`, which is `ARGB8888` to a compositor.
-pub(crate) const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
+use super::depth::PresentFormat;
 
 /// One buffer of the ring.
 pub(crate) struct Slot {
@@ -66,6 +65,8 @@ pub(crate) struct BufferRing {
     pub(crate) slots: Vec<Slot>,
     history: DamageHistory,
     size: (u32, u32),
+    /// What the buffers are: `ARGB8888`, or a deep format (see `depth`).
+    format: PresentFormat,
     /// The most buffers the ring grows to before it waits for one back.
     limit: usize,
     composite: CompositePipeline,
@@ -87,8 +88,9 @@ impl BufferRing {
         target: &wgpu::Texture,
         limit: usize,
         link: Option<super::present_link::BufferLink>,
+        (format, transfer): (PresentFormat, f64),
     ) -> Self {
-        let composite = create_composite_pipeline(device, FORMAT);
+        let composite = create_composite_pipeline(device, format.texture_format(), transfer);
         let bind_group = create_composite_bind_group(
             device,
             &composite.layout,
@@ -99,6 +101,7 @@ impl BufferRing {
             slots: Vec::new(),
             history: DamageHistory::default(),
             size: (target.width(), target.height()),
+            format,
             limit: limit.max(1),
             composite,
             bind_group,
@@ -130,6 +133,33 @@ impl BufferRing {
         for slot in &mut self.slots {
             slot.painted = None;
         }
+    }
+
+    /// Whether its buffers can be made as `format`.
+    pub(crate) fn takes(&self, format: PresentFormat) -> bool {
+        self.link.as_ref().is_none_or(|link| link.takes(format))
+    }
+
+    /// Presents as `format` from now on, through a composite converting as
+    /// `transfer` says. Buffers of another format are retired and every
+    /// buffer is repainted whole.
+    pub(crate) fn set_format(
+        &mut self,
+        device: &wgpu::Device,
+        target: &wgpu::Texture,
+        format: PresentFormat,
+        transfer: f64,
+    ) {
+        if format != self.format {
+            self.format = format;
+            let old = std::mem::take(&mut self.slots);
+            if let Some(link) = &mut self.link {
+                link.retire(old);
+            }
+            self.presented = None;
+        }
+        self.composite = create_composite_pipeline(device, format.texture_format(), transfer);
+        self.retarget(device, target);
     }
 
     /// The window the ring presented to, its buffers dropped with it.
@@ -194,14 +224,14 @@ impl BufferRing {
             }
             if self.slots.len() < self.limit {
                 let slot = match &mut self.link {
-                    Some(link) => match link.allocate(device, self.size) {
+                    Some(link) => match link.allocate(device, self.size, self.format) {
                         Ok(slot) => slot,
                         Err(error) => {
                             eprintln!("morf: gpu: could not make a buffer: {error}");
                             return None;
                         }
                     },
-                    None => Slot::new(plain_texture(device, self.size), None),
+                    None => Slot::new(plain_texture(device, self.size, self.format), None),
                 };
                 self.slots.push(slot);
                 return Some(self.slots.len() - 1);
@@ -344,37 +374,6 @@ impl BufferRing {
     }
 }
 
-#[cfg(test)]
-impl super::backend_types::WgpuBackend {
-    /// Presents into a ring of `limit` plain textures from now on, whose
-    /// release the test decides.
-    pub(crate) fn present_into_ring(&mut self, limit: usize) {
-        self.buffers = Some(BufferRing::new(&self.device, &self.texture, limit, None));
-    }
-
-    /// The buffer the last frame went to, if it went to one.
-    pub(crate) fn ring_presented(&self) -> Option<usize> {
-        self.buffers.as_ref()?.presented
-    }
-
-    /// The compositor lets go of buffer `index`.
-    pub(crate) fn ring_release(&mut self, index: usize) {
-        if let Some(ring) = &mut self.buffers {
-            ring.release(index);
-        }
-    }
-
-    /// Buffer `index`'s pixels, as RGBA like `read_pixels`.
-    pub(crate) fn ring_pixels(&self, index: usize) -> Vec<u8> {
-        let ring = self.buffers.as_ref().expect("a ring");
-        let mut pixels = self.read_texture(&ring.slots[index].texture);
-        for pixel in pixels.as_chunks_mut::<4>().0 {
-            pixel.swap(0, 2);
-        }
-        pixels
-    }
-}
-
 /// `MORF_PRESENT_LOG=1`: every frame's buffer, how many the compositor
 /// held, and how long getting one took.
 pub(crate) fn log_wanted() -> bool {
@@ -412,7 +411,11 @@ fn release_wait() -> std::time::Duration {
 }
 
 /// A buffer with nothing behind it but a texture: the tests' ring.
-fn plain_texture(device: &wgpu::Device, (width, height): (u32, u32)) -> wgpu::Texture {
+fn plain_texture(
+    device: &wgpu::Device,
+    (width, height): (u32, u32),
+    format: PresentFormat,
+) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("morf ring buffer"),
         size: wgpu::Extent3d {
@@ -423,7 +426,7 @@ fn plain_texture(device: &wgpu::Device, (width, height): (u32, u32)) -> wgpu::Te
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: FORMAT,
+        format: format.texture_format(),
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     })

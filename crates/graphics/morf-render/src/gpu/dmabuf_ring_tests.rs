@@ -102,6 +102,7 @@ fn a_frame_goes_out_through_an_exported_dmabuf() {
         &backend.texture,
         3,
         Some(link),
+        Default::default(),
     ));
     let mut engine = RenderEngine::new(backend);
     let desk = desk();
@@ -125,6 +126,53 @@ fn a_frame_goes_out_through_an_exported_dmabuf() {
         difference, 0,
         "the dmabuf differs from the frame at ({x}, {y})"
     );
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn a_deep_frame_goes_out_through_a_ten_bit_dmabuf() {
+    use super::depth::{OutputDepth, PresentFormat};
+    use super::depth_tests::{STEPS, columns, ten_bit_reds};
+    require_gpu!();
+    let mut backend = pollster::block_on(WgpuBackend::new(4, 4)).unwrap();
+    let ours = dmabuf::modifiers_for_purpose(
+        &backend.device,
+        dmabuf::FOURCC_XBGR2101010,
+        Purpose::PRESENT,
+    );
+    if !backend.dmabuf.as_ref().is_some_and(|s| s.sync_file)
+        || !ours.contains(&dmabuf::MODIFIER_LINEAR)
+    {
+        eprintln!("skipped: this device cannot present through linear 10-bit dmabufs");
+        return;
+    }
+    let record = Arc::new(Mutex::new(Record::default()));
+    let sink = FakeSink {
+        modifiers: vec![dmabuf::MODIFIER_LINEAR],
+        record: record.clone(),
+    };
+    backend.set_blend(BlendSpace::Srgb);
+    backend.set_opaque_surface(true);
+    backend.attach_sink(Box::new(sink)).expect("a link");
+    assert!(backend.set_output_depth(OutputDepth::Ten));
+    assert_eq!(backend.present, PresentFormat::Ten);
+    let mut scene = morf_scene::Scene::new();
+    let whole = [DamageRect {
+        x: 0,
+        y: 0,
+        width: 4,
+        height: 4,
+    }];
+    backend.render(&columns(&mut scene), &whole, 120).unwrap();
+
+    let record = record.lock().unwrap();
+    let label = *record.presented.last().expect("the frame was presented");
+    let (fd, stride, _) = &record.imported[label as usize - 1];
+    let shown = read_linear(fd, *stride, 4);
+    let reds = ten_bit_reds(&shown[..16]);
+    for (red, step) in reds.iter().zip(STEPS) {
+        assert!(red.abs_diff(step) <= 1, "{reds:?} for {STEPS:?}");
+    }
 }
 
 /// The bytes of a linear dmabuf, mapped and copied out.

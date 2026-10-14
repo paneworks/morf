@@ -2217,6 +2217,22 @@ swapchain as before.
 | `MORF_PRESENT=swapchain` | presents through the swapchain instead (`MORF_PRESENT_MODE=fifo\|mailbox\|immediate` picks its mode) |
 | `MORF_PRESENT_BUFFERS=N` | how many buffers of its own a surface uses at most (default 4) |
 | `MORF_PRESENT_WAIT_MS=N` | how long a frame waits for the compositor to give a buffer back before it is skipped (default 250); a skipped frame's changes go with the next one |
+| `MORF_DEPTH=10` | presents deeper than eight bits a channel where the compositor and the GPU both can (see below) |
+
+#### Ten-bit output
+
+`MORF_DEPTH=10` draws each surface into half-float targets and presents
+it as a deeper format the compositor advertises for `zwp_linux_dmabuf_v1`
+(or the swapchain offers) and the GPU can export: `XBGR2101010` for a
+surface declared opaque (`morf.surface.opaque = true`), `ABGR16161616F`
+for any surface, since ten-bit formats keep only two bits of alpha and a
+translucent surface's edges and shadows would come out in four steps.
+Where neither is taken it falls back to eight bits, `ARGB8888`, as without
+the setting; the log says which was chosen (and `MORF_GPU_LOG=1` what
+the compositor advertised). Gradients stop
+banding; nothing else changes. This is precision only, not HDR: colours
+are still sRGB, presented as sRGB, with no PQ or scRGB output and no
+colour-management protocol.
 
 ## 8. Idioms to prefer
 

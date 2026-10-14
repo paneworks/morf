@@ -217,7 +217,7 @@ impl RenderBackend for WgpuBackend {
             self.mask_pipeline = Some(super::pipelines::build_mask_pipeline(
                 &self.device,
                 &self.glyph_layout,
-                self.blend,
+                self.space,
             ));
         }
         self.layer_pool.begin_frame();

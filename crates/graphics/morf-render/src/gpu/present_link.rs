@@ -32,9 +32,43 @@ use ash::vk;
 use morf_value::present::{BufferSink, Damage, DmabufPlane, SinkBuffer};
 use wgpu::hal::api::Vulkan;
 
-use super::dmabuf::{self, DmabufImage, FOURCC_ARGB8888, Purpose};
+use super::depth::PresentFormat;
+use super::dmabuf::{self, DmabufImage, Purpose};
 use super::present::Slot;
 use crate::DamageRect;
+
+/// The modifiers both the window and the device take `format` buffers with.
+///
+/// Linear whenever both sides can: a presented buffer is never drawn into,
+/// only copied to (the frame is drawn in a target of its own), so tiling it
+/// buys nothing, and linear is the one layout every importer reads the same
+/// way. A tiled one, left to the driver to pick, came out garbled under
+/// Hyprland on a Kaby Lake laptop -- blocks of noise, text in pieces --
+/// where a swapchain was fine.
+fn agreed(device: &wgpu::Device, sink: &dyn BufferSink, format: PresentFormat) -> Vec<u64> {
+    let theirs = sink.modifiers(format.fourcc());
+    let ours = dmabuf::modifiers_for_purpose(device, format.fourcc(), Purpose::PRESENT);
+    let shared: Vec<u64> = ours
+        .iter()
+        .copied()
+        .filter(|modifier| theirs.contains(modifier))
+        .filter(|modifier| dmabuf::modifier_wanted(*modifier))
+        .collect();
+    let modifiers = if shared.contains(&dmabuf::MODIFIER_LINEAR) {
+        vec![dmabuf::MODIFIER_LINEAR]
+    } else {
+        shared
+    };
+    if std::env::var_os("MORF_GPU_LOG").is_some() {
+        eprintln!(
+            "morf: gpu: {format:?} present modifiers: ours {}, the compositor's {}, used {}",
+            dmabuf::modifier_names(&ours),
+            dmabuf::modifier_names(&theirs),
+            dmabuf::modifier_names(&modifiers),
+        );
+    }
+    modifiers
+}
 
 /// A slot's dmabuf, the window system's buffer for it, and its two
 /// semaphores.
@@ -73,8 +107,8 @@ impl Drop for SlotLink {
 pub(crate) struct BufferLink {
     /// `None` only once [`BufferLink::into_sink`] took it.
     sink: Option<Box<dyn BufferSink>>,
-    /// Modifiers both the window system and the device take.
-    modifiers: Vec<u64>,
+    /// Modifiers both the window system and the device take, by format.
+    modifiers: [(PresentFormat, Vec<u64>); 3],
     /// Buffers of an old size, kept until the compositor lets go of them.
     retired: Vec<Slot>,
     device: wgpu::Device,
@@ -93,34 +127,8 @@ impl BufferLink {
         if !support.is_some_and(|support| support.sync_file) {
             return Err("the device cannot export dmabufs with sync files".to_owned());
         }
-        let theirs = sink.modifiers(FOURCC_ARGB8888);
-        let ours = dmabuf::modifiers_for_purpose(device, FOURCC_ARGB8888, Purpose::PRESENT);
-        let shared: Vec<u64> = ours
-            .iter()
-            .copied()
-            .filter(|modifier| theirs.contains(modifier))
-            .filter(|modifier| dmabuf::modifier_wanted(*modifier))
-            .collect();
-        // Linear whenever both sides can: a presented buffer is never drawn
-        // into, only copied to (the frame is drawn in a target of its own),
-        // so tiling it buys nothing, and linear is the one layout every
-        // importer reads the same way. A tiled one, left to the driver to
-        // pick, came out garbled under Hyprland on a Kaby Lake laptop --
-        // blocks of noise, text in pieces -- where a swapchain was fine.
-        let modifiers = if shared.contains(&dmabuf::MODIFIER_LINEAR) {
-            vec![dmabuf::MODIFIER_LINEAR]
-        } else {
-            shared
-        };
-        if std::env::var_os("MORF_GPU_LOG").is_some() {
-            eprintln!(
-                "morf: gpu: present modifiers: ours {}, the compositor's {}, used {}",
-                dmabuf::modifier_names(&ours),
-                dmabuf::modifier_names(&theirs),
-                dmabuf::modifier_names(&modifiers),
-            );
-        }
-        if modifiers.is_empty() {
+        let modifiers = PresentFormat::ALL.map(|format| (format, agreed(device, &*sink, format)));
+        if modifiers[0].1.is_empty() {
             return Err("the compositor and the GPU agree on no ARGB8888 modifier".to_owned());
         }
         let hal = unsafe { device.as_hal::<Vulkan>() }.ok_or("the device is not Vulkan")?;
@@ -167,19 +175,31 @@ impl BufferLink {
         heard
     }
 
-    /// A new buffer of `size`, exported, made the window system's.
+    /// Whether the window and the device agree on a modifier for `format`.
+    pub(crate) fn takes(&self, format: PresentFormat) -> bool {
+        self.modifiers_of(format).is_some()
+    }
+
+    fn modifiers_of(&self, format: PresentFormat) -> Option<&[u64]> {
+        self.modifiers
+            .iter()
+            .find(|(each, modifiers)| *each == format && !modifiers.is_empty())
+            .map(|(_, modifiers)| modifiers.as_slice())
+    }
+
+    /// A new `format` buffer of `size`, exported, made the window system's.
     pub(crate) fn allocate(
         &mut self,
         device: &wgpu::Device,
         size: (u32, u32),
+        format: PresentFormat,
     ) -> Result<Slot, String> {
-        let image = dmabuf::export_for(
-            device,
-            size,
-            FOURCC_ARGB8888,
-            &self.modifiers,
-            Purpose::PRESENT,
-        )?;
+        let modifiers = self
+            .modifiers_of(format)
+            .map(<[u64]>::to_vec)
+            .ok_or_else(|| format!("the compositor takes no {format:?} buffer"))?;
+        let image =
+            dmabuf::export_for(device, size, format.fourcc(), &modifiers, Purpose::PRESENT)?;
         let exportable = |raw: &ash::Device| {
             let mut export = vk::ExportSemaphoreCreateInfo::default()
                 .handle_types(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD);
@@ -210,7 +230,7 @@ impl BufferLink {
             modifier: image.modifier,
         };
         let imported = match &mut self.sink {
-            Some(sink) => sink.import(plane, size, FOURCC_ARGB8888, busy.clone()),
+            Some(sink) => sink.import(plane, size, format.fourcc(), busy.clone()),
             None => Err("the link has no window".to_owned()),
         };
         let buffer = match imported {

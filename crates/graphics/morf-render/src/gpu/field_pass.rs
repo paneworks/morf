@@ -162,7 +162,7 @@ pub(crate) struct FieldPipeline<'a> {
     pub(crate) textures: Option<&'a wgpu::BindGroupLayout>,
     pub(crate) data: Option<&'a wgpu::BindGroupLayout>,
     /// The space it blends in, which decides its target and what it writes.
-    pub(crate) blend: crate::BlendSpace,
+    pub(crate) space: super::Space,
 }
 
 pub(crate) fn build_field_pipeline(
@@ -177,13 +177,13 @@ pub(crate) fn build_field_pipeline(
         vertex,
         textures,
         data,
-        blend,
+        space,
         variant,
     } = built;
     // Group two is a shader's own textures and three its data blocks, both
     // present only when it declared any — an empty group is still a group wgpu
     // would want filled.
-    let mut constants = super::blend_constants(blend).to_vec();
+    let mut constants = super::blend_constants(space).to_vec();
     constants.push((
         "MORF_ANALYTIC",
         if variant == FieldVariant::General {
@@ -284,7 +284,7 @@ pub(crate) fn build_field_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: super::target_format(blend),
+                format: super::target_format(space),
                 blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],

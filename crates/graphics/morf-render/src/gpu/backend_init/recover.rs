@@ -13,8 +13,8 @@ use super::device::{ready, shared_instance};
 impl WgpuBackend {
     /// Rebuilds this backend on a fresh device after its own was lost.
     ///
-    /// The surface it presents to and its settings (blend space, subpixel
-    /// text, opacity, clock) carry over. Registered shaders do not: their
+    /// The surface it presents to and its settings (blend space, depth,
+    /// subpixel text, opacity, clock) carry over. Registered shaders do not: their
     /// pipelines were the old device's, so whoever registered them does so
     /// again, and the next frame has to be drawn in full.
     pub fn recover(&mut self) -> Result<(), GpuError> {
@@ -29,9 +29,10 @@ impl WgpuBackend {
         if let Some(sink) = sink {
             fresh.attach_sink(sink).map_err(GpuError::Surface)?;
         }
-        fresh.set_blend(self.blend);
+        fresh.set_blend(self.space.blend);
         fresh.set_subpixel_text(self.subpixel);
         fresh.opaque_surface = self.opaque_surface;
+        fresh.set_output_depth(self.depth);
         fresh.elapsed = self.elapsed;
         std::mem::swap(&mut fresh.text, &mut self.text);
         std::mem::swap(&mut fresh.drawings, &mut self.drawings);
@@ -66,6 +67,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires a GPU adapter"]
     fn a_lost_device_is_replaced_and_the_next_frames_draw() {
         require_gpu!();
         let private = ready(open_device(&shared_instance(), None)).expect("an adapter");

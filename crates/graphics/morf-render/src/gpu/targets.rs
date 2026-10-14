@@ -14,6 +14,7 @@ pub(crate) fn create_target(
     height: u32,
     format: wgpu::TextureFormat,
 ) -> (wgpu::Texture, wgpu::TextureView) {
+    let twins = [format.add_srgb_suffix(), format.remove_srgb_suffix()];
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("morf persistent target"),
         size: wgpu::Extent3d {
@@ -31,8 +32,9 @@ pub(crate) fn create_target(
         // A gamma-blended target is also read through an sRGB view, by the
         // pass that hands it to an sRGB swapchain; see `composite_view`. And
         // every target through a plain one, by the pass that copies its bytes
-        // into a buffer of this engine's own; see `plain_view`.
-        view_formats: &[format.add_srgb_suffix(), format.remove_srgb_suffix()],
+        // into a buffer of this engine's own; see `plain_view`. A half-float
+        // target has no sRGB twin and is only ever read as itself.
+        view_formats: if twins[0] == twins[1] { &[] } else { &twins },
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     (texture, view)
@@ -134,6 +136,49 @@ pub(crate) struct SurfaceState {
     /// Whether the surface asked to be reconfigured while a frame was still in
     /// hand, so it has to be done before the next one is acquired.
     pub(crate) stale: bool,
+    /// Every format the surface offered, and the eight-bit one chosen first.
+    pub(crate) formats: Vec<wgpu::TextureFormat>,
+    pub(crate) eight: wgpu::TextureFormat,
+}
+
+impl SurfaceState {
+    /// Whether the swapchain can present as `format`.
+    pub(crate) fn takes(&self, format: super::depth::PresentFormat) -> bool {
+        !format.deep() || self.formats.contains(&format.texture_format())
+    }
+
+    /// The swapchain format that presents as `format`.
+    pub(crate) fn format_for(&self, format: super::depth::PresentFormat) -> wgpu::TextureFormat {
+        if format.deep() {
+            format.texture_format()
+        } else {
+            self.eight
+        }
+    }
+
+    /// Configures the swapchain as `format`, and the composite into it.
+    pub(crate) fn reformat(
+        &mut self,
+        device: &wgpu::Device,
+        target: &wgpu::Texture,
+        format: wgpu::TextureFormat,
+        transfer: f64,
+    ) {
+        if self.config.format != format {
+            self.config.format = format;
+            self.stale = true;
+        }
+        let CompositePipeline {
+            pipeline,
+            layout,
+            sampler,
+        } = create_composite_pipeline(device, format, transfer);
+        self.bind_group =
+            create_composite_bind_group(device, &layout, &composite_view(target), &sampler);
+        self.pipeline = pipeline;
+        self.texture_layout = layout;
+        self.sampler = sampler;
+    }
 }
 
 pub(crate) fn create_surface_state(
@@ -203,10 +248,12 @@ pub(crate) fn create_surface_state(
         pipeline,
         layout: texture_layout,
         sampler,
-    } = create_composite_pipeline(device, format);
+    } = create_composite_pipeline(device, format, 0.0);
     let bind_group = create_composite_bind_group(device, &texture_layout, target_view, &sampler);
     Ok(SurfaceState {
         stale: false,
+        formats: capabilities.formats.clone(),
+        eight: format,
         surface,
         config,
         pipeline,
@@ -224,10 +271,12 @@ pub(crate) struct CompositePipeline {
     pub(crate) sampler: wgpu::Sampler,
 }
 
-/// A composite pass writing `format`.
+/// A composite pass writing `format`, converting as `transfer` says (see
+/// `depth::transfer`).
 pub(crate) fn create_composite_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
+    transfer: f64,
 ) -> CompositePipeline {
     let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("morf composite texture layout"),
@@ -287,7 +336,10 @@ pub(crate) fn create_composite_pipeline(
                 blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],
-            compilation_options: Default::default(),
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: &[("MORF_TRANSFER", transfer)],
+                ..Default::default()
+            },
         }),
         multiview_mask: None,
         cache: None,

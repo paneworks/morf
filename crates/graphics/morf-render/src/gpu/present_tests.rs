@@ -9,8 +9,52 @@ use morf_layout::{Layout, Size};
 use morf_scene::{Element, NodeHandle, Scene, Value};
 
 use super::partial_tests::{LOGICAL, desk, frame, largest_difference};
+use super::present::BufferRing;
 use crate::tests::NoText;
 use crate::*;
+
+impl WgpuBackend {
+    /// Presents into a ring of `limit` plain textures from now on, whose
+    /// release the test decides.
+    pub(crate) fn present_into_ring(&mut self, limit: usize) {
+        let format = (self.present, self.transfer());
+        self.buffers = Some(BufferRing::new(
+            &self.device,
+            &self.texture,
+            limit,
+            None,
+            format,
+        ));
+        self.select_depth();
+    }
+
+    /// Buffer `index`'s bytes as its format stores them.
+    pub(crate) fn ring_bytes(&self, index: usize) -> Vec<u8> {
+        let ring = self.buffers.as_ref().expect("a ring");
+        self.read_texture(&ring.slots[index].texture)
+    }
+
+    /// The buffer the last frame went to, if it went to one.
+    pub(crate) fn ring_presented(&self) -> Option<usize> {
+        self.buffers.as_ref()?.presented
+    }
+
+    /// The compositor lets go of buffer `index`.
+    pub(crate) fn ring_release(&mut self, index: usize) {
+        if let Some(ring) = &mut self.buffers {
+            ring.release(index);
+        }
+    }
+
+    /// Buffer `index`'s pixels, as RGBA like `read_pixels`.
+    pub(crate) fn ring_pixels(&self, index: usize) -> Vec<u8> {
+        let mut pixels = self.ring_bytes(index);
+        for pixel in pixels.as_chunks_mut::<4>().0 {
+            pixel.swap(0, 2);
+        }
+        pixels
+    }
+}
 
 /// Asserts that the buffer the last frame went to shows the frame.
 fn assert_presented_shows_the_frame(

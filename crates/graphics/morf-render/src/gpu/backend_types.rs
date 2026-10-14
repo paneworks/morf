@@ -136,8 +136,17 @@ pub(crate) struct ShaderInstanceKey {
 pub struct WgpuBackend {
     pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
-    /// The space this surface blends in; every target and pipeline follows it.
-    pub(crate) blend: crate::BlendSpace,
+    /// The space this surface blends in and how deep its targets are; every
+    /// target and pipeline follows it.
+    pub(crate) space: super::Space,
+    /// The depth asked for, which `space` follows when it can be presented.
+    pub(crate) depth: super::depth::OutputDepth,
+    /// What the frames are presented as: the swapchain's or the ring's
+    /// buffers' format.
+    pub(crate) present: super::depth::PresentFormat,
+    /// Every shader registered, kept to build its pipeline again when the
+    /// space changes.
+    pub(crate) registered: Vec<super::shader_registry::KeptShader>,
     pub(crate) clear_pipeline: wgpu::RenderPipeline,
     /// What the clear pipeline is built from, kept to rebuild it when the
     /// blend space changes.

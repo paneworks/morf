@@ -7,7 +7,7 @@ pub use gpu::dmabuf::{
     split_dev_t,
 };
 pub use gpu::{
-    GpuError, GpuInfo, PresentStalls, ShaderRegistration, WgpuBackend, lose_devices,
+    GpuError, GpuInfo, OutputDepth, PresentStalls, ShaderRegistration, WgpuBackend, lose_devices,
     opened_device_count, present_stalls,
 };
 

@@ -262,7 +262,7 @@ impl WgpuBackend {
         beneath: Vec<Beneath>,
         generation: u64,
     ) -> BackdropEntry {
-        let format = super::super::target_format(self.blend);
+        let format = super::super::target_format(self.space);
         let sizes = level_sizes(region.width, region.height, levels);
         let texture = |(width, height): (u32, u32), label: &str, copy: bool| {
             self.device.create_texture(&wgpu::TextureDescriptor {
@@ -350,7 +350,7 @@ impl WgpuBackend {
     /// The full-surface target backdrops re-render what is beneath them into.
     pub(crate) fn backdrop_scratch(&mut self) -> (wgpu::Texture, wgpu::TextureView) {
         if self.backdrops.scratch.is_none() {
-            let format = super::super::target_format(self.blend);
+            let format = super::super::target_format(self.space);
             let texture = self.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("morf backdrop scratch"),
                 size: wgpu::Extent3d {

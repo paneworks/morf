@@ -47,7 +47,7 @@ impl WgpuBackend {
         stages: &[super::layer_pool::Stage],
     ) -> Vec<Option<LayerTarget>> {
         use super::layer_pool::{LayerRegion, Stage, pack};
-        let format = super::target_format(self.blend);
+        let format = super::target_format(self.space);
         let limit = (self.width, self.height);
         let largest = self.device.limits().max_texture_dimension_2d;
         // Where each layer's region lives: which texture, and where in it.

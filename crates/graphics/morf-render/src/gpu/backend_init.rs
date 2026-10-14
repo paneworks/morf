@@ -65,6 +65,7 @@ impl WgpuBackend {
                         // The sink holds the window's connection and
                         // surface: the handles are not needed again.
                         drop(window);
+                        backend.set_output_depth(super::depth::OutputDepth::from_env());
                         return Ok(backend);
                     }
                     Err(error) => Err(error),
@@ -81,7 +82,9 @@ impl WgpuBackend {
         let surface = instance
             .create_surface(window)
             .map_err(|error| GpuError::Surface(format!("could not create GPU surface: {error}")))?;
-        Self::initialize(instance, Some(surface), width, height).await
+        let mut backend = Self::initialize(instance, Some(surface), width, height).await?;
+        backend.set_output_depth(super::depth::OutputDepth::from_env());
+        Ok(backend)
     }
 
     /// Presents through `sink` from now on, or says why it cannot.
@@ -93,7 +96,9 @@ impl WgpuBackend {
             &self.texture,
             ring_buffers(),
             Some(link),
+            (self.present, self.transfer()),
         ));
+        self.select_depth();
         Ok(())
     }
 
@@ -181,11 +186,11 @@ impl WgpuBackend {
             bind_group_layouts: &[Some(&viewport_layout)],
             immediate_size: 0,
         });
-        let blend = crate::BlendSpace::default();
-        let format = super::target_format(blend);
+        let space = super::Space::default();
+        let format = super::target_format(space);
         let clear_pipeline =
             create_clear_pipeline(&device, &pipeline_layout, &clear_shader, format);
-        let (glyph_pipeline, glyph_layout, glyph_sampler) = create_glyph_pipeline(&device, blend);
+        let (glyph_pipeline, glyph_layout, glyph_sampler) = create_glyph_pipeline(&device, space);
         let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("morf nearest sampler"),
             mag_filter: wgpu::FilterMode::Nearest,
@@ -196,7 +201,7 @@ impl WgpuBackend {
             GlyphAtlas::new(&device, &glyph_layout, &glyph_sampler, RasterContent::Mask);
         let glyph_color_atlas =
             GlyphAtlas::new(&device, &glyph_layout, &glyph_sampler, RasterContent::Color);
-        let (blur_pipeline, blur_layout, blur_sampler) = create_blur_pipeline(&device, blend);
+        let (blur_pipeline, blur_layout, blur_sampler) = create_blur_pipeline(&device, space);
         let glyph_capacity = 1;
         let glyph_buffer = create_glyph_buffer(&device, glyph_capacity);
         let texture_capacity = 1;
@@ -217,7 +222,7 @@ impl WgpuBackend {
                 vertex: None,
                 textures: None,
                 data: None,
-                blend,
+                space,
             },
         )
         .expect("the field shader carries its own hook");
@@ -233,7 +238,7 @@ impl WgpuBackend {
                     vertex: None,
                     textures: None,
                     data: None,
-                    blend,
+                    space,
                 },
             )
             .expect("the field shader carries its own hook")
@@ -286,7 +291,10 @@ impl WgpuBackend {
         Ok(Self {
             device,
             queue,
-            blend,
+            space,
+            depth: super::depth::OutputDepth::Eight,
+            present: super::depth::PresentFormat::Eight,
+            registered: Vec::new(),
             clear_pipeline,
             clear_layout: pipeline_layout,
             clear_shader,

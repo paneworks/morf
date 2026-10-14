@@ -38,7 +38,7 @@ impl WgpuBackend {
             &self.device,
             self.width,
             self.height,
-            super::super::target_format(self.blend),
+            super::super::target_format(self.space),
         );
         // The pooled layer targets are surface-sized, so a resize retires them.
         self.layer_pool.clear();
@@ -66,22 +66,28 @@ impl WgpuBackend {
 
     /// The space this surface blends translucent colours in.
     pub fn blend(&self) -> crate::BlendSpace {
-        self.blend
+        self.space.blend
     }
 
     /// Changes the space this surface blends in.
     ///
-    /// Every target and built-in pipeline is rebuilt for it, and registered
-    /// shaders are dropped: their pipelines were built for the old target, so
-    /// the host registers them again. Returns whether anything changed — only
-    /// then do the shaders need registering. The next frame is drawn in full,
-    /// since the old target is gone.
+    /// Every target and pipeline is rebuilt for it, registered shaders
+    /// included. Returns whether anything changed; the next frame is then
+    /// drawn in full, since the old target is gone.
     pub fn set_blend(&mut self, blend: crate::BlendSpace) -> bool {
-        if blend == self.blend {
+        self.set_space(super::super::Space {
+            blend,
+            ..self.space
+        })
+    }
+
+    /// Rebuilds every target and pipeline for `space`, when it changed.
+    pub(crate) fn set_space(&mut self, space: super::super::Space) -> bool {
+        if space == self.space {
             return false;
         }
-        self.blend = blend;
-        let format = super::super::target_format(blend);
+        self.space = space;
+        let format = super::super::target_format(space);
         self.clear_pipeline =
             create_clear_pipeline(&self.device, &self.clear_layout, &self.clear_shader, format);
         self.glyph_pipeline = build_glyph_pipeline(
@@ -91,14 +97,14 @@ impl WgpuBackend {
             None,
             None,
             None,
-            blend,
+            space,
         )
         .expect("the glyph shader carries its own hook");
         self.lcd_pipeline = self
             .subpixel
-            .map(|text| build_lcd_pipeline(&self.device, &self.glyph_layout, blend, text));
+            .map(|text| build_lcd_pipeline(&self.device, &self.glyph_layout, space, text));
         self.mask_pipeline = None;
-        self.blur_pipeline = build_blur_pipeline(&self.device, &self.blur_layout, blend);
+        self.blur_pipeline = build_blur_pipeline(&self.device, &self.blur_layout, space);
         self.field_pipeline = build_field_pipeline(
             &self.device,
             FieldPipeline {
@@ -110,7 +116,7 @@ impl WgpuBackend {
                 vertex: None,
                 textures: None,
                 data: None,
-                blend,
+                space,
             },
         )
         .expect("the field shader carries its own hook");
@@ -126,7 +132,7 @@ impl WgpuBackend {
                     vertex: None,
                     textures: None,
                     data: None,
-                    blend,
+                    space,
                 },
             )
             .expect("the field shader carries its own hook")
@@ -137,10 +143,9 @@ impl WgpuBackend {
         self.field_boxes_opaque = specialised(FieldVariant::BoxesOpaque);
         self.field_quad = specialised(FieldVariant::Quad);
         self.field_boxes_uniform = specialised(FieldVariant::BoxesUniform);
-        self.shaders.clear();
-        self.effect_shaders.clear();
-        self.shader_instances.clear();
         self.resize_target(self.width, self.height);
+        self.rebuild_presentation();
+        self.rebuild_shaders();
         true
     }
 
@@ -162,7 +167,7 @@ impl WgpuBackend {
         }
         self.subpixel = text;
         self.lcd_pipeline =
-            text.map(|text| build_lcd_pipeline(&self.device, &self.glyph_layout, self.blend, text));
+            text.map(|text| build_lcd_pipeline(&self.device, &self.glyph_layout, self.space, text));
         true
     }
 
@@ -172,11 +177,15 @@ impl WgpuBackend {
     }
 
     /// Whether the whole surface is declared opaque to the compositor, which
-    /// makes all of it ground subpixel text may be drawn on. Returns whether
-    /// it changed.
+    /// makes all of it ground subpixel text may be drawn on, and lets a deep
+    /// surface present without alpha (see `depth`). Returns whether it
+    /// changed.
     pub fn set_opaque_surface(&mut self, opaque: bool) -> bool {
         let changed = self.opaque_surface != opaque;
         self.opaque_surface = opaque;
+        if changed {
+            self.select_depth();
+        }
         changed
     }
 
