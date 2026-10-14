@@ -92,6 +92,28 @@ out, observed and given its input region and frames, and nothing is drawn;
 hidden panel) the runner lays out itself, so `morf check` finds its
 problems too.
 
+## What a configuration may do
+
+A configuration is a program, run with your privileges. Nothing sandboxes
+it: it can start programs (`morf.run`, `morf.spawn`), read and write your
+files, open sockets and fetch from the network, talk to the session and
+system buses, and ask PAM to authenticate. Run one you would not run as a
+shell script.
+
+The limits morf sets are against mistakes, not against intent. Instruction
+fuel stops a loop that never ends and a memory cap stops one that grows
+without end; caps on processes, watches and terminals stop a runaway
+request. None of them limits what a configuration may reach.
+
+`morf check`, `render` and `test` run the configuration too, side effects
+and all. `--no-dbus`, `--private-bus` and `--isolate` keep the bus and your
+settings out of the run ([TESTING.md](TESTING.md)); programs it starts and
+files outside its XDG folders are still real.
+
+A lock's IPC socket is reachable by any process of yours, so while it holds
+the session it answers only `status`, `keyboard_show` and `keyboard_hide`:
+unlocking is the configuration's own authentication, never a verb.
+
 ## Lua
 
 `library/lib` holds the shared Lua: `kit/` (the widget kit), `services/`
