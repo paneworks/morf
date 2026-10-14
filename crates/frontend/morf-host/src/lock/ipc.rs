@@ -3,10 +3,11 @@
 //! A lock runs alongside the shell on the same `WAYLAND_DISPLAY`, so it
 //! cannot take the shell's socket. It binds `<display>-lock.sock` beside it,
 //! which `morf list` shows like any other instance and `morf --lock ipc call
-//! ...` (or `morf -i <display>-lock ...`) reaches.
+//! ...` (or `morf -i <display>-lock ...`) reaches. While the lock holds the
+//! session it answers only the verbs in [`LOCKED_VERBS`].
 
 use morf_io::{IpcIncoming, IpcReply, IpcRequest, IpcServer, IpcValue as WireValue};
-use morf_lua::{LogEntry, Runtime};
+use morf_lua::{LogEntry, Runtime, SessionLockState};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -89,6 +90,16 @@ pub fn answer_lock_request(
     started: Instant,
 ) -> (IpcReply, bool) {
     match request {
+        IpcRequest::Call { target, .. }
+            if held(runtime) && !LOCKED_VERBS.contains(&target.as_str()) =>
+        {
+            (
+                IpcReply::refused(format!(
+                    "`{target}` is not answered while the session is locked"
+                )),
+                false,
+            )
+        }
         IpcRequest::Call { target, args } => {
             let args = args.iter().map(lua_ipc_value).collect::<Vec<_>>();
             match runtime.call_ipc(target, &args) {
@@ -122,6 +133,20 @@ pub fn answer_lock_request(
             false,
         ),
     }
+}
+
+/// The only verbs a lock answers while it holds the session: any process of
+/// the user reaches the socket, so a verb the configuration exposed that
+/// unlocks must not be one of them. Unlocking is authentication's, inside
+/// the lock.
+pub const LOCKED_VERBS: &[&str] = &["status", "keyboard_show", "keyboard_hide"];
+
+/// Whether the lock holds the session, or has asked to.
+fn held(runtime: &Runtime) -> bool {
+    matches!(
+        runtime.session_lock_state(),
+        SessionLockState::Locked | SessionLockState::Pending
+    )
 }
 
 fn strings(lines: Vec<String>) -> IpcReply {

@@ -58,3 +58,31 @@ fn a_lock_answers_calls_and_refuses_to_be_killed() {
         "killing a lock client would leave the session locked"
     );
 }
+
+#[test]
+fn a_held_lock_refuses_every_verb_but_the_allowed_ones() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "lock-held.lua",
+            br##"
+                morf.surface.session_lock = true
+                morf.ipc.unlock = function() morf.surface.session_lock = false return "open" end
+                morf.ipc.status = function() return "locked" end
+                require("morf.ui").Rect { color = "#000000" }
+            "##,
+        )
+        .unwrap();
+    runtime.set_session_lock_state(morf_lua::SessionLockState::Locked);
+    let path = Path::new("lock.lua");
+    let started = Instant::now();
+    let call = |target: &str| IpcRequest::Call {
+        target: target.into(),
+        args: Vec::new(),
+    };
+    let (unlock, changed) = answer_lock_request(&mut runtime, &call("unlock"), path, started);
+    assert!(!unlock.ok && !changed, "{unlock:?}");
+    assert!(runtime.layer_surface_config().session_lock);
+    let (status, _) = answer_lock_request(&mut runtime, &call("status"), path, started);
+    assert_eq!(status.result, [WireValue::String("locked".into())]);
+}
