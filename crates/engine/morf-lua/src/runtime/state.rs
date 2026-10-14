@@ -105,7 +105,7 @@ pub(crate) struct ReactiveState {
     /// names and services this runtime serves.
     pub(crate) dbus: DbusState,
     /// Theme token files being watched.
-    pub(crate) theme_sources: Vec<ThemeSource>,
+    pub(crate) theme_sources: ThemeSources,
     /// `morf.terminal.listen`: terminals of our own hearing colour sequences.
     pub(crate) palettes: crate::api::media::terminal_palette::PaletteListeners,
     /// `morf.prefers` and where its answers come from.

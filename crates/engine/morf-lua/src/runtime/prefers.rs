@@ -1,7 +1,5 @@
 //! Keeping `morf.prefers` and theme sources current between frames.
 
-use std::time::Duration;
-
 use morf_scene::reactive::SignalId;
 
 use crate::{
@@ -68,7 +66,7 @@ impl Runtime {
     /// signal moved.
     pub(crate) fn poll_appearance(&mut self) -> bool {
         let mut changes: Vec<(&'static str, IpcValue)> = Vec::new();
-        let mut rewritten: Vec<usize> = Vec::new();
+        let rewritten;
         {
             let mut state = self.reactive.borrow_mut();
             if let Some(Prefers {
@@ -79,18 +77,7 @@ impl Runtime {
             {
                 changes = portal.poll(overridden);
             }
-            for (index, source) in state.theme_sources.iter().enumerate() {
-                let Some(watcher) = &source.watcher else {
-                    continue;
-                };
-                let mut touched = false;
-                while watcher.next_event(Duration::ZERO).is_some() {
-                    touched = true;
-                }
-                if touched {
-                    rewritten.push(index);
-                }
-            }
+            rewritten = state.theme_sources.rewritten();
         }
         let mut moved = false;
         for (name, value) in changes {
@@ -102,12 +89,7 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("preferences: {message}")),
             }
         }
-        for index in rewritten {
-            let (path, fields) = {
-                let state = self.reactive.borrow();
-                let source = &state.theme_sources[index];
-                (source.path.clone(), source.fields.clone())
-            };
+        for (path, fields) in rewritten {
             if !path.exists() {
                 continue;
             }

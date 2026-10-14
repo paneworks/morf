@@ -220,11 +220,10 @@ pub(crate) fn install_theme_api<'gc>(
                     .filter_map(|key| Some((key.clone(), *fields.scalars.get(key)?)))
                     .collect();
                 let watcher = FileView::new(&path).watch().ok();
-                state.borrow_mut().theme_sources.push(ThemeSource {
-                    path,
-                    watcher,
-                    fields: watched,
-                });
+                state
+                    .borrow_mut()
+                    .theme_sources
+                    .watch(path, watcher, watched);
             }
             drop(fields);
             stack.replace(ctx, userdata);

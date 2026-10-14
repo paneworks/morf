@@ -17,7 +17,7 @@ impl ReactiveState {
             metatables: Default::default(),
             transform_watchers: Default::default(),
             removal_listeners: Vec::new(),
-            theme_sources: Vec::new(),
+            theme_sources: Default::default(),
             palettes: Default::default(),
             prefers: None,
             audio: None,
