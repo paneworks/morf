@@ -5,6 +5,8 @@ local function load()
     LULE_A="/nonexistent/lule",HYPRLAND_INSTANCE_SIGNATURE=false},source=[[
     require("services").here=function() return true end
     require("services").weather=function() return {available=false} end
+    -- Nothing playing, whatever players the session bus has.
+    require("services").media=nil
     require("init")
     morf.ipc.page=function(index)
       local dashboard=require("dashboard")
