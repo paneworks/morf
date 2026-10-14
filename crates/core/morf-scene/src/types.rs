@@ -202,6 +202,9 @@ pub struct Scene {
     /// against the root of the tree it happened in, so a surface re-lays out
     /// only when its own tree moved; see [`Scene::layout_revision_of`].
     pub(crate) root_revisions: FastMap<NodeId, u64>,
+    /// Bumped whenever something paint reads changes: any property, the
+    /// shape of the tree, a shader, a terminal's screen, a stretch.
+    pub(crate) paint_revision: u64,
     /// The layout revision each tree last lost a node at, by its root: a
     /// node removed, or moved out to somewhere else. An incremental layout
     /// cannot tell which of the nodes it knows are gone, so a loss since it
@@ -284,6 +287,8 @@ pub(crate) struct Node {
     pub(crate) properties: FastMap<&'static str, PropertySlot>,
     /// When layout last had a reason to look at this node, and at what.
     pub(crate) stamps: LayoutStamps,
+    /// The newest paint revision in this node's subtree, itself included.
+    pub(crate) paint: u64,
 }
 
 /// The layout revisions a node was last touched at, which is what lets a

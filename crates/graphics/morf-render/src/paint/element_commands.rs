@@ -3,6 +3,40 @@
 
 use super::*;
 
+/// The border a bordered `ClipRect` draws over what it holds.
+pub(super) fn clip_border_command(
+    scene: &Scene,
+    node: NodeHandle,
+    (bounds, transform, clip): (Geometry, Transform2D, Option<Geometry>),
+    radii: [f64; 4],
+    color_overlay: Color,
+) -> Result<DrawCommand, RenderError> {
+    Ok(DrawCommand::Quad {
+        node,
+        bounds,
+        transform,
+        clip,
+        color: Color::rgba8(0, 0, 0, 0),
+        color_overlay: Color::rgba8(0, 0, 0, 0),
+        gradient: None,
+        radii,
+        border_width: scene.number(node, "border_width")?,
+        antialiasing: scene.bool_value(node, "antialiasing")?,
+        border_pixel_aligned: scene.bool_value(node, "border_pixel_aligned")?,
+        border_color: apply_overlay(scene.color_value(node, "border_color")?, color_overlay),
+        blur: 0.0,
+        shadow_color: Color::rgba8(0, 0, 0, 0),
+        shadow_blur: 0.0,
+        shadow_spread: 0.0,
+        shadow_offset_x: 0.0,
+        shadow_offset_y: 0.0,
+        shadow_inner: false,
+        // The border a ClipRect overlays is not the node's own fill, so it
+        // carries no shader: the shader belongs to what is inside.
+        shader: None,
+    })
+}
+
 /// A `Text` node's shaped run, as it stands.
 pub(super) fn text_command(
     scene: &Scene,

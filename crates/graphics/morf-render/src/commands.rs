@@ -447,6 +447,16 @@ impl DrawList {
     /// keeps the capacity and the pages, which is most of the cost once a scene
     /// is large enough to leave the cache.
     pub fn rebuild(&mut self, scene: &Scene, layout: &Layout) -> Result<(), RenderError> {
+        self.rebuild_with(scene, layout, SpanBase::default(), None)
+    }
+
+    pub(crate) fn rebuild_with(
+        &mut self,
+        scene: &Scene,
+        layout: &Layout,
+        span: SpanBase,
+        mut reuse: Option<&mut Reuse<'_>>,
+    ) -> Result<(), RenderError> {
         self.commands.clear();
         self.layers.clear();
         let list = self;
@@ -462,8 +472,11 @@ impl DrawList {
                     layer: None,
                     in_field: false,
                     color: None,
+                    rtl: scene.is_rtl(root),
+                    span,
                 },
                 list,
+                reuse.as_deref_mut(),
             )?;
         }
         Ok(())

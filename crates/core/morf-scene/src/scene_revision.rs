@@ -8,7 +8,36 @@ impl Scene {
     pub(crate) fn touch_layout(&mut self, node: NodeId, property: &str) {
         if affects_layout(property) {
             self.bump_layout(node);
+        } else {
+            self.bump_paint(node);
         }
+    }
+
+    /// Records that something paint reads has moved on `node`, stamping it
+    /// and every ancestor with a new paint revision.
+    pub(crate) fn bump_paint(&mut self, node: NodeId) {
+        self.paint_revision = self.paint_revision.wrapping_add(1);
+        let revision = self.paint_revision;
+        let mut current = Some(node);
+        while let Some(id) = current {
+            let Some(entry) = self.nodes.get_mut(id) else {
+                break;
+            };
+            entry.paint = revision;
+            current = entry.parent;
+        }
+    }
+
+    /// How many times something paint reads has changed, anywhere.
+    pub fn paint_revision(&self) -> u64 {
+        self.paint_revision
+    }
+
+    /// The newest paint revision in `node`'s subtree: a draw list made for
+    /// it at a revision at least this is still what it would draw, given the
+    /// same layout and the same surroundings.
+    pub fn paint_stamp(&self, node: NodeHandle) -> Result<u64, SceneError> {
+        Ok(self.nodes[self.live(node)?].paint)
     }
 
     /// Moves the layout revision, for the whole scene and for the tree
@@ -22,6 +51,7 @@ impl Scene {
     /// anyway, so an incremental layout can find what moved by descending
     /// only into subtrees stamped since it was made.
     pub(crate) fn bump_layout(&mut self, node: NodeId) {
+        self.bump_paint(node);
         self.layout_revision = self.layout_revision.wrapping_add(1);
         let revision = self.layout_revision;
         let Some(entry) = self.nodes.get_mut(node) else {

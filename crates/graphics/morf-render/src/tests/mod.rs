@@ -111,6 +111,7 @@ mod fields;
 mod masks;
 mod outline_boxes;
 mod paths;
+mod reuse;
 mod text_input;
 mod transform_text;
 mod tree;

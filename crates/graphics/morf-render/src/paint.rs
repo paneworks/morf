@@ -6,6 +6,9 @@ use crate::{commands::*, effects::*, paint_fields::*, paint_text_input::*, sdf::
 mod element_commands;
 mod path_paint;
 mod properties;
+mod reuse;
+
+pub(crate) use reuse::{PaintCache, Reuse, SpanBase, append_node};
 
 use element_commands::*;
 use path_paint::path_paint;
@@ -21,6 +24,10 @@ pub(crate) struct PaintContext {
     pub(crate) in_field: bool,
     /// The nearest ancestor's colour, for text that says `inherit`.
     pub(crate) color: Option<Color>,
+    /// Whether the parent lays out right to left.
+    pub(crate) rtl: bool,
+    /// Where the parent starts, for copying from the last list.
+    pub(crate) span: SpanBase,
 }
 
 /// The colour a node paints with: its own, or the nearest ancestor's when it
@@ -36,12 +43,13 @@ pub(crate) fn resolved_color(
     })
 }
 
-pub(crate) fn append_node(
+pub(crate) fn paint_node(
     scene: &Scene,
     layout: &Layout,
     node: NodeHandle,
     inherited: PaintContext,
     list: &mut DrawList,
+    mut reuse: Option<&mut Reuse<'_>>,
 ) -> Result<(), RenderError> {
     if !scene.bool_value(node, "visible")? {
         return Ok(());
@@ -392,8 +400,10 @@ pub(crate) fn append_node(
                     Ok(morf_scene::Value::Color(color)) => Some(*color),
                     _ => inherited.color,
                 },
+                ..inherited
             },
             list,
+            reuse.as_deref_mut(),
         )?;
     }
     if let Some((content_layer, inner)) = content_layer {
@@ -401,30 +411,13 @@ pub(crate) fn append_node(
         list.layers[content_layer].bounds = transform.bounds(inner);
     }
     if element == Element::ClipRect && scene.number(node, "border_width")? > 0.0 {
-        list.commands.push(DrawCommand::Quad {
+        list.commands.push(clip_border_command(
+            scene,
             node,
-            bounds,
-            transform,
-            clip,
-            color: Color::rgba8(0, 0, 0, 0),
-            color_overlay: Color::rgba8(0, 0, 0, 0),
-            gradient: None,
+            (bounds, transform, clip),
             radii,
-            border_width: scene.number(node, "border_width")?,
-            antialiasing: scene.bool_value(node, "antialiasing")?,
-            border_pixel_aligned: scene.bool_value(node, "border_pixel_aligned")?,
-            border_color: apply_overlay(scene.color_value(node, "border_color")?, color_overlay),
-            blur: 0.0,
-            shadow_color: Color::rgba8(0, 0, 0, 0),
-            shadow_blur: 0.0,
-            shadow_spread: 0.0,
-            shadow_offset_x: 0.0,
-            shadow_offset_y: 0.0,
-            shadow_inner: false,
-            // The border a ClipRect overlays is not the node's own fill, so it
-            // carries no shader: the shader belongs to what is inside.
-            shader: None,
-        });
+            color_overlay,
+        )?);
     }
     if let Some(layer) = layer {
         let start = list.layers[layer].commands.start;
@@ -481,8 +474,10 @@ pub(crate) fn append_node(
                     layer: Some(index),
                     in_field: false,
                     color: None,
+                    ..inherited
                 },
                 list,
+                reuse.as_deref_mut(),
             )?,
         }
         list.layers[index].commands.end = list.commands.len();

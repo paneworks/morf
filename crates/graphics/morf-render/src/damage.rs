@@ -3,6 +3,7 @@ use morf_scene::{NodeHandle, Scene};
 use std::collections::HashMap;
 use std::error::Error as StdError;
 
+use crate::paint::PaintCache;
 use crate::{commands::*, effects::*, sdf::*};
 
 mod explain;
@@ -220,6 +221,8 @@ pub struct RenderEngine<B> {
     damage: DamageTracker,
     /// The draw list, kept between frames for its capacity.
     list: DrawList,
+    /// Where each subtree sits in the last frame's list, to copy from it.
+    paint: PaintCache,
 }
 
 impl<B: RenderBackend> RenderEngine<B> {
@@ -229,7 +232,13 @@ impl<B: RenderBackend> RenderEngine<B> {
             backend,
             damage: DamageTracker::default(),
             list: DrawList::default(),
+            paint: PaintCache::default(),
         }
+    }
+
+    /// The draw list of the last frame painted.
+    pub fn last_list(&self) -> &DrawList {
+        &self.damage.previous
     }
 
     /// Paints one resolved scene frame.
@@ -243,7 +252,8 @@ impl<B: RenderBackend> RenderEngine<B> {
         // The list is kept between frames so its buffers are not returned to
         // the allocator and reclaimed sixty times a second.
         let mut list = std::mem::take(&mut self.list);
-        let result = list.rebuild(scene, layout).and_then(|()| {
+        let built = list.rebuild_from(scene, layout, &self.damage.previous, &mut self.paint);
+        let result = built.and_then(|()| {
             let damage = self.damage.diff(&list, scale_120);
             // The caller sees the damage before anything is presented, because
             // presenting commits the surface and a commit carries whatever
@@ -263,6 +273,9 @@ impl<B: RenderBackend> RenderEngine<B> {
         // making that the baseline would silently under-damage the next frame.
         if result.is_ok() {
             self.damage.retain(&mut list);
+            self.paint.kept();
+        } else {
+            self.paint.forget();
         }
         self.list = list;
         result
@@ -282,6 +295,7 @@ impl<B: RenderBackend> RenderEngine<B> {
         }
         self.backend.resize(width, height);
         self.damage.forget();
+        self.paint.forget();
     }
 
     /// Forgets what is on screen, so the next frame is drawn in full.
@@ -296,6 +310,7 @@ impl<B: RenderBackend> RenderEngine<B> {
             );
         }
         self.damage.forget();
+        self.paint.forget();
     }
 
     /// Returns the backend for surface-specific operations.

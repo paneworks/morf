@@ -21,6 +21,7 @@ impl Scene {
             next_group: 0,
             layout_revision: 0,
             root_revisions: FastMap::default(),
+            paint_revision: 0,
             detached_revisions: FastMap::default(),
             motion_scale: 1.0,
             start_on_tick: false,
@@ -66,6 +67,7 @@ impl Scene {
                 children: Vec::new(),
                 properties,
                 stamps: LayoutStamps::default(),
+                paint: 0,
             }
         });
         // A new node is a tree of its own until it is given a parent.

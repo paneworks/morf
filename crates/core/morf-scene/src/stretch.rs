@@ -276,6 +276,7 @@ impl Scene {
                 self.stretch.remove(&id);
             }
         }
+        self.bump_paint(id);
         Ok(())
     }
 
@@ -319,15 +320,20 @@ impl Scene {
         let Some(state) = self.stretch.get_mut(&node.id()) else {
             return false;
         };
-        if reduced {
+        let changed = if reduced {
             let had = state.matrix().is_some();
             *state = StretchState {
                 sample: Some((centre, now)),
                 ..StretchState::new(state.spec)
             };
-            return had;
+            had
+        } else {
+            state.observe(centre, now, to_local)
+        };
+        if changed {
+            self.bump_paint(node.id());
         }
-        state.observe(centre, now, to_local)
+        changed
     }
 
     /// Whether a stretch is still settling.

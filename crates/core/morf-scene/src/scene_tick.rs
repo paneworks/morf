@@ -160,9 +160,7 @@ impl Scene {
                         .read(slot.current)
                         .is_ok_and(|now| *now == value);
                 if !unchanged {
-                    if affects_layout(key.property) {
-                        self.bump_layout(key.node);
-                    }
+                    self.touch_layout(key.node, key.property);
                     self.properties.write(slot.current, value)?;
                 }
                 if self.change_shows(key.node, key.property, &mut shown) {
@@ -201,9 +199,7 @@ impl Scene {
             let slot = node.properties[key.property];
             if snap {
                 let target = self.properties.read(slot.target)?.clone();
-                if affects_layout(key.property) {
-                    self.bump_layout(key.node);
-                }
+                self.touch_layout(key.node, key.property);
                 self.properties.write(slot.current, target)?;
                 frame.changed += 1;
                 physics_finished.push(key);
@@ -219,6 +215,7 @@ impl Scene {
                 };
                 let settled = advance_physics_color(channels, &mut current, delta);
                 self.properties.write(slot.current, Value::Color(current))?;
+                self.touch_layout(key.node, key.property);
                 let colour_node = key.node;
                 let colour_property = key.property;
                 if self.change_shows(colour_node, colour_property, &mut shown) {
@@ -243,9 +240,7 @@ impl Scene {
             // spring that did not move (a zero delta, as above) says nothing.
             let moved = current != before;
             if moved {
-                if affects_layout(key.property) {
-                    self.bump_layout(key.node);
-                }
+                self.touch_layout(key.node, key.property);
                 self.properties
                     .write(slot.current, Value::Number(current))?;
             }

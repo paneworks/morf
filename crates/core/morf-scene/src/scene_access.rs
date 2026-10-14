@@ -92,11 +92,14 @@ impl Scene {
     /// and never compiles anything.
     pub fn attach_shader(&mut self, node: NodeHandle, shader: NodeShader) {
         self.shaders.insert(node.0, shader);
+        self.bump_paint(node.0);
     }
 
     /// Removes a node's shader, if it had one.
     pub fn detach_shader(&mut self, node: NodeHandle) {
-        self.shaders.remove(&node.0);
+        if self.shaders.remove(&node.0).is_some() {
+            self.bump_paint(node.0);
+        }
     }
 
     /// Hangs a picture of a terminal's screen on its node, for the renderer.
@@ -107,6 +110,7 @@ impl Scene {
     ) {
         if self.nodes.contains_key(node.0) {
             self.terminal_screens.insert(node.0, screen);
+            self.bump_paint(node.0);
         }
     }
 
@@ -147,6 +151,7 @@ impl Scene {
                 self.tracks.remove(&id);
             }
         }
+        self.bump_paint(id);
         Ok(())
     }
 
@@ -177,6 +182,7 @@ impl Scene {
             block.clear();
             block.extend(values.iter().take(length).copied());
             block.resize(length, 0.0);
+            self.bump_paint(node.0);
         }
     }
 
@@ -190,6 +196,7 @@ impl Scene {
             && let Some(slot) = shader.params.get_mut(index)
         {
             *slot = value;
+            self.bump_paint(node.0);
         }
     }
 }
