@@ -9,16 +9,14 @@ use crate::capture::{OfferedCapture, answer_capture_offer, dispatch_screencopy};
 
 /// The desktop protocols on `client`'s connection; a request naming no
 /// output is for the one `client`'s surface sits on.
-pub fn desktop_for(client: &dyn Backend) -> Result<Desktop, String> {
+pub fn desktop_for(client: &dyn Backend) -> Result<Box<dyn Desktop>, String> {
     let link = client
         .desktop_link()
         .ok_or_else(|| "the desktop protocols need a compositor".to_owned())?;
-    let mut desktop = Desktop::new(link.connection)?;
+    let mut desktop = morf_desktop::connect(link)?;
     // A selection read finishing on its thread rings every loop, so the
     // loop wakes for its answer rather than sleeping past it.
     desktop.set_waker(morf_io::wake_all);
-    desktop.set_own_output(link.own_output);
-    desktop.set_shell_surface(link.shell_surface);
     Ok(desktop)
 }
 
@@ -30,7 +28,7 @@ pub fn desktop_for(client: &dyn Backend) -> Result<Desktop, String> {
 /// buffer it exports (without one, captures go through shared memory).
 pub fn dispatch_desktop(
     runtime: &mut Runtime,
-    desktop: &mut Desktop,
+    desktop: &mut dyn Desktop,
     mut renderer: Option<&mut RenderEngine<WgpuBackend>>,
 ) -> Result<bool, String> {
     desktop.dispatch_pending()?;

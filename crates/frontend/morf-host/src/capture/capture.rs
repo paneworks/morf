@@ -12,7 +12,8 @@ use morf_lua::{Runtime, Screencopy as LuaScreencopy};
 use morf_render::{FOURCC_ARGB8888, FOURCC_XRGB8888, RenderEngine, WgpuBackend, split_dev_t};
 use std::os::fd::AsFd;
 
-pub fn apply_screencopy_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
+pub fn apply_screencopy_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    let can = desktop.capabilities();
     for request in runtime.take_screencopy_requests() {
         // A window if one was named, an output otherwise — and for an output,
         // the newer protocol where the compositor has it.
@@ -23,21 +24,26 @@ pub fn apply_screencopy_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
         // session, so asking for one here would be asking for a different
         // capture rather than the same one with a pointer drawn on it.
         let output = request.output.as_deref();
+        let gpu = request.gpu && can.dmabuf_capture;
         let started = match &request.window {
-            Some(identifier) => desktop.capture_window(request.id, identifier, request.gpu),
-            None if request.include_cursor => desktop.capture_output(request.id, true, output),
+            Some(identifier) => {
+                can.window_capture && desktop.capture_window(request.id, identifier, gpu)
+            }
+            None if request.include_cursor => {
+                can.screencopy && desktop.capture_output(request.id, true, output)
+            }
             None => {
-                desktop.capture_output_image(request.id, request.gpu, output)
-                    || desktop.capture_output(request.id, false, output)
+                (can.image_capture && desktop.capture_output_image(request.id, gpu, output))
+                    || (can.screencopy && desktop.capture_output(request.id, false, output))
             }
         };
         if !started {
             let why = match (&request.window, output) {
-                (Some(_), _) if !desktop.supports_window_capture() => {
+                (Some(_), _) if !can.window_capture => {
                     "this compositor cannot capture a single window".to_owned()
                 }
                 (Some(_), _) => "no window with that identifier".to_owned(),
-                (None, Some(name)) if !desktop.has_output(name) => {
+                (None, Some(name)) if can.output_capture() && !desktop.has_output(name) => {
                     format!("no output named `{name}`")
                 }
                 (None, _) => "screen capture is unavailable".to_owned(),
@@ -170,7 +176,7 @@ pub fn apply_capture_releases(runtime: &mut Runtime, renderer: &mut RenderEngine
 pub fn answer_capture_offer(
     runtime: &mut Runtime,
     renderer: Option<&mut RenderEngine<WgpuBackend>>,
-    desktop: &mut Desktop,
+    desktop: &mut dyn Desktop,
     offer: OfferedCapture,
 ) -> bool {
     let why = match export_for_offer(renderer, desktop, &offer) {
@@ -194,7 +200,7 @@ pub struct OfferedCapture {
 
 fn export_for_offer(
     renderer: Option<&mut RenderEngine<WgpuBackend>>,
-    desktop: &mut Desktop,
+    desktop: &mut dyn Desktop,
     offer: &OfferedCapture,
 ) -> Result<(), String> {
     let (request_id, width, height, device) =

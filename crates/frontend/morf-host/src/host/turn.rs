@@ -62,8 +62,8 @@ pub struct Host {
     /// The window system, seen in morf's pixels (a no-op while the density
     /// is the compositor's), so a change of density reaches it live.
     pub backend: Box<morf_app::Dense>,
-    /// The desktop protocols, where the backend is a compositor.
-    pub desktop: Option<Desktop>,
+    /// The desktop protocols: the compositor's, or a headless stand-in.
+    pub desktop: Box<dyn Desktop>,
     pub state: SurfaceEventState,
     /// What the edge reservers were last built from.
     pub reserve: SurfaceReserve,
@@ -128,9 +128,7 @@ impl Host {
     ) -> Result<Turn, String> {
         let name = self.name.clone();
         let mut repaint = std::mem::take(&mut self.containment_repaint);
-        if let Some(desktop) = self.desktop.as_mut() {
-            repaint |= dispatch_desktop(runtime, desktop, self.state.painter.gpu())?;
-        }
+        repaint |= dispatch_desktop(runtime, &mut *self.desktop, self.state.painter.gpu())?;
         self.report_motion(runtime);
         // Before the services, so a callback reading the time reads it as it
         // is now, not as it was when the loop last woke.
@@ -163,10 +161,8 @@ impl Host {
                 if update.reset_input {
                     self.state.input.reset();
                 }
-                if update.refresh_idle
-                    && let Some(desktop) = self.desktop.as_mut()
-                {
-                    desktop.set_idle_timeouts(&runtime.idle_timeouts());
+                if update.refresh_idle {
+                    refresh_idle_timeouts(runtime, &mut *self.desktop);
                 }
                 if update.reloaded {
                     self.reloaded(runtime)?;
@@ -208,9 +204,7 @@ impl Host {
             return Ok(Turn::Recreate);
         }
         apply_idle_inhibit(runtime, &mut *self.backend);
-        if let Some(desktop) = self.desktop.as_mut() {
-            apply_idle_timeouts(runtime, desktop);
-        }
+        apply_idle_timeouts(runtime, &mut *self.desktop);
         apply_shortcuts_inhibit(runtime, &mut *self.backend);
         if let Some(density) = runtime.take_density_change() {
             // A scale slider: every window is told its new scale and size,
@@ -236,12 +230,12 @@ impl Host {
                 &name,
             )?;
         }
-        apply_service_requests(runtime, &mut *self.backend, self.desktop.as_mut());
+        apply_service_requests(runtime, &mut *self.backend, &mut *self.desktop);
         while let Some(event) = self.backend.next_event() {
             self.follow_up = true;
             repaint |= self.handle_event(runtime, event, links.map(|links| links.tx))?;
         }
-        apply_service_requests(runtime, &mut *self.backend, self.desktop.as_mut());
+        apply_service_requests(runtime, &mut *self.backend, &mut *self.desktop);
         if let Some(renderer) = self.state.painter.gpu() {
             crate::capture::apply_capture_releases(runtime, renderer);
         }
@@ -267,7 +261,7 @@ impl Host {
         let handled = handle_surface_event(
             runtime,
             &mut *self.backend,
-            self.desktop.as_mut(),
+            &mut *self.desktop,
             &mut self.state,
             event,
             tx,
@@ -302,8 +296,8 @@ impl Host {
         for surface in self.state.windows.values_mut() {
             surface.layout = None;
         }
-        if let Some(desktop) = self.desktop.as_mut() {
-            let _ = desktop.reset_gamma(None);
+        if self.desktop.capabilities().gamma_control {
+            let _ = self.desktop.reset_gamma(None);
         }
         Ok(())
     }

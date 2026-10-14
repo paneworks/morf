@@ -9,7 +9,7 @@ use wayland_protocols_wlr::output_power_management::v1::client::{
     zwlr_output_power_v1::{self, ZwlrOutputPowerV1},
 };
 
-use crate::{Desktop, DesktopState};
+use crate::{DesktopState, WaylandDesktop};
 
 /// An output's power state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -94,7 +94,12 @@ impl OutputPowerState {
     }
 }
 
-impl Desktop {
+impl WaylandDesktop {
+    /// Whether the compositor offers output power management.
+    pub fn supports_output_power(&self) -> bool {
+        self.state.output_power.manager.is_some()
+    }
+
     /// Asks for a power state for the shell's own output, or for every
     /// output when it has none (a lock screen). Returns whether the
     /// compositor offers output power management at all.

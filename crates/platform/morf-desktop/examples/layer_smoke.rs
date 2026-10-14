@@ -1,5 +1,5 @@
 use morf_app::{Event, LayerClient, LayerConfig};
-use morf_desktop::{Desktop, OutputPowerMode};
+use morf_desktop::OutputPowerMode;
 use morf_layout::{Geometry, TextAlignment, TextElide, Transform2D};
 use morf_render::{
     DamageRect, DistanceFieldStyle, DrawCommand, DrawList, RenderBackend, VerticalAlignment,
@@ -13,7 +13,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..LayerConfig::default()
     };
     let mut client = LayerClient::connect(config)?;
-    let mut desktop = Desktop::new(client.connection())?;
+    let mut desktop = morf_desktop::connect(client.desktop_link())?;
+    let capabilities = desktop.capabilities();
     let idle_notify = desktop.set_idle_timeouts(&[(600_000, false)]);
     let output_power = desktop.set_output_power(OutputPowerMode::On);
     // Turned on and straight back off, because the point here is that the
@@ -31,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let virtual_keyboard = client.supports_virtual_keyboard();
     let input_method = client.supports_input_method();
     let text_input = client.supports_text_input();
-    let screencopy = desktop.supports_screencopy();
+    let screencopy = capabilities.screencopy;
     'configured: loop {
         client.blocking_dispatch()?;
         while let Some(event) = client.next_event() {
@@ -185,8 +186,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // difference is the difference between a screenshot and an
                     // overview.
                     match (
-                        desktop.supports_window_capture(),
-                        desktop.supports_image_capture(),
+                        capabilities.window_capture,
+                        capabilities.image_capture,
                         screencopy,
                     ) {
                         (true, _, _) => "ext+window",
@@ -204,7 +205,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // rather than just whether the protocol is there: the
                     // global being advertised and the list actually arriving
                     // are different claims, and only the second is useful.
-                    if desktop.supports_toplevels() {
+                    if capabilities.toplevels {
                         // Controllable is the second claim worth making: the
                         // enumeration protocol reports no state and offers no
                         // requests, so a window is only actionable if it also

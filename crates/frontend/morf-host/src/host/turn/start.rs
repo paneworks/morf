@@ -13,7 +13,7 @@ use crate::paint::painter::Painter;
 use crate::paint::render_target::surface_backend;
 use crate::{
     host::actions::*, host::layers::*, host::surfaces::*, paint::backdrop::*, paint::pacing::*,
-    paint::*,
+    paint::*, process::services::refresh_idle_timeouts,
 };
 
 use super::{Host, slow};
@@ -49,7 +49,7 @@ impl Host {
     pub fn start(
         runtime: &mut Runtime,
         backend: Box<dyn Backend>,
-        mut desktop: Option<Desktop>,
+        mut desktop: Box<dyn Desktop>,
         options: StartOptions,
     ) -> Result<Self, String> {
         let name = options.name;
@@ -77,9 +77,7 @@ impl Host {
         }
         open_reserve_layers(&mut *backend, &layer_config, &name)?;
         open_backdrop_layer(&mut *backend, &layer_config, &name)?;
-        if let Some(desktop) = desktop.as_mut() {
-            desktop.set_idle_timeouts(&runtime.idle_timeouts());
-        }
+        refresh_idle_timeouts(runtime, &mut *desktop);
         let configuring = Instant::now();
         let first = wait_for_configure(&mut *backend)?;
         slow(
@@ -105,7 +103,7 @@ impl Host {
             // Known only now: the protocols came with the connection, the GPU
             // with the renderer. Everything a configuration or `morf info`
             // might ask.
-            let mut capabilities = capabilities_of(&*backend, desktop.as_ref(), &mut painter);
+            let mut capabilities = capabilities_of(&*backend, &*desktop, &mut painter);
             if options.desktop_canvas {
                 for (key, value) in &mut capabilities {
                     if key == "desktop_canvas" {
@@ -138,7 +136,7 @@ impl Host {
         runtime.take_layer_surface_change();
         apply_backdrop(&mut *backend, &runtime.layer_surface_config(), &name);
         let _ = sync_window_surfaces(runtime, &mut *backend, &mut windows, &name)?;
-        apply_service_requests(runtime, &mut *backend, desktop.as_mut());
+        apply_service_requests(runtime, &mut *backend, &mut *desktop);
         slow(
             options_report,
             &name,
@@ -191,7 +189,7 @@ impl Host {
         &mut self,
         runtime: &mut Runtime,
         backend: Box<dyn Backend>,
-        desktop: Option<Desktop>,
+        desktop: Box<dyn Desktop>,
     ) -> Result<(), String> {
         let mut backend = dense(runtime, backend);
         let config = runtime_bar_config(&runtime.layer_surface_config(), &self.name)?;
@@ -218,9 +216,7 @@ impl Host {
         backend.set_waker(morf_io::wake_all);
         self.backend = backend;
         self.desktop = desktop;
-        if let Some(desktop) = self.desktop.as_mut() {
-            desktop.set_idle_timeouts(&runtime.idle_timeouts());
-        }
+        refresh_idle_timeouts(runtime, &mut *self.desktop);
         self.reserve = runtime.layer_surface_config().reserve;
         Ok(())
     }
@@ -267,9 +263,10 @@ fn wait_for_configure(backend: &mut dyn Backend) -> Result<FirstFrame, String> {
 /// question; strings for the GPU, because "which one" is.
 fn capabilities_of(
     client: &dyn Backend,
-    desktop: Option<&Desktop>,
+    desktop: &dyn Desktop,
     painter: &mut Painter,
 ) -> Vec<(String, String)> {
+    let can = desktop.capabilities();
     let info = painter
         .gpu()
         .map(|renderer| renderer.backend_mut().info().clone());
@@ -289,34 +286,24 @@ fn capabilities_of(
             client.primary_scale_120().to_string(),
         ),
     ];
-    let has = |test: fn(&Desktop) -> bool| desktop.is_some_and(test);
     for (name, supported) in [
         ("desktop_canvas", false),
         ("layer_shell", client.supports_layer_shell()),
         ("layer_surfaces", client.supports_layer_surfaces()),
         ("clipboard", client.supports_clipboard()),
-        ("data_control", has(Desktop::supports_data_control)),
-        (
-            "primary_selection",
-            has(Desktop::supports_primary_selection),
-        ),
         ("drag_and_drop", client.supports_drag_and_drop()),
         ("virtual_keyboard", client.supports_virtual_keyboard()),
         ("input_method", client.supports_input_method()),
         ("text_input", client.supports_text_input()),
-        ("screencopy", has(Desktop::supports_screencopy)),
-        ("image_capture", has(Desktop::supports_image_capture)),
-        ("window_capture", has(Desktop::supports_window_capture)),
-        (
-            "dmabuf_capture",
-            has(Desktop::supports_dmabuf_capture) && info.as_ref().is_some_and(|info| info.dmabuf),
-        ),
         ("backdrop_blur", client.supports_backdrop_blur()),
-        ("toplevels", has(Desktop::supports_toplevels)),
-        ("toplevel_control", has(Desktop::supports_toplevel_control)),
-        ("gamma_control", has(Desktop::supports_gamma_control)),
         ("idle_inhibit", client.supports_idle_inhibit()),
     ] {
+        list.push((name.to_owned(), supported.to_string()));
+    }
+    // A dmabuf capture needs the GPU's half too.
+    let gpu_dmabuf = info.as_ref().is_some_and(|info| info.dmabuf);
+    for (name, supported) in can.named() {
+        let supported = supported && (name != "dmabuf_capture" || gpu_dmabuf);
         list.push((name.to_owned(), supported.to_string()));
     }
     list

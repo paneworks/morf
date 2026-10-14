@@ -15,7 +15,7 @@ use crate::{
 pub fn handle_surface_event(
     runtime: &mut Runtime,
     client: &mut dyn Backend,
-    desktop: Option<&mut morf_desktop::Desktop>,
+    desktop: &mut dyn morf_desktop::Desktop,
     state: &mut SurfaceEventState,
     event: Event,
     tx: Option<&mpsc::Sender<SupervisorMessage>>,

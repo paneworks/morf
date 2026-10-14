@@ -21,8 +21,8 @@ use std::time::{Duration, Instant};
 use crate::host::desktop::{desktop_for, dispatch_desktop};
 use crate::{
     host::layers::apply_service_requests, lock::*, paint::clock_text, paint::wake_plan::*,
-    process::services::apply_idle_timeouts, process::supervisor::execute_config_on,
-    process::workers::*,
+    process::services::apply_idle_timeouts, process::services::refresh_idle_timeouts,
+    process::supervisor::execute_config_on, process::workers::*,
 };
 
 /// The name the outputless runtime goes by among the workers, in logs and in
@@ -145,8 +145,8 @@ fn drive_outputless(
                 .as_ref()
                 .map(|client| desktop_for(client))
                 .transpose()?;
-            if let Some(desktop) = desktop.as_mut() {
-                desktop.set_idle_timeouts(&runtime.idle_timeouts());
+            if let Some(desktop) = desktop.as_deref_mut() {
+                refresh_idle_timeouts(runtime, desktop);
             }
         }
         let sleep = Sleep::plan_with(
@@ -165,7 +165,7 @@ fn drive_outputless(
                 let woke = client
                     .wait_for(timeout, Some(wake.as_fd()))
                     .map_err(|error| error.to_string())?;
-                if let Some(desktop) = desktop.as_mut() {
+                if let Some(desktop) = desktop.as_deref_mut() {
                     dispatch_desktop(runtime, desktop, None)?;
                 }
                 log_wake(OUTPUTLESS, woke, &sleep, slept);
@@ -191,9 +191,11 @@ fn drive_outputless(
                     output: OUTPUTLESS.to_owned(),
                     wanted: runtime.layer_surface_config().outputless,
                 })?;
-                if let Some(desktop) = desktop.as_mut() {
-                    desktop.set_idle_timeouts(&runtime.idle_timeouts());
-                    let _ = desktop.reset_gamma(None);
+                if let Some(desktop) = desktop.as_deref_mut() {
+                    refresh_idle_timeouts(runtime, desktop);
+                    if desktop.capabilities().gamma_control {
+                        let _ = desktop.reset_gamma(None);
+                    }
                 }
             }
         }
@@ -215,10 +217,10 @@ fn drive_outputless(
         runtime.take_layer_surface_change();
         runtime.take_window_surface_change();
         runtime.take_removed_nodes();
-        let (Some(client), Some(desktop)) = (client.as_mut(), desktop.as_mut()) else {
+        let (Some(client), Some(desktop)) = (client.as_mut(), desktop.as_deref_mut()) else {
             continue;
         };
-        apply_service_requests(runtime, client, Some(&mut *desktop));
+        apply_service_requests(runtime, client, desktop);
         apply_idle_timeouts(runtime, desktop);
         while let Some(event) = client.next_event() {
             follow_up = true;
@@ -234,7 +236,7 @@ fn drive_outputless(
                 _ => {}
             }
         }
-        apply_service_requests(runtime, client, Some(&mut *desktop));
+        apply_service_requests(runtime, client, desktop);
     }
 }
 

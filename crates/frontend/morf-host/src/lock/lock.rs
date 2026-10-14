@@ -17,6 +17,7 @@ use crate::paint::render_target::surface_backend;
 use crate::{
     host::layers::*, host::surfaces::*, input::keys::*, input::pointer::*, lock::outputs::*,
     paint::wake_plan::*, paint::*, process::services::apply_idle_timeouts,
+    process::services::refresh_idle_timeouts,
 };
 
 pub struct Worker {
@@ -134,12 +135,12 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
     let mut desktop = desktop_for(&client)?;
     // In morf's pixels, as the shell's own surfaces are.
     let mut client = morf_app::Dense::new(Box::new(client), runtime.density());
-    desktop.set_idle_timeouts(&runtime.idle_timeouts());
+    refresh_idle_timeouts(&runtime, &mut *desktop);
     client.lock().map_err(|error| error.to_string())?;
     // Asked for, not yet granted: the compositor says `locked` once every
     // output shows a locked frame, and only then is the session hidden.
     runtime.set_session_lock_state(SessionLockState::Pending);
-    apply_service_requests(&mut runtime, &mut client, Some(&mut desktop));
+    apply_service_requests(&mut runtime, &mut client, &mut *desktop);
     // Every output's lock surface: a window like the shell's others.
     let mut outputs = Windows::default();
     let mut last_frame = None;
@@ -168,14 +169,14 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
         );
         let slept = Instant::now();
         let woke = client.wait(sleep.timeout(), Some(wake.as_fd()))?;
-        let desktop_repaint = dispatch_desktop(&mut runtime, &mut desktop, None)?;
+        let desktop_repaint = dispatch_desktop(&mut runtime, &mut *desktop, None)?;
         wake.drain();
         log_wake("lock", woke, &sleep, slept);
         let mut repaint =
             std::mem::take(&mut repaint_next) | desktop_repaint | runtime.poll_services();
         repaint |= ipc.serve(&mut runtime);
-        apply_service_requests(&mut runtime, &mut client, Some(&mut desktop));
-        apply_idle_timeouts(&mut runtime, &mut desktop);
+        apply_service_requests(&mut runtime, &mut client, &mut *desktop);
+        apply_idle_timeouts(&mut runtime, &mut *desktop);
         unlock_pending |= runtime.take_session_unlock_request();
         // The file lifts the lock the way it asked for it: by clearing
         // `morf.surface.session_lock`. Which door was opened — a password, a
@@ -390,7 +391,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                 | Event::Closed { .. } => {}
             }
         }
-        apply_service_requests(&mut runtime, &mut client, Some(&mut desktop));
+        apply_service_requests(&mut runtime, &mut client, &mut *desktop);
         if repaint {
             // A tree taken down leaves shaped text and textures in whichever
             // renderer drew it, keyed on nodes that are gone.

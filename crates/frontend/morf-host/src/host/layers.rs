@@ -2,7 +2,7 @@ use morf_app::Backend;
 use morf_app::{
     KeyboardFocus, LayerAnchors, LayerConfig, PRIMARY_LAYER, ShellLayer, physical_size,
 };
-use morf_desktop::ToplevelAction;
+use morf_desktop::{Desktop, ToplevelAction};
 use morf_lua::{
     LayerSurfaceConfig, Runtime, Toplevel, WindowSurfaceConfig, WindowSurfaceKind, Workspace,
     WorkspaceRequest,
@@ -28,19 +28,16 @@ use morf_app::WindowKind;
 pub fn apply_service_requests(
     runtime: &mut Runtime,
     client: &mut dyn Backend,
-    mut desktop: Option<&mut morf_desktop::Desktop>,
+    desktop: &mut dyn Desktop,
 ) {
-    apply_clipboard_requests(runtime, client, desktop.as_deref_mut());
-    crate::input::drag::apply_offer_reads(runtime, client, desktop.as_deref_mut());
+    apply_clipboard_requests(runtime, client, desktop);
+    crate::input::drag::apply_offer_reads(runtime, client, desktop);
     crate::input::drag::apply_drag_requests(runtime, client);
     apply_virtual_keyboard_requests(runtime, client);
     apply_input_method_requests(runtime, client);
     apply_text_input_requests(runtime, client);
-    // The rest is the desktop protocols'; a host without them (headless)
-    // leaves those requests unanswered, as a compositor without them would.
-    let Some(desktop) = desktop else {
-        return;
-    };
+    // The rest is the desktop protocols'. Each is taken from the queue
+    // whatever the desktop can do, and handed on only where it can.
     apply_output_power_requests(runtime, desktop);
     crate::process::services::apply_gamma_requests(runtime, desktop);
     apply_screencopy_requests(runtime, desktop);
@@ -66,8 +63,8 @@ pub fn apply_primary_opaque(runtime: &Runtime, client: &dyn Backend) {
 /// a dozen windows, and cheaper than a diff that would have to decide what
 /// identity means for a renamed window — but doing it every frame would rebuild
 /// a dozen Lua tables sixty times a second to say nothing new.
-fn publish_windows(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
-    if !desktop.take_toplevels_changed() {
+fn publish_windows(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    if !desktop.capabilities().toplevels || !desktop.take_toplevels_changed() {
         return;
     }
     let windows: Vec<Toplevel> = desktop
@@ -93,8 +90,8 @@ fn publish_windows(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
 ///
 /// The same contract as the window list above, and rebuilt the same way for the
 /// same reason.
-fn publish_workspaces(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
-    if !desktop.take_workspaces_changed() {
+fn publish_workspaces(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    if !desktop.capabilities().workspaces || !desktop.take_workspaces_changed() {
         return;
     }
     let workspaces: Vec<Workspace> = desktop
@@ -118,8 +115,12 @@ fn publish_workspaces(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop
 }
 
 /// Acts on other windows, if the configuration asked.
-fn apply_toplevel_requests(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
-    for request in runtime.take_toplevel_requests() {
+fn apply_toplevel_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    let requests = runtime.take_toplevel_requests();
+    if !desktop.capabilities().toplevel_control {
+        return;
+    }
+    for request in requests {
         let action = match request.action.as_str() {
             "activate" => ToplevelAction::Activate,
             "close" => ToplevelAction::Close,
@@ -142,8 +143,12 @@ fn apply_toplevel_requests(runtime: &mut Runtime, desktop: &mut morf_desktop::De
 }
 
 /// Acts on workspaces, if the configuration asked.
-fn apply_workspace_requests(runtime: &mut Runtime, desktop: &mut morf_desktop::Desktop) {
-    for request in runtime.take_workspace_requests() {
+fn apply_workspace_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    let requests = runtime.take_workspace_requests();
+    if !desktop.capabilities().workspaces {
+        return;
+    }
+    for request in requests {
         match request {
             WorkspaceRequest::Activate(key) => desktop.activate_workspace(&key),
             WorkspaceRequest::Remove(key) => desktop.remove_workspace(&key),

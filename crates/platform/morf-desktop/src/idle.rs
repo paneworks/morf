@@ -9,11 +9,9 @@ use wayland_protocols::ext::idle_notify::v1::client::{
     ext_idle_notifier_v1::ExtIdleNotifierV1,
 };
 
-use crate::{Desktop, DesktopEvent, DesktopState};
+use crate::{DesktopEvent, DesktopState, WaylandDesktop};
 
-/// A threshold: milliseconds, and whether it counts input only (ignoring
-/// whatever inhibits idleness).
-type IdleKey = (u32, bool);
+type IdleKey = crate::IdleTimeout;
 
 #[derive(Default)]
 pub(crate) struct IdleState {
@@ -116,7 +114,12 @@ fn idle_changes(held: &[IdleKey], wanted: &[IdleKey]) -> (Vec<IdleKey>, Vec<Idle
     (removed, added)
 }
 
-impl Desktop {
+impl WaylandDesktop {
+    /// Whether the compositor tells idleness at all.
+    pub fn supports_idle_notify(&self) -> bool {
+        self.state.idle.notifier.is_some()
+    }
+
     /// Replaces the idle thresholds; returns whether the compositor tells
     /// idleness at all.
     pub fn set_idle_timeouts(&mut self, timeouts: &[IdleKey]) -> bool {

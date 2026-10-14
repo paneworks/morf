@@ -249,11 +249,13 @@ impl Headless {
                 // The output this runtime draws to, first: where its windows go.
                 let mut ordered = vec![own.clone()];
                 ordered.extend(screens.iter().filter(|screen| screen.id != own.id).cloned());
+                let desktop = morf_desktop::HeadlessDesktop::new()
+                    .with_outputs(ordered.iter().filter_map(|screen| screen.name.clone()));
                 let backend = HeadlessBackend::new(ordered);
                 match Host::start(
                     &mut runtime,
                     Box::new(backend),
-                    None,
+                    Box::new(desktop),
                     StartOptions {
                         name: own.name.clone().unwrap_or_default(),
                         gpu: false,

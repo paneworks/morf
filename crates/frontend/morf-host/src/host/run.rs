@@ -107,7 +107,7 @@ fn drive_surface(
     let mut host = Host::start(
         runtime,
         Box::new(client),
-        Some(desktop),
+        desktop,
         StartOptions {
             name: name.clone(),
             gpu: true,
@@ -140,7 +140,7 @@ fn drive_surface(
                     screens: replacement.screens().to_vec(),
                 }))
                 .map_err(|_| "output supervisor stopped".to_owned())?;
-                host.replace_backend(runtime, Box::new(replacement), Some(desktop))?;
+                host.replace_backend(runtime, Box::new(replacement), desktop)?;
             }
         }
     }

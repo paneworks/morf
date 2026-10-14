@@ -21,9 +21,10 @@ graphics   morf-render    painting a laid-out scene with wgpu               scen
 platform   morf-app       our own windowing: window kinds, one event type,  value
                           outputs, input, cursors; Wayland and headless
                           backends behind the Backend trait
-platform   morf-desktop   the desktop protocols on their own queue:         app value
+platform   morf-desktop   the desktop protocols behind the Desktop trait:   app value
                           capture, gamma, data-control clipboard,
-                          workspaces, foreign toplevels, idle, output power
+                          workspaces, foreign toplevels, idle, output
+                          power; on their own Wayland queue, or headless
 platform   morf-io        processes, files, sockets, D-Bus, HTTP            value
 platform   morf-audio     PipeWire                                          io value
 platform   morf-terminal  terminal emulation                                io scene value
@@ -72,6 +73,10 @@ morf-desktop shares the Wayland connection but keeps its own event queue
 and registry: smithay's toolkit implements every handler on one state type,
 and a state type of another crate cannot be given them. Any read of the
 socket fills its queue too, so the host dispatches it after each wake.
+The host sees only the `Desktop` trait object and asks its
+`DesktopCapabilities` before each feature: a request for a protocol that
+is missing is taken from the queue and dropped, as a compositor without it
+would leave it.
 
 ## Handlers
 
@@ -87,6 +92,9 @@ backend: virtual outputs that configure every window opened, a virtual seat
 that carries a test's clicks and keys to the host's own pointer and key
 paths, and a clock that moves only when told (with the runtime's virtual
 one), so the same spec fires the same timers and frame callbacks every run.
+The desktop protocols there are morf-desktop's `HeadlessDesktop`: no
+capabilities, empty workspace and window lists, every request it is
+handed recorded.
 With no GPU the host's `Painter` is a text system: every window is laid
 out, observed and given its input region and frames, and nothing is drawn;
 `morf render` draws a surface on demand. What the host has not opened (a
