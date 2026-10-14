@@ -5,3 +5,11 @@ pub mod services;
 pub mod socket_path;
 pub mod supervisor;
 pub mod workers;
+
+/// The process environment the engine's libraries read, settled once.
+///
+/// # Safety
+/// Call it first in `main`, before any thread starts.
+pub unsafe fn prepare_environment() {
+    unsafe { morf_audio::prepare_environment() };
+}

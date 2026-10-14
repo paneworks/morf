@@ -24,7 +24,13 @@ use super::{
 /// sit next to the library in every layout PipeWire installs, so they are
 /// found from where `dladdr` says `pw_init` lives. An environment that
 /// already names them is left alone.
-fn point_at_plugins(pw: &Pw) {
+///
+/// libpipewire reads them only through the environment, so they are set
+/// there, from `main` before any thread exists ([`crate::prepare_environment`]).
+///
+/// # Safety
+/// No other thread may be running: `set_var` races every reader.
+pub(crate) unsafe fn point_at_plugins(pw: &Pw) {
     let Some(library_dir) = library_dir_of(pw.init as *const std::ffi::c_void) else {
         return;
     };
@@ -37,9 +43,7 @@ fn point_at_plugins(pw: &Pw) {
         }
         let candidate = library_dir.join(folder);
         if candidate.is_dir() {
-            // SAFETY: set once, from the audio thread, before libpipewire
-            // reads it; nothing else in morf reads these variables, and
-            // this runs before any PipeWire thread exists.
+            // SAFETY: the caller guarantees the process is single-threaded.
             unsafe { std::env::set_var(variable, &candidate) };
         }
     }
@@ -70,9 +74,7 @@ pub(super) fn run(
     waker: SharedWaker,
 ) {
     static INIT: Once = Once::new();
-    // SAFETY: pw_init takes optional argc/argv and is safe to call with none.
     INIT.call_once(|| {
-        point_at_plugins(&pw);
         // SAFETY: pw_init takes optional argc/argv and is safe to call with none.
         unsafe { (pw.init)(ptr::null_mut(), ptr::null_mut()) }
     });

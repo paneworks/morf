@@ -1814,6 +1814,7 @@ dependencies = [
  "jiff",
  "libc",
  "morf-app",
+ "morf-audio",
  "morf-desktop",
  "morf-io",
  "morf-layout",

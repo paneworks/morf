@@ -22,6 +22,7 @@ libc = "0.2"
 flate2.workspace = true
 serde_json.workspace = true
 jiff.workspace = true
+morf-audio.workspace = true
 morf-layout.workspace = true
 morf-lua.workspace = true
 morf-runtime.workspace = true

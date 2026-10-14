@@ -158,6 +158,15 @@ pub struct Audio {
     next_monitor: u64,
 }
 
+/// Settles the environment libpipewire reads, before the process has threads.
+///
+/// # Safety
+/// Call it from `main` before any thread starts: it may set environment
+/// variables, which races every concurrent reader.
+pub unsafe fn prepare_environment() {
+    unsafe { pipewire::PipeWire::prepare_environment() };
+}
+
 impl Audio {
     /// The machine's sound server, or an [`Audio`] that is never available
     /// when there is none to be had.
