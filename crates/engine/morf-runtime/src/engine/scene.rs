@@ -79,9 +79,7 @@ impl Engine {
         // A removed field cannot keep the keyboard. The node that had focus
         // is handed on by the focus check, which still needs to know it went.
         self.editing.forget(&removed);
-        self.focus
-            .memory
-            .retain(|scope, node| !removed.contains(scope) && !removed.contains(node));
+        self.focus.forget(&removed);
         self.animation.forget(&removed);
         self.events.forget(&removed);
         self.timers.retain_nodes(|node| !removed.contains(&node));

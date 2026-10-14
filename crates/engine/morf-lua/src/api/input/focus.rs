@@ -63,9 +63,7 @@ impl Runtime {
         let state = self.reactive.borrow();
         state
             .focus
-            .owner
-            .get(&root)
-            .copied()
+            .owner(root)
             .filter(|node| state.scene.contains(*node))
     }
 
@@ -82,7 +80,7 @@ impl Runtime {
         morf_runtime::focus::next_in(
             &state.scene,
             &chain,
-            &state.focus.memory,
+            state.focus.memory(),
             current,
             backwards,
         )
@@ -108,8 +106,8 @@ impl Runtime {
     ) -> bool {
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            state.focus.last_root = Some(root);
-            let old = state.focus.owner.get(&root).copied();
+            state.focus.note_root(root);
+            let old = state.focus.owner(root);
             let old_visual =
                 old.is_some_and(|o| state.scene.bool_value(o, "visual_focus").unwrap_or(false));
             let visual = match reason {
@@ -117,7 +115,7 @@ impl Runtime {
                 FocusReason::Click | FocusReason::Program => false,
                 FocusReason::Restore => old_visual,
             };
-            let active = !state.focus.inactive.contains(&root);
+            let active = state.focus.is_active(root);
             if let Some(old) = old.filter(|o| Some(*o) != node) {
                 write(&mut state, old, "focused", false);
                 write(&mut state, old, "visual_focus", false);
@@ -133,17 +131,15 @@ impl Runtime {
             }
             match node {
                 Some(node) => {
-                    state.focus.owner.insert(root, node);
-                    write(&mut state, node, "focused", active);
-                    write(&mut state, node, "visual_focus", active && visual);
                     let mut scopes = Vec::new();
                     let mut scope = state.scene.focus_scope_of(node);
                     while let Some(s) = scope {
-                        state.focus.memory.insert(s, node);
                         scopes.push(s);
                         scope = state.scene.focus_scope_of(s);
                     }
-                    state.focus.scopes.insert(root, scopes);
+                    state.focus.give(root, node, scopes);
+                    write(&mut state, node, "focused", active);
+                    write(&mut state, node, "visual_focus", active && visual);
                     if old != Some(node)
                         && state.scene.element(node).ok() != Some(Element::TextInput)
                     {
@@ -154,10 +150,7 @@ impl Runtime {
                         ));
                     }
                 }
-                None => {
-                    state.focus.owner.remove(&root);
-                    state.focus.scopes.remove(&root);
-                }
+                None => state.focus.clear(root),
             }
             old != node || old_visual != visual
         };
@@ -174,13 +167,8 @@ impl Runtime {
     pub fn set_focus_active(&mut self, root: NodeHandle, active: bool) -> bool {
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            let was = !state.focus.inactive.contains(&root);
-            if active {
-                state.focus.inactive.remove(&root);
-            } else {
-                state.focus.inactive.insert(root);
-            }
-            match state.focus.owner.get(&root).copied() {
+            let was = state.focus.set_active(root, active);
+            match state.focus.owner(root) {
                 Some(owner) if was != active => {
                     write(&mut state, owner, "focused", active);
                     if !active {
@@ -202,12 +190,13 @@ impl Runtime {
         let mut moves: Vec<(NodeHandle, Option<NodeHandle>, FocusReason)> = Vec::new();
         let requests = {
             let state = self.reactive.borrow();
-            for (&root, &owner) in &state.focus.owner {
+            for (root, owner) in state.focus.owners() {
                 if state.scene.can_hold_focus(owner) && state.scene.root_of(owner) == Some(root) {
                     continue;
                 }
-                let scopes = state.focus.scopes.get(&root).cloned().unwrap_or_default();
-                let next = scopes
+                let next = state
+                    .focus
+                    .scopes(root)
                     .iter()
                     .copied()
                     .filter(|scope| state.scene.can_hold_focus(*scope))
@@ -215,7 +204,7 @@ impl Runtime {
                         let found = chain(&state, scope);
                         state
                             .focus
-                            .memory
+                            .memory()
                             .get(&scope)
                             .copied()
                             .filter(|m| *m != owner && found.contains(m))
@@ -227,16 +216,17 @@ impl Runtime {
             // keyboard: it has focus too.
             if let Some(input) = state.editing.focused
                 && let Some(root) = state.scene.root_of(input)
-                && state.focus.owner.get(&root) != Some(&input)
+                && state.focus.owner(root) != Some(input)
                 && !moves.iter().any(|(r, _, _)| *r == root)
             {
                 moves.push((root, Some(input), FocusReason::Program));
             }
-            state.focus.requests.is_empty().then(Vec::new)
+            state.focus.has_requests()
         };
-        let requests = match requests {
-            Some(none) => none,
-            None => std::mem::take(&mut self.reactive.borrow_mut().focus.requests),
+        let requests = if requests {
+            self.reactive.borrow_mut().focus.take_requests()
+        } else {
+            Vec::new()
         };
         let mut changed = false;
         for (root, node, reason) in moves {
@@ -274,9 +264,8 @@ impl Runtime {
                     // it first -- there is nowhere to move focus into.
                     if state
                         .focus
-                        .owner
-                        .get(&root)
-                        .is_some_and(|owner| within(&state, node, *owner))
+                        .owner(root)
+                        .is_some_and(|owner| within(&state, node, owner))
                     {
                         return false;
                     }
@@ -304,17 +293,17 @@ impl Runtime {
                     let Some(root) = state.scene.root_of(node) else {
                         return false;
                     };
-                    if state.focus.owner.get(&root) != Some(&node) {
+                    if state.focus.owner(root) != Some(node) {
                         return false;
                     }
                     (root, None, FocusReason::Program)
                 }
                 FocusRequest::Step(backwards) => {
-                    let Some(root) = state.focus.last_root.filter(|r| state.scene.contains(*r))
+                    let Some(root) = state.focus.last_root().filter(|r| state.scene.contains(*r))
                     else {
                         return false;
                     };
-                    let current = state.focus.owner.get(&root).copied();
+                    let current = state.focus.owner(root);
                     drop(state);
                     let next = self.next_focus_in(root, current, backwards);
                     (root, next, FocusReason::Keyboard)
@@ -340,7 +329,7 @@ pub(crate) fn install_focus_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (node, keyboard): (UserRef<NodeToken>, Option<bool>) = stack.consume(ctx)?;
             let request = FocusRequest::Set(node.handle, keyboard.unwrap_or(false));
-            set.borrow_mut().focus.requests.push(request);
+            set.borrow_mut().focus.request(request);
             Ok(CallbackReturn::Return)
         }),
     );
@@ -353,8 +342,7 @@ pub(crate) fn install_focus_api<'gc>(
             clear
                 .borrow_mut()
                 .focus
-                .requests
-                .push(FocusRequest::Clear(node.handle));
+                .request(FocusRequest::Clear(node.handle));
             Ok(CallbackReturn::Return)
         }),
     );
@@ -366,8 +354,7 @@ pub(crate) fn install_focus_api<'gc>(
             Callback::from_fn(&ctx, move |_, _, mut stack| {
                 step.borrow_mut()
                     .focus
-                    .requests
-                    .push(FocusRequest::Step(backwards));
+                    .request(FocusRequest::Step(backwards));
                 stack.clear();
                 Ok(CallbackReturn::Return)
             }),
@@ -382,8 +369,8 @@ pub(crate) fn install_focus_api<'gc>(
                 let state = get.borrow();
                 state
                     .focus
-                    .last_root
-                    .and_then(|root| state.focus.owner.get(&root).copied())
+                    .last_root()
+                    .and_then(|root| state.focus.owner(root))
                     .filter(|node| state.scene.contains(*node))
             };
             stack.clear();

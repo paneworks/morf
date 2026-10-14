@@ -138,7 +138,7 @@ impl Runtime {
                     SceneValue::Bool(false),
                 );
             }
-            let owner = state.focus.owner.get(&overlay.root).copied();
+            let owner = state.focus.owner(overlay.root);
             overlay.give_focus_back(&state.scene, owner, |node| state.scene.can_hold_focus(node))
         };
         if let Some((node, reason)) = back {
