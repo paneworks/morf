@@ -334,6 +334,17 @@ else
   notify() { asked notify; timeout 10 /usr/bin/notify-send "\$@" >> \$OUT/hc.log 2>&1; }
 fi
 sleep \${BOOT:-15}
+# The shell under test: the one process of that name in this sandbox's own
+# runtime dir. The person's live shell shares the PID namespace.
+shell_pid() {
+  found=""
+  for p in \$(pgrep -x "\${1:-morf}"); do
+    grep -qzx "XDG_RUNTIME_DIR=\$XDG_RUNTIME_DIR" /proc/\$p/environ 2>/dev/null && found="\$found \$p"
+  done
+  set -- \$found
+  [ \$# -eq 1 ] || { echo "shell_pid: \$# matches in \$XDG_RUNTIME_DIR" >> \$OUT/hc.log; return 1; }
+  echo \$1
+}
 [ -n "$WTYPE" ] && { timeout \${TIMEOUT:-240} "$WTYPE" -s 400000 > /dev/null 2>&1 & KP=\$!; }
 . "$STEPS"
 kill \$S \${AW:-} \${AB:-} \${AR:-} 2>/dev/null

@@ -1,7 +1,7 @@
 # cpu-active.steps: the shell's CPU while things move -- panels opening and
 # shutting, workspaces switching, the OSD -- each for a few seconds, and at
 # rest between. OUT/cpu.log.
-PID=$(pgrep -n -x morf)
+PID=$(shell_pid morf) || return
 hz=$(getconf CLK_TCK)
 t() { awk '{print $14+$15}' /proc/$PID/stat; }
 mark() { T0=$(t); S0=$(date +%s%N); }
