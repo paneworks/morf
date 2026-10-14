@@ -377,6 +377,8 @@ pub fn paint_auxiliary_surface(
     let Some(renderer) = &mut surface.renderer else {
         return Ok(());
     };
+    let what = format!("{} {}", kind.name(), surface.id);
+    crate::paint::recover::recover_lost_device(runtime, renderer, &what)?;
     let blend = match kind {
         AuxiliaryKind::Popup => surface.popup_config.as_ref().map(|config| &config.blend),
         AuxiliaryKind::Floating => surface.floating_config.as_ref().map(|config| &config.blend),
@@ -412,9 +414,13 @@ pub fn paint_auxiliary_surface(
     if !renderer.backend_mut().declares_damage() {
         kind.damage(client, surface.id, width, height)?;
     }
-    let damage = renderer
-        .render(&scene, &layout, scale_120, |_| {})
-        .map_err(|error| error.to_string())?;
+    let damage = match renderer.render(&scene, &layout, scale_120, |_| {}) {
+        Err(_) if crate::paint::recover::recover_lost_device(runtime, renderer, &what)? => {
+            renderer.render(&scene, &layout, scale_120, |_| {})
+        }
+        rendered => rendered,
+    }
+    .map_err(|error| error.to_string())?;
     // Only ask for another callback when this paint actually drew something.
     //
     // Asking unconditionally is a loop with no exit: the callback repaints, the

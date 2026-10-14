@@ -69,7 +69,7 @@ mod terminal_batch;
 mod textures;
 mod warm;
 
-pub use backend_init::opened_device_count;
+pub use backend_init::{lose_devices, opened_device_count};
 pub use backend_types::*;
 pub use present_stalls::{PresentStalls, present_stalls};
 #[cfg(test)]

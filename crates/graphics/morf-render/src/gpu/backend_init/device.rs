@@ -238,7 +238,7 @@ fn warn_if_not_vulkan(info: &wgpu::AdapterInfo) {
     });
 }
 
-async fn open_device(
+pub(super) async fn open_device(
     instance: &wgpu::Instance,
     surface: Option<&wgpu::Surface<'static>>,
 ) -> Result<SharedDevice, GpuError> {
@@ -316,6 +316,24 @@ pub(super) fn watch_lost(device: &wgpu::Device) -> std::sync::Arc<std::sync::ato
         }
     });
     lost
+}
+
+/// Destroys every device this process shares, as a driver losing them would,
+/// and returns how many there were.
+///
+/// For tests and the host's `@device-lost` hook: each backend drawing with
+/// one finds it lost on its next frame and moves to a fresh device
+/// (`WgpuBackend::recover`).
+pub fn lose_devices() -> usize {
+    let devices = shared_devices()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    for shared in &devices {
+        shared.device.destroy();
+        let _ = shared.device.poll(wgpu::PollType::Poll);
+    }
+    devices.len()
 }
 
 #[cfg(test)]

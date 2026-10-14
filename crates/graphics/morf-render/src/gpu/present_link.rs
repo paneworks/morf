@@ -71,7 +71,8 @@ impl Drop for SlotLink {
 
 /// The window a ring presents to, through the sink its backend gave.
 pub(crate) struct BufferLink {
-    sink: Box<dyn BufferSink>,
+    /// `None` only once [`BufferLink::into_sink`] took it.
+    sink: Option<Box<dyn BufferSink>>,
     /// Modifiers both the window system and the device take.
     modifiers: Vec<u64>,
     /// Buffers of an old size, kept until the compositor lets go of them.
@@ -130,7 +131,7 @@ impl BufferLink {
         );
         drop(hal);
         Ok(Self {
-            sink,
+            sink: Some(sink),
             modifiers,
             retired: Vec::new(),
             device: device.clone(),
@@ -139,10 +140,18 @@ impl BufferLink {
         })
     }
 
+    /// The window's sink, for a link on another device: the buffers made
+    /// here go with this link, the window stays.
+    pub(crate) fn into_sink(mut self) -> Option<Box<dyn BufferSink>> {
+        self.sink.take()
+    }
+
     /// Hears whatever the window system sent the sink: releases, mostly.
     /// The host's loop reads the socket; this only takes what it read.
     pub(crate) fn dispatch(&mut self) {
-        self.sink.dispatch();
+        if let Some(sink) = &mut self.sink {
+            sink.dispatch();
+        }
         self.retired
             .retain(|slot| slot.busy.load(Ordering::Acquire));
     }
@@ -151,7 +160,7 @@ impl BufferLink {
     /// passes -- at least once, without waiting, when it already has.
     /// Returns whether anything did.
     pub(crate) fn wait_release(&mut self, deadline: Instant) -> bool {
-        let heard = self.sink.wait(deadline);
+        let heard = self.sink.as_mut().is_some_and(|sink| sink.wait(deadline));
         if heard {
             self.dispatch();
         }
@@ -200,7 +209,11 @@ impl BufferLink {
             stride: image.plane.stride,
             modifier: image.modifier,
         };
-        let buffer = match self.sink.import(plane, size, FOURCC_ARGB8888, busy.clone()) {
+        let imported = match &mut self.sink {
+            Some(sink) => sink.import(plane, size, FOURCC_ARGB8888, busy.clone()),
+            None => Err("the link has no window".to_owned()),
+        };
+        let buffer = match imported {
             Ok(buffer) => buffer,
             Err(error) => {
                 unsafe {
@@ -334,13 +347,17 @@ impl BufferLink {
                 height: rect.height,
             })
             .collect();
-        self.sink.present(link.buffer.as_ref(), &damage);
+        if let Some(sink) = &mut self.sink {
+            sink.present(link.buffer.as_ref(), &damage);
+        }
     }
 
     /// Commits with the buffer already there: a frame drawn into no buffer
     /// still delivers the frame callback the host asked for.
     pub(crate) fn commit_without_buffer(&mut self) {
-        self.sink.commit();
+        if let Some(sink) = &mut self.sink {
+            sink.commit();
+        }
     }
 }
 

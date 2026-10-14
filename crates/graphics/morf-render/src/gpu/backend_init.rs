@@ -6,11 +6,12 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::collections::HashMap;
 
 mod device;
+mod recover;
 mod settings;
 
-pub use device::opened_device_count;
 pub(crate) use device::ready;
 use device::{SharedDevice, device_for, shared_instance};
+pub use device::{lose_devices, opened_device_count};
 
 /// How many buffers a surface presents through at most
 /// (`MORF_PRESENT_BUFFERS` overrides it). A compositor holds the buffer it
@@ -59,18 +60,8 @@ impl WgpuBackend {
         let linked: Result<(), String> = match sink {
             Ok(sink) if wanted => {
                 let mut backend = Self::initialize(instance.clone(), None, width, height).await?;
-                match super::present_link::BufferLink::connect(
-                    &backend.device,
-                    backend.dmabuf.as_ref(),
-                    sink,
-                ) {
-                    Ok(link) => {
-                        backend.buffers = Some(super::present::BufferRing::new(
-                            &backend.device,
-                            &backend.texture,
-                            ring_buffers(),
-                            Some(link),
-                        ));
+                match backend.attach_sink(sink) {
+                    Ok(()) => {
                         // The sink holds the window's connection and
                         // surface: the handles are not needed again.
                         drop(window);
@@ -93,7 +84,20 @@ impl WgpuBackend {
         Self::initialize(instance, Some(surface), width, height).await
     }
 
-    async fn initialize(
+    /// Presents through `sink` from now on, or says why it cannot.
+    pub(crate) fn attach_sink(&mut self, sink: Box<dyn BufferSink>) -> Result<(), String> {
+        let link =
+            super::present_link::BufferLink::connect(&self.device, self.dmabuf.as_ref(), sink)?;
+        self.buffers = Some(super::present::BufferRing::new(
+            &self.device,
+            &self.texture,
+            ring_buffers(),
+            Some(link),
+        ));
+        Ok(())
+    }
+
+    pub(crate) async fn initialize(
         instance: wgpu::Instance,
         surface: Option<wgpu::Surface<'static>>,
         width: u32,
@@ -101,6 +105,35 @@ impl WgpuBackend {
     ) -> Result<Self, GpuError> {
         let started = std::time::Instant::now();
         let opened_before = opened_device_count();
+        let shared = device_for(&instance, surface.as_ref()).await?;
+        let device_ready = started.elapsed();
+        let backend = Self::build(shared, surface, width, height)?;
+        // `MORF_GPU_LOG=1`: what bringing a backend up cost, and how much of
+        // it was the device.
+        if std::env::var_os("MORF_GPU_LOG").is_some() {
+            eprintln!(
+                "morf: gpu: backend {}x{} ready in {:.1} ms; device {} in {:.1} ms",
+                width,
+                height,
+                started.elapsed().as_secs_f64() * 1000.0,
+                if opened_device_count() > opened_before {
+                    "opened"
+                } else {
+                    "shared"
+                },
+                device_ready.as_secs_f64() * 1000.0
+            );
+        }
+        Ok(backend)
+    }
+
+    /// A backend drawing with `shared`, into `surface` or offscreen.
+    pub(crate) fn build(
+        shared: SharedDevice,
+        surface: Option<wgpu::Surface<'static>>,
+        width: u32,
+        height: u32,
+    ) -> Result<Self, GpuError> {
         let SharedDevice {
             adapter,
             device,
@@ -108,8 +141,7 @@ impl WgpuBackend {
             dmabuf,
             lcd_supported,
             lost,
-        } = device_for(&instance, surface.as_ref()).await?;
-        let device_ready = started.elapsed();
+        } = shared;
         let adapter_info = adapter.get_info();
         let viewport_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("morf viewport layout"),
@@ -250,23 +282,6 @@ impl WgpuBackend {
                 )
             })
             .transpose()?;
-
-        // `MORF_GPU_LOG=1`: what bringing a backend up cost, and how much of
-        // it was the device.
-        if std::env::var_os("MORF_GPU_LOG").is_some() {
-            eprintln!(
-                "morf: gpu: backend {}x{} ready in {:.1} ms; device {} in {:.1} ms",
-                width,
-                height,
-                started.elapsed().as_secs_f64() * 1000.0,
-                if opened_device_count() > opened_before {
-                    "opened"
-                } else {
-                    "shared"
-                },
-                device_ready.as_secs_f64() * 1000.0
-            );
-        }
         let profile = super::profile::GpuProfile::new(&device, &queue);
         Ok(Self {
             device,
@@ -354,8 +369,8 @@ impl WgpuBackend {
 
     /// Whether the GPU device this backend draws with was lost.
     ///
-    /// A lost device runs nothing again, so every frame fails from then on;
-    /// a backend made after it opens a fresh device.
+    /// A lost device runs nothing again, so every frame fails from then on
+    /// until [`WgpuBackend::recover`] moves the backend to a fresh one.
     pub fn device_lost(&self) -> bool {
         self.lost.load(std::sync::atomic::Ordering::Acquire)
     }

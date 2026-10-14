@@ -132,6 +132,12 @@ impl BufferRing {
         }
     }
 
+    /// The window the ring presented to, its buffers dropped with it.
+    pub(crate) fn into_sink(mut self) -> Option<Box<dyn morf_value::present::BufferSink>> {
+        self.slots.clear();
+        self.link?.into_sink()
+    }
+
     /// A free buffer to draw the next frame into, made if there is room:
     /// the freshest free one, since it has the least to catch up on.
     fn acquire(&mut self, device: &wgpu::Device) -> Option<usize> {

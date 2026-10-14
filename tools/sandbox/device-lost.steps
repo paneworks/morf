@@ -1,0 +1,16 @@
+# device-lost.steps: the GPU devices are destroyed on purpose
+# (MORF_TEST_HOOKS=1 in MORF_ENV); every surface moves to a fresh device in
+# place and the shell keeps drawing, with no worker restart. OUT/shell.log
+# says "recovered on a fresh device", never "restarting".
+wait 6
+shot before
+ipc @device-lost
+wait 4
+shot after-first
+open launcher
+wait 2
+shot after-open
+close
+ipc @device-lost
+wait 4
+shot after-second

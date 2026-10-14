@@ -7,8 +7,8 @@ pub use gpu::dmabuf::{
     split_dev_t,
 };
 pub use gpu::{
-    GpuError, GpuInfo, PresentStalls, ShaderRegistration, WgpuBackend, opened_device_count,
-    present_stalls,
+    GpuError, GpuInfo, PresentStalls, ShaderRegistration, WgpuBackend, lose_devices,
+    opened_device_count, present_stalls,
 };
 
 /// The space translucent colours are mixed in when they are drawn over what

@@ -133,6 +133,12 @@ pub fn handle_ipc(
 /// names the output whose worker panics.
 const TEST_PANIC: &str = "@panic";
 
+/// A hidden verb that destroys the process's GPU devices, as a driver losing
+/// them would, for testing in-place recovery. Gated and addressed like
+/// [`TEST_PANIC`]; the devices are the process's, so one output asking loses
+/// them for every output.
+const TEST_DEVICE_LOST: &str = "@device-lost";
+
 fn test_panic_here(screen: Option<&Screen>, args: &[morf_lua::IpcValue]) -> bool {
     if std::env::var_os("MORF_TEST_HOOKS").is_none() {
         return false;
@@ -169,9 +175,17 @@ pub fn handle_worker_command(
             if target == TEST_PANIC && test_panic_here(screen, &args) {
                 panic!("{TEST_PANIC} asked for by IPC");
             }
-            let result = runtime
-                .call_ipc(&target, &args)
-                .map_err(|error| error.to_string());
+            let lost = (target == TEST_DEVICE_LOST && test_panic_here(screen, &args))
+                .then(morf_render::lose_devices);
+            if let Some(count) = lost {
+                eprintln!("morf: {TEST_DEVICE_LOST}: destroyed {count} GPU device(s)");
+            }
+            let result = match lost {
+                Some(count) => Ok(vec![morf_lua::IpcValue::Integer(count as i64)]),
+                None => runtime
+                    .call_ipc(&target, &args)
+                    .map_err(|error| error.to_string()),
+            };
             let repaint = result.is_ok();
             let _ = reply.send(result);
             WorkerUpdate {

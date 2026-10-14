@@ -27,6 +27,8 @@ pub fn paint_layer(
     let (width, height) = client
         .layer_logical_size(layer)
         .ok_or_else(|| "layer surface disappeared while painting".to_owned())?;
+    let what = format!("layer {layer}");
+    crate::paint::recover::recover_lost_device(runtime, renderer, &what)?;
     // Read every paint like the keyboard focus below, so a configuration may
     // change it at any time; the renderer rebuilds only when it moved, and
     // its pipelines — the configuration's shaders among them — with it.
@@ -141,9 +143,9 @@ pub fn paint_layer(
     }
     // A backend presenting through its own buffers declares the damage with
     // the buffer itself (`WgpuBackend::declares_damage`).
-    let declare = !renderer.backend_mut().declares_damage();
-    let damage = renderer
-        .render(&scene, &layout, scale_120, |damage| {
+    let render = |renderer: &mut RenderEngine<WgpuBackend>| {
+        let declare = !renderer.backend_mut().declares_damage();
+        renderer.render(&scene, &layout, scale_120, |damage| {
             if !declare {
                 return;
             }
@@ -161,7 +163,16 @@ pub fn paint_layer(
                 );
             }
         })
-        .map_err(|error| error.to_string())?;
+    };
+    // A device lost during this frame is replaced and the frame drawn again
+    // on the new one, in full.
+    let damage = match render(renderer) {
+        Err(_) if crate::paint::recover::recover_lost_device(runtime, renderer, &what)? => {
+            render(renderer)
+        }
+        rendered => rendered,
+    }
+    .map_err(|error| error.to_string())?;
     split.mark("render");
     // What the frame repainted, beside how long it took: the one number that
     // says whether a change cost its own area or the whole surface.
