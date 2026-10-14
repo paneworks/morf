@@ -77,6 +77,30 @@ struct Span {
     volatile: bool,
 }
 
+/// Commands `to..to + len` of a list, copied unchanged from `from..from + len`
+/// of the list made before it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CopiedRun {
+    /// First command in the list made.
+    pub to: usize,
+    /// First command in the list copied from.
+    pub from: usize,
+    /// How many.
+    pub len: usize,
+}
+
+/// Which commands of a list are the last list's, unchanged, for whatever
+/// kept work of its own a backend made from that list.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Copies<'a> {
+    /// The list made, by the frame it was made in.
+    pub frame: Option<u64>,
+    /// The list copied from, by the frame it was made in.
+    pub from: Option<u64>,
+    /// In the order of `to`, none overlapping.
+    pub runs: &'a [CopiedRun],
+}
+
 /// What a surface remembers of its last draw list, to copy from it.
 #[derive(Debug, Default)]
 pub struct PaintCache {
@@ -84,6 +108,9 @@ pub struct PaintCache {
     /// The frame the last list was made in, while that list is kept.
     previous: Option<u64>,
     frame: u64,
+    /// What the list made last copied, and the frame it copied from.
+    runs: Vec<CopiedRun>,
+    from: Option<u64>,
 }
 
 impl PaintCache {
@@ -96,6 +123,17 @@ impl PaintCache {
     pub(crate) fn forget(&mut self) {
         self.spans.clear();
         self.previous = None;
+        self.runs.clear();
+        self.from = None;
+    }
+
+    /// What the list made last copied from the one before it.
+    pub(crate) fn copies(&self) -> Copies<'_> {
+        Copies {
+            frame: Some(self.frame),
+            from: self.from,
+            runs: if self.from.is_some() { &self.runs } else { &[] },
+        }
     }
 }
 
@@ -120,6 +158,8 @@ impl DrawList {
         cache: &mut PaintCache,
     ) -> Result<(), RenderError> {
         cache.frame += 1;
+        cache.runs.clear();
+        cache.from = cache.previous;
         if cache.spans.len() > 2 * scene.node_count() + 1024 {
             cache.spans.retain(|node, _| scene.contains(*node));
         }
@@ -224,7 +264,7 @@ impl Reuse<'_> {
     /// layer outside the span read as `layer`. False, having appended
     /// nothing, when the last list does not hold them.
     fn copy(
-        &self,
+        &mut self,
         list: &mut DrawList,
         (commands, layers): (usize, usize),
         span: &Span,
@@ -266,6 +306,18 @@ impl Reuse<'_> {
             });
             copied.mask_for = source.mask_for.map(moved);
             list.layers.push(copied);
+        }
+        let runs = &mut self.cache.runs;
+        match runs.last_mut() {
+            Some(last) if last.to + last.len == to_command && last.from + last.len == commands => {
+                last.len += span.commands.1;
+            }
+            _ if span.commands.1 == 0 => {}
+            _ => runs.push(CopiedRun {
+                to: to_command,
+                from: commands,
+                len: span.commands.1,
+            }),
         }
         true
     }

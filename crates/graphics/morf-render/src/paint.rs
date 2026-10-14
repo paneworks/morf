@@ -8,6 +8,7 @@ mod path_paint;
 mod properties;
 mod reuse;
 
+pub use reuse::{CopiedRun, Copies};
 pub(crate) use reuse::{PaintCache, Reuse, SpanBase, append_node};
 
 use element_commands::*;

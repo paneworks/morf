@@ -64,6 +64,7 @@ pub use lcd::{
     LCD_TAPS, SubpixelText, blend_stripes, stripe_centres, stripe_coverage, subpixel_text_for,
 };
 pub use morf_text::{FontSubpixel, LcdFilter, SubpixelOrder, font_subpixel};
+pub use paint::{CopiedRun, Copies};
 pub use path::PathPaint;
 pub use sdf::*;
 #[cfg(test)]
