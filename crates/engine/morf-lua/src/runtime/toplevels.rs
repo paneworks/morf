@@ -70,7 +70,7 @@ impl Runtime {
                     .map(|(_, callback)| callback.clone())
                     .collect::<Vec<_>>()
             };
-            state.reactive.try_write(revision, value);
+            state.reactive_mut().try_write(revision, value);
             (change.to_scene(), listeners)
         };
         if let Err(message) = self

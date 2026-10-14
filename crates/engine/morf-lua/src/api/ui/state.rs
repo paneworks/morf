@@ -83,7 +83,7 @@ pub(crate) fn build<'gc>(
                         register_reloadable_value(&mut state, format!("{prefix}.{key}"), value)?.0
                     }
                     None => state
-                        .reactive
+                        .reactive_mut()
                         .signal(name, value)
                         .ok_or(morf_runtime::reactive::GRAPH_RUNNING)?,
                 };
@@ -137,9 +137,9 @@ pub(crate) fn install_state_api<'gc>(
                         .rev()
                         .find(|(signal, _)| *signal == id)
                         .map(|(_, value)| value.clone())
-                        .or_else(|| state.reactive.value(id).cloned())
+                        .or_else(|| state.reactive().value(id).cloned())
                 } else {
-                    state.reactive.value(id).cloned()
+                    state.reactive().value(id).cloned()
                 }
                 .ok_or_else(|| HostError("stale state field".to_owned()))?;
                 stack.replace(ctx, value.to_lua(ctx));
@@ -175,7 +175,7 @@ pub(crate) fn install_state_api<'gc>(
                     // one on show; the frames carry it (`advance_theme_fades`).
                     if let (Some((duration, easing)), IpcValue::Color(to)) =
                         (fields.transition, &value)
-                        && let Some(IpcValue::Color(from)) = state.reactive.value(id).cloned()
+                        && let Some(IpcValue::Color(from)) = state.reactive().value(id).cloned()
                         && !duration.is_zero()
                         // Nothing shown yet: no fade, the colour is just set.
                         && state.engine.animation().ticked
@@ -208,7 +208,7 @@ pub(crate) fn install_state_api<'gc>(
                         active.writes.push((id, value));
                         return Ok(CallbackReturn::Return);
                     }
-                    state.reactive.write(id, value).map_err(HostError)?;
+                    state.reactive_mut().write(id, value).map_err(HostError)?;
                     if state.tracking().in_handler() {
                         state.tracking_mut().defer_flush();
                         return Ok(CallbackReturn::Return);

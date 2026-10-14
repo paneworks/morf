@@ -50,13 +50,13 @@ pub(crate) fn register_window_size(state: &mut ReactiveState, id: u64) {
     else {
         return;
     };
-    let Some(width) = state.reactive.signal(
+    let Some(width) = state.reactive_mut().signal(
         format!("window.{id}.width"),
         IpcValue::Integer(i64::from(size.0)),
     ) else {
         return;
     };
-    let Some(height) = state.reactive.signal(
+    let Some(height) = state.reactive_mut().signal(
         format!("window.{id}.height"),
         IpcValue::Integer(i64::from(size.1)),
     ) else {
@@ -128,7 +128,7 @@ pub(crate) fn destroy_window_surface(state: &mut ReactiveState, id: u64) -> Opti
     state.windows_mut().popup_node_anchors.remove(&id);
     if let Some(size) = state.windows_mut().window_sizes.remove(&id) {
         state
-            .reactive
+            .reactive_mut()
             .forget_signals([size.width, size.height].into_iter().collect());
     }
     crate::runtime::helpers::remove_scene_subtree(state, window.root);
@@ -247,7 +247,7 @@ impl Runtime {
             let mut changed = false;
             for (signal, value) in [(size.width, width), (size.height, height)] {
                 changed |= state
-                    .reactive
+                    .reactive_mut()
                     .update(signal, IpcValue::Integer(i64::from(value)));
             }
             changed

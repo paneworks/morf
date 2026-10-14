@@ -36,7 +36,7 @@ impl Runtime {
 
     /// How many errors this runtime's effects have raised, repeats included.
     pub fn effect_errors(&self) -> u64 {
-        self.reactive.borrow().reactive.errors().total()
+        self.reactive.borrow().reactive().errors().total()
     }
 
     /// Runs one bounded Lua UI handler and retains failures as runtime logs.

@@ -77,4 +77,6 @@ subsystems! {
     events, events_mut: crate::events::Events;
     /// The node tree the configuration built.
     scene, scene_mut: morf_scene::Scene;
+    /// The graph, the signal mirror, the declared effects and the flush.
+    reactive, reactive_mut: crate::reactive::Reactive;
 }

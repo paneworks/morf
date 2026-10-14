@@ -25,9 +25,9 @@ pub(crate) fn install_signal_api<'gc>(
                     .rev()
                     .find(|(id, _)| *id == signal.id)
                     .map(|(_, value)| value.clone())
-                    .or_else(|| state.reactive.value(signal.id).cloned())
+                    .or_else(|| state.reactive().value(signal.id).cloned())
             } else {
-                state.reactive.value(signal.id).cloned()
+                state.reactive().value(signal.id).cloned()
             }
             .ok_or_else(|| HostError("stale reactive signal".to_owned()))?;
             stack.replace(ctx, value.to_lua(ctx));
@@ -47,7 +47,10 @@ pub(crate) fn install_signal_api<'gc>(
                     stack.replace(ctx, true);
                     return Ok(CallbackReturn::Return);
                 }
-                state.reactive.write(signal.id, value).map_err(HostError)?;
+                state
+                    .reactive_mut()
+                    .write(signal.id, value)
+                    .map_err(HostError)?;
                 state.shared_mut().note_write(signal.id);
                 // Inside a handler the write is enough: the graph is flushed
                 // once, when the handler returns, however many writes it made.
@@ -78,7 +81,7 @@ pub(crate) fn install_signal_api<'gc>(
             let id = {
                 let mut state = state.borrow_mut();
                 state
-                    .reactive
+                    .reactive_mut()
                     .signal(name, value)
                     .ok_or_else(|| HostError(morf_runtime::reactive::GRAPH_RUNNING.to_owned()))?
             };
@@ -131,9 +134,9 @@ pub(crate) fn install_signal_api<'gc>(
                         .rev()
                         .find(|(signal, _)| *signal == id)
                         .map(|(_, value)| value.clone())
-                        .or_else(|| state.reactive.value(id).cloned())
+                        .or_else(|| state.reactive().value(id).cloned())
                 } else {
-                    state.reactive.value(id).cloned()
+                    state.reactive().value(id).cloned()
                 }
                 .ok_or_else(|| HostError("stale persistent property".into()))?
             };
@@ -158,7 +161,7 @@ pub(crate) fn install_signal_api<'gc>(
             {
                 let mut state = state.borrow_mut();
                 let current = state
-                    .reactive
+                    .reactive()
                     .value(id)
                     .ok_or_else(|| HostError("stale persistent property".into()))?;
                 if std::mem::discriminant(current) != std::mem::discriminant(&value) {
@@ -171,7 +174,7 @@ pub(crate) fn install_signal_api<'gc>(
                     active.writes.push((id, value));
                     return Ok(CallbackReturn::Return);
                 }
-                state.reactive.write(id, value).map_err(HostError)?;
+                state.reactive_mut().write(id, value).map_err(HostError)?;
             }
             replace_status(ctx, &mut stack, flush_status(&state, ctx, limits));
             Ok(CallbackReturn::Return)

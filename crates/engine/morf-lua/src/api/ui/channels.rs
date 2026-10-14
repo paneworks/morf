@@ -74,7 +74,7 @@ impl Runtime {
                 }
             }
             for (signal, value) in writes {
-                flush |= state.engine.reactive.try_write(signal, value);
+                flush |= state.engine.reactive_mut().try_write(signal, value);
             }
             // A path on show whose channel moved: a frame.
             let mut shown = false;
@@ -128,7 +128,7 @@ fn watch(state: &mut ReactiveState, channel: &Arc<Channel>) -> Result<SignalId, 
     }
     let revision = channel.revision();
     let signal = state
-        .reactive
+        .reactive_mut()
         .signal(
             format!("channel.{}", channel.id()),
             IpcValue::Integer(revision as i64),

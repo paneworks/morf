@@ -52,10 +52,10 @@ pub(crate) fn bump_property_signal(
     let value = IpcValue::Integer(state.revisions_mut().bump_property());
     if let Some(active) = state.tracking_mut().capture() {
         active.writes.push((signal, value.clone()));
-        state.reactive.mirror(signal, value);
+        state.reactive_mut().mirror(signal, value);
         Ok(())
     } else {
-        state.reactive.write(signal, value)
+        state.reactive_mut().write(signal, value)
     }
 }
 

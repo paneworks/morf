@@ -72,7 +72,7 @@ impl Runtime {
                     (host.revision, IpcValue::Integer(rows.revision)),
                 ];
                 for (id, value) in writes {
-                    moved |= state.reactive.update(id, value);
+                    moved |= state.reactive_mut().update(id, value);
                 }
                 // A binding that counts the devices follows them.
                 for model in changed_models {

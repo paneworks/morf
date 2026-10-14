@@ -236,7 +236,7 @@ impl Runtime {
     /// Returns bindings that currently read frame-varying scene properties.
     pub fn binding_dependencies(&self) -> Vec<String> {
         let state = self.reactive.borrow();
-        let Some(graph) = state.reactive.graph() else {
+        let Some(graph) = state.reactive().graph() else {
             return Vec::new();
         };
         graph
@@ -276,7 +276,7 @@ impl Runtime {
             .reloadables()
             .filter_map(|(name, signal)| {
                 state
-                    .reactive
+                    .reactive()
                     .value(signal)
                     .map(|value| (name.to_owned(), value.clone()))
             })

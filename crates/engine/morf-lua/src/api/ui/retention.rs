@@ -270,7 +270,7 @@ pub(crate) fn install_retention_api<'gc>(
         let state = Rc::clone(&state);
         move |ctx, _, mut stack| {
             let handle: UserRef<EffectHandleToken> = stack.consume(ctx)?;
-            let alive = state.borrow().reactive.effect(handle.token).is_some();
+            let alive = state.borrow().reactive().effect(handle.token).is_some();
             stack.replace(ctx, alive);
             Ok(CallbackReturn::Return)
         }
@@ -302,7 +302,7 @@ pub(crate) fn install_retention_api<'gc>(
                     return Err(HostError("effect owner is a removed node".to_owned()).into());
                 }
                 let token = state.tracking_mut().next_effect_token();
-                state.reactive.add_effect(
+                state.reactive_mut().add_effect(
                     token,
                     LuaEffect {
                         handler: crate::vm::handler_store::register(ctx.stash(closure)),
@@ -340,7 +340,7 @@ pub(crate) struct EffectHandleToken {
 /// nothing. While a flush holds the graph the removal waits for it to
 /// finish. False if the effect was already gone.
 pub(crate) fn dispose_effect(state: &mut ReactiveState, token: u64) -> bool {
-    if !state.reactive.dispose_effect(token) {
+    if !state.reactive_mut().dispose_effect(token) {
         return false;
     }
     state.collect_graph_garbage();

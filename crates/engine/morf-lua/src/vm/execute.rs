@@ -99,7 +99,7 @@ pub(crate) fn evaluate_effect(
         }
         // A binding whose node was removed during this flush: its effect
         // is waiting to be forgotten and has nothing left to drive.
-        let Some(effect) = state.reactive.effect(token).cloned() else {
+        let Some(effect) = state.reactive().effect(token).cloned() else {
             return Ok(());
         };
         state.tracking_mut().begin_capture();
@@ -157,7 +157,7 @@ pub(crate) fn evaluate_effect(
             let value = IpcValue::Integer(state.borrow().revisions().property());
             let mut state = state.borrow_mut();
             let signal = state
-                .reactive
+                .reactive_mut()
                 .signal(name.clone(), value)
                 .ok_or("reactive graph unavailable")?;
             state.tracking_mut().track_property(key, signal, name);
@@ -176,12 +176,15 @@ pub(crate) fn evaluate_effect(
             let mut state = state.borrow_mut();
             effect
                 .set(
-                    state.reactive.graph().ok_or("reactive graph unavailable")?,
+                    state
+                        .reactive()
+                        .graph()
+                        .ok_or("reactive graph unavailable")?,
                     signal,
                     value.clone(),
                 )
                 .map_err(|error| error.to_string())?;
-            state.reactive.mirror_flush_write(signal, value);
+            state.reactive_mut().mirror_flush_write(signal, value);
             state.shared_mut().note_write(signal);
         }
     }
@@ -196,7 +199,10 @@ fn read_signal(
     signal: morf_scene::reactive::SignalId,
 ) -> Result<(), String> {
     let state = state.borrow();
-    let graph = state.reactive.graph().ok_or("reactive graph unavailable")?;
+    let graph = state
+        .reactive()
+        .graph()
+        .ok_or("reactive graph unavailable")?;
     effect
         .get(graph, signal)
         .map(|_| ())

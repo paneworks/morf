@@ -24,7 +24,7 @@ pub(crate) fn flush_reactive(
     // takes it for a moment -- is registered now and gets its first run
     // here, so the caller sees it evaluated.
     for _ in 0..MAX_NESTED_FLUSHES {
-        if state.borrow_mut().reactive.register_pending_effects() == 0 {
+        if state.borrow_mut().reactive_mut().register_pending_effects() == 0 {
             break;
         }
         let next = flush_graph(state, ctx, limits);
@@ -52,7 +52,7 @@ pub(crate) fn run_destroyed_hooks(
 ) {
     {
         let mut state = state.borrow_mut();
-        if state.reactive.is_flushing() || !state.destroy_hooks_mut().begin() {
+        if state.reactive().is_flushing() || !state.destroy_hooks_mut().begin() {
             return;
         }
         state.tracking_mut().enter_handler();
@@ -88,14 +88,18 @@ fn flush_graph(
     // A flush asked for from inside one -- a binding that registers another,
     // a module `require`d from a binding writing a signal -- has nothing to
     // do of its own: the flush already under way drains it.
-    let Some(mut run) = state.borrow_mut().reactive.begin_flush(limits.frame_fuel)? else {
+    let Some(mut run) = state
+        .borrow_mut()
+        .reactive_mut()
+        .begin_flush(limits.frame_fuel)?
+    else {
         return Ok(());
     };
     // Driven one effect at a time, the state borrowed only between the
     // steps: an effect is Lua, and Lua may create signals or effects of its
     // own while it runs.
     let stepped = loop {
-        let next = state.borrow_mut().reactive.next_effect(&mut run);
+        let next = state.borrow_mut().reactive_mut().next_effect(&mut run);
         let pending = match next {
             Ok(Some(pending)) => pending,
             Ok(None) => break Ok(()),
@@ -113,7 +117,7 @@ fn flush_graph(
         );
         let completed = state
             .borrow_mut()
-            .reactive
+            .reactive_mut()
             .complete_effect(&mut run, pending, capture, outcome);
         if let Err(error) = completed {
             break Err(error);
@@ -123,13 +127,13 @@ fn flush_graph(
     let _span =
         crate::profile::span(|| "engine: after a flush (signal copies, graph gc)".to_owned());
     let mut state = state.borrow_mut();
-    let result = state.reactive.finish_flush(run, stepped);
+    let result = state.reactive_mut().finish_flush(run, stepped);
     state.collect_graph_garbage();
     // The effects' own errors are logged here, once per effect and its
     // repeats counted, so the callers of a flush do not log them again.
     match result {
         Ok(errors) => {
-            for line in state.reactive.errors_mut().note(&errors) {
+            for line in state.reactive_mut().errors_mut().note(&errors) {
                 state.log(LogLevel::Warn, line);
             }
             Ok(())
@@ -148,9 +152,9 @@ pub(crate) fn flush_status(
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
-    state.borrow_mut().reactive.errors_mut().take_last();
+    state.borrow_mut().reactive_mut().errors_mut().take_last();
     flush_reactive(state, ctx, limits)?;
-    match state.borrow_mut().reactive.errors_mut().take_last() {
+    match state.borrow_mut().reactive_mut().errors_mut().take_last() {
         Some(message) => Err(message),
         None => Ok(()),
     }
@@ -165,7 +169,7 @@ fn effect_label(
     pending: &morf_scene::reactive::PendingEffect,
 ) -> String {
     let state = state.borrow();
-    let Some(effect) = state.reactive.effect(pending.token()) else {
+    let Some(effect) = state.reactive().effect(pending.token()) else {
         return format!("effect {}", pending.name());
     };
     let origin = match crate::vm::handler_store::stashed(&effect.handler) {

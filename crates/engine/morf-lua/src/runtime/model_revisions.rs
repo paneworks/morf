@@ -64,9 +64,9 @@ pub(crate) fn bump_model_revision(
     };
     if let Some(active) = state.tracking_mut().capture() {
         active.writes.push((signal, value.clone()));
-        state.reactive.mirror(signal, value);
+        state.reactive_mut().mirror(signal, value);
     } else {
-        state.reactive.write(signal, value)?;
+        state.reactive_mut().write(signal, value)?;
         state.tracking_mut().defer_flush();
     }
     Ok(true)

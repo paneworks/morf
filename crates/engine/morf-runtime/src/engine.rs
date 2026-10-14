@@ -25,7 +25,7 @@ pub use scene::{scoped_id, validate_scope_part};
 
 pub struct Engine {
     /// The graph, the signal mirror, the declared effects and the flush.
-    pub reactive: crate::reactive::Reactive,
+    reactive: crate::reactive::Reactive,
     /// The handlers on the stack, the effect being captured, and the signals
     /// standing for node properties.
     tracking: crate::tracking::Tracking,

@@ -199,7 +199,7 @@ pub(crate) fn install_host_service_api<'gc>(
     {
         let mut state = state.borrow_mut();
         let revision = state
-            .reactive
+            .reactive_mut()
             .signal("screens.revision", IpcValue::Integer(0))
             .expect("the graph is not running at install");
         state.session_mut().screens_revision = Some((revision, 0));
@@ -232,7 +232,7 @@ pub(crate) fn install_host_service_api<'gc>(
     {
         let mut state = state.borrow_mut();
         let signal = state
-            .reactive
+            .reactive_mut()
             .signal("primary", IpcValue::Boolean(true))
             .expect("the graph is not running at install");
         state.session_mut().primary = Some((signal, true));

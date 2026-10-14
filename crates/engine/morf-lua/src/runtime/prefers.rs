@@ -11,10 +11,10 @@ use crate::{
 
 /// Writes one signal from the host side; the caller flushes.
 fn write_signal(state: &mut ReactiveState, id: SignalId, value: IpcValue) -> Result<(), String> {
-    if state.reactive.value(id) == Some(&value) {
+    if state.reactive().value(id) == Some(&value) {
         return Ok(());
     }
-    state.reactive.write(id, value)
+    state.reactive_mut().write(id, value)
 }
 
 impl Runtime {

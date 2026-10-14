@@ -165,7 +165,7 @@ pub(crate) fn install_toplevels_api<'gc>(
     {
         let mut state = state.borrow_mut();
         let revision = state
-            .reactive
+            .reactive_mut()
             .signal("toplevels.revision", IpcValue::Integer(0))
             .expect("the graph is not running at install");
         state.toplevels = Some(ToplevelHost {

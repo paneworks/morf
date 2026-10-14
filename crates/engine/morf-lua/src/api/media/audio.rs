@@ -132,7 +132,7 @@ fn track(state: &mut ReactiveState, id: SignalId) -> Option<IpcValue> {
     if let Some(active) = state.tracking_mut().capture() {
         active.reads.insert(id);
     }
-    state.reactive.value(id).cloned()
+    state.reactive().value(id).cloned()
 }
 
 fn host(state: &mut ReactiveState) -> &mut AudioHost {
@@ -180,11 +180,11 @@ pub(crate) fn install_audio_api<'gc>(
         let mut state = state.borrow_mut();
         const RUNNING: &str = "the graph is not running at install";
         let available = state
-            .reactive
+            .reactive_mut()
             .signal("audio.available", IpcValue::Boolean(false))
             .expect(RUNNING);
         let revision = state
-            .reactive
+            .reactive_mut()
             .signal("audio.revision", IpcValue::Integer(0))
             .expect(RUNNING);
         state.audio = Some(AudioHost {
