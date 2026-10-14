@@ -40,24 +40,12 @@
           };
         };
 
-        nvidiaVersion = builtins.getEnv "NVIDIA_VERSION";
-        hasNvidia = nvidiaVersion != "";
+        # Mesa wrappers only: evaluation stays pure. NVIDIA hosts run
+        # nixGL's own nixGLNvidia/nixVulkanNvidia (they need --impure).
+        nixglPkgs = import "${nixgl}/default.nix" { inherit pkgs; };
 
-        nixglPkgs = import "${nixgl}/default.nix" ({
-          inherit pkgs;
-        } // pkgs.lib.optionalAttrs hasNvidia {
-          inherit nvidiaVersion;
-          nvidiaHash = null;
-        });
-
-        nixGLTarget =
-          if hasNvidia
-          then "${nixglPkgs.nixGLNvidia}/bin/nixGLNvidia-${nvidiaVersion}"
-          else "${nixglPkgs.nixGLIntel}/bin/nixGLIntel";
-        nixVulkanTarget =
-          if hasNvidia
-          then "${nixglPkgs.nixVulkanNvidia}/bin/nixVulkanNvidia-${nvidiaVersion}"
-          else "${nixglPkgs.nixVulkanIntel}/bin/nixVulkanIntel";
+        nixGLTarget = "${nixglPkgs.nixGLIntel}/bin/nixGLIntel";
+        nixVulkanTarget = "${nixglPkgs.nixVulkanIntel}/bin/nixVulkanIntel";
 
         nixGLAlias = pkgs.runCommand "nixGL" { } ''
           mkdir -p $out/bin
@@ -177,7 +165,15 @@
           cargoBuildFlags = [ "--package" "morf-cli" ];
           nativeBuildInputs = with pkgs; [ pkg-config makeWrapper ];
           buildInputs = with pkgs; [ wayland libxkbcommon ];
-          doCheck = false;
+          # The crates whose tests need no GPU, display, fonts or PAM stack;
+          # the rest run in CI and the sandbox.
+          doCheck = true;
+          cargoTestFlags = [
+            "--package" "morf-value"
+            "--package" "morf-scene"
+            "--package" "morf-layout"
+            "--package" "morf-shader"
+          ];
           postInstall = ''
             mkdir -p $library/share/morf/library $out/share/morf
             cp -r library/lib library/README.md library/luarc.template.json $library/share/morf/library/
@@ -269,9 +265,6 @@
             nixVulkanAlias
             nixglPkgs.nixGLIntel
             nixglPkgs.nixVulkanIntel
-          ] ++ pkgs.lib.optionals hasNvidia [
-            nixglPkgs.nixGLNvidia
-            nixglPkgs.nixVulkanNvidia
           ] ++ guiLibs;
 
           # A musl toolchain for the static build, handed over as a path rather than a package.
