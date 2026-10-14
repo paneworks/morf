@@ -76,6 +76,7 @@ impl Process {
     }
 
     fn spawn_command(command: &mut Command) -> io::Result<Self> {
+        crate::default_signals(command);
         let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

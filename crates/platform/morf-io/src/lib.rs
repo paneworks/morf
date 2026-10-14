@@ -2,6 +2,7 @@
 
 pub mod archive;
 mod broadcast;
+mod child_signals;
 pub mod codec;
 mod dbus_decode;
 mod dbus_encode;
@@ -30,6 +31,7 @@ mod watch_hub;
 mod watch_sysfs;
 
 pub use broadcast::*;
+pub use child_signals::default_signals;
 pub use dbus_decode::{DbusSignal, DbusSignalEvent};
 pub use dbus_handlers::*;
 pub use dbus_serve::{DbusCall, DbusService, NameOutcome};

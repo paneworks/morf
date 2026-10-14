@@ -110,6 +110,7 @@ impl Pty {
                 .stdin(Stdio::from(slave.try_clone()?))
                 .stdout(Stdio::from(slave.try_clone()?))
                 .stderr(Stdio::from(slave));
+            morf_io::default_signals(&mut command);
             // SAFETY: only async-signal-safe calls, between fork and exec.
             unsafe {
                 command.pre_exec(|| {
