@@ -281,7 +281,7 @@ pub(crate) fn assign_engine_relation<'gc>(
     match property {
         "shortcuts" => {
             let shortcuts = crate::runtime::shortcut::read_table(ctx, value)?;
-            state.shortcuts.set(node, shortcuts);
+            state.shortcuts_mut().set(node, shortcuts);
         }
         "stretch" => {
             if matches!(value, LuaValue::Function(_)) {

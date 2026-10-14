@@ -53,7 +53,7 @@ pub struct Engine {
     /// Which node of each surface has focus.
     pub focus: crate::focus::FocusState,
     /// Each node's `shortcuts`, a sequence half typed, a modifier's tap.
-    pub shortcuts: crate::shortcuts::Shortcuts,
+    shortcuts:crate::shortcuts::Shortcuts,
     /// Presses under way that may become gestures.
     pub gestures: crate::gestures::Gestures,
     /// Each node's handler for each event, and the `contains_pointer` watches.
