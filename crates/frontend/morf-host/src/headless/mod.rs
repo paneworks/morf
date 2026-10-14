@@ -3,6 +3,7 @@
 pub mod env;
 pub mod headless;
 pub mod input;
+pub mod lock;
 pub mod render;
 pub mod surfaces;
 

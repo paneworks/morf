@@ -130,7 +130,7 @@ pub fn render_screen(headless: &mut Headless, scale: u32) -> Result<Picture, Str
     let mut order = (0..headless.surfaces.len())
         .filter(|index| {
             let surface = &headless.surfaces[*index];
-            surface.visible && matches!(surface.kind, "primary" | "layer")
+            surface.visible && matches!(surface.kind, "primary" | "layer" | "lock")
         })
         .collect::<Vec<_>>();
     // Bottom layer first, as a compositor stacks them: a background layer

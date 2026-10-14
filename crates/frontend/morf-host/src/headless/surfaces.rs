@@ -30,6 +30,13 @@ impl Headless {
             .into_iter()
             .map(|surface| (surface.role, surface))
             .collect::<HashMap<_, _>>();
+        // A held lock has only its lock surfaces, as a lock client does.
+        if let Some(lock) = &self.lock {
+            let mut surfaces = lock.surfaces(&self.runtime);
+            label(&mut surfaces);
+            self.surfaces = surfaces;
+            return;
+        }
         let mut surfaces = Vec::new();
         match primary_surface_root(&self.runtime) {
             Ok(root) => {
@@ -185,24 +192,16 @@ impl Headless {
                 }
             }
         }
-        // Labels, made unique: two layers may share a namespace.
-        let plain = surfaces
-            .iter()
-            .map(Surface::plain_label)
-            .collect::<Vec<_>>();
-        for (index, surface) in surfaces.iter_mut().enumerate() {
-            let shared = plain.iter().filter(|label| **label == plain[index]).count() > 1;
-            surface.label = match (shared, surface.id) {
-                (true, Some(id)) => format!("{}#{id}", plain[index]),
-                _ => plain[index].clone(),
-            };
-        }
+        label(&mut surfaces);
         self.surfaces = surfaces;
     }
 
     /// A surface's last layout: the host's for a window it has open, the one
     /// laid out here for one it has not.
     pub fn layout_of<'a>(&'a self, surface: &'a Surface) -> Option<&'a Layout> {
+        if surface.open && surface.kind == "lock" {
+            return self.lock_layout(surface.role);
+        }
         if surface.open
             && let Some(host) = &self.host
         {
@@ -336,6 +335,21 @@ impl Headless {
                         .join(", ")
                 )
             })
+    }
+}
+
+/// Labels, made unique: two layers may share a namespace.
+fn label(surfaces: &mut [Surface]) {
+    let plain = surfaces
+        .iter()
+        .map(Surface::plain_label)
+        .collect::<Vec<_>>();
+    for (index, surface) in surfaces.iter_mut().enumerate() {
+        let shared = plain.iter().filter(|label| **label == plain[index]).count() > 1;
+        surface.label = match (shared, surface.id) {
+            (true, Some(id)) => format!("{}#{id}", plain[index]),
+            _ => plain[index].clone(),
+        };
     }
 }
 

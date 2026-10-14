@@ -18,6 +18,7 @@ use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
 
+use crate::headless::lock::HeadlessLock;
 use crate::host::surfaces::PointerInput;
 use crate::host::turn::{Host, StartOptions, Turn};
 use crate::process::supervisor::LoadPolicy;
@@ -81,7 +82,7 @@ pub struct LoadFailure {
 /// One surface the configuration asked for.
 pub struct Surface {
     pub role: WindowId,
-    /// `primary`, `popup`, `floating` or `layer`.
+    /// `primary`, `popup`, `floating`, `layer` or `lock`.
     pub kind: &'static str,
     /// Its namespace, or a floating window's title.
     pub name: String,
@@ -148,6 +149,8 @@ pub struct Headless {
     /// The host and its headless backend; none with no screen (the outputless
     /// runtime) or a configuration that built no surface.
     pub host: Option<Host>,
+    /// The session lock a lock configuration holds, in place of a host.
+    pub lock: Option<HeadlessLock>,
     /// Lays out what the host has not opened (a hidden panel), so its
     /// problems are found before it is shown; with a host, the host's.
     pub(crate) text: Option<TextSystem>,
@@ -244,7 +247,21 @@ impl Headless {
         // The shell hands a configuration the time of day once a second.
         let _ = runtime.update_clock(crate::paint::clock_text());
         let mut problems = Vec::new();
+        // A lock built per output is granted at once, as a compositor would.
+        let lock = match own.is_some() && HeadlessLock::wanted(&runtime) {
+            true => match HeadlessLock::start(&mut runtime, screens.clone()) {
+                Ok(lock) => Some(lock),
+                Err(error) => {
+                    return Err(LoadFailure {
+                        error,
+                        logs: runtime.take_logs(),
+                    });
+                }
+            },
+            false => None,
+        };
         let host = match &own {
+            _ if lock.is_some() => None,
             Some(own) if crate::host::surfaces::primary_surface_root(&runtime).is_ok() => {
                 // The output this runtime draws to, first: where its windows go.
                 let mut ordered = vec![own.clone()];
@@ -285,6 +302,7 @@ impl Headless {
         let mut headless = Self {
             runtime,
             host,
+            lock,
             text,
             screen: options.size,
             surfaces: Vec::new(),
@@ -334,6 +352,12 @@ impl Headless {
                     if host.settled() {
                         break;
                     }
+                }
+            }
+            None if self.lock.is_some() => {
+                let text = self.text.get_or_insert_with(TextSystem::new);
+                if let Some(lock) = self.lock.as_mut() {
+                    lock.frame(&mut self.runtime, text, delta, &mut self.problems);
                 }
             }
             // No surface to drive frames: the services, the timers and the
@@ -423,15 +447,18 @@ impl Headless {
         self.host
             .as_ref()
             .and_then(|host| host.backend.as_headless())
+            .or(self.lock.as_ref().map(|lock| &lock.backend))
             .map_or(&self.idle_seat, HeadlessBackend::seat)
     }
 
     /// Where the pointer, the buttons and the fingers are, as the host's
     /// pointer path keeps them.
     pub fn input(&self) -> &PointerInput {
-        self.host
-            .as_ref()
-            .map_or(&self.idle_input, |host| &host.state.input)
+        match (&self.host, &self.lock) {
+            (Some(host), _) => &host.state.input,
+            (None, Some(lock)) => &lock.session.input,
+            (None, None) => &self.idle_input,
+        }
     }
 
     /// The text system layouts are measured with.
