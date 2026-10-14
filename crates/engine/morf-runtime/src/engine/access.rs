@@ -54,4 +54,6 @@ subsystems! {
     revisions, revisions_mut: crate::revisions::Revisions;
     /// Every text input's editing, and which has the keyboard.
     editing, editing_mut: crate::editing::Editing;
+    /// Which node of each surface has focus.
+    focus, focus_mut: crate::focus::FocusState;
 }

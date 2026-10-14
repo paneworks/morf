@@ -224,14 +224,14 @@ fn open<'gc>(
     s.scene
         .reparent(content, Some(wrapper))
         .map_err(|error| error.to_string())?;
-    let restore = s.focus.owner(root).map(|node| {
+    let restore = s.focus().owner(root).map(|node| {
         (
             node,
             s.scene.bool_value(node, "visual_focus").unwrap_or(false),
         )
     });
     if flag("focus", true) {
-        s.focus
+        s.focus_mut()
             .request(FocusRequest::Into(content, restore.is_some_and(|(_, v)| v)));
     }
     s.overlays.stack.push(Overlay {
@@ -310,14 +310,14 @@ fn track<'gc>(
         "id",
         SceneValue::String("morf-overlay-catcher".to_owned()),
     );
-    let restore = s.focus.owner(root).map(|node| {
+    let restore = s.focus().owner(root).map(|node| {
         (
             node,
             s.scene.bool_value(node, "visual_focus").unwrap_or(false),
         )
     });
     if flag("focus", false) {
-        s.focus
+        s.focus_mut()
             .request(FocusRequest::Into(content, restore.is_some_and(|(_, v)| v)));
     }
     s.overlays.stack.push(Overlay {

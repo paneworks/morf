@@ -38,7 +38,7 @@ pub(crate) use morf_runtime::focus::FocusRequest;
 
 /// Queues what a write to a node's `focus` asks.
 pub(crate) fn request_by_property(state: &mut ReactiveState, node: NodeHandle, on: bool) {
-    state.focus.request_by_property(node, on);
+    state.focus_mut().request_by_property(node, on);
 }
 
 fn chain(state: &ReactiveState, root: NodeHandle) -> Vec<NodeHandle> {
@@ -62,7 +62,7 @@ impl Runtime {
     pub fn focus_owner(&self, root: NodeHandle) -> Option<NodeHandle> {
         let state = self.reactive.borrow();
         state
-            .focus
+            .focus()
             .owner(root)
             .filter(|node| state.scene.contains(*node))
     }
@@ -80,7 +80,7 @@ impl Runtime {
         morf_runtime::focus::next_in(
             &state.scene,
             &chain,
-            state.focus.memory(),
+            state.focus().memory(),
             current,
             backwards,
         )
@@ -106,8 +106,8 @@ impl Runtime {
     ) -> bool {
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            state.focus.note_root(root);
-            let old = state.focus.owner(root);
+            state.focus_mut().note_root(root);
+            let old = state.focus().owner(root);
             let old_visual =
                 old.is_some_and(|o| state.scene.bool_value(o, "visual_focus").unwrap_or(false));
             let visual = match reason {
@@ -115,7 +115,7 @@ impl Runtime {
                 FocusReason::Click | FocusReason::Program => false,
                 FocusReason::Restore => old_visual,
             };
-            let active = state.focus.is_active(root);
+            let active = state.focus().is_active(root);
             if let Some(old) = old.filter(|o| Some(*o) != node) {
                 write(&mut state, old, "focused", false);
                 write(&mut state, old, "visual_focus", false);
@@ -135,7 +135,7 @@ impl Runtime {
                         scopes.push(s);
                         scope = state.scene.focus_scope_of(s);
                     }
-                    state.focus.give(root, node, scopes);
+                    state.focus_mut().give(root, node, scopes);
                     write(&mut state, node, "focused", active);
                     write(&mut state, node, "visual_focus", active && visual);
                     if old != Some(node)
@@ -148,7 +148,7 @@ impl Runtime {
                         );
                     }
                 }
-                None => state.focus.clear(root),
+                None => state.focus_mut().clear(root),
             }
             old != node || old_visual != visual
         };
@@ -165,8 +165,8 @@ impl Runtime {
     pub fn set_focus_active(&mut self, root: NodeHandle, active: bool) -> bool {
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            let was = state.focus.set_active(root, active);
-            match state.focus.owner(root) {
+            let was = state.focus_mut().set_active(root, active);
+            match state.focus().owner(root) {
                 Some(owner) if was != active => {
                     write(&mut state, owner, "focused", active);
                     if !active {
@@ -188,12 +188,12 @@ impl Runtime {
         let mut moves: Vec<(NodeHandle, Option<NodeHandle>, FocusReason)> = Vec::new();
         let requests = {
             let state = self.reactive.borrow();
-            for (root, owner) in state.focus.owners() {
+            for (root, owner) in state.focus().owners() {
                 if state.scene.can_hold_focus(owner) && state.scene.root_of(owner) == Some(root) {
                     continue;
                 }
                 let next = state
-                    .focus
+                    .focus()
                     .scopes(root)
                     .iter()
                     .copied()
@@ -201,7 +201,7 @@ impl Runtime {
                     .find_map(|scope| {
                         let found = chain(&state, scope);
                         state
-                            .focus
+                            .focus()
                             .memory()
                             .get(&scope)
                             .copied()
@@ -214,15 +214,15 @@ impl Runtime {
             // keyboard: it has focus too.
             if let Some(input) = state.editing().focused()
                 && let Some(root) = state.scene.root_of(input)
-                && state.focus.owner(root) != Some(input)
+                && state.focus().owner(root) != Some(input)
                 && !moves.iter().any(|(r, _, _)| *r == root)
             {
                 moves.push((root, Some(input), FocusReason::Program));
             }
-            state.focus.has_requests()
+            state.focus().has_requests()
         };
         let requests = if requests {
-            self.reactive.borrow_mut().focus.take_requests()
+            self.reactive.borrow_mut().focus_mut().take_requests()
         } else {
             Vec::new()
         };
@@ -261,7 +261,7 @@ impl Runtime {
                     // Already inside it -- what opened it focused a part of
                     // it first -- there is nowhere to move focus into.
                     if state
-                        .focus
+                        .focus()
                         .owner(root)
                         .is_some_and(|owner| within(&state, node, owner))
                     {
@@ -291,17 +291,17 @@ impl Runtime {
                     let Some(root) = state.scene.root_of(node) else {
                         return false;
                     };
-                    if state.focus.owner(root) != Some(node) {
+                    if state.focus().owner(root) != Some(node) {
                         return false;
                     }
                     (root, None, FocusReason::Program)
                 }
                 FocusRequest::Step(backwards) => {
-                    let Some(root) = state.focus.last_root().filter(|r| state.scene.contains(*r))
+                    let Some(root) = state.focus().last_root().filter(|r| state.scene.contains(*r))
                     else {
                         return false;
                     };
-                    let current = state.focus.owner(root);
+                    let current = state.focus().owner(root);
                     drop(state);
                     let next = self.next_focus_in(root, current, backwards);
                     (root, next, FocusReason::Keyboard)
@@ -327,7 +327,7 @@ pub(crate) fn install_focus_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (node, keyboard): (UserRef<NodeToken>, Option<bool>) = stack.consume(ctx)?;
             let request = FocusRequest::Set(node.handle, keyboard.unwrap_or(false));
-            set.borrow_mut().focus.request(request);
+            set.borrow_mut().focus_mut().request(request);
             Ok(CallbackReturn::Return)
         }),
     );
@@ -339,7 +339,7 @@ pub(crate) fn install_focus_api<'gc>(
             let node: UserRef<NodeToken> = stack.consume(ctx)?;
             clear
                 .borrow_mut()
-                .focus
+                .focus_mut()
                 .request(FocusRequest::Clear(node.handle));
             Ok(CallbackReturn::Return)
         }),
@@ -351,7 +351,7 @@ pub(crate) fn install_focus_api<'gc>(
             name,
             Callback::from_fn(&ctx, move |_, _, mut stack| {
                 step.borrow_mut()
-                    .focus
+                    .focus_mut()
                     .request(FocusRequest::Step(backwards));
                 stack.clear();
                 Ok(CallbackReturn::Return)
@@ -366,9 +366,9 @@ pub(crate) fn install_focus_api<'gc>(
             let owner = {
                 let state = get.borrow();
                 state
-                    .focus
+                    .focus()
                     .last_root()
-                    .and_then(|root| state.focus.owner(root))
+                    .and_then(|root| state.focus().owner(root))
                     .filter(|node| state.scene.contains(*node))
             };
             stack.clear();

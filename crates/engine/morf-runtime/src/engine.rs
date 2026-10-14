@@ -51,7 +51,7 @@ pub struct Engine {
     /// Every text input's editing, and which has the keyboard.
     editing:crate::editing::Editing,
     /// Which node of each surface has focus.
-    pub focus: crate::focus::FocusState,
+    focus:crate::focus::FocusState,
     /// Each node's `shortcuts`, a sequence half typed, a modifier's tap.
     shortcuts:crate::shortcuts::Shortcuts,
     /// Presses under way that may become gestures.
