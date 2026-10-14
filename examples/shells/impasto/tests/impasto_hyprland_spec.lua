@@ -24,6 +24,13 @@ end
 
 local function sent(text) return #fake.sent(text) > 0 end
 
+-- Lets the page take in what the fake last answered before a click: a reply
+-- served inside `until_` is read on the next turn, and may move the rows.
+local function steady()
+  fake.serve()
+  test.settle(500)
+end
+
 local function load(env)
   -- The scratch state folder outlives a test within this spec too.
   for _, name in ipairs { "keys.tsv", "keys.lua", "keys.conf" } do
@@ -128,6 +135,7 @@ test.describe("impasto under a fake Hyprland", function()
     test.eq(test.ipc("settings", "keys", "shell"), "keys")
     test.settle(2000)
     until_(function() return test.find({ text = "SUPER + SPACE", visible = true }) ~= nil end, "the launcher's keys are not shown")
+    steady()
     test.click({ text = "SUPER + SPACE", visible = true })
     test.settle(500)
     test.truthy(test.find({ text = "Press the keys…", visible = true }), "the editor did not open")
@@ -152,6 +160,7 @@ test.describe("impasto under a fake Hyprland", function()
     test.ipc("settings", "keys", "shell")
     test.settle(2000)
     until_(function() return test.find({ text = "SUPER + SPACE", visible = true }) ~= nil end, "no launcher row")
+    steady()
     test.click({ text = "SUPER + SPACE", visible = true })
     test.settle(300)
     test.key("a", "super", { surface = test.find({ text = "SUPER + SPACE", visible = true }).surface })
@@ -189,6 +198,7 @@ test.describe("impasto under a fake hyprlang Hyprland", function()
     test.settle(2000)
     local function rebind(shown, key)
       until_(function() return test.find({ text = shown, visible = true }) ~= nil end, "no row on " .. shown)
+      steady()
       local surface = test.find({ text = shown, visible = true }).surface
       test.click({ text = shown, visible = true })
       test.settle(300)
