@@ -128,7 +128,7 @@ pub(crate) fn install_module_api<'gc>(
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(parent) = config.parent {
                     let parent = state
-                        .windows
+                        .windows()
                         .window_surfaces
                         .get(&parent)
                         .ok_or_else(|| HostError("popup parent is stale".into()))?;
@@ -159,7 +159,7 @@ pub(crate) fn install_module_api<'gc>(
                         .scene
                         .element(anchor.node)
                         .map_err(|error| HostError(error.to_string()))?;
-                    state.windows.popup_node_anchors.insert(id, anchor);
+                    state.windows_mut().popup_node_anchors.insert(id, anchor);
                 }
                 crate::api::window::events::register_window_size(&mut state, id);
                 crate::api::window::events::window_handlers_from_options(
@@ -190,7 +190,7 @@ pub(crate) fn install_module_api<'gc>(
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(parent) = config.parent {
                     let parent = state
-                        .windows
+                        .windows()
                         .window_surfaces
                         .get(&parent)
                         .ok_or_else(|| HostError("floating parent is stale".into()))?;

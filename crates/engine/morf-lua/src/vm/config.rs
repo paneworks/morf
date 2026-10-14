@@ -127,15 +127,15 @@ impl Runtime {
 
     /// Returns the native layer-surface settings assigned by the configuration.
     pub fn layer_surface_config(&self) -> LayerSurfaceConfig {
-        self.reactive.borrow().windows.layer_surface.clone()
+        self.reactive.borrow().windows().layer_surface.clone()
     }
 
     pub fn window_surface_configs(&self) -> Vec<WindowSurfaceConfig> {
-        self.reactive.borrow().windows.configs()
+        self.reactive.borrow().windows().configs()
     }
 
     pub fn take_window_surface_change(&mut self) -> bool {
-        self.reactive.borrow_mut().windows.take_change()
+        self.reactive.borrow_mut().windows_mut().take_change()
     }
 
     /// Takes a pending change to the shell's own layer-surface geometry.
@@ -144,15 +144,18 @@ impl Runtime {
     /// be re-issued on a mapped surface, so an assignment to `morf.surface`
     /// reaches the compositor without a reconnect.
     pub fn take_layer_surface_change(&mut self) -> bool {
-        self.reactive.borrow_mut().windows.take_layer_change()
+        self.reactive.borrow_mut().windows_mut().take_layer_change()
     }
 
     pub fn take_window_surface_actions(&mut self) -> Vec<WindowSurfaceAction> {
-        self.reactive.borrow_mut().windows.take_actions()
+        self.reactive.borrow_mut().windows_mut().take_actions()
     }
 
     pub fn set_window_surface_visible(&mut self, id: u64, visible: bool) -> bool {
-        self.reactive.borrow_mut().windows.set_visible(id, visible)
+        self.reactive
+            .borrow_mut()
+            .windows_mut()
+            .set_visible(id, visible)
     }
 
     /// How big one of morf's pixels is: what the window system converts

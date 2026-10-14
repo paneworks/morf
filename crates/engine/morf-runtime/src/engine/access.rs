@@ -70,4 +70,6 @@ subsystems! {
     animation, animation_mut: crate::animation::Animation;
     /// What handlers asked of the platform, queued for the host.
     requests, requests_mut: crate::requests::Requests;
+    /// The windows the configuration declared, as the host reads them.
+    windows, windows_mut: crate::windows::Declarations;
 }

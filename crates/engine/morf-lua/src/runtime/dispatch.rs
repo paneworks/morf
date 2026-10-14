@@ -23,7 +23,10 @@ impl Runtime {
 
     /// Drains parent transitions queued by Lua handlers.
     pub fn take_parent_transitions(&mut self) -> Vec<ParentTransitionRequest> {
-        self.reactive.borrow_mut().windows.take_parent_transitions()
+        self.reactive
+            .borrow_mut()
+            .windows_mut()
+            .take_parent_transitions()
     }
 
     /// Returns the number of Lua effect evaluations performed by this runtime.

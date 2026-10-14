@@ -204,7 +204,7 @@ pub(crate) fn apply_state(
                     .map_err(|error| error.to_string())?;
             } else {
                 state
-                    .windows
+                    .windows_mut()
                     .parent_transitions
                     .push(ParentTransitionRequest {
                         node,

@@ -81,7 +81,7 @@ pub struct Engine {
     /// What handlers asked of the platform, queued for the host.
     requests: crate::requests::Requests,
     /// The windows the configuration declared, as the host reads them.
-    pub windows: crate::windows::Declarations,
+    windows: crate::windows::Declarations,
 }
 
 impl Default for Engine {
