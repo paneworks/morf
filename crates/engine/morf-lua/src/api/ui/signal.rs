@@ -48,7 +48,7 @@ pub(crate) fn install_signal_api<'gc>(
                     return Ok(CallbackReturn::Return);
                 }
                 state.reactive.write(signal.id, value).map_err(HostError)?;
-                state.shared.note_write(signal.id);
+                state.shared_mut().note_write(signal.id);
                 // Inside a handler the write is enough: the graph is flushed
                 // once, when the handler returns, however many writes it made.
                 if state.tracking.in_handler() {
@@ -253,14 +253,7 @@ pub(crate) fn install_signal_api<'gc>(
             let (name, initial): (String, LuaValue) = stack.consume(ctx)?;
             let initial = IpcValue::from_lua_deep(ctx, initial).map_err(HostError)?;
             let id = crate::runtime::helpers::validate_scope_part(&name)
-                .and_then(|()| {
-                    let mut state = state.borrow_mut();
-                    let state = &mut *state;
-                    state
-                        .engine
-                        .shared
-                        .register(&mut state.engine.reactive, name, initial)
-                })
+                .and_then(|()| state.borrow_mut().shared_signal(name, initial))
                 .map_err(HostError)?;
             let userdata = UserData::new_static(&ctx, SignalToken { id });
             userdata.set_metatable(ctx, Some(ctx.fetch(&signal_metatable)));

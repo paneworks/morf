@@ -182,7 +182,7 @@ pub(crate) fn evaluate_effect(
                 )
                 .map_err(|error| error.to_string())?;
             state.reactive.mirror_flush_write(signal, value);
-            state.shared.note_write(signal);
+            state.shared_mut().note_write(signal);
         }
     }
     state_result?;

@@ -34,4 +34,6 @@ subsystems! {
     logs, logs_mut: crate::log::Log;
     /// `morf.clock` and its coarser grains.
     clocks, clocks_mut: crate::wake::Clocks;
+    /// `morf.shared` values: this copy's signals, and what to publish.
+    shared, shared_mut: crate::shared::SharedValues;
 }

@@ -35,7 +35,7 @@ pub struct Engine {
     /// signal that binding depends on.
     model_revisions: crate::models::ModelRevisions,
     /// `morf.shared` values: this copy's signals for them, and what to publish.
-    pub shared: crate::shared::SharedValues,
+    shared: crate::shared::SharedValues,
     /// A reload, file watching, quitting and unlocking, as asked, and the
     /// values kept across a reload.
     pub lifecycle: crate::requests::Lifecycle,
