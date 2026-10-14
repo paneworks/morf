@@ -12,4 +12,3 @@ for _, pattern in ipairs {"123456", "1357", "1232", "123", "0123", "1236547891"}
 end
 assert(not validate({1, 2, 3, 4.5}))
 assert(not validate({1, 2, 3, "6"}))
-print("Pattern UI validation passed")
