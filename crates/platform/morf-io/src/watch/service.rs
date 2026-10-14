@@ -51,6 +51,9 @@ impl Service {
         let mut buffer = [MaybeUninit::<u8>::uninit(); 16 * 1024];
         let mut raw = Vec::new();
         loop {
+            if self.stop.load(Ordering::Acquire) {
+                return;
+            }
             // The attributes as they are now: a watch added or dropped rings
             // `wake`, and the next turn polls the new set.
             let attributes = lock(&self.attributes).clone();
@@ -74,12 +77,14 @@ impl Service {
                 .map(|((id, fd), _)| (*id, Arc::clone(fd)))
                 .collect::<Vec<_>>();
             drop(fds);
-            if self.stop.load(Ordering::Acquire) {
-                return;
-            }
+            // Drained before `stop` is read: a shutdown whose ring this read
+            // swallows has set `stop` already, so it is seen here.
             if woken {
                 let mut count = [0u8; 8];
                 let _ = rustix::io::read(&self.wake, &mut count);
+            }
+            if self.stop.load(Ordering::Acquire) {
+                return;
             }
             if !changed.is_empty() {
                 let mut inner = lock(&self.inner);
