@@ -23,6 +23,9 @@ impl WgpuBackend {
         // says so, not while a frame is being drawn.
         let textures = self.build_shader_textures(shader.textures)?;
         let data = self.build_shader_data_layout(shader.data);
+        // What naga or the driver rejects is caught here and returned, so the
+        // configuration hears why instead of a log line and a dead pipeline.
+        let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let pipeline = if shader.effect {
             build_glyph_pipeline(
                 &self.device,
@@ -55,6 +58,9 @@ impl WgpuBackend {
                 GpuError("the field shader has no hook to splice a shader into".to_owned())
             })?
         };
+        if let Some(error) = super::backend_init::ready(scope.pop()) {
+            return Err(GpuError(format!("the GPU rejected the shader: {error}")));
+        }
         let registry = if shader.effect {
             &mut self.effect_shaders
         } else {

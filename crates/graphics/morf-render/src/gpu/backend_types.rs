@@ -235,4 +235,6 @@ pub struct WgpuBackend {
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) info: GpuInfo,
+    /// Raised by the driver when the device is lost; see `device_lost`.
+    pub(crate) lost: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }

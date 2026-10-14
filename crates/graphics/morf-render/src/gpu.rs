@@ -23,6 +23,10 @@ pub(crate) fn blend_constants(blend: BlendSpace) -> &'static [(&'static str, f64
     }
 }
 
+#[cfg(test)]
+#[macro_use]
+mod test_gpu;
+
 mod backdrops;
 mod backend_init;
 mod backend_render;
@@ -96,6 +100,8 @@ mod shader_instance_tests;
 mod shader_language_tests;
 #[cfg(test)]
 mod shader_mode_tests;
+#[cfg(test)]
+mod shader_pipeline_tests;
 #[cfg(test)]
 mod shader_scene_tests;
 #[cfg(test)]

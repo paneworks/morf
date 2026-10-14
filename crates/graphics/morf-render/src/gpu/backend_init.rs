@@ -9,6 +9,7 @@ mod device;
 mod settings;
 
 pub use device::opened_device_count;
+pub(crate) use device::ready;
 use device::{SharedDevice, device_for, shared_instance};
 
 /// How many buffers a surface presents through at most
@@ -106,6 +107,7 @@ impl WgpuBackend {
             queue,
             dmabuf,
             lcd_supported,
+            lost,
         } = device_for(&instance, surface.as_ref()).await?;
         let device_ready = started.elapsed();
         let adapter_info = adapter.get_info();
@@ -345,6 +347,15 @@ impl WgpuBackend {
             dmabuf,
             external_textures: HashMap::new(),
             pending_exports: HashMap::new(),
+            lost,
         })
+    }
+
+    /// Whether the GPU device this backend draws with was lost.
+    ///
+    /// A lost device runs nothing again, so every frame fails from then on;
+    /// a backend made after it opens a fresh device.
+    pub fn device_lost(&self) -> bool {
+        self.lost.load(std::sync::atomic::Ordering::Acquire)
     }
 }

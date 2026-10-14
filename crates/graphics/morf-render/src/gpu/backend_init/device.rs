@@ -105,7 +105,7 @@ pub(super) fn shared_instance() -> wgpu::Instance {
 
 /// A native wgpu future's answer: they are ready when made, and this polls
 /// until it is, without a runtime to wait in.
-fn ready<T>(future: impl std::future::Future<Output = T>) -> T {
+pub(crate) fn ready<T>(future: impl std::future::Future<Output = T>) -> T {
     let mut future = std::pin::pin!(future);
     let mut context = std::task::Context::from_waker(std::task::Waker::noop());
     loop {
@@ -131,6 +131,14 @@ pub(crate) struct SharedDevice {
     pub(super) queue: wgpu::Queue,
     pub(super) dmabuf: Option<crate::gpu::dmabuf::DmabufSupport>,
     pub(super) lcd_supported: bool,
+    /// Set by the driver when the device is lost.
+    pub(super) lost: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl SharedDevice {
+    fn is_lost(&self) -> bool {
+        self.lost.load(std::sync::atomic::Ordering::Acquire)
+    }
 }
 
 /// The devices opened so far, one per adapter.
@@ -171,7 +179,10 @@ pub(super) async fn device_for(
     if !sharing_wanted() {
         return open_device(instance, surface).await;
     }
-    let reusable = |devices: &[SharedDevice]| {
+    // A lost device leaves the list here rather than in its callback, which
+    // runs inside wgpu and must not wait on this lock.
+    let reusable = |devices: &mut Vec<SharedDevice>| {
+        devices.retain(|shared| !shared.is_lost());
         devices
             .iter()
             .find(|shared| {
@@ -184,13 +195,13 @@ pub(super) async fn device_for(
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     };
-    let found = reusable(&lock());
+    let found = reusable(&mut lock());
     if let Some(shared) = found {
         return Ok(shared);
     }
     let opened = open_device(instance, surface).await?;
     let mut devices = lock();
-    if let Some(shared) = reusable(&devices) {
+    if let Some(shared) = reusable(&mut devices) {
         return Ok(shared);
     }
     devices.push(opened.clone());
@@ -279,6 +290,7 @@ async fn open_device(
     device.on_uncaptured_error(std::sync::Arc::new(|error: wgpu::Error| {
         eprintln!("morf: gpu: {error}");
     }));
+    let lost = watch_lost(&device);
     OPENED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     Ok(SharedDevice {
         adapter,
@@ -286,5 +298,51 @@ async fn open_device(
         queue,
         dmabuf,
         lcd_supported,
+        lost,
     })
+}
+
+/// A flag the driver raises when `device` is lost.
+///
+/// A lost device stops being shared, and every backend drawing with it fails
+/// its next frame, so its output comes back up on a freshly opened device
+/// instead of drawing into one that can no longer run anything.
+pub(super) fn watch_lost(device: &wgpu::Device) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+    let lost = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = lost.clone();
+    device.set_device_lost_callback(move |reason, message| {
+        flag.store(true, std::sync::atomic::Ordering::Release);
+        if reason == wgpu::DeviceLostReason::Unknown {
+            eprintln!("morf: gpu: device lost: {message}");
+        }
+    });
+    lost
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_lost_device_is_flagged_and_never_shared_again() {
+        require_gpu!();
+        let instance = shared_instance();
+        let private = ready(open_device(&instance, None)).expect("an adapter was found");
+        private.device.destroy();
+        let _ = private.device.poll(wgpu::PollType::Poll);
+        assert!(private.is_lost(), "the lost callback raised the flag");
+        shared_devices()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(0, private.clone());
+        let shared = ready(device_for(&instance, None)).expect("a device to share");
+        assert!(!shared.is_lost(), "a lost device is not handed out");
+        assert!(
+            !shared_devices()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .iter()
+                .any(SharedDevice::is_lost)
+        );
+    }
 }

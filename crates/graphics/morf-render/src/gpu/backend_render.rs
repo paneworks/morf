@@ -60,6 +60,9 @@ impl RenderBackend for WgpuBackend {
         damage: &[DamageRect],
         scale_120: u32,
     ) -> Result<(), Self::Error> {
+        if self.device_lost() {
+            return Err(GpuError("the GPU device was lost".to_owned()));
+        }
         let mut split = split::RenderSplit::start();
         let FieldBatch {
             indices: field_indices,
