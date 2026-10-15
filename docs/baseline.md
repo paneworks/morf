@@ -62,8 +62,9 @@ Per spec file:
 Taken on `develop`, 2026-10-14, against v0.2.8 (36f881f8).
 
 ```
-cargo test --workspace --no-fail-fast   1611 passed, 0 failed
-Lua specs                               157 files, 1096 passed, 0 failed
+cargo test --workspace --no-fail-fast   1612 passed, 0 failed
+Lua specs                               158 files, 1099 passed, 0 failed
+morf check --strict                     caelestia shell, lock and greet: 0 errors, 0 warnings
 ```
 
 The specs run on a private bus (`dbus-run-session` with
