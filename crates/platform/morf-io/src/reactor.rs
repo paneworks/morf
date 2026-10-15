@@ -330,7 +330,6 @@ impl Reactor {
         };
         command.stdout(output(options.stdout));
         command.stderr(output(options.stderr));
-        crate::default_signals(&mut command);
         let child = command.spawn()?;
         Ok(self.adopt(child, options))
     }

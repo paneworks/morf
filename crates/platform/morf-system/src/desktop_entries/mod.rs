@@ -339,7 +339,6 @@ fn launch(command: &[String], working_directory: &str) -> io::Result<()> {
     if !working_directory.is_empty() {
         process.current_dir(working_directory);
     }
-    morf_io::default_signals(&mut process);
     process.spawn().map(|_| ())
 }
 

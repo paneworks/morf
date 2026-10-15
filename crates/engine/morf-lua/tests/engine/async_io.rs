@@ -152,6 +152,9 @@ fn run_times_out_and_kill_ends_a_child() {
 
 #[test]
 fn kill_signals_a_process_by_its_id() {
+    // As `morf` does at start: a suite run from a background job would
+    // otherwise hand its ignored SIGINT to the sleeper.
+    morf_io::restore_ignored_signals();
     let mut runtime = start(
         r#"
         ended = nil
