@@ -54,6 +54,7 @@ OUT=$WORK/out/$KIND-$NAME; rm -rf "$OUT"; mkdir -p "$OUT"
 H=$WORK/home-$KIND; chmod -R u+w "$H" 2>/dev/null || true; rm -rf "$H"; mkdir -p "$H"
 UPHOME=$UPSTREAM/home
 WTYPE=${WTYPE:-$(command -v wtype || true)}
+NOTIFY_SEND=${NOTIFY_SEND:-$(command -v notify-send || echo /usr/bin/notify-send)}
 CAELESTIA=${CAELESTIA:-$WORK/caelestia}
 CAELESTIA_PKG=${CAELESTIA_PKG:-$WORK/caelestia-pkg}
 
@@ -318,7 +319,7 @@ if [ "$KIND" = caelestia ]; then
     for d in \$open_ones; do qsipc drawers toggle \$d >> \$OUT/hc.log; done
   }
   ipc() { asked ipc; qsipc "\$@" >> \$OUT/hc.log; }
-  notify() { asked notify; timeout 10 /usr/bin/notify-send "\$@" >> \$OUT/hc.log 2>&1; }
+  notify() { asked notify; timeout 10 "$NOTIFY_SEND" "\$@" >> \$OUT/hc.log 2>&1; }
 elif [ "$KIND" = upstream ]; then
   quickshell -p \$HOME/.config/quickshell > \$OUT/shell.log 2>&1 &
   S=\$!
@@ -331,7 +332,7 @@ else
   open() { asked open; timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
   close() { asked close; timeout 10 "$REPO/target/release/morf" ipc call close >> \$OUT/hc.log 2>&1; }
   ipc() { asked ipc; timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
-  notify() { asked notify; timeout 10 /usr/bin/notify-send "\$@" >> \$OUT/hc.log 2>&1; }
+  notify() { asked notify; timeout 10 "$NOTIFY_SEND" "\$@" >> \$OUT/hc.log 2>&1; }
 fi
 sleep \${BOOT:-15}
 # The shell under test: the one process of that name in this sandbox's own
