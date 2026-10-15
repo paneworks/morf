@@ -58,6 +58,8 @@ pub enum Turn {
 
 /// One output's windows on a backend.
 pub struct Host {
+    /// Witnessed the primary surface's configure on this backend generation.
+    pub(crate) primary_configured: bool,
     pub name: String,
     /// The window system, seen in morf's pixels (a no-op while the density
     /// is the compositor's), so a change of density reaches it live.
@@ -232,6 +234,9 @@ impl Host {
         }
         apply_service_requests(runtime, &mut *self.backend, &mut *self.desktop);
         while let Some(event) = self.backend.next_event() {
+            if matches!(&event, Event::Configure { id, .. } if *id == PRIMARY_LAYER) {
+                self.primary_configured = true;
+            }
             self.follow_up = true;
             repaint |= self.handle_event(runtime, event, links.map(|links| links.tx))?;
         }

@@ -23,6 +23,7 @@ fn native_lock_provider_sockets_are_not_public_shell_instances() {
         "wayland-1.sock",
         "wayland-1-lock.sock",
         "123-aabb-lock-provider.sock",
+        "123-aabb-shell-provider.sock",
     ];
     let listeners: Vec<_> = names
         .iter()

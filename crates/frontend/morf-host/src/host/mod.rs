@@ -7,6 +7,7 @@ mod desktop_tests;
 pub mod events;
 pub mod layers;
 pub mod popups;
+pub mod provider;
 pub mod run;
 pub mod surfaces;
 pub mod turn;

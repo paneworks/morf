@@ -166,6 +166,7 @@ impl Host {
             painter,
         };
         Ok(Self {
+            primary_configured: true,
             name,
             backend,
             desktop,
@@ -192,6 +193,7 @@ impl Host {
         backend: Box<dyn Backend>,
         desktop: Box<dyn Desktop>,
     ) -> Result<(), String> {
+        self.primary_configured = false;
         let mut backend = dense(runtime, backend);
         let config = runtime_bar_config(&runtime.layer_surface_config(), &self.name)?;
         if runtime.density() != morf_value::density::Density::Compositor {

@@ -1,5 +1,6 @@
 //! One bounded poll loop; no client can block the lock/UI thread.
 use super::*;
+use std::io::Write;
 
 struct Connection {
     stream: UnixStream,
@@ -9,7 +10,12 @@ struct Connection {
     written: usize,
     expires: Instant,
 }
-pub(super) fn serve(listener: UnixListener, wake: UnixStream, shared: Shared, owner: u32) {
+pub(crate) fn serve(
+    listener: UnixListener,
+    wake: UnixStream,
+    owner: u32,
+    request: impl Fn(u32, &[u8]) -> Option<Vec<u8>>,
+) {
     let mut peers: Vec<Connection> = Vec::new();
     loop {
         peers.retain(|peer| Instant::now() < peer.expires);
@@ -77,7 +83,7 @@ pub(super) fn serve(listener: UnixListener, wake: UnixStream, shared: Shared, ow
                         if end + 1 != peer.input.len() {
                             return false;
                         }
-                        let Some(reply) = request(&shared, peer.uid, &peer.input[..end]) else {
+                        let Some(reply) = request(peer.uid, &peer.input[..end]) else {
                             return false;
                         };
                         peer.input.clear();

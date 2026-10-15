@@ -55,9 +55,11 @@ pub(crate) fn sockets_in(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf
             .filter(|path| {
                 path.extension()
                     .is_some_and(|extension| extension == "sock")
-                    && !path
-                        .file_name()
-                        .is_some_and(|name| name.to_string_lossy().ends_with("-lock-provider.sock"))
+                    && !path.file_name().is_some_and(|name| {
+                        let name = name.to_string_lossy();
+                        name.ends_with("-lock-provider.sock")
+                            || name.ends_with("-shell-provider.sock")
+                    })
             })
             .collect()),
         // No directory is no instances, not an error: nothing has run yet.

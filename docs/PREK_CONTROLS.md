@@ -8,6 +8,10 @@ from the native global recognizer. The status response explicitly reports
 neutral handoff must be implemented before enabling exclusive Prek routing.
 The existing native/lisgd driver choices are unchanged.
 
+The separate [native shell provider](NATIVE_SHELL_PROVIDER.md) supplies real
+Wayland connection/configure identity to a verifying broker. It does not turn
+these ordinary controller IPC verbs into authenticated broker grants.
+
 `prek-control` takes one JSON string argument:
 
 ```json

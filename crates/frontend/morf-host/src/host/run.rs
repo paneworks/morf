@@ -98,6 +98,7 @@ fn drive_surface(
         bar_config.output = None;
     }
     let client = LayerClient::connect(bar_config).map_err(|error| error.to_string())?;
+    let pending_provider = native_shell_provider(&client, &name);
     let desktop = desktop_for(&client)?;
     tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
         output: name.clone(),
@@ -116,6 +117,11 @@ fn drive_surface(
             report_slow: true,
         },
     )?;
+    // Retire evidence before the backend on every exit, including errors.
+    let mut native_provider = pending_provider;
+    if let Some(provider) = &native_provider {
+        provider.configured();
+    }
     let links = Links {
         policy,
         tx,
@@ -129,11 +135,19 @@ fn drive_surface(
         }
         host.wait(runtime, Some(wake.as_fd()))?;
         wake.drain();
-        match host.turn(runtime, Some(&links))? {
+        let turn = host.turn(runtime, Some(&links))?;
+        if host.primary_configured
+            && let Some(provider) = &native_provider
+        {
+            provider.configured();
+        }
+        match turn {
             Turn::Again => {}
             Turn::Stop => return Ok(()),
             Turn::Recreate => {
+                drop(native_provider.take());
                 let replacement = connect_runtime_surface(runtime, &name)?;
+                let replacement_provider = native_shell_provider(&replacement, &name);
                 let desktop = desktop_for(&replacement)?;
                 tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
                     output: name.clone(),
@@ -141,7 +155,25 @@ fn drive_surface(
                 }))
                 .map_err(|_| "output supervisor stopped".to_owned())?;
                 host.replace_backend(runtime, Box::new(replacement), desktop)?;
+                native_provider = replacement_provider;
             }
+        }
+    }
+}
+
+fn native_shell_provider(
+    client: &LayerClient,
+    name: &str,
+) -> Option<crate::host::provider::Provider> {
+    let output = client.own_output()?.name?;
+    if output != name {
+        return None;
+    }
+    match crate::host::provider::Provider::bind(client.connection().backend().poll_fd(), &output) {
+        Ok(provider) => Some(provider),
+        Err(error) => {
+            eprintln!("morf: native shell provider unavailable for {name}: {error}");
+            None
         }
     }
 }
