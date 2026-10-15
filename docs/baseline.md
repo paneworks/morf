@@ -79,24 +79,34 @@ Frames are the `frame on <output> took` lines, the first frame of a run left
 out; CPU is the process's share in each `cpu-active` phase.
 
 ```
-                              v0.2.8             develop
-starting the GPU (A)          3.89-3.92 s        2.76-2.80 s
-the first frame (A)           3.18-3.25 s        2.56-2.62 s
-output A frames               136-144            139-147
-output A CPU per frame        3.0-3.4 ms         3.3-3.8 ms
-output B CPU per frame        2.4-2.8 ms         2.3-2.8 ms
-output C median / p90         3.8-4.3 / 9.7-9.9  3.0-3.7 / 9.5-10.0 ms
-cpu: rest                     3-4%               2-3%
-cpu: sidebar in and out x4    3-5%               3-6%
-cpu: workspace switch x4      3-4%               3-6%
-cpu: osd x4                   12-17%             15%
-cpu: dashboard x3             39-41%             38-42%
+                              v0.2.8                develop
+starting the GPU (A)          3.60-3.63 s           2.55-2.56 s
+the first frame (A)           2.95-3.04 s           2.44-2.47 s
+output A frames               142-145               161-168
+output A CPU per frame        2.89-3.04 ms          2.01-2.18 ms
+output A median / p90         1.47-1.70 / 4.4-5.1   0.71-0.75 / 3.9-4.0 ms
+output B CPU per frame        2.19-2.76 ms          1.31-1.69 ms
+output B median / p90         1.09-1.20 / 2.4-2.7   0.50-0.56 / 0.93-0.95 ms
+output C CPU per frame        5.22-5.53 ms          4.88-5.15 ms
+output C median / p90         4.4-4.8 / 8.9-9.4     2.5-3.2 / 8.7-8.8 ms
+cpu: rest                     3-4%                  4%
+cpu: sidebar in and out x4    3-5%                  2-4%
+cpu: workspace switch x4      2-5%                  3-4%
+cpu: osd x4                   11-12%                13-14%
+cpu: dashboard x3             42-44%                38-40%
 ```
 
-Start is a second shorter (the field pipeline variants are built when first
-drawn, not all at start and again when the blend space is set). Frame cost
-at this size is the same within the noise: it is spent where these changes do
-not reach. Their per-frame savings are in the CPU benches
+Start is a second shorter: the field pipeline variants are built when first
+drawn, not all at start and again when the blend space is set. A frame is
+about a third cheaper on the outputs with something on them and about half on
+the quieter ones: at this size the per-frame cost was the walks every frame
+repeated whether or not anything had moved -- every text input shaped and
+observed again, and the input region found again from the whole tree. Text
+inputs now sync only when focused or when their paint stamp or box moved
+(487-506 ms over a run, now 25-35 ms), and the input region is kept until
+an input stamp moves, which only transforms, stretches and layout move
+(516-556 ms over a run, now 316-326 ms). The savings in layout, the draw list
+and the damage diff (PLAN 4.1, 4.2) are in the CPU benches
 (`crates/graphics/morf-render/examples/`, `crates/core/morf-layout/examples/`):
 
 ```
