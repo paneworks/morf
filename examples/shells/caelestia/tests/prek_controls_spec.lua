@@ -11,9 +11,10 @@ local SOURCE=[[
     return sidebar.drawer.begin_drag()
   end
   -- Explicit authorization model; no root/socket acceptance is claimed here.
-  local authorized_token
-  __morf_prek_authorized=function(token) return token==authorized_token end
-  morf.ipc.prek_authority_model=function(token) authorized_token=token end
+  local authorized_tokens={}
+  __morf_prek_authorized=function(token) return authorized_tokens[token]==true end
+  morf.ipc.prek_authority_model=function(token) authorized_tokens={[token]=true} end
+  morf.ipc.prek_authorities_model=function(first,second) authorized_tokens={[first]=true,[second]=true} end
   morf.ipc.prek_state=function()
     local gestures=require("phone_gestures")
     return {output=(morf.screens[1] or {}).name,
@@ -69,6 +70,29 @@ test.it("native controls require a live grant and retire progress on revocation"
   test.advance(100)
   test.eq(state().switches,{}) test.falsy(state().preview.active)
   test.eq(native().error,"unauthorized")
+end)
+test.it("gesture guards cancel one controller without revoking a shared native scope",function()
+  load("material")
+  local first=request("workspace_preview","begin")
+  local second=request("dashboard","begin")
+  local prefix=string.rep("c",32)..":"
+  local one=prefix..first.epoch..":"..first.gesture
+  local two=prefix..second.epoch..":"..second.gesture
+  local function native(r,token) return test.ipc("prek-native-control",morf.json.encode(r),token) end
+  test.ipc("prek_authorities_model",one,two)
+  test.eq(native(first,one).status,"accepted")
+  test.eq(native(second,two).error,"busy")
+  test.truthy(state().preview.active,"a different gesture guard preempted a valid controller")
+  test.ipc("prek_authority_model",two)
+  test.eq(native(second,two).status,"accepted")
+  test.eq(native(first,one).error,"unauthorized")
+  second.phase,second.ordinal="cancel",2
+  test.eq(native(second,two).status,"accepted")
+  test.advance(600)
+  test.falsy(state().preview.active)
+  test.falsy(state().dashboard)
+  test.eq(state().switches,{})
+  test.eq(test.logs("error"),{})
 end)
 
 test.it("native revocation after end prevents the delayed workspace command",function()

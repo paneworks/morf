@@ -63,7 +63,9 @@ acceptance remain separate from private-socket/model and local Cage checks.
 `{"version":1,"op":"control-capabilities"}` is read-only for owner/root. It
 returns `version`, connection `epoch`, exact decimal-string `ui_generation`,
 `root_only=true`, `queue=8`, `receipts=64`, `lease_ms=1000`, `grant_ms=250` and
-`recognizer_ownership=false`. A new Lua VM increments the UI generation and
+`recognizer_ownership=false`, with `cancel_gesture=true` for gesture-scoped
+cancellation. An absent cancellation field on an older provider means unsupported.
+A new Lua VM increments the UI generation and
 retires queued work and authorization tokens without changing connection epoch.
 
 All mutations require SO_PEERCRED UID 0; JSON never supplies credentials. The
@@ -87,10 +89,17 @@ requires a newer fence before that issuer can grant again.
   handoff below; ordinary same-user controller IPC remains separate.
 - `receipt` adds only `id`. It reads an existing result and never executes work.
 - `revoke` adds no fields. It invalidates authorization and rejects queued work.
+- `cancel-gesture` adds `gesture_epoch` and `gesture`, each exactly 32 lowercase
+  hex characters. It retires only that gesture under the already authenticated
+  issuer/fence, removes its queued jobs and invalidates its private UI guard.
+  Other gestures and the owning lease/handoff remain valid. A retired identity
+  cannot be submitted again with a different request ID. At most 4096 retired
+  gestures are retained per fence; completed request metadata follows the
+  existing 64-receipt bound. A newer fence clears the old histories.
 
 Replies contain `version`, `epoch`, `ui_generation`, `status` and nullable
 `error`; queued/completed receipts also contain `id`. Status is `accepted` for
-lease/revoke, `queued` for admitted work, `dispatched` for UI controller
+lease/revoke/cancellation, `queued` for admitted work, `dispatched` for UI controller
 acceptance, or `rejected`. `dispatched` does not prove animation or compositor
 completion. Missing/evicted receipts return `retired`; no timeout authorizes a
 mutating retry. Errors include `ui_replaced`, `invalid_deadline`, `owner_alive`,
@@ -104,6 +113,13 @@ inside Lua and immediately before a delayed workspace dispatch. Revocation,
 issuer death, expiry and local authentication cancel active/settling native
 previews; a 25 ms check exists only while native progress is active or settling.
 Ordinary IPC callers cannot manufacture the random native authorization token.
+Gesture-scoped effect guards combine that random scope token with the payload's
+epoch and gesture ID. Native authorization checks the whole guard; cancellation
+of one key does not revoke the scope. The shell compares only the scope prefix
+when detecting fence replacement, so a different valid gesture does not itself
+preempt a running controller. A cancellation acknowledgement establishes native
+permission retirement, not rendered cleanup or undoing a call already in flight.
+Late completions cannot overwrite a cancelled request's retired receipt.
 These contracts do not enable production Prek routing: verified rendered
 context, acknowledged neutral handoff and actual root/logind acceptance remain
 required. Positive grant tests currently model credentials around real pidfds;

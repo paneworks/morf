@@ -70,7 +70,7 @@ function M.attach(root)
   local settling,native_token,watch
   local function authorized(token)
     local guard=rawget(_G,"__morf_prek_authorized")
-    return type(token)=="string" and #token==32 and type(guard)=="function" and guard(token)==true
+    return type(token)=="string" and (#token==32 or #token==98) and type(guard)=="function" and guard(token)==true
   end
   local function output() return (morf.screens[1] or {}).name end
   local responding
@@ -119,10 +119,11 @@ function M.attach(root)
   end
   local function receive(payload,token)
     if token and not authorized(token) then return reply("rejected","unauthorized") end
-    if token and token~=native_token then
+    local scope_token=token and token:sub(1,32)
+    if token and scope_token~=native_token then
       if active and active.token then finish(true) end
       if settling and settling.token then cancel_settling() end
-      native_token=token
+      native_token=scope_token
     end
     refresh()
     if type(payload)~="string" or #payload>2048 then return reply("rejected","invalid_request") end

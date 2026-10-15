@@ -2,13 +2,14 @@
 use crate::process::native::{PeerIdentity, birth};
 use serde_json::{Value, json};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     os::fd::{AsRawFd, FromRawFd, OwnedFd},
     time::Duration,
 };
 
 const QUEUE: usize = 8;
 const RECEIPTS: usize = 64;
+const GESTURES: usize = 4096;
 const LEASE: Duration = Duration::from_secs(1);
 const GRANT: Duration = Duration::from_millis(250);
 
@@ -128,6 +129,8 @@ pub(super) struct Controls {
     last_gesture: String,
     pending: VecDeque<Job>,
     results: BTreeMap<u64, Value>,
+    result_keys: BTreeMap<u64, String>,
+    cancelled: BTreeSet<String>,
     generation: u64,
     closed: bool,
 }
@@ -146,6 +149,8 @@ impl Controls {
             last_gesture: String::new(),
             pending: VecDeque::new(),
             results: BTreeMap::new(),
+            result_keys: BTreeMap::new(),
+            cancelled: BTreeSet::new(),
             generation: 1,
             closed: false,
         }
@@ -223,7 +228,10 @@ impl Controls {
             && self.issuer.as_ref().is_some_and(Issuer::alive)
     }
     pub fn valid_for_effect(&self, token: &str, at: Duration) -> bool {
-        self.valid(token, at)
+        let (base, key) =
+            effect_token(token).map_or((token, None), |(base, key)| (base, Some(key)));
+        self.valid(base, at)
+            && key.is_none_or(|key| !self.cancelled.contains(key))
             && self
                 .handoff
                 .as_ref()
@@ -261,14 +269,17 @@ impl Controls {
         self.expires = Duration::ZERO;
     }
     pub fn capabilities(&self) -> Value {
-        json!({"version":1,"epoch":self.epoch,"ui_generation":self.generation.to_string(),"root_only":true,"queue":QUEUE,"receipts":RECEIPTS,"lease_ms":1000,"grant_ms":250,"recognizer_ownership":false})
+        json!({"version":1,"epoch":self.epoch,"ui_generation":self.generation.to_string(),"root_only":true,"queue":QUEUE,"receipts":RECEIPTS,"lease_ms":1000,"grant_ms":250,"recognizer_ownership":false,"cancel_gesture":true})
     }
     fn answer(&self, status: &str, error: Option<&str>) -> Value {
         json!({"version":1,"epoch":self.epoch,"ui_generation":self.generation.to_string(),"status":status,"error":error})
     }
     fn result(&mut self, id: u64, status: &str, error: Option<&str>) {
-        if self.results.len() >= RECEIPTS && !self.results.contains_key(&id) {
-            self.results.pop_first();
+        if self.results.len() >= RECEIPTS
+            && !self.results.contains_key(&id)
+            && let Some((old, _)) = self.results.pop_first()
+        {
+            self.result_keys.remove(&old);
         }
         let mut result = self.answer(status, error);
         result["id"] = json!(id.to_string());
@@ -321,6 +332,8 @@ impl Controls {
                 self.last_gesture.clear();
                 self.pending.clear();
                 self.results.clear();
+                self.result_keys.clear();
+                self.cancelled.clear();
             }
             if fresh || at >= self.expires {
                 self.token = candidate.to_owned();
@@ -375,6 +388,31 @@ impl Controls {
             self.invalidate();
             return Some(self.answer("accepted", None));
         }
+        if r["op"] == "cancel-gesture" && fields == 7 {
+            let key = gesture_key(&r["gesture_epoch"], &r["gesture"])?;
+            if self.cancelled.len() >= GESTURES && !self.cancelled.contains(&key) {
+                return refused(self, "capacity");
+            }
+            self.cancelled.insert(key.clone());
+            self.pending
+                .retain(|job| effect_token(&job.token).is_none_or(|(_, job_key)| job_key != key));
+            let pending = self
+                .result_keys
+                .iter()
+                .filter(|(id, job_key)| {
+                    **job_key == key
+                        && self
+                            .results
+                            .get(id)
+                            .is_some_and(|result| result["status"] == "queued")
+                })
+                .map(|(id, _)| *id)
+                .collect::<Vec<_>>();
+            for id in pending {
+                self.result(id, "rejected", Some("retired"));
+            }
+            return Some(self.answer("accepted", None));
+        }
         if r["op"] == "receipt" && fields == 6 {
             let id = decimal(&r["id"])?;
             return Some(
@@ -409,6 +447,10 @@ impl Controls {
         if !valid_payload(payload, &self.output) {
             return refused(self, "invalid_request");
         }
+        let key = gesture_key(&payload["epoch"], &payload["gesture"])?;
+        if self.cancelled.contains(&key) {
+            return refused(self, "retired");
+        }
         self.last_id = id;
         if self.pending.len() >= QUEUE {
             self.result(id, "rejected", Some("capacity"));
@@ -424,10 +466,11 @@ impl Controls {
         }
         self.pending.push_back(Job {
             id,
-            token: self.token.clone(),
+            token: format!("{}:{key}", self.token),
             payload: payload.to_string(),
             deadline,
         });
+        self.result_keys.insert(id, key);
         self.result(id, "queued", None);
         self.results.get(&id).cloned()
     }
@@ -442,7 +485,9 @@ impl Controls {
         None
     }
     pub fn complete(&mut self, job: &Job, accepted: bool) {
-        if job.token == self.token {
+        let (base, key) = effect_token(&job.token)
+            .map_or((job.token.as_str(), None), |(base, key)| (base, Some(key)));
+        if base == self.token && key.is_none_or(|key| !self.cancelled.contains(key)) {
             self.result(
                 job.id,
                 if accepted { "dispatched" } else { "rejected" },
@@ -455,14 +500,29 @@ impl Controls {
         }
     }
 }
-fn valid_payload(r: &Value, output: &str) -> bool {
-    let hex = |value: &Value| {
-        value.as_str().is_some_and(|v| {
-            v.len() == 32
-                && v.bytes()
-                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-        })
+fn hex(value: &Value) -> bool {
+    value.as_str().is_some_and(|v| {
+        v.len() == 32
+            && v.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    })
+}
+fn gesture_key(epoch: &Value, gesture: &Value) -> Option<String> {
+    (hex(epoch) && hex(gesture))
+        .then(|| format!("{}:{}", epoch.as_str().unwrap(), gesture.as_str().unwrap()))
+}
+fn effect_token(token: &str) -> Option<(&str, &str)> {
+    let (base, suffix) = token.split_at_checked(token.len().checked_sub(66)?)?;
+    let key = suffix.strip_prefix(':')?;
+    let (epoch, gesture) = key.split_once(':')?;
+    let valid = |s: &str| {
+        s.len() == 32
+            && s.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
     };
+    (valid(epoch) && valid(gesture)).then_some((base, key))
+}
+fn valid_payload(r: &Value, output: &str) -> bool {
     if r.as_object().is_none_or(|o| o.len() != 11)
         || r["version"] != 1
         || r["output"] != output
@@ -558,6 +618,75 @@ mod tests {
         s.complete(&job, true);
         assert_eq!(s.results[&2]["status"], "dispatched");
         assert!(s.take(Duration::from_millis(102)).is_none());
+    }
+    #[test]
+    fn model_gesture_cancellation_purges_only_its_jobs_and_retires_active_guards() {
+        let mut s = state();
+        lease(&mut s, 0, &"c".repeat(32));
+        submit(&mut s, 1, 0);
+        submit(&mut s, 2, 0);
+        let active = s.take(Duration::ZERO).unwrap();
+        assert!(s.valid_for_effect(&active.token, Duration::ZERO));
+        let mut cancel = envelope("cancel-gesture");
+        cancel["gesture_epoch"] = json!("b".repeat(32));
+        cancel["gesture"] = json!(format!("{:032x}", 1));
+        assert_eq!(
+            s.request(root_model(), &cancel, Duration::ZERO, "unused")
+                .unwrap()["status"],
+            "accepted"
+        );
+        assert!(!s.valid_for_effect(&active.token, Duration::ZERO));
+        assert!(
+            s.valid(&"c".repeat(32), Duration::ZERO),
+            "gesture cancellation revoked the owning lease"
+        );
+        s.complete(&active, true);
+        assert_eq!(
+            s.results[&1]["error"], "retired",
+            "late UI completion revived a cancelled job"
+        );
+        let other = s.take(Duration::ZERO).unwrap();
+        assert_eq!(other.id, 2);
+        assert!(s.valid_for_effect(&other.token, Duration::ZERO));
+        s.complete(&other, true);
+        assert_eq!(s.results[&2]["status"], "dispatched");
+        assert_eq!(
+            s.request(root_model(), &cancel, Duration::ZERO, "unused")
+                .unwrap()["status"],
+            "accepted"
+        );
+    }
+    #[test]
+    fn model_cancelled_pending_jobs_and_foreign_cancellation_cannot_execute() {
+        let mut s = state();
+        lease(&mut s, 0, "first");
+        submit(&mut s, 1, 0);
+        let mut cancel = envelope("cancel-gesture");
+        cancel["gesture_epoch"] = json!("b".repeat(32));
+        cancel["gesture"] = json!(format!("{:032x}", 1));
+        let mut foreign = cancel.clone();
+        foreign["fence"]["session"] = json!(2);
+        assert_eq!(
+            s.request(root_model(), &foreign, Duration::ZERO, "unused")
+                .unwrap()["error"],
+            "stale_fence"
+        );
+        assert_eq!(s.pending.len(), 1);
+        s.request(root_model(), &cancel, Duration::ZERO, "unused")
+            .unwrap();
+        assert!(s.take(Duration::ZERO).is_none());
+        assert_eq!(s.results[&1]["error"], "retired");
+        // The retired identity remains rejected even with a fresh request ID.
+        let mut replay = envelope("submit");
+        replay["id"] = json!("2");
+        replay["deadline_ns"] = json!("100000000");
+        replay["request"] = json!({"version":1,"output":"HEADLESS-1","epoch":"b".repeat(32),
+            "gesture":format!("{:032x}",1),"ordinal":1,"phase":"discrete","action":"apps","dx":0,"dy":0,"vx":0,"vy":0});
+        assert_eq!(
+            s.request(root_model(), &replay, Duration::ZERO, "unused")
+                .unwrap()["error"],
+            "retired"
+        );
     }
 
     #[test]
