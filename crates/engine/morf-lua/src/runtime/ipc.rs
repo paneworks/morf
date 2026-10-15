@@ -25,6 +25,7 @@ impl Runtime {
     /// Native policy must exist before a replacement configuration executes;
     /// reloadable Lua values cannot grant recognizer ownership.
     pub fn inherit_native_policy(&mut self, previous: &Self) -> Result<(), Error> {
+        self.policy_retirement = previous.policy_retirement.clone();
         if let Some(authorize) = previous.controller_authorizer.clone() {
             self.set_controller_authorizer(authorize)?;
         }
@@ -35,6 +36,14 @@ impl Runtime {
             self.set_handoff_authorizer(authorize)?;
         }
         Ok(())
+    }
+    pub fn set_native_policy_retirement(&mut self, retire: PolicyRetirement) {
+        self.policy_retirement = Some(retire);
+    }
+    pub fn retire_native_policy(&self) {
+        if let Some(retire) = &self.policy_retirement {
+            retire();
+        }
     }
 
     /// A live native gate for duplicated global recognizers. Local widget

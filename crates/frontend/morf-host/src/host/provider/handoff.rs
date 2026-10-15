@@ -87,10 +87,9 @@ impl Gate {
     pub fn enabled(&self) -> bool {
         self.enabled.load(Ordering::Acquire)
     }
-    fn inhibit(&self) -> io::Result<()> {
+    fn inhibit(&self) {
         self.enabled.store(false, Ordering::Release);
         self.durable.store(false, Ordering::Release);
-        Ok(())
     }
     pub fn persist_inhibition(&self) -> io::Result<()> {
         let mut marker = self.marker.lock().unwrap();
@@ -281,7 +280,7 @@ impl State {
             self.token = token.to_owned();
             self.ui_ack = false;
             self.phase = Phase::Lost;
-            self.gate.inhibit().map_err(|_| "inhibition_failed")?;
+            self.gate.inhibit();
             self.phase = Phase::Quiescing;
             return Ok(());
         }

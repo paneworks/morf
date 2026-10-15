@@ -208,6 +208,12 @@ impl Provider {
                 return false;
             }
             self.runtime_generation = Some(generation);
+            let retirement = self.controls.clone();
+            runtime.set_native_policy_retirement(Arc::new(move || {
+                if let Ok(mut state) = retirement.lock() {
+                    state.retire_for_reload();
+                }
+            }));
             let gate = self.gate.clone();
             let controls = self.controls.clone();
             if runtime

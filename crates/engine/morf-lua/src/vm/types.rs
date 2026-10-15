@@ -159,6 +159,7 @@ impl StdError for Error {}
 pub(crate) type ControllerAuthorizer = std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>;
 pub(crate) type RecognizerGate = std::sync::Arc<dyn Fn() -> bool + Send + Sync>;
 pub(crate) type HandoffAuthorizer = std::sync::Arc<dyn Fn(&str, bool) -> bool + Send + Sync>;
+pub(crate) type PolicyRetirement = std::sync::Arc<dyn Fn() + Send + Sync>;
 
 pub struct Runtime {
     pub(crate) lua: Lua,
@@ -167,6 +168,7 @@ pub struct Runtime {
     pub(crate) controller_authorizer: Option<ControllerAuthorizer>,
     pub(crate) recognizer_gate: Option<RecognizerGate>,
     pub(crate) handoff_authorizer: Option<HandoffAuthorizer>,
+    pub(crate) policy_retirement: Option<PolicyRetirement>,
     pub(crate) module_roots: Rc<RefCell<Vec<PathBuf>>>,
     /// Lint findings waiting to be logged.
     ///

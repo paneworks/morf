@@ -46,6 +46,7 @@ impl Runtime {
             controller_authorizer: None,
             recognizer_gate: None,
             handoff_authorizer: None,
+            policy_retirement: None,
             module_roots,
             lint_queue: RefCell::new(Vec::new()),
         };

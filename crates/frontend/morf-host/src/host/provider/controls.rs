@@ -243,6 +243,14 @@ impl Controls {
         self.closed = true;
     }
     pub fn reset_ui(&mut self) {
+        self.retire_for_reload();
+        if let Some(next) = self.generation.checked_add(1) {
+            self.generation = next;
+        } else {
+            self.closed = true;
+        }
+    }
+    pub fn retire_for_reload(&mut self) {
         if let Some(handoff) = self.handoff.as_mut() {
             handoff.lost();
         }
@@ -251,11 +259,6 @@ impl Controls {
         }
         self.token.clear();
         self.expires = Duration::ZERO;
-        if let Some(next) = self.generation.checked_add(1) {
-            self.generation = next;
-        } else {
-            self.closed = true;
-        }
     }
     pub fn capabilities(&self) -> Value {
         json!({"version":1,"epoch":self.epoch,"ui_generation":self.generation.to_string(),"root_only":true,"queue":QUEUE,"receipts":RECEIPTS,"lease_ms":1000,"grant_ms":250,"recognizer_ownership":false})

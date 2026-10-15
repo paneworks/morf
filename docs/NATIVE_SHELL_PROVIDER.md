@@ -148,6 +148,8 @@ preserves replacements. Marker persistence/removal runs outside the UI mutex;
 native background work wakes the UI for final acknowledgement. No idle timer
 or socket loss enables recognizers. Reload candidates inherit live native
 policies before executing configuration.
+Queued effects and ownership are retired before a reload candidate executes,
+including a failed reload; successful VM replacement also advances UI generation.
 
 Caelestia cancels pending global panels/workspace previews and hides their edge
 regions while quiesced. Local panel navigation, keyboard keys and keyboard-local

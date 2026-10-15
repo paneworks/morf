@@ -258,6 +258,7 @@ pub fn handle_worker_command(
             reply,
         } => {
             // The outputless runtime has no output of its own.
+            runtime.retire_native_policy();
             let mut candidate = match screen {
                 Some(screen) => Runtime::for_screen(Limits::from_env().0, screen.clone()),
                 None => Runtime::new(Limits::from_env().0),

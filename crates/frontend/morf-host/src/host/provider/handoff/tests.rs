@@ -129,6 +129,10 @@ fn quiesce_requires_ui_ack_and_actual_neutral_boundary_before_activation() {
         )
         .unwrap();
     assert_eq!(state.status()["phase"], "owned");
+    assert!(
+        !state.update(neutral(2), true, "native", Duration::from_millis(251)),
+        "fresh observations must not create an idle repaint loop"
+    );
     assert!(!gate.enabled());
     state.synchronize(false);
     assert_eq!(state.status()["phase"], "lost");
@@ -180,6 +184,20 @@ fn confirmed_release_waits_for_neutral_and_marker_survives_restart() {
     assert!(
         !gate.enabled(),
         "only the UI thread may finish release at its current boundary"
+    );
+    state.update(
+        Boundary {
+            contacts: 1,
+            neutral: false,
+            revision: 3,
+        },
+        true,
+        "native",
+        Duration::ZERO,
+    );
+    assert!(
+        !gate.enabled(),
+        "new contact before UI completion must keep globals disabled"
     );
     state.update(neutral(2), true, "native", Duration::ZERO);
     assert!(gate.enabled());
