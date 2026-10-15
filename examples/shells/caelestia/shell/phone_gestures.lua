@@ -10,6 +10,23 @@ M.continuous = pcall(function() probe.on_panned = function() end end)
 ui.destroy(probe)
 local attached = {}
 local EDGE = 20 -- Matches the runtime's on_edge_swiped recognition zone.
+local function native_enabled()
+  local gate=rawget(_G,"__morf_global_recognizers_enabled")
+  return type(gate)~="function" or gate()==true
+end
+local global_enabled=morf.signal("caelestia.global.recognizers",native_enabled())
+local cancel_global={}
+function M.global_allowed() local enabled=global_enabled:get() return enabled and native_enabled() end
+local function regions_visible() return global_enabled:get() end
+function M.handoff(enabled)
+  if global_enabled:get()~=enabled then
+    global_enabled:set(enabled)
+    if not enabled then
+      for _,cancel in ipairs(cancel_global) do cancel() end
+    end
+  end
+  return enabled or morf.env("CAELESTIA_GESTURE_DRIVER")~="lisgd"
+end
 
 local function phone() return require("responsive").portrait() end
 
@@ -40,7 +57,7 @@ local function select_top(sidebar,x)
 end
 
 function M.swipe(edge,x)
-  if not phone() or blocked() then return end
+  if not M.global_allowed() or not phone() or blocked() then return end
   if edge == "top" then
     local sidebar = require("sidebar")
     close_other_panels(sidebar.drawer)
@@ -104,7 +121,12 @@ function M.pan(spec)
 end
 
 local edge_drawer, side_edge
+cancel_global[#cancel_global+1]=function()
+  if edge_drawer then edge_drawer.end_drag(0,true) edge_drawer=nil end
+  side_edge=nil
+end
 function M.edge_pan(edge,phase,dx,dy,vx,vy,start_x,start_y)
+  if not M.global_allowed() then return false end
   if phase == "begin" then
     edge_drawer,side_edge=nil,nil
     if not phone() or blocked() then return false end
@@ -155,8 +177,9 @@ function M.attach(root)
   if attached[root] or not phone() then return end
   attached[root] = true
   if morf.env("CAELESTIA_GESTURE_DRIVER")=="lisgd" then
-    require("lisgd_gestures").attach(root,{phone=phone,blocked=blocked,
+    local clear=require("lisgd_gestures").attach(root,{phone=phone,blocked=blocked,allowed=M.global_allowed,visible=regions_visible,
       swipe=M.swipe,close_panels=close_other_panels})
+    cancel_global[#cancel_global+1]=clear
     return
   end
   local preview=require("workspace_gesture").new(root)
@@ -188,7 +211,7 @@ function M.attach(root)
       if mode=="workspace" then preview.update(dx)
       elseif drawer then drawer.drag_by(dy) end
     elseif phase=="end" then
-      if mode=="workspace" then preview.update(dx) preview.finish(false,vx)
+      if mode=="workspace" then preview.update(dx) preview.finish(false,vx,M.global_allowed)
       elseif drawer then
         drawer.drag_by(dy) drawer.end_drag(vy or 0,false)
       end
@@ -196,8 +219,11 @@ function M.attach(root)
     end
   end
   local gestures=require("keyboard_gestures")
-  local contacts=gestures.contacts("bottom",function() return not blocked() end,
+  local contacts=gestures.contacts("bottom",function() return M.global_allowed() and not blocked() end,
     function(phase,dx,dy) single(phase,dx,dy,0,0) end)
+  cancel_global[#cancel_global+1]=function()
+    contacts.cancel() single("cancel") preview.cancel()
+  end
   -- The bottom strip owns the gesture so a second finger can cancel
   -- an in-progress panel/workspace pull before choosing the keyboard.
   if M.continuous then root.on_edge_panned=function(edge,...)
@@ -208,7 +234,7 @@ function M.attach(root)
   -- Under the existing controls: tapping the bar/rail still reaches them.
   -- An Item, rather than a fullscreen MouseArea, leaves apps interactive.
   ui.reparent(ui.Item {
-    id = "phone-gesture-edges", anchors = { fill = true }, z = -1,
+    id = "phone-gesture-edges", anchors = { fill = true }, z = -1,visible=regions_visible,
     ui.MouseArea { id = "phone-gesture-top", height = EDGE,
       anchors = { top = true, left = true, right = true } },
     ui.MouseArea { id = "phone-gesture-left", width = EDGE, y = EDGE,
@@ -222,26 +248,26 @@ function M.attach(root)
           -require("themes.keyboard").inset:get()-2*EDGE)
       end },
   }, root)
-  local bottom={id="phone-gesture-bottom",height=EDGE,z=200,
+  local bottom={id="phone-gesture-bottom",height=EDGE,z=200,visible=regions_visible,
     anchors={left=true,right=true},
     y=function() return ((morf.screens[1] or {}).height or morf.surface.height)
       -require("themes.keyboard").inset:get()-EDGE end}
   if M.continuous then
     bottom.on_panned=function(phase,dx,dy,vx,vy)
       if phase=="begin" then
-        if blocked() then return false end
+        if not M.global_allowed() or blocked() then return false end
         single("begin") single("update",dx,dy,vx,vy)
         return mode=="workspace" or mode=="dashboard"
       end
-      if blocked() then single("cancel") return end
+      if not M.global_allowed() or blocked() then single("cancel") return end
       single(phase,dx,dy,vx,vy)
     end
     bottom.on_two_finger_panned=function(phase,dx1,dy1,dx2,dy2,x1,y1,x2,y2)
       if phase=="begin" then
-        if blocked() or require("keyboard").active() then return false end
+        if not M.global_allowed() or blocked() or require("keyboard").active() then return false end
         local height=((morf.screens[1] or {}).height or morf.surface.height)
         return y1>=height-EDGE and y2>=height-EDGE
-      elseif phase=="end" and not blocked() and dy1<=-48 and dy2<=-48
+      elseif phase=="end" and M.global_allowed() and not blocked() and dy1<=-48 and dy2<=-48
         and -dy1>math.abs(dx1)*1.2 and -dy2>math.abs(dx2)*1.2 then
         require("keyboard").show("full")
       end

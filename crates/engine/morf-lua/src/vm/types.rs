@@ -156,10 +156,17 @@ impl fmt::Display for Error {
 impl StdError for Error {}
 
 /// The Luna VM owned behind morf's stable runtime boundary.
+pub(crate) type ControllerAuthorizer = std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>;
+pub(crate) type RecognizerGate = std::sync::Arc<dyn Fn() -> bool + Send + Sync>;
+pub(crate) type HandoffAuthorizer = std::sync::Arc<dyn Fn(&str, bool) -> bool + Send + Sync>;
+
 pub struct Runtime {
     pub(crate) lua: Lua,
     pub(crate) limits: Limits,
     pub(crate) reactive: Rc<StateCell<ReactiveState>>,
+    pub(crate) controller_authorizer: Option<ControllerAuthorizer>,
+    pub(crate) recognizer_gate: Option<RecognizerGate>,
+    pub(crate) handoff_authorizer: Option<HandoffAuthorizer>,
     pub(crate) module_roots: Rc<RefCell<Vec<PathBuf>>>,
     /// Lint findings waiting to be logged.
     ///

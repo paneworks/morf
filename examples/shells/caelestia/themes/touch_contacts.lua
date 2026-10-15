@@ -53,6 +53,12 @@ function M.new(spec)
     if count()==0 then reset() end
   end
   function g.cancel(id)
+    if id==nil then
+      cancel_single()
+      if spec.cancel_keys then spec.cancel_keys() end
+      reset()
+      return
+    end
     invalid,ended=true,true
     cancel_single()
     if spec.cancel_keys then spec.cancel_keys() end

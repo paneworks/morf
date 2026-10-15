@@ -83,6 +83,8 @@ requires a newer fence before that issuer can grant again.
   Its deadline must be within 250 ms and within the lease. IDs strictly increase
   within a fence; new gesture starts also require strictly increasing 32-hex
   gesture identifiers. The payload output must match this native endpoint.
+  Native shell control submission additionally requires the acknowledged owned
+  handoff below; ordinary same-user controller IPC remains separate.
 - `receipt` adds only `id`. It reads an existing result and never executes work.
 - `revoke` adds no fields. It invalidates authorization and rejects queued work.
 
@@ -106,3 +108,56 @@ These contracts do not enable production Prek routing: verified rendered
 context, acknowledged neutral handoff and actual root/logind acceptance remain
 required. Positive grant tests currently model credentials around real pidfds;
 private-socket and Cage tests exercise actual unprivileged refusal.
+
+## Global phone-touch handoff
+
+The read-only request `{"version":1,"op":"handoff-state"}` returns `version`,
+connection `epoch`, decimal `ui_generation`, and a `handoff` object. Its fields
+are `phase`, decimal `ownership_generation`, `global_enabled`, `native_neutral`,
+`contacts`, decimal `contact_revision`, `ui_ack`, `driver`, decimal monotonic
+`observed_ns`, `scope="global_phone_touch"` and `recognizer_ownership=false`.
+Reading also wakes the owning UI loop for a fresh native contact observation.
+The contact tracker includes every native Wayland down/up/cancel before hit
+testing, including contacts on empty space, and survives a Lua reload. It is
+bounded to 64 contacts; inconsistent input prevents a neutral acknowledgement.
+This is the client's native contact boundary, not a physical evdev snapshot.
+
+Root handoff mutations use the same five-field common envelope and live lease:
+
+- `handoff-quiesce` adds positive decimal `ownership_generation`, strictly newer
+  than the last handoff. It stops duplicated global phone gestures and persists
+  inhibition. Accepted means the request began; wait for `phase="quiesced"`,
+  `ui_ack=true` and a fresh native-neutral contact observation.
+- `handoff-activate` adds the same ownership generation. It requires that
+  quiesced state and a contact observation less than 250 ms old, then reports
+  `owned`. The broker must separately prove device readiness and its physical
+  neutral/grab boundary before enabling recognition.
+- `handoff-release` adds ownership generation and `descriptors_released=true`.
+  This is root's assertion that recognition stopped, buffered/held input was
+  drained and every owned evdev/uinput descriptor was closed. The receiver
+  cannot inspect those descriptors. It retires queued effects, prepares the UI,
+  removes inhibition in the native background thread, and resumes globals only
+  when the UI loop again observes a neutral boundary. Poll until `native`.
+
+Other phases are `native`, `quiescing`, `releasing` and `lost`. Expiry, root
+issuer loss, revoked authority, Lua VM replacement or an unavailable UI receiver
+cannot reactivate globals; they retain inhibition. A private per-output marker
+under `$XDG_RUNTIME_DIR/morf/handoff/` survives worker/backend restart. Output
+names use exact hex directory chunks. Cleanup checks marker device/inode and
+preserves replacements. Marker persistence/removal runs outside the UI mutex;
+native background work wakes the UI for final acknowledgement. No idle timer
+or socket loss enables recognizers. Reload candidates inherit live native
+policies before executing configuration.
+
+Caelestia cancels pending global panels/workspace previews and hides their edge
+regions while quiesced. Local panel navigation, keyboard keys and keyboard-local
+layout/hide gestures retain their handlers. An unmanaged external `lisgd`
+driver cannot acknowledge quiescence; stopping that process and confirming its
+descriptor release still requires integration. Root failures include
+`handoff_required`, `handoff_unavailable`, `stale_ownership`, `busy`,
+`inhibition_failed`, `not_neutral` and `release_unconfirmed`.
+
+The receiver and typed broker transport implement this protocol; production
+MorfActions negotiation remains disabled. Native/UI tests and modeled root
+credentials do not establish actual root/logind acceptance, physical source
+handoff, rendered context or external lisgd shutdown.

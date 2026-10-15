@@ -166,6 +166,7 @@ impl Host {
             painter,
         };
         Ok(Self {
+            native_contacts: Default::default(),
             primary_configured: true,
             name,
             backend,
@@ -195,6 +196,7 @@ impl Host {
         desktop: Box<dyn Desktop>,
     ) -> Result<(), String> {
         self.primary_configured = false;
+        self.native_contacts.new_connection();
         let mut backend = dense(runtime, backend);
         let config = runtime_bar_config(&runtime.layer_surface_config(), &self.name)?;
         if runtime.density() != morf_value::density::Density::Compositor {

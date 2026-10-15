@@ -43,6 +43,9 @@ impl Runtime {
             lua,
             limits,
             reactive,
+            controller_authorizer: None,
+            recognizer_gate: None,
+            handoff_authorizer: None,
             module_roots,
             lint_queue: RefCell::new(Vec::new()),
         };

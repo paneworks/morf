@@ -274,7 +274,10 @@ pub fn handle_worker_command(
             // replaces still held it would be given back a moment later, to
             // nobody.
             runtime.release_bus_names();
-            let result = execute_config(&mut candidate, &path, &source, policy)
+            let result = candidate
+                .inherit_native_policy(runtime)
+                .map_err(|error| error.to_string())
+                .and_then(|()| execute_config(&mut candidate, &path, &source, policy))
                 // With no output there is nothing to draw, so no root is owed.
                 .and_then(|()| match screen {
                     Some(_) => primary_surface_root(&candidate).map(|_| ()),

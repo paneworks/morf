@@ -26,6 +26,19 @@ pub(crate) fn serve_with_limit(
     limit: usize,
     request: impl Fn(PeerIdentity, &[u8]) -> Option<Vec<u8>>,
 ) {
+    serve_with_work(listener, wake, owner, limit, request, || {});
+}
+/// Byte 1 stops the loop; byte 2 requests native background work. UI callers
+/// use nonblocking writes and never perform persistence under their mutex.
+pub(crate) fn serve_with_work(
+    listener: UnixListener,
+    wake: UnixStream,
+    owner: u32,
+    limit: usize,
+    request: impl Fn(PeerIdentity, &[u8]) -> Option<Vec<u8>>,
+    work: impl Fn(),
+) {
+    let mut wake = wake;
     assert!((1..=4096).contains(&limit));
     let mut peers: Vec<Connection> = Vec::new();
     loop {
@@ -64,7 +77,20 @@ pub(crate) fn serve_with_limit(
             break;
         }
         if polls[1].revents != 0 {
-            break;
+            let mut commands = [0u8; 64];
+            match wake.read(&mut commands) {
+                Ok(0) => break,
+                Ok(count) => {
+                    if commands[..count].contains(&1) {
+                        break;
+                    }
+                    if commands[..count].contains(&2) {
+                        work();
+                    }
+                }
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
+                Err(_) => break,
+            }
         }
         for index in (0..peers.len()).rev() {
             let readiness = polls[index + 2].revents;

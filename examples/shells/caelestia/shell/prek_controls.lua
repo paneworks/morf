@@ -214,6 +214,14 @@ function M.attach(root)
     return reply("rejected","controller_failed")
   end
   morf.ipc["prek-native-refresh"]=refresh
+  morf.ipc["prek-native-handoff"]=function(token,enabled)
+    local guard=rawget(_G,"__morf_prek_handoff_authorized")
+    if type(token)~="string" or type(enabled)~="boolean" or type(guard)~="function" or not guard(token,enabled) then return nil end
+    if enabled then finish(true) cancel_settling() end
+    local gestures=require("phone_gestures")
+    return {ready=gestures.handoff(enabled),enabled=enabled,
+      driver=morf.env("CAELESTIA_GESTURE_DRIVER")=="lisgd" and "lisgd" or "native"}
+  end
   morf.ipc["prek-status"]=function(name)
     if name~=output() then return nil end
     local gestures=require("phone_gestures")

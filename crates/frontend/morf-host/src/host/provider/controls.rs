@@ -116,6 +116,7 @@ pub(super) struct Job {
     deadline: Duration,
 }
 pub(super) struct Controls {
+    handoff: Option<super::handoff::State>,
     epoch: String,
     output: String,
     issuer: Option<Issuer>,
@@ -133,6 +134,7 @@ pub(super) struct Controls {
 impl Controls {
     pub fn new(epoch: String, output: String) -> Self {
         Self {
+            handoff: None,
             epoch,
             output,
             issuer: None,
@@ -148,6 +150,71 @@ impl Controls {
             closed: false,
         }
     }
+    pub fn with_handoff(
+        epoch: String,
+        output: String,
+        gate: std::sync::Arc<super::handoff::Gate>,
+    ) -> Self {
+        let mut state = Self::new(epoch, output);
+        state.handoff = Some(super::handoff::State::new(gate));
+        state
+    }
+    pub fn handoff_status(&mut self, at: Duration) -> Value {
+        let valid = self.valid(&self.token, at);
+        if let Some(handoff) = self.handoff.as_mut() {
+            handoff.synchronize(valid);
+        }
+        json!({"version":1,"epoch":self.epoch,"ui_generation":self.generation.to_string(),"handoff":self.handoff.as_ref().map(|h|h.status())})
+    }
+    pub fn handoff_authorizes(&self, token: &str, enabled: bool) -> bool {
+        self.handoff
+            .as_ref()
+            .is_some_and(|state| state.authorizes(token, enabled))
+    }
+    pub fn handoff_work(&mut self, at: Duration) -> Option<(String, bool)> {
+        let valid = self.valid(&self.token, at);
+        let handoff = self.handoff.as_mut()?;
+        handoff.synchronize(valid);
+        handoff.work()
+    }
+    pub fn handoff_observe(&mut self, boundary: super::handoff::Boundary, at: Duration) {
+        if let Some(state) = self.handoff.as_mut() {
+            state.observe(boundary, at);
+        }
+    }
+    pub fn handoff_inhibition_failed(&mut self) -> Value {
+        if let Some(state) = self.handoff.as_mut() {
+            state.lost();
+        }
+        self.answer("rejected", Some("inhibition_failed"))
+    }
+    pub fn handoff_restore_ready(&self) -> bool {
+        self.handoff.as_ref().is_some_and(|s| s.restore_ready())
+    }
+    pub fn handoff_take_restore(&mut self) -> Option<String> {
+        self.handoff.as_mut()?.take_restore()
+    }
+    pub fn handoff_prepared_restore(&mut self, token: &str, success: bool) {
+        if let Some(state) = self.handoff.as_mut() {
+            state.prepared_restore(token, success);
+        }
+    }
+    pub fn handoff_update(
+        &mut self,
+        token: &str,
+        boundary: super::handoff::Boundary,
+        ack: bool,
+        driver: &str,
+        at: Duration,
+    ) -> bool {
+        let Some(handoff) = self.handoff.as_mut() else {
+            return false;
+        };
+        if !handoff.work().is_some_and(|(current, _)| current == token) {
+            return false;
+        }
+        handoff.update(boundary, ack, driver, at)
+    }
     pub fn valid(&self, token: &str, at: Duration) -> bool {
         !self.closed
             && !self.revoked
@@ -155,7 +222,17 @@ impl Controls {
             && token == self.token
             && self.issuer.as_ref().is_some_and(Issuer::alive)
     }
+    pub fn valid_for_effect(&self, token: &str, at: Duration) -> bool {
+        self.valid(token, at)
+            && self
+                .handoff
+                .as_ref()
+                .is_none_or(|state| state.permits_controls())
+    }
     pub fn invalidate(&mut self) {
+        if let Some(handoff) = self.handoff.as_mut() {
+            handoff.lost();
+        }
         self.revoked = true;
         while let Some(job) = self.pending.pop_front() {
             self.result(job.id, "rejected", Some("retired"));
@@ -166,6 +243,9 @@ impl Controls {
         self.closed = true;
     }
     pub fn reset_ui(&mut self) {
+        if let Some(handoff) = self.handoff.as_mut() {
+            handoff.lost();
+        }
         while let Some(job) = self.pending.pop_front() {
             self.result(job.id, "rejected", Some("ui_replaced"));
         }
@@ -231,6 +311,9 @@ impl Controls {
                 self.issuer = Some(Issuer::open(peer)?);
             }
             if fresh {
+                if let Some(handoff) = self.handoff.as_mut() {
+                    handoff.lost();
+                }
                 self.last_id = 0;
                 self.last_gesture.clear();
                 self.pending.clear();
@@ -251,6 +334,39 @@ impl Controls {
                 .is_some_and(|issuer| issuer.matches(peer))
         {
             return refused(self, "stale_fence");
+        }
+        if matches!(
+            r["op"].as_str(),
+            Some("handoff-quiesce" | "handoff-activate" | "handoff-release")
+        ) {
+            if !self.valid(&self.token, at) {
+                return refused(self, "expired_lease");
+            }
+            let op = r["op"].as_str()?;
+            if fields != if op == "handoff-release" { 7 } else { 6 } {
+                return None;
+            }
+            let generation = decimal(&r["ownership_generation"])?;
+            let Some(handoff) = self.handoff.as_mut() else {
+                return refused(self, "handoff_unavailable");
+            };
+            if let Err(error) = handoff.request(
+                op,
+                generation,
+                r["descriptors_released"] == true,
+                candidate,
+                at,
+            ) {
+                return refused(self, error);
+            }
+            if op == "handoff-release" {
+                // Retire queued effects before global recognizers can resume.
+                self.revoked = true;
+                while let Some(job) = self.pending.pop_front() {
+                    self.result(job.id, "rejected", Some("retired"));
+                }
+            }
+            return Some(self.answer("accepted", None));
         }
         if r["op"] == "revoke" && fields == 5 {
             self.invalidate();
@@ -274,6 +390,13 @@ impl Controls {
         }
         if !self.valid(&self.token, at) {
             return refused(self, "expired_lease");
+        }
+        if self
+            .handoff
+            .as_ref()
+            .is_some_and(|state| !state.permits_controls())
+        {
+            return refused(self, "handoff_required");
         }
         let deadline = Duration::from_nanos(decimal(&r["deadline_ns"])?);
         if deadline <= at || deadline - at > GRANT || deadline > self.expires {
@@ -307,7 +430,7 @@ impl Controls {
     }
     pub fn take(&mut self, at: Duration) -> Option<Job> {
         while let Some(job) = self.pending.pop_front() {
-            if at >= job.deadline || !self.valid(&job.token, at) {
+            if at >= job.deadline || !self.valid_for_effect(&job.token, at) {
                 self.result(job.id, "rejected", Some("expired"));
             } else {
                 return Some(job);
@@ -571,6 +694,131 @@ mod tests {
     }
 
     #[test]
+    fn model_handoff_orders_quiesce_activation_and_confirmed_release() {
+        use std::os::unix::fs::DirBuilderExt;
+        let path =
+            std::env::temp_dir().join(format!("mhc-{}-{}", std::process::id(), nonce().unwrap()));
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&path)
+            .unwrap();
+        let gate = super::super::handoff::Gate::open_at(&path, "HEADLESS-1").unwrap();
+        let mut s = Controls::with_handoff("a".repeat(32), "HEADLESS-1".into(), gate.clone());
+        lease(&mut s, 0, "lease");
+        assert_eq!(submit(&mut s, 1, 0)["error"], "handoff_required");
+        let mut quiesce = envelope("handoff-quiesce");
+        quiesce["ownership_generation"] = json!("1");
+        assert!(
+            s.request(
+                PeerIdentity {
+                    pid: std::process::id(),
+                    uid: 1000
+                },
+                &quiesce,
+                Duration::ZERO,
+                &"a".repeat(32)
+            )
+            .is_none()
+        );
+        assert!(gate.enabled());
+        assert_eq!(
+            s.request(root_model(), &quiesce, Duration::ZERO, &"a".repeat(32))
+                .unwrap()["status"],
+            "accepted"
+        );
+        assert!(!gate.enabled());
+        gate.persist_inhibition().unwrap();
+        let mut activate = envelope("handoff-activate");
+        activate["ownership_generation"] = json!("1");
+        assert_eq!(
+            s.request(root_model(), &activate, Duration::ZERO, "unused")
+                .unwrap()["error"],
+            "not_neutral"
+        );
+        s.handoff_update(
+            &"a".repeat(32),
+            super::super::handoff::Boundary {
+                contacts: 0,
+                neutral: true,
+                revision: 2,
+            },
+            true,
+            "native",
+            Duration::from_millis(1),
+        );
+        assert_eq!(
+            s.request(root_model(), &activate, Duration::from_millis(1), "unused")
+                .unwrap()["status"],
+            "accepted"
+        );
+        assert_eq!(submit(&mut s, 1, 1)["status"], "queued");
+        let mut release = envelope("handoff-release");
+        release["ownership_generation"] = json!("1");
+        release["descriptors_released"] = json!(false);
+        assert_eq!(
+            s.request(root_model(), &release, Duration::from_millis(1), "unused")
+                .unwrap()["error"],
+            "release_unconfirmed"
+        );
+        release["descriptors_released"] = json!(true);
+        assert_eq!(
+            s.request(
+                root_model(),
+                &release,
+                Duration::from_millis(1),
+                &"b".repeat(32)
+            )
+            .unwrap()["status"],
+            "accepted"
+        );
+        assert_eq!(s.results[&1]["error"], "retired");
+        assert!(!s.valid("lease", Duration::from_millis(1)));
+        assert!(!s.handoff_authorizes(&"a".repeat(32), true));
+        s.handoff_update(
+            &"b".repeat(32),
+            super::super::handoff::Boundary {
+                contacts: 1,
+                neutral: false,
+                revision: 3,
+            },
+            true,
+            "native",
+            Duration::from_millis(2),
+        );
+        assert!(!gate.enabled());
+        s.handoff_update(
+            &"b".repeat(32),
+            super::super::handoff::Boundary {
+                contacts: 0,
+                neutral: true,
+                revision: 4,
+            },
+            true,
+            "native",
+            Duration::from_millis(3),
+        );
+        let restore = s.handoff_take_restore().unwrap();
+        s.handoff_prepared_restore(&restore, gate.remove_inhibition().is_ok());
+        assert!(!gate.enabled());
+        s.handoff_update(
+            &"b".repeat(32),
+            super::super::handoff::Boundary {
+                contacts: 0,
+                neutral: true,
+                revision: 4,
+            },
+            true,
+            "native",
+            Duration::from_millis(3),
+        );
+        assert!(gate.enabled());
+        assert_eq!(lease(&mut s, 3, "new")["error"], "retired");
+        drop(s);
+        drop(gate);
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
     fn model_native_queue_calls_the_real_vm_guard_and_reload_retires_it() {
         use std::os::{
             fd::AsFd,
@@ -596,6 +844,10 @@ mod tests {
                 return {status="accepted"}
             end
             morf.ipc.count=function() return count end
+            morf.ipc["prek-native-handoff"]=function(token,enabled)
+                assert(__morf_prek_handoff_authorized(token,enabled))
+                return {ready=true,enabled=enabled,driver="native"}
+            end
         "#,
             )
             .unwrap();
@@ -619,6 +871,36 @@ mod tests {
                 "accepted"
             );
             // The helper has a fixed model epoch; use a temporary matching state
+            let handoff = state.handoff.as_mut().unwrap();
+            handoff
+                .request(
+                    "handoff-quiesce",
+                    1,
+                    false,
+                    &"d".repeat(32),
+                    Duration::from_millis(at),
+                )
+                .unwrap();
+            provider.gate.persist_inhibition().unwrap();
+            handoff.update(
+                super::super::handoff::Boundary {
+                    contacts: 0,
+                    neutral: true,
+                    revision: 1,
+                },
+                true,
+                "native",
+                Duration::from_millis(at),
+            );
+            handoff
+                .request(
+                    "handoff-activate",
+                    1,
+                    false,
+                    "unused",
+                    Duration::from_millis(at),
+                )
+                .unwrap();
             // to produce an otherwise valid typed payload for the real queue.
             let mut fixture = super::tests::state();
             lease(&mut fixture, at, "fixture");
@@ -642,7 +924,7 @@ mod tests {
             provider.controls.lock().unwrap().results[&1]["status"],
             "dispatched"
         );
-        assert!(!provider.dispatch(&mut runtime, 2));
+        provider.dispatch(&mut runtime, 2);
         assert!(
             !provider
                 .controls

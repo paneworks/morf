@@ -2,6 +2,7 @@
 //! lifetime, never Lua-declared geometry, authentication or action authority.
 use crate::process::native::{Endpoint, SocketPath, birth, peer, server};
 mod controls;
+pub(crate) mod handoff;
 use std::{
     io::{self, Write},
     os::{fd::BorrowedFd, unix::net::UnixStream},
@@ -20,6 +21,7 @@ pub struct Provider {
     thread: Option<JoinHandle<()>>,
     controls: Arc<Mutex<controls::Controls>>,
     runtime_generation: Option<u64>,
+    gate: Arc<handoff::Gate>,
 }
 impl Provider {
     /// `output` must come from the actual LayerClient's own_output snapshot.
@@ -29,6 +31,24 @@ impl Provider {
         Self::bind_at(Path::new(&runtime), connection, output)
     }
     fn bind_at(runtime: &Path, connection: BorrowedFd<'_>, output: &str) -> io::Result<Self> {
+        let gate = handoff::Gate::open_at(runtime, output)?;
+        Self::bind_using_gate(runtime, connection, output, gate)
+    }
+    pub(crate) fn bind_with_gate(
+        connection: BorrowedFd<'_>,
+        output: &str,
+        gate: Arc<handoff::Gate>,
+    ) -> io::Result<Self> {
+        let runtime = std::env::var_os("XDG_RUNTIME_DIR")
+            .ok_or_else(|| io::Error::other("XDG_RUNTIME_DIR is unset"))?;
+        Self::bind_using_gate(Path::new(&runtime), connection, output, gate)
+    }
+    fn bind_using_gate(
+        runtime: &Path,
+        connection: BorrowedFd<'_>,
+        output: &str,
+        gate: Arc<handoff::Gate>,
+    ) -> io::Result<Self> {
         if output.is_empty() || output.len() > 256 || output.chars().any(char::is_control) {
             return Err(io::Error::other("invalid native output name"));
         }
@@ -46,57 +66,93 @@ impl Provider {
         let configured = Arc::new(AtomicBool::new(false));
         let ready = configured.clone();
         let output = output.to_owned();
-        let controls = Arc::new(Mutex::new(controls::Controls::new(
+        let controls = Arc::new(Mutex::new(controls::Controls::with_handoff(
             epoch.clone(),
             output.clone(),
+            gate.clone(),
         )));
         let controller = controls.clone();
         let ui_waker = morf_io::waker();
+        let persist_gate = gate.clone();
+        let restore_gate = gate.clone();
+        let native_work = controls.clone();
+        let work_waker = ui_waker.clone();
         let (wake, wait) = UnixStream::pair()?;
         wake.set_nonblocking(true)?;
         wait.set_nonblocking(true)?;
         let thread = std::thread::Builder::new()
             .name("morf-shell-provider".into())
             .spawn(move || {
-                server::serve_with_limit(listener, wait, owner, 4096, move |identity, bytes| {
-                    let request: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-                    let response = if request["op"] == "control-capabilities"
-                        && request["version"] == 1
-                        && request.as_object()?.len() == 2
-                    {
-                        controller.lock().ok()?.capabilities()
-                    } else if request["op"] != "state" {
-                        if !ready.load(Ordering::Acquire) || identity.uid != 0 {
-                            return None;
-                        }
-                        let response = controller.lock().ok()?.request(
-                            identity,
-                            &request,
-                            controls::now()?,
-                            &controls::nonce()?,
-                        )?;
-                        ui_waker.wake();
-                        response
-                    } else {
-                        if request.as_object()?.len() != 2
-                            || request["version"] != 1
-                            || request["op"] != "state"
+                server::serve_with_work(
+                    listener,
+                    wait,
+                    owner,
+                    4096,
+                    move |identity, bytes| {
+                        let request: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+                        let response = if request["op"] == "control-capabilities"
+                            && request["version"] == 1
+                            && request.as_object()?.len() == 2
                         {
-                            return None;
+                            controller.lock().ok()?.capabilities()
+                        } else if request["op"] == "handoff-state"
+                            && request["version"] == 1
+                            && request.as_object()?.len() == 2
+                        {
+                            ui_waker.wake();
+                            controller.lock().ok()?.handoff_status(controls::now()?)
+                        } else if request["op"] != "state" {
+                            if !ready.load(Ordering::Acquire) || identity.uid != 0 {
+                                return None;
+                            }
+                            let mut response = controller.lock().ok()?.request(
+                                identity,
+                                &request,
+                                controls::now()?,
+                                &controls::nonce()?,
+                            )?;
+                            if request["op"] == "handoff-quiesce"
+                                && response["status"] == "accepted"
+                                && persist_gate.persist_inhibition().is_err()
+                            {
+                                response = controller.lock().ok()?.handoff_inhibition_failed();
+                            }
+                            ui_waker.wake();
+                            response
+                        } else {
+                            if request.as_object()?.len() != 2
+                                || request["version"] != 1
+                                || request["op"] != "state"
+                            {
+                                return None;
+                            }
+                            let configured = ready.load(Ordering::Acquire);
+                            serde_json::json!({
+                                "version":1,"role":"shell","epoch":epoch,
+                                "revision":if configured {2} else {1},
+                                "phase":if configured {"configured"} else {"pending"},
+                                "compositor_pid":compositor.pid,"compositor_start":start,
+                                "compositor_uid":compositor.uid,"output":output,
+                            })
+                        };
+                        let mut response = serde_json::to_vec(&response).ok()?;
+                        response.push(b'\n');
+                        Some(response)
+                    },
+                    move || {
+                        let ticket = native_work
+                            .lock()
+                            .ok()
+                            .and_then(|mut state| state.handoff_take_restore());
+                        if let Some(token) = ticket {
+                            let success = restore_gate.remove_inhibition().is_ok();
+                            if let Ok(mut state) = native_work.lock() {
+                                state.handoff_prepared_restore(&token, success);
+                            }
+                            work_waker.wake();
                         }
-                        let configured = ready.load(Ordering::Acquire);
-                        serde_json::json!({
-                            "version":1,"role":"shell","epoch":epoch,
-                            "revision":if configured {2} else {1},
-                            "phase":if configured {"configured"} else {"pending"},
-                            "compositor_pid":compositor.pid,"compositor_start":start,
-                            "compositor_uid":compositor.uid,"output":output,
-                        })
-                    };
-                    let mut response = serde_json::to_vec(&response).ok()?;
-                    response.push(b'\n');
-                    Some(response)
-                });
+                    },
+                );
             })?;
         Ok(Self {
             _socket: socket,
@@ -105,6 +161,7 @@ impl Provider {
             thread: Some(thread),
             controls,
             runtime_generation: None,
+            gate,
         })
     }
     /// Native host startup completed its first configured surface/frame.
@@ -116,6 +173,22 @@ impl Provider {
     /// Runs at most one bounded request on the UI thread. A dispatched receipt
     /// records controller acceptance, not animation or compositor completion.
     pub fn dispatch(&mut self, runtime: &mut morf_lua::Runtime, generation: u64) -> bool {
+        self.dispatch_at_boundary(
+            runtime,
+            generation,
+            handoff::Boundary {
+                contacts: 0,
+                neutral: false,
+                revision: 0,
+            },
+        )
+    }
+    pub(crate) fn dispatch_at_boundary(
+        &mut self,
+        runtime: &mut morf_lua::Runtime,
+        generation: u64,
+        boundary: handoff::Boundary,
+    ) -> bool {
         if self.runtime_generation != Some(generation) {
             if self.runtime_generation.is_some() {
                 self.controls.lock().unwrap().reset_ui();
@@ -123,8 +196,11 @@ impl Provider {
             let controls = self.controls.clone();
             if runtime
                 .set_controller_authorizer(Arc::new(move |token| {
-                    controls::now()
-                        .is_some_and(|at| controls.lock().is_ok_and(|state| state.valid(token, at)))
+                    controls::now().is_some_and(|at| {
+                        controls
+                            .lock()
+                            .is_ok_and(|state| state.valid_for_effect(token, at))
+                    })
                 }))
                 .is_err()
             {
@@ -132,6 +208,62 @@ impl Provider {
                 return false;
             }
             self.runtime_generation = Some(generation);
+            let gate = self.gate.clone();
+            let controls = self.controls.clone();
+            if runtime
+                .set_recognizer_gate(Arc::new(move || gate.enabled()))
+                .is_err()
+                || runtime
+                    .set_handoff_authorizer(Arc::new(move |token, enabled| {
+                        controls
+                            .lock()
+                            .is_ok_and(|state| state.handoff_authorizes(token, enabled))
+                    }))
+                    .is_err()
+            {
+                self.controls.lock().unwrap().close();
+                return false;
+            }
+        }
+        let Some(at) = controls::now() else {
+            return false;
+        };
+        let handoff_work = {
+            let mut state = self.controls.lock().unwrap();
+            state.handoff_observe(boundary, at);
+            state.handoff_work(at)
+        };
+        let mut handoff_changed = false;
+        if let Some((token, enabled)) = handoff_work {
+            let ack = runtime
+                .call_ipc(
+                    "prek-native-handoff",
+                    &[
+                        morf_lua::IpcValue::String(token.clone()),
+                        morf_lua::IpcValue::Boolean(enabled),
+                    ],
+                )
+                .ok()
+                .and_then(|values| values.first().map(|value| value.to_json()));
+            if let Some(at) = controls::now() {
+                let mut ready = ack
+                    .as_ref()
+                    .is_some_and(|value| value["ready"] == true && value["enabled"] == enabled);
+                let driver = ack
+                    .as_ref()
+                    .and_then(|value| value["driver"].as_str())
+                    .filter(|v| matches!(*v, "native" | "lisgd"))
+                    .unwrap_or("unavailable");
+                ready &= enabled || driver == "native";
+                handoff_changed = self
+                    .controls
+                    .lock()
+                    .unwrap()
+                    .handoff_update(&token, boundary, ready, driver, at);
+            }
+        }
+        if self.controls.lock().unwrap().handoff_restore_ready() {
+            let _ = self.wake.write_all(&[2]);
         }
         let refreshed = runtime
             .call_ipc("prek-native-refresh", &[])
@@ -140,11 +272,11 @@ impl Provider {
         // Refresh can execute Lua; sample expiry after it, immediately before
         // handing the next job to its controller.
         let Some(at) = controls::now() else {
-            return refreshed;
+            return refreshed || handoff_changed;
         };
         let job = self.controls.lock().unwrap().take(at);
         let Some(job) = job else {
-            return refreshed;
+            return refreshed || handoff_changed;
         };
         let accepted = runtime
             .call_ipc(
@@ -167,7 +299,9 @@ impl Provider {
 }
 impl Drop for Provider {
     fn drop(&mut self) {
-        self.controls.lock().unwrap().close();
+        if let Ok(mut state) = self.controls.lock() {
+            state.close();
+        }
         let _ = self.wake.write_all(&[1]);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
