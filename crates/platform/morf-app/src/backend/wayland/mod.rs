@@ -15,6 +15,7 @@ mod client_layer;
 mod client_lock;
 mod client_services;
 mod client_surface;
+mod client_sync;
 mod color;
 mod cursor;
 mod data_handlers;

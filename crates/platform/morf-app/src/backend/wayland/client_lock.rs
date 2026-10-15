@@ -45,9 +45,13 @@ impl LayerClient {
         lock.unlock();
         self.state.lock_surfaces.clear();
         self.state.forget_lock_surfaces();
-        self.connection
-            .flush()
-            .map_err(|error| WaylandError(format!("Wayland flush failed: {error}")))
+        // The caller drops the client immediately after unlock. A flush only
+        // writes to the socket; confirm server processing before teardown can
+        // race the compositor's disconnect handling. No UI callbacks run here.
+        super::client_sync::confirm_requests(
+            &self.connection,
+            std::time::Instant::now() + std::time::Duration::from_secs(1),
+        )
     }
 
     /// Returns one configured lock surface for rendering.
