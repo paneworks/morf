@@ -12,13 +12,15 @@ function M.new(root)
   local generation=0
   local animation
   local drag_origin=0
+  local wallpaper=require("workspace_wallpaper").new()
   -- Keep the real shell frame, rail and its decorations above the preview.
   local viewport=ui.Item {id="phone-workspace-preview",z=-1,clip=true,
     x=function() return select(1,require("bar").desk()) end,
     y=function() return select(2,require("bar").desk()) end,
     width=function() return select(3,require("bar").desk()) end,
     height=function() return select(4,require("bar").desk()) end,
-    visible=function() return state.active end}
+    visible=function() return state.active end,
+    on_destroyed=function() wallpaper.close() end}
   ui.reparent(viewport,root)
   local track=ui.Item {id="phone-workspace-track",anchors={fill=true}}
   ui.reparent(track,viewport)
@@ -84,7 +86,7 @@ function M.new(root)
       -- behind the bar. Preserve that crop and origin inside this viewport.
       ui.Image {id="phone-workspace-wallpaper-"..position,x=-dx,y=-dy,width=sw,height=sh,
         z=-1,fill_mode="preserve_aspect_crop",
-        source=function() return require("wallpaper").current:get() end},
+        source=wallpaper.source},
     }
     ui.reparent(node,track) pages[#pages+1]=node
     local mx,my,ratio=0,0,1
@@ -133,6 +135,7 @@ function M.new(root)
   local next_id,previous_id
   local g={state=state}
   function g.begin()
+    wallpaper.sync()
     -- Catch the displayed pose, retaining the snapshots while settling.
     if state.active and state.from==services.workspace.active() then
       if animation then animation:stop() animation=nil end

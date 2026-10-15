@@ -28,6 +28,49 @@ const SOURCE: &str = r##"
 "##;
 
 #[test]
+fn cover_uses_workers_at_display_resolution_and_releases_its_result() {
+    let mut runtime = Runtime::default();
+    runtime.execute("cover.lua", br##"
+        local preview=morf.image.preview('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="8"><rect width="16" height="8" fill="red"/></svg>')
+        local result
+        morf.ipc.done=function() return result end
+        morf.ipc.close=function() preview.close() end
+        for _,args in ipairs {{0,100,120},{100,100,0},{-1,100,120},{1.5,100,120}} do
+            assert(not pcall(preview.cover,args[1],args[2],args[3],function() end))
+        end
+        assert(preview.cover(100,100,180,function(ok,value)
+            assert(ok,value) assert(value.width==300 and value.height==150)
+            result=value.path
+        end))
+        assert(result==nil,'cover ran on the Lua thread')
+    "##).unwrap();
+    let IpcValue::String(source) = pump(&mut runtime).remove(0) else {
+        panic!("expected memory source")
+    };
+    assert_eq!(
+        morf_image::ops::pixel_at(&source, 299, 149, 45000).unwrap(),
+        [255, 0, 0, 255]
+    );
+    runtime.call_ipc("close", &[]).unwrap();
+    assert!(morf_image::ops::image_info(source).is_err());
+}
+
+#[test]
+fn closing_a_queued_cover_cannot_publish_a_late_frame() {
+    let mut runtime = Runtime::default();
+    runtime.execute("cover-close.lua", br##"
+        local preview=morf.image.preview('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="8"/>')
+        local result
+        morf.ipc.done=function() return result end
+        assert(preview.cover(100,100,120,function(ok,value)
+            result=ok and value.path or "closed"
+        end))
+        preview.close()
+    "##).unwrap();
+    assert_eq!(pump(&mut runtime), vec![IpcValue::String("closed".into())]);
+}
+
+#[test]
 fn native_canvas_uses_workers_and_the_standard_callback_contract() {
     let root = std::env::temp_dir().join(format!("morf-lua-canvas-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();

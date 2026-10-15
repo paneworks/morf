@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use crate::{ImageData, ImageError, ops, published};
 use image::DynamicImage;
 
+mod prepare;
+
 /// The retained source of a preview must fit this budget (128 MiB).
 pub const MAX_PREVIEW_BYTES: u64 = 128 * 1024 * 1024;
 /// All retained preview sources and displayed frames share one process budget.

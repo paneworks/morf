@@ -55,15 +55,72 @@ test.it("workspace previews follow newly applied Lule images while the studio is
   apply(first)
   test.load("../shell/init.lua",{source=HOST,size={1116,2484},
     env={CAELESTIA_DRY_RUN="1",CAELESTIA_WALLPAPER="",LULE_A=root}})
-  test.ipc("begin") test.eq(test.ipc("wallpapers"),{first,first})
+  test.ipc("begin")
+  test.wait(function() return test.ipc("wallpapers")[1]:find("memory:",1,true)==1 end,2000)
+  local prepared=test.ipc("wallpapers")[1]
+  test.eq(test.ipc("wallpapers"),{prepared,prepared})
   test.ipc("studio")
   for i=1,4 do test.ipc("churn") test.advance(20) end
   apply(second)
-  test.wait(function() return test.ipc("wallpapers")[1]==second end,2000)
-  test.eq(test.ipc("wallpapers"),{second,second})
+  test.wait(function()
+    local source=test.ipc("wallpapers")[1]
+    return source~=prepared and source:find("memory:",1,true)==1
+  end,2000)
+  prepared=test.ipc("wallpapers")[1]
+  test.eq(test.ipc("wallpapers"),{prepared,prepared})
   test.ipc("cancel") test.ipc("begin")
-  test.eq(test.ipc("wallpapers"),{second,second})
+  test.eq(test.ipc("wallpapers"),{prepared,prepared})
   test.eq(test.logs("error"),{})
+end)
+test.it("wallpaper preparation discards stale results and closes on destruction",function()
+  test.load("../shell/init.lua",{source=[[
+    local ui=require("morf.ui")
+    local source=morf.signal("test.wallpaper.source","first")
+    package.loaded.wallpaper={current=source}
+    package.loaded.bar={desk=function() return 0,0,100,200 end}
+    morf.screens={{width=100,height=200,density_scale=1.5}}
+    local jobs={}
+    morf.image.preview=function(path)
+      local job={path=path,closed=false}
+      jobs[#jobs+1]=job
+      return {cover=function(w,h,scale,callback)
+        job.size={w,h,scale} job.callback=callback return true
+      end,close=function() job.closed=true end}
+    end
+    local wallpaper=require("workspace_wallpaper").new()
+    local root=ui.Item {on_destroyed=wallpaper.close}
+    local surface=ui.Item {width=100,height=200,root}
+    morf.ipc.change=function(path) source:set(path) end
+    morf.ipc.deliver=function(index,ok)
+      jobs[tonumber(index)].callback(ok~="false",{path="memory:"..index})
+    end
+    morf.ipc.destroy=function() ui.destroy(root) end
+    morf.ipc.sync=wallpaper.sync
+    morf.ipc.state=function()
+      local result={source=wallpaper.source(),jobs={}}
+      for i,job in ipairs(jobs) do result.jobs[i]={path=job.path,closed=job.closed,size=job.size} end
+      return result
+    end
+    return surface
+  ]],size={100,200}})
+  test.eq(test.ipc("state").source,"")
+  test.eq(test.ipc("state").jobs[1].size,{100,200,180})
+  test.ipc("change","second")
+  test.eq(test.ipc("state").jobs[1].closed,true)
+  test.ipc("deliver","1")
+  test.eq(test.ipc("state").source,"")
+  test.ipc("deliver","2")
+  test.eq(test.ipc("state").source,"memory:2")
+  test.ipc("sync") test.eq(#test.ipc("state").jobs,2)
+  test.ipc("change","third") test.ipc("deliver","3","false")
+  test.eq(test.ipc("state").source,"")
+  test.eq(test.ipc("state").jobs[3].closed,true)
+  test.ipc("sync") test.eq(#test.ipc("state").jobs,3)
+  test.ipc("change","fourth") test.ipc("destroy")
+  test.ipc("deliver","4") test.ipc("change","fifth")
+  test.eq(test.ipc("state").source,"")
+  test.eq(test.ipc("state").jobs[4].closed,true)
+  test.eq(#test.ipc("state").jobs,4)
 end)
 test.it("automatic fullscreen dimensions retain window geometry and release captures on cancel",function()
   test.load("../shell/init.lua",{source=HOST,size={1116,2484},env={CAELESTIA_DRY_RUN="1"}})

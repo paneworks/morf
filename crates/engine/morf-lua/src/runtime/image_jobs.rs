@@ -101,6 +101,12 @@ pub(crate) enum ImageJob {
         preview: Arc<morf_image::preview::Preview>,
         ops: Vec<ops::ImageOp>,
     },
+    PreviewCover {
+        preview: Arc<morf_image::preview::Preview>,
+        width: u32,
+        height: u32,
+        scale_120: u32,
+    },
     Pixel {
         source: PathBuf,
         x: u32,
@@ -259,6 +265,15 @@ fn run(job: ImageJob) -> Result<ImageOutcome, String> {
             .map_err(|error| error.to_string()),
         ImageJob::Preview { preview, ops } => preview
             .render(&ops)
+            .map(|image| ImageOutcome::Preview(image, preview))
+            .map_err(|error| error.to_string()),
+        ImageJob::PreviewCover {
+            preview,
+            width,
+            height,
+            scale_120,
+        } => preview
+            .cover(width, height, scale_120)
             .map(|image| ImageOutcome::Preview(image, preview))
             .map_err(|error| error.to_string()),
         ImageJob::Process(request) => ops::process(&request)
