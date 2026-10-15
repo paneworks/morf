@@ -167,6 +167,13 @@ pub(crate) fn create_texture_batch(
         if source.is_empty() || bounds.width <= 0.0 || bounds.height <= 0.0 {
             continue;
         }
+        // Workspace pages and clipped scrolling content can retain image
+        // commands outside their viewport. Cull in surface coordinates before
+        // probing, decoding or uploading a picture no pixel can sample.
+        let visible = command.bounds();
+        if visible.width <= 0.0 || visible.height <= 0.0 {
+            continue;
+        }
         // A capture the compositor drew straight into GPU memory. Nothing to
         // decode, nothing to upload, nothing to cache: the texture is the
         // picture, at the size it was captured at.

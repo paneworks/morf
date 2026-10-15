@@ -154,3 +154,5 @@ mod shader_tests;
 mod tests;
 #[cfg(test)]
 mod text_field_tests;
+#[cfg(test)]
+mod texture_culling_tests;
