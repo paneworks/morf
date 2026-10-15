@@ -7,12 +7,40 @@
 use morf_app::Backend;
 use std::time::Duration;
 
-use morf_app::backend::headless::VirtualSeat;
-use morf_app::{Event, WindowId};
+use morf_app::backend::headless::{HeadlessBackend, VirtualSeat};
+use morf_app::{Event, InputRect, WindowId};
 
 use crate::headless::Headless;
+use crate::host::surfaces::PointerInput;
 
 impl Headless {
+    /// The seat: where the pointer is, and which surface has the keyboard.
+    pub fn seat(&self) -> &VirtualSeat {
+        self.host
+            .as_ref()
+            .and_then(|host| host.backend.as_headless())
+            .or(self.lock.as_ref().map(|lock| &lock.backend))
+            .map_or(&self.idle_seat, HeadlessBackend::seat)
+    }
+
+    /// Where the pointer, the buttons and the fingers are, as the host's
+    /// pointer path keeps them.
+    pub fn input(&self) -> &PointerInput {
+        match (&self.host, &self.lock) {
+            (Some(host), _) => &host.state.input,
+            (None, Some(lock)) => &lock.session.input,
+            (None, None) => &self.idle_input,
+        }
+    }
+
+    /// The input region last handed to the compositor for `window`.
+    pub fn input_region(&self, window: WindowId) -> Option<Vec<InputRect>> {
+        self.host
+            .as_ref()
+            .and_then(|host| host.backend.as_headless())
+            .and_then(|backend| backend.input_region(window))
+    }
+
     /// Hands one event to the host through the backend's seat, then lets a
     /// frame's worth of nothing pass so the layout shows what it did.
     pub fn send(&mut self, event: Event) -> Result<(), String> {

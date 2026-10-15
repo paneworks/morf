@@ -169,8 +169,8 @@ pub struct Headless {
     /// The layout revision each open surface was last linted at.
     pub(crate) linted: std::collections::HashMap<WindowId, u64>,
     /// The seat and pointer of a run with no host.
-    idle_seat: VirtualSeat,
-    idle_input: PointerInput,
+    pub(crate) idle_seat: VirtualSeat,
+    pub(crate) idle_input: PointerInput,
 }
 
 impl Headless {
@@ -446,33 +446,6 @@ impl Headless {
             }
         }
         self.now - started
-    }
-
-    /// The input region last handed to the compositor for `window`.
-    pub fn input_region(&self, window: WindowId) -> Option<Vec<morf_app::InputRect>> {
-        self.host
-            .as_ref()
-            .and_then(|host| host.backend.as_headless())
-            .and_then(|backend| backend.input_region(window))
-    }
-
-    /// The seat: where the pointer is, and which surface has the keyboard.
-    pub fn seat(&self) -> &VirtualSeat {
-        self.host
-            .as_ref()
-            .and_then(|host| host.backend.as_headless())
-            .or(self.lock.as_ref().map(|lock| &lock.backend))
-            .map_or(&self.idle_seat, HeadlessBackend::seat)
-    }
-
-    /// Where the pointer, the buttons and the fingers are, as the host's
-    /// pointer path keeps them.
-    pub fn input(&self) -> &PointerInput {
-        match (&self.host, &self.lock) {
-            (Some(host), _) => &host.state.input,
-            (None, Some(lock)) => &lock.session.input,
-            (None, None) => &self.idle_input,
-        }
     }
 
     /// The text system layouts are measured with.
