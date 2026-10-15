@@ -61,6 +61,7 @@ mod dmabuf_acquire;
 #[cfg(test)]
 mod dmabuf_ring_tests;
 mod field_pass;
+mod field_variants;
 #[cfg(test)]
 mod glyph_atlas_tests;
 mod glyph_batch;

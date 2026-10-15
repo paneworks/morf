@@ -123,3 +123,26 @@ fn a_one_box_field_draws_as_the_general_pipeline_does() {
         assert!(painted > 1000, "{name}: only {painted} pixels painted");
     }
 }
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn field_variants_are_built_when_drawn_and_dropped_with_the_space() {
+    let mut backend = pollster::block_on(super::WgpuBackend::new(SIZE, SIZE)).unwrap();
+    assert_eq!(
+        backend.field_variants.built(),
+        0,
+        "nothing is built before a frame"
+    );
+    let (one, _) = both(|_| {});
+    super::field_tests::read_frame(&mut backend, &one, SIZE);
+    assert_eq!(
+        backend.field_variants.built(),
+        1,
+        "the frame built only what it drew"
+    );
+    assert!(backend.set_blend(crate::BlendSpace::Srgb));
+    assert_eq!(backend.field_variants.built(), 0, "a new space drops them");
+    let drawn = super::field_tests::read_frame(&mut backend, &one, SIZE);
+    assert_eq!(backend.field_variants.built(), 1);
+    assert!(drawn.chunks(4).filter(|pixel| pixel[3] > 0).count() > 1000);
+}
