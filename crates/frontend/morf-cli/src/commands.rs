@@ -47,7 +47,7 @@ pub(crate) fn follow_logs(follow: bool, level: LogLevel) -> Result<(), String> {
 }
 
 /// The `.sock` files in one directory; none if it does not exist.
-fn sockets_in(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
+pub(crate) fn sockets_in(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
     match fs::read_dir(dir) {
         Ok(entries) => Ok(entries
             .filter_map(Result::ok)
@@ -55,6 +55,9 @@ fn sockets_in(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> 
             .filter(|path| {
                 path.extension()
                     .is_some_and(|extension| extension == "sock")
+                    && !path
+                        .file_name()
+                        .is_some_and(|name| name.to_string_lossy().ends_with("-lock-provider.sock"))
             })
             .collect()),
         // No directory is no instances, not an error: nothing has run yet.

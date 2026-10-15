@@ -154,6 +154,14 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
     // from the first moment; beside the shell's socket, not over it.
     let ipc = crate::lock::ipc::LockIpc::bind(path)?;
     let client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
+    let provider =
+        match crate::lock::provider::Provider::bind(client.connection().backend().poll_fd()) {
+            Ok(provider) => Some(provider),
+            Err(error) => {
+                runtime.warn(format!("native lock provider: {error}"));
+                None
+            }
+        };
     let mut desktop = desktop_for(&client)?;
     // In morf's pixels, as the shell's own surfaces are.
     let mut client = morf_app::Dense::new(Box::new(client), runtime.density());
@@ -189,7 +197,19 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
         apply_service_requests(&mut runtime, &mut client, &mut *desktop);
         apply_idle_timeouts(&mut runtime, &mut *desktop);
         if lock.wants_unlock(&mut runtime) {
-            return lock.unlock(&mut runtime, &mut client);
+            lock.unlock(&mut runtime, &mut client)?;
+            if let Some(provider) = &provider {
+                provider.unlock_dispatched();
+            }
+            drop(lock);
+            drop(runtime);
+            drop(client);
+            drop(desktop);
+            drop(ipc);
+            if let Some(provider) = &provider {
+                provider.finish();
+            }
+            return Ok(());
         }
         let next_clock = clock_text();
         if next_clock != clock {
@@ -243,6 +263,11 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                     repaint = true;
                 }
             }
+        }
+        if lock.locked
+            && let Some(provider) = &provider
+        {
+            provider.locked();
         }
         apply_service_requests(&mut runtime, &mut client, &mut *desktop);
         if repaint {

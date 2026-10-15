@@ -8,6 +8,36 @@ use std::path::Path;
 use std::time::Instant;
 
 #[test]
+fn native_lock_provider_sockets_are_not_public_shell_instances() {
+    use std::{fs, os::unix::net::UnixListener};
+    let directory = std::env::temp_dir().join(format!(
+        "morf-native-list-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&directory).unwrap();
+    let names = [
+        "wayland-1.sock",
+        "wayland-1-lock.sock",
+        "123-aabb-lock-provider.sock",
+    ];
+    let listeners: Vec<_> = names
+        .iter()
+        .map(|name| UnixListener::bind(directory.join(name)).unwrap())
+        .collect();
+    let mut listed = crate::commands::sockets_in(&directory).unwrap();
+    listed.sort();
+    let mut expected = vec![directory.join(names[0]), directory.join(names[1])];
+    expected.sort();
+    assert_eq!(listed, expected);
+    drop(listeners);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn the_lock_socket_sits_beside_the_shells() {
     assert_eq!(
         lock_variant(Path::new("/run/user/1000/morf/wayland-1.sock")),
