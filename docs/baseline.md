@@ -112,3 +112,30 @@ dashboard on A, 5 s       +363         +29          +29
 
 Before PLAN 4.5 every completion rang every loop, so B and C took A's
 ~66 wakes a second as well.
+
+Per-frame CPU on the desk layout (`MORF_FRAME_LOG=1`, the `frame on <output>
+took` lines of `cpu-active.steps`, caelestia, two alternating rounds, the
+first frame of each run left out):
+
+```
+                         v0.2.8                    develop
+output A frames          134-135                   175-181
+output A per frame       4.4-4.9 ms (sum/frames)   3.3-3.6 ms
+output A median / p90    1.7-2.0 / 4.9-8.3 ms      2.0 / 3.6-4.0 ms
+output B median / p90    1.6-1.7 / 3.6-4.2 ms      1.7-1.9 / 3.2-4.1 ms
+output C median / p90    3.3-3.6 / 13.8-14.3 ms    3.1-3.2 / 12.9-13.3 ms
+```
+
+The same script draws about 30% more frames on output A, each cheaper and
+with a much shorter tail.
+
+Start on the desk layout (`morf: output HEADLESS-A: starting the GPU took`,
+`the first frame took`, caelestia): the specialised field pipelines are built
+the first time a frame draws with one, not all at start and again when the
+configuration sets its blend space.
+
+```
+                         v0.2.8        develop
+starting the GPU         4.7-5.0 s     3.1-3.9 s
+the first frame          4.3-4.6 s     4.0-4.7 s
+```
