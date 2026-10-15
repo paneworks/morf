@@ -160,6 +160,7 @@ function M.attach(root)
     return
   end
   local preview=require("workspace_gesture").new(root)
+  M.workspace_controller=preview
   M.workspace_preview=preview.state
   local mode,drawer
   local function single(phase,dx,dy,vx,vy)

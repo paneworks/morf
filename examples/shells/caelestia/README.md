@@ -1,6 +1,9 @@
 # Caelestia
 
 Run the example with `morf examples/shells/caelestia/shell/init.lua`.
+The optional typed Prek controller receiver is documented in
+[Prek controls](../../../docs/PREK_CONTROLS.md); broker binding and recognizer
+handoff remain pending.
 The top, bottom, left and right panel triggers wait for a 600 ms hover
 before opening, including at the outermost pixel. Leaving early cancels
 the pending opening. IPC also opens them:
