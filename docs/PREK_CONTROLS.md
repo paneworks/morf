@@ -80,6 +80,20 @@ progress, panel visibility/selection, keyboard visibility/layout and workspace
 preview activity. This is Lua controller state, not native visibility, native
 lock evidence or a broker-authorized context snapshot.
 
+Shell and lock IPC calls request a repaint when visible scene properties or
+primary surface settings actually change. Reading status and changing hidden
+or nonvisual state do not force a frame. A handler that fails after a visible
+write still requests repaint; this does not roll back or retry its effects.
+Normal animation, service and compositor-driven frames remain independent.
+
+The local Cage helper records ordinary IPC durations in `rpc_timings`, bounded
+to 256 samples, with the total call count recorded separately. Each entry names
+the verb, records `reply` or `error`, and gives `elapsed_ns`. These are client
+round-trip timings, not render completion or action grants. A failed trial
+writes `morf-controls-failure.json`, preserving controller refusals, timings and
+process status before and after cleanup. Inactivity and hard gesture limits
+remain enforced; a slow or retired request is not replayed.
+
 Run the real controller/layout tests for both themes:
 
 ```sh

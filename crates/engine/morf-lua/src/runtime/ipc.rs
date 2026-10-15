@@ -127,6 +127,95 @@ impl Runtime {
         self.run_handler(|ctx, limits| execute_ipc_handler(ctx, &handler, args, limits))
             .map_err(Error::Runtime)
     }
+
+    /// Calls a handler and reports whether visible scene or primary surface
+    /// settings changed. Reading state does not owe a frame. Errors can leave
+    /// partial visible changes, which still need painting.
+    pub fn call_ipc_with_repaint(
+        &mut self,
+        verb: &str,
+        args: &[IpcValue],
+    ) -> (Result<Vec<IpcValue>, Error>, bool) {
+        let before = self.reactive.borrow().revisions().mark();
+        let surface = self.layer_surface_config();
+        let result = self.call_ipc(verb, args);
+        let repaint = self.reactive.borrow().revisions().shown_since(before)
+            || self.layer_surface_config() != surface;
+        (result, repaint)
+    }
+}
+
+#[cfg(test)]
+mod repaint_tests {
+    use super::*;
+
+    fn runtime() -> Runtime {
+        let mut runtime = Runtime::default();
+        runtime
+            .execute(
+                "ipc-repaint.lua",
+                br##"
+            local ui = require("morf.ui")
+            local shown = ui.Rect { width=10, height=10, color="#123456" }
+            local hidden = ui.Rect { width=10, height=10, visible=false }
+            morf.ipc.status = function() return "ready" end
+            morf.ipc.resize = function(width) shown.width=width return width end
+            morf.ipc.hidden = function() hidden.width=20 end
+            morf.ipc.partial = function() shown.width=30 error("after visible write") end
+            morf.ipc.surface = function(width) morf.surface.width=width end
+        "##,
+            )
+            .unwrap();
+        runtime
+    }
+
+    #[test]
+    fn queries_and_unknown_verbs_do_not_request_a_frame() {
+        let mut runtime = runtime();
+        let (reply, repaint) = runtime.call_ipc_with_repaint("status", &[]);
+        assert_eq!(reply.unwrap(), vec![IpcValue::String("ready".into())]);
+        assert!(!repaint);
+        let (reply, repaint) = runtime.call_ipc_with_repaint("missing", &[]);
+        assert!(reply.is_err());
+        assert!(!repaint);
+    }
+
+    #[test]
+    fn only_actual_visible_changes_request_a_frame() {
+        let mut runtime = runtime();
+        let (reply, repaint) = runtime.call_ipc_with_repaint("resize", &[IpcValue::Integer(20)]);
+        assert!(reply.is_ok() && repaint);
+        let (reply, repaint) = runtime.call_ipc_with_repaint("resize", &[IpcValue::Integer(20)]);
+        assert!(reply.is_ok());
+        assert!(!repaint);
+        let (reply, repaint) = runtime.call_ipc_with_repaint("hidden", &[]);
+        assert!(reply.is_ok());
+        assert!(!repaint);
+    }
+
+    #[test]
+    fn a_failed_handler_still_paints_its_partial_visible_changes() {
+        let mut runtime = runtime();
+        let (reply, repaint) = runtime.call_ipc_with_repaint("partial", &[]);
+        assert!(
+            reply
+                .unwrap_err()
+                .to_string()
+                .contains("after visible write")
+        );
+        assert!(repaint);
+    }
+
+    #[test]
+    fn surface_settings_do_not_depend_on_a_scene_node_change() {
+        let mut runtime = runtime();
+        let (reply, repaint) = runtime.call_ipc_with_repaint("surface", &[IpcValue::Integer(200)]);
+        assert!(reply.is_ok() && repaint);
+        assert_eq!(runtime.layer_surface_config().width, 200);
+        let (reply, repaint) = runtime.call_ipc_with_repaint("surface", &[IpcValue::Integer(200)]);
+        assert!(reply.is_ok());
+        assert!(!repaint);
+    }
 }
 
 #[cfg(test)]

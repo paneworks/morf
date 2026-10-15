@@ -103,12 +103,13 @@ pub fn answer_lock_request(
         }
         IpcRequest::Call { target, args } => {
             let args = args.iter().map(lua_ipc_value).collect::<Vec<_>>();
-            match runtime.call_ipc(target, &args) {
+            let (result, changed) = runtime.call_ipc_with_repaint(target, &args);
+            match result {
                 Ok(values) => (
                     IpcReply::success(values.iter().map(wire_ipc_value).collect()),
-                    true,
+                    changed,
                 ),
-                Err(error) => (IpcReply::refused(error.to_string()), false),
+                Err(error) => (IpcReply::refused(error.to_string()), changed),
             }
         }
         IpcRequest::Verbs => (strings(runtime.ipc_verbs()), false),

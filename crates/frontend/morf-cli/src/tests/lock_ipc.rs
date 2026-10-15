@@ -71,7 +71,7 @@ fn a_lock_answers_calls_and_refuses_to_be_killed() {
         path,
         started,
     );
-    assert!(reply.ok && changed);
+    assert!(reply.ok && !changed, "nonvisual state does not owe a frame");
     assert_eq!(reply.result, [WireValue::String("hi1".into())]);
 
     let (verbs, _) = answer_lock_request(&mut runtime, &IpcRequest::Verbs, path, started);
@@ -116,4 +116,39 @@ fn a_held_lock_refuses_every_verb_but_the_allowed_ones() {
     assert!(runtime.layer_surface_config().session_lock);
     let (status, _) = answer_lock_request(&mut runtime, &call("status"), path, started);
     assert_eq!(status.result, [WireValue::String("locked".into())]);
+}
+
+#[test]
+fn lock_queries_do_not_repaint_and_partial_visual_errors_still_do() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "lock-paint.lua",
+            br##"
+        local node=require("morf.ui").Rect {width=10,height=10}
+        morf.ipc.status=function() return "locked" end
+        morf.ipc.keyboard_show=function() node.width=20 end
+        morf.ipc.keyboard_hide=function() node.width=30 error("partial") end
+    "##,
+        )
+        .unwrap();
+    runtime.set_session_lock_state(morf_lua::SessionLockState::Locked);
+    for (verb, repaint, success) in [
+        ("status", false, true),
+        ("keyboard_show", true, true),
+        ("keyboard_hide", true, false),
+        ("unlock", false, false),
+    ] {
+        let (reply, changed) = answer_lock_request(
+            &mut runtime,
+            &IpcRequest::Call {
+                target: verb.into(),
+                args: vec![],
+            },
+            Path::new("lock.lua"),
+            Instant::now(),
+        );
+        assert_eq!(changed, repaint, "{verb}");
+        assert_eq!(reply.ok, success, "{verb}");
+    }
 }

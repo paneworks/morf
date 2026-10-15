@@ -192,14 +192,11 @@ pub fn handle_worker_command(
             if let Some(count) = lost {
                 eprintln!("morf: {TEST_DEVICE_LOST}: destroyed {count} GPU device(s)");
             }
-            let result = match lost {
-                Some(count) => Ok(vec![morf_lua::IpcValue::Integer(count as i64)]),
-                None => runtime
-                    .call_ipc(&target, &args)
-                    .map_err(|error| error.to_string()),
+            let (result, repaint) = match lost {
+                Some(count) => (Ok(vec![morf_lua::IpcValue::Integer(count as i64)]), true),
+                None => runtime.call_ipc_with_repaint(&target, &args),
             };
-            let repaint = result.is_ok();
-            let _ = reply.send(result);
+            let _ = reply.send(result.map_err(|error| error.to_string()));
             WorkerUpdate {
                 repaint,
                 reset_input: false,
@@ -309,6 +306,47 @@ pub fn handle_worker_command(
                 recreate_surface: repaint && hard,
                 reloaded: repaint,
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod repaint_tests {
+    use super::*;
+
+    #[test]
+    fn worker_repaints_visual_ipc_changes_including_changes_before_an_error() {
+        let mut runtime = Runtime::default();
+        runtime
+            .execute(
+                "worker-ipc.lua",
+                br##"
+            local node=require("morf.ui").Rect {width=10,height=10}
+            morf.ipc.status=function() return "ready" end
+            morf.ipc.resize=function() node.width=20 end
+            morf.ipc.partial=function() node.width=30 error("partial") end
+        "##,
+            )
+            .unwrap();
+        for (verb, repaint, success) in [
+            ("status", false, true),
+            ("resize", true, true),
+            ("partial", true, false),
+            ("missing", false, false),
+        ] {
+            let (reply, receive) = mpsc::sync_channel(1);
+            let update = handle_worker_command(
+                &mut runtime,
+                None,
+                LoadPolicy::default(),
+                WorkerCommand::Call {
+                    target: verb.into(),
+                    args: vec![],
+                    reply,
+                },
+            );
+            assert_eq!(update.repaint, repaint, "{verb}");
+            assert_eq!(receive.recv().unwrap().is_ok(), success, "{verb}");
         }
     }
 }
