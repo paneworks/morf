@@ -132,3 +132,33 @@ dashboard on A, 5 s       +363         +29          +29
 Before PLAN 4.5 every completion rang every loop, so B and C took A's
 ~66 wakes a second as well. In the A/B runs above, over the whole script A
 was rung ~2950 times and B and C ~270 each.
+
+Each PLAN item on its own at the desk layout: the commit before it and the
+commit that adds it, the same script (`cpu-active.steps`, `cpu-idle.steps`
+for 4.3) with `MORF_FRAME_LOG=2 MORF_FRAME_SPLIT_MS=0`, two runs each; stage
+totals over a run, CPU per frame on each output, the first frame left out.
+
+```
+item                         before                       after
+4.2 kept Taffy trees         layout 294-297 ms            layout 288-300 ms
+  9f4a5a3b -> 286a502b       A 2.92-3.00 ms/frame         A 2.79-3.28 ms/frame
+4.1 copied commands, damage  render 1917-2067 ms          render 1651-1752 ms
+  286a502b -> 543f4dc7       C 5.32-5.45 ms/frame         C 5.04-5.17 ms/frame
+4.1 kept fields and quads    render 1632-1724 ms          render 1593-1744 ms
+  924ead69 -> a4fa4375       C 4.98-5.03 ms/frame         C 5.02-5.13 ms/frame
+4.4 one-box field pipeline   render 1748-1769 ms          render 1576-1623 ms
+  a4fa4375 -> 22d2998b       C 5.06-5.23 ms/frame         C 4.86-5.09 ms/frame
+4.3 capped text caches       rss 923-929 MB               rss 927-929 MB
+  2c15f150 -> 7ae5207d       (idle script)
+4.5 wakes by asker           every completion rang        A ~2950, B and C ~270
+                             every output's loop          each over the A/B run
+```
+
+At this size caelestia's layout is mostly not Flex or Grid, so the kept Taffy
+trees (4.2) change little; they pay in the layout benches. Copying unchanged
+commands and diffing only between copied runs (4.1) take about a seventh off
+the render stage, the one-box pipeline (4.4) about a tenth; keeping field
+instances and glyph quads saves what its bench said, ~0.1 ms a frame, inside
+the noise here. The text caches (4.3) never reach their caps in a short
+script; the caps bound a long session's memory, which their unit tests
+cover.
