@@ -111,7 +111,7 @@ function mediapopup.build(top)
     direction = "row",
     justify = "center",
     align = "start",
-    anchors = { left = true, right = true, top = true, top_margin = top },
+    anchors = { left = true, right = true, top = true, bottom = true, top_margin = top },
     visible = function() return mounted:get() end,
     pill,
   }

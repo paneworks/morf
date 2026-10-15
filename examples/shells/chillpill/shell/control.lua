@@ -748,7 +748,7 @@ function control.build(top)
     direction = "row",
     justify = "center",
     align = "start",
-    anchors = { left = true, right = true, top = true, top_margin = top },
+    anchors = { left = true, right = true, top = true, bottom = true, top_margin = top },
     ui.Item(theme.reveal(control.shown, {
       from_y = -S(60),
       from_scale = 0.9,

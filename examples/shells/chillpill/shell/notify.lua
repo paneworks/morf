@@ -230,7 +230,7 @@ function notify.build(top)
     direction = "row",
     justify = "center",
     align = "start",
-    anchors = { left = true, right = true, top = true, top_margin = top },
+    anchors = { left = true, right = true, top = true, bottom = true, top_margin = top },
     ui.Repeater {
       as = "column",
       gap = S(10),
