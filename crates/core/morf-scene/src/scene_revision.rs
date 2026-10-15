@@ -10,7 +10,32 @@ impl Scene {
             self.bump_layout(node);
         } else {
             self.bump_paint(node);
+            if affects_input(property) {
+                self.bump_input(node);
+            }
         }
+    }
+
+    /// Records that where input lands may have moved on `node` without a
+    /// new layout, stamping it and every ancestor with a new input revision.
+    pub(crate) fn bump_input(&mut self, node: NodeId) {
+        self.input_revision = self.input_revision.wrapping_add(1);
+        let revision = self.input_revision;
+        let mut current = Some(node);
+        while let Some(id) = current {
+            let Some(entry) = self.nodes.get_mut(id) else {
+                break;
+            };
+            entry.input = revision;
+            current = entry.parent;
+        }
+    }
+
+    /// The newest input revision in `node`'s subtree: the input region found
+    /// for it at a revision at least this is still where input lands, given
+    /// the same layout.
+    pub fn input_stamp(&self, node: NodeHandle) -> Result<u64, SceneError> {
+        Ok(self.nodes[self.live(node)?].input)
     }
 
     /// Records that something paint reads has moved on `node`, stamping it
@@ -52,6 +77,7 @@ impl Scene {
     /// only into subtrees stamped since it was made.
     pub(crate) fn bump_layout(&mut self, node: NodeId) {
         self.bump_paint(node);
+        self.bump_input(node);
         self.layout_revision = self.layout_revision.wrapping_add(1);
         let revision = self.layout_revision;
         let Some(entry) = self.nodes.get_mut(node) else {

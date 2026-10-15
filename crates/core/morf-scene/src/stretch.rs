@@ -277,6 +277,7 @@ impl Scene {
             }
         }
         self.bump_paint(id);
+        self.bump_input(id);
         Ok(())
     }
 
@@ -332,6 +333,7 @@ impl Scene {
         };
         if changed {
             self.bump_paint(node.id());
+            self.bump_input(node.id());
         }
         changed
     }

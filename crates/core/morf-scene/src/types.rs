@@ -205,6 +205,9 @@ pub struct Scene {
     /// Bumped whenever something paint reads changes: any property, the
     /// shape of the tree, a shader, a terminal's screen, a stretch.
     pub(crate) paint_revision: u64,
+    /// Bumped whenever something that decides where input lands changes
+    /// without a new layout: a transform, a stretch, a node starting to exit.
+    pub(crate) input_revision: u64,
     /// The layout revision each tree last lost a node at, by its root: a
     /// node removed, or moved out to somewhere else. An incremental layout
     /// cannot tell which of the nodes it knows are gone, so a loss since it
@@ -289,6 +292,8 @@ pub(crate) struct Node {
     pub(crate) stamps: LayoutStamps,
     /// The newest paint revision in this node's subtree, itself included.
     pub(crate) paint: u64,
+    /// The newest input revision in this node's subtree, itself included.
+    pub(crate) input: u64,
 }
 
 /// The layout revisions a node was last touched at, which is what lets a

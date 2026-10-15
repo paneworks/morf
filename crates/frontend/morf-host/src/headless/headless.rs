@@ -448,6 +448,14 @@ impl Headless {
         self.now - started
     }
 
+    /// The input region last handed to the compositor for `window`.
+    pub fn input_region(&self, window: WindowId) -> Option<Vec<morf_app::InputRect>> {
+        self.host
+            .as_ref()
+            .and_then(|host| host.backend.as_headless())
+            .and_then(|backend| backend.input_region(window))
+    }
+
     /// The seat: where the pointer is, and which surface has the keyboard.
     pub fn seat(&self) -> &VirtualSeat {
         self.host

@@ -76,7 +76,16 @@ pub fn paint_layer(
     runtime.observe_stretch(&layout);
     split.mark("stretch");
     let scene = runtime.scene();
-    let input = send_input_region(&scene, &layout, client, layer, config, cache.as_deref())?;
+    let stamp = (!fresh).then(|| scene.input_stamp(root).ok()).flatten();
+    let (input, input_paint) = send_input_region(
+        &scene,
+        &layout,
+        client,
+        layer,
+        config,
+        cache.as_deref(),
+        stamp,
+    )?;
     split.mark("input region");
     let mut backdrop = Vec::new();
     // Where the compositor should blur what is behind this surface. Nothing is
@@ -230,6 +239,7 @@ pub fn paint_layer(
         size: (width, height),
         scale_120,
         input,
+        input_paint,
         backdrop,
         keyboard_focus: config.keyboard_focus.clone(),
     })
@@ -317,8 +327,19 @@ pub fn send_input_region(
     layer: u64,
     config: &LayerSurfaceConfig,
     cache: Option<&CachedLayout>,
-) -> Result<Vec<InputRect>, String> {
-    Ok(if let Some(regions) = &config.input_regions {
+    stamp: Option<u64>,
+) -> Result<(Vec<InputRect>, u64), String> {
+    // The same layout (`stamp` is only given when it was not redone) and a
+    // tree whose input stamp has not moved: what takes input is where it
+    // was, and the walk that finds it is the one thing every frame paid.
+    if let (Some(stamp), Some(cached)) = (stamp, cache)
+        && config.input_regions.is_none()
+        && cached.input_paint == stamp
+    {
+        return Ok((cached.input.clone(), stamp));
+    }
+    let derived_at = stamp.unwrap_or(u64::MAX);
+    let input = if let Some(regions) = &config.input_regions {
         // A configured mask is a static surface setting — nothing animates it —
         // so rasterising it and re-sending it every paint asks the compositor
         // to rebuild an identical region sixty times a second. The branch below
@@ -357,5 +378,6 @@ pub fn send_input_region(
             client.set_input_region(WindowId::Layer(layer), Some(&input));
         }
         input
-    })
+    };
+    Ok((input, derived_at))
 }

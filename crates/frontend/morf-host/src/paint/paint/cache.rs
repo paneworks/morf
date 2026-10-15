@@ -27,6 +27,9 @@ pub struct CachedLayout {
     /// protocol traffic and the derivation that produced it, and changes
     /// nothing.
     pub input: Vec<InputRect>,
+    /// The surface root's input stamp `input` was derived at: with the same
+    /// layout and the same stamp, the region is the same.
+    pub input_paint: u64,
     /// The backdrop-blur shapes last handed to the compositor.
     ///
     /// The *shapes*, not the rectangles they rasterise to, because rasterising
@@ -48,6 +51,7 @@ impl CachedLayout {
             size: (0, 0),
             scale_120: 0,
             input: Vec::new(),
+            input_paint: u64::MAX,
             backdrop: Vec::new(),
             keyboard_focus: String::new(),
         }

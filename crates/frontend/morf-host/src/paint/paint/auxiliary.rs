@@ -185,6 +185,7 @@ pub fn paint_auxiliary_surface(
         size,
         scale_120,
         input: Vec::new(),
+        input_paint: u64::MAX,
         backdrop: Vec::new(),
         keyboard_focus: String::new(),
     });

@@ -49,9 +49,18 @@ pub fn lay_out_layer(
     // way there.
     runtime.sync_text_inputs(&layout, text);
     runtime.observe_stretch(&layout);
-    let input = {
+    let (input, input_paint) = {
         let scene = runtime.scene();
-        send_input_region(&scene, &layout, client, layer, config, cache.as_deref())?
+        let stamp = (!fresh).then(|| scene.input_stamp(root).ok()).flatten();
+        send_input_region(
+            &scene,
+            &layout,
+            client,
+            layer,
+            config,
+            cache.as_deref(),
+            stamp,
+        )?
     };
     // The clock the animations run on is the frame callbacks, drawn or not.
     client.request_frame(WindowId::Layer(layer));
@@ -62,6 +71,7 @@ pub fn lay_out_layer(
         size: (width, height),
         scale_120,
         input,
+        input_paint,
         backdrop: Vec::new(),
         keyboard_focus: config.keyboard_focus.clone(),
     })
@@ -126,6 +136,7 @@ pub fn lay_out_auxiliary(
         size,
         scale_120,
         input: Vec::new(),
+        input_paint: u64::MAX,
         backdrop: Vec::new(),
         keyboard_focus: String::new(),
     });

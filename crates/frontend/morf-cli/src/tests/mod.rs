@@ -1,6 +1,7 @@
 mod command_line;
 mod config_paths;
 mod headless;
+mod input_region;
 mod layout_cache;
 mod lock_input;
 mod lock_ipc;

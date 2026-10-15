@@ -22,6 +22,7 @@ impl Scene {
             layout_revision: 0,
             root_revisions: FastMap::default(),
             paint_revision: 0,
+            input_revision: 0,
             detached_revisions: FastMap::default(),
             motion_scale: 1.0,
             start_on_tick: false,
@@ -68,6 +69,7 @@ impl Scene {
                 properties,
                 stamps: LayoutStamps::default(),
                 paint: 0,
+                input: 0,
             }
         });
         // A new node is a tree of its own until it is given a parent.
