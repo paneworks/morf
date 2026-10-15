@@ -2168,7 +2168,7 @@ printed on stderr:
 | `MORF_SLOW_MS=N` | any stage of a turn that held the output longer than N ms (default 150) |
 | `MORF_PROFILE=1` | with each slow stage, whose work filled it (below) |
 
-Every line these print starts with the time, `[12345.678]`: milliseconds
+Loop, wake and frame-summary lines start with `[12345.678]`: milliseconds
 on the monotonic clock (`CLOCK_MONOTONIC`, Python's `time.monotonic()`), so
 a log can be lined up with a screen recording or another process's log.
 
@@ -2191,6 +2191,13 @@ click) by the `file:line` of its function; a `timer`, `loader build`,
 D-Bus call`, `get` and `set` are the synchronous `morf.dbus` calls -- a
 turn that waits on the bus says so. `engine: …` is the engine's own
 bookkeeping between them. Off, it costs nothing.
+
+`MORF_FRAME_LOG=2` also reports individual slow image preparations: source
+probing, decoding, GPU upload, animation work and texture-cache maintenance.
+These use the `MORF_RENDER_SPLIT_MS` threshold (50 ms by default). Image source
+labels are bounded to 96 characters and escaped; inline SVG/data payloads are
+represented only by their byte length. These detail lines accompany the
+timestamped frame summaries. They measure CPU stages, not GPU completion.
 
 A shell that wakes more than it should says why under `MORF_WAKE_LOG`:
 a `clock-seconds` every second is a binding reading `morf.clock` where

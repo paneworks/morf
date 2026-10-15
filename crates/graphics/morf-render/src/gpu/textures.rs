@@ -8,6 +8,7 @@ use super::glyphs::*;
 
 mod paths;
 mod placement;
+mod trace;
 mod upload;
 
 pub(crate) use paths::push_path_textures;
@@ -174,6 +175,7 @@ pub(crate) fn create_texture_batch(
         if visible.width <= 0.0 || visible.height <= 0.0 {
             continue;
         }
+        let mut trace = trace::ImageTrace::start(source, command_index);
         // A capture the compositor drew straight into GPU memory. Nothing to
         // decode, nothing to upload, nothing to cache: the texture is the
         // picture, at the size it was captured at.
@@ -201,6 +203,7 @@ pub(crate) fn create_texture_batch(
                 context.target_size,
                 scale,
             );
+            trace.mark("external texture");
             continue;
         }
         // A moving picture: its frames were decoded once, at its own size,
@@ -266,6 +269,7 @@ pub(crate) fn create_texture_batch(
                 context.target_size,
                 scale,
             );
+            trace.mark("animation");
             continue;
         }
         let preferred = bounds.width.max(bounds.height).ceil().max(1.0) as u32;
@@ -288,6 +292,7 @@ pub(crate) fn create_texture_batch(
             smooth: *smooth,
         };
         used.insert(key.clone());
+        trace.mark("probe");
         if let Some(image) = textures.get(&key) {
             push_texture_instance(
                 &mut batch,
@@ -303,6 +308,7 @@ pub(crate) fn create_texture_batch(
                 context.target_size,
                 scale,
             );
+            trace.mark("cached texture");
             continue;
         }
         let loaded = match (icon_theme, distance_field) {
@@ -326,9 +332,11 @@ pub(crate) fn create_texture_batch(
             ),
             (None, false) => cache.load(source, logical_width, logical_height, scale_120),
         };
+        trace.mark("decode");
         let Ok(image) = loaded else {
             continue;
         };
+        trace.pixels(image.width, image.height);
         let texture = context.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("morf image texture"),
             size: wgpu::Extent3d {
@@ -383,6 +391,7 @@ pub(crate) fn create_texture_batch(
                     },
                 ],
             });
+        trace.mark("upload");
         let (target_width, target_height) = context.target_size;
         let texture_image = TextureImage {
             _texture: texture,
@@ -405,6 +414,7 @@ pub(crate) fn create_texture_batch(
             scale,
         );
     }
+    let _maintenance = trace::ImageTrace::start("texture cache maintenance", list.commands.len());
     evict_image_textures(textures, &used);
     cache.shrink();
 
