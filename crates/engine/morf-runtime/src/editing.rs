@@ -136,6 +136,8 @@ pub struct Editing {
     /// Whether those callbacks are being run, so running one does not start
     /// running them again from inside itself.
     draining: bool,
+    /// The paint stamp and box each unfocused field was last synced at.
+    synced: HashMap<NodeHandle, (u64, [u64; 4])>,
 }
 
 impl Editing {
@@ -163,6 +165,24 @@ impl Editing {
         self.inputs.retain(|node, _| !removed.contains(node));
         self.order.retain(|node, _| !removed.contains(node));
         self.events.retain(|(node, _, _)| !removed.contains(node));
+        self.synced.retain(|node, _| !removed.contains(node));
+    }
+
+    /// Whether `node` has to be shaped and observed again this frame: it has
+    /// the keyboard (its caret moves without the scene changing), or its
+    /// paint stamp or box moved since it last was. Records them when so.
+    pub fn needs_sync(&mut self, node: NodeHandle, stamp: u64, bounds: [f64; 4]) -> bool {
+        if self.focused == Some(node) {
+            // Synced again once the keyboard has gone, whatever moved.
+            self.synced.remove(&node);
+            return true;
+        }
+        let seen = (stamp, bounds.map(f64::to_bits));
+        if self.synced.get(&node) == Some(&seen) {
+            return false;
+        }
+        self.synced.insert(node, seen);
+        true
     }
 
     /// Starts running the owed callbacks, unless they are being run, a

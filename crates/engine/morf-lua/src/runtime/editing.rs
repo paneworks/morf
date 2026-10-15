@@ -157,6 +157,15 @@ impl Runtime {
                 let Some(geometry) = layout.geometry(node) else {
                     continue;
                 };
+                let stamp = state.scene().paint_stamp(node).unwrap_or(u64::MAX);
+                let bounds = [geometry.x, geometry.y, geometry.width, geometry.height];
+                if !state
+                    .engine_mut()
+                    .editing_mut()
+                    .needs_sync(node, stamp, bounds)
+                {
+                    continue;
+                }
                 let Ok(shape) = InputShape::read(state.scene(), node, Some(geometry.width)) else {
                     continue;
                 };
