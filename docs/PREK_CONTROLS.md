@@ -5,7 +5,7 @@ They reuse its existing drawers, menus, keyboard and workspace preview. They do
 not authenticate a Prek broker, prove rendered geometry, or transfer ownership
 from the native global recognizer. The status response explicitly reports
 `recognizer_ownership=false`. Native binding, broker grants and acknowledged
-neutral handoff must be implemented before enabling exclusive Prek routing.
+neutral handoff must be implemented and accepted together before enabling exclusive Prek routing.
 The existing native/lisgd driver choices are unchanged.
 
 The separate [native shell provider](NATIVE_SHELL_PROVIDER.md) supplies real
@@ -62,6 +62,17 @@ Replies contain `version`, `output`, `epoch`, `gesture`, `ordinal`, `status`
 provide valid correlation fields. A caller must match all correlation fields
 before using a response. Ordinary Morf IPC carries a returned table as a JSON
 string in its scalar `result` array.
+
+The native endpoint can deliver the same typed payload to the fixed internal
+`prek-native-control` handler with a random, live native authorization token.
+Calling this handler through ordinary IPC without that token returns
+`unauthorized`. Native IDs are deduplicated by the bounded native protocol,
+separately from the ordinary 4,096-entry ledger. Native expiry/revocation and
+token replacement cancel progress; workspace completion checks authority again
+after its animation, immediately before sending a command. Authentication also
+cancels previews that are already settling after an `end` request. See the
+[native protocol](NATIVE_SHELL_PROVIDER.md#root-controller-protocol) for limits,
+generation retirement and the remaining handoff requirements.
 
 `prek-status OUTPUT` returns ordinary controller state for that exact output:
 version, output, ownership=false, blocked, retained identity count, active

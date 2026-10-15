@@ -142,7 +142,14 @@ fn drive_surface(
             provider.configured();
         }
         match turn {
-            Turn::Again => {}
+            Turn::Again => {
+                if host.primary_configured
+                    && let Some(provider) = native_provider.as_mut()
+                    && provider.dispatch(runtime, host.runtime_generation)
+                {
+                    host.request_paint();
+                }
+            }
             Turn::Stop => return Ok(()),
             Turn::Recreate => {
                 drop(native_provider.take());

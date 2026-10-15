@@ -67,6 +67,11 @@ end
 
 function M.attach(root)
   local seen,count,active={},0,nil
+  local settling,native_token,watch
+  local function authorized(token)
+    local guard=rawget(_G,"__morf_prek_authorized")
+    return type(token)=="string" and #token==32 and type(guard)=="function" and guard(token)==true
+  end
   local function output() return (morf.screens[1] or {}).name end
   local responding
   local function reply(status,error)
@@ -80,14 +85,46 @@ function M.attach(root)
     if not current then return end
     current.lease:cancel()
     current.deadline:cancel()
-    if current.preview then current.preview.finish(canceled,vx or 0)
+    if current.preview then
+      settling=current
+      current.preview.finish(canceled,vx or 0,function()
+        return not blocked() and (not current.token or authorized(current.token))
+      end)
     else current.drawer.end_drag((horizontal(current.drawer) and vx or vy) or 0,canceled) end
+  end
+  local function cancel_settling()
+    if not settling then return false end
+    settling.preview.cancel()
+    settling=nil
+    return true
+  end
+  local function refresh()
+    local changed=false
+    if active and active.token and not authorized(active.token) then finish(true) changed=true end
+    if settling then
+      if not settling.preview.state.active then settling=nil
+      elseif blocked() or (settling.token and not authorized(settling.token)) then
+        cancel_settling() changed=true
+      end
+    end
+    if not active and not settling and watch then watch:cancel() watch=nil end
+    return changed
+  end
+  local function watch_native()
+    if not watch then watch=morf.timer(25,refresh,true) end
   end
   local function lease()
     if active.lease then active.lease:cancel() end
     active.lease=morf.timer(500,function() finish(true) end,false)
   end
-  local function receive(payload)
+  local function receive(payload,token)
+    if token and not authorized(token) then return reply("rejected","unauthorized") end
+    if token and token~=native_token then
+      if active and active.token then finish(true) end
+      if settling and settling.token then cancel_settling() end
+      native_token=token
+    end
+    refresh()
     if type(payload)~="string" or #payload>2048 then return reply("rejected","invalid_request") end
     local ok,r=pcall(morf.json.decode,payload)
     if not ok or type(r)~="table" then return reply("rejected","invalid_request") end
@@ -109,21 +146,21 @@ function M.attach(root)
     -- focus changes do not choose a replacement output.
     if r.output~=output() then return nil end
     responding=r
-    if blocked() then finish(true) return reply("rejected","blocked") end
+    if blocked() then finish(true) cancel_settling() return reply("rejected","blocked") end
     local key=r.epoch..":"..r.gesture
     if r.phase=="discrete" or r.phase=="begin" then
-      if r.ordinal~=1 or seen[key] then return reply("rejected","duplicate") end
+      if r.ordinal~=1 or (not token and seen[key]) then return reply("rejected","duplicate") end
       if active then return reply("rejected","busy") end
-      if count>=4096 then return reply("rejected","capacity") end
+      if not token and count>=4096 then return reply("rejected","capacity") end
       -- Remember even declined/failed controller calls: uncertain effects are
       -- never replayed. No eviction can revive an old identity in this runtime.
-      seen[key]=true count=count+1
+      if not token then seen[key]=true count=count+1 end
       if r.phase=="discrete" then
         if not DISCRETE[r.action] then return reply("rejected","unsupported_phase") end
         return discrete(r.action) and reply("accepted") or reply("rejected","unavailable")
       end
       if not CONTINUOUS[r.action] then return reply("rejected","unsupported_phase") end
-      local current={key=key,action=r.action,ordinal=1}
+      local current={key=key,action=r.action,ordinal=1,token=token}
       if r.action=="workspace_preview" then
         local gestures=require("phone_gestures")
         if not gestures.workspace_controller then
@@ -144,11 +181,12 @@ function M.attach(root)
         move(current.drawer,r)
       end
       active=current
+      if token then watch_native() end
       lease()
       current.deadline=morf.timer(2000,function() finish(true) end,false)
       return reply("accepted")
     end
-    if not active or active.key~=key or active.action~=r.action then return reply("rejected","retired") end
+    if not active or active.key~=key or active.action~=r.action or active.token~=token then return reply("rejected","retired") end
     if r.ordinal~=active.ordinal+1 then return reply("rejected","out_of_order") end
     active.ordinal=r.ordinal
     if r.phase=="cancel" then finish(true)
@@ -167,6 +205,15 @@ function M.attach(root)
     pcall(finish,true)
     return reply("rejected","controller_failed")
   end
+  morf.ipc["prek-native-control"]=function(payload,token)
+    responding=nil
+    if not authorized(token) then return reply("rejected","unauthorized") end
+    local ok,value=pcall(receive,payload,token)
+    if ok then return value end
+    pcall(finish,true) pcall(cancel_settling)
+    return reply("rejected","controller_failed")
+  end
+  morf.ipc["prek-native-refresh"]=refresh
   morf.ipc["prek-status"]=function(name)
     if name~=output() then return nil end
     local gestures=require("phone_gestures")
@@ -185,7 +232,7 @@ function M.attach(root)
   -- check dormant while idle rather than adding a permanent polling timer.
   morf.effect("caelestia.prek.controls.blocked",function()
     local inhibited=blocked()
-    if active and inhibited then finish(true) end
+    if inhibited then finish(true) cancel_settling() end
   end)
 end
 return M

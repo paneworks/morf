@@ -179,6 +179,7 @@ impl Host {
             motion_reported: None,
             jit_logged: None,
             follow_up: true,
+            runtime_generation: 1,
             pending_streak: 0,
             containment_repaint: false,
             report_slow: options_report,

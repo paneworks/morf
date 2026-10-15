@@ -58,6 +58,7 @@ pub enum Turn {
 
 /// One output's windows on a backend.
 pub struct Host {
+    pub(crate) runtime_generation: u64,
     /// Witnessed the primary surface's configure on this backend generation.
     pub(crate) primary_configured: bool,
     pub name: String,
@@ -88,6 +89,10 @@ pub struct Host {
 }
 
 impl Host {
+    pub(crate) fn request_paint(&mut self) {
+        self.follow_up = true;
+        self.containment_repaint = true;
+    }
     /// Waits until something is due: the backend sends something, a service
     /// thread rings `wake`, or the first thing on the clock. Nothing else: an
     /// idle shell sleeps until one of those.
@@ -167,6 +172,10 @@ impl Host {
                     refresh_idle_timeouts(runtime, &mut *self.desktop);
                 }
                 if update.reloaded {
+                    self.runtime_generation = self
+                        .runtime_generation
+                        .checked_add(1)
+                        .ok_or("native controller runtime generation exhausted")?;
                     self.reloaded(runtime)?;
                     // What to do once every output is gone may have changed.
                     links

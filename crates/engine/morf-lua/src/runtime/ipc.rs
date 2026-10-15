@@ -1,6 +1,27 @@
 use crate::{runtime::host_types::*, vm::execute::*, vm::types::*};
+use luna::{Callback, CallbackReturn};
+use std::sync::Arc;
 
 impl Runtime {
+    /// Installs the native controller's live authorization check in this VM.
+    pub fn set_controller_authorizer(
+        &mut self,
+        authorize: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+    ) -> Result<(), Error> {
+        self.lua
+            .try_enter(|ctx| {
+                let callback = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+                    let token: luna::String = stack.consume(ctx)?;
+                    let token = token.to_str()?;
+                    stack.replace(ctx, token.len() <= 128 && authorize(token));
+                    Ok(CallbackReturn::Return)
+                });
+                ctx.globals().set(ctx, "__morf_prek_authorized", callback)?;
+                Ok(())
+            })
+            .map_err(|error| Error::Runtime(error.to_string()))
+    }
+
     /// What the runtime is holding: live scene nodes, the scene's property
     /// signals, the reactive graph's signals and effects, and the Lua
     /// bindings behind them. Every figure should track what is on screen;

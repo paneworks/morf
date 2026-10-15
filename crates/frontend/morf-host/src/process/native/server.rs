@@ -4,7 +4,7 @@ use std::io::Write;
 
 struct Connection {
     stream: UnixStream,
-    uid: u32,
+    identity: PeerIdentity,
     input: Vec<u8>,
     output: Vec<u8>,
     written: usize,
@@ -14,8 +14,19 @@ pub(crate) fn serve(
     listener: UnixListener,
     wake: UnixStream,
     owner: u32,
-    request: impl Fn(u32, &[u8]) -> Option<Vec<u8>>,
+    request: impl Fn(PeerIdentity, &[u8]) -> Option<Vec<u8>>,
 ) {
+    serve_with_limit(listener, wake, owner, MAX_REQUEST, request)
+}
+
+pub(crate) fn serve_with_limit(
+    listener: UnixListener,
+    wake: UnixStream,
+    owner: u32,
+    limit: usize,
+    request: impl Fn(PeerIdentity, &[u8]) -> Option<Vec<u8>>,
+) {
+    assert!((1..=4096).contains(&limit));
     let mut peers: Vec<Connection> = Vec::new();
     loop {
         peers.retain(|peer| Instant::now() < peer.expires);
@@ -73,9 +84,9 @@ pub(crate) fn serve(
                         count != 0
                     })
             } else {
-                let mut buffer = [0u8; MAX_REQUEST];
+                let mut buffer = [0u8; 4096];
                 peer.stream.read(&mut buffer).map(|count| {
-                    if count == 0 || peer.input.len() + count > MAX_REQUEST {
+                    if count == 0 || peer.input.len() + count > limit {
                         return false;
                     }
                     peer.input.extend_from_slice(&buffer[..count]);
@@ -83,7 +94,7 @@ pub(crate) fn serve(
                         if end + 1 != peer.input.len() {
                             return false;
                         }
-                        let Some(reply) = request(peer.uid, &peer.input[..end]) else {
+                        let Some(reply) = request(peer.identity, &peer.input[..end]) else {
                             return false;
                         };
                         peer.input.clear();
@@ -108,7 +119,7 @@ pub(crate) fn serve(
         {
             peers.push(Connection {
                 stream,
-                uid: identity.uid,
+                identity,
                 input: Vec::new(),
                 output: Vec::new(),
                 written: 0,

@@ -176,7 +176,7 @@ function M.new(root)
     if state.target==state.from then state.offset=state.offset*.2 end
     track.translate_x=state.offset
   end
-  function g.finish(canceled,velocity)
+  function g.finish(canceled,velocity,allowed)
     if not state.active then return end
     local commit=not canceled and math.abs(state.offset)>=width()*.35 and state.target~=state.from
     if not canceled and motion.fling(state.offset,velocity) then
@@ -189,6 +189,9 @@ function M.new(root)
     animation=morf.animation.play {motion.step(track,"translate_x",final,
       canceled and 0 or velocity,width()),on_finished=function(reason)
       if reason~="completed" then return end
+      -- Native broker leases can retire while the preview is settling.
+      -- Check at the last point before issuing the workspace command.
+      if allowed and not allowed() then clear() return end
       if commit and hypr.available() then
         -- Keep the destination preview until the compositor has accepted
         -- the switch. Clearing before the asynchronous command completes

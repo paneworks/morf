@@ -1,12 +1,13 @@
 //! Native shell connection evidence. This reports connection/configuration
 //! lifetime, never Lua-declared geometry, authentication or action authority.
 use crate::process::native::{Endpoint, SocketPath, birth, peer, server};
+mod controls;
 use std::{
     io::{self, Write},
     os::{fd::BorrowedFd, unix::net::UnixStream},
     path::Path,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread::JoinHandle,
@@ -17,6 +18,8 @@ pub struct Provider {
     configured: Arc<AtomicBool>,
     wake: UnixStream,
     thread: Option<JoinHandle<()>>,
+    controls: Arc<Mutex<controls::Controls>>,
+    runtime_generation: Option<u64>,
 }
 impl Provider {
     /// `output` must come from the actual LayerClient's own_output snapshot.
@@ -43,29 +46,54 @@ impl Provider {
         let configured = Arc::new(AtomicBool::new(false));
         let ready = configured.clone();
         let output = output.to_owned();
+        let controls = Arc::new(Mutex::new(controls::Controls::new(
+            epoch.clone(),
+            output.clone(),
+        )));
+        let controller = controls.clone();
+        let ui_waker = morf_io::waker();
         let (wake, wait) = UnixStream::pair()?;
         wake.set_nonblocking(true)?;
         wait.set_nonblocking(true)?;
         let thread = std::thread::Builder::new()
             .name("morf-shell-provider".into())
             .spawn(move || {
-                server::serve(listener, wait, owner, move |_, bytes| {
+                server::serve_with_limit(listener, wait, owner, 4096, move |identity, bytes| {
                     let request: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-                    if request.as_object()?.len() != 2
-                        || request["version"] != 1
-                        || request["op"] != "state"
+                    let response = if request["op"] == "control-capabilities"
+                        && request["version"] == 1
+                        && request.as_object()?.len() == 2
                     {
-                        return None;
-                    }
-                    let configured = ready.load(Ordering::Acquire);
-                    let mut response = serde_json::to_vec(&serde_json::json!({
-                        "version":1,"role":"shell","epoch":epoch,
-                        "revision":if configured {2} else {1},
-                        "phase":if configured {"configured"} else {"pending"},
-                        "compositor_pid":compositor.pid,"compositor_start":start,
-                        "compositor_uid":compositor.uid,"output":output,
-                    }))
-                    .ok()?;
+                        controller.lock().ok()?.capabilities()
+                    } else if request["op"] != "state" {
+                        if !ready.load(Ordering::Acquire) || identity.uid != 0 {
+                            return None;
+                        }
+                        let response = controller.lock().ok()?.request(
+                            identity,
+                            &request,
+                            controls::now()?,
+                            &controls::nonce()?,
+                        )?;
+                        ui_waker.wake();
+                        response
+                    } else {
+                        if request.as_object()?.len() != 2
+                            || request["version"] != 1
+                            || request["op"] != "state"
+                        {
+                            return None;
+                        }
+                        let configured = ready.load(Ordering::Acquire);
+                        serde_json::json!({
+                            "version":1,"role":"shell","epoch":epoch,
+                            "revision":if configured {2} else {1},
+                            "phase":if configured {"configured"} else {"pending"},
+                            "compositor_pid":compositor.pid,"compositor_start":start,
+                            "compositor_uid":compositor.uid,"output":output,
+                        })
+                    };
+                    let mut response = serde_json::to_vec(&response).ok()?;
                     response.push(b'\n');
                     Some(response)
                 });
@@ -75,6 +103,8 @@ impl Provider {
             configured,
             wake,
             thread: Some(thread),
+            controls,
+            runtime_generation: None,
         })
     }
     /// Native host startup completed its first configured surface/frame.
@@ -82,9 +112,62 @@ impl Provider {
     pub fn configured(&self) {
         self.configured.store(true, Ordering::Release);
     }
+
+    /// Runs at most one bounded request on the UI thread. A dispatched receipt
+    /// records controller acceptance, not animation or compositor completion.
+    pub fn dispatch(&mut self, runtime: &mut morf_lua::Runtime, generation: u64) -> bool {
+        if self.runtime_generation != Some(generation) {
+            if self.runtime_generation.is_some() {
+                self.controls.lock().unwrap().reset_ui();
+            }
+            let controls = self.controls.clone();
+            if runtime
+                .set_controller_authorizer(Arc::new(move |token| {
+                    controls::now()
+                        .is_some_and(|at| controls.lock().is_ok_and(|state| state.valid(token, at)))
+                }))
+                .is_err()
+            {
+                self.controls.lock().unwrap().close();
+                return false;
+            }
+            self.runtime_generation = Some(generation);
+        }
+        let refreshed = runtime
+            .call_ipc("prek-native-refresh", &[])
+            .ok()
+            .is_some_and(|values| values.first().is_some_and(|value| value.to_json() == true));
+        // Refresh can execute Lua; sample expiry after it, immediately before
+        // handing the next job to its controller.
+        let Some(at) = controls::now() else {
+            return refreshed;
+        };
+        let job = self.controls.lock().unwrap().take(at);
+        let Some(job) = job else {
+            return refreshed;
+        };
+        let accepted = runtime
+            .call_ipc(
+                "prek-native-control",
+                &[
+                    morf_lua::IpcValue::String(job.payload.clone()),
+                    morf_lua::IpcValue::String(job.token.clone()),
+                ],
+            )
+            .ok()
+            .is_some_and(|values| {
+                values
+                    .first()
+                    .is_some_and(|value| value.to_json()["status"] == "accepted")
+            });
+        self.controls.lock().unwrap().complete(&job, accepted);
+        // Keep draining this bounded queue without depending on another socket wake.
+        true
+    }
 }
 impl Drop for Provider {
     fn drop(&mut self) {
+        self.controls.lock().unwrap().close();
         let _ = self.wake.write_all(&[1]);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -141,6 +224,34 @@ mod tests {
         assert_eq!(ready["phase"], "configured");
         assert_eq!(ready["revision"], 2);
         assert_eq!(ready["epoch"], pending["epoch"]);
+        client
+            .get_mut()
+            .write_all(b"{\"version\":1,\"op\":\"control-capabilities\"}\n")
+            .unwrap();
+        let mut response = String::new();
+        client.read_line(&mut response).unwrap();
+        let capabilities: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(capabilities["epoch"], ready["epoch"]);
+        assert_eq!(capabilities["ui_generation"], "1");
+        assert_eq!(capabilities["root_only"], true);
+        assert_eq!(capabilities["recognizer_ownership"], false);
+        if unsafe { libc::geteuid() } != 0 {
+            // The kernel supplies our actual unprivileged identity. A JSON
+            // credential cannot grant authority or change the native state.
+            let mut attacker = UnixStream::connect(&socket).unwrap();
+            attacker
+                .set_read_timeout(Some(Duration::from_secs(1)))
+                .unwrap();
+            writeln!(
+                attacker,
+                "{}",
+                serde_json::json!({"version":1,"op":"lease","uid":0,"epoch":ready["epoch"]})
+            )
+            .unwrap();
+            use std::io::Read;
+            assert_eq!(attacker.read(&mut [0u8; 1]).unwrap(), 0);
+            assert_eq!(query(&mut client), ready);
+        }
         client
             .get_mut()
             .write_all(b"{\"version\":1,\"op\":\"state\",\"phase\":\"configured\"}\n")

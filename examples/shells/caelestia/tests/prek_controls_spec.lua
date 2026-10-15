@@ -10,6 +10,10 @@ local SOURCE=[[
     sidebar.select("settings")
     return sidebar.drawer.begin_drag()
   end
+  -- Explicit authorization model; no root/socket acceptance is claimed here.
+  local authorized_token
+  __morf_prek_authorized=function(token) return token==authorized_token end
+  morf.ipc.prek_authority_model=function(token) authorized_token=token end
   morf.ipc.prek_state=function()
     local gestures=require("phone_gestures")
     return {output=(morf.screens[1] or {}).name,
@@ -37,6 +41,7 @@ local function load(style,width,height)
   test.advance(600)
   next_id=0
 end
+
 local function request(action,phase)
   next_id=next_id+1
   return {version=1,output=state().output,epoch=string.rep("a",32),
@@ -49,6 +54,62 @@ local function accepted(r)
   test.eq(reply.status,"accepted")
   test.eq(reply.epoch,r.epoch) test.eq(reply.gesture,r.gesture) test.eq(reply.ordinal,r.ordinal)
 end
+
+test.it("native controls require a live grant and retire progress on revocation",function()
+  load("material")
+  local token=string.rep("c",32)
+  local r=request("workspace_preview","begin")
+  local function native() return test.ipc("prek-native-control",morf.json.encode(r),token) end
+  test.eq(native().error,"unauthorized")
+  test.ipc("prek_authority_model",token)
+  test.eq(native().status,"accepted")
+  r.phase,r.ordinal,r.dx="update",2,-400
+  test.eq(native().status,"accepted")
+  test.ipc("prek_authority_model","retired")
+  test.advance(100)
+  test.eq(state().switches,{}) test.falsy(state().preview.active)
+  test.eq(native().error,"unauthorized")
+end)
+
+test.it("native revocation after end prevents the delayed workspace command",function()
+  load("material")
+  local token=string.rep("c",32)
+  test.ipc("prek_authority_model",token)
+  local r=request("workspace_preview","begin")
+  local function native() return test.ipc("prek-native-control",morf.json.encode(r),token) end
+  test.eq(native().status,"accepted")
+  r.phase,r.ordinal,r.dx="update",2,-400 test.eq(native().status,"accepted")
+  r.phase,r.ordinal="end",3 test.eq(native().status,"accepted")
+  test.ipc("prek_authority_model","retired")
+  test.advance(600)
+  test.eq(state().switches,{}) test.falsy(state().preview.active)
+end)
+
+test.it("authentication after end prevents an ordinary delayed workspace command",function()
+  load("material")
+  local r=request("workspace_preview","begin") accepted(r)
+  r.phase,r.ordinal,r.dx="update",2,-400 accepted(r)
+  r.phase,r.ordinal="end",3 accepted(r)
+  test.ipc("session","open") test.advance(600)
+  test.eq(state().switches,{}) test.falsy(state().preview.active)
+end)
+
+test.it("native token replacement cancels the previous gesture and preserves ordinary deduplication",function()
+  load("material")
+  local ordinary=request("apps") accepted(ordinary)
+  local token=string.rep("c",32)
+  test.ipc("prek_authority_model",token)
+  local r=request("workspace_preview","begin")
+  local function native() return test.ipc("prek-native-control",morf.json.encode(r),token) end
+  test.eq(native().status,"accepted")
+  r.phase,r.ordinal,r.dx="update",2,-400 test.eq(native().status,"accepted")
+  token=string.rep("d",32) test.ipc("prek_authority_model",token)
+  r=request("apps") test.eq(native().status,"accepted")
+  test.advance(600)
+  test.eq(state().switches,{}) test.falsy(state().preview.active)
+  test.eq(send(ordinary).error,"duplicate")
+  test.eq(test.ipc("prek-status",state().output).identities,1)
+end)
 
 for _,style in ipairs {"material","tsugumori"} do
   test.it(style.." typed Prek controls reuse real drawers, menus and keyboard",function()

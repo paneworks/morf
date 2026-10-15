@@ -127,8 +127,8 @@ impl Provider {
         let worker = std::thread::Builder::new()
             .name("morf-lock-provider".into())
             .spawn(move || {
-                server::serve(listener, wait, owner, move |uid, bytes| {
-                    request(&state, uid, bytes)
+                server::serve(listener, wait, owner, move |identity, bytes| {
+                    request(&state, identity.uid, bytes)
                 })
             })?;
         Ok(Self {
