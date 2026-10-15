@@ -71,23 +71,32 @@ The specs run on a private bus (`dbus-run-session` with
 `tools/sandbox/dbus-session.conf`), caelestia_spec with `--no-dbus`, and
 lyrics with python3 on PATH.
 
-Desk layout in the sandbox, caelestia, `MONITORS="3840x2160 3840x2160
-3456x2160"`, `tools/sandbox/cpu-idle.steps` and `cpu-active.steps`, two
-alternating rounds each (v0.2.8 / develop):
+The desk layout, v0.2.8 against develop under identical conditions: caelestia
+in the sandbox with `MONITORS="3840x2160 3840x2160 3456x2160"`, one run per
+build per round, three rounds alternating, each run the same script
+(`cpu-active.steps` between two `@wakes` reads) with `MORF_FRAME_LOG=1`.
+Frames are the `frame on <output> took` lines, the first frame of a run left
+out; CPU is the process's share in each `cpu-active` phase.
 
 ```
-                          v0.2.8          develop
-rest                      4-6%            3-5%
-threads                   42              37-38
-rss                       941-952 MB      936-943 MB
-sidebar in and out x4     4%              3-4%
-workspace switch x4       4-8%            4%
-osd x4                    11-12%          10-13%
-dashboard x3              39-40%          36-39%
+                              v0.2.8             develop
+starting the GPU (A)          3.89-3.92 s        2.76-2.80 s
+the first frame (A)           3.18-3.25 s        2.56-2.62 s
+output A frames               136-144            139-147
+output A CPU per frame        3.0-3.4 ms         3.3-3.8 ms
+output B CPU per frame        2.4-2.8 ms         2.3-2.8 ms
+output C median / p90         3.8-4.3 / 9.7-9.9  3.0-3.7 / 9.5-10.0 ms
+cpu: rest                     3-4%               2-3%
+cpu: sidebar in and out x4    3-5%               3-6%
+cpu: workspace switch x4      3-4%               3-6%
+cpu: osd x4                   12-17%             15%
+cpu: dashboard x3             39-41%             38-42%
 ```
 
-The shell's own CPU at this size is dominated by work these changes do not
-touch; the per-frame savings show in the CPU benches
+Start is a second shorter (the field pipeline variants are built when first
+drawn, not all at start and again when the blend space is set). Frame cost
+at this size is the same within the noise: it is spent where these changes do
+not reach. Their per-frame savings are in the CPU benches
 (`crates/graphics/morf-render/examples/`, `crates/core/morf-layout/examples/`):
 
 ```
@@ -111,31 +120,5 @@ dashboard on A, 5 s       +363         +29          +29
 ```
 
 Before PLAN 4.5 every completion rang every loop, so B and C took A's
-~66 wakes a second as well.
-
-Per-frame CPU on the desk layout (`MORF_FRAME_LOG=1`, the `frame on <output>
-took` lines of `cpu-active.steps`, caelestia, two alternating rounds, the
-first frame of each run left out):
-
-```
-                         v0.2.8                    develop
-output A frames          134-135                   175-181
-output A per frame       4.4-4.9 ms (sum/frames)   3.3-3.6 ms
-output A median / p90    1.7-2.0 / 4.9-8.3 ms      2.0 / 3.6-4.0 ms
-output B median / p90    1.6-1.7 / 3.6-4.2 ms      1.7-1.9 / 3.2-4.1 ms
-output C median / p90    3.3-3.6 / 13.8-14.3 ms    3.1-3.2 / 12.9-13.3 ms
-```
-
-The same script draws about 30% more frames on output A, each cheaper and
-with a much shorter tail.
-
-Start on the desk layout (`morf: output HEADLESS-A: starting the GPU took`,
-`the first frame took`, caelestia): the specialised field pipelines are built
-the first time a frame draws with one, not all at start and again when the
-configuration sets its blend space.
-
-```
-                         v0.2.8        develop
-starting the GPU         4.7-5.0 s     3.1-3.9 s
-the first frame          4.3-4.6 s     4.0-4.7 s
-```
+~66 wakes a second as well. In the A/B runs above, over the whole script A
+was rung ~2950 times and B and C ~270 each.
