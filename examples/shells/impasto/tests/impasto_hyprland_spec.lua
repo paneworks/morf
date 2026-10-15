@@ -12,23 +12,47 @@ local fake_hyprland = require("lib.testing.fake_hyprland")
 
 local fake
 
--- Serves the fake and moves the clock until `done()` holds.
+-- Serves the fake, the clock held, until the shell has read every answer
+-- and every event it was sent: however slow the machine, no answer lands a
+-- turn later than the clock says it would.
+local function drain()
+  local token
+  test.drain(function()
+    if fake.serve() > 0 or token == nil then token = fake.sync() end
+  end, function(io)
+    if token == nil then return true end
+    for _, line in pairs(io.synced) do
+      if line == token then return true end
+    end
+    return false
+  end)
+end
+
+-- Drains and moves the clock until `done()` holds, for `timeout_ms` of
+-- the shell's own time.
 local function until_(done, message, timeout_ms)
-  return test.wait(function()
-    fake.serve()
+  local spent = 0
+  while true do
+    drain()
+    if done() then return end
+    if spent >= (timeout_ms or 8000) then
+      error("timed out after " .. tostring(timeout_ms or 8000) .. " ms: " .. tostring(message), 2)
+    end
     test.advance(25)
-    fake.serve()
-    return done()
-  end, timeout_ms or 8000, message)
+    spent = spent + 25
+  end
 end
 
 local function sent(text) return #fake.sent(text) > 0 end
 
--- Lets the page take in what the fake last answered before a click: a reply
--- served inside `until_` is read on the next turn, and may move the rows.
+-- Lets the page take in all the fake answered before a click, and settle,
+-- until settling asks nothing more of it.
 local function steady()
-  fake.serve()
-  test.settle(500)
+  repeat
+    drain()
+    test.settle(500)
+  until fake.serve() == 0 and test.io().pending == 0
+  drain()
 end
 
 local function load(env)
@@ -81,7 +105,7 @@ test.describe("impasto under a fake Hyprland", function()
     -- The fake moved it, so nothing is left to push.
     local count = #fake.sent("hl.monitor(")
     test.advance(2000)
-    fake.serve()
+    drain()
     test.eq(#fake.sent("hl.monitor("), count, "pushed again though nothing differs")
     test.eq(test.ipc("display", "eDP-1", "off"), "ok")
     until_(function() return sent('hl.monitor({ output = "desc:BOE 0x0BCA", disabled = true })') end, "not switched off")
@@ -133,7 +157,7 @@ test.describe("impasto under a fake Hyprland", function()
   test.it("rebinds a key from the keys page, writes keys.tsv and reloads", function()
     load()
     test.eq(test.ipc("settings", "keys", "shell"), "keys")
-    test.settle(2000)
+    steady()
     until_(function() return test.find({ text = "SUPER + SPACE", visible = true }) ~= nil end, "the launcher's keys are not shown")
     steady()
     test.click({ text = "SUPER + SPACE", visible = true })
@@ -158,7 +182,7 @@ test.describe("impasto under a fake Hyprland", function()
   test.it("warns of a clash before applying, and Escape cancels", function()
     load()
     test.ipc("settings", "keys", "shell")
-    test.settle(2000)
+    steady()
     until_(function() return test.find({ text = "SUPER + SPACE", visible = true }) ~= nil end, "no launcher row")
     steady()
     test.click({ text = "SUPER + SPACE", visible = true })
@@ -195,7 +219,7 @@ test.describe("impasto under a fake hyprlang Hyprland", function()
   test.it("keeps every moved bind in keys.conf, one move after another", function()
     load()
     test.ipc("settings", "keys", "shell")
-    test.settle(2000)
+    steady()
     local function rebind(shown, key)
       until_(function() return test.find({ text = shown, visible = true }) ~= nil end, "no row on " .. shown)
       steady()
@@ -214,8 +238,9 @@ test.describe("impasto under a fake hyprlang Hyprland", function()
     -- As Hyprland would list it once keys.conf is sourced.
     fake.binds[2].key = "K"
     fake.emit("configreloaded>>")
+    drain()
     test.advance(600)
-    fake.serve()
+    drain()
     rebind("SUPER + A", "j")
     local conf = morf.fs.read(morf.fs.join(morf.fs.dir("state"), "impasto-morf", "keys.conf")) or ""
     test.contains(conf, "unbind = SUPER, SPACE\nbindd = SUPER, K, Shell · Open the launcher, exec, morf ipc call launcher")

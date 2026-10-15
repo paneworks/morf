@@ -385,8 +385,14 @@ impl Headless {
     ///
     /// `real` spreads that much wall time over the advance, for a
     /// configuration whose answers come from processes and buses that run
-    /// on the wall clock whatever this one says.
+    /// on the wall clock whatever this one says. With `by` zero, the clock
+    /// holds: `real` passes and one frame takes in what came meanwhile.
     pub fn advance(&mut self, by: Duration, real: Duration) {
+        if by.is_zero() {
+            std::thread::sleep(real);
+            self.frame(Duration::ZERO);
+            return;
+        }
         let end = self.now + by;
         let frames = (by.as_millis() / FRAME.as_millis()).max(1) as u32;
         let nap = real / frames;

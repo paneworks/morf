@@ -191,6 +191,28 @@ function test.wait(predicate, timeout_ms, message)
   end
 end
 
+-- What the configuration waits on from outside: `pending`, the
+-- `morf.request_socket` answers and `morf.connect` connects under way, and
+-- `synced`, by path, the last `__morf_test.sync>>` line each connection read.
+function test.io() return host.ipc("__morf_test.io") end
+
+-- Holds the clock while the outside answers: calls `serve` (a fake living
+-- in the spec) until nothing is pending and `predicate(test.io())`, if
+-- given, holds. Fails after `timeout_ms` of wall time.
+function test.drain(serve, predicate, timeout_ms)
+  local deadline = host.wall_ms() + (timeout_ms or 30000)
+  while true do
+    if serve then serve() end
+    local state = test.io()
+    if state.pending == 0 and (predicate == nil or predicate(state)) then return end
+    if host.wall_ms() > deadline then
+      fail("still waiting on the outside after " .. tostring(timeout_ms or 30000) .. " ms",
+        tostring(state.pending) .. " pending")
+    end
+    host.advance(0, 2)
+  end
+end
+
 -- --------------------------------------------------------------- finding --
 
 local function matches_query(node, query)

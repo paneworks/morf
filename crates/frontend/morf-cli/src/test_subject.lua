@@ -57,15 +57,86 @@ local function read_env(name)
   return real_env(name)
 end
 
+-- What the configuration still waits on from outside (`test.io`): request
+-- answers and connects under way, and the last `__morf_test.sync>>` line
+-- each connection read, by path. Sync lines are the spec's, never passed on.
+local outside = { pending = 0, synced = {} }
+local SYNC = "__morf_test.sync>>"
+
+-- A handle whose `close` also ends the wait, as the callback would.
+local function counted(handle, finish)
+  if type(handle) ~= "userdata" and type(handle) ~= "table" then return handle end
+  return setmetatable({}, { __index = function(_, key)
+    local value = handle[key]
+    if key == "close" then return function(_, ...) finish() return value(handle, ...) end end
+    if type(value) == "function" then return function(_, ...) return value(handle, ...) end end
+    return value
+  end })
+end
+
+local function waiting()
+  outside.pending = outside.pending + 1
+  local done = false
+  return function()
+    if done then return end
+    done = true
+    outside.pending = outside.pending - 1
+  end
+end
+
+local real_request = morf.request_socket
+local function request_socket(path, data, callback, options)
+  local finish = waiting()
+  local ok, handle = pcall(real_request, path, data, function(...)
+    finish()
+    if callback then return callback(...) end
+  end, options)
+  if not ok then finish() error(handle, 0) end
+  return counted(handle, finish)
+end
+
+local real_connect = morf.connect
+local function connect(options)
+  if type(options) ~= "table" then return real_connect(options) end
+  local given, finish = {}, waiting()
+  for key, value in pairs(options) do given[key] = value end
+  given.on_connect = function(...)
+    finish()
+    if options.on_connect then return options.on_connect(...) end
+  end
+  given.on_close = function(...)
+    finish()
+    if options.on_close then return options.on_close(...) end
+  end
+  if options.on_line then
+    local path = tostring(options.path or options.host or "")
+    given.on_line = function(line, ...)
+      if type(line) == "string" and line:sub(1, #SYNC) == SYNC then
+        outside.synced[path] = line
+        return
+      end
+      return options.on_line(line, ...)
+    end
+  end
+  local ok, handle = pcall(real_connect, given)
+  if not ok then finish() error(handle, 0) end
+  return counted(handle, finish)
+end
+
 morf.run = run
 morf.env = read_env
+morf.request_socket = request_socket
+morf.connect = connect
 for _, module in ipairs { "morf.io", "morf.core" } do
   local loaded = package.loaded[module]
   if type(loaded) == "table" then
     if loaded.run ~= nil then loaded.run = run end
     if loaded.env ~= nil then loaded.env = read_env end
+    if loaded.request_socket ~= nil then loaded.request_socket = request_socket end
+    if loaded.connect ~= nil then loaded.connect = connect end
   end
 end
+morf.ipc["__morf_test.io"] = function() return outside end
 
 morf.ipc["__morf_test.runs"] = function() return runs end
 morf.ipc["__morf_test.stub"] = function(name, text)

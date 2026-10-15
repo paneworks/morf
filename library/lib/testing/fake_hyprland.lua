@@ -56,6 +56,20 @@ function M.new(options)
     for _, socket in ipairs(self.listeners) do pcall(socket.send, socket, line .. "\n") end
   end
 
+  -- The last sync line, also sent to a listener that connects after it.
+  local synced = nil
+  local syncs = 0
+  --- Sends a `morf test` sync line after every event so far, and returns it:
+  --- once `test.io().synced` holds it, the configuration has read them all.
+  --- Nil while no one listens.
+  function self.sync()
+    if #self.listeners == 0 then return nil end
+    syncs = syncs + 1
+    synced = "__morf_test.sync>>" .. self.runtime .. "#" .. syncs
+    self.emit(synced)
+    return synced
+  end
+
   local later = {}
   local function monitor_rule(output, fields)
     local changed = false
@@ -154,22 +168,28 @@ function M.new(options)
     while true do
       local client = requests:accept()
       if not client then break end
+      -- The client writes its command as soon as it connects, however late
+      -- a loaded machine lets it: wait for it as long as the client waits.
       local data = ""
       while true do
-        local chunk = client:receive(65536, #data == 0 and 200 or 10)
+        local chunk = client:receive(65536, #data == 0 and 5000 or 10)
         if not chunk or chunk == "" then break end
         data = data .. chunk
       end
-      if data:sub(1, 2) ~= "j/" then self.transcript[#self.transcript + 1] = data end
-      client:send(answer(data))
-      client:flush()
+      if data ~= "" then
+        if data:sub(1, 2) ~= "j/" then self.transcript[#self.transcript + 1] = data end
+        -- A client that gave up meanwhile is not the fake's failure.
+        pcall(client.send, client, answer(data))
+        pcall(client.flush, client)
+        served = served + 1
+      end
       client:close()
-      served = served + 1
     end
     while true do
       local client = events:accept()
       if not client then break end
       self.listeners[#self.listeners + 1] = client
+      if synced then pcall(client.send, client, synced .. "\n") end
     end
     local pending = later
     later = {}
