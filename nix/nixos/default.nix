@@ -75,6 +75,22 @@ let
     candidate="$root/morf/default/$role/init.lua"
     if [ "$role" = shell ] && [ -r "$root/morf/shell.lua" ]; then candidate="$root/morf/shell.lua"; fi
     fallback="/etc/xdg/morf/default/$role/init.lua"
+    # The chosen appearance lives in state, so read-only configs keep it and the
+    # greeter can follow it. An older file beside the theme moves there once.
+    if [ -z "''${CAELESTIA_APPEARANCE:-}" ]; then
+      if [ "$role" = greet ] && [ -n "''${MORF_GREETER_CONFIG_HOME:-}" ]; then
+        appearance="''${MORF_GREETER_APPEARANCE:-}"
+        if [ -n "$appearance" ] && [ -r "$appearance" ]; then export CAELESTIA_APPEARANCE="$appearance"; fi
+      else
+        appearance="''${XDG_STATE_HOME:-$HOME/.local/state}/morf/appearance/appearance.json"
+        ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$appearance")"
+        if [ ! -e "$appearance" ] && [ -r "$candidate" ]; then
+          legacy="$(${pkgs.coreutils}/bin/dirname "$(${pkgs.coreutils}/bin/dirname "$(${pkgs.coreutils}/bin/readlink -f "$candidate")")")/appearance.json"
+          if [ -r "$legacy" ]; then ${pkgs.coreutils}/bin/install -m 644 "$legacy" "$appearance"; fi
+        fi
+        export CAELESTIA_APPEARANCE="$appearance"
+      fi
+    fi
     ${lib.optionalString config.programs.morf.usePackagedTheme ''
       # Keep the shipped UI and engine together while preserving the user's
       # appearance preferences. Custom CLI paths remain explicit overrides.
@@ -109,6 +125,15 @@ let
   greeterAccess = pkgs.writeShellScript "morf-greeter-access" ''
     # No write access, and no directory listing outside the Morf tree.
     home=$(${pkgs.coreutils}/bin/readlink -e ${lib.escapeShellArg userHome}) || exit 0
+    # The chosen appearance is the one state folder the greeter may read.
+    appearance="$home/.local/state/morf/appearance"
+    if [ -d "$appearance" ] && [ ! -L "$appearance" ]; then
+      for parent in "$home" "$home/.local" "$home/.local/state" "$home/.local/state/morf"; do
+        ${pkgs.acl}/bin/setfacl -m u:greeter:--x "$parent" || echo "Cannot grant greeter traversal on $parent" >&2
+      done
+      ${pkgs.acl}/bin/setfacl -R -P -m u:greeter:rX,d:u:greeter:rX "$appearance" \
+        || echo "Cannot grant greeter read access on $appearance" >&2
+    fi
     root=$(${pkgs.coreutils}/bin/readlink -e "$home/.config/morf") || exit 0
     [ -d "$root" ] || exit 0
     for start in "$home" "$(${pkgs.coreutils}/bin/readlink -e "$home/.config")" "$root"; do
@@ -137,6 +162,7 @@ let
     }:/run/current-system/sw/bin
     export XDG_CONFIG_HOME=/var/lib/greetd/.config
     export MORF_GREETER_CONFIG_HOME=${lib.escapeShellArg "${userHome}/.config"}
+    export MORF_GREETER_APPEARANCE=${lib.escapeShellArg "${userHome}/.local/state/morf/appearance/appearance.json"}
     export XDG_CONFIG_DIRS=${lib.escapeShellArg "${userHome}/.config:/etc/xdg"}
     export XDG_DATA_DIRS=${config.services.displayManager.sessionData.desktops}/share:/run/current-system/sw/share
     exec ${config.system.build.morfGreeterCompositor}
