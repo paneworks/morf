@@ -24,86 +24,93 @@ pub(crate) fn nodes(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
                 .pointer
                 .filter(|(role, _, _)| *role == surface.role)
                 .map(|(_, x, y)| (x, y));
-            // (node, depth, parent, visible so far)
-            let mut pending = vec![(surface.root, 0i64, None, surface.visible)];
-            while let Some((node, depth, parent, shown)) = pending.pop() {
-                let visible = shown
-                    && scene.bool_value(node, "visible").unwrap_or(true)
-                    && scene.number(node, "opacity").unwrap_or(1.0) > 0.0;
-                let rect = layout.surface_rect(&scene, node).unwrap_or_default();
-                let read = |name: &str| {
-                    scene
-                        .has_property(node, name)
-                        .unwrap_or(false)
-                        .then(|| scene.string_value(node, name).ok())
-                        .flatten()
-                };
-                found.push((
-                    node,
-                    parent,
-                    vec![
-                        (
-                            "element",
-                            string(format!(
-                                "{:?}",
-                                scene.element(node).map_err(|error| error.to_string())?
-                            )),
-                        ),
-                        ("id", string(read("id").unwrap_or_default())),
-                        (
-                            "text",
-                            read("text")
-                                .map(str::to_owned)
-                                .or_else(|| shown_glyph(&scene, node))
-                                .map_or(IpcValue::Nil, string),
-                        ),
-                        ("x", IpcValue::Number(rect.x)),
-                        ("y", IpcValue::Number(rect.y)),
-                        ("width", IpcValue::Number(rect.width)),
-                        ("height", IpcValue::Number(rect.height)),
-                        ("visible", IpcValue::Boolean(visible)),
-                        (
-                            "opacity",
-                            IpcValue::Number(scene.number(node, "opacity").unwrap_or(1.0)),
-                        ),
-                        ("exiting", IpcValue::Boolean(scene.is_exiting(node))),
-                        (
-                            "focused",
-                            IpcValue::Boolean(scene.bool_value(node, "focused").unwrap_or(false)),
-                        ),
-                        (
-                            "visual_focus",
-                            IpcValue::Boolean(
-                                scene.bool_value(node, "visual_focus").unwrap_or(false),
+            // The surface's tree, then the engine's band painted over it.
+            let band = (surface.kind == "primary")
+                .then(|| subject.reload_band())
+                .flatten()
+                .map(|band| (band.root, &band.layout));
+            for (tree, layout) in std::iter::once((surface.root, layout)).chain(band) {
+                // (node, depth, parent, visible so far)
+                let mut pending = vec![(tree, 0i64, None, surface.visible)];
+                while let Some((node, depth, parent, shown)) = pending.pop() {
+                    let visible = shown
+                        && scene.bool_value(node, "visible").unwrap_or(true)
+                        && scene.number(node, "opacity").unwrap_or(1.0) > 0.0;
+                    let rect = layout.surface_rect(&scene, node).unwrap_or_default();
+                    let read = |name: &str| {
+                        scene
+                            .has_property(node, name)
+                            .unwrap_or(false)
+                            .then(|| scene.string_value(node, name).ok())
+                            .flatten()
+                    };
+                    found.push((
+                        node,
+                        parent,
+                        vec![
+                            (
+                                "element",
+                                string(format!(
+                                    "{:?}",
+                                    scene.element(node).map_err(|error| error.to_string())?
+                                )),
                             ),
-                        ),
-                        (
-                            "contains_pointer",
-                            IpcValue::Boolean(
-                                pointer.is_some_and(|(x, y)| {
+                            ("id", string(read("id").unwrap_or_default())),
+                            (
+                                "text",
+                                read("text")
+                                    .map(str::to_owned)
+                                    .or_else(|| shown_glyph(&scene, node))
+                                    .map_or(IpcValue::Nil, string),
+                            ),
+                            ("x", IpcValue::Number(rect.x)),
+                            ("y", IpcValue::Number(rect.y)),
+                            ("width", IpcValue::Number(rect.width)),
+                            ("height", IpcValue::Number(rect.height)),
+                            ("visible", IpcValue::Boolean(visible)),
+                            (
+                                "opacity",
+                                IpcValue::Number(scene.number(node, "opacity").unwrap_or(1.0)),
+                            ),
+                            ("exiting", IpcValue::Boolean(scene.is_exiting(node))),
+                            (
+                                "focused",
+                                IpcValue::Boolean(
+                                    scene.bool_value(node, "focused").unwrap_or(false),
+                                ),
+                            ),
+                            (
+                                "visual_focus",
+                                IpcValue::Boolean(
+                                    scene.bool_value(node, "visual_focus").unwrap_or(false),
+                                ),
+                            ),
+                            (
+                                "contains_pointer",
+                                IpcValue::Boolean(pointer.is_some_and(|(x, y)| {
                                     layout.contains_point(&scene, node, x, y)
-                                }),
+                                })),
                             ),
-                        ),
-                        ("depth", IpcValue::Integer(depth)),
-                        // Whether it clips what is under it, and turns: a
-                        // check of what spills reads the visible box through
-                        // both.
-                        (
-                            "clip",
-                            IpcValue::Boolean(scene.bool_value(node, "clip").unwrap_or(false)),
-                        ),
-                        (
-                            "rotation",
-                            IpcValue::Number(scene.number(node, "rotation").unwrap_or(0.0)),
-                        ),
-                        ("surface", string(surface.label())),
-                        ("surface_kind", string(surface.kind)),
-                    ],
-                ));
-                if let Ok(children) = scene.children(node) {
-                    for child in children.iter().rev() {
-                        pending.push((*child, depth + 1, Some(node), visible));
+                            ("depth", IpcValue::Integer(depth)),
+                            // Whether it clips what is under it, and turns: a
+                            // check of what spills reads the visible box through
+                            // both.
+                            (
+                                "clip",
+                                IpcValue::Boolean(scene.bool_value(node, "clip").unwrap_or(false)),
+                            ),
+                            (
+                                "rotation",
+                                IpcValue::Number(scene.number(node, "rotation").unwrap_or(0.0)),
+                            ),
+                            ("surface", string(surface.label())),
+                            ("surface_kind", string(surface.kind)),
+                        ],
+                    ));
+                    if let Ok(children) = scene.children(node) {
+                        for child in children.iter().rev() {
+                            pending.push((*child, depth + 1, Some(node), visible));
+                        }
                     }
                 }
             }

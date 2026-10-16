@@ -167,6 +167,15 @@ function test.source(source, options)
   return host.load(nil, options)
 end
 
+-- `test.reload()` reloads the configuration from its file in place, as the
+-- shell does when the file changes; `test.reload { source = [[...]] }` from
+-- that source. Returns `true`, or `false` and the reload's error.
+function test.reload(options) return host.reload(options or {}) end
+
+-- What the runner itself found wrong since load: a frame that failed, a
+-- layout that could not be made, a surface that could not be worked out.
+function test.problems() return host.problems() end
+
 function test.surfaces() return host.surfaces() end
 function test.now() return host.now() end
 --- Whether the configuration holds the compositor's shortcuts off it now

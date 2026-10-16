@@ -230,6 +230,8 @@ shown; `message` is put in front.
 | `test.load(path, options)` | loads a configuration, replacing the one loaded before (whose children are killed and reaped first). `path` is looked for beside the spec, then from the working directory |
 | `test.load { source = [[...]] }`, `test.source(text, options)` | a configuration written in the spec |
 | `test.surfaces()` | `{ label, kind, name, width, height, x, y, visible }` for each surface, the primary first |
+| `test.reload()`, `test.reload { source = [[...]] }` | reloads the configuration in place, from its file or from that source, through the same worker command and host turn the shell's supervisor drives; returns `true`, or `false` and the error. A failed reload keeps the running configuration, and while the engine's error band is shown it is among the primary surface's nodes (`id = "morf-reload-error"`, its text `"morf-reload-error-text"`) |
+| `test.problems()` | what the runner itself found wrong since load: a frame that failed, a layout that could not be made, a surface that could not be worked out |
 
 `options`: `size = { w, h }`, `screens = n`, `args = { ... }` (the
 configuration's own arguments, what follows `--`: `morf.args`,
@@ -345,6 +347,10 @@ or an exact `text`), or a function of the node returning true.
 - `contains_pointer_spec.lua`: a configuration written in the spec, and a
   panel's `contains_pointer` through pointer moves, a leave, a clip, and a
   binding made while the pointer was already there.
+- `reload_band_spec.lua`: `test.reload` with a broken file and a fixed one:
+  the old scene keeps painting under the engine's error band, which names
+  the file, the line and the error, survives every kind of root, and goes
+  on a fixed reload, a press, or the configuration's own `on_reload_failed`.
 - `impasto_spec.lua`: loads `examples/shells/impasto/shell/init.lua` with
   `IMPASTO_DRY_RUN`, opens every panel over IPC and closes it, and checks
   that nothing landed in `morf ipc call failed`. Run it with

@@ -50,6 +50,20 @@ fn laid_out(headless: &Headless, id: &str) -> bool {
 }
 
 #[test]
+fn the_reload_band_spec_passes() {
+    use crate::runner_args::{Runner, parse_runner};
+    use crate::test_runner::{Tally, run_spec};
+    let spec = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../examples/demos/tests/reload_band_spec.lua");
+    let args = parse_runner(Runner::Test, &[spec.to_str().unwrap()]).unwrap();
+    let (mut number, mut tally) = (0, Tally::default());
+    run_spec(&spec, &args, &mut number, &mut tally).unwrap();
+    assert_eq!(tally.failed, 0, "{} of {number} failed", tally.failed);
+    assert_eq!(tally.passed, number);
+    assert!(number >= 16, "{number} tests ran");
+}
+
+#[test]
 fn the_band_takes_the_pointer_and_a_press_on_the_primary_surface_dismisses_it() {
     use morf_app::{KeyModifiers, PRIMARY_LAYER, WindowId};
     let mut headless = load(&shell("Item"));
